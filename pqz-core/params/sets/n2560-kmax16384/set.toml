@@ -1,0 +1,13 @@
+# PQZ parameter set n2560-kmax16384: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
+# derived from it; README.md beside this directory). The 16k set of plan 5h Task 7 (research record
+# pqz-core/pqzl/params/p16k/), shippable for customer chains that need K_MAX 16,384.
+description = "the 16k set, owner 2026-10-21: shippable (customer chains may choose it)"
+n = 2560
+k_max = 16384
+q = 1125899864532089              # 2^50 - 42,310,535 (owner ruling Q1, 2026-10-20)
+pqz_delta = 1.00366               # e-s1.txt
+kmlwe_min = 39                    # e-s1.txt (p16k: codegen's default rank 38 gives dual_hybrid 446 / 447)
+
+[approval]
+date = "2026-10-21"
+what = "approved as the Task 8 set on 2026-10-20 (Q1), superseded as the default by set (a) on 2026-10-21; kept as a shippable set (owner 2026-10-21: full vectors, gate, SET.md conditions)"

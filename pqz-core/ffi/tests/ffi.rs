@@ -129,7 +129,12 @@ fn pqzl_differential() {
             let i = next() as usize % p.len();
             match k {
                 0..=2 => p[i] ^= 1 << (next() % 8),
-                3 => p[i] = next() as u8,
+                // a random byte, never the same one (set n2560-kmax16384: a draw equal to the byte left the proof
+                // unchanged and accepted; every other draw is as before)
+                3 => {
+                    let b = next() as u8;
+                    p[i] = if b == p[i] { !b } else { b };
+                }
                 4 => p.truncate(i.max(1)),
                 _ => p[i..].iter_mut().for_each(|b| *b = 0),
             }

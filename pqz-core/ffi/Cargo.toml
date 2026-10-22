@@ -40,6 +40,7 @@ default = ["pqzl-rust", "set-n2048-kmax1024"]
 # BEGIN gen_set.py sets
 set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024", "pqzl?/set-n2048-kmax1024", "pqzh"]
 set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096", "pqzl?/set-n2304-kmax4096"]
+set-n2560-kmax16384 = ["pqz-stmt/set-n2560-kmax16384", "pqzl?/set-n2560-kmax16384"]
 # END gen_set.py sets
 # PQZH (Ligero) compiled in: the v3 set only until plan 5h Task 8c
 pqzh = ["dep:pqzh-ligero"]

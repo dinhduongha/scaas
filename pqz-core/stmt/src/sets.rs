@@ -6,6 +6,9 @@ mod set;
 #[cfg(feature = "set-n2304-kmax4096")]
 #[path = "../../params/sets/n2304-kmax4096/rust/set.rs"]
 mod set;
-const _: () = assert!(cfg!(feature = "set-n2048-kmax1024") as u8 + cfg!(feature = "set-n2304-kmax4096") as u8 == 1, "pqz-stmt: exactly one parameter set feature set-<set>");
+#[cfg(feature = "set-n2560-kmax16384")]
+#[path = "../../params/sets/n2560-kmax16384/rust/set.rs"]
+mod set;
+const _: () = assert!(cfg!(feature = "set-n2048-kmax1024") as u8 + cfg!(feature = "set-n2304-kmax4096") as u8 + cfg!(feature = "set-n2560-kmax16384") as u8 == 1, "pqz-stmt: exactly one parameter set feature set-<set>");
 /// the sets this crate builds for (set.toml without core_only)
-pub const SETS: &[&str] = &["n2048-kmax1024", "n2304-kmax4096"];
+pub const SETS: &[&str] = &["n2048-kmax1024", "n2304-kmax4096", "n2560-kmax16384"];

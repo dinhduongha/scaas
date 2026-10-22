@@ -22,6 +22,7 @@ default = ["set-n2048-kmax1024"]
 # BEGIN gen_set.py sets
 set-n2048-kmax1024 = ["pqz-ffi/set-n2048-kmax1024"]
 set-n2304-kmax4096 = ["pqz-ffi/set-n2304-kmax4096"]
+set-n2560-kmax16384 = ["pqz-ffi/set-n2560-kmax16384"]
 # END gen_set.py sets
 # mode `pqzl-diff` (pqzl-rust plan Task 11; PQZ_FUZZ_MODE=pqzl-diff build.sh): also the C core (ASan + UBSan, pqz-ffi's
 # `pqzl::c`), compared with the Rust core on every PQZL input (verdict, pqz_test_mutate bytes)

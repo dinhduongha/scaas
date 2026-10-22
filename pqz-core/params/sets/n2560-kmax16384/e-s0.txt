@@ -1,0 +1,64 @@
+
+====================================================================================================
+0. Set n2560-kmax16384: n = 2560, K_MAX = 16,384, q = 1125899864532089 (pqz_set.h; pq-zero-knowledge.md §4.3)
+====================================================================================================
+Python 3.12.5, numpy 2.2.4
+q = 2^50.000 prime, q mod 16 = 9 (l = 4): OK
+Delta = floor(q / 2^20) = 1073741783 = 2^30.000: OK
+LS18 Cor. 1.2 invertibility bound q^(1/l)/sqrt(l) = 2896.3 (l_inf)
+B_FRESH = 14624; K_MAX * B_FRESH = 239599616 <= E = 2^28: OK
+15 K_MAX = 245760 < 2^18 (digit sums M_i): OK
+uniqueness 2E = 2^29 <= Delta: OK
+centring Delta (2^18 - 1) + E = 2^48.000 < q/2: OK
+mint margin (Delta - E) / ((K - 1) B_FRESH) = 3.36x
+Delta parity: odd (an even Delta allows a rounding tie at |noise| = Delta / 2 = 2^29.00; honest noise < E = 2^28)
+
+====================================================================================================
+3a. Challenge space of each relation's header (LNP22 4.4), 2 omega below the LS18 bound
+====================================================================================================
+omega = 8, eta = 140: P(accept) = 0.9929, |C| = 2^130.79, 2/|C| = 2^-129.79, 2 omega = 16 < 2896: OK
+
+====================================================================================================
+4. Exactness of the norm proofs per relation (no wrap-around mod q)
+====================================================================================================
+rel       m1    alpha nbin    s3 e_s0     stdev3 log2 b_ l2: b^2+be^2  JL: 41 N b  (log2; q = 2^50.00)
+burn     178    273.2   17  5.517e+04   2.54e+04   18.80        37.60       37.63  OK
+dr        88    187.7    8  3.791e+04   1.27e+04   18.26        36.51       36.07  OK
+ds        81    197.0    0  3.979e+04   1.27e+04   18.33        36.65       36.02  OK
+reg       80    186.3    0  3.763e+04   1.27e+04   18.25        36.49       35.93  OK
+tx0      180    280.7   18  5.668e+04   2.54e+04   18.84        37.67       37.69  OK
+tx       181    287.9   18  5.814e+04   2.54e+04   18.87        37.75       37.73  OK
+txm160   450    495.3   33      1e+05  5.079e+04   19.66        39.31       39.83  OK
+txm16    466    557.6   33  1.126e+05  5.079e+04   19.83        39.65       40.05  OK
+txm20    182    288.0   19  5.816e+04   2.54e+04   18.87        37.75       37.74  OK
+txm2     184    301.9   19  6.096e+04   2.54e+04   18.94        37.88       37.82  OK
+txm40    186    302.1   21  6.101e+04   2.54e+04   18.94        37.89       37.84  OK
+txm4     190    328.1   21  6.626e+04   2.54e+04   19.06        38.12       37.99  OK
+txm80    274    377.7   25  7.626e+04   2.54e+04   19.27        38.53       38.72  OK
+txm8     282    418.8   25  8.457e+04  5.079e+04   19.41        38.83       38.91  OK
+binary rows: largest reconstructed integer 2^29 (e_T + E) < q: OK
+row 7 terms |M_i + c_(i-1) - d'_i - d_i - 16 c_i| < 2^19 < q: OK
+R_DR: e' + E in 29 bits, Delta d + e' < q: OK
+
+====================================================================================================
+5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own) and the headers' knowledge error
+====================================================================================================
+R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)             128.00 bits OK  unit-vector case 2^-128.99
+R2 Z_q amortization, lambda = 3 repetitions (q^-lambda)                    150.00 bits OK  
+R3 R_q aggregation of quadratic relations (q^-(d/l) = q^-16)               800.00 bits OK  
+R4 burn    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 dr      c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 ds      c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 reg     c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 tx0     c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 tx      c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm160  c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm16   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm20   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm2    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm40   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm4    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm80   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 txm8    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+
+GATE (n2560-kmax16384: set checks, exactness and FS rounds of 14 relations): MET

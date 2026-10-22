@@ -1,0 +1,13 @@
+variant: v3
+march: -march=x86-64-v3 -maes -mpclmul
+lazer: 3330e487228f633eceb322807b13a596b516770f
+-- Compile flag not found: HEXL_HAS_AVX512DQ
+-- Compile flag not found: HEXL_HAS_AVX512IFMA
+-- Compile flag not found: HEXL_HAS_AVX512VBMI2
+-- Setting HEXL_HAS_AVX256
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+cmake version 3.28.3
+libgmp-dev:amd64	2:6.3.0+dfsg-2ubuntu6.1
+libmpfr-dev:amd64	4.2.1-1build1.1
+libstdc++-13-dev:amd64	13.3.0-6ubuntu2~24.04.1
+58e050eeff71f3941f3462e8e81e8c2544da6e2cfc14b33f358aaf9a382fdd8d  /w/lazer_dump-v3

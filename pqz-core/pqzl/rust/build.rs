@@ -47,11 +47,12 @@ mod oracle {
         if feat("TEST_HOOKS") {
             b.flag("-DPQZ_TEST_HOOKS");
         }
-        let set = ["n2048-kmax1024", "n2304-kmax4096"]
-            .into_iter()
-            .find(|s| feat(&format!("SET_{}", s.to_uppercase().replace('-', "_"))))
-            .expect("one set-<set> feature");
-        let setdir = core.join("../params/sets").join(set);
+        // the one set-<set> feature (as pqz-ffi's build.rs): CARGO_FEATURE_SET_N2304_KMAX4096 -> n2304-kmax4096
+        let set: Vec<String> = env::vars()
+            .filter_map(|(k, _)| k.strip_prefix("CARGO_FEATURE_SET_").map(|x| x.to_lowercase().replace('_', "-")))
+            .collect();
+        assert_eq!(set.len(), 1, "exactly one parameter set feature set-<set>: {set:?}");
+        let setdir = core.join("../params/sets").join(&set[0]);
         b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(&setdir);
         for f in ["pqz_lazer", "pqz_ntt", "pqz_arena", "pqz_rel", "pqz_keys", "pqz_sv"] {
             b.file(core.join(format!("src/{f}.c")));

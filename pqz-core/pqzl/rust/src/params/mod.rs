@@ -84,11 +84,14 @@ pub(crate) struct Tbox {
 }
 
 // exactly one parameter set per build
-const _: () = assert!(cfg!(feature = "set-n2048-kmax1024") as u8 + cfg!(feature = "set-n2304-kmax4096") as u8 == 1, "enable exactly one set-<set> feature");
+const _: () = assert!(cfg!(feature = "set-n2048-kmax1024") as u8 + cfg!(feature = "set-n2304-kmax4096") as u8 + cfg!(feature = "set-n2560-kmax16384") as u8 == 1, "enable exactly one set-<set> feature");
 #[cfg(feature = "set-n2048-kmax1024")]
 #[path = "../../../../params/sets/n2048-kmax1024/rust/mod.rs"]
 mod chosen;
 #[cfg(feature = "set-n2304-kmax4096")]
 #[path = "../../../../params/sets/n2304-kmax4096/rust/mod.rs"]
+mod chosen;
+#[cfg(feature = "set-n2560-kmax16384")]
+#[path = "../../../../params/sets/n2560-kmax16384/rust/mod.rs"]
 mod chosen;
 pub(crate) use chosen::*;
