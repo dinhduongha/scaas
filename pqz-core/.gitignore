@@ -5,3 +5,4 @@ build/
 *.wasm
 lazer_dump-*
 artifact/out/
+runs/gate/last

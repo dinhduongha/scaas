@@ -6,6 +6,8 @@
 #                                                                           and in runs/gate/<label>-summary.txt
 # label: optional, default the set's name (owner 2026-10-23: nothing to remember — re-running the same command resumes;
 # progress in runs/gate/<set>-progress.txt). A run at another tree starts over and overwrites that label's logs.
+# runs/gate/last names the latest run (set, label, start, status running / PASS / FAIL; owner 2026-10-23: a resumed
+# session continues the right set): `scripts/capped pqz-core/gate.sh --last` re-runs it with its set and label.
 # PQZ_SET: the parameter set (owner 2026-10-21: pqz-core/params/sets/<set>/, one set per library build; default
 # n2304-kmax4096, the frozen v3 set is n2048-kmax1024); named in the summary.
 # Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, the PQZL
@@ -26,6 +28,12 @@
 # logs start / ok (duration) / FAILED / resumed with a timestamp to runs/gate/<label>-progress.txt (tail -f it).
 set -u
 cd "$(dirname "$0")"
+if [ "${1:-}" = --last ]; then
+  [ -f runs/gate/last ] || { echo "gate.sh --last: no runs/gate/last" >&2; exit 2; }
+  PQZ_SET=$(sed -n 's/^set=//p' runs/gate/last)
+  set -- "$(sed -n 's/^label=//p' runs/gate/last)"
+  echo "gate.sh --last: set $PQZ_SET, label $1"
+fi
 PQZ_SET=${PQZ_SET:-n2304-kmax4096}
 L=${1:-$PQZ_SET} FZ=${2:-60}
 R=runs/gate/$L
@@ -44,6 +52,7 @@ GATE_TREE=$PQZ_SET-$( { git rev-parse HEAD
     (cd "$TOP" && xargs -0r sha256sum); } | sha256sum | cut -c1-16)
 GATE_LOG=$(pwd)/$R-progress.txt
 export GATE_STATE GATE_TREE GATE_LOG
+printf 'set=%s\nlabel=%s\nstarted=%s\nstatus=running\n' "$PQZ_SET" "$L" "$(date +%FT%T)" > runs/gate/last
 glog "gate $L (set $PQZ_SET) started at $(git rev-parse --short HEAD), tree $GATE_TREE"
 # the summary also goes to a file (review round 2: the PQZL Rust port's gate PASS line was on stdout only)
 say() { echo "$*" | tee -a "$R-summary.txt"; }
@@ -138,4 +147,5 @@ if [ "$PQZH" = True ]; then step xcheck pqzh/xcheck/run.sh; else skip xcheck "$N
 if [ "$CORE_ONLY" = True ]; then skip fuzz core_only; else step fuzz fuzz; fi
 say "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && echo PASS || echo FAIL )"
 glog "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && echo PASS || echo FAIL )"
+sed -i "s/^status=.*/status=$( [ $fail = 0 ] && echo PASS || echo FAIL ) $(date +%FT%T)/" runs/gate/last
 exit $fail
