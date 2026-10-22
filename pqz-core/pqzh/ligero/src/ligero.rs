@@ -270,11 +270,12 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Resu
 }
 
 /// The prover's length limit: the verifier's bound; fallback A (feature `fallback-retry`, set (a) with THE preset): also
-/// at most MAX_PROOF_PQZH, so the prover re-proves (fresh masks and salts) while a proof is longer. The length is a
-/// function of the transcript's query indices alone, so the rejection keeps zero knowledge (the simulator rejection-
-/// samples the same public event): docs/research/pqzh-set-a-proof-limit.md.
+/// at most MAX_PROOF_PQZH for the production preset (the one the precompile gates; the bench's reference presets keep
+/// their bound), so the prover re-proves (fresh masks and salts) while a proof is longer. The length is a function of
+/// the transcript's query indices alone, so the rejection keeps zero knowledge (the simulator rejection-samples the same
+/// public event): docs/research/pqzh-set-a-proof-limit.md.
 fn prover_limit(p: &Params, rel: Rel) -> usize {
-    if cfg!(feature = "fallback-retry") {
+    if cfg!(feature = "fallback-retry") && *p == Params::proven() {
         p.max_proof_len(rel).min(pqz_stmt::MAX_PROOF_PQZH)
     } else {
         p.max_proof_len(rel)
