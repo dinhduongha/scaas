@@ -9,6 +9,7 @@
 # proof bytes, valid). Exit 1 if any step fails.
 set -u
 cd "$(dirname "$0")/.."
+. ../resume.sh # under gate.sh: a check that passed at this tree is skipped; builds always run (owner 2026-10-23)
 R=vectors/runs/$1
 mkdir -p vectors/runs
 fail=0
@@ -25,7 +26,7 @@ esac
 V=../../smartcontracts/vectors/pqz; [ "$S" = n2048-kmax1024 ] || V=$V/$S
 export PQZ_SET=$S
 echo "set $S, vectors $V; PQZL backend: ${PQZL:-the default feature} (cargo flags: ${BF:-none})" > "$R-build.txt"
-step() { name=$1; shift; "$@" || { echo "FAILED: $name (rc=$?)"; fail=1; }; }
+step() { name=$1; shift; case $name in build | rebuild | wasm-build) "$@" ;; *) part "vectors/$name" "$@" ;; esac || { echo "FAILED: $name (rc=$?)"; fail=1; }; }
 B="cargo build --release --offline $BF --features prove --bin pqz-vectors"
 step build sh -c "$B >> $R-build.txt 2>&1"
 if [ "${2:-}" = write ]; then

@@ -7,6 +7,7 @@
 # scans, the C smoke test against pqz_ffi.h, the wasm32 builds and the native = wasm32 digest diff, the bench.
 set -u
 cd "$(dirname "$0")"
+. ../resume.sh # under gate.sh: a block that ran to its end at this tree is skipped (owner 2026-10-23)
 L=runs/$1 X=$(pwd)/target/run
 mkdir -p runs "$X"
 rm -f "$X/fill.txt"
@@ -21,13 +22,17 @@ case ${PQZL:-} in
   *) echo "PQZL=$PQZL: rust or c" >&2; exit 2 ;;
 esac
 
+ffi_test() {
 {
   echo "# PQZL backend: ${PQZL:-the default feature} (cargo flags: ${BF:-none})"
   OUT cargo test --release --offline $BF --lib
   PQZ_FFI_DIGESTS=$X/native.jsonl PQZ_FFI_FILL_OUT=$X/fill.txt OUT cargo test --release --offline $BF --features prove,test-hooks -- --nocapture --test-threads 4
 } > "$L-test.txt" 2>&1
+}
+part ffi/test ffi_test
 cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null # C backend only (fill_determinism)
 
+ffi_native() {
 {
   echo "# verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one"
   OUT cargo build --release --offline $BF
@@ -58,7 +63,10 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null # C backend only (fill_determinism)
   echo "# clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate"
   OUT cargo clippy --release --offline $BF --features prove,test-hooks --lib -- -D clippy::float_arithmetic
 } > "$L-native.txt" 2>&1
+}
+part ffi/native ffi_native
 
+ffi_wasm() {
 {
   echo "# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native"
   OUT cargo build --release --offline $BF --lib --target wasm32-unknown-unknown
@@ -73,9 +81,14 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null # C backend only (fill_determinism)
   cp "$X/native.jsonl" "$L-digests-native.jsonl"; cp "$X/wasm.jsonl" "$L-digests-wasm.jsonl"
   if diff "$X/native.jsonl" "$X/wasm.jsonl"; then echo "native = wasm32: $(wc -l < "$X/wasm.jsonl") lines equal"; else echo "native != wasm32"; fi
 } > "$L-wasm.txt" 2>&1
+}
+part ffi/wasm ffi_wasm
 
+ffi_bench() {
 /usr/bin/time -v cargo run --release --offline $BF --features prove,test-hooks --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
 echo "bench rc=$?" >> "$L-bench-time.txt"
+}
+part ffi/bench ffi_bench
 
 grep -hE "^# PQZL backend|^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|op 7 largest|abort-freedom:|selftest hash|node faults:|verify-only |fill determinism:" "$L-test.txt"
 grep -hE "^c_abi|symbols ok|forbidden|C core in this build|NEEDED|/gmp|libm-style|\[rc=[1-9]" "$L-native.txt"

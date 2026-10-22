@@ -6,12 +6,13 @@
 # prover, which mutation cannot produce (they pass the final hash and reach the z2 norm check).
 set -eu
 cd "$(dirname "$0")/.."
+. ../resume.sh # under gate.sh: a run that passed at this tree is skipped (owner 2026-10-23)
 CAPPED=${CAPPED:-$(git rev-parse --show-toplevel)/scripts/capped}
 L=$1 NR=${2:-40} NT=${3:-20} MU=${4:-3} FZ=${5:-20}
 ./build.sh native >/dev/null 2>&1
 ./build.sh native-x86v3 >/dev/null 2>&1
-$CAPPED build/native/pqz_sv_diff "$NR" "$NT" "$MU" 1 "$FZ" > "sv/runs/$L-portable.jsonl" || echo "portable rc=$?"
-$CAPPED build/native-x86v3/pqz_sv_diff $((NR / 2)) $((NT / 2)) "$MU" 2 "$FZ" > "sv/runs/$L-x86v3.jsonl" || echo "x86v3 rc=$?"
-$CAPPED sv/review/review.sh zdiff "${ZN:-1}" > "sv/runs/$L-z21diff.jsonl" || echo "z21diff rc=$?"
+part diff/portable sh -c "$CAPPED build/native/pqz_sv_diff $NR $NT $MU 1 $FZ > sv/runs/$L-portable.jsonl" || echo "portable rc=$?"
+part diff/x86v3 sh -c "$CAPPED build/native-x86v3/pqz_sv_diff $((NR / 2)) $((NT / 2)) $MU 2 $FZ > sv/runs/$L-x86v3.jsonl" || echo "x86v3 rc=$?"
+part diff/z21diff sh -c "$CAPPED sv/review/review.sh zdiff ${ZN:-1} > sv/runs/$L-z21diff.jsonl" || echo "z21diff rc=$?"
 grep -h z21diff "sv/runs/$L-z21diff.jsonl"
 grep -h -e '"seed"' -e '"mismatch"' -e prg -e arena "sv/runs/$L-portable.jsonl" "sv/runs/$L-x86v3.jsonl"

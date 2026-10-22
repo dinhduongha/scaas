@@ -17,6 +17,10 @@
 # another set the Ligero tests and the STARK / Ligero cross-check are "skipped (PQZH ...)" and pqz-ffi / pqz-vectors
 # are built without PQZH (owner ruling 2026-10-21: skipped, not PARTIAL). A core_only set (set.toml, e.g. A') has no
 # pqz-stmt / precompile build: vectors, ffi, cargo, xcheck and fuzz are "skipped (core_only)". Exit 1 if any step fails.
+# Resume (owner 2026-10-23, every set): runs/gate/<label>-state records each step and each part of a long step (diff,
+# fnv, vectors, ffi, rust, cargo, fuzz; resume.sh) that passed; re-running the same label at the same set and tree
+# (HEAD + uncommitted changes, logs and the fuzz corpus excluded) skips them, so an interrupted gate restarts near
+# where it stopped. A code change re-runs everything; GATE_FRESH=1 ignores the state.
 set -u
 cd "$(dirname "$0")"
 L=$1 FZ=${2:-60} R=runs/gate/$1
@@ -26,10 +30,25 @@ export PQZ_SET
 V3=n2048-kmax1024
 mkdir -p runs/gate
 fail=0
+. ./resume.sh
+GATE_STATE=$(pwd)/$R-state
+[ "${GATE_FRESH:-0}" = 1 ] && rm -f "$GATE_STATE"
+TOP=$(git rev-parse --show-toplevel)
+GATE_TREE=$PQZ_SET-$( { git rev-parse HEAD
+  git -C "$TOP" diff HEAD -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus'
+  git -C "$TOP" ls-files -o --exclude-standard -z -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus' |
+    (cd "$TOP" && xargs -0r sha256sum); } | sha256sum | cut -c1-16)
+export GATE_STATE GATE_TREE
 # the summary also goes to a file (review round 2: the PQZL Rust port's gate PASS line was on stdout only)
 say() { echo "$*" | tee -a "$R-summary.txt"; }
 echo "# gate $L (set $PQZ_SET): $(git rev-parse HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)" > "$R-summary.txt"
-step() { name=$1; shift; say "== $name"; if "$@" > "$R-$name.txt" 2>&1; then say "   ok"; else say "   FAILED (rc=$?)"; fail=1; fi; }
+step() {
+  name=$1
+  shift
+  say "== $name"
+  if grep -qxF "step/$name $GATE_TREE" "$GATE_STATE" 2>/dev/null; then say "   ok (resumed: passed earlier at this tree)"; return; fi
+  if "$@" > "$R-$name.txt" 2>&1; then say "   ok"; echo "step/$name $GATE_TREE" >> "$GATE_STATE"; else say "   FAILED (rc=$?)"; fail=1; fi
+}
 skip() { say "== $1"; say "   skipped ($2)"; }
 SJ=params/sets/$PQZ_SET/set.json
 json() { python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$SJ" "$1"; }
@@ -46,16 +65,27 @@ diffs() { (cd pqzl && CAPPED=env sv/diff.sh "gate-$L" 20 10 2 10 &&
 tbox() { (cd pqzl && ./check_tbox_fixes.sh); }
 # the vector tests need the set's vectors; without them (any set but v3 until 8d) tests/common builds one honest row per
 # bench relation, proved by the C core, so the crate also needs feature bench
-rust() { (cd pqzl/rust && CARGO_TARGET_DIR=target/$PQZ_SET cargo test -j2 --release --offline $NODEF --features "${FEAT}c-oracle,test-hooks,bench" &&
+# (one part per test binary: cargo builds them all, then each runs as cargo test would, from the crate directory)
+rust() { (cd pqzl/rust && export CARGO_TARGET_DIR="target/$PQZ_SET" && rf=0 &&
+  CF="-j2 --release --offline $NODEF --features ${FEAT}c-oracle,test-hooks,bench" &&
+  cargo test $CF --no-run --message-format=json | python3 -I -c "$TESTX" > "$CARGO_TARGET_DIR/gate-tests.txt" &&
+  while read -r n x; do echo "     Running $n ($x)"; part "rust/$n" "$x" < /dev/null || rf=1; done < "$CARGO_TARGET_DIR/gate-tests.txt" &&
+  part rust/doc cargo test $CF --doc && [ $rf = 0 ] &&
   python3 -I ../params/to_rust.py --check && python3 -I ../../params/sets/gen_set.py --all --check); }
+# "<kind>-<target> <executable>" per test binary of cargo's JSON messages
+TESTX='import json, sys
+for l in sys.stdin:
+    j = json.loads(l)
+    if j.get("reason") == "compiler-artifact" and j.get("executable") and j["profile"]["test"]:
+        print(j["target"]["kind"][0] + "-" + j["target"]["name"], j["executable"])'
 # C = Rust = wasm32 on the bench proofs: the C core's pqz_bench, the Rust bench and the Rust bench in wasm32 (node) print
 # the same proofs_fnv per relation (2 proofs of each of the 14 relations, mask 16383)
-fnv() { (cd pqzl && PQZ_ARENA_MB=2048 build/native/pqz_bench 2 1 16383 > "../$R-fnv-c.jsonl" &&
-  cd rust && CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline $NODEF --features "${FEAT}bench" --bin bench &&
-  "target/$PQZ_SET/release/bench" 2 1 16383 > "../../$R-fnv-rust.jsonl" &&
-  (cd wasm && CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline --target wasm32-unknown-unknown \
-     --no-default-features --features "set-$PQZ_SET") &&
-  PQZL_WASM_FILE="wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm" node wasm/run_wasm.mjs 2 1 16383 > "../../$R-fnv-wasm.jsonl" &&
+fnv() { (cd pqzl && part fnv/c sh -c "PQZ_ARENA_MB=2048 build/native/pqz_bench 2 1 16383 > '../$R-fnv-c.jsonl'" &&
+  cd rust && part fnv/rust sh -c "CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline $NODEF --features '${FEAT}bench' --bin bench &&
+    target/$PQZ_SET/release/bench 2 1 16383 > '../../$R-fnv-rust.jsonl'" &&
+  part fnv/wasm sh -c "(cd wasm && CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline --target wasm32-unknown-unknown \
+     --no-default-features --features 'set-$PQZ_SET') &&
+    PQZL_WASM_FILE=wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_wasm.mjs 2 1 16383 > '../../$R-fnv-wasm.jsonl'" &&
   cd ../.. && for x in c rust wasm; do python3 -I -c "$FNVX" "$R-fnv-$x.jsonl" > "$R-fnv-$x.txt" || return 1; done &&
   test "$(wc -l < "$R-fnv-c.txt")" = 14 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
   cat "$R-fnv-c.txt"); }
@@ -72,10 +102,10 @@ for l in open(sys.argv[1]):
 sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
 # pqz-stmt at the set; Ligero's tests where the set has PQZH
-cargo_tests() { (cd stmt && CARGO_TARGET_DIR=target/$PQZ_SET cargo test --release --offline --no-default-features --features "set-$PQZ_SET") &&
-  if [ "$PQZH" = True ]; then (cd pqzh/ligero && cargo test --release --offline); else echo "Ligero: $NOPQZH"; fi; }
+cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --no-default-features --features "set-$PQZ_SET") &&
+  if [ "$PQZH" = True ]; then (cd pqzh/ligero && part cargo/ligero cargo test --release --offline); else echo "Ligero: $NOPQZH"; fi; }
 # a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): restore them afterwards
-fuzz() { fuzz/build.sh && for t in precompile mutate codec; do fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done &&
+fuzz() { fuzz/build.sh && for t in precompile mutate codec; do part "fuzz/$t" fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done &&
   git checkout -- fuzz/corpus && git clean -fdq fuzz/corpus; }
 
 say "set $PQZ_SET"
