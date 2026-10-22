@@ -25,21 +25,24 @@ limbs. Query soundness 128.50 bits as v3 (field terms larger).
 
 Every debit bound is above `MAX_PROOF_PQZH` 262,144 by ≈ 40 KB. Every built form fits `MAX_INPUT` 512 KiB (Task 8d).
 
-### Open item (owner): debit proofs vs `MAX_PROOF_PQZH`
+### Decision (owner 2026-10-23): `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only
 
-The debit bounds (≈ 301.9–303.6 KB [model]) exceed 262,144 as set (a)'s did (owner 2026-10-22 for set (a): B in
-production, A and C fallbacks; `docs/research/pqzh-set-a-proof-limit.md`). The same B / A / C question is open for
-this set, **not decided**; facts for it [model, `runs/c8-params-n2560-kmax16384.txt`]:
+The debit bounds (≈ 301.9–303.6 KB [model]) exceed the 262,144 B every other set keeps. Of the three options for a
+proof over the limit (`pqz-core/params/sets/README.md`, "When a PQZH proof exceeds `MAX_PROOF_PQZH`"), only the per-set
+limit raise works here [model, `runs/c8-params-n2560-kmax16384.txt`]:
 
-- **B (a set-specific preset):** not available as at set (a). q − 1 = 2^3·19·43·431·5,659·70,627 has no other small
-  radix, and the preset search over the crate's radices (with the prover cost that models the crate's FFT, n up to
-  148,264) finds no proven preset below ≈ 299.6 KB for R_TX (≈ 300.4 KB for op 7 M = 4 with the auditor).
-- **A (re-prove under the limit):** a ≈ 37–41 KB gap; at set (a) honest debit proofs sat ≈ 2–7 KB under their bound
-  [measured, spike A], so rejection on length would essentially never succeed here.
-- **C (raise `MAX_PROOF_PQZH` for this set):** ≥ ≈ 304 KB (the op 7 M = 4 auditor bound 303,590), one per-set constant.
-- Otherwise: no PQZH debits at 16k (registration and disclosures fit 262,144).
+- **set-specific preset:** not available. q − 1 = 2^3·19·43·431·5,659·70,627 has no other small radix, and the preset
+  search over the crate's radices (prover cost modelling the crate's FFT, n up to 148,264) finds no proven preset below
+  ≈ 299.6 KB for R_TX (≈ 300.4 KB for op 7 M = 4 with the auditor).
+- **re-prove under the limit:** a ≈ 37–41 KB gap; at `n2304-kmax4096` honest debit proofs sat ≈ 2–7 KB under their
+  bound [measured], so rejection on length would essentially never succeed here.
+- **per-set limit raise (chosen):** `MAX_PROOF_PQZH` = **327,680 B** at `n2560-kmax16384` only (decisions CTR-PQZ-10).
+  Headroom over the largest bound (op 7 M = 4 with the auditor, 303,590 B): 24,090 B. Largest precompile input
+  5 + 165,760 + 327,680 = 493,445 B ≤ `MAX_INPUT` 512 KiB. Built in Task 8c part 2 (the prover limit in this set's
+  `pqzh_set.rs`) and Task 8d (per-set `pqz-stmt` `max_proof(PQZH_ID)` and `MAX_INPUT`).
 
-To be settled when the 16k set is built (Task 8c part 2 / 8b's set directory).
+For anyone running PQZH at this set: a chain must accept PQZH proofs up to 327,680 B and precompile inputs up to
+493,445 B, and the calldata conditions below still apply (debits need a per-transaction cap ≥ ≈ 21.2 M).
 
 ## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [model]
 
@@ -62,6 +65,6 @@ A PQZH debit needs a per-transaction regular-gas cap ≥ ≈ 21.2 M; under 2^24 
 
 ## Summary
 
-PQZH at 16k needs: a 16k PQZH `proofSystemId` (8d), an answer to the open item above for debits (on today's numbers
-`MAX_PROOF_PQZH` ≥ ≈ 304 KB, or no PQZH debits), a
+PQZH at 16k needs: a 16k PQZH `proofSystemId` (8d), `MAX_PROOF_PQZH` = 327,680 B for this set (owner 2026-10-23, built in 8c part 2 /
+8d), a
 per-transaction cap ≥ ≈ 21.2 M for debits, a block ≥ ≈ 56 M per debit, calibrated `G_op`, and measured verify time.
