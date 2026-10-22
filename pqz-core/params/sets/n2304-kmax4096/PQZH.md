@@ -2,11 +2,11 @@
 
 PQZH (Ligero over F_q, `pqz-core/pqzh/ligero`) is the **backup** proof system (owner 2026-10-21); PQZL is the one on
 chain. This file says what a chain needs before it can accept PQZH proofs at this parameter set. Plan 5h Task 8c
-part 1; the PQZH `proofSystemId` of this set comes with Task 8d's bump. `SET.md` (Task 8b) is this set's main
-description.
+part 1 and 1b (preset B, owner 2026-10-22); the PQZH `proofSystemId` of this set comes with Task 8d's bump. `SET.md`
+(Task 8b) is this set's main description.
 
-Sources: `[crate]` = the Rust crate built with `--features set-n2304-kmax4096` (`pqz-core/pqzh/ligero/runs/c8-a-*`);
-`[model]` = `python3 -I pqz-core/pqzh/ligero/ligero_params.py --set n2304-kmax4096`
+Sources: `[crate]` = the Rust crate built with `--features set-n2304-kmax4096` (`pqz-core/pqzh/ligero/runs/c8b-a-*`,
+preset B); `[model]` = `python3 -I pqz-core/pqzh/ligero/ligero_params.py --set n2304-kmax4096`
 (`runs/c8-params-n2304-kmax4096.txt`, equal to the crate on all 14 relations it checks); `[measured]` = an earlier
 measurement named in place; `[estimate]` = scaled or assumed, not measured.
 
@@ -18,41 +18,38 @@ measurement named in place; `[estimate]` = scaled or assumed, not measured.
 | F_q element in a proof | 46 bits in 6 bytes, big-endian, canonical (as v3) |
 | extension | F_q^4 = F_q[X]/(X^4 − 3), 3 a non-square, \|F_q^4\| = 2^183.2 |
 | generator | 3 (generates F_q^*) |
-| domains | THE preset of v3 kept: n = 32,756 = 4·19·431 (code on the coset 3·H_n), k = 817 = 19·43 (messages on H_k), t = 121, l = 695, products on H_1634; FFT radices 2 / 19 / 43 / 431 |
+| domains | **preset B** (owner 2026-10-22): n = 45,752 = 2^3·7·19·43 (code on the coset 3·H_n), k = 952 = 2^3·7·17 (messages on H_k), t = 120, l = 831, products on H_2261 (7·17·19); FFT radices 2 / 7 / 17 / 19 / 43 / 431 (7 and 17 through the generic r-point stage); 3·H_n misses H_k (tested). v3's preset (n 32,756, k 817, t 121) is the fallbacks' (below) |
 | arithmetic | native: Barrett, u128 products; wasm32: three 16-bit limbs in u64 (no 64 × 64 → 128 multiply) |
-| constants | `pqzh_set.rs` (this directory) + `rust/set.rs` (PQZL's) |
+| constants | `pqzh_set.rs` (this directory; the fallbacks' preset in `pqzh_set_fallback.rs`, spike B's t = 119 file `pqzh_set_spike_b.rs` kept, not compiled) + `rust/set.rs` (PQZL's) |
 
 ## Soundness [crate]
 
-Every relation: 127.23 bits in total (query 128.50 = 121 columns × 0.9298 + 16 grinding; Keccak 128;
-proximity ≥ 159.8, linear ≥ 169.2, quadratic 183.2). The same total as v3: the query term depends on n and k only,
-the field terms grow with q (v3: 145.0 / 154.3 / 168.0).
+Every relation: 127.40 bits in total (query 128.94 = 120 columns × 0.9412 + 16 grinding; Keccak 128;
+proximity ≥ 159.7, linear ≥ 169.3, quadratic 183.2). v3 and THE preset here: 127.23 (query 128.50); t = 120 is one
+column above the model's minimum 119 so that the total stays above 127.23 (owner 2026-10-22). The query term depends
+on n and k only, the field terms grow with q (v3: 145.0 / 154.3 / 168.0).
 
 ## Sizes per form
 
 The bound is the verifier's exact maximum (`Params::max_len_exact`): the length gate before anything is parsed.
-Honest proofs: seeds 0 and 1 of the crate's test inputs (`runs/c8-a-kat.jsonl`).
+Honest proofs: seeds 0 and 1 of the crate's test inputs (`runs/c8b-a-kat.jsonl`). Bounds `runs/c8b-a-sizes.jsonl`.
 
 | relation | rows m | proof bound B [crate] | honest proofs B [crate] | statement B | input 5 + stmt + bound B |
 |---|---|---|---|---|---|
-| R_REG (op 3) | 83 | 204,978 | 200,376–201,746 | 18,528 | 223,511 |
-| R_DS (op 4) | 83 | 204,978 | 201,458–201,650 | 37,280 | 242,263 |
-| R_DR / R_DA (op 5) | 83 | 204,978 | 201,714–202,162 | 37,280 | 242,263 |
-| R_TX (op 1, auditor) | 165 | 264,510 | 260,702–261,086 | 93,312 | 357,827 |
-| R_TX0 (op 1, no auditor) | 164 | 263,784 | 260,168–260,616 | 74,752 | 338,541 |
-| R_BURN / refresh (op 2) | 164 | 263,784 | 260,328–261,096 | 56,192 | 319,981 |
-| R_TXM op 7 M = 1 / 2 / 4, auditor | 165 / 165 / 166 | 264,510 / 264,510 / 265,236 | 260,862–261,972 | 93,312 / 112,000 / 149,376 | 357,827 / 376,515 / 414,617 |
-| R_TXM op 7 M = 1 / 2 / 4, no auditor | 164 / 165 / 165 | 263,784 / 264,510 / 264,510 | 259,432–262,014 | 74,752 / 93,312 / 130,432 | 338,541 / 357,827 / 394,947 |
-| R_TXM op 7 M = 8 (G = 2; not a PQZH shape) | 248 / 247 | 324,768 / 324,042 [model] | — | 242,560 / 223,104 | 567,333 / 547,151 |
+| R_REG (op 3) | 63 | 207,688 | 204,358–204,936 | 18,528 | 226,221 |
+| R_DS (op 4) | 63 | 207,688 | 204,616–205,416 | 37,280 | 244,973 |
+| R_DR / R_DA (op 5) | 63 | 207,688 | 204,552–204,936 | 37,280 | 244,973 |
+| R_TX (op 1, auditor) | 124 | 251,608 | 248,312–248,952 | 93,312 | 344,925 |
+| R_TX0 (op 1, no auditor) | 124 | 251,608 | 247,544–248,376 | 74,752 | 326,365 |
+| R_BURN / refresh (op 2) | 124 | 251,608 | 247,176–248,440 | 56,192 | 307,805 |
+| R_TXM op 7 M = 1 / 2 / 4, auditor | 124 / 125 / 126 | 251,608 / 252,328 / 253,048 | 247,304–249,880 | 93,312 / 112,000 / 149,376 | 344,925 / 364,333 / 402,429 |
+| R_TXM op 7 M = 1 / 2 / 4, no auditor | 124 / 124 / 125 | 251,608 / 251,608 / 252,328 | 246,792–249,384 | 74,752 / 93,312 / 130,432 | 326,365 / 344,925 / 382,765 |
+| R_TXM op 7 M = 8 (G = 2; not a PQZH shape) | 187 / 186 | 296,968 / 296,248 [crate, not built] | — | 242,560 / 223,104 | 539,533 / 519,357 |
 
-- `MAX_PROOF_PQZH` = 262,144 (owner 2026-10-21: stays): R_REG / R_DS / R_DR fit; **every debit bound is above it**
-  (by 1,640–3,092 B), and the honest debit proofs measured are 130–2,712 B below it. A chain at this set either accepts
-  that a debit proof above 262,144 is refused (the prover can re-prove with fresh randomness until it is below:
-  `prove_inner`'s retry with the precompile's limit, Task 8c part 2; the retry then fires, so its zero-knowledge argument
-is to be re-checked: review finding 6 in `docs/research/pqzh-ligero.md` §12), or uses a preset with the extra radices 7 / 17 of
-  this q (n 45,752, k 952, t 119: R_TX bound 250,512, op 7 M = 4 251,940 [model]; not built), or raises the limit.
-- `MAX_INPUT`: 393,216 today, 512 KiB from Task 8d: every built form fits 512 KiB (op 7 M = 4 auditor 414,617 does not
-  fit today's 393,216).
+- `MAX_PROOF_PQZH` = 262,144 (owner 2026-10-21: stays): **every built form fits**, the debit bounds by 9,096–10,536 B
+  (THE preset's were 1,640–3,092 B above it; see "Fallbacks").
+- `MAX_INPUT`: 393,216 today, 512 KiB from Task 8d: every built form fits 512 KiB; op 7 M = 4 with the auditor
+  (402,429) does not fit today's 393,216.
 
 ## One transaction's calldata (EIP-7976) [model]
 
@@ -63,44 +60,67 @@ Foundry 1.8.5 Amsterdam]); with Ethereum's per-transaction regular-gas cap 2^24 
 
 | relation | path | calldata B | floor gas | fits 2^24 | smallest per-tx cap (floor) |
 |---|---|---|---|---|---|
-| R_REG | `UARegistry.register` | 228,996 | 14,670,744 | yes | 14.67 M |
-| R_DS / R_DR | `verifyTransferAmount` (`eth_call`) | 205,188 | 13,147,032 | yes | 13.15 M |
-| R_TX / R_TX0 | relayed `mtxExecute` (op 1) | 287,844 / 287,012 | 18,437,016 / 18,383,768 | **no** | 18.44 / 18.38 M |
-| R_BURN / refresh | relayed `mtxExecute` (op 2) | 286,884 | 18,375,576 | **no** | 18.38 M |
-| R_TXM op 7 M = 1 / 2 / 4, auditor | relayed `mtxExecute` | 287,908 / 288,196 / 289,508 | 18.44 / 18.46 / 18.54 M | **no** | 18.44 / 18.46 / 18.54 M |
+| R_REG | `UARegistry.register` | 231,716 | 14,844,824 | yes | 14.84 M |
+| R_DS / R_DR | `verifyTransferAmount` (`eth_call`) | 207,908 | 13,321,112 | yes | 13.32 M |
+| R_TX / R_TX0 | relayed `mtxExecute` (op 1) | 274,948 / 274,820 | 17,611,672 / 17,603,480 | **no** | 17.61 / 17.60 M |
+| R_BURN / refresh | relayed `mtxExecute` (op 2) | 274,692 | 17,595,288 | **no** | 17.60 M |
+| R_TXM op 7 M = 1 / 2 / 4, auditor | relayed `mtxExecute` | 275,012 / 276,036 / 277,316 | 17.62 / 17.68 / 17.76 M | **no** | 17.62 / 17.68 / 17.76 M |
 
 The largest proof one 2^24 transaction can carry on the debit paths is ≈ 237.6–238.8 KB. **A PQZH debit needs a
-per-transaction regular-gas cap of at least ≈ 18.6 M** (e.g. 2^25); with 2^24 only registration and the disclosure
+per-transaction regular-gas cap of at least ≈ 17.8 M** (e.g. 2^25); with 2^24 only registration and the disclosure
 `eth_call`s work. A direct call to the precompile carries the whole input as calldata: R_REG / R_DS / R_DR fit 2^24
-(223,511 / 242,263 B), the debit forms do not.
+(226,221 / 244,973 B), the debit forms do not.
 
 ## Gas per operation [estimate]
 
 | item | value |
 |---|---|
-| PQZH precompile row (`G_op`) | **not calibrated at this set.** v3 rows [measured, P6f 2026-10-15]: transfer 4,225,000, transfer0 4,021,000, burn 3,738,000, register 3,322,000, disclose 3,283,000 / 2,881,000 (p99 valid 8.0–11.8 ms native). Scaled by rows (m + 12: 177 / 137, 95 / 75) ≈ 5.5 M transfer, ≈ 4.2 M register [estimate] |
-| regular gas of a debit | floor-bound: ≈ 18.4–18.5 M (the floor above; the execution part, ≈ 2 M token work + the precompile row + 16 gas / byte standard calldata ≈ 4.6 M, stays below it [estimate]) |
+| PQZH precompile row (`G_op`) | **not calibrated at this set.** v3 rows [measured, P6f 2026-10-15]: transfer 4,225,000, transfer0 4,021,000, burn 3,738,000, register 3,322,000, disclose 3,283,000 / 2,881,000 (p99 valid 8.0–11.8 ms native). Part 1's row-scaled estimate for THE preset here (m + 12: 177 / 137, 95 / 75) ≈ 5.5 M transfer, ≈ 4.2 M register [estimate]; preset B's verifier does 0.97–1.04× THE preset's base-field products at this set [counted, spike B `runs/spike-b-count*.jsonl`], so the same estimate stands |
+| regular gas of a debit | floor-bound: ≈ 17.6–17.8 M (the floor above; the execution part, ≈ 2 M token work + the precompile row + 16 gas / byte standard calldata ≈ 4.4 M, stays below it [estimate]) |
 | state gas of a debit (EIP-8037) | as PQZL's, independent of the proof system: op 1 29.63 M with 64-bit lanes, 21.54 M with the P46 layout of Task 8d; op 7 M = 4 31.64 / 23.21 M [measured at set (a), spike PACK `55d38e61`, precompile burnt] |
-| total of a debit | ≈ 48 M (64-bit lanes) / ≈ 40 M (P46) [estimate] |
+| total of a debit | ≈ 47 M (64-bit lanes) / ≈ 39 M (P46) [estimate] |
 | R_REG | regular ≈ max(14.67 M floor, execution) ≤ 2^24 [estimate]; state: the stored key as PQZL's registration |
 
 ## Block gas limit
 
-One PQZH debit needs ≈ 40 M (P46) to ≈ 48 M (64-bit lanes) of block gas [estimate]: a 60 M block holds one (two PQZL
-op 1 debits fit the same block with P46). The block must also allow the per-transaction cap above (≥ 18.6 M regular).
+One PQZH debit needs ≈ 39 M (P46) to ≈ 47 M (64-bit lanes) of block gas [estimate]: a 60 M block holds one (two PQZL
+op 1 debits fit the same block with P46). The block must also allow the per-transaction cap above (≥ 17.8 M regular).
 
 ## Verify time
 
 Target: p99 ≤ 60 ms in wasm32 (and native on the chain host). **Not measured at this set** (no timing in Task 8c). For
 reference, v3 wasm32 p99 honest verify was 15–24 ms (`runs/rev2-proven-wasm.jsonl`, before the set-generic field,
-which also changed the wasm32 reduction); this set has 1.3× the rows. Calibrate before any chain uses it.
+which also changed the wasm32 reduction); at this set preset B's verifier does 0.97–1.04× the base-field products of
+THE preset [counted, spike B], whose rows are 1.3× v3's. Calibrate before any chain uses it.
 
 ## Summary: what a chain needs for PQZH at this set
 
 1. A PQZH `proofSystemId` for this set in the precompile build and the chainspec's schedule rows (Task 8d), with
    `G_op` calibrated at this set (not done).
-2. Debits (op 1 / 2 / 7): a per-transaction regular-gas cap ≥ ≈ 18.6 M (2^24 is not enough), and a debit proof
-   ≤ `MAX_PROOF_PQZH` 262,144 (re-prove when above, or one of the alternatives in "Sizes per form").
+2. Debits (op 1 / 2 / 7): a per-transaction regular-gas cap ≥ ≈ 17.8 M (2^24 is not enough). Proof sizes need
+   nothing: with preset B every bound is under `MAX_PROOF_PQZH` 262,144.
 3. Registration and disclosures: work under 2^24.
-4. A block gas limit ≥ ≈ 48 M (≈ 40 M with P46) per PQZH debit.
+4. A block gas limit ≥ ≈ 47 M (≈ 39 M with P46) per PQZH debit.
 5. Verify time measured ≤ 60 ms p99 (not yet).
+
+## Fallbacks (owner 2026-10-22)
+
+Production at this set is preset B (above; owner 2026-10-22: "chọn B, A và C là các phương án dự phòng"). Two
+fallbacks are kept for the case that B is rejected later (e.g. by a review of its domains or a chain that wants no
+set-specific preset); neither is in a production build. Analysis, numbers and the zero-knowledge argument:
+`docs/research/pqzh-set-a-proof-limit.md`.
+
+- **A — re-prove under `MAX_PROOF_PQZH`** (Cargo feature `fallback-retry` of `pqzh-ligero`, this set only; never in
+  the default or production builds; also tag `pqzh-set-a-fallback-A` on the spike commit `4f3477b8`). It uses THE
+  preset of v3 (n 32,756, k 817, t 121, radices 2 / 19 / 43 / 431; `pqzh_set_fallback.rs`; 127.23 bits) and the prover
+  limit min(verifier bound, 262,144) with up to 32 attempts (`ligero.rs` `prover_limit`). The verifier and its bounds
+  (263,784–265,236 B) are unchanged; every accepted proof is ≤ 262,144. Cost: +38 % prover runs on average for op 7
+  M = 4 with the auditor (27.6 % of first attempts exceed the limit, up to 7 runs seen in 200), ≈ +0.9 % for R_TX and
+  op 7 M = 2 / M = 4 without the auditor, none for R_TX0 / R_BURN; failure after 32 attempts ≈ 10^−18 [measured,
+  spike A]. Zero knowledge: the proof length is a function of the random-oracle query indices only, so rejection on
+  length conditions on a public, witness-independent event that the simulator reproduces. Debit calldata with a proof at
+  262,144: ≈ 285.5–286.4 KB [model], so a per-tx cap ≥ ≈ 18.4 M. Tested: `runs/c8b-fallback-tests.txt`.
+- **C — raise `MAX_PROOF_PQZH` for this set** (documented only, no code): with THE preset, `MAX_PROOF_PQZH`
+  ≥ 265,236 (the op 7 M = 4 auditor bound) as a per-set constant (pqz-stmt, the precompile, the node, the docs that
+  quote 262,144). Against the owner's 2026-10-21 ruling that the limit stays, so only when neither B nor A is
+  acceptable. Inputs: op 7 M = 4 auditor 414,617 B (above today's `MAX_INPUT` 393,216; fits 512 KiB).

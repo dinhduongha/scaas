@@ -131,3 +131,39 @@ materialise (the generic stage handles 7 and 17, wasm32 and the constant-time ch
 soundness total above today's 127.23. A is the cheap fallback if a set-specific preset is unwanted (its argument
 holds, its cost is +38 % prover runs on op 7 M = 4 with the auditor). C stays the fallback of last resort. None of
 them lets a PQZH debit fit one 2^24 transaction at set (a).
+
+## Decision and fallbacks (owner 2026-10-22)
+
+**B shipped at t = 120** (owner 2026-10-22: "chọn B, A và C là các phương án dự phòng"; plan 5h Task 8c part 1b, branch
+`pqz-8c`): set (a)'s `pqz-core/params/sets/n2304-kmax4096/pqzh_set.rs` holds radices 2 / 7 / 17 / 19 / 43 / 431 and the
+preset n 45,752, k 952, **t 120** (l 831, products on H_2261). Built and measured [crate, `runs/c8b-a-sizes.jsonl`,
+equal to `ligero_params.py --set n2304-kmax4096`]: R_REG / R_DS / R_DR 207,688; R_TX / R_TX0 / R_BURN / op 7 M = 1
+251,608; op 7 M = 2 auditor 252,328; op 7 M = 4 auditor **253,048** (9,096 B under 262,144; input 402,429); soundness
+query 128.94, total **127.40** bits on every relation (THE preset 127.23). Debit calldata at the bound 274.7–277.3 KB:
+still no 2^24 transaction (set (a) `PQZH.md`). Part 1b's round (tests, native = wasm32, constant time, product counts):
+`pqz-core/pqzh/ligero/runs/c8b-*`. Product counts at t = 120: prover debits 2.34–2.39 · 10^8 vs 2.44–2.49 · 10^8 at
+THE preset (−4 to −5 %), verifier 0.97–1.04×. `ligero_params.py --set` now counts the prover's FFT products as `fft.rs`
+does (zero-padding skip of the deepest stage): model / crate 0.93–0.96 (`runs/c8-params-n2304-kmax4096.txt`), which
+replaces the per-point charge behind the earlier "5×" claim.
+
+The two other options are kept as fallbacks; neither is in a production build.
+
+- **A — re-prove under `MAX_PROOF_PQZH`** (fallback; Cargo feature `fallback-retry` of `pqzh-ligero`, set (a) only,
+  never in the default or production builds): THE preset (n 32,756, k 817, t 121, radices 2 / 19 / 43 / 431; constants
+  in `pqzh_set_fallback.rs`), the prover's length limit min(verifier bound, 262,144) (`ligero.rs` `prover_limit`) and
+  up to 32 attempts (failure ≈ 0.276^32 ≈ 10^−18 per op 7 M = 4 auditor proof). The verifier and its bounds
+  (263,784–265,236) are unchanged; every accepted proof is ≤ 262,144. Costs: +38 % prover runs on average on op 7 M = 4
+  with the auditor, ≈ +0.9 % on R_TX / op 7 M = 2 / M = 4 without the auditor (spike A). Zero knowledge: the section
+  "Zero knowledge of rejection on length" above. When: a chain or reviewer wants no set-specific preset. The spike's
+  code is also tagged `pqzh-set-a-fallback-A` (local tag on `4f3477b8`).
+- **C — raise `MAX_PROOF_PQZH` for set (a)** (fallback of last resort; documented only, no code): with THE preset,
+  `MAX_PROOF_PQZH` ≥ 265,236 (the op 7 M = 4 auditor bound) as one per-set constant (pqz-stmt, the precompile, the node
+  and the docs that quote it). It contradicts the owner's 2026-10-21 ruling that the limit stays, so it is used only when
+  neither B nor A is acceptable. Inputs grow with it (op 7 M = 4 auditor 414,617 B, above today's `MAX_INPUT` 393,216;
+  fits Task 8d's 512 KiB).
+
+The 16k set (`n2560-kmax16384`) has the same problem without B: its q − 1 = 2^3·19·43·431·5,659·70,627 has no other
+small radix, and the preset search with the corrected prover-cost model finds no proven preset with a debit bound below
+≈ 299.6 KB (n up to 148,264) [model]. A cannot bridge a gap of ≈ 37–41 KB either (at set (a) with THE preset, honest
+debit proofs sit ≈ 2–7 KB under their bound [measured, spike A]), so only C or "no PQZH debits at 16k" remain on today's
+numbers. The question is open for the owner when the 16k set is built (16k `PQZH.md`); not decided here.

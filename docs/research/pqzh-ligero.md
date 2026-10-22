@@ -1200,7 +1200,8 @@ in `pqz-core/params/sets/<set>/PQZH.md`.
    W-bit digits, the high digits folded with 2^(W i) mod q, and a final Barrett step whose product fits u64.
 3. **Domains: THE preset at every set** (n 32,756, k 817, t 121, l 695; radices 2 / 19 / 43 / 431): every set's q − 1
    is divisible by 2^3·19·43·431, 3 generates F_q^*, 3·H_n misses H_k (tested); the query term depends on n, k only
-   (128.50 bits), the field terms grow with q. Task 7 chose the same at 16k.
+   (128.50 bits), the field terms grow with q. Task 7 chose the same at 16k. **Superseded at set (a)** by preset B
+   (part 1b, §16.4); v3 and 16k keep THE preset.
 4. **Widths from the set:** l2 bounds BETA_S / BETA_E / BETA_2, value offsets 2^bitlen(β) in bitlen(β) + 1 bits, slacks
    in bitlen(B^2) bits, M_i in MBITS, carries + 64 in CBITS, e_T / e' + 2^(EBITS−1) in EBITS, N, K, Δ, the LOG2Q mask of
    the A expansion and of uniform samples. At v3 every value is the old literal.
@@ -1221,13 +1222,49 @@ numbers. No timing was run: verify p99 at set (a) is not measured (v3 wasm32 15�
 
 ### 16.3 Open (for the owner / 8c part 2 / 8d)
 
-- **Set (a) debit proofs vs `MAX_PROOF_PQZH` 262,144** (owner: stays): bounds 1,640–3,092 B above, honest proofs
+- ~~**Set (a) debit proofs vs `MAX_PROOF_PQZH` 262,144**~~ (resolved: owner 2026-10-22 chose B, A and C fallbacks;
+  §16.4; the text below is part 1's): bounds 1,640–3,092 B above, honest proofs
   measured 130–2,712 B below. Options: (A) the prover re-proves above the precompile's limit (`prove_inner` with
   `MAX_PROOF_PQZH`; review finding 6 of §12: the retry then fires, its ZK argument to be re-checked; the condition is a
   function of the public proof, so a simulator can rejection-sample the same event); (B) a set (a) preset using the
   radices 7 / 17 of its q − 1: n 45,752, k 952, t 119, R_TX bound 250,512, op 7 M = 4 251,940, ≈ 5× fewer prover
   products [model; needs radix-7 / 17 FFT stages and a per-set preset]; (C) raise the limit. Debits cannot be carried
   by one 2^24 transaction at set (a) anyway (calldata ≈ 287–290 KB > 261,909 B; PQZH.md).
-- 16k: crate build when Task 8b's set directory exists (part 2); model only until then (debit bounds ≈ 302–304 KB).
+- 16k: crate build when Task 8b's set directory exists (part 2); model only until then (debit bounds ≈ 302–304 KB,
+  above 262,144: the B / A / C question is open for that set, see §16.4 and the 16k `PQZH.md`).
 - `pqz-ffi` / `pqz-vectors` / `gate.sh` set forwarding, the PQZH id per set (8d), `G_op` calibration and verify timing at
   the new sets.
+
+### 16.4 Set (a) preset B and the fallbacks (part 1b, owner 2026-10-22)
+
+At set (a) THE preset's debit bounds (263,784–265,236) exceeded `MAX_PROOF_PQZH` 262,144. Spikes A (re-prove) and B
+(radices 7 / 17) are in `docs/research/pqzh-set-a-proof-limit.md`; the owner chose **B at t = 120** and kept A and C
+as fallbacks (2026-10-22). Branch `pqz-8c`, raw files `pqz-core/pqzh/ligero/runs/c8b-*`.
+
+1. **Preset per set.** `params/sets/<set>/pqzh_set.rs` carries the radices and the preset; set (a): radices
+   2 / 7 / 17 / 19 / 43 / 431 (7 and 17 through the generic r-point FFT stage, no new FFT code, wasm32 unchanged),
+   n 45,752 = 2^3·7·19·43, k 952 = 2^3·7·17, t 120 (one above the model's minimum, so the total stays above 127.23),
+   l 831, products on H_2261. v3 and 16k keep THE preset.
+2. **Fallback A** = feature `fallback-retry` (set (a) only, never default or production): THE preset
+   (`pqzh_set_fallback.rs`) with the prover limit min(bound, `MAX_PROOF_PQZH`) and 32 attempts (`ligero.rs`
+   `prover_limit`); outside the feature `prove`'s limit is the verifier bound as before. Its zero-knowledge argument
+   (rejection on a public, witness-independent length) answers §12 finding 6 for that path. **Fallback C** = raise
+   `MAX_PROOF_PQZH` for the set (≥ 265,236), documented only.
+3. **Model.** `ligero_params.py --set` accepts t ≥ the model's minimum and counts the prover's FFT products as `fft.rs`
+   does (the deepest stage skips the zero padding); its numbers are 0.93–0.96× the crate's counted products (the
+   rest is outside the FFTs). The old per-point charge had made spike B's prover look ≈ 5× cheaper.
+
+| check (`runs/c8b-*`) | v3 | set (a), preset B |
+|---|---|---|
+| proofs = before | 24 / 24 fingerprints = `756713a2`; 16 / 16 vectors rows re-proved byte-exact | — |
+| tests | 15 + 17 + 8 + 1, production 13 | 15 + 16 (+1 ignored) + 8 + 1, production 13; `fallback-retry` build 15 + 16 (+1 ignored) + 9 + 1 incl. `fallback_retry_under_limit` (`c8b-fallback-tests.txt`) |
+| native = wasm32 | 24 / 24, 144 / 144 mutations rejected | 24 / 24, 144 / 144 |
+| exact bounds | unchanged | R_REG / R_DS / R_DR 207,688; debits 251,608–253,048 (9,096–10,536 B under 262,144) |
+| honest proofs | unchanged | 204,358–205,416; debits 246,792–249,880 |
+| soundness total | 127.23 | 127.40 (query 128.94) |
+| constant time (valgrind memcheck, 12 relations) | (part 1: 0 reports) | 0 secret-dependent reports, rc 0 (`ct-c8b-a.txt`) |
+| base-field products, seed 0 (`c8b-a-count.jsonl` vs `c8b-fallback-count.jsonl` = THE preset) | — | prover debits 2.34–2.39 · 10^8 vs 2.44–2.49 · 10^8 (−4 to −5 %); verifier 0.97–1.04× |
+
+Debits still need a per-transaction cap ≥ ≈ 17.8 M (calldata 274.7–277.3 KB > 261,909). The 16k set has no extra
+small radix: the search finds no proven preset below ≈ 299.6 KB there, so its B / A / C question stays open (16k
+`PQZH.md`).

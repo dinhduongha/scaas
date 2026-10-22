@@ -23,14 +23,19 @@ the parent [pqz-core/README.md](../README.md) first; the design and every measur
 
 - **Relations:** `R_REG`, `R_TX`, `R_TX0`, `R_BURN`, `R_DS`, `R_DR` and the multi-recipient transfer `R_TXM` (op 7)
   for M = 1, 2 and 4. M = 8 is not built: its proof (up to 281,208 B) would exceed PQZH's `MAX_PROOF` of 262,144 B.
-- **Parameters:** one fixed preset, `Params::proven()`: n = 32,756, k = 817, t = 121, 127.2 bits of proven
-  (unique-decoding) soundness. Parameters are fixed per `proofSystemId` and op, never read from the proof.
+- **Parameters:** one fixed preset per parameter set, `Params::proven()`: at v3 n = 32,756, k = 817, t = 121, 127.2
+  bits of proven (unique-decoding) soundness; set (a) below. Parameters are fixed per `proofSystemId` and op, never read
+  from the proof.
 - **Statements** are decoded by the shared codec `pqz-stmt`, so the same canonical rules apply as everywhere else.
 - **Parameter sets** (owner 2026-10-21, plan 5h Task 8c): one set per build, as PQZL — feature `set-<set>`
   (`set-n2048-kmax1024` = v3, `set-n2304-kmax4096` = set (a)), at most one; none = v3 (what `pqz-ffi` gets until it
   forwards a set). The constants come from `pqz-core/params/sets/<set>/rust/set.rs` (PQZL's) and `pqzh_set.rs`
-  (generator, F_q^4 non-residue, radices, preset); the same preset at every set. v3 proofs are byte-identical to
-  before the change. What a chain needs to run PQZH at a set: `params/sets/<set>/PQZH.md`.
+  (generator, F_q^4 non-residue, radices, preset). v3 keeps its preset; **set (a) uses preset B** (owner 2026-10-22:
+  radices 2 / 7 / 17 / 19 / 43 / 431, n = 45,752, k = 952, t = 120, 127.4 bits; every debit proof bound 251,608–253,048,
+  under `MAX_PROOF_PQZH` 262,144). Its fallbacks are kept, not in production builds: A = feature `fallback-retry`
+  (set (a) only: v3's preset, the prover re-proves until the proof is ≤ 262,144), C = raise `MAX_PROOF_PQZH` for the
+  set (documented only); `docs/research/pqzh-set-a-proof-limit.md`. v3 proofs are byte-identical to before the
+  change. What a chain needs to run PQZH at a set: `params/sets/<set>/PQZH.md`.
 - **Dependencies:** `sha3` and `pqz-stmt` only.
 - **Two builds:**
   - the default feature `bench` adds the reference presets, the float parameter model, soundness accounting and the
@@ -81,6 +86,7 @@ Run from `pqz-core/`:
 (cd pqzh/ligero && cargo test --release --offline --no-default-features)  # the production build
 (cd pqzh/ligero && cargo test --release --offline --features set-n2304-kmax4096)  # another parameter set
 scripts/capped pqz-core/pqzh/ligero/runs/c8.sh <tag> <set>      # from the repository root: one set's round
+scripts/capped pqz-core/pqzh/ligero/runs/c8b.sh            # from the repository root: v3 + set (a) + fallback A rounds
 scripts/capped pqz-core/pqzh/ligero/runs/gateb.sh <tag>   # from the repository root: the gate-B round
 scripts/capped pqz-core/pqzh/xcheck/ligero.sh             # from the repository root: Rust bytes = C bytes, all six forms
 scripts/capped pqz-core/pqzh/ligero/runs/ct.sh <label>    # from the repository root: the constant-time check (x86-64)
