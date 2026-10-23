@@ -79,6 +79,37 @@ exists at a set depends on q:
 
 Details per set: `<set>/PQZH.md`.
 
+### PQZL per set: sizes and limits
+
+PQZL proof size per relation, the largest of two proofs from the C prover bench of each set's gate
+(`pqz-core/runs/gate/<set>-fnv-c.jsonl`, `proof_bytes_max`; C = Rust = wasm32 byte for byte), and the C prover's arena
+peak. Op 7 (`R_TXM`) M legs with the auditor; `M = …, no auditor` without. Every set's limit is `MAX_PROOF_PQZL` 98,304 B
+(pqz-stmt; the same for all four sets).
+
+| Relation | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
+|---|---|---|---|---|
+| R_REG (op 9, register) | 28,080 | 30,273 | 32,433 | 35,420 |
+| R_DS (disclose to the sender) | 28,984 | 30,800 | 32,979 | 35,925 |
+| R_DR (disclose to the receiver) | 29,002 | 31,451 | 33,780 | 36,753 |
+| R_TX (op 1, transfer) | 42,768 | 46,706 | 50,407 | 54,857 |
+| R_TX0 (transfer from a fresh account) | 42,423 | 46,322 | 50,060 | 54,508 |
+| R_BURN | 41,925 | 45,836 | 49,551 | 54,031 |
+| op 7 M = 1 | 42,755 | 46,673 | 50,385 | 54,882 |
+| op 7 M = 2 | 43,614 | 47,509 | 51,226 | 57,762 |
+| op 7 M = 4 | 45,278 | 50,749 | 54,850 | 59,529 |
+| op 7 M = 8 (two randomness groups) | 61,831 | 67,604 | 72,724 | 79,195 |
+| op 7 M = 1, no auditor | 42,434 | 46,364 | 50,066 | 54,501 |
+| op 7 M = 2, no auditor | 42,938 | 46,844 | 50,538 | 55,018 |
+| op 7 M = 4, no auditor | 43,918 | 47,862 | 51,576 | 58,125 |
+| op 7 M = 8, no auditor | 58,981 | 64,632 | 69,904 | 76,364 |
+| largest / `MAX_PROOF_PQZL` | 61,831 / 98,304 | 67,604 / 98,304 | 72,724 / 98,304 | 79,195 / 98,304 |
+| pk / ciphertext (B) | 16,384 / 16,512 | 18,432 / 18,560 | 20,480 / 20,608 | 22,528 / 22,656 |
+| op 1 statement, auditor on (B) | 83,072 | 93,312 | 103,552 | 113,792 |
+| C prover arena peak: R_TX / op 7 M = 8 | 312 / 794 MB | 380 / 937 MB | 457 / 1,094 MB | 538 / 1,259 MB |
+
+op 7 M = 8 needs `PQZ_ARENA_MB=2048` in the C bench at every set (above its default 768 MiB). `n2816-kmax65536` is core
+only: no pqz-stmt / precompile build, so its limits are the other sets' for comparison, not a deployed limit.
+
 ### PQZH per set: preset and limits (plan 5h Task 8c part 2)
 
 `set.toml` holds the preset and the limits; `gen_set.py` writes `pqzh_set.rs` (radices, n, k, t; q − 1's factors,
