@@ -36,8 +36,10 @@ fn verifier_out_of_memory_is_a_fault() {
         let (st, w) = s.rel(f);
         let pf = prove(f.op(), st, w, [1; 32], &p).unwrap();
         assert_eq!(try_verify(f.op(), st, &pf, &p), Ok(true));
-        // 1 MiB: nothing refused; 200 kB: the domain H_n (262 kB); 50 kB: the decoded w (52 kB); 20 kB: the same
-        let r: Vec<_> = [1 << 20, 200_000, 50_000, 20_000]
+        // 1 MiB: nothing refused; 200 kB: the domain H_n (262 kB); 50 kB: the decoded w (52 kB); 20 kB: the same (above
+        // a decoded public-key vector of N u64, infallible: 20,480 B at n2560-kmax16384, so 20,481 there)
+        let low = 20_000usize.max(8 * pqzh_ligero::pqz_stmt::N + 1);
+        let r: Vec<_> = [1 << 20, 200_000, 50_000, low]
             .map(|limit| {
                 LIMIT.store(limit, Ordering::SeqCst);
                 let r = try_verify(f.op(), st, &pf, &p);
