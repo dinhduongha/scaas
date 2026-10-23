@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """PQZ parameter sets (owner 2026-10-21: one directory per set, chosen at compile time, one set per library build; one
 input file per set, one generic generator). From sets/<set>/set.toml (n, k_max, q, pqz_delta, kmlwe_min, description,
-approval: the only place these values are written) this writes every derived file of the set:
+approval, max_input, [pqzh_preset]: the only place these values are written) this writes every derived file of the set:
 
   <rel>_params.sage   the LaZer codegen specs of the 14 PQZL relations (reg, tx, tx0, burn, ds, dr, R_TXM M = 2 / 4 / 8
                       with and without the auditor, G = ceil(M / 4) randomness groups, and the bench-only M = 16)
   pqz_set.h           every parameter-dependent constant of the C core outside LaZer's codegen headers
-  rust/set.rs         the same for the Rust crates (pqzl, pqz-stmt; `#[path]` per cargo feature set-<set>)
+  rust/set.rs         the same for the Rust crates (pqzl, pqz-stmt, pqzh-ligero; `#[path]` per cargo feature set-<set>);
+                      a set with pqz-stmt (not core_only) also MAX_PROOF_PQZH and MAX_INPUT (plan 5h Task 8c part 2)
   set.json            every derived constant the Python tools need (pqz_kat.py, e_s0_set.py)
   PqzSet.sol          the Solidity constants of the set (make.sh <set> sol compiles it; PQZ_SOL_INSTALL=1 copies it to
                       smartcontracts/evm/src/pqz/)
