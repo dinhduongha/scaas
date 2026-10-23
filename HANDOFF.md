@@ -1,4 +1,52 @@
-## Session 2026-10-23 (afternoon; 8b review + fix round, four gates at once) — resume here
+## Session 2026-10-23 (evening; 8b DONE, 8c part 2 half done) — resume here
+
+**State:** main `be0e102b` + this note. No agent, gate, capped job or background shell running (paused for the
+shutdown ≈ 16:45); only the testnet node and the owner's Odoo containers. SDD ledger (git-ignored):
+`.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/` — `progress.md` (last lines = this
+session), `task-8b-report.md` (top: "Status: DONE"), `task-8c-report.md` (top: "Part 2 — Paused", exact next commands),
+`task-8c2-brief.md` (the 8c part 2 brief).
+
+**Branches (not pushed):**
+- **`pqz-16k`** (worktree `.claude/worktrees/pqz-16k`), head **`fe5abb63`**. **Task 8b DONE:** the four gates PASS at
+  the fix-round head `a542f6cf` (`n2048-kmax1024` all 11 steps `fdf2ae7a`; `n2304-kmax4096`, `n2560-kmax16384`,
+  `n2816-kmax65536` `020127bc`, resumed per part after the afternoon shutdown; xcheck skipped for the three non-frozen
+  sets until 8c part 2); re-review minors N1–N4 merged; `z21diff` re-run alone per set after N4 = the gate outputs byte
+  for byte at all four sets. Also merged: **`pqz-8c`** (`eec5d510`: 8b's pqz-stmt taken over the stand-in; semantic fix
+  — pqz-stmt allows at most one `set-<set>`, none = `n2048-kmax1024`, default `[]`, because pqzh-ligero forwards its
+  set with pqz-stmt's default features; `gen_set.py --check` accepted 8c's hand-written `pqzh_set*.rs`).
+- **`pqz-8c2`** (worktree `.claude/worktrees/pqz-8c2`, from `fe5abb63`), **8c part 2 paused**, WIP `4a2acab9`,
+  `ea7beeae`: `gen_set.py` writes `pqzh_set.rs` from a `[pqzh_preset]` table in `set.toml`; per-set `MAX_PROOF_PQZH` /
+  `MAX_INPUT` constants in `rust/set.rs` used by pqz-stmt; `n2560-kmax16384` PQZH in pqzh-ligero (all bounds ≤ 303,590 B
+  under its 327,680 limit); pqz-ffi / pqz-vectors / `pqz_kat.py` take PQZH per set; `gate.sh` cargo/ligero with the set
+  feature, xcheck = STARK check (n2048 only) + `pqzh/xcheck/ligero.sh` at every PQZH set. Checked: n2048 PQZH 24/24
+  proofs byte-identical, replay 16/16, native = wasm32, 144/144 mutations; n2304 tests + native = wasm32; n2560 suites
+  green (oom test fixed, re-run alone); Ligero xcheck ok at n2304 / n2560; pqz-stmt tests at three sets; `gen_set
+  --check` ok. **Not done:** vectors for n2304 / n2560 (stopped mid-generation, nothing written), the full n2560 round
+  (wasm, ct, honest sizes), fallback tests, clippy, `ligero_params.py` per set, docs, the three gates.
+- `pqz-8b-fix` merged (worktree removable); `pqz-8c` merged (worktree removable; branch kept with `pqz-8c-spike`).
+
+**Owner questions (8c part 2, the implementer's — needed before the vectors are final):**
+1. **`MAX_INPUT` per set** — the code still had 393,216 (512 KiB is the ruling, not yet in code). Implementer set
+   `n2048-kmax1024` 393,216 (keeps its vectors byte-identical), `n2304-kmax4096` and `n2560-kmax16384` 524,288 (else
+   pqz-ffi rejects every n2560 PQZH debit and n2304 op 7 M = 4 with the auditor). `pqz_ffi.h` and the node limit
+   (393,216) untouched → 8d. Confirm or overrule.
+2. **`n2560-kmax16384` PQZH preset**: kept the n2048 preset at t = 121 (soundness 127.23 bits = n2048's, below
+   n2304's 127.40); t = 122 ≈ 127.55 bits [estimate] for ≈ +1.3 KB per proof, still < 327,680 (one `set.toml` line).
+3. **Generated `pqzh_set.rs`** for n2048 / n2304 equal the hand-written files in every code line, but the comment header
+   is now "Generated … do not edit" + the set.toml description; exact byte identity would need the old prose copied
+   into set.toml. Accept the header change?
+
+**Measured today (memory, four gates at once):** peaks per capped scope 2,415 / 2,590 / 3,072 (= cap) / 2,500 (= cap)
+MB for n2048 / n2304 / n2560 / n2816 (page cache included; nothing killed) → `CAPPED_MEM=3G` for every set; min
+available 5.5 GB. Watcher: `scratchpad/gate-memwatch.sh`.
+
+**Next (order):** (1) owner answers the three questions; (2) resume 8c part 2 (fresh implementer or the controller)
+from `task-8c-report.md` "Part 2 — Paused": vectors n2304 / n2560, full n2560 round, fallback tests, clippy,
+`ligero_params.py`, docs, then the three PQZH gates concurrently (`PQZ_SET=<set> CAPPED_SLOTS=4 CAPPED_MEM=3G
+scripts/capped pqz-core/gate.sh`, xcheck must run) → review → merge `pqz-8c2` into `pqz-16k`; (3) 8d → Task 9 (timing
+only on the owner's go) → merge part B → metatx split (variant A).
+
+## Session 2026-10-23 (afternoon; 8b review + fix round, four gates at once)
 
 **State:** main `7d649675` + this note. No agent, gate, capped job or background shell running (stopped for the
 shutdown 13:36); only the testnet node and the owner's Odoo containers. SDD ledger (git-ignored):
