@@ -39,7 +39,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-23, shutdown):** `pqz-16k` `eb823b44`: 8b item 6 built (`n2560-kmax16384`, `n2816-kmax65536`), gate
+- **Now (2026-10-23, afternoon shutdown):** `pqz-16k` `fdf2ae7a`: 8b review (4 Important / 10 Minor) → fix round 1 + re-review
+  (approved pending I2; per-set build paths so the four gates run at once, owner `CAPPED_SLOTS=4`); gate
+  `n2048-kmax1024` PASS; resume the other three gates (`gate.sh --last <set>`, before merging `pqz-8b-fix` `bd27243e`,
+  re-review minors N1–N4) → 8b DONE → merge `pqz-8c` → 8c part 2. Order in HANDOFF.md top note.
+- **Earlier (2026-10-23, morning shutdown):** `pqz-16k` `eb823b44`: 8b item 6 built (`n2560-kmax16384`, `n2816-kmax65536`), gate
   resume tooling; next `scripts/capped pqz-core/gate.sh --last` (resumes the `n2816-kmax65536` gate), then the
   `n2560-kmax16384` full gate, 8b report → review → merge `pqz-8c` (`bf38bbbd`, 8c part 1b done) → 8c part 2
   (`MAX_PROOF_PQZH` 327,680 B for `n2560-kmax16384` only, owner). Order in HANDOFF.md top note.

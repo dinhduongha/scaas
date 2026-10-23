@@ -1,4 +1,49 @@
-## Session 2026-10-23 (5h part B: 8b item 6 near done, 8c part 1b done, gate resume) — resume here
+## Session 2026-10-23 (afternoon; 8b review + fix round, four gates at once) — resume here
+
+**State:** main `7d649675` + this note. No agent, gate, capped job or background shell running (stopped for the
+shutdown 13:36); only the testnet node and the owner's Odoo containers. SDD ledger (git-ignored):
+`.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/` — `progress.md` (last lines = this
+session), `task-8b-report.md` (top: gates + re-review, then "Fix round 1", then the final "Result"),
+`task-8b-review.md` (review + re-review).
+
+**Branches (not pushed):**
+- **`pqz-16k`** (worktree `.claude/worktrees/pqz-16k`), head **`fdf2ae7a`**. Since `eb823b44`: 8b review (agent):
+  Approved with fixes, 0 Critical / 4 Important (I1 z21diff used `n2048-kmax1024`'s `Bsq` at every set and its sweep never
+  reached the bound at most relations — dead check; I2 PASS gates predated the head; I3 resume key blind to binary
+  files; I4 C wasm32 limb path never run at `n2816-kmax65536`) / 10 Minor → fix round 1 (agent, `a8ed109f..75339b5f`,
+  fast-forwarded): z21diff takes each set's `Bsq` and sweeps to the first reject (n2560: all 14 relations now cross
+  the bound, closest 1.004 × Bsq, 0 mismatches), gate checks its summary; resume key = binary contents + scripts +
+  GATE_ENV; new part `fnv/cwasm` (C wasm32 = native C on 14 relations at n2816); **per-set build / output paths**
+  (`PQZ_BUILD_TAG=<set>`: `pqzl/build/<set>/`, `ffi/target/<set>`, `build/fuzz-<set>`, …) so the four gates run at
+  once from one worktree; 9 of 10 minors (m3 `__multi3` wasm32 cost → Task 14; m8 moot). `a542f6cf`: `e-s0.txt` for
+  `n2048-kmax1024` (GATE MET, 14 relations). Re-review: approved pending I2.
+- **`pqz-8b-fix`** (worktree `.claude/worktrees/pqz-8b-fix`), head **`bd27243e`** = `a542f6cf` + re-review minors N1–N4
+  (resume key recomputed before a part is recorded, `fuzz/corpus` + `RUSTFLAGS` in the key, `unset B`; `make.sh kat`
+  per-set build dir; one gate per label (flock); z21diff reads `Bsq` through its `int_t`). **Not merged on purpose:** it
+  changes `gate.sh`, i.e. the resume key of the paused gates.
+- **`pqz-8c`** unchanged (`bf38bbbd`, 8c part 1b done). Dry-run merge into `pqz-16k`: conflicts only in
+  `pqz-core/stmt/Cargo.toml` and `stmt/src/lib.rs` (take 8b's pqz-stmt).
+
+**Gates at `a542f6cf` (four at once, owner: `CAPPED_SLOTS=4`):** `n2048-kmax1024` **PASS** (all 11 steps, logs
+`fdf2ae7a`); stopped, resumable per part: `n2304-kmax4096` (kat..ffi ok, in rust), `n2560-kmax16384` (kat..vectors ok,
+in ffi), `n2816-kmax65536` (kat..diff ok, in fnv/wasm). Memory peaks per scope: 2,415 / 2,590 / 1,327 / 1,291 MB (the
+last two before rust); min available 6.1 GB; a 2.5G cap would be tight for the full sets (rust / cargo ≈ 2.6 GB, fuzz
+`rss_limit_mb` 3072). Watcher kept in `scratchpad/gate-memwatch.sh`.
+
+**Owner rulings today (afternoon):** 8b review by an agent at the normal model; never call the frozen set "v3" in new
+text — `n2048-kmax1024` (memory updated); the four gates run concurrently, `capped` up to 4 slots for them
+(`CAPPED_MEM=3G`; 2500M for `n2816-kmax65536`, no fuzz); verification jobs may use 4 slots.
+
+**Next (order):** (1) in `pqz-16k`, resume the three gates at once (same tree — do NOT merge `pqz-8b-fix` first):
+`for s in n2304-kmax4096 n2560-kmax16384 n2816-kmax65536; do CAPPED_SLOTS=4 CAPPED_MEM=3G scripts/capped pqz-core/gate.sh --last $s & done`
+(≈ 1 h; n2816 may use `CAPPED_MEM=2500M`); (2) all PASS → I2 closed; merge `pqz-8b-fix` (`bd27243e`) into `pqz-16k`,
+then run z21diff alone per set with the gate seeds and compare with
+`pqzl/sv/runs/gate-<set>-z21diff.jsonl` (byte-identical expected); progress line "Task 8b: DONE"; (3) merge `pqz-8c`
+into `pqz-16k` (take 8b's pqz-stmt) → 8c part 2 (pqz-ffi / vectors / gate / gen_set.py take PQZH per set;
+`n2560-kmax16384` PQZH with `MAX_PROOF_PQZH` 327,680) → review; (4) 8d → Task 9 (timing only on the owner's go) →
+merge part B → metatx split (variant A).
+
+## Session 2026-10-23 (morning; 5h part B: 8b item 6 near done, 8c part 1b done, gate resume)
 
 **State:** main `c5d2001d` + this note. No agent, capped job, gate or background shell running (stopped for the
 shutdown); only the testnet node and the owner's Odoo containers. SDD ledger (git-ignored):
