@@ -23,7 +23,8 @@ fn set() -> String {
     s[0].clone()
 }
 
-/// The set's vectors directory: v3 at the canonical path the contracts read until plan 5h Task 8d, others below it.
+/// The set's vectors directory: n2048-kmax1024 at the canonical path the contracts read until plan 5h Task 8d part 2,
+/// every other set below it.
 fn vectors_dir(core: &Path, set: &str) -> PathBuf {
     let v = core.join("../../smartcontracts/vectors/pqz");
     if set == "n2048-kmax1024" { v } else { v.join(set) }
