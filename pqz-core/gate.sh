@@ -33,7 +33,7 @@
 set -u
 cd "$(dirname "$0")"
 # the environment the steps read (8b review I3 / m6): part of the resume key, recorded in runs/gate/last
-GATE_ENV="ZN PQZ_ARENA_MB PQZL N PQZ_FUZZ_MODE CC CLANG WASM_LD WASM_SIMD SV OVERSIZE"
+GATE_ENV="RUSTFLAGS ZN PQZ_ARENA_MB PQZL N PQZ_FUZZ_MODE CC CLANG WASM_LD WASM_SIMD SV OVERSIZE"
 if [ "${1:-}" = --last ]; then
   LF=runs/gate/last; [ -n "${2:-}" ] && LF=runs/gate/last-$2 # --last <set>: that set's latest run (concurrent gates)
   [ -f "$LF" ] || { echo "gate.sh --last: no $LF" >&2; exit 2; }
@@ -53,29 +53,22 @@ export PQZ_SET
 # read PQZ_BUILD_TAG), the pqz-ffi / vectors / fuzz / xcheck cargo targets and work files under .../target/<set>/,
 # build/fuzz-<set>/; logs are named by the label (default the set)
 export PQZ_BUILD_TAG=$PQZ_SET
+unset B # build.sh's directory comes from PQZ_BUILD_TAG only (an exported B split builds from harness links; re-review N1)
 PB=build/$PQZ_SET
 [ -f "params/sets/$PQZ_SET/pqz_set.h" ] || { echo "PQZ_SET=$PQZ_SET: no params/sets/$PQZ_SET" >&2; exit 2; }
 V3=n2048-kmax1024
 mkdir -p runs/gate
+# one gate per label at a time (re-review N3: two gates on one label share state and output files)
+exec 9> "runs/gate/$L.lock"
+flock -n 9 || { echo "gate label $L: another gate is running it" >&2; exit 2; }
 fail=0
 . ./resume.sh
 GATE_STATE=$(pwd)/$R-state
 [ "${GATE_FRESH:-0}" = 1 ] && rm -f "$GATE_STATE"
 TOP=$(git rev-parse --show-toplevel)
-# the tree = file contents, not the commit (committing does not invalidate finished parts): the index's blob ids, the
-# unstaged changes (--binary: a binary file's new bytes, not just "differ"; 8b review I3) and the untracked files,
-# without the logs, the fuzz corpus and the files that change no tested code (.gitignore, *.md); then the fuzz seconds
-# and GATE_ENV
-tree() {
-  set -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus' ':(exclude,glob)**/.gitignore' \
-    ':(exclude,glob)**/*.md'
-  git ls-files -s -- "$@"
-  git diff --binary --no-ext-diff --no-textconv -- "$@"
-  git ls-files -o --exclude-standard -z -- "$@" | xargs -0r sha256sum
-  echo "fz=$FZ"
-  for v in $GATE_ENV; do echo "$v=$(printenv "$v" || echo '<unset>')"; done
-}
-GATE_TREE=$PQZ_SET-$( (cd "$TOP" && tree) | sha256sum | cut -c1-16)
+# the tree (resume.sh gate_tree): file contents, the fuzz seconds and GATE_ENV
+export GATE_TOP=$TOP GATE_FZ=$FZ GATE_ENV
+GATE_TREE=$(gate_tree)
 # a state of another tree is dropped whole: a resumed part never pairs "passed" with another tree's output files
 if [ -f "$GATE_STATE" ] && grep -qv " $GATE_TREE\$" "$GATE_STATE"; then rm -f "$GATE_STATE"; fi
 GATE_LOG=$(pwd)/$R-progress.txt
@@ -95,7 +88,7 @@ step() {
   glog "start   step/$name"
   t0=$(date +%s)
   if "$@" > "$R-$name.txt" 2>&1; then
-    say "   ok"; echo "step/$name $GATE_TREE" >> "$GATE_STATE"; glog "ok      step/$name ($(dur "$t0"))"
+    say "   ok"; gate_record "step/$name"; glog "ok      step/$name ($(dur "$t0"))"
   else
     rc=$?; say "   FAILED (rc=$rc)"; fail=1; glog "FAILED  step/$name rc=$rc ($(dur "$t0"))"
   fi
