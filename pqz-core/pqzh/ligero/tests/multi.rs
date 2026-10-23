@@ -7,7 +7,8 @@ use pqzh_ligero::client::{HDR_AMOUNT, HDR_AUDITOR_ON, HDR_FEE, HDR_LEGS, HDR_REC
 use pqzh_ligero::cs::{self, Layout};
 use pqzh_ligero::ligero::VERIFY_PANICS;
 use pqzh_ligero::pqz_stmt::{HEADER_BYTES, MAX_INPUT, MAX_PROOF_PQZH, PK_BYTES, PQZL_ID, V_BYTES, groups};
-use pqzh_ligero::ring::{DELTA, Poly, Q, digits, dot_int, modq, polys_of};
+use pqzh_ligero::ring::{DELTA, N, Poly, Q, digits, dot_int, modq, polys_of};
+use pqzh_ligero::set::{BETA_E, BETA_S};
 use pqzh_ligero::{Form, OP_TRANSFER, OP_TRANSFER_MULTI as OP7, Params, Rel, multi_rels, prove, prove_unchecked, verify};
 
 fn pp() -> Params {
@@ -55,21 +56,23 @@ fn honest(st: &[u8], w: &[u8]) -> Vec<u8> {
     pf
 }
 
-/// every |s_k| <= 1 but ||s||^2 = 1300 > 36^2
+/// every |s_k| <= 1 but ||s||^2 = BETA_S^2 + 4 (v3 1300 > 36^2)
 fn small_but_long() -> Vec<i64> {
-    (0..2048).map(|k| if k >= 1300 { 0 } else if k % 2 == 0 { 1 } else { -1 }).collect()
+    let n = BETA_S * BETA_S + 4;
+    (0..N).map(|k| if k >= n { 0 } else if k % 2 == 0 { 1 } else { -1 }).collect()
 }
 
 /// |x_5| = v (outside the bit range of x + off)
 fn one_large(v: i64) -> Vec<i64> {
-    let mut x = vec![0i64; 2048];
+    let mut x = vec![0i64; N];
     x[5] = v;
     x
 }
 
-/// ||e1||^2 = 32,768 > 164^2 with |e1_k| = 4
+/// ||e1||^2 = 16 N > BETA_E^2 with |e1_k| = 4 (v3 32,768 > 164^2)
 fn e1_long() -> Vec<i64> {
-    (0..2048).map(|k| if k % 2 == 0 { 4 } else { -4 }).collect()
+    const { assert!(16 * N > BETA_E * BETA_E) };
+    (0..N).map(|k| if k % 2 == 0 { 4 } else { -4 }).collect()
 }
 
 /// d_0 = 16 + 0, d_1 = 4 - 1 of 123,456: same value, digit 0 outside 4 bits
@@ -132,7 +135,15 @@ fn honest_every_shape() {
             eprintln!("{} {what}: {} B (bound {max})", name(m, aud), pf.len());
             assert!(pf.len() <= max, "{} {what}", name(m, aud));
         }
-        if m <= 4 {
+        // v3 (D5); at set (a) every debit bound is above MAX_PROOF_PQZH (ligero.rs `limits_exact` pins it)
+        if m <= 4 && pqzh_ligero::set::NAME == "n2048-kmax1024" {
+            assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
+        }
+        // set (a) preset B (owner 2026-10-22): every built bound within MAX_PROOF_PQZH
+        if pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry") {
+            assert!(max <= MAX_PROOF_PQZH, "{} limit", name(m, aud));
+        }
+        if false {
             assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
         }
         // the single-leg shapes have op 1's rows
@@ -231,7 +242,7 @@ fn negative_witnesses() {
         }
         // witness byte edits: one CBD(20) coefficient + 1 (its ring row fails): e_f, e1_0, e1_{G-1}
         let (st, w) = setup_multi(m, aud, &d());
-        for off in [2048, 8192, 6144 * g + 2048] {
+        for off in [N, 4 * N, 3 * N * g + N] {
             let mut w2 = w.clone();
             w2[off] = w2[off].wrapping_add(1);
             assert!(refused(&st, &w2), "{} witness byte {off}", name(m, aud));
@@ -387,11 +398,12 @@ fn noise_range_edges() {
         let ut_at = HEADER_BYTES + (1 + m + aud as usize) * PK_BYTES;
         let vt_at = ut_at + PK_BYTES;
         let ut = polys_of(&st[ut_at..vt_at], 64);
-        let sf: Vec<Poly> = w[..2048].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
+        let sf: Vec<Poly> = w[..N].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
         let y = dot_int(&ut.iter().collect::<Vec<_>>(), &sf.iter().collect::<Vec<_>>());
         let wv = modq(polys_of(&st[vt_at..vt_at + 128], 16)[0][0] - y[0]);
         let m0 = (wv + DELTA / 2).div_euclid(DELTA);
-        for (e, ok) in [((1 << 24) - 1, true), (1 << 24, false), (-(1 << 24), true), (-(1 << 24) - 1, false)] {
+        let big_e: i64 = 1 << (pqzh_ligero::set::EBITS - 1);
+        for (e, ok) in [(big_e - 1, true), (big_e, false), (-big_e, true), (-big_e - 1, false)] {
             let mut s = st.clone();
             let nv = modq(y[0] + DELTA * m0 + e).rem_euclid(Q as i64) as u64;
             s[vt_at..vt_at + 8].copy_from_slice(&nv.to_be_bytes());
@@ -418,4 +430,20 @@ fn hedged_and_deterministic() {
     assert_ne!(a[..32], b[..32]);
     assert_eq!(a, prove_unchecked(OP7, &st, &w, [5; 32], &p).unwrap());
     assert_eq!(a, prove(OP7, &st, &w, [5; 32], &p).unwrap());
+}
+
+/// fallback A (feature `fallback-retry`, set (a) with THE preset; owner 2026-10-22): the prover re-proves while a proof is
+/// above MAX_PROOF_PQZH, so every accepted proof of the worst shape (op 7 M = 4 with the auditor: 27.6 % of attempts over,
+/// docs/research/pqzh-set-a-proof-limit.md) is within the limit and verifies, although the verifier's bound is above it
+#[cfg(feature = "fallback-retry")]
+#[test]
+fn fallback_retry_under_limit() {
+    let p = pp();
+    let rel = Rel::Multi { m: 4, aud: true };
+    let (st, w) = setup_multi(4, true, &MultiTweak::default());
+    assert!(p.max_proof_len(rel) > MAX_PROOF_PQZH);
+    for seed in 0..12u8 {
+        let pf = prove(OP7, &st, &w, [seed; 32], &p).expect("prove");
+        assert!(pf.len() <= MAX_PROOF_PQZH && verify(OP7, &st, &pf, &p), "seed {seed}: {} B", pf.len());
+    }
 }

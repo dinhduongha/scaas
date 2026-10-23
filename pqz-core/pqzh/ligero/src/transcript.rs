@@ -1,7 +1,7 @@
 //! Fiat–Shamir transcript: Keccak-256 chained state (the EVM's opcode, as the STARK's transcript seed), seeded with
 //! keccak256("SCAAS-PQZH-LIGERO-V1" || u8(op) || be32(len) || stmt). absorb: state = keccak(state || data).
 //! Squeeze: keccak(state || 0xff || be64(counter)) gives four 8-byte big-endian words; a field element is a word masked
-//! to 42 bits, rejected if >= q (as pqz-core's expand_A).
+//! to LOG2Q bits (v3 42), rejected if >= q (as pqz-core's expand_A).
 
 use crate::fq::{F4, Fq, Q};
 use crate::merkle::{H, keccak};
@@ -32,7 +32,7 @@ impl Tr {
     }
     pub fn fq(&mut self) -> Fq {
         loop {
-            let v = self.word() & ((1 << 42) - 1);
+            let v = self.word() & crate::fq::MASK;
             if v < Q {
                 return Fq(v);
             }

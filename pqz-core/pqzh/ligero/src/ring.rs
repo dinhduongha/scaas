@@ -9,9 +9,13 @@ use crate::Wiped;
 
 pub use crate::fq::Q;
 pub use pqz_stmt::{D, K};
-pub const DELTA: i64 = (1 << 26) - 1;
+/// floor(q / 2^(MBITS + 2)), the plaintext digits' scale (v3 2^26 - 1)
+pub const DELTA: i64 = crate::set::DELTA;
+/// ring dimension k d (v3 2048)
+pub const N: usize = K * D;
 
-const _: () = assert!(pqz_stmt::Q == Q);
+// pqz-stmt is built for the same parameter set (feature set-<set> forwarded)
+const _: () = assert!(pqz_stmt::Q == Q && crate::set::K == K && crate::set::N == N);
 
 pub type Poly = [i64; D];
 
@@ -20,8 +24,8 @@ pub fn centre(v: u64) -> i64 {
     if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 }
 }
 
-/// A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low 42 bits, accept if < q, centred
-/// (pqz_rel.c expand_A).
+/// A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low LOG2Q bits (v3 42), accept if < q,
+/// centred (pqz_rel.c expand_A, pqzl/rust keys.rs).
 pub fn a_matrix() -> &'static Vec<Poly> {
     static A: OnceLock<Vec<Poly>> = OnceLock::new();
     A.get_or_init(|| {
@@ -36,7 +40,7 @@ pub fn a_matrix() -> &'static Vec<Poly> {
                 while k < D {
                     let mut w = [0u8; 8];
                     r.read(&mut w);
-                    let v = u64::from_be_bytes(w) & ((1u64 << 42) - 1);
+                    let v = u64::from_be_bytes(w) & crate::fq::MASK;
                     if v < Q {
                         out[i * K + j][k] = centre(v);
                         k += 1;
@@ -49,7 +53,7 @@ pub fn a_matrix() -> &'static Vec<Poly> {
 }
 
 /// The centred polynomials of a statement object already checked by `pqz_stmt::parse` (`n` coefficients per
-/// polynomial: 64 for pk / u, 16 for v): pk or u (16,384 B) gives 32, v (128 B) one with 16 coefficients.
+/// polynomial: 64 for pk / u, 16 for v): pk or u (8 N B) gives K, v (128 B) one with 16 coefficients.
 pub fn polys_of(b: &[u8], n: usize) -> Vec<Poly> {
     b.chunks(8 * n)
         .map(|c| {

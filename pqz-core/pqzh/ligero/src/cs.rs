@@ -10,16 +10,18 @@
 //!   R_TX0  R_TX without the auditor (CTR-PQZ-24, plan D8): rows 1-4, 6, 7, legs t and f only (no pk_a, v_a, e2_a)
 //!   R_BURN R_TX rows 1, 2, 4, 6, 7 with d public (one leg: pk_f, v_f, e2_f, d')
 //!   R_DS   u = A^T r + e1; pk^T r + e2 = v - Delta d (k < 16)
-//!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^24 in 25 bits
+//!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^(EBITS-1) in EBITS bits (v3: + 2^24 in 25)
 //!   R_TXM  op 7 (P6-ANON plan §3): R_TX with M receiver legs j (digits d_j) and one randomness group (r_g, e1_g, u_g)
 //!          per 4 legs, g(j) = j / 4, v_f in group 0; auditor on: one copy v_{a,j} of every leg under pk_a (digits d_j,
 //!          group g(j)); row 7 with sum_j d_j. R_TX is R_TXM's M = 1 (one builder; op 1 keeps its own bytes).
-//! with every exact l2 bound of pqz-core (36 / 164 for CBD(1) / CBD(20) vectors, 64 for e2) and the bit ranges. R_TXM
+//! with every exact l2 bound of pqz-core (BETA_S / BETA_E for CBD(1) / CBD(20) vectors: v3 36 / 164, set (a) 38 / 173;
+//! BETA_2 = 64 for e2) and the bit ranges of the parameter set (M_i < 2^MBITS, c_i + 64 < 2^CBITS, e_T + 2^(EBITS-1) <
+//! 2^EBITS: v3 14 / 11 / 25, set (a) 16 / 13 / 27; `crate::set`). R_TXM
 //! bounds every e2 vector by 64 (legs, v_f, auditor copies), as R_TX's legs: the owner's rule for op 7 (2026-10-15,
 //! decisions.md CTR-PQZ-03, pre-review X-1; the plan's first draft had one block bound 64 sqrt(M), which this implies).
 //! Honest encryptions (CTR-PQZ-19 resamples each e2 to <= 64) meet it.
 //!
-//! Layout (§3.3). Rows have l slots. A big group (2048 values of one short vector) has value rows, slot-aligned square
+//! Layout (§3.3). Rows have l slots. A big group (N = k d values of one short vector, v3 2048) has value rows, slot-aligned square
 //! rows and one row per bit of x + off (off = 2^(bits-1)); the bit decomposition covers every slot of the group's rows
 //! (padding slots hold 0, its square 0 and the bits of off). The small values (e2, digits, M, carries, e_T, e', the l2
 //! slacks) are packed in small value rows, aligned small square rows, and small bit rows that hold their bits
@@ -38,15 +40,31 @@ use pqz_stmt::{
     OP_TRANSFER_MULTI, PK_BYTES, PQZH_ID, V_BYTES, built_legs, groups, multi_len, word_u64,
 };
 
-use crate::ring::{D, DELTA, Poly, a_matrix, digits, dot_int, encrypt, keypair, modq, polys, polys_of};
+use crate::ring::{D, DELTA, K, N, Poly, a_matrix, digits, dot_int, encrypt, keypair, modq, polys, polys_of};
+use crate::set::{BETA_2, BETA_E, BETA_S, CBITS, EBITS, MBITS};
 
 use crate::fq::{Acc4, F4, Fq};
 use crate::{Oom, Wipe, Wiped, ct, try_vec};
 
-const BS: i64 = 36 * 36;
-const BE: i64 = 164 * 164;
-const B2: i64 = 64 * 64;
-const N: usize = 2048;
+const BS: i64 = (BETA_S * BETA_S) as i64;
+const BE: i64 = (BETA_E * BETA_E) as i64;
+const B2: i64 = (BETA_2 * BETA_2) as i64;
+/// e_T, e' offset: E = 2^(EBITS - 1)
+const EOFF: i64 = 1 << (EBITS - 1);
+/// carries c_i + 64 (c_i >= -64)
+const COFF: i64 = 64;
+
+/// bits of x
+const fn blen(x: usize) -> usize {
+    (usize::BITS - x.leading_zeros()) as usize
+}
+/// (bits, off) of a value with |x| <= b: x + 2^blen(b) in blen(b) + 1 bits (v3: 36 -> (7, 64), 164 -> (9, 256), e2's
+/// 64 -> (8, 128))
+const fn range(b: usize) -> (usize, i64) {
+    (blen(b) + 1, 1 << blen(b))
+}
+// every square sum stays below q (no wrap in the l2 rows): N values below 2^bits each
+const _: () = assert!(((N as u128) << (2 * range(BETA_E).0)) < crate::fq::Q as u128);
 
 /// A relation the crate proves: a pqz-stmt form (ops 1-5) or an op 7 `R_TXM` shape (M legs, auditor on / off; the
 /// header words pick it, plan R4: the length alone does not).
@@ -81,7 +99,7 @@ impl Rel {
     pub fn wit_len(self) -> usize {
         match self {
             Rel::Form(f) => f.wit_len(),
-            Rel::Multi { m, aud } => 6144 * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1),
+            Rel::Multi { m, aud } => 3 * N * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1),
         }
     }
 }
@@ -145,10 +163,14 @@ impl Layout {
     /// the layout of a relation (REFRESH = BURN, AUDITOR = DISCLOSE-RECEIVER)
     pub fn new(rel: impl Into<Rel>, ell: usize) -> Layout {
         assert!(ell >= 1);
-        // big groups (bits, off, B^2) of a CBD(1) / CBD(20) pair; small items (count, bits, off)
-        let se = [(7, 64, BS), (9, 256, BE)];
-        let sl = [(1, 11, 0), (1, 15, 0)];
-        let e2 = |legs: usize| (16 * legs, 8, 128);
+        // big groups (bits, off, B^2) of a CBD(1) / CBD(20) pair; small items (count, bits, off); the l2 slacks
+        // B^2 - ||x||^2 in blen(B^2) bits (v3 11 / 15 / e2 13)
+        let (rs, re, r2) = (range(BETA_S), range(BETA_E), range(BETA_2));
+        let se = [(rs.0, rs.1, BS), (re.0, re.1, BE)];
+        let sl = [(1, blen(BS as usize), 0), (1, blen(BE as usize), 0)];
+        let e2 = |legs: usize| (16 * legs, r2.0, r2.1);
+        let s2 = (1, blen(B2 as usize), 0);
+        let et = (16, EBITS as usize, EOFF);
         // a debit with `legs` e2 vectors, `nd` secret digit vectors (d_j; R_BURN 0: d public) and `pairs` big pairs
         // (s_f, e_f) and (r_g, e1_g)
         let debit = |legs: usize, nd: usize, pairs: usize| -> Vec<(usize, usize, i64)> {
@@ -156,11 +178,11 @@ impl Layout {
             if nd > 0 {
                 v.push((16 * nd, 4, 0));
             }
-            v.extend([(16, 4, 0), (16, 14, 0), (16, 11, 64), (16, 25, 1 << 24)]);
+            v.extend([(16, 4, 0), (16, MBITS as usize, 0), (16, CBITS as usize, COFF), et]);
             for _ in 0..pairs {
                 v.extend(sl);
             }
-            v.extend(vec![(1, 13, 0); legs]);
+            v.extend(vec![s2; legs]);
             v
         };
         let (bigs, smalls, sig): (Vec<(usize, i64, i64)>, Vec<(usize, usize, i64)>, usize) = match rel.into() {
@@ -168,10 +190,8 @@ impl Layout {
             Rel::Form(Form::Transfer) => ([se, se].concat(), debit(3, 1, 2), 6),
             Rel::Form(Form::Transfer0) => ([se, se].concat(), debit(2, 1, 2), 6),
             Rel::Form(Form::Burn | Form::Refresh) => ([se, se].concat(), debit(1, 0, 2), 5),
-            Rel::Form(Form::DiscloseSender) => (se.to_vec(), [vec![e2(1)], sl.to_vec(), vec![(1, 13, 0)]].concat(), 1),
-            Rel::Form(Form::DiscloseReceiver | Form::DiscloseAuditor) => {
-                (se.to_vec(), [vec![(16, 25, 1 << 24)], sl.to_vec()].concat(), 1)
-            }
+            Rel::Form(Form::DiscloseSender) => (se.to_vec(), [vec![e2(1)], sl.to_vec(), vec![s2]].concat(), 1),
+            Rel::Form(Form::DiscloseReceiver | Form::DiscloseAuditor) => (se.to_vec(), [vec![et], sl.to_vec()].concat(), 1),
             // legs j, f, [a_j]; pairs (s_f, e_f), (r_g, e1_g) for g < G
             Rel::Multi { m, aud } => {
                 let pairs = 1 + groups(m);
@@ -486,13 +506,13 @@ pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Resul
         Stmt::Debit(t) => {
             let (nl, ng, nd) = (t.legs.len(), t.us.len(), t.nd);
             let mut sf = rd_i8(wit, N);
-            let mut ef = rd_i16(&wit[2048..], N);
+            let mut ef = rd_i16(&wit[N..], N);
             // (r_g, e1_g) per group
             let mut rs: Wiped<Vec<Vec<i64>>> =
-                Wiped((0..ng).map(|g| take(&mut rd_i8(&wit[6144 * (1 + g)..], N))).collect());
+                Wiped((0..ng).map(|g| take(&mut rd_i8(&wit[3 * N * (1 + g)..], N))).collect());
             let mut e1s: Wiped<Vec<Vec<i64>>> =
-                Wiped((0..ng).map(|g| take(&mut rd_i16(&wit[6144 * (1 + g) + 2048..], N))).collect());
-            let p0 = 6144 * (1 + ng);
+                Wiped((0..ng).map(|g| take(&mut rd_i16(&wit[3 * N * (1 + g) + N..], N))).collect());
+            let p0 = 3 * N * (1 + ng);
             let e2: Wiped<Vec<Vec<i64>>> = Wiped((0..nl).map(|x| take(&mut rd_i16(&wit[p0 + 32 * x..], 16))).collect());
             let p = p0 + 32 * nl;
             // d_j (R_BURN: digits(amount), public) and d'
@@ -540,14 +560,14 @@ pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Resul
                 let e = wv - DELTA * m;
                 let dsum: i64 = ds.iter().map(|d| d[i] as i64).sum();
                 let s = m + cprev - dp[i] as i64 - dsum - ((t.fee >> (4 * i)) & 15) as i64;
-                // s % 16 != 0, a digit > 15, M outside [0, 2^14), e_T outside [-2^24, 2^24)
+                // s % 16 != 0, a digit > 15, M outside [0, 2^MBITS), e_T outside [-E, E)
                 bad_d |= (s & 15) as u64
                     | ds.iter().fold(0, |a, d| a | d[i] >> 4) as u64
                     | (dp[i] >> 4) as u64
-                    | (m as u64) >> 14
-                    | ((e + (1 << 24)) as u64) >> 25;
+                    | (m as u64) >> MBITS
+                    | ((e + EOFF) as u64) >> EBITS;
                 let c = s >> 4; // = s.div_euclid(16)
-                bad_c |= ((c + 64) as u64) >> 11; // c outside [-64, 1984)
+                bad_c |= ((c + COFF) as u64) >> CBITS; // c outside [-64, 2^CBITS - 64)
                 (mv[i], et[i], cv[i]) = (m, e, c);
                 cprev = c;
             }
@@ -582,7 +602,7 @@ pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Resul
             Ok(w)
         }
         Stmt::Ds(t) => {
-            let (mut r, mut e1, e2) = (rd_i8(wit, N), rd_i16(&wit[2048..], N), rd_i16(&wit[6144..], 16));
+            let (mut r, mut e1, e2) = (rd_i8(wit, N), rd_i16(&wit[N..], N), rd_i16(&wit[3 * N..], 16));
             if check && ct::verdict(gt(l2(&r), BS) | gt(l2(&e1), BE) | gt(l2(&e2), B2) != 0) {
                 return Err("witness norm");
             }
@@ -612,8 +632,8 @@ pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Resul
             let d = digits(t.amount);
             let mut small = Wiped(Vec::with_capacity(16 + 2));
             small.extend((0..16).map(|i| modq(t.v[i] - y[i]) - DELTA * d[i] as i64));
-            // e' outside [-2^24, 2^24)
-            let bad = small.iter().fold(0u64, |a, &e| a | ((e + (1 << 24)) as u64) >> 25);
+            // e' outside [-E, E)
+            let bad = small.iter().fold(0u64, |a, &e| a | ((e + EOFF) as u64) >> EBITS);
             if check && ct::verdict(bad != 0) {
                 return Err("not an encryption of amount");
             }
@@ -756,8 +776,8 @@ impl Bld<'_> {
     /// y = big group gy
     fn ring_rows(&mut self, tr: bool, gx: usize, gy: usize, rhs: &[Poly]) {
         let a = a_matrix();
-        let gam = if tr { self.ring(&|i, j| &a[j * 32 + i], 32, 32, D, gx) } else { self.ring(&|i, j| &a[i * 32 + j], 32, 32, D, gx) };
-        for i in 0..32 {
+        let gam = if tr { self.ring(&|i, j| &a[j * K + i], K, K, D, gx) } else { self.ring(&|i, j| &a[i * K + j], K, K, D, gx) };
+        for i in 0..K {
             for k in 0..D {
                 let w = gam[i] * self.rp[k];
                 self.add(self.lay.bpos(gy, D * i + k), w);
@@ -789,7 +809,7 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Result<Comb, Oom> {
             }
             // rows 3-5 (R_BURN: row 4 only): v_x = pk_x^T r_g(x) + e2_x + Delta digit_x (k < 16)
             for (x, leg) in t.legs.iter().enumerate() {
-                let gam = b.ring(&|_, j| &leg.pk[j], 1, 32, 16, 2 + 2 * leg.g);
+                let gam = b.ring(&|_, j| &leg.pk[j], 1, K, 16, 2 + 2 * leg.g);
                 for k in 0..16 {
                     let w = gam[0] * b.rp[k];
                     b.add(lay.spos(E2, 16 * x + k), w);
@@ -802,7 +822,7 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Result<Comb, Oom> {
                 b.c.rhs += gam[0] * b.rsum(&leg.v, 16);
             }
             // row 6: u_T^T s_f + Delta M + e_T = v_T (k < 16)
-            let gam = b.ring(&|_, j| &t.ut[j], 1, 32, 16, 0);
+            let gam = b.ring(&|_, j| &t.ut[j], 1, K, 16, 0);
             for k in 0..16 {
                 let w = gam[0] * b.rp[k];
                 b.add(lay.spos(mm, k), w * delta);
@@ -842,7 +862,7 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Result<Comb, Oom> {
         Stmt::Ds(t) => {
             // u = A^T r + e1; pk^T r + e2 = v - Delta d (k < 16); ||e2||^2 + slack = 64^2
             b.ring_rows(true, 0, 1, &t.u);
-            let gam = b.ring(&|_, j| &t.pk[j], 1, 32, 16, 0);
+            let gam = b.ring(&|_, j| &t.pk[j], 1, K, 16, 0);
             for k in 0..16 {
                 let w = gam[0] * b.rp[k];
                 b.add(lay.spos(E2, k), w);
@@ -858,7 +878,7 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Result<Comb, Oom> {
         Stmt::Dr(t) => {
             // pk = A s + e; u^T s + e' = v - Delta d (k < 16)
             b.ring_rows(false, 0, 1, &t.pk);
-            let gam = b.ring(&|_, j| &t.u[j], 1, 32, 16, 0);
+            let gam = b.ring(&|_, j| &t.u[j], 1, K, 16, 0);
             for k in 0..16 {
                 let w = gam[0] * b.rp[k];
                 b.add(lay.spos(EP, k), w);

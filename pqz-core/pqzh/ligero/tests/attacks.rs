@@ -5,7 +5,8 @@ use pqzh_ligero::client::{DISC_AMOUNT, DISC_PK, HDR_AMOUNT, HDR_AUDITOR_ON, HDR_
 use pqzh_ligero::cs;
 use pqzh_ligero::ligero::VERIFY_PANICS;
 use pqzh_ligero::pqz_stmt::{FORMS, PK_BYTES, PQZH_ID, PQZL_ID};
-use pqzh_ligero::ring::{DELTA, Poly, Q, digits, dot_int, modq, polys_of};
+use pqzh_ligero::ring::{DELTA, N, Poly, Q, digits, dot_int, modq, polys_of};
+use pqzh_ligero::set::{BETA_E, BETA_S, EBITS};
 use pqzh_ligero::{Form, OP_DISCLOSE_RECEIVER, OP_REGISTER, OP_TRANSFER, Params, RELS, prove, prove_unchecked, verify};
 
 fn p(_op: u8) -> Params {
@@ -184,18 +185,19 @@ fn mutations_960_per_relation_rejected() {
     eprintln!("{} x 960 mutated inputs rejected, {} verifier panics caught", RELS.len(), VERIFY_PANICS.load(std::sync::atomic::Ordering::Relaxed) - p0);
 }
 
-/// every |s_k| <= 1 but ||s||^2 = 1300 > 36^2: only the exact l2 check can catch it
+/// every |s_k| <= 1 but ||s||^2 = BETA_S^2 + 4 (v3 1300 > 36^2): only the exact l2 check can catch it
 fn small_but_long() -> Vec<i64> {
-    let mut sv = vec![0i64; 2048];
-    for k in 0..1300 {
+    let mut sv = vec![0i64; N];
+    for k in 0..BETA_S * BETA_S + 4 {
         sv[k] = if k % 2 == 0 { 1 } else { -1 };
     }
     sv
 }
 
-/// |s_5| = 100 > 36 (and > 64, outside the 7 bits of s + 64)
+/// |s_5| = 100 > BETA_S (and > 64, outside the 7 bits of s + 64: BETA_S < 64 in every set)
 fn one_large() -> Vec<i64> {
-    let mut sv = vec![0i64; 2048];
+    const { assert!(BETA_S < 64 && BETA_E < 256) };
+    let mut sv = vec![0i64; N];
     sv[5] = 100;
     sv
 }
@@ -228,7 +230,7 @@ fn norm_exceeded_small_coefficients() {
 #[test]
 fn coefficient_out_of_range() {
     // s_f_5 = 100 (outside the 7 bits of s + 64), e_f_5 = 300 (outside the 9 bits of e + 256); pk_f recomputed
-    let mut e_large = vec![0i64; 2048];
+    let mut e_large = vec![0i64; N];
     e_large[5] = 300;
     for tw in [Tweak { s_f: Some(one_large()), ..Default::default() }, Tweak { e_f: Some(e_large), ..Default::default() }] {
         let s = setup_with(&tw);
@@ -245,11 +247,12 @@ fn coefficient_out_of_range() {
 /// outside the bit range; ciphertexts re-encrypted, so only the norm / range proofs can catch them
 #[test]
 fn randomness_norm_and_range() {
-    let mut e1_long = vec![0i64; 2048];
+    let mut e1_long = vec![0i64; N];
     for (k, x) in e1_long.iter_mut().enumerate() {
-        *x = if k % 2 == 0 { 4 } else { -4 }; // ||e1||^2 = 32,768 > 164^2 = 26,896
+        *x = if k % 2 == 0 { 4 } else { -4 }; // ||e1||^2 = 16 N > BETA_E^2 (v3 32,768 > 164^2 = 26,896)
     }
-    let mut e1_large = vec![0i64; 2048];
+    const { assert!(16 * N > BETA_E * BETA_E) };
+    let mut e1_large = vec![0i64; N];
     e1_large[5] = 300; // outside the 9 bits of e1 + 256
     for (name, tw) in [
         ("r l2", Tweak { r: Some(small_but_long()), ..Default::default() }),
@@ -264,16 +267,17 @@ fn randomness_norm_and_range() {
     }
 }
 
-/// R_DR's e' range [-2^24, 2^24): v_0 crafted so that e'_0 sits on each side of each edge
+/// R_DR's e' range [-E, E), E = 2^(EBITS - 1) (v3 2^24): v_0 crafted so that e'_0 sits on each side of each edge
 #[test]
 fn dr_noise_range_edges() {
     let s = setup();
     let (st, w) = s.rel(Form::DiscloseReceiver);
     let u = polys_of(&st[DISC_PK + PK_BYTES..DISC_PK + 2 * PK_BYTES], 64);
-    let sv: Vec<Poly> = w[..2048].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
+    let sv: Vec<Poly> = w[..N].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
     let y = dot_int(&u.iter().collect::<Vec<_>>(), &sv.iter().collect::<Vec<_>>());
     let d0 = (123_456u64 & 15) as i64;
-    for (e, ok) in [((1 << 24) - 1, true), (1 << 24, false), (-(1 << 24), true), (-(1 << 24) - 1, false)] {
+    let big_e: i64 = 1 << (EBITS - 1);
+    for (e, ok) in [(big_e - 1, true), (big_e, false), (-big_e, true), (-big_e - 1, false)] {
         let mut st = st.clone();
         let v0 = modq(y[0] + DELTA * d0 + e).rem_euclid(Q as i64) as u64;
         let o = DISC_PK + 2 * PK_BYTES;
@@ -328,7 +332,8 @@ fn e2_norm_exceeded() {
     assert!(refused(Form::Transfer0, &s));
 }
 
-/// row 6 (u_T^T s_f + Delta M + e_T = v_T) of R_TX, R_TX0, R_BURN: e_T's range [-2^24, 2^24); v_T_0 crafted so that
+/// row 6 (u_T^T s_f + Delta M + e_T = v_T) of R_TX, R_TX0, R_BURN: e_T's range [-E, E), E = 2^(EBITS - 1) (v3 2^24);
+/// v_T_0 crafted so that
 /// e_T_0 sits on each side of each edge with the honest M_0 (rounding keeps M_0: |e_T_0| < Delta / 2)
 #[test]
 fn debit_noise_range_edges() {
@@ -340,12 +345,13 @@ fn debit_noise_range_edges() {
         let ut_at = 640 + npk * PK_BYTES;
         let vt_at = ut_at + PK_BYTES;
         let ut = polys_of(&st[ut_at..vt_at], 64);
-        let sf: Vec<Poly> = w[..2048].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
+        let sf: Vec<Poly> = w[..N].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
         let y = dot_int(&ut.iter().collect::<Vec<_>>(), &sf.iter().collect::<Vec<_>>());
         let v0 = polys_of(&st[vt_at..vt_at + 128], 16)[0][0];
         let wv = modq(v0 - y[0]);
         let m0 = (wv + DELTA / 2).div_euclid(DELTA);
-        for (e, ok) in [((1 << 24) - 1, true), (1 << 24, false), (-(1 << 24), true), (-(1 << 24) - 1, false)] {
+        let big_e: i64 = 1 << (EBITS - 1);
+        for (e, ok) in [(big_e - 1, true), (big_e, false), (-big_e, true), (-big_e - 1, false)] {
             let mut st = st.clone();
             let nv = modq(y[0] + DELTA * m0 + e).rem_euclid(Q as i64) as u64;
             st[vt_at..vt_at + 8].copy_from_slice(&nv.to_be_bytes());
@@ -364,7 +370,8 @@ fn debit_noise_range_edges() {
 fn overspend() {
     // claim new balance digits all 15 (2^64 - 1): the carry chain cannot close
     let s = setup();
-    for (f, off) in [(Form::Transfer, 12400), (Form::Transfer0, 12368), (Form::Burn, 12320)] {
+    // d' after s_f, e_f, r, e1 (6N), the e2 legs and d (v3: 12,400 / 12,368 / 12,320)
+    for (f, off) in [(Form::Transfer, 6 * N + 112), (Form::Transfer0, 6 * N + 80), (Form::Burn, 6 * N + 32)] {
         let (op, (st, w)) = (f.op(), s.rel(f));
         let mut w = w.clone();
         w[off..off + 16].fill(15);
@@ -407,17 +414,17 @@ fn scalar_word_above_2_64() {
 fn wrong_witness_ring_row() {
     // one coefficient of a CBD(20) vector changed (still short): its R_q row no longer holds mod q
     let s = setup();
-    // e1 at 8192 (R_TX, R_TX0, R_BURN), e_f at 2048 (R_REG, R_TX, R_TX0, R_BURN), R_DS's e1 / R_DR's e at 2048
+    // e1 at 4N (R_TX, R_TX0, R_BURN), e_f at N (R_REG, R_TX, R_TX0, R_BURN), R_DS's e1 / R_DR's e at N (v3: 8192, 2048)
     for (f, off) in [
-        (Form::Transfer, 8192),
-        (Form::Transfer0, 8192),
-        (Form::Burn, 8192),
-        (Form::Register, 2048),
-        (Form::Transfer, 2048),
-        (Form::Transfer0, 2048),
-        (Form::Burn, 2048),
-        (Form::DiscloseSender, 2048),
-        (Form::DiscloseReceiver, 2048),
+        (Form::Transfer, 4 * N),
+        (Form::Transfer0, 4 * N),
+        (Form::Burn, 4 * N),
+        (Form::Register, N),
+        (Form::Transfer, N),
+        (Form::Transfer0, N),
+        (Form::Burn, N),
+        (Form::DiscloseSender, N),
+        (Form::DiscloseReceiver, N),
     ] {
         let (op, (st, w)) = (f.op(), s.rel(f));
         let mut w = w.clone();
@@ -460,12 +467,18 @@ fn transfer_forms_cross_rejected() {
         assert_eq!(prove_unchecked(OP_TRANSFER, st, w, [6; 32], &pp), Err("length"));
     }
     // the length gate is the form's: R_TX0's bound is R_BURN's (same m), below R_TX's
-    assert!(pp.max_proof_len(Form::Transfer0) < pp.max_proof_len(Form::Transfer));
+    // (set (a) preset B, l = 831: R_TX0 and R_TX have the same rows, 124, so equal bounds)
+    if pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry") {
+        assert_eq!(pp.max_proof_len(Form::Transfer0), pp.max_proof_len(Form::Transfer));
+    } else {
+        assert!(pp.max_proof_len(Form::Transfer0) < pp.max_proof_len(Form::Transfer));
+    }
 }
 
 /// the EVM fixtures (ligero_export) verify natively: honest and other-statement proofs accepted, negative witnesses
-/// rejected
+/// rejected. The fixtures are v3's (smartcontracts/evm/test/vectors/pqzh-ligero; regenerated per set in 8d if ever)
 #[test]
+#[cfg_attr(feature = "set-n2304-kmax4096", ignore = "the EVM fixtures are the v3 set's")]
 fn evm_fixtures() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../smartcontracts/evm/test/vectors/pqzh-ligero");
     let rd = |n: &str| std::fs::read(format!("{dir}/{n}")).unwrap();

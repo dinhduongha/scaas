@@ -1,0 +1,17 @@
+TRANSFER                            bytes  230946 keccak same verify_stored True
+TRANSFER0                           bytes  231480 keccak same verify_stored True
+BURN                                bytes  232184 keccak same verify_stored True
+REFRESH                             bytes  230280 keccak same verify_stored True
+REGISTER                            bytes  186778 keccak same verify_stored True
+DISCLOSE-SENDER                     bytes  186456 keccak same verify_stored True
+DISCLOSE-RECEIVER                   bytes  187226 keccak same verify_stored True
+DISCLOSE-AUDITOR                    bytes  187194 keccak same verify_stored True
+TRANSFER-MULTI     M1-on            bytes  232494 keccak same verify_stored True
+TRANSFER-MULTI     M2-on            bytes  231256 keccak same verify_stored True
+TRANSFER-MULTI     M4-on            bytes  232708 keccak same verify_stored True
+TRANSFER-MULTI     M1-off           bytes  232248 keccak same verify_stored True
+TRANSFER-MULTI     M2-off           bytes  232078 keccak same verify_stored True
+TRANSFER-MULTI     M4-off           bytes  232494 keccak same verify_stored True
+TRANSFER-MULTI     M2-off-two-real  bytes  231640 keccak same verify_stored True
+TRANSFER-MULTI     M4-off-decoys    bytes  231726 keccak same verify_stored True
+rows 16, byte-identical and stored proof verified: 16, failures: 0

@@ -1,12 +1,14 @@
 //! Fixtures for the EVM verifier (smartcontracts/evm/test/pqzh/ligero/): the same bytes the Rust verifier takes.
 //!   ligero_export <dir> [preset ...]      presets: proven (radix 431), conj (radix 431), johnson, conj-n<N>-k<K> (any n, k)
-//! Writes a.bin (A as 32 x 32 x 64 canonical F_q, 6 bytes big-endian, order (i, j, coefficient)), and per relation
+//! Writes a.bin (A as K x K x 64 canonical F_q, EB bytes big-endian (v3: 32 x 32 x 64, 6 B), order (i, j, coefficient)), and per relation
 //! (reg, tx; tx0 at proven only) and preset: <rel>-<preset>.stmt / .proof / .other (a valid proof of the statement with byte 64 flipped, a hashed-only header byte) / .params
 //! (n, k, l, t, grinding bits: five 32-byte big-endian words). neg-<case>.stmt / .proof: invalid witnesses proved without the honest prover's checks
 //! (conjectured preset), each must be rejected. A JSON line per file on stdout.
 
 use pqzh_ligero::client::{Tweak, setup, setup_with};
-use pqzh_ligero::ring::{Q, a_matrix, digits};
+use pqzh_ligero::fq::EB;
+use pqzh_ligero::ring::{K, N, Q, a_matrix, digits};
+use pqzh_ligero::set::BETA_S;
 use pqzh_ligero::{OP_REGISTER, OP_TRANSFER, Params, prove, prove_unchecked, verify};
 
 fn put(dir: &str, name: &str, b: &[u8]) {
@@ -20,10 +22,10 @@ fn main() {
     std::fs::create_dir_all(&dir).unwrap();
     let presets: Vec<String> = if a.len() > 2 { a[2..].to_vec() } else { vec!["proven".into(), "conj".into()] };
 
-    let mut am = Vec::with_capacity(32 * 32 * 64 * 6);
+    let mut am = Vec::with_capacity(K * K * 64 * EB);
     for p in a_matrix() {
         for &c in p {
-            am.extend_from_slice(&(c.rem_euclid(Q as i64) as u64).to_be_bytes()[2..]);
+            am.extend_from_slice(&(c.rem_euclid(Q as i64) as u64).to_be_bytes()[8 - EB..]);
         }
     }
     put(&dir, "a.bin", &am);
@@ -62,12 +64,12 @@ fn main() {
     }
 
     // invalid witnesses (pqzh/tests/attacks.rs and ligero tests/attacks.rs), conjectured preset
-    let mut sv = vec![0i64; 2048];
-    for k in 0..1300 {
+    let mut sv = vec![0i64; N];
+    for k in 0..BETA_S * BETA_S + 4 {
         sv[k] = if k % 2 == 0 { 1 } else { -1 };
     }
     let norm = setup_with(&Tweak { s_f: Some(sv), ..Default::default() });
-    let mut sv = vec![0i64; 2048];
+    let mut sv = vec![0i64; N];
     sv[5] = 100;
     let coef = setup_with(&Tweak { s_f: Some(sv), ..Default::default() });
     let mut d = digits(123_456);
@@ -79,10 +81,10 @@ fn main() {
     let e2 = setup_with(&Tweak { e2_t: Some(e), ..Default::default() });
     let mut over = s.tx_wit.clone();
     for i in 0..16 {
-        over[12400 + i] = 15;
+        over[6 * N + 112 + i] = 15; // d' (v3 12,400)
     }
     let mut ring = s.tx_wit.clone();
-    ring[8192] = ring[8192].wrapping_add(1);
+    ring[4 * N] = ring[4 * N].wrapping_add(1); // e1 (v3 8192)
     let cases: Vec<(&str, u8, &[u8], &[u8])> = vec![
         ("reg-norm", OP_REGISTER, &norm.reg_stmt, &norm.reg_wit),
         ("reg-coef", OP_REGISTER, &coef.reg_stmt, &coef.reg_wit),

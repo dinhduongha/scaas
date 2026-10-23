@@ -1,0 +1,39 @@
+# ct c8-a: HEAD 62294cc8261e53a0c8f197903954f9949b1597f1, diff sha256 e3b0c44298fc1c14, valgrind-3.22.0, rels 4095, nprove 1, set n2304-kmax4096
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 4.49s
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+{"rel": "R_REG", "run": 0, "prove": "Ok(201746)", "verify": true, "fnv": "80207bd3"}
+{"rel": "R_TX", "run": 0, "prove": "Ok(261086)", "verify": true, "fnv": "0f25b7e2"}
+{"rel": "R_BURN", "run": 0, "prove": "Ok(260328)", "verify": true, "fnv": "90e22dc7"}
+{"rel": "R_DS", "run": 0, "prove": "Ok(201458)", "verify": true, "fnv": "df29cda0"}
+{"rel": "R_DR", "run": 0, "prove": "Ok(202162)", "verify": true, "fnv": "2335a5c3"}
+{"rel": "R_TX0", "run": 0, "prove": "Ok(260616)", "verify": true, "fnv": "b16c684c"}
+{"rel": "R_TXM1", "run": 0, "prove": "Ok(260862)", "verify": true, "fnv": "4dd7b8b0"}
+{"rel": "R_TXM2", "run": 0, "prove": "Ok(261406)", "verify": true, "fnv": "50888108"}
+{"rel": "R_TXM4", "run": 0, "prove": "Ok(261972)", "verify": true, "fnv": "02ec5881"}
+{"rel": "R_TXM1_0", "run": 0, "prove": "Ok(260776)", "verify": true, "fnv": "c2e930c4"}
+{"rel": "R_TXM2_0", "run": 0, "prove": "Ok(261342)", "verify": true, "fnv": "97f3ea81"}
+{"rel": "R_TXM4_0", "run": 0, "prove": "Ok(260702)", "verify": true, "fnv": "f75efee0"}
+{"fails": 0}
+==354250== Memcheck, a memory error detector
+==354250== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==354250== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==354250== Command: target/release/ct 4095 1
+==354250== Parent PID: 353993
+==354250== 
+==354250== 
+==354250== HEAP SUMMARY:
+==354250==     in use at exit: 1,241,046 bytes in 19 blocks
+==354250==   total heap usage: 1,082,500 allocs, 1,082,481 frees, 3,849,005,154 bytes allocated
+==354250== 
+==354250== LEAK SUMMARY:
+==354250==    definitely lost: 0 bytes in 0 blocks
+==354250==    indirectly lost: 0 bytes in 0 blocks
+==354250==      possibly lost: 0 bytes in 0 blocks
+==354250==    still reachable: 1,241,046 bytes in 19 blocks
+==354250==         suppressed: 0 bytes in 0 blocks
+==354250== Rerun with --leak-check=full to see details of leaked memory
+==354250== 
+==354250== For lists of detected and suppressed errors, rerun with: -s
+==354250== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+ct c8-a: rc=0 secret-dependent reports=0

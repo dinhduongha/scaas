@@ -1,0 +1,39 @@
+# ct spike-b: HEAD 14f24c29cb2f6f281caa94c4a6cf07589e3f5354, diff sha256 e3b0c44298fc1c14, valgrind-3.22.0, rels 4095, nprove 1, set n2304-kmax4096,spike-b
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c-spike/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 5.71s
+rustc 1.97.1 (8bab26f4f 2026-07-14)
+{"rel": "R_REG", "run": 0, "prove": "Ok(203790)", "verify": true, "fnv": "79b3730b"}
+{"rel": "R_TX", "run": 0, "prove": "Ok(247536)", "verify": true, "fnv": "b0c64ecc"}
+{"rel": "R_BURN", "run": 0, "prove": "Ok(247760)", "verify": true, "fnv": "ae9da8e1"}
+{"rel": "R_DS", "run": 0, "prove": "Ok(204206)", "verify": true, "fnv": "54a83af4"}
+{"rel": "R_DR", "run": 0, "prove": "Ok(203950)", "verify": true, "fnv": "db05c886"}
+{"rel": "R_TX0", "run": 0, "prove": "Ok(247728)", "verify": true, "fnv": "89703209"}
+{"rel": "R_TXM1", "run": 0, "prove": "Ok(248048)", "verify": true, "fnv": "459fcac1"}
+{"rel": "R_TXM2", "run": 0, "prove": "Ok(248282)", "verify": true, "fnv": "4a28ebb1"}
+{"rel": "R_TXM4", "run": 0, "prove": "Ok(249348)", "verify": true, "fnv": "d13da94f"}
+{"rel": "R_TXM1_0", "run": 0, "prove": "Ok(247760)", "verify": true, "fnv": "b90d5f13"}
+{"rel": "R_TXM2_0", "run": 0, "prove": "Ok(247472)", "verify": true, "fnv": "2ee3be17"}
+{"rel": "R_TXM4_0", "run": 0, "prove": "Ok(247738)", "verify": true, "fnv": "744586d9"}
+{"fails": 0}
+==1201175== Memcheck, a memory error detector
+==1201175== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1201175== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1201175== Command: target/release/ct 4095 1
+==1201175== Parent PID: 1200406
+==1201175== 
+==1201175== 
+==1201175== HEAP SUMMARY:
+==1201175==     in use at exit: 1,241,046 bytes in 19 blocks
+==1201175==   total heap usage: 4,704,772 allocs, 4,704,753 frees, 4,232,085,980 bytes allocated
+==1201175== 
+==1201175== LEAK SUMMARY:
+==1201175==    definitely lost: 0 bytes in 0 blocks
+==1201175==    indirectly lost: 0 bytes in 0 blocks
+==1201175==      possibly lost: 0 bytes in 0 blocks
+==1201175==    still reachable: 1,241,046 bytes in 19 blocks
+==1201175==         suppressed: 0 bytes in 0 blocks
+==1201175== Rerun with --leak-check=full to see details of leaked memory
+==1201175== 
+==1201175== For lists of detected and suppressed errors, rerun with: -s
+==1201175== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+ct spike-b: rc=0 secret-dependent reports=0
