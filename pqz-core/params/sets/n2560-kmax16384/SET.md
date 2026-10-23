@@ -17,7 +17,7 @@ derived (see [`../README.md`](../README.md)).
 | encryption, no hints | uSVP β 508; 2^145.7 classical / 2^132.7 quantum (dual_hybrid β 499 / 500) (`p16k/results-16k.md` §2) |
 | encryption, 80 hints | DDGR20 worst case β 482.43; dual_hybrid on the hinted instance 474.43 / 476.43 [estimate: n − 80 model minus the measured offset] (n-study §3.3) |
 | e_s0 | budget, exactness of every norm proof (14 relations) and Fiat–Shamir rounds (final challenge 2^-129.79): MET (`e-s0.txt`) |
-| proofSystemId | the v3 label until the plan 5h Task 8d bump (owner ruling 2026-10-21); the label spec §6.4 gave this set (`mlwe-d64k40-q50l4`) is superseded |
+| proofSystemId | the label `…/mlwe-d64k32-q42l4/v3` until the plan 5h Task 8d bump (owner ruling 2026-10-21); the label spec §6.4 gave this set (`mlwe-d64k40-q50l4`) is superseded |
 | owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by `n2304-kmax4096`; kept shippable) |
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits (P50); `PqzSet.sol` `PACK_BITS`; built in 8d |
 | PQZH | q is PQZH-compatible; not built for this set until plan 5h Task 8c part 2 (pqz-ffi / pqz-vectors / the gate skip it). Debit proofs ≈ 302–304 KB [model] exceed 262,144 B → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (decisions CTR-PQZ-10; planned: the prover limit in 8c part 2, `pqz-stmt` max_proof / `MAX_INPUT` in 8d) |

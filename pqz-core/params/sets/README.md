@@ -101,7 +101,7 @@ an owner decision recorded in `docs/decisions.md` (CTR-PQZ-10) and in the set's 
 | Rust `pqzl` | cargo feature `set-<set>` (default `set-n2304-kmax4096`; another set: `--no-default-features --features sv,set-<set>`) |
 | `pqz-stmt` | cargo feature `set-<set>` (default `set-n2048-kmax1024`, the contracts' set until 8d) |
 | `pqz-ffi` (precompile, prover API, `pqz-vectors`) | cargo feature `set-<set>` (default `set-n2048-kmax1024`, forwarded to `pqz-stmt` and `pqzl`); PQZH (`pqzh-ligero`) only with `set-n2048-kmax1024` |
-| gate | `PQZ_SET=<set> scripts/capped pqz-core/gate.sh <label>` |
+| gate | `PQZ_SET=<set> scripts/capped pqz-core/gate.sh <label>`; the gates of different sets may run at the same time from one worktree, one `scripts/capped` slot each (every build / output path per set: `pqzl/build/<set>/`, `…/target/<set>/`, `build/fuzz-<set>/`; owner 2026-10-23) |
 
 Each build checks that exactly one set is chosen (C: `pqz_set.h` from one directory; Rust: a compile error otherwise).
 
@@ -113,7 +113,7 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 | `pqz_set.h`, `rust/set.rs` | n, k, q, log2 q, Δ, `K_MAX`, digit / carry / noise widths, norm bounds, NTT roots, Barrett constants, the specialised verifier's CRT prime count | [`gen_set.py`](gen_set.py) (`--check` in the gate) |
 | `set.json` | every derived constant the Python tools read (`pqz_kat.py`, `e_s0_set.py`, the tests' `core_only`) | `gen_set.py` |
 | `PqzSet.sol` | the set's Solidity constants; `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (the `n2048-kmax1024` one until 8d) | `gen_set.py` |
-| `<rel>_params.sage` | LaZer codegen specs of the 14 relations (reg, tx, tx0, burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (v3's have the shapes of `pqzl/params/*.sage`, the record) |
+| `<rel>_params.sage` | LaZer codegen specs of the 14 relations (reg, tx, tx0, burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (`n2048-kmax1024`'s have the shapes of `pqzl/params/*.sage`, the record) |
 | `pqz_<rel>_params.h`, `codegen.txt` | LaZer codegen headers and the codegen log (`codegen-check.txt` for the frozen `n2048-kmax1024`: the regenerated headers byte-identical) | `make.sh <set> codegen` (LaZer 3330e48, pinned Sage image) |
 | `rust/<rel>.rs`, `rust/mod.rs` | the headers' Rust form | `pqzl/params/to_rust.py` (`make.sh <set> rust`) |
 | `e-s1.txt` | lattice-estimator check of every spec (MSIS β, hiding MLWE uSVP and dual_hybrid ≥ 450) | `pqzl/params/n-study/e_s1_n.sage` |

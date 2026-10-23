@@ -10,7 +10,7 @@
 #           be set.toml's: if not (or missing), stop and print the values to put into set.toml   (heavy, capped)
 #   codegen LaZer 3330e48 codegen of the 14 specs into <set>/.codegen/, moved to <set>/pqz_<rel>_params.h and
 #           <set>/codegen.txt only when all 14 succeed (a failure leaves the committed headers untouched); a set with
-#           `frozen = true` (the v3 set) is compared byte for byte instead -> <set>/codegen-check.txt (capped)
+#           `frozen = true` (n2048-kmax1024) is compared byte for byte instead -> <set>/codegen-check.txt (capped)
 #   rust    pqzl/params/to_rust.py <set>: the headers' Rust form <set>/rust/<rel>.rs and the crate's params/mod.rs
 #   e_s0    e_s0_set.py: the set's budget checks, exactness of the norm proofs per relation, FS rounds -> <set>/e-s0.txt
 #   kat     the upstream LaZer golden arithmetic KAT at the set's q (pqzl/kat/build-lazer-dump.sh, docker, x86-64-v3)

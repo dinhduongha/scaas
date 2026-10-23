@@ -38,9 +38,9 @@ Terms used throughout:
   [`params/sets/<set>/`](params/README.md), selected at compile time (C `PQZ_SET`, Rust feature `set-<set>`; one set
   per library build); the only input of a set is its `set.toml`, `params/sets/gen_set.py` derives the rest and
   `params/sets/make.sh <set> all` runs estimator → codegen → KATs → vectors → gate. Sets: `n2048-kmax1024` (the frozen
-  v3 set: main's constants, vectors byte-identical, contracts until 8d), `n2304-kmax4096` (the default, owner
+  set: main's constants, vectors byte-identical, contracts until 8d), `n2304-kmax4096` (the default, owner
   2026-10-21: C = Rust = wasm32, its own vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`, PQZH compiled out
-  until 8c, the v3 `proofSystemId` until 8d), `n2560-kmax16384` (shippable for customer chains: its own vectors under
+  until 8c, the `proofSystemId` label `…/v3` until 8d), `n2560-kmax16384` (shippable for customer chains: its own vectors under
   `smartcontracts/vectors/pqz/n2560-kmax16384/`, PQZH in 8c part 2) and `n2816-kmax65536` (research record, core only:
   C + Rust, no pqz-stmt / precompile / PQZH). Details: the sets' `SET.md` and [`params/sets/README.md`](params/sets/README.md).
 

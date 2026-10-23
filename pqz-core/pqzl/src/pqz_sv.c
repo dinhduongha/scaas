@@ -16,8 +16,8 @@
  * 2^(30 NP)), Montgomery form throughout. An integer polynomial is held exactly while its coefficients stay below P/2 in
  * absolute value; it is then CRT-reconstructed and reduced mod q (red ()). Inputs enter as integers below 2^L (values
  * mod q, L = PQZ_LOG2Q) or as small integers (c, c^2, X^32, the all-ones polynomial); one ring product of two such
- * inputs is below 64 2^(2L) (the bounds next to each sum are given in the unit 2^98 of n2304-kmax4096, L = 46; v3
- * L = 42: 2^90; the term counts are the largest over the sets), and the largest sum formed below is < 2^(2L + 23)
+ * inputs is below 64 2^(2L) (the bounds next to each sum are given in the unit 2^98 of n2304-kmax4096, L = 46;
+ * n2048-kmax1024, L = 42: 2^90; the term counts are the largest over the sets), and the largest sum formed below is < 2^(2L + 23)
  * (n2304-kmax4096: 2^115 < P/2 ~ 2^119); gen_set.py picks NP so that P/2 stays above it (asserted below), so no
  * input, honest or adversarial, can overflow it.
  *

@@ -331,7 +331,7 @@ def main(argv):
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(t)
     if check:
-        # the contracts' PqzSet.sol: exactly the v3 set's generated text until plan 5h Task 8d (8b review m7)
+        # the contracts' PqzSet.sol: exactly n2048-kmax1024's generated text until plan 5h Task 8d (8b review m7)
         if not os.path.exists(SOL_EVM) or open(SOL_EVM, encoding="utf-8").read() != sol_text(V3):
             diff.append(os.path.relpath(SOL_EVM, REPO))
         diff += [os.path.relpath(p, REPO) for s in names for p in stray(s)]

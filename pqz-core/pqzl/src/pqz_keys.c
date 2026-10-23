@@ -199,7 +199,7 @@ pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES
     }
   for (unsigned i = 0; i < 16; i++)
     {
-      /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)), ties up (v3: Delta odd, no ties; n2304-kmax4096: Delta even, and an
+      /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)), ties up (n2048-kmax1024: Delta odd, no ties; n2304-kmax4096: Delta even, and an
          encryption's |noise| < Delta / 2 never ties); branch-free: |w| < q/2 and Delta ~ q / 2^(MBITS + 2), so with
          SH = MBITS + 3, 2 Delta 2^SH ~ 4q, t = 2w + Delta + 2 Delta 2^SH > 0 and floor(t / (2 Delta)) = M + 2^SH.
          review E: the division is the fixed-step restoring division of pqz_mpn.h (w is secret; wasm32 keeps a 64-bit
