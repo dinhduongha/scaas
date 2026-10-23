@@ -1,9 +1,10 @@
-# Parameter set `n2816-kmax65536` (A′, core only)
+# Parameter set `n2816-kmax65536` (core only)
 
-Candidate A′ of plan 5h (research record [`pqz-core/pqzl/params/aprime/`](../../../pqzl/params/aprime/README.md):
-`K_MAX` ≈ 65k, owner choice 2026-10-19, superseded by the 16k set on 2026-10-20). The owner asked on 2026-10-21 to
+The `K_MAX` 65,536 candidate of plan 5h (research record [`pqz-core/pqzl/params/aprime/`](../../../pqzl/params/aprime/README.md):
+owner choice 2026-10-19, superseded by [`n2560-kmax16384`](../n2560-kmax16384/SET.md) on 2026-10-20). The owner asked on 2026-10-21 to
 keep it in `params/sets/` "in case a customer wants it": **core only** (`core_only = true` in [`set.toml`](set.toml)):
-the PQZL C and Rust cores build and test at this set (C = Rust, native = wasm32, own KATs); there is no `pqz-stmt` /
+the PQZL C and Rust cores build and test at this set (C = Rust; native = wasm32 for the Rust crate, and for the C
+core through the gate's `fnv/cwasm` part, see "64-bit arithmetic" below; own KATs); there is no `pqz-stmt` /
 precompile / vectors / contracts build for it. Every other file here is derived (see [`../README.md`](../README.md)).
 
 | Item | Value |
@@ -21,9 +22,9 @@ precompile / vectors / contracts build for it. Every other file here is derived 
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL) at q = 2^54 − 327, 19/19 |
 | 64-bit arithmetic | log2 q = 54 is within every bound of the set-generic cores: `PQZ_LOG2Q <= 56` (`pqz_ntt.c` wasm32 limbs, `pqz_sv.c` lift), Barrett 2L + 4 = 112 ≤ L + 63, specialised verifier 5 CRT primes, Δ · 2^(MBITS − 1) = 2^51 in int64 |
 | proofSystemId | none of its own: the cores carry the v3 label (as every set until plan 5h Task 8d); a deployment would need its own id |
-| owner approval | 2026-10-21: keep A′ as a core-only set (progress.md); its values are the research record's, not a frozen relation |
+| owner approval | 2026-10-21: keep this set as a core-only set (progress.md); its values are the research record's, not a frozen relation |
 | stored-blob packing width | ⌈log2 q⌉ = 54 bits (`PqzSet.sol` `PACK_BITS`, not built: core only) |
-| PQZH | not built (core only); q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has none of the radices 19 / 43 / 431 of PQZH's Ligero domains (the v3 / (a) / 16k q's have them), so PQZH at this q would need other domains |
+| PQZH | not built (core only); q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has none of the radices 19 / 43 / 431 of PQZH's Ligero domains (the q's of `n2048-kmax1024`, `n2304-kmax4096` and `n2560-kmax16384` have them), so PQZH at this q would need other domains |
 
 Object sizes: pk 22,528 B, ciphertext 22,656 B, op 1 statement 113,792 B (auditor on).
 
@@ -31,9 +32,9 @@ Object sizes: pk 22,528 B, ciphertext 22,656 B, op 1 statement 113,792 B (audito
 
 A customer chain cannot run this set as it stands: the precompile (`pqz-ffi`), its statement layer (`pqz-stmt`), the
 vectors and the contracts are built for `n2048-kmax1024` (today), `n2304-kmax4096` and `n2560-kmax16384` only. Using
-A′ on a chain would need, at least: a `pqz-stmt` / `pqz-ffi` build for the set (drop `core_only`, `make.sh … vectors`),
+this set on a chain would need, at least: a `pqz-stmt` / `pqz-ffi` build for the set (drop `core_only`, `make.sh … vectors`),
 its own proofSystemId, `MAX_PROOF` / `MAX_INPUT` re-pinned (op 7 M = 8 codegen proof ≈ 82.7 KB), the contracts wired
-to `PqzSet.sol` (plan 5h Task 8d), and the chain conditions of [the 16k set](../n2560-kmax16384/SET.md#conditions-for-this-set-to-work-on-a-chain)
+to `PqzSet.sol` (plan 5h Task 8d), and the chain conditions of [`n2560-kmax16384`](../n2560-kmax16384/SET.md#conditions-for-this-set-to-work-on-a-chain)
 re-measured at its larger objects (22.7 KB per ciphertext: more state gas per debit).
 
 Files: `set.toml` (input), `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, `<rel>_params.sage` (gen_set.py),

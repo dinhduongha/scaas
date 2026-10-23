@@ -859,9 +859,10 @@ Each ruling, with its content and status:
     `set.json`, `PqzSet.sol` and the crates' feature lists, `make.sh <set> all` runs the rest (estimator, codegen,
     KATs, vectors, gate). C chooses with `PQZ_SET=<set>`, Rust with the cargo feature `set-<set>`; the algorithm code
     uses named constants only; a runtime choice between sets is deferred. Sets: `n2048-kmax1024` (the frozen v3
-    set; its vectors stay at `smartcontracts/vectors/pqz/`, which the contracts read until 8d) and `n2304-kmax4096`
-    (set (a), the `pqzl` crate's default; vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`); later
-    `n2560-kmax16384` (16k, shippable) and `n2816-kmax65536` (A', core only). PQZH is compiled out of pqz-ffi /
+    set; its vectors stay at `smartcontracts/vectors/pqz/`, which the contracts read until 8d) `n2304-kmax4096`
+    (the `pqzl` crate's default; vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`), `n2560-kmax16384`
+    (`K_MAX` 16,384, shippable; vectors under `smartcontracts/vectors/pqz/n2560-kmax16384/`) and `n2816-kmax65536`
+    (`K_MAX` 65,536, core only). PQZH is compiled out of pqz-ffi /
     pqz-vectors for every set but v3 until 8c; every set carries the v3 `proofSystemId` until the 8d bump. Status:
     decided (owner 2026-10-21); built in 8b.
 

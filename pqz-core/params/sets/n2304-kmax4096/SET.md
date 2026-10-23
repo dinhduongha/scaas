@@ -1,7 +1,7 @@
-# Parameter set `n2304-kmax4096` (set (a))
+# Parameter set `n2304-kmax4096` (the default set)
 
-Set (a) of the n-study (plan 5h Task 7c, candidate E), approved by the owner on 2026-10-21; it supersedes the approved
-16k set (n 2560, `K_MAX` 16,384) as the target of plan 5h Task 8. The default set of the `pqzl` crate and of
+Candidate E of the n-study (plan 5h Task 7c), approved by the owner on 2026-10-21; it supersedes the approved
+[`n2560-kmax16384`](../n2560-kmax16384/SET.md) (n 2560, `K_MAX` 16,384) as the target of plan 5h Task 8. The default set of the `pqzl` crate and of
 `gate.sh`; the contracts still use [`n2048-kmax1024`](../n2048-kmax1024/SET.md) until plan 5h Task 8d. Input:
 [`set.toml`](set.toml); every other file here is derived (see [`../README.md`](../README.md)).
 
@@ -17,7 +17,7 @@ Set (a) of the n-study (plan 5h Task 7c, candidate E), approved by the owner on 
 | encryption, 80 hints (op 7 group of 4 legs + auditor) | DDGR20 worst case β 468.47; dual_hybrid on the hinted instance 458.47 / 461.47 classical / quantum [estimate: n − 80 model minus the measured offset] (n-study §3.2 / §3.3) |
 | e_s0 | budget, exactness of every norm proof (14 relations incl. txm4 / txm8) and Fiat–Shamir rounds (λ = 3: 137.4 bits; final challenge 2^-129.79): MET (`e-s0.txt`) |
 | proofSystemId | the v3 label `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` until the one bump of plan 5h Task 8d (owner ruling 2026-10-21) |
-| owner approval | 2026-10-21 (set (a) supersedes the approved 16k set; progress.md) |
+| owner approval | 2026-10-21 (supersedes the approved `n2560-kmax16384`; progress.md) |
 | stored-blob packing width (P46 ruling, owner 2026-10-21) | ⌈log2 q⌉ = 46 bits (P46: 4 coefficients per 23 bytes); `PqzSet.sol` `PACK_BITS`; built in 8d |
 | PQZH | not built for this set until plan 5h Task 8c (q is PQZH-compatible); pqz-ffi / pqz-vectors / the gate skip it |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |

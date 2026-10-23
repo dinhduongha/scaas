@@ -1,8 +1,8 @@
-# Parameter set `n2560-kmax16384` (16k)
+# Parameter set `n2560-kmax16384` (shippable)
 
-The 16k set of plan 5h Task 7 (research record [`pqz-core/pqzl/params/p16k/`](../../../pqzl/params/p16k/results-16k.md)),
+The `K_MAX` 16,384 set of plan 5h Task 7 (research record [`pqz-core/pqzl/params/p16k/`](../../../pqzl/params/p16k/results-16k.md)),
 approved as the Task 8 set on 2026-10-20 (owner ruling Q1) and superseded as the default by
-[set (a)](../n2304-kmax4096/SET.md) on 2026-10-21; the owner keeps it as a **shippable** set (2026-10-21: a customer
+[`n2304-kmax4096`](../n2304-kmax4096/SET.md) on 2026-10-21; the owner keeps it as a **shippable** set (2026-10-21: a customer
 chain may choose it): full vectors, its own gate, this file. Input: [`set.toml`](set.toml); every other file here is
 derived (see [`../README.md`](../README.md)).
 
@@ -17,16 +17,16 @@ derived (see [`../README.md`](../README.md)).
 | encryption, no hints | uSVP β 508; 2^145.7 classical / 2^132.7 quantum (dual_hybrid β 499 / 500) (`p16k/results-16k.md` §2) |
 | encryption, 80 hints | DDGR20 worst case β 482.43; dual_hybrid on the hinted instance 474.43 / 476.43 [estimate: n − 80 model minus the measured offset] (n-study §3.3) |
 | e_s0 | budget, exactness of every norm proof (14 relations) and Fiat–Shamir rounds (final challenge 2^-129.79): MET (`e-s0.txt`) |
-| proofSystemId | the v3 label until the plan 5h Task 8d bump (owner ruling 2026-10-21); the 16k label of spec §6.4 (`mlwe-d64k40-q50l4`) is superseded |
-| owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by set (a); kept shippable) |
+| proofSystemId | the v3 label until the plan 5h Task 8d bump (owner ruling 2026-10-21); the label spec §6.4 gave this set (`mlwe-d64k40-q50l4`) is superseded |
+| owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by `n2304-kmax4096`; kept shippable) |
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits (P50); `PqzSet.sol` `PACK_BITS`; built in 8d |
-| PQZH | q is PQZH-compatible; not built for this set until plan 5h Task 8c (pqz-ffi / pqz-vectors / the gate skip it) |
+| PQZH | q is PQZH-compatible; not built for this set until plan 5h Task 8c part 2 (pqz-ffi / pqz-vectors / the gate skip it). Debit proofs ≈ 302–304 KB [model] exceed 262,144 B → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (decisions CTR-PQZ-10; planned: the prover limit in 8c part 2, `pqz-stmt` max_proof / `MAX_INPUT` in 8d) |
 | LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
 ## Conditions for this set to work on a chain
 
-Measured where marked; the rest [estimate]. Gas figures are Task 7b's under Ethereum's Amsterdam rules at the 16k sizes
+Measured where marked; the rest [estimate]. Gas figures are Task 7b's under Ethereum's Amsterdam rules at this set's sizes
 (Foundry 1.8.5 = Nethermind 2.2.0 on the same transactions; `p16k/results-16k.md` §8), with the precompile priced at
 today's PQZL v3 rows × 1.25 [estimate].
 
@@ -46,16 +46,18 @@ today's PQZL v3 rows × 1.25 [estimate].
    M ≤ 4 and 31.8 M per prepare half [measured], ≈ 68.7 M for op 7 M = 8 [measured, precompile mocked]; so one debit
    needs a block gas limit ≥ ≈ 43 M (regular + state), op 7 M = 8 ≥ ≈ 76 M. The P50 packing of 8d (stored data only,
    ⌈log2 q⌉ = 50 bits) lowers the blob's state gas by about 22 % (50 of 64 bits per
-   stored coefficient) [estimate; the P46 spike measured −8.10 M per op 1 at set (a)]. Ethereum mainnet's 60 M block holds one 16k debit; Glamsterdam's expected 200 M holds about
+   stored coefficient) [estimate; the P46 spike measured −8.10 M per op 1 at `n2304-kmax4096`]. Ethereum mainnet's 60 M block holds one debit of this set; Glamsterdam's expected 200 M holds about
    four. The real cost (state gas is paid) applies on a customer chain.
 5. **`ROLL_MAX` 80** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas) [measured, Task 7b].
-6. **PQZH:** a backup only — its debit inputs (406–469 KB) exceed one transaction's calldata; `R_REG` fits
-   [Task 7b]. Built for this set in 8c.
+6. **PQZH:** a backup only — its debit proofs (≈ 302–304 KB [model]) need this set's `MAX_PROOF_PQZH` of 327,680 B
+   (owner 2026-10-23; planned for 8c part 2 / 8d), and its debit inputs (largest 493,445 B ≤ `MAX_INPUT` 512 KiB
+   [model], [`../README.md`](../README.md)) exceed one transaction's calldata; `R_REG` fits. Built for this set in 8c
+   part 2.
 7. **Security margins:** encryption β 508; ≤ 80 worst-case hints on one `(r_g, e1_g)` (op 7 group of 4 legs + auditor)
    β 482.4 (above 450, no exception needed); proof MSIS / MLWE β ≥ 450 per spec (`e-s1.txt`); exactness and
    Fiat–Shamir rounds MET (`e-s0.txt`); mint margin 3.36.
 8. **Verify time** (≤ 60 ms p99 wasm32, the precompile's budget): not re-measured for this set (owner rule: no timing
-   runs during this task); the proof sizes are 6–8 % above set (a)'s (below).
+   runs during this task); the proof sizes are 6–8 % above `n2304-kmax4096`'s (below).
 
 Proof sizes (`smartcontracts/vectors/pqz/n2560-kmax16384/proof_pqzl.json`, byte-identical C = Rust = wasm32): TRANSFER
 50,391 B, TRANSFER0 50,053, BURN 49,538, REFRESH 49,527, REGISTER 32,452, DISCLOSE-SENDER 32,985, -RECEIVER 33,763,

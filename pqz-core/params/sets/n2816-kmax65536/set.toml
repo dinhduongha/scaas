@@ -1,7 +1,7 @@
 # PQZ parameter set n2816-kmax65536: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
-# derived from it; README.md beside this directory). A' of plan 5h (research record pqz-core/pqzl/params/aprime/):
+# derived from it; README.md beside this directory). The K_MAX 65,536 set of plan 5h (research record pqz-core/pqzl/params/aprime/):
 # K_MAX about 65k for a customer that wants it later; core only.
-description = "A' (K_MAX 65,536), owner 2026-10-21: core only"
+description = "K_MAX 65,536, owner 2026-10-21: core only"
 n = 2816
 k_max = 65536
 q = 18014398509481657             # 2^54 - 327 (aprime/aprime.sage budget)

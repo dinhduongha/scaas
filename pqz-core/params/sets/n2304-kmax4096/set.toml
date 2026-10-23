@@ -1,6 +1,6 @@
 # PQZ parameter set n2304-kmax4096: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
-# derived from it; README.md beside this directory). Set (a), plan 5h Task 7c candidate E.
-description = "set (a), owner 2026-10-21 (plan 5h Task 8b)"
+# derived from it; README.md beside this directory). The default set: plan 5h Task 7c candidate E.
+description = "the default set, owner 2026-10-21 (plan 5h Task 8b)"
 n = 2304
 k_max = 4096
 q = 61275424977257                # 2^45.80, q = 9 mod 16, q - 1 divisible by 2^3 * 19 * 43 * 431
@@ -9,4 +9,4 @@ kmlwe_min = 36                    # e-s1.txt: hiding MLWE uSVP and dual_hybrid b
 
 [approval]
 date = "2026-10-21"
-what = "parameter set (a) supersedes the approved 16k set (owner, progress.md 2026-10-21); the default set of the pqzl crate"
+what = "supersedes n2560-kmax16384 as the approved set (owner, progress.md 2026-10-21); the default set of the pqzl crate"

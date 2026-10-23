@@ -1,9 +1,9 @@
 {
  "set": "n2304-kmax4096",
- "description": "set (a), owner 2026-10-21 (plan 5h Task 8b)",
+ "description": "the default set, owner 2026-10-21 (plan 5h Task 8b)",
  "approval": {
   "date": "2026-10-21",
-  "what": "parameter set (a) supersedes the approved 16k set (owner, progress.md 2026-10-21); the default set of the pqzl crate"
+  "what": "supersedes n2560-kmax16384 as the approved set (owner, progress.md 2026-10-21); the default set of the pqzl crate"
  },
  "core_only": false,
  "pqzh": false,

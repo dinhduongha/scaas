@@ -1,9 +1,9 @@
 {
  "set": "n2560-kmax16384",
- "description": "the 16k set, owner 2026-10-21: shippable (customer chains may choose it)",
+ "description": "K_MAX 16,384, owner 2026-10-21: shippable (customer chains may choose it)",
  "approval": {
   "date": "2026-10-21",
-  "what": "approved as the Task 8 set on 2026-10-20 (Q1), superseded as the default by set (a) on 2026-10-21; kept as a shippable set (owner 2026-10-21: full vectors, gate, SET.md conditions)"
+  "what": "approved as the Task 8 set on 2026-10-20 (Q1), superseded as the default by n2304-kmax4096 on 2026-10-21; kept as a shippable set (owner 2026-10-21: full vectors, gate, SET.md conditions)"
  },
  "core_only": false,
  "pqzh": false,

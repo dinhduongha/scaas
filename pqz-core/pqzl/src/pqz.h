@@ -21,13 +21,14 @@
 #define PQZ_MAX_PROOF 98304 /* MAX_PROOF (pq-zero-knowledge.md §8) */
 
 /* The parameter set (owner 2026-10-21: one directory per set, chosen at compile time, one set per library build;
-   build.sh PQZ_SET=pa | v3): params/sets/<set>/pqz_set.h gives n = PQZ_N = k d (k = PQZ_K polys of d = 64), q, Delta,
-   K_MAX, the norm bounds and the bit widths (pa: n 2304, q = 61,275,424,977,257, M_i 16, carries 13, e_T 27 bits;
-   v3: n 2048, q = 2^42 - 215, 14 / 11 / 25). */
+   PQZ_SET=<set> ./build.sh native | wasm, <set> a directory name such as n2304-kmax4096): params/sets/<set>/pqz_set.h
+   gives n = PQZ_N = k d (k = PQZ_K polys of d = 64), q, Delta, K_MAX, the norm bounds and the bit widths
+   (n2304-kmax4096: n 2304, q = 61,275,424,977,257, M_i 16, carries 13, e_T 27 bits; v3 n2048-kmax1024: n 2048,
+   q = 2^42 - 215, 14 / 11 / 25). */
 #include "pqz_set.h"
 #define PQZ_EOFF ((int64_t)1 << (PQZ_EBITS - 1)) /* e_T + E, e' + E in EBITS bits */
 /* debit bit layout after the legs' digits d_j (64 bits each): d' at 0, M_i at PQZ_BITS_M + MBITS i, c_i + 64 at
-   PQZ_BITS_C + CBITS i, e_T,i + E at PQZ_BITS_E + EBITS i; R_BURN (no leg) has PQZ_BITS_BURN bits (v3 853, pa 947), a
+   PQZ_BITS_C + CBITS i, e_T,i + E at PQZ_BITS_E + EBITS i; R_BURN (no leg) has PQZ_BITS_BURN bits (v3 853, n2304-kmax4096 947), a
    debit with M legs PQZ_BITS_BURN + 64 M */
 #define PQZ_BITS_M 64
 #define PQZ_BITS_C (PQZ_BITS_M + 16 * PQZ_MBITS)
@@ -37,7 +38,7 @@
 #define PQZ_V_BYTES 128         /* 16 coeffs x be8 */
 #define PQZ_PREFIX_BYTES 64     /* opTag || proofSystemId */
 /* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"); the same for every set in
-   plan 5h Task 8b: 8d makes the one bump for set (a) and the transcript fixes of Task 8 (pq-zero-knowledge.md §8,
+   plan 5h Task 8b: 8d makes the one bump for the new sets and the transcript fixes of Task 8 (pq-zero-knowledge.md §8,
    CTR-PQZ-09). pqz-core only hashes it; the precompile accepts only ids it implements. v3 (was .../v2): the Fiat-Shamir
    transcript absorbs z3, z4 before V3 / V4 and h before mu and the final challenge (P6-FS, lazer/lnp-tbox.c
    _lnp_tbox_hash_z34 / _lnp_tbox_hash_h, src/pqz_sv.c; lazer-crypto/lazer issue 28); v2 is retired (forgeable).
@@ -65,7 +66,7 @@
 #define PQZ_HDR_TO_UA 192
 #define PQZ_HDR_RECIPIENT 320
 /* auditorOn word (§7.7 offset 448; CTR-PQZ-24): op 1 is R_TX with a 93,312-byte statement, which requires the word
-   = 1, and R_TX0 with a 74,752-byte one (pa; v3: 83,072 / 66,560), which requires 0; anything else is rejected (P6e plan R6) */
+   = 1, and R_TX0 with a 74,752-byte one (n2304-kmax4096; v3: 83,072 / 66,560), which requires 0; anything else is rejected (P6e plan R6) */
 #define PQZ_HDR_AUDITOR_ON 448
 /* R_TX (auditor on): header || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a */
 #define PQZ_TX_STMT_BYTES                                                                                   \
@@ -88,7 +89,7 @@
    randomness groups (leg j in group j / 4, v_f in group 0), auditor on (A = 1, one copy v_{a,j} per leg) or off.
    Header: §7.7's with word 192 = recipientsHash (hashed only) and word 320 = M; the core picks the relation by the
    M word (PQZ_TXM_BUILT) and the auditorOn word (0 / 1) and requires the length PQZ_TXM_STMT_BYTES(M, A) (the length
-   alone does not fix (M, A): (1, on) and (2, off) have the same length, pa 93,312 B, v3 83,072 B). Body: pk_f || pk_0 .. pk_{M-1} || [pk_a] ||
+   alone does not fix (M, A): (1, on) and (2, off) have the same length, n2304-kmax4096 93,312 B, v3 83,072 B). Body: pk_f || pk_0 .. pk_{M-1} || [pk_a] ||
    T = u_T || v_T || u_0 .. u_{G-1} || v_0 .. v_{M-1} || v_f || [v_{a,0} .. v_{a,M-1}]; at M = 1 that is R_TX's /
    R_TX0's body, and the relation uses R_TX's / R_TX0's parameters with ABDLOP keys of its own. Built M: 1, 2, 4, 8;
    M = 16 only with -DPQZ_TXM_OVERSIZE (bench builds; it does not fit MAX_INPUT, plan D3 / D20). */
@@ -117,7 +118,7 @@
 
 /* Disclosure (pq-zero-knowledge.md §7.9): opTag || proofSystemId || chainId || chainUid || token || registry || entryRef
    || amount || kind || pk || u || v, every scalar a 32-byte word (amount < 2^64; kind is hashed only), so pk starts
-   at 288. Same layout for R_DS and R_DR; pa 37,280 B, v3 33,184 B. */
+   at 288. Same layout for R_DS and R_DR; n2304-kmax4096 37,280 B, v3 33,184 B. */
 #define PQZ_DISC_AMOUNT (PQZ_PREFIX_BYTES + 5 * 32)
 #define PQZ_DISC_KIND (PQZ_DISC_AMOUNT + 32)
 #define PQZ_DISC_PK (PQZ_DISC_KIND + 32)
