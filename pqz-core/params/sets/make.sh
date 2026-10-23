@@ -8,15 +8,18 @@
 #   e_s1    lattice-estimator check of every spec (pqzl/params/n-study/e_s1_n.sage, pinned Sage image): MSIS beta,
 #           hiding MLWE uSVP and dual_hybrid >= 450 -> <set>/e-s1.txt; then every spec's pqz_delta / kmlwe_min must
 #           be set.toml's: if not (or missing), stop and print the values to put into set.toml   (heavy, capped)
-#   codegen LaZer 3330e48 codegen of the 14 specs -> <set>/pqz_<rel>_params.h, <set>/codegen.txt; a set with
-#           `frozen = true` (the v3 set) is regenerated into <set>/.codegen/ and compared byte for byte (capped)
+#   codegen LaZer 3330e48 codegen of the 14 specs into <set>/.codegen/, moved to <set>/pqz_<rel>_params.h and
+#           <set>/codegen.txt only when all 14 succeed (a failure leaves the committed headers untouched); a set with
+#           `frozen = true` (the v3 set) is compared byte for byte instead -> <set>/codegen-check.txt (capped)
 #   rust    pqzl/params/to_rust.py <set>: the headers' Rust form <set>/rust/<rel>.rs and the crate's params/mod.rs
 #   e_s0    e_s0_set.py: the set's budget checks, exactness of the norm proofs per relation, FS rounds -> <set>/e-s0.txt
 #   kat     the upstream LaZer golden arithmetic KAT at the set's q (pqzl/kat/build-lazer-dump.sh, docker, x86-64-v3)
 #           -> <set>/lazer-3330e48-kat.json (+ -build.txt), then pqz-core = upstream (pqzl/kat/check.py)
 #   fixtures the cheating fixtures the Rust suite reads (pqzl/rust/tests/fixtures/cheating/export.sh -> <set>/)  (capped)
 #   vectors pqz-ffi/vectors/run.sh write (PQZ_SET=<set>): smartcontracts/vectors/pqz[/<set>]   (not for core_only)
-#   sol     <set>/PqzSet.sol -> smartcontracts/evm/src/pqz/PqzSet.sol, forge build of that file   (not for core_only)
+#   sol     forge build of <set>/PqzSet.sol in a scratch project <set>/.solcheck (the contracts' file is untouched);
+#           PQZ_SOL_INSTALL=1 also copies it to smartcontracts/evm/src/pqz/PqzSet.sol (gen_set.py --check wants the
+#           n2048-kmax1024 one there until plan 5h Task 8d)                                    (not for core_only)
 #   gate    PQZ_SET=<set> pqz-core/gate.sh (run alone; label = the set, an interrupted gate resumes)
 # Environment: PQZ_TOOLS = a directory with the pinned checkouts lk (leaky-LWE-Estimator 0a9caf8), le
 # (lattice-estimator 53da598), lz (LaZer 3330e48) (e_s1, codegen); PQZ_WORK = a work directory for the KAT build
@@ -73,7 +76,8 @@ step_codegen() {
   tools lz || return 1
   LZ=$(cd "$PQZ_TOOLS/lz" && pwd)
   [ "$(git -C "$LZ" rev-parse HEAD)" = 3330e487228f633eceb322807b13a596b516770f ] || { echo "LaZer must be at 3330e48" >&2; return 1; }
-  O=$D; [ "$FROZEN" = True ] && { O=$D/.codegen; mkdir -p "$O"; }
+  O=$D/.codegen
+  rm -rf "$O" && mkdir -p "$O"
   rc=0
   { echo "LaZer $(git -C "$LZ" rev-parse HEAD); image $IMG; set $S"
     for r in $RELS; do
@@ -91,7 +95,13 @@ step_codegen() {
     done
     echo "codegen rc=$rc"
   } > "$O/codegen.txt" 2>&1
-  [ "$FROZEN" = True ] && { cp "$O/codegen.txt" "$D/codegen-check.txt"; rm -rf "$O"; }
+  if [ "$FROZEN" = True ]; then
+    cp "$O/codegen.txt" "$D/codegen-check.txt"; rm -rf "$O"
+  elif [ $rc = 0 ]; then
+    mv "$O"/pqz_*_params.h "$O/codegen.txt" "$D/" && rm -rf "$O"
+  else
+    echo "codegen failed: the committed headers are unchanged; outputs in $O (codegen.txt)" >&2
+  fi
   return $rc
 }
 
@@ -117,8 +127,18 @@ step_vectors() {
 
 step_sol() {
   [ "$CORE_ONLY" = True ] && { echo "skipped (core_only set: no contracts)"; return 0; }
-  cp "$D/PqzSet.sol" "$REPO/smartcontracts/evm/src/pqz/PqzSet.sol" &&
-    (cd "$REPO/smartcontracts/evm" && "$CAP" forge build --contracts src/pqz/PqzSet.sol)
+  T=$D/.solcheck
+  V=$(sed -n 's/^solc_version = "\(.*\)"$/\1/p' "$REPO/smartcontracts/evm/foundry.toml" | head -1)
+  rm -rf "$T" && mkdir -p "$T/src" && cp "$D/PqzSet.sol" "$T/src/" &&
+    (cd "$T" && "$CAP" forge build --root "$T" --offline --use "$V")
+  rc=$?
+  rm -rf "$T"
+  [ $rc = 0 ] || return 1
+  if [ "${PQZ_SOL_INSTALL:-0}" = 1 ]; then
+    cp "$D/PqzSet.sol" "$REPO/smartcontracts/evm/src/pqz/PqzSet.sol" && echo "installed as smartcontracts/evm/src/pqz/PqzSet.sol"
+  else
+    echo "compiled; smartcontracts/evm/src/pqz/PqzSet.sol unchanged (PQZ_SOL_INSTALL=1 installs it)"
+  fi
 }
 
 step_gate() { PQZ_SET=$S "$CAP" "$CORE/gate.sh"; }
