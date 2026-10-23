@@ -2,7 +2,9 @@
 //! the Ligero API is here (on `pqz-stmt` with all six forms since P6e Tasks 6, 8).
 use pqzh_ligero::Params;
 
-/// THE preset of the D3 id (proven, radix 431, n = 32,756, k = 817, t = 121, l = 695): a `const fn`, no floats.
+/// The set's proven preset (pqz-core/params/sets/<set>/pqzh_set.rs; n2048-kmax1024: THE preset of the D3 id, radix 431,
+/// n = 32,756, k = 817, t = 121, l = 695; n2304-kmax4096: preset B; n2560-kmax16384: THE preset's n / k, t = 122): a
+/// `const fn`, no floats.
 pub const PARAMS: Params = Params::proven();
 
 /// The Ligero verifier (it catches its own panics; `crate::precompile` catches any other). `Err(NodeFault)` when one
@@ -27,9 +29,9 @@ pub fn verify_panics() -> usize {
     pqzh_ligero::ligero::VERIFY_PANICS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// One forward and inverse FFT over the preset's 2k − 1 domain (n2 = 1,634 = 2·19·43) of a fixed vector: the
-/// self-test's Ligero KAT (D13). Returns the forward output as 6-byte big-endian elements and whether the inverse
-/// gave the input back.
+/// One forward and inverse FFT over THE preset's 2k − 1 domain (n2 = 1,634 = 2·19·43, a domain at every set with PQZH)
+/// of a fixed vector: the self-test's Ligero KAT (D13). Returns the forward output as EB-byte big-endian elements (6 at
+/// n2048-kmax1024) and whether the inverse gave the input back.
 pub fn fft_kat() -> (Vec<u8>, bool) {
     use pqzh_ligero::fft::Domain;
     use pqzh_ligero::fq::Fq;
@@ -37,7 +39,7 @@ pub fn fft_kat() -> (Vec<u8>, bool) {
     let d = Domain::new(n);
     let a: Vec<Fq> = (0..n as u64).map(|i| Fq((i * i * 0x9E37_79B9 + 1) % pqzh_ligero::fq::Q)).collect();
     let f = d.fft(&a);
-    let mut out = Vec::with_capacity(6 * n);
+    let mut out = Vec::with_capacity(pqzh_ligero::fq::EB * n);
     f.iter().for_each(|x| x.put(&mut out));
     (out, d.ifft(&f) == a)
 }

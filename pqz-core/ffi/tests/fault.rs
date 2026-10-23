@@ -17,7 +17,7 @@ fn node_faults_are_status_4() {
     let c = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Transfer).unwrap();
     let proof = prove(c.op(), &c.stmt, &c.wit, &[7; 32]).unwrap();
     let input = stmt::input(c.op(), &c.stmt, &proof);
-    // PQZH: in the v3 set's build only (until plan 5h Task 8c)
+    // PQZH: in the builds of the sets with PQZH (all three with pqz-ffi since plan 5h Task 8c part 2)
     let pqzh_input = PQZH.then(|| {
         let h = fixture::cases(&PQZH_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Register).unwrap();
         stmt::input(h.op(), &h.stmt, &prove(h.op(), &h.stmt, &h.wit, &[7; 32]).unwrap())

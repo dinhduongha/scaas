@@ -53,5 +53,19 @@
   },
   "bundle": 16688,
   "bundle0": 16560
+ },
+ "max_proof_pqzh": 262144,
+ "max_input": 393216,
+ "pqzh_preset": {
+  "radices": [
+   2,
+   19,
+   43,
+   431
+  ],
+  "n": 32756,
+  "k": 817,
+  "t": 121,
+  "ell": 695
  }
 }

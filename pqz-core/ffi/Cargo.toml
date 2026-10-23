@@ -15,8 +15,8 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
 pqz-stmt = { path = "../stmt", default-features = false }
-# PQZH: Ligero over the v3 set's F_q only (its own pqz-stmt is the default set n2048-kmax1024); compiled out for every
-# other set until plan 5h Task 8c ports it (feature `pqzh`, implied by `set-n2048-kmax1024`)
+# PQZH: Ligero over the set's F_q (plan 5h Task 8c part 2): feature `pqzh`, implied by `set-<set>` for every set whose
+# set.toml says pqzh, which also forwards the set to pqzh-ligero (gen_set.py writes the set lines below)
 pqzh-ligero = { path = "../pqzh/ligero", default-features = false, optional = true }
 sha3 = "=0.10.8"
 # feature `pqzl-rust`: the PQZL core in Rust (pqz-core/pqzl/rust), byte-for-byte equal to the C core. Parameter set
@@ -38,11 +38,11 @@ default = ["pqzl-rust", "set-n2048-kmax1024"]
 # the parameter set (pqz-core/params/sets/<set>, owner 2026-10-21): exactly one; another set than the default needs
 # --no-default-features --features pqzl-rust,set-<set>. Vectors: smartcontracts/vectors/pqz (v3) or …/pqz/<set>/.
 # BEGIN gen_set.py sets
-set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024", "pqzl?/set-n2048-kmax1024", "pqzh"]
-set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096", "pqzl?/set-n2304-kmax4096"]
-set-n2560-kmax16384 = ["pqz-stmt/set-n2560-kmax16384", "pqzl?/set-n2560-kmax16384"]
+set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024", "pqzl?/set-n2048-kmax1024", "pqzh-ligero?/set-n2048-kmax1024", "pqzh"]
+set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096", "pqzl?/set-n2304-kmax4096", "pqzh-ligero?/set-n2304-kmax4096", "pqzh"]
+set-n2560-kmax16384 = ["pqz-stmt/set-n2560-kmax16384", "pqzl?/set-n2560-kmax16384", "pqzh-ligero?/set-n2560-kmax16384", "pqzh"]
 # END gen_set.py sets
-# PQZH (Ligero) compiled in: the v3 set only until plan 5h Task 8c
+# PQZH (Ligero) compiled in: every set with pqzh (the set lines above)
 pqzh = ["dep:pqzh-ligero"]
 # `pqzl::` = the Rust crate `pqzl`; with `pqzl-c` too, the C core is `pqzl::c` (the differential and the fuzz mode
 # `pqzl-diff`)

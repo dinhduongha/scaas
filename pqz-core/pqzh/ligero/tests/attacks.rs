@@ -467,8 +467,11 @@ fn transfer_forms_cross_rejected() {
         assert_eq!(prove_unchecked(OP_TRANSFER, st, w, [6; 32], &pp), Err("length"));
     }
     // the length gate is the form's: R_TX0's bound is R_BURN's (same m), below R_TX's
-    // (set (a) preset B, l = 831: R_TX0 and R_TX have the same rows, 124, so equal bounds)
-    if pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry") {
+    // (n2304-kmax4096 preset B, l = 831: R_TX0 and R_TX have the same rows, 124; n2560-kmax16384, l = 694: 165; so equal
+    // bounds)
+    let equal = pqzh_ligero::set::NAME == "n2560-kmax16384"
+        || pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry");
+    if equal {
         assert_eq!(pp.max_proof_len(Form::Transfer0), pp.max_proof_len(Form::Transfer));
     } else {
         assert!(pp.max_proof_len(Form::Transfer0) < pp.max_proof_len(Form::Transfer));
@@ -478,7 +481,7 @@ fn transfer_forms_cross_rejected() {
 /// the EVM fixtures (ligero_export) verify natively: honest and other-statement proofs accepted, negative witnesses
 /// rejected. The fixtures are v3's (smartcontracts/evm/test/vectors/pqzh-ligero; regenerated per set in 8d if ever)
 #[test]
-#[cfg_attr(feature = "set-n2304-kmax4096", ignore = "the EVM fixtures are the v3 set's")]
+#[cfg_attr(any(feature = "set-n2304-kmax4096", feature = "set-n2560-kmax16384"), ignore = "the EVM fixtures are n2048-kmax1024's")]
 fn evm_fixtures() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../smartcontracts/evm/test/vectors/pqzh-ligero");
     let rd = |n: &str| std::fs::read(format!("{dir}/{n}")).unwrap();

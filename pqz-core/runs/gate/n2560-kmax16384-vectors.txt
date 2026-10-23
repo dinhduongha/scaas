@@ -1,15 +1,15 @@
 set n2560-kmax16384, vectors ../../smartcontracts/vectors/pqz/n2560-kmax16384; PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2560-kmax16384)
-pqz-vectors --check: 15 files, 10867170 B: ok
-	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/target/n2560-kmax16384/release/pqz-vectors --check"
+pqz-vectors --check: 16 files, 25770123 B: ok
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/ffi/target/n2560-kmax16384/release/pqz-vectors --check"
 pqz_kat: ok
-70956 KB
-tamper: 177 / 177 caught: ok
+92696 KB
+tamper: 191 / 191 caught: ok
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.20s
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 116.98s
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 24.35s
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 120.78s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.35s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 113.70s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 48.65s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 115.00s
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-{"cases":28,"verify_only":0,"fails":0,"node":"v26.8.1"}
+{"cases":53,"verify_only":0,"fails":0,"node":"v26.8.1"}
 run.sh gate-n2560-kmax16384: ok

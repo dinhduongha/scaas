@@ -36,7 +36,8 @@ section.
 **`precompile`** — raw bytes straight into `pqz_precompile`.
 
 - `targets/precompile.c` calls the C ABI itself.
-- `-max_len=400000`, which is over `MAX_INPUT`, so the revert path is reached.
+- `-max_len` = the set's `MAX_INPUT` + 4,096 (set.json `max_input`: 397,312 at `n2048-kmax1024`, 528,384 at the
+  other sets), so the revert path is reached and no honest seed is truncated.
 - Seeds: the vectors' honest and negative inputs (the multi-recipient ones included) and `06 00000000` (the
   self-test).
 - Extra checks: none.

@@ -135,15 +135,9 @@ fn honest_every_shape() {
             eprintln!("{} {what}: {} B (bound {max})", name(m, aud), pf.len());
             assert!(pf.len() <= max, "{} {what}", name(m, aud));
         }
-        // v3 (D5); at set (a) every debit bound is above MAX_PROOF_PQZH (ligero.rs `limits_exact` pins it)
-        if m <= 4 && pqzh_ligero::set::NAME == "n2048-kmax1024" {
-            assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
-        }
-        // set (a) preset B (owner 2026-10-22): every built bound within MAX_PROOF_PQZH
-        if pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry") {
-            assert!(max <= MAX_PROOF_PQZH, "{} limit", name(m, aud));
-        }
-        if false {
+        // every built shape within the set's MAX_PROOF_PQZH and MAX_INPUT (D5; plan 5h Task 8c part 2), except the
+        // n2304-kmax4096 fallback build (THE preset: every debit bound above MAX_PROOF_PQZH)
+        if m <= 4 && !cfg!(feature = "fallback-retry") {
             assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
         }
         // the single-leg shapes have op 1's rows

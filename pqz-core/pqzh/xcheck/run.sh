@@ -8,7 +8,7 @@ cd "$(dirname "$0")/../stark-backup" # the STARK backup crate (dump_setup exampl
 out=target/xcheck${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}
 XB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG/xcheck} # pqzl-relative C build of n2048-kmax1024 (its own dir under a tag)
 mkdir -p $out/c $out/rust
-(cd ../../pqzl && PQZ_SET=n2048-kmax1024 B=$XB ./build.sh native > /dev/null) # PQZH: n2048-kmax1024 only (until plan 5h Task 8c)
+(cd ../../pqzl && PQZ_SET=n2048-kmax1024 B=$XB ./build.sh native > /dev/null) # the STARK backup: n2048-kmax1024 only (gate.sh; Ligero's cross-check per set: ligero.sh)
 ${CC:-clang} -std=gnu11 -O2 -I../../pqzl/src -I../../pqzl/$XB/include -o $out/dump_setup ../xcheck/dump_setup.c ../../pqzl/$XB/native/libpqz.a
 $out/dump_setup $out/c
 cargo run --release --offline --quiet --example dump_setup -- $out/rust

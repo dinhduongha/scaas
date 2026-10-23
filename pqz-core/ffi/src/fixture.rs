@@ -280,7 +280,7 @@ const DIGEST_MAX_LEGS: usize = 4;
 /// fixtures and proofs, the same verdicts.
 pub fn digest_lines(id: &Word) -> String {
     if *id == crate::PQZH_ID && !crate::PQZH {
-        return String::new(); // PQZH not in this build (parameter set without PQZH until plan 5h Task 8c)
+        return String::new(); // PQZH not in this build (parameter set without PQZH)
     }
     let sys = if *id == PQZL_ID { "PQZL" } else { "PQZH" };
     let forms = cases(id).unwrap_or_default().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit));

@@ -102,7 +102,8 @@ fn lengths_and_constants() {
     }
     assert!(345_221 <= MAX_INPUT);
     assert_eq!(max_proof(&PQZL_ID), Some(98_304));
-    assert_eq!(max_proof(&PQZH_ID), Some(262_144));
+    assert_eq!(max_proof(&PQZH_ID), Some(if SET == "n2560-kmax16384" { 327_680 } else { 262_144 }));
+    assert_eq!(MAX_INPUT, if SET == "n2048-kmax1024" { 393_216 } else { 524_288 });
     assert_eq!(max_proof(&[0; 32]), None);
     // the retired, forgeable PQZL v2 id (lazer#28, CTR-PQZ-09 F6 / F9) is an unknown id
     assert_eq!(max_proof(&hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f")), None);
@@ -364,20 +365,16 @@ fn multi_lengths_and_sets() {
     #[cfg(not(feature = "oversize"))]
     assert_eq!((built_legs(&PQZL_ID), built_legs(&PQZH_ID)), (&[1, 2, 4, 8][..], &[1, 2, 4][..]));
     assert!(built_legs(&[0; 32]).is_empty());
-    // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT except PQZH (4, on):
-    // 5 + 132,992 + 262,144 = 395,141 > 393,216 (a PQZH proof over 260,219 B makes that input exceed MAX_INPUT; the
-    // model expects ~232 KB, H2 measures Ligero's exact bound)
+    // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT, except at n2048-kmax1024 PQZH
+    // (4, on): 5 + 132,992 + 262,144 = 395,141 > 393,216 (a PQZH proof over 260,219 B makes that input exceed MAX_INPUT;
+    // Ligero's exact bound there is 236,196). The other sets' MAX_INPUT 512 KiB holds every shape (largest: n2560-kmax16384
+    // PQZH (4, on), 5 + 165,760 + 327,680 = 493,445; plan 5h Task 8c part 2)
     #[cfg(not(feature = "oversize"))]
     for id in [PQZL_ID, PQZH_ID] {
         for aud in [true, false] {
             for &m in built_legs(&id) {
                 let fits = 5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT;
-                // PQZL: every set. PQZH: the v3 limits' fact; other sets build no PQZH until plan 5h Task 8c and 8d
-                // re-pins the limits per set (n2560-kmax16384: (4, on) and (4, off) exceed MAX_INPUT at
-                // MAX_PROOF_PQZH: 5 + 144,768 + 262,144 = 406,917 > 393,216 for (4, off))
-                if id == PQZL_ID || SET == "n2048-kmax1024" {
-                    assert_eq!(fits, !(id == PQZH_ID && m == 4 && aud), "M = {m}, A = {aud}");
-                }
+                assert_eq!(fits, !(SET == "n2048-kmax1024" && id == PQZH_ID && m == 4 && aud), "M = {m}, A = {aud}");
             }
         }
     }
@@ -520,11 +517,14 @@ fn multi_every_rule_rejects() {
     }
     // op 7 bytes under op 1 and op 1 bytes under op 7: OpTag both ways
     assert_eq!(parse(OP_TRANSFER, &l).err(), Some(Reject::OpTag));
-    // PQZH (4, on) with a proof of MAX_INPUT − 5 − 132,992 = 260,219 B is exactly MAX_INPUT; one byte more is Input
+    // PQZH (4, on) at n2048-kmax1024: a proof of MAX_INPUT − 5 − 132,992 = 260,219 B is exactly MAX_INPUT; one byte more
+    // is Input. Every other set (MAX_INPUT 512 KiB): MAX_PROOF_PQZH fits, one byte more is ProofLength
     let h4 = build_multi(&PQZH_ID, 4, true, 0);
     let room = MAX_INPUT - 5 - multi_len(4, true); // v3: 260,219
-    assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; room])).is_ok());
-    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; room + 1])).err(), Some(Reject::Input));
+    let (fit, over) = if room <= MAX_PROOF_PQZH { (room, Reject::Input) } else { (MAX_PROOF_PQZH, Reject::ProofLength) };
+    assert_eq!(room <= MAX_PROOF_PQZH, SET == "n2048-kmax1024");
+    assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit])).is_ok());
+    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit + 1])).err(), Some(over));
     // an op 1 statement under op 7's decoder
     let o = objs();
     assert_eq!(parse_multi(&build(Form::Transfer, &o, &PQZL_ID)).err(), Some(Reject::OpTag));

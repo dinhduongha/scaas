@@ -7,8 +7,9 @@ set -u
 cd "$(dirname "$0")/.."
 tag=$1
 set=$2
-(cd wasm && cargo build --release --offline --target wasm32-unknown-unknown --features set-$set 2> ../runs/$tag-wasm-build.txt) || { echo "wasm build FAILED"; exit 1; }
-node wasm/fnv_wasm.mjs $set > runs/$tag-wasm.jsonl || { echo "wasm run FAILED: runs/$tag-wasm.jsonl"; exit 1; }
+W=$(pwd)/wasm/target/$set # per-set wasm target (plan 5h Task 8c part 2)
+(cd wasm && CARGO_TARGET_DIR=$W cargo build --release --offline --target wasm32-unknown-unknown --features set-$set 2> ../runs/$tag-wasm-build.txt) || { echo "wasm build FAILED"; exit 1; }
+node wasm/fnv_wasm.mjs $set $W/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm > runs/$tag-wasm.jsonl || { echo "wasm run FAILED: runs/$tag-wasm.jsonl"; exit 1; }
 python3 -I -c "
 import json, sys
 n = [json.loads(l) for l in open('runs/$tag-kat.jsonl')]

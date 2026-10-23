@@ -10,3 +10,5 @@ runs/gate/last-*
 params/sets/*/.codegen/
 params/sets/*/.solcheck/
 params/sets/*/.e-s1.err
+runs/gate/*.lock
+runs/gate/*-state

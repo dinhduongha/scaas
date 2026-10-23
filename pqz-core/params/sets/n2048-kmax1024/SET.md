@@ -18,7 +18,7 @@ PQZH (Ligero over the same q). One set per library build: C `PQZ_SET=n2048-kmax1
 | proofSystemId | `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b…16baef` |
 | owner approval | P6 (CTR-PQZ-03); v3 id since the Fiat–Shamir fix (CTR-PQZ-09 F6); kept frozen as the reference set (owner 2026-10-21) |
 | stored-blob packing width (P46 ruling, owner 2026-10-21) | ⌈log2 q⌉ = 42 bits; whether this set packs at 42 or keeps 46 is decided in 8d |
-| PQZH | yes (Ligero over F_q, `pqzh/ligero`); `pqz_set.h` / `rust/set.rs` only; `pqzh_set.rs` arrives with 8c |
+| PQZH | yes (Ligero over F_q, `pqzh/ligero`): THE preset (n 32,756, k 817, t 121), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; `MAX_PROOF_PQZH` 262,144, `MAX_INPUT` 393,216; conditions: [PQZH.md](PQZH.md) |
 
 Proof sizes (committed vectors, `proof_pqzl.json`): TRANSFER 42,760 B, TRANSFER0 42,430, BURN 41,931, REGISTER 28,092,
 DISCLOSE-SENDER 28,966; op 7 with the auditor M = 1 / 2 / 4 / 8: 42,775 / 43,596 / 45,270 / 61,806 B.

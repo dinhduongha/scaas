@@ -6,7 +6,7 @@
   "what": "approved as the Task 8 set on 2026-10-20 (Q1), superseded as the default by n2304-kmax4096 on 2026-10-21; kept as a shippable set (owner 2026-10-21: full vectors, gate, SET.md conditions)"
  },
  "core_only": false,
- "pqzh": false,
+ "pqzh": true,
  "pqz_delta": 1.00366,
  "kmlwe_min": 39,
  "d": 64,
@@ -53,5 +53,19 @@
   },
   "bundle": 20784,
   "bundle0": 20656
+ },
+ "max_proof_pqzh": 327680,
+ "max_input": 524288,
+ "pqzh_preset": {
+  "radices": [
+   2,
+   19,
+   43,
+   431
+  ],
+  "n": 32756,
+  "k": 817,
+  "t": 122,
+  "ell": 694
  }
 }

@@ -43,7 +43,7 @@ flowchart LR
 | Status | Meaning | `out` | What the node does |
 |---|---|---|---|
 | 0 | ok | `out[0..32]` holds `…01`, `…00` or the self-test hash | uses the answer |
-| 1 | revert: the input is over `MAX_INPUT` = 393,216 B | zeroed | the call reverts |
+| 1 | revert: the input is over the set's `MAX_INPUT` (393,216 B at `n2048-kmax1024` = `PQZ_FFI_MAX_INPUT`, the node's limit; 524,288 B at the other sets' builds until the node follows in plan 5h Task 8d) | zeroed | the call reverts |
 | 2 | bad arguments (`input` NULL with `len` > 0, `out` NULL, or `out_len` < 32) | nothing written | — |
 | 3 | a panic in the decode / verify logic was caught. It is caused by the input, so every node hits it on the same input | `…00` (invalid) | treats the input as invalid and logs it |
 | 4 | node fault: a fault of this node, not of the input (see "Faults" below) | untouched, no result | stops block processing; never records the input as invalid |

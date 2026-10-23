@@ -177,8 +177,8 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         f(&mut s[off..]);
         s
     };
-    // an op 7 shape that fits MAX_PROOF + 1 within MAX_INPUT (all but PQZH (4, on): 5 + 132,992 + 262,145 > 393,216,
-    // whose boundary `multi_input_boundary` checks)
+    // an op 7 shape that fits MAX_PROOF + 1 within MAX_INPUT (all but n2048-kmax1024's PQZH (4, on): 5 + 132,992 +
+    // 262,145 > 393,216, whose boundary `multi_limits_and_memo` checks)
     let over_fits = 5 + st.len() + max + 1 <= MAX_INPUT;
     let mut v: Vec<(String, Vec<u8>, Option<Reject>)> = vec![
         ("op 0".into(), inp(0, st, pf), Some(Reject::Op)),

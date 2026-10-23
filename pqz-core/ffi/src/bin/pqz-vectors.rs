@@ -21,8 +21,9 @@ use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::{Keccak256, Sha3_256, Shake256};
 
 // The parameter set of this build (pqz-ffi feature `set-<set>`, owner 2026-10-21): every set-dependent number below
-// comes from pqz-stmt's set constants; the v3 set's files stay byte-identical. A set without PQZH (every set but
-// n2048-kmax1024 until plan 5h Task 8c) writes the PQZL id's files only (no proof_pqzh.json, no PQZH rows).
+// comes from pqz-stmt's set constants (MAX_PROOF_PQZH and MAX_INPUT too) and, for PQZH, from pqzh-ligero at the set (its
+// preset, element bytes EB); the n2048-kmax1024 files stay byte-identical. PQZH is in every set whose set.json says pqzh (plan
+// 5h Task 8c part 2); a build without it writes the PQZL id's files only (no proof_pqzh.json, no PQZH rows).
 const Q: u64 = st::Q;
 const DELTA: u64 = st::DELTA as u64;
 const PK: usize = st::PK_BYTES;
@@ -853,18 +854,19 @@ mod ph {
         pqzh_ligero::Params::proven().max_proof_len(rel(&s))
     }
 
-    /// D15 for PQZH proofs: canonical F_q elements (6-byte BE < q), opened columns in strictly increasing index order
+    /// D15 for PQZH proofs: canonical F_q elements (EB-byte BE < q; EB = 6 at n2048-kmax1024), opened columns in strictly increasing index order
     /// without repeats (the indices come from the transcript, so a swapped or repeated column block is the
     /// encoding-level form), the exact length bound
     #[cfg(feature = "pqzh")]
     pub fn negatives(s: Shape) -> Vec<(String, Vec<E>)> {
         let pp = pqzh_ligero::Params::proven();
+        let eb = pqzh_ligero::fq::EB;
         let fe = 4 * (2 * (2 * pp.k - 1) + (2 * pp.k - 1 - pp.ell)); // F_q elements of w, q, h
-        let col0 = 32 + 6 * fe + 8;
-        let q6 = Q.to_be_bytes()[2..].to_vec();
+        let col0 = 32 + eb * fe + 8;
+        let q6 = Q.to_be_bytes()[8 - eb..].to_vec();
         let what = if matches!(s, Shape::Form(_)) { "form" } else { "shape" };
         let rl = rel(&s);
-        let blk = 32 + 6 * (pqzh_ligero::cs::Layout::new(rl, pp.ell).m + 12);
+        let blk = 32 + eb * (pqzh_ligero::cs::Layout::new(rl, pp.ell).m + 12);
         vec![
             (format!("proof of max_proof_len({what}) + 1 bytes"), vec![E::ProofResize(pp.max_proof_len(rl) + 1)]),
             ("w coefficient 0 element = q".into(), vec![E::ProofSet(32, q6.clone())]),
@@ -886,6 +888,17 @@ mod ph {
             ("pow_bits", J::from(pp.pow_bits)),
             ("max_proof", J::from(st::MAX_PROOF_PQZH)),
         ])
+    }
+
+    /// bytes per F_q element in PQZH proofs and the self-test's FFT
+    #[cfg(feature = "pqzh")]
+    pub fn eb() -> usize {
+        pqzh_ligero::fq::EB
+    }
+    /// no PQZH: the self-test description's number only
+    #[cfg(not(feature = "pqzh"))]
+    pub fn eb() -> usize {
+        6
     }
 
     #[cfg(not(feature = "pqzh"))]
@@ -1958,9 +1971,10 @@ fn generate() -> (Vec<(String, String)>, bool) {
             )
         } else {
             (
-                "PQZH proofs (Ligero over F_q, proofSystemId D3) of every statement form, from pqzh-ligero (THE proven \
+                leak(format!("PQZH proofs (Ligero over F_q, proofSystemId D3) of every statement form, from pqzh-ligero ({} \
                  preset, params), fixed rnd32: deterministic, byte-exact native = wasm32. Fields as proof_pqzl.json; \
                  max_proof_len = the verifier's exact bound for the form. Validity: pqz-vectors --check (Ligero verify).",
+                 if V3 { "THE proven" } else { "the set's proven" })),
                 ph::params(),
             )
         };
@@ -2105,12 +2119,12 @@ fn generate() -> (Vec<(String, String)>, bool) {
              u8(pqzl_valid) || u8(pqzl_invalid) || u8(pqzh_valid) || u8(pqzh_invalid)); kat_digest = keccak256(a_digest || \
              keccak256(pk) || keccak256(u || v) || M (16 bytes) || keccak256(fft) || u8(fft_ok)): a_digest = matrix.json \
              a_keccak; pk = KeyGen(seed_key); u || v = Enc(pk, digits(msg_value), seed_enc); M = Dec; fft = Ligero's \
-             forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, 6-byte \
+             forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, {}-byte \
              BE elements, fft_ok = the inverse gives a back. The four results: the precompile path on the REGISTER \
              statement (opTag || id || keccak256(SCAAS-PQZ-SELFTEST-V1) || pk) with the REGISTER proof of each id (rnd32 = \
              0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). Computed by pqz-ffi \
              (selftest::report, the hash also through pqz_precompile on 06 00000000), whose build.rs compiles in these \
-             REGISTER proofs.{}", if pqz_ffi::PQZH { "" } else { " This set's build has no PQZH (until plan 5h Task 8c): \
+             REGISTER proofs.{}", ph::eb(), if pqz_ffi::PQZH { "" } else { " This set's build has no PQZH: \
              fft is empty (n 0, ok 0) and both PQZH results are 0." })),
             vec![
                 ("input", J::from("0600000000")),

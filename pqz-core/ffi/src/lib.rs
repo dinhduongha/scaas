@@ -33,7 +33,8 @@ pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Wor
 
 // the parameter set (owner 2026-10-21: one per build): feature `set-<set>`, forwarded to pqz-stmt (which refuses to
 // build without exactly one) and pqzl; `stmt::SET` names it
-/// whether PQZH (Ligero) is compiled in: the v3 set only until plan 5h Task 8c; without it a PQZH-id input decodes
+/// whether PQZH (Ligero) is compiled in: every set whose set.json says pqzh (plan 5h Task 8c part 2: all three sets
+/// with pqz-ffi); without it a PQZH-id input decodes
 /// and its verdict is `…00` (no verifier for that id in this build), its prover refuses
 pub const PQZH: bool = cfg!(feature = "pqzh");
 

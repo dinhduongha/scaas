@@ -20,7 +20,7 @@ derived (see [`../README.md`](../README.md)).
 | proofSystemId | the label `…/mlwe-d64k32-q42l4/v3` until the plan 5h Task 8d bump (owner ruling 2026-10-21); the label spec §6.4 gave this set (`mlwe-d64k40-q50l4`) is superseded |
 | owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by `n2304-kmax4096`; kept shippable) |
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits (P50); `PqzSet.sol` `PACK_BITS`; built in 8d |
-| PQZH | q is PQZH-compatible; not built for this set until plan 5h Task 8c part 2 (pqz-ffi / pqz-vectors / the gate skip it). Debit proofs ≈ 302–304 KB [model] exceed 262,144 B → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (decisions CTR-PQZ-10; planned: the prover limit in 8c part 2, `pqz-stmt` max_proof / `MAX_INPUT` in 8d) |
+| PQZH | built (plan 5h Task 8c part 2): THE preset's radices and n / k (n 32,756, k 817) with t = 122 (owner 2026-10-23), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; debit bounds 303,412–305,120 B exceed 262,144 → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (decisions CTR-PQZ-10), in `pqz-stmt` with `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
 | LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
@@ -49,10 +49,10 @@ today's PQZL v3 rows × 1.25 [estimate].
    stored coefficient) [estimate; the P46 spike measured −8.10 M per op 1 at `n2304-kmax4096`]. Ethereum mainnet's 60 M block holds one debit of this set; Glamsterdam's expected 200 M holds about
    four. The real cost (state gas is paid) applies on a customer chain.
 5. **`ROLL_MAX` 80** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas) [measured, Task 7b].
-6. **PQZH:** a backup only — its debit proofs (≈ 302–304 KB [model]) need this set's `MAX_PROOF_PQZH` of 327,680 B
-   (owner 2026-10-23; planned for 8c part 2 / 8d), and its debit inputs (largest 493,445 B ≤ `MAX_INPUT` 512 KiB
-   [model], [`../README.md`](../README.md)) exceed one transaction's calldata; `R_REG` fits. Built for this set in 8c
-   part 2.
+6. **PQZH:** a backup only — its debit proofs (bounds 303,412–305,120 B [crate]) need this set's `MAX_PROOF_PQZH` of
+   327,680 B (owner 2026-10-23, built in 8c part 2), and its debit inputs (largest 493,445 B at the limit, 470,885 B at
+   the bound ≤ `MAX_INPUT` 524,288; the node's 393,216 is raised in 8d) exceed one transaction's calldata; `R_REG`
+   fits. [PQZH.md](PQZH.md).
 7. **Security margins:** encryption β 508; ≤ 80 worst-case hints on one `(r_g, e1_g)` (op 7 group of 4 legs + auditor)
    β 482.4 (above 450, no exception needed); proof MSIS / MLWE β ≥ 450 per spec (`e-s1.txt`); exactness and
    Fiat–Shamir rounds MET (`e-s0.txt`); mint margin 3.36.

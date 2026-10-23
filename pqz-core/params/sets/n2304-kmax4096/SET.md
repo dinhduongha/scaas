@@ -19,7 +19,7 @@ Candidate E of the n-study (plan 5h Task 7c), approved by the owner on 2026-10-2
 | proofSystemId | the v3 label `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` until the one bump of plan 5h Task 8d (owner ruling 2026-10-21) |
 | owner approval | 2026-10-21 (supersedes the approved `n2560-kmax16384`; progress.md) |
 | stored-blob packing width (P46 ruling, owner 2026-10-21) | ⌈log2 q⌉ = 46 bits (P46: 4 coefficients per 23 bytes); `PqzSet.sol` `PACK_BITS`; built in 8d |
-| PQZH | not built for this set until plan 5h Task 8c (q is PQZH-compatible); pqz-ffi / pqz-vectors / the gate skip it |
+| PQZH | built (plan 5h Task 8c part 2): preset B (radices 2/7/17/19/43/431, n 45,752, k 952, t 120; owner 2026-10-22), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; `MAX_PROOF_PQZH` 262,144, `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
 Proof sizes (`smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzl.json`, byte-identical C = Rust = wasm32): TRANSFER

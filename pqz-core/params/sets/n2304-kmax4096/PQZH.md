@@ -1,9 +1,10 @@
-# Conditions for a chain to run PQZH — set `n2304-kmax4096` (set (a))
+# Conditions for a chain to run PQZH — set `n2304-kmax4096`
 
 PQZH (Ligero over F_q, `pqz-core/pqzh/ligero`) is the **backup** proof system (owner 2026-10-21); PQZL is the one on
 chain. This file says what a chain needs before it can accept PQZH proofs at this parameter set. Plan 5h Task 8c
-part 1 and 1b (preset B, owner 2026-10-22); the PQZH `proofSystemId` of this set comes with Task 8d's bump. `SET.md`
-(Task 8b) is this set's main description.
+part 1 and 1b (preset B, owner 2026-10-22), part 2 (the preset in `set.toml` `[pqzh_preset]`, `pqzh_set.rs` generated;
+PQZH in pqz-ffi, the vectors `smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json` and the gate); the PQZH
+`proofSystemId` of this set comes with Task 8d's bump. [`SET.md`](SET.md) is this set's main description.
 
 Sources: `[crate]` = the Rust crate built with `--features set-n2304-kmax4096` (`pqz-core/pqzh/ligero/runs/c8b-a-*`,
 preset B); `[model]` = `python3 -I pqz-core/pqzh/ligero/ligero_params.py --set n2304-kmax4096`
@@ -48,8 +49,9 @@ Honest proofs: seeds 0 and 1 of the crate's test inputs (`runs/c8b-a-kat.jsonl`)
 
 - `MAX_PROOF_PQZH` = 262,144 (owner 2026-10-21: stays): **every built form fits**, the debit bounds by 9,096–10,536 B
   (THE preset's were 1,640–3,092 B above it; see "Fallbacks").
-- `MAX_INPUT`: 393,216 today, 512 KiB from Task 8d: every built form fits 512 KiB; op 7 M = 4 with the auditor
-  (402,429) does not fit today's 393,216.
+- `MAX_INPUT`: pqz-stmt's at this set is 524,288 (512 KiB, plan 5h Task 8c part 2; decisions O8): every built form
+  fits (largest input 402,429 at the bound, 411,525 at `MAX_PROOF_PQZH`). The node's limit (`pqz_ffi.h`, Nethermind)
+  stays 393,216 until Task 8d: op 7 M = 4 with the auditor (402,429) does not fit it.
 
 ## One transaction's calldata (EIP-7976) [model]
 

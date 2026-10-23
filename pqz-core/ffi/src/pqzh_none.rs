@@ -1,5 +1,5 @@
-//! PQZH compiled out (feature `pqzh` off: every parameter set but n2048-kmax1024 until plan 5h Task 8c ports Ligero to
-//! the set's q): the same API as `pqzh.rs`, fail-closed. A PQZH-id input is never valid in this build.
+//! PQZH compiled out (feature `pqzh` off: a parameter set without PQZH; since plan 5h Task 8c part 2 every set with
+//! pqz-ffi has it): the same API as `pqzh.rs`, fail-closed. A PQZH-id input is never valid in this build.
 
 /// No PQZH verifier in this build: every PQZH-id input is invalid (`…00`).
 pub fn verify(_op: u8, _stmt: &[u8], _proof: &[u8]) -> Result<bool, crate::NodeFault> {
@@ -9,7 +9,7 @@ pub fn verify(_op: u8, _stmt: &[u8], _proof: &[u8]) -> Result<bool, crate::NodeF
 /// No PQZH prover in this build.
 #[cfg(feature = "prove")]
 pub fn prove(_op: u8, _stmt: &[u8], _wit: &[u8], _rnd32: &[u8; 32]) -> Result<Vec<u8>, &'static str> {
-    Err("PQZH is not compiled into this build (parameter set without PQZH until plan 5h Task 8c)")
+    Err("PQZH is not compiled into this build (parameter set without PQZH)")
 }
 
 /// No Ligero FFT in this build: the self-test's FFT part is empty and not ok (`selftest.json` records it).

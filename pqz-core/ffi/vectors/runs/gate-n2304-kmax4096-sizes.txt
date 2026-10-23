@@ -1,17 +1,18 @@
-   4286 cbd.json
-   7897 enc.json
-1050579 fee0.json
-   2930 keygen.json
-   1087 matrix.json
- 126332 negative.json
-2309214 proof_pqzl.json
-   2327 selftest.json
- 114814 statement_burn.json
- 227972 statement_disclose.json
- 114738 statement_refresh.json
-  38357 statement_register.json
- 341243 statement_transfer.json
-3208363 statement_transfer_multi.json
-1579046 worstcase_noise.json
-   1406 README.md
-9130591 total
+    4286 cbd.json
+    7897 enc.json
+ 3042143 fee0.json
+    2930 keygen.json
+    1087 matrix.json
+  250933 negative.json
+ 8013383 proof_pqzh.json
+ 2309214 proof_pqzl.json
+    2356 selftest.json
+  114974 statement_burn.json
+  228452 statement_disclose.json
+  114898 statement_refresh.json
+   38517 statement_register.json
+  341563 statement_transfer.json
+ 3209707 statement_transfer_multi.json
+ 3974079 worstcase_noise.json
+    1406 README.md
+21657825 total

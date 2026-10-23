@@ -62,7 +62,10 @@ ffi_native() {
   echo "strings /gmp|mpfr|hexl/i: $(strings -a "$SO" | grep -ciE 'gmp|mpfr|hexl')"
   echo "libm-style imports: $(nm -D --undefined-only "$SO" | awk '{print $2}' | grep -cE '^(sin|cos|tan|exp|exp2|log|log2|log10|pow|sqrt|floor|ceil|round|fmod|ldexp|frexp)f?(@|$)')"
   echo "# C smoke test against pqz_ffi.h"
-  OUT clang -std=c11 -Wall -Wextra -o "$X/c_abi" tests/c_abi.c -L"$TD/release" -lpqz_ffi -Wl,-rpath,"$TD/release"
+  # the set's precompile input limit (set.json max_input: n2048-kmax1024 = PQZ_FFI_MAX_INPUT, 524,288 at the others;
+  # plan 5h Task 8c part 2, the node's in 8d)
+  MI=$(python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))['max_input'])" "../params/sets/$S/set.json")
+  OUT clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT="$MI" -o "$X/c_abi" tests/c_abi.c -L"$TD/release" -lpqz_ffi -Wl,-rpath,"$TD/release"
   OUT "$X/c_abi"
   echo "# clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate"
   OUT cargo clippy --release --offline $BF --features prove,test-hooks --lib -- -D clippy::float_arithmetic
