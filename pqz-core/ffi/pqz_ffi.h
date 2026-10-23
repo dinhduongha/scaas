@@ -29,7 +29,9 @@
                                 no result, out untouched; abort block processing, never treat the input as invalid
                                 (controller 2026-10-14) */
 
-#define PQZ_FFI_MAX_INPUT 393216 /* P6e D5: 5 + 83,072 + 262,144 = 345,221 <= 393,216 */
+#define PQZ_FFI_MAX_INPUT 393216 /* P6e D5: 5 + 83,072 + 262,144 = 345,221 <= 393,216: the node's limit and the
+                                    n2048-kmax1024 build's; the other sets' builds accept up to 524,288 (pqz-stmt
+                                    MAX_INPUT, plan 5h Task 8c part 2; the node follows in Task 8d) */
 #define PQZ_FFI_OUT_BYTES 32
 
 #ifdef __cplusplus

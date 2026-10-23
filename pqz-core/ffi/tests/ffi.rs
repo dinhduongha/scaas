@@ -234,7 +234,8 @@ fn digest_lines() {
     }
 }
 
-/// pqz_ffi.h's constants are the crate's.
+/// pqz_ffi.h's constants are the crate's; PQZ_FFI_MAX_INPUT is the node's limit, n2048-kmax1024's MAX_INPUT (the other
+/// sets' pqz-stmt accepts up to 524,288; the node follows in plan 5h Task 8d).
 #[test]
 fn header_matches() {
     let h = include_str!("../pqz_ffi.h");
@@ -247,7 +248,8 @@ fn header_matches() {
     assert_eq!(def("PQZ_FFI_BAD_ARGS"), PQZ_FFI_BAD_ARGS as i64);
     assert_eq!(def("PQZ_FFI_INTERNAL"), PQZ_FFI_INTERNAL as i64);
     assert_eq!(def("PQZ_FFI_NODE_FAULT"), PQZ_FFI_NODE_FAULT as i64);
-    assert_eq!(def("PQZ_FFI_MAX_INPUT"), MAX_INPUT as i64);
+    assert_eq!(def("PQZ_FFI_MAX_INPUT"), 393_216);
+    assert_eq!(MAX_INPUT, if stmt::SET == "n2048-kmax1024" { 393_216 } else { 524_288 });
     assert_eq!(def("PQZ_FFI_OUT_BYTES"), 32);
     assert!(h.contains("int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);"));
 }

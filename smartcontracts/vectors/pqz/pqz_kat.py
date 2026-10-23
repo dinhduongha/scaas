@@ -1501,7 +1501,7 @@ def check_selftest(j, d):
         f = dft([(i * i * 0x9E3779B9 + 1) % Q for i in range(n)], W)
     else:
         f = []
-    fb = b"".join(x.to_bytes(6, "big") for x in f)
+    fb = b"".join(x.to_bytes(EB, "big") for x in f)  # EB-byte elements (6 at n2048-kmax1024, 7 at n2560-kmax16384)
     kat = keccak256(a_digest, kec(pk), kec(ct), bytes(M), kec(fb), bytes([HAS_PQZH]))
     for k, want in (("input", "0600000000"), ("message", keccak256(b"SCAAS-PQZ-SELFTEST-V1").hex()),
                     ("a_digest", a_digest.hex()), ("pk_keccak", kec(pk).hex()), ("ct_keccak", kec(ct).hex()),
