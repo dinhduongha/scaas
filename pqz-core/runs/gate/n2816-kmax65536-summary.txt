@@ -1,0 +1,25 @@
+# gate n2816-kmax65536 (set n2816-kmax65536): fdf2ae7a5f2ce61d8bde5ef3e8a6881e11d2fa56, 2026-10-23T07:19Z
+set n2816-kmax65536
+== kat
+   ok (resumed: passed earlier at this tree)
+== tbox
+   ok (resumed: passed earlier at this tree)
+== sv
+   ok (resumed: passed earlier at this tree)
+== diff
+   ok (resumed: passed earlier at this tree)
+== fnv
+   ok
+== vectors
+   skipped (core_only)
+== ffi
+   skipped (core_only)
+== rust
+   ok
+== cargo
+   skipped (core_only)
+== xcheck
+   skipped (PQZH is not built for set n2816-kmax65536 until plan 5h Task 8c)
+== fuzz
+   skipped (core_only)
+gate n2816-kmax65536 (set n2816-kmax65536): PASS

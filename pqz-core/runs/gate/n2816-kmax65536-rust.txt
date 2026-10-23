@@ -1,0 +1,201 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 06s
+     Running lib-pqzl (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/pqzl-10a86e7dfc844352)
+
+running 10 tests
+test arith::polymat::tests::views ... ok
+test arith::spoly::tests::errors_and_order ... ok
+test keys::tests::canonical_short_chunk ... ok
+test rand::fixexp::tests::bernoulli_masked_add_eq_shift ... ok
+test rand::rejection::tests::saturation_near_2_63 ... ok
+test rel::tests::bad_length_refused_before_caches ... ok
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test rel::tests::build_refuses_noncanonical ... ok
+test sv::tests::setup_limits_eq_generic ... ok
+test rand::rejection::tests::onetime_rej1 ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.42s
+
+     Running bin-bench (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/bench-73613c479964abd1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running test-oracle_codec (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_codec-47ac40189e72f01b)
+
+running 3 tests
+test ghint_eq_c has been running for over 60 seconds
+test malformed_eq_c has been running for over 60 seconds
+test test_mutate_eq_c has been running for over 60 seconds
+test malformed_eq_c ... ok
+test ghint_eq_c ... ok
+test test_mutate_eq_c ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 353.32s
+
+     Running test-oracle_prove (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_prove-e24e8ccb826443b7)
+
+running 1 test
+test prove_eq_c has been running for over 60 seconds
+test prove_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 106.53s
+
+     Running test-oracle_verify (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_verify-ce50b9fed5f5f5ff)
+
+running 5 tests
+test negative_eq_c ... ok
+test cheating_eq_c ... ok
+test bad_length_eq_c has been running for over 60 seconds
+test c_out_of_range_rejected has been running for over 60 seconds
+test mutated_eq_c has been running for over 60 seconds
+test bad_length_eq_c ... ok
+test c_out_of_range_rejected ... ok
+test mutated_eq_c ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 685.97s
+
+     Running bin-kat_dump (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/kat_dump-c0c6dc0de0388c7d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running bin-keys_kat (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/keys_kat-71425a85086e3d75)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running test-sv_diff (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/sv_diff-521d9afbe7c169df)
+
+running 4 tests
+test cheating_rejected ... ok
+test sv_eq_c_sv has been running for over 60 seconds
+test sv_eq_generic has been running for over 60 seconds
+test vectors_verify_fast has been running for over 60 seconds
+test vectors_verify_fast ... ok
+test sv_eq_c_sv ... ok
+test sv_eq_generic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 776.56s
+
+     Running test-oracle_arith (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_arith-f2b7c00786b36406)
+
+running 4 tests
+test ntt_roundtrip_eq_c ... ok
+test basemul_eq_c ... ok
+test int_ops_eq_c ... ok
+test polyvec_ops_eq_c ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.39s
+
+     Running test-keys (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/keys-b431c336aff8ce96)
+
+running 1 test
+test ctx_eq_free ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 35.89s
+
+     Running test-oracle_params (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_params-2310530654fdbe0c)
+
+running 1 test
+test constants_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running test-oracle_keys (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_keys-a26907bc1ae597c0)
+
+running 2 tests
+test keygen_enc_dec_eq_c ... ok
+test keypair_encrypt_decrypt_raw_eq_c ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.98s
+
+     Running test-oracle_rand (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_rand-40da9159c7a51fde)
+
+running 7 tests
+test cbd_eq_vectors ... ok
+test rejection_saturation_eq_c ... ok
+test aes_ctr_eq_c ... ok
+test grandom_eq_c ... ok
+test shake_eq_c ... ok
+test urandom_eq_c ... ok
+test rejection_eq_c ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.79s
+
+     Running test-oracle_smoke (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/oracle_smoke-185f7c8201281c0e)
+
+running 2 tests
+test c_core_selftest_proofs_verify ... ok
+test rust_verify_accepts ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running test-threads (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/threads-d26b52dfd62b54c6)
+
+running 1 test
+test concurrent_eq_sequential has been running for over 60 seconds
+test concurrent_eq_sequential ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 117.00s
+
+     Running test-vectors (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/vectors-41f0397daaf5e980)
+
+running 12 tests
+test enc_json ... ok
+test keygen_json ... ok
+test matrix_json ... ok
+test negative_rows_reject ... ok
+test enc_group_seed_eq_shake ... ok
+test enc_dec_input_errors ... ok
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify has been running for over 60 seconds
+test codec_roundtrip has been running for over 60 seconds
+test prove_refuses_noncanonical_statement has been running for over 60 seconds
+test reprove_byte_equal has been running for over 60 seconds
+test wasm_replay_inputs has been running for over 60 seconds
+test all_pqzl_proofs_verify ... ok
+test prove_refuses_noncanonical_statement ... ok
+test wasm_replay_inputs ... ok
+test codec_roundtrip ... ok
+test reprove_byte_equal ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 175.02s
+
+     Running test-memory (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/memory-2dd7b91b6bb7791c)
+
+running 2 tests
+test exhaustion_is_error has been running for over 60 seconds
+test peak_per_op has been running for over 60 seconds
+test peak_per_op ... ok
+test exhaustion_is_error ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 620.70s
+
+     Running test-cheat_b1 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/cheat_b1-91196d09ab8610bf)
+
+running 1 test
+test cheating_prover_rejected has been running for over 60 seconds
+test cheating_prover_rejected ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 197.94s
+
+     Running test-fs_bind (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2816-kmax65536/release/deps/fs_bind-ef94809dc931d228)
+
+running 1 test
+test fs_bind ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 33.29s
+
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+to_rust.py --check: 61 files, equal
+gen_set.py --check: 4 sets, 80 files

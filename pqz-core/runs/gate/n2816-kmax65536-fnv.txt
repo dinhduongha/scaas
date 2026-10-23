@@ -1,0 +1,18 @@
+resumed: fnv/c (passed earlier at this tree)
+resumed: fnv/rust (passed earlier at this tree)
+    Finished `release` profile [optimized] target(s) in 0.06s
+R_REG 724b382e
+R_TX ded14b2c
+R_BURN f32dd44e
+R_DS 4a1ceb53
+R_DR f8322c27
+R_TX0 f1f88ff3
+R_TXM1 6acfc7a4
+R_TXM2 2595ee22
+R_TXM4 c2044ae2
+R_TXM8 0b653c1f
+R_TXM1_0 9408e7ca
+R_TXM2_0 ed688e0e
+R_TXM4_0 93532ee9
+R_TXM8_0 8ef746ff
+C core wasm32 = C core native (14 relations)

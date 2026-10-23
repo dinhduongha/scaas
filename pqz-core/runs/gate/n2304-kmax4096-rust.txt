@@ -1,0 +1,66 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.13s
+     Running test-oracle_arith (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_arith-b26f638d694c47d0)
+resumed: rust/test-oracle_arith (passed earlier at this tree)
+     Running bin-keys_kat (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/keys_kat-3d9b757059310fc1)
+resumed: rust/bin-keys_kat (passed earlier at this tree)
+     Running test-cheat_b1 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/cheat_b1-295fdb093ce9589b)
+resumed: rust/test-cheat_b1 (passed earlier at this tree)
+     Running test-oracle_prove (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_prove-fdcfda21497e5709)
+resumed: rust/test-oracle_prove (passed earlier at this tree)
+     Running test-oracle_smoke (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_smoke-2628c231e90cc6f0)
+resumed: rust/test-oracle_smoke (passed earlier at this tree)
+     Running test-oracle_keys (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_keys-8be9642d42746d90)
+resumed: rust/test-oracle_keys (passed earlier at this tree)
+     Running test-keys (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/keys-da68da7e73d9ef5f)
+resumed: rust/test-keys (passed earlier at this tree)
+     Running test-oracle_verify (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_verify-3ec36ddc36506a5e)
+resumed: rust/test-oracle_verify (passed earlier at this tree)
+     Running test-sv_diff (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/sv_diff-035f3b3b24a65f95)
+
+running 4 tests
+test cheating_rejected ... ok
+test vectors_verify_fast ... ok
+test sv_eq_c_sv has been running for over 60 seconds
+test sv_eq_generic has been running for over 60 seconds
+test sv_eq_c_sv ... ok
+test sv_eq_generic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 442.03s
+
+     Running test-vectors (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/vectors-093ef7c6b1c53c91)
+resumed: rust/test-vectors (passed earlier at this tree)
+     Running test-memory (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/memory-4aad8083dd982fc2)
+
+running 2 tests
+test exhaustion_is_error has been running for over 60 seconds
+test peak_per_op has been running for over 60 seconds
+test peak_per_op ... ok
+test exhaustion_is_error ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 582.08s
+
+     Running test-oracle_params (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_params-15b15222ed77fefb)
+resumed: rust/test-oracle_params (passed earlier at this tree)
+     Running test-oracle_rand (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_rand-bbbc822b9988d95b)
+resumed: rust/test-oracle_rand (passed earlier at this tree)
+     Running bin-kat_dump (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/kat_dump-2bc41be74372cb7e)
+resumed: rust/bin-kat_dump (passed earlier at this tree)
+     Running test-fs_bind (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/fs_bind-5d60c654516f4042)
+resumed: rust/test-fs_bind (passed earlier at this tree)
+     Running test-threads (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/threads-0ce683b5e0fc0cda)
+resumed: rust/test-threads (passed earlier at this tree)
+     Running lib-pqzl (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/pqzl-f233821061f26228)
+resumed: rust/lib-pqzl (passed earlier at this tree)
+     Running bin-bench (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/bench-0cbde1480a2f5b00)
+resumed: rust/bin-bench (passed earlier at this tree)
+     Running test-oracle_codec (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2304-kmax4096/release/deps/oracle_codec-ab9277bc32f51156)
+resumed: rust/test-oracle_codec (passed earlier at this tree)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+to_rust.py --check: 61 files, equal
+gen_set.py --check: 4 sets, 80 files

@@ -1,0 +1,19 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.94s
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 9.50s
+R_REG 78ab724c
+R_TX 2dd6fe7b
+R_BURN c34aff31
+R_DS 90c98b00
+R_DR 75d5d510
+R_TX0 4eddd068
+R_TXM1 e5ec594a
+R_TXM2 d5a4c651
+R_TXM4 eb9b92a4
+R_TXM8 43094cbf
+R_TXM1_0 4ef35623
+R_TXM2_0 16473f10
+R_TXM4_0 7f3bb64e
+R_TXM8_0 c11e26d0
