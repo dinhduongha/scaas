@@ -43,12 +43,12 @@ extern int64_t pqz_poc_k, pqz_poc_z21sq, pqz_poc_z2sq;
 #include "pqz_txm160_params.h"
 #include "pqz_txm16_params.h"
 #endif
-static const limb_t *const BSQL[NREL] = { pqz_reg_Bsq_limbs,  pqz_tx_Bsq_limbs,   pqz_burn_Bsq_limbs,  pqz_ds_Bsq_limbs,
-                                          pqz_dr_Bsq_limbs,   pqz_tx0_Bsq_limbs,  pqz_tx_Bsq_limbs,    pqz_txm2_Bsq_limbs,
-                                          pqz_txm4_Bsq_limbs, pqz_txm8_Bsq_limbs, pqz_tx0_Bsq_limbs,   pqz_txm20_Bsq_limbs,
-                                          pqz_txm40_Bsq_limbs, pqz_txm80_Bsq_limbs,
+static const int_struct *const BSQL[NREL] = { pqz_reg_Bsq,  pqz_tx_Bsq,   pqz_burn_Bsq,  pqz_ds_Bsq,
+                                          pqz_dr_Bsq,   pqz_tx0_Bsq,  pqz_tx_Bsq,    pqz_txm2_Bsq,
+                                          pqz_txm4_Bsq, pqz_txm8_Bsq, pqz_tx0_Bsq,   pqz_txm20_Bsq,
+                                          pqz_txm40_Bsq, pqz_txm80_Bsq,
 #ifdef PQZ_TXM_OVERSIZE
-                                          pqz_txm16_Bsq_limbs, pqz_txm160_Bsq_limbs,
+                                          pqz_txm16_Bsq, pqz_txm160_Bsq,
 #endif
 };
 static int64_t BSQ[NREL];
@@ -64,11 +64,14 @@ main (int argc, char **argv)
   const char *amb = getenv ("PQZ_ARENA_MB");
   const size_t arena_bytes = amb != NULL ? (size_t)atoi (amb) << 20 : ARENA_BYTES;
   xs = 0x5A21D1FF00000001ULL;
-  for (int rel = 0; rel < NREL; rel++) /* every set's Bsq is one limb < 2^63 (two limbs in the header, the top one 0) */
+  for (int rel = 0; rel < NREL; rel++) /* every set's Bsq is one limb < 2^63 (the header's higher limbs, if any, 0) */
     {
-      if (BSQL[rel][1] != 0 || BSQL[rel][0] > INT64_MAX)
+      if (BSQL[rel]->neg || BSQL[rel]->limbs[0] > INT64_MAX)
         return 2;
-      BSQ[rel] = (int64_t)BSQL[rel][0];
+      for (unsigned int i = 1; i < BSQL[rel]->nlimbs; i++)
+        if (BSQL[rel]->limbs[i] != 0)
+          return 2;
+      BSQ[rel] = (int64_t)BSQL[rel]->limbs[0];
     }
   if (pqz_init (malloc (arena_bytes), arena_bytes) != 0)
     return 2;

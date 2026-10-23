@@ -114,8 +114,9 @@ step_kat() {
   W=$PQZ_WORK/lazer-kat-$S
   PQZ_SET=$S "$CAP" "$CORE/pqzl/kat/build-lazer-dump.sh" "$W" v3 > "$W.log" 2>&1 || { echo "see $W.log" >&2; return 1; }
   "$W/lazer_dump-v3" > "$D/lazer-3330e48-kat.json" && cp "$W/build-info-v3.txt" "$D/lazer-3330e48-kat-build.txt" &&
-    (cd "$CORE/pqzl" && PQZ_SET=$S "$CAP" sh -c './build.sh native && build/native/kat_dump > build/native/kat-pqz.json' &&
-     python3 -I kat/check.py "$D/lazer-3330e48-kat.json" build/native/kat-pqz.json)
+    (cd "$CORE/pqzl" && export B="${B:-build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}}" && # build.sh's directory rule (8b re-review N2)
+     PQZ_SET=$S "$CAP" sh -c './build.sh native && "$B/native/kat_dump" > "$B/native/kat-pqz.json"' &&
+     python3 -I kat/check.py "$D/lazer-3330e48-kat.json" "$B/native/kat-pqz.json")
 }
 
 step_fixtures() { PQZ_SET=$S "$CAP" "$CORE/pqzl/rust/tests/fixtures/cheating/export.sh"; }

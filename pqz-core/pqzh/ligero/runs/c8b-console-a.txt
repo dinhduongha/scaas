@@ -1,0 +1,24 @@
+24
+runs/c8b-a-tests.txt:test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.96s
+runs/c8b-a-tests.txt:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+runs/c8b-a-tests.txt:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+runs/c8b-a-tests.txt:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+runs/c8b-a-tests.txt:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+runs/c8b-a-tests.txt:test result: ok. 16 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 122.31s
+runs/c8b-a-tests.txt:test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 254.58s
+runs/c8b-a-tests.txt:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+runs/c8b-a-tests.txt:test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+runs/c8b-a-nobench.txt:test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+native = wasm32 (n2304-kmax4096): identical (24 proofs, all verify) ; mutations rejected 144 / 144
+fallback tests FAILED
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.04s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: FAILED. 15 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 101.48s
+test fallback_retry_under_limit ... ok
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 239.32s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.45s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ct c8b-a: rc=0 secret-dependent reports=0

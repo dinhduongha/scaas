@@ -1,0 +1,13 @@
+{"set": "n2304-kmax4096", "n": 45752, "k": 952, "t": 119, "ell": 832, "n2": 2261}
+{"rel": "R_REG", "proof_bytes": 203790, "prover_products": 131822036, "verifier_products": 7348032, "verify": true}
+{"rel": "R_TX", "proof_bytes": 247536, "prover_products": 233692714, "verifier_products": 11589449, "verify": true}
+{"rel": "R_BURN", "proof_bytes": 247760, "prover_products": 233486658, "verifier_products": 11383393, "verify": true}
+{"rel": "R_DS", "proof_bytes": 204206, "prover_products": 132451872, "verifier_products": 7843848, "verify": true}
+{"rel": "R_DR", "proof_bytes": 203950, "prover_products": 131921860, "verifier_products": 7447856, "verify": true}
+{"rel": "R_TX0", "proof_bytes": 247728, "prover_products": 233592174, "verifier_products": 11488909, "verify": true}
+{"rel": "R_TXM1", "proof_bytes": 248048, "prover_products": 233692714, "verifier_products": 11589449, "verify": true}
+{"rel": "R_TXM2", "proof_bytes": 248282, "prover_products": 236006186, "verifier_products": 12193840, "verify": true}
+{"rel": "R_TXM4", "proof_bytes": 249348, "prover_products": 238525698, "verifier_products": 13004271, "verify": true}
+{"rel": "R_TXM1_0", "proof_bytes": 247760, "prover_products": 233592174, "verifier_products": 11488909, "verify": true}
+{"rel": "R_TXM2_0", "proof_bytes": 247472, "prover_products": 233698922, "verifier_products": 11595657, "verify": true}
+{"rel": "R_TXM4_0", "proof_bytes": 247738, "prover_products": 236017834, "verifier_products": 12205488, "verify": true}

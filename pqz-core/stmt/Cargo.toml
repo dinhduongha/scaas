@@ -10,8 +10,9 @@ publish = false
 [dependencies]
 
 [features]
-# the parameter set (owner 2026-10-21: one per build, pqz-core/params/sets/<set>/rust/set.rs): exactly one
-default = ["set-n2048-kmax1024"]
+# the parameter set (owner 2026-10-21: one per build, pqz-core/params/sets/<set>/rust/set.rs): at most one; none =
+# n2048-kmax1024, the frozen set (pqzh-ligero depends with default features and forwards its set-<set>)
+default = []
 # BEGIN gen_set.py sets
 set-n2048-kmax1024 = []
 set-n2304-kmax4096 = []
