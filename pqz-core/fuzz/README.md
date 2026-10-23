@@ -124,6 +124,9 @@ file, `fixture-disclose-receiver-rnd33`:
   than deleted, so the honest set stays at 44 and the committed `mutate` / `codec` edit scripts keep their meaning.
 - B-1 / A-2 (5h Task 8a, 2026-10-21): re-proved again under the new transcript, same statement and `rnd32`
   (`runs/2026-10-21-t8a-regress-valid.txt`).
+- The set's own ids (5h Task 8d part 1, 2026-10-23): the statement's id word set to `n2048-kmax1024`'s PQZL id
+  (`…/mlwe-d64k32-q42l4/v4`; the v3 id is retired) and re-proved with the same `rnd32`
+  (`runs/2026-10-23-t8d1-regress-valid.txt`). It is an input of that set only (`seeds.py` adds it there).
 
 ## Build (D12)
 
