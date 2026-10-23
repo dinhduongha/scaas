@@ -99,6 +99,12 @@ plan 5h Task 8d part 2; the PQZH calldata floor gas per relation in each set's `
   is only usable if every bound is ≤ its `MAX_PROOF_PQZH`.
 - **arena peak** (PQZL): the prover's memory use on the client, in MB — not a chain limit.
 
+Gas limits the sizes are judged against (spec §12 item 2: Ethereum-like limits, never the testnet's): **per transaction
+16,777,216 regular gas (2^24, EIP-7825)** — so at most ≈ 261,909 B of calldata under the EIP-7976 floor
+(15,000 + 64 gas per byte); **per block 60 M gas** on Ethereum mainnet today (≈ 200 M expected with Glamsterdam; the
+SCaaS testnet's genesis has 200 M). New contract state is paid separately as state gas (EIP-8037): it counts towards the
+block, not towards the 2^24 regular-gas cap of the transaction.
+
 ### PQZL per set: proof sizes and size limits (bytes)
 
 PQZL proof size per relation, the largest of two proofs from the C prover bench of each set's gate
@@ -167,6 +173,30 @@ and 1, all verify), then the largest precompile input (5 + statement + bound), a
 
 op 7 M = 8 is measured for the record only: its bound is over every set's `MAX_PROOF_PQZH`, so PQZH does not offer it
 (PQZL does; table above).
+
+#### Calldata floor gas of one transaction (EIP-7976) [model]
+
+The precompile input is built in memory by the token / registry, so only the call's calldata counts (payload + proof +
+UA authorisation); its floor = 15,000 + 64 gas × calldata bytes is a **lower bound** of the transaction's regular gas
+(execution and the `PQZ` precompile's own price come on top: plan 5h Task 8d part 2 and Task 9; state gas is separate).
+Calldata = the proof (PQZL: the table above; PQZH: its bound) + the call path's overhead taken from each set's `PQZH.md`
+calldata table. ✗ = above 16,777,216: cannot be one transaction on an Ethereum-like chain. "—": that `PQZH.md` has no row
+for the path (≈ the R_TX row).
+
+| Relation — call path | `n2048-kmax1024` PQZL / PQZH | `n2304-kmax4096` PQZL / PQZH | `n2560-kmax16384` PQZL / PQZH |
+|---|---|---|---|
+| R_REG — `UARegistry.register` | 3.22 M / 13.61 M | 3.49 M / 14.84 M | 3.76 M / 16.67 M |
+| R_DS / R_DR — `verifyTransferAmount` (`eth_call`) | 1.88 M / 12.22 M | 2.00 M / 13.32 M | 2.14 M / 15.02 M |
+| R_TX — relayed `mtxExecute` (op 1) | 4.12 M / 16.45 M | 4.50 M / 17.61 M ✗ | 4.87 M / 21.11 M ✗ |
+| R_TX0 — relayed `mtxExecute` (op 1) | 4.08 M / 16.39 M | 4.47 M / 17.60 M ✗ | — / — |
+| R_BURN — relayed `mtxExecute` (op 2) | 4.04 M / 16.38 M | 4.43 M / 17.60 M ✗ | 4.79 M / 21.04 M ✗ |
+| op 7 M = 1, auditor — relayed `mtxExecute` | 4.12 M / 16.45 M | 4.50 M / 17.62 M ✗ | — / — |
+| op 7 M = 2, auditor | 4.19 M / 16.47 M | 4.57 M / 17.68 M ✗ | — / — |
+| op 7 M = 4, auditor | 4.34 M / 16.55 M | 4.82 M / 17.76 M ✗ | 5.21 M / 21.23 M ✗ |
+
+PQZL fits every path at every set with ≥ 11.5 M of the 2^24 cap left for execution and the precompile; PQZH debits fit
+only at `n2048-kmax1024` (≈ 0.2–0.4 M margin) — at `n2304-kmax4096` and `n2560-kmax16384` they need a per-transaction cap
+≥ 17.8 M / 21.3 M (PQZH is a backup, spec §12 item 4).
 
 `MAX_INPUT` 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)) is pqz-stmt's at the non-frozen sets; the node's
 precompile input limit (`pqz_ffi.h` `PQZ_FFI_MAX_INPUT`, Nethermind plugin) stays 393,216 until plan 5h Task 8d, so the
