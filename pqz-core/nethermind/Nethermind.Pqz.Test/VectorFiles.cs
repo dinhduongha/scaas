@@ -8,8 +8,9 @@ using NUnit.Framework;
 
 namespace Nethermind.Pqz.Test;
 
-/// <summary>Paths and the shared vectors: the flat PQZ corpus (corpus.py over smartcontracts/vectors/pqz), the UA
-/// ML-DSA vectors, and the library under test (PQZ_FFI_DIR, default pqz-core/ffi/target/release).</summary>
+/// <summary>Paths and the shared vectors: the flat PQZ corpus (corpus.py over the parameter set's vectors), the UA
+/// ML-DSA vectors, and the library under test (PQZ_FFI_DIR, default pqz-core/ffi/target/release, pqz-ffi's default
+/// set). The set: PQZ_SET, default n2304-kmax4096 (pqz-ffi's default feature, plan 5h Task 8d).</summary>
 public static class Repo
 {
     public static readonly string Root = Find();
@@ -22,6 +23,9 @@ public static class Repo
     }
 
     public static string Path_(params string[] parts) => Path.Combine([Root, .. parts]);
+    public static string Set => Environment.GetEnvironmentVariable("PQZ_SET") ?? "n2304-kmax4096";
+    /// <summary>the set's vectors: smartcontracts/vectors/pqz/&lt;set&gt;/ (n2048-kmax1024: smartcontracts/vectors/pqz/)</summary>
+    public static string VectorDir => Set == "n2048-kmax1024" ? Path_("smartcontracts", "vectors", "pqz") : Path_("smartcontracts", "vectors", "pqz", Set);
     public static string FfiDir => Environment.GetEnvironmentVariable("PQZ_FFI_DIR") ?? Path_("pqz-core", "ffi", "target", "release");
     public static string HooksDir => Path_("pqz-core", "nethermind", "bin", "test-hooks");
     public static string CorpusPath => Environment.GetEnvironmentVariable("PQZ_CORPUS") ?? Path_("pqz-core", "nethermind", "bin", "corpus.jsonl");
@@ -40,11 +44,12 @@ public static class Corpus
             (long)o["stmt_len"]!, Convert.FromHexString((string)o["input"]!), (string)o["expect"]!);
     }).ToList();
 
-    public static readonly Dictionary<string, string> Ids = new()
-    {
-        ["pqzl"] = "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",
-        ["pqzh"] = "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
-    };
+    private static Dictionary<string, string>? _ids;
+
+    /// <summary>The proofSystemIds by name (pqzl, pqzh): statement bytes 32..63 of the honest inputs (the set's own ids,
+    /// plan 5h Task 8d).</summary>
+    public static Dictionary<string, string> Ids => _ids ??= Rows.Where(r => r.Kind == "honest").GroupBy(r => r.Id)
+        .ToDictionary(g => g.Key, g => Convert.ToHexStringLower(g.First().Input.AsSpan(37, 32)));
 
     /// <summary>op 7's (M, auditorOn) from header words 320 / 448 (plan D19); (0, 0) for the other ops.</summary>
     public static (int Legs, int Aud) Shape(byte[] input) =>

@@ -32,11 +32,16 @@ from eth import address, keccak256, legacy_tx  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../.."))
-PQZ = "0x5caa500000000000000000000000000000000f01"
-ML44 = "0x5caa500000000000000000000000000000000012"
-ML65 = "0x5caa500000000000000000000000000000000013"
+PQZ = "0x000000000000000000000000000000005caa0f01"
+ML44 = "0x000000000000000000000000000000005caa0012"
+ML65 = "0x000000000000000000000000000000005caa0013"
 PROBE_AT = "0x00000000000000000000000000000000000f6f01"  # eth_call state override: the probe without a deployment
-SELFTEST = "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
+# the node library's parameter set (PQZ_SET, default n2304-kmax4096 = pqz-ffi's default; plan 5h Task 8d): its
+# OP_SELFTEST hash and input limit (pqz_max_input () = set.json max_input)
+PQZ_SET = os.environ.get("PQZ_SET", "n2304-kmax4096")
+SELFTEST = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/pqz", "" if PQZ_SET == "n2048-kmax1024" else PQZ_SET,
+                                       "selftest.json")))["hash"]
+MAX_INPUT = json.load(open(os.path.join(ROOT, "pqz-core/params/sets", PQZ_SET, "set.json")))["max_input"]
 CHAIN_ID = 7622
 PK44, SIG44, PK65, SIG65 = 1312, 2420, 1952, 3309
 FAILS = []
@@ -251,7 +256,7 @@ def cmd_probe(a, expect_fail=False):
         word, used, rlen = call_probe(PQZ, b)
         check(rlen == 32 and word == 0 and used - 100 - oh == sch.gas(b) and sch.row(b) is None,
               f"PQZ miss {name}: …00, gas {used - 100 - oh} = smallest row + length term {sch.gas(b)}")
-    over = h + bytes(393217 - len(h))
+    over = h + bytes(MAX_INPUT + 1 - len(h))
     word, used, rlen = call_probe(PQZ, over)
     check(word == 2**256 - 1 and rlen == 0, f"PQZ input of MAX_INPUT + 1: failed call (word {hex(word)[:6]}, rlen {rlen})")
     for lvl, b, valid, name in ml_rows():

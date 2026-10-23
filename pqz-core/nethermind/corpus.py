@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""P6f: one flat corpus of PQZ precompile inputs from smartcontracts/vectors/pqz (P6e Task 11), for every consumer
+"""P6f: one flat corpus of PQZ precompile inputs from the parameter set's vectors (P6e Task 11), for every consumer
 (the C# tests, the harness, the calibration, probe.sh, e2e.py). Run with python3 -I.
 
-    corpus.py <out.jsonl>
+    [PQZ_SET=<set>] corpus.py <out.jsonl>
+
+PQZ_SET: the set (default n2304-kmax4096, pqz-ffi's default build, the library the node loads; plan 5h Task 8d), its
+vectors smartcontracts/vectors/pqz/<set>/ (n2048-kmax1024: smartcontracts/vectors/pqz/).
 
 One JSON object per line: kind (honest | flip | negative | fee0 | selftest), name, id (pqzl | pqzh | -), form, op,
 stmt_len, input (hex), expect ("1", "0", "revert", or the 32-byte self-test hash in hex). The honest inputs are the
@@ -14,9 +17,11 @@ import json
 import os
 import sys
 
-VEC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../smartcontracts/vectors/pqz")
-sys.path.insert(0, VEC)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../smartcontracts/vectors/pqz"))
+os.environ.setdefault("PQZ_SET", "n2304-kmax4096")  # pqz_kat.py reads it at import
 import pqz_kat as K  # noqa: E402  (the vectors' own checker: apply_edits, statement_rows, with_id, IDS)
+
+VEC = K.VEC_DIR
 
 
 def main(out):
@@ -55,7 +60,7 @@ def main(out):
     kinds = {}
     for r in rows:
         kinds[r["kind"]] = kinds.get(r["kind"], 0) + 1
-    print(f"corpus {out}: {len(rows)} inputs {kinds}")
+    print(f"corpus {out} (set {K.SET}): {len(rows)} inputs {kinds}")
 
 
 if __name__ == "__main__":

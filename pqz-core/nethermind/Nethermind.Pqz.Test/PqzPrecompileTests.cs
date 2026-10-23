@@ -48,7 +48,7 @@ public class PqzPrecompileTests
     [Test]
     public void Selftest_constant_equals_the_vector_file()
     {
-        JsonObject st = JsonNode.Parse(File.ReadAllText(Repo.Path_("smartcontracts", "vectors", "pqz", "selftest.json")))!.AsObject();
+        JsonObject st = JsonNode.Parse(File.ReadAllText(Path.Combine(Repo.VectorDir, "selftest.json")))!.AsObject();
         Assert.That((string)st["hash"]!, Is.EqualTo(SelfTest.ExpectedHash));
         Assert.That(SelfTest.Run(), Is.EqualTo(SelfTest.ExpectedHash));
     }

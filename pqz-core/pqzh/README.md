@@ -120,8 +120,10 @@ runs, the Solidity and StarkEx cost models (`sol/`) and the design-study counts 
 
 ## Status and open points
 
-- Gate B passed on 2026-10-17; the PQZH `proofSystemId`
-  `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` = `0x0a47a768…2fead4` is frozen.
+- Gate B passed on 2026-10-17 with the PQZH `proofSystemId`
+  `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` = `0x0a47a768…2fead4`; plan 5h Task 8d retired it
+  for one PQZH id per parameter set, `keccak256("scaas/pqz/pqzh/ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2")`
+  (the set's field and preset; `pqz-core/params/sets/README.md`).
 - The modified zero-knowledge construction was reviewed (pqzh-ligero.md §12): sound and zero-knowledge in the
   classical random-oracle model. An external review comes before PQZH is used with real value (owner step).
 - Open (owner): a 128-bit post-quantum soundness target (against Grover-style quantum search) would need a new

@@ -1,8 +1,8 @@
 # Parameter set `n2048-kmax1024` (the frozen v3 set)
 
 The PQZL parameters main has run since P6 (CTR-PQZ-03): the set of every committed vector under
-`smartcontracts/vectors/pqz/`, of the contracts until plan 5h Task 8d, of `pqz-stmt` / `pqz-ffi`'s default build and of
-PQZH (Ligero over the same q). One set per library build: C `PQZ_SET=n2048-kmax1024` (`pqzl/build.sh`), Rust feature
+`smartcontracts/vectors/pqz/`, of the contracts until plan 5h Task 8d part 2, of `pqz-stmt`'s build without a set
+feature, of `pqz-ffi`'s default build until 8d part 1 (now `n2304-kmax4096`) and of PQZH (Ligero over the same q). One set per library build: C `PQZ_SET=n2048-kmax1024` (`pqzl/build.sh`), Rust feature
 `set-n2048-kmax1024` (crates `pqzl`, `pqz-stmt`, `pqz-ffi`). See [`../README.md`](../README.md) for how sets work.
 
 | Item | Value |
@@ -15,8 +15,8 @@ PQZH (Ligero over the same q). One set per library build: C `PQZ_SET=n2048-kmax1
 | proof MLWE rank (`kmlwe`) | 33 (codegen headers: `MLWE(33, 35, [-1, 1])`) |
 | encryption, no hints | uSVP β 476 (2^139.0 classical / 2^126.1 quantum) |
 | encryption, 80 hints (op 7 group of 4 legs + auditor) | DDGR20 worst case β 446.0 (owner-accepted exception to β ≥ 450, CTR-PQZ-03, 2026-10-15); dual_hybrid on the hinted instance not measured for this set |
-| proofSystemId | `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b…16baef` |
-| owner approval | P6 (CTR-PQZ-03); v3 id since the Fiat–Shamir fix (CTR-PQZ-09 F6); kept frozen as the reference set (owner 2026-10-21) |
+| proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4")` = `0x19fad50a…9a326d`; PQZH `keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2")` = `0x9d945089…a7dca4` (set.toml `pqzl_id` / `pqzh_id`; plan 5h Task 8d, the one bump of Task 8: controller proposal, decisions CTR-PQZ-09); was v3 `0x8079d65b…16baef`, retired |
+| owner approval | P6 (CTR-PQZ-03); the v3 id since the Fiat–Shamir fix (CTR-PQZ-09 F6), its own v4 id since plan 5h Task 8d; kept frozen as the reference set (owner 2026-10-21) |
 | stored-blob packing width (P46 ruling, owner 2026-10-21) | ⌈log2 q⌉ = 42 bits; whether this set packs at 42 or keeps 46 is decided in 8d |
 | PQZH | yes (Ligero over F_q, `pqzh/ligero`): THE preset (n 32,756, k 817, t 121), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; `MAX_PROOF_PQZH` 262,144, `MAX_INPUT` 393,216; conditions: [PQZH.md](PQZH.md) |
 

@@ -21,7 +21,7 @@ precompile / vectors / contracts build for it. Every other file here is derived 
 | e_s0 | budget, exactness of every norm proof (14 relations) and Fiat–Shamir rounds: MET (`e-s0.txt`) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL) at q = 2^54 − 327, 19/19 |
 | 64-bit arithmetic | log2 q = 54 is within every bound of the set-generic cores: `PQZ_LOG2Q <= 56` (`pqz_ntt.c` wasm32 limbs, `pqz_sv.c` lift), Barrett 2L + 4 = 112 ≤ L + 63, specialised verifier 5 CRT primes, Δ · 2^(MBITS − 1) = 2^51 in int64. The C core's wasm32 limb path (`PQZ_MUL128` 0, limb width LB = 27) runs: its wasm32 build (`B=build/gate-cwasm-n2816-kmax65536 ./build.sh wasm`, `test/run_wasm.mjs 2 1 16383`) gives the native C run's `proofs_fnv` on all 14 bench relations, 0 fails (8b fix round 1: `pqz-core/runs/gate/fix1-n2816-cwasm.*`; the gate checks it as part `fnv/cwasm`) |
-| proofSystemId | none of its own: the cores carry the v3 label (as every set until plan 5h Task 8d); a deployment would need its own id |
+| proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4")` = `0x9d23a0de…bd53a3` (set.toml `pqzl_id`, plan 5h Task 8d; the cores' bench statements carry it; no PQZH, no pqz-stmt build) |
 | owner approval | 2026-10-21: keep this set as a core-only set (progress.md); its values are the research record's, not a frozen relation |
 | stored-blob packing width | ⌈log2 q⌉ = 54 bits (`PqzSet.sol` `PACK_BITS`, not built: core only) |
 | PQZH | not built (core only); q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has none of the radices 19 / 43 / 431 of PQZH's Ligero domains (the q's of `n2048-kmax1024`, `n2304-kmax4096` and `n2560-kmax16384` have them), so PQZH at this q would need other domains |
@@ -33,7 +33,7 @@ Object sizes: pk 22,528 B, ciphertext 22,656 B, op 1 statement 113,792 B (audito
 A customer chain cannot run this set as it stands: the precompile (`pqz-ffi`), its statement layer (`pqz-stmt`), the
 vectors and the contracts are built for `n2048-kmax1024` (today), `n2304-kmax4096` and `n2560-kmax16384` only. Using
 this set on a chain would need, at least: a `pqz-stmt` / `pqz-ffi` build for the set (drop `core_only`, `make.sh … vectors`),
-its own proofSystemId, `MAX_PROOF` / `MAX_INPUT` re-pinned (op 7 M = 8 codegen proof ≈ 82.7 KB), the contracts wired
+a PQZH id if PQZH is built (its PQZL id exists), `MAX_PROOF` / `MAX_INPUT` re-pinned (op 7 M = 8 codegen proof ≈ 82.7 KB), the contracts wired
 to `PqzSet.sol` (plan 5h Task 8d), and the chain conditions of [`n2560-kmax16384`](../n2560-kmax16384/SET.md#conditions-for-this-set-to-work-on-a-chain)
 re-measured at its larger objects (22.7 KB per ciphertext: more state gas per debit).
 

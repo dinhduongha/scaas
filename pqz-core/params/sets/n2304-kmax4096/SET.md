@@ -1,8 +1,9 @@
 # Parameter set `n2304-kmax4096` (the default set)
 
 Candidate E of the n-study (plan 5h Task 7c), approved by the owner on 2026-10-21; it supersedes the approved
-[`n2560-kmax16384`](../n2560-kmax16384/SET.md) (n 2560, `K_MAX` 16,384) as the target of plan 5h Task 8. The default set of the `pqzl` crate and of
-`gate.sh`; the contracts still use [`n2048-kmax1024`](../n2048-kmax1024/SET.md) until plan 5h Task 8d. Input:
+[`n2560-kmax16384`](../n2560-kmax16384/SET.md) (n 2560, `K_MAX` 16,384) as the target of plan 5h Task 8. The default set of the `pqzl` crate, of
+`gate.sh` and, since plan 5h Task 8d part 1, of `pqz-ffi` (the node's library, owner 2026-10-21: the default set on
+chain); the contracts still use [`n2048-kmax1024`](../n2048-kmax1024/SET.md) until plan 5h Task 8d part 2. Input:
 [`set.toml`](set.toml); every other file here is derived (see [`../README.md`](../README.md)).
 
 | Item | Value |
@@ -16,7 +17,7 @@ Candidate E of the n-study (plan 5h Task 7c), approved by the owner on 2026-10-2
 | encryption, no hints | uSVP β 496; full estimate 2^142.2 classical / 2^129.6 quantum (dual_hybrid β 487 / 489) (`pqzl/params/n-study/enc-n.txt`, row 18) |
 | encryption, 80 hints (op 7 group of 4 legs + auditor) | DDGR20 worst case β 468.47; dual_hybrid on the hinted instance 458.47 / 461.47 classical / quantum [estimate: n − 80 model minus the measured offset] (n-study §3.2 / §3.3) |
 | e_s0 | budget, exactness of every norm proof (14 relations incl. txm4 / txm8) and Fiat–Shamir rounds (λ = 3: 137.4 bits; final challenge 2^-129.79): MET (`e-s0.txt`) |
-| proofSystemId | the v3 label `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` until the one bump of plan 5h Task 8d (owner ruling 2026-10-21) |
+| proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4")` = `0x15d16d77…cb608a`; PQZH `keccak256("scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2")` = `0xe4bc6d17…885730` (set.toml `pqzl_id` / `pqzh_id`; plan 5h Task 8d, the one bump of Task 8: controller proposal, decisions CTR-PQZ-09) |
 | owner approval | 2026-10-21 (supersedes the approved `n2560-kmax16384`; progress.md) |
 | stored-blob packing width (P46 ruling, owner 2026-10-21) | ⌈log2 q⌉ = 46 bits (P46: 4 coefficients per 23 bytes); `PqzSet.sol` `PACK_BITS`; built in 8d |
 | PQZH | built (plan 5h Task 8c part 2): preset B (radices 2/7/17/19/43/431, n 45,752, k 952, t 120; owner 2026-10-22), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; `MAX_PROOF_PQZH` 262,144, `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |

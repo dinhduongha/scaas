@@ -27,16 +27,16 @@ static class Shared
         File.ReadLines(path).Select(l => JsonNode.Parse(l)!.AsObject()).Select(o =>
             ((string)o["kind"]!, (string)o["id"]!, Convert.FromHexString((string)o["input"]!), (string)o["expect"]!)).ToList();
 
-    public static readonly Dictionary<string, string> Ids = new()
-    {
-        ["pqzl"] = "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",
-        ["pqzh"] = "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
-    };
+    /// <summary>The corpus' proofSystemIds by name (pqzl, pqzh): statement bytes 32..63 of its honest inputs (the
+    /// parameter set's own ids, plan 5h Task 8d); set by <see cref="Schedule"/>.</summary>
+    public static Dictionary<string, string> Ids = [];
 
     /// <summary>One row per distinct (op, id, stmtLen[, M, auditorOn]) of the honest inputs (pqz1's rows plus op 7's
     /// shapes, P6-ANON S8), gas 1,000,000.</summary>
     public static PqzSchedule Schedule(IEnumerable<(string kind, string id, byte[] input, string expect)> corpus)
     {
+        Ids = corpus.Where(r => r.kind == "honest").GroupBy(r => r.id)
+            .ToDictionary(g => g.Key, g => Convert.ToHexStringLower(g.First().input.AsSpan(37, 32)));
         JsonArray rows = [];
         foreach (var k in corpus.Where(r => r.kind == "honest")
                      .Select(r => (op: (int)r.input[0], r.id, len: r.input[1] << 24 | r.input[2] << 16 | r.input[3] << 8 | r.input[4],
@@ -95,7 +95,7 @@ sealed class CountingLogger : InterfaceLogger
 
 static class Run
 {
-    const int MaxInput = PqzNative.MaxInput;
+    static int MaxInput => PqzNative.MaxInput;
 
     public static int Exec(string[] a)
     {

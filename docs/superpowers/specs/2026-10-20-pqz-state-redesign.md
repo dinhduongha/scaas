@@ -838,10 +838,16 @@ Each ruling, with its content and status:
 6. **`ROLL_MAX` is re-pinned in 8d** on the as-built code at set (a): ≈ 96 [estimate, n-study §6] instead of 16k's 80
    (Amsterdam) / 192 (old rules). Status: open until 8d measures it.
 7. **`MAX_INPUT` stays 512 KiB** (O8): the precompile input is built in memory by the token, so the calldata limit does
-   not bound it. Task 7b's 261,120 (255 KiB) proposal is dropped. Status: decided (owner 2026-10-21).
+   not bound it. Task 7b's 261,120 (255 KiB) proposal is dropped. Status: decided (owner 2026-10-21); **built in 8d part
+   1** (off chain): pqz-stmt's per-set `MAX_INPUT` (524,288 at `n2304-kmax4096` / `n2560-kmax16384`, 393,216 at
+   `n2048-kmax1024`) is exported by pqz-ffi as `pqz_max_input()`, and the node (`pqz_ffi.h`, the Nethermind plugin's
+   `PqzNative.MaxInput`) reads it from the library instead of the literal 393,216.
 8. **`MAX_PROOF_PQZH` stays 262,144.** Status: decided.
 9. **Precompile addresses move to 32-bit form** in 8d: `PQZ` `0x…5caa0f01`, `MLDSA44` `0x…5caa0012`, `MLDSA65`
-   `0x…5caa0013` (were `0x5caa50…0f01` / `…0012` / `…0013`, decisions.md CTR-PQZ-10 Change 2026-10-15, P6f D3). Status: decided; 8d.
+   `0x…5caa0013` (were `0x5caa50…0f01` / `…0012` / `…0013`, decisions.md CTR-PQZ-10 Change 2026-10-15, P6f D3). Status:
+   decided; **built off chain in 8d part 1** (`0x000000000000000000000000000000005caa0f01` / `…5caa0012` / `…5caa0013` in
+   the Nethermind plugin, the chain scripts, `script/pqz/e2e.py` and the docs); the Solidity constants and contract
+   tests in 8d part 2; chain 7622's live image keeps the old addresses until the next roll-out.
 10. **Op blobs stay in contract state ("Không được mất ciphertext": a ciphertext must never be lost).** Absolute rule:
     calldata and events can be pruned by history expiry (EIP-4444), so every ciphertext a later debit or rollover needs
     stays in state (CTR-PQZ-07 Change 2026-10-19 holds). The state-gas cost is real money on a customer chain and is
@@ -862,9 +868,12 @@ Each ruling, with its content and status:
     set; its vectors stay at `smartcontracts/vectors/pqz/`, which the contracts read until 8d) `n2304-kmax4096`
     (the `pqzl` crate's default; vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`), `n2560-kmax16384`
     (`K_MAX` 16,384, shippable; vectors under `smartcontracts/vectors/pqz/n2560-kmax16384/`) and `n2816-kmax65536`
-    (`K_MAX` 65,536, core only). PQZH is compiled out of pqz-ffi /
-    pqz-vectors for every set but v3 until 8c; every set carries the v3 `proofSystemId` until the 8d bump. Status:
-    decided (owner 2026-10-21); built in 8b.
+    (`K_MAX` 65,536, core only). PQZH is built for the three sets with pqz-stmt since 8c. Status:
+    decided (owner 2026-10-21); built in 8b. **8d part 1:** the one `proofSystemId` bump, one id per set and proof
+    system: `set.toml` `pqzl_id` / `pqzh_id` labels (PQZL `scaas/pqz/lnp22/mlwe-d64k<k>-q<log2q>l4/v4`, PQZH
+    `scaas/pqz/pqzh/ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2`; controller proposal, decisions.md CTR-PQZ-09),
+    keccak256 by `gen_set.py` into `pqz_set.h` / `rust/set.rs` / `set.json` / `PqzSet.sol`; the retired v2 / v3 / PQZH v1
+    ids refused; pqz-ffi's default set (and the node library's) is `n2304-kmax4096`; every set's vectors regenerated.
 
 Superseded by this section (kept above as the record): the 16k set n = 2560 / `K_MAX` 16,384 / q = 2^50 − 42,310,535
 (§6, §6.4's id label `mlwe-d64k40-q50l4`, the k / q of the new label follow set (a) in 8d), O9's G = 1 for M = 8 on

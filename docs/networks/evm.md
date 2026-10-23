@@ -142,7 +142,9 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   `PQZ` `0x5caa500000000000000000000000000000000f01` (PQZL and PQZH proofs, per-row gas 2.57–5.41 M + 3 per word),
   `MLDSA44` `0x5caa500000000000000000000000000000000012` (49,000 + 6 per message word) and `MLDSA65`
   `0x5caa500000000000000000000000000000000013` (68,000 + 6 per word), EIP-8355 layout, empty context; prices frozen in
-  the chainspec's `engine.Pqz` ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)). A stock Nethermind image ignores
+  the chainspec's `engine.Pqz` ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)). The next image moves them to the
+  32-bit form `0x000000000000000000000000000000005caa0f01` / `…5caa0012` / `…5caa0013` (spec 2026-10-20 §12 item 9; plugin built in plan 5h
+  Task 8d part 1, not yet rolled out). A stock Nethermind image ignores
   that section and the addresses stay empty accounts (shown on the copy), so contracts self-test and nodes probe.
   Runbook: `pqz-core/nethermind/chain/RUNBOOK.md`.
 - **P-256** (RIP-7212 / EIP-7951 at `0x100`): present on 7622; probed per chain (`has_p256_precompile`); without it

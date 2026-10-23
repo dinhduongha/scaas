@@ -20,12 +20,12 @@
  "kat_digest": "f7c772d6467c84e1c143004017d3594d57dfbde49097e9d3fd9b382e03680776",
  "register": {
   "pqzl": {
-   "proof_keccak": "ec1b24cf743c731d484194c571fdc2d5ed7b2fd89c3602107bada3c83f8dc065",
+   "proof_keccak": "373dd9e0c52443ce67942a5a9df4011ada5579a95cd77bcdfd70926cf2588f94",
    "valid": 1,
    "invalid": 0
   },
   "pqzh": {
-   "proof_keccak": "d7e6cdb531a4cc4263a1b5f158c7f7c6ab54a47d47d6bd73ef972d9357d8c9ae",
+   "proof_keccak": "551511a28cf7a22dad1c8447d647bf63815644edc9d9f08d849dde4c0e31074e",
    "valid": 1,
    "invalid": 0
   }

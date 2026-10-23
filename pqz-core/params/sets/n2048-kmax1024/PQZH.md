@@ -1,12 +1,13 @@
 # Conditions for a chain to run PQZH — set `n2048-kmax1024` (the frozen v3 set)
 
 PQZH (Ligero over F_q, `pqz-core/pqzh/ligero`) is the **backup** proof system (owner 2026-10-21). At this set it is
-the shipped PQZH (`proofSystemId` `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`, D3); the crate
+the shipped PQZH (THE preset of the D3 id; `proofSystemId` since plan 5h Task 8d `keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2")` = `0x9d945089…a7dca4`, the D3 id v1 `0x0a47a768…2fead4` retired); the crate
 built with `--features set-n2048-kmax1024` (or no set feature) reproduces its proofs byte for byte (plan 5h Task 8c:
 `pqz-core/pqzh/ligero/runs/c8-v3-kat-vs-base.txt`, `c8-v3-replay.txt`). `SET.md` (Task 8b) is this set's main
 description ([`SET.md`](SET.md)). Since plan 5h Task 8c part 2 its constants are generated: `pqzh_set.rs` from
 `set.toml` `[pqzh_preset]` (THE preset), `MAX_PROOF_PQZH` 262,144 / `MAX_INPUT` 393,216 in `rust/set.rs`; the
-proofs, the vectors and the crate's outputs are byte-identical (`pqz-core/pqzh/ligero/runs/c8c-n2048-*`).
+proofs, the vectors and the crate's outputs were byte-identical (`pqz-core/pqzh/ligero/runs/c8c-n2048-*`) until the id
+bump of Task 8d, which changes every statement's id word and so every proof.
 
 Sources: `[crate]` `runs/c8-v3-*`; `[model]` `python3 -I pqz-core/pqzh/ligero/ligero_params.py --set n2048-kmax1024`
 (`runs/c8-params-n2048-kmax1024.txt`, equal to the crate on 14 relations); `[measured]` named in place.
