@@ -266,10 +266,16 @@ fn other_id(id: usize) -> Word {
     if id == 0 { PQZH_ID } else { PQZL_ID }
 }
 
-/// The retired PQZL id v2 (forgeable, lazer#28; CTR-PQZ-09 F6 / F9 path B): the negative rows "retired PQZL v2
-/// proofSystemId" put it on an honest v3 input, which every verifier must reject as an unknown id
-fn pqzl_v2_id() -> Word {
-    keccak(&[b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2"])
+/// The retired ids of a system (decisions CTR-PQZ-09): PQZL v2 (forgeable, lazer#28; F6 / F9 path B) and v3, PQZH v1
+/// (both replaced by the per-set ids of plan 5h Task 8d); the negative rows "retired <name> proofSystemId" put each on
+/// an honest input of that system, which every verifier must reject as an unknown id
+fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
+    let k = |l: &str| keccak(&[l.as_bytes()]);
+    if id == 0 {
+        vec![("PQZL v2", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")), ("PQZL v3", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"))]
+    } else {
+        vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"))]
+    }
 }
 
 fn fname(f: Form) -> &'static str {
@@ -1027,8 +1033,8 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             }
             add(format!("{nm}: unknown proofSystemId (zero word)"), f, vec![E::StmtSet(32, vec![0; 32])]);
             add(format!("{nm}: the other system's proofSystemId"), f, vec![E::StmtSet(32, other_id(id).to_vec())]);
-            if id == 0 {
-                add(format!("{nm}: retired PQZL v2 proofSystemId"), f, vec![E::StmtSet(32, pqzl_v2_id().to_vec())]);
+            for (r, w) in retired_ids(id) {
+                add(format!("{nm}: retired {r} proofSystemId"), f, vec![E::StmtSet(32, w.to_vec())]);
             }
             add(format!("{nm}: proof truncated by 1 byte"), f, vec![E::ProofResize(pl(f) - 1)]);
             add(format!("{nm}: proof extended by 1 zero byte"), f, vec![E::ProofResize(pl(f) + 1)]);
@@ -1753,8 +1759,8 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
             }
             add("unknown proofSystemId (zero word)".into(), c, vec![E::StmtSet(32, vec![0; 32])]);
             add("the other system's proofSystemId".into(), c, vec![E::StmtSet(32, other_id(id).to_vec())]);
-            if id == 0 {
-                add("retired PQZL v2 proofSystemId".into(), c, vec![E::StmtSet(32, pqzl_v2_id().to_vec())]);
+            for (r, w) in retired_ids(id) {
+                add(format!("retired {r} proofSystemId"), c, vec![E::StmtSet(32, w.to_vec())]);
             }
             add("proof truncated by 1 byte".into(), c, vec![E::ProofResize(pl - 1)]);
             add("proof extended by 1 zero byte".into(), c, vec![E::ProofResize(pl + 1)]);
@@ -1962,7 +1968,7 @@ fn generate() -> (Vec<(String, String)>, bool) {
         }
         let (desc, params) = if *id == PQZL_ID {
             (
-                "PQZL proofs (proofSystemId v2, D2) of every statement form, from the C core (pqz_prove, hedged: CTR-PQZ-19), \
+                "PQZL proofs (the set's proofSystemId, set.json pqzl_label) of every statement form, from the C core (pqz_prove, hedged: CTR-PQZ-19), \
                  fixed rnd32: deterministic, byte-exact on every build (native = wasm32). statement: the row of that file, \
                  under this id. wit: the prover-API witness (pqz.h, R3; not consensus), rebuilt by pqz_kat.py from the \
                  seeds. proof_fnv = FNV-1a 32 of the proof. Disclosures: opening = abi.encode(bytes bundle, bytes proof) \
@@ -1971,7 +1977,7 @@ fn generate() -> (Vec<(String, String)>, bool) {
             )
         } else {
             (
-                leak(format!("PQZH proofs (Ligero over F_q, proofSystemId D3) of every statement form, from pqzh-ligero ({} \
+                leak(format!("PQZH proofs (Ligero over F_q, the set's proofSystemId, set.json pqzh_label) of every statement form, from pqzh-ligero ({} \
                  preset, params), fixed rnd32: deterministic, byte-exact native = wasm32. Fields as proof_pqzl.json; \
                  max_proof_len = the verifier's exact bound for the form. Validity: pqz-vectors --check (Ligero verify).",
                  if V3 { "THE proven" } else { "the set's proven" })),

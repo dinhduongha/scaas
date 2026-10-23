@@ -17,8 +17,9 @@ case ${PQZ_FUZZ_MODE:-} in
   pqzl-diff) S=-pqzl-diff F="--features pqzl-diff" ;;
   *) echo "PQZ_FUZZ_MODE=$PQZ_FUZZ_MODE: unset or pqzl-diff" >&2; exit 2 ;;
 esac
-# PQZ_SET: the parameter set (default the v3 set n2048-kmax1024; run.sh / seeds.py take the same variable)
-[ "${PQZ_SET:-n2048-kmax1024}" = n2048-kmax1024 ] || F="$F --no-default-features --features set-$PQZ_SET"
+# PQZ_SET: the parameter set (default n2304-kmax4096, pqz-ffi's; run.sh / seeds.py take the same variable)
+export PQZ_SET=${PQZ_SET:-n2304-kmax4096}
+[ "$PQZ_SET" = n2304-kmax4096 ] || F="$F --no-default-features --features set-$PQZ_SET"
 mkdir -p "$B"
 export CC=clang-18 CARGO_TARGET_DIR="$B/target$S"
 export RUSTFLAGS="-C passes=sancov-module -C llvm-args=-sanitizer-coverage-level=4 \

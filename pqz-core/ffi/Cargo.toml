@@ -32,11 +32,12 @@ sha2 = { version = "=0.10.9", optional = true }
 cc = { version = "1", optional = true }
 
 [features]
-# the PQZL backend (CTR-PQZ-09, owner 2026-10-18): the Rust crate by default, no C compiled; the parameter set v3 (the
-# contracts' set until plan 5h Task 8d)
-default = ["pqzl-rust", "set-n2048-kmax1024"]
+# the PQZL backend (CTR-PQZ-09, owner 2026-10-18): the Rust crate by default, no C compiled; the parameter set
+# n2304-kmax4096, the default set on chain (owner 2026-10-21; plan 5h Task 8d)
+default = ["pqzl-rust", "set-n2304-kmax4096"]
 # the parameter set (pqz-core/params/sets/<set>, owner 2026-10-21): exactly one; another set than the default needs
-# --no-default-features --features pqzl-rust,set-<set>. Vectors: smartcontracts/vectors/pqz (v3) or …/pqz/<set>/.
+# --no-default-features --features pqzl-rust,set-<set>. Vectors: smartcontracts/vectors/pqz/<set>/
+# (n2048-kmax1024: smartcontracts/vectors/pqz/).
 # BEGIN gen_set.py sets
 set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024", "pqzl?/set-n2048-kmax1024", "pqzh-ligero?/set-n2048-kmax1024", "pqzh"]
 set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096", "pqzl?/set-n2304-kmax4096", "pqzh-ligero?/set-n2304-kmax4096", "pqzh"]
