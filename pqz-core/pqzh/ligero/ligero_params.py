@@ -297,10 +297,12 @@ def main0():
 # ---- per parameter set (plan 5h Task 8c): --set <name> ----
 HERE = os.path.dirname(os.path.abspath(__file__))
 SETS_DIR = os.path.join(HERE, '..', '..', 'params', 'sets')
-# a set whose directory Task 8b has not created yet: (n, K_MAX, q) for n-study's budget(), as gen_set.py derives them
-PENDING = {'n2560-kmax16384': (2560, 16_384, 2**50 - 42_310_535)}
+# a set whose directory has no rust/set.rs yet: (n, K_MAX, q) for n-study's budget(), as gen_set.py derives them (none
+# today: every set directory exists since plan 5h Task 8b)
+PENDING = {}
 # pqzh_set.rs defaults (every set so far)
 PQZH_DEFAULT = {'GEN': 3, 'NR': 3, 'RADICES': [2, 19, 43, 431], 'PRESET_N': 32756, 'PRESET_K': 817, 'PRESET_T': 121}
+# defaults for a set without the limits in rust/set.rs (core_only); the set's own are read in main_set
 MAX_PROOF_PQZH, MAX_INPUT_TODAY, MAX_INPUT_8D = 262_144, 393_216, 512 * 1024
 CAP = 2**24                  # Ethereum-like regular gas per transaction (EIP-7825)
 TX_LIMIT = (CAP - 15_000) // 64   # EIP-7976: 15,000 + 64 gas per calldata byte <= the cap (Task 7b: 261,909 B)
@@ -488,10 +490,10 @@ def label(rel):
 
 
 def crate_sizes(name):
-    """the crate's own exact bounds (ligero_kat sizes) if this set was built: runs/c8b-<tag>-sizes.jsonl (part 1b, the
-    current preset) before runs/c8-<tag>-sizes.jsonl (part 1)"""
+    """the crate's own exact bounds (ligero_kat sizes) if this set was built: runs/c8c-<tag>-sizes.jsonl (part 2) before
+    runs/c8b-<tag>-sizes.jsonl (part 1b) before runs/c8-<tag>-sizes.jsonl (part 1): the newest run of the set's preset"""
     for f in sorted(os.listdir(os.path.join(HERE, 'runs')), reverse=True):
-        if f.startswith(('c8b-', 'c8-')) and f.endswith('-sizes.jsonl'):
+        if f.startswith(('c8c-', 'c8b-', 'c8-')) and f.endswith('-sizes.jsonl'):
             rows = [json.loads(x) for x in open(os.path.join(HERE, 'runs', f))]
             if rows and rows[0]['set'] == name:
                 return f, {r['rel']: r for r in rows}
@@ -500,6 +502,9 @@ def crate_sizes(name):
 
 def main_set(name):
     c, src = set_consts(name)
+    # the set's limits (pqz-stmt, rust/set.rs; plan 5h Task 8c part 2): MAX_PROOF_PQZH 262,144 (n2560-kmax16384 327,680),
+    # MAX_INPUT 393,216 at n2048-kmax1024, 524,288 elsewhere
+    mp, mi = c.get('MAX_PROOF_PQZH', MAX_PROOF_PQZH), c.get('MAX_INPUT', MAX_INPUT_TODAY)
     q, L = c['Q'], c['LOG2Q']
     p = Lay(c)
     f = factor(q - 1)
@@ -544,8 +549,8 @@ def main_set(name):
           f'`ligero_kat sizes` (runs/c8-*-sizes.jsonl, runs/c8b-*-sizes.jsonl)\n')
     cf, cs = crate_sizes(name)
     print('## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)\n')
-    print(f'| relation | rows m | proof bound B | <= MAX_PROOF_PQZH {MAX_PROOF_PQZH:,} | statement B | input 5 + stmt + '
-          f'bound B | <= MAX_INPUT {MAX_INPUT_TODAY:,} today / {MAX_INPUT_8D:,} (8d) | crate bound [crate] | crate soundness bits |')
+    print(f'| relation | rows m | proof bound B | <= MAX_PROOF_PQZH {mp:,} | statement B | input 5 + stmt + '
+          f'bound B | <= MAX_INPUT {mi:,} (pqz-stmt) / {MAX_INPUT_8D:,} (8d) | crate bound [crate] | crate soundness bits |')
     print('|---|---|---|---|---|---|---|---|---|')
     checked = 0
     for rel in SET_RELS:
@@ -556,8 +561,8 @@ def main_set(name):
             assert (cr['max_proof_len'], cr['stmt_bytes'], cr['rows_m']) == (b, st, rows_set(p, rel, ell)), (rel, cr)
             checked += 1
         snd = cr['soundness'].get('total') if cr else None
-        print(f"| {label(rel)} | {rows_set(p, rel, ell)} | {b:,} | {'yes' if b <= MAX_PROOF_PQZH else 'NO'} | {st:,} | "
-              f"{inp:,} | {'yes' if inp <= MAX_INPUT_TODAY else 'no'} / {'yes' if inp <= MAX_INPUT_8D else 'NO'} | "
+        print(f"| {label(rel)} | {rows_set(p, rel, ell)} | {b:,} | {'yes' if b <= mp else 'NO'} | {st:,} | "
+              f"{inp:,} | {'yes' if inp <= mi else 'no'} / {'yes' if inp <= MAX_INPUT_8D else 'NO'} | "
               f"{cr['max_proof_len'] if cr else '-'} | {snd if snd is not None else ('not built' if cr else '-')} |")
     print(f'\nmodel = crate on {checked} relations ({cf or "no crate build of this set yet"}); op 7 M = 8: G = 2, not a '
           f'built PQZH shape\n')
@@ -580,7 +585,7 @@ def main_set(name):
               f"{inp:,} | {'yes' if inp <= TX_LIMIT else 'NO'} | {lo:,} |")
     print('\n## Preset search (proven, n >= 4k, k >= 64, l >= 16, prover <= %.0e products): the smallest R_TX and '
           'R_TXM4 bounds, radices of the crate and with the small primes of q - 1 it does not use\n' % PMAX)
-    print('| radices | relation | n | k | t | l | rows m | proof bound B | <= 262,144 | prover products |')
+    print('| radices | relation | n | k | t | l | rows m | proof bound B | <= {mp:,} | prover products |'.format(mp=mp))
     print('|---|---|---|---|---|---|---|---|---|---|')
     v3r = PQZH_DEFAULT['RADICES']  # the v3 radices (the fallback preset's) next to the set's own
     for rs in ([v3r] if v3r != rad else []) + [rad] + ([sorted(rad + extra)] if extra else []):
@@ -608,7 +613,7 @@ def main_set(name):
                         break
             for b, nn, kk, tt, m_rows, pr in best:
                 print(f"| {'/'.join(map(str, rs))} | {label(rel)} | {nn:,} | {kk} | {tt} | {kk - tt - 1} | {m_rows} | {b:,} | "
-                      f"{'yes' if b <= MAX_PROOF_PQZH else 'no'} | {pr:.3g} |")
+                      f"{'yes' if b <= mp else 'no'} | {pr:.3g} |")
     print('\n## Prover work: the model\'s FFT products vs the crate\'s counted products (fq::spike_count, all base-field '
           'products of one honest proof, seed 0; runs/*count*.jsonl of this set)\n')
     print('| count file | n | k | t | relation | model FFT products | crate products | model / crate |')

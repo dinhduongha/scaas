@@ -4,7 +4,9 @@ PQZH (Ligero over F_q, `pqz-core/pqzh/ligero`) is the **backup** proof system (o
 the shipped PQZH (`proofSystemId` `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`, D3); the crate
 built with `--features set-n2048-kmax1024` (or no set feature) reproduces its proofs byte for byte (plan 5h Task 8c:
 `pqz-core/pqzh/ligero/runs/c8-v3-kat-vs-base.txt`, `c8-v3-replay.txt`). `SET.md` (Task 8b) is this set's main
-description.
+description ([`SET.md`](SET.md)). Since plan 5h Task 8c part 2 its constants are generated: `pqzh_set.rs` from
+`set.toml` `[pqzh_preset]` (THE preset), `MAX_PROOF_PQZH` 262,144 / `MAX_INPUT` 393,216 in `rust/set.rs`; the
+proofs, the vectors and the crate's outputs are byte-identical (`runs/c8c-v3-*`).
 
 Sources: `[crate]` `runs/c8-v3-*`; `[model]` `python3 -I pqz-core/pqzh/ligero/ligero_params.py --set n2048-kmax1024`
 (`runs/c8-params-n2048-kmax1024.txt`, equal to the crate on 14 relations); `[measured]` named in place.
