@@ -48,8 +48,9 @@ memcheck, 12 relations): 0 secret-dependent reports.
   limit is the verifier's bound (below it).
 - **`MAX_INPUT`**: pqz-stmt's at this set is 524,288 (512 KiB, decisions O8 / 2026-10-21 (7)): every built form fits
   (largest 470,885 at the bound, 493,445 = 5 + 165,760 + 327,680 at the limit). **The node's limit (`pqz_ffi.h`
-  `PQZ_FFI_MAX_INPUT`, the Nethermind plugin) stays 393,216 until Task 8d**: every debit input here (365,753 for R_BURN
-  fits; R_TX / R_TX0 / op 7 do not) needs 8d.
+  `PQZ_FFI_MAX_INPUT`, the Nethermind plugin) stays 393,216 until Task 8d**: at the verifier bound R_BURN (365,753),
+  R_TX0 and op 7 M = 1 without the auditor (387,215) fit it; R_TX (407,823), op 7 M = 1 with the auditor (407,823),
+  M = 2 (407,823 / 428,559) and M = 4 (449,039 / 470,885) need 8d.
 
 ## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [model]
 

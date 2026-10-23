@@ -81,7 +81,8 @@ cp "runs/gate/last-$PQZ_SET" runs/gate/last
 glog "gate $L (set $PQZ_SET) started at $(git rev-parse --short HEAD), tree $GATE_TREE"
 # the summary also goes to a file (review round 2: the PQZL Rust port's gate PASS line was on stdout only)
 say() { echo "$*" | tee -a "$R-summary.txt"; }
-echo "# gate $L (set $PQZ_SET): $(git rev-parse HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)" > "$R-summary.txt"
+# (the gate's own logs under runs/gate/ excluded: glog has already written this run's progress file; review 8c part 2 m9)
+echo "# gate $L (set $PQZ_SET): $(git rev-parse HEAD)$(git diff --quiet HEAD -- . ':!runs/gate' || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)" > "$R-summary.txt"
 step() {
   name=$1
   shift

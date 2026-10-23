@@ -5,7 +5,7 @@
 # rels: src/bin/ct.rs's bit mask (default 4095: the six forms and the six op 7 shapes); nprove: proofs per relation
 # (default 1); set: the parameter set (cargo feature set-<set>; default none = n2048-kmax1024). The crate is built with the
 # test-only feature ctgrind (release profile, x86-64); src/bin/ct.rs marks the witness and rnd32 undefined (secret)
-# and proves at THE preset; memcheck then reports every branch ("Conditional jump
+# and proves at the set's preset (Params::proven); memcheck then reports every branch ("Conditional jump
 # or move depends on uninitialised value(s)") or address ("Use of uninitialised value") that depends on them, after the
 # declassification points (ct::public / ct::verdict: the root, w, q, h, the opened columns, the witness-valid and
 # self-check verdicts, the samplers' accept bits; research/code-review-2026-10-19/O-pqzh-constant-time.md).
@@ -25,9 +25,9 @@ count () { grep -c "Conditional jump or move depends\|Use of uninitialised value
 echo "# ct $L: HEAD $(git rev-parse HEAD), diff sha256 $(git diff HEAD -- . | sha256sum | cut -c1-16), $(valgrind --version), rels ${2:-4095}, nprove ${3:-1}, set ${4:-n2048-kmax1024}" > "$O"
 cargo build -j2 --release --offline --features ctgrind${4:+,set-$4} --bin ct >> "$O" 2>&1 || exit 1
 rustc --version >> "$O" # rust-toolchain.toml's compiler
-$VG --log-file=target/ct/rust.vg $CARGO_TARGET_DIR/release/ct "${2:-4095}" "${3:-1}" >> "$O" 2>&1
+$VG --log-file=target/ct/rust-${4:-n2048-kmax1024}.vg $CARGO_TARGET_DIR/release/ct "${2:-4095}" "${3:-1}" >> "$O" 2>&1
 rc=$?
-cat target/ct/rust.vg >> "$O"
-n=$(count target/ct/rust.vg)
+cat target/ct/rust-${4:-n2048-kmax1024}.vg >> "$O"
+n=$(count target/ct/rust-${4:-n2048-kmax1024}.vg)
 echo "ct $L: rc=$rc secret-dependent reports=$n" | tee -a "$O"
 [ $rc = 0 ] && [ "$n" = 0 ]

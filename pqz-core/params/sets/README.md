@@ -5,7 +5,9 @@ runtime choice between sets is deferred). Each directory `<set>/` holds every pa
 and Rust cores; the algorithm code uses only the named constants. Sets are named by n and `K_MAX`. PQZH has its own
 generated file per set (`pqzh_set.rs`, from `set.toml`'s `[pqzh_preset]`; plan 5h Task 8c part 2) for every set whose
 `set.toml` says `pqzh = true`, and `pqz-ffi` / `pqz-vectors` / the gate build it there. Adding a set: write
-`<set>/set.toml`, then `make.sh <set> all`.
+`<set>/set.toml`, then `make.sh <set> all`; a new set with PQZH also needs, by hand (a missing one fails loudly):
+pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm feature, `pqz_kat.py` `_LIGERO_MAX` and the
+`limits_exact` tables (`pqzh/ligero/src/ligero.rs`).
 
 | Set | n, k | q | `K_MAX` | Status | `SET.md` |
 |---|---|---|---|---|---|
@@ -91,7 +93,8 @@ of them into `set.json` (`pqz_kat.py`, `ligero_params.py`). Bounds and soundness
 
 `MAX_INPUT` 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)) is pqz-stmt's at the non-frozen sets; the node's
 precompile input limit (`pqz_ffi.h` `PQZ_FFI_MAX_INPUT`, Nethermind plugin) stays 393,216 until plan 5h Task 8d, so the
-inputs above it (n2304-kmax4096 op 7 M = 4 with the auditor; every n2560-kmax16384 debit) need 8d.
+inputs above it at the bound (n2304-kmax4096: op 7 M = 4 with the auditor; n2560-kmax16384: R_TX and op 7 M = 1 with
+the auditor, M = 2, M = 4 — R_TX0, R_BURN and op 7 M = 1 without the auditor fit) need 8d.
 
 ### When a PQZH proof exceeds `MAX_PROOF_PQZH`: three options
 

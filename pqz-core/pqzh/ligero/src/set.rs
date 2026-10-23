@@ -42,6 +42,24 @@ mod lattice;
 #[path = "../../../params/sets/n2048-kmax1024/pqzh_set.rs"]
 mod pqzh;
 
+// the Ligero build's set is pqz-stmt's (a dependent enabling pqz-stmt/set-X without pqzh-ligero/set-X would otherwise
+// build Ligero at n2048-kmax1024's constants against set X's codec; review 8c part 2 m6)
+const fn same(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+const _: () = assert!(same(lattice::SET_NAME, pqz_stmt::SET), "pqzh-ligero's set-<set> must be pqz-stmt's");
+
 pub(crate) use lattice::*;
 pub(crate) use pqzh::*;
 

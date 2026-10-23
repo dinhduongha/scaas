@@ -151,10 +151,12 @@ impl Params {
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + (mid + 2 - self.t) * 32
     }
 
-    /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) and the v3 set it is
-    /// <= pqz_stmt::MAX_PROOF_PQZH (D5) for every relation: the six forms (R_TX 235,470 B) and every built op 7 R_TXM
-    /// shape (largest (M = 4, auditor on) 236,196 B, 5 + statement + bound 369,193 B <= MAX_INPUT); at set (a) the
-    /// debit forms are above it (R_TX 264,510 B, plan 5h Task 8c); unit test `limits_exact` pins all of them per set. Not capped at MAX_PROOF_PQZH: the reference
+    /// The verifier's length bound (plan Task 9): the exact maximum. At every set's production preset it is <= the
+    /// set's pqz_stmt::MAX_PROOF_PQZH (D5) for every relation and every built op 7 R_TXM shape (n2048-kmax1024: R_TX
+    /// 235,470 B, largest (M = 4, auditor on) 236,196 B, 5 + statement + bound 369,193 B <= MAX_INPUT; n2304-kmax4096
+    /// preset B up to 253,048; n2560-kmax16384 up to 305,120 under 327,680); only the n2304-kmax4096 fallback build
+    /// (feature `fallback-retry`, THE preset) has debit bounds above it (R_TX 264,510 B); unit test `limits_exact` pins
+    /// all of them per set. Not capped at MAX_PROOF_PQZH: the reference
     /// presets are not the id, proven without radix 431 has every R_TX / R_BURN proof above it, and the bench-only
     /// oversize R_TXM shapes (M = 8, 16) are above it by design.
     pub fn max_proof_len(&self, rel: impl Into<Rel>) -> usize {

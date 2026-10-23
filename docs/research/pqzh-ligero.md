@@ -1230,7 +1230,7 @@ numbers. No timing was run: verify p99 at set (a) is not measured (v3 wasm32 15�
   radices 7 / 17 of its q − 1: n 45,752, k 952, t 119, R_TX bound 250,512, op 7 M = 4 251,940, ≈ 5× fewer prover
   products [model; needs radix-7 / 17 FFT stages and a per-set preset]; (C) raise the limit. Debits cannot be carried
   by one 2^24 transaction at set (a) anyway (calldata ≈ 287–290 KB > 261,909 B; PQZH.md).
-- ~~16k crate build and its B / A / C question~~ (resolved in part 2, §16.5: n2560-kmax16384 built, owner 2026-10-23
+- ~~n2560-kmax16384 crate build and its B / A / C question~~ (resolved in part 2, §16.5: n2560-kmax16384 built, owner 2026-10-23
   chose C — `MAX_PROOF_PQZH` 327,680 — and t = 122).
 - ~~`pqz-ffi` / `pqz-vectors` / `gate.sh` set forwarding~~ (part 2, §16.5). Open: the PQZH id per set (8d), the node's
   input limit (8d), `G_op` calibration and verify timing at the new sets.

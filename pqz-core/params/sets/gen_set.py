@@ -392,14 +392,14 @@ SET_FILES |= {f"{r}_params.sage" for r in RELS} | {f"pqz_{r}_params.h" for r in 
 # n2304-kmax4096 (plan 5h Task 8c part 1b, owner 2026-10-22), kept as they are: pqzh_set_fallback.rs (THE preset,
 # fallback A = pqzh-ligero feature `fallback-retry`, never in production) and pqzh_set_spike_b.rs (the superseded t = 119
 # spike, not compiled)
-SET_FILES |= {"pqzh_set_fallback.rs", "pqzh_set_spike_b.rs"}
+RESEARCH = {"n2304-kmax4096": {"pqzh_set_fallback.rs", "pqzh_set_spike_b.rs"}}  # allowed in that directory only
 
 
 def stray(name):
     """paths in the set's directory that no step writes (dot files / directories are make.sh's scratch), and missing
     codegen headers"""
     d = os.path.join(HERE, name)
-    ok = SET_FILES | ({"pqzh_set.rs"} if load(name).get("pqzh") else set())
+    ok = SET_FILES | ({"pqzh_set.rs"} if load(name).get("pqzh") else set()) | RESEARCH.get(name, set())
     out = [os.path.join(d, f"pqz_{r}_params.h") for r in RELS if not os.path.exists(os.path.join(d, f"pqz_{r}_params.h"))]
     for root, dirs, fs in os.walk(d):
         dirs[:] = [x for x in dirs if not x.startswith(".")]

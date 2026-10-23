@@ -22,7 +22,7 @@ use sha3::{Keccak256, Sha3_256, Shake256};
 
 // The parameter set of this build (pqz-ffi feature `set-<set>`, owner 2026-10-21): every set-dependent number below
 // comes from pqz-stmt's set constants (MAX_PROOF_PQZH and MAX_INPUT too) and, for PQZH, from pqzh-ligero at the set (its
-// preset, element bytes EB); the v3 set's files stay byte-identical. PQZH is in every set whose set.json says pqzh (plan
+// preset, element bytes EB); the n2048-kmax1024 files stay byte-identical. PQZH is in every set whose set.json says pqzh (plan
 // 5h Task 8c part 2); a build without it writes the PQZL id's files only (no proof_pqzh.json, no PQZH rows).
 const Q: u64 = st::Q;
 const DELTA: u64 = st::DELTA as u64;
