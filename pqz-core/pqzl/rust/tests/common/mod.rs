@@ -7,16 +7,25 @@ use std::path::PathBuf;
 
 pub const PQZL_ID: [u8; 32] = pqzl::PROOF_SYSTEM_ID;
 
+/// set.json's `core_only` (gen_set.py, from set.toml): a core_only set has no vectors, every other set has them
+pub fn core_only() -> bool {
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../params/sets").join(pqzl::SET).join("set.json");
+    let j: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap();
+    j["core_only"].as_bool().unwrap_or_else(|| panic!("{}: no boolean core_only", p.display()))
+}
+
 /// the committed vectors of this build's parameter set (owner 2026-10-21, one set per build): the frozen v3 set
 /// n2048-kmax1024 at smartcontracts/vectors/pqz (what the contracts read until plan 5h Task 8d), any other set under
-/// smartcontracts/vectors/pqz/<set>/ once generated; None = this set has no vectors yet
+/// smartcontracts/vectors/pqz/<set>/; None for a core_only set. Decided by set.json, not by a missing file (8b review
+/// m4): a set that is not core_only and has no proof_pqzl.json panics, so moved vectors cannot turn tests into skips.
 pub fn vectors_dir() -> Option<PathBuf> {
-    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
-    if pqzl::SET == "n2048-kmax1024" {
-        return Some(base);
+    if core_only() {
+        return None;
     }
-    let d = base.join(pqzl::SET);
-    d.join("proof_pqzl.json").is_file().then_some(d)
+    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
+    let d = if pqzl::SET == "n2048-kmax1024" { base } else { base.join(pqzl::SET) };
+    assert!(d.join("proof_pqzl.json").is_file(), "set {} is not core_only (set.json) but {} has no proof_pqzl.json", pqzl::SET, d.display());
+    Some(d)
 }
 
 pub fn json(file: &str) -> Value {

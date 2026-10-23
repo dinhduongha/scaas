@@ -238,14 +238,21 @@ fn exhaustion_is_error() {
     let rs = rows();
     let tx = rs.iter().find(|r| r.code == 1).unwrap();
     let m8 = rs.iter().find(|r| r.name == "M8-on").unwrap();
-    // the caps: the brief's 64 / 32 MiB for the v3 set; for another set the R_TX prove's cold peak rounded up + 4 MiB
-    // and half that (the same roles: R_TX fits, R_TXM8 and half the cap do not)
+    // the caps: the brief's 64 / 32 MiB for n2048-kmax1024; for another set its R_TX prove cold peak as recorded here
+    // (8b report / fix round 1; not measured by this run, so a heap regression fails instead of moving the caps: 8b
+    // review m5) rounded up + 4 MiB, and half that (the same roles: R_TX fits, R_TXM8 and half the cap do not)
+    let peak: usize = match pqzl::SET {
+        "n2048-kmax1024" => 0,
+        "n2304-kmax4096" => 69_224_208,
+        "n2560-kmax16384" => 76_418_480,
+        "n2816-kmax65536" => 114_436_848,
+        s => panic!("set {s}: record its R_TX prove cold peak in memory.rs exhaustion_is_error"),
+    };
     let (hi, lo) = if pqzl::SET == "n2048-kmax1024" {
         (64, 32)
     } else {
-        let (_, p, _, _) = measure(None, 0, || run(&mut Ctx::new(), tx, 0));
-        let hi = p.div_ceil(MIB) + 4;
-        println!("R_TX prove cold peak {p} B: caps {hi} / {} MiB", hi / 2);
+        let hi = peak.div_ceil(MIB) + 4;
+        println!("R_TX prove cold peak recorded {peak} B: caps {hi} / {} MiB", hi / 2);
         (hi, hi / 2)
     };
     for (r, cap, want_mem) in [(tx, hi, false), (m8, hi, true), (tx, lo, true)] {

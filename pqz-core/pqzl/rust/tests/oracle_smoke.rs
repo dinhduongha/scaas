@@ -3,16 +3,10 @@
 use pqzl::c_oracle::c_verify;
 use pqzl::{Ctx, OP_REGISTER};
 use serde_json::Value;
-use std::path::PathBuf;
-
-/// the vectors of this build's parameter set (v3 at the canonical path, another set below it)
-fn vectors() -> PathBuf {
-    let b = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
-    if pqzl::SET == "n2048-kmax1024" { b } else { b.join(pqzl::SET) }
-}
+mod common;
 
 fn json(file: &str) -> Value {
-    let p = vectors().join(file);
+    let p = common::vectors_dir().expect("vectors").join(file);
     serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
 }
 
@@ -23,8 +17,8 @@ fn hex(s: &Value) -> Vec<u8> {
 
 /// `(stmt, proof)` of every REGISTER row of proof_pqzl.json.
 fn register_rows() -> Vec<(Vec<u8>, Vec<u8>)> {
-    if !vectors().join("proof_pqzl.json").is_file() {
-        eprintln!("set {}: no vectors (core_only): no self-test REGISTER rows", pqzl::SET);
+    if common::vectors_dir().is_none() {
+        eprintln!("set {}: core_only (set.json): no vectors, no self-test REGISTER rows", pqzl::SET);
         return Vec::new();
     }
     let rows: Vec<_> = json("proof_pqzl.json")["rows"]

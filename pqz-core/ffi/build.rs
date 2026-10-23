@@ -5,9 +5,10 @@
 //! compiler_builtins provides mem*). Then the symbol scan (../pqzl/check_symbols.sh) on the archive: no malloc,
 //! stdio, libm, GMP, MPFR. Always: the self-test proofs from the REGISTER rows of
 //! smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!); for a parameter set other than
-//! n2048-kmax1024 from smartcontracts/vectors/pqz/<set>/proof_pqzl.json, no PQZH (compiled out until plan 5h Task 8c),
-//! and while that set has no vectors yet an empty proof (pqz-vectors writes them, then a rebuild; --check flags stale
-//! self-test proofs).
+//! n2048-kmax1024 from smartcontracts/vectors/pqz/<set>/proof_pqzl.json, no PQZH (compiled out until plan 5h Task 8c).
+//! A missing proof_pqzl.json fails the build (8b review m4: never a silently empty self-test proof), except with
+//! PQZ_VECTORS_BOOTSTRAP=1, which vectors/run.sh write sets for its first build only (pqz-vectors then writes the
+//! vectors and the rebuild compiles them in; --check flags stale self-test proofs).
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
@@ -39,10 +40,18 @@ fn main() {
     // no copy here); written by this crate's pqz-vectors binary
     let vec = vectors_dir(&core, set);
     let pqzh = env::var_os("CARGO_FEATURE_PQZH").is_some();
+    println!("cargo:rerun-if-env-changed=PQZ_VECTORS_BOOTSTRAP");
+    let boot = env::var("PQZ_VECTORS_BOOTSTRAP").as_deref() == Ok("1");
     for id in ["pqzl", "pqzh"] {
         let src = vec.join(format!("proof_{id}.json"));
         println!("cargo:rerun-if-changed={}", src.display());
-        if (id == "pqzh" && !pqzh) || (set != "n2048-kmax1024" && !src.exists()) {
+        if id == "pqzh" && !pqzh {
+            fs::write(out.join(format!("{id}_reg.bin")), []).unwrap();
+            continue;
+        }
+        if !src.exists() {
+            assert!(boot, "{}: missing; set {set} needs its vectors (PQZ_VECTORS_BOOTSTRAP=1 only for the first build of \
+                           ffi/vectors/run.sh write)", src.display());
             fs::write(out.join(format!("{id}_reg.bin")), []).unwrap();
             continue;
         }

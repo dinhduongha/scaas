@@ -51,11 +51,9 @@ fn rel_code(r: &Value) -> u8 {
 
 /// one frozen proof per relation code (the first row of each), in file order
 fn proofs() -> Vec<(u8, Vec<u8>)> {
-    // the vectors of this build's parameter set (v3 at the canonical path, another set below it)
-    let b = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
-    let p = if pqzl::SET == "n2048-kmax1024" { b } else { b.join(pqzl::SET) }.join("proof_pqzl.json");
-    if !p.is_file() {
-        // a set without vectors (core_only, e.g. n2816-kmax65536): one C-proved bench proof per relation code
+    // the vectors of this build's parameter set (n2048-kmax1024 at the canonical path, another set below it; common::vectors_dir)
+    let Some(d) = common::vectors_dir() else {
+        // a core_only set (set.json, e.g. n2816-kmax65536): one C-proved bench proof per relation code
         let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
         for r in common::pqzl_rows() {
             if !out.iter().any(|(c, _)| *c == r.code) {
@@ -63,8 +61,8 @@ fn proofs() -> Vec<(u8, Vec<u8>)> {
             }
         }
         return out;
-    }
-    let j: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+    };
+    let j: Value = serde_json::from_str(&std::fs::read_to_string(d.join("proof_pqzl.json")).unwrap()).unwrap();
     let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
     for r in j["rows"].as_array().unwrap() {
         let code = rel_code(r);

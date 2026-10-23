@@ -1,0 +1,150 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling cc v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling cpufeatures v0.2.17
+   Compiling keccak v0.1.6
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/pqzl/rust)
+   Compiling cfg-if v1.0.5
+   Compiling aes v0.8.4
+   Compiling sha3 v0.10.8
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.154
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+warning: unused import: `std::path::PathBuf`
+ --> tests/oracle_codec.rs:9:5
+  |
+9 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `pqzl` (test "oracle_codec") generated 1 warning (run `cargo fix --test "oracle_codec" -p pqzl` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 30.30s
+     Running tests/memory.rs (target/n2816-kmax65536-fix/release/deps/memory-2dd7b91b6bb7791c)
+
+running 1 test
+size_of::<Ctx>() = 41712 B (the specialised verifier's fixed tables inline, the rest on the heap)
+peak_per_op (bytes; cold = fresh Ctx, the call builds A / keys / SV tables; warm = second call)
+row                            prove cold   prove warm  verify cold  verify warm    fast cold    fast warm    allocs
+REGISTER                         39487488     36754560     39279456     36546528     10337521       976753     14651
+TRANSFER                        114436848    110610960    114023424    110197536     14759809      1650081     38240
+BURN                            112011696    108233328    111606192    107827824     14560977      1616529     29492
+DISCLOSE-SENDER                  40584016     37832080     40372816     37620880     10416465       989329     22818
+DISCLOSE-RECEIVER                46511296     43702336     46267360     43458400     10644561      1023441     20853
+TRANSFER0                       113436000    109629120    113025744    109218864     14679553      1636193     36694
+test peak_per_op has been running for over 60 seconds
+M1-on                           114436848    110610960    114023424    110197536     14759809      1650081     38818
+M2-on                           120178480    116165680    119756080    115743280     15462425      1710105     31463
+M4-on                           127873424    123760304    127435184    123322064     15923225      1822265     32014
+M8-on                           202017320    196597928    201403784    195984392     21180737      2593985     48508
+M1-off                          113436000    109629120    113025744    109218864     14679553      1636193     36692
+M2-off                          116515344    112679952    116100336    112264944     14820657      1678385     39527
+M4-off                          121606992    117574128    121181424    117148560     15587737      1766713     31372
+M8-off                          181642600    176392168    181054408    175803976     20480833      2482881     39576
+R_TX prove (cold) 114436848 B = 0.36 x the C arena peak 312151904 B (target <= 1.1, fails > 2)
+test peak_per_op ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 97.61s
+
+     Running tests/oracle_codec.rs (target/n2816-kmax65536-fix/release/deps/oracle_codec-47ac40189e72f01b)
+
+running 3 tests
+code 0x03: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x01: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x02: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x04: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x05: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x81: refused 1 of 64 bit flips, 12 of 13 foreign proofs
+code 0x78: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x79: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7a: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7b: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x70: refused 1 of 64 bit flips, 12 of 13 foreign proofs
+code 0x71: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x72: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x73: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+test malformed_eq_c ... ok
+test ghint_eq_c has been running for over 60 seconds
+code 0x03: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c has been running for over 60 seconds
+code 0x01: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x02: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test ghint_eq_c ... ok
+code 0x04: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x05: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x81: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x78: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x79: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7a: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7b: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x70: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x71: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x72: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x73: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 351.60s
+
+     Running tests/oracle_rand.rs (target/n2816-kmax65536-fix/release/deps/oracle_rand-40da9159c7a51fde)
+
+running 7 tests
+set n2816-kmax65536: core_only (set.json): no vectors, no cbd.json
+test cbd_eq_vectors ... ok
+test aes_ctr_eq_c ... ok
+test grandom_eq_c ... ok
+test rejection_saturation_eq_c ... ok
+test shake_eq_c ... ok
+rejection_eq_c: 1069 rejects, 743 accepts, 188 errors, all equal
+test rejection_eq_c ... ok
+test urandom_eq_c ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+
+     Running tests/oracle_smoke.rs (target/n2816-kmax65536-fix/release/deps/oracle_smoke-185f7c8201281c0e)
+
+running 2 tests
+set n2816-kmax65536: core_only (set.json): no vectors, no self-test REGISTER rows
+set test c_core_selftest_proofs_verify ... n2816-kmax65536ok: core_only (set.json): no vectors, no self-test REGISTER rows
+
+test rust_verify_accepts ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/vectors.rs (target/n2816-kmax65536-fix/release/deps/vectors-41f0397daaf5e980)
+
+running 12 tests
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify has been running for over 60 seconds
+test codec_roundtrip has been running for over 60 seconds
+test codec_roundtrip ... ok
+test enc_dec_input_errors ... ok
+test enc_group_seed_eq_shake ... ok
+set n2816-kmax65536: core_only (set.json): enc_json skipped
+test enc_json ... ok
+set n2816-kmax65536: core_only (set.json): keygen_json skipped
+test keygen_json ... ok
+set n2816-kmax65536: core_only (set.json): matrix_json skipped
+test matrix_json ... ok
+set n2816-kmax65536: no negative.json yet (no vectors): no negative-vector rows
+negative_rows_reject: 0 of 0 rows split into (op, stmt, proof), all rejected
+test negative_rows_reject ... ok
+test all_pqzl_proofs_verify ... ok
+test prove_refuses_noncanonical_statement ... ok
+test reprove_byte_equal has been running for over 60 seconds
+test reprove_byte_equal ... ok
+test wasm_replay_inputs has been running for over 60 seconds
+set n2816-kmax65536: no negative.json yet (no vectors): no negative-vector rows
+test wasm_replay_inputs ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 208.13s
+

@@ -14,12 +14,12 @@ use common::{hex, json};
 const Q: u64 = pqzl::Q;
 const DELTA: u64 = pqzl::DELTA as u64;
 
-/// false (said on stderr) for a set without vectors (core_only, e.g. n2816-kmax65536): the tests that read the vectors'
-/// key / ciphertext files skip (keys and Enc are C = Rust through oracle_keys there)
+/// false (said on stderr) for a core_only set (set.json, e.g. n2816-kmax65536; common::vectors_dir): the tests that
+/// read the vectors' key / ciphertext files skip (keys and Enc are C = Rust through oracle_keys there)
 fn have_vectors(test: &str) -> bool {
     let h = common::vectors_dir().is_some();
     if !h {
-        eprintln!("set {}: no vectors (core_only): {test} skipped", pqzl::SET);
+        eprintln!("set {}: core_only (set.json): {test} skipped", pqzl::SET);
     }
     h
 }
@@ -355,7 +355,9 @@ fn hx(b: &[u8]) -> String {
 /// `WASM_MAX_LEGS`, refused on wasm32), the verify and verify_fast verdicts on this target. run.sh diffs the two.
 #[test]
 fn wasm_replay_inputs() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/wasm-replay");
+    // under gate.sh (PQZ_BUILD_TAG = the set; concurrent gates) target/wasm-replay-<set>, else target/wasm-replay
+    let tag = std::env::var("PQZ_BUILD_TAG").map(|t| format!("-{t}")).unwrap_or_default();
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("target/wasm-replay{tag}"));
     std::fs::create_dir_all(&dir).unwrap();
     let (mut inp, mut out) = (String::new(), String::new());
     let mut c = Ctx::new();
