@@ -1417,6 +1417,9 @@ def check_negative(j, d):
         if r["name"] + r["id"] in names:
             bad.append("duplicate row " + r["name"])
         names.add(r["name"] + r["id"])
+        # the id names the base input's system; a raw input (form "-") has none (8d part 1: a tamper of a raw row's id
+        # went unnoticed)
+        cmp(bad, r["name"] + " id", r["id"], "-" if r["form"] == "-" else r["id"] if r["id"] in IDS else "pqzl | pqzh")
         b = apply_edits(r, stmts, proofs)
         cmp(bad, r["name"] + " input", (r["input_bytes"], r["input_sha3"]), (len(b), hashlib.sha3_256(b).hexdigest()))
         try:
