@@ -769,7 +769,7 @@ mod tests {
         let t = crate::set::PRESET_T;
         assert_eq!(Params::proven(), Params { t, ell: m.k - t - 1, ..m });
         assert!(m.t <= t);
-        assert_eq!(m.t == t, crate::set::NAME == "n2048-kmax1024" || cfg!(feature = "fallback-retry"));
+        assert_eq!(m.t == t, crate::set::NAME != "n2304-kmax4096" || cfg!(feature = "fallback-retry"));
     }
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
@@ -826,44 +826,51 @@ mod tests {
 
     /// Task 9 / D5: the verifier's bound is the exact maximum, the length gate admits MAX and rejects MAX + 1 (and 0)
     /// before the statement or the proof is parsed; ops without a relation have no form. Per parameter set (plan 5h
-    /// Task 8c): v3 every built relation within MAX_PROOF_PQZH and MAX_INPUT (D5); set (a) R_REG / R_DS / R_DR within,
-    /// every debit form's bound above MAX_PROOF_PQZH 262,144 (owner 2026-10-21: it stays; PQZH is a backup, its debit
-    /// inputs exceed one transaction's calldata anyway: ligero_params.py --set, PQZH.md of the set)
+    /// Task 8c): every built relation within the set's MAX_PROOF_PQZH and MAX_INPUT (n2048-kmax1024: 262,144 / 393,216,
+    /// D5; n2304-kmax4096 preset B: 262,144 / 524,288; n2560-kmax16384 THE preset: 327,680 / 524,288, owner
+    /// 2026-10-23); only the n2304-kmax4096 fallback build (THE preset) has debit bounds above MAX_PROOF_PQZH
     #[test]
     fn limits_exact() {
         use pqz_stmt::{MAX_INPUT, MAX_PROOF_PQZH};
         let p = Params::proven();
-        let v3 = crate::set::NAME == "n2048-kmax1024";
+        let set = crate::set::NAME;
         // (form, exact bound, within MAX_PROOF_PQZH and MAX_INPUT)
-        // set (a) with preset B (n 45,752, k 952, t 120; owner 2026-10-22); the fallback build keeps THE preset
-        let b = !v3 && !cfg!(feature = "fallback-retry");
-        let expect = if b {
-            [
+        // n2304-kmax4096 with preset B (n 45,752, k 952, t 120; owner 2026-10-22); its fallback build keeps THE preset
+        let fb = cfg!(feature = "fallback-retry");
+        let expect = match set {
+            "n2304-kmax4096" if !fb => [
                 (Form::Register, 207_688, true),
                 (Form::Transfer, 251_608, true),
                 (Form::Burn, 251_608, true),
                 (Form::DiscloseSender, 207_688, true),
                 (Form::DiscloseReceiver, 207_688, true),
                 (Form::Transfer0, 251_608, true),
-            ]
-        } else if v3 {
-            [
+            ],
+            "n2048-kmax1024" => [
                 (Form::Register, 190_458, true),
                 (Form::Transfer, 235_470, true),
                 (Form::Burn, 234_744, true),
                 (Form::DiscloseSender, 190_458, true),
                 (Form::DiscloseReceiver, 190_458, true),
                 (Form::Transfer0, 234_744, true),
-            ]
-        } else {
-            [
+            ],
+            // THE preset at 7-byte elements, MAX_PROOF_PQZH 327,680 (owner 2026-10-23)
+            "n2560-kmax16384" => [
+                (Form::Register, 233_289, true),
+                (Form::Transfer, 302_743, true),
+                (Form::Burn, 301_896, true),
+                (Form::DiscloseSender, 233_289, true),
+                (Form::DiscloseReceiver, 233_289, true),
+                (Form::Transfer0, 302_743, true),
+            ],
+            _ => [
                 (Form::Register, 204_978, true),
                 (Form::Transfer, 264_510, false),
                 (Form::Burn, 263_784, false),
                 (Form::DiscloseSender, 204_978, true),
                 (Form::DiscloseReceiver, 204_978, true),
                 (Form::Transfer0, 263_784, false),
-            ]
+            ],
         };
         assert_eq!(expect.map(|e| e.0), RELS);
         for (f, max, fits) in expect {
@@ -874,11 +881,12 @@ mod tests {
             assert_eq!(cs::form_of(f.op(), f.stmt_len()), Some(f));
         }
         assert!([0, 6, 7, 255].iter().all(|&op| cs::form_of(op, 0).is_none()));
-        // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound (v3 = the pre-review H-3 table,
-        // measured max_len_exact in runs/l16-txm-*; set (a): runs/c8-a-sizes.jsonl); v3's built shapes (M <= 4)
-        // within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above; set (a): every shape above MAX_PROOF_PQZH
-        let multi = if b {
-            [
+        // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound (n2048-kmax1024 = the pre-review H-3
+        // table, measured max_len_exact in runs/l16-txm-*; the others: runs/c8*-sizes.jsonl); built shapes (M <= 4)
+        // within MAX_PROOF_PQZH and MAX_INPUT except n2048-kmax1024 none above and the fallback build's (all above
+        // MAX_PROOF_PQZH); the oversize ones (M = 8, 16) above
+        let multi = match set {
+            "n2304-kmax4096" if !fb => [
                 ((1, true), 251_608, 344_925),
                 ((1, false), 251_608, 326_365),
                 ((2, true), 252_328, 364_333),
@@ -889,9 +897,8 @@ mod tests {
                 ((8, false), 296_248, 519_357),
                 ((16, true), 387_688, 816_621),
                 ((16, false), 384_088, 792_541),
-            ]
-        } else if v3 {
-            [
+            ],
+            "n2048-kmax1024" => [
                 ((1, true), 235_470, 318_547),
                 ((1, false), 234_744, 301_309),
                 ((2, true), 235_470, 335_187),
@@ -902,9 +909,20 @@ mod tests {
                 ((8, false), 279_756, 478_289),
                 ((16, true), 372_684, 754_513),
                 ((16, false), 369_054, 732_451),
-            ]
-        } else {
-            [
+            ],
+            "n2560-kmax16384" => [
+                ((1, true), 302_743, 406_300),
+                ((1, false), 302_743, 385_692),
+                ((2, true), 302_743, 427_036),
+                ((2, false), 302_743, 406_300),
+                ((4, true), 303_590, 469_355),
+                ((4, false), 302_743, 447_516),
+                ((8, true), 373_044, 642_233),
+                ((8, false), 372_197, 619_882),
+                ((16, true), 513_646, 989_683),
+                ((16, false), 509_411, 962_920),
+            ],
+            _ => [
                 ((1, true), 264_510, 357_827),
                 ((1, false), 263_784, 338_541),
                 ((2, true), 264_510, 376_515),
@@ -915,13 +933,13 @@ mod tests {
                 ((8, false), 324_042, 547_151),
                 ((16, true), 445_284, 874_217),
                 ((16, false), 441_654, 850_107),
-            ]
+            ],
         };
         for ((m, aud), max, input) in multi {
             let r = Rel::Multi { m, aud };
             assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
-            // preset B: every built shape within MAX_PROOF_PQZH; M = 4 auditor on above today's MAX_INPUT (512 KiB in 8d)
-            let fits = if b { m <= 4 && !(m == 4 && aud) } else { v3 && m <= 4 };
+            // every built shape within the set's limits, except the fallback build's (THE preset at n2304-kmax4096)
+            let fits = m <= 4 && !(set == "n2304-kmax4096" && fb);
             assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, fits, "M {m} {aud}");
             assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
         }

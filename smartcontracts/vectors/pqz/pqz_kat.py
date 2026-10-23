@@ -16,7 +16,8 @@ together. Public data only: nothing here is constant-time.
 
 Parameter set (owner 2026-10-21: one per build): PQZ_SET=<set> (default n2048-kmax1024, the v3 set, whose files are
 next to this script); the set's constants come from pqz-core/params/sets/<set>/set.json (gen_set.py), its files from
-<set>/ next to this script. A set without PQZH (every set but n2048-kmax1024 until plan 5h Task 8c) has PQZL files only.
+<set>/ next to this script. PQZH files exist for every set whose set.json says pqzh (plan 5h Task 8c part 2: its preset,
+MAX_PROOF_PQZH and MAX_INPUT from set.json too); a set without PQZH has PQZL files only.
 """
 import glob
 import hashlib
@@ -875,8 +876,8 @@ def check_c_keys(path, log):
 
 
 # ---------------------------------------------------------------- precompile decoder (pqz-stmt decode_input)
-MAX_INPUT = 393216  # D5
-MAX_PROOF = {PQZL_ID: 98304, PQZH_ID: 262144}
+MAX_INPUT = _S["max_input"]  # D5: 393,216 at n2048-kmax1024; 524,288 at the other sets (plan 5h Task 8c part 2)
+MAX_PROOF = {PQZL_ID: 98304, PQZH_ID: _S["max_proof_pqzh"]}  # PQZH: 262,144; n2560-kmax16384 327,680 (owner 2026-10-23)
 REASON = {"length": "Length", "opTag does not belong to op": "OpTag", "unknown proofSystemId": "ProofSystemId",
           "fee >= 2^64": "Fee", "amount >= 2^64": "Amount", "salt word not 16 zero bytes || salt": "Salt",
           "auditorOn does not match the length": "AuditorOn", "coefficient >= q": "Coefficient",
@@ -921,10 +922,25 @@ def decode_input(b):
 IDS = {"pqzl": PQZL_ID, "pqzh": PQZH_ID} if HAS_PQZH else {"pqzl": PQZL_ID}  # the ids with proofs in the set's files
 STATEMENT_FILES = ["statement_transfer.json", "statement_burn.json", "statement_refresh.json",
                    "statement_register.json", "statement_disclose.json"]
-LIGERO = {"n": 32756, "k": 817, "ell": 695, "t": 121, "pow_bits": 16, "max_proof": 262144}  # D3 preset, never read
-# the PQZH verifier's exact length bound per form at THE preset (decisions.md CTR-PQZ-10, D5; R_TX0 = R_BURN's m)
-LIGERO_MAX = {"TRANSFER": 235470, "TRANSFER0": 234744, "BURN": 234744, "REFRESH": 234744, "REGISTER": 190458,
-              "DISCLOSE-SENDER": 190458, "DISCLOSE-RECEIVER": 190458, "DISCLOSE-AUDITOR": 190458}
+# the set's PQZH preset (set.json pqzh_preset, from set.toml; n2048-kmax1024: THE preset of the D3 id), never read from
+# the vectors; F_q elements of EB = ceil(LOG2Q / 8) bytes (6 at n2048-kmax1024 and n2304-kmax4096, 7 at n2560-kmax16384)
+_P = _S.get("pqzh_preset") or {"n": 0, "k": 0, "t": 0, "ell": 0}
+LIGERO = {"n": _P["n"], "k": _P["k"], "ell": _P["ell"], "t": _P["t"], "pow_bits": 16, "max_proof": MAX_PROOF[PQZH_ID]}
+EB = (LOG2Q + 7) // 8
+# the PQZH verifier's exact length bound per form at the set's preset (pqzh-ligero ligero.rs `limits_exact`; decisions.md
+# CTR-PQZ-10, D5), per op 7 shape (M, auditorOn) (n2048-kmax1024: pqzh-ligero.md §15.2, H2)
+_LIGERO_MAX = {
+    "n2048-kmax1024": ((235470, 234744, 234744, 190458), {(1, 1): 235470, (1, 0): 234744, (2, 1): 235470, (2, 0): 235470,
+                                                          (4, 1): 236196, (4, 0): 235470}),
+    "n2304-kmax4096": ((251608, 251608, 251608, 207688), {(1, 1): 251608, (1, 0): 251608, (2, 1): 252328, (2, 0): 251608,
+                                                          (4, 1): 253048, (4, 0): 252328}),
+    "n2560-kmax16384": ((302743, 302743, 301896, 233289), {(1, 1): 302743, (1, 0): 302743, (2, 1): 302743,
+                                                           (2, 0): 302743, (4, 1): 303590, (4, 0): 302743})}
+_lm = _LIGERO_MAX.get(SET, ((0, 0, 0, 0), {}))
+# (TRANSFER, TRANSFER0, BURN = REFRESH, REGISTER = the disclosures)
+LIGERO_MAX = {"TRANSFER": _lm[0][0], "TRANSFER0": _lm[0][1], "BURN": _lm[0][2], "REFRESH": _lm[0][2],
+              "REGISTER": _lm[0][3], "DISCLOSE-SENDER": _lm[0][3], "DISCLOSE-RECEIVER": _lm[0][3],
+              "DISCLOSE-AUDITOR": _lm[0][3]}
 _memo = {}
 
 
@@ -1122,8 +1138,8 @@ MULTI_FILE = "statement_transfer_multi.json"
 # all-decoy row, a group-boundary row (real legs 3 and 4: groups 0 and 1)
 MULTI_CASES = [(f"M{m}-{'on' if a else 'off'}", m, a) for a in (1, 0) for m in (1, 2, 4, 8)] + \
     [("M2-off-two-real", 2, 0), ("M4-off-decoys", 4, 0), ("M8-on-boundary", 8, 1)]
-# the PQZH verifier's exact length bound per op 7 shape at THE preset (pqzh-ligero.md §15.2, H2)
-LIGERO_MAX_MULTI = {(1, 1): 235470, (1, 0): 234744, (2, 1): 235470, (2, 0): 235470, (4, 1): 236196, (4, 0): 235470}
+# the PQZH verifier's exact length bound per op 7 shape at the set's preset (_LIGERO_MAX above)
+LIGERO_MAX_MULTI = _lm[1]
 
 
 def multi_rows(d):
@@ -1226,18 +1242,18 @@ def check_multi(j, d):
 
 def proof_framing(idn, form, proof, params, row_max=None, bound=None):
     """what can be checked of a proof without verifying it: length within MAX_PROOF(id), PQZL ends in the coder's
-    final 1-bit (last byte != 0), PQZH: test polynomials w, q, h canonical (6-byte BE < q), the exact bound."""
+    final 1-bit (last byte != 0), PQZH: test polynomials w, q, h canonical (EB-byte BE < q), the exact bound."""
     bad = []
     if not 1 <= len(proof) <= MAX_PROOF[IDS[idn]]:
         bad.append(f"{form}: proof length {len(proof)}")
     if idn == "pqzl" and proof[-1] == 0:
         bad.append(f"{form}: PQZL proof ends in a zero byte")
     if idn == "pqzh":
-        cmp(bad, "PQZH params (D3 preset)", {k: params[k] for k in LIGERO}, LIGERO)
+        cmp(bad, "PQZH params (the set's preset)", {k: params[k] for k in LIGERO}, LIGERO)
         k, ell = params["k"], params["ell"]
         ne = 4 * (2 * (2 * k - 1) + (2 * k - 1 - ell))
-        if len(proof) <= 32 + 6 * ne + 8 or any(int.from_bytes(proof[32 + 6 * i:38 + 6 * i], "big") >= Q
-                                                 for i in range(ne)):
+        if len(proof) <= 32 + EB * ne + 8 or any(int.from_bytes(proof[32 + EB * i:32 + EB * (i + 1)], "big") >= Q
+                                                  for i in range(ne)):
             bad.append(f"{form}: PQZH test polynomials not canonical")
         if row_max is not None and not (len(proof) <= row_max == (bound or LIGERO_MAX[form]) <= LIGERO["max_proof"]):
             bad.append(f"{form}: max_proof_len {row_max}")

@@ -6,7 +6,7 @@
   "what": "supersedes n2560-kmax16384 as the approved set (owner, progress.md 2026-10-21); the default set of the pqzl crate"
  },
  "core_only": false,
- "pqzh": false,
+ "pqzh": true,
  "pqz_delta": 1.00366,
  "kmlwe_min": 36,
  "d": 64,
@@ -53,5 +53,21 @@
   },
   "bundle": 18736,
   "bundle0": 18608
+ },
+ "max_proof_pqzh": 262144,
+ "max_input": 524288,
+ "pqzh_preset": {
+  "radices": [
+   2,
+   7,
+   17,
+   19,
+   43,
+   431
+  ],
+  "n": 45752,
+  "k": 952,
+  "t": 120,
+  "ell": 831
  }
 }

@@ -7,6 +7,15 @@ q = 4398046510889                 # 2^42 - 215
 pqz_delta = 1.00366               # the v3 specs' (pqzl/params/*.sage); no kmlwe_min: LaZer's default hiding rank (33)
 pqzh = true                       # PQZH (Ligero over this q) is built for this set
 frozen = true                     # its codegen headers are the record: make.sh codegen only checks they reproduce
+max_input = 393216                # pqz-stmt MAX_INPUT (D5), the frozen set's (the contracts' until plan 5h Task 8d)
+
+[pqzh_preset]                     # PQZH's Ligero preset: gen_set.py writes pqzh_set.rs (+ q - 1's factors, generator, non-square)
+description = "THE preset (owner 2026-10-14 (a), the D3 id), soundness depends on n, k only (ligero_params.py)"
+radices = [2, 19, 43, 431]        # FFT radices, each dividing q - 1
+n = 32756                         # code length (on the coset 3 H_n)
+k = 817                           # message length (H_k)
+t = 121                           # column queries
+max_proof = 262144                # MAX_PROOF_PQZH (B): the precompile's and the prover's proof limit
 
 [approval]
 date = "2026-10-07"

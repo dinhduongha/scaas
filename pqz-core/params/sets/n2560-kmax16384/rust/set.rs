@@ -49,3 +49,7 @@ pub(crate) const BARX: u32 = 104;
 pub(crate) const MUX: u64 = 18_014_399_186_450_569;
 /// 30-bit CRT primes of the specialised verifier (pqz_sv.c): P / 2 above its largest sum
 pub(crate) const SV_NP: usize = 5;
+/// MAX_PROOF(PQZH id): the precompile's and the PQZH prover's proof limit (set.toml [pqzh_preset] max_proof)
+pub(crate) const MAX_PROOF_PQZH: usize = 327_680;
+/// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)
+pub(crate) const MAX_INPUT: usize = 524_288;

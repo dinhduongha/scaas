@@ -6,7 +6,7 @@
 // precompile. The Rust backend (default) proves M = 8 too (port plan Task 12); the module's m8_refused() tells which.
 // Prints JSON lines; exit 1 on any difference.
 //   node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
-// A parameter set without PQZH (every set but n2048-kmax1024 until plan 5h Task 8c): its directory has no
+// A parameter set without PQZH (none of the sets with pqz-ffi since plan 5h Task 8c part 2): its directory has no
 // proof_pqzh.json, and only the PQZL id is replayed.
 import { existsSync, readFileSync } from 'node:fs';
 

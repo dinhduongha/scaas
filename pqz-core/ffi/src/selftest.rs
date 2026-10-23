@@ -12,7 +12,7 @@
 //! `smartcontracts/vectors/pqz/proof_<id>.json` (proved with `RND`; build.rs reads it, plan D9: no copy; written by
 //! `pqz-vectors`, `tests/ffi.rs` `selftest_vectors` checks a fresh prove equals it); invalid = the same proof under the
 //! statement with the last message byte flipped. Frozen with the vectors (`selftest.json`, P6e Task 11).
-//! A build without PQZH (feature `pqzh` off: every parameter set but n2048-kmax1024 until plan 5h Task 8c) has no
+//! A build without PQZH (feature `pqzh` off: a parameter set without PQZH) has no
 //! Ligero FFT (`fft` empty, `fft_ok` 0) and no PQZH proof (both PQZH results 0); the vectors of its set record that.
 use std::sync::OnceLock;
 

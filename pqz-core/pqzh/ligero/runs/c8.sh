@@ -1,6 +1,6 @@
 #!/bin/sh
 # Plan 5h Task 8c (PQZH at the parameter set's q): per-set test round, no timing. Run under the machine lock:
-#   scripts/capped pqz-core/pqzh/ligero/runs/c8.sh <tag> <set>        (set: n2048-kmax1024 | n2304-kmax4096)
+#   scripts/capped pqz-core/pqzh/ligero/runs/c8.sh <tag> <set>        (set: a set with PQZH, e.g. n2560-kmax16384)
 # 1. cargo test --release (bench, the set)  2. the production lib + unit tests (--no-default-features)
 # 3. ligero_kat setup (proof keccak / FNV of every relation, seeds 0 and 1)  4. v3 only: the vectors replay and the
 # comparison with the baseline runs/c8-base-kat.jsonl (byte identity)
@@ -9,13 +9,16 @@ cd "$(dirname "$0")/.."
 tag=$1
 set=$2
 f="--features set-$set"
+# per-set cargo target (concurrent rounds / gates of other sets; plan 5h Task 8c part 2)
+export CARGO_TARGET_DIR=$(pwd)/target/$set
+T=$CARGO_TARGET_DIR/release
 cargo test --release --offline $f -- --test-threads 1 > runs/$tag-tests.txt 2>&1 || { echo "tests FAILED: runs/$tag-tests.txt"; exit 1; }
 cargo test --release --offline --no-default-features $f --lib > runs/$tag-nobench.txt 2>&1 || { echo "nobench FAILED"; exit 1; }
 cargo build --release --offline $f --bin ligero_kat 2> runs/$tag-kat-build.txt || exit 1
-target/release/ligero_kat setup > runs/$tag-kat.jsonl || exit 1
+$T/ligero_kat setup > runs/$tag-kat.jsonl || exit 1
 grep -c '"verify": true' runs/$tag-kat.jsonl
 if [ "$set" = n2048-kmax1024 ]; then
-  python3 -I runs/replay_vectors.py target/release/ligero_kat > runs/$tag-replay.txt || { echo "replay FAILED"; exit 1; }
+  python3 -I runs/replay_vectors.py $T/ligero_kat > runs/$tag-replay.txt || { echo "replay FAILED"; exit 1; }
   tail -1 runs/$tag-replay.txt
   python3 -I -c "
 import json, sys

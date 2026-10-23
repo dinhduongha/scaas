@@ -5,7 +5,8 @@
 //! compiler_builtins provides mem*). Then the symbol scan (../pqzl/check_symbols.sh) on the archive: no malloc,
 //! stdio, libm, GMP, MPFR. Always: the self-test proofs from the REGISTER rows of
 //! smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!); for a parameter set other than
-//! n2048-kmax1024 from smartcontracts/vectors/pqz/<set>/proof_pqzl.json, no PQZH (compiled out until plan 5h Task 8c).
+//! n2048-kmax1024 from smartcontracts/vectors/pqz/<set>/proof_{pqzl,pqzh}.json (PQZH: every set with it, plan 5h Task 8c
+//! part 2; a build without feature `pqzh` compiles an empty PQZH proof).
 //! A missing proof_pqzl.json fails the build (8b review m4: never a silently empty self-test proof), except with
 //! PQZ_VECTORS_BOOTSTRAP=1, which vectors/run.sh write sets for its first build only (pqz-vectors then writes the
 //! vectors and the rebuild compiles them in; --check flags stale self-test proofs).
