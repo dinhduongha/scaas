@@ -1230,10 +1230,10 @@ numbers. No timing was run: verify p99 at set (a) is not measured (v3 wasm32 15�
   radices 7 / 17 of its q − 1: n 45,752, k 952, t 119, R_TX bound 250,512, op 7 M = 4 251,940, ≈ 5× fewer prover
   products [model; needs radix-7 / 17 FFT stages and a per-set preset]; (C) raise the limit. Debits cannot be carried
   by one 2^24 transaction at set (a) anyway (calldata ≈ 287–290 KB > 261,909 B; PQZH.md).
-- 16k: crate build when Task 8b's set directory exists (part 2); model only until then (debit bounds ≈ 302–304 KB,
-  above 262,144: the B / A / C question is open for that set, see §16.4 and the 16k `PQZH.md`).
-- `pqz-ffi` / `pqz-vectors` / `gate.sh` set forwarding, the PQZH id per set (8d), `G_op` calibration and verify timing at
-  the new sets.
+- ~~16k crate build and its B / A / C question~~ (resolved in part 2, §16.5: n2560-kmax16384 built, owner 2026-10-23
+  chose C — `MAX_PROOF_PQZH` 327,680 — and t = 122).
+- ~~`pqz-ffi` / `pqz-vectors` / `gate.sh` set forwarding~~ (part 2, §16.5). Open: the PQZH id per set (8d), the node's
+  input limit (8d), `G_op` calibration and verify timing at the new sets.
 
 ### 16.4 Set (a) preset B and the fallbacks (part 1b, owner 2026-10-22)
 
@@ -1268,3 +1268,21 @@ as fallbacks (2026-10-22). Branch `pqz-8c`, raw files `pqz-core/pqzh/ligero/runs
 Debits still need a per-transaction cap ≥ ≈ 17.8 M (calldata 274.7–277.3 KB > 261,909). The 16k set has no extra
 small radix: the search finds no proven preset below ≈ 299.6 KB there, so its B / A / C question stays open (16k
 `PQZH.md`).
+
+### 16.5 PQZH per set through the generator (part 2, 2026-10-23)
+
+Branch `pqz-8c2`, raw files `pqz-core/pqzh/ligero/runs/c8c-*`.
+
+1. **Generator.** `params/sets/<set>/set.toml` `[pqzh_preset]` (radices, n, k, t, `max_proof`) is the only input;
+   `gen_set.py` writes `pqzh_set.rs` (q − 1's factors, smallest generator, smallest non-square, checked) and
+   `MAX_PROOF_PQZH` / `MAX_INPUT` into `rust/set.rs` (pqz-stmt) and `set.json`. The generated files of n2048-kmax1024 and
+   n2304-kmax4096 have the hand-written constants byte for byte (header comment regenerated, owner-accepted).
+2. **n2560-kmax16384:** THE preset's radices and n / k with t = 122 (owner 2026-10-23; 127.55 bits total, query 129.43)
+   and `MAX_PROOF_PQZH` 327,680 for this set only (owner 2026-10-23, option C): bounds 234,238 (R_REG / R_DS / R_DR),
+   303,412–305,120 (debits); honest proofs ≤ 302,112; native = wasm32, 0 constant-time reports.
+3. **Limits per set:** pqz-stmt `MAX_INPUT` 393,216 at n2048-kmax1024, 524,288 at the other sets (owner 2026-10-23);
+   the node's `PQZ_FFI_MAX_INPUT` stays 393,216 until 8d.
+4. **Wiring:** pqz-ffi's `set-<set>` forwards to pqzh-ligero for every set with PQZH; pqz-vectors / `pqz_kat.py` take
+   the preset, the limits and the element width (EB) from the set; the gate runs Ligero's tests with
+   `--features set-<set>` and the Ligero cross-check (`xcheck/ligero.sh`) at every PQZH set (the STARK one at
+   n2048-kmax1024 only). n2048-kmax1024 proofs and vectors unchanged byte for byte.
