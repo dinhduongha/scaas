@@ -1,6 +1,6 @@
 {
  "file": "selftest.json",
- "description": "OP_SELFTEST (P6e D13; pq-zether.md 9.1): input exactly 06 00000000, output keccak256(kat_digest || u8(pqzl_valid) || u8(pqzl_invalid) || u8(pqzh_valid) || u8(pqzh_invalid)); kat_digest = keccak256(a_digest || keccak256(pk) || keccak256(u || v) || M (16 bytes) || keccak256(fft) || u8(fft_ok)): a_digest = matrix.json a_keccak; pk = KeyGen(seed_key); u || v = Enc(pk, digits(msg_value), seed_enc); M = Dec; fft = Ligero's forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, 6-byte BE elements, fft_ok = the inverse gives a back. The four results: the precompile path on the REGISTER statement (opTag || id || keccak256(SCAAS-PQZ-SELFTEST-V1) || pk) with the REGISTER proof of each id (rnd32 = 0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). Computed by pqz-ffi (selftest::report, the hash also through pqz_precompile on 06 00000000), whose build.rs compiles in these REGISTER proofs. This set's build has no PQZH (until plan 5h Task 8c): fft is empty (n 0, ok 0) and both PQZH results are 0.",
+ "description": "OP_SELFTEST (P6e D13; pq-zether.md 9.1): input exactly 06 00000000, output keccak256(kat_digest || u8(pqzl_valid) || u8(pqzl_invalid) || u8(pqzh_valid) || u8(pqzh_invalid)); kat_digest = keccak256(a_digest || keccak256(pk) || keccak256(u || v) || M (16 bytes) || keccak256(fft) || u8(fft_ok)): a_digest = matrix.json a_keccak; pk = KeyGen(seed_key); u || v = Enc(pk, digits(msg_value), seed_enc); M = Dec; fft = Ligero's forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, 6-byte BE elements, fft_ok = the inverse gives a back. The four results: the precompile path on the REGISTER statement (opTag || id || keccak256(SCAAS-PQZ-SELFTEST-V1) || pk) with the REGISTER proof of each id (rnd32 = 0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). Computed by pqz-ffi (selftest::report, the hash also through pqz_precompile on 06 00000000), whose build.rs compiles in these REGISTER proofs.",
  "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "input": "0600000000",
  "seed_key": "5151515151515151515151515151515151515151515151515151515151515151",
@@ -13,18 +13,23 @@
  "ct_keccak": "bde5ec4ce39d6ff9d7d3f241360b641c049733468baea17c79bb937256a340f0",
  "M": [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
  "fft": {
-  "n": 0,
-  "keccak": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
-  "ok": false
+  "n": 1634,
+  "keccak": "735af2516e6143941958a78d214a93515e3e57340cdfa464f541804ad7d00b80",
+  "ok": true
  },
- "kat_digest": "a6220ab0c93422b628d993815cd059f08dc8574c8d9e94bca7a8d0aa875b41c1",
+ "kat_digest": "c41aa6d883d611f4761f63e3629e1b21a4b67d6072c9e3b887ccb97a5c2dadaf",
  "register": {
   "pqzl": {
    "proof_keccak": "569b10683672f028fc58d12803e74c79afda7ffd4492be56a15272753ea793dd",
    "valid": 1,
    "invalid": 0
+  },
+  "pqzh": {
+   "proof_keccak": "618d807a13ec56778bfddf8ec49ece26966bfd7c20334ac063e647d4f3b4f9db",
+   "valid": 1,
+   "invalid": 0
   }
  },
- "results": [1, 0, 0, 0],
- "hash": "70ec3b7c3c9d9d8cdc5f5fa11b658fa37e1dd29a5ba239f6e3fece7414c3d2a8"
+ "results": [1, 0, 1, 0],
+ "hash": "23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0"
 }
