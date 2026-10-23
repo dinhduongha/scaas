@@ -7,7 +7,8 @@
 # label: optional, default the set's name (owner 2026-10-23: nothing to remember — re-running the same command resumes;
 # progress in runs/gate/<set>-progress.txt). A run at another tree starts over and overwrites that label's logs.
 # runs/gate/last names the latest run (set, label, start, status running / PASS / FAIL; owner 2026-10-23: a resumed
-# session continues the right set): `scripts/capped pqz-core/gate.sh --last` re-runs it with its set and label.
+# session continues the right set): `scripts/capped pqz-core/gate.sh --last` re-runs it with its set and label;
+# runs/gate/last-<set> is each set's latest run, `gate.sh --last <set>` re-runs that one (concurrent gates).
 # PQZ_SET: the parameter set (owner 2026-10-21: pqz-core/params/sets/<set>/, one set per library build; default
 # n2304-kmax4096, the frozen v3 set is n2048-kmax1024); named in the summary.
 # Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, the PQZL
@@ -19,25 +20,40 @@
 # smartcontracts/vectors/pqz/ (n2048-kmax1024) or smartcontracts/vectors/pqz/<set>/ (pqz-vectors, pqz_kat.py, fuzz
 # seeds and the Rust tests read the set's). PQZH (Ligero over F_q) exists for the sets whose set.json says pqzh (n2048-kmax1024 until plan 5h Task 8c): for
 # another set the Ligero tests and the STARK / Ligero cross-check are "skipped (PQZH ...)" and pqz-ffi / pqz-vectors
-# are built without PQZH (owner ruling 2026-10-21: skipped, not PARTIAL). A core_only set (set.toml, e.g. A') has no
+# are built without PQZH (owner ruling 2026-10-21: skipped, not PARTIAL). A core_only set (set.toml, e.g. n2816-kmax65536) has no
 # pqz-stmt / precompile build: vectors, ffi, cargo, xcheck and fuzz are "skipped (core_only)". Exit 1 if any step fails.
 # Resume (owner 2026-10-23, every set): runs/gate/<label>-state records each step and each part of a long step (diff,
 # fnv, vectors, ffi, rust, cargo, fuzz; resume.sh) that passed; re-running the same label at the same set and tree
-# (HEAD + uncommitted changes, logs and the fuzz corpus excluded) skips them, so an interrupted gate restarts near
-# where it stopped. A code change re-runs everything; GATE_FRESH=1 ignores the state. Milestones: every step and part
-# logs start / ok (duration) / FAILED / resumed with a timestamp to runs/gate/<label>-progress.txt (tail -f it).
+# skips them, so an interrupted gate restarts near where it stopped. The tree (GATE_TREE) is the file contents (binary
+# files included, this script and resume.sh too; logs and the fuzz corpus excluded), the fuzz seconds and the
+# variables in GATE_ENV that change what a step does. Any other tree clears the label's state, so every part re-runs
+# and rewrites its outputs (they are named by the label only); GATE_FRESH=1 does the same. --last restores the set,
+# the label, the fuzz seconds and GATE_ENV. Milestones: every step and part logs start / ok (duration) / FAILED /
+# resumed with a timestamp to runs/gate/<label>-progress.txt (tail -f it).
 set -u
 cd "$(dirname "$0")"
+# the environment the steps read (8b review I3 / m6): part of the resume key, recorded in runs/gate/last
+GATE_ENV="ZN PQZ_ARENA_MB PQZL N PQZ_FUZZ_MODE CC CLANG WASM_LD WASM_SIMD SV OVERSIZE"
 if [ "${1:-}" = --last ]; then
-  [ -f runs/gate/last ] || { echo "gate.sh --last: no runs/gate/last" >&2; exit 2; }
-  PQZ_SET=$(sed -n 's/^set=//p' runs/gate/last)
-  set -- "$(sed -n 's/^label=//p' runs/gate/last)"
-  echo "gate.sh --last: set $PQZ_SET, label $1"
+  LF=runs/gate/last; [ -n "${2:-}" ] && LF=runs/gate/last-$2 # --last <set>: that set's latest run (concurrent gates)
+  [ -f "$LF" ] || { echo "gate.sh --last: no $LF" >&2; exit 2; }
+  PQZ_SET=$(sed -n 's/^set=//p' "$LF")
+  set -- "$(sed -n 's/^label=//p' "$LF")" "$(sed -n 's/^fz=//p' "$LF")"
+  for v in $GATE_ENV; do
+    if grep -q "^env $v=" "$LF"; then export "$v=$(sed -n "s/^env $v=//p" "$LF")"; else unset "$v"; fi
+  done
+  echo "gate.sh --last: set $PQZ_SET, label $1, fuzz seconds ${2:-60}"
 fi
 PQZ_SET=${PQZ_SET:-n2304-kmax4096}
 L=${1:-$PQZ_SET} FZ=${2:-60}
 R=runs/gate/$L
 export PQZ_SET
+# every build / output path of the steps is per set (owner 2026-10-23: the four sets' gates run at the same time from
+# one worktree, one scripts/capped slot each): the C builds under pqzl/build/<set>/ (build.sh and the harness scripts
+# read PQZ_BUILD_TAG), the pqz-ffi / vectors / fuzz / xcheck cargo targets and work files under .../target/<set>/,
+# build/fuzz-<set>/; logs are named by the label (default the set)
+export PQZ_BUILD_TAG=$PQZ_SET
+PB=build/$PQZ_SET
 [ -f "params/sets/$PQZ_SET/pqz_set.h" ] || { echo "PQZ_SET=$PQZ_SET: no params/sets/$PQZ_SET" >&2; exit 2; }
 V3=n2048-kmax1024
 mkdir -p runs/gate
@@ -47,19 +63,26 @@ GATE_STATE=$(pwd)/$R-state
 [ "${GATE_FRESH:-0}" = 1 ] && rm -f "$GATE_STATE"
 TOP=$(git rev-parse --show-toplevel)
 # the tree = file contents, not the commit (committing does not invalidate finished parts): the index's blob ids, the
-# unstaged changes and the untracked files, without the logs, the fuzz corpus and the files that change no tested code
-# (this script, resume.sh, .gitignore, *.md)
+# unstaged changes (--binary: a binary file's new bytes, not just "differ"; 8b review I3) and the untracked files,
+# without the logs, the fuzz corpus and the files that change no tested code (.gitignore, *.md); then the fuzz seconds
+# and GATE_ENV
 tree() {
-  set -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus' ':(exclude)pqz-core/gate.sh' \
-    ':(exclude)pqz-core/resume.sh' ':(exclude,glob)**/.gitignore' ':(exclude,glob)**/*.md'
+  set -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus' ':(exclude,glob)**/.gitignore' \
+    ':(exclude,glob)**/*.md'
   git ls-files -s -- "$@"
-  git diff -- "$@"
+  git diff --binary --no-ext-diff --no-textconv -- "$@"
   git ls-files -o --exclude-standard -z -- "$@" | xargs -0r sha256sum
+  echo "fz=$FZ"
+  for v in $GATE_ENV; do echo "$v=$(printenv "$v" || echo '<unset>')"; done
 }
 GATE_TREE=$PQZ_SET-$( (cd "$TOP" && tree) | sha256sum | cut -c1-16)
+# a state of another tree is dropped whole: a resumed part never pairs "passed" with another tree's output files
+if [ -f "$GATE_STATE" ] && grep -qv " $GATE_TREE\$" "$GATE_STATE"; then rm -f "$GATE_STATE"; fi
 GATE_LOG=$(pwd)/$R-progress.txt
 export GATE_STATE GATE_TREE GATE_LOG
-printf 'set=%s\nlabel=%s\nstarted=%s\nstatus=running\n' "$PQZ_SET" "$L" "$(date +%FT%T)" > runs/gate/last
+{ printf 'set=%s\nlabel=%s\nfz=%s\nstarted=%s\nstatus=running\n' "$PQZ_SET" "$L" "$FZ" "$(date +%FT%T)"
+  for v in $GATE_ENV; do printenv "$v" > /dev/null && echo "env $v=$(printenv "$v")"; done; } > "runs/gate/last-$PQZ_SET"
+cp "runs/gate/last-$PQZ_SET" runs/gate/last
 glog "gate $L (set $PQZ_SET) started at $(git rev-parse --short HEAD), tree $GATE_TREE"
 # the summary also goes to a file (review round 2: the PQZL Rust port's gate PASS line was on stdout only)
 say() { echo "$*" | tee -a "$R-summary.txt"; }
@@ -85,11 +108,14 @@ NOPQZH="PQZH is not built for set $PQZ_SET until plan 5h Task 8c"
 
 # the pqzl crate's cargo flags for the set (one set-<set> feature, default-features off for a non-default set)
 if [ "$PQZ_SET" = n2304-kmax4096 ]; then NODEF=""; FEAT=""; else NODEF="--no-default-features"; FEAT="sv,set-$PQZ_SET,"; fi
-kat() { (cd pqzl && ./build.sh native && build/native/kat_dump > build/native/kat-pqz.json &&
-  python3 -I kat/check.py "../params/sets/$PQZ_SET/lazer-3330e48-kat.json" build/native/kat-pqz.json); }
+kat() { (cd pqzl && ./build.sh native && $PB/native/kat_dump > $PB/native/kat-pqz.json &&
+  python3 -I kat/check.py "../params/sets/$PQZ_SET/lazer-3330e48-kat.json" $PB/native/kat-pqz.json); }
+# (diff.sh exits 1 when a run does; the z21diff summary must also show its relations crossing the set's own Bsq)
 diffs() { (cd pqzl && CAPPED=env sv/diff.sh "gate-$L" 20 10 2 10 &&
   grep -q '"mismatches": 0, "other_fails": 0' "sv/runs/gate-$L-portable.jsonl" &&
-  ! grep -h '"mismatch": ' "sv/runs/gate-$L-portable.jsonl" "sv/runs/gate-$L-x86v3.jsonl"); }
+  ! grep -h '"mismatch": ' "sv/runs/gate-$L-portable.jsonl" "sv/runs/gate-$L-x86v3.jsonl" &&
+  grep -q '"disagreements": 0, "expect_mismatches": 0, "prove_errors": 0, .*"both_verdicts_every_relation": 1}' \
+    "sv/runs/gate-$L-z21diff.jsonl"); }
 tbox() { (cd pqzl && ./check_tbox_fixes.sh); }
 # the vector tests need the set's vectors; without them (any set but v3 until 8d) tests/common builds one honest row per
 # bench relation, proved by the C core, so the crate also needs feature bench
@@ -107,8 +133,9 @@ for l in sys.stdin:
     if j.get("reason") == "compiler-artifact" and j.get("executable") and j["profile"]["test"]:
         print(j["target"]["kind"][0] + "-" + j["target"]["name"], j["executable"])'
 # C = Rust = wasm32 on the bench proofs: the C core's pqz_bench, the Rust bench and the Rust bench in wasm32 (node) print
-# the same proofs_fnv per relation (2 proofs of each of the 14 relations, mask 16383)
-fnv() { (cd pqzl && part fnv/c sh -c "PQZ_ARENA_MB=2048 build/native/pqz_bench 2 1 16383 > '../$R-fnv-c.jsonl'" &&
+# the same proofs_fnv per relation (2 proofs of each of the 14 relations, mask 16383); a core_only set also the C core
+# in wasm32 (cwasm)
+fnv() { (cd pqzl && part fnv/c sh -c "./build.sh native > /dev/null && PQZ_ARENA_MB=2048 $PB/native/pqz_bench 2 1 16383 > '../$R-fnv-c.jsonl'" &&
   cd rust && part fnv/rust sh -c "CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline $NODEF --features '${FEAT}bench' --bin bench &&
     target/$PQZ_SET/release/bench 2 1 16383 > '../../$R-fnv-rust.jsonl'" &&
   part fnv/wasm sh -c "(cd wasm && CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline --target wasm32-unknown-unknown \
@@ -116,7 +143,14 @@ fnv() { (cd pqzl && part fnv/c sh -c "PQZ_ARENA_MB=2048 build/native/pqz_bench 2
     PQZL_WASM_FILE=wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_wasm.mjs 2 1 16383 > '../../$R-fnv-wasm.jsonl'" &&
   cd ../.. && for x in c rust wasm; do python3 -I -c "$FNVX" "$R-fnv-$x.jsonl" > "$R-fnv-$x.txt" || return 1; done &&
   test "$(wc -l < "$R-fnv-c.txt")" = 14 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
-  cat "$R-fnv-c.txt"); }
+  cat "$R-fnv-c.txt" && if [ "$CORE_ONLY" = True ]; then cwasm; fi); }
+# a core_only set has no pqz-ffi build, whose wasm32 build and replay run the C core in wasm32 at the other sets: here
+# the C core's wasm32 build (its limb path, PQZ_MUL128 0) in its own build directory (not the native build's) must print
+# the native C run's proofs_fnv (8b review I4)
+cwasm() { (cd pqzl && part fnv/cwasm sh -c "B=$PB/cwasm ./build.sh wasm > /dev/null &&
+    PQZ_WASM_FILE=$PB/cwasm/wasm/pqz.wasm PQZ_ARENA_MB=2048 node test/run_wasm.mjs 2 1 16383 \
+    > '../$R-fnv-cwasm.jsonl'") && python3 -I -c "$FNVX" "$R-fnv-cwasm.jsonl" > "$R-fnv-cwasm.txt" &&
+  cmp "$R-fnv-c.txt" "$R-fnv-cwasm.txt" && echo "C core wasm32 = C core native (14 relations)"; }
 # one "<rel> <proofs_fnv>" line per relation of a bench's JSON lines (the C / Rust benches print '": ', the wasm32 one
 # '":'); exit 1 if any line reports fails > 0
 FNVX='import json, sys
@@ -131,10 +165,10 @@ sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
 # pqz-stmt at the set; Ligero's tests where the set has PQZH
 cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --no-default-features --features "set-$PQZ_SET") &&
-  if [ "$PQZH" = True ]; then (cd pqzh/ligero && part cargo/ligero cargo test --release --offline); else echo "Ligero: $NOPQZH"; fi; }
-# a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): restore them afterwards
-fuzz() { fuzz/build.sh && for t in precompile mutate codec; do part "fuzz/$t" fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done &&
-  git checkout -- fuzz/corpus && git clean -fdq fuzz/corpus; }
+  if [ "$PQZH" = True ]; then (cd pqzh/ligero && part cargo/ligero env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline); else echo "Ligero: $NOPQZH"; fi; }
+# a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): with PQZ_BUILD_TAG, run.sh merges
+# into build/fuzz-<set>/corpus/ and only reads fuzz/corpus/
+fuzz() { fuzz/build.sh && for t in precompile mutate codec; do part "fuzz/$t" fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done; }
 
 say "set $PQZ_SET"
 step kat kat
@@ -154,5 +188,8 @@ if [ "$PQZH" = True ]; then step xcheck pqzh/xcheck/run.sh; else skip xcheck "$N
 if [ "$CORE_ONLY" = True ]; then skip fuzz core_only; else step fuzz fuzz; fi
 say "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && echo PASS || echo FAIL )"
 glog "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && echo PASS || echo FAIL )"
-sed -i "s/^status=.*/status=$( [ $fail = 0 ] && echo PASS || echo FAIL ) $(date +%FT%T)/" runs/gate/last
+st="status=$( [ $fail = 0 ] && echo PASS || echo FAIL ) $(date +%FT%T)"
+sed -i "s/^status=.*/$st/" "runs/gate/last-$PQZ_SET"
+# runs/gate/last: only while it still names this run (another set's gate may have started since)
+grep -qx "label=$L" runs/gate/last && grep -qx "set=$PQZ_SET" runs/gate/last && sed -i "s/^status=.*/$st/" runs/gate/last
 exit $fail

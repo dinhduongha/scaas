@@ -5,7 +5,7 @@
 # Paths are relative to the caller's directory; a missing file or an nm failure is an error (STATUS Open 9: the scan
 # used to cd here first and print "symbols ok" over nm's errors). test/check_symbols_neg.sh checks both.
 set -eu
-if [ $# -eq 0 ]; then cd "$(dirname "$0")" && set -- build/native/pqz_*.o; fi
+if [ $# -eq 0 ]; then cd "$(dirname "$0")" && set -- "build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}"/native/pqz_*.o; fi
 for f in "$@"; do [ -f "$f" ] || { echo "check_symbols: no such file: $f" >&2; exit 1; }; done
 NM=${NM:-$(command -v llvm-nm-18 || command -v llvm-nm || echo nm)} # reads ELF and wasm objects
 ALLOWED="memcpy memset __stack_chk_fail __stack_pointer"

@@ -1,9 +1,10 @@
 # Per-part resume for long gate runs (owner 2026-10-23: an interrupted gate restarts near where it stopped, not from
 # its first step). Sourced by gate.sh and the step scripts it calls (pqzl/sv/diff.sh, ffi/run.sh, ffi/vectors/run.sh).
-# gate.sh exports GATE_STATE (runs/gate/<label>-state) and GATE_TREE (the set + HEAD + a hash of the uncommitted
-# changes, logs excluded); `part <name> <cmd…>` runs <cmd…> unless "<name> <GATE_TREE>" is in GATE_STATE, and records it
-# when <cmd…> exits 0. A part's outputs are files named by the gate label, so a skipped part's results are still on
-# disk. Without GATE_STATE (a script run alone) every part runs.
+# gate.sh exports GATE_STATE (runs/gate/<label>-state) and GATE_TREE (the set + a hash of the file contents, the fuzz
+# seconds and the step environment; gate.sh tree()); `part <name> <cmd…>` runs <cmd…> unless "<name> <GATE_TREE>" is in
+# GATE_STATE, and records it when <cmd…> exits 0. A part's outputs are files named by the gate label, so a skipped
+# part's results are still on disk; gate.sh drops a state of any other tree, so they are this tree's. Without
+# GATE_STATE (a script run alone) every part runs.
 # Milestones (owner 2026-10-23): with GATE_LOG set (runs/gate/<label>-progress.txt) every step and part writes a
 # timestamped line when it starts, passes (with its duration), fails (rc, duration) or is resumed.
 glog() { [ -z "${GATE_LOG:-}" ] || echo "$(date +%FT%T) $*" >> "$GATE_LOG"; }

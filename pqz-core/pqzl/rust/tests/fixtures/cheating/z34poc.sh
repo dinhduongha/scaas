@@ -9,12 +9,13 @@
 set -eu
 F=$(cd "$(dirname "$0")" && pwd)
 cd "$F/../../../.." # pqz-core/pqzl
-[ -f build/native/libpqz.a ] || ./build.sh native > /dev/null
-B=build/z34poc
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
+[ -f $PB/native/libpqz.a ] || ./build.sh native > /dev/null
+B=$PB/z34poc
 rm -rf $B/out # never a previous run's (another parameter set's) proofs
 mkdir -p $B/out
 CC=${CC:-clang}
-FL="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -Ibuild/include -Isrc -Ilazer -Iparams"
+FL="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -I$PB/include -Isrc -Ilazer -Iparams"
 sed -e '3a\
 int pqz_z34_mode; /* z34poc: 0 honest, 1 y3 << 2 and no z3 rejection, 2 y4 << 4 and no z4 rejection */' \
   -e 's|^          polyvec_grandom (y3, params->log2stdev3, seed_tbox, dom++);$|&\n          if (pqz_z34_mode == 1) polyvec_lshift (y3, y3, 2);|' \
@@ -28,9 +29,9 @@ $CC -I$B $FL -DPQZ_SV -c src/pqz_lazer.c -o $B/pqz_lazer.o
 for f in pqz_ntt pqz_arena pqz_rel pqz_keys pqz_sv; do $CC $FL -DPQZ_SV -c src/$f.c -o $B/$f.o; done
 rm -f $B/libpqz.a
 ar rcs $B/libpqz.a $B/*.o
-$CC -std=gnu11 -O2 -w -DPQZ_Z34_POC -Ibuild/include -Isrc -o $B/z34poc_prove "$F/z34poc.c" $B/libpqz.a
-$CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/z34poc_verify "$F/z34poc.c" build/native/libpqz.a
+$CC -std=gnu11 -O2 -w -DPQZ_Z34_POC -I$PB/include -Isrc -o $B/z34poc_prove "$F/z34poc.c" $B/libpqz.a
+$CC -std=gnu11 -O2 -w -I$PB/include -Isrc -o $B/z34poc_verify "$F/z34poc.c" $PB/native/libpqz.a
 echo "== cheating prover (patched lnp-tbox.c, $n lines)"
 $B/z34poc_prove prove $B/out
-echo "== production verifiers (build/native/libpqz.a)"
+echo "== production verifiers ($PB/native/libpqz.a)"
 $B/z34poc_verify verify $B/out

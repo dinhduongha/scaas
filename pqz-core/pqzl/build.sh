@@ -3,9 +3,12 @@
 #   ./build.sh native | wasm | all        (outputs in build/)
 #   PQZ_SET=<set> ./build.sh ...           the parameter set, params/sets/<set>/ (default n2304-kmax4096; the frozen v3
 #                                          set n2048-kmax1024); one set per build directory (B=build/<set> to keep several)
+#   PQZ_BUILD_TAG=<tag> ./build.sh ...     the default build directory becomes build/<tag> (gate.sh: the set, so gates of
+#                                          different sets run at the same time); the harness scripts (check_tbox_fixes.sh,
+#                                          sz/, l2dom/, sv/, the cheating-fixture export) read the same variable
 set -eu
 cd "$(dirname "$0")"
-B=${B:-build}
+B=${B:-build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG}} # gate.sh: PQZ_BUILD_TAG = the set, so concurrent gates of different sets never share a build
 mkdir -p $B/include
 CC=${CC:-clang}
 WARN="-Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-sign-compare"

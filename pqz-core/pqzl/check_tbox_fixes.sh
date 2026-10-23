@@ -18,56 +18,57 @@
 # Needs build/native/libpqz.a (./build.sh native). Heavy: run under scripts/capped. Exit 0 = all fixes in place.
 set -eu
 cd "$(dirname "$0")"
-O=build/l2dom/out
-rm -rf "$O" build/sz/fs_bind
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
+O=$PB/l2dom/out
+rm -rf "$O" $PB/sz/fs_bind
 mkdir -p build
 rc=0
 sum=""
 res () { [ "$2" = 0 ] && sum="$sum$1 ok; " || { sum="$sum$1 FAIL; "; rc=1; }; }
 st=0
-sz/build.sh > build/sz-trace.txt 2>&1 || st=1
-grep VERDICT build/sz-trace.txt || echo "sz: no verdict (build/sz-trace.txt)"
+sz/build.sh > $PB/sz-trace.txt 2>&1 || st=1
+grep VERDICT $PB/sz-trace.txt || echo "sz: no verdict ($PB/sz-trace.txt)"
 res P6-SZ $st
 st=0
-l2dom/build.sh "$O" > build/l2dom.txt 2>&1 || st=1
+l2dom/build.sh "$O" > $PB/l2dom.txt 2>&1 || st=1
 for c in honest s_over_A s_over_B tx_over; do
-  ctl=$(sed -n '/^== control/,/^== fixed/p' build/l2dom.txt | grep -c "in-process pqz_verify($c): ACCEPT" || true)
-  prod=$(grep -c "production-lib pqz_verify($c): REJECT" build/l2dom.txt || true)
+  ctl=$(sed -n '/^== control/,/^== fixed/p' $PB/l2dom.txt | grep -c "in-process pqz_verify($c): ACCEPT" || true)
+  prod=$(grep -c "production-lib pqz_verify($c): REJECT" $PB/l2dom.txt || true)
   echo "l2dom $c: control (fix undone) accepts $ctl/1, production rejects $prod/1"
   [ "$ctl" = 1 ] && [ "$prod" = 1 ] || st=1
 done
 res P6-L2 $st
 st=0
-sv/review/review.sh norm > build/z21-norm.txt 2>&1 || st=1
-blk () { sed -n "/^== $1/,/^==/p" build/z21-norm.txt; }
-z21=$(grep -c '^z21_big  prove rc=0' build/z21-norm.txt || true)
+sv/review/review.sh norm > $PB/z21-norm.txt 2>&1 || st=1
+blk () { sed -n "/^== $1/,/^==/p" $PB/z21-norm.txt; }
+z21=$(grep -c '^z21_big  prove rc=0' $PB/z21-norm.txt || true)
 hon=$(blk production | grep -c '^honest   generic ACCEPT  fast ACCEPT$' || true)
 prod=$(blk production | grep -c -e '^z21_big  generic REJECT  fast REJECT$' -e '^z1_over  generic REJECT  fast REJECT$' \
   -e '^w_over   generic REJECT  fast REJECT$' || true)
 ctl=$(blk 'control: z21 term' | grep -c '^z21_big  generic ACCEPT  fast ACCEPT$' || true)
 echo "z21 z21_big: proved $z21/1; production: honest accepted $hon/1, z21_big / z1_over / w_over rejected by both $prod/3;" \
   "control (z21 term removed) accepts z21_big $ctl/1"
-grep '||z21||' build/z21-norm.txt || true
+grep '||z21||' $PB/z21-norm.txt || true
 [ "$z21" = 1 ] && [ "$hon" = 1 ] && [ "$prod" = 3 ] && [ "$ctl" = 1 ] || st=1
 res P6-Z21 $st
 st=0
-if [ -x build/sz/fs_bind ]; then
-  build/sz/fs_bind > build/fs-bind.txt 2>&1 || st=1
-  grep '^P6-FS' build/fs-bind.txt || true
-  grep VERDICT build/fs-bind.txt || { echo "fs_bind: no verdict (build/fs-bind.txt)"; st=1; }
+if [ -x $PB/sz/fs_bind ]; then
+  $PB/sz/fs_bind > $PB/fs-bind.txt 2>&1 || st=1
+  grep '^P6-FS' $PB/fs-bind.txt || true
+  grep VERDICT $PB/fs-bind.txt || { echo "fs_bind: no verdict ($PB/fs-bind.txt)"; st=1; }
 else
-  echo "fs_bind: not built (build/sz-trace.txt)"; st=1
+  echo "fs_bind: not built ($PB/sz-trace.txt)"; st=1
 fi
 res "P6-FS lazer#28" $st
 st=0
-sv/review/review.sh dom > build/dom-trace.txt 2>&1 || st=1
-grep 'shared dom(s)$' build/dom-trace.txt || st=1
-grep -q '^0 shared dom(s)$' build/dom-trace.txt || st=1
+sv/review/review.sh dom > $PB/dom-trace.txt 2>&1 || st=1
+grep 'shared dom(s)$' $PB/dom-trace.txt || st=1
+grep -q '^0 shared dom(s)$' $PB/dom-trace.txt || st=1
 # control (8a review m2): with A-2 undone the same harness must report the shared dom
-sv/review/review.sh domctl > build/dom-trace-control.txt 2>&1 || st=1
-grep -e '^control:' -e 'shared dom(s)$' build/dom-trace-control.txt | sed 's/^/A-2 control: /' || true
-grep -q '^control: A-2 undone on 2 line(s)' build/dom-trace-control.txt || st=1
-grep -q '^[1-9][0-9]* shared dom(s)$' build/dom-trace-control.txt || st=1
+sv/review/review.sh domctl > $PB/dom-trace-control.txt 2>&1 || st=1
+grep -e '^control:' -e 'shared dom(s)$' $PB/dom-trace-control.txt | sed 's/^/A-2 control: /' || true
+grep -q '^control: A-2 undone on 2 line(s)' $PB/dom-trace-control.txt || st=1
+grep -q '^[1-9][0-9]* shared dom(s)$' $PB/dom-trace-control.txt || st=1
 res A-2 $st
 echo "checks: $sum"
 [ $rc = 0 ] && echo "check_tbox_fixes: ok" || echo "check_tbox_fixes: FAIL"

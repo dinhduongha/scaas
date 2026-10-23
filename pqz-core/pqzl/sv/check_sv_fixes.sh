@@ -11,13 +11,14 @@
 # Exit 0 = both fixes in place and both reversions detected.
 set -eu
 cd "$(dirname "$0")/.."
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
 A=${1:-"1 1 0 1 0 1 1 1 1 1"}
 export PQZ_ARENA_MB=${PQZ_ARENA_MB:-2048}
-B=build/svfix
+B=$PB/svfix
 mkdir -p $B
 CC=${CC:-clang}
-F="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -DPQZ_SV -DPQZ_TEST_HOOKS -Ibuild/include -Isrc -Ilazer -Iparams"
-H=build/native
+F="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -DPQZ_SV -DPQZ_TEST_HOOKS -I$PB/include -Isrc -Ilazer -Iparams"
+H=$PB/native
 OLD_SZ='  { uint64_t V[2 * M]; if (!urandom_q (V, 2 * M, seed, dom)) return 0; for (unsigned i = 0; i < LAMBDA / 2; i++) for (unsigned j = 0; j < M; j++) g[(2 * i) * M + j] = V[j], g[(2 * i + 1) * M + j] = V[M + j]; return 1; }'
 sed "s|^  return urandom_q (g, LAMBDA \* M, seed, dom);\$|$OLD_SZ|" src/pqz_sv.c > $B/sv_sz.c
 sed 's|ONE (M + 2 \* (DEG - 1) + 3 + i);|ONE (M + 2 * (DEG - 1) + 3);|' src/pqz_sv.c > $B/sv_l2.c
@@ -28,7 +29,7 @@ for v in tree sz l2; do
   n=$(diff src/pqz_sv.c $src | grep -c '^>' || true)
   if [ $v != tree ] && [ "$n" != 1 ]; then echo "check_sv_fixes $v: revert did not apply ($n lines)"; rc=1; continue; fi
   $CC $F -c $src -o $B/pqz_sv_$v.o
-  $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/pqz_sv_diff_$v test/pqz_sv_diff.c $H/hooks/pqz_rel.o $B/pqz_sv_$v.o \
+  $CC -std=gnu11 -O2 -w -I$PB/include -Isrc -o $B/pqz_sv_diff_$v test/pqz_sv_diff.c $H/hooks/pqz_rel.o $B/pqz_sv_$v.o \
     $H/pqz_lazer.o $H/pqz_ntt.o $H/pqz_arena.o
   # shellcheck disable=SC2086
   $B/pqz_sv_diff_$v $A > $B/$v.jsonl || true

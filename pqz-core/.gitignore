@@ -6,6 +6,7 @@ build/
 lazer_dump-*
 artifact/out/
 runs/gate/last
+runs/gate/last-*
 params/sets/*/.codegen/
 params/sets/*/.solcheck/
 params/sets/*/.e-s1.err

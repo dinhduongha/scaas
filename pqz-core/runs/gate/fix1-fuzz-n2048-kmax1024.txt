@@ -1,0 +1,41 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling keccak v0.1.6
+   Compiling cpufeatures v0.2.17
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/pqzl/rust)
+   Compiling cfg-if v1.0.5
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/ffi)
+   Compiling generic-array v0.14.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling aes v0.8.4
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/pqzh/ligero)
+   Compiling pqz-fuzz v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 15.29s
+-rwxrwxr-x 1 ha ha 14994304 Oct 23 10:44 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/build/fuzz-n2048-kmax1024/codec
+-rwxrwxr-x 1 ha ha 14994312 Oct 23 10:44 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/build/fuzz-n2048-kmax1024/mutate
+-rwxrwxr-x 1 ha ha 14994744 Oct 23 10:44 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/build/fuzz-n2048-kmax1024/precompile
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+Done 4688 runs in 21 second(s)
+stat::number_of_executed_units: 4688
+stat::average_exec_per_sec:     223
+stat::new_units_added:          17
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              687
+pqz-fuzz summary (codec): 4576 inputs checked, 1724 decoded (618 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 480 PQZL proof re-encodings equal, PQZL core: Rust
+[fuzz rc=0]
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz summary (codec): 305 inputs checked, 101 decoded (43 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 77 PQZL proof re-encodings equal, PQZL core: Rust
+pqz-fuzz summary (codec): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[merge rc=0]
+corpus/codec: 190 inputs (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/build/fuzz-n2048-kmax1024/corpus/codec), 2542 B (merged set 190 inputs, 2542 B)
+fuzz rc=0

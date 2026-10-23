@@ -8,7 +8,11 @@
 set -u
 cd "$(dirname "$0")"
 . ../resume.sh # under gate.sh: a block that ran to its end at this tree is skipped (owner 2026-10-23)
-L=runs/$1 X=$(pwd)/target/run
+# PQZ_BUILD_TAG (gate.sh: the set): cargo target, wasm target and work files under target/<tag>/ so concurrent gates of
+# different sets never share them; unset: the crate's default target/ (as before)
+if [ -n "${PQZ_BUILD_TAG:-}" ]; then export CARGO_TARGET_DIR=$(pwd)/target/$PQZ_BUILD_TAG; WT=$CARGO_TARGET_DIR-wasm; else WT=$(pwd)/wasm/target; fi
+TD=${CARGO_TARGET_DIR:-$(pwd)/target}
+L=runs/$1 X=$TD/run
 mkdir -p runs "$X"
 rm -f "$X/fill.txt"
 OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
@@ -36,19 +40,19 @@ ffi_native() {
 {
   echo "# verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one"
   OUT cargo build --release --offline $BF
-  echo "test hooks in the production cdylib (must be 0): $(strings -a target/release/libpqz_ffi.so | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER')"
+  echo "test hooks in the production cdylib (must be 0): $(strings -a $TD/release/libpqz_ffi.so | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER')"
   # positive check (fails closed): the C core is in the build exactly when pqz-ffi's feature pqzl-c is on
   F=$(cargo tree --offline $BF -e features -i pqz-ffi --prefix none) || echo "cargo tree -e features -i pqz-ffi: [rc=1]"
   case $F in
     *'pqz-ffi feature "pqzl-c"'*)
-      A=$(pwd)/$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)
+      A=$(ls -t $TD/release/build/pqz-ffi-*/out/libpqz.a | head -1)
       OUT ../pqzl/check_symbols.sh "$A" ;;
     *'pqz-ffi feature "pqzl-rust"'*)
       echo "C core in this build: none (feature pqzl-c off, pqzl-rust on: build.rs compiles no C)"
       echo "\$ cargo tree $BF -e normal,build --prefix none"; cargo tree --offline $BF -e normal,build --prefix none | sort -u ;;
     *) echo "C core in this build: unknown (no PQZL backend feature in cargo tree) [rc=1]" ;;
   esac
-  SO=target/release/libpqz_ffi.so
+  SO=$TD/release/libpqz_ffi.so
   OUT sha256sum "$SO"
   echo "\$ readelf -d $SO | grep NEEDED"; readelf -d "$SO" | grep NEEDED
   echo "\$ nm -D --undefined-only $SO"; nm -D --undefined-only "$SO"
@@ -58,7 +62,7 @@ ffi_native() {
   echo "strings /gmp|mpfr|hexl/i: $(strings -a "$SO" | grep -ciE 'gmp|mpfr|hexl')"
   echo "libm-style imports: $(nm -D --undefined-only "$SO" | awk '{print $2}' | grep -cE '^(sin|cos|tan|exp|exp2|log|log2|log10|pow|sqrt|floor|ceil|round|fmod|ldexp|frexp)f?(@|$)')"
   echo "# C smoke test against pqz_ffi.h"
-  OUT clang -std=c11 -Wall -Wextra -o "$X/c_abi" tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,"$(pwd)/target/release"
+  OUT clang -std=c11 -Wall -Wextra -o "$X/c_abi" tests/c_abi.c -L"$TD/release" -lpqz_ffi -Wl,-rpath,"$TD/release"
   OUT "$X/c_abi"
   echo "# clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate"
   OUT cargo clippy --release --offline $BF --features prove,test-hooks --lib -- -D clippy::float_arithmetic
@@ -70,8 +74,8 @@ ffi_wasm() {
 {
   echo "# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native"
   OUT cargo build --release --offline $BF --lib --target wasm32-unknown-unknown
-  (cd wasm && OUT cargo build --release --offline $BF --target wasm32-unknown-unknown)
-  W=wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+  (cd wasm && CARGO_TARGET_DIR=$WT OUT cargo build --release --offline $BF --target wasm32-unknown-unknown)
+  W=$WT/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
   OUT sha256sum "$W"
   ls -l "$W" | awk '{print "wasm bytes", $5}'
   echo "\$ llvm-nm-18 --undefined-only $W (imports)"; llvm-nm-18 --undefined-only "$W"

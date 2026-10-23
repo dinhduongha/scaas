@@ -11,12 +11,13 @@ set -eu
 F=$(cd "$(dirname "$0")" && pwd)
 X=$F # the scripts (z34poc.sh)
 cd "$F/../../../.." # pqz-core/pqzl
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
 # the parameter set (owner 2026-10-21: one per build): the v3 set's fixtures here, another set's in <set>/
 PQZ_SET=${PQZ_SET:-n2304-kmax4096}
 export PQZ_SET
 [ "$PQZ_SET" = n2048-kmax1024 ] || { F=$F/$PQZ_SET; mkdir -p "$F"; }
 ./build.sh native > /dev/null
-O=build/l2dom/out
+O=$PB/l2dom/out
 rm -rf "$O"
 l2dom/build.sh "$O"
 for c in honest s_over_A s_over_B; do
@@ -26,12 +27,12 @@ done
 cp "$O/tx_over.stmt" "$O/tx_over.proof" "$F/"
 sv/review/review.sh norm
 for c in honest z21_big z1_over w_over; do
-  cp "build/review/norm-out/$c.stmt" "$F/norm_$c.stmt"
-  cp "build/review/norm-out/$c.proof" "$F/norm_$c.proof"
+  cp "$PB/review/norm-out/$c.stmt" "$F/norm_$c.stmt"
+  cp "$PB/review/norm-out/$c.proof" "$F/norm_$c.proof"
 done
 "$X/z34poc.sh"
 for c in z3_over z4_over; do
-  cp "build/z34poc/out/$c.stmt" "$F/norm_$c.stmt"
-  cp "build/z34poc/out/$c.proof" "$F/norm_$c.proof"
+  cp "$PB/z34poc/out/$c.stmt" "$F/norm_$c.stmt"
+  cp "$PB/z34poc/out/$c.proof" "$F/norm_$c.proof"
 done
 ls -l "$F"

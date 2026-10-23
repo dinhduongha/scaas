@@ -4,15 +4,20 @@
 #   sv/diff.sh <label> [n_reg n_tx muts fuzz]        (defaults 40 20 3 20; the x86-64-v3 run uses half)
 # Plus the P6-Z21 differential (sv/review/review.sh zdiff, ZN seeds, default 1): z21-inflated proofs from the cheating
 # prover, which mutation cannot produce (they pass the final hash and reach the z2 norm check).
+# Exit 1 if any of the three runs exits non-zero (a mismatch, a disagreement, an expectation mismatch against the set's
+# own Bsq, or a relation without both verdicts); every run still runs and its lines are printed.
 set -eu
 cd "$(dirname "$0")/.."
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
 . ../resume.sh # under gate.sh: a run that passed at this tree is skipped (owner 2026-10-23)
 CAPPED=${CAPPED:-$(git rev-parse --show-toplevel)/scripts/capped}
 L=$1 NR=${2:-40} NT=${3:-20} MU=${4:-3} FZ=${5:-20}
 ./build.sh native >/dev/null 2>&1
 ./build.sh native-x86v3 >/dev/null 2>&1
-part diff/portable sh -c "$CAPPED build/native/pqz_sv_diff $NR $NT $MU 1 $FZ > sv/runs/$L-portable.jsonl" || echo "portable rc=$?"
-part diff/x86v3 sh -c "$CAPPED build/native-x86v3/pqz_sv_diff $((NR / 2)) $((NT / 2)) $MU 2 $FZ > sv/runs/$L-x86v3.jsonl" || echo "x86v3 rc=$?"
-part diff/z21diff sh -c "$CAPPED sv/review/review.sh zdiff ${ZN:-1} > sv/runs/$L-z21diff.jsonl" || echo "z21diff rc=$?"
-grep -h z21diff "sv/runs/$L-z21diff.jsonl"
-grep -h -e '"seed"' -e '"mismatch"' -e prg -e arena "sv/runs/$L-portable.jsonl" "sv/runs/$L-x86v3.jsonl"
+rc=0
+part diff/portable sh -c "$CAPPED $PB/native/pqz_sv_diff $NR $NT $MU 1 $FZ > sv/runs/$L-portable.jsonl" || { echo "portable rc=$?"; rc=1; }
+part diff/x86v3 sh -c "$CAPPED $PB/native-x86v3/pqz_sv_diff $((NR / 2)) $((NT / 2)) $MU 2 $FZ > sv/runs/$L-x86v3.jsonl" || { echo "x86v3 rc=$?"; rc=1; }
+part diff/z21diff sh -c "$CAPPED sv/review/review.sh zdiff ${ZN:-1} > sv/runs/$L-z21diff.jsonl" || { echo "z21diff rc=$?"; rc=1; }
+grep -h -e z21diff -e '"accepted"' "sv/runs/$L-z21diff.jsonl" || rc=1
+grep -h -e '"seed"' -e '"mismatch"' -e prg -e arena "sv/runs/$L-portable.jsonl" "sv/runs/$L-x86v3.jsonl" || rc=1
+exit $rc

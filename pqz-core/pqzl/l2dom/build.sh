@@ -7,7 +7,8 @@
 #   fixed:   the PoC built on the tree as is; the production library must REJECT every PoC proof.
 set -eu
 cd "$(dirname "$0")/.."
-B=build
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
+B=$PB
 O=${1:?outdir}
 U=$B/l2dom/unfixed
 mkdir -p "$U" "$O/control"
@@ -25,11 +26,11 @@ for v in fixed unfixed; do
     $CC $inc $CFLAGS -c "$f" -o "$o"
     objs="$objs $o"
   done
-  $CC -std=gnu11 -O2 -DPQZ_L2DOM_POC -Ibuild/include -Isrc -o "$B/l2dom/l2dom_prove_$v" l2dom/l2dom_poc.c $objs
-  $CC -std=gnu11 -O2 -DPQZ_L2DOM_POC -Ibuild/include -Isrc -o "$B/l2dom/l2dom_tx_prove_$v" l2dom/l2dom_tx.c $objs -lm
+  $CC -std=gnu11 -O2 -DPQZ_L2DOM_POC -I$PB/include -Isrc -o "$B/l2dom/l2dom_prove_$v" l2dom/l2dom_poc.c $objs
+  $CC -std=gnu11 -O2 -DPQZ_L2DOM_POC -I$PB/include -Isrc -o "$B/l2dom/l2dom_tx_prove_$v" l2dom/l2dom_tx.c $objs -lm
 done
-$CC -std=gnu11 -O2 -Ibuild/include -Isrc -o "$B/l2dom/l2dom_verify" l2dom/l2dom_poc.c "$B/native/libpqz.a"
-$CC -std=gnu11 -O2 -Ibuild/include -Isrc -o "$B/l2dom/l2dom_tx_verify" l2dom/l2dom_tx.c "$B/native/libpqz.a" -lm
+$CC -std=gnu11 -O2 -I$PB/include -Isrc -o "$B/l2dom/l2dom_verify" l2dom/l2dom_poc.c "$B/native/libpqz.a"
+$CC -std=gnu11 -O2 -I$PB/include -Isrc -o "$B/l2dom/l2dom_tx_verify" l2dom/l2dom_tx.c "$B/native/libpqz.a" -lm
 echo "== control (P6-L2 fix undone)"
 "$B/l2dom/l2dom_prove_unfixed" prove "$O/control"
 "$B/l2dom/l2dom_tx_prove_unfixed" prove "$O/control"

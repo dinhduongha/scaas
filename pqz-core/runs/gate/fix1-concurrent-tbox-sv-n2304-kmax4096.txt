@@ -1,0 +1,34 @@
+VERDICT: evaluation-step independent Z_q tests = 4 -> ok (lambda=4 expected)
+l2dom honest: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom s_over_A: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom s_over_B: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom tx_over: control (fix undone) accepts 1/1, production rejects 1/1
+z21 z21_big: proved 1/1; production: honest accepted 1/1, z21_big / z1_over / w_over rejected by both 3/3; control (z21 term removed) accepts z21_big 1/1
+z21_big  prove rc=0 proof 90992 B  y21 << 7: ||z21||^2 = 2065783240714968 (3.3x the set's R_REG Bsq 618834510584175)
+P6-FS verify honest: ACCEPT
+P6-FS verify h-mutated (rejected) kind 5 mu seed: honest 2d3720f1 mutated a1be8932 -> differ
+P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest d662f200 mutated 01e9544b -> differ
+P6-FS verify z3-mutated (rejected) kind 3 V3 seed: honest d662f200 mutated 01e9544b -> differ
+P6-FS verify z4-mutated (rejected) kind 2 V4 seed: honest d662f200 mutated e3b36f28 -> differ
+P6-FS verify z4-mutated (rejected) kind 3 V3 seed: honest d662f200 mutated e3b36f28 -> differ
+P6-FS verify tg-mutated (rejected) kind 2 V4 seed: honest d662f200 mutated 21805099 -> differ
+P6-FS verify tg-mutated (rejected) kind 3 V3 seed: honest d662f200 mutated 21805099 -> differ
+P6-FS verify_fast honest: ACCEPT
+P6-FS verify_fast h-mutated (rejected) kind 15 mu seed: honest 2d3720f1 mutated a1be8932 -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 12 V4 seed: honest d662f200 mutated 01e9544b -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 13 V3 seed: honest d662f200 mutated 01e9544b -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 12 V4 seed: honest d662f200 mutated e3b36f28 -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 13 V3 seed: honest d662f200 mutated e3b36f28 -> differ
+P6-FS verify_fast tg-mutated (rejected) kind 12 V4 seed: honest d662f200 mutated 21805099 -> differ
+P6-FS verify_fast tg-mutated (rejected) kind 13 V3 seed: honest d662f200 mutated 21805099 -> differ
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) ok (0 failed checks of 18)
+0 shared dom(s)
+A-2 control: control: A-2 undone on 2 line(s) of lnp-tbox.c
+A-2 control: 1 shared dom(s)
+checks: P6-SZ ok; P6-L2 ok; P6-Z21 ok; P6-FS lazer#28 ok; A-2 ok; 
+check_tbox_fixes: ok
+check_sv_fixes tree: cases mismatches = 28 0
+check_sv_fixes sz: cases mismatches = 28 28
+check_sv_fixes l2: cases mismatches = 28 28
+check_sv_fixes: ok
+n2304-kmax4096 rc=0

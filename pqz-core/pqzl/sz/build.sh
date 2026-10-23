@@ -8,7 +8,8 @@
 # scripts/capped like the other heavy builds.
 set -eu
 cd "$(dirname "$0")/.."
-B=build
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
+B=$PB
 mkdir -p "$B/include" "$B/sz"
 CC=${CC:-clang}
 # lazer.h, as build.sh assembles it

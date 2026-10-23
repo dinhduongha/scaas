@@ -10,6 +10,10 @@
 set -u
 cd "$(dirname "$0")/.."
 . ../resume.sh # under gate.sh: a check that passed at this tree is skipped; builds always run (owner 2026-10-23)
+# PQZ_BUILD_TAG (gate.sh: the set): cargo target, wasm target and work files under target/<tag>/ so concurrent gates of
+# different sets never share them; unset: the crate's default target/ (as before)
+if [ -n "${PQZ_BUILD_TAG:-}" ]; then export CARGO_TARGET_DIR=$(pwd)/target/$PQZ_BUILD_TAG; WT=$CARGO_TARGET_DIR-wasm; else WT=$(pwd)/wasm/target; fi
+TD=${CARGO_TARGET_DIR:-target}
 R=vectors/runs/$1
 mkdir -p vectors/runs
 fail=0
@@ -28,17 +32,19 @@ export PQZ_SET=$S
 echo "set $S, vectors $V; PQZL backend: ${PQZL:-the default feature} (cargo flags: ${BF:-none})" > "$R-build.txt"
 step() { name=$1; shift; case $name in build | rebuild | wasm-build) "$@" ;; *) part "vectors/$name" "$@" ;; esac || { echo "FAILED: $name (rc=$?)"; fail=1; }; }
 B="cargo build --release --offline $BF --features prove --bin pqz-vectors"
-step build sh -c "$B >> $R-build.txt 2>&1"
+# write: the first build may precede the set's first vectors (ffi/build.rs then compiles an empty self-test proof only
+# with PQZ_VECTORS_BOOTSTRAP=1); the rebuild after pqz-vectors has them
+if [ "${2:-}" = write ]; then step build sh -c "PQZ_VECTORS_BOOTSTRAP=1 $B >> $R-build.txt 2>&1"; else step build sh -c "$B >> $R-build.txt 2>&1"; fi
 if [ "${2:-}" = write ]; then
-  step write sh -c "/usr/bin/time -v target/release/pqz-vectors > $R-generate.txt 2>&1"
+  step write sh -c "/usr/bin/time -v $TD/release/pqz-vectors > $R-generate.txt 2>&1"
   step rebuild sh -c "$B >> $R-build.txt 2>&1"
 fi
-step check sh -c "/usr/bin/time -v target/release/pqz-vectors --check > $R-check.txt 2>&1"
+step check sh -c "/usr/bin/time -v $TD/release/pqz-vectors --check > $R-check.txt 2>&1"
 step pqz_kat sh -c "/usr/bin/time -f '%M KB' python3 -I ../../smartcontracts/vectors/pqz/pqz_kat.py --check > $R-pqz-kat.txt 2>&1"
 step tamper sh -c "python3 -I vectors/tamper.py > $R-tamper.txt 2>&1"
 step ffi-test sh -c "cargo test --release --offline $BF --features prove,test-hooks -- --test-threads 4 > $R-ffi-test.txt 2>&1"
-step wasm-build sh -c "(cd wasm && cargo build --release --offline $BF --target wasm32-unknown-unknown) >> $R-build.txt 2>&1"
-step wasm-replay sh -c "node vectors/replay_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm $V > $R-wasm.txt 2>&1"
+step wasm-build sh -c "(cd wasm && CARGO_TARGET_DIR=$WT cargo build --release --offline $BF --target wasm32-unknown-unknown) >> $R-build.txt 2>&1"
+step wasm-replay sh -c "node vectors/replay_wasm.mjs $WT/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm $V > $R-wasm.txt 2>&1"
 (cd $V && wc -c *.json README.md) > "$R-sizes.txt"
 head -1 "$R-build.txt"
 grep -h -e "pqz-vectors" -e "DIFF" -e "EXTRA" -e "self-test proofs" "$R-check.txt"
