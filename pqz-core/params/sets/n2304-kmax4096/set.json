@@ -56,6 +56,10 @@
  },
  "max_proof_pqzh": 262144,
  "max_input": 524288,
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4",
+ "pqzl_id": "15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a",
+ "pqzh_label": "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2",
+ "pqzh_id": "e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730",
  "pqzh_preset": {
   "radices": [
    2,

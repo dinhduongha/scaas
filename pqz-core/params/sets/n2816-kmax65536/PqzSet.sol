@@ -41,6 +41,8 @@ library PqzSet {
     uint256 internal constant BUNDLE = 22_832;
     /// disclosure bundle, auditor off
     uint256 internal constant BUNDLE0 = 22_704;
+    /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4")
+    bytes32 internal constant PQZL_ID = 0x9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
     /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / 4) (pqz-stmt multi_len)

@@ -105,8 +105,32 @@ fn lengths_and_constants() {
     assert_eq!(max_proof(&PQZH_ID), Some(if SET == "n2560-kmax16384" { 327_680 } else { 262_144 }));
     assert_eq!(MAX_INPUT, if SET == "n2048-kmax1024" { 393_216 } else { 524_288 });
     assert_eq!(max_proof(&[0; 32]), None);
-    // the retired, forgeable PQZL v2 id (lazer#28, CTR-PQZ-09 F6 / F9) is an unknown id
-    assert_eq!(max_proof(&hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f")), None);
+    for id in RETIRED {
+        assert_eq!(max_proof(&id), None);
+    }
+}
+
+/// the retired ids (decisions CTR-PQZ-09: PQZL v2, forgeable, lazer#28 / F9; PQZL v3 and PQZH v1, replaced by the per-set
+/// ids of plan 5h Task 8d) are unknown ids: refused by every parser, never this set's
+const RETIRED: [Word; 3] = [
+    hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"),
+    hex32("8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"),
+    hex32("0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"),
+];
+
+#[test]
+fn retired_ids_refused() {
+    let o = objs();
+    assert!(!RETIRED.contains(&PQZL_ID) && !RETIRED.contains(&PQZH_ID) && PQZL_ID != PQZH_ID);
+    for id in RETIRED {
+        for f in FORMS {
+            assert_eq!(parse(f.op(), &build(f, &o, &id)).err(), Some(Reject::ProofSystemId), "{f:?}");
+        }
+        for (m, aud) in [(1, true), (4, false)] {
+            assert_eq!(parse_multi(&build_multi(&id, m, aud, 0)).err(), Some(Reject::ProofSystemId), "M = {m}");
+        }
+        assert_eq!(decode_input(&input(3, &build(Form::Register, &o, &id), &[1])).err(), Some(Reject::ProofSystemId));
+    }
 }
 
 #[test]

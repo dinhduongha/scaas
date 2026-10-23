@@ -932,11 +932,16 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Result<Comb, Oom> {
 mod tests {
     use super::*;
 
-    /// D3: PQZH's id is the keccak256 of its string, and it is pqz-stmt's
+    /// D3 / plan 5h Task 8d: the set's ids are the keccak256 of their set.toml labels (gen_set.py's Keccak = this
+    /// crate's), PQZH's label names this set's field and preset
     #[test]
-    fn pqzh_id_d3() {
-        let h = crate::merkle::keccak(&[b"scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"]);
-        assert_eq!(h, PQZH_ID);
+    fn ids_are_the_labels_keccak() {
+        use pqz_stmt::{PQZH_LABEL, PQZL_ID, PQZL_LABEL};
+        assert_eq!(crate::merkle::keccak(&[PQZH_LABEL.as_bytes()]), PQZH_ID);
+        assert_eq!(crate::merkle::keccak(&[PQZL_LABEL.as_bytes()]), PQZL_ID);
+        let p = crate::ligero::Params::proven();
+        let want = format!("/ligero-fq{}-n{}k{}t{}-keccak256-zk-proven/", pqz_stmt::LOG2Q, p.n, p.k, p.t);
+        assert!(PQZH_LABEL.contains(&want), "{PQZH_LABEL} vs {want}");
     }
 
     /// pqz-stmt's opTags are the keccak256 of their names

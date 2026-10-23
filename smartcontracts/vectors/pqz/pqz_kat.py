@@ -3,7 +3,7 @@
 Keccak-256 checked against hashlib's SHA3 permutation): no numpy, no third-party package, runs under `python3 -I`.
 
 Implements everything of PQZL except the proofs: the matrix A (SHAKE128 "SCAAS-PQZ-A-V2"), CBD, KeyGen, Enc, Dec,
-Add / Sub / Trivial, digits, the opTags and both proofSystemIds, every statement layout (build and parse, with the
+Add / Sub / Trivial, digits, the opTags and the set's two proofSystemIds, every statement layout (build and parse, with the
 canonical-encoding rules of the plan's D15 / R6), ctHash, authDigest, the bundle and opening encodings, entryRef.
 
   pqz_kat.py --check [vector.json ...]   self-test, then recompute every non-proof field of every vector file
@@ -102,8 +102,13 @@ def shake256(data, n):
 
 
 # ---------------------------------------------------------------- ids, tags (§5, CTR-PQZ-09, P6e D2 / D3)
-PQZL_ID = keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")  # v2 retired (lazer#28, CTR-PQZ-09 F6)
-PQZH_ID = keccak256(b"scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
+# the set's ids (plan 5h Task 8d: one per set and proof system): keccak256 of set.json's labels (set.toml pqzl_id /
+# pqzh_id); the self-test compares them with gen_set.py's ids and refuses the retired ones
+PQZL_ID = keccak256(_S["pqzl_label"].encode())
+PQZH_ID = keccak256(_S["pqzh_label"].encode())
+RETIRED_IDS = {"PQZL v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",  # forgeable (lazer#28, F9)
+               "PQZL v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",  # .../mlwe-d64k32-q42l4/v3
+               "PQZH v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"}  # .../ligero-fq-r431-.../v1
 OP_NAMES = ["TRANSFER", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER", "DISCLOSE-AUDITOR",
             "TRANSFER-MULTI"]
 OP_TAG = {n: keccak256(b"SCAAS-PQZ-OP-" + n.encode() + b"-V1") for n in OP_NAMES}
@@ -646,8 +651,11 @@ def selftest(log):
         m = bytes((7 * i + 1) & 255 for i in range(n))
         ok(_sponge(m, 0x06) == hashlib.sha3_256(m).digest(), f"Keccak-f permutation = hashlib sha3_256, {n} B")
     ok(keccak256(b"").hex() == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470", "keccak256('')")
-    ok(PQZL_ID.hex() == "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef", "PQZL proofSystemId (D2)")
-    ok(PQZH_ID.hex() == "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4", "PQZH proofSystemId (D3)")
+    ok(keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3").hex() == RETIRED_IDS["PQZL v3"], "keccak256 of the retired v3 label")
+    ok(PQZL_ID.hex() == _S["pqzl_id"] and f"/mlwe-d64k{K}-q{LOG2Q}l4/" in _S["pqzl_label"],
+       f"PQZL proofSystemId {_S['pqzl_label']} = {PQZL_ID.hex()[:8]}... (set.json)")
+    ok(PQZH_ID.hex() == _S["pqzh_id"], f"PQZH proofSystemId {_S['pqzh_label']} = {PQZH_ID.hex()[:8]}... (set.json)")
+    ok(not {PQZL_ID.hex(), PQZH_ID.hex()} & set(RETIRED_IDS.values()) and PQZL_ID != PQZH_ID, "ids not retired, distinct")
     plan = {"TRANSFER": "ef22f3d1", "BURN": "7383374d", "REFRESH": "f118f2df", "REGISTER": "69562a9c",
             "DISCLOSE-SENDER": "868cc07c", "DISCLOSE-RECEIVER": "d8356cfb", "DISCLOSE-AUDITOR": "d6019aa4",
             "TRANSFER-MULTI": "6f6a773a"}
