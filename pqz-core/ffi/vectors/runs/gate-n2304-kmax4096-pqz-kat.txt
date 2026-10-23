@@ -105,14 +105,15 @@ ok   Enc: counter 64 error
 ok   bundle 18,736 / 18,608 B
 ok   opening = abi.encode(bytes, bytes)
      entryRef(7622, 1, token, 2, 0) = ea6afa7d500f6712173244bbdebf289d808d780c15138a298bcf1c0f59715ae3
-     parameter set n2304-kmax4096 (q = 61275424977257, n = 2304, K_MAX = 4,096, no PQZH)
-     vector files: 15
+     parameter set n2304-kmax4096 (q = 61275424977257, n = 2304, K_MAX = 4,096, PQZH)
+     vector files: 16
 ok   cbd.json
 ok   enc.json
 ok   fee0.json
 ok   keygen.json
 ok   matrix.json
 ok   negative.json
+ok   proof_pqzh.json
 ok   proof_pqzl.json
 ok   selftest.json
 ok   statement_burn.json
@@ -123,4 +124,4 @@ ok   statement_transfer.json
 ok   statement_transfer_multi.json
 ok   worstcase_noise.json
 pqz_kat: ok
-58420 KB
+79036 KB

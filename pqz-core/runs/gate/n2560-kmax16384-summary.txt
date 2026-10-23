@@ -1,17 +1,17 @@
-# gate n2560-kmax16384 (set n2560-kmax16384): fdf2ae7a5f2ce61d8bde5ef3e8a6881e11d2fa56, 2026-10-23T07:19Z
+# gate n2560-kmax16384 (set n2560-kmax16384): e458ec63f8019f30835d495e39ccb0eb60c17fab + uncommitted changes, 2026-10-23T12:14Z
 set n2560-kmax16384
 == kat
-   ok (resumed: passed earlier at this tree)
+   ok
 == tbox
-   ok (resumed: passed earlier at this tree)
+   ok
 == sv
-   ok (resumed: passed earlier at this tree)
+   ok
 == diff
-   ok (resumed: passed earlier at this tree)
+   ok
 == fnv
-   ok (resumed: passed earlier at this tree)
+   ok
 == vectors
-   ok (resumed: passed earlier at this tree)
+   ok
 == ffi
    ok
 == rust
@@ -19,7 +19,7 @@ set n2560-kmax16384
 == cargo
    ok
 == xcheck
-   skipped (PQZH is not built for set n2560-kmax16384 until plan 5h Task 8c)
+   ok
 == fuzz
    ok
 gate n2560-kmax16384 (set n2560-kmax16384): PASS
