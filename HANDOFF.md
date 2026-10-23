@@ -25,7 +25,7 @@ session), `task-8b-report.md` (top: "Status: DONE"), `task-8c-report.md` (top: "
   (wasm, ct, honest sizes), fallback tests, clippy, `ligero_params.py` per set, docs, the three gates.
 - `pqz-8b-fix` merged (worktree removable); `pqz-8c` merged (worktree removable; branch kept with `pqz-8c-spike`).
 
-**Owner questions (8c part 2, the implementer's — needed before the vectors are final):**
+**Owner questions (8c part 2) — ANSWERED 2026-10-23: (1) OK, (2) t = 122, (3) header accepted:**
 1. **`MAX_INPUT` per set** — the code still had 393,216 (512 KiB is the ruling, not yet in code). Implementer set
    `n2048-kmax1024` 393,216 (keeps its vectors byte-identical), `n2304-kmax4096` and `n2560-kmax16384` 524,288 (else
    pqz-ffi rejects every n2560 PQZH debit and n2304 op 7 M = 4 with the auditor). `pqz_ffi.h` and the node limit
@@ -40,7 +40,8 @@ session), `task-8b-report.md` (top: "Status: DONE"), `task-8c-report.md` (top: "
 MB for n2048 / n2304 / n2560 / n2816 (page cache included; nothing killed) → `CAPPED_MEM=3G` for every set; min
 available 5.5 GB. Watcher: `scratchpad/gate-memwatch.sh`.
 
-**Next (order):** (1) owner answers the three questions; (2) resume 8c part 2 (fresh implementer or the controller)
+**Next (order):** (1) apply the answers on `pqz-8c2`: `n2560-kmax16384/set.toml` `[pqzh_preset]` t = 122 → `gen_set.py
+--all` (sizes / soundness re-measured in its round; MAX_INPUT and header as built); (2) resume 8c part 2 (fresh implementer or the controller)
 from `task-8c-report.md` "Part 2 — Paused": vectors n2304 / n2560, full n2560 round, fallback tests, clippy,
 `ligero_params.py`, docs, then the three PQZH gates concurrently (`PQZ_SET=<set> CAPPED_SLOTS=4 CAPPED_MEM=3G
 scripts/capped pqz-core/gate.sh`, xcheck must run) → review → merge `pqz-8c2` into `pqz-16k`; (3) 8d → Task 9 (timing

@@ -41,8 +41,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 - **Now (2026-10-23, evening shutdown):** `pqz-16k` `fe5abb63`: **Task 8b DONE** (four gates PASS, z21diff byte-identical
   after N4), `pqz-8c` merged; **8c part 2 paused** on `pqz-8c2` (WIP `ea7beeae`: generator owns `pqzh_set.rs`, per-set
-  PQZH limits, n2560 PQZH, ffi / vectors / gate per set; vectors, docs, gates left) — three owner questions
-  (`MAX_INPUT` per set, n2560 preset t 121 / 122, generated header). Order in HANDOFF.md top note.
+  PQZH limits, n2560 PQZH, ffi / vectors / gate per set; vectors, docs, gates left) — owner answers
+  2026-10-23: `MAX_INPUT` per set OK, n2560 preset t = 122, generated header accepted. Order in HANDOFF.md top note.
 - **Earlier (2026-10-23, afternoon shutdown):** `pqz-16k` `fdf2ae7a`: 8b review (4 Important / 10 Minor) → fix round 1 + re-review
   (approved pending I2; per-set build paths so the four gates run at once, owner `CAPPED_SLOTS=4`); gate
   `n2048-kmax1024` PASS; resume the other three gates (`gate.sh --last <set>`, before merging `pqz-8b-fix` `bd27243e`,
