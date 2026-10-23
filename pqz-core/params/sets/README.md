@@ -79,12 +79,32 @@ exists at a set depends on q:
 
 Details per set: `<set>/PQZH.md`.
 
-### PQZL per set: sizes and limits
+### What the sizes and limits below mean (both tables)
+
+Every number in the two tables below is a **size in bytes (B)** — not gas (1 KiB = 1,024 B). Gas is elsewhere and not yet
+measured for every set: `n2560-kmax16384` in its `SET.md` ("Conditions for this set to work on a chain") and
+[`pqzl/params/p16k/results-16k.md`](../../pqzl/params/p16k/results-16k.md) §8 (plan 5h Task 7b, Amsterdam);
+`n2304-kmax4096` estimates in [`docs/research/pqz-pack.md`](../../../docs/research/pqz-pack.md) (spike PACK), measured in
+plan 5h Task 8d part 2; the PQZH calldata floor gas per relation in each set's `PQZH.md`.
+
+- **proof**: the bytes of one zero-knowledge proof, as the client sends it.
+- **statement**: the public data the proof is about (public keys, ciphertexts, amounts' commitments), built by the token
+  contract from its own state.
+- **precompile input**: what the token passes to the `PQZ` precompile for one check = 5-byte header + statement + proof.
+- **`MAX_PROOF_PQZL`, `MAX_PROOF_PQZH`**: the largest proof (B) the `PQZ` precompile accepts for that proof system; a
+  longer proof is rejected before any verification (a revert, not a wrong answer). Set in `pqz-stmt` from the set's
+  `rust/set.rs`.
+- **`MAX_INPUT`**: the largest precompile input (B) the precompile accepts, whatever the proof system.
+- **bound** (PQZH): the longest proof the PQZH prover can produce for that relation (computed by the crate, exact); a set
+  is only usable if every bound is ≤ its `MAX_PROOF_PQZH`.
+- **arena peak** (PQZL): the prover's memory use on the client, in MB — not a chain limit.
+
+### PQZL per set: proof sizes and size limits (bytes)
 
 PQZL proof size per relation, the largest of two proofs from the C prover bench of each set's gate
 (`pqz-core/runs/gate/<set>-fnv-c.jsonl`, `proof_bytes_max`; C = Rust = wasm32 byte for byte), and the C prover's arena
-peak. Op 7 (`R_TXM`) M legs with the auditor; `M = …, no auditor` without. Every set's limit is `MAX_PROOF_PQZL` 98,304 B
-(pqz-stmt; the same for all four sets).
+peak. Op 7 (`R_TXM`) M legs with the auditor; `M = …, no auditor` without. The limit for every set is `MAX_PROOF_PQZL` =
+98,304 B (96 KiB), the same for all four sets.
 
 | Relation | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
 |---|---|---|---|---|
@@ -110,13 +130,13 @@ peak. Op 7 (`R_TXM`) M legs with the auditor; `M = …, no auditor` without. Eve
 op 7 M = 8 needs `PQZ_ARENA_MB=2048` in the C bench at every set (above its default 768 MiB). `n2816-kmax65536` is core
 only: no pqz-stmt / precompile build, so its limits are the other sets' for comparison, not a deployed limit.
 
-### PQZH per set: preset and limits (plan 5h Task 8c part 2)
+### PQZH per set: preset, proof sizes and size limits (bytes; plan 5h Task 8c part 2)
 
 `set.toml` holds the preset and the limits; `gen_set.py` writes `pqzh_set.rs` (radices, n, k, t; q − 1's factors,
 generator and non-square computed and checked), `MAX_PROOF_PQZH` / `MAX_INPUT` into `rust/set.rs` (pqz-stmt) and all
 of them into `set.json` (`pqz_kat.py`, `ligero_params.py`). Bounds and soundness: the crate (`ligero_kat sizes`).
 
-| Set | radices | n / k / t | largest bound (B) | soundness (bits) | `MAX_PROOF_PQZH` | `MAX_INPUT` (pqz-stmt) | largest input at the bound / at the limit |
+| Set | radices | n / k / t | largest bound (B) | soundness (bits) | `MAX_PROOF_PQZH` (B) | `MAX_INPUT` (B) | largest precompile input (B): proof at the bound / at `MAX_PROOF_PQZH` |
 |---|---|---|---|---|---|---|---|
 | `n2048-kmax1024` | 2/19/43/431 | 32,756 / 817 / 121 | 236,196 (op 7 M = 4, auditor) | 127.23 | 262,144 | 393,216 | 369,193 / 395,141 (above: a proof over 260,219 B there is an Input revert) |
 | `n2304-kmax4096` | 2/7/17/19/43/431 | 45,752 / 952 / 120 | 253,048 | 127.40 | 262,144 | 524,288 | 402,429 / 411,525 |
