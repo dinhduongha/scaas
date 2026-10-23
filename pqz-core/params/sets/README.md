@@ -122,6 +122,32 @@ of them into `set.json` (`pqz_kat.py`, `ligero_params.py`). Bounds and soundness
 | `n2304-kmax4096` | 2/7/17/19/43/431 | 45,752 / 952 / 120 | 253,048 | 127.40 | 262,144 | 524,288 | 402,429 / 411,525 |
 | `n2560-kmax16384` | 2/19/43/431 | 32,756 / 817 / 122 | 305,120 | 127.55 | 327,680 | 524,288 | 470,885 / 493,445 |
 
+Per relation: the proof bound from the crate (`ligero_kat sizes`; `pqzh/ligero/runs/c8-v3-sizes.jsonl`,
+`c8b-a-sizes.jsonl`, `c8c-n2560-sizes.jsonl`), in brackets the honest proofs measured (`c8c-<set>-kat.jsonl`, seeds 0
+and 1, all verify), then the largest precompile input (5 + statement + bound), all in bytes. `n2816-kmax65536`: no PQZH.
+
+| Relation | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` |
+|---|---|---|---|
+| R_REG (op 9, register) | 190,458 (186,904–187,098) / 206,943 | 207,688 (204,358–204,936) / 226,221 | 234,238 (230,526–231,006) / 254,819 |
+| R_DS (disclose to the sender) | 190,458 (187,482–187,546) / 223,647 | 207,688 (204,616–205,416) / 244,973 | 234,238 (230,366–231,774) / 275,619 |
+| R_DR (disclose to the receiver) | 190,458 (185,462–185,462) / 223,647 | 207,688 (204,552–204,936) / 244,973 | 234,238 (231,422–231,678) / 275,619 |
+| R_TX (op 1, transfer) | 235,470 (231,256–231,416) / 318,547 | 251,608 (248,312–248,952) / 344,925 | 304,266 (299,850–300,490) / 407,823 |
+| R_TX0 (transfer from a fresh account) | 234,744 (229,672–231,320) / 301,309 | 251,608 (247,544–248,376) / 326,365 | 304,266 (300,682–301,194) / 387,215 |
+| R_BURN | 234,744 (231,256–232,344) / 284,797 | 251,608 (247,176–248,440) / 307,805 | 303,412 (300,148–301,204) / 365,753 |
+| op 7 M = 1 | 235,470 (230,242–231,598) / 318,547 | 251,608 (247,304–248,344) / 344,925 | 304,266 (299,923–301,226) / 407,823 |
+| op 7 M = 2 | 235,470 (231,128–232,462) / 335,187 | 252,328 (248,424–248,434) / 364,333 | 304,266 (300,170–300,586) / 428,559 |
+| op 7 M = 4 | 236,196 (231,944–233,604) / 369,193 | 253,048 (249,752–249,880) / 402,429 | 305,120 (301,824–302,112) / 470,885 |
+| op 7 M = 1, no auditor | 234,744 (231,304–232,024) / 301,309 | 251,608 (247,304–248,440) / 326,365 | 304,266 (301,450–301,610) / 387,215 |
+| op 7 M = 2, no auditor | 235,470 (231,438–232,366) / 318,547 | 251,608 (246,792–248,088) / 344,925 | 304,266 (300,019–300,682) / 407,823 |
+| op 7 M = 4, no auditor | 235,470 (230,872–232,526) / 351,571 | 252,328 (249,160–249,384) / 382,765 | 304,266 (299,219–301,098) / 449,039 |
+| op 7 M = 8 (not a PQZH shape: over the limit) | 281,208 / 497,149 | 296,968 / 539,533 | 375,148 / 644,337 |
+| op 7 M = 8, no auditor (same) | 279,756 / 478,289 | 296,248 / 519,357 | 374,294 / 621,979 |
+| `MAX_PROOF_PQZH` / `MAX_INPUT` (pqz-stmt) | 262,144 / 393,216 | 262,144 / 524,288 | 327,680 / 524,288 |
+| soundness (bits) | 127.23 | 127.40 | 127.55 |
+
+op 7 M = 8 is measured for the record only: its bound is over every set's `MAX_PROOF_PQZH`, so PQZH does not offer it
+(PQZL does; table above).
+
 `MAX_INPUT` 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)) is pqz-stmt's at the non-frozen sets; the node's
 precompile input limit (`pqz_ffi.h` `PQZ_FFI_MAX_INPUT`, Nethermind plugin) stays 393,216 until plan 5h Task 8d, so the
 inputs above it at the bound (n2304-kmax4096: op 7 M = 4 with the auditor; n2560-kmax16384: R_TX and op 7 M = 1 with
