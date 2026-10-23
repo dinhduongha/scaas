@@ -2,8 +2,9 @@
 //! the Ligero API is here (on `pqz-stmt` with all six forms since P6e Tasks 6, 8).
 use pqzh_ligero::Params;
 
-/// The set's proven preset (pqz-core/params/sets/<set>/pqzh_set.rs; n2048-kmax1024 and n2560-kmax16384: THE preset of
-/// the D3 id, radix 431, n = 32,756, k = 817, t = 121, l = 695; n2304-kmax4096: preset B): a `const fn`, no floats.
+/// The set's proven preset (pqz-core/params/sets/<set>/pqzh_set.rs; n2048-kmax1024: THE preset of the D3 id, radix 431,
+/// n = 32,756, k = 817, t = 121, l = 695; n2304-kmax4096: preset B; n2560-kmax16384: THE preset's n / k, t = 122): a
+/// `const fn`, no floats.
 pub const PARAMS: Params = Params::proven();
 
 /// The Ligero verifier (it catches its own panics; `crate::precompile` catches any other). `Err(NodeFault)` when one

@@ -769,7 +769,8 @@ mod tests {
         let t = crate::set::PRESET_T;
         assert_eq!(Params::proven(), Params { t, ell: m.k - t - 1, ..m });
         assert!(m.t <= t);
-        assert_eq!(m.t == t, crate::set::NAME != "n2304-kmax4096" || cfg!(feature = "fallback-retry"));
+        // more than the model's t: n2304-kmax4096 preset B (120 > 119), n2560-kmax16384 (122 > 121, owner 2026-10-23)
+        assert_eq!(m.t == t, crate::set::NAME == "n2048-kmax1024" || cfg!(feature = "fallback-retry"));
     }
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
@@ -827,7 +828,7 @@ mod tests {
     /// Task 9 / D5: the verifier's bound is the exact maximum, the length gate admits MAX and rejects MAX + 1 (and 0)
     /// before the statement or the proof is parsed; ops without a relation have no form. Per parameter set (plan 5h
     /// Task 8c): every built relation within the set's MAX_PROOF_PQZH and MAX_INPUT (n2048-kmax1024: 262,144 / 393,216,
-    /// D5; n2304-kmax4096 preset B: 262,144 / 524,288; n2560-kmax16384 THE preset: 327,680 / 524,288, owner
+    /// D5; n2304-kmax4096 preset B: 262,144 / 524,288; n2560-kmax16384 t = 122: 327,680 / 524,288, owner
     /// 2026-10-23); only the n2304-kmax4096 fallback build (THE preset) has debit bounds above MAX_PROOF_PQZH
     #[test]
     fn limits_exact() {
@@ -854,14 +855,14 @@ mod tests {
                 (Form::DiscloseReceiver, 190_458, true),
                 (Form::Transfer0, 234_744, true),
             ],
-            // THE preset at 7-byte elements, MAX_PROOF_PQZH 327,680 (owner 2026-10-23)
+            // THE preset's n / k with t = 122 at 7-byte elements, MAX_PROOF_PQZH 327,680 (owner 2026-10-23)
             "n2560-kmax16384" => [
-                (Form::Register, 233_289, true),
-                (Form::Transfer, 302_743, true),
-                (Form::Burn, 301_896, true),
-                (Form::DiscloseSender, 233_289, true),
-                (Form::DiscloseReceiver, 233_289, true),
-                (Form::Transfer0, 302_743, true),
+                (Form::Register, 234_238, true),
+                (Form::Transfer, 304_266, true),
+                (Form::Burn, 303_412, true),
+                (Form::DiscloseSender, 234_238, true),
+                (Form::DiscloseReceiver, 234_238, true),
+                (Form::Transfer0, 304_266, true),
             ],
             _ => [
                 (Form::Register, 204_978, true),
@@ -911,16 +912,16 @@ mod tests {
                 ((16, false), 369_054, 732_451),
             ],
             "n2560-kmax16384" => [
-                ((1, true), 302_743, 406_300),
-                ((1, false), 302_743, 385_692),
-                ((2, true), 302_743, 427_036),
-                ((2, false), 302_743, 406_300),
-                ((4, true), 303_590, 469_355),
-                ((4, false), 302_743, 447_516),
-                ((8, true), 373_044, 642_233),
-                ((8, false), 372_197, 619_882),
-                ((16, true), 513_646, 989_683),
-                ((16, false), 509_411, 962_920),
+                ((1, true), 304_266, 407_823),
+                ((1, false), 304_266, 387_215),
+                ((2, true), 304_266, 428_559),
+                ((2, false), 304_266, 407_823),
+                ((4, true), 305_120, 470_885),
+                ((4, false), 304_266, 449_039),
+                ((8, true), 375_148, 644_337),
+                ((8, false), 374_294, 621_979),
+                ((16, true), 516_912, 992_949),
+                ((16, false), 512_642, 966_151),
             ],
             _ => [
                 ((1, true), 264_510, 357_827),

@@ -467,7 +467,7 @@ fn transfer_forms_cross_rejected() {
         assert_eq!(prove_unchecked(OP_TRANSFER, st, w, [6; 32], &pp), Err("length"));
     }
     // the length gate is the form's: R_TX0's bound is R_BURN's (same m), below R_TX's
-    // (n2304-kmax4096 preset B, l = 831: R_TX0 and R_TX have the same rows, 124; n2560-kmax16384, l = 695: 165; so equal
+    // (n2304-kmax4096 preset B, l = 831: R_TX0 and R_TX have the same rows, 124; n2560-kmax16384, l = 694: 165; so equal
     // bounds)
     let equal = pqzh_ligero::set::NAME == "n2560-kmax16384"
         || pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry");

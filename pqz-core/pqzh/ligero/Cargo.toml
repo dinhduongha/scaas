@@ -28,7 +28,7 @@ spike-count = ["bench"]
 set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024"]
 # n 2304, K_MAX 4,096, q = 61,275,424,977,257 (owner 2026-10-21): preset B (radices 2/7/17/19/43/431)
 set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096"]
-# n 2560, K_MAX 16,384, q = 2^50 - 42,310,535: THE preset, MAX_PROOF_PQZH 327,680 (owner 2026-10-23)
+# n 2560, K_MAX 16,384, q = 2^50 - 42,310,535: THE preset's n / k with t = 122, MAX_PROOF_PQZH 327,680 (owner 2026-10-23)
 set-n2560-kmax16384 = ["pqz-stmt/set-n2560-kmax16384"]
 bench = []
 # bench only (P6-ANON plan, global constraints): op 7 also at M = 8, 16 (pqz-stmt's `oversize`), proofs above

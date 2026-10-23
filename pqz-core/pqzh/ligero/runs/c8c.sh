@@ -2,7 +2,7 @@
 # Plan 5h Task 8c part 2 (PQZH per parameter set through the generator): the crate rounds, no timing. Run under the
 # machine lock, one round per capped job (per-set cargo targets, so rounds of different sets may run at once):
 #   scripts/capped pqz-core/pqzh/ligero/runs/c8c.sh n2560 | v3 | a | fallback
-# n2560: n2560-kmax16384 (THE preset, MAX_PROOF_PQZH 327,680, owner 2026-10-23): tests, production lib, kat (every
+# n2560: n2560-kmax16384 (n 32,756, k 817, t 122, MAX_PROOF_PQZH 327,680, owner 2026-10-23): tests, production lib, kat (every
 # honest proof verifies), native = wasm32, sizes / soundness, constant-time check. v3: n2048-kmax1024 byte identity with
 # the baseline runs/c8-base-kat.jsonl and the vectors replay, native = wasm32. a: n2304-kmax4096 preset B. fallback:
 # n2304-kmax4096's feature fallback-retry tests.

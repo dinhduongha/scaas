@@ -922,7 +922,8 @@ def decode_input(b):
 IDS = {"pqzl": PQZL_ID, "pqzh": PQZH_ID} if HAS_PQZH else {"pqzl": PQZL_ID}  # the ids with proofs in the set's files
 STATEMENT_FILES = ["statement_transfer.json", "statement_burn.json", "statement_refresh.json",
                    "statement_register.json", "statement_disclose.json"]
-# the set's PQZH preset (set.json pqzh_preset, from set.toml; n2048-kmax1024: THE preset of the D3 id), never read from
+# the set's PQZH preset (set.json pqzh_preset, from set.toml; n2048-kmax1024: THE preset of the D3 id; n2560-kmax16384:
+# its n / k with t = 122), never read from
 # the vectors; F_q elements of EB = ceil(LOG2Q / 8) bytes (6 at n2048-kmax1024 and n2304-kmax4096, 7 at n2560-kmax16384)
 _P = _S.get("pqzh_preset") or {"n": 0, "k": 0, "t": 0, "ell": 0}
 LIGERO = {"n": _P["n"], "k": _P["k"], "ell": _P["ell"], "t": _P["t"], "pow_bits": 16, "max_proof": MAX_PROOF[PQZH_ID]}
@@ -934,8 +935,8 @@ _LIGERO_MAX = {
                                                           (4, 1): 236196, (4, 0): 235470}),
     "n2304-kmax4096": ((251608, 251608, 251608, 207688), {(1, 1): 251608, (1, 0): 251608, (2, 1): 252328, (2, 0): 251608,
                                                           (4, 1): 253048, (4, 0): 252328}),
-    "n2560-kmax16384": ((302743, 302743, 301896, 233289), {(1, 1): 302743, (1, 0): 302743, (2, 1): 302743,
-                                                           (2, 0): 302743, (4, 1): 303590, (4, 0): 302743})}
+    "n2560-kmax16384": ((304266, 304266, 303412, 234238), {(1, 1): 304266, (1, 0): 304266, (2, 1): 304266,
+                                                           (2, 0): 304266, (4, 1): 305120, (4, 0): 304266})}
 _lm = _LIGERO_MAX.get(SET, ((0, 0, 0, 0), {}))
 # (TRANSFER, TRANSFER0, BURN = REFRESH, REGISTER = the disclosures)
 LIGERO_MAX = {"TRANSFER": _lm[0][0], "TRANSFER0": _lm[0][1], "BURN": _lm[0][2], "REFRESH": _lm[0][2],
