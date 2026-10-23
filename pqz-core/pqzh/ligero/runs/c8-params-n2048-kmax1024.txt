@@ -16,7 +16,7 @@ constants: pqz-core/params/sets/n2048-kmax1024/rust/set.rs + pqzh_set.rs
 
 ## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)
 
-| relation | rows m | proof bound B | <= MAX_PROOF_PQZH 262,144 | statement B | input 5 + stmt + bound B | <= MAX_INPUT 393,216 today / 524,288 (8d) | crate bound [crate] | crate soundness bits |
+| relation | rows m | proof bound B | <= MAX_PROOF_PQZH 262,144 | statement B | input 5 + stmt + bound B | <= MAX_INPUT 393,216 (pqz-stmt) / 524,288 (8d) | crate bound [crate] | crate soundness bits |
 |---|---|---|---|---|---|---|---|---|
 | R_REG | 63 | 190,458 | yes | 16,480 | 206,943 | yes / yes | 190458 | 127.23 |
 | R_TX | 125 | 235,470 | yes | 83,072 | 318,547 | yes / yes | 235470 | 127.23 |

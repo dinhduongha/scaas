@@ -16,7 +16,7 @@ constants: pqz-core/params/sets/n2304-kmax4096/rust/set.rs + pqzh_set.rs
 
 ## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)
 
-| relation | rows m | proof bound B | <= MAX_PROOF_PQZH 262,144 | statement B | input 5 + stmt + bound B | <= MAX_INPUT 393,216 today / 524,288 (8d) | crate bound [crate] | crate soundness bits |
+| relation | rows m | proof bound B | <= MAX_PROOF_PQZH 262,144 | statement B | input 5 + stmt + bound B | <= MAX_INPUT 524,288 (pqz-stmt) / 524,288 (8d) | crate bound [crate] | crate soundness bits |
 |---|---|---|---|---|---|---|---|---|
 | R_REG | 63 | 207,688 | yes | 18,528 | 226,221 | yes / yes | 207688 | 127.4 |
 | R_TX | 124 | 251,608 | yes | 93,312 | 344,925 | yes / yes | 251608 | 127.4 |
@@ -28,10 +28,10 @@ constants: pqz-core/params/sets/n2304-kmax4096/rust/set.rs + pqzh_set.rs
 | R_TXM1_0 | 124 | 251,608 | yes | 74,752 | 326,365 | yes / yes | 251608 | 127.4 |
 | R_TXM2 | 125 | 252,328 | yes | 112,000 | 364,333 | yes / yes | 252328 | 127.4 |
 | R_TXM2_0 | 124 | 251,608 | yes | 93,312 | 344,925 | yes / yes | 251608 | 127.4 |
-| R_TXM4 | 126 | 253,048 | yes | 149,376 | 402,429 | no / yes | 253048 | 127.4 |
+| R_TXM4 | 126 | 253,048 | yes | 149,376 | 402,429 | yes / yes | 253048 | 127.4 |
 | R_TXM4_0 | 125 | 252,328 | yes | 130,432 | 382,765 | yes / yes | 252328 | 127.4 |
 | R_TXM8 | 187 | 296,968 | NO | 242,560 | 539,533 | no / NO | 296968 | not built |
-| R_TXM8_0 | 186 | 296,248 | NO | 223,104 | 519,357 | no / yes | 296248 | not built |
+| R_TXM8_0 | 186 | 296,248 | NO | 223,104 | 519,357 | yes / yes | 296248 | not built |
 
 model = crate on 14 relations (c8b-a-sizes.jsonl); op 7 M = 8: G = 2, not a built PQZH shape
 

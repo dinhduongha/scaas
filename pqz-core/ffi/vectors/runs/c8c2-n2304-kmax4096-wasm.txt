@@ -13,3 +13,18 @@
 {"id":"pqzl","form":"TRANSFER-MULTI M1-off","proof_bytes":46326,"wasm_equal_native":true,"wasm_precompile":1,"ms":2464}
 {"id":"pqzl","form":"TRANSFER-MULTI M2-off","proof_bytes":46827,"wasm_equal_native":true,"wasm_precompile":1,"ms":7607}
 {"id":"pqzl","form":"TRANSFER-MULTI M4-off","proof_bytes":47851,"wasm_equal_native":true,"wasm_precompile":1,"ms":8352}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-off","proof_bytes":64597,"wasm_equal_native":true,"wasm_precompile":1,"ms":4942}
+{"id":"pqzl","form":"TRANSFER-MULTI M2-off-two-real","proof_bytes":46849,"wasm_equal_native":true,"wasm_precompile":1,"ms":1327}
+{"id":"pqzl","form":"TRANSFER-MULTI M4-off-decoys","proof_bytes":47871,"wasm_equal_native":true,"wasm_precompile":1,"ms":2017}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-on-boundary","proof_bytes":67550,"wasm_equal_native":true,"wasm_precompile":1,"ms":14316}
+{"id":"pqzh","form":"TRANSFER","proof_bytes":248344,"wasm_equal_native":true,"wasm_precompile":1,"ms":2242}
+{"id":"pqzh","form":"TRANSFER0","proof_bytes":248824,"wasm_equal_native":true,"wasm_precompile":1,"ms":2168}
+{"id":"pqzh","form":"BURN","proof_bytes":247944,"wasm_equal_native":true,"wasm_precompile":1,"ms":2169}
+{"id":"pqzh","form":"REFRESH","proof_bytes":249080,"wasm_equal_native":true,"wasm_precompile":1,"ms":2162}
+{"id":"pqzh","form":"REGISTER","proof_bytes":204552,"wasm_equal_native":true,"wasm_precompile":1,"ms":1257}
+{"id":"pqzh","form":"DISCLOSE-SENDER","proof_bytes":205128,"wasm_equal_native":true,"wasm_precompile":1,"ms":1345}
+{"id":"pqzh","form":"DISCLOSE-RECEIVER","proof_bytes":205320,"wasm_equal_native":true,"wasm_precompile":1,"ms":1267}
+{"id":"pqzh","form":"DISCLOSE-AUDITOR","proof_bytes":204904,"wasm_equal_native":true,"wasm_precompile":1,"ms":1257}
+{"id":"pqzh","form":"TRANSFER-MULTI M1-on","proof_bytes":248920,"wasm_equal_native":true,"wasm_precompile":1,"ms":2169}
+{"id":"pqzh","form":"TRANSFER-MULTI M2-on","proof_bytes":249800,"wasm_equal_native":true,"wasm_precompile":1,"ms":2253}
+{"id":"pqzh","form":"TRANSFER-MULTI M4-on","proof_bytes":249784,"wasm_equal_native":true,"wasm_precompile":1,"ms":2227}
