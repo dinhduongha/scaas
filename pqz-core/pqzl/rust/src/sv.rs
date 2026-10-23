@@ -323,7 +323,7 @@ fn acc_scal(r: &mut Acc, a: &Nt, s: u64, sub: bool, pr: &[Prime; NP]) {
 }
 
 /// What C keeps in static storage for every relation: the primes, the mod-q images of the CRT weights, the all-ones
-/// polynomial, and A (32 x 32) in this form.
+/// polynomial, and A (K x K) in this form.
 pub(crate) struct Ar {
     pr: [Prime; NP],
     /// p_0 ... p_{i-1} mod q, P mod q
@@ -426,7 +426,7 @@ impl Ar {
         self.fwd(&a)
     }
 
-    /// `primes_init` (with `aes_tables`'s place taken by the `aes` crate) and A in this form (`lz_mat (A, 32, 32)`)
+    /// `primes_init` (with `aes_tables`'s place taken by the `aes` crate) and A in this form (`lz_mat (A, NPK, NPK)`, K x K)
     fn new(a: &PolyMat) -> Result<Ar, Error> {
         let mut ar = Ar { pr: [PRIME0; NP], mq: [0; NP], pq: 0, hd: [0; NP], nj: NT0, sa: Vec::new() };
         let mut p: u32 = (1 << 30) - 127; // = 1 mod 128

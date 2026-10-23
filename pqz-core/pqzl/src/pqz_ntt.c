@@ -10,7 +10,8 @@
  *
  * Integer-only, constant-time: no table lookups indexed by data, no data-dependent branches.
  * Reduction: Barrett (pqz_ntt.h pqz_redx), the same canonical residues for every set (v3: the 2^42 - 215 folds it
- * replaced gave the same values). zeta = 3^((q - 1) / 8) (pqz_set.h).
+ * replaced gave the same values). zeta = g^((q - 1) / 8), g the set's smallest quadratic non-residue >= 3 (pqz_set.h;
+ * g = 3 except n2816-kmax65536, g = 5).
  */
 #include <stdint.h>
 

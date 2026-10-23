@@ -1,6 +1,6 @@
 /* Review PoC hooks, prepended to a patched copy of lazer/lnp-quad.c by sv/review/review.sh (never in a production
    build). pqz_poc_mode selects the cheating prover: 0 honest, 1 z1 inflated (y1 << 3, z1 rejection skipped),
-   2 z21 inflated (y21 << pqz_poc_shift, 7, or less while the proof exceeds PQZ_MAX_PROOF: 5 at n2816-kmax65536; z2 rejection and the prover's own ||y2|| check skipped), 3 w1 shifted by +2 mod m before
+   2 z21 inflated (y21 << pqz_poc_shift, 7, or less while the proof exceeds PQZ_MAX_PROOF: 6 at n2816-kmax65536, as its tbox logs print; z2 rejection and the prover's own ||y2|| check skipped), 3 w1 shifted by +2 mod m before
    the final hash, the hint shifted to match (so the verifier recovers the hashed w1 and ||w - gamma w1|| grows);
    4 (P6-Z21 differential, sv/review/z21diff.c) the first polynomial of y21 times pqz_poc_k (one polynomial keeps the
    proof under PQZ_MAX_PROOF up to ||z21||^2 ~ 2^52), z2 rejection and ||y2|| check skipped as in 2. */

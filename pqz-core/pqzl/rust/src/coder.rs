@@ -487,6 +487,7 @@ pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -
         1 => f.z21.swap(ix(m2r), ((r1 / m2r + 1 + r1 % m2r) % m2r) as usize),
         2 => core::mem::swap(&mut f.z3[ix(4)], &mut f.z4[((r1 >> 8) % 4) as usize]),
         3 => add(&mut f.z1[ix(m1)], c64, sg),
+        // 4 / 6: large fixed magnitudes, the same at every set (as C: the norm check or the equations reject them)
         4 => set(&mut f.z1[ix(m1)], c64, sg * ((1 << 25) + (r1 % 1000) as i64)),
         5 => set(&mut f.z4[ix(4)], c64, sg * (p.bz4.get_i64() + ((r1 >> 8) as i64) % 2)),
         6 => add(&mut f.z3[ix(4)], c64, sg * (1 << 20)),

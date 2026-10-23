@@ -10,7 +10,7 @@ use crate::params::set;
 pub(crate) const Q: u64 = set::Q;
 pub(crate) const D: usize = 64;
 
-/// primitive 8th root of unity mod q, 3^((q - 1) / 8)
+/// primitive 8th root of unity mod q, g^((q - 1) / 8) with g the set's smallest quadratic non-residue >= 3 (gen_set.py)
 const ZETA: u64 = set::ZETA;
 /// zeta^2, a square root of -1
 const IROOT: u64 = set::IROOT;

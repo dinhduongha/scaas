@@ -16,9 +16,10 @@
  * 2^(30 NP)), Montgomery form throughout. An integer polynomial is held exactly while its coefficients stay below P/2 in
  * absolute value; it is then CRT-reconstructed and reduced mod q (red ()). Inputs enter as integers below 2^L (values
  * mod q, L = PQZ_LOG2Q) or as small integers (c, c^2, X^32, the all-ones polynomial); one ring product of two such
- * inputs is below 64 2^(2L) (the bounds next to each sum are given at the set n2304-kmax4096, L = 46: unit 2^98; v3
- * L = 42: 2^90), and the largest sum formed below is < 2^(2L + 23) (pa: 2^115 < P/2 ~ 2^119); gen_set.py picks NP so
- * that P/2 stays above it, so no input, honest or adversarial, can overflow it.
+ * inputs is below 64 2^(2L) (the bounds next to each sum are given in the unit 2^98 of n2304-kmax4096, L = 46; v3
+ * L = 42: 2^90; the term counts are the largest over the sets), and the largest sum formed below is < 2^(2L + 23)
+ * (n2304-kmax4096: 2^115 < P/2 ~ 2^119); gen_set.py picks NP so that P/2 stays above it (asserted below), so no
+ * input, honest or adversarial, can overflow it.
  *
  * PRG: LaZer's AES-256-CTR (rng.c: key = seed, nonce = le64(dom) || 0^8, 128-bit big-endian counter). The streams
  * here are public (derived from the transcript), so a table-based AES is used; the prover keeps the bitsliced one.
@@ -62,6 +63,7 @@ extern void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, 
 #define JLR 256 /* JL rows */
 #define M30 ((((uint32_t)1) << 30) - 1)
 _Static_assert (PQZ_LOG2Q <= 56, "lift: two folds below 2^31");
+_Static_assert (30 * NP - 1 > 2 * PQZ_LOG2Q + 23, "P / 2 above the largest sum 2^(2L + 23) (gen_set.py's NP rule)");
 #define Q PQZ_Q
 
 typedef struct
@@ -774,6 +776,8 @@ jl_fold (int64_t *acc, unsigned ncols, uint64_t V[LAMBDA][JLR], const prg_t *g, 
 #define SVZ (3 + 2 * SVG + 2 * SVL) /* exact l2 blocks: s_f, e_f, r_g, e1_g, one per e2 vector (X-1) */
 #define SVPR (2 + 2 * SVL)           /* evaluation-equation products */
 #define SVBIN ((PQZ_BITS_BURN + 64 * SVL + 63) / 64) /* binary polys */
+/* the evaluation sum (SVPR + SVBIN products of 64 terms, c up to 2^9) stays < 2^(2L + 22), gen_set.py's assumption */
+_Static_assert ((SVPR + SVBIN) * 64 * 512 <= 1 << 22, "evaluation sum above 2^(2L + 22): raise gen_set.py's NP rule");
 typedef struct
 {
   const lnp_tbox_params_struct *P;
@@ -1692,7 +1696,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     for (k = 0; k < LAMBDA; k++)
       {
         unsigned col = 0;
-        memset (&acc, 0, sizeof acc); /* nex <= 460 terms (R_TXM, 16 legs, X-1 blocks): |.| < 460 2^98 < 2^107 */
+        memset (&acc, 0, sizeof acc); /* nex <= 550 terms (R_TXM, 16 legs with the auditor, X-1 blocks, at
+                                         n2816-kmax65536; 460 at n2304-kmax4096): |.| < 550 2^98 < 2^108 */
 #define W3MAC(slot)                                                                                          \
   do                                                                                                         \
     {                                                                                                        \
@@ -1788,7 +1793,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
           uint64_t rho;
           acc_t br;
           eval_fold (S, op, Gm, Ab, &rho, gin + k * M, T);
-          memset (&br, 0, sizeof br); /* nprod + nbin <= 34 + 31 terms: |.| < 65 2^98 < 2^105 */
+          memset (&br, 0, sizeof br); /* nprod + nbin <= SVPR + SVBIN terms (34 + 31 at n2304-kmax4096,
+                                                 34 + 34 at n2816-kmax65536): |.| < 68 2^98 < 2^105 */
           for (i = 0; i < S->nprod; i++)
             fwd (&t1, Gm[i]), acc_mul (&br, &t1, &PKe[i]);
           for (i = 0; i < S->nbin; i++)

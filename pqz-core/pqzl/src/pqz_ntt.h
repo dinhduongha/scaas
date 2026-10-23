@@ -18,6 +18,7 @@ pqz_csubq (uint64_t a)
   return t + (PQZ_Q & (uint64_t)((int64_t)t >> 63));
 }
 
+_Static_assert (PQZ_BARX == 2 * PQZ_LOG2Q + 4 && PQZ_BARX <= PQZ_LOG2Q + 63, "Barrett: X = 2L + 4 <= L + 63");
 /* x < 2^X -> x mod q, constant-time (Barrett; L = PQZ_LOG2Q, 2^(L-1) < q < 2^L, X = PQZ_BARX = 2L + 4 <= L + 63,
    MUX = floor(2^X / q) < 2^(X-L+1)): qh = floor(floor(x / 2^(L-1)) MUX / 2^(X-L+1)) <= floor(x / q), and the three
    floors lose less than 2^(L-1) / q + x / 2^X + 1 < 3, so r = x - qh q < 3q; the product is below 2^(2X-2L+2) <= 2^128 */

@@ -1657,13 +1657,16 @@ pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, ui
     case 3: /* z1 coefficient +-1 */
       p = polyvec_get_elem (F.z1, r1 % m1), set_c (p, c64, cval (p, c64) + sg);
       break;
-    case 4: /* z1 coefficient large (norm) */
+    case 4: /* z1 coefficient set to +-(2^25 + r): large, near the z1 l2 bound at every set (sigma1 = 2^18 in every set's
+               codegen, the bound grows only as sqrt(m1)); rejected by that norm check or, below it, by the equations
+               (8b review m10: the name promises the norm path, which is not guaranteed) */
       p = polyvec_get_elem (F.z1, r1 % m1), set_c (p, c64, sg * (((int64_t)1 << 25) + (int64_t)(r1 % 1000)));
       break;
     case 5: /* z4 coefficient at / over the l_inf bound */
       p = polyvec_get_elem (F.z4, r1 % 4), set_c (p, c64, sg * (int_get_i64 (P->Bz4) + (int64_t)(r1 >> 8) % 2));
       break;
-    case 6: /* z3 coefficient large (norm) */
+    case 6: /* z3 coefficient +-2^20: large (the same fixed magnitude at every set; the norm check or the equations
+               reject it, as kind 4) */
       p = polyvec_get_elem (F.z3, r1 % 4), set_c (p, c64, cval (p, c64) + sg * ((int64_t)1 << 20));
       break;
     case 7: /* h: coefficient 0 / d/2 nonzero, or another coefficient changed */

@@ -20,6 +20,8 @@
 #include "pqz.h"
 
 #ifdef PQZ_NORM_POC
+#include "lazer.h"
+#include "pqz_reg_params.h" /* the set's R_REG Bsq (build/include) */
 extern int pqz_poc_mode;
 extern int pqz_poc_shift;
 extern int64_t pqz_poc_z21sq;
@@ -105,8 +107,9 @@ main (int argc, char **argv)
             }
           printf ("%-8s prove rc=%d proof %zu B", MODE[k], rc, pl);
           if (k == 2)
-            printf ("  y21 << %d: ||z21||^2 = %lld (%.1fx the v3 R_REG Bsq 22226101053479)", pqz_poc_shift,
-                    (long long)pqz_poc_z21sq, pqz_poc_z21sq / 22226101053479.0);
+            printf ("  y21 << %d: ||z21||^2 = %lld (%.1fx the set's R_REG Bsq %llu)", pqz_poc_shift,
+                    (long long)pqz_poc_z21sq, pqz_poc_z21sq / (double)pqz_reg_Bsq_limbs[0],
+                    (unsigned long long)pqz_reg_Bsq_limbs[0]);
           printf ("\n");
           if (rc)
             continue;
