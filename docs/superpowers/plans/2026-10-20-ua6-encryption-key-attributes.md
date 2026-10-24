@@ -5,7 +5,7 @@
 **Status:** plan (designer for UA-6, 2026-10-20), **waiting for the owner's review of the spec** (Task 0). Nothing here is built.
 
 **Base:** `main` at `c173de37` (5g-Z2 merged). UA-6 runs **before** plan Task 5h (CTR-UA-30); the 5h plan is being
-updated in parallel and is this plan's dependency only for the chain-7622 roll-out (plan fs3 Task 13).
+updated in parallel and is this plan's dependency only for the SCaaS testnet roll-out (plan fs3 Task 13).
 
 **Goal.** Build the owner rulings of 2026-10-20 (decisions CTR-UA-30 and its two Change lines, CTR-ZTH-32 Change):
 1. a UA is the actor that signs a write; the PQZ public key is an attribute of a PQ signing UA (`mldsa44`, `mldsa65`,
@@ -58,11 +58,11 @@ CTR-ZTH-51, `pq-zero-knowledge.md` §6, §7.2, §7.10, `docs/node/gateway.md` NO
 | U10 | bn254 | UA-6 moves the whole bn254 Zether line (kind, Schnorr verifier, token verifier instances, `proofSystemId`, deploy steps, fixtures, KATs) to `legacy/`; 5h drops its bn254 step. | The kind cannot leave while bn254 suites register bn254 accounts; UA-6 lands first. |
 | U11 | Index | Each UA in its kind's list; a holder also in the `0x0142` "PQZ-capable" list (`uaCount/uaAt/uaPage(0x0142)`), no reverse index. The CTR-UA-29 decoy rule loses its `authRef` clause. | One anonymity set per chain for PQZ decoys; ≈ +27 k gas per holder. |
 | U12 | Public balances | PQZ public balance, fees, shield source under the signing UA id; Zether public balance under the Zether UA id. | CTR-UA-30 (2), (3); CTR-PQZ-06 Change 2026-10-20. |
-| U13 | `R_REG` | Message `uaMessage(0x0142, POP, popDigest(signerUA, h))`; no own `proofSystemId`; reaches 7622 with the 16k id in fs3 Task 13. | The message is opaque to the relation; the verifier probe is unchanged. |
+| U13 | `R_REG` | Message `uaMessage(0x0142, POP, popDigest(signerUA, h))`; no own `proofSystemId`; reaches the SCaaS testnet with the 16k id in fs3 Task 13. | The message is opaque to the relation; the verifier probe is unchanged. |
 | U14 | Clients | 9 libraries + clientkeys + zether-prover per spec §10 table; 0x0142 in a `SCHEMES` table. | `tag(0x0142)` and the keyHash group must survive. |
 | U15 | Node | Gateway route `{chain, kind, keyData, pop, pqzKey?, pqzPop?}`, its body limit 160 KiB; record cache on the new `recordOf`. No node source change expected. | A PQZL holder registration is ≈ 100–108 KB as hex. |
 | U16–U19 | Vectors, size, gas, tests | Spec §10. | — |
-| U20 | Migration | Redeploy; 7622 in fs3 Task 13. | Test chains only. |
+| U20 | Migration | Redeploy; SCaaS testnet in fs3 Task 13. | Test chains only. |
 
 ## Review Focus (inputs most likely to bite)
 
@@ -186,9 +186,9 @@ instances and `proofSystemId` (to legacy per U10); tests `test/zether/**` (fixtu
   backups, the gas and size logs. Fixes; findings and dispositions recorded under CTR-UA-30 in decisions.md.
 
 ### Task 11: Merge
-- [ ] After the owner's approval the controller merges `ua6` into main (and pushes on the owner's word). The 7622
+- [ ] After the owner's approval the controller merges `ua6` into main (and pushes on the owner's word). The SCaaS testnet
   redeploy is **not** here: it happens in plan fs3 Task 13 with the 16k `proofSystemId` (spec §9, U20), using Task 3's
-  `e2e.py`. Until then 7622 keeps today's registry.
+  `e2e.py`. Until then the SCaaS testnet keeps today's registry.
 
 ## Out of scope
 Mainnet 22776. The 5h state layout, the K_MAX = 16,384 parameter set and its `proofSystemId` (plan 5h). Wallet decoy

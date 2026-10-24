@@ -1,4 +1,4 @@
-# chain 7622 — Nethermind private, Clique
+# SCaaS testnet — Nethermind private, Clique
 
 Chain đích **đầu tiên** cho Zether (quyết định #5: gas không phải ràng buộc, nên
 chạy private trước).

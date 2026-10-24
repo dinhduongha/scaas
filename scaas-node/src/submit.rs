@@ -24,6 +24,8 @@ use crate::metatx::{addr, uint, Mtx};
 use crate::nonce::{bump, plan, Inflight};
 use crate::odoo::{Job, Odoo, Report};
 
+/// A 0-value self-transfer: 21,000 before Amsterdam, 12,000 under EIP-2780 (no recipient charge for the sender
+/// itself; the SCaaS testnet's value transfer to another account used 21,000 = 12,000 + 3,000 + 6,000), so 21,000 fits both.
 const GAP_FILL_GAS: u64 = 21_000;
 /// Nhịp lấy mẫu base fee + số dư lane cho cầu dao (R55).
 const SAMPLE_EVERY: Duration = Duration::from_secs(15);
@@ -256,7 +258,12 @@ impl Submitter {
                 },
                 None => None,
             };
-            let gas = me.cfg.max_gas_per_tx.min(guard::MAX_TX_GAS);
+            // its replacements reuse the original transaction's gas limit (review M3); only when the RPC cannot tell,
+            // the cap: the operator's, never past what the chain's blocks take (an unreadable block fails the start)
+            let gas = match me.chain.tx_gas(hash).await {
+                Ok(Some(g)) => g,
+                _ => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
+            };
             // Tập in-flight dựng lại từ việc đang theo dõi (§8.6).
             let guard = work.as_ref().and_then(|w| w.meta?.digest).and_then(|d| me.digests.try_acquire(d));
             let orphan = work.is_none().then_some(j.job_id);
@@ -761,6 +768,14 @@ mod tests {
         code_only: Option<Address>,
         /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
         genesis: bool,
+        /// `latest`'s `gasLimit` (default 200,000,000, the SCaaS testnet's target).
+        block_gas: Option<u64>,
+        /// `latest` has no `blockAccessListHash`: a chain before Amsterdam (Osaka, an L2, anvil).
+        osaka: bool,
+        /// `eth_getBlockByNumber latest` fails (a transport error).
+        block_err: bool,
+        /// `eth_getTransactionByHash` answers a transaction with this gas limit (`None`: unknown, `null`).
+        tx_gas: Option<u64>,
     }
     type Rpc = Arc<Mutex<Evm>>;
 
@@ -777,12 +792,24 @@ mod tests {
             let word = |v: U256| Value::String(format!("0x{}", alloy::hex::encode(v.abi_encode())));
             let out: Result<Value, Value> = match r["method"].as_str().unwrap() {
                 "eth_getTransactionCount" => Ok(json!(format!("{:#x}", e.count))),
+                // Nethermind 2.2.0's estimate-stage answer for a call over 2^24 regular gas (at its 100 M RPC gas cap)
+                "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
+                "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
+                "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| json!({"gas": format!("{g:#x}")}))),
+                "eth_getBlockByNumber" if p[0] == "latest" && e.block_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
                 "eth_getLogs" => Ok(json!([])),
                 "eth_getBalance" => Ok(json!("0xde0b6b3a7640000")),
+                "eth_getBlockByNumber" if p[0] == "latest" => {
+                    let mut b = json!({"number": "0x10", "gasLimit": format!("{:#x}", e.block_gas.unwrap_or(200_000_000))});
+                    if !e.osaka {
+                        b["blockAccessListHash"] = json!(format!("{:#x}", B256::repeat_byte(0xba)));
+                    }
+                    Ok(b)
+                }
                 "eth_getBlockByNumber" if e.genesis => {
                     Ok(serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
                 }
@@ -830,6 +857,9 @@ mod tests {
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
+                            // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
+                            Some("oog") => Err(err(-32000, "out of gas", None)),
+                            Some("estimate_oog" | "estimate_down") => Ok(word(U256::from(1))),
                             Some(_) => Err(err(-32000, "upstream timeout", None)),
                             None => Ok(word(U256::from(1))),
                         }
@@ -1254,15 +1284,91 @@ mod tests {
         // the first settle try never passes max
         let (r, rpc) = outcomes(ok(), vec![call_job(9, dex, settle.clone())], move |c| { cfg(c); c.max_gas_per_tx = 200_000; }).await;
         assert_eq!((states_of(&r).last().copied(), rpc.lock().unwrap().gas.clone()), (Some("broadcast"), vec![200_000]));
-        // max_gas_per_tx above 2^24 is clamped: a settlement needing more never goes
-        let (r, rpc) = outcomes(Evm { settle_from: guard::MAX_TX_GAS + 1, ..ok() }, vec![call_job(9, dex, settle)],
+        // Amsterdam: a settlement may take more than 2^24 (state gas on top of the regular 2^24) up to max_gas_per_tx ...
+        let (r, rpc) = outcomes(Evm { settle_from: guard::MAX_TX_GAS + 1, ..ok() }, vec![call_job(9, dex, settle.clone())],
             move |c| { cfg(c); c.max_gas_per_tx = 1 << 25; }).await;
+        assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
+        assert!(rpc.lock().unwrap().gas[0] > guard::MAX_TX_GAS);
+        // ... but never past the chain's block gas limit, read from the chain
+        let (r, rpc) = outcomes(Evm { settle_from: guard::MAX_TX_GAS + 1, block_gas: Some(guard::MAX_TX_GAS), ..ok() },
+            vec![call_job(9, dex, settle)], move |c| { cfg(c); c.max_gas_per_tx = 1 << 25; }).await;
         assert_eq!((r[0].0.as_str(), rpc.lock().unwrap().sent.len()), ("dead", 0), "{r:?}");
         // the 1271 floor follows the signer, not the target
         let (_, rpc) = outcomes(Evm { code_only: Some(TOKEN), ..ok() }, vec![job(7)], |_| {}).await;
         assert_eq!(rpc.lock().unwrap().gas, vec![0x30000 * 6 / 5], "an EOA signer on a contract token");
         let (_, rpc) = outcomes(Evm { code_only: Some(Address::repeat_byte(0xab)), ..ok() }, vec![job(7)], |_| {}).await;
         assert_eq!(rpc.lock().unwrap().gas, vec![guard::ERC1271_FLOOR]);
+    }
+
+    /// The Amsterdam gas model (EIP-7825 + EIP-8037): regular gas ≤ 2^24, the gas limit (regular + state) bounded by
+    /// `max_gas_per_tx` and the chain's block gas limit, never by 2^24.
+    #[tokio::test]
+    async fn gas_follows_the_two_dimensional_model() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
+        // regular ≤ 2^24, total > 2^24: the largest Zether edge cell measured under Amsterdam needs 31.2 M in total
+        // (F185, ZetherGasLimit test_edge_*); accepted, its limit is the estimate + 20 %, past 2^24
+        let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), ..ok() }, vec![job(7)], cap).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert_eq!(rpc.lock().unwrap().gas, vec![37_440_000]);
+        // the block gas limit binds before max_gas_per_tx (a smaller chain, or the ramp after a reset)
+        let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(30_000_000), ..ok() }, vec![job(7)], cap).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("above the chain's block gas limit 30000000"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // the padded limit stops at the block gas limit, never below the estimate
+        let (_, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(32_000_000), ..ok() }, vec![job(7)], cap).await;
+        assert_eq!(rpc.lock().unwrap().gas, vec![32_000_000]);
+        // regular over 2^24 (1): the chain's simulation fails "out of gas" at its gas cap: refused, never requeued
+        let (r, rpc) = outcomes(Evm { sim: Some("oog"), ..ok() }, vec![job(7)], cap).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("2^24 regular gas"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // regular over 2^24 (2): a calldata floor over 2^24 (261,910 B: 15,000 + 64 · 261,910 > 2^24) is refused before
+        // any simulation; 261,909 B still goes
+        let af = Address::repeat_byte(0x32);
+        let deploy = |n: usize| [&[0x45, 0x9b, 0x5b, 0x50][..], &vec![0u8; n - 4]].concat();
+        let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.account_factory = Some(af); };
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, af, deploy(261_910))], fac).await;
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("calldata floor 16777240 above the 2^24 regular gas"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let (r, _) = outcomes(ok(), vec![call_job(9, af, deploy(261_909))], fac).await;
+        assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
+    }
+
+    /// Review amsterdam-node M1, M2, L5: the fork is read per chain from its `latest` header; before Amsterdam (no
+    /// `blockAccessListHash`: Osaka, an L2, anvil) the whole gas limit stays under 2^24 and there is no 64 gas/byte
+    /// floor; the estimate-stage "gas required exceeds allowance" is a refusal; an unreadable block, or any other
+    /// simulation error, is transient.
+    #[tokio::test]
+    async fn gas_follows_each_chains_fork_and_tells_refusals_from_transport() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
+        // Osaka: an estimate over 2^24 is refused, a large one under it is padded to 2^24 at most
+        let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("above the 2^24 gas limit of a transaction"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let (r, rpc) = outcomes(Evm { estimate: Some(15_000_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert_eq!(rpc.lock().unwrap().gas, vec![guard::MAX_TX_GAS], "clamped to 2^24 before Amsterdam");
+        // Amsterdam: the same estimate goes past 2^24
+        let (_, rpc) = outcomes(Evm { estimate: Some(15_000_000), ..ok() }, vec![job(7)], cap).await;
+        assert_eq!(rpc.lock().unwrap().gas, vec![18_000_000]);
+        // Osaka: no Amsterdam calldata floor (261,910 B is not refused by the node; the chain's own rules apply)
+        let af = Address::repeat_byte(0x32);
+        let big = [&[0x45, 0x9b, 0x5b, 0x50][..], &vec![0u8; 261_906]].concat();
+        let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.account_factory = Some(af); };
+        let (r, _) = outcomes(Evm { osaka: true, ..ok() }, vec![call_job(9, af, big)], fac).await;
+        assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
+        // the estimate stage refuses (regular gas over 2^24 at the RPC's gas cap): dead, nothing sent
+        let (r, rpc) = outcomes(Evm { sim: Some("estimate_oog"), ..ok() }, vec![job(7)], cap).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("gas required exceeds allowance"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // any other estimate error stays transient (classify_sim leaves it a transport error): queued, never dead
+        let (r, _) = outcomes(Evm { sim: Some("estimate_down"), ..ok() }, vec![job(7)], cap).await;
+        assert_eq!(states_of(&r), ["queued"], "{r:?}");
+        // an unreadable block gas limit is transient too
+        let (r, rpc) = outcomes(Evm { block_err: true, ..ok() }, vec![job(7)], cap).await;
+        assert_eq!(states_of(&r), ["queued"], "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
     }
 
     /// NODE-GW-07: a lane whose RPC block 0 is not the pinned chain_uid never starts (review T4 I3).
@@ -1289,7 +1395,9 @@ mod tests {
     }
 
     /// Review T4 m1/m2: the registered tokens follow the client; a job rebuilt after a restart passes the guard (a
-    /// refused one is only gap-filled) and is tracked with gas clamped to 2^24.
+    /// refused one is only gap-filled) and is tracked with its original transaction's gas limit (review M3); only when
+    /// the RPC does not know it, with `max_gas_per_tx` clamped by the block gas limit (Amsterdam: no longer 2^24); an
+    /// unreadable block then fails the start (review L5).
     #[tokio::test]
     async fn tokens_refresh_and_rebuilt_jobs_pass_the_guard() {
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
@@ -1305,10 +1413,24 @@ mod tests {
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, ..Default::default() }).await;
         for (toks, kept) in [(toks(), true), (json!([]), false)] {
             let (odoo, _) = fake_odoo(Fake { tokens: toks, inflight: tracked(job(7)), ..Default::default() }).await;
-            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 25).await.unwrap();
+            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
             let sent = s.inflight.get(&0).expect("tracked");
-            assert_eq!((sent.work.is_some(), sent.gas), (kept, guard::MAX_TX_GAS));
+            assert_eq!((sent.work.is_some(), sent.gas), (kept, 200_000_000), "the block gas limit binds");
         }
+        // the original transaction's gas limit when the RPC knows it
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_gas: Some(0x5_5555), ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
+        assert_eq!(s.inflight.get(&0).expect("tracked").gas, 0x5_5555);
+        // before Amsterdam the fallback stays under 2^24
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, osaka: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
+        assert_eq!(s.inflight.get(&0).expect("tracked").gas, guard::MAX_TX_GAS);
+        // no original gas and no block: the lane does not start (retried like any start-up RPC failure)
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, block_err: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        assert!(lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.is_err());
     }
 
     /// Review P5 m7: a job tracked after a restart and refused by the guard is still reported: `mined` when its own

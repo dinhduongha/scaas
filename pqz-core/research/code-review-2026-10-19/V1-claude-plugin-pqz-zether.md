@@ -57,7 +57,7 @@ The reverse switch (NONE to BUNDLE) also works but only costs Mallory gas. A COM
 - The ciphertexts survive only in the `PqzTransfer` / `PqzTransferMulti` event logs.
 - It also breaks the documented guarantee that the user picks the storage mode.
 
-Reach: direct calls on BUNDLE tokens only. Gas is free on 7622, so the attack costs nothing.
+Reach: direct calls on BUNDLE tokens only. Gas is free on the SCaaS testnet, so the attack costs nothing.
 
 **Confirmed or hypothesis:** confirmed by the trace above.
 
@@ -130,7 +130,7 @@ Reach: direct calls on BUNDLE tokens only. Gas is free on 7622, so the attack co
 
 `T` is indeed unchanged (lane-wise mod q, `PqzCt.sol:43-94`), so the proof stays valid; only the calldata is stale. On the relayed path the envelope signature covers `data` (`MetaTxLib.sol:100,189`), so the user must **re-sign** the envelope (ML-DSA on the UA path), not just resubmit. Mallory can repeat this while Alice has unrolled credits, and anyone can create those by sending her credits.
 
-**Impact:** liveness griefing of debits, at no cost on 7622. No fund loss.
+**Impact:** liveness griefing of debits, at no cost on the SCaaS testnet. No fund loss.
 
 **Confirmed or hypothesis:** confirmed; the impact rating is a judgment.
 

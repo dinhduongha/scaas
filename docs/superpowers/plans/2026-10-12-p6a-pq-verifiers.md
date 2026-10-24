@@ -11,7 +11,7 @@ chain and accepted by the core), `fndsa512` (Falcon-512 with EIP-8052's SHAKE256
 **gas gate measured: passes**); clientkeys `src/pq.js` (keys from the BIP-39 seed by the specified HKDF, `signUA`, the
 expanded key); cross-language vectors from the published sources (NIST ACVP FIPS 204/205 sigVer, the EIP-8051 and
 EIP-8052 KATs, the EIP-8355 cases) and SCaaS vectors with a mutation set; measured gas (T-GAS for the PQ kinds); the
-docs. Not here: the UA registry (`UARegistry`, UA F1 — P6c), any precompile on chain 7622 (P6f), PQ Zether.
+docs. Not here: the UA registry (`UARegistry`, UA F1 — P6c), any precompile on the SCaaS testnet (P6f), PQ Zether.
 
 **Architecture:** Three layers under `smartcontracts/evm/src/ua/`. (1) **Shared**: `PqUA.sol` (`IUAKindVerifier`,
 kind numbers and tags, `ua_msg`, `pq_msg`, `M' = 0x00 ‖ 0x00 ‖ pq_msg`, the exact-answer precompile probe),
@@ -128,7 +128,7 @@ of the call.
   the registry stores is P6c's (owner) decision with the measured numbers.
 - **P5 — Probing.** ML-DSA only, EIP-8355 layout `pk ‖ sig ‖ pq_msg`, one candidate per verifier, probed in the
   constructor with a valid and a one-bit-flipped vector (exact 32-byte 1 / 0); a failed probe means pure Solidity, not a
-  revert (one contract serves every chain; the chain-7622 deploy requires `PRECOMPILE() != 0`). Not probed: EIP-8051
+  revert (one contract serves every chain; the SCaaS testnet deploy requires `PRECOMPILE() != 0`). Not probed: EIP-8051
   (it needs the expanded key per call, which only a stored-key registry has; and a precompile built from its text's μ
   would fail the probe), EIP-8052 (no addresses), SLH-DSA (no EIP).
 - **P6 — SHAKE in Solidity.** Our own Keccak-f[1600] (lanes at fixed memory, round body unrolled, theta / rho-pi / chi
@@ -169,7 +169,7 @@ of the call.
 
 ## Out of scope (next sub-phases)
 
-The registry and its `verifyCap`s (P6c), the chain-7622 ML-DSA precompile in the EIP-8355 layout and the address move
+The registry and its `verifyCap`s (P6c), the SCaaS testnet ML-DSA precompile in the EIP-8355 layout and the address move
 (P6f), `UAPqzVerifier` and `PqzToken` (P6g), the node's PQ intents (P6i); bamboo-dms has nothing to change for P6a.
 
 ### Task 1: clientkeys PQ keys and signing; the PQ vectors

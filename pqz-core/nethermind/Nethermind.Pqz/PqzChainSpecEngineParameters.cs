@@ -62,7 +62,7 @@ public class PqzChainSpecEngineParameters : IChainSpecEngineParameters
         return active;
     }
 
-    public void AddTransitions(SortedSet<long> blockNumbers, SortedSet<ulong> timestamps)
+    public void AddTransitions(SortedSet<ulong> blockNumbers, SortedSet<ulong> timestamps)
     {
         Validate();
         // a 0 timestamp (active from a genesis at time 0) is not a fork (EIP-2124; Taiko does the same)
@@ -70,7 +70,7 @@ public class PqzChainSpecEngineParameters : IChainSpecEngineParameters
             if (s.Timestamp > 0) timestamps.Add(s.Timestamp);
     }
 
-    public void ApplyToReleaseSpec(ReleaseSpec spec, long startBlock, ulong? startTimestamp)
+    public void ApplyToReleaseSpec(ReleaseSpec spec, ulong startBlock, ulong? startTimestamp)
     {
         if (spec is not PqzReleaseSpec pqz)
             throw new InvalidOperationException(

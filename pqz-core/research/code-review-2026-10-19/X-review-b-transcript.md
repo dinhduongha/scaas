@@ -66,7 +66,7 @@ not with `tg`.
 
 The domains do not collide: the last hash1 domain is `M + 2(d−1) + 2 + Z − 1`. `hz` stays (hash1 = H(hz ‖ tg) still
 binds `z3` / `z4`), and `hash0` becomes unused except as the input of the tg round. This is a transcript change:
-`proofSystemId` v4, regenerated vectors and digests, C = Rust parity, `gate fin`. The 7622 roll-out (Task 13) should wait
+`proofSystemId` v4, regenerated vectors and digests, C = Rust parity, `gate fin`. The SCaaS testnet roll-out (Task 13) should wait
 for it. Add to `fs_bind` (C and Rust, all four verifiers): mutate `tg` by one coefficient (a new test-only mutate
 kind) and assert that the kind 2 / 3 (12 / 13) seeds change. Update `pqz-tbox-soundness.md` §8 and the spec's transcript
 bullet (B-2).

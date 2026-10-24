@@ -223,7 +223,7 @@ static class Cal
     static PqzSchedule Sched(JsonArray rows, long self, long m44, long m65)
     {
         JsonObject s = new() { ["timestamp"] = 1, ["pqz"] = rows.DeepClone(), ["selftestGas"] = self, ["mldsa44Gas"] = m44, ["mldsa65Gas"] = m65 };
-        PqzSchedule p = new Nethermind.Serialization.Json.EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString());
+        PqzSchedule p = new Nethermind.Serialization.Json.EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString())!;
         p.Validate();
         return p;
     }

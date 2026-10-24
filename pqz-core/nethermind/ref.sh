@@ -3,7 +3,7 @@
 # these assemblies. The container is created, copied from and removed; it is never started.
 set -eu
 cd "$(dirname "$0")"
-IMG=${NM_BASE:-nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6}
+IMG=${NM_BASE:-nethermind/nethermind:2.2.0@sha256:5cc0061e6a317e9249e1e1f537a0a40a2036525c62f1cb250943432f4c000a38}
 docker image inspect "$IMG" > /dev/null 2>&1 || docker pull "$IMG"
 rm -rf ref && mkdir ref
 C=$(docker create "$IMG")

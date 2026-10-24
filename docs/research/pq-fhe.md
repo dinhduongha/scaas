@@ -163,7 +163,7 @@ flowchart LR
     relinearisation keys, a threshold key network to decrypt results, KB–MB ciphertexts and milliseconds of GPU per
     operation. Division has no native FHE form (bootstrapping / LUT approximations only). Under the Zether model each
     account has its own key, so a product of two accounts' ciphertexts would not even decrypt.
-  - Each precompile is a consensus change (chainspec activation, gas pricing, audit scope, maintenance on 7622 and
+  - Each precompile is a consensus change (chainspec activation, gas pricing, audit scope, maintenance on the SCaaS testnet and
     22776), so none is added without a user and a spec. *Ciphertext × public scalar* works with today's scheme
     and fits in Solidity if a contract needs it. Shared hidden state (auctions, a confidential order book) would be
     its own FHE project (off-chain coprocessor + key network), specified when a use case exists.

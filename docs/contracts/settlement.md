@@ -252,7 +252,7 @@ fails ([CTR-ZTH-06](zether.md#CTR-ZTH-06)). PQZ mirrors the names with `pqz` and
 - **Node:** re-encodes the dynamic arguments and refuses non-canonical `data` before computing the mesh `intent_id`
   ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)).
 - **Status:** BUILT (P3), UNAUDITED: the `*_ZETHER` kinds refuse to initialize outside chain ids 31337 and 1337
-  ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); chain 7622 is not on that list. The old `ZetherToken` with its own envelope and
+  ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the SCaaS testnet is not on that list. The old `ZetherToken` with its own envelope and
   names is backed up in `smartcontracts/evm/legacy/p3/`.
 
 ### 3.8 Mandates

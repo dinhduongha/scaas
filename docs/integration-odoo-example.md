@@ -46,7 +46,7 @@ Odoo 19).
 - `blockchain.chain` (`mail.thread`): `name`, `evm_chain_number` (unique), `caip2` (`eip155:<n>`), `native_currency`,
   `state` (`draft`/`active`/`paused`), `finality_mode` (`depth`/`tag`), `finality_depth`, `finality_quorum`,
   `indexed_block`, `public_rpc_url` (for `wallet_addEthereumChain`); activation refuses `rpc_urls < quorum`; seeds for
-  100, 42220 and the private chain 7622 (formerly 9000).
+  100, 42220 and the SCaaS testnet (chain id 7622, formerly 9000).
 - `blockchain.token` (`mail.thread`): `chain_id`, `address`, `name`, `symbol`, `decimals`, `domain_name` (default
   `SCaaS MetaToken`), `domain_version` (`1`), `currency_id`, `is_confidential`, `active`; `UNIQUE(chain_id, address)`.
 - `blockchain.metatx` — signed envelope, immutable after signing: `company_id`, `chain_id`, `token_id`, `from_address`,

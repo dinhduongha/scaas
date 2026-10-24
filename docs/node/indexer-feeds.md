@@ -67,7 +67,7 @@ family details in [networks/](../networks/README.md)):
 
 | Family | Mode | Final head | Height unit | Notes |
 |---|---|---|---|---|
-| EVM private (chain 7622, Clique 1 signer) | `depth`, 1 | `latest − 1` | block | Reorg-free by construction |
+| EVM private (SCaaS testnet, Clique 1 signer) | `depth`, 1 | `latest − 1` | block | Reorg-free by construction |
 | EVM public (Gnosis) | `tag` `finalized`, quorum ≥ 2 | `eth_getBlockByNumber('finalized')` | block | ~160–240 s; quorum 2 required before `active` |
 | EVM L2 (Celo OP Stack) | `l1_batch` | L1-finalized batch | block | **PLANNED** (tracker item 13); until then `tag` |
 | Hedera | `instant` | latest record file via JSON-RPC relay | block | aBFT |

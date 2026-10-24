@@ -66,7 +66,7 @@ reached by DELEGATECALL and does not count towards a token's size; `internal` li
 
 | Profile | EVM | Why |
 |---|---|---|
-| `default`, `private7622` | osaka | chain 7622: private Nethermind (Clique, one signer), Fusaka + BPO2, EIP-2537 live, the `PQZ` and ML-DSA precompiles (`src/chains/private7622/`) |
+| `default`, `private7622` | osaka | SCaaS testnet: private Nethermind (Clique, one signer), Fusaka + BPO2, EIP-2537 live, the `PQZ` and ML-DSA precompiles (`src/chains/private7622/`) |
 | `gnosis`, `celo` | osaka | Pectra, then Fusaka; EIP-2537 measured live |
 | `bsc`, `polygon`, `base` | osaka | drafts ([networks/evm.md](../../docs/networks/evm.md) §1) |
 | `zether` | osaka | the Zether suite (`FOUNDRY_PROFILE=zether forge test --match-path 'test/zether/*'`) |

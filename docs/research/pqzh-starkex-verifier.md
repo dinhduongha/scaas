@@ -358,7 +358,7 @@ Security flags against the owner's choices (proven 128, ZK required) [inference]
 ## 7a. Owner decision (2026-10-14)
 
 After this study the owner decided **not to build PQZH for chains without the precompile** (the split FRI + ZK
-verifier of §7 is not pursued); PQZH runs only where the PQZ precompile exists (7622 / 22776). Status: closed, no
+verifier of §7 is not pursued); PQZH runs only where the PQZ precompile exists (SCaaS testnet / 22776). Status: closed, no
 work planned (TODO.md, `3e2675b`). Summary across all PQZH backends: `pqzh-backend-comparison.md`.
 
 ## 8. Files and rerun

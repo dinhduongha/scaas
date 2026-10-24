@@ -45,7 +45,7 @@ big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, A
    - 9.2 [Precompiles `MLDSA44` and `MLDSA65`](#92-precompiles-mldsa44-and-mldsa65)
    - 9.3 [Gas model](#93-gas-model)
    - 9.4 [Contracts](#94-contracts)
-10. [Chain integration (Nethermind precompile on chain 7622)](#10-chain-integration-nethermind-precompile-on-chain-7622)
+10. [Chain integration (Nethermind precompile on the SCaaS testnet)](#10-chain-integration-nethermind-precompile-on-the-scaas-testnet)
 11. [Provers](#11-provers)
 12. [Threats](#threats)
 13. [Hybrid path and migration](#13-hybrid-path-and-migration)
@@ -64,7 +64,7 @@ module-lattice assumptions:
 |---|---|---|
 | Balance encryption | lifted ElGamal on bn254 / BLS12-381 G1 | additive module-LWE, BFV-style scaling `Δ`, digit-packed plaintext ([encryption](#encryption)) |
 | Validity proofs | Σ-protocol + 2 Bulletproofs (`n_v = n_b = 64`) | one LNP22 lattice proof per op ([proof engine](#proof-engine)): key, encryption, decryption and integer-carry relations with exact norms |
-| Verification | Solidity + bn254/BLS precompiles | native precompile on chain 7622 (`PQZ`, `0x5caa5…0f01`), same PQZL core as the prover: the C core today, the byte-equal Rust crate `pqzl` once its port is verified (owner 2026-10-18) ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
+| Verification | Solidity + bn254/BLS precompiles | native precompile on the SCaaS testnet (`PQZ`, `0x5caa5…0f01`), same PQZL core as the prover: the C core today, the byte-equal Rust crate `pqzl` once its port is verified (owner 2026-10-18) ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
 | Authorization | the key is the UA; its spends need the proof alone (the legacy registry's 8 `AuthScheme`s are in `legacy/ua3/`) | the PQ signing UA that carries the PQZ key: `mldsa65` (default), `mldsa44`, `fndsa512` or a PQ-dominant `msig` (hybrid, t-of-n), signing `authDigest` through `requireAuthorized` ([CTR-PQZ-12](#CTR-PQZ-12)) |
 | Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
@@ -103,7 +103,7 @@ immutable `chainUid`, which enters every statement and `entryRef`, so no proof, 
 another chain with the same chain id; the UA PoPs bind it through `popDigest` ([CTR-UA-07](accounts.md#CTR-UA-07)).
 
 The node binds registry, `chainUid()` and the RPC genesis hash per chain profile and refuses a mismatch.
-`OpenFactory.kindEnabled(NONE_PQZ / UNDERLYING_PQZ)` starts `false` (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. Chain 7622 is
+`OpenFactory.kindEnabled(NONE_PQZ / UNDERLYING_PQZ)` starts `false` (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. The SCaaS testnet is
 the owner's named target and runs our client. The owner moved the private chain off its former id 9000 because 9000
 is also Evmos Testnet, a public chain; 7622 is not assumed unique either, hence `chain_uid`. The self-test is what
 keeps PQZ off chains whose client is not ours. **Public chains** (owner, 2026-10-08): PQZ is meant for public
@@ -116,7 +116,7 @@ above, plus a price calibration of its precompile ([CTR-PQZ-11](#CTR-PQZ-11)).
 an explicit patent grant; LNP22-family techniques come from IBM Research; GMP/MPFR are LGPL and must be absent from
 every shipped artifact after the engine rewrite; plus the chosen ML-DSA implementations' licences) **and** an
 independent cryptographic audit. Development and research continue without them; nothing deploys outside the
-allowlist or holds real funds until both are recorded as passed. Classical Zether's own gate on chain 7622 is
+allowlist or holds real funds until both are recorded as passed. Classical Zether's own gate on the SCaaS testnet is
 unaffected ([CTR-ZTH-33](zether.md#CTR-ZTH-33)).
 
 The licence gate **G-LIC**: legal review of LaZer (MIT, no patent grant) and any code retained from it; LNP22-family IP (IBM
@@ -226,7 +226,7 @@ and the six layers below are rewritten. The landscape was surveyed on 2026-10-06
 (research note `pqz-proof-alternatives.md` §3, §7: prior art and proof backends).
 
 **Hardware fact that drives the build.** LaZer requires AVX-512 and AES-NI and has no portable code path. The
-chain-7622 host is an **AMD Ryzen 5 7235HS (Zen 3+): AVX2 and AES-NI, no AVX-512** (`/proc/cpuinfo`, 2026-10-06), as
+SCaaS testnet host is an **AMD Ryzen 5 7235HS (Zen 3+): AVX2 and AES-NI, no AVX-512** (`/proc/cpuinfo`, 2026-10-06), as
 are most phones and every WASM runtime. A verifier that needs AVX-512 cannot run in the node. Hence the portable fork
 instead of linking LaZer. The AVX-512 kernels are not the only problem. LaZer `main` at `3330e48` (2026-09-28), read
 through the GitHub API on 2026-10-06, depends on:
@@ -238,12 +238,12 @@ through the GitHub API on 2026-10-06, depends on:
 | Rejection sampling | `src/rejection.c`: `mpfr_exp((−2⟨z,v⟩ + ⟨v,v⟩)/(2σ²))` | MPFR on a secret-dependent value: not constant-time, not bit-exact across platforms |
 | Gaussian sampler | `src/grandom.c`: `double` (`exp_small`, `BerExp`) | floating point: x87/FMA/libm differences break byte-exact proofs |
 | NTT | Intel HEXL (C++, AVX-512-oriented, Apache-2.0) | no portable path |
-| Errors, memory | `ERR()` = `fprintf(stderr, …); abort();` (`src/lazer-in2.h:1680`); `ASSERT_ERR` empty in release; `malloc`/`realloc` | an abort in the node halts chain 7622 ([CTR-PQZ-10](#CTR-PQZ-10)); no fixed memory bound |
+| Errors, memory | `ERR()` = `fprintf(stderr, …); abort();` (`src/lazer-in2.h:1680`); `ASSERT_ERR` empty in release; `malloc`/`realloc` | an abort in the node halts the SCaaS testnet ([CTR-PQZ-10](#CTR-PQZ-10)); no fixed memory bound |
 
 So the fork keeps LaZer's protocol logic, specifications and codegen, and **rewrites** those six layers for the fixed
 PQZ parameters.
 
-**Chain 7622 limits that bind the design.**
+**The SCaaS testnet limits that bind the design.**
 
 | Fact | Value | Consequence |
 |---|---|---|
@@ -585,7 +585,7 @@ Zether worker and `pqz-cli` open (`sealPqKey` / `openPqKey`). PQZ adds no signin
 
 | No. | Name (tag `scaas.ua.<name>.v1`) | Key | keyHash group | Proof | Verifier (EVM) | Chains |
 |---|---|---|---|---|---|---|
-| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, POP_TAG, popDigest(signerUA, pqzKeyHash))` | `UAPqzVerifier` → precompile `0x…0F01` op 3 | chain 7622 ([CTR-PQZ-01](#CTR-PQZ-01)) |
+| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, POP_TAG, popDigest(signerUA, pqzKeyHash))` | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
 
 **Record storage.** The signer's UA `Record` is unchanged; the PQZ key is a second SSTORE2 pointer beside it
 (`recordOf(ua)` returns it, 0 = none; `UAPqzVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
@@ -732,7 +732,7 @@ TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; 
   balance. This replaces the earlier per-credit fee and its chain floor.
 - **Flood economics.** A decoy or shield costs its sender the op blob share and one slot and costs the receiver side one
   rollover share (≈ 36 k gas; a TRIVIAL entry less) paid by keepers or the owner; filling a queue no longer locks the
-  account (it costs delay and rollover work), and the recipient is paid `d` per decoy leg. Gas on chain 7622 is free, so
+  account (it costs delay and rollover work), and the recipient is paid `d` per decoy leg. Gas on the SCaaS testnet is free, so
   permissioned submitters and node rate limits ([T7](#threats)) stay the control for a flood.
 
 <a id="calldata-storage"></a>
@@ -914,9 +914,9 @@ in another form.
 
 Plan: [P6-ANON](../superpowers/plans/2026-10-14-p6-anon.md) (decisions D1–D21 in [decisions.md](../decisions.md)); the
 classical design it mirrors: [zether.md CTR-ZTH-37](zether.md#CTR-ZTH-37) (Z1–Z13). Built: PQZL and PQZH relations,
-`pqz-stmt`, `pqz-ffi`, vectors, fuzzing, the package (P6-ANON S1–S6); live in the `PQZ` precompile on chain 7622 since
+`pqz-stmt`, `pqz-ffi`, vectors, fuzzing, the package (P6-ANON S1–S6); live in the `PQZ` precompile on the SCaaS testnet since
 2026-10-17 (S8); the token entry points below are built (P6g op 7, 2026-10-17: `PqzTransferLib.transferMulti`, forge tests
-`test/pqz/PqzMulti.t.sol`, e2e on chain 7622).
+`test/pqz/PqzMulti.t.sol`, e2e on the SCaaS testnet).
 
 <a id="CTR-PQZ-25"></a>**CTR-PQZ-25** — **Two transfer paths, no switch** (owner 2026-10-14; classical Z7 / Z8). Every
 PQZ token offers both: the **multi-recipient transfer** `mtxConfidentialTransfer` / `mtxConfidentialTransferCompact`
@@ -1315,7 +1315,7 @@ Any other selector ⇒ `MtxSelectorNotAllowed`. `supportedModes()` returns `0xF3
 precompile call; then the op's own checks in transfer/burn order, the statement with `envelopeBinding`,
 `requireAuthorized` (the PQ `auth`) and the `PQZ` verify; the pool movements last (the amount the library debited, paid by
 the token), then the escrow check. Anything failing ⇒ the whole transaction reverts: no fee, nonce unspent; the relayer loses its gas (free on
-chain 7622) and protects itself by simulating on a follower.
+SCaaS testnet) and protects itself by simulating on a follower.
 
 <a id="CTR-PQZ-21"></a>**CTR-PQZ-21** — **`PqzToken` relays through the generic self-call, as classical Zether**
 (owner 2026-10-08: "why not the same as Zether?"). `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxShield(bytes32,uint256)` are allowlisted self-calls
@@ -1423,7 +1423,7 @@ V3 / V4, and `h` (the evaluation step's garbage polynomials) before `μ` and the
 challenge before it fixes the message is not bound by the check, so **v2 proofs are forgeable**. The gap is upstream
 LaZer's and was in all four verifiers (C generic and specialised, Rust generic and specialised) and in both provers
 (C, Rust). v3 adds the two rounds ([transcript](#transcript), rounds 3 and 5); the proof layout, the parameters and the
-relations are unchanged. **v2 is retired**: it leaves the accepted set and `pqz-stmt`, and chain 7622 is reset from
+relations are unchanged. **v2 is retired**: it leaves the accepted set and `pqz-stmt`, and the SCaaS testnet is reset from
 genesis at the v3 roll-out (owner 2026-10-19, path B), since the PQZ tokens and `UAPqzVerifier` hold their id
 immutably and are redeployed. v3 also carries the two prover-side fixes below (z2 rejection, β signs), which change
 honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_fixes.sh` (P6-FS,
@@ -1551,7 +1551,7 @@ bytes; `be8` and `‖` as in the notation at the top.
 
 Retired, **forgeable**: PQZL `…/v2` = `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f`
 (2026-10-19; [lazer#28](https://github.com/lazer-crypto/lazer/issues/28), [CTR-PQZ-09](#CTR-PQZ-09)): removed from
-the accepted set and from `pqz-stmt`; chain 7622, which runs it on image `pqz2` (a test chain), is reset from genesis
+the accepted set and from `pqz-stmt`; SCaaS testnet, which runs it on image `pqz2` (a test chain), is reset from genesis
 at the v3 roll-out. Retired, never deployed: PQZL `…/v1` (2026-10-13) and the STARK's provisional
 `keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1")` (`0xaa1f92dd…`). Any other id ⇒ `0`.
 
@@ -1740,12 +1740,12 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 | Option | Cost per transfer | Trust | Verdict |
 |---|---|---|---|
 | Solidity LNP22 verifier | `A` expansion with keccak instead of SHAKE ≈ 0.8 M; `A^T z` ≈ 65 k mulmods ≈ 1.5–2 M; commitment checks ≈ 5 M; NTTs, norms, transcript ≈ 1–3 M; plus calldata ⇒ **≈ 10–25 M (estimate)** | public | **No**: at or above the EIP-7825 16.78 M per-transaction cap; a second implementation of the verifier (Solidity + C) doubles audit surface and invites cross-language divergence |
-| **Native precompile (chain 7622)** | ≈ 0.12 M per ms of p99 verify time + calldata | every full node re-executes | **Chosen** ([CTR-PQZ-10](#CTR-PQZ-10)) |
-| Off-chain co-processor (quorum of verifiers signs ML-DSA attestations; contract checks t-of-n) | ≈ 30–60 k verification + calldata | the quorum, not re-verifiable from chain data | The later path for customer-run private chains (owner); rejected on chain 7622, where the precompile gives the same latency with public verifiability |
+| **Native precompile (SCaaS testnet)** | ≈ 0.12 M per ms of p99 verify time + calldata | every full node re-executes | **Chosen** ([CTR-PQZ-10](#CTR-PQZ-10)) |
+| Off-chain co-processor (quorum of verifiers signs ML-DSA attestations; contract checks t-of-n) | ≈ 30–60 k verification + calldata | the quorum, not re-verifiable from chain data | The later path for customer-run private chains (owner); rejected on the SCaaS testnet, where the precompile gives the same latency with public verifiability |
 | STARK proof of the lattice verifier | multi-M + prover minutes | public, PQ | Disproportionate |
 
 <a id="precompile"></a>
-<a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on chain 7622**: `PQZ` at
+<a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on the SCaaS testnet**: `PQZ` at
 `0x5caa500000000000000000000000000000000f01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) — and the ML-DSA precompiles
 `MLDSA44` at `0x5caa500000000000000000000000000000000012` and `MLDSA65` at `0x5caa500000000000000000000000000000000013`
 (EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)). The addresses lie above `0xffff`
@@ -1757,7 +1757,7 @@ plus a `PQZ-INPUT-PANIC keccak(input)` warning; 2, 4 or any other ⇒ `PQZ-NODE-
 with code 120 — the block in progress is never sealed or imported and nothing is marked invalid; a restart
 re-processes it. **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
 get the off-chain co-processor attestation seam later; **no client ports in v1**; the co-processor is rejected on chain
-7622 itself. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
+the SCaaS testnet itself. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
 call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
 output `0x00…00`; a fault of the node itself, not of the input (arena exhaustion, the worker or the core unavailable,
@@ -1771,7 +1771,7 @@ timestamp; [CTR-PQZ-11](#CTR-PQZ-11)); contracts self-test and
 the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like an enabled one.
 
 **The verify
-path never crashes the node**: `pqz_verify` runs in-process, chain 7622 has one Clique signer, and every
+path never crashes the node**: `pqz_verify` runs in-process, the SCaaS testnet has one Clique signer, and every
 `eth_call`/`eth_estimateGas` reaches the precompile, so one abort, out-of-bounds access or stack overflow on crafted
 input is a chain halt, not a split. Requirements: every upstream `ERR`/`ASSERT` becomes `return 0`; a bounds-checked
 decoder (Rust, in front of the C core) accepts only the fixed lengths before any C code runs; fixed-size stack, no
@@ -1780,7 +1780,7 @@ CI (P6e D12: clang 18 libFuzzer on stable Rust, the C core under ASan + UBSan, `
 targets through `pqz_precompile`, over edited honest inputs of every form and id, and the codec round trip; long runs on
 the owner's machine under `scripts/capped`, no CI job for now (controller 2026-10-14); P6e Task 10, `pqz-core/fuzz/`). Operationally a follower node serves all public RPC and pre-simulation, so `eth_call` never reaches the signer
 process; a crashing input inside a transaction would still reach every node at its block, so never-crash is the
-requirement and the follower is only defence in depth. Every node of chain 7622 must run the PQZ client build.
+requirement and the follower is only defence in depth. Every node of the SCaaS testnet must run the PQZ client build.
 
 ### 9.1 Precompile `PQZ`
 
@@ -1814,7 +1814,7 @@ output always 32 bytes, `…01` / `…00`. The UA signs the 32-byte `pq_msg` wit
 ([CTR-UA-23](accounts.md#CTR-UA-23)). Implementation: .NET 10 `MLDsa` on the OpenSSL 3.5 of the pinned base image
 (`MLDsa.IsSupported` checked at start-up; P6f D5). The low address bytes repeat EIP-8355's own `0x12` / `0x13`; the
 `0x5caa5` prefix keeps them off the contested `0x12`–`0x15` (EIP-8051 / EIP-8355). The UA `mldsa44` / `mldsa65`
-verifier for chain 7622 (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
+verifier for the SCaaS testnet (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
 argument checked by self-test, so a later standard precompile means a new verifier in a new registry generation.
 Elsewhere the UA PQ kinds use a pure-Solidity verifier ([CTR-UA-23](accounts.md#CTR-UA-23)). Gas:
 [CTR-PQZ-11](#CTR-PQZ-11).
@@ -1827,11 +1827,11 @@ calibrated on the p99 verify time over adversarial inputs against `ecMul` on the
 (`engine.Pqz.schedules`: per schedule an activation timestamp, the `pqz` rows `(op, id, stmtLen, gas)`, `selftestGas`,
 `mldsa44Gas`, `mldsa65Gas`; parsed strictly, a new price or op 7 is a new schedule with a later timestamp: P6f D2);
 `OP_SELFTEST` has a fixed price of its own and is computed once per process. EIP-7623 and EIP-7825 stay enabled.
-Operator change: Clique `TargetBlockGasLimit` **80,000,000** on chain 7622 (no data reset): at the calldata floor a
+Operator change: Clique `TargetBlockGasLimit` **80,000,000** on the SCaaS testnet (no data reset): at the calldata floor a
 block then carries at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata, so
 no block the producer builds can be oversized.
 
-Node and client limits on chain 7622: Nethermind `TxPool.MaxTxSize`
+Node and client limits on the SCaaS testnet: Nethermind `TxPool.MaxTxSize`
 1,048,576 and `Blocks.TargetBlockGasLimit` 80,000,000 in the node's `config.json`, JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 16_000_000`, gateway body limit 1 MiB on job
 submissions to the `pqz` chain profile only (64 KiB elsewhere) — recommendations to node operators
 ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block while
@@ -1842,7 +1842,7 @@ profile must raise it.
 **op 7 rows** (P6-ANON S8, plan D19): an op 7 row adds `(M, auditorOn)`, read from header words 320 / 448 without
 validation (a word ≥ 256 or an unbuilt shape is a miss), because the length alone does not fix the shape. Calibrated
 once on the chain host (`pqz-core/nethermind/runs/2026-10-17-calib-ops7.txt`, image `pqz2`, 0.357 M gas per ms) and live
-on chain 7622 since timestamp 1792205116 as the second `engine.Pqz` schedule:
+on the SCaaS testnet since timestamp 1792205116 as the second `engine.Pqz` schedule:
 
 | `G_7` | M = 1 | M = 2 | M = 4 | M = 8 |
 |---|---|---|---|---|
@@ -1901,7 +1901,7 @@ processes. ML-DSA p99 0.135 ms (44) / 0.189 ms (65) ⇒ `mldsa44Gas` **49,000**,
 6,500 / 9,000 is lower). Re-calibrate before chain 22776 or when a later measurement differs by more than 15 %. The
 estimates below predate this table.
 
-**Measured on chain 7622 (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
+**Measured on the SCaaS testnet (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
 `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer
 42.4–42.8 KB, burn / refresh 41.9 KB, `R_REG` 28.1 KB, disclosure 29.0 KB, each 0.3–1.9 s native.
 
@@ -2024,7 +2024,7 @@ unreachable unless accounting is broken), `RollOverRange`, `CapReached`, `RollTo
 `BadPayload`, and for op 7 `BadRecipientCount`, `DuplicateRecipient`. Gone with the old layout: `StaleSendCounter`, `AccMismatch`,
 `InlineMismatch`, `RefreshRequired`, `PlainOverdraw`, `CiphertextOffState`.
 
-## 10. Chain integration (Nethermind precompile on chain 7622)
+## 10. Chain integration (Nethermind precompile on the SCaaS testnet)
 
 <a id="chain-integration"></a>
 
@@ -2051,14 +2051,14 @@ unreachable unless accounting is broken), `RollOverRange`, `CapReached`, `RollTo
   addresses stay empty accounts — shown on the copy), which is why contracts self-test and nodes probe.
 - `reth` would make this trivial (Rust, `PrecompilesMap`) but has no Clique; switching clients is not in scope.
 
-**Consensus rules.** Every node of chain 7622 runs the same image ([CTR-PQZ-10](#CTR-PQZ-10)). A node without the
+**Consensus rules.** Every node of the SCaaS testnet runs the same image ([CTR-PQZ-10](#CTR-PQZ-10)). A node without the
 precompile executes a `STATICCALL` to `PQZ` as a call to an empty account: success with empty output. `PqzToken`
 requires `returndata.length == 32` and value 1, so such a node reverts where others succeed — a visible state-root
 split, never a silent acceptance (fail closed).
 
 **Operational steps.**
 
-1. Build the image; start a throwaway copy of chain 7622 (the same chainspec parameters + `engine.Pqz` with a future
+1. Build the image; start a throwaway copy of the SCaaS testnet (the same chainspec parameters + `engine.Pqz` with a future
    first timestamp — path A — or from genesis — path B); runbook `pqz-core/nethermind/chain/RUNBOOK.md`.
 2. Probe: `eth_getBlockByNumber(0).hash` equals the profile's genesis hash and the registry's `chainUid()` (chain id
    7622 alone is not assumed unique); `eth_call` to `PQZ` with `OP_SELFTEST` returns the KAT hash; `eth_estimateGas`
@@ -2095,7 +2095,7 @@ constructor also takes the self-test's `R_REG` vector of its id (≈ 45 KB PQZL 
 into code under EIP-170) as an argument, requires `keccak256(psid ‖ message ‖ pk ‖ proof) == SELFTEST_VECTOR_HASH`
 (`PROBE_PQZL` / `PROBE_PQZH`), requires `OP_REGISTER` on it to return 1, then flips one proof bit in memory and requires
 0 (`UAPqzProbe`). `PqzToken.initialize` takes no vector: bound to `PQZ`, whose self-test already covers those verdicts,
-the probe would add nothing (a 45–200 KB argument on every token creation). `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the chain-7622 deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
+the probe would add nothing (a 45–200 KB argument on every token creation). `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the SCaaS testnet deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
 This, not the allowlist alone, is what keeps PQZ off chains whose client is not ours.
 
 The chain profile, the private-chain runbook and the node's `pqz` profile flag
@@ -2150,7 +2150,7 @@ worker derived and sealed it with `sealPqKey`), so neither the BIP-39 seed, the 
 `proof ‖ out`. The ML-DSA signature over `authDigest` comes from the **key worker** (`signUA('zether-auth', authDigest)`),
 and so does the envelope signature (`signUA('metatx', uaDigest)` by the fee UA): the envelope fields are fixed before
 proving (the binding is in the statement), the signature is made after it (its digest covers `m.data`, which holds the
-proof). Both workers terminate on lock, 5 min idle or 5 min hidden. The app's Zether-worker chain list gains 7622 for
+proof). Both workers terminate on lock, 5 min idle or 5 min hidden. The app's Zether-worker chain list gains the SCaaS testnet for
 configured PQZ tokens; the CSP already allows `'wasm-unsafe-eval'`.
 
 *Budgets* (p95, per transfer; measured on reference devices, enforced in CI):
@@ -2205,7 +2205,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T4 | Malformed ciphertexts (out-of-range coefficients, wrong lengths, huge noise) | `< q` checks in Solidity and precompile; every ciphertext comes with a proof of exact norms; the only trivial term (the plain term of `T`) is built by the contract |
 | T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
 | T6 | Decryption-noise leakage (IND-CPA^D style) | noise never leaves `pqz_dec`; disclosure is ZK ([CTR-PQZ-14](#CTR-PQZ-14)); no "decrypt and publish" API |
-| T7 | Credit and shield flood: filling a victim's queue | credits and shields are **never refused** (plan 5h, [CTR-PQZ-06](#CTR-PQZ-06)), so a flood no longer locks an account; it costs the victim delay and rollover work. Measured cost of the work: a rollover is ≈ 2.85 M + 36.3 k per entry (`ROLL_MAX = 256` = 12.13 M gas, 72.3 % of 2^24; a TRIVIAL entry costs less), 10,000 queued decoys = 40 rollovers, run by keepers, the owner or a relayer; recovery of a full `acc` is one refresh (≈ 3.9 M contract side). The flooder pays per entry: a proven transfer ≈ 4.0–4.5 M plus the proof, a decoy leg `decoyFee` to the victim (`d ≥ minDecoyFee`, paid to every leg), a shield one TRIVIAL slot per account and block (a merge within the block ≈ 52 k, an append ≈ 74 k; at one per 5 s block ≈ 17,280 entries a day ≈ 0.16 G gas of rollover work). Shields are free for the sender (owner 2026-10-20, gas only), so on chain 7622, where gas is free, permissioned submitters and node rate limits remain the real control; rollover is public |
+| T7 | Credit and shield flood: filling a victim's queue | credits and shields are **never refused** (plan 5h, [CTR-PQZ-06](#CTR-PQZ-06)), so a flood no longer locks an account; it costs the victim delay and rollover work. Measured cost of the work: a rollover is ≈ 2.85 M + 36.3 k per entry (`ROLL_MAX = 256` = 12.13 M gas, 72.3 % of 2^24; a TRIVIAL entry costs less), 10,000 queued decoys = 40 rollovers, run by keepers, the owner or a relayer; recovery of a full `acc` is one refresh (≈ 3.9 M contract side). The flooder pays per entry: a proven transfer ≈ 4.0–4.5 M plus the proof, a decoy leg `decoyFee` to the victim (`d ≥ minDecoyFee`, paid to every leg), a shield one TRIVIAL slot per account and block (a merge within the block ≈ 52 k, an append ≈ 74 k; at one per 5 s block ≈ 17,280 entries a day ≈ 0.16 G gas of rollover work). Shields are free for the sender (owner 2026-10-20, gas only), so on the SCaaS testnet, where gas is free, permissioned submitters and node rate limits remain the real control; rollover is public |
 | T8 | Rollover grief against in-flight proofs | proofs: impossible by construction (the same `T`, [CTR-PQZ-08](#CTR-PQZ-08)); calldata: none left, since `acc` and the inline window are read from state and a stale optional hint is ignored; **`ROLL_AGE = 5` blocks** keeps entries made after the proof from being rolled past `p`, so a debit submitted within five blocks of its proof never sees `rolled > p`, and after that it settles while `rolled − p ≤ INLINE_MAX` (the un-roll keeps order and loses nothing). Residuals, bounded harm and no loss: more than `INLINE_MAX` *old* entries above a capped `p` (re-prove at a new `p`), and a debit whose window holds an entry of its own block, revertible by a same-block merge ([§7.3](#73-shield)); clients prove at `p = pendingCount` and retry once on `InlineTooFar` or `ProofRejected` |
 | T9 | Replay / proof transplant | `sendCounter`, `chainId`, `chainUid`, `token`, `registry`, `validUntilBlock`, UAs, fee, beneficiary and `envelopeBinding` in the statement; envelope 2D nonce and `validUntil`; strong FS |
 | T10 | Fiat–Shamir for multi-round LNP22 (round-by-round grinding; QROM) | `op` and statement absorbed first; every challenge round ≥ 128-bit sound on its own, listed in `estimator.txt`; QROM soundness an assumption, stated; tracked for the audit. PQZH (Ligero): 128-bit classical in the ROM, QROM assumed likewise; a quantum Grover attack on the Fiat–Shamir grinding halves the query term (gate B review 2026-10-17, pqzh-ligero.md §5.1 and §12) |
@@ -2214,14 +2214,14 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; continuous ASan/UBSan fuzzing of `pqz_verify`; fail-closed returndata check; deterministic integer code |
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
 | T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9), and for `R_TXM` ≤ 80 hints per `(r_g, e1_g)` with groups of 4 legs, auditor included (β 446.0 ≥ Kyber-512's 406, owner-accepted exception to [CTR-PQZ-03](#CTR-PQZ-03)'s 450 margin; `pqz-core/pqzl/params/anon/hints-anon.txt`); fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
-| T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to 7622; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
+| T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
 | T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the UA `popDigest(ua, pqzKeyHash)` (chain key, `chain_uid`, registry, the signer's UA, the key hash) beside the signer's own PoP over the same digest ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
 | T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
 | T18 | Broken v1 envelope key (quantum ECDSA, leaked EOA) | authority split ([CTR-PQZ-15](#CTR-PQZ-15)): the envelope signer authorizes only its public balance and nonces; confidential value needs the PQ `authSig` + proof; bound ops cannot be re-pointed (their amounts, recipients and outputs). Residual: loss of that signer's public float and liveness of its own relayed ops; on a relayed op the storage mode (BUNDLE / HASH / NONE) and an unwrap's leg / `minOut` are bound by the envelope signature only (the PQ `authSig` covers `envelopeBinding`, which excludes `data`), so the key holder can re-sign the same op with another mode (`…NoBundle`), as `mtxUnshield` instead of `mtxUnshieldUnwrap`, or with another leg / `minOut`, and front-run: at worst no entry is stored or the payout takes another form, with no value lost beyond the public float above (review 5g L1, 2026-10-19). **Closed by plan 5h D15:** the mode is folded into every relayed binding (`keccak256(abi.encode(envelopeBinding, uint8(mode)))`) and an unwrap's leg / `minOut` likewise, so a re-signed envelope with another mode or leg no longer verifies against the proof; NONE is retired, so `…NoBundle` no longer exists; v3 path with an `mldsa65` fee UA removes the classical key |
 | T19 | Envelope stripping or re-wrapping (relayer takes the op out, or into an envelope with its own fee/recipient) | `envelopeBinding` in the statement (direct calls: 0, a transfer's mode binding, the unwrap binding), checked through the `authSig` before the precompile, as classical [CTR-ZTH-06](zether.md#CTR-ZTH-06) |
-| T20 | Fee griefing: envelopes that fail late to burn relayer gas | outer fee checked before any SSTORE2 read or precompile call; fee and nonce taken only after verify, so a failing op reverts whole; relayers pre-simulate on a follower; gas on chain 7622 is free, the cost is block capacity |
+| T20 | Fee griefing: envelopes that fail late to burn relayer gas | outer fee checked before any SSTORE2 read or precompile call; fee and nonce taken only after verify, so a failing op reverts whole; relayers pre-simulate on a follower; gas on the SCaaS testnet is free, the cost is block capacity |
 | T21 | Malicious recipient keys extract hints on a multi transfer's shared `(r_g, e1_g)` (16 per leg) | ≤ 4 legs per randomness group, ≤ 80 hints, β 446.0 ≥ Kyber-512's 406 (owner-accepted exception to CTR-PQZ-03's 450); fresh randomness per operation ([CTR-PQZ-26](#CTR-PQZ-26)) |
 | T22 | Decoy flood: listing victims as decoys (`M − 1` victims per transfer) | each unit is a proven leg; the cap on `acc` keeps the noise budget and is never a refusal (head-of-line delay only); **`decoyFee`**: the sender pays `d ≥ minDecoyFee` to every leg, the victim included, so a flood pays its victims for the rollover work; T7's permissioned submitters and rate limits; wallet load spreading (P6h) |
 | T23 | Burying real credits behind junk (ordered roll-over) | strict order is deliberate (it hides which ring members were decoys); a real credit behind `x` decoys is spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 256`: 10,000 decoys = 40 rollovers, ≈ 12.1 M gas each), or at once in the owner's own debit with `p` within `INLINE_MAX` of `rolled`; the owner can always spend `acc` with `p = rolled`; keepers roll decoy credits (P6i); the decoy fee compensates the work |
@@ -2243,21 +2243,21 @@ service is the user's (or the organization's key oracle), never a third party's 
 
 <a id="migration"></a>
 <a id="CTR-PQZ-20"></a>**CTR-PQZ-20** — **Migration classical → PQZ** is `ZetherToken.mtxUnshield` to the owner's address then
-`PqzToken.mtxShield`; the amount is public on chain 7622 once. No cross-system equality proof in v1. Classical Zether holds
+`PqzToken.mtxShield`; the amount is public on the SCaaS testnet once. No cross-system equality proof in v1. Classical Zether holds
 no production funds (dev-only gate), so only pilots migrate.
 
 | Phase | What runs | HNDL status |
 |---|---|---|
-| H0 (today) | classical Zether on dev chains only ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the owner decides chain 7622 for classical Zether ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | exposed, but no production funds |
-| H1 | PQZ on chain 7622 behind [CTR-PQZ-01](#CTR-PQZ-01), dev and pilot only | amounts PQ-safe from first use |
-| H2 | pilots migrate classical → PQZ: `ZetherToken.mtxUnshield(…, ownerAddress)` then `PqzToken.mtxShield(ua, amount)` with `approve(PqzToken)` (spender is a contract, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) | each migrated amount is public once on chain 7622 |
+| H0 (today) | classical Zether on dev chains only ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the owner decides SCaaS testnet for classical Zether ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | exposed, but no production funds |
+| H1 | PQZ on the SCaaS testnet behind [CTR-PQZ-01](#CTR-PQZ-01), dev and pilot only | amounts PQ-safe from first use |
+| H2 | pilots migrate classical → PQZ: `ZetherToken.mtxUnshield(…, ownerAddress)` then `PqzToken.mtxShield(ua, amount)` with `approve(PqzToken)` (spender is a contract, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) | each migrated amount is public once on the SCaaS testnet |
 | H3 | release gates **G-LIC** (licence/patent clearance) and independent audit ([CTR-PQZ-01](#CTR-PQZ-01)) — both before any production or commercial use | — |
 
 No dual-stack ciphertexts (ElGamal ⊕ lattice secret-sharing of every balance) and no cross-system equality proof: both
 would make every transfer carry two proof systems for the benefit of balances that, by gate, do not exist.
 
-Per-family availability: EVM chain 7622 (Nethermind, ours) **v1**; dev chains 31337/1337 tests only (anvil cannot host
-the precompile: forge tests mock it with `vm.mockCall` on KAT inputs; end-to-end on a chain-7622 copy); other private
+Per-family availability: EVM SCaaS testnet (Nethermind, ours) **v1**; dev chains 31337/1337 tests only (anvil cannot host
+the precompile: forge tests mock it with `vm.mockCall` on KAT inputs; end-to-end on a SCaaS testnet copy); other private
 EVM chains not in v1 (later via the co-processor seam); public EVM never without an owner ruling; Cosmos SDK private
 chains feasible later (a Go module calling `libpqz` via cgo); Hedera, Soroban, Sui, Aptos, Solana, GRAM no
 ([networks/README.md](../networks/README.md#availability)).
@@ -2332,7 +2332,7 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
 - **invariants** (`PqzStateInvariantTest`, `PqzPoolInvariantTest`): each debit's `T` equals `ref + Σ entries [lastP, p)`, every
   pending ciphertext is in exactly one place, `cleared ≤ floor ≤ rolled ≤ pendingCount`; `balanceOf(SHIELD_POOL) ==
   totalShielded·shieldScale`, `totalSupply` moves only with wraps and unwraps, every fee is in a public UA balance;
-- **chain uid**: a proof, authorization or disclosure valid on one chain-7622 copy is replayed on a second copy with the
+- **chain uid**: a proof, authorization or disclosure valid on one SCaaS testnet copy is replayed on a second copy with the
   same chain id, token and registry addresses but another genesis/`chainUid` ⇒ 0 / `AuthRejected`; `initialize` with
   `registry.chainUid() == 0` reverts;
 - **op / proofSystemId confusion:** each valid proof submitted under every other `op` byte, under its own op with another
@@ -2408,7 +2408,7 @@ chains, `pqz-cli serve` LAN mode.
 - LaZer source facts: `Makefile`, `src/int.c`, `src/rejection.c`, `src/grandom.c`, `src/lazer-in2.h` at `3330e48` via the
   GitHub API, 2026-10-06; Intel HEXL licence Apache-2.0 <https://github.com/intel/hexl>; GMP <https://gmplib.org/>
   (LGPLv3/GPLv2), MPFR <https://www.mpfr.org/> (LGPLv3)
-- Former chain id 9000 = Evmos Testnet (reason for the move to 7622): <https://chainlist.org/chain/9000>
+- Former chain id 9000 = Evmos Testnet (reason for the move to the SCaaS testnet): <https://chainlist.org/chain/9000>
 - LaZer: Lyubashevsky, Seiler, Steuer, CCS 2024, <https://eprint.iacr.org/2024/1846>; code (MIT, AVX-512 required)
   <https://github.com/lazer-crypto/lazer>
 - Lantern Sage implementation (TU Graz): <https://lattice-zk.isec.tugraz.at/>

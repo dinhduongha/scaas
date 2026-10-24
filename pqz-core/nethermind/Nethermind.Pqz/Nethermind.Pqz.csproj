@@ -9,6 +9,7 @@
     <Reference Include="Nethermind.Core" HintPath="$(RefDir)Nethermind.Core.dll" Private="false" />
     <Reference Include="Nethermind.Crypto" HintPath="$(RefDir)Nethermind.Crypto.dll" Private="false" />
     <Reference Include="Nethermind.Evm" HintPath="$(RefDir)Nethermind.Evm.dll" Private="false" />
+    <Reference Include="Nethermind.Init" HintPath="$(RefDir)Nethermind.Init.dll" Private="false" />
     <Reference Include="Nethermind.Evm.Precompiles" HintPath="$(RefDir)Nethermind.Evm.Precompiles.dll" Private="false" />
     <Reference Include="Nethermind.Logging" HintPath="$(RefDir)Nethermind.Logging.dll" Private="false" />
     <Reference Include="Nethermind.Specs" HintPath="$(RefDir)Nethermind.Specs.dll" Private="false" />
