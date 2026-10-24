@@ -10,5 +10,9 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Deterministic>true</Deterministic>
     <RefDir>$(MSBuildThisFileDirectory)ref/</RefDir>
+    <!-- the parameter set of the library the plugin loads (SelfTest.cs: its OP_SELFTEST hash; plan 5h Task 8d part 1b):
+         -p:PqzSet=<set>, default pqz-ffi's default set -->
+    <PqzSet Condition="'$(PqzSet)' == ''">n2304-kmax4096</PqzSet>
+    <DefineConstants>$(DefineConstants);PQZ_SET_$(PqzSet.ToUpperInvariant().Replace('-', '_'))</DefineConstants>
   </PropertyGroup>
 </Project>

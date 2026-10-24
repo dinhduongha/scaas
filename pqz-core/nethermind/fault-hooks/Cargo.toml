@@ -11,7 +11,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-pqz-ffi = { path = "../../ffi", features = ["test-hooks"] }
+# the set: pqz-ffi's default (n2304-kmax4096) through this crate's default feature; another set:
+# --no-default-features --features pqz-ffi/set-<set> (plan 5h Task 8d part 1b)
+pqz-ffi = { path = "../../ffi", default-features = false, features = ["pqzl-rust", "test-hooks"] }
+
+[features]
+default = ["pqz-ffi/set-n2304-kmax4096"]
 
 [profile.release]
 panic = "unwind"

@@ -272,7 +272,12 @@ fn other_id(id: usize) -> Word {
 fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
     let k = |l: &str| keccak(&[l.as_bytes()]);
     if id == 0 {
-        vec![("PQZL v2", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")), ("PQZL v3", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"))]
+        let mut v = vec![("PQZL v2", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")), ("PQZL v3", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"))];
+        // a set without PQZH (n2816-kmax65536) has no PQZH rows: the retired PQZH v1 id goes on its PQZL inputs
+        if !st::HAS_PQZH {
+            v.push(("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")));
+        }
+        v
     } else {
         vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"))]
     }
@@ -1195,6 +1200,7 @@ const MARGIN_E: &str = match EB {
     24 => "margin_2_24",
     26 => "margin_2_26",
     28 => "margin_2_28",
+    30 => "margin_2_30",
     _ => panic!("margin key for this E"),
 };
 /// "both systems" (v3) or "PQZL" (a build without PQZH)

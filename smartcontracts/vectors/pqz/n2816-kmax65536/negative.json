@@ -1,0 +1,5720 @@
+{
+ "file": "negative.json",
+ "description": "Precompile inputs that must give 0 (expect 0) or revert (input over MAX_INPUT, P6f): each is the honest input u8(op) || be32(len) || stmt || proof of (form, id) (statements: statement_*.json under the id; proofs: proof_<id>.json) with edits applied in order: op = the op byte; proof_from = another form's proof (same id); stmt_set / proof_set [offset, hex] overwrite; proof_copy [src, dst, len], proof_swap [a, b, len] move bytes; stmt_resize / proof_resize truncate or zero-extend; stmt_flip / proof_flip [byte, bit]; len_field replaces be32(len); raw = the whole input; input_resize truncates or zero-extends the built input. input_sha3 = SHA3-256 of the input (FIPS 202, not Keccak: Python checks it fast). reason: the pqz-stmt decoder's Reject (D5, D15, R6), or verify (the decoder accepts and the verifier of the id rejects: PQZL specialised and generic agree). Expected outputs from pqz_precompile (C ABI). openings: the disclosure opening abi.encode(bytes bundle, bytes proof) (TRANSFER bundle, PQZL DISCLOSE-SENDER proof) with set [offset, hex] / resize edits, and pqz-stmt parse_opening's result (ok or Opening).",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
+ "max_input": 524288,
+ "rows": [
+  {
+   "name": "TRANSFER: statement length - 1",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 113791
+    }
+   ],
+   "input_bytes": 168639,
+   "input_sha3": "be0fe6b97a18387f4c7ab4e246cb2a0fa887d1ed02c0106d6d36adea05d27707",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "TRANSFER: statement length + 1",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 113793
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "d29880c160d13f5ae2020ec5e60049e8bfdd834cc29bf8ccdc00e86edd65c696",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "TRANSFER: under op 2",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "a49e5d21a26e876695e9342f6b43209e5b82d5ce4ca64c89631d8d391bd18255",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER: under op 3",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "aba55b328f02a08afee717efbb4591787d3d0f9a1f7b31a35a55ecf014c18f7b",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER: under op 4",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "e003d616144852599def7ba97820cd45f07496cf26022fda3451ddcc30feae45",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER: under op 5",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "750770d5057ddf5f39baa3fa1285eaf17646f5fba0446e600e800b2ec1a0a785",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER: unknown proofSystemId (zero word)",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "ae79822eb9d1fd51b8186a125760f6290bb1f814cb2047829842731fde4a54ac",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER: the other system's proofSystemId",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "ae79822eb9d1fd51b8186a125760f6290bb1f814cb2047829842731fde4a54ac",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "0379c713137621272dbe83b146abf0344fbcfd084a330b30407ad1e3f8938a67",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "e4a84a45057b474ad0cc169ee031163e5e909e13551b9ac88d6bb174dff2a392",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER: proof truncated by 1 byte",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54842
+    }
+   ],
+   "input_bytes": 168639,
+   "input_sha3": "79c1eafe783b71c8484790c50caca252b8e2840c8f767e25ab3989828ffbe182",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: proof extended by 1 zero byte",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54844
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "58102e46c7186a6e4b48c0c890cc983c4b97199449d48be253f7948f7615d80c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "a19fbc583e452dc78ab1b810933d7d5d8b2e37ab7484f7faa04f049c23d5eac1",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: proof middle byte bit 3 flipped",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [27421, 3]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "ef2ea5d821c7c075114fe53548d7387471ec48b66f0cbf2f8a68d87530c1964e",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: proof last byte bit 7 flipped",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54842, 7]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "6115bd07757a991b58ca1112546fd6a07b4d7d486f7b28a8a7cda0f1f76c17a3",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: statement length - 1",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 91135
+    }
+   ],
+   "input_bytes": 145671,
+   "input_sha3": "ccf945cb31dedee2c659128cd851a38e3c648d5356a03029a3d9ee483a155213",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "TRANSFER0: statement length + 1",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 91137
+    }
+   ],
+   "input_bytes": 145673,
+   "input_sha3": "7ee9e6260a14b10954ed988efebd718ebe8638ffeeb03fe8648b7bea7fbb6493",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "TRANSFER0: under op 2",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "8bc793fc42c403222a64b63f699d2c0574de8f96d8547dfc9c12e3971e2662b1",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER0: under op 3",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "e404df2e91d3a4274266a15428ab966d715f1523bad65a4986367edd491ff3c9",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER0: under op 4",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "a9b9db077897aff8f70500ecb13f3d62bd428bb5f667346992086c3f13c55504",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER0: under op 5",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "41fa474abaf58b8cbfe7d8b5fd782bea00eeba5792e4217b756bae9a4c266daa",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER0: unknown proofSystemId (zero word)",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "ddcdcf526e4cda878339cfcf1312782fb8e7c2edd6026e627009270bb2720aab",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER0: the other system's proofSystemId",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "ddcdcf526e4cda878339cfcf1312782fb8e7c2edd6026e627009270bb2720aab",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER0: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "79307591c389fe635b7cf04d1d30e9d8c057fb7ca0981430a53d91f418eded88",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER0: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "d9532ddc0ba8e26190c9e83cbc21169f28843e72e285d1c885e53f50f148efe7",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "TRANSFER0: proof truncated by 1 byte",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54530
+    }
+   ],
+   "input_bytes": 145671,
+   "input_sha3": "6f88479ade49542c7d36236b155b6cc54c7cabbf506cda92dfc9fcf35b2fc61f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: proof extended by 1 zero byte",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54532
+    }
+   ],
+   "input_bytes": 145673,
+   "input_sha3": "fa00f7000abf00f7d4aeff39989f25d1d77227447038ec29393bf93899cf30e7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "30f47a07ff14cbfa78c7f4ac5a0870deca2b31d8dc64b0317948b5c2216157e0",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: proof middle byte bit 3 flipped",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [27265, 3]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "0c77dded59bbb4f6ae0ae68a51a618e766ed9dd22facd793a4fc2461b5284d4a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: proof last byte bit 7 flipped",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54530, 7]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "e96cf3e7798ac4871f36940619bae15658bbb902e2bb2b24164500ddcf82f5ab",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: statement length - 1",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 68479
+    }
+   ],
+   "input_bytes": 122496,
+   "input_sha3": "dbbba05921a292515342b293a54825480643da63dfc073ebf06075896a294f21",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "BURN: statement length + 1",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 68481
+    }
+   ],
+   "input_bytes": 122498,
+   "input_sha3": "8b926e74374fc68df1b3f571926b07d0baf0be2227e61e63e0b862efb93d1106",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "BURN: under op 1",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "caa8437031e93501aa4556ed983db09a74fa127bab93b4d0ea7171743c513c35",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "BURN: under op 3",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "016e9dda0d15903f212dfe41d8dc4b25a67523984423bbba2b61b23a4fd6a990",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "BURN: under op 4",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "1654af229844aa033ed6685e2bf9d2c4b5e38ea5a76b2394ee421d7c6a890f03",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "BURN: under op 5",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "4cc44810d932151f4e54c76a986b933d7583e90de998a2d63c7a2fbd33c68964",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "BURN: unknown proofSystemId (zero word)",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "ce2ef7bfec9a99b5bc109ec692d8e20c225bebbe6be36a69e47c7560ad1ee047",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "BURN: the other system's proofSystemId",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "ce2ef7bfec9a99b5bc109ec692d8e20c225bebbe6be36a69e47c7560ad1ee047",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "BURN: retired PQZL v2 proofSystemId",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "9b95e420f99e4ebcb69e12676c9216acfbf2a9c2b348774b1a69d05f8388d3df",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "BURN: retired PQZL v3 proofSystemId",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "9be04febc4e962151289616e66356435120f89e85e5ef9616a46acb0295540dc",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "BURN: proof truncated by 1 byte",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54011
+    }
+   ],
+   "input_bytes": 122496,
+   "input_sha3": "b87a5e72ce090e046cffbc21d90a562385260d3b1632768bb417c06f92cde670",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: proof extended by 1 zero byte",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54013
+    }
+   ],
+   "input_bytes": 122498,
+   "input_sha3": "b181b7f91a25ac7b2e2123ea99d6cb49182c79679af563aa4d1c2cd37d0d7e05",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: proof byte 0 bit 0 flipped",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "3d0915d70e538ff28ebccd0ecf5661ffe37d646e2d564d17e372a61bb1b9cdd2",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: proof middle byte bit 3 flipped",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [27006, 3]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "e348055247ab7ab2970b83b7e3c53f2aff012aabcf29ea3b8801a6e5c2173a0e",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: proof last byte bit 7 flipped",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54011, 7]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "4c783403c2d1d6b9800a3da54fb7343282a459155eb651afb67a0be67573b658",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: statement length - 1",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 68479
+    }
+   ],
+   "input_bytes": 122467,
+   "input_sha3": "8d5793c16354e9a8fe13d364616a8ce06d8885cf1c466f0dd6917265e1fcdff7",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "REFRESH: statement length + 1",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 68481
+    }
+   ],
+   "input_bytes": 122469,
+   "input_sha3": "ed42d77076b9c05736e1a361a5e7e4e5a795de36cfca162a4ab0e1e2d3a9261b",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "REFRESH: under op 1",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "9edb859b741d623f64302d3182d4eb2c016845ab4e87d76e440e21e8fdaece1f",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REFRESH: under op 3",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "4a4adcc9e84169b359544d93cec8d78a14204171a6e06fe23fc931f9a8631b97",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REFRESH: under op 4",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "1cd6a0b4f0efc3780a68d4e4e68a0bfa14e2fff3d6431d664da605462b29c6d9",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REFRESH: under op 5",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "1dc91276b0ac00ecd1549f7ead5ac821af4656c2c8885bfbf88b88cfa7b4f571",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REFRESH: unknown proofSystemId (zero word)",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "e11bc53186d9830c4aaf123902317a8291a397fd40e84a6358d7f0d0ccb32918",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REFRESH: the other system's proofSystemId",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "e11bc53186d9830c4aaf123902317a8291a397fd40e84a6358d7f0d0ccb32918",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REFRESH: retired PQZL v2 proofSystemId",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "f432df9a841cdd9782b1179da996c5b7e55e955ada0e0046b41ec21b822beda4",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REFRESH: retired PQZL v3 proofSystemId",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "a5381040a64c2f921e4580a7c39624463064664ea16ffaed3bf88bcd5c8a8405",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REFRESH: proof truncated by 1 byte",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 53982
+    }
+   ],
+   "input_bytes": 122467,
+   "input_sha3": "3b2f677f4858f93692a86ae0034dcf77db5f838760f7a0bed9cb0ccd25d56618",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: proof extended by 1 zero byte",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 53984
+    }
+   ],
+   "input_bytes": 122469,
+   "input_sha3": "4e174c19e9588c40a4526d0fd9dbe1ddadde55a86c066a0adfa8c3a4672a6646",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: proof byte 0 bit 0 flipped",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "993d3bd8d5f6ba4221995c41692d6e7dfbfde52bdc998bbecc3e5394f5f931fc",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: proof middle byte bit 3 flipped",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [26991, 3]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "0cc671d38a3b11badc35dd37b42f525a539dc6259fe2f7b303480be2450c77e5",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: proof last byte bit 7 flipped",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [53982, 7]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "bf277708915070125c99ee03ba8fd2ed0d9be005fcf06294145badb472b8fe02",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: statement length - 1",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 22623
+    }
+   ],
+   "input_bytes": 58035,
+   "input_sha3": "c23d2ca4f8297a68fc19f551d8fc87bffd0e1cbb8e0864c9511e97f789be30bc",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "REGISTER: statement length + 1",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 22625
+    }
+   ],
+   "input_bytes": 58037,
+   "input_sha3": "a86ddb0a8fa2c5fd7a2388f4b27a886eee92ce72369e95a20828a39923ec40cf",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "REGISTER: under op 1",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "a80cf0e1166a1ae1966036a00291947d87ccaa4824b367350ebf2a72458b2422",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REGISTER: under op 2",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "818441de04d7038e7316ed53d0e2a9ddc20a2ceb89d09874d17108d639716d67",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REGISTER: under op 4",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "65f9868d66d1d900739f7aa11fde7dba757472fa47665c611a6cb6c82ef53a44",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REGISTER: under op 5",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "18a90b4a00b571c718ff691b1e2041fdfd48e88f4be74dfae94053d3b71a0c4f",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REGISTER: unknown proofSystemId (zero word)",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "85b0bcf89d5e721851cd5f0df352a115eae4ddd53d0468b1d6b7fbbb847adcc3",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REGISTER: the other system's proofSystemId",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "85b0bcf89d5e721851cd5f0df352a115eae4ddd53d0468b1d6b7fbbb847adcc3",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REGISTER: retired PQZL v2 proofSystemId",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "d6042561b9c4272e6c97f3dc1068f04e33256536e9023b9e330e092b940d73ff",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REGISTER: retired PQZL v3 proofSystemId",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "cb5fa389382fcf56e3a4f50fb214541c0133936d8fb7e50d05dedfd2038553e4",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "REGISTER: proof truncated by 1 byte",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 35406
+    }
+   ],
+   "input_bytes": 58035,
+   "input_sha3": "c6601f7bc90fafc222694b885be2869c0182df985e2e80abf92a7fcfced7a3fa",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: proof extended by 1 zero byte",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 35408
+    }
+   ],
+   "input_bytes": 58037,
+   "input_sha3": "b22e0b81d39414c4fd19e44f35f7ac69c051e23a493940ba5552c7e20a3d5c8a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: proof byte 0 bit 0 flipped",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "dcf4eb97339324fd77281957025c681adf39be9648a4ac09581ea7fd8dfe0ecc",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: proof middle byte bit 3 flipped",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [17703, 3]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "57b8eb08c87a53f3731dc6aa7e9035644d5a436582fdfea207b024eca764841f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: proof last byte bit 7 flipped",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [35406, 7]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "739c4b9f26dd69f15d0b6abb2d4945bc7675ae7991d17616ace928f7bb4ea459",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: statement length - 1",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 45471
+    }
+   ],
+   "input_bytes": 81400,
+   "input_sha3": "948e07e6724b92c21d779af2be77b60100042712b86ccb7f40d020af95281664",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "DISCLOSE-SENDER: statement length + 1",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 45473
+    }
+   ],
+   "input_bytes": 81402,
+   "input_sha3": "ab33ba8f39358b80563ccdcb0fb6babc8628caacd47ea2f8e4571e18fe6917eb",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "DISCLOSE-SENDER: under op 1",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "226f4f62a0bde650249ac30b6fa0d4fe146685c32073490d5b0ab4b5d55a19bc",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-SENDER: under op 2",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "4a0dd8e783a8040f27d0c35b745714e83a0625df8986cfc24420b9b43f4299b9",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-SENDER: under op 3",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "d679e87f6fc35b3443879484402ca1f1c344490717b59fcd8cfa6d451d16214a",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-SENDER: under op 5",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "4f89dc9aa7460619c8c12c94eb5eb7db57aef0917e505b33e6c92e57d7b9256a",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-SENDER: unknown proofSystemId (zero word)",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "539d2ffbfdaea75fac5c86fe0969737a1f43386e07dcc252229349c0a8939fe3",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-SENDER: the other system's proofSystemId",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "539d2ffbfdaea75fac5c86fe0969737a1f43386e07dcc252229349c0a8939fe3",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-SENDER: retired PQZL v2 proofSystemId",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "51880d7851271b8dee91a0af5399f69047ad4526e14c336659c43b507b8fc19d",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-SENDER: retired PQZL v3 proofSystemId",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "cbf0c65af1c7b0161e04f4465b095a5b4be5d91a204701b04c08d69fa076601c",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-SENDER: proof truncated by 1 byte",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 35923
+    }
+   ],
+   "input_bytes": 81400,
+   "input_sha3": "548430f0de312b39b5d7abb36b9ffa1cd111bbccb5d611d638cfde1f5aa38a79",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: proof extended by 1 zero byte",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 35925
+    }
+   ],
+   "input_bytes": 81402,
+   "input_sha3": "4deb05bc1de90766e36bf61dacac6833123494bd38a51b01608bcb59cc09060c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: proof byte 0 bit 0 flipped",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "5ee83e5373db073e639476955531168d8d6c5b1ec4bb2339fafbd31f44847bf8",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: proof middle byte bit 3 flipped",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [17962, 3]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "7d28b9ca0a7114d5e5adbbd28215047d1b08f52e8217877092ddbf2b38273bfe",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: proof last byte bit 7 flipped",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [35923, 7]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "785524727741181f8bf169a24daed116afe0d76c92f74971087908e5e382bfa5",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: statement length - 1",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 45471
+    }
+   ],
+   "input_bytes": 82204,
+   "input_sha3": "ad75f22d1a616a2f02ba8774c98cce894bfe974dc5b7bcbbca1386487ba992d0",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: statement length + 1",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 45473
+    }
+   ],
+   "input_bytes": 82206,
+   "input_sha3": "19726dd959ad2d0ad762a21dc165f2ba767f5e2225c052baf959cd570e6a1cbe",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: under op 1",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "2b1aa0845f47b71f18be6496678ecf31b993d28da5916ba1809273e0d2654d93",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: under op 2",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "e882bd398edc23325c173f7bcedadf196ef6903dbb1c30738045443e4a39db56",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: under op 3",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "1df5cd9bc5f8b988f3e65ba8ab5e634ec0359222cbdbc915aa1c2af7f7c44cf2",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: under op 4",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "616643593edd1bf2bdb380c61d39b67f0b05b2cd2343a1a454963a81d19264bf",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: unknown proofSystemId (zero word)",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "b5fc79d46a355701ea700fc7ce0ca212766b858e13b31d044292a9964cd97348",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: the other system's proofSystemId",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "b5fc79d46a355701ea700fc7ce0ca212766b858e13b31d044292a9964cd97348",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: retired PQZL v2 proofSystemId",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "e3201c06a246d43c018df770d48e967d92049104758b8f51b206041494449efe",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: retired PQZL v3 proofSystemId",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "9a0cbabf8b3fd05e7444ef8022a7f03942631780db61e6d373f52235d85405a9",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: proof truncated by 1 byte",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 36727
+    }
+   ],
+   "input_bytes": 82204,
+   "input_sha3": "84aaeb5762f6d59f7b54d9df82b82de228f04108be9605b31b1b4b03bc0b4fc5",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: proof extended by 1 zero byte",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 36729
+    }
+   ],
+   "input_bytes": 82206,
+   "input_sha3": "0a64e14d077033a59c21babe8398b973e2c215ed0d48a6cd396efbd663fcde61",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: proof byte 0 bit 0 flipped",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "8dbdd0e2066bf2a94310c6cd877edaf8b5d6f760cb8b94cffbababdda10eb2ef",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: proof middle byte bit 3 flipped",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [18364, 3]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "a10d99c6ca37979445964b6a67944371be6d1e4a346ad351bf8e26bd4869c3a0",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: proof last byte bit 7 flipped",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [36727, 7]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "8e4b895069cff5342a3e0f271f98c5a62cf589f9c4b51480cca9bf142dbe20a7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: statement length - 1",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 45471
+    }
+   ],
+   "input_bytes": 82218,
+   "input_sha3": "46af142a50067792cbdadb254ae72fec48ab6589546706a3ad5b2767fd79410d",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: statement length + 1",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 45473
+    }
+   ],
+   "input_bytes": 82220,
+   "input_sha3": "67af4e18f5a0bd5c1af33ca787a85896cfeb63a9d2630fb501787b801e10f1be",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: under op 1",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "e792597559081dd445aeb3d5f7940173291c889ea31b6c9e10aa91ff9f28b2c2",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: under op 2",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "6f260f3a114f7770edbf00a74f28e88a2a954e12cb63c62c1bf1cf8d7cd25e1d",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: under op 3",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "55ce68fd5b0a3ae01f34da16a9fcf89c367059228d51abefc562eb679d2f666c",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: under op 4",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "b3b6f552095b9a33e75e29309a8b6426d9349466064cc54e08c3f4795ff7acca",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: unknown proofSystemId (zero word)",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "8fd63c18a50b599aedbbf8cc3811c6e3cd0950336b2fc4d6172f888fbb7eaafb",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: the other system's proofSystemId",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "8fd63c18a50b599aedbbf8cc3811c6e3cd0950336b2fc4d6172f888fbb7eaafb",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: retired PQZL v2 proofSystemId",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "de1f22a9c3b46692cad763e6581ca81c724a14f87031324b452014d5bd9bdf14",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: retired PQZL v3 proofSystemId",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "114f43445f09be214af2814c2079d10a5f3f83ca497f4d505a0e6ccb36aebcee",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: proof truncated by 1 byte",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 36741
+    }
+   ],
+   "input_bytes": 82218,
+   "input_sha3": "d5ff61caf22c8f6ae0a6d276e8b9edbec04f4c3e1fb5900fc082a7cea41a93bf",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: proof extended by 1 zero byte",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 36743
+    }
+   ],
+   "input_bytes": 82220,
+   "input_sha3": "ecb4c4cc61de893e891a00df0b4b7c85f89fe280263ca6bd12fff5de4d797441",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: proof byte 0 bit 0 flipped",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "7f6e07a211228278187d57b1363e9dee750ee449e5eab20809e3cbf4ee77514f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: proof middle byte bit 3 flipped",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [18371, 3]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "eeadcf7dfb052b44bce9b8b6075380e1396048e98ba947a92066a6d9537fc959",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: proof last byte bit 7 flipped",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [36741, 7]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "5b148ea68bef5a5d2a639e549bb8b97aa1e565c885135181e39d43044c7c00da",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: under op 0",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "ea0c3526a8bedf7f6be9b45270dff8e02bc3e83a8346d90fe22020c8f09d54ac",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "TRANSFER: under op 6",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "267c63129652aeebf5b55236581b2d51bce0187a45ce22cace2b14c54327c106",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "TRANSFER: under op 7",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 7
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "d6581d4d97876d5d356933a0c056599d651604d22cb35a424105a51fac5c7947",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "TRANSFER: auditorOn 0 on the 113,792-byte form (R6)",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [448, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "953651e8b6f2dfa977bb1cc907f528145222bc23432f1bfcce9e2491de581bcc",
+   "expect": "0",
+   "reason": "AuditorOn"
+  },
+  {
+   "name": "TRANSFER: auditorOn 2 (R6)",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [448, "0000000000000000000000000000000000000000000000000000000000000002"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "3dd64521bfccd73be7deef0cdd337ae235de3dc5ae40e437f4bf48f9867e2a62",
+   "expect": "0",
+   "reason": "AuditorOn"
+  },
+  {
+   "name": "TRANSFER0: auditorOn 1 on the 91,136-byte form (R6)",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [448, "0000000000000000000000000000000000000000000000000000000000000001"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "12256b6698295626ad9671645c6deb46683baf135230365138a58243cb031cce",
+   "expect": "0",
+   "reason": "AuditorOn"
+  },
+  {
+   "name": "TRANSFER: fee >= 2^64",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [279, "01"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "141c6bdc1b1b57c63a6e222e5796481e26865cccde86bd2b54496c0f13090b1b",
+   "expect": "0",
+   "reason": "Fee"
+  },
+  {
+   "name": "BURN: fee >= 2^64",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [279, "01"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "965bfc69abf6e6437166d5d3e16cb876aafb6a0bc8fdf2b06a01b5cc0d873e8c",
+   "expect": "0",
+   "reason": "Fee"
+  },
+  {
+   "name": "REFRESH: fee >= 2^64",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [279, "01"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "049b4a0e67096e61bcdb8059ace1022f2b1d916508c18cd4a2a7bd1296b3fef9",
+   "expect": "0",
+   "reason": "Fee"
+  },
+  {
+   "name": "BURN: amount >= 2^64",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [311, "01"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "39a5a8ff353f610546230583f5ad2c758a9ca89c641d0a9ea83e05c4b7da2d93",
+   "expect": "0",
+   "reason": "Amount"
+  },
+  {
+   "name": "TRANSFER: amount >= 2^64 (decoder stricter than R_TX)",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [311, "01"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "fff219d24ba996fbeeb9143babac0e8cbdc706da5c09e08063036c7d255622a6",
+   "expect": "0",
+   "reason": "Amount"
+  },
+  {
+   "name": "DISCLOSE-SENDER: amount >= 2^64",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [247, "01"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "2bdbb755e3d780ac25f86f9c574700f82d50bb1742010a7c77ef7454a8213184",
+   "expect": "0",
+   "reason": "Amount"
+  },
+  {
+   "name": "TRANSFER: salt word top byte set",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [576, "01"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "db4e378f83d00cfa4dae45eec33fd5cddda1339febf4d5d2324d3f0d58e8393c",
+   "expect": "0",
+   "reason": "Salt"
+  },
+  {
+   "name": "TRANSFER0: salt word byte 15 set",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [591, "80"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "8ea9d99616fb968431a246eed9b64a573c905bf0fbf7221f542e645a8d316b4b",
+   "expect": "0",
+   "reason": "Salt"
+  },
+  {
+   "name": "TRANSFER: amount != 0",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [319, "01"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "1602c650d4e2f054dca9044fe32444d2207d1e6bddf828846b84c79387f05f5c",
+   "expect": "0",
+   "reason": "MustBeZero(amount)"
+  },
+  {
+   "name": "TRANSFER: recipient != 0",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [351, "01"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "93bff6bcf5240119ce52981309eec395a8117891e90eda1b73cb010193940198",
+   "expect": "0",
+   "reason": "MustBeZero(recipient)"
+  },
+  {
+   "name": "TRANSFER0: recipient != 0",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [351, "01"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "172a9ea9e4c32316ee468cd282438920393d36b5f19819b423d8f75cc7198591",
+   "expect": "0",
+   "reason": "MustBeZero(recipient)"
+  },
+  {
+   "name": "BURN: toUA != 0",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [223, "01"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "c9a3f3d75960cc5fe981e6323aec9a2c5c9f01820817a20b408feab0ba9c5f4e",
+   "expect": "0",
+   "reason": "MustBeZero(toUA)"
+  },
+  {
+   "name": "BURN: auditorOn != 0",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [479, "01"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "671a30d1fc783c3c97e74a2eedf74ac16145226c4201cfbc92513e3cf041759a",
+   "expect": "0",
+   "reason": "MustBeZero(auditorOn)"
+  },
+  {
+   "name": "BURN: salt != 0",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [607, "01"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "4c92b162427ac7c05da74b26c91607591d6e409092fca21f00bbf344ba7ce5e2",
+   "expect": "0",
+   "reason": "MustBeZero(salt)"
+  },
+  {
+   "name": "REFRESH: toUA != 0",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [223, "01"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "c18a57076eea169cfb49fc46c21e62f25e11e79f158c3461e677d0ac54d91e1f",
+   "expect": "0",
+   "reason": "MustBeZero(toUA)"
+  },
+  {
+   "name": "REFRESH: amount != 0",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [319, "01"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "11327d7ff822b6f6bcceb7df92e978760f9b6f13d4add660c135b16122224331",
+   "expect": "0",
+   "reason": "MustBeZero(amount)"
+  },
+  {
+   "name": "REFRESH: recipient != 0",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [351, "01"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "a7cf0feafae2d026345c69e75a0046010ce18a6ac03c29e856bdd12f09dfc47d",
+   "expect": "0",
+   "reason": "MustBeZero(recipient)"
+  },
+  {
+   "name": "REFRESH: auditorOn != 0",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [479, "01"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "754ac7920c0471526e8b48c3f6caf169a4a5004cec38171cf2883615d22e3f73",
+   "expect": "0",
+   "reason": "MustBeZero(auditorOn)"
+  },
+  {
+   "name": "REFRESH: salt != 0",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [607, "01"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "3133f0d64c0e521cc82ab8851fec85dc47d7b1368fd2ab98f2b0f5eaa943e435",
+   "expect": "0",
+   "reason": "MustBeZero(salt)"
+  },
+  {
+   "name": "TRANSFER: pk_f coefficient 0 = q",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [640, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "7ff16191bc9d2254f0d11902f73cd884b77c961613944e5b5b98089ff070a05c",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "TRANSFER: pk_a coefficient 0 = 2^54",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [45696, "0040000000000000"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "845c8bd963fff8c47e94e01c0d38340b434f4a1519332a29ece4b1f84e96b559",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "TRANSFER: T coefficient 0 = q",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [68224, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "a3217d939f5313131e880aca792e3448f70958b7468146b5a6199f9f65212f24",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "TRANSFER: u coefficient 0 = 2^64 - 1",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [90880, "ffffffffffffffff"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "0ea05bad2a02bcd0a6ce28987103a259c96cdac6ff99658102310c319ac3cdf8",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "TRANSFER: v_a last coefficient = q",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [113784, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "d4900d46aa7a2031964f0250f6a2aad435783092d5fbb42f3c668027e34fa14e",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "TRANSFER0: v_f last coefficient = q",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [91128, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "a8494da5e39682802ef3ce437c0193565379ee281b6a31a98753d5800ebe3d52",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "BURN: v_f last coefficient = q",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [68472, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "dbb75165e3684e1701d2601ab39b874139ff27aa5a755950a46049d6b3ac79b3",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "REGISTER: pk coefficient 0 = q",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [96, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "128cb568dc15d82d42947facb01e40886583e5719ee4f438a94824200901e11b",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "REGISTER: pk last coefficient = 2^54",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [22616, "0040000000000000"]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "2ef23e69ba2f450755e565bbc6b17cf78eac3eab59227f2e6aa1948b27038a45",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "DISCLOSE-SENDER: pk coefficient 0 = q",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [288, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "8b2e8ec5e8d72918d626a63dc40ca89c10a726ef9132dcc10b1b5aba7fea6478",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: u coefficient 0 = q",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [22816, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "527506a7dc77cb76d1f2f649fdc5254b0910e8feaf52e80d356b26f41dd08c11",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: v last coefficient = q",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [45464, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "1f08ebf852d4a538f01de67a91dd17a803ebc5c2b7c5b8a8b63b28d76c2b7d97",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "BURN: REFRESH opTag on the BURN statement",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [0, "f118f2df0f018062e2d4c296a01707dcd7ad7c85f6981d68517ac8b2cd75eede"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "a7a70b40b0318032429dfaaff7bdd5c62ab3e67cf35bd87bed1e3d4401128797",
+   "expect": "0",
+   "reason": "MustBeZero(amount)"
+  },
+  {
+   "name": "REFRESH: BURN opTag on the REFRESH statement",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [0, "7383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc1407"]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "3857f9cb319c9c1c7bfaabdf0a186dda493d60ac0a54f6bc02e008b0e7847b11",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: AUDITOR opTag on the RECEIVER statement",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [0, "d6019aa47e04fe91c11df386ddc5bda2178a3f2506c46cdd59b16ef1d21daf81"]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "a40b01a440409750ac805a97abfebea796d74cdde4ff750600de827bed2c8561",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: RECEIVER opTag on the AUDITOR statement",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [0, "d8356cfbd875acb80fe8a8127a57b5c549d20fd65b9acca8672186a1a4296456"]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "b7e7e0835f7234ce54a9237338f4979c1571dfcd4d9ad8889a75c9559787cd7c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: REGISTER opTag under op 1",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [0, "69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088"]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "46fbdeeb543a61f68d5dd6e93e17b5dafe5d56da5ca3060965a3121c81bb0788",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "DISCLOSE-SENDER: RECEIVER opTag under op 4",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [0, "d8356cfbd875acb80fe8a8127a57b5c549d20fd65b9acca8672186a1a4296456"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "ef5caf1594439d233752d5632cdf382876f333b012bc456199c41a9be96ab218",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "REGISTER: message bit flipped (the self-test's invalid case)",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [95, 0]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "f54bb844e69a1c37667f4d75d0a57afc97143bb4faaef4aa1b80901f9a0fd3e0",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: chainId bit flipped",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [95, 0]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "553f4b573dab394aba940a1ef2f7699cc25145e0ec58fe3b6d5976846bf14436",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: pk_f coefficient 0 low bit flipped",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [647, 0]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "0327c08ce14d1228b9a9b1d76113676cab668b1df63e6cad4eedcbcc060ebf36",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: v_f low bit flipped",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [91135, 0]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "6b19a6fd6d178624e0abc2bc03d3edbbe41770b2fd85ed979ec4afc1825a402a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: kind word changed",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [287, 0]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "776cd0d2e5d8d2324f13b54128fbdcd84d592a76e36352a6330668f1dd8cf3bd",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: amount + 1",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [248, "000000000001e241"]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "c8a7903c076b4a9bffafba0da012ef5fb093b6f7ac17798286b4d8fea7000ec7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: amount + 1",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [312, "000000000001e241"]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "04780f5465918282cfd59001c6e3f84c6b184104c01e0bebeb5bad2983729f3c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: TRANSFER0's proof",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "TRANSFER0"
+    }
+   ],
+   "input_bytes": 168328,
+   "input_sha3": "a91f5282079091f4907dbf8198f716e8632ad90e0976cd22ed8b90bc0444fdbe",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: REFRESH's proof",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "REFRESH"
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "f7410a9bc40a3810d209831d45f45ef21c4263b935d00b83feaedc327131c62d",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: DISCLOSE-RECEIVER's proof",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "DISCLOSE-RECEIVER"
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "cedb6a5bd92fec3024306c06c100ed2fa5508555dbaeac2c78e87af2f6409baa",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: DISCLOSE-RECEIVER's proof",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "DISCLOSE-RECEIVER"
+    }
+   ],
+   "input_bytes": 59357,
+   "input_sha3": "01e39c5e6380c1e6df46c35b75062e9aeb995d8c12a39c614b1b8e411c2d30b3",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: BURN statement with TRANSFER's proof under op 2",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "TRANSFER"
+    }
+   ],
+   "input_bytes": 123328,
+   "input_sha3": "ee5f6f617a5caadfbaa4f3e09f0bff247391e4a9a6f04c555ef7c05e891dd916",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: empty proof",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 0
+    }
+   ],
+   "input_bytes": 113797,
+   "input_sha3": "332466da757dbdd8d781c026e33e2d1f96fd7ef4c916347da708a44a68729e9b",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "TRANSFER: proof of MAX_PROOF(id) + 1 bytes",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 98305
+    }
+   ],
+   "input_bytes": 212102,
+   "input_sha3": "75f45693d863f44301b9f5c1ab3b48c921074ee2f80b05b057c4d648f03eb732",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "REGISTER: proof of MAX_PROOF(id) + 1 bytes",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 98305
+    }
+   ],
+   "input_bytes": 120934,
+   "input_sha3": "055052ead74a5f0a1a2f54efa0d824d2aaebf7f9bbf550bca6cdf12d5919b4b8",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "TRANSFER: input of MAX_INPUT + 1 bytes (expected revert, P6f)",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "input_resize": 524289
+    }
+   ],
+   "input_bytes": 524289,
+   "input_sha3": "829a2ce3d312c98419bd1ba6c1a266f06dacd8338779a6ebdf09506066146f16",
+   "expect": "revert",
+   "reason": "Input"
+  },
+  {
+   "name": "TRANSFER: length field 0xffffffff",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "len_field": 4294967295
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "04b10533d777d7077274532320204ba4262a642946c7bca4f9ed1d7e46be5c20",
+   "expect": "0",
+   "reason": "Input"
+  },
+  {
+   "name": "TRANSFER: length field = statement + proof + 1",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "len_field": 168636
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "ece14d249019dbad5a0804d33723b6ce7a6fad4b369aeb04e176ce41265eaf08",
+   "expect": "0",
+   "reason": "Input"
+  },
+  {
+   "name": "TRANSFER: length field = statement + 1",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "len_field": 113793
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "357746557ca97689cb5c9d365b318fe48f8a7718f1a217696a32c0f8042a137a",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "TRANSFER: input of 4 bytes",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "input_resize": 4
+    }
+   ],
+   "input_bytes": 4,
+   "input_sha3": "1b7229cba7ad3119f83373596e2a86599c8fed06156c7583b312e993a1bc811b",
+   "expect": "0",
+   "reason": "Input"
+  },
+  {
+   "name": "TRANSFER: proof of exactly MAX_PROOF(id) bytes",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 98304
+    }
+   ],
+   "input_bytes": 212101,
+   "input_sha3": "e93eb1bfc274944bbf47720699d507e1e63acd2aedd05cc13a7f4823dfca8756",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: input of exactly MAX_INPUT bytes (not a revert)",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "input_resize": 524288
+    }
+   ],
+   "input_bytes": 524288,
+   "input_sha3": "5b2f0df6c789c9b18176a4497b771827bb92f60656afba78d6bf82809182e710",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "TRANSFER: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54842, 7]
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "6115bd07757a991b58ca1112546fd6a07b4d7d486f7b28a8a7cda0f1f76c17a3",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54530, 7]
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "e96cf3e7798ac4871f36940619bae15658bbb902e2bb2b24164500ddcf82f5ab",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: coder padding bit 7 set after the final 1-bit",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54011, 7]
+    }
+   ],
+   "input_bytes": 122497,
+   "input_sha3": "4c783403c2d1d6b9800a3da54fb7343282a459155eb651afb67a0be67573b658",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: coder padding bit 7 set after the final 1-bit",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [53982, 7]
+    }
+   ],
+   "input_bytes": 122468,
+   "input_sha3": "bf277708915070125c99ee03ba8fd2ed0d9be005fcf06294145badb472b8fe02",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: coder padding bit 7 set after the final 1-bit",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [35406, 7]
+    }
+   ],
+   "input_bytes": 58036,
+   "input_sha3": "739c4b9f26dd69f15d0b6abb2d4945bc7675ae7991d17616ace928f7bb4ea459",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: coder padding bit 7 set after the final 1-bit",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [35923, 7]
+    }
+   ],
+   "input_bytes": 81401,
+   "input_sha3": "785524727741181f8bf169a24daed116afe0d76c92f74971087908e5e382bfa5",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: coder padding bit 7 set after the final 1-bit",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [36727, 7]
+    }
+   ],
+   "input_bytes": 82205,
+   "input_sha3": "8e4b895069cff5342a3e0f271f98c5a62cf589f9c4b51480cca9bf142dbe20a7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: coder padding bit 7 set after the final 1-bit",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [36741, 7]
+    }
+   ],
+   "input_bytes": 82219,
+   "input_sha3": "5b148ea68bef5a5d2a639e549bb8b97aa1e565c885135181e39d43044c7c00da",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "SELFTEST with a 1-byte proof",
+   "form": "-",
+   "id": "-",
+   "edits": [
+    {
+     "raw": "060000000000"
+    }
+   ],
+   "input_bytes": 6,
+   "input_sha3": "7f3137c379f415b8ef8eec13856eab72bb7a9c7c70715c902d7a6a055d2c2429",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "SELFTEST with a 1-byte statement",
+   "form": "-",
+   "id": "-",
+   "edits": [
+    {
+     "raw": "060000000100"
+    }
+   ],
+   "input_bytes": 6,
+   "input_sha3": "e123b02e1f2bc758cd8c0089a79b3bdf15cd51b16cec2bfc7dbf562883954e08",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "op 6 with an empty input tail of 3 bytes",
+   "form": "-",
+   "id": "-",
+   "edits": [
+    {
+     "raw": "06000000"
+    }
+   ],
+   "input_bytes": 4,
+   "input_sha3": "f539ba122394c3dc16cda997ef6396713276f5922b246851fe9aea01d18ce050",
+   "expect": "0",
+   "reason": "Input"
+  },
+  {
+   "name": "M1-on: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 113791
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "ebcff751bce3fbe0c7d892a916eee8b33b6f67a8c4f976b47ed45a2e7d6a116a",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M1-on: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 113793
+    }
+   ],
+   "input_bytes": 168642,
+   "input_sha3": "8629fcf029c03288ccc57875a5cbe46fc3136cf9b34a23b1e7b99ee09afff8b1",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M1-on: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "7689ecc58614f129d7f38e812863bcedafe53b38d76f97708321f5ce69ae30ec",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M1-on: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "a68fe96902f68a334f55cccb71cfbf3c8201666e7556488138f0a044b882a463",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-on: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "45017655fffd7394405eb3fd3a67da074b6c2dd3f5e886b152d2ce9af1d788a1",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-on: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "38f9c620a36656f85e40bc48ff95fd99b8707e12499d7411267790520be2d6f4",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-on: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "6d123b51fb94177aa30f44dbe00cf73d1e5c90f37ff08739582bcab6510a73f2",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-on: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "8fbbcdfc186ffbeb8ca704530f458149e72c330ed3bd7678656c62bcf4b11f17",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-on: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "a41be273769e8ecfcfcc83b935661d3b1df7d5a742a7f1d544469768844aa953",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M1-on: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "338b8fd1244d4e295564f1d360029454f1d377a61a87fd0812e214d1d34e4c09",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-on: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "338b8fd1244d4e295564f1d360029454f1d377a61a87fd0812e214d1d34e4c09",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-on: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "8f35add1be352dbf7bfdfa59fd091d5aca6d5f39039a688af94c8fab4b8c414c",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-on: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "6484aa77c2b58e4d3f4b6e40fad146e33ef502a0011d0f73b7d7b0c5ee9c27a4",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-on: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54843
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "810fb6f130a47112e68f5b5611823b16c7e6cc392f08a6248e2c9da2edd2ed4d",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-on: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54845
+    }
+   ],
+   "input_bytes": 168642,
+   "input_sha3": "85a7bc2822ec05d920d83ee02efe8df765c95069b7bc458e461a93903a0938c3",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-on: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "e7863913246ad6b9e176ded8ca5878c95b4a2d716c80b740b7fb946285eff05c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-on: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [27422, 3]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "08460be135dc17e014fc73e3cdce3641375e1839f6b58c6f3589ada045525af7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-on: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54843, 7]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "31c8c61a0cf68e41a0bb6d48d9801740dbe7d168998cad7b7bec03b74d999d6e",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-on: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54843, 7]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "31c8c61a0cf68e41a0bb6d48d9801740dbe7d168998cad7b7bec03b74d999d6e",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 136575
+    }
+   ],
+   "input_bytes": 194326,
+   "input_sha3": "3395a2ebe679ecc24abce11942316e75631700152b3529bd019efab602136252",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-on: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 136577
+    }
+   ],
+   "input_bytes": 194328,
+   "input_sha3": "e0f40630e50d02579b2d41934654a9cab418570755b3898434c061bb3e7a0702",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-on: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "0e9d40a370dd1f942079502f8ad1f0c79adf20e57462c1e89f2215cf4f0b31e4",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M2-on: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "9993891ef19b1f206bca068b1014a979ae5e984b300be1c0bcbe8ad68820d2e8",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-on: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "9448c603fc64baffc38865f5f54813ab4fc5b12ca85cd46bc1a847abe1d1081b",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-on: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "fe5cb4277ef3685087e271685ec124f171043a5ae5ed661566e42087f552736c",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-on: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "1f8fca24c7b4c0805169171e573cf9c5fef4579fd4f74f4624913d10f3af8257",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-on: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "ab321c81a208b01ac875d4b909f6a5d52df62861fb0fad45104d655308437845",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-on: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "0b0e4d726a633d1118f78e47620f7d7ca48b578efb2d0289a2c2237c6c26cc3f",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M2-on: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "c3b5bde4a539cac74861fd46971a1fa389fe537fce45272d17d30aec54e93232",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-on: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "c3b5bde4a539cac74861fd46971a1fa389fe537fce45272d17d30aec54e93232",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-on: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "fd4819c38f899b9e6e6511312caeaa0a0c7dcd8413e19990e216c046de96b971",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-on: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "03d0e59320dcbef98ec620535839baf0eb0c4f5fdcbb0cd5c0f00fcdff1767bb",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-on: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 57745
+    }
+   ],
+   "input_bytes": 194326,
+   "input_sha3": "2ee2e5d09743c372a043f93e42e78fb730e74e8b2681688d2dfde050af2b3f5f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 57747
+    }
+   ],
+   "input_bytes": 194328,
+   "input_sha3": "80eeaecd401d2e09ed4b1e75a01e997228155a2ebd6f9bf52c06b264ec367a40",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "c552a89496a6080ef67abe2f924f4e106b77885ca210c709184392c85a67c31e",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [28873, 3]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "fcef01ac467cd0b31d238a7eb03517c509969440920b8c00b6a43f2806aa4669",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [57745, 7]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "a7ba44427ce1f8337c0e658a16218dc5b10cac3e331fab36a63629b7130f055a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [57745, 7]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "a7ba44427ce1f8337c0e658a16218dc5b10cac3e331fab36a63629b7130f055a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-on: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 182143
+    }
+   ],
+   "input_bytes": 241656,
+   "input_sha3": "12d65ec7d862200a39d7e619ad23e17da9b5327eb96015a12708e9ce57f190ab",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M4-on: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 182145
+    }
+   ],
+   "input_bytes": 241658,
+   "input_sha3": "4f9a1ac569e01ddce5ca93d08c22115338f43ed2080fb507a9df12653ed94d86",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M4-on: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "898f2af56fc92c2ca8a93c5c5fc540273b1ffd4f8c836d393c3c2d0f59e022ee",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M4-on: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "1789e34dc548799ca43c3500e15096f48ae883963209d587faebcf7d49e95af3",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-on: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "7ba08827a411cd315091b72b8c3d4978e56ffb9b579a77abd091d83c7f261b8f",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-on: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "46ea35b98d11f72f121db016577b28d95b501081faadeec968b3e8d22adc4cbb",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-on: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "d3c09ac976a01b592233f3f81b38f162e4d45cff677c8874d03c4357e212964f",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-on: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "94411711b5e12877ecee1695e9e2120c2d5b2e3f22a6470e43b96d02b60a938e",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-on: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "7613c9e55b72593f87ca644b70267af392d4cf62479b095c3a005fc2875645a7",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M4-on: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "bed9cb7ede2e4fac35b277c1af27575c2b51099a5986700558580e6fc53aadb8",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-on: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "bed9cb7ede2e4fac35b277c1af27575c2b51099a5986700558580e6fc53aadb8",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-on: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "72d971bf73b65e7f8c7464398de36923c1f9bee6474b16635d7a82bde49231db",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-on: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "8919d60569b73fd3848889e5fc8bd0d6ed66bb5a5c7144561029efe3adeb7e0f",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-on: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 59507
+    }
+   ],
+   "input_bytes": 241656,
+   "input_sha3": "48d6229172385cacfd7c8b297af7805b02028e90a7cd3b121de70dc2e9a23ad1",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-on: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 59509
+    }
+   ],
+   "input_bytes": 241658,
+   "input_sha3": "7d67f904b2d3ef35d3e743eb0705b9c6c50e8790caa904dd009776c21c3e06c6",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-on: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "4a6470da1281a0d7916130936392e69b74a0b14231d8c98d132f9dd841b556d2",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-on: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [29754, 3]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "675c6ed8f3ae5a68b956c279238a260a480d549ddfb8bc5539140c1534c81f4c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-on: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [59507, 7]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "4a818f0fbad5b93e352d2d2a58e5905a0d66531bebb1af52939300e90b16accd",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-on: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [59507, 7]
+    }
+   ],
+   "input_bytes": 241657,
+   "input_sha3": "4a818f0fbad5b93e352d2d2a58e5905a0d66531bebb1af52939300e90b16accd",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 295807
+    }
+   ],
+   "input_bytes": 375008,
+   "input_sha3": "9002bf92896243dc239d8b10a5c054569d9dc5429c0c747416a6a6c21e545b84",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M8-on: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 295809
+    }
+   ],
+   "input_bytes": 375010,
+   "input_sha3": "58be619aed7d2015c37f117dec8176eaabf39e580c01e6b2103ac360d42d573b",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M8-on: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "e16bdd3fef8112ba8864c4bdc730f2d9e49c58b0751e4cd4618fc269c7c0bd28",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M8-on: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "0db767ba65541bbd2bbc9e5528ad87befb6b844bc5dca346a474fc9e43130357",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-on: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "fde7c1f8817e5b0e456ecbc826c2db95107ffebd74f6ff564f8a7669c9de0733",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-on: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "89625281725b979d23b28736ef6ae5c76536a760f62e9167983c4d5176d04ceb",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-on: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "f907ba477e176b59e4cbbdf78910b005fe4c69eae21f60441ad03c94fdda0e73",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-on: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "acc88c48573724e349a941c051d5b25d00687f1eba83b8174c79b4703c4ef681",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-on: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "ca9823e6db6ddd3a4d330839ba811aeffee5b18832a194021ccee28f0640c38d",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M8-on: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "9f23a6e764ab982345b8e4395e4d88e17cde054c1650bb45d6ebc7c507ae5987",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-on: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "9f23a6e764ab982345b8e4395e4d88e17cde054c1650bb45d6ebc7c507ae5987",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-on: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "722a5d68c8ec919126c9789b7f10d27101293f381ba0e45230ba5d6c8473d0b9",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-on: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "d98df71db0851f21457c66b4343ede9985f4523cfef8d686f8cf6afef9e0fa81",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-on: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 79195
+    }
+   ],
+   "input_bytes": 375008,
+   "input_sha3": "2ad0e87ef16b09e16472fa464cb6eee7f04ecd4f77ff74886493d863d65dc0b2",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 79197
+    }
+   ],
+   "input_bytes": 375010,
+   "input_sha3": "d426054921ddc0558dd3455b8ca3269d5dfeb8da5d918591cc87e944eccc68a1",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "b9078e3fefe7980f1ee7aad7b52114a9071c78462b2d3a3ef6ce1a66f495b828",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [39598, 3]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "6b408d5481b70dad1de5dee28d5c0e16280d0871bc443cf410ae85c0bd72b041",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [79195, 7]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "314f33cae10e47639271f7b5bddf38dbcaf120b09f78c590a45e02f840a685a8",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [79195, 7]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "314f33cae10e47639271f7b5bddf38dbcaf120b09f78c590a45e02f840a685a8",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-off: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 91135
+    }
+   ],
+   "input_bytes": 145646,
+   "input_sha3": "b5bf0d88d3dfb27b62234c81991a10584e152c67151dcaa7d066f8229aec7bf3",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M1-off: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 91137
+    }
+   ],
+   "input_bytes": 145648,
+   "input_sha3": "8b0f0f564414314b40cd87fea618dfd31ce30972964a00d400cdb62d6dcff6eb",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M1-off: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "605c06a5800b08be7b726983c9c4678dd640c6cfd17ab402b138ae50b96c6c25",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M1-off: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "9f6cd0038441ca56ed42a2305a1814980ff39be2ad834080754fc17027bf7753",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-off: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "6ec1421caa149be10e81359ab914f8596b7a0e8bb89e5c7619e6077ca17ab29c",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-off: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "e9982ca093439f25aa984c5a966178ea48999ea6859960cafcb1b6e247c8e00d",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-off: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "b1acff9ccc1d25758e842e35f3ed0365efc4e45a7f3a6eb89ce5cec91708c2d1",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-off: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "6e89c7f1b06cbbc76314a1d83ad823e5567d779057746ec18e4400a6fa435f5c",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M1-off: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "8368b6825d9682d0d80247ef78396f72a94ccad82cee9bba5181ef77cc17a362",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M1-off: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "527a2908b5c3fc5cfc429757b3220a59bd318e8ef281ca90fe0ced1c593f48ac",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-off: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "527a2908b5c3fc5cfc429757b3220a59bd318e8ef281ca90fe0ced1c593f48ac",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-off: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "f9deb548da248616d230c41c22281b75d312330c792ed88e0827f9e3269c69de",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-off: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "392929dcd0a667e4334be1a058dec13eaa0f1b7b931a94c38d763cef4b99881b",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M1-off: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54505
+    }
+   ],
+   "input_bytes": 145646,
+   "input_sha3": "45a6a29bce8ba71fd77b8d1d0f9dfdeb5b54980b45099fca884a6f8b376cb8b4",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-off: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 54507
+    }
+   ],
+   "input_bytes": 145648,
+   "input_sha3": "35c24ea651088a16bb318a843e6880bb302af52ac8eda16fa86fc43e46f33089",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-off: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "5c2474f0fe1cf889b9dec0d97abed1e412c6db519b0ca507d55570d33d950bee",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-off: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [27253, 3]
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "6e951e07bd0ca565315a62b1baf15e01c1460520f8c079d0cc7d8f940592e1dd",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-off: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [54505, 7]
+    }
+   ],
+   "input_bytes": 145647,
+   "input_sha3": "df7e3b06bd871867a9e758670df3cc5b4d0b1594a6f3d076716c03f24617505d",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-off: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 113791
+    }
+   ],
+   "input_bytes": 168820,
+   "input_sha3": "7371d0559b4d8fbf0f41441e5b4cb05787ce89651de7d6b1d7ff911ad1b51664",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-off: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 113793
+    }
+   ],
+   "input_bytes": 168822,
+   "input_sha3": "faa47f668eb9d7b5815ade4091c0850cc3ec4e7cef9952354c6b92a565c87ff4",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-off: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "338c3cc70028bbab21018af2bf9d039074bdc71571cf96d26f1901c2b497cfaa",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M2-off: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "7bd03fbee8543173a27ad337f2ca35ff01ffb788beb78bbadd56f1ef82734681",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-off: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "0d838e933e6976b44341e8b7202156b93ba00b4e487c4cb79a5c4e0a1f6fd6f9",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-off: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "9a5fb97d0a2e45a44835f991574c787179f310e73f4048994e5a5c59cfd6d382",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-off: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "71f53777d22af435db09ae82106025dff7cf31c15980eb0cbbc76462ce0cf562",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-off: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "4c1fa580c37e052e25bdcc09dbd06242a2b3401c6a0d68e90488251549b98112",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M2-off: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "aad63bbe7977a924c02e9617f7ad251afc106a66ee43d772211b9be23d29945a",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M2-off: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "096c718fa77d6d7c4db660c5d0e49b6a099dbab21525b533ef71efe7e29a223e",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-off: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "096c718fa77d6d7c4db660c5d0e49b6a099dbab21525b533ef71efe7e29a223e",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-off: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "a30b3d1d3f08aaed6551a41cffc67df14bcda628692a617a22494f07e8d86d1d",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-off: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "5faf308423e63428aa7f86c1fd4be26b63924ae2611806ff73ae35fc46dd2a3c",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M2-off: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 55023
+    }
+   ],
+   "input_bytes": 168820,
+   "input_sha3": "221897567eb5d36848d6ecaa31db168463fdd3fe20b38abdaba7b7aaface111b",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-off: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 55025
+    }
+   ],
+   "input_bytes": 168822,
+   "input_sha3": "0a9b5eb582738a7386b3d08e6e0d8e459b29124892ddcb042fe7b6ffccbcb3c2",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-off: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "969d7686cbc7f4fe66fc86496c0434d395cee430ca55bcae2e4a0ec77c9129a7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-off: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [27512, 3]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "8a8a9e491009b639b995ac176c92a0c5429b78d0da742286855103d63f746d35",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-off: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [55023, 7]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "4f6546b448285f1fbba562de49bbaa07af2c21a10e308a892a4d047b9104908f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-off: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [55023, 7]
+    }
+   ],
+   "input_bytes": 168821,
+   "input_sha3": "4f6546b448285f1fbba562de49bbaa07af2c21a10e308a892a4d047b9104908f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-off: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 159103
+    }
+   ],
+   "input_bytes": 217256,
+   "input_sha3": "b57df2916c46819494098fe32422692b40bf859d45ce492129aec9420d9657b6",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M4-off: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 159105
+    }
+   ],
+   "input_bytes": 217258,
+   "input_sha3": "a2395dc75d3d2f610dc1e7895ade6479704b326e411880200fed8bb55ffc9a1a",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M4-off: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "5159be6e4cf7dd77a3ad6632dff1779cb7bd1571276ca07c74b669578a38470b",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M4-off: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "c5fd89e60322227ccadf2f0ca18868afa51e3de9549d18347404c0433f8d31f6",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-off: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "77893ca3ced53c1c74ccc7c735831712b7df43ccb11887a7838f532dae143f4b",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-off: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "e9e5836348d6eb657dec971d9571f67f40acdbbe136427f1d4cae4c388fd7fb6",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-off: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "7b420b2a197c65ea36f647051709cde12611298c7ef446d8d0d6ebd24e6fbc75",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-off: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "0f00b0b322c28a9e46c2922785c7a78cf729ce16ee50e6856ffe740b0f7ae2cc",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M4-off: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "e191bf4972202c83ca769e5f321ba5709a4765d93f30da6d5be4dc5a8d9fd80e",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M4-off: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "b3d5ac8a03d5db35918ce41c7fcaf64a8b38ce0ff4e0ca179cc623734a0e2d3c",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-off: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "b3d5ac8a03d5db35918ce41c7fcaf64a8b38ce0ff4e0ca179cc623734a0e2d3c",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-off: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "e6344121a449add537c6665a723b0f0288ef107bb3327e204d00f9a964826af0",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-off: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "e5afead319fe7d8fa9e599552850caf7bce527cecba0bee5f605160df36aab1a",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M4-off: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 58147
+    }
+   ],
+   "input_bytes": 217256,
+   "input_sha3": "8609a3236cc21101933543f32e7182f8f823aad5468ac0c07f2689d96b2be985",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-off: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 58149
+    }
+   ],
+   "input_bytes": 217258,
+   "input_sha3": "f55fc55c1ef253247369779f05703f5cf28bdbeecec36bc58fd5b41bef9ea0f4",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-off: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "0ce8cfe53c344e566454253bc1416330a9de97c8545fd610f50386449897c2c7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-off: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [29074, 3]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "55daad6a89fb4ae3c9aa2fd05b8f1aeabad3c9a4e4f77eb73665cb60a8ce31e0",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-off: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [58147, 7]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "08c76f69707eced064826d97ee351e41e51a93d5a699edf68a8951be2d834ff9",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-off: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [58147, 7]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "08c76f69707eced064826d97ee351e41e51a93d5a699edf68a8951be2d834ff9",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-off: statement length - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 272255
+    }
+   ],
+   "input_bytes": 348610,
+   "input_sha3": "e6c6c3ce83d2de294d4920cf35906f7ba4f0202e5abd20102d86180eea5c6c23",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M8-off: statement length + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 272257
+    }
+   ],
+   "input_bytes": 348612,
+   "input_sha3": "9fac4e03a0c4e02c4344194df5202926c79324516760592c098c2b9493240e16",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M8-off: under op 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 0
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "1c9f6100c447c2d2f0bddcd4ca3f549c0cae43f290a13008573a5e680fe0d125",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M8-off: under op 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 1
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "faf3373f839b0369ff49b406ab3dd1b17053354d1ca05b20d073912dcb73f1fe",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-off: under op 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 2
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "444046b33e023116556c245ff25d123e63eba234d100700528d1732dd2979f15",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-off: under op 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 3
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "bca50c02144c36669a6724ac2808919289658b99127ebfbc3e2d95f27b72ded6",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-off: under op 4",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 4
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "dea09e171a3a423ae7994f7e09810cd18471d546297bc3578f01baebebc70a17",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-off: under op 5",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 5
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "952615c063f3850ae58f4be64b987991b68baed465d7385778ac3f2b32db7a8b",
+   "expect": "0",
+   "reason": "OpTag"
+  },
+  {
+   "name": "M8-off: under op 6",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "op": 6
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "5092ac36c94daa809af14f31ee077566ee62d93f307ed33b3bdff8f056c04e8b",
+   "expect": "0",
+   "reason": "Op"
+  },
+  {
+   "name": "M8-off: unknown proofSystemId (zero word)",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "39b6e6e88c0a973b8a30f89d88250299ec44d7024bd01216da3f2944d20943b7",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-off: the other system's proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "39b6e6e88c0a973b8a30f89d88250299ec44d7024bd01216da3f2944d20943b7",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-off: retired PQZL v2 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "2c6106ce8c6c583063943f8543a2ea1cc74971046baf3fa8e69a2015c67f79a2",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-off: retired PQZL v3 proofSystemId",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [32, "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "6f2baf9227017f95806c50cea5869a6554dcb5e63db31b3862b4fa17891abd4e",
+   "expect": "0",
+   "reason": "ProofSystemId"
+  },
+  {
+   "name": "M8-off: proof truncated by 1 byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 76349
+    }
+   ],
+   "input_bytes": 348610,
+   "input_sha3": "af59702ea61aaff6f141c6f89433f8a10435d065608d04fbb529df117cc7ef6e",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-off: proof extended by 1 zero byte",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 76351
+    }
+   ],
+   "input_bytes": 348612,
+   "input_sha3": "aa441e10288931bdcba25296bcd6050da37c0689a31d57b3f68ed7b486ac0bcb",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-off: proof byte 0 bit 0 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [0, 0]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "68182caff7944f85637acee33b21d7fa2deba75f387201efed7da979882a7dd7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-off: proof middle byte bit 3 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [38175, 3]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "d45a1f4d1c0b1ba2702eb381f54991befd8c36158c98a5ad81f7361c16b56dde",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-off: proof last byte bit 7 flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [76349, 7]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "e89992c8b667db7178fd64e0aa20d547ca7f2814a14672c2e9576b61fd52ce4f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-off: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [76349, 7]
+    }
+   ],
+   "input_bytes": 348611,
+   "input_sha3": "e89992c8b667db7178fd64e0aa20d547ca7f2814a14672c2e9576b61fd52ce4f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: M word 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [320, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "69492396361c35410abc0de76ee10c5dab0ffbdfab94dee3e48c9d3667bafc37",
+   "expect": "0",
+   "reason": "Legs"
+  },
+  {
+   "name": "M2-on: M word 3",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [320, "0000000000000000000000000000000000000000000000000000000000000003"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "cf35c5f353926570d83bdc0c0b34d4cbb213044d2d41974044300c60796ddefc",
+   "expect": "0",
+   "reason": "Legs"
+  },
+  {
+   "name": "M2-on: M word 16 (oversize only)",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [320, "0000000000000000000000000000000000000000000000000000000000000010"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "d35c99af2ed107e3c8eb2668dbd528721829a6930ec034d050ba28620002ba12",
+   "expect": "0",
+   "reason": "Legs"
+  },
+  {
+   "name": "M2-on: M word with bit 64 set",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [343, "01"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "4e9040b81449d5b47cf5613ecf463091d0c3ea7deef7fbdb3ca4fa89306fe266",
+   "expect": "0",
+   "reason": "Legs"
+  },
+  {
+   "name": "M2-on: M word 4 on the M = 2 length",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [320, "0000000000000000000000000000000000000000000000000000000000000004"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "fbd84283fa57c8a5974ddfd3f5e8944499118ab9f93cfa4af648ddf3e17a502f",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-on: auditorOn 0 on an auditor-on statement",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [448, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "09f3d1ade27af8539d4c3af4477dc9055e03b7fb2668902bdbc67477fa858a80",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M4-off: auditorOn 1 on an auditor-off statement",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [448, "0000000000000000000000000000000000000000000000000000000000000001"]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "13360cc0c690c207357392ffedf8205d603d88677e4f6a3ac69ca95a4a32a174",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-on: auditorOn 2",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [448, "0000000000000000000000000000000000000000000000000000000000000002"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "ae215f99f6a6e237f582b3e0cc21c5427dc34e0ed6e649680d3fcf18ebb24b7c",
+   "expect": "0",
+   "reason": "AuditorOn"
+  },
+  {
+   "name": "M2-on: statement of the 640-byte header only",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 640
+    }
+   ],
+   "input_bytes": 58391,
+   "input_sha3": "0817481e87a625ddd34f3beb43933c46d3fba28414cd1b651ff5e1a92a682336",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-on: statement cut inside the header (639 bytes)",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_resize": 639
+    }
+   ],
+   "input_bytes": 58390,
+   "input_sha3": "83ac34707f13f723bb2cdbb87a8accddc9fcd6bff2865898d26888191fe03395",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-on: amount 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [288, "0000000000000000000000000000000000000000000000000000000000000001"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "8476a9e863bb3c6b89b0e9805a0d82beccfa5df6481844539fa478fdc885aeea",
+   "expect": "0",
+   "reason": "MustBeZero(amount)"
+  },
+  {
+   "name": "M2-on: amount >= 2^64",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [311, "01"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "1c9248dabdfb02cd52ad81459dfd701e27fb64b883f6e3dc4767884466d9f7d8",
+   "expect": "0",
+   "reason": "Amount"
+  },
+  {
+   "name": "M2-on: fee >= 2^64",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [279, "01"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "ec15ff379e57a5c419d91cb89d62f67af64f3b067222d1e3823f3adcd5a44c24",
+   "expect": "0",
+   "reason": "Fee"
+  },
+  {
+   "name": "M2-on: salt word top byte set",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [576, "01"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "57a548f3b8f2b22562d87ff59747f5eac12e2d722c520aa5e5fe9a4a6ec9d278",
+   "expect": "0",
+   "reason": "Salt"
+  },
+  {
+   "name": "M4-off: salt word byte 15 set",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [591, "80"]
+    }
+   ],
+   "input_bytes": 217257,
+   "input_sha3": "e100b3d815b517741d21ec0ea80f0f3a6f4fcf7df916fc250eb1a483040b9e29",
+   "expect": "0",
+   "reason": "Salt"
+  },
+  {
+   "name": "M2-on: pk_f coefficient 0 = q",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [640, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "0116db546b887d84d0bc6cec6d0485687a13caf90bf88513f3e1c065bfb9c2ee",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "M2-on: pk_1 coefficient 0 = 2^54",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [45696, "0040000000000000"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "68d0962031b471445809ceb1ab4b2b7976bac9b774d958cf1dca74f3df6ada39",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "M2-on: u_0 coefficient 0 = q",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [113408, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "323e09c3cde29bde5698c6a0f4ce1c7ae76f20ad8a957a5734fa410010e4ee0f",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "M2-on: v_f last coefficient = q",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [136312, "003ffffffffffeb9"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "db054a296e7c2b743a91873b3a555779242e068d7c3e89af38d1b514faded5ae",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "M2-on: v_{a,M-1} last coefficient = 2^64 - 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [136568, "ffffffffffffffff"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "9ece588ef0f5adfcd2c711eff15ff54a3577b8c260ed5d701c2d415f5f616bf7",
+   "expect": "0",
+   "reason": "Coefficient"
+  },
+  {
+   "name": "M2-on: recipientsHash bit flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [223, 0]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "45dbc770ef163a285693ed65bc5e34efb8d5c733f801f61fdddb39a994e68fd1",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: memoHash bit flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [639, 0]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "3aedf94669e313e8b8156f9389723f8cb287ff98deb928bf27e9e445daf4a5fd",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: fee + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [280, "0000000000000008"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "0f539ff8574493652be3b21b988d01883acfac2d8a953ba719a2184612465cb7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: chainId bit flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [95, 0]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "ab33aef94fc483189cb373d3f9614fcf5bdda405576267b2fb51133de9216999",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: pk_0 coefficient 0 low bit flipped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_flip": [23175, 0]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "f9c1e62f9f2d06814f45fe22b5d891298499f64ae13d863379dc8c089527495d",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: v_0 replaced by v_1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [135936, "003d951ca961ac84000c071db99d27100009de099ca693d9001ebd7bfd36206f0027374765aee7200020f6912aeaa50f0016bde17f5a07b90031eb0af8b4f8810032702b8cbd70cc002953855830a31e000d9575ad8f8ce1001d578b85ef127f00199656a47aa1e70011f7f666652baa0002073d42bf523200132b4d9cb90cc1"]
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "00c79b28de92038d4303ca5722ad44b41ae6b4ab152f70a3e93839720b0cacf0",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-on: (1, on) read as (2, off): M word 2, auditorOn 0",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [320, "0000000000000000000000000000000000000000000000000000000000000002"]
+    },
+    {
+     "stmt_set": [448, "0000000000000000000000000000000000000000000000000000000000000000"]
+    }
+   ],
+   "input_bytes": 168641,
+   "input_sha3": "0873864687a30589da96f0c282cf14c2abe248d6a176a93de08bb132422b24c0",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-on: op 1 TRANSFER's proof (same statement length)",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "TRANSFER"
+    }
+   ],
+   "input_bytes": 168640,
+   "input_sha3": "a7a38ced2473611172cc517d53c0c24e595aff048f3f9ddb86cb0ab59290d14b",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M1-off: op 1 TRANSFER0's proof (same statement length)",
+   "form": "TRANSFER-MULTI",
+   "case": "M1-off",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "TRANSFER0"
+    }
+   ],
+   "input_bytes": 145672,
+   "input_sha3": "21238aa6bbffaa58f995486987338d0401171be5190008d5dc2f986f8a7e6b62",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: M4-on's proof",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "M4-on"
+    }
+   ],
+   "input_bytes": 196089,
+   "input_sha3": "146e4f5bbfeaa21e6f422c2643fc0da79b6e6e6a8e5577a3c2c351e2290ad936",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-off-two-real: M2-on's proof",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off-two-real",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "M2-on"
+    }
+   ],
+   "input_bytes": 171543,
+   "input_sha3": "4591cad8bcf8a21dac523b4a1c0a3ed469bff8a18423d92ce568e27f45236739",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M2-on: empty proof",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 0
+    }
+   ],
+   "input_bytes": 136581,
+   "input_sha3": "d5ccab23affb2f2940dec32a01355be5fc068aa088d13a0b5af1e360a7940b10",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "M2-on: proof of MAX_PROOF(id) + 1 bytes",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 98305
+    }
+   ],
+   "input_bytes": 234886,
+   "input_sha3": "778eb7d7ab16d34c4c59cb98a53754ae6f406841ff11dfd6e90b9114f3a65e3c",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "M2-on: proof of exactly MAX_PROOF(id) bytes",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 98304
+    }
+   ],
+   "input_bytes": 234885,
+   "input_sha3": "85f56dfc67f161b2ca133a8f64a8a894d2ab051ff277e97bf1da1d5c4242d374",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M4-on: input of exactly MAX_INPUT bytes (not a revert)",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "input_resize": 524288
+    }
+   ],
+   "input_bytes": 524288,
+   "input_sha3": "25747dabb6ae2a47c74fb6a020c918969d0f3a897722ab04beda544e10178419",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "M4-on: input of MAX_INPUT + 1 bytes (expected revert, P6f)",
+   "form": "TRANSFER-MULTI",
+   "case": "M4-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "input_resize": 524289
+    }
+   ],
+   "input_bytes": 524289,
+   "input_sha3": "ce3413c6165e34c8a058e6c842482f062f9a76e477350fe57c5d36ab040cf177",
+   "expect": "revert",
+   "reason": "Input"
+  },
+  {
+   "name": "M2-on: length field = statement + 1",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "len_field": 136577
+    }
+   ],
+   "input_bytes": 194327,
+   "input_sha3": "08fc1278346469c275ab14ed57141c2a1e2ef97a04e378687f8195b604afbd05",
+   "expect": "0",
+   "reason": "Length"
+  },
+  {
+   "name": "M2-off-two-real: v_0 and v_1 swapped",
+   "form": "TRANSFER-MULTI",
+   "case": "M2-off-two-real",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [113408, "00224198c2043ee5001be111a23b1186002218caa0c038740006be751917e0e6002fb1ed780d58a5000615d98b2f67c8002d554076182ea90002f0e328667f9c000a45a83c64aa46003cdf5c1b772cf7001a24268f89670b0008245069a027100014270bc38bc49e00184a506154bde7002b84b04b4be663000c2f66f86db77d"]
+    },
+    {
+     "stmt_set": [113536, "0017b3452f7e3f3600280e00899606ef0035d55bd2509606002e8c2753644b0600104a01e218a671000c7b5923e4f8d8003b11e90a795d680003af64e923cda90019b40794ee69a60002f56edf8e8255003a7bcd273f005e0036a1ec6913e77c000436237c84428a000435d405f42e6b002c9cf12d98c9a60029c4ddacc59808"]
+    }
+   ],
+   "input_bytes": 168788,
+   "input_sha3": "7c6747de800de699794be21ea3f367263e43f4570fd3a6166c7593aea4842d0d",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on-boundary: v_3 and v_4 swapped (legs across groups 0 and 1)",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on-boundary",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [294016, "002eb6e87527cca300113daddd1be578003f59a71ab79621000cbe80b376649d003fd1e6152a431700303dbb929fae53002e31d78cdb503f002c4c4639e102c7002015a712cd105c00244011c5963ed700235f621eab3d9d0024f2aa3245f9640026162f3132fc24001d6ef4fb80a3de001a68edbc48c92d0039fba120e2a0b7"]
+    },
+    {
+     "stmt_set": [294144, "0025981fe25ee108000091322b3d14b4001490668007ee99002522a26aa89b67003d4cfc19ebf7660018d1ba624596d50023eb85f89e274c00171e094baeec5100131354510bae18003a813aeedb5012001aae4cf102536b001ea79111abaa8c00399957b24365c200069b95077ae5c8001ab872c142e7e40013ef774638b60a"]
+    }
+   ],
+   "input_bytes": 375012,
+   "input_sha3": "bd53b09d027058fcd55a14b66693f95384e2769a134b4620d69f739bebc17e9a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on-boundary: M8-off's proof",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on-boundary",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_from": "M8-off"
+    }
+   ],
+   "input_bytes": 372163,
+   "input_sha3": "804e6f1d0c3e8b35333e9d2cf3d035f3defceaa8dc58429d78519c82d141658c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on: M word 4 on the M = 8 length",
+   "form": "TRANSFER-MULTI",
+   "case": "M8-on",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [320, "0000000000000000000000000000000000000000000000000000000000000004"]
+    }
+   ],
+   "input_bytes": 375009,
+   "input_sha3": "a6fb549b9e3680aacb219cb7dca27f6e2a6a4d8bc27d9a8474d8708b96b2759f",
+   "expect": "0",
+   "reason": "Length"
+  }
+ ],
+ "openings": [
+  {
+   "name": "the canonical opening",
+   "edits": [],
+   "reason": "ok"
+  },
+  {
+   "name": "head word 0 = 65",
+   "edits": [
+    {
+     "set": [0, "0000000000000000000000000000000000000000000000000000000000000041"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "head word 1 off by 32",
+   "edits": [
+    {
+     "set": [32, "00000000000000000000000000000000000000000000000000000000000059c0"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "bundle length word >= 2^64",
+   "edits": [
+    {
+     "set": [64, "01"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "bundle padding byte non-zero",
+   "edits": [
+    {
+     "set": [22943, "01"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "proof length word = 2^63",
+   "edits": [
+    {
+     "set": [22944, "0000000000000000000000000000000000000000000000008000000000000000"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "proof padding byte non-zero",
+   "edits": [
+    {
+     "set": [58911, "01"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "one trailing zero byte",
+   "edits": [
+    {
+     "resize": 58913
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "truncated by 1 byte",
+   "edits": [
+    {
+     "resize": 58911
+    }
+   ],
+   "reason": "Opening"
+  }
+ ]
+}

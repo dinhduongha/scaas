@@ -79,17 +79,164 @@ exists at a set depends on q:
 
 Details per set: `<set>/PQZH.md`.
 
-### PQZH per set: preset and limits (plan 5h Task 8c part 2)
+### What the sizes and limits below mean (both tables)
+
+Every number in the two tables below is a **size in bytes (B)** — not gas (1 KiB = 1,024 B). Gas is elsewhere and not yet
+measured for every set: `n2560-kmax16384` in its `SET.md` ("Conditions for this set to work on a chain") and
+[`pqzl/params/p16k/results-16k.md`](../../pqzl/params/p16k/results-16k.md) §8 (plan 5h Task 7b, Amsterdam);
+`n2304-kmax4096` estimates in [`docs/research/pqz-pack.md`](../../../docs/research/pqz-pack.md) (spike PACK), measured in
+plan 5h Task 8d part 2; the PQZH calldata floor gas per relation in each set's `PQZH.md`.
+
+- **proof**: the bytes of one zero-knowledge proof, as the client sends it.
+- **statement**: the public data the proof is about (public keys, ciphertexts, amounts' commitments), built by the token
+  contract from its own state.
+- **precompile input**: what the token passes to the `PQZ` precompile for one check = 5-byte header + statement + proof.
+- **`MAX_PROOF_PQZL`, `MAX_PROOF_PQZH`**: the largest proof (B) the `PQZ` precompile accepts for that proof system; a
+  longer proof is rejected before any verification (a revert, not a wrong answer). Set in `pqz-stmt` from the set's
+  `rust/set.rs`.
+- **`MAX_INPUT`**: the largest precompile input (B) the precompile accepts, whatever the proof system.
+- **bound** (PQZH): the longest proof the PQZH prover can produce for that relation (computed by the crate, exact); a set
+  is only usable if every bound is ≤ its `MAX_PROOF_PQZH`.
+- **arena peak** (PQZL): the prover's memory use on the client, in MB — not a chain limit.
+
+Relations (the statements a proof is about; names as in `pqz-stmt` and the vectors):
+
+| Relation | What it proves | Used by |
+|---|---|---|
+| R_REG | the owner of a new PQZ public key knows its secret key (registration) | `UARegistry.register` |
+| R_DS / R_DR | a ciphertext's amount, disclosed to the sender / to the receiver or the auditor | `verifyTransferAmount` (read-only `eth_call`) |
+| R_TX | a confidential transfer to one recipient, with the auditor's ciphertext | the token's transfer (relayed `mtxExecute`) |
+| R_TX0 | the same transfer on a token without an auditor | the token's transfer |
+| R_BURN | a confidential debit with no recipient (burn, refresh) | the token's unshield / refresh |
+| R_TXM M = k | one confidential transfer to k recipients at once, with the auditor (M = 8: the legs in two randomness groups of four) | the token's multi-transfer |
+| R_TXM M = k, no auditor | the same on a token without an auditor | the token's multi-transfer |
+
+Gas limits the sizes are judged against (spec §12 item 2: Ethereum-like limits, never the testnet's), as Glamsterdam
+defines them. A transaction has **two gas dimensions, regular and state**; the calldata floor is not a third budget but
+a minimum on the regular one. The block limit is a separate, larger limit.
+
+| Item | Dimension | Rule and value | Source |
+|---|---|---|---|
+| intrinsic gas, a call with no ETH value (every PQZ call) | regular | 15,000 (was 21,000) | [EIP-2780](https://eips.ethereum.org/EIPS/eip-2780) / [EIP-8007](https://eips.ethereum.org/EIPS/eip-8007) |
+| calldata, standard cost | regular | 4 gas per zero byte, 16 per non-zero byte | [EIP-7976](https://eips.ethereum.org/EIPS/eip-7976) |
+| calldata floor | regular | the transaction pays at least 15,000 + 64 gas × calldata bytes (zero or not): regular gas charged = max(intrinsic + standard calldata + execution, floor) | EIP-7976 |
+| execution (EVM, the `PQZ` precompile's price) | regular | shares the cap below with intrinsic + calldata | [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) |
+| **regular gas per transaction** | regular | **≤ 16,777,216 (2^24, `TX_MAX_GAS_LIMIT`)**; Glamsterdam keeps it; so the floor allows at most (2^24 − 15,000) / 64 = **261,909 B of calldata** | EIP-7825, [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037) |
+| new state (storage slots, SSTORE2 blobs) | state | ≈ 1,530 gas per stored byte of an SSTORE2 blob (measured, plan 5h Task 7b); a cold storage-word rewrite ≈ 12,100 ([EIP-8038](https://eips.ethereum.org/EIPS/eip-8038)); paid first from the reservoir = `tx.gas` − 2^24, then from regular gas | EIP-8037 |
+| **`tx.gas` per transaction** | both | **≤ 4,294,967,295 (2^32 − 1)**: state gas may take a transaction far above 2^24 | EIP-8037 |
+| **gas used per block** | both | **max(Σ execution gas, Σ state gas) ≤ block gas limit** — the two dimensions are not added | EIP-8037 |
+| **block gas limit** | — | **60,000,000 on Ethereum mainnet** (October 2026); ≈ 200,000,000 planned with Glamsterdam; SCaaS testnet genesis 200,000,000. 60 M is a block limit, not a transaction limit | [ethereum.org](https://ethereum.org/latest/building-on-ethereum-in-2026/) |
+
+Example, a PQZL transfer (R_TX) at `n2304-kmax4096`: calldata ≈ 70 KB → standard calldata ≈ 1.1 M (16 gas per
+non-zero byte), so ≈ 15.6 M of the 2^24 cap is left for execution and the precompile; the floor (≈ 4.50 M, table below)
+only binds if execution costs less than ≈ 3.4 M. Its stored ciphertexts cost ≈ 29.6 M state gas
+before the P46 packing and ≈ 21.5 M with it [spike PACK estimate, `docs/research/pqz-pack.md`; measured in plan 5h Task
+8d part 2] — state gas, so it does not count against the 2^24 cap, only against the block (60 M) in the state dimension.
+
+- **Regular gas per transaction ≤ 16,777,216 (2^24, `TX_MAX_GAS_LIMIT`)** — intrinsic gas, the EIP-7976 calldata floor
+  (15,000 + 64 gas per byte, so at most ≈ 261,909 B of calldata) and execution gas. Glamsterdam keeps this cap.
+- **State gas** (EIP-8037: new storage, SSTORE2 blobs) may go above it: the part of `tx.gas` over 2^24 is a reservoir
+  usable only for state gas; `tx.gas` ≤ 4,294,967,295 (2^32 − 1).
+- **Per block:** gas used = max(execution gas, state gas) — the two are not added — and must stay ≤ the block gas
+  limit: 60 M on Ethereum mainnet today (October 2026), ≈ 200 M planned with Glamsterdam; the SCaaS testnet's genesis
+  has 200 M. 60 M is a block limit, not a transaction limit.
+
+### PQZL per set: proof sizes and size limits (bytes)
+
+PQZL proof size per relation, the largest of two proofs from the C prover bench of each set's gate
+(`pqz-core/runs/gate/<set>-fnv-c.jsonl`, `proof_bytes_max`; C = Rust = wasm32 byte for byte), and the C prover's arena
+peak. R_TXM rows: M recipients, with the auditor unless the row says "no auditor". The limit for every set is `MAX_PROOF_PQZL` =
+98,304 B (96 KiB), the same for all four sets.
+
+| Relation | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
+|---|---|---|---|---|
+| R_REG | 28,080 | 30,273 | 32,433 | 35,420 |
+| R_DS | 28,984 | 30,800 | 32,979 | 35,925 |
+| R_DR | 29,002 | 31,451 | 33,780 | 36,753 |
+| R_TX | 42,768 | 46,706 | 50,407 | 54,857 |
+| R_TX0 | 42,423 | 46,322 | 50,060 | 54,508 |
+| R_BURN | 41,925 | 45,836 | 49,551 | 54,031 |
+| R_TXM M = 1 | 42,755 | 46,673 | 50,385 | 54,882 |
+| R_TXM M = 2 | 43,614 | 47,509 | 51,226 | 57,762 |
+| R_TXM M = 4 | 45,278 | 50,749 | 54,850 | 59,529 |
+| R_TXM M = 8 | 61,831 | 67,604 | 72,724 | 79,195 |
+| R_TXM M = 1, no auditor | 42,434 | 46,364 | 50,066 | 54,501 |
+| R_TXM M = 2, no auditor | 42,938 | 46,844 | 50,538 | 55,018 |
+| R_TXM M = 4, no auditor | 43,918 | 47,862 | 51,576 | 58,125 |
+| R_TXM M = 8, no auditor | 58,981 | 64,632 | 69,904 | 76,364 |
+| largest / `MAX_PROOF_PQZL` | 61,831 / 98,304 | 67,604 / 98,304 | 72,724 / 98,304 | 79,195 / 98,304 |
+| pk / ciphertext (B) | 16,384 / 16,512 | 18,432 / 18,560 | 20,480 / 20,608 | 22,528 / 22,656 |
+| R_TX statement (B) | 83,072 | 93,312 | 103,552 | 113,792 |
+| C prover arena peak: R_TX / R_TXM M = 8 | 312 / 794 MB | 380 / 937 MB | 457 / 1,094 MB | 538 / 1,259 MB |
+
+R_TXM M = 8 needs `PQZ_ARENA_MB=2048` in the C bench at every set (above its default 768 MiB). `n2816-kmax65536` is core
+only: no pqz-stmt / precompile build, so its limits are the other sets' for comparison, not a deployed limit.
+
+### PQZH per set: preset, proof sizes and size limits (bytes; plan 5h Task 8c part 2)
 
 `set.toml` holds the preset and the limits; `gen_set.py` writes `pqzh_set.rs` (radices, n, k, t; q − 1's factors,
 generator and non-square computed and checked), `MAX_PROOF_PQZH` / `MAX_INPUT` into `rust/set.rs` (pqz-stmt) and all
 of them into `set.json` (`pqz_kat.py`, `ligero_params.py`). Bounds and soundness: the crate (`ligero_kat sizes`).
 
-| Set | radices | n / k / t | largest bound (B) | soundness (bits) | `MAX_PROOF_PQZH` | `MAX_INPUT` (pqz-stmt) | largest input at the bound / at the limit |
+| Set | radices | n / k / t | largest bound (B) | soundness (bits) | `MAX_PROOF_PQZH` (B) | `MAX_INPUT` (B) | largest precompile input (B): proof at the bound / at `MAX_PROOF_PQZH` |
 |---|---|---|---|---|---|---|---|
-| `n2048-kmax1024` | 2/19/43/431 | 32,756 / 817 / 121 | 236,196 (op 7 M = 4, auditor) | 127.23 | 262,144 | 393,216 | 369,193 / 395,141 (above: a proof over 260,219 B there is an Input revert) |
+| `n2048-kmax1024` | 2/19/43/431 | 32,756 / 817 / 121 | 236,196 (R_TXM M = 4) | 127.23 | 262,144 | 393,216 | 369,193 / 395,141 (above: a proof over 260,219 B there is an Input revert) |
 | `n2304-kmax4096` | 2/7/17/19/43/431 | 45,752 / 952 / 120 | 253,048 | 127.40 | 262,144 | 524,288 | 402,429 / 411,525 |
 | `n2560-kmax16384` | 2/19/43/431 | 32,756 / 817 / 122 | 305,120 | 127.55 | 327,680 | 524,288 | 470,885 / 493,445 |
+
+Per relation: the proof bound from the crate (`ligero_kat sizes`; `pqzh/ligero/runs/c8-v3-sizes.jsonl`,
+`c8b-a-sizes.jsonl`, `c8c-n2560-sizes.jsonl`), in brackets the honest proofs measured (`c8c-<set>-kat.jsonl`, seeds 0
+and 1, all verify), then the largest precompile input (5 + statement + bound), all in bytes. `n2816-kmax65536`: no PQZH.
+
+| Relation | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` |
+|---|---|---|---|
+| R_REG | 190,458 (186,904–187,098) / 206,943 | 207,688 (204,358–204,936) / 226,221 | 234,238 (230,526–231,006) / 254,819 |
+| R_DS | 190,458 (187,482–187,546) / 223,647 | 207,688 (204,616–205,416) / 244,973 | 234,238 (230,366–231,774) / 275,619 |
+| R_DR | 190,458 (185,462–185,462) / 223,647 | 207,688 (204,552–204,936) / 244,973 | 234,238 (231,422–231,678) / 275,619 |
+| R_TX | 235,470 (231,256–231,416) / 318,547 | 251,608 (248,312–248,952) / 344,925 | 304,266 (299,850–300,490) / 407,823 |
+| R_TX0 | 234,744 (229,672–231,320) / 301,309 | 251,608 (247,544–248,376) / 326,365 | 304,266 (300,682–301,194) / 387,215 |
+| R_BURN | 234,744 (231,256–232,344) / 284,797 | 251,608 (247,176–248,440) / 307,805 | 303,412 (300,148–301,204) / 365,753 |
+| R_TXM M = 1 | 235,470 (230,242–231,598) / 318,547 | 251,608 (247,304–248,344) / 344,925 | 304,266 (299,923–301,226) / 407,823 |
+| R_TXM M = 2 | 235,470 (231,128–232,462) / 335,187 | 252,328 (248,424–248,434) / 364,333 | 304,266 (300,170–300,586) / 428,559 |
+| R_TXM M = 4 | 236,196 (231,944–233,604) / 369,193 | 253,048 (249,752–249,880) / 402,429 | 305,120 (301,824–302,112) / 470,885 |
+| R_TXM M = 1, no auditor | 234,744 (231,304–232,024) / 301,309 | 251,608 (247,304–248,440) / 326,365 | 304,266 (301,450–301,610) / 387,215 |
+| R_TXM M = 2, no auditor | 235,470 (231,438–232,366) / 318,547 | 251,608 (246,792–248,088) / 344,925 | 304,266 (300,019–300,682) / 407,823 |
+| R_TXM M = 4, no auditor | 235,470 (230,872–232,526) / 351,571 | 252,328 (249,160–249,384) / 382,765 | 304,266 (299,219–301,098) / 449,039 |
+| R_TXM M = 8 (bound over the limit: not offered) | 281,208 / 497,149 | 296,968 / 539,533 | 375,148 / 644,337 |
+| R_TXM M = 8, no auditor (same) | 279,756 / 478,289 | 296,248 / 519,357 | 374,294 / 621,979 |
+| `MAX_PROOF_PQZH` / `MAX_INPUT` (pqz-stmt) | 262,144 / 393,216 | 262,144 / 524,288 | 327,680 / 524,288 |
+| soundness (bits) | 127.23 | 127.40 | 127.55 |
+
+R_TXM M = 8 is measured for the record only: its bound is over every set's `MAX_PROOF_PQZH`, so PQZH does not offer it
+(PQZL does; table above).
+
+#### Calldata floor gas of one transaction (EIP-7976) [model]
+
+The precompile input is built in memory by the token / registry, so only the call's calldata counts (payload + proof +
+UA authorisation); its floor = 15,000 + 64 gas × calldata bytes is a **lower bound** of the transaction's regular gas
+(execution and the `PQZ` precompile's own price come on top: plan 5h Task 8d part 2 and Task 9; state gas is separate).
+Calldata = the proof (PQZL: the table above; PQZH: its bound) + the call path's overhead taken from each set's `PQZH.md`
+calldata table. ✗ = above 16,777,216: cannot be one transaction on an Ethereum-like chain. "≈": the path's overhead is
+not in that `PQZH.md` and is estimated from the ABI layout (R_TX0 = R_TX − 128 B, R_TXM M = 1 = R_TX + 64 B, + 288 B per
+extra recipient; the per-recipient step reproduces Task 7's measured R_TXM M = 8 calldata at the old 16k parameters,
+`pqzl/params/p16k/results-16k.md` §8). "not offered": PQZH cannot prove R_TXM M = 8 under its limit.
+
+| Relation — call path | `n2048-kmax1024` PQZL / PQZH | `n2304-kmax4096` PQZL / PQZH | `n2560-kmax16384` PQZL / PQZH |
+|---|---|---|---|
+| R_REG — `UARegistry.register` | 3.22 M / 13.61 M | 3.49 M / 14.84 M | 3.76 M / 16.67 M |
+| R_DS / R_DR — `verifyTransferAmount` (`eth_call`) | 1.88 M / 12.22 M | 2.00 M / 13.32 M | 2.14 M / 15.02 M |
+| R_TX — relayed `mtxExecute` | 4.12 M / 16.45 M | 4.50 M / 17.61 M ✗ | 4.87 M / 21.11 M ✗ |
+| R_TX0 — relayed `mtxExecute` | 4.08 M / 16.39 M | 4.47 M / 17.60 M ✗ | ≈ 4.84 M / ≈ 21.11 M ✗ |
+| R_BURN — relayed `mtxExecute` | 4.04 M / 16.38 M | 4.43 M / 17.60 M ✗ | 4.79 M / 21.04 M ✗ |
+| R_TXM M = 1 — relayed `mtxExecute` | 4.12 M / 16.45 M | 4.50 M / 17.62 M ✗ | ≈ 4.87 M / ≈ 21.12 M ✗ |
+| R_TXM M = 2 | 4.19 M / 16.47 M | 4.57 M / 17.68 M ✗ | ≈ 4.94 M / ≈ 21.14 M ✗ |
+| R_TXM M = 4 | 4.34 M / 16.55 M | 4.82 M / 17.76 M ✗ | 5.21 M / 21.23 M ✗ |
+| R_TXM M = 8 | ≈ 5.47 M / not offered | ≈ 5.97 M / not offered | ≈ 6.43 M / not offered |
+
+PQZL fits every path at every set, R_TXM M = 8 included, with ≥ 10.3 M of the 2^24 cap left for execution and the
+precompile; PQZH debits fit
+only at `n2048-kmax1024` (≈ 0.2–0.4 M margin) — at `n2304-kmax4096` and `n2560-kmax16384` they need a per-transaction cap
+≥ 17.8 M / 21.3 M (PQZH is a backup, spec §12 item 4).
 
 `MAX_INPUT` 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)) is pqz-stmt's at the non-frozen sets. Since
 plan 5h Task 8d part 1 the node takes its precompile input limit from the library it loads (`pqz-ffi`'s
@@ -124,7 +271,7 @@ are used here):
 
 | Option (8c letter) | What it does | Cost / limits | Where used |
 |---|---|---|---|
-| **re-prove under the limit** (A) | keep the preset; when a proof comes out over the limit, prove again with fresh randomness until it fits. The proof length depends only on the query indices (public), so dropping a long proof reveals nothing about the witness (ZK argument in the research note) | extra prover runs: at `n2304-kmax4096` 0.9 % of runs for most forms, 27.6 % for op 7 M = 4 with the auditor (average 1.38 runs, at most 7 in 200); useless when the gap is larger than the spread of honest proof lengths (a few KB) | `n2304-kmax4096` fallback: Cargo feature `fallback-retry`, never in default or production builds; tag `pqzh-set-a-fallback-A` |
+| **re-prove under the limit** (A) | keep the preset; when a proof comes out over the limit, prove again with fresh randomness until it fits. The proof length depends only on the query indices (public), so dropping a long proof reveals nothing about the witness (ZK argument in the research note) | extra prover runs: at `n2304-kmax4096` 0.9 % of runs for most forms, 27.6 % for R_TXM M = 4 (average 1.38 runs, at most 7 in 200); useless when the gap is larger than the spread of honest proof lengths (a few KB) | `n2304-kmax4096` fallback: Cargo feature `fallback-retry`, never in default or production builds; tag `pqzh-set-a-fallback-A` |
 | **set-specific preset** (B; at `n2304-kmax4096` the radix-7/17 preset) | a new Ligero preset whose evaluation domain uses extra small radices of q − 1 (there 7 and 17, through the existing generic FFT stage), so the code length / message length / query count fit under the limit | needs q − 1 to have such radices; soundness must stay at or above the old preset's | **`n2304-kmax4096` production** (owner 2026-10-22): debits 251,608–253,048 B, soundness 127.40 bits, prover 4–5 % fewer products |
 | **per-set limit raise** (C) | keep the preset; raise `MAX_PROOF_PQZH` for that set only (one constant per set in `pqz-stmt` and the prover) | larger precompile inputs (`MAX_INPUT` must cover 5 + largest statement + limit) and calldata; every chain running the set must accept the larger limit | **`n2560-kmax16384`** (owner 2026-10-23): 327,680 B (320 KiB), largest bound 305,120 B at t = 122 (22,560 B headroom), largest input 493,445 B ≤ `MAX_INPUT` 512 KiB; `n2304-kmax4096` fallback (≥ 265,236 B, documented only) |
 

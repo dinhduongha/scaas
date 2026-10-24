@@ -105,7 +105,10 @@ def shake256(data, n):
 # the set's ids (plan 5h Task 8d: one per set and proof system): keccak256 of set.json's labels (set.toml pqzl_id /
 # pqzh_id); the self-test compares them with gen_set.py's ids and refuses the retired ones
 PQZL_ID = keccak256(_S["pqzl_label"].encode())
-PQZH_ID = keccak256(_S["pqzh_label"].encode())
+# a set without PQZH (set.json pqzh false, n2816-kmax65536) has no PQZH id: the zero word, refused (as pqz-stmt)
+PQZH_ID = keccak256(_S["pqzh_label"].encode()) if HAS_PQZH else bytes(32)
+KNOWN_IDS = (PQZL_ID, PQZH_ID) if HAS_PQZH else (PQZL_ID,)
+ID2 = PQZH_ID if HAS_PQZH else PQZL_ID  # the second id the self-test mixes in (PQZL at a set without PQZH)
 RETIRED_IDS = {"PQZL v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",  # forgeable (lazer#28, F9)
                "PQZL v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",  # .../mlwe-d64k32-q42l4/v3
                "PQZH v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"}  # .../ligero-fq-r431-.../v1
@@ -399,7 +402,7 @@ def _scalar(b, name):  # a header word the relations read: < 2^64
     return x
 
 
-def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
+def parse(op_byte, stmt, ids=KNOWN_IDS):
     """Statement -> dict (op name, words, objects), or NonCanonical / ValueError for every D15 / R6 rule: length of
     the op (op 1 by length: 83,072 auditor on, 66,560 off), opTag of the op, a known proofSystemId, coefficients < q,
     fee / amount < 2^64 (every debit form: the decoder is stricter than the relations, which read amount only for
@@ -473,7 +476,7 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
 # 446.0, owner-accepted 2026-10-15; pqz-core/pqzl/params/anon/hints-anon.txt)
 LEGS_PER_GROUP = 4
 # op 7 leg counts per id, either auditor mode (pqz-stmt built_legs; D20)
-BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8), PQZH_ID: (1, 2, 4)}
+BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8)} | ({PQZH_ID: (1, 2, 4)} if HAS_PQZH else {})
 MULTI_HEADER = [{"toUA": "recipientsHash", "recipient": "M"}.get(k, k) for k in HEADER]
 
 
@@ -654,7 +657,10 @@ def selftest(log):
     ok(keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3").hex() == RETIRED_IDS["PQZL v3"], "keccak256 of the retired v3 label")
     ok(PQZL_ID.hex() == _S["pqzl_id"] and f"/mlwe-d64k{K}-q{LOG2Q}l4/" in _S["pqzl_label"],
        f"PQZL proofSystemId {_S['pqzl_label']} = {PQZL_ID.hex()[:8]}... (set.json)")
-    ok(PQZH_ID.hex() == _S["pqzh_id"], f"PQZH proofSystemId {_S['pqzh_label']} = {PQZH_ID.hex()[:8]}... (set.json)")
+    if HAS_PQZH:
+        ok(PQZH_ID.hex() == _S["pqzh_id"], f"PQZH proofSystemId {_S['pqzh_label']} = {PQZH_ID.hex()[:8]}... (set.json)")
+    else:
+        ok("pqzh_id" not in _S and _S["max_proof_pqzh"] == 0, "no PQZH id at this set (set.json)")
     ok(not {PQZL_ID.hex(), PQZH_ID.hex()} & set(RETIRED_IDS.values()) and PQZL_ID != PQZH_ID, "ids not retired, distinct")
     plan = {"TRANSFER": "ef22f3d1", "BURN": "7383374d", "REFRESH": "f118f2df", "REGISTER": "69562a9c",
             "DISCLOSE-SENDER": "868cc07c", "DISCLOSE-RECEIVER": "d8356cfb", "DISCLOSE-AUDITOR": "d6019aa4",
@@ -740,7 +746,7 @@ def selftest(log):
         return build_multi(f, pk, [keys[j % 3][0] for j in range(m)], ct, [u] * groups(m),
                            [vs[j % 3] for j in range(m)], vs[1], pk_a=pk if aud else None,
                            v_as=[vs[2]] * m if aud else None)
-    for psid, name in ((PQZL_ID, "PQZL"), (PQZH_ID, "PQZH")):
+    for psid, name in ((PQZL_ID, "PQZL"), (PQZH_ID, "PQZH"))[:1 + HAS_PQZH]:
         for aud in (1, 0):
             for m in BUILT_LEGS[psid]:
                 st = multi(psid, m, aud, 0 if m % 2 else 7)
@@ -756,7 +762,7 @@ def selftest(log):
         ok(st[HEADER_BYTES:] == build_debit("TRANSFER", hdr, pk, ct, u + vs[0] + vs[1] + (vs[2] if aud else b""),
                                               pk_t=keys[0][0], pk_a=pk if aud else None)[HEADER_BYTES:] and
            len(st) == len(t1), f"op 7 M = 1 body = op 1 body, auditor {'on' if aud else 'off'}")
-    s2, s4, l4 = multi(PQZL_ID, 2, 1, 0), multi(PQZH_ID, 4, 0, 5), multi(PQZL_ID, 4, 0, 0)
+    s2, s4, l4 = multi(PQZL_ID, 2, 1, 0), multi(ID2, 4, 0, 5), multi(PQZL_ID, 4, 0, 0)
     for st, op_byte, what, why in (
             (s2[:-1], 7, "length - 1", "length"), (s2 + b"\0", 7, "length + 1", "length"),
             (s2[:640] + bytes(multi_len(3, 1) - 640), 7, "M = 3 length, M word 2", "length"),
@@ -764,7 +770,7 @@ def selftest(log):
             (s2[:639], 7, "header cut", "length"),
             (s2[:320] + word(0) + s2[352:], 7, "M word 0", "M not a built leg count"),
             (s2[:320] + word(3) + s2[352:], 7, "M word 3", "M not a built leg count"),
-            (s4[:320] + word(8) + s4[352:], 7, "PQZH M word 8 (not built)", "M not a built leg count"),
+            *([(s4[:320] + word(8) + s4[352:], 7, "PQZH M word 8 (not built)", "M not a built leg count")] if HAS_PQZH else []),
             (s2[:320] + word(16) + s2[352:], 7, "PQZL M word 16 (oversize only)", "M not a built leg count"),
             (s2[:320] + word(2**64 + 2) + s2[352:], 7, "M word high bits", "M not a built leg count"),
             (s2[:320] + word(4) + s2[352:], 7, "M word 4 on the M = 2 length", "length"),

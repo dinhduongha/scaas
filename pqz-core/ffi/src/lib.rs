@@ -37,6 +37,8 @@ pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Wor
 /// with pqz-ffi); without it a PQZH-id input decodes
 /// and its verdict is `…00` (no verifier for that id in this build), its prover refuses
 pub const PQZH: bool = cfg!(feature = "pqzh");
+// a set without PQZH (pqz-stmt HAS_PQZH false, n2816-kmax65536: no Ligero domain at its q) has no PQZH build
+const _: () = assert!(!PQZH || pqz_stmt::HAS_PQZH, "feature pqzh at a set without PQZH (set.toml pqzh = false)");
 
 #[cfg(feature = "prove")]
 pub mod fixture;

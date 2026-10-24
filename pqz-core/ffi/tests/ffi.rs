@@ -64,8 +64,8 @@ fn multi_limits_and_memo() {
         assert_eq!(precompile(&pad(room + 1)), Err(Error::Revert));
     }
     // oversize shapes (bench builds only) never decode here: PQZL M = 16, PQZH M = 8 (the decoder knows both ids in
-    // every build)
-    for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)] {
+    // every build of a set with PQZH; n2816-kmax65536 has none)
+    for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)].into_iter().filter(|&(id, _)| id == PQZL_ID || stmt::HAS_PQZH) {
         let mut st = vec![0u8; stmt::multi_len(m, true)];
         for (i, w) in stmt::Multi::header(&id, m, true).iter().enumerate() {
             st[32 * i..32 * i + 32].copy_from_slice(w);

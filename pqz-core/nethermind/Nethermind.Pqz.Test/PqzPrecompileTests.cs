@@ -48,6 +48,7 @@ public class PqzPrecompileTests
     [Test]
     public void Selftest_constant_equals_the_vector_file()
     {
+        Assert.That(SelfTest.Set, Is.EqualTo(Repo.Set), "plugin built for another set (-p:PqzSet) than PQZ_SET");
         JsonObject st = JsonNode.Parse(File.ReadAllText(Path.Combine(Repo.VectorDir, "selftest.json")))!.AsObject();
         Assert.That((string)st["hash"]!, Is.EqualTo(SelfTest.ExpectedHash));
         Assert.That(SelfTest.Run(), Is.EqualTo(SelfTest.ExpectedHash));
