@@ -3,7 +3,7 @@
  1263456 fee0.json
     3016 keygen.json
     1167 matrix.json
-  133527 negative.json
+  139883 negative.json
  2744566 proof_pqzl.json
     2303 selftest.json
   139390 statement_burn.json
@@ -13,4 +13,5 @@
   414972 statement_transfer.json
  3904686 statement_transfer_multi.json
  6202428 worstcase_noise.json
-15284702 total
+    1881 README.md
+15292939 total
