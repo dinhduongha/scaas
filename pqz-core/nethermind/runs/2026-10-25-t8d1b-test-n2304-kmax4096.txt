@@ -1,0 +1,94 @@
+# P6f tests in Ubuntu 26.04.1 LTS, OpenSSL 3.5.5 27 Jan 2026 (Library: OpenSSL 3.5.5 27 Jan 2026), SDK 10.0.402, 2026-10-24T17:57:30Z
+An issue was encountered verifying workloads. For more information, run "dotnet workload update".
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Nethermind.Pqz -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/nethermind/Nethermind.Pqz/bin/Release/net10.0/Nethermind.Pqz.dll
+  Harness -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/nethermind/Harness/bin/Release/net10.0/Harness.dll
+  Nethermind.Pqz.Test -> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+Test run for /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+NUnit Adapter 5.0.0.0: Test execution started
+Running all tests in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/nethermind/Nethermind.Pqz.Test/bin/Release/net10.0/Nethermind.Pqz.Test.dll
+   NUnit3TestExecutor discovered 46 of 46 NUnit test cases using Current Discovery mode, Non-Explicit run
+libpqz_ffi.so: /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/release/libpqz_ffi.so sha256 9b4b1c2668d8fb3a6d0c242b0e0cf66f1abcf3c4bba5cdaf100727515f36dd25
+Nethermind.Pqz.dll references: Autofac, Nethermind.Api, Nethermind.Blockchain, Nethermind.Core, Nethermind.Evm, Nethermind.Init, Nethermind.Logging, Nethermind.Specs, System.Collections, System.Collections.Immutable, System.Console, System.Linq, System.Runtime, System.Runtime.InteropServices, System.Security.Cryptography, System.Text.Json, System.Threading
+ACVP ML-DSA sigVer: external 30 (of them 2 with the empty context also through the precompile), internal via VerifyMu 30, skipped 0: []
+  Passed Plugin_references_only_base_image_assemblies_and_the_framework [7 ms]
+  Passed A_cryptographic_exception_is_the_failure_word [52 ms]
+  Passed Acvp_sigver_cases [41 ms]
+  Passed Eip8355_cases [14 ms]
+  Passed Every_length_and_one_bit_flips [317 ms]
+MLDsa.IsSupported=True runtime=10.0.13 os=Ubuntu 26.04.1 LTS
+pq_signatures ML-DSA rows through the precompile: 10
+  Passed Gas_is_eip8355_at_minimum [1 s]
+  Passed Supported_and_runtime_recorded [1 ms]
+  Passed Ua_pq_signatures_rows [8 ms]
+  Passed A_row_absent_from_the_schedule_is_zero_without_an_ffi_call [93 ms]
+  Passed Boundary_lengths [3 ms]
+corpus through PqzPrecompile.Run: fee0/1 8, flip/0 30, honest/1 35, negative/0 741, negative/revert 4, selftest/23d7a1 1
+  Passed Every_corpus_input_gives_its_expected_output [2 s]
+  Passed Gas_is_the_row_plus_the_length_term_and_never_depends_on_validity [24 ms]
+  Passed Library_sha256_is_compared_with_the_reviewed_value [55 ms]
+fault child: exit 120; stdout: fault child: before the hook 0000000000000000000000000000000000000000000000000000000000000001
+fault child: TEST_FAIL_WORKER on; stderr: PQZ-NODE-FAULT status=4 keccak=0x2891e67c6e9b757f4b426ef1a6c72891079d3c29d74b9e5797eed3c4f5f33703 len=139977: a fault of this node, not of the input; exit 120
+  Passed Node_fault_exits_120_with_the_tag [1 s]
+  Passed Op7_rows_are_keyed_by_the_M_and_auditorOn_words [29 ms]
+  Passed Selftest_constant_equals_the_vector_file [< 1 ms]
+  Passed A_block_number_transition_keeps_the_schedule [433 ms]
+  Passed Before_T_stock_set_from_T_three_more [22 ms]
+  Passed Genesis_activation_from_block_0 [13 ms]
+  Passed IsPrecompile_finds_the_three_from_T [5 ms]
+  Passed Plugin_enabled_iff_the_section_is_present [13 ms]
+  Passed Startup_checks_are_a_step_before_genesis [104 ms]
+unknown key in a schedule: InvalidDataException: The JSON property 'mldsa87Gas' could not be mapped to any .NET member contained in type 'Nethermind.Pqz.PqzSchedule'.
+unknown key at the top: InvalidDataException: The JSON property 'x' could not be mapped to any .NET member contained in type 'Nethermind.Pqz.PqzChainSpecEngineParameters'.
+unknown key in a row: InvalidDataException: The JSON property 'x' could not be mapped to any .NET member contained in type 'Nethermind.Pqz.PqzRow'.
+missing selftestGas: InvalidDataException: JSON deserialization for type 'Nethermind.Pqz.PqzSchedule' was missing required properties including: 'selftestGas'.
+missing timestamp: InvalidDataException: JSON deserialization for type 'Nethermind.Pqz.PqzSchedule' was missing required properties including: 'timestamp'.
+missing pqz: InvalidDataException: JSON deserialization for type 'Nethermind.Pqz.PqzSchedule' was missing required properties including: 'pqz'.
+missing schedules: InvalidDataException: JSON deserialization for type 'Nethermind.Pqz.PqzChainSpecEngineParameters' was missing required properties including: 'schedules'.
+no schedules: ArgumentException: engine.Pqz: no schedules
+  Passed Stock_provider_with_the_section_fails_closed [12 ms]
+  Passed Strict_section_is_a_start_up_error((unknown key in a schedule, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [8 ms]
+  Passed Strict_section_is_a_start_up_error((unknown key at the top, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [3 ms]
+  Passed Strict_section_is_a_start_up_error((unknown key in a row, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [11 ms]
+  Passed Strict_section_is_a_start_up_error((missing selftestGas, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [3 ms]
+  Passed Strict_section_is_a_start_up_error((missing timestamp, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [2 ms]
+  Passed Strict_section_is_a_start_up_error((missing pqz, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [2 ms]
+  Passed Strict_section_is_a_start_up_error((missing schedules, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [2 ms]
+  Passed Strict_section_is_a_start_up_error((no schedules, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [3 ms]
+empty rows: ArgumentException: engine.Pqz schedule 1000000: no pqz rows
+unsorted: ArgumentException: engine.Pqz: schedule timestamps must increase strictly (2000000 then 1000000)
+duplicate timestamp: ArgumentException: engine.Pqz: schedule timestamps must increase strictly (1000000 then 1000000)
+timestamp before genesis: ArgumentException: engine.Pqz: first timestamp 5 is before genesis (16)
+duplicate row: ArgumentException: engine.Pqz schedule 1000000: duplicate row op 1 stmtLen 74752 id E4BC6D17AC1395670158D149B01898476EA32FFA482CE3F4C3F495D6B9885730 legs  auditorOn 
+op 6 row: ArgumentException: engine.Pqz schedule 1000000: op 6 (1..255, not 6)
+id of 31 bytes: ArgumentException: engine.Pqz schedule 1000000: id must be 32 bytes
+op 7 row without legs / auditorOn: ArgumentException: engine.Pqz schedule 1000000: op 7 row needs legs (1..255) and auditorOn (0 / 1) iff op is 7
+op 7 row with auditorOn 2: ArgumentException: engine.Pqz schedule 1000000: op 7 row needs legs (1..255) and auditorOn (0 / 1) iff op is 7
+  Passed Strict_section_is_a_start_up_error((empty rows, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [3 ms]
+  Passed Strict_section_is_a_start_up_error((unsorted, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [3 ms]
+  Passed Strict_section_is_a_start_up_error((duplicate timestamp, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [3 ms]
+  Passed Strict_section_is_a_start_up_error((timestamp before genesis, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [5 ms]
+  Passed Strict_section_is_a_start_up_error((duplicate row, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [5 ms]
+  Passed Strict_section_is_a_start_up_error((op 6 row, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [4 ms]
+  Passed Strict_section_is_a_start_up_error((id of 31 bytes, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [5 ms]
+  Passed Strict_section_is_a_start_up_error((op 7 row without legs / auditorOn, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [4 ms]
+  Passed Strict_section_is_a_start_up_error((op 7 row with auditorOn 2, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [4 ms]
+op 7 row with legs 0: ArgumentException: engine.Pqz schedule 1000000: op 7 row needs legs (1..255) and auditorOn (0 / 1) iff op is 7
+op 1 row with legs: ArgumentException: engine.Pqz schedule 1000000: op 1 row needs legs (1..255) and auditorOn (0 / 1) iff op is 7
+mldsa44Gas below EIP-8355: ArgumentException: engine.Pqz schedule 1000000: mldsa44Gas 6499 < EIP-8355's 6500
+mldsa65Gas below EIP-8355: ArgumentException: engine.Pqz schedule 1000000: mldsa65Gas 8999 < EIP-8355's 9000
+NUnit Adapter 5.0.0.0: Test execution complete
+  Passed Strict_section_is_a_start_up_error((op 7 row with legs 0, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [5 ms]
+  Passed Strict_section_is_a_start_up_error((op 1 row with legs, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [5 ms]
+  Passed Strict_section_is_a_start_up_error((mldsa44Gas below EIP-8355, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [4 ms]
+  Passed Strict_section_is_a_start_up_error((mldsa65Gas below EIP-8355, System.Func`1[Nethermind.Specs.ChainSpecStyle.ChainSpec])) [4 ms]
+  Passed The_schedule_is_found_through_a_decorator [5 ms]
+  Passed Two_schedules_switch_at_the_second_timestamp_and_are_fork_transitions [8 ms]
+
+Test Run Successful.
+Total tests: 46
+     Passed: 46
+ Total time: 8.1322 Seconds
+rc=0
