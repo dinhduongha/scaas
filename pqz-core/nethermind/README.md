@@ -147,6 +147,16 @@ FFI_REV=1adbd56318b3d07af76d8f61ffbbb27b4b4fd2b0 scripts/capped pqz-core/netherm
 scripts/capped pqz-core/nethermind/calibrate.sh pqz1                                       # ONE run: runs/<date>-calib.txt, chain/engine-pqz.json
 ```
 
+**Another parameter set (plan 5h Task 8d part 1b).** The plugin is built for the set of the library it loads: the
+MSBuild property `PqzSet` (`Directory.Build.props`, default `n2304-kmax4096`) selects `SelfTest.ExpectedHash` (the
+set's `selftest.json` hash) and an unknown set does not compile. The tests of another set, e.g. `n2816-kmax65536`
+(PQZL only): build its library (`cd pqz-core/ffi && CARGO_TARGET_DIR=target/neth-<set> cargo build --release --offline
+--no-default-features --features pqzl-rust,set-<set>`), its fault-hook library (`cd fault-hooks && cargo build --release
+--offline --no-default-features --features pqz-ffi/set-<set>`, copied to a directory of its own as `libpqz_ffi.so`) and
+its corpus (`PQZ_SET=<set> corpus.py bin/corpus-<set>.jsonl`), then `PQZ_SET=<set> PQZ_FFI_DIR=<abs dir> PQZ_CORPUS=<abs
+file> PQZ_HOOKS_DIR=<abs dir> scripts/capped pqz-core/nethermind/run-tests.sh` (log `runs/<date>-test-<set>.txt`; the
+script passes `-p:PqzSet=$PQZ_SET`). The image (`Dockerfile`, `build-image.sh`) builds the default set only.
+
 **The reviewed library (review W-G, 2026-10-19).** `build-image.sh` reads `ExpectedLibrarySha256` from
 `Nethermind.Pqz/SelfTest.cs`, builds `libpqz_ffi.so` (the `ffi-export` target) and stops with `FAIL the built library is
 not the reviewed one` unless the two hashes are equal; the Dockerfile checks the library in the image against the same
