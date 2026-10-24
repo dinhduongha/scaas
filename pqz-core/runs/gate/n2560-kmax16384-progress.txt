@@ -342,3 +342,109 @@
 2026-10-24T04:35:33 ok      fuzz/codec (0h1m31s)
 2026-10-24T04:35:33 ok      step/fuzz (0h5m10s)
 2026-10-24T04:35:33 gate n2560-kmax16384 (set n2560-kmax16384): PASS
+2026-10-25T00:56:17 gate n2560-kmax16384 (set n2560-kmax16384) started at 962f21ef, tree n2560-kmax16384-77d8678e850e4bf9
+2026-10-25T00:56:17 start   step/kat
+2026-10-25T00:56:34 ok      step/kat (0h0m17s)
+2026-10-25T00:56:34 start   step/tbox
+2026-10-25T00:58:44 ok      step/tbox (0h2m10s)
+2026-10-25T00:58:44 start   step/sv
+2026-10-25T01:04:55 ok      step/sv (0h6m11s)
+2026-10-25T01:04:55 start   step/diff
+2026-10-25T01:05:40 start   diff/portable
+2026-10-25T01:48:58 ok      diff/portable (0h43m18s)
+2026-10-25T01:48:58 start   diff/x86v3
+2026-10-25T02:12:24 ok      diff/x86v3 (0h23m26s)
+2026-10-25T02:12:24 start   diff/z21diff
+2026-10-25T02:41:26 ok      diff/z21diff (0h29m2s)
+2026-10-25T02:41:26 ok      step/diff (1h36m31s)
+2026-10-25T02:41:26 start   step/fnv
+2026-10-25T02:41:26 start   fnv/c
+2026-10-25T02:47:38 ok      fnv/c (0h6m12s)
+2026-10-25T02:47:38 start   fnv/rust
+2026-10-25T02:50:15 ok      fnv/rust (0h2m37s)
+2026-10-25T02:50:15 start   fnv/wasm
+2026-10-25T02:55:23 ok      fnv/wasm (0h5m8s)
+2026-10-25T02:55:23 ok      step/fnv (0h13m57s)
+2026-10-25T02:55:23 start   step/vectors
+2026-10-25T02:55:38 start   vectors/check
+2026-10-25T03:00:18 ok      vectors/check (0h4m40s)
+2026-10-25T03:00:18 start   vectors/pqz_kat
+2026-10-25T03:03:40 ok      vectors/pqz_kat (0h3m22s)
+2026-10-25T03:03:40 start   vectors/tamper
+2026-10-25T03:12:45 ok      vectors/tamper (0h9m5s)
+2026-10-25T03:12:45 start   vectors/ffi-test
+2026-10-25T03:16:42 ok      vectors/ffi-test (0h3m57s)
+2026-10-25T03:16:51 start   vectors/wasm-replay
+2026-10-25T03:19:43 ok      vectors/wasm-replay (0h2m52s)
+2026-10-25T03:19:43 ok      step/vectors (0h24m20s)
+2026-10-25T03:19:43 start   step/ffi
+2026-10-25T03:19:43 start   ffi/test
+2026-10-25T03:22:47 ok      ffi/test (0h3m4s)
+2026-10-25T03:22:47 start   ffi/native
+2026-10-25T03:22:53 ok      ffi/native (0h0m6s)
+2026-10-25T03:22:53 start   ffi/wasm
+2026-10-25T03:24:30 ok      ffi/wasm (0h1m37s)
+2026-10-25T03:24:30 start   ffi/bench
+2026-10-25T03:29:37 ok      ffi/bench (0h5m7s)
+2026-10-25T03:29:37 ok      step/ffi (0h9m54s)
+2026-10-25T03:29:37 start   step/rust
+2026-10-25T03:30:28 start   rust/lib-pqzl
+2026-10-25T03:30:31 ok      rust/lib-pqzl (0h0m3s)
+2026-10-25T03:30:31 start   rust/bin-bench
+2026-10-25T03:30:31 ok      rust/bin-bench (0h0m0s)
+2026-10-25T03:30:31 start   rust/bin-kat_dump
+2026-10-25T03:30:31 ok      rust/bin-kat_dump (0h0m0s)
+2026-10-25T03:30:31 start   rust/test-oracle_codec
+2026-10-25T03:34:07 ok      rust/test-oracle_codec (0h3m36s)
+2026-10-25T03:34:07 start   rust/test-oracle_prove
+2026-10-25T03:34:58 ok      rust/test-oracle_prove (0h0m51s)
+2026-10-25T03:34:58 start   rust/test-oracle_verify
+2026-10-25T03:43:41 ok      rust/test-oracle_verify (0h8m43s)
+2026-10-25T03:43:41 start   rust/test-vectors
+2026-10-25T03:45:14 ok      rust/test-vectors (0h1m33s)
+2026-10-25T03:45:14 start   rust/test-cheat_b1
+2026-10-25T03:47:33 ok      rust/test-cheat_b1 (0h2m19s)
+2026-10-25T03:47:33 start   rust/test-sv_diff
+2026-10-25T03:55:11 ok      rust/test-sv_diff (0h7m38s)
+2026-10-25T03:55:11 start   rust/test-memory
+2026-10-25T04:03:25 ok      rust/test-memory (0h8m14s)
+2026-10-25T04:03:25 start   rust/bin-keys_kat
+2026-10-25T04:03:25 ok      rust/bin-keys_kat (0h0m0s)
+2026-10-25T04:03:25 start   rust/test-threads
+2026-10-25T04:06:40 ok      rust/test-threads (0h3m15s)
+2026-10-25T04:06:40 start   rust/test-fs_bind
+2026-10-25T04:06:41 ok      rust/test-fs_bind (0h0m1s)
+2026-10-25T04:06:41 start   rust/test-oracle_arith
+2026-10-25T04:06:45 ok      rust/test-oracle_arith (0h0m4s)
+2026-10-25T04:06:45 start   rust/test-oracle_params
+2026-10-25T04:06:45 ok      rust/test-oracle_params (0h0m0s)
+2026-10-25T04:06:45 start   rust/test-oracle_keys
+2026-10-25T04:06:49 ok      rust/test-oracle_keys (0h0m4s)
+2026-10-25T04:06:49 start   rust/test-keys
+2026-10-25T04:06:50 ok      rust/test-keys (0h0m1s)
+2026-10-25T04:06:50 start   rust/test-oracle_rand
+2026-10-25T04:06:51 ok      rust/test-oracle_rand (0h0m1s)
+2026-10-25T04:06:51 start   rust/test-oracle_smoke
+2026-10-25T04:06:52 ok      rust/test-oracle_smoke (0h0m1s)
+2026-10-25T04:06:52 start   rust/doc
+2026-10-25T04:06:52 ok      rust/doc (0h0m0s)
+2026-10-25T04:06:52 ok      step/rust (0h37m15s)
+2026-10-25T04:06:52 start   step/cargo
+2026-10-25T04:06:52 start   cargo/stmt
+2026-10-25T04:06:53 ok      cargo/stmt (0h0m1s)
+2026-10-25T04:06:53 start   cargo/ligero
+2026-10-25T04:10:10 ok      cargo/ligero (0h3m17s)
+2026-10-25T04:10:10 ok      step/cargo (0h3m18s)
+2026-10-25T04:10:10 start   step/xcheck
+2026-10-25T04:10:10 start   xcheck/ligero
+2026-10-25T04:10:26 ok      xcheck/ligero (0h0m16s)
+2026-10-25T04:10:26 ok      step/xcheck (0h0m16s)
+2026-10-25T04:10:26 start   step/fuzz
+2026-10-25T04:10:35 start   fuzz/precompile
+2026-10-25T04:12:04 ok      fuzz/precompile (0h1m29s)
+2026-10-25T04:12:04 start   fuzz/mutate
+2026-10-25T04:14:07 ok      fuzz/mutate (0h2m3s)
+2026-10-25T04:14:07 start   fuzz/codec
+2026-10-25T04:15:38 ok      fuzz/codec (0h1m31s)
+2026-10-25T04:15:38 ok      step/fuzz (0h5m12s)
+2026-10-25T04:15:38 gate n2560-kmax16384 (set n2560-kmax16384): PASS

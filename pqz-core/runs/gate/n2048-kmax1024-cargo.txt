@@ -1,22 +1,23 @@
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/stmt)
-    Finished `release` profile [optimized] target(s) in 1.71s
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
+    Finished `release` profile [optimized] target(s) in 1.73s
      Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqz_stmt-73b2f32bbca7c6f9)
 
-running 12 tests
+running 13 tests
 test tests::coefficient_codec ... ok
-test tests::lengths_and_constants ... ok
-test tests::multi_lengths_and_sets ... ok
 test tests::bundle_and_opening ... ok
-test tests::multi_m1_body_is_op1_body ... ok
+test tests::lengths_and_constants ... ok
 test tests::fields_land_where_the_spec_says ... ok
+test tests::multi_lengths_and_sets ... ok
+test tests::multi_m1_body_is_op1_body ... ok
 test tests::round_trip_every_form_both_ids ... ok
-test tests::precompile_input ... ok
-test tests::retired_ids_refused ... ok
 test tests::every_d15_r6_rule_rejects ... ok
+test tests::other_sets_ids_refused ... ok
+test tests::retired_ids_refused ... ok
+test tests::precompile_input ... ok
 test tests::multi_round_trip_every_built_shape_fee_0 ... ok
 test tests::multi_every_rule_rejects ... ok
 
-test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running tests/xcheck.rs (target/n2048-kmax1024/release/deps/xcheck-34909bd80b0bed2c)
 
@@ -31,77 +32,86 @@ running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/pqzh/ligero)
-    Finished `release` profile [optimized + debuginfo] target(s) in 7.01s
-     Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqzh_ligero-3b11ba3aca83c286)
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling keccak v0.1.6
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
+   Compiling generic-array v0.14.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.89s
+     Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqzh_ligero-aadaaa90c81e6a33)
 
 running 15 tests
 test cs::tests::ids_are_the_labels_keccak ... ok
 test cs::tests::op_tags_hash ... ok
-test fq::tests::field_facts_and_ext ... ok
 test cs::tests::ring_recurrence_matches_naive ... ok
-test fq::tests::branch_free_matches_reference ... ok
-test ligero::tests::limits_exact ... ok
 test fq::tests::mul_and_red_match_naive ... ok
-test ligero::tests::rng_hedged_with_witness ... ok
-test merkle::tests::multiproof_roundtrip ... ok
+test ligero::tests::limits_exact ... ok
+test fq::tests::branch_free_matches_reference ... ok
 test ligero::tests::proven_is_the_model ... ok
-test fq::tests::limb_matches_u128 ... ok
+test fq::tests::field_facts_and_ext ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+test ligero::tests::rng_hedged_with_witness ... ok
 test cs::tests::branch_free_rounding_matches_reference ... ok
+test fq::tests::limb_matches_u128 ... ok
 test ligero::tests::max_len_exact_multiproof_tight ... ok
 test fft::tests::fft_matches_naive_all_radices ... ok
 test ligero::tests::prover_retries_over_limit ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.47s
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.81s
 
-     Running unittests src/bin/ligero_bench.rs (target/n2048-kmax1024/release/deps/ligero_bench-89ae30acbe6a6643)
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-     Running unittests src/bin/ligero_export.rs (target/n2048-kmax1024/release/deps/ligero_export-d745b3f71c7341a8)
+     Running unittests src/bin/ligero_bench.rs (target/n2048-kmax1024/release/deps/ligero_bench-67bbd87d772e0b0f)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/ligero_kat.rs (target/n2048-kmax1024/release/deps/ligero_kat-517d37968b7320ee)
+     Running unittests src/bin/ligero_export.rs (target/n2048-kmax1024/release/deps/ligero_export-7ed10544ff16af6a)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/spike_retry.rs (target/n2048-kmax1024/release/deps/spike_retry-a8c803130b6ab54b)
+     Running unittests src/bin/ligero_kat.rs (target/n2048-kmax1024/release/deps/ligero_kat-a4f25cb7fd4c454d)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/attacks.rs (target/n2048-kmax1024/release/deps/attacks-3633dc17321d962b)
+     Running unittests src/bin/spike_retry.rs (target/n2048-kmax1024/release/deps/spike_retry-3e31746daa541d96)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attacks.rs (target/n2048-kmax1024/release/deps/attacks-4625c70013afab7e)
 
 running 17 tests
 test evm_fixtures ... ignored, the EVM fixtures carry the retired PQZH v1 id (contract vectors: plan 5h Task 8d part 2)
 test dr_noise_range_edges ... ok
 test digit_out_of_range ... ok
-test e2_norm_exceeded ... ok
 test norm_exceeded_small_coefficients ... ok
-test other_ids_and_length_bound_rejected ... ok
+test e2_norm_exceeded ... ok
 test coefficient_out_of_range ... ok
+test other_ids_and_length_bound_rejected ... ok
 test overspend ... ok
 test transfer_forms_cross_rejected ... ok
+test hedged_proofs ... ok
 test scalar_word_above_2_64 ... ok
 test debit_noise_range_edges ... ok
-test mutations_960_per_relation_rejected ... ok
-test hedged_proofs ... ok
 test wrong_public_amount ... ok
+test mutations_960_per_relation_rejected ... ok
 test wrong_witness_ring_row ... ok
 test randomness_norm_and_range ... ok
 test honest_all_presets_cross_and_hiding ... ok
 
-test result: ok. 16 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 31.31s
+test result: ok. 16 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 35.68s
 
-     Running tests/multi.rs (target/n2048-kmax1024/release/deps/multi-9737a8b3c1b56ee2)
+     Running tests/multi.rs (target/n2048-kmax1024/release/deps/multi-bf805c4ce864f10d)
 
 running 8 tests
 test rel_of_words ... ok
@@ -114,14 +124,14 @@ test honest_every_shape ... ok
 test negative_witnesses has been running for over 60 seconds
 test negative_witnesses ... ok
 
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 122.93s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 120.78s
 
-     Running tests/oom.rs (target/n2048-kmax1024/release/deps/oom-8c63b1ab43bd3bd3)
+     Running tests/oom.rs (target/n2048-kmax1024/release/deps/oom-a2e3bf2260a3e2a8)
 
 running 1 test
 test verifier_out_of_memory_is_a_fault ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.09s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
 
    Doc-tests pqzh_ligero
 

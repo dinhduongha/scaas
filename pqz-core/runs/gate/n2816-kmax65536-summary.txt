@@ -1,4 +1,4 @@
-# gate n2816-kmax65536 (set n2816-kmax65536): aa37a263c075db5e45471a35158a6b97754803cb + uncommitted changes, 2026-10-23T18:20Z
+# gate n2816-kmax65536 (set n2816-kmax65536): 962f21efa641aa23f57e28abf51f05f2fc109bb2, 2026-10-24T17:56Z
 set n2816-kmax65536
 == kat
    ok
@@ -11,15 +11,15 @@ set n2816-kmax65536
 == fnv
    ok
 == vectors
-   skipped (core_only)
+   ok
 == ffi
-   skipped (core_only)
+   ok
 == rust
    ok
 == cargo
-   skipped (core_only)
+   ok
 == xcheck
    skipped (set n2816-kmax65536 has no PQZH (set.json pqzh))
 == fuzz
-   skipped (core_only)
+   ok
 gate n2816-kmax65536 (set n2816-kmax65536): PASS

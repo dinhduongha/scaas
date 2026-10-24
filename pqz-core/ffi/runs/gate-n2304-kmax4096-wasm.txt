@@ -1,19 +1,35 @@
 # wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
 $ cargo build --release --offline --lib --target wasm32-unknown-unknown
-    Finished `release` profile [optimized + debuginfo] target(s) in 0.06s
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling keccak v0.1.6
+   Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
+   Compiling generic-array v0.14.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling aes v0.8.4
+   Compiling sha3 v0.10.8
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.26s
 [rc=0]
 $ cargo build --release --offline --target wasm32-unknown-unknown
     Finished `release` profile [optimized] target(s) in 0.02s
 [rc=0]
-$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/ffi/target/n2304-kmax4096-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
-0848371eaed5dc81c380e13527b309578aabfb60c0874269a866abe1851fcc2e  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/ffi/target/n2304-kmax4096-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2304-kmax4096-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+1d6f903250a2072637f0f13b7c7dff20788ddf8b211d7163cdde0030bfc49f8b  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2304-kmax4096-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
 [rc=0]
-wasm bytes 993479
-$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/ffi/target/n2304-kmax4096-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+wasm bytes 993503
+$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2304-kmax4096-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
 strings /gmp|mpfr|hexl/i: 0
 node rc=0
-wasm run 93127 ms, memory 169607168 B
+wasm run 96802 ms, memory 169607168 B
 wasm PQZL op 7 M = 8 prove refused (Statement(Legs); C backend true, Rust backend false): false
-	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:33.42
-	Maximum resident set size (kbytes): 234172
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:37.04
+	Maximum resident set size (kbytes): 232184
 native = wasm32: 29 lines equal

@@ -181,16 +181,16 @@
 {"rel": "R_TX0", "kind": "m_swap_h", "cases": 20, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "stmt_auditor", "cases": 20, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "fuzz", "cases": 100, "generic_accepts": 0, "mismatches": 0}
-{"timing": "R_REG fast honest", "n": 20, "p50_ms": 5.406, "p99_ms": 5.652, "max_ms": 6.931}
-{"timing": "R_REG fast adversarial", "n": 1178, "p50_ms": 5.298, "p99_ms": 7.708, "max_ms": 8.317}
-{"timing": "R_TX fast honest", "n": 10, "p50_ms": 11.559, "p99_ms": 13.948, "max_ms": 14.486}
-{"timing": "R_TX fast adversarial", "n": 628, "p50_ms": 11.316, "p99_ms": 15.215, "max_ms": 17.736}
-{"timing": "R_BURN fast honest", "n": 10, "p50_ms": 11.132, "p99_ms": 11.721, "max_ms": 13.684}
-{"timing": "R_BURN fast adversarial", "n": 608, "p50_ms": 10.692, "p99_ms": 15.127, "max_ms": 17.009}
-{"timing": "R_DS fast honest", "n": 10, "p50_ms": 6.283, "p99_ms": 7.576, "max_ms": 8.363}
-{"timing": "R_DS fast adversarial", "n": 608, "p50_ms": 6.083, "p99_ms": 8.664, "max_ms": 9.502}
-{"timing": "R_DR fast honest", "n": 10, "p50_ms": 6.314, "p99_ms": 6.402, "max_ms": 6.457}
-{"timing": "R_DR fast adversarial", "n": 608, "p50_ms": 6.061, "p99_ms": 8.458, "max_ms": 9.483}
-{"timing": "R_TX0 fast honest", "n": 10, "p50_ms": 11.479, "p99_ms": 12.165, "max_ms": 13.786}
-{"timing": "R_TX0 fast adversarial", "n": 628, "p50_ms": 11.016, "p99_ms": 15.309, "max_ms": 17.844}
+{"timing": "R_REG fast honest", "n": 20, "p50_ms": 5.504, "p99_ms": 7.346, "max_ms": 7.836}
+{"timing": "R_REG fast adversarial", "n": 1178, "p50_ms": 5.308, "p99_ms": 8.473, "max_ms": 14.035}
+{"timing": "R_TX fast honest", "n": 10, "p50_ms": 11.459, "p99_ms": 13.853, "max_ms": 16.687}
+{"timing": "R_TX fast adversarial", "n": 628, "p50_ms": 11.060, "p99_ms": 17.026, "max_ms": 17.746}
+{"timing": "R_BURN fast honest", "n": 10, "p50_ms": 11.588, "p99_ms": 16.052, "max_ms": 16.301}
+{"timing": "R_BURN fast adversarial", "n": 608, "p50_ms": 10.854, "p99_ms": 17.400, "max_ms": 21.892}
+{"timing": "R_DS fast honest", "n": 10, "p50_ms": 7.076, "p99_ms": 9.378, "max_ms": 9.906}
+{"timing": "R_DS fast adversarial", "n": 608, "p50_ms": 6.168, "p99_ms": 9.946, "max_ms": 11.617}
+{"timing": "R_DR fast honest", "n": 10, "p50_ms": 6.748, "p99_ms": 8.597, "max_ms": 9.904}
+{"timing": "R_DR fast adversarial", "n": 608, "p50_ms": 6.253, "p99_ms": 10.403, "max_ms": 14.960}
+{"timing": "R_TX0 fast honest", "n": 10, "p50_ms": 12.530, "p99_ms": 14.432, "max_ms": 17.023}
+{"timing": "R_TX0 fast adversarial", "n": 628, "p50_ms": 11.367, "p99_ms": 18.525, "max_ms": 20.177}
 {"seed": 1, "cases": 4328, "mismatches": 0, "other_fails": 0}
