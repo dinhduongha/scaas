@@ -463,8 +463,8 @@ vectors that use `0x24e43dcb…c464` as a fixed `chainUid` keep it (a test const
 
 ## Image 2.2.0-pqz4 on the SCaaS testnet (executed 2026-10-25)
 
-*Live only.* Owner 2026-10-24: "tự chạy luôn trên SCaaS testnet" (the controller deploys plan 5h Task 8d part 1 to the
-testnet itself, instead of a copy-chain probe) and "không cần sao lưu chain 7622" (no backup). Log
+*Live only.* Owner 2026-10-24: "run it on the SCaaS testnet yourself" (the controller deploys plan 5h Task 8d part 1 to
+the testnet itself, instead of a copy-chain probe) and "no backup of chain 7622 needed". Log
 `../runs/2026-10-25-pqz4-live.txt`; branch `pqz-16k` at `35b59a62` (8d part 1 merged with main's Nethermind 2.2 work).
 
 1. Image: `scripts/capped pqz-core/nethermind/build-image.sh pqz4` twice — pass 1 stops at the reviewed-library check
