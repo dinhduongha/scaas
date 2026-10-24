@@ -8,11 +8,13 @@ Amsterdam (Glamsterdam) since its reset on 2026-10-21. What PQZ is and
 how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
 
-- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz3` (built locally, never
-  pushed): Nethermind 2.2.0 + the reviewed library of `pqz3` (`16dd99ce…`, the Rust PQZL core, built from commit
-  `1adbd563` with `FFI_REV`, see below). History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
+- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz4` (built locally, never
+  pushed; live on the SCaaS testnet since 2026-10-25): Nethermind 2.2.0 + the reviewed library `0894d191…64772` (set
+  `n2304-kmax4096`, the per-set proofSystemIds of plan 5h Task 8d part 1, `pqz_max_input()` 524,288; built from
+  `54c7c88e`), with provisional `engine.Pqz` rows (`chain/engine-pqz-provisional-n2304.json`) until the calibration of
+  plan 5h Task 9. History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
   multi-recipient transfer, P6-ANON S8; C PQZL core), `1.39.0-pqz3` (2026-10-19, never ran on the testnet),
-  `2.2.0-pqz3` (2026-10-21).
+  `2.2.0-pqz3` (2026-10-21; library `16dd99ce…` from `1adbd563`), `2.2.0-pqz4` (2026-10-25).
 - **Nethermind 2.2.0 (2026-10-21):** the first release with Glamsterdam on Hoodi; 64 KiB contracts (EIP-7954) and
   200 M-gas blocks. What the port changed and what Amsterdam's gas rules mean for our pins (`ROLL_MAX`, op 7 M = 8,
   the precompile gas): [§ Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-2026-10-21) and
@@ -36,8 +38,8 @@ how the library works: the parent [pqz-core README](../README.md), §3
 
 ## The three precompiles
 
-The addresses are the 32-bit form (spec 2026-10-20 §12 item 9, plan 5h Task 8d part 1); chain 7622's live image `2.2.0-pqz3`
-still serves P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` / `…0013` until the next roll-out.
+The addresses are the 32-bit form (spec 2026-10-20 §12 item 9, plan 5h Task 8d part 1); live on the SCaaS testnet since image
+`2.2.0-pqz4` (2026-10-25); the earlier images served P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` / `…0013`.
 `PQZ`'s input limit (`PqzNative.MaxInput`, an input above it is a failed call) is the loaded library's
 `pqz_max_input()`, the `MAX_INPUT` of the parameter set it was built for (524,288 B at the default `n2304-kmax4096`;
 was the literal 393,216 of `n2048-kmax1024`).

@@ -1762,7 +1762,7 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 (EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)). These are the 32-bit form (owner
 2026-10-21, spec `superpowers/specs/2026-10-20-pqz-state-redesign.md` §12 item 9; built in the node plugin and the
 scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` /
-`…0013`, which the SCaaS testnet's live image `2.2.0-pqz3` still serves until the next roll-out. The addresses lie above `0xffff`
+`…0013`, which the SCaaS testnet served until image `2.2.0-pqz4` replaced `2.2.0-pqz3` on 2026-10-25 (with provisional schedule rows until plan 5h Task 9). The addresses lie above `0xffff`
 (outside EIP-1352), outside RIP-7587's `0x100`–`0x1ff` and the OP / Taiko / Arbitrum system ranges; the same addresses
 on 22776 (P6f D3, controller proposal, owner may override). They come from a Nethermind **plugin** `Nethermind.Pqz`
 (no Nethermind patch: P6f D1) in the image `scaas/nethermind-pqz:1.39.0-pqz<n>` (built locally, never pushed: D13).
@@ -1798,7 +1798,7 @@ requirement and the follower is only defence in depth. Every node of the SCaaS t
 
 ### 9.1 Precompile `PQZ`
 
-Address `0x000000000000000000000000000000005caa0f01` ([CTR-PQZ-10](#CTR-PQZ-10); live `2.2.0-pqz3`: P6f D3's `0x5caa500000000000000000000000000000000f01`).
+Address `0x000000000000000000000000000000005caa0f01` ([CTR-PQZ-10](#CTR-PQZ-10); before image `2.2.0-pqz4`, 2026-10-25: P6f D3's `0x5caa500000000000000000000000000000000f01`).
 
 Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof`; output 32 bytes, `…01` valid, `…00` otherwise; never reverts on
 cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT` bytes, the set's limit `pqz_max_input()`: 524,288 at
@@ -1823,7 +1823,7 @@ into the transcript.
 
 ### 9.2 Precompiles `MLDSA44` and `MLDSA65`
 
-`MLDSA44` at `0x000000000000000000000000000000005caa0012`, `MLDSA65` at `0x000000000000000000000000000000005caa0013` (live `2.2.0-pqz3`: `0x5caa50…0012` / `…0013`):
+`MLDSA44` at `0x000000000000000000000000000000005caa0012`, `MLDSA65` at `0x000000000000000000000000000000005caa0013` (before image `2.2.0-pqz4`, 2026-10-25: `0x5caa50…0012` / `…0013`):
 EIP-8355's layout and semantics. Input `pk ‖ sig ‖ msg` (`pk` 1,312 / 1,952 B, `sig` 2,420 / 3,309 B), FIPS 204
 `ML-DSA.Verify(pk, msg, sig)` with the **empty context** (pure ML-DSA); a shorter input than `pk ‖ sig` ⇒ `…00`;
 output always 32 bytes, `…01` / `…00`. The UA signs the 32-byte `pq_msg` with the empty context
