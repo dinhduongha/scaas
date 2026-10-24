@@ -1,18 +1,45 @@
-resumed: fnv/c (passed earlier at this tree)
-resumed: fnv/rust (passed earlier at this tree)
-    Finished `release` profile [optimized] target(s) in 0.06s
-R_REG 724b382e
-R_TX ded14b2c
-R_BURN f32dd44e
-R_DS 4a1ceb53
-R_DR f8322c27
-R_TX0 f1f88ff3
-R_TXM1 6acfc7a4
-R_TXM2 2595ee22
-R_TXM4 c2044ae2
-R_TXM8 0b653c1f
-R_TXM1_0 9408e7ca
-R_TXM2_0 ed688e0e
-R_TXM4_0 93532ee9
-R_TXM8_0 8ef746ff
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/pqzl/rust)
+   Compiling keccak v0.1.6
+   Compiling crypto-common v0.1.7
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling cpufeatures v0.2.17
+   Compiling cfg-if v1.0.5
+   Compiling sha3 v0.10.8
+   Compiling aes v0.8.4
+    Finished `release` profile [optimized + debuginfo] target(s) in 7.22s
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling cfg-if v1.0.5
+   Compiling keccak v0.1.6
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/pqzl/rust)
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling aes v0.8.4
+   Compiling pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 13.44s
+R_REG 460326bc
+R_TX f0e73711
+R_BURN d6f86746
+R_DS fcdff59e
+R_DR 1603fdfb
+R_TX0 6d9cde80
+R_TXM1 9825f512
+R_TXM2 3172737e
+R_TXM4 4d761b19
+R_TXM8 fad64bff
+R_TXM1_0 c05684c6
+R_TXM2_0 fd2b2cdf
+R_TXM4_0 6473d4f7
+R_TXM8_0 c767ced5
 C core wasm32 = C core native (14 relations)

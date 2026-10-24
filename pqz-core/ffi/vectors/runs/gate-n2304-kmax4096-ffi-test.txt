@@ -1,45 +1,43 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/ffi)
-    Finished `release` profile [optimized + debuginfo] target(s) in 12.73s
-     Running unittests src/lib.rs (target/n2304-kmax4096/release/deps/pqz_ffi-9bb139bcf26a45b0)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.06s
+     Running unittests src/lib.rs (target/n2304-kmax4096/release/deps/pqz_ffi-7d530ec0659c5bfc)
 
 running 1 test
 test pqzl::rust::tests::out_of_memory_is_a_node_fault ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/pqz-vectors.rs (target/n2304-kmax4096/release/deps/pqz_vectors-caeef4c9e59aedbb)
+     Running unittests src/bin/pqz-vectors.rs (target/n2304-kmax4096/release/deps/pqz_vectors-c295ca7a255dc456)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/fault.rs (target/n2304-kmax4096/release/deps/fault-1ae4dddb7d44ef80)
+     Running tests/fault.rs (target/n2304-kmax4096/release/deps/fault-3c861bd35396ba19)
 
 running 1 test
 test node_faults_are_status_4 ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.28s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.97s
 
-     Running tests/ffi.rs (target/n2304-kmax4096/release/deps/ffi-1be53f35a5dc6b90)
+     Running tests/ffi.rs (target/n2304-kmax4096/release/deps/ffi-e39c882a0f88dc78)
 
 running 10 tests
 test header_matches ... ok
 test c_abi_arguments ... ok
-test digest_lines ... ok
-test every_rejection has been running for over 60 seconds
-test multi_limits_and_memo has been running for over 60 seconds
 test multi_limits_and_memo ... ok
 test one_mib_stack ... ok
-test round_trip_every_form ... ok
-test selftest_vectors ... ok
+test digest_lines ... ok
 test selftest_report ... ok
+test selftest_vectors ... ok
+test round_trip_every_form ... ok
+test every_rejection has been running for over 60 seconds
 test every_rejection ... ok
-test pqzl_differential has been running for over 60 seconds
 test pqzl_differential ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 124.26s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 70.70s
 
-     Running tests/verify_only.rs (target/n2304-kmax4096/release/deps/verify_only-981c74fdb151169a)
+     Running tests/verify_only.rs (target/n2304-kmax4096/release/deps/verify_only-48cbbff72d41a6f0)
 
 running 2 tests
 test child_task ... ok
@@ -47,12 +45,12 @@ test child_task ... ok
 running 1 test
 test child_task ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 47.50s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 26.93s
 
 test verify_only_arena has been running for over 60 seconds
 test verify_only_arena ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 84.23s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 100.62s
 
    Doc-tests pqz_ffi
 

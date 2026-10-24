@@ -1,13 +1,13 @@
-# gate n2816-kmax65536 (set n2816-kmax65536): fdf2ae7a5f2ce61d8bde5ef3e8a6881e11d2fa56, 2026-10-23T07:19Z
+# gate n2816-kmax65536 (set n2816-kmax65536): aa37a263c075db5e45471a35158a6b97754803cb + uncommitted changes, 2026-10-23T18:20Z
 set n2816-kmax65536
 == kat
-   ok (resumed: passed earlier at this tree)
+   ok
 == tbox
-   ok (resumed: passed earlier at this tree)
+   ok
 == sv
-   ok (resumed: passed earlier at this tree)
+   ok
 == diff
-   ok (resumed: passed earlier at this tree)
+   ok
 == fnv
    ok
 == vectors
@@ -19,7 +19,7 @@ set n2816-kmax65536
 == cargo
    skipped (core_only)
 == xcheck
-   skipped (PQZH is not built for set n2816-kmax65536 until plan 5h Task 8c)
+   skipped (set n2816-kmax65536 has no PQZH (set.json pqzh))
 == fuzz
    skipped (core_only)
 gate n2816-kmax65536 (set n2816-kmax65536): PASS

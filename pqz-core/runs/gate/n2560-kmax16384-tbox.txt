@@ -4,7 +4,7 @@ l2dom s_over_A: control (fix undone) accepts 1/1, production rejects 1/1
 l2dom s_over_B: control (fix undone) accepts 1/1, production rejects 1/1
 l2dom tx_over: control (fix undone) accepts 1/1, production rejects 1/1
 z21 z21_big: proved 1/1; production: honest accepted 1/1, z21_big / z1_over / w_over rejected by both 3/3; control (z21 term removed) accepts z21_big 1/1
-z21_big  prove rc=0 proof 95999 B  y21 << 7: ||z21||^2 = 2127129484925832 (4.2x the set's R_REG Bsq 509449879084178)
+z21_big  prove rc=0 proof 96298 B  y21 << 7: ||z21||^2 = 2148103845808666 (4.2x the set's R_REG Bsq 509449879084178)
 P6-FS verify honest: ACCEPT
 P6-FS verify h-mutated (rejected) kind 5 mu seed: honest 4dbfefe0 mutated ddff20be -> differ
 P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest a51cfea0 mutated 69c35de4 -> differ
