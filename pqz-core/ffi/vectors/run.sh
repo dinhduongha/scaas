@@ -17,16 +17,16 @@ TD=${CARGO_TARGET_DIR:-target}
 R=vectors/runs/$1
 mkdir -p vectors/runs
 fail=0
-# PQZ_SET: the parameter set (pqz-core/params/sets/<set>, one per build; default the v3 set n2048-kmax1024, pqz-ffi's
-# default feature); another set or an explicit backend: --no-default-features --features pqzl-<backend>,set-<set>
-S=${PQZ_SET:-n2048-kmax1024}
+# PQZ_SET: the parameter set (pqz-core/params/sets/<set>, one per build; default n2304-kmax4096, pqz-ffi's default
+# feature since plan 5h Task 8d); another set or an explicit backend: --no-default-features --features pqzl-<backend>,set-<set>
+S=${PQZ_SET:-n2304-kmax4096}
 [ -f "../params/sets/$S/pqz_set.h" ] || { echo "PQZ_SET=$S: no pqz-core/params/sets/$S" >&2; exit 2; }
 case ${PQZL:-} in
   rust | c) BF="--no-default-features --features pqzl-$PQZL,set-$S" ;;
-  "") if [ "$S" = n2048-kmax1024 ]; then BF=; else BF="--no-default-features --features pqzl-rust,set-$S"; fi ;;
+  "") if [ "$S" = n2304-kmax4096 ]; then BF=; else BF="--no-default-features --features pqzl-rust,set-$S"; fi ;;
   *) echo "PQZL=$PQZL: rust or c" >&2; exit 2 ;;
 esac
-# the set's vectors: v3 at the canonical path (the contracts' until plan 5h Task 8d), another set below it
+# the set's vectors: n2048-kmax1024 at the canonical path (the contracts' until plan 5h Task 8d part 2), another set below it
 V=../../smartcontracts/vectors/pqz; [ "$S" = n2048-kmax1024 ] || V=$V/$S
 export PQZ_SET=$S
 echo "set $S, vectors $V; PQZL backend: ${PQZL:-the default feature} (cargo flags: ${BF:-none})" > "$R-build.txt"

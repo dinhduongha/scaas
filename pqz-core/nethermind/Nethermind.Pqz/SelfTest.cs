@@ -5,10 +5,12 @@ using System.Security.Cryptography;
 namespace Nethermind.Pqz;
 
 /// <summary>P6f R3: the plugin runs <c>OP_SELFTEST</c> at start-up and refuses to start unless it equals the hash of
-/// <c>smartcontracts/vectors/pqz/selftest.json</c> (P6e D13; a test pins this constant to the file).</summary>
+/// the library's parameter set's <c>selftest.json</c> (P6e D13; a test pins this constant to the file): since plan 5h
+/// Task 8d part 1 the default set <c>n2304-kmax4096</c>, <c>smartcontracts/vectors/pqz/n2304-kmax4096/selftest.json</c>
+/// (the <c>n2048-kmax1024</c> library's was <c>ed910a2c…d205</c>).</summary>
 public static class SelfTest
 {
-    public const string ExpectedHash = "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205";
+    public const string ExpectedHash = "23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0";
 
     /// <summary>Review W-G (2026-10-19): the SHA-256 of the reviewed <c>libpqz_ffi.so</c> (the Dockerfile's <c>ffi</c>
     /// stage, a reproducible build). The plugin refuses to start with any other library; <c>build-image.sh</c> reads

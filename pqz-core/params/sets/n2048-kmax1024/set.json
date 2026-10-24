@@ -1,6 +1,6 @@
 {
  "set": "n2048-kmax1024",
- "description": "the frozen v3 set (proofSystemId .../mlwe-d64k32-q42l4/v3)",
+ "description": "the frozen set (the parameters of the retired v3 proofSystemId; own ids since plan 5h Task 8d)",
  "approval": {
   "date": "2026-10-07",
   "what": "CTR-PQZ-03 (lattice parameters at or above Kyber-512); the v3 proofSystemId since the Fiat-Shamir fix (CTR-PQZ-09 F6); kept frozen as the reference set (owner 2026-10-21)"
@@ -56,6 +56,10 @@
  },
  "max_proof_pqzh": 262144,
  "max_input": 393216,
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4",
+ "pqzl_id": "19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d",
+ "pqzh_label": "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2",
+ "pqzh_id": "9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4",
  "pqzh_preset": {
   "radices": [
    2,

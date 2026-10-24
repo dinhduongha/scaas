@@ -1,17 +1,17 @@
 {"prg_mismatches": 0}
 {"bad_length_before_keys": 0}
 {"rel": "R_REG", "prover_seeds_match": 1}
-{"rel": "R_REG", "arena_base": 11776768, "sv_tables": 4540480, "verify_peak_generic": 100417184, "verify_peak_fast": 1156416}
+{"rel": "R_REG", "arena_base": 11776768, "sv_tables": 4540480, "verify_peak_generic": 100417184, "verify_peak_fast": 1156384}
 {"rel": "R_TX", "prover_seeds_match": 1}
-{"rel": "R_TX", "arena_base": 30585328, "sv_tables": 5500976, "verify_peak_generic": 335466128, "verify_peak_fast": 1848480}
+{"rel": "R_TX", "arena_base": 30585328, "sv_tables": 5500976, "verify_peak_generic": 335466128, "verify_peak_fast": 1848464}
 {"rel": "R_BURN", "prover_seeds_match": 1}
 {"rel": "R_BURN", "arena_base": 50062224, "sv_tables": 5388336, "verify_peak_generic": 319463168, "verify_peak_fast": 1809184}
 {"rel": "R_DS", "prover_seeds_match": 1}
-{"rel": "R_DS", "arena_base": 63896688, "sv_tables": 3256368, "verify_peak_generic": 104884768, "verify_peak_fast": 1171680}
+{"rel": "R_DS", "arena_base": 63896688, "sv_tables": 3256368, "verify_peak_generic": 104884768, "verify_peak_fast": 1171696}
 {"rel": "R_DR", "prover_seeds_match": 1}
-{"rel": "R_DR", "arena_base": 75878064, "sv_tables": 3363888, "verify_peak_generic": 112236256, "verify_peak_fast": 1206096}
+{"rel": "R_DR", "arena_base": 75878064, "sv_tables": 3363888, "verify_peak_generic": 112236256, "verify_peak_fast": 1206112}
 {"rel": "R_TX0", "prover_seeds_match": 1}
-{"rel": "R_TX0", "arena_base": 93393168, "sv_tables": 5455920, "verify_peak_generic": 328976016, "verify_peak_fast": 1832336}
+{"rel": "R_TX0", "arena_base": 93393168, "sv_tables": 5455920, "verify_peak_generic": 328976016, "verify_peak_fast": 1832320}
 {"rel": "R_REG", "kind": "honest", "cases": 10, "generic_accepts": 10, "mismatches": 0}
 {"rel": "R_REG", "kind": "reencode", "cases": 10, "generic_accepts": 10, "mismatches": 0}
 {"rel": "R_REG", "kind": "bitflip", "cases": 20, "generic_accepts": 0, "mismatches": 0}
@@ -25,7 +25,7 @@
 {"rel": "R_REG", "kind": "other_proof", "cases": 18, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_REG", "kind": "bench_k4_unary", "cases": 20, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_REG", "kind": "m_swap_z1", "cases": 20, "generic_accepts": 0, "mismatches": 0}
-{"rel": "R_REG", "kind": "m_swap_z21", "cases": 20, "generic_accepts": 1, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z21", "cases": 20, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_REG", "kind": "m_swap_z3z4", "cases": 20, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_REG", "kind": "m_z1_pm1", "cases": 20, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_REG", "kind": "m_z1_large", "cases": 20, "generic_accepts": 0, "mismatches": 0}
@@ -109,7 +109,7 @@
 {"rel": "R_DS", "kind": "stmt_scalar", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DS", "kind": "other_proof", "cases": 8, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DS", "kind": "bench_k4_unary", "cases": 10, "generic_accepts": 0, "mismatches": 0}
-{"rel": "R_DS", "kind": "m_swap_z1", "cases": 10, "generic_accepts": 1, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_z1", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DS", "kind": "m_swap_z21", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DS", "kind": "m_swap_z3z4", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DS", "kind": "m_z1_pm1", "cases": 10, "generic_accepts": 0, "mismatches": 0}
@@ -137,7 +137,7 @@
 {"rel": "R_DR", "kind": "stmt_scalar", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DR", "kind": "other_proof", "cases": 8, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DR", "kind": "bench_k4_unary", "cases": 10, "generic_accepts": 0, "mismatches": 0}
-{"rel": "R_DR", "kind": "m_swap_z1", "cases": 10, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_z1", "cases": 10, "generic_accepts": 1, "mismatches": 0}
 {"rel": "R_DR", "kind": "m_swap_z21", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DR", "kind": "m_swap_z3z4", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_DR", "kind": "m_z1_pm1", "cases": 10, "generic_accepts": 0, "mismatches": 0}
@@ -165,8 +165,8 @@
 {"rel": "R_TX0", "kind": "stmt_scalar", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "other_proof", "cases": 8, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "bench_k4_unary", "cases": 10, "generic_accepts": 0, "mismatches": 0}
-{"rel": "R_TX0", "kind": "m_swap_z1", "cases": 10, "generic_accepts": 1, "mismatches": 0}
-{"rel": "R_TX0", "kind": "m_swap_z21", "cases": 10, "generic_accepts": 1, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z1", "cases": 10, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z21", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "m_swap_z3z4", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "m_z1_pm1", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "m_z1_large", "cases": 10, "generic_accepts": 0, "mismatches": 0}
@@ -181,16 +181,16 @@
 {"rel": "R_TX0", "kind": "m_swap_h", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "stmt_auditor", "cases": 10, "generic_accepts": 0, "mismatches": 0}
 {"rel": "R_TX0", "kind": "fuzz", "cases": 50, "generic_accepts": 0, "mismatches": 0}
-{"timing": "R_REG fast honest", "n": 10, "p50_ms": 2.908, "p99_ms": 3.069, "max_ms": 3.466}
-{"timing": "R_REG fast adversarial", "n": 588, "p50_ms": 2.744, "p99_ms": 3.821, "max_ms": 9.891}
-{"timing": "R_TX fast honest", "n": 5, "p50_ms": 5.366, "p99_ms": 5.643, "max_ms": 6.108}
-{"timing": "R_TX fast adversarial", "n": 313, "p50_ms": 5.280, "p99_ms": 6.105, "max_ms": 6.625}
-{"timing": "R_BURN fast honest", "n": 5, "p50_ms": 5.378, "p99_ms": 5.408, "max_ms": 5.772}
-{"timing": "R_BURN fast adversarial", "n": 303, "p50_ms": 5.084, "p99_ms": 6.089, "max_ms": 6.554}
-{"timing": "R_DS fast honest", "n": 5, "p50_ms": 3.367, "p99_ms": 3.646, "max_ms": 4.069}
-{"timing": "R_DS fast adversarial", "n": 303, "p50_ms": 3.282, "p99_ms": 4.137, "max_ms": 4.401}
-{"timing": "R_DR fast honest", "n": 5, "p50_ms": 3.415, "p99_ms": 3.800, "max_ms": 4.120}
-{"timing": "R_DR fast adversarial", "n": 303, "p50_ms": 3.331, "p99_ms": 4.220, "max_ms": 5.142}
-{"timing": "R_TX0 fast honest", "n": 5, "p50_ms": 5.721, "p99_ms": 5.787, "max_ms": 5.851}
-{"timing": "R_TX0 fast adversarial", "n": 313, "p50_ms": 5.654, "p99_ms": 6.997, "max_ms": 7.400}
+{"timing": "R_REG fast honest", "n": 10, "p50_ms": 3.044, "p99_ms": 3.375, "max_ms": 3.441}
+{"timing": "R_REG fast adversarial", "n": 588, "p50_ms": 2.792, "p99_ms": 3.843, "max_ms": 4.616}
+{"timing": "R_TX fast honest", "n": 5, "p50_ms": 5.759, "p99_ms": 6.027, "max_ms": 6.237}
+{"timing": "R_TX fast adversarial", "n": 313, "p50_ms": 5.586, "p99_ms": 7.321, "max_ms": 7.823}
+{"timing": "R_BURN fast honest", "n": 5, "p50_ms": 5.563, "p99_ms": 5.820, "max_ms": 6.185}
+{"timing": "R_BURN fast adversarial", "n": 303, "p50_ms": 5.436, "p99_ms": 7.239, "max_ms": 8.485}
+{"timing": "R_DS fast honest", "n": 5, "p50_ms": 3.741, "p99_ms": 3.874, "max_ms": 4.020}
+{"timing": "R_DS fast adversarial", "n": 303, "p50_ms": 3.419, "p99_ms": 4.607, "max_ms": 5.370}
+{"timing": "R_DR fast honest", "n": 5, "p50_ms": 3.951, "p99_ms": 4.181, "max_ms": 4.346}
+{"timing": "R_DR fast adversarial", "n": 303, "p50_ms": 3.572, "p99_ms": 5.126, "max_ms": 5.863}
+{"timing": "R_TX0 fast honest", "n": 5, "p50_ms": 5.771, "p99_ms": 6.235, "max_ms": 8.393}
+{"timing": "R_TX0 fast adversarial", "n": 313, "p50_ms": 5.756, "p99_ms": 7.793, "max_ms": 9.366}
 {"seed": 2, "cases": 2158, "mismatches": 0, "other_fails": 0}

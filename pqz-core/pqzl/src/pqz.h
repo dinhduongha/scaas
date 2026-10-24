@@ -37,15 +37,11 @@
 #define PQZ_POLYVEC_BYTES (PQZ_K * 512) /* k polys x 64 coeffs x be8 */
 #define PQZ_V_BYTES 128         /* 16 coeffs x be8 */
 #define PQZ_PREFIX_BYTES 64     /* opTag || proofSystemId */
-/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"); the same for every set in
-   plan 5h Task 8b: 8d makes the one bump for the new sets and the transcript fixes of Task 8 (pq-zero-knowledge.md §8,
-   CTR-PQZ-09). pqz-core only hashes it; the precompile accepts only ids it implements. v3 (was .../v2): the Fiat-Shamir
-   transcript absorbs z3, z4 before V3 / V4 and h before mu and the final challenge (P6-FS, lazer/lnp-tbox.c
-   _lnp_tbox_hash_z34 / _lnp_tbox_hash_h, src/pqz_sv.c; lazer-crypto/lazer issue 28); v2 is retired (forgeable).
-   v2 (was .../v1): the LaZer tbox Schwartz-Zippel fixes P6-SZ / P6-L2 (lazer-crypto/lazer issues 24, 25). */
-#define PQZ_PROOF_SYSTEM_ID                                                                                 \
-  { 0x80, 0x79, 0xd6, 0x5b, 0x5e, 0x5c, 0x15, 0xe3, 0x30, 0xf7, 0xe6, 0x5c, 0x87, 0x57, 0x76, 0xdf,  \
-    0xc1, 0xb0, 0xf6, 0xc9, 0x3c, 0xed, 0x90, 0xc0, 0x45, 0xe8, 0x38, 0x65, 0xd1, 0x16, 0xba, 0xef }
+/* proofSystemId (statement bytes 32..63): PQZ_PROOF_SYSTEM_ID of the set's pqz_set.h, keccak256 of its set.toml label
+   pqzl_id (gen_set.py; plan 5h Task 8d: one id per set, ".../mlwe-d64k<k>-q<log2q>l4/v4", CTR-PQZ-09). pqz-core only
+   hashes it; the precompile accepts only ids it implements. v4: B-1 / A-2 / R_REG (plan 5h Task 8a) and the set's
+   parameters; v3 (retired): the Fiat-Shamir transcript absorbs z3, z4 before V3 / V4 and h before mu and the final
+   challenge (P6-FS, lazer#28); v2 (retired, forgeable): the LaZer tbox Schwartz-Zippel fixes (lazer#24, #25). */
 
 /* R_REG: prefix || message (32) || pk */
 #define PQZ_REG_STMT_BYTES (PQZ_PREFIX_BYTES + 32 + PQZ_POLYVEC_BYTES)

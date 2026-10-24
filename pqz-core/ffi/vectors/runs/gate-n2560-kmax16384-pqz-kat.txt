@@ -5,8 +5,10 @@ ok   Keccak-f permutation = hashlib sha3_256, 136 B
 ok   Keccak-f permutation = hashlib sha3_256, 137 B
 ok   Keccak-f permutation = hashlib sha3_256, 300 B
 ok   keccak256('')
-ok   PQZL proofSystemId (D2)
-ok   PQZH proofSystemId (D3)
+ok   keccak256 of the retired v3 label
+ok   PQZL proofSystemId scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4 = a3db21fc... (set.json)
+ok   PQZH proofSystemId scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2 = e83ad1da... (set.json)
+ok   ids not retired, distinct
 ok   opTag TRANSFER = ef22f3d1...
 ok   opTag BURN = 7383374d...
 ok   opTag REFRESH = f118f2df...
@@ -124,4 +126,4 @@ ok   statement_transfer.json
 ok   statement_transfer_multi.json
 ok   worstcase_noise.json
 pqz_kat: ok
-92696 KB
+92924 KB

@@ -43,7 +43,7 @@ flowchart LR
 | Status | Meaning | `out` | What the node does |
 |---|---|---|---|
 | 0 | ok | `out[0..32]` holds `…01`, `…00` or the self-test hash | uses the answer |
-| 1 | revert: the input is over the set's `MAX_INPUT` (393,216 B at `n2048-kmax1024` = `PQZ_FFI_MAX_INPUT`, the node's limit; 524,288 B at the other sets' builds until the node follows in plan 5h Task 8d) | zeroed | the call reverts |
+| 1 | revert: the input is over the set's `MAX_INPUT` (`pqz_max_input()`: 524,288 B at `n2304-kmax4096`, the default build, and `n2560-kmax16384`; 393,216 B at `n2048-kmax1024`); the node takes its limit from the same function (plan 5h Task 8d) | zeroed | the call reverts |
 | 2 | bad arguments (`input` NULL with `len` > 0, `out` NULL, or `out_len` < 32) | nothing written | — |
 | 3 | a panic in the decode / verify logic was caught. It is caused by the input, so every node hits it on the same input | `…00` (invalid) | treats the input as invalid and logs it |
 | 4 | node fault: a fault of this node, not of the input (see "Faults" below) | untouched, no result | stops block processing; never records the input as invalid |
@@ -56,6 +56,7 @@ clients only; a native build with `panic = abort` is a compile error.
 | Entry | What it does |
 |---|---|
 | `pqz_precompile(input, len, out, out_len) -> int` (`pqz_ffi.h`) | the C ABI the node calls (P/Invoke); status codes in the table above |
+| `pqz_max_input() -> size_t` (`pqz_ffi.h`) | the build's input limit (`MAX_INPUT` of its parameter set); the node's limit (Nethermind `PqzNative.MaxInput`), so it is never a second literal (plan 5h Task 8d) |
 | `precompile(&[u8]) -> Result<[u8; 32], Error>` | the same in Rust: `Error::Revert`, `Error::NodeFault`; a caught input-caused panic gives `…00` |
 | `decode(&[u8])` | `pqz_stmt::decode_input` (the crate re-exports `pqz_stmt` as `stmt`) |
 | `verify_input(&[u8]) -> Result<bool, NodeFault>` | decode, then run the id's verifier (ops 1–5 and 7) |
@@ -80,7 +81,7 @@ clients only; a native build with `panic = abort` is a compile error.
 - **Both** (`--features pqzl-c` on the default): `pqzl::` is the Rust core and `pqzl::c` the C core, in one binary
   (the fuzz mode `pqzl-diff`, `../fuzz/README.md`).
 
-The node image (`../nethermind/Dockerfile`) builds this crate's default and copies `pqz-core/pqzl/rust` (its Docker
+The node image (`../nethermind/Dockerfile`) builds this crate's default (the set `n2304-kmax4096` since plan 5h Task 8d) and copies `pqz-core/pqzl/rust` (its Docker
 build is checked in the Rust port's Task 12). The SCaaS testnet runs the C-backed library built before the switch until the
 live roll-out.
 
@@ -148,16 +149,18 @@ kat_digest = keccak256(A digest ‖ keccak256(pk) ‖ keccak256(u ‖ v) ‖ M �
 - `kat_digest` covers: the matrix A read from the core column by column (equal to `pqz_kat.py`'s A digest
   `f176b313…`), KeyGen(`0x51…`), Enc / Dec of 123,456, and one forward / inverse Ligero FFT over 1,634 points.
 - The four flags run the precompile path on one compiled-in `R_REG` proof per id, and on the same proof under the
-  statement with the last message byte flipped. The proofs are the REGISTER rows of
-  `smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json`, read by `build.rs` (plan D9: no copy), proved with
+  statement with the last message byte flipped. The proofs are the REGISTER rows of the set's
+  `proof_{pqzl,pqzh}.json` (`smartcontracts/vectors/pqz/<set>/`; `n2048-kmax1024`: `smartcontracts/vectors/pqz/`), read by `build.rs` (plan D9: no copy), proved with
   `rnd32 = 0x53…`; the statement is `opTag ‖ id ‖ keccak256("SCAAS-PQZ-SELFTEST-V1") ‖ pk`.
-- It is computed once per process. The same hash from either backend (`ed910a2c…`).
+- It is computed once per process. The same hash from either backend; one per parameter set (`n2304-kmax4096`, the
+  default build: `23d7a1db…`; `n2048-kmax1024`: `ed910a2c…`; `n2560-kmax16384`: `167c772e…`). It covers verdicts, not
+  proof bytes, so the `proofSystemId` bump of plan 5h Task 8d left each set's hash unchanged.
 - After a prover change, regenerate the vectors (from the repository root:
   `scripts/capped pqz-core/ffi/vectors/run.sh <label> write`), which rebuilds the crate; the test `selftest_vectors`
   checks that a fresh prove equals the compiled-in proofs.
 
-**Vectors (P6e Task 11).** `src/bin/pqz-vectors.rs` (feature `prove`) writes the test vectors in
-`smartcontracts/vectors/pqz/` (D9, R4). Every value comes from this crate (`pqzl` keygen / enc / dec / `encrypt`,
+**Vectors (P6e Task 11).** `src/bin/pqz-vectors.rs` (feature `prove`) writes the test vectors of the build's set in
+`smartcontracts/vectors/pqz/<set>/` (`n2048-kmax1024`: `smartcontracts/vectors/pqz/`; D9, R4). Every value comes from this crate (`pqzl` keygen / enc / dec / `encrypt`,
 `prove`), and every expected output from `pqz_precompile` and `selftest::selftest()`. `--check` regenerates them and
 compares byte for byte. `vectors/run.sh` runs it together with `pqz_kat.py --check`, `vectors/tamper.py` and the
 wasm32 replay `vectors/replay_wasm.mjs` (through `wasm/`).

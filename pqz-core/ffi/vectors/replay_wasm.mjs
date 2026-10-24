@@ -5,12 +5,15 @@
 // in wasm32 (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena; S3): there the native proof is verified through the wasm32
 // precompile. The Rust backend (default) proves M = 8 too (port plan Task 12); the module's m8_refused() tells which.
 // Prints JSON lines; exit 1 on any difference.
-//   node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
+//   [PQZ_SET=<set>] node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
+// default dir: the set's vectors, PQZ_SET default n2304-kmax4096 (the builds' default, plan 5h Task 8d; n2048-kmax1024:
+// smartcontracts/vectors/pqz/ itself)
 // A parameter set without PQZH (none of the sets with pqz-ffi since plan 5h Task 8c part 2): its directory has no
 // proof_pqzh.json, and only the PQZL id is replayed.
 import { existsSync, readFileSync } from 'node:fs';
 
-const [file, dir = new URL('../../../smartcontracts/vectors/pqz/', import.meta.url).pathname] = process.argv.slice(2);
+const SET = process.env.PQZ_SET || 'n2304-kmax4096';
+const [file, dir = new URL(`../../../smartcontracts/vectors/pqz/${SET === 'n2048-kmax1024' ? '' : SET + '/'}`, import.meta.url).pathname] = process.argv.slice(2);
 const J = (n) => JSON.parse(readFileSync(`${dir}/${n}`, 'utf8'));
 const hex = (s) => Uint8Array.from(s.match(/../g).map((b) => parseInt(b, 16)));
 const out = (o) => console.log(JSON.stringify(o));

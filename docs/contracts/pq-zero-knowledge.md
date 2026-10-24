@@ -1398,11 +1398,16 @@ LaBRADOR/Greyhound deferred to aggregation work. **Kill criterion**: stop and re
 the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 60 ms on the chain host (50 ms until 2026-10-14; owner raised it to 60 ms, which also bounds wasm32 verify, so the PQZH Ligero backend's measured 55.9 ms wasm32 p99 passes; the gas figures below quoted "at 50 ms" are the old threshold and are recalibrated on measured p99 in P6f), or if the rewritten layers
 cannot reach arithmetic-layer KAT equality with upstream. Single implementation; LaZer is MIT and protocol logic stays
 upstream-shaped. We own a C fork with six rewritten layers, a rewrite rather than a kernel swap; upstream protocol
-fixes are merged by hand. **Versioning:** two proof systems, one `proofSystemId` word with two values
-([serialization v1](#serialization)): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` (`0x8079d65b…16baef`,
-`PQZ_PROOF_SYSTEM_ID` in `pqz-core/pqzl/src/pqz.h`, `PROOF_SYSTEM_ID` in `pqz-core/pqzl/rust/src/lib.rs`; since
-2026-10-19, replacing v2, which P6e D2 had frozen at gate A) and PQZH (Ligero over F_q) `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`
-(`0x0a47a768…2fead4`; P6e D3, frozen at gate B), `MAX_PROOF` 98,304 B and 262,144 B. The token stores its id at
+fixes are merged by hand. **Versioning:** two proof systems, one `proofSystemId` word; since plan 5h Task 8d one PQZL
+and one PQZH id **per parameter set** ([serialization v1](#serialization); `pqz-core/params/sets/<set>/set.toml`
+`pqzl_id` / `pqzh_id`, generated into `pqz_set.h` `PQZ_PROOF_SYSTEM_ID` and `rust/set.rs` `PQZL_ID` / `PQZH_ID`):
+PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k<k>-q<log2q>l4/v4")`, PQZH
+`keccak256("scaas/pqz/pqzh/ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2")`; the default set `n2304-kmax4096`:
+`0x15d16d77…cb608a` / `0xe4bc6d17…885730` (table in [serialization v1](#serialization)). They replace PQZL v3
+`keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` (`0x8079d65b…16baef`, 2026-10-19, which had replaced v2, frozen by
+P6e D2 at gate A) and PQZH `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` (`0x0a47a768…2fead4`;
+P6e D3, frozen at gate B). `MAX_PROOF` 98,304 B and the set's `MAX_PROOF_PQZH` (262,144 B; `n2560-kmax16384`
+327,680 B). The token stores its id at
 `initialize` and the precompile accepts only ids it implements. **Bump rule** (P6e D4): any change, after a
 deployment, to the parameters, presets, relation rows or statement layout of an existing form, the transcript, the
 proof encoding or the accepted set ⇒ a new id. Prover-only changes must keep the frozen vectors' proof bytes
@@ -1546,10 +1551,12 @@ bytes; `be8` and `‖` as in the notation at the top.
 
 | `proofSystemId` | System | `MAX_PROOF(id)` | Verifier on the precompile path | Freeze |
 |---|---|---|---|---|
-| `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | PQZL v3: LNP22 through LaZer's `tbox` with the P6-FS transcript ([transcript](#transcript)) (`pqz-core`: the Rust crate `pqzl`, the C core as reference) | 98,304 B | `verify_fast` (`pqz_verify_fast` in C) | v3 vectors `8af584b` (plan `pqzl-fs3` Task 5); the branch's final gate before the merge (plan Tasks 9, 12) |
-| `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` = `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | PQZH Ligero v1: Ligero over F_q, radix-431 domains, Keccak-256 Merkle tree and transcript, zero knowledge, proven preset (`pqzh-ligero`, Rust) | 262,144 B | `pqzh_ligero::verify` | gate B (P6e D3) |
+| per set (plan 5h Task 8d): `keccak256("scaas/pqz/lnp22/mlwe-d64k<k>-q<log2q>l4/v4")`; `n2304-kmax4096` (default) `…/mlwe-d64k36-q46l4/v4` = `0x15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a`, `n2048-kmax1024` `…/mlwe-d64k32-q42l4/v4` = `0x19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d`, `n2560-kmax16384` `…/mlwe-d64k40-q50l4/v4` = `0xa3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d` | PQZL v4 (the set's parameters, B-1 / A-2 / `R_REG` of plan 5h Task 8a) | 98,304 B | `verify_fast` (`pqz_verify_fast` in C) | plan 5h Task 8d part 1 (built, not yet frozen by a gate on chain) |
+| was `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` (retired by plan 5h Task 8d) | PQZL v3: LNP22 through LaZer's `tbox` with the P6-FS transcript ([transcript](#transcript)) (`pqz-core`: the Rust crate `pqzl`, the C core as reference) | 98,304 B | `verify_fast` (`pqz_verify_fast` in C) | v3 vectors `8af584b` (plan `pqzl-fs3` Task 5); the branch's final gate before the merge (plan Tasks 9, 12) |
+| per set (plan 5h Task 8d): `keccak256("scaas/pqz/pqzh/ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2")`; `n2304-kmax4096` `…/ligero-fq46-n45752k952t120-…/v2` = `0xe4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730`, `n2048-kmax1024` `…/ligero-fq42-n32756k817t121-…/v2` = `0x9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4`, `n2560-kmax16384` `…/ligero-fq50-n32756k817t122-…/v2` = `0xe83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851` | PQZH Ligero v2: the set's field and preset (backup only, not offered on chain) | the set's `MAX_PROOF_PQZH` | `pqzh_ligero::verify` | plan 5h Task 8d part 1 |
+| was `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` = `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` (retired by plan 5h Task 8d) | PQZH Ligero v1: Ligero over F_q, radix-431 domains, Keccak-256 Merkle tree and transcript, zero knowledge, proven preset (`pqzh-ligero`, Rust) | 262,144 B | `pqzh_ligero::verify` | gate B (P6e D3) |
 
-Retired, **forgeable**: PQZL `…/v2` = `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f`
+Retired by plan 5h Task 8d (refused as unknown ids by `pqz-stmt`): PQZL `…/v3` and PQZH `…/v1` above. Retired, **forgeable**: PQZL `…/v2` = `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f`
 (2026-10-19; [lazer#28](https://github.com/lazer-crypto/lazer/issues/28), [CTR-PQZ-09](#CTR-PQZ-09)): removed from
 the accepted set and from `pqz-stmt`; SCaaS testnet, which runs it on image `pqz2` (a test chain), is reset from genesis
 at the v3 roll-out. Retired, never deployed: PQZL `…/v1` (2026-10-13) and the STARK's provisional
@@ -1561,10 +1568,14 @@ at the v3 roll-out. Retired, never deployed: PQZL `…/v1` (2026-10-13) and the 
 input = u8(op) ‖ be32(L) ‖ stmt (L bytes) ‖ proof (all remaining bytes)
 ```
 
-1. `len(input) > MAX_INPUT = 393,216` ⇒ revert (the only revert; `pqz-ffi` status 1, nothing parsed). The largest
-   input the decoder can pass is 5 + 215,936 + 98,304 = 314,245 B for PQZL (op 7, `M = 8` with the auditor, at
-   `MAX_PROOF`); for PQZH op 7 (`M = 4`, auditor on) only `MAX_INPUT` bounds it (a proof of up to 260,219 B), while an
-   honest proof stays within Ligero's exact bound of 236,196 B, i.e. ≤ 369,193 B of input (P6e D5, P6-ANON S3).
+1. `len(input) > MAX_INPUT` ⇒ revert (the only revert; `pqz-ffi` status 1, nothing parsed). `MAX_INPUT` is the
+   parameter set's (`set.toml` `max_input`, exported by the library as `pqz_max_input()`, which the node reads; plan 5h
+   Task 8d): 524,288 B at `n2304-kmax4096` (the default build) and `n2560-kmax16384`, 393,216 B at `n2048-kmax1024`.
+   At `n2048-kmax1024` the largest input the decoder can pass is 5 + 215,936 + 98,304 = 314,245 B for PQZL (op 7,
+   `M = 8` with the auditor, at `MAX_PROOF`); for PQZH op 7 (`M = 4`, auditor on) only `MAX_INPUT` bounds it (a proof of
+   up to 260,219 B), while an honest proof stays within Ligero's exact bound of 236,196 B, i.e. ≤ 369,193 B of input
+   (P6e D5, P6-ANON S3). The other sets fit every built input under their 524,288 B (largest at the PQZH limit: 411,525
+   B at `n2304-kmax4096`, 493,445 B at `n2560-kmax16384`; per-set table in `pqz-core/params/sets/README.md`).
 2. `len(input) < 5`, or `L > len(input) − 5` ⇒ `0`.
 3. `op = 6`: the input must be exactly `06 00000000` (self-test, below); `op = 6` with any statement or proof byte ⇒ `0`.
 4. `op ∉ {1, …, 5, 7}` ⇒ `0`; op 7 (`R_TXM`) only for a built `(id, M, auditorOn)` ([CTR-PQZ-26](#CTR-PQZ-26)).
@@ -1746,9 +1757,12 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 
 <a id="precompile"></a>
 <a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on the SCaaS testnet**: `PQZ` at
-`0x5caa500000000000000000000000000000000f01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) — and the ML-DSA precompiles
-`MLDSA44` at `0x5caa500000000000000000000000000000000012` and `MLDSA65` at `0x5caa500000000000000000000000000000000013`
-(EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)). The addresses lie above `0xffff`
+`0x000000000000000000000000000000005caa0f01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) — and the ML-DSA precompiles
+`MLDSA44` at `0x000000000000000000000000000000005caa0012` and `MLDSA65` at `0x000000000000000000000000000000005caa0013`
+(EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)). These are the 32-bit form (owner
+2026-10-21, spec `superpowers/specs/2026-10-20-pqz-state-redesign.md` §12 item 9; built in the node plugin and the
+scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` /
+`…0013`, which the SCaaS testnet's live image `2.2.0-pqz3` still serves until the next roll-out. The addresses lie above `0xffff`
 (outside EIP-1352), outside RIP-7587's `0x100`–`0x1ff` and the OP / Taiko / Arbitrum system ranges; the same addresses
 on 22776 (P6f D3, controller proposal, owner may override). They come from a Nethermind **plugin** `Nethermind.Pqz`
 (no Nethermind patch: P6f D1) in the image `scaas/nethermind-pqz:1.39.0-pqz<n>` (built locally, never pushed: D13).
@@ -1784,10 +1798,12 @@ requirement and the follower is only defence in depth. Every node of the SCaaS t
 
 ### 9.1 Precompile `PQZ`
 
-Address `0x5caa500000000000000000000000000000000f01` ([CTR-PQZ-10](#CTR-PQZ-10)).
+Address `0x000000000000000000000000000000005caa0f01` ([CTR-PQZ-10](#CTR-PQZ-10); live `2.2.0-pqz3`: P6f D3's `0x5caa500000000000000000000000000000000f01`).
 
 Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof`; output 32 bytes, `…01` valid, `…00` otherwise; never reverts on
-cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 393,216` bytes (P6e D5: 5 + 83,072 + 262,144 = 345,221 for a PQZH transfer).
+cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT` bytes, the set's limit `pqz_max_input()`: 524,288 at
+`n2304-kmax4096` / `n2560-kmax16384`, 393,216 at `n2048-kmax1024` (P6e D5 there: 5 + 83,072 + 262,144 = 345,221 for a
+PQZH transfer; plan 5h Task 8d: the node reads the library's limit).
 
 | op | Name | `stmt` |
 |---|---|---|
@@ -1807,7 +1823,7 @@ into the transcript.
 
 ### 9.2 Precompiles `MLDSA44` and `MLDSA65`
 
-`MLDSA44` at `0x5caa500000000000000000000000000000000012`, `MLDSA65` at `0x5caa500000000000000000000000000000000013`:
+`MLDSA44` at `0x000000000000000000000000000000005caa0012`, `MLDSA65` at `0x000000000000000000000000000000005caa0013` (live `2.2.0-pqz3`: `0x5caa50…0012` / `…0013`):
 EIP-8355's layout and semantics. Input `pk ‖ sig ‖ msg` (`pk` 1,312 / 1,952 B, `sig` 2,420 / 3,309 B), FIPS 204
 `ML-DSA.Verify(pk, msg, sig)` with the **empty context** (pure ML-DSA); a shorter input than `pk ‖ sig` ⇒ `…00`;
 output always 32 bytes, `…01` / `…00`. The UA signs the 32-byte `pq_msg` with the empty context

@@ -20,6 +20,16 @@ ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-prec
 [pq-zero-knowledge.md §10](../../../docs/contracts/pq-zero-knowledge.md#chain-integration). Logs of the executed runs:
 [`../runs/`](../runs/).
 
+**Scripts at `pqz-8d1` and later target the next image, not the live `2.2.0-pqz3` chain** (plan 5h Task 8d part 1):
+`e2e.py`, `patch-chainspec.py` and the plugin use the 32-bit addresses `0x000000000000000000000000000000005caa0f01` /
+`…5caa0012` / `…5caa0013`, and `e2e.py` / `corpus.py` take the self-test hash, `MAX_INPUT` and the vectors of
+`PQZ_SET` (default `n2304-kmax4096`, the new library's set, whose ids differ from the live rows'). Against the live
+SCaaS testnet (image `pqz2`: P6f D3's `0x5caa50…0f01` / `…0012` / `…0013`, the `n2048-kmax1024` library, the old-id
+schedule rows) run these scripts from the commit of that image (main's `nethermind-2.2` merge); at this head every PQZ / ML-DSA check would fail there,
+which is not a chain fault. The next roll-out needs, besides the image: `engine-pqz.json` rows for the new ids and
+statement lengths (calibration, plan 5h Task 9), a reviewed `SelfTest.ExpectedLibrarySha256`, and a rehearsal on the
+copy (`copy.sh`, `e2e.py probe`; also the first check of the 32-bit addresses on a running node).
+
 **Chain roles** (owner 2026-10-15): **the SCaaS testnet (chain id 7622) is the test chain**, and its data may be reset. **22776 is the future
 mainnet** (owner only; not built). Chain 22776 gets the precompiles only after the production gates — the external
 audit and the G-LIC written licence clearance ([pq-zero-knowledge.md CTR-PQZ-01](../../../docs/contracts/pq-zero-knowledge.md),

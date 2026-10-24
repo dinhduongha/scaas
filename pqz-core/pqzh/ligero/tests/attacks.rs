@@ -479,9 +479,10 @@ fn transfer_forms_cross_rejected() {
 }
 
 /// the EVM fixtures (ligero_export) verify natively: honest and other-statement proofs accepted, negative witnesses
-/// rejected. The fixtures are v3's (smartcontracts/evm/test/vectors/pqzh-ligero; regenerated per set in 8d if ever)
+/// rejected. The fixtures are n2048-kmax1024's under the retired PQZH v1 id (smartcontracts/evm/test/vectors/pqzh-ligero,
+/// with the EVM LigeroVerifier test): regenerated with the contracts in plan 5h Task 8d part 2, ignored until then
 #[test]
-#[cfg_attr(any(feature = "set-n2304-kmax4096", feature = "set-n2560-kmax16384"), ignore = "the EVM fixtures are n2048-kmax1024's")]
+#[ignore = "the EVM fixtures carry the retired PQZH v1 id (contract vectors: plan 5h Task 8d part 2)"]
 fn evm_fixtures() {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../smartcontracts/evm/test/vectors/pqzh-ligero");
     let rd = |n: &str| std::fs::read(format!("{dir}/{n}")).unwrap();

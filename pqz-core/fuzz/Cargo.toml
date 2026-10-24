@@ -17,8 +17,8 @@ crate-type = ["staticlib"]
 pqz-ffi = { path = "../ffi", default-features = false, features = ["fuzz", "pqzl-rust"] }
 
 [features]
-# the parameter set (pqz-core/params/sets/<set>, one per build): the v3 set by default; build.sh: PQZ_SET
-default = ["set-n2048-kmax1024"]
+# the parameter set (pqz-core/params/sets/<set>, one per build): n2304-kmax4096 by default (pqz-ffi's); build.sh: PQZ_SET
+default = ["set-n2304-kmax4096"]
 # BEGIN gen_set.py sets
 set-n2048-kmax1024 = ["pqz-ffi/set-n2048-kmax1024"]
 set-n2304-kmax4096 = ["pqz-ffi/set-n2304-kmax4096"]

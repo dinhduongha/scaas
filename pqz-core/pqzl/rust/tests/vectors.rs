@@ -305,11 +305,13 @@ fn negative_rows_reject() {
     // 367 since PQZL v3 (pqzl-fs3 Task 5): + 16 "retired PQZL v2 proofSystemId" rows, - 3 coder-padding rows (the
     // generator adds those only when the proof's last byte is < 0x80); 368 since B-1 / A-2 (5h Task 8a): the new
     // proofs' last bytes give + 3 - 2 such rows
-    // set n2304-kmax4096: 367 (its proofs' last bytes give one coder-padding row fewer); n2560-kmax16384: 370
+    // set n2304-kmax4096: 367 (its proofs' last bytes give one coder-padding row fewer); n2560-kmax16384: 370.
+    // The set's own ids (5h Task 8d part 1): + 16 "retired PQZL v3 proofSystemId" rows each, and the new proofs' last
+    // bytes move the coder-padding rows: n2048-kmax1024 383 (- 1), n2304-kmax4096 384 (+ 1), n2560-kmax16384 384 (- 2)
     let want = match pqzl::SET {
-        "n2048-kmax1024" => 368,
-        "n2304-kmax4096" => 367,
-        "n2560-kmax16384" => 370,
+        "n2048-kmax1024" => 383,
+        "n2304-kmax4096" => 384,
+        "n2560-kmax16384" => 384,
         "n2816-kmax65536" => 0, // core_only: no vectors
         s => panic!("no negative.json row count recorded for set {s}"),
     };

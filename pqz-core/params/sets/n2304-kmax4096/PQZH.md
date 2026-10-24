@@ -4,7 +4,7 @@ PQZH (Ligero over F_q, `pqz-core/pqzh/ligero`) is the **backup** proof system (o
 chain. This file says what a chain needs before it can accept PQZH proofs at this parameter set. Plan 5h Task 8c
 part 1 and 1b (preset B, owner 2026-10-22), part 2 (the preset in `set.toml` `[pqzh_preset]`, `pqzh_set.rs` generated;
 PQZH in pqz-ffi, the vectors `smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json` and the gate); the PQZH
-`proofSystemId` of this set comes with Task 8d's bump. [`SET.md`](SET.md) is this set's main description.
+`proofSystemId` of this set (Task 8d) is `keccak256("scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2")` = `0xe4bc6d17…885730`. [`SET.md`](SET.md) is this set's main description.
 
 Sources: `[crate]` = the Rust crate built with `--features set-n2304-kmax4096` (`pqz-core/pqzh/ligero/runs/c8b-a-*`,
 preset B); `[model]` = `python3 -I pqz-core/pqzh/ligero/ligero_params.py --set n2304-kmax4096`
@@ -50,8 +50,9 @@ Honest proofs: seeds 0 and 1 of the crate's test inputs (`runs/c8b-a-kat.jsonl`)
 - `MAX_PROOF_PQZH` = 262,144 (owner 2026-10-21: stays): **every built form fits**, the debit bounds by 9,096–10,536 B
   (THE preset's were 1,640–3,092 B above it; see "Fallbacks").
 - `MAX_INPUT`: pqz-stmt's at this set is 524,288 (512 KiB, plan 5h Task 8c part 2; decisions O8): every built form
-  fits (largest input 402,429 at the bound, 411,525 at `MAX_PROOF_PQZH`). The node's limit (`pqz_ffi.h`, Nethermind)
-  stays 393,216 until Task 8d: op 7 M = 4 with the auditor (402,429) does not fit it.
+  fits (largest input 402,429 at the bound, 411,525 at `MAX_PROOF_PQZH`). The node takes its limit from the library
+  (`pqz_max_input()`, 524,288 at this set) since Task 8d part 1; before, its 393,216 did not fit op 7 M = 4 with the
+  auditor (402,429).
 
 ## One transaction's calldata (EIP-7976) [model]
 
@@ -97,8 +98,8 @@ THE preset [counted, spike B], whose rows are 1.3× v3's. Calibrate before any c
 
 ## Summary: what a chain needs for PQZH at this set
 
-1. A PQZH `proofSystemId` for this set in the precompile build and the chainspec's schedule rows (Task 8d), with
-   `G_op` calibrated at this set (not done).
+1. The set's PQZH `proofSystemId` (built in Task 8d part 1) in the chainspec's schedule rows, with `G_op` calibrated
+   at this set (not done).
 2. Debits (op 1 / 2 / 7): a per-transaction regular-gas cap ≥ ≈ 17.8 M (2^24 is not enough). Proof sizes need
    nothing: with preset B every bound is under `MAX_PROOF_PQZH` 262,144.
 3. Registration and disclosures: work under 2^24.
@@ -125,4 +126,4 @@ set-specific preset); neither is in a production build. Analysis, numbers and th
 - **C — raise `MAX_PROOF_PQZH` for this set** (documented only, no code): with THE preset, `MAX_PROOF_PQZH`
   ≥ 265,236 (the op 7 M = 4 auditor bound) as a per-set constant (pqz-stmt, the precompile, the node, the docs that
   quote 262,144). Against the owner's 2026-10-21 ruling that the limit stays, so only when neither B nor A is
-  acceptable. Inputs: op 7 M = 4 auditor 414,617 B (above today's `MAX_INPUT` 393,216; fits 512 KiB).
+  acceptable. Inputs: op 7 M = 4 auditor 414,617 B (above `n2048-kmax1024`'s `MAX_INPUT` 393,216; fits 512 KiB).

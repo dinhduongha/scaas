@@ -1,0 +1,81 @@
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  46660 B  prove+verify 2.18 s
+pqzl TRANSFER0          proof  46343 B  prove+verify 2.54 s
+pqzl BURN               proof  45823 B  prove+verify 2.80 s
+pqzl REFRESH            proof  45828 B  prove+verify 1.91 s
+pqzl REGISTER           proof  30283 B  prove+verify 1.20 s
+pqzl DISCLOSE-SENDER    proof  30827 B  prove+verify 0.66 s
+pqzl DISCLOSE-RECEIVER  proof  31452 B  prove+verify 0.72 s
+pqzl DISCLOSE-AUDITOR   proof  31459 B  prove+verify 1.57 s
+pqzh TRANSFER           proof 249176 B  prove+verify 1.78 s
+pqzh TRANSFER0          proof 248088 B  prove+verify 1.92 s
+pqzh BURN               proof 248984 B  prove+verify 1.76 s
+pqzh REFRESH            proof 248248 B  prove+verify 1.74 s
+pqzh REGISTER           proof 204136 B  prove+verify 1.03 s
+pqzh DISCLOSE-SENDER    proof 205288 B  prove+verify 1.03 s
+pqzh DISCLOSE-RECEIVER  proof 204552 B  prove+verify 1.00 s
+pqzh DISCLOSE-AUDITOR   proof 204680 B  prove+verify 0.99 s
+pqzl M1-on              proof  46661 B  prove+verify 1.77 s
+pqzh M1-on              proof 247928 B  prove+verify 1.73 s
+pqzl M2-on              proof  47522 B  prove+verify 2.37 s
+pqzh M2-on              proof 247506 B  prove+verify 1.74 s
+pqzl M4-on              proof  50744 B  prove+verify 3.13 s
+pqzh M4-on              proof 249944 B  prove+verify 1.87 s
+pqzl M8-on              proof  67587 B  prove+verify 4.75 s
+pqzl M1-off             proof  46346 B  prove+verify 1.28 s
+pqzh M1-off             proof 248920 B  prove+verify 1.82 s
+pqzl M2-off             proof  46814 B  prove+verify 1.36 s
+pqzh M2-off             proof 248728 B  prove+verify 1.77 s
+pqzl M4-off             proof  47844 B  prove+verify 3.93 s
+pqzh M4-off             proof 249704 B  prove+verify 1.75 s
+pqzl M8-off             proof  64590 B  prove+verify 3.26 s
+pqzl M2-off-two-real    proof  46807 B  prove+verify 1.90 s
+pqzh M2-off-two-real    proof 248856 B  prove+verify 1.74 s
+pqzl M4-off-decoys      proof  47851 B  prove+verify 1.62 s
+pqzh M4-off-decoys      proof 249928 B  prove+verify 1.73 s
+pqzl M8-on-boundary     proof  67585 B  prove+verify 4.83 s
+proofs: 69.7 s
+negative: 775 rows (467 decoder, 308 verifier): 92.3 s
+worst case: 109.8 s
+total: 117.3 s
+self-test proofs compiled into this binary differ from the REGISTER rows: rebuild, then --check
+wrote matrix.json 1087 B
+wrote cbd.json 4286 B
+wrote keygen.json 2930 B
+wrote enc.json 7897 B
+wrote statement_transfer.json 341563 B
+wrote statement_burn.json 114974 B
+wrote statement_refresh.json 114898 B
+wrote statement_register.json 38517 B
+wrote statement_disclose.json 228452 B
+wrote statement_transfer_multi.json 3209707 B
+wrote proof_pqzl.json 2309364 B
+wrote proof_pqzh.json 8011139 B
+wrote negative.json 263190 B
+wrote selftest.json 2356 B
+wrote worstcase_noise.json 3978739 B
+wrote fee0.json 3039041 B
+pqz-vectors: 16 files, 21668140 B
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1/pqz-core/ffi/target/n2304-kmax4096/release/pqz-vectors"
+	User time (seconds): 115.08
+	System time (seconds): 2.00
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:57.29
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 337240
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 878338
+	Voluntary context switches: 9335
+	Involuntary context switches: 1598
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 42416
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

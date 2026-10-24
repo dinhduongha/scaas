@@ -55,8 +55,8 @@ impl Honest {
     }
 }
 
-/// The ids of this build: PQZL, and PQZH where it is compiled in (the parameter set n2048-kmax1024 until plan 5h Task
-/// 8c).
+/// The ids of this build's parameter set (plan 5h Task 8d: one PQZL and one PQZH id per set): PQZL, and PQZH where it
+/// is compiled in.
 pub fn ids() -> Vec<Word> {
     if PQZH { vec![PQZL_ID, PQZH_ID] } else { vec![PQZL_ID] }
 }

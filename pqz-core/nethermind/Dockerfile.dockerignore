@@ -6,6 +6,7 @@
 !pqz-core/pqzl/src
 !pqz-core/pqzl/lazer
 !pqz-core/pqzl/params
+!pqz-core/params/sets
 !pqz-core/pqzl/rust
 !pqz-core/stmt
 !pqz-core/pqzh/ligero
@@ -17,8 +18,8 @@
 !pqz-core/nethermind/Calibrate
 !pqz-core/nethermind/NOTICE-pqz.txt
 !pqz-core/nethermind/bin/corpus.jsonl
-!smartcontracts/vectors/pqz/proof_pqzl.json
-!smartcontracts/vectors/pqz/proof_pqzh.json
+!smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzl.json
+!smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json
 !smartcontracts/vectors/ua/pq_external.json
 **/target
 **/bin/Release

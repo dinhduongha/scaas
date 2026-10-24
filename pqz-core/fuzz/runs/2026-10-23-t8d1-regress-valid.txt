@@ -1,0 +1,49 @@
+# 5h Task 8d part 1 (2026-10-23): regress/valid/fixture-disclose-receiver-rnd33 re-proved under the set n2048-kmax1024's own
+# PQZL id (sha1 34ce7b8b15cd56f6d1674793476a3b20d1e1203a, 62166 B; the same statement with the id word replaced, the same rnd32)
+
+Why: the old input carried the retired v3 id (0x8079d65b...16baef), refused as an unknown id since 8d; seeds.py lists
+regress/valid/* as honest inputs of the n2048-kmax1024 set.
+
+## run (scratch crate depending on pqz-ffi --no-default-features --features prove,pqzl-rust,set-n2048-kmax1024; under scripts/capped)
+rerun on the new file: set n2048-kmax1024, PQZL id [19, fa, d5, 0a]
+rerun on the new file: old: precompile word Ok(01)
+
+## first run (old input -> new input)
+set n2048-kmax1024, PQZL id [19, fa, d5, 0a]
+old: precompile word Ok(00)
+old id word = retired v3: true
+statement = fixture::cases DiscloseReceiver, id word aside: true
+new: proof 28977 B, input 62166 B, precompile word 01, generic verifier Ok(true)
+re-proved again: byte-equal true
+
+## source (src/main.rs; Cargo.toml: pqz-ffi = { path = "pqz-core/ffi", default-features = false, features = ["prove", "pqzl-rust", "set-n2048-kmax1024"] }, toolchain 1.97.1)
+// Task 8d part 1 (5h, 2026-10-23): re-prove pqz-core/fuzz/regress/valid/fixture-disclose-receiver-rnd33 under the set
+// n2048-kmax1024's own PQZL id: the same statement except the id word (fixture::cases(PQZL_ID) DiscloseReceiver), same
+// rnd32 = 0x33..
+// Usage: refix <old input> <new input out>
+use pqz_ffi::*;
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let old = std::fs::read(&a[1]).unwrap();
+    println!("set {}, PQZL id {:02x?}", stmt::SET, &PQZL_ID[..4]);
+    println!("old: precompile word {:02x?}", precompile(&old).map(|w| w[31]));
+    let n = u32::from_be_bytes(old[1..5].try_into().unwrap()) as usize;
+    let c = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::DiscloseReceiver).unwrap();
+    let mut o = old[5..5 + n].to_vec();
+    println!("old id word = retired v3: {}", o[32..64] == hex("8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef")[..]);
+    o[32..64].copy_from_slice(&PQZL_ID);
+    println!("statement = fixture::cases DiscloseReceiver, id word aside: {}", o == c.stmt);
+    assert_eq!(o, c.stmt);
+    let p = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    let mut x = vec![c.op()];
+    x.extend_from_slice(&(c.stmt.len() as u32).to_be_bytes());
+    x.extend_from_slice(&c.stmt);
+    x.extend_from_slice(&p);
+    let w = precompile(&x).unwrap();
+    println!("new: proof {} B, input {} B, precompile word {:02x}, generic verifier {:?}", p.len(), x.len(), w[31], pqzl::verify_generic(c.op(), &c.stmt, &p));
+    assert_eq!(w[31], 1);
+    let p2 = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    println!("re-proved again: byte-equal {}", p2 == p);
+    std::fs::write(&a[2], &x).unwrap();
+}
+fn hex(s: &str) -> Vec<u8> { (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect() }

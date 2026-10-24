@@ -1,13 +1,15 @@
 # PQZ parameter set n2048-kmax1024: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
-# derived from it; README.md beside this directory). The frozen v3 set.
-description = "the frozen v3 set (proofSystemId .../mlwe-d64k32-q42l4/v3)"
+# derived from it; README.md beside this directory). The frozen set (the v3 parameters).
+description = "the frozen set (the parameters of the retired v3 proofSystemId; own ids since plan 5h Task 8d)"
 n = 2048
 k_max = 1024
 q = 4398046510889                 # 2^42 - 215
 pqz_delta = 1.00366               # the v3 specs' (pqzl/params/*.sage); no kmlwe_min: LaZer's default hiding rank (33)
 pqzh = true                       # PQZH (Ligero over this q) is built for this set
 frozen = true                     # its codegen headers are the record: make.sh codegen only checks they reproduce
-max_input = 393216                # pqz-stmt MAX_INPUT (D5), the frozen set's (the contracts' until plan 5h Task 8d)
+max_input = 393216                # pqz-stmt MAX_INPUT (D5), the frozen set's
+pqzl_id = "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4"   # PQZL proofSystemId = keccak256(label) (plan 5h Task 8d, the one bump: controller proposal, owner may override)
+pqzh_id = "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2"   # PQZH proofSystemId (the same bump; field and [pqzh_preset] named)
 
 [pqzh_preset]                     # PQZH's Ligero preset: gen_set.py writes pqzh_set.rs (+ q - 1's factors, generator, non-square)
 description = "THE preset (owner 2026-10-14 (a), the D3 id), soundness depends on n, k only (ligero_params.py)"

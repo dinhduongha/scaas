@@ -6,6 +6,13 @@ the frozen reference values in `expected-results.json`; it exits 0 only if every
 reviewers and auditors who want to confirm the numbers in the [pqz-core README](../README.md) (§5), and for the team
 before a release. For the terms used here (relation, form, op, SV, `proofSystemId`) see the glossary in that README.
 
+**Stale since plan 5h Task 8a (2026-10-21); refresh before use.** `expected-results.json` predates the B-1 / A-2
+transcript change (8a) and the per-set `proofSystemId`s (8d), so the proof hashes no longer match. Since 8d part 1
+`pqz-ffi`'s default parameter set is `n2304-kmax4096`: the package's `pqz-ffi` stages build that set (the C smoke test
+`tests/c_abi.c` gets its `max_input`, 524,288), while the rest of the package exports `PQZ_SET=n2048-kmax1024`. A
+refresh pins one set everywhere (`--no-default-features --features pqzl-rust,set-<set>` on every `pqz-ffi` cargo call)
+and regenerates `expected-results.json`.
+
 **What it covers** (scope: both systems, owner 2026-10-14, replacing "PQZL only" of 2026-10-13):
 
 - **PQZL**, the LaZer fork in C: the six relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, `R_TX0`; the generic

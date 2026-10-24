@@ -1,19 +1,19 @@
-reg_stmt 20576 B c=46545b8b21e476e1 rust=46545b8b21e476e1 equal
+reg_stmt 20576 B c=409fbd02436b6da0 rust=409fbd02436b6da0 equal
 reg_wit 7680 B c=fbc640e424c2da09 rust=fbc640e424c2da09 equal
-tx_stmt 103552 B c=63ce572c786e454f rust=63ce572c786e454f equal
+tx_stmt 103552 B c=c99fd90e54b5711e rust=c99fd90e54b5711e equal
 tx_wit 15488 B c=fb7767196dca26f2 rust=fb7767196dca26f2 equal
-burn_stmt 62336 B c=bd43d87c0ad6f43d rust=bd43d87c0ad6f43d equal
+burn_stmt 62336 B c=01b3e37bf4b8dcd3 rust=01b3e37bf4b8dcd3 equal
 burn_wit 15408 B c=b2de92bab07eb949 rust=b2de92bab07eb949 equal
-ds_stmt 41376 B c=c1de7abcc328c2e3 rust=c1de7abcc328c2e3 equal
+ds_stmt 41376 B c=f3743195a9eefc02 rust=f3743195a9eefc02 equal
 ds_wit 7712 B c=5c3d2321f2212fca rust=5c3d2321f2212fca equal
-dr_stmt 41376 B c=d192a7bd93f1b8a1 rust=d192a7bd93f1b8a1 equal
+dr_stmt 41376 B c=589cd95b5d8cf9c7 rust=589cd95b5d8cf9c7 equal
 dr_wit 7680 B c=96500c4a00f91e00 rust=96500c4a00f91e00 equal
-tx0_stmt 82944 B c=5ccc85ad33dccbee rust=5ccc85ad33dccbee equal
+tx0_stmt 82944 B c=bf6a59f2ea581833 rust=bf6a59f2ea581833 equal
 tx0_wit 15456 B c=fc3fdf19709e029b rust=fc3fdf19709e029b equal
-reg_stmt 20576 B REGISTER id=0a47a768 as-PQZL=rejected rebuilt=equal ok
-tx_stmt 103552 B TRANSFER id=0a47a768 as-PQZL=rejected rebuilt=equal ok
-burn_stmt 62336 B BURN id=0a47a768 as-PQZL=rejected rebuilt=equal ok
-ds_stmt 41376 B DISCLOSE-SENDER id=0a47a768 as-PQZL=rejected rebuilt=equal ok
-dr_stmt 41376 B DISCLOSE-RECEIVER id=0a47a768 as-PQZL=rejected rebuilt=equal ok
-tx0_stmt 82944 B TRANSFER id=0a47a768 as-PQZL=rejected rebuilt=equal ok
+reg_stmt 20576 B REGISTER id=e83ad1da as-PQZL=rejected rebuilt=equal ok
+tx_stmt 103552 B TRANSFER id=e83ad1da as-PQZL=rejected rebuilt=equal ok
+burn_stmt 62336 B BURN id=e83ad1da as-PQZL=rejected rebuilt=equal ok
+ds_stmt 41376 B DISCLOSE-SENDER id=e83ad1da as-PQZL=rejected rebuilt=equal ok
+dr_stmt 41376 B DISCLOSE-RECEIVER id=e83ad1da as-PQZL=rejected rebuilt=equal ok
+tx0_stmt 82944 B TRANSFER id=e83ad1da as-PQZL=rejected rebuilt=equal ok
 kat_stmt: ok

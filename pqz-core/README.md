@@ -168,7 +168,11 @@ prover-side zero-knowledge fixes, D-2 and D-3).
 The prices live in the chainspec section `engine.Pqz` (a new price, or a new op as op 7 was, takes effect as a new schedule at a future timestamp). Status 4 (a node
 fault) makes the node log `PQZ-NODE-FAULT` and exit with code 120; it never turns into a verdict. Live run: probes and e2e pass
 (`nethermind/runs/2026-10-16-live.txt`); roll-out and rollback: [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md).
-Chain 22776 (the future mainnet) gets the same addresses only after the audit and the licence clearance.
+The plugin of the next image moves the three addresses to the 32-bit form `0x000000000000000000000000000000005caa0f01`
+/ `…5caa0012` / `…5caa0013` and takes the input limit from the library (`pqz_max_input()`, 524,288 B at the default set
+`n2304-kmax4096`) (spec 2026-10-20 §12 items 7 and 9; built in plan 5h Task 8d part 1, not yet rolled out; the chainspec rows
+for the new sets' ids need the calibration of plan 5h Task 9). Chain 22776 (the future mainnet) gets the same addresses only
+after the audit and the licence clearance.
 
 ## 4. Statement forms, ids, limits
 
@@ -215,12 +219,15 @@ layout — statements, objects, both proof formats, the precompile input and `OP
   - in the browser (wasm32), PQZL proves up to M = 8 with the Rust core (`pqz-ffi`'s default backend, 117 MiB at
     M = 8, run `d6`); the C core proves only M ≤ 4 there (memory, §5.4).
 
-The two proof system ids (a change to either proof system needs a new id):
+The proof system ids (a change to either proof system needs a new id): since plan 5h Task 8d one PQZL and one PQZH id
+per parameter set, from the set's `set.toml` labels (all sets: [params/sets/README.md](params/sets/README.md#proofsystemids-per-set-plan-5h-task-8d-part-1)):
 
-| `proofSystemId` | keccak256 of | Value | Frozen at |
+| `proofSystemId` | keccak256 of | Value | Status |
 |---|---|---|---|
-| PQZL v3 | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3` | `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | vectors `8af584b` (branch `pqzl-fs3`); its final gate before the merge |
-| PQZH | `scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1` | `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | gate B |
+| PQZL, `n2304-kmax4096` (default) | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4` | `0x15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a` | plan 5h Task 8d part 1 |
+| PQZH, `n2304-kmax4096` | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2` | `0xe4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730` | plan 5h Task 8d part 1 |
+| PQZL v3 (retired by 8d) | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3` | `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | was frozen at vectors `8af584b` (branch `pqzl-fs3`) |
+| PQZH v1 (retired by 8d) | `scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1` | `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | was frozen at gate B |
 
 Retired: PQZL v2 (`…/v2`, `0x2e07e6ed…798c2f`, frozen at gate A), **forgeable** (lazer#28), removed from the accepted
 set and from `pqz-stmt` on 2026-10-19. The SCaaS testnet still runs it (image `pqz2`) until the v3 roll-out resets the chain
@@ -230,10 +237,10 @@ Size and time limits:
 
 | Limit (enforced by `pqz-stmt`) | Value |
 |---|---|
-| `MAX_INPUT` (a larger input makes the call revert) | 393,216 B |
+| `MAX_INPUT` (a larger input makes the call revert) | the set's, `pqz_max_input()`: 524,288 B at `n2304-kmax4096` (the default build) and `n2560-kmax16384`, 393,216 B at `n2048-kmax1024` |
 | `MAX_PROOF`, PQZL | 98,304 B |
-| `MAX_PROOF`, PQZH | 262,144 B (exact maximum at the proven preset: 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor) |
-| Largest possible input | PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`) |
+| `MAX_PROOF`, PQZH | the set's: 262,144 B (`n2560-kmax16384`: 327,680 B); at `n2048-kmax1024`'s proven preset the exact maximum is 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor |
+| Largest possible input | `n2048-kmax1024`: PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`). Other sets: [params/sets/README.md](params/sets/README.md#pqzh-per-set-preset-and-limits-plan-5h-task-8c-part-2) |
 | Proof length | `1 ≤ len(proof) ≤ MAX_PROOF(id)` |
 | Verify time | **≤ 60 ms at p99** on the chain host, and also in wasm32 (owner decision 2026-10-14) |
 

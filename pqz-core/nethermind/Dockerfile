@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # P6f D13: scaas/nethermind-pqz:2.2.0-pqz<n> = the pinned Nethermind 2.2.0 image + /nethermind/plugins/{Nethermind.Pqz.dll,
 # libpqz_ffi.so, NOTICE-pqz.txt, NOTICE-pqz-core.txt, LICENSE-lazer.txt}. Built locally by build-image.sh (context = the repo root), never pushed. Targets:
-#   ffi   - libpqz_ffi.so (release, default features: no prove, no test-hooks)
+#   ffi   - libpqz_ffi.so (release, default features: the set n2304-kmax4096, no prove, no test-hooks)
 #   node  - the node image (default)
 #   calib - the node image + /opt/pqz-calibrate (Calibrate.dll, fresh proofs, the corpus): Task 6 only, never run as a node
 # BuildKit runs outside scripts/capped, so the stages cap themselves: cargo -j 2, dotnet -m:2.
@@ -28,12 +28,15 @@ COPY --from=ffisrc /pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
 COPY --from=ffisrc /pqz-core/pqzl/src pqz-core/pqzl/src
 COPY --from=ffisrc /pqz-core/pqzl/lazer pqz-core/pqzl/lazer
 COPY --from=ffisrc /pqz-core/pqzl/params pqz-core/pqzl/params
+# the parameter sets (the crates #[path]-include the chosen set's generated files; pqz-ffi's default n2304-kmax4096)
+COPY --from=ffisrc /pqz-core/params/sets pqz-core/params/sets
 # pqz-ffi's default PQZL backend (CTR-PQZ-09, 2026-10-18): the Rust crate pqzl; the C sources above stay for pqzl-c
 COPY --from=ffisrc /pqz-core/pqzl/rust pqz-core/pqzl/rust
 COPY --from=ffisrc /pqz-core/stmt pqz-core/stmt
 COPY --from=ffisrc /pqz-core/pqzh/ligero pqz-core/pqzh/ligero
 COPY --from=ffisrc /pqz-core/ffi pqz-core/ffi
-COPY --from=ffisrc /smartcontracts/vectors/pqz/proof_pqzl.json /smartcontracts/vectors/pqz/proof_pqzh.json smartcontracts/vectors/pqz/
+# the self-test's compiled-in REGISTER proofs (ffi/build.rs): the default set's vectors
+COPY --from=ffisrc /smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzl.json /smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json smartcontracts/vectors/pqz/n2304-kmax4096/
 
 FROM rust AS ffi
 RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/ \
@@ -71,7 +74,7 @@ COPY pqz-core/pqzl/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
 RUN echo "${FFI_SHA256}  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
 LABEL scaas.pqz.commit="${COMMIT}" \
       scaas.pqz.ffi.sha256="${FFI_SHA256}" \
-      scaas.pqz.selftest="ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205" \
+      scaas.pqz.selftest="23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0" \
       org.opencontainers.image.title="scaas/nethermind-pqz" \
       org.opencontainers.image.description="Nethermind 2.2.0 + the SCaaS PQZ / ML-DSA precompile plugin (local only, never pushed)"
 

@@ -31,9 +31,9 @@ sys.path.insert(0, os.path.join(ROOT, "smartcontracts/vectors/pqz"))
 from eth import _mul, address, keccak256, legacy_tx, sign  # noqa: E402
 import pqz_kat as K  # noqa: E402
 
-PQZ = "0x5caa500000000000000000000000000000000f01"
-ML44 = "0x5caa500000000000000000000000000000000012"
-ML65 = "0x5caa500000000000000000000000000000000013"
+PQZ = "0x000000000000000000000000000000005caa0f01"
+ML44 = "0x000000000000000000000000000000005caa0012"
+ML65 = "0x000000000000000000000000000000005caa0013"
 PQZL_ID = K.PQZL_ID
 SCALE, MAXS, FEE = 10_000, 1 << 40, 3
 MIN_DECOY, DEC_FEE = 1, 2  # the tokens' minDecoyFee (plan 5h fee ruling) and the decoyFee this run puts in op 7 payloads

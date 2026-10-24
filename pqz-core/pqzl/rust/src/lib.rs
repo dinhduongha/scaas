@@ -86,12 +86,9 @@ pub const TXM_MAX_LEGS: usize = if cfg!(feature = "oversize") { 16 } else { 8 };
 /// takes; the C core keeps 4, CTR-PQZ-09). Feature `wasm-m8` (bench builds only) lifts it to `TXM_MAX_LEGS` (16 with
 /// `oversize`)
 pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } else { 8 };
-/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3") (CTR-PQZ-09; v3: the Fiat-Shamir transcript absorbs z3, z4 and h,
-/// P6-FS, lazer#28; v2 is retired, forgeable)
-pub const PROOF_SYSTEM_ID: [u8; 32] = [
-    0x80, 0x79, 0xd6, 0x5b, 0x5e, 0x5c, 0x15, 0xe3, 0x30, 0xf7, 0xe6, 0x5c, 0x87, 0x57, 0x76, 0xdf, 0xc1, 0xb0, 0xf6, 0xc9,
-    0x3c, 0xed, 0x90, 0xc0, 0x45, 0xe8, 0x38, 0x65, 0xd1, 0x16, 0xba, 0xef,
-];
+/// the set's PQZL proofSystemId: keccak256 of its set.toml label `pqzl_id` (gen_set.py, rust/set.rs; plan 5h Task 8d:
+/// one id per set, `.../mlwe-d64k<k>-q<log2q>l4/v4`; v3 and v2 are retired, CTR-PQZ-09). The core only hashes it
+pub const PROOF_SYSTEM_ID: [u8; 32] = params::set::PQZL_ID;
 
 /// The C core's return codes (`pqz_rt.h`, D3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

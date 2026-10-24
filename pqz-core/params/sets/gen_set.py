@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """PQZ parameter sets (owner 2026-10-21: one directory per set, chosen at compile time, one set per library build; one
 input file per set, one generic generator). From sets/<set>/set.toml (n, k_max, q, pqz_delta, kmlwe_min, description,
-approval, max_input, [pqzh_preset]: the only place these values are written) this writes every derived file of the set:
+approval, max_input, [pqzh_preset], the proofSystemId labels pqzl_id / pqzh_id: the only place these values are written) this writes every derived file of the set:
 
   <rel>_params.sage   the LaZer codegen specs of the 14 PQZL relations (reg, tx, tx0, burn, ds, dr, R_TXM M = 2 / 4 / 8
                       with and without the auditor, G = ceil(M / 4) randomness groups, and the bench-only M = 16)
   pqz_set.h           every parameter-dependent constant of the C core outside LaZer's codegen headers
   rust/set.rs         the same for the Rust crates (pqzl, pqz-stmt, pqzh-ligero; `#[path]` per cargo feature set-<set>);
                       a set with pqz-stmt (not core_only) also MAX_PROOF_PQZH and MAX_INPUT (plan 5h Task 8c part 2)
+                      and PQZH_ID; every set PQZL_ID (plan 5h Task 8d: keccak256 of set.toml's labels, one id per
+                      set and proof system, checked distinct across the sets and from the retired ids)
   set.json            every derived constant the Python tools need (pqz_kat.py, e_s0_set.py)
   PqzSet.sol          the Solidity constants of the set (make.sh <set> sol compiles it; PQZ_SOL_INSTALL=1 copies it to
                       smartcontracts/evm/src/pqz/)
@@ -44,6 +46,74 @@ from budget import budget  # noqa: E402
 V3 = "n2048-kmax1024"  # the frozen v3 set: the contracts', pqz-stmt's and pqz-ffi's default until plan 5h Task 8d
 SOL_EVM = os.path.join(REPO, "smartcontracts", "evm", "src", "pqz", "PqzSet.sol")
 U64 = ("Q", "ZETA", "IROOT", "ZETA3", "INV2", "INVZ", "INVI", "INVZ3", "R64", "MUX")
+
+
+# ---------------------------------------------------------------- proofSystemIds (plan 5h Task 8d: the one bump)
+def keccak256(data):
+    """Keccak-256 (rate 136, pad 0x01; not hashlib's SHA3-256): selfcheck() pins it to the retired v3 id"""
+    rc = [1, 0x8082, 0x800000000000808A, 0x8000000080008000, 0x808B, 0x80000001, 0x8000000080008081, 0x8000000000008009,
+          0x8A, 0x88, 0x80008009, 0x8000000A, 0x8000808B, 0x800000000000008B, 0x8000000000008089, 0x8000000000008003,
+          0x8000000000008002, 0x8000000000000080, 0x800A, 0x800000008000000A, 0x8000000080008081, 0x8000000000008080,
+          0x80000001, 0x8000000080008008]
+    rot = [[0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61], [28, 55, 25, 21, 56], [27, 20, 39, 8, 14]]
+    m64 = 2**64 - 1
+    msg = bytearray(data) + b"\x01"
+    msg += bytes(-len(msg) % 136)
+    msg[-1] |= 0x80
+    a = [[0] * 5 for _ in range(5)]
+    for off in range(0, len(msg), 136):
+        for i in range(17):
+            a[i % 5][i // 5] ^= int.from_bytes(msg[off + 8 * i:off + 8 * i + 8], "little")
+        for r in rc:
+            c = [a[x][0] ^ a[x][1] ^ a[x][2] ^ a[x][3] ^ a[x][4] for x in range(5)]
+            d = [c[x - 1] ^ (((c[(x + 1) % 5] << 1) | (c[(x + 1) % 5] >> 63)) & m64) for x in range(5)]
+            a = [[a[x][y] ^ d[x] for y in range(5)] for x in range(5)]
+            b = [[0] * 5 for _ in range(5)]
+            for x in range(5):
+                for y in range(5):
+                    n = rot[x][y]
+                    b[y][(2 * x + 3 * y) % 5] = ((a[x][y] << n) | (a[x][y] >> (64 - n))) & m64 if n else a[x][y]
+            a = [[b[x][y] ^ (~b[(x + 1) % 5][y] & b[(x + 2) % 5][y]) for y in range(5)] for x in range(5)]
+            a[0][0] ^= r
+    return b"".join(a[i % 5][i // 5].to_bytes(8, "little") for i in range(4))
+
+
+# the retired ids (decisions CTR-PQZ-09): never a set's id; pqz-stmt's tests refuse them
+RETIRED = {"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1": None,
+           "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",
+           "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",
+           "scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
+           "scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1": "aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304"}
+
+
+def ids(name):
+    """{"pqzl": (label, id), "pqzh": (label, id)} of the set (no pqzh for a core_only set): keccak256 of set.toml's
+    pqzl_id / pqzh_id labels. A label names the parameters it fixes (PQZL d64k<k>-q<log2q>, PQZH fq<log2q>-n<n>k<k>t<t>
+    of [pqzh_preset]), so a label that no longer matches its set fails here"""
+    t = load(name)
+    k, L = t["n"] // 64, (t["q"] - 1).bit_length()
+    out = {"pqzl": t["pqzl_id"]}
+    assert f"/mlwe-d64k{k}-q{L}l4/" in out["pqzl"], f"{name}: pqzl_id {out['pqzl']} does not name d64k{k}-q{L}"
+    if not t.get("core_only"):
+        out["pqzh"] = t["pqzh_id"]
+        p = t["pqzh_preset"]
+        want = f"/ligero-fq{L}-n{p['n']}k{p['k']}t{p['t']}-"
+        assert want in out["pqzh"], f"{name}: pqzh_id {out['pqzh']} does not name {want}"
+    return {s: (lab, keccak256(lab.encode())) for s, lab in out.items()}
+
+
+def check_ids():
+    """every id of every set distinct, none retired (a proof of one set never verifies under another set's id)"""
+    seen = {}
+    for s in sets():
+        for sys_, (lab, h) in ids(s).items():
+            assert lab not in RETIRED and h.hex() not in RETIRED.values(), f"{s}: {sys_} id {lab} is retired"
+            assert h not in seen, f"{s}: {sys_} id {lab} = {seen[h]}'s"
+            seen[h] = f"{s} {sys_}"
+
+
+def c_bytes(h):
+    return "{ " + ", ".join(f"0x{x:02x}" for x in h) + " }"
 
 
 def sets():
@@ -176,6 +246,12 @@ def c_text(name):
     for k, v, s, doc in cs:
         val = s if s is not None else (f"{v}ULL" if k in U64 else f"((int64_t){v})" if k == "DELTA" else str(v))
         out.append(f"#define PQZ_{k} {val} /* {doc} */")
+    i = ids(name)
+    out.append(f"/* proofSystemId (statement bytes 32..63) = keccak256(\"{i['pqzl'][0]}\"): the cores only hash it */")
+    out.append(f"#define PQZ_PROOF_SYSTEM_ID {c_bytes(i['pqzl'][1])}")
+    if "pqzh" in i:
+        out.append(f"/* PQZH's proofSystemId = keccak256(\"{i['pqzh'][0]}\") (the C side writes it only in test tools) */")
+        out.append(f"#define PQZ_PQZH_ID {c_bytes(i['pqzh'][1])}")
     out += ["", "#endif", ""]
     return "\n".join(out)
 
@@ -196,6 +272,10 @@ def rs_text(name):
         out.append(f"/// MAX_PROOF(PQZH id): the precompile's and the PQZH prover's proof limit (set.toml [pqzh_preset] max_proof)\n"
                    f"pub(crate) const MAX_PROOF_PQZH: usize = {mp:_};")
         out.append(f"/// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)\npub(crate) const MAX_INPUT: usize = {mi:_};")
+    for sys_, (lab, h) in ids(name).items():
+        out.append(f"/// {sys_.upper()}'s proofSystemId label (set.toml {sys_}_id)\npub(crate) const {sys_.upper()}_LABEL: &str = \"{lab}\";")
+        out.append(f"/// {sys_.upper()}'s proofSystemId: keccak256({sys_.upper()}_LABEL)\n"
+                   f"pub(crate) const {sys_.upper()}_ID: [u8; 32] = [{', '.join(f'0x{x:02x}' for x in h)}];")
     out.append("")
     return "\n".join(out)
 
@@ -281,6 +361,8 @@ def json_text(name):
         "pack_bits": math.ceil(math.log2(t["q"])), "lengths": lengths(c["k"])}
     if not t.get("core_only"):
         j["max_proof_pqzh"], j["max_input"] = limits(name)
+    for sys_, (lab, h) in ids(name).items():
+        j[f"{sys_}_label"], j[f"{sys_}_id"] = lab, h.hex()
     if t.get("pqzh"):
         p = t["pqzh_preset"]
         j["pqzh_preset"] = {"radices": p["radices"], "n": p["n"], "k": p["k"], "t": p["t"], "ell": p["k"] - p["t"] - 1}
@@ -314,6 +396,8 @@ def sol_text(name):
            "library PqzSet {", f'    string internal constant NAME = "{name}";']
     for k, v, doc in rows:
         out.append(f"    /// {doc}\n    uint256 internal constant {k} = {u(v)};")
+    for sys_, (lab, h) in ids(name).items():
+        out.append(f"    /// {sys_.upper()}'s proofSystemId: keccak256(\"{lab}\")\n    bytes32 internal constant {sys_.upper()}_ID = 0x{h.hex()};")
     out += ["", "    /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f",
             "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / 4) (pqz-stmt multi_len)",
             "    function multiLen(uint256 m, bool aud) internal pure returns (uint256) {",
@@ -365,7 +449,10 @@ def wiring():
         "// Generated by pqz-core/params/sets/gen_set.py: do not edit. The parameter set of this build (owner 2026-10-21:\n"
         "// pqz-core/params/sets/<set>/, one per build, cargo feature set-<set>; the same rust/set.rs as the PQZL crate).\n"
         f"{mods}const _: () = assert!({cnt} <= 1, \"pqz-stmt: at most one parameter set feature set-<set> (none: {V3})\");\n"
-        f"/// the sets this crate builds for (set.toml without core_only)\npub const SETS: &[&str] = &[{', '.join(repr(s).replace(chr(39), chr(34)) for s in rs)}];\n")
+        f"/// the sets this crate builds for (set.toml without core_only)\npub const SETS: &[&str] = &[{', '.join(repr(s).replace(chr(39), chr(34)) for s in rs)}];\n"
+        "/// every set's proofSystemIds (set, system, id; core_only sets too): the tests refuse each other set's\n"
+        "#[cfg(test)]\npub(crate) const ALL_IDS: &[(&str, &str, Word)] = &[\n"
+        + "".join(f'    ("{s}", "{k}", hex32("{h.hex()}")),\n' for s in ss for k, (_, h) in ids(s).items()) + "];\n")
     return out
 
 
@@ -416,6 +503,7 @@ def main(argv):
     if bad:
         print(f"gen_set.py: no set.toml for {bad}; sets: {sets()}")
         return 2
+    check_ids()
     fs = files(names)
     diff = []
     for p, t in fs.items():
@@ -437,6 +525,10 @@ def main(argv):
 
 
 def selfcheck():
+    # Keccak-256, not SHA3-256: the retired v3 / PQZH v1 ids (pqz_kat.py's keccak256, decisions CTR-PQZ-09)
+    for lab, h in RETIRED.items():
+        assert h is None or keccak256(lab.encode()).hex() == h, lab
+    assert keccak256(b"").hex() == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
     # the v3 set is main's frozen constants (pqz_ntt.c / pqz_rel.c / pqz_keys.c of main)
     c = {k: v for k, v, s, d in consts(V3)[2]}
     assert (c["K"], c["Q"], c["LOG2Q"], c["DELTA"], c["MBITS"], c["CBITS"], c["EBITS"]) == (32, 4398046510889, 42, 2**26 - 1, 14, 11, 25)

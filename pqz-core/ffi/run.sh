@@ -16,13 +16,13 @@ L=runs/$1 X=$TD/run
 mkdir -p runs "$X"
 rm -f "$X/fill.txt"
 OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
-# PQZ_SET: the parameter set (pqz-core/params/sets/<set>, one per build; default the v3 set n2048-kmax1024, pqz-ffi's
-# default feature); another set or an explicit backend: --no-default-features --features pqzl-<backend>,set-<set>
-S=${PQZ_SET:-n2048-kmax1024}
+# PQZ_SET: the parameter set (pqz-core/params/sets/<set>, one per build; default n2304-kmax4096, pqz-ffi's default
+# feature since plan 5h Task 8d); another set or an explicit backend: --no-default-features --features pqzl-<backend>,set-<set>
+S=${PQZ_SET:-n2304-kmax4096}
 [ -f "../params/sets/$S/pqz_set.h" ] || { echo "PQZ_SET=$S: no pqz-core/params/sets/$S" >&2; exit 2; }
 case ${PQZL:-} in
   rust | c) BF="--no-default-features --features pqzl-$PQZL,set-$S" ;;
-  "") if [ "$S" = n2048-kmax1024 ]; then BF=; else BF="--no-default-features --features pqzl-rust,set-$S"; fi ;;
+  "") if [ "$S" = n2304-kmax4096 ]; then BF=; else BF="--no-default-features --features pqzl-rust,set-$S"; fi ;;
   *) echo "PQZL=$PQZL: rust or c" >&2; exit 2 ;;
 esac
 
@@ -62,8 +62,8 @@ ffi_native() {
   echo "strings /gmp|mpfr|hexl/i: $(strings -a "$SO" | grep -ciE 'gmp|mpfr|hexl')"
   echo "libm-style imports: $(nm -D --undefined-only "$SO" | awk '{print $2}' | grep -cE '^(sin|cos|tan|exp|exp2|log|log2|log10|pow|sqrt|floor|ceil|round|fmod|ldexp|frexp)f?(@|$)')"
   echo "# C smoke test against pqz_ffi.h"
-  # the set's precompile input limit (set.json max_input: n2048-kmax1024 = PQZ_FFI_MAX_INPUT, 524,288 at the others;
-  # plan 5h Task 8c part 2, the node's in 8d)
+  # the set's precompile input limit (set.json max_input: 393,216 at n2048-kmax1024, 524,288 at the others): c_abi
+  # checks the library's pqz_max_input () against it
   MI=$(python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))['max_input'])" "../params/sets/$S/set.json")
   OUT clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT="$MI" -o "$X/c_abi" tests/c_abi.c -L"$TD/release" -lpqz_ffi -Wl,-rpath,"$TD/release"
   OUT "$X/c_abi"

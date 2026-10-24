@@ -27,5 +27,7 @@
 #define PQZ_BARX 112 /* Barrett input range: x < 2^BARX = 2^(2 log2q + 4) > 16 q^2 (a basemul column sum) */
 #define PQZ_MUX 288230376151716976ULL /* floor(2^BARX / q) < 2^(log2q + 5) */
 #define PQZ_SV_NP 5 /* 30-bit CRT primes of the specialised verifier (pqz_sv.c): P / 2 above its largest sum */
+/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4"): the cores only hash it */
+#define PQZ_PROOF_SYSTEM_ID { 0x9d, 0x23, 0xa0, 0xde, 0x64, 0x03, 0xd1, 0xa3, 0x7a, 0xef, 0xcf, 0x61, 0x82, 0x1f, 0xcf, 0xb4, 0x6d, 0xc5, 0x30, 0x21, 0xd1, 0x2a, 0x92, 0x32, 0x46, 0x7b, 0x57, 0x0a, 0xc3, 0xbd, 0x53, 0xa3 }
 
 #endif
