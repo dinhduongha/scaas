@@ -3,7 +3,7 @@
  "description": "K_MAX 65,536, owner 2026-10-24: full PQZL set for customers (no PQZH)",
  "approval": {
   "date": "2026-10-24",
-  "what": "owner 2026-10-21: restore the earlier K_MAX ~ 65k set into params/sets/ in case a customer wants it later (core only); owner 2026-10-24: a full PQZL set, deployable for a customer like the other sets (pqz-stmt, precompile, vectors, gate; contracts in 8d part 2); PQZH not possible at its q"
+  "what": "owner 2026-10-21: restore the earlier K_MAX ~ 65k set into params/sets/ in case a customer wants it later (core only); owner 2026-10-24: a full PQZL set, deployable for a customer like the other sets (pqz-stmt, precompile, vectors, gate; contracts in 8d part 2); no PQZH at this set (none of the current Ligero radices divides q - 1)"
  },
  "core_only": false,
  "pqzh": false,

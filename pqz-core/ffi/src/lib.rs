@@ -33,11 +33,12 @@ pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Wor
 
 // the parameter set (owner 2026-10-21: one per build): feature `set-<set>`, forwarded to pqz-stmt (which refuses to
 // build without exactly one) and pqzl; `stmt::SET` names it
-/// whether PQZH (Ligero) is compiled in: every set whose set.json says pqzh (plan 5h Task 8c part 2: all three sets
-/// with pqz-ffi); without it a PQZH-id input decodes
-/// and its verdict is `…00` (no verifier for that id in this build), its prover refuses
+/// whether PQZH (Ligero) is compiled in: every set whose set.json says pqzh (plan 5h Task 8c part 2: three of the four
+/// sets with pqz-ffi; not n2816-kmax65536). A set without PQZH knows no PQZH id (pqz-stmt `HAS_PQZH`): its zero-word
+/// `PQZH_ID` is refused by the decoder, so the verdict is `…00`, and its prover refuses
 pub const PQZH: bool = cfg!(feature = "pqzh");
-// a set without PQZH (pqz-stmt HAS_PQZH false, n2816-kmax65536: no Ligero domain at its q) has no PQZH build
+// a set without PQZH (pqz-stmt HAS_PQZH false; n2816-kmax65536: none of the current Ligero radices divides its q - 1)
+// has no PQZH build
 const _: () = assert!(!PQZH || pqz_stmt::HAS_PQZH, "feature pqzh at a set without PQZH (set.toml pqzh = false)");
 
 #[cfg(feature = "prove")]

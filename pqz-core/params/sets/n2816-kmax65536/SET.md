@@ -5,8 +5,7 @@ owner choice 2026-10-19, superseded by [`n2560-kmax16384`](../n2560-kmax16384/SE
 `params/sets/` on 2026-10-21 "in case a customer wants it" as a core-only set; **owner 2026-10-24: a full PQZL set,
 deployable for a customer like the other sets** ("it must be done fully, for customers if they need it"): pqz-stmt, the precompile
 (`pqz-ffi`, the Nethermind plugin), vectors (`smartcontracts/vectors/pqz/n2816-kmax65536/`) and the full gate since
-plan 5h Task 8d part 1b; its contracts follow in 8d part 2 with the other sets. **No PQZH, and none possible at this q**
-(below). Input: [`set.toml`](set.toml) (`core_only = false`, `pqzh = false`); every other file here is derived (see
+plan 5h Task 8d part 1b; its contracts follow in 8d part 2 with the other sets. **No PQZH** (owner ruling; why: below). Input: [`set.toml`](set.toml) (`core_only = false`, `pqzh = false`); every other file here is derived (see
 [`../README.md`](../README.md)).
 
 | Item | Value |
@@ -28,9 +27,9 @@ plan 5h Task 8d part 1b; its contracts follow in 8d part 2 with the other sets. 
 | stored-blob packing width | ⌈log2 q⌉ = 54 bits (`PqzSet.sol` `PACK_BITS`; the contracts are wired in 8d part 2) |
 | limits | `MAX_PROOF_PQZL` 98,304 B (every set's): largest proof 79,199 B (R_TXM M = 8 with the auditor, the vectors), margin 19,105 B; `MAX_INPUT` 524,288 B (`set.toml` `max_input`, 512 KiB like the other non-frozen sets; `pqz_max_input()` gives it to the node): largest input at the limit 5 + 295,808 + 98,304 = 394,117 B (R_TXM M = 8 with the auditor), above the frozen set's 393,216 |
 | self-test | `OP_SELFTEST` = `0x0aa1dfe2…491882` (`selftest.json`: results 1, 0, 0, 0, no Ligero FFT); the Nethermind plugin built with `-p:PqzSet=n2816-kmax65536` pins it (`SelfTest.cs`) |
-| PQZH | **not possible at this q**: q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has a smooth part of only 24, so no Ligero evaluation domain exists (PQZH's domains need small radices of q − 1: 19 / 43 / 431 at the other sets' q's, also 7 / 17 at `n2304-kmax4096`'s). PQZH here would need another q, i.e. another set (not in scope). pqz-ffi is built without PQZH (feature `pqzh` off; a compile-time check refuses it at this set), the vectors are PQZL only, the gate skips Ligero and the cross-checks |
+| PQZH | **none at this set** (owner ruling 2026-10-24): q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has no power-of-two part beyond 2^3 and a smooth part of only 24, none of the radices the current Ligero presets use (19 / 43 / 431; 7 / 17 at `n2304-kmax4096`). F_q^* does have subgroups of order 1,789 and 42,936 (= 24 · 1,789), so PQZH here would need a radix-1,789 FFT step and a new preset at a different rate (k = 1,789, n = 42,936: rate 1/24 against ≈ 1/40 today, more column queries, a fresh soundness and size analysis) — unexplored work, not in scope — or another q, i.e. another set. pqz-ffi is built without PQZH (feature `pqzh` off; a compile-time check refuses it at this set), the vectors are PQZL only, the gate skips Ligero and the cross-checks |
 
-Object sizes: pk 22,528 B, ciphertext 22,656 B, op 1 statement 113,792 B (auditor on).
+Object sizes: pk 22,528 B, ciphertext 22,656 B, R_TX statement 113,792 B (auditor on).
 
 ## What a chain needs for this set
 
@@ -55,11 +54,11 @@ Measured where marked; the rest [estimate]. Nothing here was timed (owner rule: 
 6. **Security margins:** encryption uSVP β 520, 80 worst-case hints β 496.79; proof MSIS / MLWE β ≥ 450 per spec
    (`e-s1.txt`); exactness and Fiat–Shamir rounds MET (`e-s0.txt`); worst-case noise margin 1.02 against 2^30
    (`worstcase_noise.json` `margin_2_30`), mint margin 3.08.
-7. **No PQZH backup** at this set (above): a chain that wants the hash-based backup proof system needs another set.
+7. **No PQZH backup** at this set (above): a chain that wants the hash-based backup proof system needs another set (or the unexplored radix-1,789 preset, not in scope).
 
-Proof sizes (`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`, byte-identical C = Rust = wasm32): TRANSFER
-54,843 B, TRANSFER0 54,531, BURN 54,012, REFRESH 53,983, REGISTER 35,407, DISCLOSE-SENDER 35,924, -RECEIVER 36,728,
--AUDITOR 36,742; R_TXM with the auditor M = 1 / 2 / 4 / 8: 54,844 / 57,746 / 59,508 / 79,196 B (the M = 8 boundary row
+Proof sizes (`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`, byte-identical C = Rust = wasm32): R_TX
+54,843 B, R_TX0 54,531, R_BURN 54,012 (burn) / 53,983 (refresh), R_REG 35,407, R_DS 35,924, R_DR 36,728 (receiver) /
+36,742 (auditor); R_TXM with the auditor M = 1 / 2 / 4 / 8: 54,844 / 57,746 / 59,508 / 79,196 B (the M = 8 boundary row
 79,199 B), without 54,506 / 55,024 / 58,148 / 76,350 B (all below `MAX_PROOF_PQZL` 98,304). Heap: C prover arena peaks
 538 MB (R_TX) … 1,259 MB (R_TXM M = 8 with the auditor: needs `PQZ_ARENA_MB=2048`).
 

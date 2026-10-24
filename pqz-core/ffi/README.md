@@ -43,7 +43,7 @@ flowchart LR
 | Status | Meaning | `out` | What the node does |
 |---|---|---|---|
 | 0 | ok | `out[0..32]` holds `…01`, `…00` or the self-test hash | uses the answer |
-| 1 | revert: the input is over the set's `MAX_INPUT` (`pqz_max_input()`: 524,288 B at `n2304-kmax4096`, the default build, and `n2560-kmax16384`; 393,216 B at `n2048-kmax1024`); the node takes its limit from the same function (plan 5h Task 8d) | zeroed | the call reverts |
+| 1 | revert: the input is over the set's `MAX_INPUT` (`pqz_max_input()`: 524,288 B at `n2304-kmax4096`, the default build, `n2560-kmax16384` and `n2816-kmax65536` (largest input there 394,117 B, R_TXM M = 8 with the auditor at `MAX_PROOF`); 393,216 B at `n2048-kmax1024`); the node takes its limit from the same function (plan 5h Task 8d) | zeroed | the call reverts |
 | 2 | bad arguments (`input` NULL with `len` > 0, `out` NULL, or `out_len` < 32) | nothing written | — |
 | 3 | a panic in the decode / verify logic was caught. It is caused by the input, so every node hits it on the same input | `…00` (invalid) | treats the input as invalid and logs it |
 | 4 | node fault: a fault of this node, not of the input (see "Faults" below) | untouched, no result | stops block processing; never records the input as invalid |
@@ -153,7 +153,7 @@ kat_digest = keccak256(A digest ‖ keccak256(pk) ‖ keccak256(u ‖ v) ‖ M �
   `proof_{pqzl,pqzh}.json` (`smartcontracts/vectors/pqz/<set>/`; `n2048-kmax1024`: `smartcontracts/vectors/pqz/`), read by `build.rs` (plan D9: no copy), proved with
   `rnd32 = 0x53…`; the statement is `opTag ‖ id ‖ keccak256("SCAAS-PQZ-SELFTEST-V1") ‖ pk`.
 - It is computed once per process. The same hash from either backend; one per parameter set (`n2304-kmax4096`, the
-  default build: `23d7a1db…`; `n2048-kmax1024`: `ed910a2c…`; `n2560-kmax16384`: `167c772e…`). It covers verdicts, not
+  default build: `23d7a1db…`; `n2048-kmax1024`: `ed910a2c…`; `n2560-kmax16384`: `167c772e…`; `n2816-kmax65536`: `0aa1dfe2…`, PQZL only, so its PQZH flags are 0 and there is no Ligero FFT). It covers verdicts, not
   proof bytes, so the `proofSystemId` bump of plan 5h Task 8d left each set's hash unchanged.
 - After a prover change, regenerate the vectors (from the repository root:
   `scripts/capped pqz-core/ffi/vectors/run.sh <label> write`), which rebuilds the crate; the test `selftest_vectors`

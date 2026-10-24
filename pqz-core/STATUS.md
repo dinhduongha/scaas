@@ -43,7 +43,7 @@ Terms used throughout:
   since 8c part 2, the `proofSystemId` label `…/v3` until 8d), `n2560-kmax16384` (shippable for customer chains: its own vectors under
   `smartcontracts/vectors/pqz/n2560-kmax16384/`, PQZH since 8c part 2 with `MAX_PROOF_PQZH` 327,680) and `n2816-kmax65536` (research record; core only until
   owner 2026-10-24 made it a full PQZL set for customers in plan 5h Task 8d part 1b: pqz-stmt, precompile, its own vectors under
-  `smartcontracts/vectors/pqz/n2816-kmax65536/`, gate; no PQZH, impossible at its q). Details: the sets' `SET.md` and [`params/sets/README.md`](params/sets/README.md).
+  `smartcontracts/vectors/pqz/n2816-kmax65536/`, gate; no PQZH: none of the current Ligero radices divides its q − 1, a radix-1,789 preset is unexplored and not in scope). Details: the sets' `SET.md` and [`params/sets/README.md`](params/sets/README.md).
 
 - **PQZL v2 is forgeable; PQZL v3 fixes it on branch `pqzl-fs3`, not merged yet.** The whole-code review of
   2026-10-19 found that LaZer's tbox absorbs `z3`, `z4` and `h` after the challenges that check them

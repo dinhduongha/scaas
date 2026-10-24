@@ -120,8 +120,9 @@ const fn nib(c: u8) -> u8 {
 pub const PQZL_ID: Word = set::PQZL_ID;
 /// the string `PQZL_ID` hashes (a test of pqzh-ligero recomputes the keccak256)
 pub const PQZL_LABEL: &str = set::PQZL_LABEL;
-/// whether this set has PQZH (set.toml `pqzh`; `n2816-kmax65536` has none: its q − 1 has no Ligero domain). Without
-/// it this codec knows no PQZH id: `PQZH_ID` is the zero word and refused like any unknown id (`Reject::ProofSystemId`)
+/// whether this set has PQZH (set.toml `pqzh`; `n2816-kmax65536` has none: none of the current Ligero radices divides
+/// its q − 1). Without it this codec knows no PQZH id: `PQZH_ID` is the zero word and refused like any unknown id
+/// (`Reject::ProofSystemId`)
 pub const HAS_PQZH: bool = set::PQZH;
 /// PQZH's id at this set: keccak256 of set.toml's `pqzh_id` (`.../ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2`);
 /// the zero word at a set without PQZH (`HAS_PQZH`), never accepted there

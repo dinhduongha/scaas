@@ -312,7 +312,9 @@ fn negative_rows_reject() {
         "n2048-kmax1024" => 383,
         "n2304-kmax4096" => 384,
         "n2560-kmax16384" => 384,
-        // full PQZL set since 5h Task 8d part 1b, PQZL only: + 16 "retired PQZH v1 proofSystemId" rows on its PQZL inputs
+        // full PQZL set since 5h Task 8d part 1b, PQZL only. Against n2560-kmax16384's 384: + 16 "retired PQZH v1
+        // proofSystemId" rows on its PQZL inputs, + 1 coder-padding row ("coder padding bit 7 set after the final 1-bit",
+        // 15 here, 14 there: the proofs' last bytes) = 401
         "n2816-kmax65536" => 401,
         s => panic!("no negative.json row count recorded for set {s}"),
     };

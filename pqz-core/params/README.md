@@ -11,7 +11,7 @@ part 2 (every set whose `set.toml` says `pqzh`; the precompile limits `MAX_PROOF
 | [`n2048-kmax1024`](sets/n2048-kmax1024/SET.md) | 2048 | 1,024 | 2^42 − 215 | the frozen set (contracts, vectors at `smartcontracts/vectors/pqz/` until 8d) |
 | [`n2304-kmax4096`](sets/n2304-kmax4096/SET.md) | 2304 | 4,096 | 61,275,424,977,257 | the default, owner 2026-10-21; the `pqzl` crate's default |
 | [`n2560-kmax16384`](sets/n2560-kmax16384/SET.md) | 2560 | 16,384 | 2^50 − 42,310,535 | shippable (customer chains may choose it): its own vectors, PQZH since 8c part 2 (`MAX_PROOF_PQZH` 327,680) |
-| [`n2816-kmax65536`](sets/n2816-kmax65536/SET.md) | 2816 | 65,536 | 2^54 − 327 | research record; a full PQZL set for customers since plan 5h Task 8d part 1b (owner 2026-10-24): pqz-stmt, precompile, vectors, gate; no PQZH (no Ligero domain at its q) |
+| [`n2816-kmax65536`](sets/n2816-kmax65536/SET.md) | 2816 | 65,536 | 2^54 − 327 | research record; a full PQZL set for customers since plan 5h Task 8d part 1b (owner 2026-10-24): pqz-stmt, precompile, vectors, gate; no PQZH (none of the current Ligero radices divides q − 1; a radix-1,789 preset is unexplored, not in scope) |
 
 ## Adding a set
 

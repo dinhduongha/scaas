@@ -27,7 +27,10 @@ public static class SelfTest
     /// this line and refuses an image whose freshly built library differs. A library change = a reviewed new value
     /// here. Today the library of image <c>2.2.0-pqz4</c> (2026-10-25, plan 5h Task 8d part 1, set n2304-kmax4096, built
     /// from 54c7c88e; reviewed: exports pqz_max_input / pqz_precompile only, no test hooks, no GMP / MPFR / HEXL,
-    /// pqz_max_input() = 524,288).</summary>
+    /// pqz_max_input() = 524,288).
+    /// This value is the default set's library only: a plugin built with another <c>-p:PqzSet</c> (e.g.
+    /// <c>n2816-kmax65536</c>) passes the tests but refuses to start a node until that set's library has its own reviewed
+    /// hash here (customer-image work, plan 5h Task 8d part 1b review M4; not done).</summary>
     public const string ExpectedLibrarySha256 = "0894d1916b4e2f8270c5bac6e7f9a87a19137e51c6f7f93263d05b9756e64772";
     public static ReadOnlySpan<byte> Input => [6, 0, 0, 0, 0];
 

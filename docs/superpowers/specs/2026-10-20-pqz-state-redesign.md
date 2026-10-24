@@ -878,8 +878,10 @@ Each ruling, with its content and status:
     **8d part 1b (owner 2026-10-24):** `n2816-kmax65536` is a full PQZL set for customers (`core_only = false`,
     `pqzh = false`, `MAX_INPUT` 524,288): pqz-stmt (no PQZH id at a set without PQZH: `HAS_PQZH`, its `PQZH_ID` the
     zero word, refused), pqz-ffi without PQZH, vectors `smartcontracts/vectors/pqz/n2816-kmax65536/`, the Nethermind
-    plugin per set (`-p:PqzSet`), the full gate; its contracts in 8d part 2. PQZH is impossible at its q (q − 1 =
-    2^3 · 3 · 1,789 · 419,563,967,521, smooth part 24: no Ligero evaluation domain).
+    plugin per set (`-p:PqzSet`), the full gate; its contracts in 8d part 2. No PQZH at this set (owner ruling): q − 1 =
+    2^3 · 3 · 1,789 · 419,563,967,521 has no power-of-two part beyond 2^3 (smooth part 24), none of the current
+    Ligero radices; F_q^* has subgroups of order 1,789 and 42,936, so PQZH would need a radix-1,789 FFT step and a new
+    preset at a different rate — unexplored work, not in scope.
 
 Superseded by this section (kept above as the record): the 16k set n = 2560 / `K_MAX` 16,384 / q = 2^50 − 42,310,535
 (§6, §6.4's id label `mlwe-d64k40-q50l4`, the k / q of the new label follow set (a) in 8d), O9's G = 1 for M = 8 on

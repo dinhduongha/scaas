@@ -155,7 +155,10 @@ set's `selftest.json` hash) and an unknown set does not compile. The tests of an
 --offline --no-default-features --features pqz-ffi/set-<set>`, copied to a directory of its own as `libpqz_ffi.so`) and
 its corpus (`PQZ_SET=<set> corpus.py bin/corpus-<set>.jsonl`), then `PQZ_SET=<set> PQZ_FFI_DIR=<abs dir> PQZ_CORPUS=<abs
 file> PQZ_HOOKS_DIR=<abs dir> scripts/capped pqz-core/nethermind/run-tests.sh` (log `runs/<date>-test-<set>.txt`; the
-script passes `-p:PqzSet=$PQZ_SET`). The image (`Dockerfile`, `build-image.sh`) builds the default set only.
+script passes `-p:PqzSet=$PQZ_SET`). Tests only, so far: `SelfTest.ExpectedLibrarySha256` is the reviewed library of
+the default set, so a plugin built for another set refuses to start a node until that set's library has its own reviewed
+hash (customer-image work, not done). The image (`Dockerfile`, `build-image.sh`) and `fresh-proofs` (it iterates both
+ids) build the default set only.
 
 **The reviewed library (review W-G, 2026-10-19).** `build-image.sh` reads `ExpectedLibrarySha256` from
 `Nethermind.Pqz/SelfTest.cs`, builds `libpqz_ffi.so` (the `ffi-export` target) and stops with `FAIL the built library is

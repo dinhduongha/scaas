@@ -109,7 +109,8 @@ fn lengths_and_constants() {
     }
     assert!(345_221 <= MAX_INPUT);
     assert_eq!(max_proof(&PQZL_ID), Some(98_304));
-    // PQZH at every set but n2816-kmax65536 (its q - 1 has no Ligero domain): there PQZH_ID is the zero word, refused
+    // PQZH at every set but n2816-kmax65536 (none of the current Ligero radices divides its q - 1; owner ruling: no PQZH):
+    // there PQZH_ID is the zero word, refused
     assert_eq!(HAS_PQZH, SET != "n2816-kmax65536");
     if HAS_PQZH {
         assert_eq!(max_proof(&PQZH_ID), Some(if SET == "n2560-kmax16384" { 327_680 } else { 262_144 }));
@@ -340,7 +341,7 @@ fn precompile_input() {
         assert!(decode_input(&input(OP_TRANSFER, &h, &big)).is_ok()); // PQZH bound is larger
     }
     let max = vec![1; max_proof(&ID2).unwrap()];
-    assert!(decode_input(&input(OP_TRANSFER, &h, &max)).is_ok()); // the largest op 1 input (v3: 345,221 B)
+    assert!(decode_input(&input(OP_TRANSFER, &h, &max)).is_ok()); // the largest R_TX input (n2048-kmax1024: 345,221 B)
     assert_eq!(decode_input(&input(OP_TRANSFER, &h, &[max.as_slice(), &[1]].concat())).err(), Some(Reject::ProofLength));
     let mut over = input(OP_TRANSFER, &h, &max);
     over.resize(MAX_INPUT + 1, 0);
