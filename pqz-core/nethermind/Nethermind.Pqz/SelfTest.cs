@@ -17,7 +17,7 @@ public static class SelfTest
 #elif PQZ_SET_N2560_KMAX16384
     public const string Set = "n2560-kmax16384", ExpectedHash = "167c772ef4d0911d60d6b3d2fad256902e1be2dd4a8f0aa9d01d3b3ed8bb45e7";
 #elif PQZ_SET_N2816_KMAX65536
-    public const string Set = "n2816-kmax65536", ExpectedHash = "N2816_SELFTEST_HASH";
+    public const string Set = "n2816-kmax65536", ExpectedHash = "0aa1dfe291b81f0c8efa859405c9f14cdc0fa744584b4d5b30bd0a6472491882";
 #else
 #error "unknown PqzSet (MSBuild -p:PqzSet=<set>, a directory of pqz-core/params/sets)"
 #endif
@@ -25,8 +25,10 @@ public static class SelfTest
     /// <summary>Review W-G (2026-10-19): the SHA-256 of the reviewed <c>libpqz_ffi.so</c> (the Dockerfile's <c>ffi</c>
     /// stage, a reproducible build). The plugin refuses to start with any other library; <c>build-image.sh</c> reads
     /// this line and refuses an image whose freshly built library differs. A library change = a reviewed new value
-    /// here. Today the library of image <c>pqz3</c> (2026-10-19); plan Task 13 sets <c>pqz4</c>'s.</summary>
-    public const string ExpectedLibrarySha256 = "16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf";
+    /// here. Today the library of image <c>2.2.0-pqz4</c> (2026-10-25, plan 5h Task 8d part 1, set n2304-kmax4096, built
+    /// from 54c7c88e; reviewed: exports pqz_max_input / pqz_precompile only, no test hooks, no GMP / MPFR / HEXL,
+    /// pqz_max_input() = 524,288).</summary>
+    public const string ExpectedLibrarySha256 = "0894d1916b4e2f8270c5bac6e7f9a87a19137e51c6f7f93263d05b9756e64772";
     public static ReadOnlySpan<byte> Input => [6, 0, 0, 0, 0];
 
     public static string Run()

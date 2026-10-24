@@ -17,7 +17,7 @@ ready for others; SCaaS itself does not use it"** — stealth (2B), sender ring 
 stay here as described alternatives. The controller then recorded that mode 2A′ **is the multi-recipient transfer the
 owner decided for classical Zether on 2026-10-08** (Z1–Z13, CTR-ZTH-37 … 43), so it is planned as the PQZ
 multi-recipient transfer `R_TXM`; the owner accepted that design (sender visible, one proof per transfer, verified by
-the one PQZ precompile for PQZL and PQZH, live on chain 7622 with P6f) and corrected the earlier "prepared, unused":
+the one PQZ precompile for PQZL and PQZH, live on the SCaaS testnet with P6f) and corrected the earlier "prepared, unused":
 **the multi-recipient transfer is used by SCaaS as the normal PQZ transfer**; decoys are a client choice. This version keeps the original §1–§4 (the §2 table marked as the 2026-10-13
 sender + receiver estimate) and adds:
 
@@ -80,7 +80,7 @@ Lether's ≈ 51 KB vs our measured 42.7 KB, the rest scales the measured PQZL fi
 | Gas (EIP-7623 calldata floor + precompile at ≈ 0.12 M gas / ms) | ≈ 4 M | ≈ 7–8 M | ≈ 10–12 M | ≈ 19–23 M, over the EIP-7825 cap 16,777,216 |
 
 - **Practical ring size ≈ 8** under the current limits. Packing keys and ciphertexts at 42 bits per coefficient
-  instead of 8 bytes cuts the input by ≈ 35 % and allows N ≈ 11–12 [estimate]. Chains we run (7622, 22776) could raise
+  instead of 8 bytes cuts the input by ≈ 35 % and allows N ≈ 11–12 [estimate]. Chains we run (SCaaS testnet, 22776) could raise
   `MAX_INPUT` and the gas cap.
 - An anonymity set of 8–12 is small next to Zcash's whole note set; ring choice must avoid patterns that single the
   sender out (decoy selection is a wallet problem).
@@ -258,7 +258,7 @@ Z1–Z13, folded into zether.md CTR-ZTH-37 … 43, measured on the merged spike)
 proof, decoys receive an encryption of 0 (Z1), no sender ring (Z2). pq-zero-knowledge.md left multi-recipient transfers
 unruled for PQZ (CTR-PQZ-22 *Open*). So mode 2A′ is planned as **the PQZ multi-recipient transfer `R_TXM`**, following
 the Z-decisions where they carry over; §8.6 lists where PQZ differs. The owner's scope (2026-10-14): build only this
-mode, for PQZL and PQZH, measured, verified by the precompile on 7622, and used by SCaaS as the normal transfer; **both
+mode, for PQZL and PQZH, measured, verified by the precompile on the SCaaS testnet, and used by SCaaS as the normal transfer; **both
 paths stay**, as classical Z7 + Z8: one proof for M ≥ 1 recipients (`R_TXM`, op 7), and the single-recipient
 `R_TX` / `R_TX0` (op 1) unchanged — many separate transfers, each with its own proof and nonce, as before. `R_TXM` with
 M = 1 is the same relation as `R_TX` (the codegen gives the identical 44,638 B; the body bytes coincide), so it reuses
@@ -360,7 +360,7 @@ conservative [measured].
 
 **Measured (2026-10-17):** the built shapes were measured end to end — proof sizes, prove and verify times native and
 wasm32 (the package's `--multi-bench` in Docker, `pqz-core/artifact/README.md`), the precompile path (`pqz-core/README.md`
-§5.3) and the calibrated precompile gas `G_7` on chain 7622 (3.63–6.18 M PQZL, 3.86–4.94 M PQZH,
+§5.3) and the calibrated precompile gas `G_7` on the SCaaS testnet (3.63–6.18 M PQZL, 3.86–4.94 M PQZH,
 [pq-zero-knowledge.md §9.3](../contracts/pq-zero-knowledge.md#gas)). The estimates below predate them and are kept as
 the record of the sizing.
 
@@ -444,7 +444,7 @@ receive multi-recipient credits — rejected once multi became the normal transf
   victims, so the attacker's cost per victim falls to ≈ T7 / (M_max) (≈ 0.4–0.9 G per victim at M_max = 4–8),
   about the victim's own recovery cost. Nothing in the relation can tell a griefing leg from a real one, and with
   multi as the normal transfer an opt-in would block real payments; the plan keeps T7's controls (permissioned
-  submitters, node rate limits; gas is capacity on chain 7622), an optional per-leg fee and a wallet policy that
+  submitters, node rate limits; gas is capacity on the SCaaS testnet), an optional per-leg fee and a wallet policy that
   spreads decoy load.
 
 ### 8.5 State, receiver, auditor, disclosure
@@ -577,7 +577,7 @@ cover them): no new relation. `RECEIVER_X` disclosures work unchanged with `pk =
 | Auditor | per-leg copies: amounts and real recipients on chain | amount and `sid`; the link is an off-chain `R_REG` proof over `pk′ − pk_R` |
 
 The first version of this note recommended building both, stealth first. **Owner 2026-10-14: build only 2A′**, for
-both proof systems, as the normal PQZ transfer (used by SCaaS, verified by the precompile on 7622); 2B, 1 and 3 stay
+both proof systems, as the normal PQZ transfer (used by SCaaS, verified by the precompile on the SCaaS testnet); 2B, 1 and 3 stay
 described here.
 
 ## 11. What leaks anyway
@@ -601,5 +601,5 @@ described here.
 Design and sizing only; nothing built or measured beyond the codegen sizing runs and the estimate scripts. Next: the
 plan `2026-10-14-p6-anon.md` (after P6e's `pqz-stmt` and `pqz-ffi` merge): estimator evidence (80 hints), `R_TXM` in
 PQZL and Ligero for M = 2, 4, 8, 16, measured, the fitting sizes in P6e's frozen set and the P6-PUB package, op 7 live
-in the 7622 precompile. Contracts (P6g), wallet decoy policy (P6h), keeper roll-overs (P6i) follow from the specification the plan
+in the SCaaS testnet precompile. Contracts (P6g), wallet decoy policy (P6h), keeper roll-overs (P6i) follow from the specification the plan
 writes.

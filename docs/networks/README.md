@@ -30,11 +30,11 @@ The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its o
 (Stellar and Pi Network), Move (Sui and Aptos), GRAM (formerly TON), Solana. Planned (owner 2026-10-17): NEAR,
 Algorand, and TRON as an EVM profile (Base is already a draft EVM profile).
 
-<p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the private chain 7622 (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), GRAM (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built. Planned, no code yet: TRON (an EVM profile on TVM), NEAR and Algorand. GRAM is the former TON."></p>
+<p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the SCaaS testnet (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), GRAM (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built. Planned, no code yet: TRON (an EVM profile on TVM), NEAR and Algorand. GRAM is the former TON."></p>
 
 | Family | Chains | Meta-tx mechanism | Subject signature | Relayer lane key | Mesh v1 | Status |
 |---|---|---|---|---|---|---|
-| EVM | Gnosis (100), Celo (42220), private chain 7622, anvil 31337 | contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (`SmartKeyAccount`: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | BUILT |
+| EVM | Gnosis (100), Celo (42220), SCaaS testnet, anvil 31337 | contract-level EIP-712 (`ERC20MetaTx`) | ECDSA secp256k1 (EOA) / ERC-1271 (`SmartKeyAccount`: P-256 WebAuthn, secp256k1) | secp256k1 `m/44'/60'/0'/0/i` | yes | BUILT |
 | Hedera | 295 / 296 / 297 / 298 | the same Solidity on HSCS through a JSON-RPC relay | ECDSA (EVM alias) or ED25519 through HIP-632 `isAuthorizedRaw` | secp256k1 `m/44'/3030'/0'/0/i` | yes (family `hedera`) | BUILT |
 | Cosmos | CosmWasm chains (`cosmos:<chain-id>`) | contract-level `Relay{payload, auth}` | ADR-036 secp256k1 (Keplr/Leap `signArbitrary`) / WebAuthn P-256 | secp256k1 `m/44'/118'/0'/0/i` | yes | BUILT |
 | Soroban | Stellar (`pubnet`, `testnet`, `standalone`), Pi Network (`pi-mainnet`, `pi-testnet`) | native Soroban authorization (`SorobanAddressCredentials`, nonce + ledger expiry) | ed25519 (Freighter `signAuthEntry`) / custom account `__check_auth` with `secp256r1_verify` | ed25519 `m/44'/148'/i'`; Pi `m/44'/314159'/i'` | **no** | BUILT |
@@ -286,7 +286,7 @@ exposes it (Soroban network id, Solana genesis hash), else a chain-profile const
 ([NET-ALL-26](#NET-ALL-26)). Hedera:
 the relay's block-0 hash, fixed only once it is confirmed stable across mirror-node and relay restarts
 ([hedera.md#payload](hedera.md#payload)). Why: chain ids are a registry convention, not unique — 9000 is also Evmos
-Testnet, which is why the private chain moved to 7622 ([NET-EVM-02](evm.md#NET-EVM-02)). Transitional (BUILT): only
+Testnet, which is why the private chain moved to the SCaaS testnet ([NET-EVM-02](evm.md#NET-EVM-02)). Transitional (BUILT): only
 the Universal Account registry and the UA meta-transaction domain carry `chain_uid`; deployed tokens, the factory,
 subject accounts, mandate wallets and the DEX sign with `(name, version, chainId, verifyingContract)` and are
 deployed with CREATE, until the salted contracts replace them (nothing is deployed outside test chains).
@@ -499,7 +499,7 @@ per-family inputs:
 
 | Family | Final when | Event source agreed across the quorum |
 |---|---|---|
-| EVM | `tag finalized` (Gnosis ~160–240 s), or a configured depth (private chain 7622: depth 1) | `eth_getLogs` |
+| EVM | `tag finalized` (Gnosis ~160–240 s), or a configured depth (SCaaS testnet: depth 1) | `eth_getLogs` |
 | Hedera | record file accepted (`instant`, depth 0) | `eth_getLogs` through the relay (1 000 blocks per call) |
 | Cosmos | committed block (`instant`, CometBFT) | `status` + `block` at the minimum height and the tx events of the range |
 | Soroban | closed ledger (`instant`, SCP) | `getEvents` per ledger range |
@@ -640,7 +640,7 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
 | Receiver-pays | EVM v2 | Hedera v2 | — | — | — | — | — |
 | Gas sponsorship policy (node) | all | all | book and limit only | 〃 | 〃 | 〃 | 〃 |
 | Token wrappers v2 | SPECIFIED | SPECIFIED ([hedera wrappers](hedera.md#wrappers)) | today `scaas-token` (CW20 + meta-op, `minter`, `initial_balances`, tier 1): tier 1 unchanged (gets `Burn` and minter renounce with its next version); wrapper of a bank denom (`info.funds`) or a CW20 (`Receive`) with the same rate/reserve rules and `wrap_rate_vectors.json`: PLANNED | today SEP-41 token + `pay`, admin `mint`, `burn` (tier 1): unchanged; wrapper of a Stellar Asset Contract (e.g. USDC): PLANNED | none needed (the subject `Account` holds any FA / `Coin<T>`; gasless for every asset) | today Tact jetton + custom wallet + `SignedOp`, admin `Mint` (tier 1): unchanged; third-party jettons cannot carry `SignedOp`, so a wrapper minter (receive `transfer_notification`, mint; unwrap with bounce handling) is the only gasless route: PLANNED, highest value of the three | none needed (the `SmartKeyAccount` PDA owns SPL token accounts for any mint) |
-| Post-quantum Zether | chain 7622 only (precompile in our client); dev chains 31337/1337 tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a chain-7622 copy); other private EVM clients not in v1 (later via an attestation seam); public EVM never without an owner ruling | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no |
+| Post-quantum Zether | SCaaS testnet only (precompile in our client); dev chains 31337/1337 tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a SCaaS testnet copy); other private EVM clients not in v1 (later via an attestation seam); public EVM never without an owner ruling | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no |
 | Crypto-shredding commitments | keccak256 | keccak256 | SHA-256, tag `scaas.commit.sha256.v1` | 〃 | 〃 | 〃 | 〃 |
 
 Common to all wrappers: fees are `NONE` off EVM, so fee policies are EVM/Hedera only; named meta-tx functions are

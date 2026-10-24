@@ -14,8 +14,8 @@ canonical-encoding rules of the plan's D15 / R6), ctHash, authDigest, the bundle
 A vector file without a checker here is a failure: the generator (P6e Task 11) adds the file and its checker
 together. Public data only: nothing here is constant-time.
 
-Parameter set (owner 2026-10-21: one per build): PQZ_SET=<set> (default n2048-kmax1024, the v3 set, whose files are
-next to this script); the set's constants come from pqz-core/params/sets/<set>/set.json (gen_set.py), its files from
+Parameter set (owner 2026-10-21: one per build): PQZ_SET=<set> (default n2304-kmax4096, the default of every build
+since plan 5h Task 8d; n2048-kmax1024's files are next to this script, every other set's in <set>/); the set's constants come from pqz-core/params/sets/<set>/set.json (gen_set.py), its files from
 <set>/ next to this script. PQZH files exist for every set whose set.json says pqzh (plan 5h Task 8c part 2: its preset,
 MAX_PROOF_PQZH and MAX_INPUT from set.json too); a set without PQZH has PQZL files only.
 """
@@ -28,7 +28,7 @@ import os
 import sys
 
 V3 = "n2048-kmax1024"
-SET = os.environ.get("PQZ_SET", V3)
+SET = os.environ.get("PQZ_SET", "n2304-kmax4096")  # the builds' default (plan 5h Task 8d)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _S = json.load(open(os.path.join(_HERE, "..", "..", "..", "pqz-core", "params", "sets", SET, "set.json")))
 VEC_DIR = _HERE if SET == V3 else os.path.join(_HERE, SET)  # the set's vector files

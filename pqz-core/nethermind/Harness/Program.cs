@@ -47,7 +47,7 @@ static class Shared
             rows.Add(o);
         }
         JsonObject s = new() { ["timestamp"] = 1, ["pqz"] = rows, ["selftestGas"] = 1_000_000, ["mldsa44Gas"] = 6500, ["mldsa65Gas"] = 9000 };
-        PqzSchedule p = new EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString());
+        PqzSchedule p = new EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString())!;
         p.Validate();
         return p;
     }
@@ -179,7 +179,7 @@ static class Run
             bool honest = validSet.Contains(Convert.ToHexString(SHA256.HashData(x)));
             if (honest && !unedited) Count("pqz edit restored an honest input");
             Result<byte[]> o1, o2;
-            long g1, g2;
+            ulong g1, g2;
             try
             {
                 g1 = PqzPrecompile.Gas(x, sched);

@@ -89,7 +89,7 @@ lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas 
 # private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
 # dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/7622.json)
-chain_uid = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"  # block 0 (evm/chain-uids.json):
+chain_uid = "0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2"  # block 0 (evm/chain-uids.json):
                                                  # a lane whose RPC block 0 differs never starts (NODE-GW-07)
 # account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
 # token_factory = "0x..."                        # the token factory: never a call target
@@ -101,7 +101,8 @@ chain_uid = "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464"
 # exclusive_ms = 7000
 poll_ms = 1000
 stuck_after_secs = 60
-max_gas_per_tx = 3000000
+max_gas_per_tx = 64000000                        # regular + state gas (Amsterdam): PQZ op 1 ≈ 43 M (owner 2026-10-22);
+                                                 # regular stays ≤ 2^24, and the block gas limit is read from the chain
 max_fee_cap_gwei = 500
 max_index_lag = 100                              # /readyz fails when final head - indexed > this
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.

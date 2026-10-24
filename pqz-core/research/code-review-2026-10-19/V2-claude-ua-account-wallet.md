@@ -15,13 +15,13 @@ are chosen) and five P3s.
 
 ---
 
-### V2-1 — P2 — Anyone can flood the per-kind decoy list (CTR-UA-29) for free on 7622 and shrink the anonymity of PQZ / Zether multi-recipient transfers
+### V2-1 — P2 — Anyone can flood the per-kind decoy list (CTR-UA-29) for free on the SCaaS testnet and shrink the anonymity of PQZ / Zether multi-recipient transfers
 
 **Locations:**
 - `ua/UARegistry.sol:229-234` (`_list`), `:348` (every `register` appends), `:242-262` (`uaCount` / `uaAt` / `uaPage`).
 - `docs/contracts/accounts.md:1086` (CTR-UA-29: "wallets pick decoys … from the UAs registered under the token's kind
   … how a wallet reads the list (all, ranges, random) is its own decision").
-- `smartcontracts/evm/foundry.toml:36` (chain 7622: "base fee stuck at 0, so gas is free").
+- `smartcontracts/evm/foundry.toml:36` (SCaaS testnet: "base fee stuck at 0, so gas is free").
 
 **Trigger:**
 1. An observer O generates N fresh keys.
@@ -36,7 +36,7 @@ are chosen) and five P3s.
 - O knows that none of its own UAs is a real sender or recipient. Each decoy drawn from O's set therefore drops out of
   the anonymity set, as far as O is concerned.
 - With N ≫ honest, a multi-recipient transfer is close to non-anonymous towards O.
-- Registration needs no `msg.sender` state, no stake and no activity. On 7622 the only cost is block gas
+- Registration needs no `msg.sender` state, no stake and no activity. On the SCaaS testnet the only cost is block gas
   (pqz-mlwe ≈ 3.4 M per record for the 16 KB SSTORE2 key).
 - The S6 mitigation ("sponsorship policy at the node") does not apply: O pays its own gas.
 
@@ -172,7 +172,7 @@ hypothesis.
   `gasleft() >= MIN_HANDOFF_GAS` (a constant covering gen 1's pre-hold work).
 - Alternatively, inside `catch`, re-raise `UAVerifyGas` when the error data is empty and `gasleft()` is below
   `MIN_HANDOFF_GAS / 63`.
-- Either option changes gen-2 bytecode only. No gen 2 is deployed on 7622 today, so nothing needs migrating.
+- Either option changes gen-2 bytecode only. No gen 2 is deployed on the SCaaS testnet today, so nothing needs migrating.
 - Also narrow the comment at `:667` to "at the hold".
 
 ---
@@ -405,4 +405,4 @@ hypothesis.
 - **Measurements.** Whether `MSIG_MEMBER_GAS` = 35 k and the per-kind caps match measured costs; I trust the
   `UAGas.t.sol` claims without running them.
 - **Clients.** How wallets sample decoys (V2-1) and how clients sign 0x0108 (V2-2), beyond a grep of `clientkeys/src/ua.js`.
-- **Deployed state.** I did not compare the on-chain 7622 registry or its constructor arguments with this source.
+- **Deployed state.** I did not compare the on-chain SCaaS testnet registry or its constructor arguments with this source.

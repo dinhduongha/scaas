@@ -17,7 +17,7 @@ four transfer flows; proof-free shield), CTR-PQZ-12 / -13. Research: [`ua-identi
 
 **Dependency.** Plan Task 5h ([spec](2026-10-20-pqz-state-redesign.md), [plan](../plans/2026-10-20-pqz-state-redesign.md);
 being updated in parallel for the `K_MAX = 16,384` ruling and the proof-free shield). CTR-UA-30 orders UA-6 **before**
-5h; the `R_REG` message change of UA-6 reaches chain 7622 together with 5h's `proofSystemId` bump (the "16k" id, which
+5h; the `R_REG` message change of UA-6 reaches SCaaS testnet together with 5h's `proofSystemId` bump (the "16k" id, which
 also carries the B-1 transcript fix) in the roll-out of plan fs3 Task 13 (§9).
 
 **Code read** (main `c173de37`): `smartcontracts/evm/src/ua/UARegistry.sol` (`register` 330–352, `_checkAuthRef` 375,
@@ -175,7 +175,7 @@ pointer read serves every reader.
 **Kind table.** The registry's slot 12 (`zether-bn254`) goes; slot 18 (today `pqz-mlwe`) stays, now meaning "PQZ key
 verifier and its cap" (`KindConfig(0x0142, UAPqzVerifier, cap)` at deploy). The generation rule keeps 0x0142 in at most
 one generation per chain (its keyHash group `pqz-mlwe`, `_groupInPredecessor`), because gen 1 cannot see a key claimed
-in gen 2. On every chain but 7622 slot 18 is 0: a `pqzKey` reverts `UAKindDisabled(0x0142)` (CTR-PQZ-01).
+in gen 2. On every chain but the SCaaS testnet slot 18 is 0: a `pqzKey` reverts `UAKindDisabled(0x0142)` (CTR-PQZ-01).
 
 ## 4. How PQZ tokens find the key (U7)
 
@@ -264,7 +264,7 @@ in the generation that enables 0x0142 (one per chain, §3.2). Classical Zether d
 The decoy rule of CTR-UA-29's 2026-10-19 Change ("at most a fixed share per `authRef` group", threat S30) loses its
 `authRef` clause: with one key per UA there is no on-chain grouping left to cap; the rule keeps "active in the token
 within the look-back window, weighted by recency, never registered after the wallet's sync point". S30's text records
-that a sybil decoy set now costs one PQ registration per decoy (≈ 5 M gas, free on 7622: bounded by node sponsorship
+that a sybil decoy set now costs one PQ registration per decoy (≈ 5 M gas, free on the SCaaS testnet: bounded by node sponsorship
 quotas, CTR-UA-25).
 
 ## 8. UA ledger and public balances (U12)
@@ -286,8 +286,8 @@ parameters), `UAPqzVerifier`, the precompile and `statement_register.json` (whic
 do not change. Only the **pre-image** of the message changes (signer id instead of the PQZ id, keyHash instead of
 `authRef`), which is registry and client code. Consequences:
 
-- No `proofSystemId` of its own: the change "rides the 16k bump" (CTR-UA-30) in the sense that chain 7622 gets the new
-  registry when fs3 Task 13 resets it with the K_MAX = 16,384 / B-1 id; until then 7622 keeps today's registry.
+- No `proofSystemId` of its own: the change "rides the 16k bump" (CTR-UA-30) in the sense that the SCaaS testnet gets the new
+  registry when fs3 Task 13 resets it with the K_MAX = 16,384 / B-1 id; until then the SCaaS testnet keeps today's registry.
 - The constructor probe of `UAPqzVerifier` (the pinned self-test vector with its fixed message) is untouched.
 - 5h changes `PqzCt.PK` (20,608 B); the registry follows automatically (U1: no length in the registry).
 
@@ -351,9 +351,9 @@ ops through `requireAuthorized`; PQZ transfer from an ML-DSA holder and an `msig
 `UARegistryZether.t.sol` / `UARegistryPq.t.sol`) go to `legacy/ua6/`.
 
 **U20 — migration** (all chains test-only, owner; mainnet 22776 not launched): no compatibility path. The registry ABI,
-the Zether entry points and every client change at once. Chain 7622: the new gen-1 registry (with `UAPqzVerifier` in
+the Zether entry points and every client change at once. SCaaS testnet: the new gen-1 registry (with `UAPqzVerifier` in
 slot 0x0142 on the 16k id), the PQZ and Zether tokens and the e2e accounts are redeployed by
-`smartcontracts/evm/script/pqz/e2e.py` in plan fs3 **Task 13** (back up, reset, deploy; controller may do this on 7622,
+`smartcontracts/evm/script/pqz/e2e.py` in plan fs3 **Task 13** (back up, reset, deploy; controller may do this on the SCaaS testnet,
 owner 2026-10-15). Other dev chains: `DeployBase` redeploys on their next reset. No record is carried over.
 
 ## 11. Owner questions (blocking only)
@@ -374,7 +374,7 @@ U15 (route limit) are controller proposals the owner may override after the fact
 - **Holder lock-out.** A PQ signer registered without its PQZ key can never get one (ids unchanged, record immutable):
   wallets must register both together; clientkeys refuses a holder-kind registration without a key unless asked.
 - **Registration size.** A holder registration carries ≈ 49 KB (PQZL) to ≈ 210 KB (PQZH) of calldata in one
-  transaction: fine on 7622 (64 KiB code, 2^24 gas); the gateway limit (U15) and the PQZH path need care.
+  transaction: fine on the SCaaS testnet (64 KiB code, 2^24 gas); the gateway limit (U15) and the PQZH path need care.
 - **Hot Zether key now signs public writes** (U8): a leaked `x` already lost the confidential balance; the public
   balance under the same id goes with it. Accepted by CTR-UA-30's Change line; wallets show it.
 - **Sybil decoys** (§7): without `authRef` groups nothing on chain ties decoys to one owner; the wallet rule and the

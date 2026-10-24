@@ -38,7 +38,7 @@ precompiles (execution)" at fork **J\***, two forks after Hegotá, and "core PQ 
 **Bottom line for SCaaS.** SCaaS already designed for PQ where it matters and is ahead of Ethereum on paper: PQ
 signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) are enabled for Universal Accounts on every EVM chain with a pure
 Solidity verifier and precompile **probing** ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)); PQ Zether runs on a
-private precompile of chain 7622 ([CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)); private mesh traffic uses
+private precompile of the SCaaS testnet ([CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)); private mesh traffic uses
 X25519MLKEM768 ([NODE-GSP-03](../node/gossip.md#NODE-GSP-03)). The drafts change no SCaaS decision. They expose four
 compatibility gaps worth keeping open (§7): the ML-DSA context string versus EIP-8355's empty context, EIP-8051's
 expanded key format, FN-DSA versus EIP-8052's Falcon hash variants, and the absence of a hash-based kind while
@@ -116,7 +116,7 @@ flowchart LR
   guardian recovery, key changes by its own `MetaTransaction` ([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09), [CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)). No PQ key.
 - **Confidentiality.** Classical Zether is dev-only ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); a quantum
   adversary could read balances and forge proofs. PQ Zether (`PqzToken`, MLWE encryption, LNP22 proofs) is specified
-  for chain 7622 only, behind an allowlist and a precompile self-test; precompiles `PQZ` at `0x…0F01` and `MLDSA65` at
+  for the SCaaS testnet only, behind an allowlist and a precompile self-test; precompiles `PQZ` at `0x…0F01` and `MLDSA65` at
   `0x…0F10` ("EIP-8355's layout plus a context field"), placed off 0x12/0x13 on purpose (2026-10-15, P6f: moved to
   `0x5caa5…0f01` / `…0012` / `…0013`, EIP-8355 layout with the empty context, `MLDSA44` added; Q6)
   ([CTR-PQZ-01](../contracts/pq-zero-knowledge.md#CTR-PQZ-01), [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)). Public
@@ -143,7 +143,7 @@ when execution is small).
 | Scheme | Signature / key | Pure Solidity today | With a draft precompile | Calldata of the signature |
 |---|---|---|---|---|
 | ML-DSA-44 | 2 420 / 1 312 B | 1.23 M (Fireblocks, 2026-09-02; key deployed once as code, ~4.1 M) | 8355: 6 500 + 6/word; 8051: 4 500 but with a 20 512-byte expanded key | 39–97 k |
-| ML-DSA-65 | 3 309 / 1 952 B | SCaaS estimate 1.2–8.1 M (see §7 Q5) | 8355: 9 000 + 6/word (≈ 20 k with SCaaS key loading, as on chain 7622) | 53–132 k |
+| ML-DSA-65 | 3 309 / 1 952 B | SCaaS estimate 1.2–8.1 M (see §7 Q5) | 8355: 9 000 + 6/word (≈ 20 k with SCaaS key loading, as on the SCaaS testnet) | 53–132 k |
 | FN-DSA / Falcon-512 | ~666 / 897 B | SCaaS estimate 0.6–2.5 M; ~2 M (Keccak variant, older ethresear.ch figure) | 8052: 3 000 | 11–27 k |
 | SLH-DSA-SHA2-128s (FIPS 205) | 7 856 / 32 B | ~0.6 M (SCaaS table) | none drafted | 126–314 k |
 | SPHINCS- (Keccak, non-FIPS) | 3 704–6 512 B | 94–276 k (ethresear.ch, 2026-06-12) | none needed | 59–260 k |
@@ -166,7 +166,7 @@ measured-cap rule already prices this per chain, so none of it needs a rule chan
 | I\* | possible slot for a precompile re-proposal | no proposals listed yet **[inference]** |
 | J\* | "PQ signature precompiles (execution)" on the EF roadmap | pq.ethereum.org; at the strawmap's ~6-month cadence after Glamsterdam this is around 2028 **[inference]** |
 | L2s / public EVM chains SCaaS profiles | no RIP or L2 PQ precompile found | search 2026-10-11 **[unverified absence]** |
-| Chain 7622 | now, by our own client | [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10) |
+| SCaaS testnet | now, by our own client | [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10) |
 | Quantum threat | "early-to-mid 2030s" in most engineering roadmaps | pq.ethereum.org |
 
 ## 6. Applicability to SCaaS, component by component
@@ -200,7 +200,7 @@ leanXMSS) and Aptos's (SLH-DSA, AIP-137 **[unverified status]**) are hash-based.
 
 **(4) DEX orders.** `TradeOrder` makers sign through `SigCheck`; the UA path refuses `trade`. So a PQ maker exists only
 as a PQ ERC-1271 wallet, which fits the cap only with a precompile, or later as a `SmartKeyAccount` with a PQ key.
-Watch; it follows (1) and (2). On chain 7622 the private `MLDSA65` precompile could serve a PQ 1271 wallet today.
+Watch; it follows (1) and (2). On the SCaaS testnet the private `MLDSA65` precompile could serve a PQ 1271 wallet today.
 
 **(5) Classical Zether.** Not applicable: a quantum adversary reads and mints; the dev-only gate and the PQZ migration
 ([migration](../contracts/pq-zero-knowledge.md#migration)) are the answer, not an EIP.
@@ -209,7 +209,7 @@ Watch; it follows (1) and (2). On chain 7622 the private `MLDSA65` precompile co
 not signature verification; no draft offers it. EIP-7885's NTT and vector ops are the only generic building blocks
 and are not proposed for any fork; even with them a Solidity LNP22 verifier would be multi-million gas
 **[inference]**. 8288's recursive STARK verifies leanSPHINCS and reserves leanSTARK; arbitrary programs are not in
-scope yet. The chain-7622 design stays; its first addresses `0x…0F01`/`0x…0F10` avoided the 0x12–0x15 contest but sat inside
+scope yet. The SCaaS testnet design stays; its first addresses `0x…0F01`/`0x…0F10` avoided the 0x12–0x15 contest but sat inside
 the EIP-1352 precompile range (Q6).
 
 **(7) Node and relayer keys.** Key exchange: already PQ, ahead of the drafts. Identity: Ed25519 with a stated ML-DSA
@@ -217,7 +217,7 @@ upgrade path; nothing in the EIPs changes it (libp2p has no PQ key type). Lane k
 chain requires ECDSA transaction signatures today; they hold gas only. After Hegotá a relayer on L1 could submit from
 an 8141 frame account verified by a PQ scheme — only useful once a cheap PQ check exists there (§4). Watch.
 
-**(8) Ethereum consensus.** leanXMSS, EIP-8310 and EIP-8292 change validators, not contracts. Chain 7622 runs Clique
+**(8) Ethereum consensus.** leanXMSS, EIP-8310 and EIP-8292 change validators, not contracts. The SCaaS testnet runs Clique
 with one secp256k1 signer and states "consensus PQ is out of scope"; nothing to do.
 
 **(9) Hedera and non-EVM families.** Not EIPs; each chain moves on its own: **Hedera** (blog, 2026-04-10): hybrid
@@ -276,7 +276,7 @@ Kept open; none blocks the current contract phase (DEX, then Zether kinds) or th
   estimates attribute it to ML-DSA-65; the ML-DSA-65 worst case is likely higher **[inference]**. The per-chain
   T-GAS measurement settles it before any cap is set.
 - **Q6 Private precompile addresses — closed (P6f D3, 2026-10-15).** The old `0x…0F01`/`0x…0F10` lay in the EIP-1352
-  reserved range. Chain 7622 now uses `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012` and `MLDSA65`
+  reserved range. The SCaaS testnet now uses `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012` and `MLDSA65`
   `…0013` under the `0x5caa5` prefix: above `0xffff`, outside RIP-7587's `0x100`–`0x1ff` and the OP / Taiko / Arbitrum
   system ranges ([CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10); controller proposal, owner may override).
 - **Q7 PQ makers and 1271 wallets on public chains.** Until a precompile exists, a PQ wallet can sign UA-path intents

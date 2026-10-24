@@ -1,13 +1,13 @@
-# P6f — E-S3 Nethermind precompiles: `PQZ` (PQZL + PQZH) and ML-DSA-44/65 (EIP-8355 layout), live on chain 7622 — Implementation Plan
+# P6f — E-S3 Nethermind precompiles: `PQZ` (PQZL + PQZH) and ML-DSA-44/65 (EIP-8355 layout), live on the SCaaS testnet — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** the P6f row of the [P6 roadmap](2026-10-12-p6-roadmap.md), widened by the owner grant of 2026-10-14
-(TODO.md "P6f live on chain 7622"): a Nethermind plugin `Nethermind.Pqz` that adds the one `PQZ` precompile (both
+(TODO.md "P6f live on the SCaaS testnet"): a Nethermind plugin `Nethermind.Pqz` that adds the one `PQZ` precompile (both
 proof systems through `pqz-ffi`'s C ABI) and the ML-DSA-44 / ML-DSA-65 precompiles in the EIP-8355 layout, at
 addresses outside the EIP-1352 range, priced by a calibrated deterministic table frozen in the chainspec; a local image
-`scaas/nethermind-pqz:1.39.0-pqz1` (never pushed); tested on a throwaway copy of chain 7622, then **run for real on
-the live chain 7622** with timestamped backups, health checks, the self-test and e2e on the live chain, and a rehearsed
+`scaas/nethermind-pqz:1.39.0-pqz1` (never pushed); tested on a throwaway copy of the SCaaS testnet, then **run for real on
+the live SCaaS testnet** with timestamped backups, health checks, the self-test and e2e on the live chain, and a rehearsed
 rollback. Gate: **pq-zero-knowledge.md §10 steps 1–2 and 5 pass on the copy**, then the live roll-out (§10 steps 3–4).
 Not here: `PqzToken`, `UAPqzVerifier`, the UA registry redeploy (P6g); the node's `pqz` profile and `pqz_call` (P6i);
 a follower node on the live chain (owner step, rehearsed here); chain 22776 (owner step).
@@ -47,7 +47,7 @@ addresses); `pqz-core/ffi/README.md` + `pqz_ffi.h` (C ABI, statuses 0–4, threa
 caller stack); [P6e plan](2026-10-14-p6e-relations.md) D5 (`MAX_INPUT` 393,216), D13 (self-test), D4 (bump rule);
 [P6-ANON plan](2026-10-14-p6-anon.md) §8 and D19 (op 7 `R_TXM` through the same precompile, gas per form keyed by
 length); decisions.md CTR-PQZ-10 Change lines (both ids, status 3 / 4 split). TODO.md P6 rows: the session-4 mandate
-(decisions are controller proposals recorded in decisions.md) and the owner grant "P6f live on chain 7622".
+(decisions are controller proposals recorded in decisions.md) and the owner grant "P6f live on the SCaaS testnet".
 
 **Base:** `main` at `0807e41` (`pqz-ffi` merged with both ids, the status 3 / 4 split, `OP_SELFTEST`; P6e vectors in
 `smartcontracts/vectors/pqz/`). P6e Task 10 (fuzzing, `p6e-a5`) and Task 12 (docs) and P6-ANON op 7 (`p6-anon-s`) are
@@ -128,7 +128,7 @@ Source: tag `1.39.0` = commit `14aca2c5202c48a6a46c8d928fe7ed8a898d253e`, cloned
   value baked into the image label), the schedules and the addresses. So no block ever runs the cold self-test.
 - **R4 ML-DSA-87 is not built** (no UA kind uses it); adding it later is one class and one schedule key.
 - **R5 Probe contract is test-only** (`smartcontracts/evm/test/p6f/`), never in `src/`; it is deployed on the copy
-  and, for the live e2e, on 7622 (a test chain). `UAMldsaVerifier` is deployed only on the copy; on 7622 it is
+  and, for the live e2e, on the SCaaS testnet (a test chain). `UAMldsaVerifier` is deployed only on the copy; on the SCaaS testnet it is
   deployed with the registry in P6g (owner 2026-10-13: deploy once).
 
 ## Decisions (controller proposals; recorded in decisions.md in Task 9, "status: controller proposal, owner may override")
@@ -346,7 +346,7 @@ D2, D6, D7, D8; CTR-UA-23 — D3, D5), `pqz-core/nethermind/README.md`, roadmap 
 - [ ] `python3 scripts/docs_check.py check` → 0 errors.
 - **Acceptance:** clean; every decision of this plan is in decisions.md with its status.
 
-### Task 10: Live roll-out on chain 7622 (owner grant 2026-10-14) — operational
+### Task 10: Live roll-out on the SCaaS testnet (owner grant 2026-10-14) — operational
 
 **Files:** `runs/<date>-live.txt` (every command and output), the live directory per the runbook.
 
@@ -360,12 +360,12 @@ D2, D6, D7, D8; CTR-UA-23 — D3, D5), `pqz-core/nethermind/README.md`, roadmap 
   compose `image: scaas/nethermind-pqz:1.39.0-pqz1`; `diff` of each against its backup in the log.
 - [ ] Start (`docker compose up -d blockchain-node`); health: `PQZ-START` line (sha256, selftest, schedule, addresses),
   head = recorded head + new blocks every 5 s, `eth_chainId`, genesis hash; before T the 3 addresses are empty.
-- [ ] After T: `probe.sh` and `e2e.py` against `127.0.0.1:8545` (the probe contract deployed on 7622, R5).
+- [ ] After T: `probe.sh` and `e2e.py` against `127.0.0.1:8545` (the probe contract deployed on the SCaaS testnet, R5).
 - [ ] Watch: `watch.sh` hourly for 24 h (cron line in the log or manual): no exit, no `PQZ-NODE-FAULT`, `gasLimit`
   reaches 80 M.
 - [ ] Rollback (only on a failed check): `docker compose down`; restore the four backups (data through `alpine:3`:
   `rm -rf` the live dir, `cp -a` the backup); start the stock image; head hash = the recorded one; report.
-- **Acceptance:** probes and e2e green on 7622; 24 h watch clean; backups kept (not deleted; owner decides).
+- **Acceptance:** probes and e2e green on the SCaaS testnet; 24 h watch clean; backups kept (not deleted; owner decides).
 
 ## Order, effort, gate
 
@@ -396,7 +396,7 @@ drill and the rollback rehearsal. **Then** Task 10 on the live chain (§10 steps
 
 1. Review D1–D15 (controller proposals; D3 addresses and D6 `selftestGas` are the ones that change contract-facing
    constants — override before Task 10 costs a constant).
-2. Live follower node + rate-limited public RPC on chain 7622 (§10 step 5; configs from Task 8 ready) — until then
+2. Live follower node + rate-limited public RPC on the SCaaS testnet (§10 step 5; configs from Task 8 ready) — until then
    the signer's RPC on `0.0.0.0:8545` is the only RPC and free `eth_call`s to `PQZ` compete with block processing for
    the `pqz-ffi` lock.
 3. Restart policy for `mba_chain_node_nethermind` (none today; with D4 a node fault stops the chain until restarted).

@@ -8,7 +8,7 @@ and applications can use the proof system without the C build. Plan: `docs/super
 Status: **port done** (Tasks 1–12 and 10b of the plan, 2026-10-18/19): every API function is ported and checked
 against the C core (vectors re-proved byte-equal, the C oracle tests, the 2 h fuzz differential, the package's
 "Rust = C" stage). Owner 2026-10-18: this crate is the production PQZL core of the `PQZ` precompile; `pqz-ffi` builds
-it by default (feature `pqzl-rust`, Task 11), the C core is the opt-in reference. Chain 7622 keeps the C-backed node
+it by default (feature `pqzl-rust`, Task 11), the C core is the opt-in reference. The SCaaS testnet keeps the C-backed node
 image until the live roll-out.
 
 ## Layout

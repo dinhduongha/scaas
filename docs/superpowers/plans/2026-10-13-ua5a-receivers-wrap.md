@@ -88,7 +88,7 @@ new address-allowlist rows; `mintToUA`, `payWithFeeToUA` never allowlisted), CTR
   `pq_signatures.json` (Task 6). The existing keys of both files stay byte-identical (the new rows go under new keys);
   `kinds.json`, `structures.json`, `signatures.json`, `groups.json`, `ed25519_fuzz.json`, `pq_kat.json`,
   `pq_external.json` and the address-path KATs do not change.
-- No chain-7622 or real/public-chain action, no change to chain docker/chainspec files, no node (`scaas-node`) change.
+- No SCaaS testnet or real/public-chain action, no change to chain docker/chainspec files, no node (`scaas-node`) change.
 - No size optimisation (owner: wait for Glamsterdam); the size gate must pass — the new sizes go into
   `smartcontracts/evm/size-baseline.json` (the ratchet) instead. Test chains run 64 KiB code.
 - Nothing is superseded (no `legacy/` move); every chain is a test chain: redeploy, no migration.

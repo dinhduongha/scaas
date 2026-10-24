@@ -108,11 +108,15 @@ jobs:
       - name: unit tests and vectors
         run: npm test
 
-  # P6e Task 10 / gate A / gate B: the PQZ core's frozen set — KAT, the tbox / SV fix checks, the vectors byte for byte
+  # P6e Task 10 / gate A / gate B, at one parameter set (PQZ_SET below) — KAT, the tbox / SV fix checks, the vectors byte for byte
   # (Rust generator and the independent Python checker), the crates' tests, a fuzz smoke on the committed corpora.
   # The full gate (differential, wasm32 replay, 2 h campaigns) is pqz-core/gate.sh, run on the owner's machine.
   pqz:
     runs-on: ubuntu-24.04
+    # one parameter set end to end (pqz-ffi's default; plan 5h Task 8d: the Rust generator and the Python checker on the
+    # same files, review 8d1 M2); the other sets: pqz-core/gate.sh
+    env:
+      PQZ_SET: n2304-kmax4096
     defaults:
       run:
         working-directory: pqz-core
@@ -128,7 +132,7 @@ jobs:
         run: |
           cd pqzl && ./build.sh native
           build/native/kat_dump > build/native/kat-pqz.json
-          python3 -I kat/check.py kat/lazer-3330e48.json build/native/kat-pqz.json
+          python3 -I kat/check.py "../params/sets/$PQZ_SET/lazer-3330e48-kat.json" build/native/kat-pqz.json
       - name: tbox and SV fix checks
         run: (cd pqzl && ./check_tbox_fixes.sh && sv/check_sv_fixes.sh)
       - name: pqz-vectors --check, pqz_kat.py --check, tamper
@@ -138,8 +142,8 @@ jobs:
           (cd ffi && python3 -I vectors/tamper.py)
       - name: cargo test (pqz-stmt, Ligero, pqz-ffi)
         run: |
-          (cd stmt && cargo test --release)
-          (cd pqzh/ligero && cargo test --release)
+          (cd stmt && cargo test --release --features "set-$PQZ_SET")
+          (cd pqzh/ligero && cargo test --release --features "set-$PQZ_SET")
           (cd ffi && cargo test --release --features prove,test-hooks -- --test-threads 2)
       - name: fuzz smoke (60 s per target, committed corpora)
         run: |

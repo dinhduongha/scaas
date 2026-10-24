@@ -8,7 +8,7 @@ q = 1125899864532089              # 2^50 - 42,310,535 (owner ruling Q1, 2026-10-
 pqz_delta = 1.00366               # e-s1.txt
 kmlwe_min = 39                    # e-s1.txt (p16k: codegen's default rank 38 gives dual_hybrid 446 / 447)
 pqzh = true                       # PQZH (Ligero over this q) is built for this set
-max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (decisions 2026-10-20 O8, 2026-10-21 (7); the node's in 8d)
+max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (decisions 2026-10-20 O8, 2026-10-21 (7); the node reads it, pqz_max_input())
 pqzl_id = "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4"   # PQZL proofSystemId = keccak256(label) (plan 5h Task 8d, the one bump: controller proposal, owner may override)
 pqzh_id = "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2"   # PQZH proofSystemId (the same bump; field and [pqzh_preset] named)
 

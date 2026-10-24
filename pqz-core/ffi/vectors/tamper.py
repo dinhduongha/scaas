@@ -15,7 +15,7 @@ import sys
 import tempfile
 
 V = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../smartcontracts/vectors/pqz")
-SET = os.environ.get("PQZ_SET", "n2048-kmax1024")
+SET = os.environ.get("PQZ_SET", "n2304-kmax4096")  # pqz_kat.py's and the builds' default (plan 5h Task 8d)
 D = sys.argv[1] if len(sys.argv) > 1 else (V if SET == "n2048-kmax1024" else os.path.join(V, SET))
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 12
 spec = importlib.util.spec_from_file_location("pqz_kat", os.path.join(V, "pqz_kat.py"))

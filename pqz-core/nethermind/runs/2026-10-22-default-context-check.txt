@@ -1,0 +1,15 @@
+# Review nethermind-2.2 M4: the default image build (no FFI_REV) and its context. 2026-10-21T17:17:17Z, worktree amsterdam-node
+# BuildKit reads pqz-core/nethermind/Dockerfile.dockerignore (the Dockerfile-specific ignore file, next to the Dockerfile
+# build-image.sh passes with -f): an allowlist, so 'COPY . /' in the ffisrc stage copies only the listed paths.
+$ (cd pqz-core/nethermind && docker build -f Dockerfile --progress plain --target ffisrc -o type=local,dest=<scratch> <repo root>)
+#1 DONE 0.0s
+#2 DONE 1.4s
+#4 transferring context: 6.96MB 0.1s
+#4 transferring context: 16.23MB 0.1s done
+#4 DONE 0.2s
+#5 DONE 0.1s
+#6 DONE 0.1s
+exported ffisrc stage: 18M, 765 files; top-level dirs:
+pqz-core pqz-core/ffi pqz-core/ffi/csrc pqz-core/ffi/examples pqz-core/ffi/src pqz-core/ffi/tests pqz-core/ffi/vectors pqz-core/ffi/wasm pqz-core/nethermind pqz-core/nethermind/Calibrate pqz-core/nethermind/fresh-proofs pqz-core/nethermind/Nethermind.Pqz pqz-core/pqzh pqz-core/pqzh/ligero pqz-core/pqzl pqz-core/pqzl/lazer pqz-core/pqzl/params pqz-core/pqzl/rust pqz-core/pqzl/src pqz-core/stmt pqz-core/stmt/runs pqz-core/stmt/src pqz-core/stmt/tests smartcontracts smartcontracts/vectors smartcontracts/vectors/pqz smartcontracts/vectors/ua 
+no .git, target/, node_modules, ref/, bin/ (except the allowlisted ones): 0 matches
+Result: the default path already sends only the allowlisted paths (16 MB here); no root .dockerignore needed.

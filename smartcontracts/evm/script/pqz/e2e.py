@@ -187,13 +187,16 @@ class Sender:
         tx = {"from": self.addr, "data": "0x" + data.hex()}
         if to:
             tx["to"] = to
+        head = rpc("eth_getBlockByNumber", ["latest", False])
         if gas is None:
+            # Amsterdam (EIP-8037): the estimate is regular + state gas and may pass 2^24 (the chain caps the regular
+            # part); the limit is bounded by the chain's block gas limit, read here, never assumed
             try:
-                gas = min(16_777_216, int(int(rpc("eth_estimateGas", [tx]), 16) * 1.15) + 50_000)
+                gas = min(int(head["gasLimit"], 16), int(int(rpc("eth_estimateGas", [tx]), 16) * 1.15) + 50_000)
             except RuntimeError as e:
                 check(False, f"{what}: estimateGas {e}")
                 raise
-        fee = int(rpc("eth_getBlockByNumber", ["latest", False])["baseFeePerGas"], 16)
+        fee = int(head["baseFeePerGas"], 16)
         raw = legacy_tx(self.key, self.nonce, 2 * fee + 10**9, gas, to, 0, data, 7622)
         self.nonce += 1
         h = rpc("eth_sendRawTransaction", ["0x" + raw.hex()])

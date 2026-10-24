@@ -136,6 +136,27 @@ const RETIRED: [Word; 3] = [
     hex32("0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"),
 ];
 
+/// a proof of one set never verifies under another set's id (plan 5h Task 8d): every other set's ids (gen_set.py's
+/// `ALL_IDS`, from every set.toml) are unknown ids at this set, refused like the retired ones (review 8d1 M6)
+#[test]
+fn other_sets_ids_refused() {
+    let o = objs();
+    let mine: Vec<_> = ALL_IDS.iter().filter(|(s, _, _)| *s == SET).map(|(_, k, id)| (*k, *id)).collect();
+    let want: &[(&str, Word)] = if HAS_PQZH { &[("pqzl", PQZL_ID), ("pqzh", PQZH_ID)] } else { &[("pqzl", PQZL_ID)] };
+    assert_eq!(mine, want, "this set's ids in ALL_IDS");
+    let others: Vec<_> = ALL_IDS.iter().filter(|(s, _, _)| *s != SET).collect();
+    assert!(others.len() >= 5, "{} other ids", others.len());
+    for (s, k, id) in others {
+        assert!(*id != PQZL_ID && *id != PQZH_ID, "{s} {k}");
+        assert_eq!(max_proof(id), None, "{s} {k}");
+        for f in FORMS {
+            assert_eq!(parse(f.op(), &build(f, &o, id)).err(), Some(Reject::ProofSystemId), "{s} {k} {f:?}");
+        }
+        assert_eq!(parse_multi(&build_multi(id, 2, true, 0)).err(), Some(Reject::ProofSystemId), "{s} {k} op 7");
+        assert_eq!(decode_input(&input(3, &build(Form::Register, &o, id), &[1])).err(), Some(Reject::ProofSystemId));
+    }
+}
+
 #[test]
 fn retired_ids_refused() {
     let o = objs();

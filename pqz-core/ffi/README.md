@@ -5,7 +5,7 @@ entry point in front of both proof systems: it decodes the input with [`pqz-stmt
 statement's `proofSystemId` and sends the proof to the PQZL or the PQZH verifier. The node calls it through one C
 function; Rust code and wallets can use its Rust API, and the feature `prove` adds key generation, encryption and
 proving for clients. For the terms used here (op, form, `proofSystemId`, SV) see the glossary in the
-[pqz-core README](../README.md); for how the precompile sits on chain 7622 see its
+[pqz-core README](../README.md); for how the precompile sits on the SCaaS testnet see its
 [§3](../README.md#3-two-proof-systems-one-precompile).
 
 - **Plan and specification:** P6e plan Task 7, decisions D10 / R5; [pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)
@@ -82,7 +82,7 @@ clients only; a native build with `panic = abort` is a compile error.
   (the fuzz mode `pqzl-diff`, `../fuzz/README.md`).
 
 The node image (`../nethermind/Dockerfile`) builds this crate's default (the set `n2304-kmax4096` since plan 5h Task 8d) and copies `pqz-core/pqzl/rust` (its Docker
-build is checked in the Rust port's Task 12). Chain 7622 runs the C-backed library built before the switch until the
+build is checked in the Rust port's Task 12). The SCaaS testnet runs the C-backed library built before the switch until the
 live roll-out.
 
 **Lock (STATUS.md Open 6).** Every PQZL call runs under one process-wide `Mutex`, on one worker thread with a 16 MiB

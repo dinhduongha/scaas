@@ -21,7 +21,7 @@ stated assumptions.
 | Is "anyone may pick any version, existing instances never change" common? | **Rare among large protocols** (Aave, Compound, OP Stack, zkSync, Scroll upgrade live instances through governance). The closest precedents are Uniswap V2 / V3 pools, Tornado Cash pools after the operator was renounced, and Aztec, whose rollup instances are immutable and new versions are registered beside them. [source, §3–4] |
 | Do creators choose dependencies anywhere? | Yes: Safe (caller-chosen singleton), Uniswap V4 (pool-creator-chosen hooks), Semaphore deployers (verifier). V4 bounds a hook by permission bits in its address and by the singleton's accounting; no protocol found lets a creator pick an unbounded proof verifier for funds that other people deposit and still lists the result as vetted. [source / inference, §3.1, §4] |
 | What does the industry have that SCaaS does not (yet)? | (1) a **delay** before new code becomes usable (Aave 1 d, Uniswap and Compound 2 d, zkSync 5–9 d, Aztec ≥ 12 d of notice); (2) a **published release registry** with addresses and code hashes (superchain-registry, safe-deployments); (3) an **on-chain validator** that checks a deployment against the release (OP `StandardValidator`); (4) a multisig or council as the key, never one EOA. [source, §6] |
-| What limits does `deployImplementation` hit? | EIP-3860 refuses `CREATE2` init code above 49,152 B on Ethereum today; the largest SCaaS implementation's init code is 61,702 B. It fits chain 7622 (65,536 / 131,072) and Ethereum after EIP-7954 (scheduled for Glamsterdam). Deploying it costs ≈ 13 M gas, under the 2^24 per-transaction cap of EIP-7825. [source / estimate, §5] |
+| What limits does `deployImplementation` hit? | EIP-3860 refuses `CREATE2` init code above 49,152 B on Ethereum today; the largest SCaaS implementation's init code is 61,702 B. It fits the SCaaS testnet (65,536 / 131,072) and Ethereum after EIP-7954 (scheduled for Glamsterdam). Deploying it costs ≈ 13 M gas, under the 2^24 per-transaction cap of EIP-7825. [source / estimate, §5] |
 
 ## 2. The SCaaS design being compared
 
@@ -242,9 +242,9 @@ model (fixed address, changed only by a chain upgrade).
   [legacypool.go](https://github.com/ethereum/go-ethereum/blob/17e0a6ca4ed14f46997f6d0f1edb4cca33b86024/core/txpool/legacypool/legacypool.go)).
   [source]
 - **Applied to `deployImplementation`** (sizes from `smartcontracts/evm/size-baseline.json`: `UnderlyingPqzToken`
-  60,105 B runtime / 61,702 B init, `UnderlyingZetherToken` 57,475 / 59,170 B; chain 7622 `maxCodeSize` 65,536 and
+  60,105 B runtime / 61,702 B init, `UnderlyingZetherToken` 57,475 / 59,170 B; SCaaS testnet `maxCodeSize` 65,536 and
   init 131,072 per `src/chains/private7622/README.md`):
-  - init code + appended `Env` (≈ 1 KB) ≈ 62.7 KB: over 49,152 on any chain without EIP-7954, under 131,072 on 7622;
+  - init code + appended `Env` (≈ 1 KB) ≈ 62.7 KB: over 49,152 on any chain without EIP-7954, under 131,072 on the SCaaS testnet;
     the transaction is under the 128 KB pool limit. The factory route adds no new limit compared with a direct
     `0x4e59` deployment: the same EIP-3860 check applies to the factory's `CREATE2`. [estimate]
   - gas: code deposit 200 × 60,105 ≈ 12.02 M, `CREATE2` 32,000 + 8 gas per init word ≈ 16 k, calldata ≈ 0.8 M (16 /
@@ -328,7 +328,7 @@ For **22776 (mainnet)** [inference]:
 - Launch after Glamsterdam (EIP-7954) or keep the raised code-size limit in the 22776 chainspec; re-measure the
   `deployImplementation` gas under EIP-8037.
 
-For **7622 (testnet)** [inference]:
+For **SCaaS testnet** [inference]:
 - Keep the deployer as registrar, but build the delay with a small value (minutes) so the code path and the client
   handling of "not yet usable" are tested before 22776.
 - Generate the release list from the deploy JSON already produced, to rehearse the format.

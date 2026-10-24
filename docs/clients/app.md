@@ -39,7 +39,7 @@ meta-tx token; wrap/unwrap including gasless unwrap (target: `mtxExecute` with t
 (SSRF-guarded), policy, gossip (peers, topics, announces, bans, trusted), DEX markets and homes, external-client API keys,
 admin users, audit, and a metrics dashboard link.
 
-**Families**, all behind one adapter interface: EVM (Gnosis 100, Celo 42220, private chain 7622 (formerly 9000), anvil 31337); Hedera
+**Families**, all behind one adapter interface: EVM (Gnosis 100, Celo 42220, SCaaS testnet (chain id 7622, formerly 9000), anvil 31337); Hedera
 295–298 (EVM on HSCS plus the HTS specifics); Cosmos (CosmWasm); Soroban (Stellar and Pi); Aptos; Sui; GRAM; Solana.
 
 **Deployment**: two modes from one build — a static SPA with a runtime `config.json`, or served by `scaas-node` on its
@@ -303,7 +303,7 @@ There is no RPC override in production builds. Why: a third-party RPC can forge 
 and chain.
 
 EVM-chain specifics: Gnosis 100 — `finalized` ~160–240 s, the final badge waits for the `finalized` tag; Celo 42220 — no
-CIP-64, CELO gas only; private 7622 — base fee 0, `private: true`, Zether gated, no public explorer links, and the RPC must
+CIP-64, CELO gas only; SCaaS testnet — base fee 0, `private: true`, Zether gated, no public explorer links, and the RPC must
 send CORS for the app origin; anvil 31337 — `dev: true`, the dev key in dev builds, Zether; everywhere — RIP-7212 presence
 changes passkey/UA P-256 cost, so the gas estimate is shown before a self-paid passkey intent. Hedera: the create wizard
 reads `getTokenCustomFees` / `getTokenKey(FEE_SCHEDULE)` through the HTS precompile and warns
@@ -603,8 +603,8 @@ banner ([zether balance](signers-clientkeys.md#zether-balance)). Every Zether sc
 prover (`wasm-bindgen --target web`) and opens the conf vault itself (`openConfKey`), so `x` never enters the main realm; it
 keeps `x` and the BSGS table for the session and is terminated on lock, after 5 min idle or 5 min hidden. Defaults
 `tableBits 22, boundBits 44`; `allowLargeTable` only by explicit choice. Zether shows only on chains 31337/1337 with a
-configured ZetherToken ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02); whether chain 7622 joins is an open owner question).
-Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the same worker
+configured ZetherToken ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02); whether the SCaaS testnet joins is an open owner question).
+Post-quantum Zether (PQZ) tokens configured on the SCaaS testnet run in the same worker
 ([CTR-PQZ-18](../contracts/pq-zero-knowledge.md#CTR-PQZ-18)).
 
 ### 10.1 Feature availability

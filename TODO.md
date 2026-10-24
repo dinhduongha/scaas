@@ -10,7 +10,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - **Specs before app code** (owner 2026-10-08).
 - **Concurrency** (owner 2026-10-08 / 2026-10-15): max 3 agents; `scripts/capped` has 2 heavy slots (`heavy`,
   `heavy.2`; `CAPPED_SLOTS` overrides), 4 GB each; docker containers need their own `--memory`.
-- **Chains** (owner 2026-10-15): 7622 = testnet, resettable — the controller backs up the chain data, then resets /
+- **Chains** (owner 2026-10-15): SCaaS testnet = testnet, resettable — the controller backs up the chain data, then resets /
   redeploys itself; 22776 = future mainnet — every change is the owner's (work on a throwaway copy), precompiles only
   after the production gates (cryptographic audit, G-LIC), and from its launch "test-only, no migration" ends there.
 - **P6 mandate** (owner 2026-10-14, session 4): carry P6 to its end; merge AND push each sub-phase once tests, size gate,
@@ -39,9 +39,47 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-20 night):** **5h part A merged** (branch `pqz-state-b`, merge commit on main; Tasks 1–6 + relayed
-  rollover, final review + fix wave + re-review clean). Next: **5h part B** (16k regeneration with B-1, A-2, `R_REG`,
-  one `proofSystemId` bump; plan Tasks 7–9), then the Codex order below (HANDOFF.md top note).
+- **Now (2026-10-23, evening shutdown):** `pqz-16k` `fe5abb63`: **Task 8b DONE** (four gates PASS, z21diff byte-identical
+  after N4), `pqz-8c` merged; **8c part 2 paused** on `pqz-8c2` (WIP `ea7beeae`: generator owns `pqzh_set.rs`, per-set
+  PQZH limits, n2560 PQZH, ffi / vectors / gate per set; vectors, docs, gates left) — owner answers
+  2026-10-23: `MAX_INPUT` per set OK, n2560 preset t = 122, generated header accepted. Order in HANDOFF.md top note.
+- **Earlier (2026-10-23, afternoon shutdown):** `pqz-16k` `fdf2ae7a`: 8b review (4 Important / 10 Minor) → fix round 1 + re-review
+  (approved pending I2; per-set build paths so the four gates run at once, owner `CAPPED_SLOTS=4`); gate
+  `n2048-kmax1024` PASS; resume the other three gates (`gate.sh --last <set>`, before merging `pqz-8b-fix` `bd27243e`,
+  re-review minors N1–N4) → 8b DONE → merge `pqz-8c` → 8c part 2. Order in HANDOFF.md top note.
+- **Earlier (2026-10-23, morning shutdown):** `pqz-16k` `eb823b44`: 8b item 6 built (`n2560-kmax16384`, `n2816-kmax65536`), gate
+  resume tooling; next `scripts/capped pqz-core/gate.sh --last` (resumes the `n2816-kmax65536` gate), then the
+  `n2560-kmax16384` full gate, 8b report → review → merge `pqz-8c` (`bf38bbbd`, 8c part 1b done) → 8c part 2
+  (`MAX_PROOF_PQZH` 327,680 B for `n2560-kmax16384` only, owner). Order in HANDOFF.md top note.
+- **Earlier (2026-10-22, shutdown):** 8b items 1–5 + per-set generator done on `pqz-16k` (`61b0c003` WIP; set (a) gate PASS;
+  v3 gate re-run + item 6 16k / A′ via `set.toml` + `make.sh all` left); 8c part 1 + 1b on `pqz-8c` (`6e69bfa0` WIP; set (a)
+  PQZH = preset B t 120, fallbacks A `fallback-retry` / C; `c8b.sh` checks left). Order in HANDOFF.md top note.
+- **Earlier (2026-10-21 evening):** **5h part B** on branch `pqz-16k` (not pushed). Done: Task 7 (16k, now superseded),
+  7b (Amsterdam re-measure), 7c (smaller n), 8a (B-1, A-2, `R_REG`; reviewed), spike PACK (P46) and F185 (Foundry 1.8.5,
+  every profile amsterdam) — both merged into `pqz-16k`. **Task 8b paused** (parameter sets `pqz-core/params/sets/`, PQZL at set (a)). Then 8c PQZH
+  (backup) → 8d stmt / contracts (P46, per-set Solidity, 32-bit precompile addresses, `ROLL_MAX`, M = 8 by measurement,
+  one id bump) → Task 9. HANDOFF.md top note has every owner ruling of the day.
+- [x] **Node / relayer on the Amsterdam gas model — done 2026-10-22, merged `b62a54f1`** (per-chain fork detection, regular ≤ 2^24 + EIP-7976 floor on Amsterdam chains, 2^24 clamp elsewhere, gas = estimate + 20 % capped by `max_gas_per_tx` / live block limit / 2^32 − 1, out-of-gas simulations refused, rebuilt jobs keep their gas; `DECOY_LEG_GAS` 120,000; testnet `max_gas_per_tx` 64 M, owner). Was (F185 finding): regular gas ≤ 2^24 per tx, total (regular + state)
+  up to 2^32 − 1; `scaas-node` zether.rs `DECOY_LEG_GAS` 32,000 vs 116,698 measured per leg; the prover's `gas_limits` M
+  table assumes total ≤ 2^24 (edge cells need 21–31 M); `docs/node/ops.md` `max_gas_per_tx` 16 M. Never assume gas
+  price 0 or our block limit (owner 2026-10-21: the precompile may be deployed for customers).
+- [ ] **SCaaS testnet at the next reset (plan fs3 Task 13):** ~~genesis `gasLimit` 200 M~~ **done 2026-10-22** (owner: reset now;
+  genesis `0xa17faef4…2ac2`, `b62a54f1`; fail-closed drill, README v2-id note, `eth_estimateGas` probe row also done); the PQZ library v4 of the chosen set; the 32-bit precompile addresses; the
+  `nethermind-2.2` review minors: fail-closed drill with a tampered library, e2e burst / fill drills under Amsterdam,
+  a 200 M block load rehearsal, `.dockerignore` for the default (no `FFI_REV`) image build, README note that the
+  testnet's PQZL v2 id is the forgeable one, an `eth_estimateGas` row in the probe; main's FFI library `ee2f7096…` is
+  not the reviewed `16dd99ce…` (review the v4 library before building the image).
+- [ ] **Dependabot alerts 19 / 20 / 21 / 36 — owner 2026-10-22: leave open (option 2), no dismiss.** All dev / test-only:
+  Solana `ed25519-dalek` 1.0.1, `curve25519-dalek` 3.2.0, `rand` 0.7.3 via `litesvm` 0.17 (dev-dependency) →
+  `agave-precompiles` 4.3.0 — `cargo update` once litesvm / Agave move to `ed25519-dalek` 2; TON `sprintf-js` 1.0.3 via
+  jest → babel-plugin-istanbul → `js-yaml` 3 → `argparse` 1 (no patched version) — goes when jest drops `js-yaml` 3.
+- [ ] **Research (owner 2026-10-21, not blocking):** PQZH proof below ≈ 170 KB at the proven soundness (the debit
+  inputs must fit one tx under EIP-7976, ≈ 261,909 B with the statement); Kyber-style compression of `u` (noise vs
+  `K_MAX`); both only if PQZH on chain or smaller blobs are wanted.
+- [ ] **Metatx split** (owner 2026-10-20 "kiểu gì cũng phải tách"; governance goes to a lib or module): spec → plan →
+  build **after 5h part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code** (timing ruled 2026-10-21).
+  **Owner 2026-10-21: variant A** (DELEGATECALL library, the token keeps the entry points); pass the library only the
+  envelope data hash (else a ≈ 340 KB op 7 pays ≈ +1 M gas).
 - [x] **`MtxRule`: allow-list vs fee class — owner 2026-10-20: keep as is.** `feeClass = 0` = not relayable,
   `ABSOLUTE` / `AMOUNT` = the fee basis (CTR-MTX-20); on contracts with `supportedModes() = 0x03` (`SmartKeyAccount`,
   `MandateWallet`, their `cancelNonce`) an `ABSOLUTE` selector can only run with fee mode `NONE` (CTR-MTX-22; node
@@ -67,7 +105,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   through them; today the node relays address envelopes only), `pqz_call` (direct PQZ calls on the private chain),
   canonical re-encoding of Zether calldata (one intent, one id; NODE-JOB-20) → (6) **Codex run 2: contracts +
   pqz-prover + node relay** (OpenFactory 5g-Z2, UA-6 registry, PQZ / Zether after 5h; the prover's secret handling;
-  the relay paths) before the 7622 redeploy → (7) plan fs3 Task 13 (7622 reset, real e2e: wallet with pqz-prover,
+  the relay paths) before the SCaaS testnet redeploy → (7) plan fs3 Task 13 (SCaaS testnet reset, real e2e: wallet with pqz-prover,
   node relay, fees; ask the owner before timing).
   If credits allow only one run: pqz-core first (proof soundness); contracts keep Claude reviews.
   **Every Codex run is paired with an agy (Antigravity / Gemini) review of the same scope at the same time** (owner
@@ -79,13 +117,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   issue (drafts in `scratchpad/`).
 - [x] **Zether BLS12-381 only (owner 2026-10-20, decisions CTR-ZTH-32; done inside UA-6, design U10)** — bn254 Zether (verifier, `proofSystemId`, UA kind `zether-bn254` 0x0140 + its Schnorr verifier, deploy steps, vectors, client paths) to `legacy/`; specs zether.md / accounts.md / README follow; with UA-6 and 5h. Also with 5h: drop `*_ZETHER_PQZ` kinds (CTR-TOK-21), `mtxShield` / `mtxUnshield` (CTR-ZTH-45), four flows with proof-free shield (CTR-PQZ-06). **Done on branch `ua6` (merge pending).**
 - [x] **UA-6: encryption keys as UA attributes (owner 2026-10-20, decisions CTR-UA-30; research `docs/research/ua-identity.md`; spec + plan merged 2026-10-20: `docs/superpowers/{specs,plans}/2026-10-20-ua6-encryption-key-attributes.md`, owner rulings at the plan's top; next: code)** — spec + plan, then code: registry `register` takes the PQZ key (PQ signers only), `keyOwner` uniqueness incl. msig, `pqz-mlwe` kind and `authRef` removed, `R_REG` message bound to the UA id (rides the 16k id bump), PQZ account keyed by the signing UA; classical Zether unchanged (key = UA, "self" mode). Before plan Task 5h. All UA clients follow. **Done on branch `ua6` (merge pending).**
-- [x] **Z2 owner questions (answers 2026-10-20; Z2 merged 2026-10-20, all applied; notice period: 3 days minimum on every mainnet, owner):** notice period defaults (10 min on 7622, 3 days on 22776) — **OK**;
+- [x] **Z2 owner questions (answers 2026-10-20; Z2 merged 2026-10-20, all applied; notice period: 3 days minimum on every mainnet, owner):** notice period defaults (10 min on the SCaaS testnet, 3 days on 22776) — **OK**;
   library pins = registrar list checked by code hash, not compared with the init code's link references — **OK**;
   `initialize` without Env — **answered**: keep the split explicit — the implementation carries what never changes for it (Env: verifier addresses, registry, chain, libraries; fixed in its constructor), the contract instance carries its own configuration from `initArgs` (e.g. a wrapped USDC → VND token at 1 : 25,000 and a USDC → RUB token at another rate; mint / burn / blacklist / … allowed or not), and both feed the governance matrix item; `deployImplementation` binds the kind's latest Env
   — **No**: to be discussed together with smart-contract governance and token governance.
-- [ ] **bamboo-dms: follow the generic factory API (owner 2026-10-20, plan Task 5g-Z)** — `createToken(kind, version, bytes initArgs, salt)` / `createDex(version, bytes initArgs, salt)` replace the typed `TokenConfig` path; the confidential verifier set comes from the factory (no creator-supplied verifier); `createTokenUnregistered` is refused for confidential kinds; version 0 tokens are unvetted (`isRegisteredToken`). Encoders (plan 5g-Z2, merged 2026-10-20): `initArgs = abi.encode(TokenConfig)` with `ConfidentialConfig` **without** the `verifier` field (7 fields: auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode, multiLegFee), `createDex` `initArgs = abi.encode(DexConfig)`; a release may not be usable yet (`VersionNotYetUsable`: 10 minutes after its deployment on 7622, 3 days minimum on every mainnet) and a kind may be disabled (`KindDisabled`); factory events `EnvPublished`, `ImplementationDeployed`, `KindEnabled` replace `ImplementationRegistered` and the Zether / PQZ flags. 5g-Z2 merged 2026-10-20: update the Odoo connector encoders now.
+- [ ] **bamboo-dms: follow the generic factory API (owner 2026-10-20, plan Task 5g-Z)** — `createToken(kind, version, bytes initArgs, salt)` / `createDex(version, bytes initArgs, salt)` replace the typed `TokenConfig` path; the confidential verifier set comes from the factory (no creator-supplied verifier); `createTokenUnregistered` is refused for confidential kinds; version 0 tokens are unvetted (`isRegisteredToken`). Encoders (plan 5g-Z2, merged 2026-10-20): `initArgs = abi.encode(TokenConfig)` with `ConfidentialConfig` **without** the `verifier` field (7 fields: auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode, multiLegFee), `createDex` `initArgs = abi.encode(DexConfig)`; a release may not be usable yet (`VersionNotYetUsable`: 10 minutes after its deployment on the SCaaS testnet, 3 days minimum on every mainnet) and a kind may be disabled (`KindDisabled`); factory events `EnvPublished`, `ImplementationDeployed`, `KindEnabled` replace `ImplementationRegistered` and the Zether / PQZ flags. 5g-Z2 merged 2026-10-20: update the Odoo connector encoders now.
 - [ ] **PQZL Rust port follow-ups** (port merged `5952951`; placed in the fs3 plan 2026-10-19; full text in
-  COMPLETED.md): (1) roll-out on 7622 — Rust-backed `Nethermind.Pqz` image (pqz-ffi default `pqzl-rust`), RUNBOOK steps
+  COMPLETED.md): (1) roll-out on the SCaaS testnet — Rust-backed `Nethermind.Pqz` image (pqz-ffi default `pqzl-rust`), RUNBOOK steps
   as P6f, PQZ gas rows re-calibrated on the chain host before or with the image switch (CTR-PQZ-09 controller proposal)
   — Task 13; (2) at the roll-out pq-zero-knowledge.md (~1293 / 1320 / 1504) names the Rust crate as the production core
   — Task 13; (3) wasm32 limb path in `pqzl/rust/src/arith/ntt.rs` (wasm32 `verify_fast` 1.7–2.0× slower than C, R_TXM8
@@ -103,13 +141,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 ### P6 — what is left
 
 Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-SZ, P6-Z21, P6-REL, P6-PQZH-SOL, the
-`R_TXM` multi-recipient transfer (P6-ANON S1–S9, op 7 live on 7622 and in the PQZ tokens), gates A / B and the freeze
+`R_TXM` multi-recipient transfer (P6-ANON S1–S9, op 7 live on the SCaaS testnet and in the PQZ tokens), gates A / B and the freeze
 (2026-10-17) — details in COMPLETED.md.
 - [ ] **P6h** clients and WASM (browser wallet bundle builds with `SV=0`, owner 2026-10-13), **P6i** node, **P6j**
   review — after the token-family rename (owner 2026-10-19).
 - [ ] **P6c owner step:** audit the PQ verifiers and the expanded-key cache before any public chain enables a PQ kind.
-- [ ] **P6f follow-ups (owner):** follower + public RPC, restart policy (the 7622 node has none), deleting backups; the
-  hourly `watch.sh` check is manual. (P6f done and live on 7622 since 2026-10-16.)
+- [ ] **P6f follow-ups (owner):** follower + public RPC, restart policy (the SCaaS testnet node has none), deleting backups; the
+  hourly `watch.sh` check is manual. (P6f done and live on the SCaaS testnet since 2026-10-16.)
 - [ ] **P6-PUB drafts** (owner 2026-10-14, session 4): after P6, the live precompiles and P6-ANON, the controller drafts
   the ePrint paper (LaTeX, citing the frozen package) and the ethresear.ch post (Markdown, results-first), kept private
   in `scratchpad/pub/` until the owner posts; the results mail to the LaZer maintainers
@@ -133,7 +171,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
-  P/Invoke) for 7622 / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof
+  P/Invoke) for the SCaaS testnet / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof
   bytes and verdict; chain allowlist + self-test as `PqzSafety`); built only with an explicit option (Cargo feature +
   MSBuild property, image build argument; default off); a node built without it refuses a chainspec that activates it.
   bn254 stays Solidity-only. Controller notes in COMPLETED.md.
@@ -201,7 +239,14 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   which delay, lockable or not). Covers smart-contract governance (releases, Env versions, `deployImplementation` — owner:
   it must not simply bind the kind's latest Env) and token governance (today's `features` / `lockedFeatures`, `AdminLib`
   roles, `owner = 0`, `RATE_ADJUSTABLE` with `rateDelay` / `maxRateStepBps`). Spec first (owner rule), then Z2 follows it.
-- [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; chain 7622 and the UA key tree `m/7622'/…` stay unchanged. Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
+  - Inputs (owner 2026-10-21, chat): (1) **mint allowance per minter** — `{total, perWindow, window, expiry}`, two-tier
+    (USDC masterMinter pattern), a reduce-only role; (2) **moderator transfer** of a user's balance without the user's
+    signature (loyalty points), bounded by a per-moderator total and per window (same primitive as (1)), own event,
+    relayable, public balances only — never on confidential kinds (FORCE rule); proposal: enabled at INIT only;
+    (3) **hybrid underlying** — wrap (citizen brings a stablecoin) plus issuer mint under one `maxSupply`; reserve
+    accounting needed (proposal: unbacked units not redeemable for the underlying; alternatives pro-rata or queue P15);
+    PQZ / Zether minters never mint shielded value.
+- [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; SCaaS testnet and the UA key tree `m/7622'/…` stay unchanged. Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
 - [ ] **Template library** (owner 2026-10-12): every README use case (escrow with an arbiter, milestone service
   contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic
   withdrawal, provenance and family-tree registries) as an implementation deployed once per chain, instances by clone /

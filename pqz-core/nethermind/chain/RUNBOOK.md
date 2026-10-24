@@ -1,24 +1,34 @@
-# P6f runbook — the copy (executed) and the live roll-out on chain 7622 (Task 10)
+# P6f runbook — the copy (executed) and the live roll-out on the SCaaS testnet (Task 10)
 
 This runbook is the step-by-step procedure for switching on the PQZ and ML-DSA precompiles
 ([../README.md](../README.md)) on a running chain, and for undoing it. It is for whoever operates the chain host: the
-owner, or the controller session the owner has allowed to back up, reset and deploy chain 7622 (owner decision
-2026-10-15). Every step was first rehearsed on a throwaway **copy** of chain 7622, then run on the real chain.
+owner, or the controller session the owner has allowed to back up, reset and deploy the SCaaS testnet (owner decision
+2026-10-15). Every step was first rehearsed on a throwaway **copy** of the SCaaS testnet, then run on the real chain.
 
 **Status (all executed):**
 
 | Procedure | Date | Log |
 |---|---|---|
 | [The copy](#the-copy-tasks-78) — rehearsal of both activation paths (Tasks 7–8); gate passed | 2026-10-15 / 16 | `../runs/*-copy-*.txt`, `../runs/2026-10-15-rehearsal.txt` |
-| [Live roll-out on chain 7622](#live-roll-out-on-chain-7622-task-10-executed-2026-10-16) — back up, reset with the precompiles from block 0 (Task 10, image `pqz1`) | 2026-10-16 | `../runs/2026-10-16-live.txt` |
-| [The multi-recipient transfer (op 7)](#the-multi-recipient-transfer-op-7-on-chain-7622-executed-2026-10-17) — a second schedule on the running chain (image `pqz2`) | 2026-10-17 | `../runs/2026-10-17-s8-live*.txt` |
+| [Live roll-out on the SCaaS testnet](#live-roll-out-on-the-scaas-testnet-task-10-executed-2026-10-16) — back up, reset with the precompiles from block 0 (Task 10, image `pqz1`) | 2026-10-16 | `../runs/2026-10-16-live.txt` |
+| [The multi-recipient transfer (op 7)](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17) — a second schedule on the running chain (image `pqz2`) | 2026-10-17 | `../runs/2026-10-17-s8-live*.txt` |
+| [Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21) — reset onto image `2.2.0-pqz3`, Amsterdam from block 1 | 2026-10-21 | `../runs/2026-10-21-testnet-2.2.0.txt` |
+| [Genesis gasLimit 200 M](#genesis-gaslimit-200-m-on-the-scaas-testnet-executed-2026-10-22) — the same chain reset with a 200 M genesis block | 2026-10-22 | `../runs/2026-10-22-testnet-200m.txt` |
+| [Image 2.2.0-pqz4: per-set ids, 32-bit addresses](#image-220-pqz4-on-the-scaas-testnet-executed-2026-10-25) — reset (path B, no backup) onto the plan 5h Task 8d part 1 library (`n2304-kmax4096`) with provisional rows | 2026-10-25 | `../runs/2026-10-25-pqz4-live.txt` |
 
-The commands below are the ones that were executed. Steps marked *live only* ran on chain 7622 itself; everything else
+The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
 [pq-zero-knowledge.md §10](../../../docs/contracts/pq-zero-knowledge.md#chain-integration). Logs of the executed runs:
 [`../runs/`](../runs/).
 
-**Chain roles** (owner 2026-10-15): **7622 is the testnet**, and its data may be reset. **22776 is the future
+**Scripts at `pqz-8d1` and later target image `2.2.0-pqz4`, live on the SCaaS testnet since 2026-10-25** (plan 5h Task
+8d part 1): `e2e.py`, `patch-chainspec.py` and the plugin use the 32-bit addresses
+`0x000000000000000000000000000000005caa0f01` / `…5caa0012` / `…5caa0013`, and `e2e.py` / `corpus.py` take the self-test
+hash, `MAX_INPUT` and the vectors of `PQZ_SET` (default `n2304-kmax4096`, the library's set). For an older image
+(`2.2.0-pqz3` and before: P6f D3's `0x5caa50…0f01` / `…0012` / `…0013`, the `n2048-kmax1024` library, the old-id rows)
+run the scripts of that image's commit.
+
+**Chain roles** (owner 2026-10-15): **the SCaaS testnet (chain id 7622) is the test chain**, and its data may be reset. **22776 is the future
 mainnet** (owner only; not built). Chain 22776 gets the precompiles only after the production gates — the external
 audit and the G-LIC written licence clearance ([pq-zero-knowledge.md CTR-PQZ-01](../../../docs/contracts/pq-zero-knowledge.md),
 the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the same addresses.
@@ -27,8 +37,8 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 
 | Term | Meaning |
 |---|---|
-| chain host | the machine that runs chain 7622: live directory `/home/dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind`, RPC `http://127.0.0.1:8545` |
-| copy | a replica of chain 7622 with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
+| chain host | the machine that runs the SCaaS testnet: live directory `/home/dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind`, RPC `http://127.0.0.1:8545` |
+| copy | a replica of the SCaaS testnet with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
 | chainspec | the chain's JSON configuration (`genesis.json`); the precompiles are switched on by its `engine.Pqz` section |
 | schedule, T | one entry of `engine.Pqz.schedules`: gas prices that apply from its timestamp T on |
 | stock image | the unmodified `nethermind/nethermind:1.39.0`; it ignores `engine.Pqz` |
@@ -41,7 +51,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 | Path | When | chainspec | Data |
 |---|---|---|---|
 | **A. Transition timestamp** (an upgrade of a running chain) | 22776 later, any chain upgrade, a re-price or a new op such as the multi-recipient transfer (`R_TXM`, op 7), added as a second schedule | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged | kept |
-| **B. From genesis** (a new chain, the 7622 testnet reset, owner 2026-10-15) | Task 10 on 7622 (used on 2026-10-16) | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
+| **B. From genesis** (a new chain, the SCaaS testnet reset, owner 2026-10-15) | Task 10 on the SCaaS testnet (used on 2026-10-16) | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
 
 The plugin refuses a first timestamp *before* genesis; a timestamp equal to genesis is path B.
 `patch-chainspec.py` is stricter (review CHAIN-02): without `--testnet-reset` the first timestamp must lie at least
@@ -49,16 +59,16 @@ The plugin refuses a first timestamp *before* genesis; a timestamp equal to gene
 
 ## The copy (Tasks 7–8)
 
-**What it is.** The copy is a **replica** of chain 7622: the live chainspec's parameters, engine and genesis header
+**What it is.** The copy is a **replica** of the SCaaS testnet: the live chainspec's parameters, engine and genesis header
 (`../Nethermind.Pqz.Test/chainspecs/genesis-7622.json`) with a throwaway signer key in `extraData`. The stock image
 first produces some history on it. The live directory is never read beyond read-only `cat` / `ls` /
 `docker image inspect`, and no live data or key material is copied. As a result the copy's genesis hash is its own,
-not 7622's `0x24e43dcb…c464`; on the live chain, step 2 of the probe checks the live hash.
+not the SCaaS testnet's `0x24e43dcb…c464`; on the live chain, step 2 of the probe checks the live hash.
 
 **Changes the copy needed** (found in runs `2026-10-1[56]-copy-*.txt`):
 
 - the history chainspec `genesis.stock.json` adds `eip4895TransitionTimestamp` 0 and `maximumExtraDataSize` `0xffff`
-  (with 7622's parameters as they are, no follower can sync);
+  (with the SCaaS testnet's parameters as they are, no follower can sync);
 - path B starts from the faithful replica `genesis.faithful.json` with `--testnet-reset`, exactly as Task 10 does;
 - both node configs set `Network.FilterPeersByRecentIp` false (otherwise a restarted follower was refused for minutes);
 - `copy.sh up` starts the signer first.
@@ -99,13 +109,13 @@ $C/probe.sh $E && python3 -I $C/e2e.py e2e --engine $E --key <throwaway key>
 
 Results: `../runs/*-copy-*.txt`, `../runs/*-rehearsal.txt`.
 
-## Live roll-out on chain 7622 (Task 10, executed 2026-10-16)
+## Live roll-out on the SCaaS testnet (Task 10, executed 2026-10-16)
 
 *Live only.* **Executed on 2026-10-16** with image `pqz1`; log `../runs/2026-10-16-live.txt`. The chain has run `pqz2` since
-2026-10-17 ([op 7 section](#the-multi-recipient-transfer-op-7-on-chain-7622-executed-2026-10-17)).
+2026-10-17 ([op 7 section](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17)).
 
 **The decision** (owner 2026-10-15, TODO.md, explicit): once the copy gate (Tasks 7–9) passes, back up the current
-7622 chain data, then **reset** 7622 with a fresh genesis carrying the precompiles from block 0 (path B). Keep chain id
+SCaaS testnet data, then **reset** the SCaaS testnet with a fresh genesis carrying the precompiles from block 0 (path B). Keep chain id
 7622, the gas limit 16,777,216, the ports and the signer.
 
 **Why the genesis hash does not change.** The genesis **block** stays byte-identical, so the genesis hash stays
@@ -288,7 +298,7 @@ process-wide lock is shared by RPC calls and block import. A node that serves RP
 (a node fault inside an `eth_call`) or slowed (calls queueing on the lock) by its callers. So the signer's JSON-RPC
 must be reachable from the chain host only; public RPC goes to a follower behind the rate-limited proxy
 (`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`), whose exit stops only that
-follower. **On 7622** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
+follower. **On the SCaaS testnet** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
 host interface; **accepted for the testnet (owner 2026-10-19)**: no firewall or binding change. The rule above binds
 mainnet 22776. A start-up refusal
 `PQZ-REFUSE … sha256 … != the reviewed …` means the image's `libpqz_ffi.so` is not the reviewed build (review W-G):
@@ -296,13 +306,13 @@ use an image built by `build-image.sh` from the reviewed commit.
 
 ### Owner steps outside this runbook
 
-- The follower node and the rate-limited public RPC on 7622. The copy's `docker-compose.copy.yml`,
+- The follower node and the rate-limited public RPC on the SCaaS testnet. The copy's `docker-compose.copy.yml`,
   `config.follower.json` and `nginx-rpc.conf` are the rehearsed configs.
 - A restart policy for the node.
 - When to delete the `*.bak-pqz-*` backups (the runbook's backups are the dated directories `pqz-<TS>` and
   `op7-<TS>` in `/home/dockers/mba-chain-nethermind-backups/`).
 
-## The multi-recipient transfer (op 7) on chain 7622 (executed 2026-10-17)
+## The multi-recipient transfer (op 7) on the SCaaS testnet (executed 2026-10-17)
 
 *Live only;* plan P6-ANON S8. This added the multi-recipient transfer (`R_TXM`, op 7) to the running chain.
 
@@ -362,3 +372,118 @@ python3 -I $C/e2e.py e2e --engine $C/engine-pqz.json --rpc http://127.0.0.1:8545
   start it again. The data needs no restore, because no block has used the second schedule yet.
 - **After T:** run [Task 10's rollback](#rollback) with `$B`'s data, again writing `op7-$TS` where it says `pqz-$TS`.
   This returns the chain to its state at the op 7 backup.
+
+## Nethermind 2.2.0 and Amsterdam on the SCaaS testnet (executed 2026-10-21)
+
+*Live only.* The owner's instruction (2026-10-21): reset the SCaaS testnet directly with the new image and Amsterdam
+active, **no backup**. Nothing was deleted: the 1.39.0 data dir was renamed to
+`data/nethermind_data.pre-2.2.0-20261021`, and the three edited files got `*.bak-1.39.0-20261021` copies (the live
+directory's convention); deleting them is the controller's call.
+
+**Why a reset and not a fork at a future timestamp.** The owner allowed and then asked for a reset; it also gives a
+fresh flat-DB (2.x default for a new node) instead of a 1.39.0 patricia DB carried forward. An in-place fork would
+work the same way with `eip<N>TransitionTimestamp` = T > now (Clique forks by timestamp like any chain).
+
+**What changed** (script `../runs/2026-10-21-testnet-reset-2.2.0.sh`, steps `reset` and `check`):
+
+- `genesis.json`: `eip<N>TransitionTimestamp` = 1 for EIP-2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038,
+  8246. Timestamp 1, not 0: the genesis (timestamp 0) stays a pre-Amsterdam block, so its header and hash
+  `0x24e43dcb…c464` do not change (the same trick as `eip4895TransitionTimestamp` 1). Left out: EIP-7843 (SLOTNUM; the
+  Clique producer sets no slot number and 2.2.0's header validator rejects the block) and EIP-8282 (builder requests,
+  CL predeploys). `engine.Pqz` unchanged (two schedules, PQZL v2 rows). The file was rewritten by `json.dump` with
+  indent 2, so its diff is mostly whitespace.
+- `config.json`: `Blocks.TargetBlockGasLimit` 80,000,000 → 200,000,000 (a 64 KiB deploy needs ≈ 100 M of state gas
+  and a block bigger than its `tx.gas`; the limit ramps by 1/1024 per block, ≈ 2.5 h from 16.8 M to 100 M); `Init.IsMining`
+  removed (2.2.0: "Invalid configuration settings"; `Mining.Enabled` is the key).
+- `docker-compose.yml`: image `scaas/nethermind-pqz:2.2.0-pqz3`.
+
+**Checks** (all in the log): `PQZ-START` with library `16dd99ce…`, self-test `ed910a2c…`, both schedules; blocks every
+5 s with a `blockAccessListHash` in the header; `eth_chainId` 0x1dc6; genesis hash unchanged; `e2e.py probe` all
+checks passed with the reviewed library's corpus (`--corpus bin/corpus-ffi-1adbd563.jsonl`), every input whose
+calldata floor exceeds 2^24 refused by `eth_call`; `e2e.py e2e` all checks passed (76), the same inputs refused by the
+pool; one ordinary value transfer (21,000 gas = 12,000 + 3,000 + 6,000, with its EIP-7708 log). **Not yet run:**
+`e2e.py codesize` (65,536 B of code must deploy, 65,537 B fail). It needs a block gas limit above its `tx.gas` of
+110 M, and after the reset the limit ramps from the genesis `gasLimit` 0x1000000 (16,777,216) toward
+`TargetBlockGasLimit` 200 M by only 1/1024 per block: ≈ 1,780 blocks (≈ 2.5 h) to 110 M, ≈ 2,540 blocks (≈ 3.5 h) to
+200 M (block 856 was at 38.7 M). Re-run once `gasLimit` > 111 M (the command waits by itself):
+`python3 -I pqz-core/nethermind/chain/e2e.py codesize --rpc http://127.0.0.1:8545 --key <test key 0x…04>`.
+
+**After any reset** the same ramp applies: until the limit has climbed, a transaction whose `tx.gas` exceeds the
+current block gas limit is not included (EIP-8037 reserves `tx.gas` in the state dimension), so large deploys wait.
+Changing the genesis `gasLimit` would change the genesis hash.
+
+**Rollback** to 1.39.0 (not needed): stop the node, put the three `*.bak-1.39.0-20261021` files back, swap the data
+dirs back (`data/nethermind_data.pre-2.2.0-20261021` → `data/nethermind_data`), start. The 1.39.0 head is the one in
+that data dir.
+
+**Amsterdam rules the operator must know** ([gas impact](../runs/2026-10-21-glamsterdam-gas-impact.md)): `tx.gas` may
+exceed 2^24 (up to 2^32 − 1) but execution gas may not; the calldata floor is 64 gas per byte and must stay ≤ 2^24, so
+a transaction carries at most ≈ 261,909 calldata bytes; a transaction's `tx.gas` must fit the block gas limit (EIP-8037
+reserves it in the state dimension); new storage slots cost 97,920 state gas and code 1,530 per byte.
+
+
+## Genesis gasLimit 200 M on the SCaaS testnet (executed 2026-10-22)
+
+*Live only.* Owner 2026-10-22: reset the SCaaS testnet now so blocks are 200 M from block 0 ("Reset ngay để có 200 M
+sớm, không cần chạy tải"); no load rehearsal, no burst / fill drill, no calibration. Everything else stays as on
+2026-10-21: image `scaas/nethermind-pqz:2.2.0-pqz3`, the same `engine.Pqz` (two schedules, PQZL v2 rows) and params
+(Amsterdam from timestamp 1), `config.json` (`TargetBlockGasLimit` already 200 M), compose, ports and keys. No chain-data
+backup (owner 2026-10-21); the data dir is renamed, `genesis.json` gets a `.bak-pre-200m-20261022` copy.
+
+**Status: executed 2026-10-22** by the controller (log `../runs/2026-10-22-testnet-200m.txt`, script
+`../runs/2026-10-22-testnet-reset-200m.sh`, rehearsed first on throwaway chains, `../runs/2026-10-22-genesis-200m-throwaway.txt`).
+Image `scaas/nethermind-pqz:2.2.0-pqz3` = `sha256:b3f6c855b2d2adbcf1fa6f6453e931cd54b79467e7e5f023e8642aae43a93b14`;
+`PQZ-START` with library `16dd99ce…`; genesis `0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2` (as
+predicted), block 1 `0xca1fbc04d57f83aa20993bb097be1f5801b1fff4d1505a00926dce4e9024f012`, `gasLimit` 200,000,000 from
+block 0; probe all checks passed (with the `eth_estimateGas` row: 3,394,851 vs exact 3,366,962); e2e `--no-ua` all checks
+passed; `codesize`: 65,536 B deployed at once in block 46 (100,504,388 gas), 65,537 B refused. The e2e part of the log
+holds two interleaved check runs started at the same time with the same key: one hit a nonce clash ("replacement
+transaction underpriced"), the other passed fully — an operator slip, not a chain fault. Redeployed by the checks: the
+probe contract of `e2e.py e2e` and the two `codesize` contracts; nothing else (the PQZ / UA stack is redeployed with
+plan fs3 Task 13). Afterwards `smartcontracts/evm/chain-uids.json` `private7622`, `scaas-node/node.example.toml` and
+`docs/networks/evm.md` carry the new genesis hash (commit `00d791b0`). A gas-less `eth_call` of a call with total gas
+> 2^24 and regular < 2^24 succeeds on the reset chain (`../runs/2026-10-22-testnet-gasless-call.txt`).
+
+```sh
+sh pqz-core/nethermind/runs/2026-10-22-testnet-reset-200m.sh reset   # stop, .bak, patch-chainspec --testnet-reset, rename data, start
+sh pqz-core/nethermind/runs/2026-10-22-testnet-reset-200m.sh check   # head, block 0 / 1, probe (+ eth_estimateGas row), e2e --no-ua, codesize
+```
+
+`reset` refuses to go on unless the semantic diff of `genesis.json` is exactly `genesis.gasLimit` `0x1000000` →
+`0xbebc200`. Success: `PQZ-START` (library `16dd99ce…`), block 0 hash `0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2`
+(predicted by the throwaway run with the live genesis) and `gasLimit` 200,000,000 from block 0, probe and e2e all checks
+passed, `codesize` deploys 65,536 B at once (no ramp). After it: record block 1's hash and the image id in this section
+and in `../README.md`; the genesis hash is the new `chainUid` of chain 7622 (`smartcontracts/evm/chain-uids.json`
+`private7622`, the chain profile's `genesis_hash`, every contract that pins `chainUid`); everything deployed on the old
+chain is gone and is redeployed by its own scripts (`smartcontracts/evm/script/pqz/e2e.py` for the PQZ stack). The test
+vectors that use `0x24e43dcb…c464` as a fixed `chainUid` keep it (a test constant, not the live chain's).
+
+**Rollback:** stop the node, put `genesis.json.bak-pre-200m-20261022` back, swap the data dirs back
+(`data/nethermind_data.pre-200m-20261022` → `data/nethermind_data`), start.
+
+## Image 2.2.0-pqz4 on the SCaaS testnet (executed 2026-10-25)
+
+*Live only.* Owner 2026-10-24: "run it on the SCaaS testnet yourself" (the controller deploys plan 5h Task 8d part 1 to
+the testnet itself, instead of a copy-chain probe) and "no backup of chain 7622 needed". Log
+`../runs/2026-10-25-pqz4-live.txt`; branch `pqz-16k` at `35b59a62` (8d part 1 merged with main's Nethermind 2.2 work).
+
+1. Image: `scripts/capped pqz-core/nethermind/build-image.sh pqz4` twice — pass 1 stops at the reviewed-library check
+   and prints the new library's hash; review (exports `pqz_max_input` / `pqz_precompile` only, no test hooks, no GMP /
+   MPFR / HEXL, `pqz_max_input()` = 524,288), set `SelfTest.ExpectedLibrarySha256` = `0894d191…64772`, commit; pass 2
+   builds `scaas/nethermind-pqz:2.2.0-pqz4` (`sha256:55037b0b…faca6`), `build-image: ok`.
+2. Rows: `provisional-rows.py ../bin/corpus.jsonl engine-pqz.json engine-pqz-provisional-n2304.json` — 26 rows for the
+   new ids (the live row of the same op / proof system / legs / auditor flag × 1.3; `selftestGas` 3,337,000; ML-DSA
+   unchanged). **Provisional, testnet only**: plan 5h Task 9 calibrates the real prices.
+3. Chainspec: `patch-chainspec.py genesis.json engine-pqz-provisional-n2304.json 0x0 genesis.new.json --testnet-reset`
+   — engine.Pqz replaced, params and genesis header unchanged, so the genesis hash stays `0xa17faef4…2ac2`.
+4. Node (stopped since 2026-10-22): install `genesis.json`, compose image `2.2.0-pqz3` → `2.2.0-pqz4`, empty
+   `data/nethermind_data` (no backup), `docker compose up -d blockchain-node`.
+5. Health: `PQZ-START sha256=0894d191… selftest=23d7a1db…c97c0 max_input=524288 addresses=PQZ:0x…5caa0f01,
+   MLDSA44:0x…5caa0012,MLDSA65:0x…5caa0013`, 26 rows; blocks sealed from block 1.
+6. Probe: `PQZ_SET=n2304-kmax4096 e2e.py probe --engine chain/engine-pqz-provisional-n2304.json --rpc
+   http://127.0.0.1:8545 --genesis-hash 0xa17faef4…2ac2` — **398 ok, 0 FAIL** (chain id, genesis hash, `OP_SELFTEST`,
+   every `n2304-kmax4096` PQZL / PQZH vector 1 / 0 with the formula gas, the retired ids refused, misses, ML-DSA-44 /
+   -65 at the 32-bit addresses).
+
+Not done here: contracts (plan 5h Task 8d part 2 — the testnet has no PQZ contracts until their redeploy, fs3 Task
+13), the calibration (Task 9).

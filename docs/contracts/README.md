@@ -92,7 +92,7 @@ profile.
 
 What protects is the contract: on chain B the digest uses B's `chain_uid`, so a signature for chain A reverts
 there, whichever wallet produced it. **Limit:** a genesis hash separates chains with different genesis blocks that
-share a chain id (another network on 7622, a private chain re-created with a new genesis). It does not separate two
+share a chain id (another network on the SCaaS testnet, a private chain re-created with a new genesis). It does not separate two
 branches of a fork (they share genesis) nor a PoA chain re-created from the **same** genesis file. The second is closed
 by the deploy gate: every private chain's genesis carries a unique `extraData` nonce, and a genesis hash already
 present in any chain profile is refused. The first is ruled by the owner: a fork of a chain we run is a **new chain** —
@@ -189,11 +189,11 @@ families carry stronger gates, enforced in code:
 |---|---|---|
 | Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactory.kindEnabled` starts `false` for kinds 2–3 (`setKindEnabled`, registrar; plan 5g-Z2); `createToken` of kinds 2–3 reverts when the kind is off, `createTokenUnregistered` always; the kinds' `initialize` (outside a dev chain, or with a verifier unsupported on the chain), both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
 | Adding a chain to the classical allowlist | a code change of `ZetherSafety` plus a new deployment, after the cryptographic audit | — |
-| Chain 7622 as a classical Zether dev chain | whether chain 7622 counts as "dev": not a dev chain until the owner decides ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | open |
+| SCaaS testnet as a classical Zether dev chain | whether the SCaaS testnet counts as "dev": not a dev chain until the owner decides ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | open |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
 | Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** any dev gate is lifted | open |
 | Gas before public chains | the bn254 transfer (3.33 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
-| PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.kindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
+| PQ Zether gate | hard-coded allowlist (31337, 1337 and the SCaaS testnet) **and** a constructor precompile self-test; `OpenFactory.kindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 
 ## <a id="build-ci-and-pins"></a>5. Build, CI and pins

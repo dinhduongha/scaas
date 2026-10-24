@@ -5,7 +5,7 @@
 **Status:** done (2026-10-18/19, branch `pqzl-rust`): Tasks 1–12 and 10b, commits `109dda5` (Task 1) … `15c19d6`
 (Task 12 fix round), plus the whole-branch review fix round; reports in the SDD run
 `.superpowers/sdd/2026-10-17-pqzl-rust-port/`. `pqz-ffi` builds the Rust core by default (Task 11); the live chain
-7622 keeps the C-backed image until the roll-out. (Originally: plan only, owner 2026-10-16; execution after the
+The SCaaS testnet keeps the C-backed image until the roll-out. (Originally: plan only, owner 2026-10-16; execution after the
 freeze.) Decisions D1–D8 below are controller
 proposals; the owner may override any of them.
 

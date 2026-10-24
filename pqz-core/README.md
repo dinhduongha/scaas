@@ -44,7 +44,7 @@ general-purpose zero-knowledge system.
 | `proofSystemId` | the 32-byte id in every statement that says which proof system (PQZL or PQZH) made the proof |
 | SV | the specialised verifier `pqz_verify_fast`, the fast PQZL verifier used on chain; the generic `pqz_verify` is its reference |
 | `pqz-stmt`, `pqz-ffi` | the shared statement codec, and the library the node loads (the `PQZ` precompile) |
-| chain 7622 / 22776 | the SCaaS testnet / the future mainnet |
+| SCaaS testnet / 22776 | the SCaaS testnet / the future mainnet |
 | `scripts/capped` | the repository's machine lock: heavy jobs run under it, two at a time |
 
 ## 1. At a glance
@@ -75,7 +75,7 @@ The key numbers for one transfer (`R_TX`, 128-bit security):
 Both verify far below the 60 ms limit, and both provers fit in a browser's 256 MiB memory. One precompile verifies
 both: the `proofSystemId` inside the statement selects the system.
 
-**Live on chain 7622** (the testnet): ops 1–6 since 2026-10-16, the multi-recipient transfer (op 7) since 2026-10-17,
+**Live on the SCaaS testnet** (the testnet): ops 1–6 since 2026-10-16, the multi-recipient transfer (op 7) since 2026-10-17,
 and the PQZ tokens use it. See [§3](#3-two-proof-systems-one-precompile) for the precompile and its gas prices.
 
 ## 2. What PQZ is
@@ -155,7 +155,7 @@ prover-side zero-knowledge fixes, D-2 and D-3).
     ones; in the browser, PQZL proves multi-recipient transfers only up to M = 4 (memory).
   - `src/bin/pqz-vectors.rs` generates the frozen test vectors in `smartcontracts/vectors/pqz/`.
 
-**Live on chain 7622** (the testnet, reset on 2026-10-16 with the precompiles active from block 0; genesis hash
+**Live on the SCaaS testnet** (the testnet, reset on 2026-10-16 with the precompiles active from block 0; genesis hash
 `0x24e43dcb…c464`): the Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md), image
 `scaas/nethermind-pqz:1.39.0-pqz2`, built locally, never pushed) loads `libpqz_ffi.so` and adds three precompiles:
 
@@ -230,17 +230,17 @@ per parameter set, from the set's `set.toml` labels (all sets: [params/sets/READ
 | PQZH v1 (retired by 8d) | `scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1` | `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | was frozen at gate B |
 
 Retired: PQZL v2 (`…/v2`, `0x2e07e6ed…798c2f`, frozen at gate A), **forgeable** (lazer#28), removed from the accepted
-set and from `pqz-stmt` on 2026-10-19. Chain 7622 still runs it (image `pqz2`) until the v3 roll-out resets the chain
+set and from `pqz-stmt` on 2026-10-19. The SCaaS testnet still runs it (image `pqz2`) until the v3 roll-out resets the chain
 from genesis (plan `pqzl-fs3` Task 13).
 
 Size and time limits:
 
 | Limit (enforced by `pqz-stmt`) | Value |
 |---|---|
-| `MAX_INPUT` (a larger input makes the call revert) | 393,216 B |
+| `MAX_INPUT` (a larger input makes the call revert) | the set's, `pqz_max_input()`: 524,288 B at `n2304-kmax4096` (the default build) and `n2560-kmax16384`, 393,216 B at `n2048-kmax1024` |
 | `MAX_PROOF`, PQZL | 98,304 B |
-| `MAX_PROOF`, PQZH | 262,144 B (exact maximum at the proven preset: 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor) |
-| Largest possible input | PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`) |
+| `MAX_PROOF`, PQZH | the set's: 262,144 B (`n2560-kmax16384`: 327,680 B); at `n2048-kmax1024`'s proven preset the exact maximum is 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor |
+| Largest possible input | `n2048-kmax1024`: PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`). Other sets: [params/sets/README.md](params/sets/README.md#pqzh-per-set-preset-and-limits-plan-5h-task-8c-part-2) |
 | Proof length | `1 ≤ len(proof) ≤ MAX_PROOF(id)` |
 | Verify time | **≤ 60 ms at p99** on the chain host, and also in wasm32 (owner decision 2026-10-14) |
 
@@ -805,8 +805,8 @@ run files keep the paths of their day.
 |---|---|
 | until 2026-10-14 | PQZL: first spike (`R_REG`, `R_TX`, native and wasm32), optimisation round, `R_BURN`, `R_DS`, `R_DR`, the LaZer soundness fixes (`proofSystemId` v2) and the z21 check, the specialised verifier |
 | 2026-10-14 | relations round: hedged provers, keys from seeds, `R_TX0`, `pqz-stmt`, PQZH on Ligero (all six forms), `pqz-ffi`, the frozen test vectors, serialization v1 |
-| 2026-10-16 | the precompile live on chain 7622 for ops 1–6; the PQZ contracts deployed there, end to end with real PQZL proofs |
-| 2026-10-17 | the multi-recipient transfer (op 7) in both systems, `pqz-stmt`, `pqz-ffi`, vectors, fuzzing, the package, live on chain 7622 and in the PQZ tokens; the directory layout |
+| 2026-10-16 | the precompile live on the SCaaS testnet for ops 1–6; the PQZ contracts deployed there, end to end with real PQZL proofs |
+| 2026-10-17 | the multi-recipient transfer (op 7) in both systems, `pqz-stmt`, `pqz-ffi`, vectors, fuzzing, the package, live on the SCaaS testnet and in the PQZ tokens; the directory layout |
 | 2026-10-17 | **gate A (PQZL) and gate B (PQZH) passed** (`gate.sh`, runs `runs/gate/2026-10-17-*`, decisions.md CTR-PQZ-09): KAT 19/19, fix checks, differential with 0 disagreements, vector checks, wasm32 replay byte-equal, `pqz-ffi` tests, clean fuzzing; for PQZH also every proof ≤ 262,144 B, every verify ≤ 60 ms p99, and the review of the modified Ligero zero-knowledge construction. Both ids are frozen. |
 | 2026-10-17 | **the freeze**: `artifact/runs/freeze-2026-10-17/` (233 checks ok), `expected-results.json` frozen |
 | 2026-10-19 | **PQZL v3** (branch `pqzl-fs3`, not merged yet): the Fiat–Shamir fix for lazer#28 in all four PQZL verifiers and both provers, the z2 rejection and β sign fixes, `proofSystemId` v3, regenerated vectors; v2 retired (STATUS.md, section "PQZL v3") |
@@ -815,7 +815,7 @@ run files keep the paths of their day.
 **In progress:** **PQZL in Rust** ([plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
 `pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate is the production PQZL core
 of the precompile** (owner 2026-10-18): `pqz-ffi` builds it by default (since the port's Task 11) and the C core stays
-as the reference, opt-in (feature `pqzl-c`). Not deployed yet: the precompile on chain 7622 runs the C-backed image
+as the reference, opt-in (feature `pqzl-c`). Not deployed yet: the precompile on the SCaaS testnet runs the C-backed image
 until the live roll-out. The package checks Rust = C (`artifact/reproduce.sh`), and run `d6` compared the two cores'
 speed and memory in one session (§5 "Rust" rows).
 
@@ -843,5 +843,5 @@ scope: [pqz-general-purpose.md](../docs/research/pqz-general-purpose.md).
 | PQZL | `docs/research/pqz-core-e-s1.md` (the spike write-up), `pqz-specialised-verifier.md`, `pqz-verifier-floor.md`, `pqz-relations-burn-disclose.md`, `pqz-tbox-soundness.md`, `pqz-l2-domain.md`, `pqz-z21-norm.md`, `pqz-parameters-e-s0.md` |
 | PQZH | `docs/research/pqzh-ligero.md`, `pqzh-backend-comparison.md`, `pqzh-design.md`, `pqzh-prototype.md`, `pqzh-zk-ext5.md`, `pqzh-zk-whir.md`, `pqzh-solidity-verifier.md`, `pqzh-starkex-verifier.md` |
 | Node | [nethermind/README.md](nethermind/README.md) (plugin, image, gas), [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md) (copy gate, live roll-out, rollback) |
-| Plans | [relations and serialization](../docs/superpowers/plans/2026-10-14-p6e-relations.md), [multi-recipient transfer](../docs/superpowers/plans/2026-10-14-p6-anon.md), [precompiles on chain 7622](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md), [pqz-core layout](../docs/superpowers/plans/2026-10-15-pqz-core-layout.md), [PQZL in Rust](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md) |
+| Plans | [relations and serialization](../docs/superpowers/plans/2026-10-14-p6e-relations.md), [multi-recipient transfer](../docs/superpowers/plans/2026-10-14-p6-anon.md), [precompiles on the SCaaS testnet](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md), [pqz-core layout](../docs/superpowers/plans/2026-10-15-pqz-core-layout.md), [PQZL in Rust](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md) |
 | Other | anonymity research `docs/research/pqz-anonymity.md`; general-purpose circuits `docs/research/pqz-general-purpose.md`; licences `docs/research/pqz-licence-inventory.md` |

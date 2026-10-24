@@ -80,7 +80,7 @@ domain sizes reachable in F_q, so it gives nothing over the proven analysis in t
 5. **PQZH without the precompile:** first (2026-10-14) "if it fits the limits, use it" (withdrawing the 2026-10-13
    ruling "no chain needs it", `3253c30`); measured: Ligero does not fit (534.6 M), a StarkEx-style split FRI + ZK
    verifier would (≈ 21.4 M over 4 txs); then, after the StarkEx study, **do not build PQZH for chains without the
-   precompile** — PQZH runs only where the PQZ precompile exists (7622 / 22776). Status: closed, no work planned
+   precompile** — PQZH runs only where the PQZ precompile exists (SCaaS testnet / 22776). Status: closed, no work planned
    (`3e2675b`).
 
 Controller proposals (owner may override), from the P6e plan and the Ligero note: PQZH proof limit 256 KB with
@@ -102,5 +102,5 @@ WHIR), `pqzh-zk-whir.md` (ZK WHIR), `pqzh-ligero.md` (Ligero, EVM verifier, P6e 
 | Verifier | Solidity on existing precompiles (bn254 `0x06`/`0x07`, BLS12-381 EIP-2537) | native precompile (`pqz-ffi`, one address for both proof systems, CTR-PQZ-10) |
 | Gas per transfer | ≈ 3.6 M (bn254) / ≈ 4.3 M (BLS12-381) minimum gas limit, single recipient (`docs/contracts/zether.md`, node gas cap row) | precompile priced per id in P6f; without the precompile: PQZL has no Solidity verifier, PQZH Ligero 534.6 M (§2), StarkEx-style split FRI + ZK ≈ 21.4 M over 4 txs not built (owner) |
 | Ethereum mainnet / public L2 | possible once the token contracts fit (31,162 / 40,706 B runtime > EIP-170 24,576 B; owner: size waits for Glamsterdam) and after an audit; today `ZetherSafety` allows dev chains only (31337 / 1337) | no, unless that chain adds the PQZ precompile |
-| Private chains 7622 / 22776 (64 KiB code limit) | yes | yes, once P6f deploys the precompile (owner: live on 7622) |
+| Private chains SCaaS testnet / 22776 (64 KiB code limit) | yes | yes, once P6f deploys the precompile (owner: live on the SCaaS testnet) |
 | Post-quantum | no (ElGamal over elliptic curves: a quantum adversary decrypts amounts and balances) | yes (MLWE encryption; PQZL lattice / PQZH hash-based proofs) |

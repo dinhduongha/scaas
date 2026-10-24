@@ -38,7 +38,7 @@ L748; `lnp-quad-many.c` L34; `lnp-quad.c` L458–L472). No cheating-prover proof
 
 **Owner rulings 2026-10-19:** fix the P0s now, ahead of the other Rust-port follow-ups and the token rename; report
 upstream as a public issue at once (filed as [lazer-crypto/lazer#28](https://github.com/lazer-crypto/lazer/issues/28));
-stop and roll back the Rust-backed roll-out on 7622 (live stays on `pqz2` until the fix).
+stop and roll back the Rust-backed roll-out on the SCaaS testnet (live stays on `pqz2` until the fix).
 
 **Fix E (2026-10-19, owner ruling: before the merge, both cores):** Codex finding G-1, prover control flow on secret
 witness values (slack, `binexp`, `Int` add / sub). Inventory, fixes, the ctgrind check (`pqzl/test/ct.sh`) and its

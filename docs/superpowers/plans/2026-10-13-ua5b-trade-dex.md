@@ -70,7 +70,7 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
 - Vector files are generated, never hand-edited; existing keys of every vector file stay byte-identical (insertions
   only); `kinds.json` gains only the `trade` rows.
 - No size optimisation (owner: Glamsterdam); the size gate passes with the new sizes recorded in `size-baseline.json`.
-- No chain-7622 or public-chain action; nothing deployed changes (all chains are test chains). Never merge, never push.
+- No SCaaS testnet or public-chain action; nothing deployed changes (all chains are test chains). Never merge, never push.
 - SPDX header on every new source file; commit trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Review focus

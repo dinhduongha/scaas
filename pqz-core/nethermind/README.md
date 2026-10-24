@@ -1,15 +1,24 @@
-# `Nethermind.Pqz` — the PQZ and ML-DSA precompiles for chain 7622 (P6f)
+# `Nethermind.Pqz` — the PQZ and ML-DSA precompiles for the SCaaS testnet (P6f)
 
-This folder holds the code that lets a blockchain node check PQZ proofs. It is a **plugin** for the Nethermind 1.39.0
+This folder holds the code that lets a blockchain node check PQZ proofs. It is a **plugin** for the Nethermind 2.2.0
 Ethereum client (no change to Nethermind itself) that adds three **precompiles**: built-in contracts at fixed
 addresses that run native code instead of EVM bytecode. One of them, `PQZ`, hands each proof to the PQZ library
-`libpqz_ffi.so`; the other two check ML-DSA signatures. It runs today on chain 7622 (the SCaaS testnet). What PQZ is and
+`libpqz_ffi.so`; the other two check ML-DSA signatures. It runs today on the SCaaS testnet (chain id 7622), which runs
+Amsterdam (Glamsterdam) since its reset on 2026-10-21. What PQZ is and
 how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
 
-- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:1.39.0-pqz2` (built locally, never
-  pushed). The image was `pqz1` until 2026-10-17, when `pqz2` added the multi-recipient transfer (P6-ANON S8). Today
-  the library inside the image is built from the C PQZL core.
+- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz4` (built locally, never
+  pushed; live on the SCaaS testnet since 2026-10-25): Nethermind 2.2.0 + the reviewed library `0894d191…64772` (set
+  `n2304-kmax4096`, the per-set proofSystemIds of plan 5h Task 8d part 1, `pqz_max_input()` 524,288; built from
+  `54c7c88e`), with provisional `engine.Pqz` rows (`chain/engine-pqz-provisional-n2304.json`) until the calibration of
+  plan 5h Task 9. History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
+  multi-recipient transfer, P6-ANON S8; C PQZL core), `1.39.0-pqz3` (2026-10-19, never ran on the testnet),
+  `2.2.0-pqz3` (2026-10-21; library `16dd99ce…` from `1adbd563`), `2.2.0-pqz4` (2026-10-25).
+- **Nethermind 2.2.0 (2026-10-21):** the first release with Glamsterdam on Hoodi; 64 KiB contracts (EIP-7954) and
+  200 M-gas blocks. What the port changed and what Amsterdam's gas rules mean for our pins (`ROLL_MAX`, op 7 M = 8,
+  the precompile gas): [§ Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-2026-10-21) and
+  [`runs/2026-10-21-glamsterdam-gas-impact.md`](runs/2026-10-21-glamsterdam-gas-impact.md).
 - **Plan:** [P6f](../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md). **Spec:**
   [pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md) CTR-PQZ-10 / CTR-PQZ-11, §9.1–§9.3, §10.
 - **Operating the chain** (roll-out, rollback, health checks): [chain/RUNBOOK.md](chain/RUNBOOK.md).
@@ -25,12 +34,12 @@ how the library works: the parent [pqz-core README](../README.md), §3
 | miss | an input that matches no row: it pays the smallest row and gets `…00` (invalid) without calling the library |
 | multi-recipient transfer | `R_TXM`, op 7: one proof for a transfer to M recipients ([parent README](../README.md)) |
 | P/Invoke | the .NET way of calling a C function in a shared library; here `pqz_precompile` in `libpqz_ffi.so` |
-| copy | a throwaway replica of chain 7622 used to rehearse every step before it runs on the real chain |
+| copy | a throwaway replica of the SCaaS testnet used to rehearse every step before it runs on the real chain |
 
 ## The three precompiles
 
-The addresses are the 32-bit form (spec 2026-10-20 §12 item 9, plan 5h Task 8d part 1); chain 7622's live image `pqz2`
-still serves P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` / `…0013` until the next roll-out.
+The addresses are the 32-bit form (spec 2026-10-20 §12 item 9, plan 5h Task 8d part 1); live on the SCaaS testnet since image
+`2.2.0-pqz4` (2026-10-25); the earlier images served P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` / `…0013`.
 `PQZ`'s input limit (`PqzNative.MaxInput`, an input above it is a failed call) is the loaded library's
 `pqz_max_input()`, the `MAX_INPUT` of the parameter set it was built for (524,288 B at the default `n2304-kmax4096`;
 was the literal 393,216 of `n2048-kmax1024`).
@@ -53,10 +62,10 @@ status code into the call's result.
 
 ```mermaid
 flowchart LR
-  C["contract on chain 7622"] --> VM["Nethermind VM"]
+  C["contract on the SCaaS testnet"] --> VM["Nethermind VM"]
   VM --> PQ["PqzPrecompile (C#)<br/>prices the input from the schedule"]
   PQ -->|"P/Invoke"| FFI["libpqz_ffi.so<br/>pqz_precompile"]
-  FFI --> L["PQZL (Rust core pqzl; the image on 7622<br/>runs the C core until the roll-out)"]
+  FFI --> L["PQZL (Rust core pqzl)"]
   FFI --> H["PQZH (Ligero, Rust)"]
   FFI -->|"status 0"| O["32-byte answer<br/>…01 valid / …00 invalid"]
   FFI -->|"status 1: input over MAX_INPUT"| F["failed call, all gas used"]
@@ -78,7 +87,8 @@ transition never drops the precompiles (review W-D, 2026-10-19: refuted, the tes
 took effect, that .NET supports ML-DSA, that the library's SHA-256 equals the reviewed value compiled into the plugin
 (`SelfTest.ExpectedLibrarySha256`, review W-G) and that the library's self-test (op 6) returns the expected hash; it
 then logs `PQZ-START` (library SHA-256, self-test, schedules, addresses). Any failure logs `PQZ-REFUSE` and the node
-exits with code 120 instead of running without the precompiles.
+exits with code 120 instead of running without the precompiles. On Nethermind 2.x these checks are the init step
+`PqzStartupCheck` (after `InitializeBlockTree`, before `LoadGenesisBlock`): 2.x no longer calls a plugin's `Init`.
 
 ```mermaid
 flowchart LR
@@ -131,6 +141,8 @@ scripts/capped sh -c 'cd pqz-core/nethermind && dotnet Harness/bin/Release/net10
 scripts/capped pqz-core/nethermind/harness.sh 60 1h                                         # the same, in the base image's runtime
 # 6. Build the image (with CALIB=1 also the calib target)
 CALIB=1 scripts/capped pqz-core/nethermind/build-image.sh pqz1                               # runs/<date>-image-pqz1.txt (+ calib target)
+#    ... the 2.2.0 image of 2026-10-21: the reviewed library from its own commit, the plugin from the work tree
+FFI_REV=1adbd56318b3d07af76d8f61ffbbb27b4b4fd2b0 scripts/capped pqz-core/nethermind/build-image.sh pqz3   # 2.2.0-pqz3
 # 7. Calibrate the gas prices, once, on the chain host
 scripts/capped pqz-core/nethermind/calibrate.sh pqz1                                       # ONE run: runs/<date>-calib.txt, chain/engine-pqz.json
 ```
@@ -148,16 +160,85 @@ The commands show the first image label, `pqz1`. The current image was built wit
 the op 7 rows (`runs/2026-10-17-calib-ops7*`) and leaves `chain/engine-pqz.json` unchanged, because those rows join
 the live rows in a second schedule.
 
+**`FFI_REV` (2026-10-21).** On main the library sources moved on after the reviewed build (pqzl-fs3 Task 5: the PQZL
+`proofSystemId` v3 and regenerated vectors; A-3 secret wiping), so a build from the work tree gives `ee2f7096…`, not
+the reviewed `16dd99ce…`, and `build-image.sh` stops (`runs/2026-10-21-image-pqz3-failed-main-ffi.txt`). With
+`FFI_REV=<commit>` the script extracts that commit's tree (`git archive` into `bin/ffi-src`) and passes it as the
+Dockerfile's `ffisrc` build context, so the library is built (reproducibly, the same sha256) from the reviewed commit
+while the plugin comes from the work tree. A library change is still the review step above; `FFI_REV` does not replace
+it. The probe and e2e of such an image use that commit's vectors: `python3 -I bin/ffi-src/pqz-core/nethermind/corpus.py
+bin/corpus-ffi-<rev>.jsonl` and `e2e.py … --corpus bin/corpus-ffi-<rev>.jsonl`.
+
+## Nethermind 2.2.0 and Amsterdam (2026-10-21)
+
+**Port** (commits on branch `nethermind-2.2`): base `nethermind/nethermind:2.2.0@sha256:5cc0061e…`, SDK
+`10.0.402-resolute@sha256:6924c5c6…` (2.2.0's build SDK; its runtime is .NET 10.0.13 with OpenSSL 3.5.5, as the base
+image). Changes Nethermind 2.x forced:
+
+| Nethermind 2.x | Plugin change |
+|---|---|
+| `IPrecompile.BaseGasCost` / `DataGasCost` and the spec provider's block numbers are `ulong` (2.0.0: numeric API types) | gas returns `ulong`; no schedule ⇒ `ulong.MaxValue` (out of gas, as before) |
+| `ReleaseSpec` indexes precompiles by number and throws for an address with a non-zero byte above its low 32 bits ("a precompile number must fit 32 bits") | `PqzReleaseSpec` re-implements `IReleaseSpec.Precompiles` / `IsPrecompile` over its own set; every caller in Nethermind goes through the interface, and the code-info repositories fall back to the provider's dictionary for a number they cannot index. Test `IsPrecompile_finds_the_three_from_T` |
+| The plugin `Init` hook is gone (init steps, #12326): `Init` still compiled and was never called | `PqzStartupCheck` step; test `Startup_checks_are_a_step_before_genesis` (the first `2.2.0-pqz3` build ran a few minutes without `PQZ-START` before this was found, see the run log) |
+| `IJsonSerializer.Deserialize<T>` returns `T?` | `!` in the harness, calibration and tests |
+
+Tests 46 / 46 in the pinned SDK image (`runs/2026-10-21-test.txt`). Not re-run for this port: the 60-minute P/Invoke
+harness (the boundary and the library are unchanged) and the calibration (owner's go).
+
+**Amsterdam on the SCaaS testnet.** Reset on 2026-10-21 (owner: reset directly, no backup), `eip<N>TransitionTimestamp`
+= 1 for EIP-2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038, 8246 — Amsterdam from block 1, the genesis
+block (and hash `0x24e43dcb…c464`) unchanged. Not enabled: EIP-7843 (SLOTNUM needs a consensus layer's slot number;
+the Clique producer sets none and 2.2.0 rejects such a header) and EIP-8282 (builder requests: CL predeploys). Code
+size 64 KiB native (EIP-7954; `maxCodeSize` 0x10000 stays for the genesis release). `Blocks.TargetBlockGasLimit`
+80 M → 200 M: a 64 KiB deploy is ≈ 100 M of EIP-8037 state gas and needs a block larger than its `tx.gas`.
+`engine.Pqz` keeps the two schedules the testnet ran before (PQZL rows with the v2 id `0x2e07e6ed…`, which the reviewed
+`pqz3` library verifies; copy in `runs/2026-10-21-testnet-engine-pqz.json`). **The v2 id is the forgeable one**: the
+PQZL v2 transcript lets a proof be forged (fixed by v3 / `0x8079d65b…`, pqzl-fs3 Task 5), so a PQZL proof accepted by
+the testnet proves nothing until the v4 library rolls out — a test chain only (owner ruling, review nethermind-2.2 M5); `chain/engine-pqz.json` on main already
+carries the v3 id `0x8079d65b…` for the `pqz4` roll-out (plan pqzl-fs3 Task 13) and does not match this image. Procedure:
+[chain/RUNBOOK.md](chain/RUNBOOK.md#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21); log
+`runs/2026-10-21-testnet-2.2.0.txt`.
+
+**Gas-rule headline** ([full report](runs/2026-10-21-glamsterdam-gas-impact.md)): (1) the EIP-7976 calldata floor (64
+gas per byte) must stay under 2^24 (EIP-8037), so **no transaction carries more than ≈ 261,909 calldata bytes**:
+every PQZH TRANSFER / BURN / REFRESH / op 7 input and PQZL op 7 M = 8 with the auditor are now refused (measured), and
+the 16k op 7 M = 8 (309,591 B) can never fit; (2) EIP-8038's 10,000-gas storage write puts the 16k `ROLL_MAX` = 192
+rollover at ≈ 16.6–18.0 M, so `ROLL_MAX` under 0.75 · 2^24 becomes ≈ 80–96 [estimate]; (3) the precompile prices are
+unchanged (every probed row = formula); (4) every SSTORE2 op blob becomes ≈ 26–32 M of state gas.
+
+**Prepared for the next reset (2026-10-22, branch `amsterdam-node`; the review nethermind-2.2 minors that need no new
+library).** (a) `chain/patch-chainspec.py --testnet-reset` sets the genesis `gasLimit` to 200,000,000 (`0xbebc200`,
+= `TargetBlockGasLimit`: no 2.5 h ramp) and replaces an existing `engine.Pqz` (reset only); the genesis hash changes
+with it. Checked on a throwaway chain (`runs/2026-10-22-genesis-200m-throwaway.txt`): block 0 `gasLimit` 200 M, a
+65,536 B contract deployed in block 9 (100,504,388 gas), 65,537 B refused, a 22.0 M-gas transaction (200 new slots,
+regular < 2^24) included, probe all checks passed; the live genesis through the same reset gives the hash
+`0xa17faef4…2ac2`. **The SCaaS testnet was reset with it on 2026-10-22** (script
+`runs/2026-10-22-testnet-reset-200m.sh`, log `runs/2026-10-22-testnet-200m.txt`): genesis `0xa17faef4…2ac2` as predicted,
+block 1 `0xca1fbc04…f012`, image `sha256:b3f6c855…`, `gasLimit` 200 M from block 0, probe / e2e / `codesize` all
+checks passed ([RUNBOOK](chain/RUNBOOK.md#genesis-gaslimit-200-m-on-the-scaas-testnet-executed-2026-10-22)). (b) `e2e.py probe`
+has an `eth_estimateGas` row (a direct call to `PQZ` estimates the precompile row: 3,394,851 vs exact 3,366,962,
++0.8 %, on the throwaway chain), closing the review's open point on Facade / JsonRpc. (c) Fail-closed drill (M1) on a
+throwaway container: a library with one appended byte gives `PQZ-REFUSE … != the reviewed 16dd99ce…` and exit 120
+3.5 s after start, RPC never answered; the untampered control starts (`runs/2026-10-22-fail-closed-drill.txt`).
+(d) M4 (no `.dockerignore` for the default build) does not hold: BuildKit reads `Dockerfile.dockerignore` (an
+allowlist) for `-f Dockerfile`; the default build sends 16 MB (`runs/2026-10-22-default-context-check.txt`). (e)
+`e2e.py burst` / `fill` pick the largest input under the calldata floor and size `tx.gas` by `intrinsic()` (M2; not
+run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3), timing / gas calibration.
+
 ## Runbook
 
 [chain/RUNBOOK.md](chain/RUNBOOK.md) has every step, in order, for:
 
-- **the copy** (Tasks 7–8): the rehearsal on a replica of chain 7622. Executed; the gate passed on 2026-10-16, with
+- **the copy** (Tasks 7–8): the rehearsal on a replica of the SCaaS testnet. Executed; the gate passed on 2026-10-16, with
   the checklist in `runs/2026-10-15-rehearsal.txt`;
-- **the live roll-out on chain 7622** (Task 10): back up, then reset the chain with `engine.Pqz` active from block 0
+- **the live roll-out on the SCaaS testnet** (Task 10): back up, then reset the chain with `engine.Pqz` active from block 0
   (owner decision 2026-10-15). Executed on 2026-10-16, log `runs/2026-10-16-live.txt`;
 - **adding the multi-recipient transfer (op 7)** to the running chain with a second schedule. Executed on 2026-10-17,
   log `runs/2026-10-17-s8-live.txt`.
+- **Genesis gasLimit 200 M**: the SCaaS testnet reset again with a 200 M genesis block, everything else unchanged.
+  Executed on 2026-10-22, log `runs/2026-10-22-testnet-200m.txt`.
+- **Nethermind 2.2.0 + Amsterdam**: the SCaaS testnet reset onto `2.2.0-pqz3` with Amsterdam from block 1. Executed on
+  2026-10-21, log `runs/2026-10-21-testnet-2.2.0.txt`.
 
 ## Results (2026-10-15 to 2026-10-17)
 
@@ -169,8 +250,10 @@ the live rows in a second schedule.
 | 6 calibration | `t_ecMul` 17 µs; rows 2.567–5.409 M gas; `selftestGas` 2,567,000; ML-DSA 49,000 / 68,000 | `runs/2026-10-15-calib.txt` |
 | 7 copy | the stock image ignores `engine.Pqz`; path A before / after T, probe 111, e2e 53; path B probe 112, e2e 53 | `runs/2026-10-1[56]-copy-*.txt` |
 | 8 rehearsal | burst 429s, 80 M ramp + full block (79.24 M gas), kill drill, rollback | `runs/2026-10-15-rehearsal.txt` |
-| 10 live roll-out | chain 7622 backed up and reset with `engine.Pqz` from block 0 (image `pqz1`); genesis hash unchanged; probe and e2e passed | `runs/2026-10-16-live.txt` |
-| S8 multi-recipient transfer (op 7, P6-ANON) | plugin rows per `(id, M, auditorOn)` (plan D19), 41 / 41 tests; harness 60 min CLEAN (4,577,772 inputs); image `pqz2` (library `4fc1a6a2…`); multi-recipient calibration 14 rows 3,625,000–6,177,000 gas; copy path A (pqz1 → pqz2, data kept) before / after T, e2e 86 ok; **live on 7622** 2026-10-17: second schedule at T = 1792205116, probe 389 ok before and after T, e2e 76 ok | `runs/2026-10-17-*` |
+| 10 live roll-out | the SCaaS testnet backed up and reset with `engine.Pqz` from block 0 (image `pqz1`); genesis hash unchanged; probe and e2e passed | `runs/2026-10-16-live.txt` |
+| S8 multi-recipient transfer (op 7, P6-ANON) | plugin rows per `(id, M, auditorOn)` (plan D19), 41 / 41 tests; harness 60 min CLEAN (4,577,772 inputs); image `pqz2` (library `4fc1a6a2…`); multi-recipient calibration 14 rows 3,625,000–6,177,000 gas; copy path A (pqz1 → pqz2, data kept) before / after T, e2e 86 ok; **live on the SCaaS testnet** 2026-10-17: second schedule at T = 1792205116, probe 389 ok before and after T, e2e 76 ok | `runs/2026-10-17-*` |
+
+| Nethermind 2.2.0 + Amsterdam | port tests 46 / 46; image `2.2.0-pqz3` (library `16dd99ce…` from `1adbd563`); **SCaaS testnet reset** 2026-10-21 with Amsterdam from block 1: `PQZ-START`, genesis hash unchanged, probe all checks passed (input refusals over the floor included), e2e 76 ok, one ordinary transfer; the 64 KiB deploy check waits for the gas-limit ramp (RUNBOOK) | `runs/2026-10-21-*` |
 
 In this table, "path A" and "path B" are the two ways to switch the precompiles on (a future timestamp, or from
 genesis; see the [runbook](chain/RUNBOOK.md)); "probe" and "e2e" count the checks that passed in `chain/probe.sh` (read-only

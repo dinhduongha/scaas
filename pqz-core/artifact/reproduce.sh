@@ -281,7 +281,7 @@ run ffi-native.txt ffi sh -c "cargo test $C --lib && cargo build $C \
        *'pqz-ffi feature \"pqzl-rust\"'*) echo 'symbols ok: no C core in this build (default backend pqzl-rust, CTR-PQZ-09: feature pqzl-c off)' ;; \
        *) echo 'C core in this build: unknown (no PQZL backend feature in cargo tree)'; false ;; \
      esac \
-  && \${CC:-clang} -std=c11 -Wall -Wextra -o target/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,\"\$(pwd)/target/release\" \
+  && \${CC:-clang} -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT=\$(python3 -I -c \"import json; print(json.load(open('../params/sets/n2304-kmax4096/set.json'))['max_input'])\") -o target/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,\"\$(pwd)/target/release\" \
   && target/c_abi && cargo clippy $C --features prove,test-hooks --lib -- -D clippy::float_arithmetic"
 step "pqz-ffi: wasm32 builds and digest lines (must equal native)"
 run ffi-wasm-build.txt ffi sh -c "cargo build $C --lib --target wasm32-unknown-unknown && cd wasm && cargo build $C --target wasm32-unknown-unknown"

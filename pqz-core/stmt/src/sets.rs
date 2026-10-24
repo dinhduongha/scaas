@@ -15,3 +15,14 @@ mod set;
 const _: () = assert!(cfg!(feature = "set-n2048-kmax1024") as u8 + cfg!(feature = "set-n2304-kmax4096") as u8 + cfg!(feature = "set-n2560-kmax16384") as u8 + cfg!(feature = "set-n2816-kmax65536") as u8 <= 1, "pqz-stmt: at most one parameter set feature set-<set> (none: n2048-kmax1024)");
 /// the sets this crate builds for (set.toml without core_only)
 pub const SETS: &[&str] = &["n2048-kmax1024", "n2304-kmax4096", "n2560-kmax16384", "n2816-kmax65536"];
+/// every set's proofSystemIds (set, system, id; core_only sets too): the tests refuse each other set's
+#[cfg(test)]
+pub(crate) const ALL_IDS: &[(&str, &str, Word)] = &[
+    ("n2048-kmax1024", "pqzl", hex32("19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d")),
+    ("n2048-kmax1024", "pqzh", hex32("9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4")),
+    ("n2304-kmax4096", "pqzl", hex32("15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a")),
+    ("n2304-kmax4096", "pqzh", hex32("e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730")),
+    ("n2560-kmax16384", "pqzl", hex32("a3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d")),
+    ("n2560-kmax16384", "pqzh", hex32("e83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851")),
+    ("n2816-kmax65536", "pqzl", hex32("9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3")),
+];

@@ -697,7 +697,10 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
 
 /// `1 ≤ M ≤ MAX_RECIPIENTS` recipients per transfer.
 pub const MAX_RECIPIENTS: usize = 16;
-/// EIP-7825: the cap on a transaction's gas LIMIT (2^24), intrinsic and calldata included.
+/// EIP-7825: 2^24. Under Amsterdam (EIP-8037, every chain after its Glamsterdam fork, owner 2026-10-21) it caps a
+/// transaction's REGULAR gas (intrinsic, calldata floor, execution); state gas (new slots 97,920 each) comes on top, so
+/// the transaction's gas LIMIT is larger and comes from `eth_estimateGas`, never from this table: the largest admitted
+/// cells need 21.4 M to 31.2 M in total (BLS12-381, F185 `ZetherGasLimit` `test_edge_*` at a 2^25 limit, branch pqz-16k).
 pub const TX_GAS_CAP: u64 = 16_777_216;
 /// Headroom the prover keeps under [`TX_GAS_CAP`]: 1 % (167,772 gas) for bytecode, calldata and state drift; the
 /// measured limits are already the dear case (cold accounts, every account's first credit).
@@ -708,6 +711,11 @@ pub const GAS_MARGIN: u64 = TX_GAS_CAP / 100;
 /// calldata with the EIP-7623 floor), binary search on the limit, inner fee paid. Relayed = through `mtxExecute`, which
 /// adds the envelope and two more frames that each keep 1/64 (EIP-150). A row ends at the first `M` over the cap less
 /// the margin. Re-measure with §19 and the edges move (`gas_table_edges` pins them).
+/// Measured on Osaka (one gas dimension). Under Amsterdam the table is kept as the bound on a transfer's REGULAR gas:
+/// F185 re-ran every edge cell (the largest `M` of each form, direct and relayed) under Amsterdam and each settles,
+/// so its regular gas is within 2^24 (`ZetherGasLimit` `test_edge_*`); the per-`M` regular gas has not been re-measured
+/// (needs `vm.lastCallGas()` in `test_measure_*`, a gas run on the owner's go): an Amsterdam cell one past an edge may
+/// fit and is still refused, the safe side.
 fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'static [u64] {
     use TransferMode::*;
     match (bls, mode, auditor, relayed) {
@@ -760,8 +768,10 @@ pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: boo
 }
 
 /// What a non-zero `decoyFee` adds per leg on top of [`transfer_gas`] (the pool → leg payout, the leg's first UA-ledger
-/// credit: 28,663 measured, `ZetherDecoyFeeGasTest`, which pins this bound).
-pub const DECOY_LEG_GAS: u64 = 32_000;
+/// credit): 116,698 measured under Amsterdam (F185, `ZetherDecoyFee.test_gas_decoyFeePerLeg`, which pins the bound
+/// 120,000; EIP-8037 state gas for the new balance slot, EIP-8038 for the writes; 28,663 on Osaka, then bound 32,000).
+/// The total is counted against the regular cap, so the check errs on the safe side.
+pub const DECOY_LEG_GAS: u64 = 120_000;
 
 /// [`transfer_gas`] plus [`DECOY_LEG_GAS`] per leg when the build pays a `decoyFee`.
 pub fn build_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> u64 {

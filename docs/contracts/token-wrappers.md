@@ -579,7 +579,7 @@ check was dropped); the rule handles each one explicitly:
 | Case | `code.length` | Treated as | Why |
 |---|---|---|---|
 | Plain EOA | 0 | EOA | — |
-| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague, available on chain 7622) | 23 | **EOA** | the code is only a designator; the EOA's private key still signs anything |
+| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague, available on the SCaaS testnet) | 23 | **EOA** | the code is only a designator; the EOA's private key still signs anything |
 | Contract during its constructor | 0 | **EOA** (refused) | indistinguishable from an EOA at that moment; consequence: a contract **cannot** be approved or spend an allowance from its own constructor |
 | Deployed contract | > 0, not a designator | contract | — |
 
@@ -713,7 +713,7 @@ implementation itself, so what a release depends on is fixed in its code by cons
 - **Notice period.** `usableFrom = block.timestamp + noticePeriod`; `createToken` / `createDex` refuse a release before
   it (`VersionNotYetUsable`, `DexVersionNotYetUsable`). The deploy script reads `NOTICE_PERIOD`: every mainnet (any
   chain outside `DeployBase._isTestChain`'s fixed test / dev list — 22776, Hedera 295, Ethereum, BSC, an unknown chain)
-  defaults to and may not go below 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0 (owner
+  defaults to and may not go below 3 days; the SCaaS testnet defaults to 10 minutes, the other test / dev chains to 0 (owner
   ruling 2026-10-20). The constructor caps it at 30 days (`MAX_NOTICE_PERIOD`, `NoticePeriodTooLong`: near `2^64` every deployment would overflow).
 - **Limit.** The registrar's key is the trust root for code: it chooses the init code and the env. The factory proves
   which env was appended to the init code and that each library listed in the env had its pinned code hash at
@@ -897,7 +897,7 @@ each library ≤ 24,576 B.
   other contracts ≤ 24,576 B, init code ≤ 49,152 B, and a contract named in `smartcontracts/evm/size-baseline.json`
   may exceed its limit but never its recorded size (UA-4, with the UA ledger: `NoUnderlyingToken` 31,770 B, `UnderlyingToken` 39,189 B, `NoUnderlyingZetherToken` 40,067 B, `UnderlyingZetherToken` 49,778 B, and its init code 51,473 B as the entry `UnderlyingZetherToken.init` over EIP-3860; owner decision 2026-10-11: optimise
   later, wait for the Glamsterdam fork, code size is not a concern); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
-  Every token implementation now needs a chain with 64 KiB code (anvil `--code-size-limit 65536`, chain 7622), and
+  Every token implementation now needs a chain with 64 KiB code (anvil `--code-size-limit 65536`, SCaaS testnet), and
   `deploy.sh` and the node e2e pass `--code-size-limit 65536` to `forge script` (`deploy.sh` also `--slow`: one tx per block; parallel broadcast can strand a deploy tx that doesn't fit the block's remaining gas).
   **Flag:** with P2a `NoUnderlyingToken` is over its 20,480 B budget (still under EIP-170).
 

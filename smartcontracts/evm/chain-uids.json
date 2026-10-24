@@ -8,12 +8,12 @@
       "name": "SCaaS private chain",
       "chainId": 7622,
       "testnet": false,
-      "chainUid": "0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464",
+      "chainUid": "0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2",
       "genesisTimestamp": null,
       "sources": [
-        "docs/networks/evm.md"
+        "http://127.0.0.1:8545 (eth_getBlockByNumber 0x0, 2026-10-22)"
       ],
-      "note": "from the chain profile in the docs, not re-queried"
+      "note": "SCaaS testnet reset 2026-10-22 (genesis gasLimit 200 M, pqz-core/nethermind/runs/2026-10-22-testnet-200m.txt); resets again at plan fs3 Task 13. Client test vectors keep the earlier 0x24e43dcb…c464 as a fixed constant (owner 2026-10-22)"
     },
     {
       "key": "ethereum",

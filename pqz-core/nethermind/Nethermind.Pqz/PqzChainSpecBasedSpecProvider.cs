@@ -11,7 +11,7 @@ public class PqzChainSpecBasedSpecProvider(ChainSpec chainSpec, ILogManager logM
 {
     protected override ReleaseSpec CreateEmptyReleaseSpec() => new PqzReleaseSpec();
 
-    protected override ReleaseSpec CreateReleaseSpec(ChainSpec spec, long releaseStartBlock, ulong? releaseStartTimestamp = null)
+    protected override ReleaseSpec CreateReleaseSpec(ChainSpec spec, ulong releaseStartBlock, ulong? releaseStartTimestamp = null)
     {
         spec.EngineChainSpecParametersProvider.GetChainSpecParameters<PqzChainSpecEngineParameters>()
             .ValidateGenesis(spec.Genesis?.Timestamp ?? 0);

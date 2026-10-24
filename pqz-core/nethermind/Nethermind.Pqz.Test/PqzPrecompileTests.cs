@@ -18,7 +18,7 @@ public class PqzPrecompileTests
     {
         JsonObject s = SpecTests.Schedule(1);
         if (rows is not null) s["pqz"] = rows;
-        PqzSchedule p = new EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString());
+        PqzSchedule p = new EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString())!;
         p.Validate();
         return p;
     }
@@ -100,7 +100,7 @@ public class PqzPrecompileTests
         Assert.That(PqzPrecompile.Gas(new byte[68], s), Is.EqualTo(min + 9));
         Assert.That(PqzPrecompile.Gas([6, 0, 0, 0, 0], s), Is.EqualTo(s.SelftestGas));
         Assert.That(PqzPrecompile.Gas(new byte[] { 6 }.Concat(new byte[100_000]).ToArray(), s), Is.EqualTo(s.SelftestGas));
-        Assert.That(PqzPrecompile.Gas(h0, null), Is.EqualTo(long.MaxValue), "no schedule: out of gas (fail closed)");
+        Assert.That(PqzPrecompile.Gas(h0, null), Is.EqualTo(ulong.MaxValue), "no schedule: out of gas (fail closed)");
     }
 
     [Test]
