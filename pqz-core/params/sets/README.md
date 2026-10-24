@@ -14,7 +14,7 @@ pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm featu
 | `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the frozen set (the parameters of the retired PQZL v3 id): the committed vectors at `smartcontracts/vectors/pqz/`, the contracts until 8d part 2 | [SET.md](n2048-kmax1024/SET.md) |
 | `n2304-kmax4096` | 2304, 36 | 61,275,424,977,257 (2^45.80) | 4,096 | owner 2026-10-21: the default set on chain; the default of the `pqzl` crate, `gate.sh` and (since 8d part 1) `pqz-ffi` | [SET.md](n2304-kmax4096/SET.md) |
 | `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | approved 2026-10-20 as the Task 8 set, superseded as the default by `n2304-kmax4096` 2026-10-21: shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
-| `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21: **core only** (`core_only = true`: C + Rust cores, KATs; no pqz-stmt / precompile / vectors / contracts) | [SET.md](n2816-kmax65536/SET.md) |
+| `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21 core only; **owner 2026-10-24: a full PQZL set for customers** (pqz-stmt, precompile, vectors, gate since plan 5h Task 8d part 1b; contracts in 8d part 2); **no PQZH** (no Ligero domain at its q) | [SET.md](n2816-kmax65536/SET.md) |
 
 Older notes and plans use short names for three of these sets: "set (a)" = `n2304-kmax4096`, "16k" = `n2560-kmax16384`,
 "A′" = `n2816-kmax65536`; new text uses the directory names only.
@@ -75,7 +75,7 @@ exists at a set depends on q:
 | `n2048-kmax1024` | built and running (`pqz-ffi`, vectors, gate): THE preset (D3 id) |
 | `n2304-kmax4096` | built (plan 5h Task 8c part 2; owner 2026-10-22): the **radix-7/17 preset** (radices 2 / 7 / 17 / 19 / 43 / 431, n 45,752, k 952, t 120), debit proofs 251,608–253,048 B (9–10 KB under 262,144), soundness 127.40 bits; the two other options below stay as fallbacks (re-prove under the limit: Cargo feature `fallback-retry`, never in production builds; per-set limit raise: documented only) |
 | `n2560-kmax16384` | built (plan 5h Task 8c part 2): debit proofs above 262,144 and no set-specific preset (q − 1 = 2^3 · 19 · 43 · 431 · 5,659 · 70,627 has no other small radix; re-proving cannot close a ≈ 40 KB gap) → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (per-set limit raise; decisions CTR-PQZ-10) and t = 122 on THE preset's n / k (soundness 127.55 bits, above the other sets'): debit bounds 303,412–305,120 B |
-| `n2816-kmax65536` | none: q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has none of the radices 19 / 43 / 431 of PQZH's domains; PQZH here would need other domains |
+| `n2816-kmax65536` | none, and none possible at this q: q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has a smooth part of only 24, so no Ligero evaluation domain exists (PQZH would need another q, i.e. another set). The set is PQZL only (`set.toml` `pqzh = false`): pqz-stmt knows no PQZH id there, pqz-ffi has no PQZH build, the gate skips Ligero and the cross-checks |
 
 Details per set: `<set>/PQZH.md`.
 
@@ -169,8 +169,11 @@ peak. R_TXM rows: M recipients, with the auditor unless the row says "no auditor
 | R_TX statement (B) | 83,072 | 93,312 | 103,552 | 113,792 |
 | C prover arena peak: R_TX / R_TXM M = 8 | 312 / 794 MB | 380 / 937 MB | 457 / 1,094 MB | 538 / 1,259 MB |
 
-R_TXM M = 8 needs `PQZ_ARENA_MB=2048` in the C bench at every set (above its default 768 MiB). `n2816-kmax65536` is core
-only: no pqz-stmt / precompile build, so its limits are the other sets' for comparison, not a deployed limit.
+R_TXM M = 8 needs `PQZ_ARENA_MB=2048` in the C bench at every set (above its default 768 MiB). `n2816-kmax65536` (a
+full PQZL set since plan 5h Task 8d part 1b): its vectors' largest proof is 79,199 B (R_TXM M = 8 with the auditor,
+`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`), 19,105 B under `MAX_PROOF_PQZL`; its `MAX_INPUT` is
+524,288 like the other non-frozen sets' (largest input at the limit 5 + 295,808 + 98,304 = 394,117 B, R_TXM M = 8 with
+the auditor: above the frozen set's 393,216).
 
 ### PQZH per set: preset, proof sizes and size limits (bytes; plan 5h Task 8c part 2)
 
@@ -219,22 +222,24 @@ Calldata = the proof (PQZL: the table above; PQZH: its bound) + the call path's 
 calldata table. ✗ = above 16,777,216: cannot be one transaction on an Ethereum-like chain. "≈": the path's overhead is
 not in that `PQZH.md` and is estimated from the ABI layout (R_TX0 = R_TX − 128 B, R_TXM M = 1 = R_TX + 64 B, + 288 B per
 extra recipient; the per-recipient step reproduces Task 7's measured R_TXM M = 8 calldata at the old 16k parameters,
-`pqzl/params/p16k/results-16k.md` §8). "not offered": PQZH cannot prove R_TXM M = 8 under its limit.
+`pqzl/params/p16k/results-16k.md` §8). "not offered": PQZH cannot prove R_TXM M = 8 under its limit. `n2816-kmax65536`
+(PQZL only, no `PQZH.md`): every value ≈, its proof (table above) + `n2560-kmax16384`'s overhead of the same path + 2,048 B
+(one pk more per path that carries a pk; none for the `eth_call` path).
 
-| Relation — call path | `n2048-kmax1024` PQZL / PQZH | `n2304-kmax4096` PQZL / PQZH | `n2560-kmax16384` PQZL / PQZH |
-|---|---|---|---|
-| R_REG — `UARegistry.register` | 3.22 M / 13.61 M | 3.49 M / 14.84 M | 3.76 M / 16.67 M |
-| R_DS / R_DR — `verifyTransferAmount` (`eth_call`) | 1.88 M / 12.22 M | 2.00 M / 13.32 M | 2.14 M / 15.02 M |
-| R_TX — relayed `mtxExecute` | 4.12 M / 16.45 M | 4.50 M / 17.61 M ✗ | 4.87 M / 21.11 M ✗ |
-| R_TX0 — relayed `mtxExecute` | 4.08 M / 16.39 M | 4.47 M / 17.60 M ✗ | ≈ 4.84 M / ≈ 21.11 M ✗ |
-| R_BURN — relayed `mtxExecute` | 4.04 M / 16.38 M | 4.43 M / 17.60 M ✗ | 4.79 M / 21.04 M ✗ |
-| R_TXM M = 1 — relayed `mtxExecute` | 4.12 M / 16.45 M | 4.50 M / 17.62 M ✗ | ≈ 4.87 M / ≈ 21.12 M ✗ |
-| R_TXM M = 2 | 4.19 M / 16.47 M | 4.57 M / 17.68 M ✗ | ≈ 4.94 M / ≈ 21.14 M ✗ |
-| R_TXM M = 4 | 4.34 M / 16.55 M | 4.82 M / 17.76 M ✗ | 5.21 M / 21.23 M ✗ |
-| R_TXM M = 8 | ≈ 5.47 M / not offered | ≈ 5.97 M / not offered | ≈ 6.43 M / not offered |
+| Relation — call path | `n2048-kmax1024` PQZL / PQZH | `n2304-kmax4096` PQZL / PQZH | `n2560-kmax16384` PQZL / PQZH | `n2816-kmax65536` PQZL |
+|---|---|---|---|---|
+| R_REG — `UARegistry.register` | 3.22 M / 13.61 M | 3.49 M / 14.84 M | 3.76 M / 16.67 M | ≈ 4.08 M |
+| R_DS / R_DR — `verifyTransferAmount` (`eth_call`) | 1.88 M / 12.22 M | 2.00 M / 13.32 M | 2.14 M / 15.02 M | ≈ 2.33 M |
+| R_TX — relayed `mtxExecute` | 4.12 M / 16.45 M | 4.50 M / 17.61 M ✗ | 4.87 M / 21.11 M ✗ | ≈ 5.29 M |
+| R_TX0 — relayed `mtxExecute` | 4.08 M / 16.39 M | 4.47 M / 17.60 M ✗ | ≈ 4.84 M / ≈ 21.11 M ✗ | ≈ 5.26 M |
+| R_BURN — relayed `mtxExecute` | 4.04 M / 16.38 M | 4.43 M / 17.60 M ✗ | 4.79 M / 21.04 M ✗ | ≈ 5.21 M |
+| R_TXM M = 1 — relayed `mtxExecute` | 4.12 M / 16.45 M | 4.50 M / 17.62 M ✗ | ≈ 4.87 M / ≈ 21.12 M ✗ | ≈ 5.29 M |
+| R_TXM M = 2 | 4.19 M / 16.47 M | 4.57 M / 17.68 M ✗ | ≈ 4.94 M / ≈ 21.14 M ✗ | ≈ 5.49 M |
+| R_TXM M = 4 | 4.34 M / 16.55 M | 4.82 M / 17.76 M ✗ | 5.21 M / 21.23 M ✗ | ≈ 5.64 M |
+| R_TXM M = 8 | ≈ 5.47 M / not offered | ≈ 5.97 M / not offered | ≈ 6.43 M / not offered | ≈ 6.98 M |
 
 PQZL fits every path at every set, R_TXM M = 8 included, with ≥ 10.3 M of the 2^24 cap left for execution and the
-precompile; PQZH debits fit
+precompile (≈ 9.8 M at `n2816-kmax65536`); PQZH debits fit
 only at `n2048-kmax1024` (≈ 0.2–0.4 M margin) — at `n2304-kmax4096` and `n2560-kmax16384` they need a per-transaction cap
 ≥ 17.8 M / 21.3 M (PQZH is a backup, spec §12 item 4).
 
@@ -260,7 +265,7 @@ sets differ and that none is retired (PQZL v2 `0x2e07e6ed…798c2f`, v3 `0x8079d
 | `n2048-kmax1024` | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4` → `0x19fad50a…9a326d` | `scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2` → `0x9d945089…a7dca4` |
 | `n2304-kmax4096` | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4` → `0x15d16d77…cb608a` | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2` → `0xe4bc6d17…885730` |
 | `n2560-kmax16384` | `scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4` → `0xa3db21fc…70262d` | `scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2` → `0xe83ad1da…109851` |
-| `n2816-kmax65536` | `scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4` → `0x9d23a0de…bd53a3` (core only: the cores' bench statements) | — |
+| `n2816-kmax65536` | `scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4` → `0x9d23a0de…bd53a3` | — (no PQZH: pqz-stmt's `HAS_PQZH` false, its `PQZH_ID` the zero word, refused; plan 5h Task 8d part 1b) |
 
 **Changing a label (an owner override, or a later bump).** Edit the set's `pqzl_id` / `pqzh_id` in `set.toml`, then:
 `python3 -I pqz-core/params/sets/gen_set.py --all` (the generated files, `stmt/src/sets.rs`' `ALL_IDS`; at
@@ -309,7 +314,7 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 
 | File | What | Made by |
 |---|---|---|
-| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input` (sets with pqz-stmt), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with pqz-stmt), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
+| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input` (sets with pqz-stmt), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with PQZH), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
 | `pqz_set.h`, `rust/set.rs` | n, k, q, log2 q, Δ, `K_MAX`, digit / carry / noise widths, norm bounds, NTT roots, Barrett constants, the specialised verifier's CRT prime count, the `proofSystemId`s (keccak256 of the labels) | [`gen_set.py`](gen_set.py) (`--check` in the gate) |
 | `set.json` | every derived constant the Python tools read (`pqz_kat.py`, `e_s0_set.py`, `ligero_params.py`, the tests' `core_only`; the limits and the PQZH preset) | `gen_set.py` |
 | `pqzh_set.rs` | a set with PQZH: q − 1's factors, generator, F_q^4 non-residue, radices, the Ligero preset (n, k, t) | `gen_set.py` |

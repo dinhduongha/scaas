@@ -7,8 +7,8 @@ approval, max_input, [pqzh_preset], the proofSystemId labels pqzl_id / pqzh_id: 
                       with and without the auditor, G = ceil(M / 4) randomness groups, and the bench-only M = 16)
   pqz_set.h           every parameter-dependent constant of the C core outside LaZer's codegen headers
   rust/set.rs         the same for the Rust crates (pqzl, pqz-stmt, pqzh-ligero; `#[path]` per cargo feature set-<set>);
-                      a set with pqz-stmt (not core_only) also MAX_PROOF_PQZH and MAX_INPUT (plan 5h Task 8c part 2)
-                      and PQZH_ID; every set PQZL_ID (plan 5h Task 8d: keccak256 of set.toml's labels, one id per
+                      a set with pqz-stmt (not core_only) also MAX_PROOF_PQZH, MAX_INPUT (plan 5h Task 8c part 2),
+                      PQZH (set.toml pqzh) and PQZH_ID (the zero word without PQZH: plan 5h Task 8d part 1b); every set PQZL_ID (plan 5h Task 8d: keccak256 of set.toml's labels, one id per
                       set and proof system, checked distinct across the sets and from the retired ids)
   set.json            every derived constant the Python tools need (pqz_kat.py, e_s0_set.py)
   PqzSet.sol          the Solidity constants of the set (make.sh <set> sol compiles it; PQZ_SOL_INSTALL=1 copies it to

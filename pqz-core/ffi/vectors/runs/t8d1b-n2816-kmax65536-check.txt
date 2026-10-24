@@ -1,27 +1,27 @@
-keys / cbd / matrix / enc: 0.2 s
-pqzl TRANSFER           proof  54843 B  prove+verify 3.07 s
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  54843 B  prove+verify 3.04 s
 pqzl TRANSFER0          proof  54531 B  prove+verify 2.90 s
-pqzl BURN               proof  54012 B  prove+verify 2.12 s
-pqzl REFRESH            proof  53983 B  prove+verify 5.89 s
+pqzl BURN               proof  54012 B  prove+verify 2.11 s
+pqzl REFRESH            proof  53983 B  prove+verify 5.87 s
 pqzl REGISTER           proof  35407 B  prove+verify 0.62 s
-pqzl DISCLOSE-SENDER    proof  35924 B  prove+verify 1.75 s
-pqzl DISCLOSE-RECEIVER  proof  36728 B  prove+verify 1.77 s
-pqzl DISCLOSE-AUDITOR   proof  36742 B  prove+verify 1.53 s
-pqzl M1-on              proof  54844 B  prove+verify 3.41 s
-pqzl M2-on              proof  57746 B  prove+verify 2.75 s
-pqzl M4-on              proof  59508 B  prove+verify 3.27 s
-pqzl M8-on              proof  79196 B  prove+verify 5.75 s
-pqzl M1-off             proof  54506 B  prove+verify 8.12 s
-pqzl M2-off             proof  55024 B  prove+verify 4.39 s
-pqzl M4-off             proof  58148 B  prove+verify 3.56 s
-pqzl M8-off             proof  76350 B  prove+verify 4.80 s
-pqzl M2-off-two-real    proof  54991 B  prove+verify 4.66 s
-pqzl M4-off-decoys      proof  58113 B  prove+verify 3.09 s
-pqzl M8-on-boundary     proof  79199 B  prove+verify 6.64 s
-proofs: 70.5 s
-negative: 388 rows (262 decoder, 126 verifier): 100.6 s
-worst case: 257.3 s
-total: 263.9 s
+pqzl DISCLOSE-SENDER    proof  35924 B  prove+verify 1.74 s
+pqzl DISCLOSE-RECEIVER  proof  36728 B  prove+verify 1.70 s
+pqzl DISCLOSE-AUDITOR   proof  36742 B  prove+verify 1.51 s
+pqzl M1-on              proof  54844 B  prove+verify 3.34 s
+pqzl M2-on              proof  57746 B  prove+verify 2.79 s
+pqzl M4-on              proof  59508 B  prove+verify 3.29 s
+pqzl M8-on              proof  79196 B  prove+verify 5.82 s
+pqzl M1-off             proof  54506 B  prove+verify 8.06 s
+pqzl M2-off             proof  55024 B  prove+verify 4.26 s
+pqzl M4-off             proof  58148 B  prove+verify 3.44 s
+pqzl M8-off             proof  76350 B  prove+verify 4.78 s
+pqzl M2-off-two-real    proof  54991 B  prove+verify 4.65 s
+pqzl M4-off-decoys      proof  58113 B  prove+verify 3.03 s
+pqzl M8-on-boundary     proof  79199 B  prove+verify 6.59 s
+proofs: 69.9 s
+negative: 404 rows (278 decoder, 126 verifier): 99.1 s
+worst case: 256.8 s
+total: 263.0 s
 same matrix.json 1167 B
 same cbd.json 4307 B
 same keygen.json 3016 B
@@ -33,28 +33,28 @@ same statement_register.json 46549 B
 same statement_disclose.json 277124 B
 same statement_transfer_multi.json 3904686 B
 same proof_pqzl.json 2744566 B
-same negative.json 133527 B
+same negative.json 139883 B
 same selftest.json 2303 B
 same worstcase_noise.json 6202428 B
 same fee0.json 1263456 B
-pqz-vectors --check: 15 files, 15284702 B: ok
+pqz-vectors --check: 15 files, 15291058 B: ok
 	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2816-kmax65536/release/pqz-vectors --check"
-	User time (seconds): 258.89
-	System time (seconds): 2.89
+	User time (seconds): 258.36
+	System time (seconds): 2.87
 	Percent of CPU this job got: 99%
-	Elapsed (wall clock) time (h:mm:ss or m:ss): 4:23.95
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 4:23.05
 	Average shared text size (kbytes): 0
 	Average unshared data size (kbytes): 0
 	Average stack size (kbytes): 0
 	Average total size (kbytes): 0
-	Maximum resident set size (kbytes): 362484
+	Maximum resident set size (kbytes): 363004
 	Average resident set size (kbytes): 0
 	Major (requiring I/O) page faults: 0
-	Minor (reclaiming a frame) page faults: 1069990
-	Voluntary context switches: 132385
-	Involuntary context switches: 15362
+	Minor (reclaiming a frame) page faults: 1042356
+	Voluntary context switches: 132321
+	Involuntary context switches: 10354
 	Swaps: 0
-	File system inputs: 20352
+	File system inputs: 0
 	File system outputs: 32
 	Socket messages sent: 0
 	Socket messages received: 0

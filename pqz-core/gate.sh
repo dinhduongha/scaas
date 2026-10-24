@@ -22,8 +22,9 @@
 # seeds and the Rust tests read the set's). PQZH (Ligero over F_q) exists for the sets whose set.json says pqzh
 # (n2048-kmax1024, n2304-kmax4096, n2560-kmax16384 since plan 5h Task 8c part 2): pqz-ffi / pqz-vectors / fuzz build it
 # with the set (feature set-<set> forwards it), Ligero's tests run with --features set-<set>; for a set without it the
-# Ligero tests and the cross-checks are "skipped (PQZH ...)" (owner ruling 2026-10-21: skipped, not PARTIAL). A core_only set (set.toml, e.g. n2816-kmax65536) has no
-# pqz-stmt / precompile build: vectors, ffi, cargo, xcheck and fuzz are "skipped (core_only)". Exit 1 if any step fails.
+# Ligero tests and the cross-checks are "skipped (PQZH ...)" (owner ruling 2026-10-21: skipped, not PARTIAL; n2816-kmax65536,
+# PQZL only since plan 5h Task 8d part 1b). A core_only set (set.toml; none today) has no pqz-stmt / precompile build:
+# vectors, ffi, cargo, xcheck and fuzz are "skipped (core_only)". Exit 1 if any step fails.
 # Resume (owner 2026-10-23, every set): runs/gate/<label>-state records each step and each part of a long step (diff,
 # fnv, vectors, ffi, rust, cargo, fuzz; resume.sh) that passed; re-running the same label at the same set and tree
 # skips them, so an interrupted gate restarts near where it stopped. The tree (GATE_TREE) is the file contents (binary
@@ -129,7 +130,7 @@ for l in sys.stdin:
     if j.get("reason") == "compiler-artifact" and j.get("executable") and j["profile"]["test"]:
         print(j["target"]["kind"][0] + "-" + j["target"]["name"], j["executable"])'
 # C = Rust = wasm32 on the bench proofs: the C core's pqz_bench, the Rust bench and the Rust bench in wasm32 (node) print
-# the same proofs_fnv per relation (2 proofs of each of the 14 relations, mask 16383); a core_only set also the C core
+# the same proofs_fnv per relation (2 proofs of each of the 14 relations, mask 16383); a core_only set and n2816-kmax65536 also the C core
 # in wasm32 (cwasm)
 fnv() { (cd pqzl && part fnv/c sh -c "./build.sh native > /dev/null && PQZ_ARENA_MB=2048 $PB/native/pqz_bench 2 1 16383 > '../$R-fnv-c.jsonl'" &&
   cd rust && part fnv/rust sh -c "CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline $NODEF --features '${FEAT}bench' --bin bench &&
@@ -139,9 +140,10 @@ fnv() { (cd pqzl && part fnv/c sh -c "./build.sh native > /dev/null && PQZ_ARENA
     PQZL_WASM_FILE=wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_wasm.mjs 2 1 16383 > '../../$R-fnv-wasm.jsonl'" &&
   cd ../.. && for x in c rust wasm; do python3 -I -c "$FNVX" "$R-fnv-$x.jsonl" > "$R-fnv-$x.txt" || return 1; done &&
   test "$(wc -l < "$R-fnv-c.txt")" = 14 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
-  cat "$R-fnv-c.txt" && if [ "$CORE_ONLY" = True ]; then cwasm; fi); }
-# a core_only set has no pqz-ffi build, whose wasm32 build and replay run the C core in wasm32 at the other sets: here
-# the C core's wasm32 build (its limb path, PQZ_MUL128 0) in its own build directory (not the native build's) must print
+  cat "$R-fnv-c.txt" && if [ "$CORE_ONLY" = True ] || [ "$(json log2q)" -gt 50 ]; then cwasm; fi); }
+# a core_only set, and a set with log2 q > 50 (n2816-kmax65536, 54: the closest to the C core's PQZ_LOG2Q <= 56 limb
+# bound; it kept this part when it stopped being core_only, plan 5h Task 8d part 1b; pqz-ffi's wasm32 build runs the
+# Rust core): the C core's wasm32 build (its limb path, PQZ_MUL128 0) in its own build directory (not the native build's) must print
 # the native C run's proofs_fnv (8b review I4)
 cwasm() { (cd pqzl && part fnv/cwasm sh -c "B=$PB/cwasm ./build.sh wasm > /dev/null &&
     PQZ_WASM_FILE=$PB/cwasm/wasm/pqz.wasm PQZ_ARENA_MB=2048 node test/run_wasm.mjs 2 1 16383 \

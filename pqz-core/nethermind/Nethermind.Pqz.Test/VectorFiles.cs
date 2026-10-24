@@ -27,7 +27,7 @@ public static class Repo
     /// <summary>the set's vectors: smartcontracts/vectors/pqz/&lt;set&gt;/ (n2048-kmax1024: smartcontracts/vectors/pqz/)</summary>
     public static string VectorDir => Set == "n2048-kmax1024" ? Path_("smartcontracts", "vectors", "pqz") : Path_("smartcontracts", "vectors", "pqz", Set);
     public static string FfiDir => Environment.GetEnvironmentVariable("PQZ_FFI_DIR") ?? Path_("pqz-core", "ffi", "target", "release");
-    public static string HooksDir => Path_("pqz-core", "nethermind", "bin", "test-hooks");
+    public static string HooksDir => Environment.GetEnvironmentVariable("PQZ_HOOKS_DIR") ?? Path_("pqz-core", "nethermind", "bin", "test-hooks");
     public static string CorpusPath => Environment.GetEnvironmentVariable("PQZ_CORPUS") ?? Path_("pqz-core", "nethermind", "bin", "corpus.jsonl");
 }
 

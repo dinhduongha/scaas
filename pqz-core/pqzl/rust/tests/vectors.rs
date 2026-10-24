@@ -312,7 +312,8 @@ fn negative_rows_reject() {
         "n2048-kmax1024" => 383,
         "n2304-kmax4096" => 384,
         "n2560-kmax16384" => 384,
-        "n2816-kmax65536" => 0, // core_only: no vectors
+        // full PQZL set since 5h Task 8d part 1b, PQZL only: + 16 "retired PQZH v1 proofSystemId" rows on its PQZL inputs
+        "n2816-kmax65536" => 401,
         s => panic!("no negative.json row count recorded for set {s}"),
     };
     assert_eq!(rows.len(), want);

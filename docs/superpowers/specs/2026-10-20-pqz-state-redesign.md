@@ -868,12 +868,18 @@ Each ruling, with its content and status:
     set; its vectors stay at `smartcontracts/vectors/pqz/`, which the contracts read until 8d) `n2304-kmax4096`
     (the `pqzl` crate's default; vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`), `n2560-kmax16384`
     (`K_MAX` 16,384, shippable; vectors under `smartcontracts/vectors/pqz/n2560-kmax16384/`) and `n2816-kmax65536`
-    (`K_MAX` 65,536, core only). PQZH is built for the three sets with pqz-stmt since 8c. Status:
+    (`K_MAX` 65,536; core only until 8d part 1b, then a full PQZL set without PQZH). PQZH is built for the three
+    sets whose q allows it since 8c. Status:
     decided (owner 2026-10-21); built in 8b. **8d part 1:** the one `proofSystemId` bump, one id per set and proof
     system: `set.toml` `pqzl_id` / `pqzh_id` labels (PQZL `scaas/pqz/lnp22/mlwe-d64k<k>-q<log2q>l4/v4`, PQZH
     `scaas/pqz/pqzh/ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2`; controller proposal, decisions.md CTR-PQZ-09),
     keccak256 by `gen_set.py` into `pqz_set.h` / `rust/set.rs` / `set.json` / `PqzSet.sol`; the retired v2 / v3 / PQZH v1
     ids refused; pqz-ffi's default set (and the node library's) is `n2304-kmax4096`; every set's vectors regenerated.
+    **8d part 1b (owner 2026-10-24):** `n2816-kmax65536` is a full PQZL set for customers (`core_only = false`,
+    `pqzh = false`, `MAX_INPUT` 524,288): pqz-stmt (no PQZH id at a set without PQZH: `HAS_PQZH`, its `PQZH_ID` the
+    zero word, refused), pqz-ffi without PQZH, vectors `smartcontracts/vectors/pqz/n2816-kmax65536/`, the Nethermind
+    plugin per set (`-p:PqzSet`), the full gate; its contracts in 8d part 2. PQZH is impossible at its q (q − 1 =
+    2^3 · 3 · 1,789 · 419,563,967,521, smooth part 24: no Ligero evaluation domain).
 
 Superseded by this section (kept above as the record): the 16k set n = 2560 / `K_MAX` 16,384 / q = 2^50 − 42,310,535
 (§6, §6.4's id label `mlwe-d64k40-q50l4`, the k / q of the new label follow set (a) in 8d), O9's G = 1 for M = 8 on
