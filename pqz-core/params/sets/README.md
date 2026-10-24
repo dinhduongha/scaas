@@ -11,7 +11,7 @@ pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm featu
 
 | Set | n, k | q | `K_MAX` | Status | `SET.md` |
 |---|---|---|---|---|---|
-| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the frozen set (the v3 parameters): the committed vectors at `smartcontracts/vectors/pqz/`, the contracts until 8d part 2 | [SET.md](n2048-kmax1024/SET.md) |
+| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the frozen set (the parameters of the retired PQZL v3 id): the committed vectors at `smartcontracts/vectors/pqz/`, the contracts until 8d part 2 | [SET.md](n2048-kmax1024/SET.md) |
 | `n2304-kmax4096` | 2304, 36 | 61,275,424,977,257 (2^45.80) | 4,096 | owner 2026-10-21: the default set on chain; the default of the `pqzl` crate, `gate.sh` and (since 8d part 1) `pqz-ffi` | [SET.md](n2304-kmax4096/SET.md) |
 | `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | approved 2026-10-20 as the Task 8 set, superseded as the default by `n2304-kmax4096` 2026-10-21: shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
 | `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21: **core only** (`core_only = true`: C + Rust cores, KATs; no pqz-stmt / precompile / vectors / contracts) | [SET.md](n2816-kmax65536/SET.md) |
@@ -114,6 +114,18 @@ sets differ and that none is retired (PQZL v2 `0x2e07e6ed…798c2f`, v3 `0x8079d
 | `n2304-kmax4096` | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4` → `0x15d16d77…cb608a` | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2` → `0xe4bc6d17…885730` |
 | `n2560-kmax16384` | `scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4` → `0xa3db21fc…70262d` | `scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2` → `0xe83ad1da…109851` |
 | `n2816-kmax65536` | `scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4` → `0x9d23a0de…bd53a3` (core only: the cores' bench statements) | — |
+
+**Changing a label (an owner override, or a later bump).** Edit the set's `pqzl_id` / `pqzh_id` in `set.toml`, then:
+`python3 -I pqz-core/params/sets/gen_set.py --all` (the generated files, `stmt/src/sets.rs`' `ALL_IDS`; at
+`n2048-kmax1024` also `PQZ_SOL_INSTALL=1 make.sh n2048-kmax1024 sol`, the contracts' `PqzSet.sol`), regenerate the
+set's vectors (`PQZ_SET=<set> scripts/capped pqz-core/ffi/vectors/run.sh <label> write`) and the pinned
+`negative_rows_reject` counts in `pqzl/rust/tests/vectors.rs` if the coder-padding rows move, and run the set's gate.
+Copies that are not generated: at `n2048-kmax1024` the PQZL id literal in `pqzh/stark-backup/src/rel.rs`
+(`PQZL_PROOF_SYSTEM_ID`; the STARK cross-check fails loudly otherwise) and the fuzz input
+`fuzz/regress/valid/fixture-disclose-receiver-rnd33` (re-prove it under the new id, as
+`fuzz/runs/2026-10-23-t8d1-regress-valid.txt`); in the docs the id tables of decisions CTR-PQZ-09, `pq-zero-knowledge.md`
+(versioning, serialization), `pqz-core/README.md` §4, this section, the set's `SET.md` / `PQZH.md` and the vectors
+READMEs.
 
 ### When a PQZH proof exceeds `MAX_PROOF_PQZH`: three options
 

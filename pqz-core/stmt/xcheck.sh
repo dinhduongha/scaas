@@ -4,6 +4,7 @@
 #   scripts/capped pqz-core/stmt/xcheck.sh <label>          -> stmt/runs/<label>-*.txt
 set -eu
 cd "$(dirname "$0")"
+export PQZ_SET=n2048-kmax1024 # the set of pqz-stmt's featureless build and of the C build below (pqz_kat.py too)
 R=runs/$1 X=$(pwd)/target/xcheck
 mkdir -p runs "$X/c"
 (cd ../pqzl && PQZ_SET=n2048-kmax1024 ./build.sh native) > "$R-build.txt" 2>&1  # the v3 set: pqz-stmt default and PQZH

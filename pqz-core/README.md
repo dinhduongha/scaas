@@ -237,10 +237,10 @@ Size and time limits:
 
 | Limit (enforced by `pqz-stmt`) | Value |
 |---|---|
-| `MAX_INPUT` (a larger input makes the call revert) | 393,216 B |
+| `MAX_INPUT` (a larger input makes the call revert) | the set's, `pqz_max_input()`: 524,288 B at `n2304-kmax4096` (the default build) and `n2560-kmax16384`, 393,216 B at `n2048-kmax1024` |
 | `MAX_PROOF`, PQZL | 98,304 B |
-| `MAX_PROOF`, PQZH | 262,144 B (exact maximum at the proven preset: 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor) |
-| Largest possible input | PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`) |
+| `MAX_PROOF`, PQZH | the set's: 262,144 B (`n2560-kmax16384`: 327,680 B); at `n2048-kmax1024`'s proven preset the exact maximum is 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor |
+| Largest possible input | `n2048-kmax1024`: PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`). Other sets: [params/sets/README.md](params/sets/README.md#pqzh-per-set-preset-and-limits-plan-5h-task-8c-part-2) |
 | Proof length | `1 ≤ len(proof) ≤ MAX_PROOF(id)` |
 | Verify time | **≤ 60 ms at p99** on the chain host, and also in wasm32 (owner decision 2026-10-14) |
 

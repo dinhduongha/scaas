@@ -4,11 +4,11 @@
 # (dump_setup.c `pqzh`: opTag, the D3 id, auditorOn); byte-identical or exit 1. Then pqz_kat.py parses each statement
 # (PQZH id only) and rebuilds it byte for byte (kat_stmt.py).
 # Run alone under the machine lock: scripts/capped pqz-core/pqzh/xcheck/ligero.sh  (output: ligero/runs/<tag>-xcheck.txt)
-# PQZ_SET: a set with PQZH (default n2048-kmax1024; plan 5h Task 8c part 2): the C core and the crate at that set.
+# PQZ_SET: a set with PQZH (default n2304-kmax4096, the builds' default since plan 5h Task 8d): the C core and the crate at that set.
 # PQZ_BUILD_TAG (gate.sh: the set): the C build and the outputs per tag (concurrent gates); unset: per set as well.
 set -eu
 cd "$(dirname "$0")/.."
-S=${PQZ_SET:-n2048-kmax1024}
+S=${PQZ_SET:-n2304-kmax4096}
 T=${PQZ_BUILD_TAG:-$S}
 export PQZ_SET=$S # pqz_kat.py (kat_stmt.py) reads the same set
 out=ligero/target/xcheck/$T

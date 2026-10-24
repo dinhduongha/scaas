@@ -1568,10 +1568,14 @@ at the v3 roll-out. Retired, never deployed: PQZL `…/v1` (2026-10-13) and the 
 input = u8(op) ‖ be32(L) ‖ stmt (L bytes) ‖ proof (all remaining bytes)
 ```
 
-1. `len(input) > MAX_INPUT = 393,216` ⇒ revert (the only revert; `pqz-ffi` status 1, nothing parsed). The largest
-   input the decoder can pass is 5 + 215,936 + 98,304 = 314,245 B for PQZL (op 7, `M = 8` with the auditor, at
-   `MAX_PROOF`); for PQZH op 7 (`M = 4`, auditor on) only `MAX_INPUT` bounds it (a proof of up to 260,219 B), while an
-   honest proof stays within Ligero's exact bound of 236,196 B, i.e. ≤ 369,193 B of input (P6e D5, P6-ANON S3).
+1. `len(input) > MAX_INPUT` ⇒ revert (the only revert; `pqz-ffi` status 1, nothing parsed). `MAX_INPUT` is the
+   parameter set's (`set.toml` `max_input`, exported by the library as `pqz_max_input()`, which the node reads; plan 5h
+   Task 8d): 524,288 B at `n2304-kmax4096` (the default build) and `n2560-kmax16384`, 393,216 B at `n2048-kmax1024`.
+   At `n2048-kmax1024` the largest input the decoder can pass is 5 + 215,936 + 98,304 = 314,245 B for PQZL (op 7,
+   `M = 8` with the auditor, at `MAX_PROOF`); for PQZH op 7 (`M = 4`, auditor on) only `MAX_INPUT` bounds it (a proof of
+   up to 260,219 B), while an honest proof stays within Ligero's exact bound of 236,196 B, i.e. ≤ 369,193 B of input
+   (P6e D5, P6-ANON S3). The other sets fit every built input under their 524,288 B (largest at the PQZH limit: 411,525
+   B at `n2304-kmax4096`, 493,445 B at `n2560-kmax16384`; per-set table in `pqz-core/params/sets/README.md`).
 2. `len(input) < 5`, or `L > len(input) − 5` ⇒ `0`.
 3. `op = 6`: the input must be exactly `06 00000000` (self-test, below); `op = 6` with any statement or proof byte ⇒ `0`.
 4. `op ∉ {1, …, 5, 7}` ⇒ `0`; op 7 (`R_TXM`) only for a built `(id, M, auditorOn)` ([CTR-PQZ-26](#CTR-PQZ-26)).
@@ -1797,7 +1801,9 @@ requirement and the follower is only defence in depth. Every node of chain 7622 
 Address `0x000000000000000000000000000000005caa0f01` ([CTR-PQZ-10](#CTR-PQZ-10); live `pqz2`: P6f D3's `0x5caa500000000000000000000000000000000f01`).
 
 Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof`; output 32 bytes, `…01` valid, `…00` otherwise; never reverts on
-cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 393,216` bytes (P6e D5: 5 + 83,072 + 262,144 = 345,221 for a PQZH transfer).
+cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT` bytes, the set's limit `pqz_max_input()`: 524,288 at
+`n2304-kmax4096` / `n2560-kmax16384`, 393,216 at `n2048-kmax1024` (P6e D5 there: 5 + 83,072 + 262,144 = 345,221 for a
+PQZH transfer; plan 5h Task 8d: the node reads the library's limit).
 
 | op | Name | `stmt` |
 |---|---|---|

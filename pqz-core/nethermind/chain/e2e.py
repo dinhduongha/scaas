@@ -3,6 +3,8 @@
 one JSON-RPC endpoint (the follower behind nginx on the copy; 127.0.0.1:8545 on 7622 in Task 10). Python stdlib
 (run with python3 -I) with eth.py (keccak, legacy EIP-155 signing); forge artifacts from
 smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) and retried on 429.
+Since plan 5h Task 8d part 1 this targets the next image (32-bit addresses, PQZ_SET's self-test hash / MAX_INPUT /
+corpus, default n2304-kmax4096), not the live pqz2 chain: for that run the script of the pqz2 commit (RUNBOOK.md).
 
   e2e.py before  --engine E                 the three addresses empty (code, balance, nonce; eth_call answers nothing)
   e2e.py probe   --engine E [--genesis-hash H]   step 2: chain id, genesis hash, OP_SELFTEST, every vector 1 / 0,

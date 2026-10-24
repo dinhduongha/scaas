@@ -113,7 +113,7 @@ diffs() { (cd pqzl && CAPPED=env sv/diff.sh "gate-$L" 20 10 2 10 &&
   grep -q '"disagreements": 0, "expect_mismatches": 0, "prove_errors": 0, .*"both_verdicts_every_relation": 1}' \
     "sv/runs/gate-$L-z21diff.jsonl"); }
 tbox() { (cd pqzl && ./check_tbox_fixes.sh); }
-# the vector tests need the set's vectors; without them (any set but v3 until 8d) tests/common builds one honest row per
+# the vector tests need the set's vectors; without them (a core_only set) tests/common builds one honest row per
 # bench relation, proved by the C core, so the crate also needs feature bench
 # (one part per test binary: cargo builds them all, then each runs as cargo test would, from the crate directory)
 rust() { (cd pqzl/rust && export CARGO_TARGET_DIR="target/$PQZ_SET" && rf=0 &&

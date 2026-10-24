@@ -26,7 +26,7 @@ case ${PQZL:-} in
   "") if [ "$S" = n2304-kmax4096 ]; then BF=; else BF="--no-default-features --features pqzl-rust,set-$S"; fi ;;
   *) echo "PQZL=$PQZL: rust or c" >&2; exit 2 ;;
 esac
-# the set's vectors: v3 at the canonical path (the contracts' until plan 5h Task 8d), another set below it
+# the set's vectors: n2048-kmax1024 at the canonical path (the contracts' until plan 5h Task 8d part 2), another set below it
 V=../../smartcontracts/vectors/pqz; [ "$S" = n2048-kmax1024 ] || V=$V/$S
 export PQZ_SET=$S
 echo "set $S, vectors $V; PQZL backend: ${PQZL:-the default feature} (cargo flags: ${BF:-none})" > "$R-build.txt"
