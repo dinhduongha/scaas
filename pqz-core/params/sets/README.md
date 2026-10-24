@@ -111,11 +111,16 @@ Relations (the statements a proof is about; names as in `pqz-stmt` and the vecto
 | R_TXM M = k | one confidential transfer to k recipients at once, with the auditor (M = 8: the legs in two randomness groups of four) | the token's multi-transfer |
 | R_TXM M = k, no auditor | the same on a token without an auditor | the token's multi-transfer |
 
-Gas limits the sizes are judged against (spec §12 item 2: Ethereum-like limits, never the testnet's): **per transaction
-16,777,216 regular gas (2^24, EIP-7825)** — so at most ≈ 261,909 B of calldata under the EIP-7976 floor
-(15,000 + 64 gas per byte); **per block 60 M gas** on Ethereum mainnet today (≈ 200 M expected with Glamsterdam; the
-SCaaS testnet's genesis has 200 M). New contract state is paid separately as state gas (EIP-8037): it counts towards the
-block, not towards the 2^24 regular-gas cap of the transaction.
+Gas limits the sizes are judged against (spec §12 item 2: Ethereum-like limits, never the testnet's), as Glamsterdam
+defines them ([EIP-7825](https://eips.ethereum.org/EIPS/eip-7825), [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037)):
+
+- **Regular gas per transaction ≤ 16,777,216 (2^24, `TX_MAX_GAS_LIMIT`)** — intrinsic gas, the EIP-7976 calldata floor
+  (15,000 + 64 gas per byte, so at most ≈ 261,909 B of calldata) and execution gas. Glamsterdam keeps this cap.
+- **State gas** (EIP-8037: new storage, SSTORE2 blobs) may go above it: the part of `tx.gas` over 2^24 is a reservoir
+  usable only for state gas; `tx.gas` ≤ 4,294,967,295 (2^32 − 1).
+- **Per block:** gas used = max(execution gas, state gas) — the two are not added — and must stay ≤ the block gas
+  limit: 60 M on Ethereum mainnet today (October 2026), ≈ 200 M planned with Glamsterdam; the SCaaS testnet's genesis
+  has 200 M. 60 M is a block limit, not a transaction limit.
 
 ### PQZL per set: proof sizes and size limits (bytes)
 
