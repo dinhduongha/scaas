@@ -120,22 +120,32 @@ const fn nib(c: u8) -> u8 {
 pub const PQZL_ID: Word = set::PQZL_ID;
 /// the string `PQZL_ID` hashes (a test of pqzh-ligero recomputes the keccak256)
 pub const PQZL_LABEL: &str = set::PQZL_LABEL;
-/// PQZH's id at this set: keccak256 of set.toml's `pqzh_id` (`.../ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2`)
+/// whether this set has PQZH (set.toml `pqzh`; `n2816-kmax65536` has none: its q − 1 has no Ligero domain). Without
+/// it this codec knows no PQZH id: `PQZH_ID` is the zero word and refused like any unknown id (`Reject::ProofSystemId`)
+pub const HAS_PQZH: bool = set::PQZH;
+/// PQZH's id at this set: keccak256 of set.toml's `pqzh_id` (`.../ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2`);
+/// the zero word at a set without PQZH (`HAS_PQZH`), never accepted there
 pub const PQZH_ID: Word = set::PQZH_ID;
 /// the string `PQZH_ID` hashes
 pub const PQZH_LABEL: &str = set::PQZH_LABEL;
 pub const MAX_PROOF_PQZL: usize = 98_304;
-/// the set's (set.toml [pqzh_preset] max_proof): 262,144; `n2560-kmax16384` 327,680 (owner 2026-10-23, CTR-PQZ-10)
+/// the set's (set.toml [pqzh_preset] max_proof): 262,144; `n2560-kmax16384` 327,680 (owner 2026-10-23, CTR-PQZ-10); 0 at a
+/// set without PQZH
 pub const MAX_PROOF_PQZH: usize = set::MAX_PROOF_PQZH;
 /// the set's (set.toml max_input): `n2048-kmax1024` 393,216 (D5: 5 + 83,072 + 262,144 = 345,221 ≤ 393,216); every
 /// other set 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)); pqz-ffi exports it to the node (`pqz_max_input`)
 pub const MAX_INPUT: usize = set::MAX_INPUT;
 
+/// whether `id` is this set's PQZH id (never at a set without PQZH)
+fn is_pqzh(id: &[u8]) -> bool {
+    HAS_PQZH && id == PQZH_ID
+}
+
 /// `MAX_PROOF(id)`; `None` for an id this codec does not know
 pub fn max_proof(id: &Word) -> Option<usize> {
     if *id == PQZL_ID {
         Some(MAX_PROOF_PQZL)
-    } else if *id == PQZH_ID {
+    } else if is_pqzh(id) {
         Some(MAX_PROOF_PQZH)
     } else {
         None
@@ -525,7 +535,7 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
         .find(|f| f.op() == op && f.op_tag()[..] == *tag && *f != Form::Transfer0)
         .ok_or(Reject::OpTag)?;
     let id = &stmt[n.min(32)..n.min(64)];
-    if id != PQZL_ID && id != PQZH_ID {
+    if id != PQZL_ID && !is_pqzh(id) {
         return Err(Reject::ProofSystemId);
     }
     // op 1: the form by length (R6)
@@ -631,7 +641,7 @@ pub fn built_legs(id: &Word) -> &'static [usize] {
     const SETS: [&[usize]; 2] = [&[1, 2, 4, 8, 16], &[1, 2, 4, 8, 16]];
     if *id == PQZL_ID {
         SETS[0]
-    } else if *id == PQZH_ID {
+    } else if is_pqzh(id) {
         SETS[1]
     } else {
         &[]
@@ -753,7 +763,7 @@ pub fn parse_multi(stmt: &[u8]) -> Result<Multi<'_>, Reject> {
         return Err(Reject::OpTag);
     }
     let id = &stmt[n.min(32)..n.min(64)];
-    if id != PQZL_ID && id != PQZH_ID {
+    if id != PQZL_ID && !is_pqzh(id) {
         return Err(Reject::ProofSystemId);
     }
     let id: &Word = id.try_into().map_err(|_| Reject::ProofSystemId)?;

@@ -87,14 +87,14 @@ RETIRED = {"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1": None,
 
 
 def ids(name):
-    """{"pqzl": (label, id), "pqzh": (label, id)} of the set (no pqzh for a core_only set): keccak256 of set.toml's
+    """{"pqzl": (label, id), "pqzh": (label, id)} of the set (no pqzh for a set without pqzh = true): keccak256 of set.toml's
     pqzl_id / pqzh_id labels. A label names the parameters it fixes (PQZL d64k<k>-q<log2q>, PQZH fq<log2q>-n<n>k<k>t<t>
     of [pqzh_preset]), so a label that no longer matches its set fails here"""
     t = load(name)
     k, L = t["n"] // 64, (t["q"] - 1).bit_length()
     out = {"pqzl": t["pqzl_id"]}
     assert f"/mlwe-d64k{k}-q{L}l4/" in out["pqzl"], f"{name}: pqzl_id {out['pqzl']} does not name d64k{k}-q{L}"
-    if not t.get("core_only"):
+    if t.get("pqzh"):
         out["pqzh"] = t["pqzh_id"]
         p = t["pqzh_preset"]
         want = f"/ligero-fq{L}-n{p['n']}k{p['k']}t{p['t']}-"
@@ -183,9 +183,9 @@ def factor(m):
 
 def limits(name):
     """(MAX_PROOF_PQZH, MAX_INPUT) of a set with pqz-stmt (not core_only): set.toml's max_input, [pqzh_preset]'s
-    max_proof (262,144 without PQZH)"""
+    max_proof (0 for a set without PQZH: pqz-stmt knows no PQZH id there; plan 5h Task 8d part 1b)"""
     t = load(name)
-    return t.get("pqzh_preset", {}).get("max_proof", 262_144), t["max_input"]
+    return (t["pqzh_preset"]["max_proof"] if t.get("pqzh") else 0), t["max_input"]
 
 
 def pqzh_preset(name):
@@ -272,6 +272,11 @@ def rs_text(name):
         out.append(f"/// MAX_PROOF(PQZH id): the precompile's and the PQZH prover's proof limit (set.toml [pqzh_preset] max_proof)\n"
                    f"pub(crate) const MAX_PROOF_PQZH: usize = {mp:_};")
         out.append(f"/// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)\npub(crate) const MAX_INPUT: usize = {mi:_};")
+        out.append(f"/// whether this set has PQZH (set.toml pqzh): without it pqz-stmt knows no PQZH id (PQZH_ID below is the zero\n"
+                   f"/// word, never accepted) and pqz-ffi has no PQZH build\npub(crate) const PQZH: bool = {str(bool(t.get('pqzh'))).lower()};")
+        if not t.get("pqzh"):
+            out.append("/// no PQZH at this set: no label\npub(crate) const PQZH_LABEL: &str = \"\";")
+            out.append("/// no PQZH at this set: the zero word (pqz-stmt refuses it: `PQZH` is false)\npub(crate) const PQZH_ID: [u8; 32] = [0; 32];")
     for sys_, (lab, h) in ids(name).items():
         out.append(f"/// {sys_.upper()}'s proofSystemId label (set.toml {sys_}_id)\npub(crate) const {sys_.upper()}_LABEL: &str = \"{lab}\";")
         out.append(f"/// {sys_.upper()}'s proofSystemId: keccak256({sys_.upper()}_LABEL)\n"

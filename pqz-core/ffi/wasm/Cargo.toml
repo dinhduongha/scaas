@@ -25,6 +25,7 @@ pqzl-c = ["pqz-ffi/pqzl-c"]
 set-n2048-kmax1024 = ["pqz-ffi/set-n2048-kmax1024"]
 set-n2304-kmax4096 = ["pqz-ffi/set-n2304-kmax4096"]
 set-n2560-kmax16384 = ["pqz-ffi/set-n2560-kmax16384"]
+set-n2816-kmax65536 = ["pqz-ffi/set-n2816-kmax65536"]
 # END gen_set.py sets
 
 [profile.release]

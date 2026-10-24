@@ -39,6 +39,13 @@ fn objs() -> Objs {
     }
 }
 
+/// this set's ids: PQZL and, where the set has PQZH (`HAS_PQZH`), PQZH
+fn ids() -> Vec<Word> {
+    if HAS_PQZH { vec![PQZL_ID, PQZH_ID] } else { vec![PQZL_ID] }
+}
+/// the second id the tests mix in: PQZH, or PQZL at a set without PQZH (`n2816-kmax65536`)
+const ID2: Word = if HAS_PQZH { PQZH_ID } else { PQZL_ID };
+
 /// A valid statement of `form` (both ids alternate with `id`).
 fn build(form: Form, o: &Objs, id: &Word) -> Vec<u8> {
     let s = match form {
@@ -102,7 +109,18 @@ fn lengths_and_constants() {
     }
     assert!(345_221 <= MAX_INPUT);
     assert_eq!(max_proof(&PQZL_ID), Some(98_304));
-    assert_eq!(max_proof(&PQZH_ID), Some(if SET == "n2560-kmax16384" { 327_680 } else { 262_144 }));
+    // PQZH at every set but n2816-kmax65536 (its q - 1 has no Ligero domain): there PQZH_ID is the zero word, refused
+    assert_eq!(HAS_PQZH, SET != "n2816-kmax65536");
+    if HAS_PQZH {
+        assert_eq!(max_proof(&PQZH_ID), Some(if SET == "n2560-kmax16384" { 327_680 } else { 262_144 }));
+    } else {
+        assert_eq!((PQZH_ID, MAX_PROOF_PQZH, PQZH_LABEL), ([0; 32], 0, ""));
+        assert_eq!(max_proof(&PQZH_ID), None);
+        assert!(built_legs(&PQZH_ID).is_empty());
+        let rg = build(Form::Register, &objs(), &PQZH_ID);
+        assert_eq!(parse(OP_REGISTER, &rg).err(), Some(Reject::ProofSystemId));
+        assert_eq!(parse_multi(&build_multi(&PQZH_ID, 1, true, 0)).err(), Some(Reject::ProofSystemId));
+    }
     assert_eq!(MAX_INPUT, if SET == "n2048-kmax1024" { 393_216 } else { 524_288 });
     assert_eq!(max_proof(&[0; 32]), None);
     for id in RETIRED {
@@ -136,7 +154,7 @@ fn retired_ids_refused() {
 #[test]
 fn round_trip_every_form_both_ids() {
     let o = objs();
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         for f in FORMS {
             let b = build(f, &o, &id);
             assert_eq!(b.len(), f.stmt_len(), "{f:?}");
@@ -188,9 +206,9 @@ fn every_d15_r6_rule_rejects() {
     let t = build(Form::Transfer, &o, &PQZL_ID);
     let t0 = build(Form::Transfer0, &o, &PQZL_ID);
     let bu = build(Form::Burn, &o, &PQZL_ID);
-    let rf = build(Form::Refresh, &o, &PQZH_ID);
+    let rf = build(Form::Refresh, &o, &ID2);
     let ds = build(Form::DiscloseSender, &o, &PQZL_ID);
-    let rg = build(Form::Register, &o, &PQZH_ID);
+    let rg = build(Form::Register, &o, &ID2);
     let cases: Vec<(&str, u8, Vec<u8>, Reject)> = vec![
         ("coefficient = q", 1, with(&t, 640, &Q.to_be_bytes()), Reject::Coefficient),
         ("coefficient = 2^LOG2Q", 1, with(&t, 640, &(1u64 << LOG2Q).to_be_bytes()), Reject::Coefficient),
@@ -296,10 +314,12 @@ fn precompile_input() {
     assert_eq!(decode_input(&input(OP_TRANSFER, &t0, &[])).err(), Some(Reject::ProofLength));
     let big = vec![1; MAX_PROOF_PQZL + 1];
     assert_eq!(decode_input(&input(OP_TRANSFER, &t0, &big)).err(), Some(Reject::ProofLength));
-    let h = build(Form::Transfer, &o, &PQZH_ID);
-    assert!(decode_input(&input(OP_TRANSFER, &h, &big)).is_ok()); // PQZH bound is larger
-    let max = vec![1; MAX_PROOF_PQZH];
-    assert!(decode_input(&input(OP_TRANSFER, &h, &max)).is_ok()); // the largest input: 345,221 B
+    let h = build(Form::Transfer, &o, &ID2);
+    if HAS_PQZH {
+        assert!(decode_input(&input(OP_TRANSFER, &h, &big)).is_ok()); // PQZH bound is larger
+    }
+    let max = vec![1; max_proof(&ID2).unwrap()];
+    assert!(decode_input(&input(OP_TRANSFER, &h, &max)).is_ok()); // the largest op 1 input (v3: 345,221 B)
     assert_eq!(decode_input(&input(OP_TRANSFER, &h, &[max.as_slice(), &[1]].concat())).err(), Some(Reject::ProofLength));
     let mut over = input(OP_TRANSFER, &h, &max);
     over.resize(MAX_INPUT + 1, 0);
@@ -387,14 +407,15 @@ fn multi_lengths_and_sets() {
         }
     }
     #[cfg(not(feature = "oversize"))]
-    assert_eq!((built_legs(&PQZL_ID), built_legs(&PQZH_ID)), (&[1, 2, 4, 8][..], &[1, 2, 4][..]));
+    assert_eq!((built_legs(&PQZL_ID), built_legs(&PQZH_ID)), (&[1, 2, 4, 8][..], if HAS_PQZH { &[1, 2, 4][..] } else { &[][..] }));
     assert!(built_legs(&[0; 32]).is_empty());
     // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT, except at n2048-kmax1024 PQZH
     // (4, on): 5 + 132,992 + 262,144 = 395,141 > 393,216 (a PQZH proof over 260,219 B makes that input exceed MAX_INPUT;
     // Ligero's exact bound there is 236,196). The other sets' MAX_INPUT 512 KiB holds every shape (largest: n2560-kmax16384
-    // PQZH (4, on), 5 + 165,760 + 327,680 = 493,445; plan 5h Task 8c part 2)
+    // PQZH (4, on), 5 + 165,760 + 327,680 = 493,445; plan 5h Task 8c part 2; n2816-kmax65536, PQZL only: (8, on),
+    // 5 + 295,808 + 98,304 = 394,117)
     #[cfg(not(feature = "oversize"))]
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         for aud in [true, false] {
             for &m in built_legs(&id) {
                 let fits = 5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT;
@@ -410,7 +431,7 @@ fn multi_lengths_and_sets() {
 
 #[test]
 fn multi_round_trip_every_built_shape_fee_0() {
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         for aud in [true, false] {
             for &m in built_legs(&id) {
                 for fee in [0, 7, u64::MAX] {
@@ -477,7 +498,7 @@ fn multi_m1_body_is_op1_body() {
 fn multi_every_rule_rejects() {
     let l = build_multi(&PQZL_ID, 2, true, 0);
     let l0 = build_multi(&PQZL_ID, 4, false, 5);
-    let h = build_multi(&PQZH_ID, 4, false, 1);
+    let h = build_multi(&ID2, 4, false, 1);
     let word = |x: u64| u64_word(x);
     #[allow(unused_mut)]
     let mut cases: Vec<(&str, Vec<u8>, Reject)> = vec![
@@ -510,11 +531,14 @@ fn multi_every_rule_rejects() {
         ("empty", vec![], Reject::OpTag),
     ];
     #[cfg(not(feature = "oversize"))]
-    cases.extend([
-        ("PQZH M = 8 (not built)", with(&build_multi_len(&h, multi_len(8, false)), 320, &word(8)), Reject::Legs),
-        ("PQZL M = 16 (oversize only)", with(&build_multi_len(&l, multi_len(16, true)), 320, &word(16)), Reject::Legs),
-        ("PQZH M = 8 length, M word 4", build_multi_len(&h, multi_len(8, false)), Reject::Length),
-    ]);
+    cases.push(("PQZL M = 16 (oversize only)", with(&build_multi_len(&l, multi_len(16, true)), 320, &word(16)), Reject::Legs));
+    #[cfg(not(feature = "oversize"))]
+    if HAS_PQZH {
+        cases.extend([
+            ("PQZH M = 8 (not built)", with(&build_multi_len(&h, multi_len(8, false)), 320, &word(8)), Reject::Legs),
+            ("PQZH M = 8 length, M word 4", build_multi_len(&h, multi_len(8, false)), Reject::Length),
+        ]);
+    }
     for (what, b, want) in cases {
         assert_eq!(parse_multi(&b).err(), Some(want), "{what}");
     }
@@ -542,11 +566,13 @@ fn multi_every_rule_rejects() {
     // op 7 bytes under op 1 and op 1 bytes under op 7: OpTag both ways
     assert_eq!(parse(OP_TRANSFER, &l).err(), Some(Reject::OpTag));
     // PQZH (4, on) at n2048-kmax1024: a proof of MAX_INPUT − 5 − 132,992 = 260,219 B is exactly MAX_INPUT; one byte more
-    // is Input. Every other set (MAX_INPUT 512 KiB): MAX_PROOF_PQZH fits, one byte more is ProofLength
-    let h4 = build_multi(&PQZH_ID, 4, true, 0);
+    // is Input. Every other set (MAX_INPUT 512 KiB): MAX_PROOF_PQZH fits, one byte more is ProofLength (n2816-kmax65536,
+    // no PQZH: the same with PQZL's MAX_PROOF_PQZL)
+    let h4 = build_multi(&ID2, 4, true, 0);
+    let mp = max_proof(&ID2).unwrap();
     let room = MAX_INPUT - 5 - multi_len(4, true); // v3: 260,219
-    let (fit, over) = if room <= MAX_PROOF_PQZH { (room, Reject::Input) } else { (MAX_PROOF_PQZH, Reject::ProofLength) };
-    assert_eq!(room <= MAX_PROOF_PQZH, SET == "n2048-kmax1024");
+    let (fit, over) = if room <= mp { (room, Reject::Input) } else { (mp, Reject::ProofLength) };
+    assert_eq!(room <= mp, SET == "n2048-kmax1024");
     assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit])).is_ok());
     assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit + 1])).err(), Some(over));
     // an op 1 statement under op 7's decoder
@@ -575,7 +601,7 @@ fn build_multi_len(b: &[u8], n: usize) -> Vec<u8> {
 #[cfg(feature = "oversize")]
 #[test]
 fn multi_oversize_shapes() {
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         assert_eq!(built_legs(&id), &[1, 2, 4, 8, 16]);
         for aud in [true, false] {
             for m in [4, 8, 16] {

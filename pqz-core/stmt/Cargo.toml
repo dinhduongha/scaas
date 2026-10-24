@@ -17,6 +17,7 @@ default = []
 set-n2048-kmax1024 = []
 set-n2304-kmax4096 = []
 set-n2560-kmax16384 = []
+set-n2816-kmax65536 = []
 # END gen_set.py sets
 # bench only (P6-ANON plan, global constraints): op 7 accepts M = 8, 16 for both ids; never in the precompile build
 oversize = []

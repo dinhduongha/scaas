@@ -53,6 +53,9 @@ pub(crate) const SV_NP: usize = 4;
 pub(crate) const MAX_PROOF_PQZH: usize = 262_144;
 /// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)
 pub(crate) const MAX_INPUT: usize = 393_216;
+/// whether this set has PQZH (set.toml pqzh): without it pqz-stmt knows no PQZH id (PQZH_ID below is the zero
+/// word, never accepted) and pqz-ffi has no PQZH build
+pub(crate) const PQZH: bool = true;
 /// PQZL's proofSystemId label (set.toml pqzl_id)
 pub(crate) const PQZL_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4";
 /// PQZL's proofSystemId: keccak256(PQZL_LABEL)
