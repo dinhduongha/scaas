@@ -1,0 +1,122 @@
+# P6f image scaas/nethermind-pqz:2.2.0-pqz4, 2026-10-24T17:07Z, commit 54c7c88e
+$ ./ref.sh
+ref/ from nethermind/nethermind:2.2.0@sha256:5cc0061e6a317e9249e1e1f537a0a40a2036525c62f1cb250943432f4c000a38 (sha256:bb26a86176f3be2336f7a7f13e8c29864c1d89a9697511b1e6c5a176d2295bd3): 185 dlls
+[rc=0]
+
+$ python3 -I corpus.py bin/corpus.jsonl
+corpus bin/corpus.jsonl (set n2304-kmax4096): 819 inputs {'honest': 35, 'negative': 745, 'flip': 30, 'fee0': 8, 'selftest': 1}
+[rc=0]
+
+$ docker build -f Dockerfile --progress plain --resource memory=4g --target ffi-export -o bin/ffi-out /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 5.92kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 2.5s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#4 DONE 0.0s
+
+#5 [rust  1/14] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 13.40MB 0.1s
+#6 transferring context: 400.80MB 1.3s done
+#6 DONE 1.4s
+
+#7 [ffisrc 1/1] COPY . /
+#7 DONE 6.3s
+
+#8 [rust  2/14] RUN apt-get update && apt-get install -y --no-install-recommends clang=1:14.0-55.7~deb12u1 clang-14=1:14.0.6-12       libclang-cpp14=1:14.0.6-12 libllvm14=1:14.0.6-12 && rm -rf /var/lib/apt/lists/*
+#8 CACHED
+
+#9 [rust  3/14] WORKDIR /src
+#9 CACHED
+
+#10 [rust  4/14] COPY --from=ffisrc /LICENSE ./
+#10 CACHED
+
+#11 [rust  5/14] COPY --from=ffisrc /pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
+#11 DONE 50.8s
+
+#12 [rust  6/14] COPY --from=ffisrc /pqz-core/pqzl/src pqz-core/pqzl/src
+#12 DONE 0.0s
+
+#13 [rust  7/14] COPY --from=ffisrc /pqz-core/pqzl/lazer pqz-core/pqzl/lazer
+#13 DONE 0.0s
+
+#14 [rust  8/14] COPY --from=ffisrc /pqz-core/pqzl/params pqz-core/pqzl/params
+#14 DONE 0.1s
+
+#15 [rust  9/14] COPY --from=ffisrc /pqz-core/params/sets pqz-core/params/sets
+#15 DONE 0.1s
+
+#16 [rust 10/14] COPY --from=ffisrc /pqz-core/pqzl/rust pqz-core/pqzl/rust
+#16 DONE 0.1s
+
+#17 [rust 11/14] COPY --from=ffisrc /pqz-core/stmt pqz-core/stmt
+#17 DONE 0.0s
+
+#18 [rust 12/14] COPY --from=ffisrc /pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#18 DONE 0.1s
+
+#19 [rust 13/14] COPY --from=ffisrc /pqz-core/ffi pqz-core/ffi
+#19 DONE 0.1s
+
+#20 [rust 14/14] COPY --from=ffisrc /smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzl.json /smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json smartcontracts/vectors/pqz/n2304-kmax4096/
+#20 DONE 0.1s
+
+#21 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#21 0.518     Updating crates.io index
+#21 1.458  Downloading crates ...
+#21 1.684   Downloaded cpufeatures v0.2.17
+#21 1.698   Downloaded cfg-if v1.0.5
+#21 1.700   Downloaded block-buffer v0.10.4
+#21 1.752   Downloaded inout v0.1.4
+#21 1.765   Downloaded keccak v0.1.6
+#21 1.795   Downloaded crypto-common v0.1.7
+#21 1.808   Downloaded generic-array v0.14.7
+#21 1.828   Downloaded digest v0.10.7
+#21 1.831   Downloaded version_check v0.9.5
+#21 1.861   Downloaded cipher v0.4.4
+#21 2.001   Downloaded aes v0.8.4
+#21 2.019   Downloaded typenum v1.20.1
+#21 2.214   Downloaded sha3 v0.10.8
+#21 2.262    Compiling version_check v0.9.5
+#21 2.263    Compiling typenum v1.20.1
+#21 2.689    Compiling generic-array v0.14.7
+#21 2.804    Compiling keccak v0.1.6
+#21 3.286    Compiling crypto-common v0.1.7
+#21 3.334    Compiling block-buffer v0.10.4
+#21 3.376    Compiling inout v0.1.4
+#21 3.405    Compiling digest v0.10.7
+#21 3.432    Compiling cipher v0.4.4
+#21 3.528    Compiling sha3 v0.10.8
+#21 3.558    Compiling cpufeatures v0.2.17
+#21 3.579    Compiling cfg-if v1.0.5
+#21 3.597    Compiling pqzl v0.1.0 (/src/pqz-core/pqzl/rust)
+#21 3.670    Compiling aes v0.8.4
+#21 3.788    Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+#21 3.916    Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+#21 4.335    Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+#21 12.09     Finished `release` profile [optimized + debuginfo] target(s) in 11.74s
+#21 12.14 0894d1916b4e2f8270c5bac6e7f9a87a19137e51c6f7f93263d05b9756e64772  /out/libpqz_ffi.so
+#21 DONE 12.3s
+
+#22 [ffi-export 1/1] COPY --from=ffi /out/ /
+#22 DONE 0.1s
+
+#23 exporting to client directory
+#23 copying files 9.95MB 0.0s done
+#23 DONE 0.0s
+[rc=0]
+
+libpqz_ffi.so sha256 0894d1916b4e2f8270c5bac6e7f9a87a19137e51c6f7f93263d05b9756e64772, reviewed 16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf
+FAIL the built library is not the reviewed one: review the build, set ExpectedLibrarySha256 = "0894d1916b4e2f8270c5bac6e7f9a87a19137e51c6f7f93263d05b9756e64772" in Nethermind.Pqz/SelfTest.cs, commit, rebuild
