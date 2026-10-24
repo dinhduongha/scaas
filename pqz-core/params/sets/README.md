@@ -112,7 +112,26 @@ Relations (the statements a proof is about; names as in `pqz-stmt` and the vecto
 | R_TXM M = k, no auditor | the same on a token without an auditor | the token's multi-transfer |
 
 Gas limits the sizes are judged against (spec §12 item 2: Ethereum-like limits, never the testnet's), as Glamsterdam
-defines them ([EIP-7825](https://eips.ethereum.org/EIPS/eip-7825), [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037)):
+defines them. A transaction has **two gas dimensions, regular and state**; the calldata floor is not a third budget but
+a minimum on the regular one. The block limit is a separate, larger limit.
+
+| Item | Dimension | Rule and value | Source |
+|---|---|---|---|
+| intrinsic gas, a call with no ETH value (every PQZ call) | regular | 15,000 (was 21,000) | [EIP-2780](https://eips.ethereum.org/EIPS/eip-2780) / [EIP-8007](https://eips.ethereum.org/EIPS/eip-8007) |
+| calldata, standard cost | regular | 4 gas per zero byte, 16 per non-zero byte | [EIP-7976](https://eips.ethereum.org/EIPS/eip-7976) |
+| calldata floor | regular | the transaction pays at least 15,000 + 64 gas × calldata bytes (zero or not): regular gas charged = max(intrinsic + standard calldata + execution, floor) | EIP-7976 |
+| execution (EVM, the `PQZ` precompile's price) | regular | shares the cap below with intrinsic + calldata | [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) |
+| **regular gas per transaction** | regular | **≤ 16,777,216 (2^24, `TX_MAX_GAS_LIMIT`)**; Glamsterdam keeps it; so the floor allows at most (2^24 − 15,000) / 64 = **261,909 B of calldata** | EIP-7825, [EIP-8037](https://eips.ethereum.org/EIPS/eip-8037) |
+| new state (storage slots, SSTORE2 blobs) | state | ≈ 1,530 gas per stored byte of an SSTORE2 blob (measured, plan 5h Task 7b); a cold storage-word rewrite ≈ 12,100 ([EIP-8038](https://eips.ethereum.org/EIPS/eip-8038)); paid first from the reservoir = `tx.gas` − 2^24, then from regular gas | EIP-8037 |
+| **`tx.gas` per transaction** | both | **≤ 4,294,967,295 (2^32 − 1)**: state gas may take a transaction far above 2^24 | EIP-8037 |
+| **gas used per block** | both | **max(Σ execution gas, Σ state gas) ≤ block gas limit** — the two dimensions are not added | EIP-8037 |
+| **block gas limit** | — | **60,000,000 on Ethereum mainnet** (October 2026); ≈ 200,000,000 planned with Glamsterdam; SCaaS testnet genesis 200,000,000. 60 M is a block limit, not a transaction limit | [ethereum.org](https://ethereum.org/latest/building-on-ethereum-in-2026/) |
+
+Example, a PQZL transfer (R_TX) at `n2304-kmax4096`: calldata ≈ 70 KB → standard calldata ≈ 1.1 M (16 gas per
+non-zero byte), so ≈ 15.6 M of the 2^24 cap is left for execution and the precompile; the floor (≈ 4.50 M, table below)
+only binds if execution costs less than ≈ 3.4 M. Its stored ciphertexts cost ≈ 29.6 M state gas
+before the P46 packing and ≈ 21.5 M with it [spike PACK estimate, `docs/research/pqz-pack.md`; measured in plan 5h Task
+8d part 2] — state gas, so it does not count against the 2^24 cap, only against the block (60 M) in the state dimension.
 
 - **Regular gas per transaction ≤ 16,777,216 (2^24, `TX_MAX_GAS_LIMIT`)** — intrinsic gas, the EIP-7976 calldata floor
   (15,000 + 64 gas per byte, so at most ≈ 261,909 B of calldata) and execution gas. Glamsterdam keeps this cap.
