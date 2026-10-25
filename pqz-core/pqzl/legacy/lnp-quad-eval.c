@@ -1,3 +1,6 @@
+/* PQZ: NOT BUILT (R0 review fix 2026-10-25, findings R1-1 / R1-C7). Upstream LaZer 3330e48's quad_eval prover / verifier
+   without the P6-FS fix (h is not absorbed before mu or the final challenge, lazer#28): no caller in pqz-core, removed
+   from pqz_lazer.c and lazer-in2.h; kept here as the record (backup, not delete). */
 #include "lazer.h"
 #include "stopwatch.h"
 

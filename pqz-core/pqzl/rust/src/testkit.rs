@@ -43,7 +43,7 @@ pub fn enc_seed_lowered(
     be: i64,
     b2: i64,
 ) -> Result<crate::Enc, crate::Error> {
-    crate::keys::enc_seed(ctx.map_or(&mut None, |c| &mut c.a), pks, msgs, seed_enc, (bs, be, b2))
+    crate::keys::enc_seed(ctx.map_or(&mut None, |c| &mut c.a), pks, None, msgs, seed_enc, (bs, be, b2))
 }
 
 /// `print_int`: up to two limbs as a decimal (a zero of either sign is `0`), else `"overflow"`

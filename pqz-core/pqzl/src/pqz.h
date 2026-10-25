@@ -81,8 +81,11 @@
    || d' (16 x u8) */
 #define PQZ_TX0_WIT_BYTES (6 * PQZ_N + 2 * 32 + 16 + 16)
 
-/* R_TXM (op 7, OP_TRANSFER_MULTI; P6-ANON plan §3, §4): M legs (a decoy is a leg of amount 0), G = ceil(M / 4)
-   randomness groups (leg j in group j / 4, v_f in group 0), auditor on (A = 1, one copy v_{a,j} per leg) or off.
+/* R_TXM (op 7, OP_TRANSFER_MULTI; P6-ANON plan §3, §4): M legs (a decoy is a leg of amount 0), G randomness groups of
+   s legs (leg j in group j / s, v_f in group 0), auditor on (A = 1, one copy v_{a,j} per leg) or off; s = PQZ_S_AUD with
+   the auditor (owner 2026-10-25, R0-1: the set's pqz_set.h), 4 without, G = ceil(M / s). The auditor copy of leg j uses
+   the coefficients [16 w, 16 w + 16) of pk_a^T r_g, w = j mod s (its window; R0-1 direction 2: no two copies of a
+   group share a coefficient of pk_a^T r_g).
    Header: §7.7's with word 192 = recipientsHash (hashed only) and word 320 = M; the core picks the relation by the
    M word (PQZ_TXM_BUILT) and the auditorOn word (0 / 1) and requires the length PQZ_TXM_STMT_BYTES(M, A) (the length
    alone does not fix (M, A): (1, on) and (2, off) have the same length, n2304-kmax4096 93,312 B, n2048-kmax1024 83,072 B). Body: pk_f || pk_0 .. pk_{M-1} || [pk_a] ||
@@ -91,7 +94,8 @@
    M = 16 only with -DPQZ_TXM_OVERSIZE (bench builds; it does not fit MAX_INPUT, plan D3 / D20). */
 #define PQZ_OP_TRANSFER_MULTI 7
 #define PQZ_HDR_LEGS 320 /* op 7: M (op 1's recipient word) */
-#define PQZ_TXM_GROUPS(m) (((m) + 3) / 4)
+#define PQZ_TXM_LPG(a) ((a) ? PQZ_S_AUD : 4) /* legs per group */
+#define PQZ_TXM_GROUPS(m, a) (((m) + PQZ_TXM_LPG (a) - 1) / PQZ_TXM_LPG (a))
 #ifdef PQZ_TXM_OVERSIZE
 #define PQZ_TXM_MAX_LEGS 16
 #else
@@ -99,12 +103,12 @@
 #endif
 #define PQZ_TXM_STMT_BYTES(m, a)                                                                            \
   (PQZ_HEADER_BYTES + (1 + (m) + (a)) * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)               \
-   + PQZ_TXM_GROUPS (m) * PQZ_POLYVEC_BYTES + ((m) + 1 + (a) * (m)) * PQZ_V_BYTES)
+   + PQZ_TXM_GROUPS (m, a) * PQZ_POLYVEC_BYTES + ((m) + 1 + (a) * (m)) * PQZ_V_BYTES)
 /* R_TXM witness (R_TX's layout with a group's r_g, e1_g after the previous group's, M leg noises and digit vectors):
    s_f (int8) || e_f (int16) || (r_g (int8) || e1_g (int16)) for g < G || e2_j (16 x int16) for j < M || e2_f
    || [e2_{a,j} for j < M] || d_j (16 x u8) for j < M || d' (16 x u8); at M = 1 R_TX's / R_TX0's witness */
 #define PQZ_TXM_WIT_BYTES(m, a)                                                                             \
-  ((1 + PQZ_TXM_GROUPS (m)) * 3 * PQZ_N + 32 * ((m) + 1 + (a) * (m)) + 16 * (m) + 16)
+  ((1 + PQZ_TXM_GROUPS (m, a)) * 3 * PQZ_N + 32 * ((m) + 1 + (a) * (m)) + 16 * (m) + 16)
 
 /* R_BURN (§7.5): header || pk_f || T = u_T || v_T || out = u || v_f */
 #define PQZ_BURN_STMT_BYTES (PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES + 2 * (PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
@@ -113,8 +117,11 @@
 #define PQZ_BURN_WIT_BYTES (6 * PQZ_N + 32 + 16)
 
 /* Disclosure (pq-zero-knowledge.md §7.9): opTag || proofSystemId || chainId || chainUid || token || registry || entryRef
-   || amount || kind || pk || u || v, every scalar a 32-byte word (amount < 2^64; kind is hashed only), so pk starts
-   at 288. Same layout for R_DS and R_DR; n2304-kmax4096 37,280 B, n2048-kmax1024 33,184 B. */
+   || amount || kind || pk || u || v, every scalar a 32-byte word (amount < 2^64), so pk starts at 288. Same layout for
+   R_DS and R_DR; n2304-kmax4096 37,280 B, n2048-kmax1024 33,184 B. kind = OpeningKind + 256 w (R0-1, owner 2026-10-25):
+   the word must be < 2^16; w is the window of the ciphertext's v (R_DR decrypts at coefficients [16 w, 16 w + 16) of
+   u^T s: an auditor copy of an R_TXM leg j has w = j mod PQZ_S_AUD), w < PQZ_S_AUD for R_DR, 0 for R_DS; the low
+   byte is hashed only. */
 #define PQZ_DISC_AMOUNT (PQZ_PREFIX_BYTES + 5 * 32)
 #define PQZ_DISC_KIND (PQZ_DISC_AMOUNT + 32)
 #define PQZ_DISC_PK (PQZ_DISC_KIND + 32)
@@ -148,24 +155,41 @@ int pqz_encrypt (const uint8_t *const pks[], unsigned int npk, const uint8_t msg
                  uint8_t vs[][PQZ_V_BYTES]);
 int pqz_decrypt_raw (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
                      int64_t w[16]); /* w_i = centre(v_i - (u^T s)_i) */
+/* the same with windows (R0-1): recipient k's v_k uses the coefficients [16 win[k], 16 win[k] + 16) of pk_k^T r
+   (win[k] < 4; NULL = all 0, pqz_encrypt), and w_i = centre(v_i - (u^T s)_{16 win + i}); PQZ_ERR_INPUT on a window >= 4 */
+int pqz_encrypt_win (const uint8_t *const pks[], unsigned int npk, const uint8_t win[], const uint8_t msgs[][16],
+                     const int8_t r[PQZ_N], const int16_t e1[PQZ_N], const int16_t e2[][16],
+                     uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES]);
+int pqz_decrypt_raw_win (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
+                         unsigned win, int64_t w[16]);
 
 /* keys and encryption from seeds (pq-zero-knowledge.md §4.2, pqz_keys.c). 0 = ok; PQZ_ERR_INTERNAL (1) before pqz_init (as the
    three helpers above); PQZ_ERR_REJECT (4) after 64 counters (never in practice: the thresholds sit >= 10 s.d. above the mean norms), PQZ_ERR_INPUT (3) on a pk or
    ciphertext coefficient >= q or a digit > 15. ctr_used (may be NULL): the counter of the accepted attempt.
-   KeyGen: SHAKE256("SCAAS-PQZ-KEYGEN-V1" || seed32 || be4(ctr)), s <- CBD_1, e <- CBD_20, pk = A s + e. */
+   KeyGen: SHAKE256("SCAAS-PQZ-KEYGEN-V2" || u8(len(set)) || set || seed32 || be4(ctr)), set = the set's name
+   (PQZ_SET_NAME; review R2-C3: one seed32 gives unrelated keys at two sets), s <- CBD_1, e <- CBD_20, pk = A s + e.
+   On an error exit s, e (and pk) are zeroed (review R2-C10). */
 int pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[PQZ_N], int16_t e[PQZ_N],
                 unsigned *ctr_used);
 /* Enc: SHAKE256("SCAAS-PQZ-ENC-V1" || seed_enc || be4(ctr)), r <- CBD_1, e1 <- CBD_20, e2_j <- CBD_20^16 in recipient
-   order; u = A^T r + e1, v_j = pk_j^T r + e2_j + Delta m_j (msgs: 16 digits < 16 per recipient) */
+   order; u = A^T r + e1, v_j = pk_j^T r + e2_j + Delta m_j (msgs: 16 digits < 16 per recipient); on an error exit the
+   outputs are zeroed (R2-C10). pqz_enc_seed_win: recipient j at window win[j] as pqz_encrypt_win (R0-1) */
 int pqz_enc_seed (const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const uint8_t seed_enc[32],
                   uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[PQZ_N], int16_t e1[PQZ_N],
                   int16_t e2[][16], unsigned *ctr_used);
+int pqz_enc_seed_win (const uint8_t *const pks[], unsigned int npk, const uint8_t win[], const uint8_t msgs[][16],
+                      const uint8_t seed_enc[32], uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES],
+                      int8_t r[PQZ_N], int16_t e1[PQZ_N], int16_t e2[][16], unsigned *ctr_used);
 /* R_TXM group seeds (CTR-PQZ-19 extended, P6-ANON D13): group 0 uses seed_enc itself, group g >= 1
-   SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" || seed_enc || be4(g))[0..32); pqz_enc_seed then encrypts the group's legs, then
-   (group 0) pk_f, then the group's auditor copies, in that order. Pure hashing: no pqz_init needed. */
+   SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" || seed_enc || be4(g))[0..32); pqz_enc_seed_win then encrypts the group's legs
+   (PQZ_TXM_LPG (A) legs per group), then (group 0) pk_f, then the group's auditor copies at windows 0, 1, ... (the
+   leg's position in its group), in that order. Pure hashing: no pqz_init needed. */
 void pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32]);
 /* Dec of ct = u || v: M_i = round(w_i / Delta), noise_i = w_i - Delta M_i; value = sum M_i 16^i (the caller's) */
 int pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16],
              int64_t noise[16]);
+/* the same for a v at window win < 4 (the auditor's copy of an R_TXM leg j: win = j mod PQZ_S_AUD; R0-1) */
+int pqz_dec_win (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], unsigned win, int64_t M[16],
+                 int64_t noise[16]);
 
 #endif

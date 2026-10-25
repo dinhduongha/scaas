@@ -96,14 +96,19 @@ dcompress_decompose (intvec_t r1, intvec_t r0, const intvec_t r,
 
 /*
  * not ctime, r in (-q,q)
+ * PQZ (review R1-C1 / R2-C2): when q sits less than 2^(D-1) below 2^log2q (n2048-kmax1024: q = 2^42 - 215), r in
+ * [q - 2^(D-1) + g, q) (g = 2^log2q - q) rounds to r1 = 2^(log2q - D), one above the (log2q - D)-bit commitment
+ * field, and the honest prove failed. Such an r is given r1 = 0 and r := redp(r) - q, in (-2^(D-1), 0): r - r1 2^D (the
+ * caller's low part tA2) stays below 2^(D-1) in absolute value and r1 2^D + tA2 = r mod q. No other r changes.
  */
 void
-dcompress_power2round (intvec_t ret, const intvec_t r,
+dcompress_power2round (intvec_t ret, intvec_t r,
                        const dcompress_params_t params)
 {
   int_ptr r0i;
   unsigned int i;
   INTVEC_T (r0, r->nelems, r->nlimbs);
+  INTVEC_T (rp, r->nelems, r->nlimbs); /* redp(r) */
 
   ASSERT_ERR (ret->nelems == r->nelems);
   ASSERT_ERR (ret->nlimbs == r->nlimbs);
@@ -120,7 +125,21 @@ dcompress_power2round (intvec_t ret, const intvec_t r,
     _cnd_addsub (r0i, params->pow2D, (limb_t)int_absgt (r0i, params->pow2Dby2), 1); /* PQZ (review E) */
   }
 
+  intvec_set (rp, ret);
   intvec_sub (ret, ret, r0);
+  /* PQZ (R1-C1 / R2-C2): ret = r1 2^D >= q only in the wrap case: r1 := 0, r := redp(r) - q (masked) */
+  _VEC_FOREACH_ELEM (ret, i)
+  {
+    int_ptr reti = intvec_get_elem (ret, i), ri = intvec_get_elem (r, i);
+    const limb_t wrap = (limb_t)int_absge (reti, params->q);
+    const limb_t keep = pqz_ct_barrier (wrap - 1); /* all ones iff no wrap */
+    INT_T (dlt, ri->nlimbs);
+    for (unsigned int k = 0; k < reti->nlimbs; k++)
+      reti->limbs[k] &= keep;
+    int_sub (dlt, intvec_get_elem (rp, i), params->q);
+    int_sub (dlt, dlt, ri);
+    _cnd_addsub (ri, dlt, wrap, 0);
+  }
   intvec_rshift (ret, ret, params->D);
 }
 

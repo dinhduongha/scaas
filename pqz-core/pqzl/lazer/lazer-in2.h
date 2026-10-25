@@ -1030,6 +1030,8 @@ void poly_urandom (poly_t r, const int_t mod, unsigned int log2mod,
                    const uint8_t seed[32], uint32_t dom);
 void poly_urandom_bnd (poly_t r, const int_t lo, const int_t hi,
                        const uint8_t seed[32], uint32_t dom);
+#define PQZ_CHAL_TRIES 256 /* poly_urandom_challenge (PQZ, review R0-C3) */
+int poly_urandom_challenge (poly_t r, int64_t bnd, unsigned int log2, uint64_t eta, const uint8_t seed[32]);
 void poly_urandom_autostable (poly_t r, int64_t bnd, unsigned int log2,
                               const uint8_t seed[32], uint32_t dom);
 int poly_eq (poly_t a, poly_t b);
@@ -1410,7 +1412,7 @@ static inline unsigned int
 dcompress_get_log2m (const dcompress_params_t params);
 void dcompress_decompose (intvec_t r1, intvec_t r0, const intvec_t r,
                           const dcompress_params_t params);
-void dcompress_power2round (intvec_t ret, const intvec_t r,
+void dcompress_power2round (intvec_t ret, intvec_t r,
                             const dcompress_params_t params);
 void dcompress_use_ghint (intvec_t ret, const intvec_t y, const intvec_t r,
                           const dcompress_params_t params);
@@ -1461,25 +1463,7 @@ int lnp_quad_many_verify (uint8_t hash[32], poly_t c, polyvec_t z1,
                           spolyvec_ptr r1i[], poly_ptr r0i[], unsigned int N,
                           const abdlop_params_t params);
 
-void lnp_quad_eval_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h,
-                          poly_t c, polyvec_t z1, polyvec_t z21,
-                          polyvec_t hint, polyvec_t s1, polyvec_t m,
-                          polyvec_t s2, polyvec_t tA2, polymat_t A1,
-                          polymat_t A2prime, polymat_t Bprime,
-                          spolymat_ptr R2i[], spolyvec_ptr r1i[],
-                          unsigned int N, spolymat_ptr Rprime2i[],
-                          spolyvec_ptr rprime1i[], poly_ptr rprime0i[],
-                          unsigned int M, const uint8_t seed[32],
-                          const lnp_quad_eval_params_t params);
-int lnp_quad_eval_verify (uint8_t hash[32], polyvec_t h, poly_t c,
-                          polyvec_t z1, polyvec_t z21, polyvec_t hint,
-                          polyvec_t tA1, polyvec_t tB, polymat_t A1,
-                          polymat_t A2prime, polymat_t Bprime,
-                          spolymat_ptr R2i[], spolyvec_ptr r1i[],
-                          poly_ptr r0i[], unsigned int N,
-                          spolymat_ptr Rprime2i[], spolyvec_ptr rprime1i[],
-                          poly_ptr rprime0i[], unsigned int M,
-                          const lnp_quad_eval_params_t params);
+/* lnp_quad_eval_prove / lnp_quad_eval_verify: removed with lnp-quad-eval.c (PQZ, review R1-1 / R1-C7; pqzl/legacy/) */
 
 void lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
                      polyvec_t z1, polyvec_t z21, polyvec_t hint, polyvec_t z3,

@@ -105,13 +105,21 @@ pub(crate) const HDR_AMOUNT: usize = 288;
 pub(crate) const HDR_LEGS: usize = 320;
 pub(crate) const HDR_AUDITOR_ON: usize = 448;
 
-const fn groups(m: usize) -> usize {
-    m.div_ceil(4)
+/// `PQZ_TXM_LPG (a)`: legs per randomness group, S_AUD with the auditor (owner 2026-10-25, R0-1), 4 without
+pub(crate) const fn lpg(a: usize) -> usize {
+    if a > 0 { set::S_AUD } else { 4 }
 }
+const _: () = assert!(set::S_AUD >= 1 && set::S_AUD <= 4, "S_AUD windows of 16 in the 64 coefficients of pk_a^T r_g");
+/// `PQZ_TXM_GROUPS (m, a)`
+pub(crate) const fn groups(m: usize, a: usize) -> usize {
+    m.div_ceil(lpg(a))
+}
+/// the R_REG / R_DR z4 filler s[0]'s l2 bound, the specs' Bprime (gen_set.py; review R0-C2)
+const BPRIME_S0: i64 = 8;
 
 /// `PQZ_TXM_STMT_BYTES (m, a)`
 pub(crate) const fn txm_stmt(m: usize, a: usize) -> usize {
-    HEADER_BYTES + (1 + m + a) * PV + (PV + V_BYTES) + groups(m) * PV + (m + 1 + a * m) * V_BYTES
+    HEADER_BYTES + (1 + m + a) * PV + (PV + V_BYTES) + groups(m, a) * PV + (m + 1 + a * m) * V_BYTES
 }
 
 /// the exact statement length of relation r (`pqz_rel.c` `stmt_bytes`)
@@ -239,11 +247,13 @@ impl Sys<'_> {
         Ok(())
     }
 
-    /// `evaleq`: ct(X^-i (pkrow^T x)) + e2_i + sum (bit terms in acc) + rhs = 0
+    /// `evaleq`: ct(X^-pki (pkrow^T x)) + e2_i + sum (bit terms in acc) + rhs = 0 (pki = i, or 16 w + i for a v at
+    /// window w: R0-1)
     fn evaleq(
         &mut self,
         pkrow: Option<&mut PolyVec>,
         off_x: usize,
+        pki: usize,
         i: usize,
         e2: Option<usize>,
         acc: &mut [Poly],
@@ -253,7 +263,7 @@ impl Sys<'_> {
         let mut r1 = Sparse::new_vec(n);
         if let Some(pk) = pkrow {
             for j in 0..K {
-                *r1.insert_elem(2 * (off_x + j))? = mul_xinv(&mut pk[j], i);
+                *r1.insert_elem(2 * (off_x + j))? = mul_xinv(&mut pk[j], pki);
             }
         }
         if let Some(e) = e2 {
@@ -322,11 +332,13 @@ pub(crate) struct Pub {
     v: Poly,
     fee: u64,
     amount: u64,
+    /// R_DR: the window of v (R0-1)
+    win: usize,
 }
 
 impl Pub {
     fn none() -> Pub {
-        Pub { u: PolyVec(Vec::new()), v: Poly::ZERO, fee: 0, amount: 0 }
+        Pub { u: PolyVec(Vec::new()), v: Poly::ZERO, fee: 0, amount: 0, win: 0 }
     }
 }
 
@@ -353,6 +365,7 @@ fn build_reg(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
 struct Shape {
     legs: usize,
     groups: usize,
+    lpg: usize,
     aud: usize,
     burn: bool,
     txm: bool,
@@ -371,7 +384,7 @@ struct Shape {
 /// `shape_of`
 fn shape_of(r: &Rel) -> Result<Shape, Error> {
     let (m, a) = (r.legs, r.aud);
-    let g = if r.op == crate::OP_BURN { 1 } else { groups(m) };
+    let g = if r.op == crate::OP_BURN { 1 } else { groups(m, a) };
     let e = 2 * K + 2 * K * g;
     let e2f = e + m;
     let bits = e2f + 1 + a * m;
@@ -390,6 +403,7 @@ fn shape_of(r: &Rel) -> Result<Shape, Error> {
     Ok(Shape {
         legs: m,
         groups: g,
+        lpg: lpg(a),
         aud: a,
         burn: r.op == crate::OP_BURN,
         txm: r.op == crate::OP_TRANSFER_MULTI,
@@ -414,7 +428,7 @@ fn shape_ok(r: &Rel, h: &Shape) -> bool {
         && h.blk.len() == p.z as usize
         && h.m1 + p.z as usize == p.tbox.m1 as usize
         && h.legs <= maxl
-        && h.groups <= groups(maxl)
+        && h.groups <= groups(maxl, 1)
         && 16 * (h.legs + 1 + h.aud * h.legs + 2) <= 16 * (3 + 2 * maxl)
         && h.blk.iter().zip(p.n).all(|(b, &n)| b.1 == n as usize)
 }
@@ -527,21 +541,23 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
                 add_bit(&mut acc, slot(64 * j, 4, i, b), DELTA << b);
             }
             let rhs = -cval(&mut t.v[j], i);
-            s.evaleq(Some(&mut t.pk[j]), 2 * K + 2 * K * (j / 4), i, Some(h.e + j), &mut acc, rhs)?;
+            s.evaleq(Some(&mut t.pk[j]), 2 * K + 2 * K * (j / h.lpg), i, i, Some(h.e + j), &mut acc, rhs)?;
         }
         acc_zero(&mut acc);
         for b in 0..4 {
             add_bit(&mut acc, slot(h.dp, 4, i, b), DELTA << b);
         }
         let rhs = -cval(&mut t.vf, i);
-        s.evaleq(Some(&mut t.pkf), 2 * K, i, Some(h.e2f), &mut acc, rhs)?;
+        s.evaleq(Some(&mut t.pkf), 2 * K, i, i, Some(h.e2f), &mut acc, rhs)?;
         for j in 0..au * m {
             acc_zero(&mut acc);
             for b in 0..4 {
                 add_bit(&mut acc, slot(64 * j, 4, i, b), DELTA << b);
             }
             let rhs = -cval(&mut t.va[j], i);
-            s.evaleq(Some(&mut t.pka), 2 * K + 2 * K * (j / 4), i, Some(h.e2f + 1 + j), &mut acc, rhs)?;
+            // R0-1: the copy of leg j at coefficients [16 (j mod lpg), ..) of pk_a^T r_g(j)
+            let (g, w) = (j / h.lpg, j % h.lpg);
+            s.evaleq(Some(&mut t.pka), 2 * K + 2 * K * g, 16 * w + i, i, Some(h.e2f + 1 + j), &mut acc, rhs)?;
         }
         // row 6: (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^24) - 2^24 - v_T,i = 0
         acc_zero(&mut acc);
@@ -552,7 +568,7 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
             add_bit(&mut acc, slot(h.et, EB, i, b), 1 << b);
         }
         let rhs = -cval(&mut t.vt, i) - EOFF;
-        s.evaleq(Some(&mut t.ut), 0, i, None, &mut acc, rhs)?;
+        s.evaleq(Some(&mut t.ut), 0, i, i, None, &mut acc, rhs)?;
         // row 7 (over Z): M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i - 16 c_i = 0, c = cbits - 64
         acc_zero(&mut acc);
         let mut rhs = -digit(t.fee, i) - dpub;
@@ -577,7 +593,7 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
             }
             rhs += 16 * 64;
         }
-        s.evaleq(None, 0, i, None, &mut acc, rhs)?;
+        s.evaleq(None, 0, i, i, None, &mut acc, rhs)?;
     }
     let mut es = vec_try(h.blk.len())?;
     for &(st, ln) in &h.blk {
@@ -585,23 +601,27 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
     }
     let ps = new_sel(nbin, m1, h.bits)?;
     let ds = new_sel(1, m1, h.e)?;
-    let p = Pub { u: t.ut, v: t.vt, fee: t.fee, amount: t.amount };
+    let p = Pub { u: t.ut, v: t.vt, fee: t.fee, amount: t.amount, win: 0 };
     Ok(Some((statement(s, es, Some(ps), ds), p)))
 }
 
-/// `parse_disc`: amount (a word < 2^64), pk, u, v
-fn parse_disc(stmt: &[u8]) -> Result<(u64, PolyVec, PolyVec, Poly, bool), Error> {
+/// `parse_disc`: amount (a word < 2^64), the kind word's window w (kind = OpeningKind + 256 w < 2^16, w < wmax;
+/// R0-1), pk, u, v
+fn parse_disc(stmt: &[u8], wmax: u64) -> Result<(u64, usize, PolyVec, PolyVec, Poly, bool), Error> {
     let (amount, mut ok) = word64(&stmt[DISC_AMOUNT..]);
+    let (kind, o) = word64(&stmt[DISC_AMOUNT + 32..]);
+    ok &= o & (kind >> 16 == 0) & ((kind >> 8) < wmax);
+    let win = ((kind >> 8) & 3) as usize;
     let (mut pk, mut u, mut v) = (new_vec()?, new_vec()?, Poly::ZERO);
     ok &= rd_polyvec(&mut pk, &stmt[DISC_PK..]);
     ok &= rd_polyvec(&mut u, &stmt[DISC_PK + PV..]);
     ok &= rd_poly(&mut v, &stmt[DISC_PK + 2 * PV..], 16);
-    Ok((amount, pk, u, v, ok))
+    Ok((amount, win, pk, u, v, ok))
 }
 
 /// R_DS: u = A^T r + e1; (pk^T r)_i + e2_i + Delta d_i - v_i = 0
 fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
-    let (amount, mut pk, mut u, mut v, ok) = parse_disc(stmt)?;
+    let (amount, _, mut pk, mut u, mut v, ok) = parse_disc(stmt, 1)?; // R_DS: window 0 (the sender's v_t)
     if !ok {
         return Ok(None);
     }
@@ -611,7 +631,7 @@ fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     }
     for i in 0..16 {
         let rhs = DELTA * digit(amount, i) - cval(&mut v, i);
-        s.evaleq(Some(&mut pk), 0, i, Some(2 * K), &mut [], rhs)?;
+        s.evaleq(Some(&mut pk), 0, i, i, Some(2 * K), &mut [], rhs)?;
     }
     let mut es = vec_try(3)?;
     es.push(new_sel(K, 2 * K + 1, 0)?);
@@ -620,9 +640,9 @@ fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     Ok(Some((statement(s, es, None, new_sel(1, 2 * K + 1, 2 * K)?), Pub::none())))
 }
 
-/// R_DR: pk = A s + e; (u^T s)_i + (e'_i + 2^24) - 2^24 + Delta d_i - v_i = 0
+/// R_DR: pk = A s + e; (u^T s)_{16 w + i} + (e'_i + E) - E + Delta d_i - v_i = 0 (w the kind word's window: R0-1)
 fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
-    let (amount, mut pk, mut u, mut v, ok) = parse_disc(stmt)?;
+    let (amount, win, mut pk, mut u, mut v, ok) = parse_disc(stmt, set::S_AUD as u64)?;
     if !ok {
         return Ok(None);
     }
@@ -638,13 +658,13 @@ fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
             add_bit(&mut acc, EB * i + b, 1 << b);
         }
         let rhs = DELTA * digit(amount, i) - cval(&mut v, i) - EOFF;
-        s.evaleq(Some(&mut u), 0, i, None, &mut acc, rhs)?;
+        s.evaleq(Some(&mut u), 0, 16 * win + i, i, None, &mut acc, rhs)?;
     }
     let mut es = vec_try(2)?;
     es.push(new_sel(K, 2 * K + DR_NBIN, 0)?);
     es.push(new_sel(K, 2 * K + DR_NBIN, K)?);
     let st = statement(s, es, Some(new_sel(DR_NBIN, 2 * K + DR_NBIN, 2 * K)?), new_sel(1, 2 * K + DR_NBIN, 0)?);
-    Ok(Some((st, Pub { u, v, fee: 0, amount })))
+    Ok(Some((st, Pub { u, v, fee: 0, amount, win })))
 }
 
 /// `build`: the statement of relation r (its length checked) and what the witness parsers read of it; `None` if
@@ -688,13 +708,13 @@ fn ct_sdiv(x: i64, d: u64) -> (i64, i64) {
     ((q ^ s).wrapping_sub(s) as i64, (n[0] ^ s).wrapping_sub(s) as i64)
 }
 
-fn dec_w(u: &mut PolyVec, v: &mut Poly, s1: &mut PolyVec) -> [i64; 16] {
+fn dec_w(u: &mut PolyVec, v: &mut Poly, s1: &mut PolyVec, off: usize) -> [i64; 16] {
     // Q-B (review A-3): u^T s, wiped on return (C: the arena); the caller wipes the result
     let mut acc = Wiped(crate::arith::polyvec::dot(&mut **u, &mut s1.sub(0, K, 1)));
     acc.fromcrt();
     // review E: secret (u^T s); reduced and centred without a branch or a division
     core::array::from_fn(|i| {
-        let mut w = ct_sdiv(cval(v, i) - cval(&mut acc, i), QI as u64).1;
+        let mut w = ct_sdiv(cval(v, i) - cval(&mut acc, off + i), QI as u64).1;
         w -= QI & (((QI - 1) / 2 - w) >> 63);
         w += QI & ((w + (QI - 1) / 2) >> 63);
         w
@@ -732,7 +752,7 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
         dp[i] = p[16 * l + i] as i64;
     }
     // decrypt T with s_f: M_i = round(w_i / Delta), e_T = w - Delta M
-    let wv = Wiped(dec_w(&mut t.u, &mut t.v, s1));
+    let wv = Wiped(dec_w(&mut t.u, &mut t.v, s1, 0));
     // review E: round half away from zero without a branch
     let mm: Wiped<[i64; 16]> = Wiped(core::array::from_fn(|i| {
         ct_sdiv(wv[i] + (((DELTA / 2) ^ (wv[i] >> 63)) - (wv[i] >> 63)), DELTA as u64).0
@@ -787,11 +807,11 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
     Ok(true)
 }
 
-/// `dr_witness`: s, e and the bits of e'_i + E, e'_i = centre(v_i - (u^T s)_i) - Delta d_i
+/// `dr_witness`: s, e and the bits of e'_i + E, e'_i = centre(v_i - (u^T s)_{16 w + i}) - Delta d_i
 fn dr_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec) -> bool {
     let p = wit_vec(s1, 0, w, false);
     wit_vec(s1, K, p, true);
-    let wv = Wiped(dec_w(&mut t.u, &mut t.v, s1)); // Q-B (review A-3, C `explicit_bzero (wv)`)
+    let wv = Wiped(dec_w(&mut t.u, &mut t.v, s1, 16 * t.win)); // Q-B (review A-3, C `explicit_bzero (wv)`)
     let mut bad = false;
     for (i, &wi) in wv.iter().enumerate() {
         let e = wi - DELTA * digit(t.amount, i);
@@ -833,6 +853,13 @@ fn set_upsilon(p: &Tbox, s1: &mut PolyVec, blocks: &[(usize, usize)]) -> bool {
     true
 }
 
+/// `s0_ok`: R_REG / R_DR's z4 filler s[0] within its Bprime (an honest prover's check, review R0-C2); the verdict is
+/// public (prove fails)
+fn s0_ok(s1: &mut PolyVec) -> bool {
+    let n2: i64 = (0..D).map(|k| cval(&mut s1[0], k) * cval(&mut s1[0], k)).sum();
+    !crate::ct::verdict(n2 > BPRIME_S0 * BPRIME_S0)
+}
+
 /// `witness`: the witness of relation r into s1, then the l2 slack; false if malformed, inconsistent or above a bound
 fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, Error> {
     const REG_WIT: usize = 3 * N;
@@ -845,6 +872,9 @@ fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, E
             }
             let p = wit_vec(s1, 0, wit, false);
             wit_vec(s1, K, p, true);
+            if !s0_ok(s1) {
+                return Ok(false);
+            }
             &reg
         }
         4 => {
@@ -859,7 +889,7 @@ fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, E
             &ds
         }
         5 => {
-            if wit.len() != REG_WIT || !dr_witness(t, wit, s1) {
+            if wit.len() != REG_WIT || !dr_witness(t, wit, s1) || !s0_ok(s1) {
                 return Ok(false);
             }
             &reg

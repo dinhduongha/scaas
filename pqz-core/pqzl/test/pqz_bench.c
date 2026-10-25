@@ -343,7 +343,7 @@ setup (void)
    restored), so the other relations' statements and proofs are unchanged; client helpers of pqz_rel.c only (no
    pqz_keys.c, which several builds of this file do not link) ---- */
 #define MAXL PQZ_TXM_MAX_LEGS
-#define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS)
+#define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS, 1)
 static pqzkey_t KTS, KTR[MAXL], KTA;
 #ifdef PQZ_TEST_HOOKS
 extern int pqz_test_cheat; /* pqz_rel.c: the test-only cheating prover (txm_check negatives) */
@@ -369,7 +369,7 @@ txspec (txspec_t *X, unsigned m, unsigned a, uint8_t tag)
   memset (X, 0, sizeof *X);
   X->m = m, X->a = a, X->tag = tag, X->balance = 1000000, X->fee = a ? 7 : 0; /* fee 0 allowed (owner 2026-10-14) */
   for (unsigned j = 0; j < MAXL; j++)
-    X->key[j] = j, X->grp[j] = j / 4;
+    X->key[j] = j, X->grp[j] = j / PQZ_TXM_LPG (a); /* groups of S_AUD legs with the auditor, 4 without (R0-1) */
   X->amount[m - 1] = 123456; /* one real leg, the last; the rest decoys (amount 0) */
 }
 
@@ -384,7 +384,7 @@ wr_word (uint8_t *p, uint64_t v)
 static int
 txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *wtlen)
 {
-  const unsigned m = X->m, a = X->a, G = PQZ_TXM_GROUPS (m);
+  const unsigned m = X->m, a = X->a, G = PQZ_TXM_GROUPS (m, a);
   static int8_t r[MAXG][PQZ_N], rT[PQZ_N];
   static int16_t e1[MAXG][PQZ_N], e1T[PQZ_N], e2T[1][16], e2l[MAXL][16], e2f[16], e2a[MAXL][16], zero16[1][16];
   static uint8_t u[MAXG][PQZ_POLYVEC_BYTES], uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], utmp[PQZ_POLYVEC_BYTES];
@@ -441,9 +441,10 @@ txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *w
       memcpy (ma[0], dg[j], 16);
       if (j == 0)
         ma[0][0] += (uint8_t)X->aud0;
+      const uint8_t win[1] = { (uint8_t)(j % PQZ_TXM_LPG (a)) }; /* the copy's window in pk_a^T r_g (R0-1) */
       if (a)
-        rc |= pqz_encrypt (pa1, 1, (const uint8_t (*)[16])ma, r[X->grp[j]], e1[X->grp[j]],
-                           (const int16_t (*)[16])e2a[j], utmp, &va[j]);
+        rc |= pqz_encrypt_win (pa1, 1, win, (const uint8_t (*)[16])ma, r[X->grp[j]], e1[X->grp[j]],
+                               (const int16_t (*)[16])e2a[j], utmp, &va[j]);
     }
   {
     const uint8_t *p1[1] = { KTS.pk };
@@ -927,7 +928,7 @@ txm_check (int rels)
   if (r81 >= 0 && TXM_RUN (15))
     {
       const size_t sl = STLEN[r81];
-      const unsigned m = 8, G = 2;
+      const unsigned m = 8, G = PQZ_TXM_GROUPS (8, 1);
       const size_t pk0 = PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES, u0 = pk0 + (m + 1) * PQZ_POLYVEC_BYTES + PQZ_POLYVEC_BYTES + PQZ_V_BYTES,
                    v0 = u0 + G * PQZ_POLYVEC_BYTES, va0 = v0 + (m + 1) * PQZ_V_BYTES;
       memcpy (st, STMT[r81], sl), st[PQZ_HDR_LEGS + 31] = 4;

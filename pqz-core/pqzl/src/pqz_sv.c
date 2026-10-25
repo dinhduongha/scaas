@@ -62,7 +62,7 @@ extern void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, 
 #define NPK PQZ_K /* k: polys per public key / ciphertext vector */
 #define JLR 256 /* JL rows */
 #define M30 ((((uint32_t)1) << 30) - 1)
-_Static_assert (PQZ_LOG2Q <= 56, "lift: two folds below 2^31");
+_Static_assert (PQZ_LOG2Q <= 55, "lift: two folds below 2^31; jl_fold: 256 q < 2^63 and >= -q 2^(63-L) (R2-C1)");
 _Static_assert (30 * NP - 1 > 2 * PQZ_LOG2Q + 23, "P / 2 above the largest sum 2^(2L + 23) (gen_set.py's NP rule)");
 #define Q PQZ_Q
 
@@ -118,7 +118,8 @@ mulq (uint64_t a, uint64_t b)
   return pqz_mulq (a, b);
 }
 /* x >= -q 2^(63-L) -> [0, q) (pqz_ntt.h pqz_modq_i64); below that the result would be wrong. Every caller passes
-   |x| < 2^(L+9) (JL fold < 256 q, statement and proof values < q, bit coefficients Delta 2^(MBITS-1) < q) */
+   |x| <= 256 (q - 1) <= q 2^(63-L) (L <= 55: JL fold < 256 q, statement and proof values < q, bit coefficients
+   Delta 2^(MBITS-1) < q; review R2-C1) */
 static inline uint64_t
 modq (int64_t x)
 {
@@ -772,7 +773,7 @@ jl_fold (int64_t *acc, unsigned ncols, uint64_t V[LAMBDA][JLR], const prg_t *g, 
 /* ---------------------------------------------------------------- per-relation tables */
 
 #define SVL 16                       /* legs of R_TXM (the oversize M = 16 included) */
-#define SVG 4                        /* randomness groups */
+#define SVG ((SVL + PQZ_S_AUD - 1) / PQZ_S_AUD) /* randomness groups (audited M = 16 with S_AUD legs each: R0-1) */
 #define SVZ (3 + 2 * SVG + 2 * SVL) /* exact l2 blocks: s_f, e_f, r_g, e1_g, one per e2 vector (X-1) */
 #define SVPR (2 + 2 * SVL)           /* evaluation-equation products */
 #define SVBIN ((PQZ_BITS_BURN + 64 * SVL + 63) / 64) /* binary polys */
@@ -796,7 +797,7 @@ typedef struct
   unsigned nprod; /* evaluation equations: the products vec[v]^T x[ox..] (+ the e2 slot), folded with Gm[k] */
   struct
   {
-    unsigned v, ox;
+    unsigned v, ox, win; /* win: the vec^T x part at coefficients [16 win, ..) (an auditor copy's window, R0-1) */
     int e2;
   } pr[SVPR];
   nt_t *A1, *A2p, *Bp;               /* kmsis x mq, kmsis x m2r, 12 x m2r */
@@ -993,7 +994,8 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
           M = 0, A = 0, S->burn = 1;
         else /* R_TXM */
           M = PQZ_REL_TXM_LEGS (op), A = PQZ_REL_TXM_AUD (op), S->txm = 1;
-        G = S->burn ? 1 : (M + 3) / 4, E = 2 * NPK + 2 * NPK * G, e2f = E + M;
+        const unsigned lpg = PQZ_TXM_LPG (A); /* legs per group (pqz.h; R0-1) */
+        G = S->burn ? 1 : PQZ_TXM_GROUPS (M, A), E = 2 * NPK + 2 * NPK * G, e2f = E + M;
         S->debit = 1, S->legs = M, S->groups = G, S->aud = A;
         S->nvec = NVEC + (M > 0 ? M - 1 : 0) + (G - 1);
         S->N = NPK * (1 + G), S->M = 16 * (M + 1 + A * M + 2);
@@ -1004,10 +1006,11 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
           S->rb[1 + g].tr = 1, S->rb[1 + g].ox = 2 * NPK + 2 * NPK * g, S->rb[1 + g].oy = 3 * NPK + 2 * NPK * g,
                      S->rb[1 + g].rhs = v_u (S, g);
         for (unsigned j = 0; j < M; j++, k++)
-          S->pr[k].v = v_pk (S, j), S->pr[k].ox = 2 * NPK + 2 * NPK * (j / 4), S->pr[k].e2 = (int)(E + j);
+          S->pr[k].v = v_pk (S, j), S->pr[k].ox = 2 * NPK + 2 * NPK * (j / lpg), S->pr[k].e2 = (int)(E + j);
         S->pr[k].v = V_PKF, S->pr[k].ox = 2 * NPK, S->pr[k].e2 = (int)e2f, k++;
         for (unsigned j = 0; j < A * M; j++, k++)
-          S->pr[k].v = V_PKA, S->pr[k].ox = 2 * NPK + 2 * NPK * (j / 4), S->pr[k].e2 = (int)(e2f + 1 + j);
+          S->pr[k].v = V_PKA, S->pr[k].ox = 2 * NPK + 2 * NPK * (j / lpg), S->pr[k].e2 = (int)(e2f + 1 + j),
+          S->pr[k].win = j % lpg;
         S->pr[k].v = V_UT, S->pr[k].ox = 0, S->pr[k].e2 = -1, k++;
         S->nprod = k;
         ok &= M <= SVL && G <= SVG && k <= SVPR;
@@ -1022,7 +1025,7 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
   ok &= P->nprime == 1 && P->quad_eval->lambda == LAMBDA && tb->ring->d == DEG && tb->l == 0
         && tb->lext == NQL + 1 && qm->l == NQL && P->quad_eval->quad_eval->l == NQEL && qm->m1 == S->mq
         && P->quad_eval->quad_eval->m1 == S->mq && qm->kmsis == S->kmsis && tb->ring->log2q == PQZ_LOG2Q
-        && qm->omega == 8 && qm->log2omega == 5;
+        && qm->omega == 8 && qm->log2omega == 5 && qm->eta == 140;
   if (!ok)
     goto fail;
   /* constants */
@@ -1095,6 +1098,7 @@ typedef struct
   int64_t (*vec)[NPK][DEG];                       /* V_PK .. V_U, then the debit's further legs and groups */
   int64_t vT[16], vf[16], v[SVL][16], va[SVL][16]; /* debit: legs, auditor copies; R_DS / R_DR: v[0] = v */
   uint64_t fee, amount;
+  unsigned win; /* R_DS / R_DR: the kind word's window (pqz_rel.c parse_disc; R0-1) */
 } stmt_t;
 
 static uint64_t
@@ -1191,6 +1195,12 @@ parse_stmt (stmt_t *T, const svrel_t *S, uint8_t op, const uint8_t *stmt, size_t
       if (len != PQZ_DISC_STMT_BYTES)
         return 0;
       ok &= rd_word64 (&T->amount, stmt + PQZ_DISC_AMOUNT);
+      {
+        uint64_t kind;
+        ok &= rd_word64 (&kind, stmt + PQZ_DISC_KIND);
+        ok &= kind >> 16 == 0 && (kind >> 8) < (op == PQZ_OP_DISCLOSE_SENDER ? 1u : (unsigned)PQZ_S_AUD);
+        T->win = (unsigned)((kind >> 8) & 3);
+      }
       p = stmt + PQZ_DISC_PK;
       ok &= rd_vec (T->vec[op == PQZ_OP_DISCLOSE_SENDER ? V_PKT : V_PK], p), p += PQZ_POLYVEC_BYTES;
       ok &= rd_vec (T->vec[V_U], p), p += PQZ_POLYVEC_BYTES;
@@ -1628,12 +1638,25 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   /* evaluation-equation products: vec^T x (+ e2), e.g. R_TX pk_t^T r + e2_t (t < 3), u_T^T s_f */
   for (k = 0; k < S->nprod; k++)
     {
+      /* the window (R0-1): an auditor copy's vec^T x at coefficients [16 w, 16 w + 16), R_DR's u^T s at the kind
+         word's w; the e2 part stays at [0, 16): P_k = X^-16w vec^T x + e2 */
+      const unsigned w = S->debit ? S->pr[k].win : T->win;
       memset (&acc, 0, sizeof acc);
       for (j = 0; j < NPK; j++)
         fwd (&t1, T->vec[S->pr[k].v][j]), acc_mul (&acc, &t1, &W.Z[S->pr[k].ox + j]);
-      if (S->pr[k].e2 >= 0)
+      if (S->pr[k].e2 >= 0 && w == 0)
         acc_add (&acc, &W.Z[S->pr[k].e2]);
       red (r, &acc);
+      if (w != 0)
+        {
+          int64_t sh[DEG];
+          for (j = 0; j < DEG; j++) /* X^-o r, negacyclic, o = 16 w (r in [0, q)) */
+            sh[j] = j + 16 * w < DEG ? r[j + 16 * w] : (int64_t)negq ((uint64_t)r[j + 16 * w - DEG]);
+          if (S->pr[k].e2 >= 0) /* + e2 (its z coefficients, W.Z's input) */
+            for (j = 0; j < DEG; j++)
+              sh[j] = (int64_t)addq ((uint64_t)sh[j], modq (W.zc[DEG * (unsigned)S->pr[k].e2 + j]));
+          memcpy (r, sh, sizeof sh);
+        }
       fwd (&PKe[k], r);
     }
 
@@ -1953,8 +1976,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     shake128_absorb (hs, buf, coder_get_offset (cs) >> 3);
     shake128_squeeze (hs, cseed, 32);
     shake128_clear (hs);
-    poly_urandom_autostable (c2, 8, 5, cseed, 0);
-    const int eq = pqz_err == PQZ_OK && poly_eq (F.c, c2);
+    const int chal = poly_urandom_challenge (c2, 8, 5, 140, cseed); /* the eta-filtered challenge (R0-C3) */
+    const int eq = chal && pqz_err == PQZ_OK && poly_eq (F.c, c2);
     poly_free (c2), poly_free (vv), polyvec_free (w1v);
     if (!eq)
       return 0;

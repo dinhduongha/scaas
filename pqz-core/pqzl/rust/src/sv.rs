@@ -39,7 +39,10 @@ use alloc::vec::Vec;
 use crate::params::set;
 const NP: usize = set::SV_NP;
 const L: u32 = set::LOG2Q;
-const _: () = assert!(L <= 56); // lift: two folds below 2^31
+// lift: two folds below 2^31; jl_fold: 256 q < 2^63 and >= -q 2^(63 - L) (review R2-C1)
+const _: () = assert!(L <= 55);
+// P / 2 above the largest sum 2^(2L + 23) (gen_set.py's NP rule; C pqz_sv.c, review R1-C6 / R2-C6)
+const _: () = assert!(30 * NP - 1 > 2 * L as usize + 23);
 const DEG: usize = 64;
 const LAMBDA: usize = 4;
 /// quad_many l: y3 (4), y4 (4), beta, g (2)
@@ -639,8 +642,8 @@ fn jl_fold(acc: &mut [i64], ncols: usize, v: &[[u64; JLR]; LAMBDA], seed: &[u8; 
 
 /// legs of R_TXM (the oversize M = 16 included)
 const SVL: usize = 16;
-/// randomness groups
-const SVG: usize = 4;
+/// randomness groups (audited M = 16 with S_AUD legs each: R0-1)
+const SVG: usize = SVL.div_ceil(set::S_AUD);
 /// exact l2 blocks: s_f, e_f, r_g, e1_g, one per e2 vector (X-1)
 const SVZ: usize = 3 + 2 * SVG + 2 * SVL;
 /// evaluation-equation products
@@ -671,6 +674,8 @@ struct Rb {
 struct Pr {
     v: usize,
     ox: usize,
+    /// the vec^T x part at coefficients [16 win, ..) (an auditor copy's window, R0-1)
+    win: usize,
     e2: Option<usize>,
 }
 
@@ -832,7 +837,7 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             s.nrb = 1;
             s.rb[0] = Rb { tr: true, ox: 0, oy: NPK, rhs: V_U };
             s.nprod = 1;
-            s.pr[0] = Pr { v: V_PKT, ox: 0, e2: Some(2 * NPK) };
+            s.pr[0] = Pr { v: V_PKT, ox: 0, win: 0, e2: Some(2 * NPK) };
         }
         5 => {
             // pk = A s + e; u^T s
@@ -840,7 +845,7 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             s.nrb = 1;
             s.rb[0] = Rb { tr: false, ox: 0, oy: NPK, rhs: V_PK };
             s.nprod = 1;
-            s.pr[0] = Pr { v: V_U, ox: 0, e2: None };
+            s.pr[0] = Pr { v: V_U, ox: 0, win: 0, e2: None };
         }
         _ => {
             // the debit relations R_TX, R_TX0, R_BURN, R_TXM (pqz_rel.c shape_t): rows 1, 2 per group; products
@@ -850,7 +855,8 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             let (m, a) = (r.legs, r.aud);
             s.burn = r.code == crate::OP_BURN;
             s.txm = r.op == crate::OP_TRANSFER_MULTI;
-            let g = if s.burn { 1 } else { m.div_ceil(4) };
+            let lpg = rel::lpg(a); // legs per group (R0-1)
+            let g = if s.burn { 1 } else { rel::groups(m, a) };
             let (e, e2f) = (2 * NPK + 2 * NPK * g, 2 * NPK + 2 * NPK * g + m);
             (s.debit, s.legs, s.groups, s.aud) = (true, m, g, a);
             s.nvec = NVEC + m.saturating_sub(1) + (g - 1);
@@ -870,16 +876,16 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             }
             let mut k = 0;
             for j in 0..m {
-                s.pr[k] = Pr { v: s.v_pk(j), ox: 2 * NPK + 2 * NPK * (j / 4), e2: Some(e + j) };
+                s.pr[k] = Pr { v: s.v_pk(j), ox: 2 * NPK + 2 * NPK * (j / lpg), win: 0, e2: Some(e + j) };
                 k += 1;
             }
-            s.pr[k] = Pr { v: V_PKF, ox: 2 * NPK, e2: Some(e2f) };
+            s.pr[k] = Pr { v: V_PKF, ox: 2 * NPK, win: 0, e2: Some(e2f) };
             k += 1;
             for j in 0..a * m {
-                s.pr[k] = Pr { v: V_PKA, ox: 2 * NPK + 2 * NPK * (j / 4), e2: Some(e2f + 1 + j) };
+                s.pr[k] = Pr { v: V_PKA, ox: 2 * NPK + 2 * NPK * (j / lpg), win: j % lpg, e2: Some(e2f + 1 + j) };
                 k += 1;
             }
-            s.pr[k] = Pr { v: V_UT, ox: 0, e2: None };
+            s.pr[k] = Pr { v: V_UT, ox: 0, win: 0, e2: None };
             k += 1;
             s.nprod = k;
         }
@@ -908,7 +914,8 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
         && qm.kmsis as usize == s.kmsis
         && ring.log2q == L
         && qm.omega == 8
-        && qm.log2omega == 5;
+        && qm.log2omega == 5
+        && qm.eta == 140;
     if !ok {
         return Err(Error::Internal);
     }
@@ -973,6 +980,8 @@ struct Stmt {
     va: [[i64; 16]; SVL],
     fee: u64,
     amount: u64,
+    /// R_DS / R_DR: the kind word's window (rel.rs parse_disc; R0-1)
+    win: usize,
 }
 
 /// pqz_rel.c rd_poly: every value < q
@@ -1071,6 +1080,10 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
             let o;
             (t.amount, o) = rel::word64(&stmt[rel::DISC_AMOUNT..]);
             ok &= o;
+            let (kind, o) = rel::word64(&stmt[rel::DISC_AMOUNT + 32..]);
+            let wmax = if code == crate::OP_DISCLOSE_SENDER { 1 } else { set::S_AUD as u64 };
+            ok &= o & (kind >> 16 == 0) & ((kind >> 8) < wmax);
+            t.win = ((kind >> 8) & 3) as usize;
             let mut p = rel::DISC_PK;
             ok &= rd_vec(&mut t.vec[if code == crate::OP_DISCLOSE_SENDER { V_PKT } else { V_PK }], &stmt[p..]);
             p += POLYVEC_BYTES;
@@ -1261,7 +1274,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let ntot = LAMBDA / 2 + 2 + s.n;
 
     // statement (pqz_rel.c build_reg / parse_debit / parse_disc: every coefficient < q)
-    let mut t = Stmt { vec: vz(s.nvec, [[0; DEG]; NPK])?, vt: [0; 16], vf: [0; 16], v: [[0; 16]; SVL], va: [[0; 16]; SVL], fee: 0, amount: 0 };
+    let mut t = Stmt { vec: vz(s.nvec, [[0; DEG]; NPK])?, vt: [0; 16], vf: [0; 16], v: [[0; 16]; SVL], va: [[0; 16]; SVL], fee: 0, amount: 0, win: 0 };
     if !parse_stmt(&mut t, s, code, stmt) {
         return Ok(false);
     }
@@ -1427,15 +1440,29 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let mut pke = vz(s.nprod.max(1), NT0)?;
     for k in 0..s.nprod {
         let pk = &s.pr[k];
+        // the window (R0-1): an auditor copy's vec^T x at coefficients [16 w, ..), R_DR's u^T s at the kind word's w;
+        // the e2 part stays at [0, 16): P_k = X^-16w vec^T x + e2
+        let w = if s.debit { pk.win } else { t.win };
         let mut acc = ACC0;
         for j in 0..NPK {
             let t1 = ar.fwd(&t.vec[pk.v][j]);
             acc_mul(&mut acc, &t1, &wz[pk.ox + j], pr);
         }
-        if let Some(e2) = pk.e2 {
+        if let (Some(e2), 0) = (pk.e2, w) {
             acc_add(&mut acc, &wz[e2]);
         }
-        pke[k] = ar.fwd(&ar.red(&acc));
+        let mut r = ar.red(&acc);
+        if w != 0 {
+            let o = 16 * w;
+            let sh: Cp = core::array::from_fn(|j| if j + o < DEG { r[j + o] } else { negq(r[j + o - DEG] as u64) as i64 });
+            r = sh;
+            if let Some(e2) = pk.e2 {
+                for j in 0..DEG {
+                    r[j] = addq(r[j] as u64, modq(zc[DEG * e2 + j])) as i64;
+                }
+            }
+        }
+        pke[k] = ar.fwd(&r);
     }
 
     // ---- z3 / z4 (JL) rows: V from (hash1, dom) (B-1: after tg), R / R' rows from (hash0, i) / (hash0, 256 + i) ----
@@ -1740,8 +1767,12 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         c.urandom(core::slice::from_mut(&mut vv), &crate::arith::poly::RING_Q, L)?;
         c.urandom(&mut *w1v, &Int::from_i64(1, s.dm as i64), s.log2m)?;
         let cseed = hash2(g2, &c.end()?);
-        let mut c2 = Poly::urandom_autostable(8, 5, &cseed, 0)?;
-        if !Poly::eq(&mut f.c, &mut c2) {
+        // the eta-filtered challenge (R0-C3)
+        let ok = match Poly::urandom_challenge(8, 5, 140, &cseed)? {
+            Some(mut c2) => Poly::eq(&mut f.c, &mut c2),
+            None => false,
+        };
+        if !ok {
             return Ok(false);
         }
     }

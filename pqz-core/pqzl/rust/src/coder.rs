@@ -93,10 +93,12 @@ impl Dcomp {
         (r1, r0)
     }
 
-    /// `dcompress_power2round`, one coefficient in (-q, q)
-    pub(crate) fn power2round(&self, a: &Int) -> Int {
+    /// `dcompress_power2round`, one coefficient a in (-q, q): (r1, a'), a' = a except in the wrap case (C: r1 2^D >= q,
+    /// q less than 2^(D-1) below 2^log2q, n2048-kmax1024), where r1 = 0 and a' = redp(a) - q (review R1-C1 / R2-C2)
+    pub(crate) fn power2round(&self, a: &Int) -> (Int, Int) {
         let mut ret = Int::new(a.n);
         ret.redp(a, &self.q);
+        let rp = ret;
         let mut r0 = Int::new(a.n);
         r0.rshift(&ret, self.d);
         r0.lshift(&{ r0 }, self.d);
@@ -104,8 +106,18 @@ impl Dcomp {
         let hi = r0.absgt(&self.pow2dby2) as u64;
         cnd_addsub(&mut r0, &self.pow2d, hi, true);
         ret.sub(&{ ret }, &r0);
+        let wrap = ret.absge(&self.q) as u64;
+        let keep = crate::ct::mask(wrap ^ 1);
+        for x in &mut ret.l[..ret.n] {
+            *x &= keep;
+        }
+        let mut na = *a;
+        let mut dlt = Int::new(a.n);
+        dlt.sub(&rp, &self.q);
+        dlt.sub(&{ dlt }, a);
+        cnd_addsub(&mut na, &dlt, wrap, false);
         ret.rshift(&{ ret }, self.d);
-        ret
+        (ret, na)
     }
 
     /// `dcompress_use_ghint`, one coefficient: r in (-q, q), y in (-m/2, m/2]; result in [0, m)

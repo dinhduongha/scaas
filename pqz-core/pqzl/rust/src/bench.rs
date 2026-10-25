@@ -394,11 +394,12 @@ impl Bench {
     }
 }
 
-/// `txm_build` (honest): sender KTS, leg j to KTR[j] in group j / 4, auditor KTA; one real leg (the last, 123,456),
+/// `txm_build` (honest): sender KTS, leg j to KTR[j] in group j / lpg (S_AUD legs with the auditor, 4 without; R0-1),
+/// auditor KTA (the copy of leg j at window j mod lpg); one real leg (the last, 123,456),
 /// the rest decoys; balance 1,000,000, fee 7 (auditor on) / 0
 #[allow(clippy::too_many_arguments)]
 fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize, tag: u8) -> Result<(Vec<u8>, Vec<u8>), Error> {
-    let g = m.div_ceil(4);
+    let (g, lpg) = (crate::rel::groups(m, a), crate::rel::lpg(a));
     let (balance, fee) = (1_000_000u64, if a > 0 { 7u64 } else { 0 });
     let amount = |j: usize| if j == m - 1 { 123_456u64 } else { 0 };
     let dg: Vec<[u8; 16]> = (0..m).map(|j| digits(amount(j))).collect();
@@ -424,9 +425,10 @@ fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize,
     xs.0 = xs0;
     let (mut v, mut va) = (Vec::new(), Vec::new());
     for j in 0..m {
-        v.push(encrypt(&[&ktr[j].pk], &[dg[j]], &r[j / 4], &e1[j / 4], &[e2l[j]])?.vs[0]);
+        v.push(encrypt(&[&ktr[j].pk], &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2l[j]])?.vs[0]);
         if a > 0 {
-            va.push(encrypt(&[&kta.pk], &[dg[j]], &r[j / 4], &e1[j / 4], &[e2a[j]])?.vs[0]);
+            let w = [(j % lpg) as u8];
+            va.push(crate::encrypt_win(&[&kta.pk], &w, &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2a[j]])?.vs[0]);
         }
     }
     let vf = encrypt(&[&kts.pk], &[dpg], &r[0], &e1[0], &[e2f])?.vs[0];

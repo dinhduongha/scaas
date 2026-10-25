@@ -19,13 +19,14 @@ extern "C" {
     fn pqz_verify(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
     fn pqz_verify_fast(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
     fn pqz_keygen(seed32: *const u8, pk: *mut u8, s: *mut i8, e: *mut i16, ctr: *mut u32) -> i32;
-    fn pqz_enc_seed(pks: *const *const u8, npk: u32, msgs: *const [u8; 16], seed_enc: *const u8, u: *mut u8,
-                    vs: *mut [u8; V_BYTES], r: *mut i8, e1: *mut i16, e2: *mut [i16; 16], ctr: *mut u32) -> i32;
-    fn pqz_dec(s: *const i8, ct: *const u8, m: *mut i64, noise: *mut i64) -> i32;
+    fn pqz_enc_seed_win(pks: *const *const u8, npk: u32, win: *const u8, msgs: *const [u8; 16], seed_enc: *const u8,
+                        u: *mut u8, vs: *mut [u8; V_BYTES], r: *mut i8, e1: *mut i16, e2: *mut [i16; 16], ctr: *mut u32)
+                        -> i32;
+    fn pqz_dec_win(s: *const i8, ct: *const u8, win: u32, m: *mut i64, noise: *mut i64) -> i32;
     fn pqz_keypair_from_secret(s: *const i8, e: *const i16, pk: *mut u8) -> i32;
-    fn pqz_encrypt(pks: *const *const u8, npk: u32, msgs: *const [u8; 16], r: *const i8, e1: *const i16,
-                   e2: *const [i16; 16], u: *mut u8, vs: *mut [u8; V_BYTES]) -> i32;
-    fn pqz_decrypt_raw(s: *const i8, u: *const u8, v: *const u8, w: *mut i64) -> i32;
+    fn pqz_encrypt_win(pks: *const *const u8, npk: u32, win: *const u8, msgs: *const [u8; 16], r: *const i8,
+                       e1: *const i16, e2: *const [i16; 16], u: *mut u8, vs: *mut [u8; V_BYTES]) -> i32;
+    fn pqz_decrypt_raw_win(s: *const i8, u: *const u8, v: *const u8, win: u32, w: *mut i64) -> i32;
     fn pqz_enc_group_seed(seed_enc: *const u8, g: u32, out: *mut u8);
     fn pqz_ntt_fwd(c: *mut u64);
     fn pqz_ntt_inv(c: *mut u64);
@@ -131,11 +132,18 @@ pub fn c_keygen(seed32: &[u8; 32]) -> Result<Key, Error> {
 
 /// `Err(Input)` if `msgs` and `pks` differ in length (the C ABI takes one count for both).
 pub fn c_enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
+    c_enc_seed_win(pks, None, msgs, seed_enc)
+}
+
+/// `pqz_enc_seed_win` (`win` None: NULL, every recipient at window 0)
+pub fn c_enc_seed_win(pks: &[&[u8; POLYVEC_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], seed_enc: &[u8; 32])
+                      -> Result<Enc, Error> {
     let n = pks.len();
     let npk = u32::try_from(n).map_err(|_| Error::Input)?;
-    if msgs.len() != n {
+    if msgs.len() != n || win.is_some_and(|w| w.len() != n) {
         return Err(Error::Input);
     }
+    let wp = win.map_or(0, |w| w.as_ptr() as usize);
     let mut c = Enc {
         u: Box::new([0; POLYVEC_BYTES]),
         vs: vec![[0; V_BYTES]; n],
@@ -147,16 +155,20 @@ pub fn c_enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u
     let ptrs: Vec<usize> = pks.iter().map(|p| p.as_ptr() as usize).collect(); // usize: Send across the thread
     // SAFETY: n public keys of POLYVEC_BYTES, n messages, n outputs each in vs / e2
     rc(with_core(|| unsafe {
-        pqz_enc_seed(ptrs.as_ptr().cast(), npk, msgs.as_ptr(), seed_enc.as_ptr(), c.u.as_mut_ptr(), c.vs.as_mut_ptr(),
-                     c.r.as_mut_ptr(), c.e1.as_mut_ptr(), c.e2.as_mut_ptr(), &mut c.ctr)
+        pqz_enc_seed_win(ptrs.as_ptr().cast(), npk, wp as *const u8, msgs.as_ptr(), seed_enc.as_ptr(), c.u.as_mut_ptr(),
+                         c.vs.as_mut_ptr(), c.r.as_mut_ptr(), c.e1.as_mut_ptr(), c.e2.as_mut_ptr(), &mut c.ctr)
     }))?;
     Ok(c)
 }
 
 pub fn c_dec(s: &[i8; crate::N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
+    c_dec_win(s, ct, 0)
+}
+
+pub fn c_dec_win(s: &[i8; crate::N], ct: &[u8; CT_BYTES], win: u32) -> Result<([i64; 16], [i64; 16]), Error> {
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     // SAFETY: fixed-size inputs and outputs of the sizes pqz.h declares
-    rc(with_core(|| unsafe { pqz_dec(s.as_ptr(), ct.as_ptr(), m.as_mut_ptr(), noise.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe { pqz_dec_win(s.as_ptr(), ct.as_ptr(), win, m.as_mut_ptr(), noise.as_mut_ptr()) }))?;
     Ok((m, noise))
 }
 
@@ -173,25 +185,36 @@ pub type UVs = (Box<[u8; POLYVEC_BYTES]>, Vec<[u8; V_BYTES]>);
 /// `pqz_encrypt` -> (u, vs); `Err(Input)` if `msgs` / `e2` and `pks` differ in length (one count in the C ABI).
 pub fn c_encrypt(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], r: &[i8; crate::N], e1: &[i16; crate::N], e2: &[[i16; 16]])
                  -> Result<UVs, Error> {
+    c_encrypt_win(pks, None, msgs, r, e1, e2)
+}
+
+/// `pqz_encrypt_win` (`win` None: NULL)
+pub fn c_encrypt_win(pks: &[&[u8; POLYVEC_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], r: &[i8; crate::N],
+                     e1: &[i16; crate::N], e2: &[[i16; 16]]) -> Result<UVs, Error> {
     let n = pks.len();
     let npk = u32::try_from(n).map_err(|_| Error::Input)?;
-    if msgs.len() != n || e2.len() != n {
+    if msgs.len() != n || e2.len() != n || win.is_some_and(|w| w.len() != n) {
         return Err(Error::Input);
     }
+    let wp = win.map_or(0, |w| w.as_ptr() as usize);
     let (mut u, mut vs) = (Box::new([0u8; POLYVEC_BYTES]), vec![[0u8; V_BYTES]; n]);
     let ptrs: Vec<usize> = pks.iter().map(|p| p.as_ptr() as usize).collect(); // usize: Send across the thread
     // SAFETY: n public keys of POLYVEC_BYTES, n messages / e2 vectors / vs outputs, fixed-size r, e1, u
     rc(with_core(|| unsafe {
-        pqz_encrypt(ptrs.as_ptr().cast(), npk, msgs.as_ptr(), r.as_ptr(), e1.as_ptr(), e2.as_ptr(), u.as_mut_ptr(),
-                    vs.as_mut_ptr())
+        pqz_encrypt_win(ptrs.as_ptr().cast(), npk, wp as *const u8, msgs.as_ptr(), r.as_ptr(), e1.as_ptr(), e2.as_ptr(),
+                        u.as_mut_ptr(), vs.as_mut_ptr())
     }))?;
     Ok((u, vs))
 }
 
 pub fn c_decrypt_raw(s: &[i8; crate::N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
+    c_decrypt_raw_win(s, u, v, 0)
+}
+
+pub fn c_decrypt_raw_win(s: &[i8; crate::N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES], win: u32) -> Result<[i64; 16], Error> {
     let mut w = [0i64; 16];
     // SAFETY: fixed-size inputs and output of the sizes pqz.h declares
-    rc(with_core(|| unsafe { pqz_decrypt_raw(s.as_ptr(), u.as_ptr(), v.as_ptr(), w.as_mut_ptr()) }))?;
+    rc(with_core(|| unsafe { pqz_decrypt_raw_win(s.as_ptr(), u.as_ptr(), v.as_ptr(), win, w.as_mut_ptr()) }))?;
     Ok(w)
 }
 

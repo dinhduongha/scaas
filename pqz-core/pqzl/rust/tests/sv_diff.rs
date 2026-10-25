@@ -60,11 +60,11 @@ mod harness {
     const TX0_STMT: usize = HEADER + 2 * PV + (PV + VB) + (PV + 2 * VB);
     const BURN_STMT: usize = HEADER + PV + 2 * (PV + VB);
 
-    const fn groups(m: usize) -> usize {
-        m.div_ceil(4)
+    const fn groups(m: usize, a: usize) -> usize {
+        pqzl::txm_groups(m, a)
     }
     const fn txm_stmt(m: usize, a: usize) -> usize {
-        HEADER + (1 + m + a) * PV + (PV + VB) + groups(m) * PV + (m + 1 + a * m) * VB
+        HEADER + (1 + m + a) * PV + (PV + VB) + groups(m, a) * PV + (m + 1 + a * m) * VB
     }
 
     pub const KIND: [&str; 30] = [
@@ -376,7 +376,7 @@ mod harness {
         /// auditorOn, the salt form
         fn make_txm(&mut self, t: usize) -> (Vec<u8>, Vec<u8>) {
             let (m, a, _) = TXD[t];
-            let g = groups(m);
+            let (g, lpg) = (groups(m, a), pqzl::txm_lpg(a));
             let (kf, ka) = (self.keygen(), self.keygen());
             let kr: Vec<Key> = (0..m).map(|_| self.keygen()).collect();
             let bal = self.rnd() % (1 << 48);
@@ -403,11 +403,12 @@ mod harness {
             for j in 0..m {
                 e2.push(self.short16::<16>(20, 64));
                 e2a.push(self.short16::<16>(20, 64));
-                let o = encrypt(&[&*kr[j].pk], &[dg[j]], &r[j / 4], &e1[j / 4], &[e2[j]]).unwrap();
-                u[j / 4] = Some(o.u);
+                let o = encrypt(&[&*kr[j].pk], &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2[j]]).unwrap();
+                u[j / lpg] = Some(o.u);
                 v.push(o.vs[0]);
                 if a == 1 {
-                    let o = encrypt(&[&*ka.pk], &[dg[j]], &r[j / 4], &e1[j / 4], &[e2a[j]]).unwrap();
+                    let w = [(j % lpg) as u8]; // the copy's window (R0-1)
+                    let o = pqzl::encrypt_win(&[&*ka.pk], &w, &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2a[j]]).unwrap();
                     va.push(o.vs[0]);
                 }
             }

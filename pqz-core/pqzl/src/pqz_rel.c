@@ -57,7 +57,9 @@
 #define NREG PQZ_K
 #define DR_NBIN ((16 * PQZ_EBITS + 63) / 64) /* R_DR: e'_i + 2^26 */
 #define MAXL PQZ_TXM_MAX_LEGS                 /* legs */
-#define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS) /* randomness groups */
+#define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS, 1) /* randomness groups (S_AUD <= 4: the auditor's are the most) */
+_Static_assert (PQZ_S_AUD >= 1 && PQZ_S_AUD <= 4, "S_AUD windows of 16 in the 64 coefficients of pk_a^T r_g");
+#define BPRIME_S0 8 /* R_REG / R_DR z4 filler s[0]: its l2 bound, the specs' Bprime (gen_set.py; review R0-C2) */
 #define NTXQ (K * (1 + MAXG))                 /* R_q-linear rows: row 1, row 2 per group */
 #define NTXE (16 * (3 + 2 * MAXL))            /* evaleqs: 16 per leg, auditor copy, v_f, row 6, row 7 */
 #define NBIN ((PQZ_BITS_BURN + 64 * MAXL + 63) / 64) /* binary polys: PQZ_BITS_BURN + 64 M bits */
@@ -512,14 +514,15 @@ build_reg (sys_t *S, const uint8_t *stmt, polyvec_t pk)
   S->Es[0] = new_sel (Rq, K, 2 * K, 0);
   S->Es[1] = new_sel (Rq, K, 2 * K, K);
   S->Ps = NULL;
-  S->Ds = new_sel (Rq, 1, 2 * K, 0); /* s[0], coefficients in [-1, 1] (reg_params.sage Bprime) */
+  S->Ds = new_sel (Rq, 1, 2 * K, 0); /* s[0], l2 <= BPRIME_S0 = 8 (reg_params.sage Bprime, an l2 bound: R0-C2) */
   return 1;
 }
 
 /* ---- R_TX, R_TX0, R_BURN and R_TXM (the debit relations) ---- */
 
 /* The debit shape of a relation: M legs (R_TX / R_TX0: 1; R_BURN: 0 with d = digits(amount) public; R_TXM: M), G
-   randomness groups of <= 4 legs (leg j in group j / 4, v_f in group 0), A auditor copies on / off. One layout serves
+   randomness groups of <= lpg legs (lpg = PQZ_TXM_LPG (A): S_AUD with the auditor, 4 without; leg j in group j / lpg,
+   v_f in group 0; the auditor copy of leg j at window j mod lpg), A auditor copies on / off. One layout serves
    all (P6-ANON R1); at M = 1, G = 1 it is R_TX's / R_TX0's, at M = 0 R_BURN's:
      s1 (k = K): 0..k-1 s_f | k..2k-1 e_f | 2k + 2k g r_g | 3k + 2k g e1_g | E = 2k + 2k G: e2_j at E + j | e2_f at
          E + M | e2_{a,j} at E + M + 1 + j | bits at E + M + 1 + A M (nbin polys, PQZ_BITS_BURN + 64 M bits)
@@ -527,7 +530,7 @@ build_reg (sys_t *S, const uint8_t *stmt, polyvec_t pk)
          64 M + PQZ_BITS_C + CBITS i + b (i < 15) | e_T[i] + 2^26 at 64 M + PQZ_BITS_E + EBITS i + b (pqz.h) */
 typedef struct
 {
-  unsigned legs, groups, aud, burn, txm;
+  unsigned legs, groups, lpg, aud, burn, txm;
   unsigned E, e2f, bits, nbin, m1;      /* s1 slots (m1 without the Z slack polys) */
   unsigned dp, m, c, e;                 /* bit bases; d_j at 64 j */
   unsigned nblk, bst[NZ], bln[NZ];      /* exact-l2 blocks: s1 slots [bst, bst + bln) */
@@ -537,9 +540,9 @@ typedef struct
 static void
 shape_of (const rel_t *R, shape_t *H)
 {
-  const unsigned M = R->legs, G = R->op == PQZ_OP_BURN ? 1 : PQZ_TXM_GROUPS (M), A = R->aud;
+  const unsigned M = R->legs, G = R->op == PQZ_OP_BURN ? 1 : PQZ_TXM_GROUPS (M, R->aud), A = R->aud;
   unsigned g, z = 0;
-  H->legs = M, H->groups = G, H->aud = A, H->burn = R->op == PQZ_OP_BURN, H->txm = R->op == PQZ_OP_TRANSFER_MULTI;
+  H->legs = M, H->groups = G, H->lpg = PQZ_TXM_LPG (A), H->aud = A, H->burn = R->op == PQZ_OP_BURN, H->txm = R->op == PQZ_OP_TRANSFER_MULTI;
   H->E = 2 * K + 2 * K * G, H->e2f = H->E + M, H->bits = H->e2f + 1 + A * M;
   H->nbin = (PQZ_BITS_BURN + 64 * M + 63) / 64, H->m1 = H->bits + H->nbin;
   H->dp = 64 * M, H->m = H->dp + PQZ_BITS_M, H->c = H->dp + PQZ_BITS_C, H->e = H->dp + PQZ_BITS_E;
@@ -575,6 +578,7 @@ typedef struct
   polyvec_ptr pk[MAXL], u[MAXG];      /* debit: leg keys, group u; R_DS / R_DR: pk[0] = pk, u[0] = u */
   poly_t vT, vf, v[MAXL], va[MAXL];   /* debit; R_DS / R_DR: v[0] = v */
   uint64_t fee, amount;               /* amount: R_BURN, R_DS, R_DR */
+  unsigned win;                       /* R_DS / R_DR: the window of v (the kind word's w; R0-1) */
 } txst_t;
 
 /* coefficient term coef * bit(slot) into the evaleq vector accumulators (one poly per bit poly) */
@@ -592,8 +596,10 @@ add_bit (poly_ptr acc[], unsigned slot, int64_t coef)
   int_add (c, c, t);
 }
 
+/* ct(X^-i (e2 + bits)) + ct(X^-pki (pkrow^T x)) - rhs = 0: the pk product at coefficient pki (i, or 16 w + i for a v at
+   window w: R0-1), the noise and the bits at coefficient i */
 static void
-evaleq (sys_t *S, unsigned idx, polyvec_ptr pkrow, unsigned off_x, unsigned i, int e2idx, poly_ptr acc[],
+evaleq (sys_t *S, unsigned idx, polyvec_ptr pkrow, unsigned off_x, unsigned pki, unsigned i, int e2idx, poly_ptr acc[],
         int64_t rhs)
 {
   rel_t *R = S->R;
@@ -604,7 +610,7 @@ evaleq (sys_t *S, unsigned idx, polyvec_ptr pkrow, unsigned off_x, unsigned i, i
   S->r1p[idx] = new_r1 (Rq, n);
   if (pkrow != NULL)
     for (unsigned j = 0; j < K; j++)
-      mul_xinv (spolyvec_insert_elem (S->r1p[idx], 2 * (off_x + j)), polyvec_get_elem (pkrow, j), i);
+      mul_xinv (spolyvec_insert_elem (S->r1p[idx], 2 * (off_x + j)), polyvec_get_elem (pkrow, j), pki);
   if (e2idx >= 0)
     {
       poly_ptr p = spolyvec_insert_elem (S->r1p[idx], 2 * (unsigned)e2idx);
@@ -727,7 +733,9 @@ parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, const shape_t *
 
 /* The rows of pq-zero-knowledge.md §7.4 with M legs (P6-ANON plan §3): row 1 pk_f = A s_f + e_f; row 2 u_g = A^T r_g + e1_g
    per group; per coefficient i < 16, in this order: row 3 per leg j (pk_j^T r_{g(j)})_i + e2_j,i + Delta d_j,i - v_j,i,
-   row 4 (pk_f^T r_0)_i + e2_f,i + Delta d'_i - v_f,i, row 5 per leg (auditor on) the same under pk_a with e2_{a,j},
+   g(j) = j / lpg, row 4 (pk_f^T r_0)_i + e2_f,i + Delta d'_i - v_f,i, row 5 per leg (auditor on)
+   (pk_a^T r_{g(j)})_{16 (j mod lpg) + i} + e2_{a,j},i + Delta d_j,i - v_{a,j},i (R0-1: every copy of a group its own
+   coefficients),
    row 6 (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^26) - 2^26 - v_T,i, row 7 (over Z, all terms < 2^17) M_i + c_{i-1}
    - d'_i - sum_j d_j,i - f_i - 16 c_i = 0. R_TX is M = 1 with the auditor, R_TX0 without (row 5 skipped); R_BURN is
    M = 0 with Delta d_i (row 4 has none: d' is the witness) and d_i (row 7) public in the constant term. One code
@@ -770,18 +778,19 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, rel_t *R)
           acc_zero (acc, nbin);
           for (b = 0; b < 4; b++)
             add_bit (acc, SLOT (64 * j, 4, i, b), DELTA << b);
-          evaleq (S, e++, T->pk[j], 2 * K + 2 * K * (j / 4), i, (int)(H.E + j), acc, -cval (T->v[j], i));
+          evaleq (S, e++, T->pk[j], 2 * K + 2 * K * (j / H.lpg), i, i, (int)(H.E + j), acc, -cval (T->v[j], i));
         }
       acc_zero (acc, nbin);
       for (b = 0; b < 4; b++)
         add_bit (acc, SLOT (H.dp, 4, i, b), DELTA << b);
-      evaleq (S, e++, T->pkf, 2 * K, i, (int)H.e2f, acc, -cval (T->vf, i));
+      evaleq (S, e++, T->pkf, 2 * K, i, i, (int)H.e2f, acc, -cval (T->vf, i));
       for (j = 0; j < A * M; j++)
         {
           acc_zero (acc, nbin);
           for (b = 0; b < 4; b++)
             add_bit (acc, SLOT (64 * j, 4, i, b), DELTA << b);
-          evaleq (S, e++, T->pka, 2 * K + 2 * K * (j / 4), i, (int)(H.e2f + 1 + j), acc, -cval (T->va[j], i));
+          evaleq (S, e++, T->pka, 2 * K + 2 * K * (j / H.lpg), 16 * (j % H.lpg) + i, i, (int)(H.e2f + 1 + j), acc,
+                  -cval (T->va[j], i));
         }
       /* row 6: (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^26) - 2^26 - v_T,i = 0 */
       acc_zero (acc, nbin);
@@ -789,7 +798,7 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, rel_t *R)
         add_bit (acc, SLOT (H.m, PQZ_MBITS, i, b), DELTA << b);
       for (b = 0; b < PQZ_EBITS; b++)
         add_bit (acc, SLOT (H.e, PQZ_EBITS, i, b), (int64_t)1 << b);
-      evaleq (S, e++, T->uT, 0, i, -1, acc, -cval (T->vT, i) - PQZ_EOFF);
+      evaleq (S, e++, T->uT, 0, i, i, -1, acc, -cval (T->vT, i) - PQZ_EOFF);
       /* row 7 (over Z, all terms < 2^17): M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i - 16 c_i = 0, c = cbits - 64 */
       acc_zero (acc, nbin);
       int64_t rhs = -(int64_t)digit (T->fee, i) - dpub;
@@ -813,7 +822,7 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, rel_t *R)
             add_bit (acc, SLOT (H.c, PQZ_CBITS, i, b), -((int64_t)16 << b));
           rhs += 16 * 64;
         }
-      evaleq (S, e++, NULL, 0, i, -1, acc, rhs);
+      evaleq (S, e++, NULL, 0, i, i, -1, acc, rhs);
     }
 
   for (unsigned z = 0; z < H.nblk; z++)
@@ -827,12 +836,17 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, rel_t *R)
 /* ---- R_DS and R_DR (disclosure, pq-zero-knowledge.md §7.9) ---- */
 
 /* opTag || proofSystemId || chainId || chainUid || token || registry || entryRef || amount || kind (32-byte words)
-   || pk || u || v; only amount, pk, u, v enter the equations, the rest is hashed */
+   || pk || u || v; amount, the kind word's window w (kind = OpeningKind + 256 w < 2^16, w < wmax; R0-1), pk, u, v enter
+   the equations, the rest is hashed */
 static int
-parse_disc (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
+parse_disc (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, unsigned wmax)
 {
   const uint8_t *p = stmt + PQZ_DISC_PK;
+  uint64_t kind;
   int ok = rd_word64 (&T->amount, stmt + PQZ_DISC_AMOUNT);
+  ok &= rd_word64 (&kind, stmt + PQZ_DISC_KIND);
+  ok &= kind >> 16 == 0 && (kind >> 8) < wmax;
+  T->win = (unsigned)((kind >> 8) & 3);
   T->pk[0] = new_vec (Rq), T->u[0] = new_vec (Rq);
   poly_alloc (T->v[0], Rq);
   ok &= rd_polyvec (T->pk[0], p), p += PQZ_POLYVEC_BYTES;
@@ -852,12 +866,12 @@ build_ds (sys_t *S, txst_t *T, const uint8_t *stmt)
   S->M = 16;
   S->bits = 2 * K + 1;
   S->nbin = 0;
-  if (!parse_disc (T, Rq, stmt))
+  if (!parse_disc (T, Rq, stmt, 1)) /* R_DS: window 0 (the sender's v_t) */
     return 0;
   for (unsigned i = 0; i < K; i++)
     add_lin_row (S, i, 1, i, 0, K, polyvec_get_elem (T->u[0], i));
   for (unsigned i = 0; i < 16; i++)
-    evaleq (S, i, T->pk[0], 0, i, 2 * K, NULL, DELTA * digit (T->amount, i) - cval (T->v[0], i));
+    evaleq (S, i, T->pk[0], 0, i, i, 2 * K, NULL, DELTA * digit (T->amount, i) - cval (T->v[0], i));
   S->Es[0] = new_sel (Rq, K, 2 * K + 1, 0);
   S->Es[1] = new_sel (Rq, K, 2 * K + 1, K);
   S->Es[2] = new_sel (Rq, 1, 2 * K + 1, 2 * K);
@@ -866,7 +880,7 @@ build_ds (sys_t *S, txst_t *T, const uint8_t *stmt)
   return 1;
 }
 
-/* R_DR: pk = A s + e; (u^T s)_i + (e'_i + 2^26) - 2^26 + Delta d_i - v_i = 0 */
+/* R_DR: pk = A s + e; (u^T s)_{16 w + i} + (e'_i + E) - E + Delta d_i - v_i = 0 (w the kind word's window: R0-1) */
 static int
 build_dr (sys_t *S, txst_t *T, const uint8_t *stmt)
 {
@@ -878,7 +892,7 @@ build_dr (sys_t *S, txst_t *T, const uint8_t *stmt)
   S->M = 16;
   S->bits = 2 * K;
   S->nbin = DR_NBIN;
-  if (!parse_disc (T, Rq, stmt))
+  if (!parse_disc (T, Rq, stmt, PQZ_S_AUD))
     return 0;
   for (unsigned b = 0; b < DR_NBIN; b++)
     acc[b] = new_poly (Rq);
@@ -889,12 +903,12 @@ build_dr (sys_t *S, txst_t *T, const uint8_t *stmt)
       acc_zero (acc, DR_NBIN);
       for (unsigned b = 0; b < PQZ_EBITS; b++)
         add_bit (acc, PQZ_EBITS * i + b, (int64_t)1 << b);
-      evaleq (S, i, T->u[0], 0, i, -1, acc, DELTA * digit (T->amount, i) - cval (T->v[0], i) - PQZ_EOFF);
+      evaleq (S, i, T->u[0], 0, 16 * T->win + i, i, -1, acc, DELTA * digit (T->amount, i) - cval (T->v[0], i) - PQZ_EOFF);
     }
   S->Es[0] = new_sel (Rq, K, 2 * K + DR_NBIN, 0);
   S->Es[1] = new_sel (Rq, K, 2 * K + DR_NBIN, K);
   S->Ps = new_sel (Rq, DR_NBIN, 2 * K + DR_NBIN, 2 * K);
-  S->Ds = new_sel (Rq, 1, 2 * K + DR_NBIN, 0); /* s[0], coefficients in [-1, 1] (dr_params.sage Bprime) */
+  S->Ds = new_sel (Rq, 1, 2 * K + DR_NBIN, 0); /* s[0], l2 <= BPRIME_S0 = 8 (dr_params.sage Bprime, an l2 bound: R0-C2) */
   return 1;
 }
 
@@ -1109,9 +1123,9 @@ ct_sdiv (int64_t x, uint64_t d, int64_t *rem)
   return (int64_t)((q ^ s) - s);
 }
 
-/* w_i = centre(v_i - (u^T s)_i), s = s1[0 .. k) */
+/* w_i = centre(v_i - (u^T s)_{off + i}), s = s1[0 .. k) */
 static void
-dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16])
+dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, unsigned off, int64_t w[16])
 {
   polyvec_t s;
   poly_t acc;
@@ -1123,7 +1137,7 @@ dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16
     {
       /* review E: secret (u^T s); reduced and centred without a branch or a division */
       int64_t wv;
-      ct_sdiv (cval (v, i) - cval (acc, i), PQZ_Q, &wv); /* wv = (v_i - acc_i) % q */
+      ct_sdiv (cval (v, i) - cval (acc, off + i), PQZ_Q, &wv); /* wv = (v_i - acc_{off+i}) % q */
       /* the masks through the value barrier (review round 2, Q-G): no compiler may turn them back into a branch */
       wv -= (int64_t)PQZ_Q & (int64_t)pqz_ct_barrier ((uint64_t)(((int64_t)(PQZ_Q - 1) / 2 - wv) >> 63));
       wv += (int64_t)PQZ_Q & (int64_t)pqz_ct_barrier ((uint64_t)((wv + (int64_t)(PQZ_Q - 1) / 2) >> 63));
@@ -1169,7 +1183,7 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
   /* decrypt T with s_f: w_i = centre(v_T,i - (u_T^T s_f)_i), M_i = round(w_i / Delta), e_T = w - Delta M */
   {
     int64_t wv[16];
-    dec_w (Rq, T->uT, T->vT, s1, wv);
+    dec_w (Rq, T->uT, T->vT, s1, 0, wv);
     for (i = 0; i < 16; i++)
       {
         /* review E: round half away from zero without a branch; the mask through the barrier (Q-G) */
@@ -1228,13 +1242,13 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
   return ok;
 }
 
-/* R_DR witness -> s1: s, e and the bits of e'_i + 2^26, e'_i = centre(v_i - (u^T s)_i) - Delta d_i */
+/* R_DR witness -> s1: s, e and the bits of e'_i + E, e'_i = centre(v_i - (u^T s)_{16 w + i}) - Delta d_i */
 static int
 dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
 {
   int64_t wv[16];
   wit_vec (s1, K, wit_vec (s1, 0, w, 0), 1);
-  dec_w (DR.P->tbox->ring, T->u[0], T->v[0], s1, wv);
+  dec_w (DR.P->tbox->ring, T->u[0], T->v[0], s1, 16 * T->win, wv);
   int bad = 0;
   for (unsigned i = 0; i < 16; i++)
     {
@@ -1344,6 +1358,16 @@ rel_of (uint8_t op, const uint8_t *stmt, size_t stmt_len)
   return R != NULL && stmt_len == stmt_bytes (R) ? R : NULL;
 }
 
+/* R_REG / R_DR: the z4 filler s[0] within its Bprime (an honest prover's check, review R0-C2: the bimodal rejection of
+   z4 is sized for ||s[0]|| <= BPRIME_S0); the verdict is public (prove fails) */
+static int
+s0_ok (polyvec_t s1)
+{
+  int ok = l2sq_poly (polyvec_get_elem (s1, 0)) <= BPRIME_S0 * BPRIME_S0;
+  PQZ_CT_PUBLIC (&ok, sizeof ok);
+  return ok || CHEAT;
+}
+
 /* witness -> s1 and the l2 slack (upsilon); 0 if the witness is malformed, inconsistent or above a bound */
 static int
 witness (txst_t *T, const rel_t *R, const uint8_t *wit, size_t wit_len, polyvec_t s1)
@@ -1358,6 +1382,8 @@ witness (txst_t *T, const rel_t *R, const uint8_t *wit, size_t wit_len, polyvec_
       if (wit_len != PQZ_REG_WIT_BYTES)
         return 0;
       wit_vec (s1, K, wit_vec (s1, 0, wit, 0), 1);
+      if (!s0_ok (s1))
+        return 0;
       break;
     case PQZ_OP_DISCLOSE_SENDER:
       if (wit_len != PQZ_DS_WIT_BYTES)
@@ -1368,7 +1394,7 @@ witness (txst_t *T, const rel_t *R, const uint8_t *wit, size_t wit_len, polyvec_
       st = st_ds, ln = ln_ds;
       break;
     case PQZ_OP_DISCLOSE_RECEIVER:
-      if (wit_len != PQZ_DR_WIT_BYTES || !dr_witness (T, wit, s1))
+      if (wit_len != PQZ_DR_WIT_BYTES || !dr_witness (T, wit, s1) || !s0_ok (s1))
         return 0;
       break;
     default: /* the debit relations (R_TX, R_TX0, R_BURN, R_TXM): pqz.h's layout, one l2 slack per block */
@@ -1523,11 +1549,22 @@ pqz_encrypt (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16],
              const int16_t e1[PQZ_N], const int16_t e2[][16], uint8_t u[PQZ_POLYVEC_BYTES],
              uint8_t vs[][PQZ_V_BYTES])
 {
+  return pqz_encrypt_win (pks, npk, NULL, msgs, r, e1, e2, u, vs);
+}
+
+int
+pqz_encrypt_win (const uint8_t *const pks[], unsigned npk, const uint8_t win[], const uint8_t msgs[][16],
+                 const int8_t r[PQZ_N], const int16_t e1[PQZ_N], const int16_t e2[][16], uint8_t u[PQZ_POLYVEC_BYTES],
+                 uint8_t vs[][PQZ_V_BYTES])
+{
   polyring_srcptr Rq = REG.P->tbox->ring;
   polyvec_t rv, ev, t, pk, row;
   poly_t acc;
   if (!ready)
     return PQZ_ERR_INTERNAL; /* before pqz_init: no A */
+  for (unsigned k = 0; win != NULL && k < npk; k++)
+    if (win[k] >= 4)
+      return PQZ_ERR_INPUT;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   polyvec_alloc (rv, Rq, K), polyvec_alloc (ev, Rq, K), polyvec_alloc (t, Rq, K), polyvec_alloc (pk, Rq, K);
@@ -1547,11 +1584,12 @@ pqz_encrypt (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16],
     wr_poly (u + 512 * i, polyvec_get_elem (t, i), PQZ_D);
   for (unsigned k = 0; k < npk; k++)
     {
+      const unsigned o = win != NULL ? 16u * win[k] : 0;
       rd_polyvec (pk, pks[k]);
       polyvec_dot (acc, pk, rv);
       poly_fromcrt (acc);
-      for (unsigned i = 0; i < 16; i++)
-        set_c (acc, i, cval (acc, i) + e2[k][i] + DELTA * msgs[k][i]);
+      for (unsigned i = 0; i < 16; i++) /* v_i = (pk^T r)_{o + i} + e2_i + Delta m_i into coefficient i */
+        set_c (acc, i, cval (acc, o + i) + e2[k][i] + DELTA * msgs[k][i]);
       poly_redc (acc, acc);
       wr_poly (vs[k], acc, 16);
     }
@@ -1564,11 +1602,20 @@ int
 pqz_decrypt_raw (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
                  int64_t w[16])
 {
+  return pqz_decrypt_raw_win (s, u, v, 0, w);
+}
+
+int
+pqz_decrypt_raw_win (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
+                     unsigned win, int64_t w[16])
+{
   polyring_srcptr Rq = REG.P->tbox->ring;
   polyvec_t sv, uv;
   poly_t acc, vv;
   if (!ready)
     return PQZ_ERR_INTERNAL; /* before pqz_init: no A */
+  if (win >= 4)
+    return PQZ_ERR_INPUT;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   polyvec_alloc (sv, Rq, K), polyvec_alloc (uv, Rq, K);
@@ -1578,6 +1625,10 @@ pqz_decrypt_raw (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], cons
   rd_poly (vv, v, 16);
   polyvec_dot (acc, uv, sv);
   poly_fromcrt (acc);
+  for (unsigned i = 0; i < 16; i++) /* (u^T s) at window win into coefficients 0 .. 15 (the rest of vv is zero) */
+    set_c (acc, i, cval (acc, 16 * win + i));
+  for (unsigned i = 16; i < PQZ_D; i++)
+    set_c (acc, i, 0);
   poly_sub (vv, vv, acc, 0);
   for (unsigned i = 0; i < 16; i++)
     w[i] = cval (vv, i);

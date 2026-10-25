@@ -33,13 +33,14 @@ static void
 setup_txm (int k, unsigned m, unsigned a, const uint8_t *pk, const int8_t *s, const int16_t *e, const int8_t *r,
            const int16_t *e1)
 {
-  static uint8_t wit[PQZ_TXM_WIT_BYTES (8, 1)], v[1][PQZ_V_BYTES], uT[PQZ_POLYVEC_BYTES];
-  static int16_t e2[1][16];
-  uint8_t mz[1][16] = { { 0 } }, r32[32] = { 0 };
-  const uint8_t *pks[1] = { pk };
-  const unsigned G = PQZ_TXM_GROUPS (m);
+  static uint8_t wit[PQZ_TXM_WIT_BYTES (8, 1)], v[4][PQZ_V_BYTES], uT[PQZ_POLYVEC_BYTES];
+  static int16_t e2[4][16];
+  uint8_t mz[4][16] = { { 0 } }, r32[32] = { 0 }, win[4] = { 0, 1, 2, 3 };
+  const uint8_t *pks[4] = { pk, pk, pk, pk };
+  const unsigned G = PQZ_TXM_GROUPS (m, a), lpg = PQZ_TXM_LPG (a);
   uint8_t *p = (uint8_t *)STM[k];
-  pqz_encrypt (pks, 1, (const uint8_t (*)[16])mz, r, e1, (const int16_t (*)[16])e2, uT, v); /* T, every u and v */
+  /* T, every u and v (window 0); the auditor copies at their windows j mod lpg (R0-1) */
+  pqz_encrypt_win (pks, 4, win, (const uint8_t (*)[16])mz, r, e1, (const int16_t (*)[16])e2, uT, v);
   memset (p, 0x5A, PQZ_HEADER_BYTES);
   memset (p + PQZ_HDR_FEE, 0, 64), memset (p + PQZ_HDR_SALT, 0, 16);
   memset (p + PQZ_HDR_LEGS, 0, 32), p[PQZ_HDR_LEGS + 31] = (uint8_t)m;
@@ -52,7 +53,7 @@ setup_txm (int k, unsigned m, unsigned a, const uint8_t *pk, const int8_t *s, co
   for (unsigned g = 0; g < G; g++)
     memcpy (p, uT, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   for (unsigned j = 0; j < m + 1 + a * m; j++)
-    memcpy (p, v[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
+    memcpy (p, v[j < m + 1 ? 0 : (j - m - 1) % lpg], PQZ_V_BYTES), p += PQZ_V_BYTES;
   p = wit;
   for (int j = 0; j < PQZ_N; j++)
     p[j] = (uint8_t)s[j], p[PQZ_N + 2 * j] = (uint8_t)e[j], p[PQZ_N + 1 + 2 * j] = (uint8_t)(e[j] >> 8);

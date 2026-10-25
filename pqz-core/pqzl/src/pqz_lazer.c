@@ -11,7 +11,8 @@
 #include "int.c"
 #include "intmat.c"
 #include "intvec.c"
-#include "lnp-quad-eval.c"
+/* lnp-quad-eval.c: not built since the R0 review fix (R1-1 / R1-C7: no caller, upstream lazer#28 transcript without h);
+   kept in ../legacy/ */
 #include "lnp-quad-many.c"
 #include "lnp-quad.c"
 #include "lnp-tbox.c"

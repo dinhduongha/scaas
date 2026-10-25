@@ -80,6 +80,13 @@ impl Stream {
         Stream::new(&[tag, seed, &ctr.to_be_bytes()])
     }
 
+    /// `stream_set (b, tag, taglen, 1, seed, ctr)`: SHAKE256(tag || u8(len(set)) || set || seed || be4(ctr)), set =
+    /// the parameter set's name (KeyGen V2, review R2-C3)
+    pub(crate) fn keys_set(tag: &[u8], seed: &[u8; 32], ctr: u32) -> Stream {
+        let set = crate::params::set::SET_NAME.as_bytes();
+        Stream::new(&[tag, &[set.len() as u8], set, seed, &ctr.to_be_bytes()])
+    }
+
     /// `bit`
     pub(crate) fn bit(&mut self) -> u32 {
         if self.nbits == 0 {

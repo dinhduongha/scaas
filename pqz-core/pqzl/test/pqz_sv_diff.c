@@ -345,11 +345,12 @@ make_disc (void)
 static void
 make_txm (int t)
 {
-  const unsigned m = TXD[t].m, a = TXD[t].a, G = PQZ_TXM_GROUPS (m);
+  const unsigned m = TXD[t].m, a = TXD[t].a, G = PQZ_TXM_GROUPS (m, a), lpg = PQZ_TXM_LPG (a);
+#define MAXG_ PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS, 1)
   static key_t_ KF, KR[PQZ_TXM_MAX_LEGS], KA;
-  static int8_t r[4][PQZ_N], r0[PQZ_N];
-  static int16_t e1[4][PQZ_N], e10[PQZ_N], e20[1][16], e2[PQZ_TXM_MAX_LEGS][16], e2f[1][16], e2a[PQZ_TXM_MAX_LEGS][16];
-  static uint8_t uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], u[4][PQZ_POLYVEC_BYTES], ut[PQZ_POLYVEC_BYTES];
+  static int8_t r[MAXG_][PQZ_N], r0[PQZ_N];
+  static int16_t e1[MAXG_][PQZ_N], e10[PQZ_N], e20[1][16], e2[PQZ_TXM_MAX_LEGS][16], e2f[1][16], e2a[PQZ_TXM_MAX_LEGS][16];
+  static uint8_t uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], u[MAXG_][PQZ_POLYVEC_BYTES], ut[PQZ_POLYVEC_BYTES];
   static uint8_t v[PQZ_TXM_MAX_LEGS][PQZ_V_BYTES], vf[1][PQZ_V_BYTES], va[PQZ_TXM_MAX_LEGS][PQZ_V_BYTES];
   uint8_t mT[1][16], dg[PQZ_TXM_MAX_LEGS][16], dp[1][16];
   unsigned j, g;
@@ -374,11 +375,12 @@ make_txm (int t)
     {
       const uint8_t *pk1[1] = { KR[j].pk };
       short16 (e2[j], 16, 20, 64), short16 (e2a[j], 16, 20, 64);
-      pqz_encrypt (pk1, 1, (const uint8_t (*)[16])dg[j], r[j / 4], e1[j / 4], (const int16_t (*)[16])e2[j], u[j / 4],
-                   &v[j]);
+      const unsigned g_ = j / lpg;
+      const uint8_t win[1] = { (uint8_t)(j % lpg) }; /* the auditor copy's window (R0-1) */
+      pqz_encrypt (pk1, 1, (const uint8_t (*)[16])dg[j], r[g_], e1[g_], (const int16_t (*)[16])e2[j], u[g_], &v[j]);
       if (a)
-        pqz_encrypt (pka, 1, (const uint8_t (*)[16])dg[j], r[j / 4], e1[j / 4], (const int16_t (*)[16])e2a[j], ut,
-                     &va[j]);
+        pqz_encrypt_win (pka, 1, win, (const uint8_t (*)[16])dg[j], r[g_], e1[g_], (const int16_t (*)[16])e2a[j], ut,
+                         &va[j]);
     }
   short16 (e2f[0], 16, 20, 64);
   pqz_encrypt (pkf, 1, (const uint8_t (*)[16])dp, r[0], e1[0], (const int16_t (*)[16])e2f, ut, vf);
