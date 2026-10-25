@@ -1,6 +1,6 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
-**Status:** short design for the owner's review (controller, 2026-10-25). Nothing is built. Queued **after plan 5h,
+**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8). Nothing is built. Queued **after plan 5h,
 before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P8) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
