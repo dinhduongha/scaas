@@ -314,7 +314,7 @@ fn negative_rows_reject() {
     let want = match pqzl::SET {
         "n2048-kmax1024" => 409,
         "n2304-kmax4096" => 410,
-        "n2560-kmax16384" => 384,
+        "n2560-kmax16384" => 410,
         // full PQZL set since 5h Task 8d part 1b, PQZL only. Against n2560-kmax16384's 384: + 16 "retired PQZH v1
         // proofSystemId" rows on its PQZL inputs, + 1 coder-padding row ("coder padding bit 7 set after the final 1-bit",
         // 15 here, 14 there: the proofs' last bytes) = 401

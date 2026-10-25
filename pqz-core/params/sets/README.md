@@ -183,8 +183,8 @@ of them into `set.json` (`pqz_kat.py`, `ligero_params.py`). Bounds and soundness
 
 | Set | radices | n / k / t | largest bound (B) | soundness (bits) | `MAX_PROOF_PQZH` (B) | `MAX_INPUT` (B) | largest precompile input (B): proof at the bound / at `MAX_PROOF_PQZH` |
 |---|---|---|---|---|---|---|---|
-| `n2048-kmax1024` | 2/19/43/431 | 32,756 / 817 / 121 | 236,196 (R_TXM M = 4) | 127.23 | 262,144 | 393,216 | 369,193 / 395,141 (above: a proof over 260,219 B there is an Input revert) |
-| `n2304-kmax4096` | 2/7/17/19/43/431 | 45,752 / 952 / 120 | 253,048 | 127.40 | 262,144 | 524,288 | 402,429 / 411,525 |
+| `n2048-kmax1024` | 2/19/43/431 | 32,756 / 817 / 121 | 279,756 (R_TXM M = 4, G = 2: R0-1) | 127.23 | 327,680 | 524,288 | 429,137 / 477,061 |
+| `n2304-kmax4096` | 2/7/17/19/43/431 | 45,752 / 952 / 120 | 296,248 (R_TXM M = 4, G = 2: R0-1) | 127.40 | 327,680 | 524,288 | 464,061 / 495,493 |
 | `n2560-kmax16384` | 2/19/43/431 | 32,756 / 817 / 122 | 305,120 | 127.55 | 327,680 | 524,288 | 470,885 / 493,445 |
 
 Per relation: the proof bound from the crate (`ligero_kat sizes`; `pqzh/ligero/runs/c8-v3-sizes.jsonl`,
@@ -201,17 +201,19 @@ and 1, all verify), then the largest precompile input (5 + statement + bound), a
 | R_BURN | 234,744 (231,256–232,344) / 284,797 | 251,608 (247,176–248,440) / 307,805 | 303,412 (300,148–301,204) / 365,753 |
 | R_TXM M = 1 | 235,470 (230,242–231,598) / 318,547 | 251,608 (247,304–248,344) / 344,925 | 304,266 (299,923–301,226) / 407,823 |
 | R_TXM M = 2 | 235,470 (231,128–232,462) / 335,187 | 252,328 (248,424–248,434) / 364,333 | 304,266 (300,170–300,586) / 428,559 |
-| R_TXM M = 4 | 236,196 (231,944–233,604) / 369,193 | 253,048 (249,752–249,880) / 402,429 | 305,120 (301,824–302,112) / 470,885 |
+| R_TXM M = 4 (G = 2 at n2048 / n2304 since the R0 review fix; the vectors' proof in brackets) | 279,756 (277,036) / 429,137 | 296,248 (293,112) / 464,061 | 305,120 (301,824–302,112) / 470,885 |
 | R_TXM M = 1, no auditor | 234,744 (231,304–232,024) / 301,309 | 251,608 (247,304–248,440) / 326,365 | 304,266 (301,450–301,610) / 387,215 |
 | R_TXM M = 2, no auditor | 235,470 (231,438–232,366) / 318,547 | 251,608 (246,792–248,088) / 344,925 | 304,266 (300,019–300,682) / 407,823 |
 | R_TXM M = 4, no auditor | 235,470 (230,872–232,526) / 351,571 | 252,328 (249,160–249,384) / 382,765 | 304,266 (299,219–301,098) / 449,039 |
-| R_TXM M = 8 (bound over the limit: not offered) | 281,208 / 497,149 | 296,968 / 539,533 | 375,148 / 644,337 |
-| R_TXM M = 8, no auditor (same) | 279,756 / 478,289 | 296,248 / 519,357 | 374,294 / 621,979 |
-| `MAX_PROOF_PQZH` / `MAX_INPUT` (pqz-stmt) | 262,144 / 393,216 | 262,144 / 524,288 | 327,680 / 524,288 |
+| R_TXM M = 8 (bound over the limit: not offered; G = 4 / 3 / 2) | 368,328 / 617,037 | 340,168 / 601,165 | 375,148 / 644,337 |
+| R_TXM M = 8, no auditor (not offered either) | 279,756 / 478,289 | 296,248 / 519,357 | 374,294 / 621,979 |
+| `MAX_PROOF_PQZH` / `MAX_INPUT` (pqz-stmt) | 327,680 / 524,288 (R0 fix; were 262,144 / 393,216) | 327,680 / 524,288 (R0 fix; was 262,144) | 327,680 / 524,288 |
 | soundness (bits) | 127.23 | 127.40 | 127.55 |
 
-R_TXM M = 8 is measured for the record only: its bound is over every set's `MAX_PROOF_PQZH`, so PQZH does not offer it
-(PQZL does; table above).
+R_TXM M = 8 is measured for the record only: PQZH does not offer it (built legs {1, 2, 4}; the audited M = 8 bounds are
+over every set's `MAX_PROOF_PQZH`); PQZL does (table above). A PQZH proof above ≈ 261,909 B does not fit one
+transaction's calldata under the 2^24 regular-gas cap (EIP-7825 / EIP-7976): the 2026-10-25 limit raise (decisions
+CTR-PQZ-10) changes nothing there, PQZH stays the backup system.
 
 #### Calldata floor gas of one transaction (EIP-7976) [model]
 
