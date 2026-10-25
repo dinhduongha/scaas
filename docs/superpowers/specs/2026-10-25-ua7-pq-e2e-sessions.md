@@ -64,10 +64,22 @@ member list and the epoch counter. Cost [estimate, to be measured in the plan]: 
 under EIP-8037, so ≈ 2.5 M state gas per wrap; a two-person session ≈ 5.0 M state gas plus calldata (paid by the relayer under mtx),
 which fits one transaction and one block on every chain we target.
 
-**C6 — Messages (off chain, for example Matrix).** Messages never go on chain. Each sender uses its own subkey so that
+**C6 — Messages (off chain, for example Matrix, or on chain by C6b).** Each sender uses its own subkey so that
 several senders never share a nonce: `k_send = HKDF(K, "scaas/pqchat/v1/msg" ‖ sessionId ‖ epoch ‖ senderUA ‖ keyId)`,
 nonce = the sender's 96-bit message counter, AES-256-GCM with aad = `sessionId ‖ epoch ‖ senderUA ‖ keyId ‖ counter`.
-A sender stops at 2^32 messages per epoch (in practice C4 rekeys long before).
+A sender stops at 2^32 messages per epoch (in practice C4 rekeys long before). One counter sequence per sender and
+epoch covers both channels (Matrix and C6b), so a nonce is never used twice whichever way a message travels.
+
+**C6b — Messages stored on chain (owner 2026-10-25: "not only offline").** `mtxPostMessage(sender, sessionId, epoch,
+counter, ciphertext)`, through mtx like every other write (a relayer may pay): the sender must be a member of that
+epoch; `(sessionId, epoch, sender, counter)` must be new (the contract refuses a repeat, so the chain itself enforces
+nonce uniqueness for what it stores); `ciphertext` is the C6 AES-256-GCM output (text + 16-byte tag). Storage: the
+full ciphertext in contract state (one SSTORE2 blob per message, append-only list per session), never only a hash or
+an event; event `PqChatMessage(sessionId, index, sender, epoch, counter)` lets clients sync; views `messageCount`,
+`messageAt(sessionId, index)`. Nobody can edit or delete a stored message. Cost [estimate, measured in the plan]:
+≈ 1,530 state gas per stored byte plus a fixed cost per blob, so a 200-character message ≈ 0.35 M state gas plus that
+fixed cost; a client may store a whole conversation, only chosen messages (a record, a contract term, a key), or
+nothing.
 
 **C7 — Matrix.** Yes, the AES key works over Matrix: Matrix is only the transport. Each message is a Matrix event of a
 custom type (proposal `vn.scaas.pqchat.v1`, content: `sessionId`, `epoch`, `sender`, `keyId`, `counter`, ciphertext in
@@ -82,8 +94,8 @@ reads `PqChat`; OpenSSL ≥ 3.5 does ML-KEM-1024, X25519 (combined per C2, a few
 fork of NeoChat / Quaternion / Nheko.
 
 **C8 — What the on-chain key store does not give.** Everything on chain is public forever. Whoever obtains a member's
-KEM secret key later — or breaks ML-KEM one day — can open every session key wrapped to that key, and with the Matrix
-ciphertexts the chat history of those epochs ("harvest now, decrypt later"). There is no forward secrecy beyond what
+KEM secret key later — or breaks ML-KEM-1024 and X25519 one day — can open every session key wrapped to that key, and
+with the stored (C6b) or captured Matrix ciphertexts the chat history of those epochs ("harvest now, decrypt later"). There is no forward secrecy beyond what
 C4 provides. Mitigations in this design: the hybrid ML-KEM-1024 + X25519, frequent rekeys, revoking and replacing device keys
 (C2), deleting old secret keys on the devices. A chat that needs full forward secrecy should add an off-chain ratchet
 on top (later, not in this design).
@@ -95,7 +107,8 @@ Rust `ml-kem` + `x25519-dalek`, JS `@noble/post-quantum` + `@noble/curves`; the 
 
 ## 3. Work (for the plan after 5h)
 
-1. `PqChat.sol` (C1–C5): KEM keys, sessions, epochs, SSTORE2 wraps, events, views; forge tests and gas per wrap.
+1. `PqChat.sol` (C1–C5, C6b): KEM key, sessions, epochs, SSTORE2 wraps, stored messages, events, views; forge tests,
+   gas per wrap and per stored message.
 2. Byte layouts (C3, C6, C7) in `docs/contracts/`; vectors.
 3. One reference client (`clients/ua-rs`: create / join / rekey / encrypt / decrypt) against the vectors, then the
    `clients/ua-qt` chat screen on libQuotient (C7).
@@ -108,3 +121,4 @@ Rust `ml-kem` + `x25519-dalek`, JS `@noble/post-quantum` + `@noble/curves`; the 
 3. KEM keys per UA: **one first**; several (one per device) later (C2).
 4. Every write through **mtx** (a relayer pays the transaction fee): key registration, session creation, rekey (C1).
 5. Qt client: `clients/ua-qt` on **libQuotient** (C7).
+6. Encrypted messages may also be stored on chain (C6b), not only sent off chain.
