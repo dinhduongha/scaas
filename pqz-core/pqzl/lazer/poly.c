@@ -552,8 +552,8 @@ poly_urandom_autostable (poly_t r, int64_t bnd, unsigned int log2,
 /* PQZ (review R0-C3): the final challenge from the challenge set C = {c : o(c) = c, ||c||_inf <= bnd,
    sqrt(||o(c) c||_1) <= eta} that LNP22's knowledge error and the codegen's |C| are stated for: the autostable
    sample of (seed, dom) for dom = 0, 1, ... (the first that passes; dom 0 is upstream's sample), at most
-   PQZ_CHAL_TRIES of them. Returns 1, or 0 if none passed (probability below 2^-1000; the caller fails). Public
-   values, no constant-time need (c is sent). */
+   PQZ_CHAL_TRIES of them. Returns 1, or 0 if none passed (the caller fails): the measured pass rate is 0.9143
+   (e_s0), so all 256 fail with probability 0.0857^256 ~ 2^-907. Public values, no constant-time need (c is sent). */
 int
 poly_urandom_challenge (poly_t r, int64_t bnd, unsigned int log2, uint64_t eta, const uint8_t seed[32])
 {
