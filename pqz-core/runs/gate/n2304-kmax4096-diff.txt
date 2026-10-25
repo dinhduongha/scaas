@@ -1,31 +1,32 @@
-{"rel": "R_REG", "accepted": 25, "rejected": 4}
+z21diff rc=1
+{"rel": "R_REG", "accepted": 24, "rejected": 5}
 {"rel": "R_TX", "accepted": 28, "rejected": 1}
-{"rel": "R_BURN", "accepted": 27, "rejected": 2}
+{"rel": "R_BURN", "accepted": 28, "rejected": 1}
 {"rel": "R_DS", "accepted": 25, "rejected": 4}
 {"rel": "R_DR", "accepted": 25, "rejected": 4}
-{"rel": "R_TX0", "accepted": 29, "rejected": 1}
-{"rel": "R_TXM1", "accepted": 27, "rejected": 2}
-{"rel": "R_TXM2", "accepted": 27, "rejected": 2}
-{"rel": "R_TXM4", "accepted": 30, "rejected": 1}
-{"rel": "R_TXM8", "accepted": 25, "rejected": 4}
+{"rel": "R_TX0", "accepted": 28, "rejected": 1}
+{"rel": "R_TXM1", "accepted": 28, "rejected": 1}
+{"rel": "R_TXM2", "accepted": 28, "rejected": 1}
+{"rel": "R_TXM4", "accepted": 28, "rejected": 1}
+{"rel": "R_TXM8", "accepted": 31, "rejected": 0}
 {"rel": "R_TXM1_0", "accepted": 28, "rejected": 1}
 {"rel": "R_TXM2_0", "accepted": 28, "rejected": 1}
 {"rel": "R_TXM4_0", "accepted": 28, "rejected": 1}
 {"rel": "R_TXM8_0", "accepted": 28, "rejected": 1}
-{"z21diff": 1, "cases": 409, "disagreements": 0, "expect_mismatches": 0, "prove_errors": 0, "closest_z2sq_over_bsq": 0.985172, "both_verdicts_every_relation": 1}
+{"z21diff": 1, "cases": 408, "disagreements": 0, "expect_mismatches": 0, "prove_errors": 15, "closest_z2sq_over_bsq": 1.011612, "both_verdicts_every_relation": 0}
 {"prg_mismatches": 0}
-{"rel": "R_REG", "arena_base": 11776768, "sv_tables": 4540480, "verify_peak_generic": 100417184, "verify_peak_fast": 1156416}
-{"rel": "R_TX", "arena_base": 30585328, "sv_tables": 5500976, "verify_peak_generic": 335466128, "verify_peak_fast": 1848528}
-{"rel": "R_BURN", "arena_base": 50062224, "sv_tables": 5388336, "verify_peak_generic": 319463168, "verify_peak_fast": 1809184}
-{"rel": "R_DS", "arena_base": 63896688, "sv_tables": 3256368, "verify_peak_generic": 104884768, "verify_peak_fast": 1171712}
-{"rel": "R_DR", "arena_base": 75878064, "sv_tables": 3363888, "verify_peak_generic": 112236256, "verify_peak_fast": 1206112}
-{"rel": "R_TX0", "arena_base": 93393168, "sv_tables": 5455920, "verify_peak_generic": 328976016, "verify_peak_fast": 1832336}
+{"rel": "R_REG", "arena_base": 11776768, "sv_tables": 4540480, "verify_peak_generic": 100417184, "verify_peak_fast": 1156480}
+{"rel": "R_TX", "arena_base": 30585328, "sv_tables": 5500976, "verify_peak_generic": 335466128, "verify_peak_fast": 1848496}
+{"rel": "R_BURN", "arena_base": 50062224, "sv_tables": 5388336, "verify_peak_generic": 319463168, "verify_peak_fast": 1809168}
+{"rel": "R_DS", "arena_base": 63896688, "sv_tables": 3256368, "verify_peak_generic": 104884768, "verify_peak_fast": 1171680}
+{"rel": "R_DR", "arena_base": 75878064, "sv_tables": 3363888, "verify_peak_generic": 112236256, "verify_peak_fast": 1206192}
+{"rel": "R_TX0", "arena_base": 93393168, "sv_tables": 5455920, "verify_peak_generic": 328976016, "verify_peak_fast": 1832352}
 {"seed": 1, "cases": 4328, "mismatches": 0, "other_fails": 0}
 {"prg_mismatches": 0}
-{"rel": "R_REG", "arena_base": 11776768, "sv_tables": 4540480, "verify_peak_generic": 100417184, "verify_peak_fast": 1156384}
-{"rel": "R_TX", "arena_base": 30585328, "sv_tables": 5500976, "verify_peak_generic": 335466128, "verify_peak_fast": 1848464}
+{"rel": "R_REG", "arena_base": 11776768, "sv_tables": 4540480, "verify_peak_generic": 100417184, "verify_peak_fast": 1156496}
+{"rel": "R_TX", "arena_base": 30585328, "sv_tables": 5500976, "verify_peak_generic": 335466128, "verify_peak_fast": 1848496}
 {"rel": "R_BURN", "arena_base": 50062224, "sv_tables": 5388336, "verify_peak_generic": 319463168, "verify_peak_fast": 1809184}
-{"rel": "R_DS", "arena_base": 63896688, "sv_tables": 3256368, "verify_peak_generic": 104884768, "verify_peak_fast": 1171696}
-{"rel": "R_DR", "arena_base": 75878064, "sv_tables": 3363888, "verify_peak_generic": 112236256, "verify_peak_fast": 1206112}
+{"rel": "R_DS", "arena_base": 63896688, "sv_tables": 3256368, "verify_peak_generic": 104884768, "verify_peak_fast": 1171712}
+{"rel": "R_DR", "arena_base": 75878064, "sv_tables": 3363888, "verify_peak_generic": 112236256, "verify_peak_fast": 1206192}
 {"rel": "R_TX0", "arena_base": 93393168, "sv_tables": 5455920, "verify_peak_generic": 328976016, "verify_peak_fast": 1832320}
 {"seed": 2, "cases": 2158, "mismatches": 0, "other_fails": 0}

@@ -6,8 +6,8 @@ ok   Keccak-f permutation = hashlib sha3_256, 137 B
 ok   Keccak-f permutation = hashlib sha3_256, 300 B
 ok   keccak256('')
 ok   keccak256 of the retired v3 label
-ok   PQZL proofSystemId scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4 = a3db21fc... (set.json)
-ok   PQZH proofSystemId scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2 = e83ad1da... (set.json)
+ok   PQZL proofSystemId scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5 = eacf34a3... (set.json)
+ok   PQZH proofSystemId scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3 = c93f3bdd... (set.json)
 ok   ids not retired, distinct
 ok   opTag TRANSFER = ef22f3d1...
 ok   opTag BURN = 7383374d...
@@ -21,9 +21,9 @@ ok   opTag TRANSFER-MULTI = 6f6a773a...
 ok   KeyGen seed 00*32: ctr 0, norms
 ok   KeyGen seed 01*32: ctr 0, norms
 ok   KeyGen seed 02*32: ctr 0, norms
-ok   Dec(Enc(m)) = m, recipient 0, max |noise| 427 <= 14624
-ok   Dec(Enc(m)) = m, recipient 1, max |noise| 260 <= 14624
-ok   Dec(Enc(m)) = m, recipient 2, max |noise| 428 <= 14624
+ok   Dec(Enc(m)) = m, recipient 0, max |noise| 372 <= 14624
+ok   Dec(Enc(m)) = m, recipient 1, max |noise| 434 <= 14624
+ok   Dec(Enc(m)) = m, recipient 2, max |noise| 285 <= 14624
 ok   Add with Trivial(5)
 ok   Sub
 ok   statement TRANSFER
@@ -60,6 +60,10 @@ ok   reject: coefficient = 2^50: coefficient >= q
 ok   reject: TRANSFER statement under op 2: opTag does not belong to op
 ok   reject: unknown proofSystemId: unknown proofSystemId
 ok   reject: disclosure amount >= 2^64: amount >= 2^64
+ok   reject: SENDER_S kind window 1: kind
+ok   reject: AUDITOR kind window 4 (S_AUD): kind
+ok   reject: kind word >= 2^16: kind
+ok   AUDITOR kind window 3 accepted
 ok   op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 103,552
 ok   op 7 PQZL M = 1 auditor on: build(parse(x)) = x
 ok   op 7 PQZL M = 2 auditor on: build(parse(x)) = x
@@ -100,7 +104,7 @@ ok   reject: op 7: unknown proofSystemId: unknown proofSystemId
 ok   reject: op 7: op 7 statement under op 1: opTag does not belong to op
 ok   reject: op 7: op 1 statement under op 7: opTag does not belong to op
 ok   op 7 at 103,552 B: the M / auditorOn words pick (1, on) or (2, off)
-ok   KeyGen resamples with ||s|| <= 36, ||e|| <= 160: counters [0, 1, 3, 2]
+ok   KeyGen resamples with ||s|| <= 36, ||e|| <= 160: counters [0, 1, 1, 3]
 ok   Enc resamples with 36 / 160 / 12: counters [55, 10, 13, 5]
 ok   KeyGen: counter 64 error
 ok   Enc: counter 64 error
@@ -126,4 +130,4 @@ ok   statement_transfer.json
 ok   statement_transfer_multi.json
 ok   worstcase_noise.json
 pqz_kat: ok
-92804 KB
+97108 KB

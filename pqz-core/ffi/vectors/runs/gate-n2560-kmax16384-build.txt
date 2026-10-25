@@ -1,45 +1,12 @@
 set n2560-kmax16384, vectors ../../smartcontracts/vectors/pqz/n2560-kmax16384; PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2560-kmax16384)
-   Compiling version_check v0.9.5
-   Compiling typenum v1.20.1
-   Compiling subtle v2.6.1
-   Compiling keccak v0.1.6
-   Compiling cfg-if v1.0.5
-   Compiling cpufeatures v0.2.17
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
-   Compiling generic-array v0.14.7
-   Compiling crypto-common v0.1.7
-   Compiling block-buffer v0.10.4
-   Compiling inout v0.1.4
-   Compiling digest v0.10.7
-   Compiling cipher v0.4.4
-   Compiling aes v0.8.4
-   Compiling sha3 v0.10.8
-   Compiling hmac v0.12.1
-   Compiling sha2 v0.10.9
-   Compiling hkdf v0.12.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
-    Finished `release` profile [optimized + debuginfo] target(s) in 14.81s
-   Compiling version_check v0.9.5
-   Compiling typenum v1.20.1
-   Compiling subtle v2.6.1
-   Compiling keccak v0.1.6
-   Compiling cfg-if v1.0.5
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
-   Compiling generic-array v0.14.7
-   Compiling crypto-common v0.1.7
-   Compiling block-buffer v0.10.4
-   Compiling inout v0.1.4
-   Compiling cipher v0.4.4
-   Compiling digest v0.10.7
-   Compiling aes v0.8.4
-   Compiling sha3 v0.10.8
-   Compiling hmac v0.12.1
-   Compiling sha2 v0.10.9
-   Compiling hkdf v0.12.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
-   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/wasm)
-    Finished `release` profile [optimized] target(s) in 8.86s
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 16.53s
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 19.02s

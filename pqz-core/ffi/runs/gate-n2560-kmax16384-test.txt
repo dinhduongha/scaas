@@ -1,12 +1,12 @@
 # PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2560-kmax16384)
 $ cargo test --release --offline --no-default-features --features pqzl-rust,set-n2560-kmax16384 --lib
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
    Compiling digest v0.10.7
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
    Compiling sha3 v0.10.8
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
-    Finished `release` profile [optimized + debuginfo] target(s) in 6.62s
-     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqz_ffi-9239c8d8dda7236a)
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 8.71s
+     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqz_ffi-dd6c8d8f726013cd)
 
 running 1 test
 test pqzl::rust::tests::out_of_memory_is_a_node_fault ... ok
@@ -15,103 +15,107 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 [rc=0]
 $ cargo test --release --offline --no-default-features --features pqzl-rust,set-n2560-kmax16384 --features prove,test-hooks -- --nocapture --test-threads 4
-    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
-     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqz_ffi-31275c20097968c0)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqz_ffi-0eecd39df93ec3a8)
 
 running 1 test
 test pqzl::rust::tests::out_of_memory_is_a_node_fault ... ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/bin/pqz-vectors.rs (target/n2560-kmax16384/release/deps/pqz_vectors-427daa7e76eeb951)
+     Running unittests src/bin/pqz-vectors.rs (target/n2560-kmax16384/release/deps/pqz_vectors-23445c8ace8b3110)
 
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/fault.rs (target/n2560-kmax16384/release/deps/fault-512534bb809f90e7)
+     Running tests/fault.rs (target/n2560-kmax16384/release/deps/fault-d332316b5c60d687)
 
 running 1 test
 
-thread 'pqz-core' (1277889) panicked at src/pqzl/rust.rs:78:17:
+thread 'pqz-core' (2397154) panicked at src/pqzl/rust.rs:78:17:
 pqz-ffi test hook TEST_PANIC
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
-thread 'pqz-core' (1277889) panicked at src/pqzl/rust.rs:78:17:
+thread 'pqz-core' (2397154) panicked at src/pqzl/rust.rs:78:17:
 pqz-ffi test hook TEST_PANIC
 Rust core faults: Ctx allocation denied → status 4; cache allocations ≥ 1 MiB denied → status 4; panic in the core → …00 status 3; each time the same input VALID afterwards
 node faults: Ctx and core allocation failures and worker failure → status 4, out untouched; recovered
 test node_faults_are_status_4 ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.30s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.01s
 
-     Running tests/ffi.rs (target/n2560-kmax16384/release/deps/ffi-5f571124b8e362bc)
+     Running tests/ffi.rs (target/n2560-kmax16384/release/deps/ffi-056f780270ee6bd6)
 
 running 10 tests
 test header_matches ... ok
 test c_abi_arguments ... ok
-op 7 PQZL TransferMulti1: statement 103552 B, proof 50358 B (bound 98304), input 153915 B, worst-case input 201861 B (MAX_INPUT 524288)
-op 7 PQZL TransferMulti2: statement 124288 B, proof 51213 B (bound 98304), input 175506 B, worst-case input 222597 B (MAX_INPUT 524288)
+test digest_lines has been running for over 60 seconds
+test every_rejection has been running for over 60 seconds
+test multi_limits_and_memo has been running for over 60 seconds
+test one_mib_stack has been running for over 60 seconds
+op 7 PQZL TransferMulti1: statement 103552 B, proof 50411 B (bound 98304), input 153968 B, worst-case input 201861 B (MAX_INPUT 524288)
+op 7 PQZL TransferMulti2: statement 124288 B, proof 51230 B (bound 98304), input 175523 B, worst-case input 222597 B (MAX_INPUT 524288)
 op 7 PQZL TransferMulti4: statement 165760 B, proof 54816 B (bound 98304), input 220581 B, worst-case input 264069 B (MAX_INPUT 524288)
-op 7 PQZL TransferMulti8: statement 269184 B, proof 72707 B (bound 98304), input 341896 B, worst-case input 367493 B (MAX_INPUT 524288)
-op 7 PQZL TransferMulti1_0: statement 82944 B, proof 50055 B (bound 98304), input 133004 B, worst-case input 181253 B (MAX_INPUT 524288)
-op 7 PQZL TransferMulti2_0: statement 103552 B, proof 50551 B (bound 98304), input 154108 B, worst-case input 201861 B (MAX_INPUT 524288)
-op 7 PQZL TransferMulti4_0: statement 144768 B, proof 51602 B (bound 98304), input 196375 B, worst-case input 243077 B (MAX_INPUT 524288)
-op 7 PQZL TransferMulti8_0: statement 247680 B, proof 69863 B (bound 98304), input 317548 B, worst-case input 345989 B (MAX_INPUT 524288)
-op 7 PQZH TransferMulti1: statement 103552 B, proof 299731 B (bound 304266), input 403288 B, worst-case input 407823 B (MAX_INPUT 524288)
-op 7 PQZH TransferMulti2: statement 124288 B, proof 301034 B (bound 304266), input 425327 B, worst-case input 428559 B (MAX_INPUT 524288)
-op 7 PQZH TransferMulti4: statement 165760 B, proof 302208 B (bound 305120), input 467973 B, worst-case input 470885 B (MAX_INPUT 524288)
-op 7 PQZH TransferMulti1_0: statement 82944 B, proof 299155 B (bound 304266), input 382104 B, worst-case input 387215 B (MAX_INPUT 524288)
-op 7 PQZH TransferMulti2_0: statement 103552 B, proof 300778 B (bound 304266), input 404335 B, worst-case input 407823 B (MAX_INPUT 524288)
-op 7 PQZH TransferMulti4_0: statement 144768 B, proof 301194 B (bound 304266), input 445967 B, worst-case input 449039 B (MAX_INPUT 524288)
+op 7 PQZL TransferMulti8: statement 269184 B, proof 72727 B (bound 98304), input 341916 B, worst-case input 367493 B (MAX_INPUT 524288)
+op 7 PQZL TransferMulti1_0: statement 82944 B, proof 50052 B (bound 98304), input 133001 B, worst-case input 181253 B (MAX_INPUT 524288)
+op 7 PQZL TransferMulti2_0: statement 103552 B, proof 50540 B (bound 98304), input 154097 B, worst-case input 201861 B (MAX_INPUT 524288)
+op 7 PQZL TransferMulti4_0: statement 144768 B, proof 51607 B (bound 98304), input 196380 B, worst-case input 243077 B (MAX_INPUT 524288)
+op 7 PQZL TransferMulti8_0: statement 247680 B, proof 69931 B (bound 98304), input 317616 B, worst-case input 345989 B (MAX_INPUT 524288)
+op 7 PQZH TransferMulti1: statement 103552 B, proof 300362 B (bound 304266), input 403919 B, worst-case input 407823 B (MAX_INPUT 524288)
+op 7 PQZH TransferMulti2: statement 124288 B, proof 300682 B (bound 304266), input 424975 B, worst-case input 428559 B (MAX_INPUT 524288)
+op 7 PQZH TransferMulti4: statement 165760 B, proof 301504 B (bound 305120), input 467269 B, worst-case input 470885 B (MAX_INPUT 524288)
+op 7 PQZH TransferMulti1_0: statement 82944 B, proof 301162 B (bound 304266), input 384111 B, worst-case input 387215 B (MAX_INPUT 524288)
+op 7 PQZH TransferMulti2_0: statement 103552 B, proof 301226 B (bound 304266), input 404783 B, worst-case input 407823 B (MAX_INPUT 524288)
+op 7 PQZH TransferMulti4_0: statement 144768 B, proof 301418 B (bound 304266), input 446191 B, worst-case input 449039 B (MAX_INPUT 524288)
 op 7 largest worst-case input 470885 B of MAX_INPUT 524288
 test multi_limits_and_memo ... ok
 test one_mib_stack ... ok
-PQZL Transfer: proof 50396 B, input 153953 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Transfer: proof 50392 B, input 153949 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Transfer0: proof 50047 B, input 132996 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Burn: proof 49543 B, input 111884 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Refresh: proof 49541 B, input 111882 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Register: proof 32563 B, input 53144 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL DiscloseSender: proof 32969 B, input 74350 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL DiscloseReceiver: proof 33890 B, input 75271 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL DiscloseAuditor: proof 33857 B, input 75238 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Transfer: proof 301034 B, input 404591 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Transfer0: proof 301098 B, input 384047 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Burn: proof 298820 B, input 361161 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Refresh: proof 300468 B, input 362809 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Register: proof 230686 B, input 251267 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH DiscloseSender: proof 231262 B, input 272643 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH DiscloseReceiver: proof 229989 B, input 271370 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH DiscloseAuditor: proof 229950 B, input 271331 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL TransferMulti1: proof 50411 B, input 153968 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
 test digest_lines ... ok
-PQZL Transfer0: proof 50049 B, input 132998 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-selftest: Report { a_digest: [15, 205, 216, 163, 89, 216, 137, 166, 68, 164, 206, 71, 72, 71, 160, 128, 8, 174, 220, 167, 133, 132, 4, 70, 60, 56, 29, 162, 234, 32, 254, 240], pk_hash: [201, 198, 36, 135, 120, 176, 180, 77, 78, 226, 103, 205, 23, 10, 230, 189, 23, 36, 13, 190, 33, 59, 171, 50, 6, 228, 46, 75, 217, 25, 104, 180], ct_hash: [1, 255, 10, 120, 91, 195, 82, 67, 7, 58, 122, 40, 37, 225, 218, 56, 195, 226, 168, 76, 76, 243, 196, 143, 208, 86, 87, 112, 37, 175, 161, 196], m: [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], fft_hash: [78, 139, 84, 168, 61, 171, 99, 253, 194, 144, 141, 142, 36, 72, 225, 119, 58, 167, 4, 103, 35, 103, 33, 33, 176, 38, 190, 9, 149, 97, 26, 128], fft_ok: true, kat_digest: [48, 76, 204, 52, 243, 170, 126, 17, 19, 14, 12, 72, 190, 22, 187, 178, 136, 47, 141, 127, 2, 29, 160, 50, 242, 205, 250, 28, 96, 90, 80, 23], results: [true, false, true, false], hash: [22, 124, 119, 46, 244, 208, 145, 29, 96, 214, 179, 210, 250, 210, 86, 144, 46, 27, 226, 221, 74, 143, 10, 169, 208, 29, 59, 62, 216, 187, 69, 231] }
-selftest hash 167c772ef4d0911d60d6b3d2fad256902e1be2dd4a8f0aa9d01d3b3ed8bb45e7
-PQZL Burn: proof 49575 B, input 111916 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL Refresh: proof 49585 B, input 111926 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL Register: proof 32438 B, input 53019 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL DiscloseSender: proof 32974 B, input 74355 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL DiscloseReceiver: proof 33784 B, input 75165 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL DiscloseAuditor: proof 33775 B, input 75156 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH Transfer: proof 301290 B, input 404847 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-test selftest_report ... ok
-PQZH Transfer0: proof 300938 B, input 383887 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH Burn: proof 300468 B, input 362809 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH Refresh: proof 298116 B, input 360457 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH Register: proof 230718 B, input 251299 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH DiscloseSender: proof 230974 B, input 272355 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH DiscloseReceiver: proof 231038 B, input 272419 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH DiscloseAuditor: proof 230430 B, input 271811 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL TransferMulti1: proof 50358 B, input 153915 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL TransferMulti2: proof 51213 B, input 175506 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL TransferMulti2: proof 51230 B, input 175523 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
 PQZL TransferMulti4: proof 54816 B, input 220581 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-test selftest_vectors ... ok
-PQZL TransferMulti8: proof 72707 B, input 341896 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL TransferMulti1_0: proof 50055 B, input 133004 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL TransferMulti2_0: proof 50551 B, input 154108 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL TransferMulti4_0: proof 51602 B, input 196375 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZL TransferMulti8_0: proof 69863 B, input 317548 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH TransferMulti1: proof 299731 B, input 403288 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH TransferMulti2: proof 301034 B, input 425327 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH TransferMulti4: proof 302208 B, input 467973 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH TransferMulti1_0: proof 299155 B, input 382104 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH TransferMulti2_0: proof 300778 B, input 404335 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-PQZH TransferMulti4_0: proof 301194 B, input 445967 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL TransferMulti8: proof 72727 B, input 341916 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL TransferMulti1_0: proof 50052 B, input 133001 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL TransferMulti2_0: proof 50540 B, input 154097 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL TransferMulti4_0: proof 51607 B, input 196380 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+selftest: Report { a_digest: [15, 205, 216, 163, 89, 216, 137, 166, 68, 164, 206, 71, 72, 71, 160, 128, 8, 174, 220, 167, 133, 132, 4, 70, 60, 56, 29, 162, 234, 32, 254, 240], pk_hash: [126, 54, 71, 124, 121, 44, 249, 40, 205, 62, 161, 165, 24, 99, 65, 239, 5, 239, 54, 217, 63, 131, 199, 150, 17, 43, 221, 147, 203, 174, 30, 188], ct_hash: [67, 67, 125, 59, 93, 195, 254, 148, 124, 218, 112, 63, 193, 234, 154, 83, 206, 210, 152, 238, 67, 45, 118, 41, 205, 9, 139, 35, 81, 203, 62, 81], m: [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], fft_hash: [78, 139, 84, 168, 61, 171, 99, 253, 194, 144, 141, 142, 36, 72, 225, 119, 58, 167, 4, 103, 35, 103, 33, 33, 176, 38, 190, 9, 149, 97, 26, 128], fft_ok: true, kat_digest: [226, 162, 25, 18, 191, 121, 73, 74, 180, 233, 3, 234, 212, 231, 47, 179, 123, 189, 204, 139, 179, 170, 66, 117, 233, 247, 2, 199, 50, 225, 129, 41], results: [true, false, true, false], hash: [251, 20, 36, 77, 189, 106, 76, 164, 196, 79, 103, 62, 248, 120, 147, 125, 36, 55, 241, 100, 36, 98, 96, 239, 69, 244, 39, 169, 249, 141, 225, 203] }
+selftest hash fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb
+PQZL TransferMulti8_0: proof 69931 B, input 317616 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH TransferMulti1: proof 300362 B, input 403919 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH TransferMulti2: proof 300682 B, input 424975 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH TransferMulti4: proof 301504 B, input 467269 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH TransferMulti1_0: proof 301162 B, input 384111 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH TransferMulti2_0: proof 301226 B, input 404783 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH TransferMulti4_0: proof 301418 B, input 446191 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
 test round_trip_every_form ... ok
-test every_rejection has been running for over 60 seconds
+test selftest_report ... ok
+test selftest_vectors ... ok
 rejection cases: 1013
 test every_rejection ... ok
+test pqzl_differential has been running for over 60 seconds
 differential: 112 cases, 16 accepted, 0 disagreements
 test pqzl_differential ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 91.41s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 150.24s
 
-     Running tests/verify_only.rs (target/n2560-kmax16384/release/deps/verify_only-ba1d410bb8bb74a2)
+     Running tests/verify_only.rs (target/n2560-kmax16384/release/deps/verify_only-1517bbcb4c83b07d)
 
 running 2 tests
 test child_task ... ok
@@ -119,13 +123,13 @@ test child_task ... ok
 running 1 test
 test child_task ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 32.21s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 54.90s
 
 test verify_only_arena has been running for over 60 seconds
-verify-only path: 30 honest inputs, corpus 11282 inputs (10240 generator), warm-up 16.4 s, 188 valid (= the unedited honest ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; Rust backend (no arena): heap in use after the 5,000 mixed calls 1830793502..=1830793502 B (before them 1830793502 B), their peak 1833209199 B <= the warm-up's 1835026038 B, Ligero panics caught 0
+verify-only path: 30 honest inputs, corpus 11282 inputs (10240 generator), warm-up 23.4 s, 188 valid (= the unedited honest ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; Rust backend (no arena): heap in use after the 5,000 mixed calls 1831094944..=1831094944 B (before them 1831094944 B), their peak 1833510641 B <= the warm-up's 1837018409 B, Ligero panics caught 0
 test verify_only_arena ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 82.83s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 122.76s
 
    Doc-tests pqz_ffi
 

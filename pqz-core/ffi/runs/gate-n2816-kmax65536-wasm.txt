@@ -2,11 +2,11 @@
 $ cargo build --release --offline --no-default-features --features pqzl-rust,set-n2816-kmax65536 --lib --target wasm32-unknown-unknown
    Compiling version_check v0.9.5
    Compiling typenum v1.20.1
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
    Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
    Compiling keccak v0.1.6
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
    Compiling generic-array v0.14.7
    Compiling crypto-common v0.1.7
    Compiling inout v0.1.4
@@ -15,22 +15,22 @@ $ cargo build --release --offline --no-default-features --features pqzl-rust,set
    Compiling digest v0.10.7
    Compiling sha3 v0.10.8
    Compiling aes v0.8.4
-    Finished `release` profile [optimized + debuginfo] target(s) in 4.21s
+    Finished `release` profile [optimized + debuginfo] target(s) in 7.71s
 [rc=0]
 $ cargo build --release --offline --no-default-features --features pqzl-rust,set-n2816-kmax65536 --target wasm32-unknown-unknown
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/wasm)
-    Finished `release` profile [optimized] target(s) in 1.01s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 1.47s
 [rc=0]
-$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
-04445f363bd8b66d7c6651344672b1ec033c9ff3cc039bb97704e392cbf80878  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+510a74a1abb3b38b59cbafac94eccd83ecfb110e5def0bec373b33ad6ad50afe  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
 [rc=0]
-wasm bytes 565301
-$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+wasm bytes 575630
+$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2816-kmax65536-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
 strings /gmp|mpfr|hexl/i: 0
 node rc=0
-wasm run 78832 ms, memory 240386048 B
+wasm run 72954 ms, memory 240386048 B
 wasm PQZL op 7 M = 8 prove refused (Statement(Legs); C backend true, Rust backend false): false
-	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:19.04
-	Maximum resident set size (kbytes): 277884
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:13.18
+	Maximum resident set size (kbytes): 279768
 native = wasm32: 15 lines equal

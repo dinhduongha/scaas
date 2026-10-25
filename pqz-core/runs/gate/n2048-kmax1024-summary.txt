@@ -1,4 +1,4 @@
-# gate n2048-kmax1024 (set n2048-kmax1024): df474f7026cfd2deb9292bf80514e0d7b5804e77, 2026-10-25T01:01Z
+# gate n2048-kmax1024 (set n2048-kmax1024): 69542f9ca32a3b00b1912ffdb87f041c5b839db8, 2026-10-25T16:29Z
 set n2048-kmax1024
 == kat
    ok
@@ -17,9 +17,9 @@ set n2048-kmax1024
 == rust
    ok
 == cargo
-   ok
+   FAILED (rc=101)
 == xcheck
    ok
 == fuzz
    ok
-gate n2048-kmax1024 (set n2048-kmax1024): PASS
+gate n2048-kmax1024 (set n2048-kmax1024): FAIL

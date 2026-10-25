@@ -1,23 +1,23 @@
-reg_stmt 16480 B c=a416b24f49f42b4b rust=a416b24f49f42b4b equal
+reg_stmt 16480 B c=b3315eedd62516f4 rust=b3315eedd62516f4 equal
 reg_wit 6144 B c=17c7a9f62fa77af1 rust=17c7a9f62fa77af1 equal
-tx_stmt 83072 B c=16411ac8c63f4f2c rust=16411ac8c63f4f2c equal
+tx_stmt 83072 B c=ffa6d6220405cb85 rust=ffa6d6220405cb85 equal
 tx_wit 12416 B c=258e15b72416daa6 rust=258e15b72416daa6 equal
-reg_stmt 16480 B c=02e35b55cd00b9c6 rust=02e35b55cd00b9c6 equal
+reg_stmt 16480 B c=9480d11c195b8645 rust=9480d11c195b8645 equal
 reg_wit 6144 B c=17c7a9f62fa77af1 rust=17c7a9f62fa77af1 equal
-tx_stmt 83072 B c=6351783ec000ddda rust=6351783ec000ddda equal
+tx_stmt 83072 B c=e6ec5d7441f1a29f rust=e6ec5d7441f1a29f equal
 tx_wit 12416 B c=258e15b72416daa6 rust=258e15b72416daa6 equal
-burn_stmt 50048 B c=cd52809c7dfb89df rust=cd52809c7dfb89df equal
+burn_stmt 50048 B c=f6948a0d47f8ca35 rust=f6948a0d47f8ca35 equal
 burn_wit 12336 B c=b30116021402c8f4 rust=b30116021402c8f4 equal
-ds_stmt 33184 B c=3ca77490fd89b2bc rust=3ca77490fd89b2bc equal
+ds_stmt 33184 B c=08278f57cf594f39 rust=08278f57cf594f39 equal
 ds_wit 6176 B c=ca851999be80c88c rust=ca851999be80c88c equal
-dr_stmt 33184 B c=32c7812a0f4f8b4c rust=32c7812a0f4f8b4c equal
+dr_stmt 33184 B c=d01420369f7c314d rust=d01420369f7c314d equal
 dr_wit 6144 B c=36ad37fb60e003ad rust=36ad37fb60e003ad equal
-tx0_stmt 66560 B c=f3b39f3414207f3c rust=f3b39f3414207f3c equal
+tx0_stmt 66560 B c=a2d667b1e2177e91 rust=a2d667b1e2177e91 equal
 tx0_wit 12384 B c=e60f801f73310e7b rust=e60f801f73310e7b equal
-reg_stmt 16480 B REGISTER id=9d945089 as-PQZL=rejected rebuilt=equal ok
-tx_stmt 83072 B TRANSFER id=9d945089 as-PQZL=rejected rebuilt=equal ok
-burn_stmt 50048 B BURN id=9d945089 as-PQZL=rejected rebuilt=equal ok
-ds_stmt 33184 B DISCLOSE-SENDER id=9d945089 as-PQZL=rejected rebuilt=equal ok
-dr_stmt 33184 B DISCLOSE-RECEIVER id=9d945089 as-PQZL=rejected rebuilt=equal ok
-tx0_stmt 66560 B TRANSFER id=9d945089 as-PQZL=rejected rebuilt=equal ok
+reg_stmt 16480 B REGISTER id=56293621 as-PQZL=rejected rebuilt=equal ok
+tx_stmt 83072 B TRANSFER id=56293621 as-PQZL=rejected rebuilt=equal ok
+burn_stmt 50048 B BURN id=56293621 as-PQZL=rejected rebuilt=equal ok
+ds_stmt 33184 B DISCLOSE-SENDER id=56293621 as-PQZL=rejected rebuilt=equal ok
+dr_stmt 33184 B DISCLOSE-RECEIVER id=56293621 as-PQZL=rejected rebuilt=equal ok
+tx0_stmt 66560 B TRANSFER id=56293621 as-PQZL=rejected rebuilt=equal ok
 kat_stmt: ok

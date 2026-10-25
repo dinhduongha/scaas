@@ -1,105 +1,101 @@
-seeds.py: 43 honest inputs -> honest.bin (24 P6e, 19 op 7, 0 regress/valid); 819 precompile seeds (775 negative.json rows, 362 of them op 7)
-# fuzz mutate (binary mutate), 60 s, 2026-10-25T10:38:50+07:00, commit 91be7315, Ubuntu clang version 18.1.3 (1ubuntu1), rustc 1.97.1 (8bab26f4f 2026-07-14)
-pqz-fuzz init (mutate): 43 honest inputs valid, self-test 23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0, PQZL core: Rust
+seeds.py: 51 honest inputs -> honest.bin (24 P6e, 19 op 7, 8 op 7 disclosures, 0 regress/valid); 877 precompile seeds (825 negative.json rows, 376 of them op 7)
+# fuzz mutate (binary mutate), 60 s, 2026-10-26T03:15:10+07:00, commit 69542f9c, Ubuntu clang version 18.1.3 (1ubuntu1), rustc 1.97.1 (8bab26f4f 2026-07-14)
+pqz-fuzz init (mutate): 51 honest inputs valid, self-test d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d, PQZL core: Rust
 INFO: Running with entropic power schedule (0xFF, 100).
-INFO: Seed: 2385734756
-INFO: Loaded 1 modules   (25094 inline 8-bit counters): 25094 [0x623a78b4c520, 0x623a78b52726), 
-INFO: Loaded 1 PC tables (25094 PCs): 25094 [0x623a78b52728,0x623a78bb4788), 
-INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/build/fuzz-n2304-kmax4096/work/mutate
+INFO: Seed: 2417876080
+INFO: Loaded 1 modules   (25713 inline 8-bit counters): 25713 [0x6550120afcb8, 0x6550120b6129), 
+INFO: Loaded 1 PC tables (25713 PCs): 25713 [0x6550120b6130,0x65501211a840), 
+INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/build/fuzz-n2304-kmax4096/work/mutate
 INFO:      483 files found in corpus/mutate
 INFO:        0 files found in regress/mutate
-INFO:      172 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/build/fuzz-n2304-kmax4096/seeds/mutate
-INFO: seed corpus: files: 655 min: 1b max: 147b total: 9420b rss: 493Mb
-#512	pulse  cov: 2014 ft: 3588 corp: 189/1691b exec/s: 34 rss: 683Mb
-#656	INITED cov: 2297 ft: 4067 corp: 222/3159b exec/s: 27 rss: 683Mb
-#663	NEW    cov: 2297 ft: 4068 corp: 223/3181b lim: 142 exec/s: 27 rss: 683Mb L: 22/142 MS: 2 CopyPart-ChangeByte-
-#669	NEW    cov: 2298 ft: 4069 corp: 224/3187b lim: 142 exec/s: 27 rss: 683Mb L: 6/142 MS: 1 ChangeBinInt-
-#689	NEW    cov: 2298 ft: 4070 corp: 225/3206b lim: 142 exec/s: 27 rss: 683Mb L: 19/142 MS: 5 InsertByte-ChangeBinInt-CrossOver-EraseBytes-InsertByte-
-#690	NEW    cov: 2298 ft: 4071 corp: 226/3212b lim: 142 exec/s: 27 rss: 683Mb L: 6/142 MS: 1 CrossOver-
-#821	REDUCE cov: 2298 ft: 4071 corp: 226/3208b lim: 142 exec/s: 28 rss: 683Mb L: 21/142 MS: 1 EraseBytes-
-#893	NEW    cov: 2298 ft: 4087 corp: 227/3336b lim: 142 exec/s: 28 rss: 683Mb L: 128/142 MS: 2 ChangeBinInt-InsertRepeatedBytes-
-#906	NEW    cov: 2321 ft: 4140 corp: 228/3343b lim: 142 exec/s: 28 rss: 683Mb L: 7/142 MS: 3 ChangeByte-ShuffleBytes-CopyPart-
-#944	REDUCE cov: 2321 ft: 4140 corp: 228/3335b lim: 142 exec/s: 28 rss: 683Mb L: 34/142 MS: 3 ChangeBit-ChangeByte-EraseBytes-
-#1008	NEW    cov: 2321 ft: 4142 corp: 229/3384b lim: 142 exec/s: 28 rss: 683Mb L: 49/142 MS: 4 ShuffleBytes-ChangeByte-CMP-EraseBytes- DE: "\263h\343\014"-
-#1024	pulse  cov: 2321 ft: 4142 corp: 229/3384b lim: 142 exec/s: 29 rss: 683Mb
-#1034	NEW    cov: 2321 ft: 4147 corp: 230/3390b lim: 142 exec/s: 29 rss: 683Mb L: 6/142 MS: 1 ChangeBinInt-
-#1065	NEW    cov: 2321 ft: 4148 corp: 231/3396b lim: 142 exec/s: 30 rss: 683Mb L: 6/142 MS: 1 ChangeBinInt-
-#1076	NEW    cov: 2321 ft: 4149 corp: 232/3402b lim: 142 exec/s: 29 rss: 683Mb L: 6/142 MS: 1 PersAutoDict- DE: "\263h\343\014"-
-#1096	NEW    cov: 2321 ft: 4150 corp: 233/3408b lim: 142 exec/s: 29 rss: 683Mb L: 6/142 MS: 5 ChangeBit-EraseBytes-ChangeBinInt-ChangeBit-InsertByte-
-#1107	NEW    cov: 2321 ft: 4155 corp: 234/3414b lim: 142 exec/s: 29 rss: 683Mb L: 6/142 MS: 1 CMP- DE: "\253\002\000\000"-
-#1117	NEW    cov: 2321 ft: 4157 corp: 235/3418b lim: 142 exec/s: 30 rss: 683Mb L: 4/142 MS: 5 InsertByte-CopyPart-CrossOver-EraseBytes-EraseBytes-
-#1134	NEW    cov: 2321 ft: 4158 corp: 236/3424b lim: 142 exec/s: 29 rss: 683Mb L: 6/142 MS: 2 ChangeBit-ChangeBinInt-
-#1144	NEW    cov: 2321 ft: 4159 corp: 237/3438b lim: 142 exec/s: 30 rss: 683Mb L: 14/142 MS: 5 CrossOver-EraseBytes-EraseBytes-EraseBytes-ChangeBinInt-
-#1148	NEW    cov: 2321 ft: 4160 corp: 238/3510b lim: 142 exec/s: 30 rss: 683Mb L: 72/142 MS: 4 InsertRepeatedBytes-InsertByte-InsertByte-InsertByte-
-#1183	NEW    cov: 2321 ft: 4161 corp: 239/3529b lim: 142 exec/s: 29 rss: 683Mb L: 19/142 MS: 5 ChangeBinInt-CMP-ShuffleBytes-ShuffleBytes-ShuffleBytes- DE: "\377\377\377\377\377\377\377\377"-
-#1184	NEW    cov: 2321 ft: 4162 corp: 240/3634b lim: 142 exec/s: 29 rss: 683Mb L: 105/142 MS: 1 InsertRepeatedBytes-
-#1196	NEW    cov: 2323 ft: 4164 corp: 241/3674b lim: 142 exec/s: 29 rss: 683Mb L: 40/142 MS: 2 ChangeByte-InsertRepeatedBytes-
-#1202	NEW    cov: 2323 ft: 4165 corp: 242/3701b lim: 142 exec/s: 30 rss: 683Mb L: 27/142 MS: 1 CMP- DE: "!\000\000\000\000\000\000\000"-
-	NEW_FUNC[1/1]: 0x623a789e42f0 in pqzl::rel::parse_disc /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzl/rust/src/rel.rs:593
-#1311	NEW    cov: 2342 ft: 4238 corp: 243/3729b lim: 142 exec/s: 29 rss: 683Mb L: 28/142 MS: 4 ChangeByte-ChangeBinInt-CopyPart-PersAutoDict- DE: "\377\377\377\377\377\377\377\377"-
-#1331	NEW    cov: 2342 ft: 4239 corp: 244/3856b lim: 142 exec/s: 29 rss: 683Mb L: 127/142 MS: 5 InsertRepeatedBytes-CopyPart-InsertByte-ChangeByte-ChangeByte-
-#1342	NEW    cov: 2342 ft: 4240 corp: 245/3862b lim: 142 exec/s: 29 rss: 683Mb L: 6/142 MS: 1 ChangeByte-
-#1374	REDUCE cov: 2342 ft: 4240 corp: 245/3845b lim: 142 exec/s: 29 rss: 683Mb L: 23/142 MS: 2 InsertByte-EraseBytes-
-#1438	NEW    cov: 2342 ft: 4242 corp: 246/3912b lim: 142 exec/s: 29 rss: 683Mb L: 67/142 MS: 4 ChangeBinInt-InsertByte-InsertRepeatedBytes-ChangeBinInt-
-#1449	NEW    cov: 2342 ft: 4262 corp: 247/3918b lim: 142 exec/s: 29 rss: 683Mb L: 6/142 MS: 1 CrossOver-
-#1450	NEW    cov: 2342 ft: 4286 corp: 248/3928b lim: 142 exec/s: 29 rss: 683Mb L: 10/142 MS: 1 ShuffleBytes-
-#1496	REDUCE cov: 2342 ft: 4286 corp: 248/3927b lim: 142 exec/s: 29 rss: 683Mb L: 10/142 MS: 1 EraseBytes-
-#1569	REDUCE cov: 2342 ft: 4287 corp: 249/4062b lim: 142 exec/s: 29 rss: 683Mb L: 135/142 MS: 3 CrossOver-ChangeBinInt-InsertRepeatedBytes-
-#1570	NEW    cov: 2342 ft: 4288 corp: 250/4084b lim: 142 exec/s: 29 rss: 683Mb L: 22/142 MS: 1 ChangeBit-
-#1701	NEW    cov: 2342 ft: 4289 corp: 251/4103b lim: 142 exec/s: 30 rss: 683Mb L: 19/142 MS: 1 ChangeBinInt-
-#1717	NEW    cov: 2342 ft: 4290 corp: 252/4114b lim: 142 exec/s: 30 rss: 683Mb L: 11/142 MS: 1 CopyPart-
-#1718	NEW    cov: 2342 ft: 4291 corp: 253/4120b lim: 142 exec/s: 30 rss: 683Mb L: 6/142 MS: 1 ChangeByte-
-	NEW_FUNC[1/165]: 0x623a788932f0 in core::ptr::drop_glue::<pqzl::coder::ProofParts> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/core/src/ptr/mod.rs:825
-	NEW_FUNC[2/165]: 0x623a78893c10 in <alloc::vec::into_iter::IntoIter<pqzl::proof::tbox::Acc> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::adapters::map::map_fold<pqzl::proof::tbox::Acc, pqzl::proof::Eq, (), pqzl::proof::tbox::quad_eqs::{closure#1}, core::iter::traits::iterator::Iterator::for_each::call<pqzl::proof::Eq, <alloc::vec::Vec<pqzl::proof::Eq>>::extend_trusted<core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<pqzl::proof::tbox::Acc>, pqzl::proof::tbox::quad_eqs::{closure#1}>>::{closure#0}>::{closure#0}>::{closure#0}> /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/alloc/src/vec/into_iter.rs:347
-#1720	NEW    cov: 3214 ft: 5333 corp: 254/4187b lim: 142 exec/s: 29 rss: 823Mb L: 67/142 MS: 2 CopyPart-CopyPart-
-#1726	REDUCE cov: 3214 ft: 5333 corp: 254/4179b lim: 142 exec/s: 29 rss: 823Mb L: 10/142 MS: 1 EraseBytes-
-#1730	NEW    cov: 3214 ft: 5334 corp: 255/4305b lim: 142 exec/s: 28 rss: 823Mb L: 126/142 MS: 4 ChangeBit-ShuffleBytes-InsertRepeatedBytes-CMP- DE: "\001\000\000\000\000\000\000\020"-
-#1755	DONE   cov: 3214 ft: 5334 corp: 255/4305b lim: 142 exec/s: 28 rss: 823Mb
+INFO:      204 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/build/fuzz-n2304-kmax4096/seeds/mutate
+INFO: seed corpus: files: 687 min: 1b max: 147b total: 9484b rss: 514Mb
+#512	pulse  cov: 2031 ft: 3587 corp: 172/1421b exec/s: 32 rss: 695Mb
+#688	INITED cov: 2326 ft: 4162 corp: 216/2775b exec/s: 25 rss: 695Mb
+#690	NEW    cov: 2326 ft: 4167 corp: 217/2794b lim: 130 exec/s: 24 rss: 695Mb L: 19/130 MS: 2 EraseBytes-CMP- DE: "\023\000\000\000\000\000\000\000"-
+#691	NEW    cov: 2326 ft: 4189 corp: 218/2801b lim: 130 exec/s: 24 rss: 695Mb L: 7/130 MS: 1 InsertByte-
+#732	NEW    cov: 2326 ft: 4190 corp: 219/2807b lim: 130 exec/s: 25 rss: 695Mb L: 6/130 MS: 1 ChangeBinInt-
+#733	NEW    cov: 2326 ft: 4191 corp: 220/2832b lim: 130 exec/s: 25 rss: 695Mb L: 25/130 MS: 1 ShuffleBytes-
+#757	NEW    cov: 2326 ft: 4192 corp: 221/2841b lim: 130 exec/s: 25 rss: 695Mb L: 9/130 MS: 4 ChangeByte-ShuffleBytes-CopyPart-CopyPart-
+#764	NEW    cov: 2326 ft: 4194 corp: 222/2844b lim: 130 exec/s: 25 rss: 695Mb L: 3/130 MS: 2 ChangeByte-ShuffleBytes-
+#809	NEW    cov: 2326 ft: 4195 corp: 223/2851b lim: 130 exec/s: 25 rss: 695Mb L: 7/130 MS: 5 ShuffleBytes-InsertByte-InsertByte-EraseBytes-CrossOver-
+#811	NEW    cov: 2326 ft: 4198 corp: 224/2926b lim: 130 exec/s: 25 rss: 695Mb L: 75/130 MS: 2 CopyPart-InsertRepeatedBytes-
+#820	NEW    cov: 2326 ft: 4199 corp: 225/2952b lim: 130 exec/s: 25 rss: 695Mb L: 26/130 MS: 4 ShuffleBytes-ShuffleBytes-ChangeBinInt-InsertByte-
+#823	NEW    cov: 2326 ft: 4200 corp: 226/2987b lim: 130 exec/s: 24 rss: 695Mb L: 35/130 MS: 3 CrossOver-InsertRepeatedBytes-ChangeBinInt-
+#855	REDUCE cov: 2326 ft: 4200 corp: 226/2985b lim: 130 exec/s: 25 rss: 695Mb L: 4/130 MS: 2 EraseBytes-InsertByte-
+#911	NEW    cov: 2326 ft: 4202 corp: 227/2999b lim: 130 exec/s: 25 rss: 695Mb L: 14/130 MS: 1 CMP- DE: "\377\377\377\377\377\377\377\377"-
+#923	NEW    cov: 2326 ft: 4203 corp: 228/3119b lim: 130 exec/s: 25 rss: 695Mb L: 120/130 MS: 2 InsertRepeatedBytes-PersAutoDict- DE: "\023\000\000\000\000\000\000\000"-
+#926	NEW    cov: 2326 ft: 4204 corp: 229/3234b lim: 130 exec/s: 25 rss: 695Mb L: 115/130 MS: 3 ChangeBit-InsertRepeatedBytes-InsertRepeatedBytes-
+#941	NEW    cov: 2326 ft: 4205 corp: 230/3265b lim: 130 exec/s: 25 rss: 695Mb L: 31/130 MS: 5 CopyPart-CrossOver-ShuffleBytes-InsertByte-EraseBytes-
+#954	NEW    cov: 2327 ft: 4212 corp: 231/3358b lim: 130 exec/s: 25 rss: 695Mb L: 93/130 MS: 3 ChangeByte-ChangeByte-InsertRepeatedBytes-
+#1000	NEW    cov: 2329 ft: 4232 corp: 232/3377b lim: 130 exec/s: 25 rss: 695Mb L: 19/130 MS: 1 ChangeByte-
+#1024	pulse  cov: 2329 ft: 4232 corp: 232/3377b lim: 130 exec/s: 25 rss: 695Mb
+#1034	NEW    cov: 2334 ft: 4256 corp: 233/3382b lim: 130 exec/s: 25 rss: 695Mb L: 5/130 MS: 4 EraseBytes-ShuffleBytes-CopyPart-InsertByte-
+#1045	REDUCE cov: 2334 ft: 4256 corp: 233/3380b lim: 130 exec/s: 25 rss: 695Mb L: 16/130 MS: 1 EraseBytes-
+#1064	NEW    cov: 2334 ft: 4257 corp: 234/3407b lim: 130 exec/s: 25 rss: 695Mb L: 27/130 MS: 4 PersAutoDict-InsertByte-CopyPart-CopyPart- DE: "\377\377\377\377\377\377\377\377"-
+#1066	REDUCE cov: 2334 ft: 4257 corp: 234/3406b lim: 130 exec/s: 25 rss: 695Mb L: 5/130 MS: 2 InsertByte-EraseBytes-
+#1183	NEW    cov: 2334 ft: 4258 corp: 235/3409b lim: 130 exec/s: 26 rss: 695Mb L: 3/130 MS: 2 EraseBytes-ChangeBit-
+#1189	NEW    cov: 2335 ft: 4259 corp: 236/3415b lim: 130 exec/s: 26 rss: 695Mb L: 6/130 MS: 1 ChangeASCIIInt-
+#1199	NEW    cov: 2335 ft: 4268 corp: 237/3429b lim: 130 exec/s: 26 rss: 695Mb L: 14/130 MS: 5 CrossOver-ShuffleBytes-ChangeBit-InsertByte-CrossOver-
+#1229	NEW    cov: 2335 ft: 4270 corp: 238/3489b lim: 130 exec/s: 26 rss: 695Mb L: 60/130 MS: 5 ChangeBit-InsertRepeatedBytes-EraseBytes-CrossOver-EraseBytes-
+#1233	NEW    cov: 2335 ft: 4272 corp: 239/3524b lim: 130 exec/s: 26 rss: 695Mb L: 35/130 MS: 4 ChangeBit-CrossOver-ChangeBit-CopyPart-
+#1243	REDUCE cov: 2335 ft: 4272 corp: 239/3521b lim: 130 exec/s: 27 rss: 695Mb L: 3/130 MS: 5 ChangeByte-CopyPart-CopyPart-ChangeBit-EraseBytes-
+#1287	NEW    cov: 2335 ft: 4273 corp: 240/3524b lim: 130 exec/s: 26 rss: 695Mb L: 3/130 MS: 4 EraseBytes-EraseBytes-CopyPart-CopyPart-
+#1306	NEW    cov: 2359 ft: 4327 corp: 241/3531b lim: 130 exec/s: 26 rss: 695Mb L: 7/130 MS: 4 InsertByte-ChangeASCIIInt-CMP-ChangeBinInt- DE: "\001\000"-
+#1316	NEW    cov: 2359 ft: 4333 corp: 242/3631b lim: 130 exec/s: 26 rss: 695Mb L: 100/130 MS: 5 CopyPart-ShuffleBytes-InsertByte-EraseBytes-InsertRepeatedBytes-
+#1325	NEW    cov: 2359 ft: 4334 corp: 243/3641b lim: 130 exec/s: 25 rss: 695Mb L: 10/130 MS: 4 ChangeBit-ChangeBinInt-ChangeBinInt-PersAutoDict- DE: "\023\000\000\000\000\000\000\000"-
+#1347	NEW    cov: 2359 ft: 4335 corp: 244/3651b lim: 130 exec/s: 26 rss: 695Mb L: 10/130 MS: 2 CopyPart-ChangeBit-
+#1399	NEW    cov: 2359 ft: 4337 corp: 245/3752b lim: 130 exec/s: 26 rss: 695Mb L: 101/130 MS: 2 ChangeByte-InsertByte-
+#1410	REDUCE cov: 2359 ft: 4337 corp: 245/3751b lim: 130 exec/s: 27 rss: 695Mb L: 4/130 MS: 1 EraseBytes-
+#1525	NEW    cov: 2359 ft: 4338 corp: 246/3775b lim: 130 exec/s: 27 rss: 695Mb L: 24/130 MS: 5 ChangeByte-InsertRepeatedBytes-ChangeBinInt-PersAutoDict-PersAutoDict- DE: "\001\000"-"\001\000"-
+#1545	NEW    cov: 2359 ft: 4339 corp: 247/3795b lim: 130 exec/s: 27 rss: 695Mb L: 20/130 MS: 5 InsertByte-ShuffleBytes-CopyPart-CrossOver-CMP- DE: "\377\377\377\377\377\377\377\007"-
+#1553	NEW    cov: 2359 ft: 4341 corp: 248/3798b lim: 130 exec/s: 27 rss: 695Mb L: 3/130 MS: 3 ChangeASCIIInt-ChangeBit-ShuffleBytes-
+#1606	NEW    cov: 2359 ft: 4343 corp: 249/3905b lim: 130 exec/s: 27 rss: 695Mb L: 107/130 MS: 3 InsertRepeatedBytes-InsertByte-CopyPart-
+#1686	DONE   cov: 2359 ft: 4343 corp: 249/3905b lim: 130 exec/s: 27 rss: 695Mb
 ###### Recommended dictionary. ######
-"\263h\343\014" # Uses: 23
-"\253\002\000\000" # Uses: 13
-"\377\377\377\377\377\377\377\377" # Uses: 8
-"!\000\000\000\000\000\000\000" # Uses: 13
-"\001\000\000\000\000\000\000\020" # Uses: 0
+"\023\000\000\000\000\000\000\000" # Uses: 47
+"\377\377\377\377\377\377\377\377" # Uses: 22
+"\001\000" # Uses: 15
+"\377\377\377\377\377\377\377\007" # Uses: 1
 ###### End of recommended dictionary. ######
-Done 1755 runs in 61 second(s)
-stat::number_of_executed_units: 1755
-stat::average_exec_per_sec:     28
+Done 1686 runs in 61 second(s)
+stat::number_of_executed_units: 1686
+stat::average_exec_per_sec:     27
 stat::new_units_added:          38
 stat::slowest_unit_time_sec:    0
-stat::peak_rss_mb:              823
-pqz-fuzz summary (mutate): 1516 inputs checked, 1205 decoded (431 op 7), 0 valid (= unmodified honest; mutate skips those), 4 differential SV = generic (1 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+stat::peak_rss_mb:              695
+pqz-fuzz summary (mutate): 1411 inputs checked, 1155 decoded (206 op 7), 0 valid (= unmodified honest; mutate skips those), 2 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
 [fuzz rc=0]
-pqz-fuzz init (mutate): 43 honest inputs valid, self-test 23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0, PQZL core: Rust
+pqz-fuzz init (mutate): 51 honest inputs valid, self-test d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d, PQZL core: Rust
 INFO: Running with entropic power schedule (0xFF, 100).
-INFO: Seed: 2580256269
-INFO: Loaded 1 modules   (25094 inline 8-bit counters): 25094 [0x617301fca520, 0x617301fd0726), 
-INFO: Loaded 1 PC tables (25094 PCs): 25094 [0x617301fd0728,0x617302032788), 
-MERGE-OUTER: 520 files, 0 in the initial corpus, 0 processed earlier
+INFO: Seed: 781935510
+INFO: Loaded 1 modules   (25713 inline 8-bit counters): 25713 [0x5aa112dcccb8, 0x5aa112dd3129), 
+INFO: Loaded 1 PC tables (25713 PCs): 25713 [0x5aa112dd3130,0x5aa112e37840), 
+MERGE-OUTER: 521 files, 0 in the initial corpus, 0 processed earlier
 MERGE-OUTER: attempt 1
-pqz-fuzz init (mutate): 43 honest inputs valid, self-test 23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0, PQZL core: Rust
+pqz-fuzz init (mutate): 51 honest inputs valid, self-test d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d, PQZL core: Rust
 INFO: Running with entropic power schedule (0xFF, 100).
-INFO: Seed: 1705425482
-INFO: Loaded 1 modules   (25094 inline 8-bit counters): 25094 [0x57dc5342b520, 0x57dc53431726), 
-INFO: Loaded 1 PC tables (25094 PCs): 25094 [0x57dc53431728,0x57dc53493788), 
-MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge2803180.txt'
-MERGE-INNER: 520 total files; 0 processed earlier; will process 520 files now
-#1	pulse  cov: 3 ft: 3 exec/s: 0 rss: 493Mb
-#2	pulse  cov: 10 ft: 10 exec/s: 0 rss: 493Mb
-#4	pulse  cov: 12 ft: 12 exec/s: 0 rss: 494Mb
-#8	pulse  cov: 844 ft: 875 exec/s: 0 rss: 497Mb
-#16	pulse  cov: 933 ft: 1133 exec/s: 0 rss: 507Mb
-#32	pulse  cov: 992 ft: 1367 exec/s: 0 rss: 511Mb
-#64	pulse  cov: 1019 ft: 1485 exec/s: 0 rss: 539Mb
-#128	pulse  cov: 1823 ft: 2803 exec/s: 42 rss: 593Mb
-#256	pulse  cov: 1874 ft: 3031 exec/s: 36 rss: 658Mb
-#512	pulse  cov: 2300 ft: 4100 exec/s: 20 rss: 658Mb
-#520	DONE   cov: 2300 ft: 4122 exec/s: 20 rss: 658Mb
-pqz-fuzz summary (mutate): 512 inputs checked, 427 decoded (143 op 7), 0 valid (= unmodified honest; mutate skips those), 1 differential SV = generic (1 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+INFO: Seed: 1086570326
+INFO: Loaded 1 modules   (25713 inline 8-bit counters): 25713 [0x584f0b442cb8, 0x584f0b449129), 
+INFO: Loaded 1 PC tables (25713 PCs): 25713 [0x584f0b449130,0x584f0b4ad840), 
+MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge2646457.txt'
+MERGE-INNER: 521 total files; 0 processed earlier; will process 521 files now
+#1	pulse  cov: 3 ft: 3 exec/s: 0 rss: 513Mb
+#2	pulse  cov: 10 ft: 10 exec/s: 0 rss: 514Mb
+#4	pulse  cov: 12 ft: 12 exec/s: 0 rss: 514Mb
+#8	pulse  cov: 724 ft: 756 exec/s: 0 rss: 517Mb
+#16	pulse  cov: 923 ft: 1158 exec/s: 0 rss: 525Mb
+#32	pulse  cov: 999 ft: 1392 exec/s: 0 rss: 535Mb
+#64	pulse  cov: 1049 ft: 1543 exec/s: 0 rss: 564Mb
+#128	pulse  cov: 1869 ft: 2861 exec/s: 42 rss: 623Mb
+#256	pulse  cov: 1898 ft: 3049 exec/s: 28 rss: 668Mb
+#512	pulse  cov: 2338 ft: 4239 exec/s: 18 rss: 668Mb
+#521	DONE   cov: 2338 ft: 4244 exec/s: 19 rss: 668Mb
+pqz-fuzz summary (mutate): 513 inputs checked, 430 decoded (77 op 7), 0 valid (= unmodified honest; mutate skips those), 1 differential SV = generic (1 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
 MERGE-OUTER: successful in 1 attempt(s)
-MERGE-OUTER: the control file has 86625 bytes
-MERGE-OUTER: consumed 0Mb (494Mb rss) to parse the control file
-MERGE-OUTER: 240 new files with 4122 new features added; 2300 new coverage edges
+MERGE-OUTER: the control file has 87984 bytes
+MERGE-OUTER: consumed 0Mb (514Mb rss) to parse the control file
+MERGE-OUTER: 244 new files with 4244 new features added; 2338 new coverage edges
 pqz-fuzz summary (mutate): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
 [merge rc=0]
-corpus/mutate: 240 inputs (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/build/fuzz-n2304-kmax4096/corpus/mutate), 3793 B (merged set 240 inputs, 3793 B)
+corpus/mutate: 244 inputs (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/build/fuzz-n2304-kmax4096/corpus/mutate), 3717 B (merged set 244 inputs, 3717 B)

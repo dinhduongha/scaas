@@ -2,43 +2,43 @@
    Compiling typenum v1.20.1
    Compiling generic-array v0.14.7
    Compiling cpufeatures v0.2.17
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzl/rust)
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
    Compiling keccak v0.1.6
    Compiling crypto-common v0.1.7
    Compiling block-buffer v0.10.4
    Compiling inout v0.1.4
-   Compiling digest v0.10.7
    Compiling cipher v0.4.4
+   Compiling digest v0.10.7
    Compiling cfg-if v1.0.5
-   Compiling aes v0.8.4
    Compiling sha3 v0.10.8
-    Finished `release` profile [optimized + debuginfo] target(s) in 10.56s
+   Compiling aes v0.8.4
+    Finished `release` profile [optimized + debuginfo] target(s) in 12.22s
    Compiling version_check v0.9.5
    Compiling typenum v1.20.1
    Compiling generic-array v0.14.7
-   Compiling keccak v0.1.6
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
    Compiling cfg-if v1.0.5
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzl/rust)
+   Compiling keccak v0.1.6
    Compiling crypto-common v0.1.7
    Compiling inout v0.1.4
    Compiling block-buffer v0.10.4
-   Compiling digest v0.10.7
    Compiling cipher v0.4.4
-   Compiling sha3 v0.10.8
+   Compiling digest v0.10.7
    Compiling aes v0.8.4
-   Compiling pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzl/rust/wasm)
-    Finished `release` profile [optimized] target(s) in 8.55s
-R_REG 74c95ac5
-R_TX aad8c379
-R_BURN 13868bb2
-R_DS 3cf067a2
-R_DR 91ea3c23
-R_TX0 a713f934
-R_TXM1 225e74f3
-R_TXM2 4d0016f7
-R_TXM4 78729c4b
-R_TXM8 c61349dd
-R_TXM1_0 f608f93b
-R_TXM2_0 175409e1
-R_TXM4_0 0ef23e1c
-R_TXM8_0 5f522656
+   Compiling sha3 v0.10.8
+   Compiling pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 11.49s
+R_REG 60d64ae3
+R_TX 242af686
+R_BURN 2f3c4d9c
+R_DS cb5a80a3
+R_DR 61c33a97
+R_TX0 453f2835
+R_TXM1 90b26a33
+R_TXM2 35933def
+R_TXM4 79bad5ef
+R_TXM8 6a89067f
+R_TXM1_0 0df2ad05
+R_TXM2_0 0bc7768a
+R_TXM4_0 686de49f
+R_TXM8_0 384ee242

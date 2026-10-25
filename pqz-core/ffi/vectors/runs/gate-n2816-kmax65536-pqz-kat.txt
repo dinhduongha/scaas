@@ -6,7 +6,7 @@ ok   Keccak-f permutation = hashlib sha3_256, 137 B
 ok   Keccak-f permutation = hashlib sha3_256, 300 B
 ok   keccak256('')
 ok   keccak256 of the retired v3 label
-ok   PQZL proofSystemId scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4 = 9d23a0de... (set.json)
+ok   PQZL proofSystemId scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5 = a801f5c4... (set.json)
 ok   no PQZH id at this set (set.json)
 ok   ids not retired, distinct
 ok   opTag TRANSFER = ef22f3d1...
@@ -21,9 +21,9 @@ ok   opTag TRANSFER-MULTI = 6f6a773a...
 ok   KeyGen seed 00*32: ctr 0, norms
 ok   KeyGen seed 01*32: ctr 0, norms
 ok   KeyGen seed 02*32: ctr 0, norms
-ok   Dec(Enc(m)) = m, recipient 0, max |noise| 343 <= 15940
-ok   Dec(Enc(m)) = m, recipient 1, max |noise| 271 <= 15940
-ok   Dec(Enc(m)) = m, recipient 2, max |noise| 237 <= 15940
+ok   Dec(Enc(m)) = m, recipient 0, max |noise| 341 <= 15940
+ok   Dec(Enc(m)) = m, recipient 1, max |noise| 294 <= 15940
+ok   Dec(Enc(m)) = m, recipient 2, max |noise| 327 <= 15940
 ok   Add with Trivial(5)
 ok   Sub
 ok   statement TRANSFER
@@ -60,6 +60,10 @@ ok   reject: coefficient = 2^54: coefficient >= q
 ok   reject: TRANSFER statement under op 2: opTag does not belong to op
 ok   reject: unknown proofSystemId: unknown proofSystemId
 ok   reject: disclosure amount >= 2^64: amount >= 2^64
+ok   reject: SENDER_S kind window 1: kind
+ok   reject: AUDITOR kind window 4 (S_AUD): kind
+ok   reject: kind word >= 2^16: kind
+ok   AUDITOR kind window 3 accepted
 ok   op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 113,792
 ok   op 7 PQZL M = 1 auditor on: build(parse(x)) = x
 ok   op 7 PQZL M = 2 auditor on: build(parse(x)) = x
@@ -93,7 +97,7 @@ ok   reject: op 7: unknown proofSystemId: unknown proofSystemId
 ok   reject: op 7: op 7 statement under op 1: opTag does not belong to op
 ok   reject: op 7: op 1 statement under op 7: opTag does not belong to op
 ok   op 7 at 113,792 B: the M / auditorOn words pick (1, on) or (2, off)
-ok   KeyGen resamples with ||s|| <= 38, ||e|| <= 167: counters [2, 2, 0, 1]
+ok   KeyGen resamples with ||s|| <= 38, ||e|| <= 167: counters [2, 6, 2, 0]
 ok   Enc resamples with 38 / 167 / 12: counters [4, 4, 3, 40]
 ok   KeyGen: counter 64 error
 ok   Enc: counter 64 error
@@ -118,4 +122,4 @@ ok   statement_transfer.json
 ok   statement_transfer_multi.json
 ok   worstcase_noise.json
 pqz_kat: ok
-122592 KB
+124084 KB

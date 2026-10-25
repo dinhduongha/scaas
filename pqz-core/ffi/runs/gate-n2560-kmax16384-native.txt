@@ -1,7 +1,7 @@
 # verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one
 $ cargo build --release --offline --no-default-features --features pqzl-rust,set-n2560-kmax16384
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-    Finished `release` profile [optimized + debuginfo] target(s) in 1.12s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.49s
 [rc=0]
 test hooks in the production cdylib (must be 0): 0
 C core in this build: none (feature pqzl-c off, pqzl-rust on: build.rs compiles no C)
@@ -18,22 +18,22 @@ generic-array v0.14.7
 generic-array v0.14.7 (*)
 inout v0.1.4
 keccak v0.1.6
-pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
-pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
-pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
+pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
 sha3 v0.10.8
 sha3 v0.10.8 (*)
 typenum v1.20.1
 version_check v0.9.5
-$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so
-cf29908b0726dc9cc70ba8582ca7cbd02a988323da5e668fabc63cf31e2a58b1  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so
+$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so
+a9ffebe376bd46ccaf343e25fa4e0bfc0717c63e60459b3d54d58d819044d087  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so
 [rc=0]
-$ readelf -d /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so | grep NEEDED
+$ readelf -d /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so | grep NEEDED
  0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
  0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
  0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
-$ nm -D --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so
+$ nm -D --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so
                  U abort@GLIBC_2.2.5
                  U bcmp@GLIBC_2.2.5
                  U calloc@GLIBC_2.2.5
@@ -104,29 +104,29 @@ $ nm -D --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b
                  U write@GLIBC_2.2.5
                  U writev@GLIBC_2.2.5
                  U __xpg_strerror_r@GLIBC_2.3.4
-$ nm -D --defined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so | grep ' T '
-0000000000083310 T pqz_max_input
-0000000000083320 T pqz_precompile
+$ nm -D --defined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release/libpqz_ffi.so | grep ' T '
+0000000000084330 T pqz_max_input
+0000000000084340 T pqz_precompile
 # GMP / MPFR / HEXL names or strings (glic/absence.sh's pattern), libm and float imports
 symbols /gmp|mpfr|hexl/i: 0
 strings /gmp|mpfr|hexl/i: 0
 libm-style imports: 0
 # C smoke test against pqz_ffi.h
-$ clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT=524288 -o /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/run/c_abi tests/c_abi.c -L/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/release
+$ clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT=524288 -o /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/run/c_abi tests/c_abi.c -L/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release
 [rc=0]
-$ /home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2560-kmax16384/run/c_abi
-c_abi: selftest 167c772ef4d0911d60d6b3d2fad256902e1be2dd4a8f0aa9d01d3b3ed8bb45e7
+$ /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/run/c_abi
+c_abi: selftest fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb
 c_abi: ok (0 failures)
 [rc=0]
 # clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate
 $ cargo clippy --release --offline --no-default-features --features pqzl-rust,set-n2560-kmax16384 --features prove,test-hooks --lib -- -D clippy::float_arithmetic
     Checking typenum v1.20.1
     Checking subtle v2.6.1
+    Checking keccak v0.1.6
     Checking cfg-if v1.0.5
     Checking cpufeatures v0.2.17
-    Checking keccak v0.1.6
-    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
     Checking generic-array v0.14.7
     Checking crypto-common v0.1.7
     Checking block-buffer v0.10.4
@@ -138,7 +138,7 @@ $ cargo clippy --release --offline --no-default-features --features pqzl-rust,se
     Checking sha2 v0.10.9
     Checking aes v0.8.4
     Checking hkdf v0.12.4
-    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
-    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
-    Finished `release` profile [optimized + debuginfo] target(s) in 3.25s
+    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 4.72s
 [rc=0]
