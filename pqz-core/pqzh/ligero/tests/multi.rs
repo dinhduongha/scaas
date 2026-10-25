@@ -6,7 +6,7 @@
 use pqzh_ligero::client::{HDR_AMOUNT, HDR_AUDITOR_ON, HDR_FEE, HDR_LEGS, HDR_RECIPIENTS_HASH, KINDS, MultiTweak, R, mutate, rel_name, setup_multi};
 use pqzh_ligero::cs::{self, Layout};
 use pqzh_ligero::ligero::VERIFY_PANICS;
-use pqzh_ligero::pqz_stmt::{HEADER_BYTES, MAX_INPUT, MAX_PROOF_PQZH, PK_BYTES, PQZL_ID, V_BYTES, groups};
+use pqzh_ligero::pqz_stmt::{HEADER_BYTES, MAX_INPUT, MAX_PROOF_PQZH, PK_BYTES, PQZL_ID, V_BYTES, groups, legs_per_group};
 use pqzh_ligero::ring::{DELTA, N, Poly, Q, digits, dot_int, modq, polys_of};
 use pqzh_ligero::set::{BETA_E, BETA_S};
 use pqzh_ligero::{Form, OP_TRANSFER, OP_TRANSFER_MULTI as OP7, Params, Rel, multi_rels, prove, prove_unchecked, verify};
@@ -227,8 +227,10 @@ fn negative_witnesses() {
             }
         }
         if g > 1 {
-            add("leg 4 encrypted with group 0's randomness".into(), MultiTweak { group: Some((4, 0)), ..d() });
-            add("leg 3 encrypted with group 1's randomness".into(), MultiTweak { group: Some((3, 1)), ..d() });
+            // the first leg of group 1 and the last of group 0 (s legs per group: S_AUD with the auditor, 4 without)
+            let s = legs_per_group(aud);
+            add(format!("leg {s} encrypted with group 0's randomness"), MultiTweak { group: Some((s, 0)), ..d() });
+            add(format!("leg {} encrypted with group 1's randomness", s - 1), MultiTweak { group: Some((s - 1, 1)), ..d() });
         }
         for (what, tw) in &cases {
             let (st, w) = setup_multi(m, aud, tw);

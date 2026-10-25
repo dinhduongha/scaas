@@ -1,8 +1,9 @@
 /*
  * P6-Z21 differential (lazer#26, docs/research/pqz-z21-norm.md): z21-inflated proofs of all six relations, verified
  * by both verifiers in-process. Mutated proofs never reach the z2 norm check (they fail the final hash first), so the
- * proofs come from the cheating prover of sv/review/normpoc_hooks.h, mode 4: the first polynomial of y21 times k,
- * the z2 rejection and the prover's own ||y2|| check skipped. For k = round(1.25^j), j = 0 .. JMAX, ||(z21, z22)||^2
+ * proofs come from the cheating prover of sv/review/normpoc_hooks.h, mode 4: ||z21||^2 grown as with the first
+ * polynomial of y21 times k, in one coefficient (R0 fix gate), the z2 rejection and the prover's own ||y2|| check
+ * skipped. For k = round(1.25^j), j = 0 .. JMAX, ||(z21, z22)||^2
  * sweeps from honest to far above Bsq, through the bound; a relation not yet rejected at JMAX goes on (j <= JCAP) until
  * its first reject, so every relation crosses its own bound (8b review I1: at n2048-kmax1024 R_TXM8 and at n2560-kmax16384 most
  * relations stayed below Bsq at k = 1010). Per case: pqz_verify and pqz_verify_fast must agree, and
