@@ -23,9 +23,20 @@ SDD ledger (git-ignored): `.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20
   - Largest PQZL proofs are 85,167 / 80,330 / 72,761 / 79,208 B (n2048 / n2304 / n2560 / n2816).
   - Full gates ran at all four sets. Five parts failed; all five were fixed and re-run individually.
   - **Review: Approved with fixes** (I1: the cargo step stopped at the first failing binary; m1–m12).
-- **Fix round, paused at shutdown.** Done: I1 (`--no-fail-fast` and the logs), m1, m2, m3, m4, m6 / m7, m10 / m11 /
-  m12. Not done: see the report section "Part a — Fix round (paused 2026-10-26)" (m5, m8 `PQZL=c` ffi + C verify
-  arena, m9 `run.sh`, the vector regeneration for the moved group-boundary row at each set).
+- **Fix round, paused at shutdown** (`pqz-r01` head **`406c7512`**, tree clean, no jobs running).
+  - Done: I1 (`--no-fail-fast`; the cargo/ligero re-runs at n2048 / n2304 and the forge Ligero 27/27 logs), m1, m2,
+    m3, m4, m6 / m7, m10 / m11 / m12. The vectors at n2048 and n2304 are regenerated and checked.
+  - Left:
+    - regenerate the vectors at n2560 and n2816; until then `pqz-vectors --check` fails there, because the
+      description text changed;
+    - the n2816 ffi step (m7);
+    - m8: the `PQZL=c` ffi runs at all four sets, and the wasm32 leg limits labelled as estimates;
+    - m9: verify `run.sh` at n2560;
+    - m3: confirm the test fails with the filter removed;
+    - m5: the report wording (no multi-group PQZH shape at n2560 under `MAX_PROOF_PQZH`);
+    - the vectors README numbers and the report section.
+  - Resume commands: `task-r01-report.md`, section "Part a — Fix round (paused 2026-10-26)". Resume the implementer
+    with a fresh agent and that section.
 
 **Next, in order:**
 1. **Finish the fix round** (resume commands in the report): the remaining findings and the vectors per set. Run only
