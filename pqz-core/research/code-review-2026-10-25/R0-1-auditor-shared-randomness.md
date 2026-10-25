@@ -140,3 +140,12 @@ byte (n2048 10,752 B ≈ 16.45 M, n2304 13,248 B ≈ 20.27 M, n2560 16,000 B ≈
 (10.7, Python 3.12.5), leaky-LWE-Estimator `0a9caf8bf0f80097724e0c6147194c52c6b90f86`, lattice-estimator
 `53da5982597709ba0fdf94ea37a84d822310fd84` (both checked by `run_hints.sh`); Kyber-512 calibration in every run: DDGR20
 405.53, estimator 406.
+
+**Controller analysis (2026-10-25).** At n2304-kmax4096 with s = 3, an audited R_TXM M = 8 (state ≈ 45.6 M with P46,
+spike PACK estimate) gains one `u` (+20.27 M) to ≈ 66 M of state gas: over a 60 M block, within the SCaaS testnet's
+200 M; M = 4 audited stays ≈ 50 M [estimates; 2b measures]. n2560 / n2816 pay nothing. Proposals put to the owner:
+(1) `s` applies only with the auditor on (auditor off keeps s = 4: 16·s = 64 hints hold at n2304 / n2560 / n2816), so
+non-audited R_TXM keeps its sizes and gas; G = ⌈M / s_aud⌉ or ⌈M / 4⌉ by the auditor flag. (2) n2048-kmax1024 (the
+frozen set): no R_TXM there (R_TX only), since no group size ≥ 2 meets both bounds with the auditor and today's R_TXM is
+already below 450 on dual_hybrid with or without it; alternatives s = 1 (≈ +99 M state gas at M = 8) or a widened
+exception. Pending the owner's answers.
