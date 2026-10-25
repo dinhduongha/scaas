@@ -1,7 +1,7 @@
 # UA-7: PQ chat sessions — an application contract that holds ML-KEM keys and per-session AES keys on chain
 
 **Status:** short design for the owner's review (controller, 2026-10-25; revised the same day after the owner's
-answer). Nothing is built. Queued **after plan 5h** (owner 2026-10-25: "viết spec ngắn, xếp sau 5h"). The choices
+answer). Nothing is built. Queued **after plan 5h and UA-8** (owner 2026-10-25: "viết spec ngắn, xếp sau 5h"). The choices
 below (C1–C9) are controller proposals inside the owner's request, with the owner's answers in §4.
 
 **Request (owner 2026-10-25).** A smart contract for chat sessions, as an application: a UA creates a session; the
@@ -22,27 +22,16 @@ public KEM keys and KEM-wrapped session keys.
 
 ## 2. Design
 
-**C1 — One application contract, `PqChat`.** Standalone (not part of `UARegistry`, no change to it): it reads
-`UARegistry` only for `requireAuthorized(ua, …)`. **Every write is an `mtx*` entry point** (owner 2026-10-25: key
-registration, session creation, rekey — all of them): the UA signs the envelope, a relayer submits the transaction and
+**C1 — One application contract, `PqChat`.** Standalone: it reads `UARegistry` for `requireAuthorized(ua, …)` and
+the members' KEM keys (C2). **Every write is an `mtx*` entry point** (owner 2026-10-25: session creation, rekey,
+stored messages — all of them; the KEM key itself is registered in `UARegistry`, UA-8 P7): the UA signs the envelope, a relayer submits the transaction and
 pays its gas, and the UA pays the relayer a fee (which may be 0) the same way as the other `mtx*` writes (CTR-MTX-20,
 the `MetaTokenBase` pattern). Upgrades by a new release, as for the other application contracts.
 
-**C2 — The KEM key: one per UA first, the same on every chain.** The UA signs a **chain-independent** record
-`kemRecord = (ua, version, pk)` (the digest has no chain id and no registry / contract address, UA-8 P4); `setKemKey(ua, version, pk, sig)` stores it on any chain where `PqChat` is deployed, submitted by **anyone**
-(the submitter pays the gas; through mtx when a relayer charges the UA a fee): the contract checks the signature
-against the UA's key in that chain's `UARegistry` and requires `version` > the stored one. So a key set on Ethereum
-can be copied to any other chain by anyone, and a newer key likewise (owner 2026-10-25: "UA accounts do
-not depend on the chain; the KEM keys too"). `keyId` = `version`. **One
-scheme only: ML-KEM-1024 + X25519** (owner 2026-10-25: the default and the only one): the X-Wing combiner with
-ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF construction of the CFRG hybrid-KEM draft; pk
-1,600 B, ciphertext 1,600 B, shared secret 32 B; secure while either part holds. The contract accepts only 1,600-byte
-keys. **No revocation** (owner 2026-10-25: what is on chain cannot be withdrawn): a replaced key gets no new on-chain
-session keys on that chain (C3 checks the current version), but it stays public and anyone can still encrypt to it
-off chain or where the newer record has not been copied (UA-8 P5). The balance (PQZ) key never changes. **Several keys per UA (one per device) later** (owner
-2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `mtxAddKemKey` later
-changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
-kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
+**C2 — The KEM key comes from `UARegistry` (UA-8 P7).** Each member's chat key is its KEM key registered in the
+registry (owner 2026-10-25: KEM key registration is part of UA-8): one scheme, ML-KEM-1024 + X25519, one key per UA
+first, a signed version that is the same on every chain, no revocation. `PqChat` reads `kemKeyOf(ua)` → `(version,
+pk)`; `keyId` below = that version.
 
 **C3 — Sessions.** `mtxCreateSession(creator, members[], wraps[]) → sessionId`; **anyone** may create a session with
 any UA (owner 2026-10-25; the creator, or its relayer, pays the gas; clients hide sessions from unknown UAs). The
@@ -137,7 +126,7 @@ Rust `ml-kem` + `x25519-dalek`, JS `@noble/post-quantum` + `@noble/curves`; the 
 
 ## 3. Work (for the plan after 5h)
 
-1. `PqChat.sol` (C1–C5, C6b): KEM key, sessions, epochs, SSTORE2 wraps, stored messages, events, views; forge tests,
+1. `PqChat.sol` (C1–C5, C6b): sessions, epochs, SSTORE2 wraps, stored messages, events, views; forge tests,
    gas per wrap and per stored message.
 2. Byte layouts (C3, C6, C7) in `docs/contracts/`; vectors.
 3. One reference client (`clients/ua-rs`: create / join / rekey / encrypt / decrypt) against the vectors, then the
@@ -149,6 +138,7 @@ Rust `ml-kem` + `x25519-dalek`, JS `@noble/post-quantum` + `@noble/curves`; the 
    ML-KEM-768 alone dropped).
 2. Who may create a session with a UA: **anyone** (the creator pays the gas; clients hide sessions from unknown UAs).
 3. KEM keys per UA: **one first**; several (one per device) later (C2).
-4. Every write through **mtx** (a relayer pays the transaction fee): key registration, session creation, rekey (C1).
+4. Every write through **mtx** (a relayer pays the transaction fee): session creation, rekey, stored messages (C1);
+   the KEM key is registered in `UARegistry` by UA-8 (owner 2026-10-25), also submittable by anyone.
 5. Qt client: `clients/ua-qt` on **libQuotient** (C7).
 6. Encrypted messages may also be stored on chain (C6b), not only sent off chain.

@@ -1,7 +1,7 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
-**Status:** short design for the owner's review (controller, 2026-10-25). Nothing is built. Queued **after plan 5h**,
-before UA-7 (whose KEM keys use §2). The choices below (P1–P6) are controller proposals; the owner may override them.
+**Status:** short design for the owner's review (controller, 2026-10-25). Nothing is built. Queued **after plan 5h,
+before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P7) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
 that information and register it on another chain: a UA account does not depend on the chain (its transactions do).
@@ -54,12 +54,31 @@ secret key may have leaked, the UA must assume that anything sent to that key ca
 **P6 — Unchanged.** UA ids, key data, `keyHash` and `_keyOwner` uniqueness (per chain), the per-chain generations and
 kind caps, write authorization (chain-bound), ML-DSA expanded-key caches (per chain, rebuilt on registration).
 
+**P7 — The KEM (chat) key in `UARegistry` (owner 2026-10-25: registered in UA-8).** The UA signs a **chain-independent** record
+`kemRecord = (ua, version, pk)` (the digest has no chain id and no registry address, P4); `UARegistry.setKemKey(ua, version, pk, sig)` stores it on any chain, submitted by **anyone**
+(the submitter pays the gas; through mtx when a relayer charges the UA a fee): the contract checks the signature
+against the UA's registered key and requires `version` > the stored one. So a key set on Ethereum
+can be copied to any other chain by anyone, and a newer key likewise (owner 2026-10-25: "UA accounts do
+not depend on the chain; the KEM keys too"). `keyId` = `version`. **One
+scheme only: ML-KEM-1024 + X25519** (owner 2026-10-25: the default and the only one): the X-Wing combiner with
+ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF construction of the CFRG hybrid-KEM draft; pk
+1,600 B, ciphertext 1,600 B, shared secret 32 B; secure while either part holds. The contract accepts only 1,600-byte
+keys. **No revocation** (owner 2026-10-25: what is on chain cannot be withdrawn): a replaced key gets no new on-chain
+session keys on that chain (UA-7 C3 checks the current version), but it stays public and anyone can still encrypt to
+it off chain or where the newer record has not been copied (P5). The balance (PQZ) key never changes. **Several keys per UA (one per device) later** (owner
+2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `addKemKey` later
+changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
+kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
+
+Views: `kemKeyOf(ua) → (version, pk)`, `kemKeyAt(ua, version)`. Event `UAKemKeySet(ua, version, keyHash)`.
+
 ## 3. Work (for the plan after 5h)
 
 1. `UAKinds` (`PURPOSE_POP_V2`, `portablePopDigest`), `UARegistry.register` on the portable digest, `pop` / `pqzPop`
    in `UARegistered`; forge tests (copy a registration between two registries with different chain ids /
    addresses; disabled kind reverts; msig).
-2. The record form of P4 as a shared library (`UAKinds.recordDigest`), used by UA-7's `PqChat`.
-3. Clients (`ua-rs`, `ua-cs`, `ua-qt`, JS) and vectors (`smartcontracts/vectors/ua/`: portable PoP rows, a record
-   row); accounts.md, decisions entry; `pqz_reg_message` in the clients and the PQZ e2e scripts on the new digest (the
+2. P7: `setKemKey` / `kemKeyOf` / `kemKeyAt`, the record digest (`UAKinds.recordDigest`), the 1,600-byte key check,
+   the version rule, the event; forge tests (copy a key record between two registries; older version refused).
+3. Clients (`ua-rs`, `ua-cs`, `ua-qt`, JS) and vectors (`smartcontracts/vectors/ua/`: portable PoP rows, KEM
+   key record rows); accounts.md, decisions entry; `pqz_reg_message` in the clients and the PQZ e2e scripts on the new digest (the
    `R_REG` relation, statement and precompile do not change — only the 32-byte message's pre-image).
