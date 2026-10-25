@@ -1,9 +1,9 @@
 LaZer 3330e487228f633eceb322807b13a596b516770f; image sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528; set n2560-kmax16384
-== reg: 6989 B, sha256 afd2ddfcf4f709a2
+== reg: 6993 B, sha256 cd667c8cefd9cc83
    // protocol is statistically complete with correctness error >= 1 - 2^(-3)
    // protocol is simulatable under MLWE(39,31,[-1,1])
    // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(19,150,2^(35.626241))
-   // ~ 32.9433593750000 KiB
+   // ~ 33.0371093750000 KiB
 == tx: 7673 B, sha256 0c2fbea3040a6899
    // protocol is statistically complete with correctness error >= 1 - 2^(-4)
    // protocol is simulatable under MLWE(39,32,[-1,1])
@@ -24,11 +24,11 @@ LaZer 3330e487228f633eceb322807b13a596b516770f; image sagemath/sagemath@sha256:4
    // protocol is simulatable under MLWE(39,31,[-1,1])
    // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(19,151,2^(35.639711))
    // ~ 33.4746093750000 KiB
-== dr: 6863 B, sha256 c7adc1adcb0964fa
+== dr: 6867 B, sha256 27161f5a42c0cc4a
    // protocol is statistically complete with correctness error >= 1 - 2^(-3)
    // protocol is simulatable under MLWE(39,31,[-1,1])
    // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(19,158,2^(35.678675))
-   // ~ 34.3183593750000 KiB
+   // ~ 34.4121093750000 KiB
 == txm2: 8326 B, sha256 f6cc1d83fa3e779c
    // protocol is statistically complete with correctness error >= 1 - 2^(-4)
    // protocol is simulatable under MLWE(39,32,[-1,1])

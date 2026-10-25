@@ -5,7 +5,7 @@
 //!
 //! protocol is statistically complete with correctness error >= 1 - 2^(-3)
 //! protocol is simulatable under MLWE(36,35,[-1,1])
-//! protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,243,2^(37.369167))
+//! protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,315,2^(37.345001))
 //!
 //! Ring
 //! degree d = 64
@@ -13,22 +13,22 @@
 //! factors q = q1
 //!
 //! Compression
-//! D = 13
-//! gamma = 3897964, log(gamma) ~ 21.894289
+//! D = 12
+//! gamma = 1948982, log(gamma) ~ 20.894289
 //!
 //! Dimensions of secrets
-//! s1: m1 = 172
+//! s1: m1 = 244
 //! m: l = 0
 //! s2: m2 = 71
 //!
 //! Size of secrets
-//! l2(s1) <= alpha = 317.5311
+//! l2(s1) <= alpha = 363.5918
 //! m unbounded
 //! s2 uniform in [-nu,nu] = [-1,1]
 //!
 //! Norm proofs
 //! binary: yes (dimension: 19)
-//! exact euclidean: yes (dimensions: [36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1], bounds: [38.0, 173.0, 38.0, 173.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0])
+//! exact euclidean: yes (dimensions: [36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1], bounds: [38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0])
 //! approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 64.0)
 //!
 //! Challenge space
@@ -41,20 +41,20 @@
 //! stdev4 = 6348.8, log(stdev4/1.55) = 12.0
 //!
 //! Repetition rate
-//! M1 = 2.0876852
+//! M1 = 2.3225435
 //! M2 = 3.018601
-//! M3 = 1.0269165
+//! M3 = 1.0354033
 //! M4 = 1.0172703
-//! total = 6.5832785
+//! total = 7.3844045
 //!
 //! Security
 //! MSIS dimension: 23
-//! MSIS root hermite factor: 1.0035958
+//! MSIS root hermite factor: 1.0035911
 //! MLWE dimension: 36
 //! MLWE root hermite factor: 1.0035462
 //!
 //! Proof size
-//! ~ 51.7089843750000 KiB
+//! ~ 65.1855468750000 KiB
 //!
 //! 50 bit moduli for degree 64: [1125899906840833, 1125899906839937, 1125899906837633]
 //! bit length of products: [49, 99, 149]
@@ -64,16 +64,16 @@ use super::{Abdlop, Dcomp, Int, QuadEval, Ring, Tbox};
 
 pub(crate) const pqz_txm4_q: Int = Int::from_limbs(&[61275424977257], 0);
 pub(crate) const pqz_txm4_qminus1: Int = Int::from_limbs(&[61275424977256], 0);
-pub(crate) const pqz_txm4_m: Int = Int::from_limbs(&[15719854], 0);
-pub(crate) const pqz_txm4_mby2: Int = Int::from_limbs(&[7859927], 0);
-pub(crate) const pqz_txm4_gamma: Int = Int::from_limbs(&[3897964], 0);
-pub(crate) const pqz_txm4_gammaby2: Int = Int::from_limbs(&[1948982], 0);
-pub(crate) const pqz_txm4_pow2d: Int = Int::from_limbs(&[8192], 0);
-pub(crate) const pqz_txm4_pow2dby2: Int = Int::from_limbs(&[4096], 0);
-pub(crate) const pqz_txm4_bsq: Int = Int::from_limbs(&[9483278271268166, 0], 0);
-pub(crate) const pqz_txm4_scm1: Int = Int::from_limbs(&[5377350453789254418, 1617506565646804533, 2], 0);
+pub(crate) const pqz_txm4_m: Int = Int::from_limbs(&[31439708], 0);
+pub(crate) const pqz_txm4_mby2: Int = Int::from_limbs(&[15719854], 0);
+pub(crate) const pqz_txm4_gamma: Int = Int::from_limbs(&[1948982], 0);
+pub(crate) const pqz_txm4_gammaby2: Int = Int::from_limbs(&[974491], 0);
+pub(crate) const pqz_txm4_pow2d: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm4_pow2dby2: Int = Int::from_limbs(&[2048], 0);
+pub(crate) const pqz_txm4_bsq: Int = Int::from_limbs(&[2400380801271154, 0], 0);
+pub(crate) const pqz_txm4_scm1: Int = Int::from_limbs(&[14663971911004987521, 5949876560615403982, 2], 0);
 pub(crate) const pqz_txm4_scm2: Int = Int::from_limbs(&[3475190623207378560, 343128444396980339, 3], 0);
-pub(crate) const pqz_txm4_scm3: Int = Int::from_limbs(&[645224350374877093, 496521712828432532, 1], 0);
+pub(crate) const pqz_txm4_scm3: Int = Int::from_limbs(&[13038733215937243369, 653075745209908343, 1], 0);
 pub(crate) const pqz_txm4_scm4: Int = Int::from_limbs(&[1655797669362676316, 318580927907168899, 1], 0);
 pub(crate) const pqz_txm4_stdev1sq: Int = Int::from_limbs(&[660394171433, 0], 0);
 pub(crate) const pqz_txm4_stdev2sq: Int = Int::from_limbs(&[40307261, 0], 0);
@@ -81,7 +81,7 @@ pub(crate) const pqz_txm4_stdev3sq: Int = Int::from_limbs(&[644916183, 0], 0);
 pub(crate) const pqz_txm4_stdev4sq: Int = Int::from_limbs(&[40307261, 0], 0);
 pub(crate) const pqz_txm4_inv2: Int = Int::from_limbs(&[30637712488628], 1);
 pub(crate) const pqz_txm4_inv4: Int = Int::from_limbs(&[15318856244314], 1);
-pub(crate) const pqz_txm4_n: [u32; 13] = [36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+pub(crate) const pqz_txm4_n: [u32; 15] = [36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 pub(crate) const pqz_txm4_bz3sqr: Int = Int::from_limbs(&[444049040871, 0], 0);
 pub(crate) const pqz_txm4_bz4: Int = Int::from_limbs(&[101580], 0);
 pub(crate) const pqz_txm4_pmodq: Int = Int::from_limbs(&[8822651798586], 1);
@@ -89,8 +89,8 @@ pub(crate) const pqz_txm4_l2bsq0: Int = Int::from_limbs(&[1444], 0);
 pub(crate) const pqz_txm4_l2bsq1: Int = Int::from_limbs(&[29929], 0);
 pub(crate) const pqz_txm4_l2bsq2: Int = Int::from_limbs(&[1444], 0);
 pub(crate) const pqz_txm4_l2bsq3: Int = Int::from_limbs(&[29929], 0);
-pub(crate) const pqz_txm4_l2bsq4: Int = Int::from_limbs(&[4096], 0);
-pub(crate) const pqz_txm4_l2bsq5: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm4_l2bsq4: Int = Int::from_limbs(&[1444], 0);
+pub(crate) const pqz_txm4_l2bsq5: Int = Int::from_limbs(&[29929], 0);
 pub(crate) const pqz_txm4_l2bsq6: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm4_l2bsq7: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm4_l2bsq8: Int = Int::from_limbs(&[4096], 0);
@@ -98,10 +98,12 @@ pub(crate) const pqz_txm4_l2bsq9: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm4_l2bsq10: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm4_l2bsq11: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm4_l2bsq12: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm4_l2bsq13: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm4_l2bsq14: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm4_ppmodq_0: Int = Int::from_limbs(&[13311472331116], 0);
 pub(crate) const pqz_txm4_ppmodq_1: Int = Int::from_limbs(&[18968826708964], 1);
 pub(crate) const pqz_txm4_ppmodq_2: Int = Int::from_limbs(&[20575547372430], 0);
-pub(crate) const pqz_txm4_l2bsq: [Int; 13] = [pqz_txm4_l2bsq0, pqz_txm4_l2bsq1, pqz_txm4_l2bsq2, pqz_txm4_l2bsq3, pqz_txm4_l2bsq4, pqz_txm4_l2bsq5, pqz_txm4_l2bsq6, pqz_txm4_l2bsq7, pqz_txm4_l2bsq8, pqz_txm4_l2bsq9, pqz_txm4_l2bsq10, pqz_txm4_l2bsq11, pqz_txm4_l2bsq12];
+pub(crate) const pqz_txm4_l2bsq: [Int; 15] = [pqz_txm4_l2bsq0, pqz_txm4_l2bsq1, pqz_txm4_l2bsq2, pqz_txm4_l2bsq3, pqz_txm4_l2bsq4, pqz_txm4_l2bsq5, pqz_txm4_l2bsq6, pqz_txm4_l2bsq7, pqz_txm4_l2bsq8, pqz_txm4_l2bsq9, pqz_txm4_l2bsq10, pqz_txm4_l2bsq11, pqz_txm4_l2bsq12, pqz_txm4_l2bsq13, pqz_txm4_l2bsq14];
 pub(crate) const pqz_txm4_ppmodq: [Int; 3] = [pqz_txm4_ppmodq_0, pqz_txm4_ppmodq_1, pqz_txm4_ppmodq_2];
 pub(crate) static pqz_txm4_ring: Ring = Ring {
     q: pqz_txm4_q,
@@ -122,14 +124,14 @@ pub(crate) static pqz_txm4_dcomp: Dcomp = Dcomp {
     gammaby2: pqz_txm4_gammaby2,
     pow2d: pqz_txm4_pow2d,
     pow2dby2: pqz_txm4_pow2dby2,
-    d: 13,
+    d: 12,
     m_odd: false,
-    log2m: 24,
+    log2m: 25,
 };
 pub(crate) static pqz_txm4_tbox: Abdlop = Abdlop {
     ring: &pqz_txm4_ring,
     dcompress: &pqz_txm4_dcomp,
-    m1: 185,
+    m1: 259,
     m2: 71,
     l: 0,
     lext: 12,
@@ -151,7 +153,7 @@ pub(crate) static pqz_txm4_tbox: Abdlop = Abdlop {
 pub(crate) static pqz_txm4_quad_eval_: Abdlop = Abdlop {
     ring: &pqz_txm4_ring,
     dcompress: &pqz_txm4_dcomp,
-    m1: 185,
+    m1: 259,
     m2: 71,
     l: 9,
     lext: 3,
@@ -173,7 +175,7 @@ pub(crate) static pqz_txm4_quad_eval_: Abdlop = Abdlop {
 pub(crate) static pqz_txm4_quad_many_: Abdlop = Abdlop {
     ring: &pqz_txm4_ring,
     dcompress: &pqz_txm4_dcomp,
-    m1: 185,
+    m1: 259,
     m2: 71,
     l: 11,
     lext: 1,
@@ -203,8 +205,8 @@ pub(crate) static pqz_txm4: Tbox = Tbox {
     nbin: 19,
     n: &pqz_txm4_n,
     nprime: 1,
-    z: 13,
-    nex: 185,
+    z: 15,
+    nex: 259,
     rej3: 2,
     log2stdev3: 14,
     scm3: pqz_txm4_scm3,
@@ -217,5 +219,5 @@ pub(crate) static pqz_txm4: Tbox = Tbox {
     bz4: pqz_txm4_bz4,
     l2bsqr: &pqz_txm4_l2bsq,
     inv4: pqz_txm4_inv4,
-    prooflen: 52950,
+    prooflen: 66750,
 };

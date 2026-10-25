@@ -29,7 +29,7 @@
 //! Norm proofs
 //! binary: yes (dimension: 8)
 //! exact euclidean: yes (dimensions: [44, 44], bounds: [42.0, 189.0])
-//! approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 1.0)
+//! approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 8.0)
 //!
 //! Challenge space
 //! c uniform in [-omega,omega] = [-8,8], o(c)=c, sqrt(l1(o(c)*c)) <= eta = 140
@@ -38,7 +38,7 @@
 //! stdev1 = 406323.2, log(stdev1/1.55) = 18.0
 //! stdev2 = 6348.8, log(stdev2/1.55) = 12.0
 //! stdev3 = 12697.6, log(stdev3/1.55) = 13.0
-//! stdev4 = 99.2, log(stdev4/1.55) = 6.0
+//! stdev4 = 793.6, log(stdev4/1.55) = 9.0
 //!
 //! Repetition rate
 //! M1 = 2.4643657
@@ -54,7 +54,7 @@
 //! MLWE root hermite factor: 1.0035676
 //!
 //! Proof size
-//! ~ 37.3085937500000 KiB
+//! ~ 37.4023437500000 KiB
 //!
 //! 50 bit moduli for degree 64: [1125899906840833, 1125899906839937, 1125899906837633]
 //! bit length of products: [49, 99, 149]
@@ -78,12 +78,12 @@ pub(crate) const pqz_dr_scm4: Int = Int::from_limbs(&[1655797669362676316, 31858
 pub(crate) const pqz_dr_stdev1sq: Int = Int::from_limbs(&[165098542858, 0], 0);
 pub(crate) const pqz_dr_stdev2sq: Int = Int::from_limbs(&[40307261, 0], 0);
 pub(crate) const pqz_dr_stdev3sq: Int = Int::from_limbs(&[161229046, 0], 0);
-pub(crate) const pqz_dr_stdev4sq: Int = Int::from_limbs(&[9841, 0], 0);
+pub(crate) const pqz_dr_stdev4sq: Int = Int::from_limbs(&[629801, 0], 0);
 pub(crate) const pqz_dr_inv2: Int = Int::from_limbs(&[9007199254740828], 1);
 pub(crate) const pqz_dr_inv4: Int = Int::from_limbs(&[4503599627370414], 1);
 pub(crate) const pqz_dr_n: [u32; 2] = [44, 44];
 pub(crate) const pqz_dr_bz3sqr: Int = Int::from_limbs(&[111012260217, 0], 0);
-pub(crate) const pqz_dr_bz4: Int = Int::from_limbs(&[1587], 0);
+pub(crate) const pqz_dr_bz4: Int = Int::from_limbs(&[12697], 0);
 pub(crate) const pqz_dr_pmodq: Int = Int::from_limbs(&[2256174392602206], 0);
 pub(crate) const pqz_dr_l2bsq0: Int = Int::from_limbs(&[1764], 0);
 pub(crate) const pqz_dr_l2bsq1: Int = Int::from_limbs(&[35721], 0);
@@ -199,12 +199,12 @@ pub(crate) static pqz_dr: Tbox = Tbox {
     scm3: pqz_dr_scm3,
     stdev3sqr: pqz_dr_stdev3sq,
     rej4: 2,
-    log2stdev4: 6,
+    log2stdev4: 9,
     scm4: pqz_dr_scm4,
     stdev4sqr: pqz_dr_stdev4sq,
     bz3sqr: pqz_dr_bz3sqr,
     bz4: pqz_dr_bz4,
     l2bsqr: &pqz_dr_l2bsq,
     inv4: pqz_dr_inv4,
-    prooflen: 38204,
+    prooflen: 38300,
 };

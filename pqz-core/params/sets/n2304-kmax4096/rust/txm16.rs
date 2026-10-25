@@ -5,7 +5,7 @@
 //!
 //! protocol is statistically complete with correctness error >= 1 - 2^(-4)
 //! protocol is simulatable under MLWE(36,36,[-1,1])
-//! protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(24,496,2^(38.193888))
+//! protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(24,640,2^(38.019445))
 //!
 //! Ring
 //! degree d = 64
@@ -13,22 +13,22 @@
 //! factors q = q1
 //!
 //! Compression
-//! D = 14
-//! gamma = 7795928, log(gamma) ~ 22.894289
+//! D = 13
+//! gamma = 3897964, log(gamma) ~ 21.894289
 //!
 //! Dimensions of secrets
-//! s1: m1 = 424
+//! s1: m1 = 568
 //! m: l = 0
 //! s2: m2 = 72
 //!
 //! Size of secrets
-//! l2(s1) <= alpha = 542.23334
+//! l2(s1) <= alpha = 597.29641
 //! m unbounded
 //! s2 uniform in [-nu,nu] = [-1,1]
 //!
 //! Norm proofs
 //! binary: yes (dimension: 31)
-//! exact euclidean: yes (dimensions: [36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], bounds: [38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0])
+//! exact euclidean: yes (dimensions: [36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], bounds: [38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0])
 //! approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 64.0)
 //!
 //! Challenge space
@@ -41,20 +41,20 @@
 //! stdev4 = 6348.8, log(stdev4/1.55) = 12.0
 //!
 //! Repetition rate
-//! M1 = 3.5234688
+//! M1 = 4.0035946
 //! M2 = 3.0659392
-//! M3 = 1.0195736
+//! M3 = 1.023778
 //! M4 = 1.0172703
-//! total = 11.204409
+//! total = 12.783678
 //!
 //! Security
 //! MSIS dimension: 24
-//! MSIS root hermite factor: 1.0035998
+//! MSIS root hermite factor: 1.0035669
 //! MLWE dimension: 36
 //! MLWE root hermite factor: 1.0035462
 //!
 //! Proof size
-//! ~ 102.500000000000 KiB
+//! ~ 129.281250000000 KiB
 //!
 //! 50 bit moduli for degree 64: [1125899906840833, 1125899906839937, 1125899906837633]
 //! bit length of products: [49, 99, 149]
@@ -64,16 +64,16 @@ use super::{Abdlop, Dcomp, Int, QuadEval, Ring, Tbox};
 
 pub(crate) const pqz_txm16_q: Int = Int::from_limbs(&[61275424977257], 0);
 pub(crate) const pqz_txm16_qminus1: Int = Int::from_limbs(&[61275424977256], 0);
-pub(crate) const pqz_txm16_m: Int = Int::from_limbs(&[7859927], 0);
-pub(crate) const pqz_txm16_mby2: Int = Int::from_limbs(&[3929963], 0);
-pub(crate) const pqz_txm16_gamma: Int = Int::from_limbs(&[7795928], 0);
-pub(crate) const pqz_txm16_gammaby2: Int = Int::from_limbs(&[3897964], 0);
-pub(crate) const pqz_txm16_pow2d: Int = Int::from_limbs(&[16384], 0);
-pub(crate) const pqz_txm16_pow2dby2: Int = Int::from_limbs(&[8192], 0);
-pub(crate) const pqz_txm16_bsq: Int = Int::from_limbs(&[39333274828071286, 0], 0);
-pub(crate) const pqz_txm16_scm1: Int = Int::from_limbs(&[6232250929538962068, 9656295680857400708, 3], 0);
+pub(crate) const pqz_txm16_m: Int = Int::from_limbs(&[15719854], 0);
+pub(crate) const pqz_txm16_mby2: Int = Int::from_limbs(&[7859927], 0);
+pub(crate) const pqz_txm16_gamma: Int = Int::from_limbs(&[3897964], 0);
+pub(crate) const pqz_txm16_gammaby2: Int = Int::from_limbs(&[1948982], 0);
+pub(crate) const pqz_txm16_pow2d: Int = Int::from_limbs(&[8192], 0);
+pub(crate) const pqz_txm16_pow2dby2: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm16_bsq: Int = Int::from_limbs(&[9893849971911334, 0], 0);
+pub(crate) const pqz_txm16_scm1: Int = Int::from_limbs(&[2943468531887557523, 66308942118091794, 4], 0);
 pub(crate) const pqz_txm16_scm2: Int = Int::from_limbs(&[1820084920535769461, 1216364161194770729, 3], 0);
-pub(crate) const pqz_txm16_scm3: Int = Int::from_limbs(&[1044479737344128883, 361069654597526306, 1], 0);
+pub(crate) const pqz_txm16_scm3: Int = Int::from_limbs(&[15034947440324134267, 438627047363408309, 1], 0);
 pub(crate) const pqz_txm16_scm4: Int = Int::from_limbs(&[1655797669362676316, 318580927907168899, 1], 0);
 pub(crate) const pqz_txm16_stdev1sq: Int = Int::from_limbs(&[660394171433, 0], 0);
 pub(crate) const pqz_txm16_stdev2sq: Int = Int::from_limbs(&[40307261, 0], 0);
@@ -81,7 +81,7 @@ pub(crate) const pqz_txm16_stdev3sq: Int = Int::from_limbs(&[2579664732, 0], 0);
 pub(crate) const pqz_txm16_stdev4sq: Int = Int::from_limbs(&[40307261, 0], 0);
 pub(crate) const pqz_txm16_inv2: Int = Int::from_limbs(&[30637712488628], 1);
 pub(crate) const pqz_txm16_inv4: Int = Int::from_limbs(&[15318856244314], 1);
-pub(crate) const pqz_txm16_n: [u32; 43] = [36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+pub(crate) const pqz_txm16_n: [u32; 47] = [36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 pub(crate) const pqz_txm16_bz3sqr: Int = Int::from_limbs(&[1776196163486, 0], 0);
 pub(crate) const pqz_txm16_bz4: Int = Int::from_limbs(&[101580], 0);
 pub(crate) const pqz_txm16_pmodq: Int = Int::from_limbs(&[8822651798586], 1);
@@ -95,10 +95,10 @@ pub(crate) const pqz_txm16_l2bsq6: Int = Int::from_limbs(&[1444], 0);
 pub(crate) const pqz_txm16_l2bsq7: Int = Int::from_limbs(&[29929], 0);
 pub(crate) const pqz_txm16_l2bsq8: Int = Int::from_limbs(&[1444], 0);
 pub(crate) const pqz_txm16_l2bsq9: Int = Int::from_limbs(&[29929], 0);
-pub(crate) const pqz_txm16_l2bsq10: Int = Int::from_limbs(&[4096], 0);
-pub(crate) const pqz_txm16_l2bsq11: Int = Int::from_limbs(&[4096], 0);
-pub(crate) const pqz_txm16_l2bsq12: Int = Int::from_limbs(&[4096], 0);
-pub(crate) const pqz_txm16_l2bsq13: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm16_l2bsq10: Int = Int::from_limbs(&[1444], 0);
+pub(crate) const pqz_txm16_l2bsq11: Int = Int::from_limbs(&[29929], 0);
+pub(crate) const pqz_txm16_l2bsq12: Int = Int::from_limbs(&[1444], 0);
+pub(crate) const pqz_txm16_l2bsq13: Int = Int::from_limbs(&[29929], 0);
 pub(crate) const pqz_txm16_l2bsq14: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm16_l2bsq15: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm16_l2bsq16: Int = Int::from_limbs(&[4096], 0);
@@ -128,10 +128,14 @@ pub(crate) const pqz_txm16_l2bsq39: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm16_l2bsq40: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm16_l2bsq41: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm16_l2bsq42: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm16_l2bsq43: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm16_l2bsq44: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm16_l2bsq45: Int = Int::from_limbs(&[4096], 0);
+pub(crate) const pqz_txm16_l2bsq46: Int = Int::from_limbs(&[4096], 0);
 pub(crate) const pqz_txm16_ppmodq_0: Int = Int::from_limbs(&[13311472331116], 0);
 pub(crate) const pqz_txm16_ppmodq_1: Int = Int::from_limbs(&[18968826708964], 1);
 pub(crate) const pqz_txm16_ppmodq_2: Int = Int::from_limbs(&[20575547372430], 0);
-pub(crate) const pqz_txm16_l2bsq: [Int; 43] = [pqz_txm16_l2bsq0, pqz_txm16_l2bsq1, pqz_txm16_l2bsq2, pqz_txm16_l2bsq3, pqz_txm16_l2bsq4, pqz_txm16_l2bsq5, pqz_txm16_l2bsq6, pqz_txm16_l2bsq7, pqz_txm16_l2bsq8, pqz_txm16_l2bsq9, pqz_txm16_l2bsq10, pqz_txm16_l2bsq11, pqz_txm16_l2bsq12, pqz_txm16_l2bsq13, pqz_txm16_l2bsq14, pqz_txm16_l2bsq15, pqz_txm16_l2bsq16, pqz_txm16_l2bsq17, pqz_txm16_l2bsq18, pqz_txm16_l2bsq19, pqz_txm16_l2bsq20, pqz_txm16_l2bsq21, pqz_txm16_l2bsq22, pqz_txm16_l2bsq23, pqz_txm16_l2bsq24, pqz_txm16_l2bsq25, pqz_txm16_l2bsq26, pqz_txm16_l2bsq27, pqz_txm16_l2bsq28, pqz_txm16_l2bsq29, pqz_txm16_l2bsq30, pqz_txm16_l2bsq31, pqz_txm16_l2bsq32, pqz_txm16_l2bsq33, pqz_txm16_l2bsq34, pqz_txm16_l2bsq35, pqz_txm16_l2bsq36, pqz_txm16_l2bsq37, pqz_txm16_l2bsq38, pqz_txm16_l2bsq39, pqz_txm16_l2bsq40, pqz_txm16_l2bsq41, pqz_txm16_l2bsq42];
+pub(crate) const pqz_txm16_l2bsq: [Int; 47] = [pqz_txm16_l2bsq0, pqz_txm16_l2bsq1, pqz_txm16_l2bsq2, pqz_txm16_l2bsq3, pqz_txm16_l2bsq4, pqz_txm16_l2bsq5, pqz_txm16_l2bsq6, pqz_txm16_l2bsq7, pqz_txm16_l2bsq8, pqz_txm16_l2bsq9, pqz_txm16_l2bsq10, pqz_txm16_l2bsq11, pqz_txm16_l2bsq12, pqz_txm16_l2bsq13, pqz_txm16_l2bsq14, pqz_txm16_l2bsq15, pqz_txm16_l2bsq16, pqz_txm16_l2bsq17, pqz_txm16_l2bsq18, pqz_txm16_l2bsq19, pqz_txm16_l2bsq20, pqz_txm16_l2bsq21, pqz_txm16_l2bsq22, pqz_txm16_l2bsq23, pqz_txm16_l2bsq24, pqz_txm16_l2bsq25, pqz_txm16_l2bsq26, pqz_txm16_l2bsq27, pqz_txm16_l2bsq28, pqz_txm16_l2bsq29, pqz_txm16_l2bsq30, pqz_txm16_l2bsq31, pqz_txm16_l2bsq32, pqz_txm16_l2bsq33, pqz_txm16_l2bsq34, pqz_txm16_l2bsq35, pqz_txm16_l2bsq36, pqz_txm16_l2bsq37, pqz_txm16_l2bsq38, pqz_txm16_l2bsq39, pqz_txm16_l2bsq40, pqz_txm16_l2bsq41, pqz_txm16_l2bsq42, pqz_txm16_l2bsq43, pqz_txm16_l2bsq44, pqz_txm16_l2bsq45, pqz_txm16_l2bsq46];
 pub(crate) const pqz_txm16_ppmodq: [Int; 3] = [pqz_txm16_ppmodq_0, pqz_txm16_ppmodq_1, pqz_txm16_ppmodq_2];
 pub(crate) static pqz_txm16_ring: Ring = Ring {
     q: pqz_txm16_q,
@@ -152,14 +156,14 @@ pub(crate) static pqz_txm16_dcomp: Dcomp = Dcomp {
     gammaby2: pqz_txm16_gammaby2,
     pow2d: pqz_txm16_pow2d,
     pow2dby2: pqz_txm16_pow2dby2,
-    d: 14,
-    m_odd: true,
-    log2m: 23,
+    d: 13,
+    m_odd: false,
+    log2m: 24,
 };
 pub(crate) static pqz_txm16_tbox: Abdlop = Abdlop {
     ring: &pqz_txm16_ring,
     dcompress: &pqz_txm16_dcomp,
-    m1: 467,
+    m1: 615,
     m2: 72,
     l: 0,
     lext: 12,
@@ -181,7 +185,7 @@ pub(crate) static pqz_txm16_tbox: Abdlop = Abdlop {
 pub(crate) static pqz_txm16_quad_eval_: Abdlop = Abdlop {
     ring: &pqz_txm16_ring,
     dcompress: &pqz_txm16_dcomp,
-    m1: 467,
+    m1: 615,
     m2: 72,
     l: 9,
     lext: 3,
@@ -203,7 +207,7 @@ pub(crate) static pqz_txm16_quad_eval_: Abdlop = Abdlop {
 pub(crate) static pqz_txm16_quad_many_: Abdlop = Abdlop {
     ring: &pqz_txm16_ring,
     dcompress: &pqz_txm16_dcomp,
-    m1: 467,
+    m1: 615,
     m2: 72,
     l: 11,
     lext: 1,
@@ -233,8 +237,8 @@ pub(crate) static pqz_txm16: Tbox = Tbox {
     nbin: 31,
     n: &pqz_txm16_n,
     nprime: 1,
-    z: 43,
-    nex: 467,
+    z: 47,
+    nex: 615,
     rej3: 2,
     log2stdev3: 15,
     scm3: pqz_txm16_scm3,
@@ -247,5 +251,5 @@ pub(crate) static pqz_txm16: Tbox = Tbox {
     bz4: pqz_txm16_bz4,
     l2bsqr: &pqz_txm16_l2bsq,
     inv4: pqz_txm16_inv4,
-    prooflen: 104960,
+    prooflen: 132384,
 };

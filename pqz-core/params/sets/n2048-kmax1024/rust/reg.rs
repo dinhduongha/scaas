@@ -29,7 +29,7 @@
 //! Norm proofs
 //! binary: no
 //! exact euclidean: yes (dimensions: [32, 32], bounds: [36.0, 164.0])
-//! approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 1.0)
+//! approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 8.0)
 //!
 //! Challenge space
 //! c uniform in [-omega,omega] = [-8,8], o(c)=c, sqrt(l1(o(c)*c)) <= eta = 140
@@ -38,7 +38,7 @@
 //! stdev1 = 406323.2, log(stdev1/1.55) = 18.0
 //! stdev2 = 6348.8, log(stdev2/1.55) = 12.0
 //! stdev3 = 12697.6, log(stdev3/1.55) = 13.0
-//! stdev4 = 99.2, log(stdev4/1.55) = 6.0
+//! stdev4 = 793.6, log(stdev4/1.55) = 9.0
 //!
 //! Repetition rate
 //! M1 = 2.1751132
@@ -54,7 +54,7 @@
 //! MLWE root hermite factor: 1.0035568
 //!
 //! Proof size
-//! ~ 28.5039062500000 KiB
+//! ~ 28.5976562500000 KiB
 //!
 //! 50 bit moduli for degree 64: [1125899906840833, 1125899906839937]
 //! bit length of products: [49, 99]
@@ -78,12 +78,12 @@ pub(crate) const pqz_reg_scm4: Int = Int::from_limbs(&[1655797669362676316, 3185
 pub(crate) const pqz_reg_stdev1sq: Int = Int::from_limbs(&[165098542858, 0], 0);
 pub(crate) const pqz_reg_stdev2sq: Int = Int::from_limbs(&[40307261, 0], 0);
 pub(crate) const pqz_reg_stdev3sq: Int = Int::from_limbs(&[161229046, 0], 0);
-pub(crate) const pqz_reg_stdev4sq: Int = Int::from_limbs(&[9841, 0], 0);
+pub(crate) const pqz_reg_stdev4sq: Int = Int::from_limbs(&[629801, 0], 0);
 pub(crate) const pqz_reg_inv2: Int = Int::from_limbs(&[2199023255444], 1);
 pub(crate) const pqz_reg_inv4: Int = Int::from_limbs(&[1099511627722], 1);
 pub(crate) const pqz_reg_n: [u32; 2] = [32, 32];
 pub(crate) const pqz_reg_bz3sqr: Int = Int::from_limbs(&[111012260217, 0], 0);
-pub(crate) const pqz_reg_bz4: Int = Int::from_limbs(&[1587], 0);
+pub(crate) const pqz_reg_bz4: Int = Int::from_limbs(&[12697], 0);
 pub(crate) const pqz_reg_pmodq: Int = Int::from_limbs(&[2787744897], 0);
 pub(crate) const pqz_reg_l2bsq0: Int = Int::from_limbs(&[1296], 0);
 pub(crate) const pqz_reg_l2bsq1: Int = Int::from_limbs(&[26896], 0);
@@ -198,12 +198,12 @@ pub(crate) static pqz_reg: Tbox = Tbox {
     scm3: pqz_reg_scm3,
     stdev3sqr: pqz_reg_stdev3sq,
     rej4: 2,
-    log2stdev4: 6,
+    log2stdev4: 9,
     scm4: pqz_reg_scm4,
     stdev4sqr: pqz_reg_stdev4sq,
     bz3sqr: pqz_reg_bz3sqr,
     bz4: pqz_reg_bz4,
     l2bsqr: &pqz_reg_l2bsq,
     inv4: pqz_reg_inv4,
-    prooflen: 29188,
+    prooflen: 29284,
 };

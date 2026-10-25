@@ -2,7 +2,7 @@
 // 
 // protocol is statistically complete with correctness error >= 1 - 2^(-3)
 // protocol is simulatable under MLWE(36,35,[-1,1])
-// protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,243,2^(37.369167))
+// protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,315,2^(37.345001))
 // 
 // Ring
 // degree d = 64
@@ -10,22 +10,22 @@
 // factors q = q1
 // 
 // Compression
-// D = 13
-// gamma = 3897964, log(gamma) ~ 21.894289
+// D = 12
+// gamma = 1948982, log(gamma) ~ 20.894289
 // 
 // Dimensions of secrets
-// s1: m1 = 172
+// s1: m1 = 244
 // m: l = 0
 // s2: m2 = 71
 // 
 // Size of secrets
-// l2(s1) <= alpha = 317.5311
+// l2(s1) <= alpha = 363.5918
 // m unbounded
 // s2 uniform in [-nu,nu] = [-1,1]
 // 
 // Norm proofs
 // binary: yes (dimension: 19)
-// exact euclidean: yes (dimensions: [36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1], bounds: [38.0, 173.0, 38.0, 173.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0])
+// exact euclidean: yes (dimensions: [36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1], bounds: [38.0, 173.0, 38.0, 173.0, 38.0, 173.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0, 64.0])
 // approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 64.0)
 // 
 // Challenge space
@@ -38,20 +38,20 @@
 // stdev4 = 6348.8, log(stdev4/1.55) = 12.0
 // 
 // Repetition rate
-// M1 = 2.0876852
+// M1 = 2.3225435
 // M2 = 3.018601
-// M3 = 1.0269165
+// M3 = 1.0354033
 // M4 = 1.0172703
-// total = 6.5832785
+// total = 7.3844045
 // 
 // Security
 // MSIS dimension: 23
-// MSIS root hermite factor: 1.0035958
+// MSIS root hermite factor: 1.0035911
 // MLWE dimension: 36
 // MLWE root hermite factor: 1.0035462
 // 
 // Proof size
-// ~ 51.7089843750000 KiB
+// ~ 65.1855468750000 KiB
 // 
 // 50 bit moduli for degree 64: [1125899906840833, 1125899906839937, 1125899906837633]
 // bit length of products: [49, 99, 149]
@@ -62,25 +62,25 @@ static const limb_t pqz_txm4_q_limbs[] = {61275424977257UL};
 static const int_t pqz_txm4_q = {{(limb_t *)pqz_txm4_q_limbs, 1, 0}};
 static const limb_t pqz_txm4_qminus1_limbs[] = {61275424977256UL};
 static const int_t pqz_txm4_qminus1 = {{(limb_t *)pqz_txm4_qminus1_limbs, 1, 0}};
-static const limb_t pqz_txm4_m_limbs[] = {15719854UL};
+static const limb_t pqz_txm4_m_limbs[] = {31439708UL};
 static const int_t pqz_txm4_m = {{(limb_t *)pqz_txm4_m_limbs, 1, 0}};
-static const limb_t pqz_txm4_mby2_limbs[] = {7859927UL};
+static const limb_t pqz_txm4_mby2_limbs[] = {15719854UL};
 static const int_t pqz_txm4_mby2 = {{(limb_t *)pqz_txm4_mby2_limbs, 1, 0}};
-static const limb_t pqz_txm4_gamma_limbs[] = {3897964UL};
+static const limb_t pqz_txm4_gamma_limbs[] = {1948982UL};
 static const int_t pqz_txm4_gamma = {{(limb_t *)pqz_txm4_gamma_limbs, 1, 0}};
-static const limb_t pqz_txm4_gammaby2_limbs[] = {1948982UL};
+static const limb_t pqz_txm4_gammaby2_limbs[] = {974491UL};
 static const int_t pqz_txm4_gammaby2 = {{(limb_t *)pqz_txm4_gammaby2_limbs, 1, 0}};
-static const limb_t pqz_txm4_pow2D_limbs[] = {8192UL};
+static const limb_t pqz_txm4_pow2D_limbs[] = {4096UL};
 static const int_t pqz_txm4_pow2D = {{(limb_t *)pqz_txm4_pow2D_limbs, 1, 0}};
-static const limb_t pqz_txm4_pow2Dby2_limbs[] = {4096UL};
+static const limb_t pqz_txm4_pow2Dby2_limbs[] = {2048UL};
 static const int_t pqz_txm4_pow2Dby2 = {{(limb_t *)pqz_txm4_pow2Dby2_limbs, 1, 0}};
-static const limb_t pqz_txm4_Bsq_limbs[] = {9483278271268166UL, 0UL};
+static const limb_t pqz_txm4_Bsq_limbs[] = {2400380801271154UL, 0UL};
 static const int_t pqz_txm4_Bsq = {{(limb_t *)pqz_txm4_Bsq_limbs, 2, 0}};
-static const limb_t pqz_txm4_scM1_limbs[] = {5377350453789254418UL, 1617506565646804533UL, 2UL};
+static const limb_t pqz_txm4_scM1_limbs[] = {14663971911004987521UL, 5949876560615403982UL, 2UL};
 static const int_t pqz_txm4_scM1 = {{(limb_t *)pqz_txm4_scM1_limbs, 3, 0}};
 static const limb_t pqz_txm4_scM2_limbs[] = {3475190623207378560UL, 343128444396980339UL, 3UL};
 static const int_t pqz_txm4_scM2 = {{(limb_t *)pqz_txm4_scM2_limbs, 3, 0}};
-static const limb_t pqz_txm4_scM3_limbs[] = {645224350374877093UL, 496521712828432532UL, 1UL};
+static const limb_t pqz_txm4_scM3_limbs[] = {13038733215937243369UL, 653075745209908343UL, 1UL};
 static const int_t pqz_txm4_scM3 = {{(limb_t *)pqz_txm4_scM3_limbs, 3, 0}};
 static const limb_t pqz_txm4_scM4_limbs[] = {1655797669362676316UL, 318580927907168899UL, 1UL};
 static const int_t pqz_txm4_scM4 = {{(limb_t *)pqz_txm4_scM4_limbs, 3, 0}};
@@ -96,7 +96,7 @@ static const limb_t pqz_txm4_inv2_limbs[] = {30637712488628UL};
 static const int_t pqz_txm4_inv2 = {{(limb_t *)pqz_txm4_inv2_limbs, 1, 1}};
 static const limb_t pqz_txm4_inv4_limbs[] = {15318856244314UL};
 static const int_t pqz_txm4_inv4 = {{(limb_t *)pqz_txm4_inv4_limbs, 1, 1}};
-static const unsigned int pqz_txm4_n[13] = {36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+static const unsigned int pqz_txm4_n[15] = {36, 36, 36, 36, 36, 36, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 static const limb_t pqz_txm4_Bz3sqr_limbs[] = {444049040871UL, 0UL};
 static const int_t pqz_txm4_Bz3sqr = {{(limb_t *)pqz_txm4_Bz3sqr_limbs, 2, 0}};
 static const limb_t pqz_txm4_Bz4_limbs[] = {101580UL};
@@ -111,9 +111,9 @@ static const limb_t pqz_txm4_l2Bsq2_limbs[] = {1444UL};
 static const int_t pqz_txm4_l2Bsq2 = {{(limb_t *)pqz_txm4_l2Bsq2_limbs, 1, 0}};
 static const limb_t pqz_txm4_l2Bsq3_limbs[] = {29929UL};
 static const int_t pqz_txm4_l2Bsq3 = {{(limb_t *)pqz_txm4_l2Bsq3_limbs, 1, 0}};
-static const limb_t pqz_txm4_l2Bsq4_limbs[] = {4096UL};
+static const limb_t pqz_txm4_l2Bsq4_limbs[] = {1444UL};
 static const int_t pqz_txm4_l2Bsq4 = {{(limb_t *)pqz_txm4_l2Bsq4_limbs, 1, 0}};
-static const limb_t pqz_txm4_l2Bsq5_limbs[] = {4096UL};
+static const limb_t pqz_txm4_l2Bsq5_limbs[] = {29929UL};
 static const int_t pqz_txm4_l2Bsq5 = {{(limb_t *)pqz_txm4_l2Bsq5_limbs, 1, 0}};
 static const limb_t pqz_txm4_l2Bsq6_limbs[] = {4096UL};
 static const int_t pqz_txm4_l2Bsq6 = {{(limb_t *)pqz_txm4_l2Bsq6_limbs, 1, 0}};
@@ -129,19 +129,23 @@ static const limb_t pqz_txm4_l2Bsq11_limbs[] = {4096UL};
 static const int_t pqz_txm4_l2Bsq11 = {{(limb_t *)pqz_txm4_l2Bsq11_limbs, 1, 0}};
 static const limb_t pqz_txm4_l2Bsq12_limbs[] = {4096UL};
 static const int_t pqz_txm4_l2Bsq12 = {{(limb_t *)pqz_txm4_l2Bsq12_limbs, 1, 0}};
+static const limb_t pqz_txm4_l2Bsq13_limbs[] = {4096UL};
+static const int_t pqz_txm4_l2Bsq13 = {{(limb_t *)pqz_txm4_l2Bsq13_limbs, 1, 0}};
+static const limb_t pqz_txm4_l2Bsq14_limbs[] = {4096UL};
+static const int_t pqz_txm4_l2Bsq14 = {{(limb_t *)pqz_txm4_l2Bsq14_limbs, 1, 0}};
 static const limb_t pqz_txm4_Ppmodq_0_limbs[] = {13311472331116UL};
 static const int_t pqz_txm4_Ppmodq_0 = {{(limb_t *)pqz_txm4_Ppmodq_0_limbs, 1, 0}};
 static const limb_t pqz_txm4_Ppmodq_1_limbs[] = {18968826708964UL};
 static const int_t pqz_txm4_Ppmodq_1 = {{(limb_t *)pqz_txm4_Ppmodq_1_limbs, 1, 1}};
 static const limb_t pqz_txm4_Ppmodq_2_limbs[] = {20575547372430UL};
 static const int_t pqz_txm4_Ppmodq_2 = {{(limb_t *)pqz_txm4_Ppmodq_2_limbs, 1, 0}};
-static const int_srcptr pqz_txm4_l2Bsq[] = {pqz_txm4_l2Bsq0, pqz_txm4_l2Bsq1, pqz_txm4_l2Bsq2, pqz_txm4_l2Bsq3, pqz_txm4_l2Bsq4, pqz_txm4_l2Bsq5, pqz_txm4_l2Bsq6, pqz_txm4_l2Bsq7, pqz_txm4_l2Bsq8, pqz_txm4_l2Bsq9, pqz_txm4_l2Bsq10, pqz_txm4_l2Bsq11, pqz_txm4_l2Bsq12};
+static const int_srcptr pqz_txm4_l2Bsq[] = {pqz_txm4_l2Bsq0, pqz_txm4_l2Bsq1, pqz_txm4_l2Bsq2, pqz_txm4_l2Bsq3, pqz_txm4_l2Bsq4, pqz_txm4_l2Bsq5, pqz_txm4_l2Bsq6, pqz_txm4_l2Bsq7, pqz_txm4_l2Bsq8, pqz_txm4_l2Bsq9, pqz_txm4_l2Bsq10, pqz_txm4_l2Bsq11, pqz_txm4_l2Bsq12, pqz_txm4_l2Bsq13, pqz_txm4_l2Bsq14};
 static const int_srcptr pqz_txm4_Ppmodq[] = {pqz_txm4_Ppmodq_0, pqz_txm4_Ppmodq_1, pqz_txm4_Ppmodq_2};
 static const polyring_t pqz_txm4_ring = {{pqz_txm4_q, 64, 46, 6, moduli_d64, 3, pqz_txm4_Pmodq, pqz_txm4_Ppmodq, pqz_txm4_inv2}};
-static const dcompress_params_t pqz_txm4_dcomp = {{ pqz_txm4_q, pqz_txm4_qminus1, pqz_txm4_m, pqz_txm4_mby2, pqz_txm4_gamma, pqz_txm4_gammaby2, pqz_txm4_pow2D, pqz_txm4_pow2Dby2, 13, 0, 24 }};
-static const abdlop_params_t pqz_txm4_tbox = {{ pqz_txm4_ring, pqz_txm4_dcomp, 185, 71, 0, 12, 23, pqz_txm4_Bsq, 1, 8, 5, 140, 1, 19, pqz_txm4_scM1, pqz_txm4_stdev1sq, 2, 12, pqz_txm4_scM2, pqz_txm4_stdev2sq}};
-static const abdlop_params_t pqz_txm4_quad_eval_ = {{ pqz_txm4_ring, pqz_txm4_dcomp, 185, 71, 9, 3, 23, pqz_txm4_Bsq, 1, 8, 5, 140, 1, 19, pqz_txm4_scM1, pqz_txm4_stdev1sq, 2, 12, pqz_txm4_scM2, pqz_txm4_stdev2sq}};
-static const abdlop_params_t pqz_txm4_quad_many_ = {{ pqz_txm4_ring, pqz_txm4_dcomp, 185, 71, 11, 1, 23, pqz_txm4_Bsq, 1, 8, 5, 140, 1, 19, pqz_txm4_scM1, pqz_txm4_stdev1sq, 2, 12, pqz_txm4_scM2, pqz_txm4_stdev2sq}};
+static const dcompress_params_t pqz_txm4_dcomp = {{ pqz_txm4_q, pqz_txm4_qminus1, pqz_txm4_m, pqz_txm4_mby2, pqz_txm4_gamma, pqz_txm4_gammaby2, pqz_txm4_pow2D, pqz_txm4_pow2Dby2, 12, 0, 25 }};
+static const abdlop_params_t pqz_txm4_tbox = {{ pqz_txm4_ring, pqz_txm4_dcomp, 259, 71, 0, 12, 23, pqz_txm4_Bsq, 1, 8, 5, 140, 1, 19, pqz_txm4_scM1, pqz_txm4_stdev1sq, 2, 12, pqz_txm4_scM2, pqz_txm4_stdev2sq}};
+static const abdlop_params_t pqz_txm4_quad_eval_ = {{ pqz_txm4_ring, pqz_txm4_dcomp, 259, 71, 9, 3, 23, pqz_txm4_Bsq, 1, 8, 5, 140, 1, 19, pqz_txm4_scM1, pqz_txm4_stdev1sq, 2, 12, pqz_txm4_scM2, pqz_txm4_stdev2sq}};
+static const abdlop_params_t pqz_txm4_quad_many_ = {{ pqz_txm4_ring, pqz_txm4_dcomp, 259, 71, 11, 1, 23, pqz_txm4_Bsq, 1, 8, 5, 140, 1, 19, pqz_txm4_scM1, pqz_txm4_stdev1sq, 2, 12, pqz_txm4_scM2, pqz_txm4_stdev2sq}};
 static const lnp_quad_eval_params_t pqz_txm4_quad_eval = {{ pqz_txm4_quad_eval_, pqz_txm4_quad_many_, 4}};
-static const lnp_tbox_params_t pqz_txm4 = {{ pqz_txm4_tbox, pqz_txm4_quad_eval, 19, pqz_txm4_n, 1, 13, 185, 2, 14, pqz_txm4_scM3, pqz_txm4_stdev3sq, 2, 12, pqz_txm4_scM4, pqz_txm4_stdev4sq, pqz_txm4_Bz3sqr, pqz_txm4_Bz4, &pqz_txm4_l2Bsq[0], pqz_txm4_inv4, 52950UL }};
+static const lnp_tbox_params_t pqz_txm4 = {{ pqz_txm4_tbox, pqz_txm4_quad_eval, 19, pqz_txm4_n, 1, 15, 259, 2, 14, pqz_txm4_scM3, pqz_txm4_stdev3sq, 2, 12, pqz_txm4_scM4, pqz_txm4_stdev4sq, pqz_txm4_Bz3sqr, pqz_txm4_Bz4, &pqz_txm4_l2Bsq[0], pqz_txm4_inv4, 66750UL }};
 

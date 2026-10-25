@@ -26,7 +26,7 @@
 // Norm proofs
 // binary: yes (dimension: 8)
 // exact euclidean: yes (dimensions: [40, 40], bounds: [40.0, 182.0])
-// approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 1.0)
+// approximate infinity: yes (psi: 3357.5105, dimension: 1, bound: 8.0)
 // 
 // Challenge space
 // c uniform in [-omega,omega] = [-8,8], o(c)=c, sqrt(l1(o(c)*c)) <= eta = 140
@@ -35,7 +35,7 @@
 // stdev1 = 406323.2, log(stdev1/1.55) = 18.0
 // stdev2 = 6348.8, log(stdev2/1.55) = 12.0
 // stdev3 = 12697.6, log(stdev3/1.55) = 13.0
-// stdev4 = 99.2, log(stdev4/1.55) = 6.0
+// stdev4 = 793.6, log(stdev4/1.55) = 9.0
 // 
 // Repetition rate
 // M1 = 2.3835273
@@ -51,7 +51,7 @@
 // MLWE root hermite factor: 1.0035676
 // 
 // Proof size
-// ~ 34.3183593750000 KiB
+// ~ 34.4121093750000 KiB
 // 
 // 50 bit moduli for degree 64: [1125899906840833, 1125899906839937, 1125899906837633]
 // bit length of products: [49, 99, 149]
@@ -90,7 +90,7 @@ static const limb_t pqz_dr_stdev2sq_limbs[] = {40307261UL, 0UL};
 static const int_t pqz_dr_stdev2sq = {{(limb_t *)pqz_dr_stdev2sq_limbs, 2, 0}};
 static const limb_t pqz_dr_stdev3sq_limbs[] = {161229046UL, 0UL};
 static const int_t pqz_dr_stdev3sq = {{(limb_t *)pqz_dr_stdev3sq_limbs, 2, 0}};
-static const limb_t pqz_dr_stdev4sq_limbs[] = {9841UL, 0UL};
+static const limb_t pqz_dr_stdev4sq_limbs[] = {629801UL, 0UL};
 static const int_t pqz_dr_stdev4sq = {{(limb_t *)pqz_dr_stdev4sq_limbs, 2, 0}};
 static const limb_t pqz_dr_inv2_limbs[] = {562949932266044UL};
 static const int_t pqz_dr_inv2 = {{(limb_t *)pqz_dr_inv2_limbs, 1, 1}};
@@ -99,7 +99,7 @@ static const int_t pqz_dr_inv4 = {{(limb_t *)pqz_dr_inv4_limbs, 1, 1}};
 static const unsigned int pqz_dr_n[2] = {40, 40};
 static const limb_t pqz_dr_Bz3sqr_limbs[] = {111012260217UL, 0UL};
 static const int_t pqz_dr_Bz3sqr = {{(limb_t *)pqz_dr_Bz3sqr_limbs, 2, 0}};
-static const limb_t pqz_dr_Bz4_limbs[] = {1587UL};
+static const limb_t pqz_dr_Bz4_limbs[] = {12697UL};
 static const int_t pqz_dr_Bz4 = {{(limb_t *)pqz_dr_Bz4_limbs, 1, 0}};
 static const limb_t pqz_dr_Pmodq_limbs[] = {32777477422226UL};
 static const int_t pqz_dr_Pmodq = {{(limb_t *)pqz_dr_Pmodq_limbs, 1, 0}};
@@ -121,5 +121,5 @@ static const abdlop_params_t pqz_dr_tbox = {{ pqz_dr_ring, pqz_dr_dcomp, 90, 70,
 static const abdlop_params_t pqz_dr_quad_eval_ = {{ pqz_dr_ring, pqz_dr_dcomp, 90, 70, 9, 3, 19, pqz_dr_Bsq, 1, 8, 5, 140, 1, 18, pqz_dr_scM1, pqz_dr_stdev1sq, 2, 12, pqz_dr_scM2, pqz_dr_stdev2sq}};
 static const abdlop_params_t pqz_dr_quad_many_ = {{ pqz_dr_ring, pqz_dr_dcomp, 90, 70, 11, 1, 19, pqz_dr_Bsq, 1, 8, 5, 140, 1, 18, pqz_dr_scM1, pqz_dr_stdev1sq, 2, 12, pqz_dr_scM2, pqz_dr_stdev2sq}};
 static const lnp_quad_eval_params_t pqz_dr_quad_eval = {{ pqz_dr_quad_eval_, pqz_dr_quad_many_, 4}};
-static const lnp_tbox_params_t pqz_dr = {{ pqz_dr_tbox, pqz_dr_quad_eval, 8, pqz_dr_n, 1, 2, 90, 2, 13, pqz_dr_scM3, pqz_dr_stdev3sq, 2, 6, pqz_dr_scM4, pqz_dr_stdev4sq, pqz_dr_Bz3sqr, pqz_dr_Bz4, &pqz_dr_l2Bsq[0], pqz_dr_inv4, 35142UL }};
+static const lnp_tbox_params_t pqz_dr = {{ pqz_dr_tbox, pqz_dr_quad_eval, 8, pqz_dr_n, 1, 2, 90, 2, 13, pqz_dr_scM3, pqz_dr_stdev3sq, 2, 9, pqz_dr_scM4, pqz_dr_stdev4sq, pqz_dr_Bz3sqr, pqz_dr_Bz4, &pqz_dr_l2Bsq[0], pqz_dr_inv4, 35238UL }};
 
