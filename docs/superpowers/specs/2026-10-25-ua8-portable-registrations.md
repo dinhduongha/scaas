@@ -45,14 +45,11 @@ chain-independent digest `uaMessage(kind, purpose, keccak256(tag ‖ ua ‖ vers
 on any chain, accepted only with `version` > the stored one. **There is no revocation** (owner 2026-10-25): a key
 that has been on chain stays public forever and cannot be withdrawn; a newer version only says which key is current.
 
-**P5 — What the version does and does not do (stated, not solved).** It orders the keys: on a chain, the contract
-uses the highest version it holds for new on-chain sessions (UA-7 C3 checks that each wrap names the member's current
-version on that chain). It does **not** stop anyone from encrypting to an older key: the old public key stays on
-every chain where it was stored, and a sender can use it off chain, or on a chain where nobody has copied the newer
-record yet. A new key reaches chain X only when someone submits it there. So: honest clients use the highest version
-they can see (the chain they use and the UA's home chain when known); the recipient's client shows a warning for
-anything wrapped to an older key; and if an old secret key may have leaked, the UA must assume that anything sent to
-that key — before or after the change — can be read.
+**P5 — Versions are the same on every chain.** The version is inside the record the UA signed, so version v names
+the same key on every chain (owner 2026-10-25). A chain may hold an older version until someone copies the newer
+record there; on each chain the contract uses the highest version it holds for new on-chain sessions (UA-7 C3). An
+older key stays public and usable by senders (there is no revocation, P4); clients need no warning for it. If an old
+secret key may have leaked, the UA must assume that anything sent to that key can be read.
 
 **P6 — Unchanged.** UA ids, key data, `keyHash` and `_keyOwner` uniqueness (per chain), the per-chain generations and
 kind caps, write authorization (chain-bound), ML-DSA expanded-key caches (per chain, rebuilt on registration).
