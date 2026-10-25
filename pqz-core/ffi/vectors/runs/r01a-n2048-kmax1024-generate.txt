@@ -1,0 +1,21 @@
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  42729 B  prove+verify 1.95 s
+pqzl TRANSFER0          proof  42422 B  prove+verify 1.89 s
+pqzl BURN               proof  41943 B  prove+verify 2.26 s
+pqzl REFRESH            proof  41908 B  prove+verify 4.30 s
+pqzl REGISTER           proof  28191 B  prove+verify 0.87 s
+pqzl DISCLOSE-SENDER    proof  28970 B  prove+verify 0.67 s
+pqzl DISCLOSE-RECEIVER  proof  29068 B  prove+verify 0.55 s
+pqzl DISCLOSE-AUDITOR   proof  29077 B  prove+verify 1.33 s
+pqzh TRANSFER           proof 231726 B  prove+verify 1.40 s
+pqzh TRANSFER0          proof 232056 B  prove+verify 1.37 s
+pqzh BURN               proof 230696 B  prove+verify 1.48 s
+pqzh REFRESH            proof 231128 B  prove+verify 1.41 s
+pqzh REGISTER           proof 186810 B  prove+verify 0.82 s
+pqzh DISCLOSE-SENDER    proof 187482 B  prove+verify 0.91 s
+pqzh DISCLOSE-RECEIVER  proof 187226 B  prove+verify 0.90 s
+pqzh DISCLOSE-AUDITOR   proof 187098 B  prove+verify 0.90 s
+pqzl M1-on              proof  42771 B  prove+verify 1.83 s
+pqzh M1-on              proof 232046 B  prove+verify 1.41 s
+pqzl M2-on              proof  43575 B  prove+verify 1.52 s
+pqzh M2-on              proof 232366 B  prove+verify 1.44 s

@@ -31,9 +31,9 @@ pub const MAX_PROOF: usize = 160 * 1024;
 /// (the precompile dispatches on it). Provisional until the FRI parameters (soundness regime) are fixed.
 pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
 /// PQZL's id as pqz-core writes it at the set n2048-kmax1024 (its pqz_set.h PQZ_PROOF_SYSTEM_ID =
-/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4"), plan 5h Task 8d; v3 and v2 retired), used only for the byte
-/// cross-check against pqz_bench.c (pqzh/xcheck/run.sh, n2048-kmax1024 only).
-pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d");
+/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5"), the R0 review fix 2026-10-25; v4, v3 and v2 retired), used only for
+/// the byte cross-check against pqz_bench.c (pqzh/xcheck/run.sh, n2048-kmax1024 only).
+pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe");
 
 const fn nib(c: u8) -> u8 {
     if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
