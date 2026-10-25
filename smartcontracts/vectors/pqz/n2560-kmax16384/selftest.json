@@ -9,27 +9,27 @@
  "msg_value": 123456,
  "message": "a24ed67f5a86fbe2b694db8e3d826fc7c93cde94f0cb2ad2fb724c744f872275",
  "a_digest": "0fcdd8a359d889a644a4ce474847a08008aedca7858404463c381da2ea20fef0",
- "pk_keccak": "c9c6248778b0b44d4ee267cd170ae6bd17240dbe213bab3206e42e4bd91968b4",
- "ct_keccak": "01ff0a785bc35243073a7a2825e1da38c3e2a84c4cf3c48fd056577025afa1c4",
+ "pk_keccak": "7e36477c792cf928cd3ea1a5186341ef05ef36d93f83c796112bdd93cbae1ebc",
+ "ct_keccak": "43437d3b5dc3fe947cda703fc1ea9a53ced298ee432d7629cd098b2351cb3e51",
  "M": [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
  "fft": {
   "n": 1634,
   "keccak": "4e8b54a83dab63fdc2908d8e2448e1773aa7046723672121b026be0995611a80",
   "ok": true
  },
- "kat_digest": "304ccc34f3aa7e11130e0c48be16bbb2882f8d7f021da032f2cdfa1c605a5017",
+ "kat_digest": "e2a21912bf79494ab4e903ead4e72fb37bbdcc8bb3aa4275e9f702c732e18129",
  "register": {
   "pqzl": {
-   "proof_keccak": "c67928ee7c8967abf1923d76523f61443e3b9578771397237997d34773b4bc88",
+   "proof_keccak": "0e6f280afa48255b976e51aba5d98931a392565ea8f77fd95a74e14bcfdc62f3",
    "valid": 1,
    "invalid": 0
   },
   "pqzh": {
-   "proof_keccak": "6de67725624aff90e2dc791fa374a9302edc3519d034b2b218b85abfefb9479f",
+   "proof_keccak": "085724c919ee3397c62678e47d3da797bf107900688058b9d276caf35e8482f4",
    "valid": 1,
    "invalid": 0
   }
  },
  "results": [1, 0, 1, 0],
- "hash": "167c772ef4d0911d60d6b3d2fad256902e1be2dd4a8f0aa9d01d3b3ed8bb45e7"
+ "hash": "fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb"
 }

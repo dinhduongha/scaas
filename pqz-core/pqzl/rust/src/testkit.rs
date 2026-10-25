@@ -763,6 +763,7 @@ pub fn ghint(i: usize, inp: &[i64; 192]) -> Option<alloc::vec::Vec<u64>> {
 
 /// `pqz_shim_p2r`: relation i's (`c_params` order) Power2Round (`Poly::power2round` with its tbox dcompress, as
 /// `abdlop::commit`) of the 64 coefficients `inp`: r1, then the input as changed (the wrap case, R1-C1 / R2-C2)
+#[cfg(feature = "c-oracle")]
 pub fn p2r(i: usize, inp: &[i64; 64]) -> Option<alloc::vec::Vec<u64>> {
     let d = rels().get(i)?.1.tbox.dcompress;
     let mut a = Poly::ZERO;

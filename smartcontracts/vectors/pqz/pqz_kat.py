@@ -1212,6 +1212,7 @@ def check_mdisc(j, d):
     for r in j.get("disclosures", []):
         case, form, ob = r["case"], r["form"], r["objects"]
         aud = form == "DISCLOSE-AUDITOR"
+        cmp(bad, f"{case} name", case, f"{ob['multi_case']}-leg{ob['leg']}-{'auditor' if aud else 'receiver'}")
         mr = rows[ob["multi_case"]]
         st = build_stmt(r)
         cmp(bad, f"{case} stmt", r["stmt"], st.hex())
@@ -1311,6 +1312,11 @@ def check_multi(j, d):
             entry_ref(h["chainId"], h["chainUid"], h["token"], h["fromUA"], h["sendCounter"]).hex())
     cmp(bad, "cases", seen, MULTI_CASES)
     rows = multi_rows(d)
+    # the key seeds: the case's own, and pqz-vectors' one other seed (0x4e * 32) for "another key seed" (a changed other
+    # seed would still give none: tamper.py)
+    for o in j["memo_open"]:
+        want = "4e" * 32 if o["name"] == "another key seed" else rows[o["case"]]["memo"]["key_seed"]
+        cmp(bad, f"memo_open {o['name']} key_seed", o["key_seed"], want)
     for o in j["memo_open"]:
         r = rows[o["case"]]
         b = bytearray(multi_build(r)[2])

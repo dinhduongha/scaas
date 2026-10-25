@@ -9,22 +9,22 @@
  "msg_value": 123456,
  "message": "a24ed67f5a86fbe2b694db8e3d826fc7c93cde94f0cb2ad2fb724c744f872275",
  "a_digest": "7015404598ec353de2dba769c9d40e111000cc1452dd9604a7dbca09981e252d",
- "pk_keccak": "be0040b815e1e1031405865a2ebbbfa7e89158956e23c1d0170b89bb58badb63",
- "ct_keccak": "9340b61b727d73ddd62afe2867089aa245bc7429a9be7e2dec9471b05924e1db",
+ "pk_keccak": "f89e028f6ec023c22f0ad6e6eb8596eb69851bec2aa2732d14fd335e9af76668",
+ "ct_keccak": "35e06f0e8947c72ac7f2465102254e4ff828ed474a44a3843fcf6ce25450b65d",
  "M": [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
  "fft": {
   "n": 0,
   "keccak": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
   "ok": false
  },
- "kat_digest": "6d95037a79410eaa4e528b2e3a86648aec0990bd1d30a3aeb966c20399a90310",
+ "kat_digest": "47f40205905fb1a1398a231b3c24d6a2f89ee78e7316e25ac70e8c6f9cf5551c",
  "register": {
   "pqzl": {
-   "proof_keccak": "d35543db9b84d93b0523cec3767b19d9ecb8400240a440eac60d69639e00dcb7",
+   "proof_keccak": "5fb8eaabc11d625cd792b867fc15df17ffff165c96a62a04f15077d2c7b63c4f",
    "valid": 1,
    "invalid": 0
   }
  },
  "results": [1, 0, 0, 0],
- "hash": "0aa1dfe291b81f0c8efa859405c9f14cdc0fa744584b4d5b30bd0a6472491882"
+ "hash": "1e69e3cd195ff67983e603a8ea969e73e6edcd70f4ac04fa4e5d75c09ddee740"
 }
