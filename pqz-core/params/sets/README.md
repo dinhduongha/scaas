@@ -170,8 +170,8 @@ peak. R_TXM rows: M recipients, with the auditor unless the row says "no auditor
 | C prover arena peak: R_TX / R_TXM M = 8 | 312 / 794 MB | 380 / 937 MB | 457 / 1,094 MB | 538 / 1,259 MB |
 
 R_TXM M = 8 needs `PQZ_ARENA_MB=2048` in the C bench at every set (above its default 768 MiB). `n2816-kmax65536` (a
-full PQZL set since plan 5h Task 8d part 1b): its vectors' largest proof is 79,199 B (R_TXM M = 8 with the auditor,
-`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`), 19,105 B under `MAX_PROOF_PQZL`; its `MAX_INPUT` is
+full PQZL set since plan 5h Task 8d part 1b): its vectors' largest proof is 79,208 B (R_TXM M = 8 with the auditor,
+`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`), 19,096 B under `MAX_PROOF_PQZL`; its `MAX_INPUT` is
 524,288 like the other non-frozen sets' (largest input at the limit 5 + 295,808 + 98,304 = 394,117 B, R_TXM M = 8 with
 the auditor: above the frozen set's 393,216).
 

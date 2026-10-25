@@ -17,7 +17,7 @@ public static class SelfTest
 #elif PQZ_SET_N2560_KMAX16384
     public const string Set = "n2560-kmax16384", ExpectedHash = "fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb";
 #elif PQZ_SET_N2816_KMAX65536
-    public const string Set = "n2816-kmax65536", ExpectedHash = "0aa1dfe291b81f0c8efa859405c9f14cdc0fa744584b4d5b30bd0a6472491882";
+    public const string Set = "n2816-kmax65536", ExpectedHash = "1e69e3cd195ff67983e603a8ea969e73e6edcd70f4ac04fa4e5d75c09ddee740";
 #else
 #error "unknown PqzSet (MSBuild -p:PqzSet=<set>, a directory of pqz-core/params/sets)"
 #endif

@@ -24,14 +24,14 @@ fn have_vectors(test: &str) -> bool {
     h
 }
 
-/// the vectors give 23 PQZL rows (proof_pqzl.json + fee0.json); a set without vectors (core_only) gives one C-proved
+/// the vectors give 27 PQZL rows (proof_pqzl.json, with the four op 7 disclosures since the R0 fix, + fee0.json); a set without vectors (core_only) gives one C-proved
 /// bench row per relation (`common::pqzl_rows`), so the C = Rust checks still run there
 fn check_row_count(rows: &[common::Row]) {
     #[cfg(feature = "bench")]
     let bench = pqzl::bench::NREL;
     #[cfg(not(feature = "bench"))]
     let bench = 0; // unreachable: without vectors and feature bench, pqzl_rows panics first
-    let want = if common::vectors_dir().is_some() { 23 } else { bench };
+    let want = if common::vectors_dir().is_some() { 27 } else { bench };
     assert_eq!(rows.len(), want);
 }
 
@@ -317,8 +317,8 @@ fn negative_rows_reject() {
         "n2560-kmax16384" => 410,
         // full PQZL set since 5h Task 8d part 1b, PQZL only. Against n2560-kmax16384's 384: + 16 "retired PQZH v1
         // proofSystemId" rows on its PQZL inputs, + 1 coder-padding row ("coder padding bit 7 set after the final 1-bit",
-        // 15 here, 14 there: the proofs' last bytes) = 401
-        "n2816-kmax65536" => 401,
+        // 15 here, 14 there: the proofs' last bytes) = 401; R0 fix as above: 428
+        "n2816-kmax65536" => 428,
         s => panic!("no negative.json row count recorded for set {s}"),
     };
     assert_eq!(rows.len(), want);
