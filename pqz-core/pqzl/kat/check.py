@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compare the arithmetic-layer cases of two lazer_dump JSON files (golden upstream vs pqz-core).
 
-  python3 -I kat/check.py kat/lazer-3330e48.json build/native/kat-pqz.json
+  python3 -I kat/check.py ../params/sets/<set>/lazer-3330e48-kat.json build/native/kat-pqz.json
 Exit 0 iff every case is equal (the "meta" block may differ: backend, build, CPU).
 """
 import json

@@ -8,6 +8,8 @@
  *   z3 : kind 14, z3 coefficient +1 (within Bz3)
  *   z4 : kind 5 at the bound, z4 coefficient = +Bz4 (passes the l_inf check)
  *   tg : kind 15, tg (the commitment to g) coefficient +1 mod q (B-1, review B)
+ *   c  : kind 9, one coefficient of the final challenge changed (R0-C3: the eta-filtered c is recomputed from the
+ *        transcript): must be rejected by both verifiers (the other relation shapes: rust/tests/fs_bind.rs, R1-C8)
  * Every challenge must be drawn after every prover message it is combined with: the V4 / V3 seeds (kinds 2 / 3)
  * must differ between the honest and the z3-, z4- and tg-changed proofs, the mu seed (kind 5) between the honest and
  * the h-changed proof; the tg-changed proof must be rejected. A record that is not emitted (the verifier rejected before the challenge) counts as a failure,
@@ -98,11 +100,11 @@ int
 main (void)
 {
   static uint8_t arena[(size_t)768 << 20];
-  static uint8_t proof[PQZ_MAX_PROOF], mut[4][2 * PQZ_MAX_PROOF];
+  static uint8_t proof[PQZ_MAX_PROOF], mut[4][2 * PQZ_MAX_PROOF], mutc[2 * PQZ_MAX_PROOF];
   int8_t s[PQZ_N];
   int16_t e[PQZ_N];
   uint8_t pk[PQZ_POLYVEC_BYTES], wit[PQZ_REG_WIT_BYTES], rnd32[32];
-  size_t len = sizeof proof, mlen[4];
+  size_t len = sizeof proof, mlen[4], mclen = sizeof mutc;
   const char *mname[4] = { "h", "z3", "z4", "tg" };
   const unsigned mkind[4] = { 7, 14, 5, 15 };
   const char *kname[6] = { "", "", "V4 seed", "V3 seed", "", "mu seed" };
@@ -138,6 +140,8 @@ main (void)
         return fprintf (stderr, "mutation %s failed\n", mname[m]), 1;
     }
 
+  if (!pqz_test_mutate (PQZ_OP_REGISTER, proof, len, 9, 0, 0x105, mutc, &mclen))
+    return fprintf (stderr, "mutation c failed\n"), 1;
   pqz_sz_trace_fn = trace;
   for (int fast = 0; fast < 2; fast++)
     {
@@ -148,6 +152,10 @@ main (void)
       memcpy (hon, cur.seed, sizeof hon), memcpy (hseen, cur.seen, sizeof hseen);
       printf ("P6-FS %s honest: %s\n", vn, ok == 1 ? "ACCEPT" : "REJECT (FAIL)");
       fails += ok != 1;
+      if (run (fast, mutc, mclen) == 1)
+        printf ("P6-FS %s c-mutated: ACCEPT (FAIL)\n", vn), fails++;
+      else
+        printf ("P6-FS %s c-mutated: rejected\n", vn);
       for (int m = 0; m < 4; m++)
         {
           int okm = run (fast, mut[m], mlen[m]);
@@ -169,7 +177,7 @@ main (void)
         }
     }
   pqz_sz_trace_fn = 0;
-  printf ("\nVERDICT: P6-FS Fiat-Shamir binding (lazer#28) %s (%d failed checks of 18)\n", fails ? "FAIL" : "ok",
+  printf ("\nVERDICT: P6-FS Fiat-Shamir binding (lazer#28) %s (%d failed checks of 20)\n", fails ? "FAIL" : "ok",
           fails);
   return fails != 0;
 }

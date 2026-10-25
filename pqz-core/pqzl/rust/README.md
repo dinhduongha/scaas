@@ -132,7 +132,7 @@ operation (`peak_per_op`) and exhaustion = `Error::Memory` / false with the `Ctx
 denied allocations, for every relation, operation and the keys (`exhaustion_is_error`; `PQZL_MEM_SWEEP`,
 `PQZL_MEM_THREADS`, `PQZL_MEM_TRACE`), `tests/threads.rs` 8 threads on separate `Ctx`s and on one handed-off `Ctx` =
 the sequential results), the arithmetic KAT (`kat_dump` against the upstream golden file
-`pqzl/kat/lazer-3330e48.json`, `kat/check.py`), the keys KAT (`keys_kat 1000` against
+`params/sets/<set>/lazer-3330e48-kat.json`, `kat/check.py`), the keys KAT (`keys_kat 1000` against
 `smartcontracts/vectors/pqz/pqz_kat.py --c-keys`; again with `keys_kat 1000 ctx` through the `Ctx` methods, the same
 lines), the generated params (`python3 -I ../params/to_rust.py --check`;
 `tests/oracle_params.rs` compares every field with the C headers), the prover's `proofs_fnv` against the C core's

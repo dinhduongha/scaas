@@ -598,7 +598,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 |---|---|
 | run the full gate A / B checklist (KAT, fix checks, differential, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, fuzz smoke) | `scripts/capped pqz-core/gate.sh <label>` |
 | build PQZL (native + wasm) | `pqzl/build.sh all` |
-| check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py pqzl/kat/lazer-3330e48.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
+| check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py params/sets/<set>/lazer-3330e48-kat.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
 | test PQZH | `(cd pqzh/ligero && cargo test --release --offline)` |
 | test the precompile boundary | `scripts/capped pqz-core/ffi/run.sh <label>` |
 | check every vector file | `scripts/capped pqz-core/ffi/vectors/run.sh <label>` |
@@ -630,7 +630,7 @@ node pqzl/test/run_wasm.mjs 3 1                                  # the same unde
 PQZ_VERIFY=fast pqzl/build/native/pqz_bench 2 200                # time pqz_verify_fast (wasm: PQZ_VERIFY=fast|both node ...)
 pqzl/build/native/pqz_sv_diff 10 5 2 1 10                        # both verifiers on honest + mutated proofs, must agree
 pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json
-python3 -I pqzl/kat/check.py pqzl/kat/lazer-3330e48.json pqzl/build/native/kat-pqz.json   # must print 19/19
+python3 -I pqzl/kat/check.py params/sets/<set>/lazer-3330e48-kat.json pqzl/build/native/kat-pqz.json   # must print 19/19
 pqzl/check_tbox_fixes.sh                                       # after pqzl/build.sh native: the tbox fixes and the z21 check are in place
 pqzl/sv/review/review.sh zdiff 1                                 # z21-inflated proofs, all five relations: both verifiers agree
 pqzl/sv/check_sv_fixes.sh                                        # after pqzl/build.sh native: pqz_verify_fast follows both fixes
@@ -668,7 +668,7 @@ pqzl/kat/build-lazer-dump.sh <work dir> v4      # upstream golden dump (v3 = AVX
 
 All three refuse other LaZer / estimator commits and run pinned images. The codegen takes minutes; headers are checked
 in and regenerated only on purpose. The v4 golden dump needs an AVX-512 CPU or Intel SDE
-(`sde64 -spr -- ./lazer_dump-v4 > pqzl/kat/lazer-3330e48.json`). Sizing details: [pqzl/params/README.md](pqzl/params/README.md).
+(`sde64 -spr -- ./lazer_dump-v4 > params/sets/<set>/lazer-3330e48-kat.json`). Sizing details: [pqzl/params/README.md](pqzl/params/README.md).
 
 </details>
 
@@ -762,7 +762,7 @@ run files keep the paths of their day.
 | `pqzl/lazer/` | LaZer `3330e48` subset. The pristine copy is commit `c91b3ab`; changes are in place, marked `PQZ:`; SHAKE256 added to `shake128.c`. Licence `pqzl/lazer/LICENSE` |
 | `pqzl/src/` | the rewritten layers and the C ABI (`pqz.h`): `pqz_mpn.h`, `pqz_ntt.c`, `pqz_fixexp.h`, `pqz_arena.c`, `pqz_rt.h`, `pqz_aes_gen.h` (from `gen_aes.py`); relations `R_REG`, `R_TX`, `R_TX0` (op 1 by statement length), `R_BURN`, `R_DS`, `R_DR` (`pqz_rel.c`); KeyGen / Enc / Dec from seeds (`pqz_keys.c`, deterministic); the specialised verifier (`pqz_sv.c`); wasm runtime (`pqz_wasm_rt.c`), `freestanding/` headers |
 | `pqzl/params/` | LaZer codegen (`codegen/`), relation specs `{reg,tx,tx0,burn,ds,dr}_params.sage`, generated headers `pqz_*_params.h`, `regen.sh`, parameter sizing (`e_s0.py`, `e_s1_proof.sage`, `estimator*.txt`), `anon/` (multi-recipient transfer sizing); [pqzl/params/README.md](pqzl/params/README.md) |
-| `pqzl/kat/` | arithmetic-layer KAT: `lazer_dump.c` (one source, upstream or pqz-core backend), golden `lazer-3330e48.json`, `check.py`, `build-lazer-dump.sh` |
+| `pqzl/kat/` | arithmetic-layer KAT: `lazer_dump.c` (one source, upstream or pqz-core backend), `check.py`, `build-lazer-dump.sh` (the golden files per set: `params/sets/<set>/lazer-3330e48-kat.json`) |
 | `pqzl/test/` | `pqz_bench.c` (prove, verify, tamper checks, the hedging check, timings, a hash of the proofs), `run_wasm.mjs` (the same under node), `pqz_keys_kat.c` (SHAKE256 / KeyGen / Enc / Dec KAT and round trip, checked by `pqz_kat.py --c-keys`), `pqz_sv_diff.c`, `pqz_sv_fuzz.c`, runs `runs/` |
 | `pqzl/sv/` | specialised verifier checks (`docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`), `bench.sh` (portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer), `research/pqzl-measure.sh` (all relations in one capped job: diff, bench, wasm both, ASan, KAT, both fix checks, memory per op), `check_sv_fixes.sh` (fails unless the differential test catches either tbox fix reverted in `pqz_sv.c`), runs `runs/`; `review/` the independent review's reproducers (`review.sh dom | norm | zdiff | fuzz`: cheating provers past the final hash, the z21 differential `z21diff.c`; never compiled by `pqzl/build.sh`) |
 | `research/pqzl-measure/` | the PQZL measurement round: `bench.sh` (build, KAT, `R_REG` / `R_TX` proof hashes, timings), `relfix.sh` (after the owner's fix-ups of 2026-10-13: build, KAT, tbox fixes, proof hashes, arena peak per relation, ASan + UBSan, timings of all six), raw runs `runs/` (latest `fs4-*`, PQZL v3) |

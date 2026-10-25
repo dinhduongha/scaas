@@ -10,7 +10,11 @@ set -u
 cd "$(dirname "$0")"
 L=runs/$1
 mkdir -p runs
-OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
+OUT() { echo "\$ $*"; "$@"; r=$?; echo "[rc=$r]"; return $r; }
+# the parameter set of the KAT step (PQZ_SET, default the crate's default n2304-kmax4096)
+S=${PQZ_SET:-n2304-kmax4096}
+if [ "$S" = n2304-kmax4096 ]; then KF=""; else KF="--no-default-features --features sv,set-$S"; fi
+kat_fail=0
 # FNV label file want: the file's proofs_fnv values in order = want (the C core's, ../../research/pqzl-measure/runs)
 FNV() {
   got=$(grep -o '"proofs_fnv": *"[0-9a-f]*"' "$2" | grep -o '[0-9a-f]\{8\}' | tr '\n' ' ')
@@ -19,10 +23,11 @@ FNV() {
 
 OUT cargo test -j2 --release --offline --no-fail-fast --features c-oracle,test-hooks,bench -- --nocapture > "$L-test.txt" 2>&1
 {
-  echo "# arithmetic KAT: kat_dump vs the upstream LaZer golden file"
-  OUT cargo build -j2 --release --offline --features test-hooks --bin kat_dump
+  echo "# arithmetic KAT: kat_dump vs the set's upstream LaZer golden file (params/sets/<set>/lazer-3330e48-kat.json;"
+  echo "# review R2-C9: the file moved there in 15c929b3, and a failed check fails this job)"
+  OUT cargo build -j2 --release --offline $KF --features test-hooks --bin kat_dump
   ./target/release/kat_dump > target/kat-rust.json
-  OUT python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
+  if ! OUT python3 -I ../kat/check.py "../../params/sets/$S/lazer-3330e48-kat.json" target/kat-rust.json; then kat_fail=1; fi
   echo "# keys KAT: keys_kat (pqzl/test/pqz_keys_kat.c's JSON lines) vs the independent Python check"
   OUT cargo build -j2 --release --offline --features test-hooks --bin keys_kat
   OUT sh -c './target/release/keys_kat 1000 > target/keys-rust.jsonl'
@@ -74,3 +79,4 @@ OUT cargo test -j2 --release --offline --no-fail-fast --features c-oracle,test-h
 
 grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|cases equal|cases over the six|MISMATCH|pqz_kat:|to_rust.py|^fnv |\"fails\"|\[rc=|^native|^wasm32|R_TX prove|cold under|^keys \(" "$L-test.txt"
 grep -hE "^(warning|error)|\[rc=" "$L-build.txt"
+[ $kat_fail = 0 ] || { echo "arithmetic KAT: FAILED (set $S)"; exit 1; }
