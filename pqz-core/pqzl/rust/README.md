@@ -51,8 +51,8 @@ false: a node must treat it as its own fault, not as an invalid proof; pqz-ffi m
 the same results as the free functions, with the `Ctx`'s A (expanded once; for servers that encrypt in bulk).
 `Error { Internal, Input, Reject, Memory }` = the C core's codes 1, 3, 4 and arena exhaustion. `PROOF_SYSTEM_ID` =
 the set's PQZL id, keccak256 of its `set.toml` label `pqzl_id` (`rust/set.rs` `PQZL_ID` = `PQZ_PROOF_SYSTEM_ID` of its
-`pqz_set.h`; plan 5h Task 8d: one id per set, e.g. `n2304-kmax4096` `keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4")`
-= `0x15d16d77…cb608a`; v3 and v2 retired, pq-zero-knowledge.md §8).
+`pqz_set.h`; plan 5h Task 8d: one id per set, e.g. `n2304-kmax4096` `keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5")`
+= `0xef1ffbcb…90336e` since the R0 review fix; v4, v3 and v2 retired, pq-zero-knowledge.md §8).
 `#![no_std]` + `alloc`, `#![forbid(unsafe_code)]` (relaxed to `deny` only for the dev-only `c_oracle` module), no
 floating point.
 

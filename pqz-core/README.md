@@ -224,8 +224,10 @@ per parameter set, from the set's `set.toml` labels (all sets: [params/sets/READ
 
 | `proofSystemId` | keccak256 of | Value | Status |
 |---|---|---|---|
-| PQZL, `n2304-kmax4096` (default) | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4` | `0x15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a` | plan 5h Task 8d part 1 |
-| PQZH, `n2304-kmax4096` | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2` | `0xe4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730` | plan 5h Task 8d part 1 |
+| PQZL, `n2304-kmax4096` (default) | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5` | `0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e` | current (R0 review fix, 2026-10-25) |
+| PQZH, `n2304-kmax4096` | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3` | `0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead` | current (R0 review fix, 2026-10-25) |
+| PQZL v4 (retired by the R0 fix) | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4` | `0x15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a` | was current from plan 5h Task 8d part 1 |
+| PQZH v2 (retired by the R0 fix) | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2` | `0xe4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730` | was current from plan 5h Task 8d part 1 |
 | PQZL v3 (retired by 8d) | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3` | `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | was frozen at vectors `8af584b` (branch `pqzl-fs3`) |
 | PQZH v1 (retired by 8d) | `scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1` | `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | was frozen at gate B |
 

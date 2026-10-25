@@ -260,9 +260,10 @@ fn auth_digest(stmt: &[u8]) -> Word {
 /// the ids whose proofs this build writes: PQZL, and PQZH where it is compiled in
 const IDS: &[(&str, Word)] = if pqz_ffi::PQZH { &[("pqzl", PQZL_ID), ("pqzh", PQZH_ID)] } else { &[("pqzl", PQZL_ID)] };
 
-/// another set's PQZL id, keccak256 of n2304-kmax4096's label: the foreign id of the "other id" rows at a set without
-/// PQZH (review 8d1b M2: its zero PQZH word would repeat the "unknown proofSystemId (zero word)" rows byte for byte)
-const FOREIGN_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4";
+/// another set's PQZL id, keccak256 of n2304-kmax4096's current label: the foreign id of the "other id" rows at a set
+/// without PQZH (review 8d1b M2: its zero PQZH word would repeat the "unknown proofSystemId (zero word)" rows byte for
+/// byte; R0 fix round m7: a live id, the retired ones have their own rows)
+const FOREIGN_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5";
 
 /// the "other id" of a negative row (its name and word): the other proof system's id, and at a set without PQZH (PQZL
 /// rows only) another set's PQZL id; both are unknown ids to this set's decoder or verifier
@@ -1575,7 +1576,7 @@ struct MRow {
 }
 
 /// (case, M, auditorOn, fee, leg amounts): every built (M, A) with one real leg at a position that varies by shape
-/// (D15), then a two-real-leg row, an all-decoy row and a group-boundary row (real legs 3 and 4, groups 0 and 1)
+/// (D15), then a two-real-leg row, an all-decoy row and a group-boundary row (real legs b - 1 and b: `boundary()`)
 fn multi_specs() -> Vec<(String, usize, bool, u64, Vec<u64>)> {
     let v = 123_456u64;
     let one = |m: usize, at: usize| (0..m).map(|j| if j == at { v } else { 0 }).collect::<Vec<u64>>();
@@ -1587,8 +1588,17 @@ fn multi_specs() -> Vec<(String, usize, bool, u64, Vec<u64>)> {
     }
     out.push(("M2-off-two-real".into(), 2, false, 7, vec![v, 7_000]));
     out.push(("M4-off-decoys".into(), 4, false, 0, vec![0; 4]));
-    out.push(("M8-on-boundary".into(), 8, true, 7, [vec![0; 3], vec![v, 7_000], vec![0; 3]].concat()));
+    let b = boundary();
+    out.push(("M8-on-boundary".into(), 8, true, 7, (0..8).map(|j| if j == b - 1 { v } else if j == b { 7_000 } else { 0 }).collect()));
     out
+}
+
+/// the first leg b of an audited group, the one at or after leg 4: b = s ceil(4 / s), s = S_AUD (R0 fix round m6).
+/// M8-on-boundary's real legs b - 1 and b are the last of one group and the first of the next at every set: 3 / 4 at
+/// s = 2 and 4, 5 / 6 at s = 3 (where the legs 3 / 4 of before sat in one group)
+fn boundary() -> usize {
+    let s = st::legs_per_group(true);
+    s * 4usize.div_ceil(s)
 }
 
 fn leg_addr(j: usize) -> Vec<u8> {
@@ -1719,14 +1729,18 @@ fn multi_rows() -> Vec<MRow> {
 }
 
 /// op 7 disclosures (R0-1: R_DR / R_DA at the window of the disclosed v): (case, op 7 case, leg, auditor). The auditor
-/// copies of legs 3 and 4 of M8-on-boundary and of leg 2 of M4-on (windows j mod S_AUD: some nonzero at every set) and
-/// the receiver of M8-on-boundary's leg 4 (window 0, its group's u)
-const MDISC: [(&str, &str, usize, bool); 4] = [
-    ("M8-on-boundary-leg3-auditor", "M8-on-boundary", 3, true),
-    ("M8-on-boundary-leg4-auditor", "M8-on-boundary", 4, true),
-    ("M4-on-leg2-auditor", "M4-on", 2, true),
-    ("M8-on-boundary-leg4-receiver", "M8-on-boundary", 4, false),
-];
+/// copies of M8-on-boundary's real legs b - 1 and b (`boundary()`) and of leg 2 of M4-on (windows j mod S_AUD: some
+/// nonzero at every set) and the receiver of M8-on-boundary's leg b (window 0, its group's u)
+fn mdisc() -> [(&'static str, &'static str, usize, bool); 4] {
+    let b = boundary();
+    let nm = |j: usize, who: &str| leak(format!("M8-on-boundary-leg{j}-{who}"));
+    [
+        (nm(b - 1, "auditor"), "M8-on-boundary", b - 1, true),
+        (nm(b, "auditor"), "M8-on-boundary", b, true),
+        ("M4-on-leg2-auditor", "M4-on", 2, true),
+        (nm(b, "receiver"), "M8-on-boundary", b, false),
+    ]
+}
 
 /// One op 7 disclosure statement (statement_transfer_multi.json `disclosures`)
 struct DRow {
@@ -1741,7 +1755,7 @@ struct DRow {
 fn multi_disclosures(mrows: &[MRow]) -> Vec<DRow> {
     let ka = keygen(SEED_A);
     let specs = multi_specs();
-    MDISC
+    mdisc()
         .iter()
         .enumerate()
         .map(|(i, &(case, mc, j, aud))| {
@@ -1931,8 +1945,9 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
         } else {
             let b = row("M8-on-boundary");
             let (_, _, bv0, _, _) = moff(8, true);
-            let (v3, v4) = (bv0 + 3 * 128, bv0 + 4 * 128);
-            list.push(("v_3 and v_4 swapped (legs across groups 0 and 1)", "M8-on-boundary", vec![
+            let (j, g) = (boundary(), boundary() / st::legs_per_group(true)); // legs j - 1, j: groups g - 1, g
+            let (v3, v4) = (bv0 + (j - 1) * 128, bv0 + j * 128);
+            list.push((leak(format!("v_{} and v_{j} swapped (legs across groups {} and {g})", j - 1, g - 1)), "M8-on-boundary", vec![
                 E::StmtSet(v3, b.stmt[v4..v4 + 128].to_vec()),
                 E::StmtSet(v4, b.stmt[v3..v3 + 128].to_vec()),
             ]));
@@ -2012,11 +2027,12 @@ fn generate() -> (Vec<(String, String)>, bool) {
         MULTI_FILE,
         "Op 7 R_TXM statements (P6-ANON plan §4, D15; pq-zether.md §8.1 op 7): every built (M, auditorOn) of each id with \
          one real leg (123,456) at a position that varies by shape and decoy legs (0), plus a two-real-leg row, an \
-         all-decoy row and a group-boundary row (real legs 3 and 4 in groups 0 and 1). ids: the proofSystemIds whose \
+         all-decoy row and a group-boundary row (real legs b - 1 and b, b = s ceil(4 / s) with s = S_AUD: the last leg \
+         of one audited group and the first of the next). ids: the proofSystemIds whose \
          built leg counts contain M (PQZL {1, 2, 4, 8}, PQZH {1, 2, 4}). header: as statement_transfer.json with word \
          192 = recipientsHash = keccak256(UA_0 || ... || UA_{M-1}) (32-byte words of objects.uas) and word 320 = M; \
          auditorOn = 1 iff pk_a. objects: keys by KeyGen seed (pks: leg order), T = Enc + Trivial(plus_trivial), out: \
-         the multi-group Enc (D13): group g encrypts its legs (j / 4 = g), then (g = 0) pk_f with value_f, then (auditor \
+         the multi-group Enc (D13): group g encrypts its legs (j / s = g), then (g = 0) pk_f with value_f, then (auditor \
          on) pk_a once per leg of the group, from seed_enc_g = seed_enc (g = 0) or SHAKE256(SCAAS-PQZ-ENC-GROUP-V1 || \
          seed_enc || be4(g))[0..32), ctr = its counter. memo (§5.4, CTR-PQZ-23): salt || ((u8(auditorOn) || u8(M) || \
          (be8(a_j) || UA_j)_j) XOR ks), key = HKDF-SHA256(IKM key_seed, no salt, info PQZ/memo/v1 || chainUid || \

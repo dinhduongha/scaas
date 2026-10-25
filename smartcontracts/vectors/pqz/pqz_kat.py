@@ -1189,7 +1189,7 @@ def check_statement(j, d):
 # ---------------------------------------------------------------- op 7 R_TXM vectors (P6-ANON S4, plan D15)
 MULTI_FILE = "statement_transfer_multi.json"
 # (case, M, auditorOn): every built shape (one real leg, its position varying by shape), a two-real-leg row, an
-# all-decoy row, a group-boundary row (real legs 3 and 4: groups 0 and 1)
+# all-decoy row, a group-boundary row (real legs b - 1 and b, b = s ceil(4 / s), s = S_AUD: two audited groups; R0 fix m6)
 MULTI_CASES = [(f"M{m}-{'on' if a else 'off'}", m, a) for a in (1, 0) for m in (1, 2, 4, 8)] + \
     [("M2-off-two-real", 2, 0), ("M4-off-decoys", 4, 0), ("M8-on-boundary", 8, 1)]
 # the PQZH verifier's exact length bound per op 7 shape at the set's preset (_LIGERO_MAX above)

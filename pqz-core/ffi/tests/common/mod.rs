@@ -62,10 +62,11 @@ pub fn ids() -> Vec<Word> {
 }
 
 /// The "other id" of a negative case: the other proof system's, and at a set without PQZH (PQZL inputs only) another
-/// set's PQZL id, n2304-kmax4096's keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4") (review 8d1b M2: not the zero word,
-/// which the "unknown id" case already sends; pqz-vectors' rows use the same id)
+/// set's PQZL id, n2304-kmax4096's current keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5") (review 8d1b M2: not the
+/// zero word, which the "unknown id" case already sends; R0 fix round m7: a live id, not a retired one; pqz-vectors' rows
+/// use the same id)
 pub fn other_id(pqzl: bool) -> Word {
-    const FOREIGN: &str = "15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a";
+    const FOREIGN: &str = "ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e";
     match (pqzl, stmt::HAS_PQZH) {
         (false, _) => PQZL_ID,
         (true, true) => PQZH_ID,

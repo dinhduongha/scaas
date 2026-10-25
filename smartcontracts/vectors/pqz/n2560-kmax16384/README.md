@@ -11,9 +11,11 @@ Differences:
   ok true) and results 1, 0, 1, 0. Limits: `MAX_PROOF_PQZH` 327,680 (this set only, owner 2026-10-23), `MAX_INPUT`
   524,288 (pqz-stmt at this set; the node reads it from the library, `pqz_max_input()`, since 8d part 1), so the `negative.json` "MAX_PROOF(id)" and "MAX_INPUT"
   rows sit at those values.
-- **The set's own proofSystemIds** (plan 5h Task 8d part 1, `set.json`; decisions CTR-PQZ-09): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4")` = `0xa3db21fc…70262d`, PQZH
-  `keccak256("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2")` = `0xe83ad1da…109851`; the
-  retired v2 / v3 / PQZH v1 ids only in `negative.json`'s "retired … proofSystemId" rows.
+- **The set's own proofSystemIds** (`set.json`; decisions CTR-PQZ-09), since the R0 review fix (2026-10-25): PQZL
+  `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5")` = `0xeacf34a3…276882`, PQZH
+  `keccak256("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3")` = `0xc93f3bdd…3f3662`; the retired
+  ids (this set's v4 `0xa3db21fc…70262d` / PQZH v2 `0xe83ad1da…109851`, PQZL v2 / v3, PQZH v1) only in
+  `negative.json`'s "retired … proofSystemId" rows.
 - Lengths, norms, noise ranges follow the set (pk 20,480 B; op 1 statement 103,552 B; worst case: 16,383 credits,
   B_FRESH 14,624, proven range 2^28, key `margin_2_28` 1.12, mint margin 3.36).
 
