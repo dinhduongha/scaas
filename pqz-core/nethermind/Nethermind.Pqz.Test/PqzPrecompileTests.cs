@@ -87,7 +87,9 @@ public class PqzPrecompileTests
             CorpusRow? f = Corpus.Rows.FirstOrDefault(r => r.Kind == "flip" && r.Id == h.Id && r.Input.Length == h.Input.Length
                 && r.Input.AsSpan(0, stmtEnd).SequenceEqual(h.Input.AsSpan(0, stmtEnd)));
             // no flip: op 7 rows, and the op 7 disclosures (op 5 rows named by their case, R0 review fix): same row and
-            // length as their form's honest input, which has one
+            // length as their form's honest input, which has one. Name-based on purpose (review m11, kept): corpus.py
+            // names an honest row "<form> <id>" and only the vectors' op 7 disclosures "<case> <id>", the one marker the
+            // corpus carries; a new honest op 1-5 row with a case name would skip this check, so give it a flip row
             bool ofMulti = h.Op == PqzSchedule.OpMulti || !h.Name.StartsWith(h.Form + " ");
             if (f is null) { Assert.That(ofMulti, Is.True, $"every op 1-5 honest input has a flip: {h.Name}"); continue; }
             Assert.That(PqzPrecompile.Gas(f.Input, s), Is.EqualTo(PqzPrecompile.Gas(h.Input, s)), h.Name);

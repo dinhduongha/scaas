@@ -313,7 +313,7 @@ def specs(name):
     """the 14 <rel>_params.sage of the set: the production shapes of the v3 set (pqzl/params/*.sage), the bit widths
     and norm bounds of the set, log2q rounded down as pqzl/params/n-study/gen_specs.py (LaZer's D loop hangs otherwise),
     pqz_delta / kmlwe_min from set.toml (e_s1's results; no kmlwe_min = LaZer's default hiding rank)."""
-    t, b, _ = consts(name)
+    t, b, cs = consts(name)
     N, K_MAX, Q = t["n"], t["k_max"], t["q"]
     k, bs, be, m, eb = N // 64, b["bs"], b["be"], b["m"], b["e_bits"] + 1
     tx_bits = 64 + 64 + 16 * m + 15 * (m - 3) + 16 * eb  # d, d', M_i, c_i + 64, e_T + 2^(eb-1)
@@ -327,9 +327,19 @@ def specs(name):
     kml = f"kmlwe_min = {t['kmlwe_min']}\n" if "kmlwe_min" in t else ""
     out = {}
 
-    def spec(rel, what, ks, Bs, e2, bits, bprime, filler, l2):
+    # the nprime = 1 filler's l2 bound, derived from what the filler is (review R0-C2, fix round m10): s[0] has 64
+    # coefficients in [-1, 1] (CBD(1)), so ||s[0]||_2 <= isqrt(64 * 1^2) = 8; an e2 block is bounded by its exact-l2
+    # proof, BETA_2 (set constants)
+    beta_2 = next(v for k_, v, *_ in cs if k_ == "BETA_2")
+    FILL = {"s0": ("s[0]: 64 coefficients in [-1, 1], l2 <= %d" % math.isqrt(64 * 1**2), math.isqrt(64 * 1**2)),
+            "e2": (f"|coefficients| <= 20, l2 <= {beta_2} (its exact-l2 block)", beta_2)}
+
+    def spec(rel, what, ks, Bs, e2, bits, bprime, filler):
         # LaZer's codegen reads Bprime as the l2 bound alpha4 of the filler (stdev4 = gamma4 sqrt(337) alpha4; bimodal z4
         # is exact only for ||R' s4|| <= sqrt(337) alpha4): it must bound the filler's l2 norm (review R0-C2)
+        pre, kind = filler
+        desc, l2 = FILL[kind]
+        filler = pre + desc
         assert bprime >= l2, f"{name} {rel}: Bprime {bprime} below the filler's l2 bound {l2}"
         nbin = math.ceil(bits / 64) if bits else 0
         m1 = len(ks) * k + e2 + nbin
@@ -347,18 +357,17 @@ def specs(name):
     def debit(G):
         return [k] * (2 + 2 * G), [bs, be] * (1 + G)
 
-    s0 = "s[0]: 64 coefficients in [-1, 1], l2 <= 8"
-    e20 = "|coefficients| <= 20, l2 <= 64 (its exact-l2 block)"
-    spec("reg", f"R_REG pk = A s + e; s1 = s, e ({k} polys each)", [k, k], [bs, be], 0, 0, 8, s0, 8)
+    s0 = ("", "s0")
+    spec("reg", f"R_REG pk = A s + e; s1 = s, e ({k} polys each)", [k, k], [bs, be], 0, 0, 8, s0)
     ks, Bs = debit(1)
     spec("tx", f"R_TX: s_f, e_f, r, e1 ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (d 64, d' 64, M 16x{m}, "
-         f"c 15x{m - 3}, e_T 16x{eb})", ks, Bs, 3, tx_bits, 64, "e2_t, " + e20, 64)
-    spec("tx0", f"R_TX0 (auditor off): R_TX without e2_a; {tx_bits} bits", ks, Bs, 2, tx_bits, 64, "e2_t, " + e20, 64)
+         f"c 15x{m - 3}, e_T 16x{eb})", ks, Bs, 3, tx_bits, 64, ("e2_t, ", "e2"))
+    spec("tx0", f"R_TX0 (auditor off): R_TX without e2_a; {tx_bits} bits", ks, Bs, 2, tx_bits, 64, ("e2_t, ", "e2"))
     spec("burn", f"R_BURN / REFRESH: s_f, e_f, r, e1, e2_f; {tx_bits - 64} bits (d public)", ks, Bs, 1, tx_bits - 64,
-         64, "e2_f, " + e20, 64)
-    spec("ds", f"R_DS: s1 = r, e1 ({k} polys each), e2_t", [k, k], [bs, be], 1, 0, 64, "e2_t, " + e20, 64)
+         64, ("e2_f, ", "e2"))
+    spec("ds", f"R_DS: s1 = r, e1 ({k} polys each), e2_t", [k, k], [bs, be], 1, 0, 64, ("e2_t, ", "e2"))
     spec("dr", f"R_DR: s1 = s, e ({k} polys each), e'_i + 2^{eb - 1} in {eb} bits ({16 * eb} bits)", [k, k], [bs, be], 0,
-         16 * eb, 8, s0, 8)
+         16 * eb, 8, s0)
     for M in (2, 4, 8, 16):
         bits = tx_bits - 64 + 64 * M
         for aud in (1, 0):
@@ -370,7 +379,7 @@ def specs(name):
             what = (f"R_TXM M = {M}, G = {G} randomness group(s) of <= {sg} legs, auditor {'on' if aud else 'off'}: s_f, "
                     f"e_f, (r_g, e1_g) x {G}, e2_j, e2_f" + (", e2_{a,j}" if aud else "") +
                     f"; {e2} e2 blocks, {bits} bits" + ("; OVERSIZE (bench builds only, -DPQZ_TXM_OVERSIZE)" if M == 16 else ""))
-            spec(rel, what, ks, Bs, e2, bits, 64, "e2_0, the first leg's noise, " + e20, 64)
+            spec(rel, what, ks, Bs, e2, bits, 64, ("e2_0, the first leg's noise, ", "e2"))
     return out
 
 
@@ -407,6 +416,9 @@ def vec_dir(name):
     return os.path.join(REPO, "smartcontracts", "vectors", "pqz", *([] if name == V3 else [name]))
 
 
+STALE = []  # sets whose vectors carry another id (sol_vectors)
+
+
 def sol_vectors(name):
     """(SELFTEST, PROBE_PQZL, PROBE_PQZH) of the set's vectors: selftest.json's hash, and keccak256(psid || message ||
     pk || proof) of the self-test's R_REG vector (statement_register.json row 0, proof_<sys>.json row 4 REGISTER) per
@@ -417,7 +429,13 @@ def sol_vectors(name):
     rd = lambda f: json.load(open(os.path.join(d, f), encoding="utf-8"))  # noqa: E731
     st = bytes.fromhex(rd("statement_register.json")["rows"][0]["stmt"])
     if st[32:64] != ids(name)["pqzl"][1]:
-        return z, z, z  # the vectors are another id's (an id bump before `make.sh <set> vectors`): no hashes yet
+        # the vectors are another id's (an id bump before `make.sh <set> vectors`): no hashes yet, never silently
+        # (review R0 fix round m12): a warning here, and main() fails --check
+        if name not in STALE:
+            STALE.append(name)
+            print(f"gen_set.py: WARNING {name}: its vectors carry another PQZL id, PqzSet.sol SELFTEST / PROBE_* = 0 "
+                  f"until `make.sh {name} vectors`", file=sys.stderr)
+        return z, z, z
     out = [bytes.fromhex(rd("selftest.json")["hash"])]
     for sys_ in ("pqzl", "pqzh"):
         if sys_ not in ids(name):
@@ -620,6 +638,7 @@ def main(argv):
         if not os.path.exists(SOL_EVM) or open(SOL_EVM, encoding="utf-8").read() != sol_text(CONTRACTS):
             diff.append(os.path.relpath(SOL_EVM, REPO))
         diff += [os.path.relpath(p, REPO) for s in names for p in stray(s)]
+        diff += [f"{s} (vectors under another id: zero SELFTEST / PROBE_*)" for s in STALE]
     print("gen_set.py%s: %d sets, %d files%s" % (" --check" if check else "", len(names), len(fs) + check,
                                                  (", differ: " + " ".join(diff)) if diff else ""))
     return 1 if diff else 0
