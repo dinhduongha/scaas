@@ -33,9 +33,15 @@ redeployed with no migration).
 `register(kind, keyData, pop, pqzKey, pqzPop, kemVersion, kemPk)` registers the UA **with its attributes** in one
 transaction (owner 2026-10-25: not two steps); the proofs may be empty (P8). It stays permissionless: the submitter
 pays the gas. Copying a UA to another chain = sending the same fields to that chain's registry; a client or a relayer
-service can do it for any UA it sees on another chain. Today `UARegistered(ua, kind, keyData, pqzKey)` keeps the key
-data and the PQZ key's pointer but not the proofs; UA-8 emits every `register` field (`pop`, `pqzPop` and the KEM
-record included) so anyone can read them from the source chain and re-submit them. Later KEM versions come by
+service can do it for any UA it sees on another chain. Today the registry stores `keyData` and the PQZ key (SSTORE2)
+but not `pop` / `pqzPop`; **UA-8 stores every `register` field in contract state** (owner 2026-10-25: "store all of
+it": `pop`, `pqzPop`, the KEM record and its signature, as SSTORE2 blobs), so anyone can rebuild the registration from
+state and re-submit it elsewhere even when logs are gone (history expiry); the event carries them as well. Cost
+[estimate, ≈ 1,530 state gas per byte]: `pop` 65 B (secp256k1) to 3,309 B (ML-DSA-65), ≈ 0.1–5 M; `pqzPop` (the
+`R_REG` proof, 28,080–35,420 B by set) ≈ 43–54 M; the PQZ key itself (16–22 KB) ≈ 25–35 M is stored already. A full
+PQ registration with a stored proof is then ≈ 75–95 M of state gas: more than a 60 M block, so on such a chain the
+proof is stored by a second call `storePqzPop(ua, pqzPop)` (anyone; checked where the PQZ verifier exists, else kept
+unchecked as in P8) — on chains with larger blocks (SCaaS testnet 200 M) one `register` holds everything. Later KEM versions come by
 `setKemKey` (P7).
 
 **P3 — What must match.** The same kind must be enabled in the target registry's generation (a PQ kind needs its
@@ -63,7 +69,8 @@ bound to the registering UA's id — with the portable digest too — so copying
 same UA), the per-chain generations and
 kind caps, write authorization (chain-bound), ML-DSA expanded-key caches (per chain, rebuilt on registration).
 
-**P7 — The KEM (chat) key in `UARegistry` (owner 2026-10-25: registered in UA-8).** The UA signs a **chain-independent** record
+**P7 — The KEM (chat) key in `UARegistry` (owner 2026-10-25: registered in UA-8; every version needs the UA's
+signature, and the signature is stored with it).** The UA signs a **chain-independent** record
 `kemRecord = (ua, version, pk)` (the digest has no chain id and no registry address, P4); `UARegistry.setKemKey(ua, version, pk, sig)` stores it on any chain, submitted by **anyone**
 (the submitter pays the gas; through mtx when a relayer charges the UA a fee): the contract checks the signature
 against the UA's registered key and stores the record under `(ua, version)` if that version is not stored yet (any
@@ -83,7 +90,9 @@ for the PQZ key: the UA-6 U3 holder set — `mldsa44` / `mldsa65` / `fndsa512`, 
 
 **No one-owner check for KEM keys** (unlike the signer and PQZ keys): a KEM record carries no proof of possession of
 the KEM secret, so a uniqueness check would let anyone who sees a key first register it under their own UA and block
-the real owner on that chain; a UA that lists someone else's KEM key gains nothing (it cannot decrypt). Views: `kemKeyOf(ua) → (version, pk)` (the highest stored version), `kemKeyAt(ua, version)`. Event `UAKemKeySet(ua, version, keyHash)`.
+the real owner on that chain; a UA that lists someone else's KEM key gains nothing (it cannot decrypt). The registry stores each version's `pk` **and its signature** in state (SSTORE2), so any version can be copied to
+another chain from state alone. Views: `kemKeyOf(ua) → (version, pk, sig)` (the highest stored version),
+`kemKeyAt(ua, version) → (pk, sig)`, `popOf(ua)`, `pqzPopOf(ua)`. Event `UAKemKeySet(ua, version, keyHash)`.
 
 **P8 — The balance-key proof is optional (owner 2026-10-25).** So that a UA with all its keys — signing key, PQZ
 (balance) key, KEM key — can be registered on chains without the PQZ precompile (Ethereum, for example). The two
