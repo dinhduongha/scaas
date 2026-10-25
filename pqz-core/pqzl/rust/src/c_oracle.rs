@@ -49,6 +49,7 @@ extern "C" {
     fn pqz_shim_params(i: u32, out: *mut u64, n: *mut usize) -> i32;
     fn pqz_shim_ghint(i: u32, inp: *const i64, out: *mut u64) -> i32;
     fn pqz_shim_p2r(i: u32, inp: *const i64, out: *mut u64) -> i32;
+    fn pqz_shim_chal(seed: *const u8, out: *mut i64) -> i32;
     #[cfg(feature = "test-hooks")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8,
                        outlen: *mut usize) -> i32;
@@ -272,6 +273,19 @@ pub fn c_p2r(i: u32, inp: &[i64; 64]) -> Option<Vec<u64>> {
         0 => Some(out),
         -1 => None,
         r => panic!("c_p2r: rc {r}"),
+    }
+}
+
+/// `pqz_shim_chal`: the C core's final challenge of `seed` (`poly_urandom_challenge`, omega 8, eta 140) and its dom-0
+/// autostable sample, as `testkit::chal`; `None` if no sample passed
+pub fn c_chal(seed: &[u8; 32]) -> Option<([i64; 64], [i64; 64])> {
+    let mut out = [0i64; 128];
+    // SAFETY: a 32-byte seed, 128 output words, as the shim reads / writes
+    let r = with_core(|| unsafe { pqz_shim_chal(seed.as_ptr(), out.as_mut_ptr()) });
+    match r {
+        0 => Some((out[..64].try_into().unwrap(), out[64..].try_into().unwrap())),
+        1 => None,
+        r => panic!("c_chal: rc {r}"),
     }
 }
 

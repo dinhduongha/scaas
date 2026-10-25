@@ -2,9 +2,9 @@
 //! field, re-encode) = `test_mutate` on the frozen proofs of every relation code (Review Focus 1: Rust rejects
 //! exactly where C rejects, and re-encodes to the same bytes where C accepts), malformed encodings, and the hint
 //! functions of `dcompress.c` (`use_ghint` / `make_ghint`) through `tests/oracle_shim.c`.
-use pqzl::c_oracle::{c_ghint, c_p2r, c_test_mutate};
+use pqzl::c_oracle::{c_chal, c_ghint, c_p2r, c_test_mutate};
 use pqzl::test_mutate;
-use pqzl::testkit::{p2r, dcomp_gamma_m, ghint, synthetic_proof};
+use pqzl::testkit::{chal, p2r, dcomp_gamma_m, ghint, synthetic_proof};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -239,4 +239,31 @@ fn ghint_eq_c() {
     }
     assert_eq!(i, if cfg!(feature = "oversize") { 14 } else { 12 });
     assert_eq!(c_ghint(i as u32, &[0; 192]), None, "C has more relations");
+}
+
+/// the eta filter's resample path (review R0 fix round m3), a known answer per core: for the seed below, the dom-0
+/// autostable sample (upstream's challenge) has ||o(c) c||_1 > eta^2, and so has dom 1, so both cores resample. Rust
+/// and C (oracle) must give the same challenge: the sample of dom KAT_DOM with the FNV-1a KAT_FNV of its coefficients
+/// (omega 8, eta 140 and the sampler are every set's, so one KAT for all sets; PQZ_CHAL_SEARCH=1 lists such seeds).
+/// With the filter removed the challenge would be the dom-0 sample and the test fails.
+#[test]
+fn challenge_resample_kat() {
+    const KAT_SEED: u8 = 17;
+    const KAT_DOM: u64 = 2;
+    const KAT_FNV: u64 = 0xc5da598f94ff083a;
+    let fnv = |c: &[i64; 64]| c.iter().fold(0xcbf29ce484222325u64, |h, &x| (h ^ x as u64).wrapping_mul(0x100000001b3));
+    if std::env::var("PQZ_CHAL_SEARCH").is_ok() {
+        for i in 0..=255u8 {
+            let (c, _, dom) = chal(&[i; 32]).unwrap();
+            if dom > 0 {
+                println!("KAT_SEED {i} KAT_DOM {dom} KAT_FNV {:#x}", fnv(&c));
+            }
+        }
+        return;
+    }
+    let seed = [KAT_SEED; 32];
+    let (c, c0, dom) = chal(&seed).expect("a passing sample");
+    assert_ne!(c, c0, "the dom-0 sample passes the filter: not a resample seed");
+    assert_eq!((dom, fnv(&c)), (KAT_DOM, KAT_FNV), "Rust challenge");
+    assert_eq!(c_chal(&seed), Some((c, c0)), "C = Rust");
 }

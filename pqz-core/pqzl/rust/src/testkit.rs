@@ -761,6 +761,16 @@ pub fn ghint(i: usize, inp: &[i64; 192]) -> Option<alloc::vec::Vec<u64>> {
     Some(o)
 }
 
+/// the final challenge of `seed` (`Poly::urandom_challenge`, omega 8, log2 5, eta 140: every set's) and the autostable
+/// sample of dom 0 (upstream's challenge), as `c_oracle::c_chal`, and the dom of the chosen sample; `None` if no sample
+/// passed (review R0 fix round m3)
+pub fn chal(seed: &[u8; 32]) -> Option<([i64; 64], [i64; 64], u64)> {
+    let co = |p: &Poly| -> [i64; 64] { core::array::from_fn(|j| p.c(j).get_i64()) };
+    let c = co(&Poly::urandom_challenge(8, 5, 140, seed).ok()??);
+    let dom = (0..crate::arith::poly::CHAL_TRIES).find(|&d| Poly::urandom_autostable(8, 5, seed, d).is_ok_and(|p| co(&p) == c))?;
+    Some((c, co(&Poly::urandom_autostable(8, 5, seed, 0).ok()?), dom))
+}
+
 /// `pqz_shim_p2r`: relation i's (`c_params` order) Power2Round (`Poly::power2round` with its tbox dcompress, as
 /// `abdlop::commit`) of the 64 coefficients `inp`: r1, then the input as changed (the wrap case, R1-C1 / R2-C2)
 #[cfg(feature = "c-oracle")]
