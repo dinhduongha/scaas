@@ -55,6 +55,10 @@ pub(crate) const SV_NP: usize = 5;
 pub(crate) const MAX_PROOF_PQZH: usize = 327_680;
 /// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)
 pub(crate) const MAX_INPUT: usize = 524_288;
+/// pqz-ffi's C backend: the prover arena in MiB (set.toml [pqzl_c] prove_arena_mib)
+pub(crate) const C_PROVE_ARENA_MIB: usize = 1_792;
+/// pqz-ffi's C backend: the largest op 7 M proved in wasm32 (set.toml [pqzl_c] wasm_max_legs)
+pub(crate) const C_WASM_MAX_LEGS: usize = 2;
 /// whether this set has PQZH (set.toml pqzh): without it pqz-stmt knows no PQZH id (PQZH_ID below is the zero
 /// word, never accepted) and pqz-ffi has no PQZH build
 pub(crate) const PQZH: bool = true;

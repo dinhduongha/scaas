@@ -22,6 +22,11 @@ k = 817                           # message length (H_k)
 t = 122                           # column queries (owner 2026-10-23: 122, not THE preset's 121)
 max_proof = 327680                # MAX_PROOF_PQZH (B), 320 KiB: the precompile's and the prover's proof limit
 
+[pqzl_c]                          # pqz-ffi's opt-in C backend (feature pqzl-c; review R1-C2 / R4-C1): sized from the gate's
+                                  # C peaks with every relation loaded (runs/gate/<set>-fnv-c.jsonl, x 1.5; README.md beside this dir)
+prove_arena_mib = 1792             # native prover / generic-verifier arena (ARENA_BIG)
+wasm_max_legs = 2                 # the largest op 7 M the C backend proves in wasm32 (its 512 MiB arena)
+
 [approval]
 date = "2026-10-21"
 what = "approved as the Task 8 set on 2026-10-20 (Q1), superseded as the default by n2304-kmax4096 on 2026-10-21; kept as a shippable set (owner 2026-10-21: full vectors, gate, SET.md conditions)"

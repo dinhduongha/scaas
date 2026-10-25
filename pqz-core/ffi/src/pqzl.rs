@@ -40,12 +40,12 @@ pub struct NodeFault;
 #[cfg(feature = "test-hooks")]
 pub static TEST_FAIL_WORKER: AtomicBool = AtomicBool::new(false);
 
-/// The largest PQZL op 7 M that `crate::prove` proves on wasm32; verify has no such limit. C backend 4 (controller
-/// proposal 2026-10-16, owner may override: the C core's `R_TXM4_0` with every relation loaded peaks at 432.7 MB in
-/// wasm32, M = 8 at 669 MB, `l3a-summary.txt`; M = 8 is for native clients). Rust backend 8 = `pqzl::WASM_MAX_LEGS`
-/// (port plan Task 12, owner 2026-10-18 "if it is enough, raise it": run `d6`, the M = 8 wasm32 prove peaks at
-/// 117.4 MiB, CTR-PQZ-09).
-pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else { 4 };
+/// The largest PQZL op 7 M that `crate::prove` proves on wasm32; verify has no such limit. C backend: per set
+/// (set.toml [pqzl_c] wasm_max_legs, pqz-stmt `C_WASM_MAX_LEGS`; review R4-C1: 4 for every set before, while the C
+/// core's wasm32 peak with every relation loaded exceeds the 512 MiB arena at M = 4 at n2816-kmax65536, and the R0
+/// review fix's audited groups raise it at n2048 / n2304). Rust backend 8 = `pqzl::WASM_MAX_LEGS` (port plan Task 12,
+/// owner 2026-10-18 "if it is enough, raise it": run `d6`, the M = 8 wasm32 prove peaks at 117.4 MiB, CTR-PQZ-09).
+pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else { pqz_stmt::C_WASM_MAX_LEGS };
 /// The worker thread's stack (pqz_bench runs the core on an 8 MiB main thread, the wasm builds on an 8 MiB stack).
 pub const STACK: usize = 16 << 20;
 

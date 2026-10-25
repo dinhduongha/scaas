@@ -96,14 +96,18 @@ core keeps its arena, base mark, sticky error and SV tables in global variables.
 once:
 
 - `ARENA_SMALL`, 512 MiB, verify only: the precompile path. Sized when the multi-recipient transfer was added (owner
-  2026-10-16) at 2.00 × the measured adversarial peak of 268 MB: the specialised verifier over all six forms and every
-  multi-recipient shape, with their keys and tables kept, plus the self-test (run `s3a`).
-- `ARENA_BIG`, 1 GiB native: the first prove or generic verify moves the core to it, once. The peak with every
-  relation loaded is 854 MB (`R_TXM8_0`, M = 8 without the auditor).
-- wasm32 has one 512 MiB arena for both. There, `prove` refuses PQZL multi-recipient transfers above M = 4
-  (`ProveError::Statement(Reject::Legs)`); M = 8 is for native clients. The Rust backend has no arena and proves
-  M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of linear memory, run
-  `d6`, Rust port Task 12, CTR-PQZ-09).
+  2026-10-16) at 2.00 × the measured adversarial peak of 268 MB at n2048-kmax1024: the specialised verifier over all six
+  forms and every multi-recipient shape, with their keys and tables kept, plus the self-test (run `s3a`); per set
+  `tests/verify_only.rs` asserts ≥ 1.5 × under `PQZL=c` (review R4-C2).
+- `ARENA_BIG`, native, per set (set.toml `[pqzl_c] prove_arena_mib`, pqz-stmt `C_PROVE_ARENA`; review R1-C2 / R4-C1:
+  1 GiB for every set before, below the C peaks at n2560-kmax16384 and n2816-kmax65536): ≥ 1.5 × the gate's C peak
+  with every relation loaded (`runs/gate/<set>-fnv-c.jsonl`). The first prove or generic verify moves the core to it,
+  once. Running out inside LaZer stops the process (a trap: no write may follow a failed allocation), so the size is
+  set above the largest relation's peak.
+- wasm32 has one 512 MiB arena for both. There, `prove` refuses PQZL multi-recipient transfers above the set's
+  `[pqzl_c] wasm_max_legs` (`ProveError::Statement(Reject::Legs)`); larger M is for native clients. The Rust backend
+  has no arena and proves M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of
+  linear memory, run `d6`, Rust port Task 12, CTR-PQZ-09).
 
 A poisoned lock is recovered and the core re-initialised (the Rust backend: a fresh `Ctx`). The arena's pages are
 reserved, not touched, until the core uses them.

@@ -140,6 +140,11 @@ pub const MAX_PROOF_PQZH: usize = set::MAX_PROOF_PQZH;
 /// the set's (set.toml max_input): `n2048-kmax1024` 393,216 (D5: 5 + 83,072 + 262,144 = 345,221 ≤ 393,216); every
 /// other set 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)); pqz-ffi exports it to the node (`pqz_max_input`)
 pub const MAX_INPUT: usize = set::MAX_INPUT;
+/// pqz-ffi's opt-in C backend at this set (set.toml [pqzl_c], review R1-C2 / R4-C1): its native prover arena (bytes) and
+/// the largest op 7 M it proves in wasm32 (512 MiB arena); not codec constants, here because every pqz-ffi build has this
+/// crate's set
+pub const C_PROVE_ARENA: usize = set::C_PROVE_ARENA_MIB << 20;
+pub const C_WASM_MAX_LEGS: usize = set::C_WASM_MAX_LEGS;
 
 /// whether `id` is this set's PQZH id (never at a set without PQZH)
 fn is_pqzh(id: &[u8]) -> bool {

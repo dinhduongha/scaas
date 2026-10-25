@@ -37,10 +37,10 @@ pub static TEST_ARENA_FILL: AtomicU32 = AtomicU32::new(0);
 /// peak over the whole adversarial corpus with every form's and every op 7 shape's keys and SV tables kept, as in a
 /// long-running node, and asserts a margin ≥ 1.5 × (STATUS.md, run `s3a`).
 pub const ARENA_SMALL: usize = 512 << 20;
-/// Prover and generic-verifier arena: native 1 GiB (controller proposal 2026-10-16, owner may override; was 448 MiB:
-/// `R_TXM8` prove peaks at 836 MB with every relation's keys loaded, `rel3/runs/l3a-summary.txt`); wasm32 = `ARENA_SMALL`
-/// (one arena, `WASM_PQZL_MAX_LEGS`).
-pub const ARENA_BIG: usize = if cfg!(target_arch = "wasm32") { ARENA_SMALL } else { 1 << 30 };
+/// Prover and generic-verifier arena: native per set (set.toml [pqzl_c] prove_arena_mib, pqz-stmt `C_PROVE_ARENA`; review
+/// R1-C2 / R4-C1: 1 GiB for every set before, below the C peaks at n2560-kmax16384 / n2816-kmax65536; ≥ 1.5 × the gate's
+/// peak with every relation's keys loaded); wasm32 = `ARENA_SMALL` (one arena, `WASM_PQZL_MAX_LEGS`).
+pub const ARENA_BIG: usize = if cfg!(target_arch = "wasm32") { ARENA_SMALL } else { pqz_stmt::C_PROVE_ARENA };
 
 extern "C" {
     /// written by the core (sticky error of the last call); read only through `addr_of!(..).read_volatile()`

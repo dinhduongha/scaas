@@ -290,6 +290,11 @@ def rs_text(name):
         out.append(f"/// MAX_PROOF(PQZH id): the precompile's and the PQZH prover's proof limit (set.toml [pqzh_preset] max_proof)\n"
                    f"pub(crate) const MAX_PROOF_PQZH: usize = {mp:_};")
         out.append(f"/// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)\npub(crate) const MAX_INPUT: usize = {mi:_};")
+        cc = t["pqzl_c"]
+        out.append(f"/// pqz-ffi's C backend: the prover arena in MiB (set.toml [pqzl_c] prove_arena_mib)\n"
+                   f"pub(crate) const C_PROVE_ARENA_MIB: usize = {cc['prove_arena_mib']:_};")
+        out.append(f"/// pqz-ffi's C backend: the largest op 7 M proved in wasm32 (set.toml [pqzl_c] wasm_max_legs)\n"
+                   f"pub(crate) const C_WASM_MAX_LEGS: usize = {cc['wasm_max_legs']};")
         out.append(f"/// whether this set has PQZH (set.toml pqzh): without it pqz-stmt knows no PQZH id (PQZH_ID below is the zero\n"
                    f"/// word, never accepted) and pqz-ffi has no PQZH build\npub(crate) const PQZH: bool = {str(bool(t.get('pqzh'))).lower()};")
         if not t.get("pqzh"):

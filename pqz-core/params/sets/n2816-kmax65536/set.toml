@@ -16,6 +16,11 @@ pqzh = false                      # owner 2026-10-24: no PQZH. q - 1 = 2^3 * 3 *
 max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (the other sets' ruling); largest input 5 + 295,808 + 98,304 = 394,117
 pqzl_id = "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5"   # PQZL proofSystemId = keccak256(label) (R0 review fix 2026-10-25: R0-1 auditor windows, R0-C2 Bprime, R0-C3 challenge filter; v4 retired)
 
+[pqzl_c]                          # pqz-ffi's opt-in C backend (feature pqzl-c; review R1-C2 / R4-C1): sized from the gate's
+                                  # C peaks with every relation loaded (runs/gate/<set>-fnv-c.jsonl, x 1.5; README.md beside this dir)
+prove_arena_mib = 2048             # native prover / generic-verifier arena (ARENA_BIG)
+wasm_max_legs = 1                 # the largest op 7 M the C backend proves in wasm32 (its 512 MiB arena)
+
 [approval]
 date = "2026-10-24"
 what = "owner 2026-10-21: restore the earlier K_MAX ~ 65k set into params/sets/ in case a customer wants it later (core only); owner 2026-10-24: a full PQZL set, deployable for a customer like the other sets (pqz-stmt, precompile, vectors, gate; contracts in 8d part 2); no PQZH at this set (none of the current Ligero radices divides q - 1)"
