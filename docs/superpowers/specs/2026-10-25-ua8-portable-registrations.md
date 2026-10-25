@@ -52,7 +52,9 @@ every stored version is usable (UA-7 C3 accepts a wrap to any of them); clients 
 see, and need no warning for an older one. If an old
 secret key may have leaked, the UA must assume that anything sent to that key can be read.
 
-**P6 — Unchanged.** UA ids, key data, `keyHash` and `_keyOwner` uniqueness (per chain), the per-chain generations and
+**P6 — Unchanged.** UA ids, key data, `keyHash` and `_keyOwner` uniqueness (per chain; kept for the signer and PQZ
+keys, owner 2026-10-25: a front-runner cannot claim a PQZ key for another UA because `R_REG` is bound to the
+registering UA's id — with the portable digest too — so copying a registration only ever registers the same UA), the per-chain generations and
 kind caps, write authorization (chain-bound), ML-DSA expanded-key caches (per chain, rebuilt on registration).
 
 **P7 — The KEM (chat) key in `UARegistry` (owner 2026-10-25: registered in UA-8).** The UA signs a **chain-independent** record
