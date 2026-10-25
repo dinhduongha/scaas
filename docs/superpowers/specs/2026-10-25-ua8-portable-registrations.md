@@ -42,13 +42,14 @@ PoP are portable the same way (members sign `uaMessage(MSIG, POP_V2, portablePop
 immutable: part of the registration, set once and copied unchanged to every chain (owner 2026-10-25). The only
 attribute a UA may change is UA-7's KEM (chat) key: a new key is a record `(ua, version, pk)` signed by the UA over a
 chain-independent digest `uaMessage(kind, purpose, keccak256(tag ‖ ua ‖ version ‖ keccak256(pk)))`, stored by anyone
-on any chain, accepted only with `version` > the stored one. **There is no revocation** (owner 2026-10-25): a key
-that has been on chain stays public forever and cannot be withdrawn; a newer version only says which key is current.
+on any chain, **in any order** (owner 2026-10-25: a lower version may be stored after a higher one, because others
+may still use it). Each `(ua, version)` is written once. **There is no revocation** (owner 2026-10-25): a key that has
+been on chain stays public forever and cannot be withdrawn; the highest version only says which key is the latest.
 
 **P5 — Versions are the same on every chain.** The version is inside the record the UA signed, so version v names
-the same key on every chain (owner 2026-10-25). A chain may hold an older version until someone copies the newer
-record there; on each chain the contract uses the highest version it holds for new on-chain sessions (UA-7 C3). An
-older key stays public and usable by senders (there is no revocation, P4); clients need no warning for it. If an old
+the same key on every chain (owner 2026-10-25). A chain holds whichever versions someone copied to it, in any order;
+every stored version is usable (UA-7 C3 accepts a wrap to any of them); clients normally pick the highest version they
+see, and need no warning for an older one. If an old
 secret key may have leaked, the UA must assume that anything sent to that key can be read.
 
 **P6 — Unchanged.** UA ids, key data, `keyHash` and `_keyOwner` uniqueness (per chain), the per-chain generations and
@@ -57,20 +58,19 @@ kind caps, write authorization (chain-bound), ML-DSA expanded-key caches (per ch
 **P7 — The KEM (chat) key in `UARegistry` (owner 2026-10-25: registered in UA-8).** The UA signs a **chain-independent** record
 `kemRecord = (ua, version, pk)` (the digest has no chain id and no registry address, P4); `UARegistry.setKemKey(ua, version, pk, sig)` stores it on any chain, submitted by **anyone**
 (the submitter pays the gas; through mtx when a relayer charges the UA a fee): the contract checks the signature
-against the UA's registered key and requires `version` > the stored one. So a key set on Ethereum
-can be copied to any other chain by anyone, and a newer key likewise (owner 2026-10-25: "UA accounts do
+against the UA's registered key and stores the record under `(ua, version)` if that version is not stored yet (any
+order, P4). So a key set on Ethereum can be copied to any other chain by anyone, every version likewise (owner 2026-10-25: "UA accounts do
 not depend on the chain; the KEM keys too"). `keyId` = `version`. **One
 scheme only: ML-KEM-1024 + X25519** (owner 2026-10-25: the default and the only one): the X-Wing combiner with
 ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF construction of the CFRG hybrid-KEM draft; pk
 1,600 B, ciphertext 1,600 B, shared secret 32 B; secure while either part holds. The contract accepts only 1,600-byte
-keys. **No revocation** (owner 2026-10-25: what is on chain cannot be withdrawn): a replaced key gets no new on-chain
-session keys on that chain (UA-7 C3 checks the current version), but it stays public and anyone can still encrypt to
-it off chain or where the newer record has not been copied (P5). The balance (PQZ) key never changes. **Several keys per UA (one per device) later** (owner
+keys. **No revocation** (owner 2026-10-25: what is on chain cannot be withdrawn): an older key stays public and usable,
+on chain and off chain (P5). The balance (PQZ) key never changes. **Several keys per UA (one per device) later** (owner
 2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `addKemKey` later
 changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
 kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
 
-Views: `kemKeyOf(ua) → (version, pk)`, `kemKeyAt(ua, version)`. Event `UAKemKeySet(ua, version, keyHash)`.
+Views: `kemKeyOf(ua) → (version, pk)` (the highest stored version), `kemKeyAt(ua, version)`. Event `UAKemKeySet(ua, version, keyHash)`.
 
 ## 3. Work (for the plan after 5h)
 
@@ -78,7 +78,8 @@ Views: `kemKeyOf(ua) → (version, pk)`, `kemKeyAt(ua, version)`. Event `UAKemKe
    in `UARegistered`; forge tests (copy a registration between two registries with different chain ids /
    addresses; disabled kind reverts; msig).
 2. P7: `setKemKey` / `kemKeyOf` / `kemKeyAt`, the record digest (`UAKinds.recordDigest`), the 1,600-byte key check,
-   the version rule, the event; forge tests (copy a key record between two registries; older version refused).
+   write-once per version (any order), the event; forge tests (copy key records between two registries, a lower
+   version after a higher one, a repeated version refused).
 3. Clients (`ua-rs`, `ua-cs`, `ua-qt`, JS) and vectors (`smartcontracts/vectors/ua/`: portable PoP rows, KEM
    key record rows); accounts.md, decisions entry; `pqz_reg_message` in the clients and the PQZ e2e scripts on the new digest (the
    `R_REG` relation, statement and precompile do not change — only the 32-byte message's pre-image).

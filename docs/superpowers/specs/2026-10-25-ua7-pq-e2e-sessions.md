@@ -30,13 +30,13 @@ the `MetaTokenBase` pattern). Upgrades by a new release, as for the other applic
 
 **C2 — The KEM key comes from `UARegistry` (UA-8 P7).** Each member's chat key is its KEM key registered in the
 registry (owner 2026-10-25: KEM key registration is part of UA-8): one scheme, ML-KEM-1024 + X25519, one key per UA
-first, a signed version that is the same on every chain, no revocation. `PqChat` reads `kemKeyOf(ua)` → `(version,
-pk)`; `keyId` below = that version.
+first, a signed version that is the same on every chain, no revocation. `PqChat` reads `kemKeyAt(ua, version)`; `keyId` below = that version (any stored
+version; `kemKeyOf(ua)` gives the highest).
 
 **C3 — Sessions.** `mtxCreateSession(creator, members[], wraps[]) → sessionId`; **anyone** may create a session with
 any UA (owner 2026-10-25; the creator, or its relayer, pays the gas; clients hide sessions from unknown UAs). The
-creator's client draws a random 32-byte session key `K` for epoch 0 and, for **the current KEM key of every member**
-(the creator's own included), writes one wrap:
+creator's client draws a random 32-byte session key `K` for epoch 0 and, for **one KEM key of every member** (the
+creator's own included; normally the highest version it sees), writes one wrap:
 
 ```
 (ct, ss) ← KEM.Encaps(pk)
@@ -44,7 +44,8 @@ kek      = HKDF-SHA-256(ss, "scaas/pqchat/v1/wrap" ‖ chainId ‖ PqChat ‖ se
 wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // 1,648 B
 ```
 
-The contract requires one wrap per member, naming that member's **current** `keyId` on this chain (C2). A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
+The contract requires one wrap per member, naming a `keyId` (version) stored for that member in this chain's registry
+(any stored version, C2). A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
 group chat are the same thing (a group has more members).
 
 **C4 — Epochs (new AES key).** `mtxRekey(member, sessionId, members[], wraps[])` by any member writes epoch + 1 with a new `K`.
