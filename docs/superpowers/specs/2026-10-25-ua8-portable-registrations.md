@@ -75,8 +75,10 @@ ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF constructio
 keys. **No revocation** (owner 2026-10-25: what is on chain cannot be withdrawn): an older key stays public and usable,
 on chain and off chain (P5). The balance (PQZ) key never changes. **Several keys per UA (one per device) later** (owner
 2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `addKemKey` later
-changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
-kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
+changes no layout; until then the devices of one UA share its key. **Only PQ kinds may hold a KEM key** (owner 2026-10-25), as
+for the PQZ key: the UA-6 U3 holder set — `mldsa44` / `mldsa65` / `fndsa512`, or an `msig` whose non-PQ weight
+(members outside 0x0130–0x0133) is below its threshold; `register` with a KEM record and `setKemKey` revert for any other kind
+(`UAPqzHolder`-style error).
 
 **No one-owner check for KEM keys** (unlike the signer and PQZ keys): a KEM record carries no proof of possession of
 the KEM secret, so a uniqueness check would let anyone who sees a key first register it under their own UA and block
@@ -97,17 +99,20 @@ In the one `register` call (P2):
    binds the attributes: without it, anyone could attach their own PQZ key to someone else's UA first; the PQZ key
    never changes, so payments to that UA would be encrypted to the attacker's key. One signature covers the UA and
    both attributes (the digest holds both hashes, P1), so one verification.
-2. **Only the proof for the balance-encryption key is optional (owner 2026-10-25): `pqzPop` (the `R_REG` proof) may be empty; each PQZ key carries a `proven` flag.** Empty: the key is stored with
+2. **Only PQ kinds may attach the PQZ key or a KEM record** (owner 2026-10-25; the PQZ rule of UA-6 U3, extended to
+   the KEM key): the U3 holder set (`mldsa44` / `mldsa65` / `fndsa512`, or a PQ-eligible `msig`); any other kind
+   reverts.
+3. **Only the proof for the balance-encryption key is optional (owner 2026-10-25): `pqzPop` (the `R_REG` proof) may be empty; each PQZ key carries a `proven` flag.** Empty: the key is stored with
    `proven = false`. Non-empty on a chain with the PQZ verifier: checked, `proven = true` (a bad proof reverts).
    Non-empty on a chain without it: not checked, emitted with the registration (P2), `proven = false`. Anyone may
    later submit `provePqzKey(ua, pqzPop)` on a chain with the precompile; with the portable digest (P1) the proof bytes
    made once are valid everywhere. PQZ token
    contracts accept only proven keys; a chain without the precompile has no PQZ tokens, so an unproven key there is a
    directory entry to copy elsewhere.
-3. **The one-UA-per-PQZ-key check applies only to proven keys.** If unproven keys claimed the key, anyone could list a
+4. **The one-UA-per-PQZ-key check applies only to proven keys.** If unproven keys claimed the key, anyone could list a
    victim's PQZ key without a proof and block the victim. A UA that lists someone else's PQZ key without a proof gains
    nothing: PQZ tokens do not accept it.
-4. **The kind rule stays:** a kind must be enabled on the chain (its verifier exists), so that nothing can be received
+5. **The kind rule stays:** a kind must be enabled on the chain (its verifier exists), so that nothing can be received
    that can never be spent.
 
 On Ethereum the cost of a registration is then the signer's signature check (cheap for secp256k1 / P256; ≈ 6–19 M
