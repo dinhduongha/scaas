@@ -2,7 +2,7 @@
 
 **Found by:** Codex, unit R0 ([codex-R0.md](codex-R0.md)), 2026-10-25, at `008e196c`. agy's R0 pass did not report it
 ([agy-R0.md](agy-R0.md)); the Claude UltraCode pass is pending. **Verified by the controller** from the spec and the
-code (below). **Status:** confirmed; fix direction chosen by the owner 2026-10-25 (direction 2); hint study running.
+code (below). **Status:** confirmed; fix direction chosen by the owner 2026-10-25 (direction 2); hint study done (section "Hint study (2026-10-25)" below).
 No deployment is affected: the SCaaS testnet has no PQZ contracts yet and no customer chain runs PQZ.
 
 ## The defect
@@ -76,3 +76,67 @@ hints.
 2. Then the fix: relation rows (C `pqz_rel.c`, the specialised verifier `pqz_sv.c`, Rust `rel.rs` / `sv.rs`, PQZH
    `cs.rs`), provers and the auditor's decryption, `s` in `set.toml` / `gen_set`, one proofSystemId bump per set,
    vectors, full gates at the four sets, Nethermind corpus, a new node image, spec §8.1 / §8.2 and CTR-PQZ-04.
+
+## Hint study (2026-10-25)
+
+Step 1 of the fix: [`pqzl/params/anon/hints_s.sage`](../../pqzl/params/anon/hints_s.sage) (new, beside `hints.sage`,
+which stays) → raw output [`pqzl/params/anon/hints-s.txt`](../../pqzl/params/anon/hints-s.txt), one container per set
+(`SET=<set> SCRIPT=hints_s.sage run_hints.sh <lk> <le> >> hints-s.txt`, `--memory 6g --cpus 4`).
+
+**Method.** `hints.sage`'s instance per set: `u = Aᵀ r + e1`, `r` CBD(1) (var 1/2), `e1` CBD(20) (var 10), m = n + 16,
+the set's n and q (`set.toml`) and `BETA_S` / `BETA_E` (`pqz_set.h`: 36/164, 38/173, 40/182, 42/189). With direction 2 a
+group of s legs gives 16·s hints from the recipient keys plus 16·s **distinct** auditor forms = **32·s** with the
+auditor on (today's model: 16·s + 16), 16·s without (unchanged). Same three hint kinds as `hints.sage` (unit on `r`,
+unit on `e1`, orthogonal maximal-norm mixed forms with V_max = var_s·BETA_E² + var_e·BETA_S², the worst case); DDGR20 =
+leaky-LWE-Estimator `DBDD_predict_diag` + `integrate_q_vectors` [measured]. dual_hybrid: lattice-estimator has no
+hints, so h hints = h removed secret dimensions, `LWE.dual_hybrid` on LWE(n − h, m = n + 16) under ADPS16 classical /
+quantum [measured on that instance], minus the offset (primal uSVP of n − h minus the DDGR20 mixed β at h) as the
+worst case [estimate] — the method of `n-study/enc_n.sage` and `p16k/dual_hints16k.sage`.
+
+**Reproduction first.** DDGR20 worst case at 80 hints: n2048 445.97, n2304 468.47, n2560 482.43, n2816 496.79 = the
+`SET.md` values exactly; dual_hybrid − offset at 80: n2304 458.47 / 461.47, n2560 474.43 / 476.43 = `SET.md` exactly
+(n2048 / n2816 had no earlier value). n2560 at 128 also equals `p16k/hints-16k-n2560.txt` (467.60; 458.60 / 460.60).
+
+**Results** (worst-case mixed hints; dual = dual_hybrid − offset, classical / quantum; bold = below 450):
+
+| Set | hints | 0 | 32 (s = 1) | 64 (s = 2) | 96 (s = 3) | 128 (s = 4) | today 80 |
+|---|---|---|---|---|---|---|---|
+| n2048-kmax1024 | DDGR20 | 475.83 | 463.85 | 451.92 | **440.03** | **428.20** | **445.97** |
+| | dual | 465.83 / 468.83 | 454.85 / 456.85 | **443.92 / 444.92** | **432.03 / 433.03** | **420.20 / 423.20** | **437.97 / 438.97** |
+| n2304-kmax4096 | DDGR20 | 495.77 | 484.82 | 473.91 | 463.04 | 452.21 | 468.47 |
+| | dual | 486.77 / 488.77 | 474.82 / 477.82 | 463.91 / 466.91 | 453.04 / 456.04 | **443.21 / 445.21** | 458.47 / 461.47 |
+| n2560-kmax16384 | DDGR20 | 507.31 | 497.34 | 487.39 | 477.48 | 467.60 | 482.43 |
+| | dual | 498.31 / 499.31 | 488.34 / 491.34 | 478.39 / 480.39 | 468.48 / 471.48 | 458.60 / 460.60 | 474.43 / 476.43 |
+| n2816-kmax65536 | DDGR20 | 519.74 | 510.54 | 501.37 | 492.22 | 483.09 | 496.79 |
+| | dual | 510.74 / 511.74 | 502.54 / 503.54 | 493.37 / 494.37 | 484.22 / 486.22 | 475.09 / 478.09 | 488.79 / 490.79 |
+
+The rough linear table above was close for DDGR20 (n2304 s = 4: 452.2 vs ≈ 452) and slightly pessimistic for dual
+(443.2 vs ≈ 442; s = 3: 453.0 vs ≈ 453).
+
+**Group size s** (largest s ∈ {4, 3, 2} with DDGR20 **and** dual ≥ 450 at 32·s hints, auditor on) and the cost.
+Today G = ⌈M / 4⌉ = 1 / 1 / 2 for R_TXM M = 2 / 4 / 8; each extra `u` = the packed `u` size × ≈ 1,530 state gas per
+byte (n2048 10,752 B ≈ 16.45 M, n2304 13,248 B ≈ 20.27 M, n2560 16,000 B ≈ 24.48 M, n2816 19,008 B ≈ 29.08 M):
+
+| Set | s | G for M = 2 / 4 / 8 | extra `u` vs today (M = 2 / 4 / 8) | extra state gas M = 2 / 4 / 8 |
+|---|---|---|---|---|
+| n2048-kmax1024 | **none of 4 / 3 / 2** (s = 1 is the largest: 463.85 / 454.85) | s = 1: 2 / 4 / 8 | +1 / +3 / +6 | +16.45 / +49.35 / +98.70 M |
+| n2304-kmax4096 | **3** (463.04; 453.04 / 456.04) | 1 / 2 / 3 | 0 / +1 / +1 | 0 / +20.27 / +20.27 M |
+| n2560-kmax16384 | **4** (467.60; 458.60 / 460.60) | 1 / 1 / 2 | none | none |
+| n2816-kmax65536 | **4** (483.09; 475.09 / 478.09) | 1 / 1 / 2 | none | none |
+
+- **n2048-kmax1024** (frozen set, today the owner exception at DDGR20 446): no s ≥ 2 meets both bounds. s = 2 meets
+  DDGR20 (451.92) but not dual (443.92 / 444.92); s = 2 is also above the 446 exception on DDGR20 alone. **The owner
+  decides** (s = 1, or s = 2 with the exception widened to dual ≈ 444). New at this set: dual − offset was not
+  measured before, and today's R_TXM is already below 450 on it — 437.97 / 438.97 at 80 hints (group of 4 + auditor) and
+  443.92 / 444.92 at 64 (group of 4, auditor off).
+- **n2304-kmax4096**: s = 3 (s = 4 fails dual: 443.21 / 445.21). R_TXM M = 4 and M = 8 each need one more `u`.
+- **n2560-kmax16384, n2816-kmax65536**: s = 4, nothing changes beyond the relation rows.
+- Auditor off (16·s hints, unchanged by the fix): s = 4 holds at n2304 / n2560 / n2816 (64 hints: n2304 473.91;
+  463.91 / 466.91); at n2048 s = 4 fails dual (above), s = 2 holds (454.85 / 456.85), s = 3 (48 hints) has DDGR20
+  457.88 and no dual value (not computed; between 454.85 at 32 and 443.92 at 64). Whether `s` applies only with the
+  auditor on (G then depends on the auditor flag) or to every R_TXM is for the controller / owner.
+
+**Pins.** SageMath image `sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528`
+(10.7, Python 3.12.5), leaky-LWE-Estimator `0a9caf8bf0f80097724e0c6147194c52c6b90f86`, lattice-estimator
+`53da5982597709ba0fdf94ea37a84d822310fd84` (both checked by `run_hints.sh`); Kyber-512 calibration in every run: DDGR20
+405.53, estimator 406.
