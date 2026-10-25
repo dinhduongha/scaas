@@ -1,96 +1,94 @@
-# UA-7: post-quantum end-to-end encryption between UAs — KEM key in the registry, one AES key per session
+# UA-7: PQ chat sessions — an application contract that holds ML-KEM keys and per-session AES keys on chain
 
-**Status:** short design for the owner's review (controller, 2026-10-25). Nothing is built. Queued **after plan 5h**
-(owner 2026-10-25: "viết spec ngắn, xếp sau 5h"). The choices below (E1–E9) are controller proposals; the owner may
-override any of them.
+**Status:** short design for the owner's review (controller, 2026-10-25; revised the same day after the owner's
+answer). Nothing is built. Queued **after plan 5h** (owner 2026-10-25: "viết spec ngắn, xếp sau 5h"). The choices
+below (C1–C9) are controller proposals inside the owner's request; the owner may override any of them.
 
-**Request (owner 2026-10-25).** UA A sends a text or an AES key to UA B with post-quantum cryptography, with many
-sessions at once and **one AES key per chat session**.
+**Request (owner 2026-10-25).** A smart contract for chat sessions, as an application: a UA creates a session; the
+session's AES key goes **on chain**, encrypted with post-quantum cryptography for each member; a UA may register
+**several ML-KEM keys**; one AES key per session; the AES key is then used to chat over **Matrix** (or any other
+channel).
 
-**What it is called.** Not "on-chain key exchange": the chain only **publishes and authenticates each UA's KEM public
-key** (a key directory). The key exchange itself — a KEM handshake that sets up a session key — runs **off chain**
-between the two clients. The whole feature is post-quantum **end-to-end encryption (E2EE)** with an on-chain key
-directory.
+**What it is called.** On-chain **key distribution** (a key-encapsulation directory and a session-key store); the
+chat itself is end-to-end encrypted with the session key. Nothing secret is exchanged in clear: the chain holds only
+public KEM keys and KEM-wrapped session keys.
 
-## 1. Why not the keys a UA already has
+## 1. Why a new key, not the keys a UA already has
 
 - **ML-DSA / FN-DSA / SLH-DSA keys sign; they cannot encrypt.**
-- **The PQZ (MLWE) key must not be reused.** It can carry 256 bits per ciphertext (16 coefficients × 16 bits), but the
-  scheme is CPA-only and deliberately malleable (additive), its ciphertext is 16.5–22.6 KB per set, and its secret also
-  opens the UA's confidential balance: a client that ever acts on a decryption result becomes a decryption oracle for
-  the balance key. One purpose per key.
+- **The PQZ (MLWE) key must not be reused.** It is CPA-only and deliberately malleable (additive), 16.5–22.6 KB per
+  ciphertext, and its secret also opens the UA's confidential balance; one purpose per key.
 
 ## 2. Design
 
-**E1 — Key kind.** A UA publishes one **KEM public key**: **ML-KEM-768** (FIPS 203; pk 1,184 B, ciphertext 1,088 B,
-shared secret 32 B), or the hybrid **X-Wing** (X25519 + ML-KEM-768; pk 1,216 B, ciphertext 1,120 B) — secure as long
-as either part holds. Both are new **scheme ids** in `UAKinds.sol` (numbers at plan time), like `pqz-mlwe` 0x0142
-since UA-6: attributes of a UA, not UA kinds; never a signer.
+**C1 — One application contract, `PqChat`.** Standalone (not part of `UARegistry`, no change to it): it reads
+`UARegistry` only for `requireAuthorized(ua, …)`. Every write is relayable like every state-changing `mtx*` write
+(fee may be 0). Upgrades by a new release, as for the other application contracts.
 
-**E2 — Registry attribute.** `UARegistry` gains `_kemKey[ua] = (scheme, version, SSTORE2 pointer)`, set by
-`setKemKey(ua, scheme, pk)` under `requireAuthorized(ua, purpose "kem")` (relayable like every state-changing
-`mtx*` write, fee may be 0), cleared by `setKemKey(ua, 0, "")`. **Rotatable** (unlike the PQZ key): `version` + 1 on
-every change, event `UAKemKeySet(ua, scheme, version, keyHash)`. One owner per key through the existing `_keyOwner`
-(group `kem`), so nobody can register someone else's KEM key under their UA. The full key stays in contract state
-(SSTORE2), readable by `eth_call`, not only in an event (events may be pruned by history expiry).
+**C2 — KEM keys, several per UA.** `addKemKey(ua, scheme, pk, label) → keyId` and `revokeKemKey(ua, keyId)`, both
+under `requireAuthorized(ua, purpose "kem")`. Schemes: **ML-KEM-768** (FIPS 203; pk 1,184 B, ciphertext 1,088 B) and
+**X-Wing** (X25519 + ML-KEM-768; pk 1,216 B, ciphertext 1,120 B; secure while either part holds). A UA keeps any
+number of keys (one per device, for example); `label` is a short public name ("phone", "laptop"). A revoked key gets no
+new session keys; it stays readable for history. The key is post-quantum authenticated only if the UA's signer is a PQ
+kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
 
-**E3 — Authentication of the key.** The binding "this KEM key belongs to UA B" is the registry write itself, authorized
-by B's signer. The key is post-quantum authenticated only if B's signer is a PQ kind (`mldsa44` / `mldsa65` / `fndsa512`
-or a PQ-dominant `msig`); clients show a UA with a classical signer as "not PQ-authenticated".
-
-**E4 — Session handshake (one AES key per session).** Each session is an independent handshake, the KEM-based AKE of
-CRYSTALS-Kyber (Bos et al., EuroS&P 2018, §5: two static encapsulations and one ephemeral):
+**C3 — Sessions.** `createSession(creator, members[], wraps[]) → sessionId`. The creator's client draws a random
+32-byte session key `K` for epoch 0 and, for **every active KEM key of every member** (the creator's own keys
+included, so the creator's other devices can read it), writes one wrap:
 
 ```
-A: sid ← 16 random bytes; (pk_e, sk_e) ← KEM.KeyGen()           // ephemeral, this session only
-A: (ct_B, ss_B) ← KEM.Encaps(pk_B)                               // B's registry key, version vB
-A → B: m1 = sid ‖ UA_A ‖ UA_B ‖ vA ‖ vB ‖ pk_e ‖ ct_B               // ≈ 2.3 KB with ML-KEM-768
-B: ss_B ← Decaps(sk_B, ct_B); (ct_A, ss_A) ← Encaps(pk_A); (ct_e, ss_e) ← Encaps(pk_e)
-B → A: m2 = sid ‖ ct_A ‖ ct_e ‖ confirm_B                           // ≈ 2.2 KB
-A: ss_A ← Decaps(sk_A, ct_A); ss_e ← Decaps(sk_e, ct_e); checks confirm_B; erases sk_e
-K = HKDF-SHA-256(ikm = ss_B ‖ ss_A ‖ ss_e,
-                 info = "scaas/ua7/v1" ‖ chainId ‖ registry ‖ H(m1 ‖ ct_A ‖ ct_e))
-(k_AB, k_BA, k_confirm) = expand(K)                               // one AES-256 key per direction
-confirm_B = HMAC(k_confirm, "B" ‖ H(m1 ‖ ct_A ‖ ct_e)); A's first message carries confirm_A likewise
+(ct, ss) ← KEM.Encaps(pk)
+kek      = HKDF-SHA-256(ss, "scaas/pqchat/v1/wrap" ‖ chainId ‖ PqChat ‖ sessionId ‖ epoch ‖ member ‖ keyId)
+wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // ≈ 1,136 B (ML-KEM-768)
 ```
 
-- Only B can open `ct_B` and only A can open `ct_A`, so each side knows it talks to the registered UA (implicit mutual
-  authentication; no signature in the handshake). `ss_e` gives **forward secrecy**: a later theft of A's or B's
-  long-term KEM key does not open past sessions, because `sk_e` was erased.
-- **Many sessions:** every handshake has its own `sid` and its own fresh randomness, so every session has its own key.
-  Sessions are independent: closing or losing one does not affect the others.
+A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
+group chat are the same thing (a group has more members).
 
-**E5 — Messages.** AES-256-GCM with `k_AB` (A → B) or `k_BA` (B → A); nonce = 96-bit message counter per direction
-(never reused; the session ends before 2^32 messages); AAD = `sid ‖ direction ‖ counter`. To "send an AES key", A
-sends those 32 bytes as one message.
+**C4 — Epochs (new AES key).** `rekey(sessionId, members[], wraps[])` by any member writes epoch + 1 with a new `K`.
+Used to add a member, remove one (the removed member gets no wrap of the new key), after a device loss, or on a
+schedule (proposal: the client rekeys every 1,000 messages or 7 days). Old epochs stay readable so history can be
+decrypted. Only members can rekey; the member list is public.
 
-**E6 — Rekey inside a long session.** Either side sends a new ephemeral `pk_e'`; the other answers with
-`Encaps(pk_e')`; `K' = HKDF(K ‖ ss_e', "rekey" ‖ …)`. Proposal: rekey every 1,000 messages or 24 h. (A full double
-ratchet as in Signal is out of scope; it can come later on top of the same keys.)
+**C5 — Storage: on chain, in state.** Each epoch's wraps are stored as one SSTORE2 blob per epoch (the full bytes stay
+in contract state, readable by `eth_call`; not only in events, which nodes may drop under history expiry), plus the
+member list and the epoch counter. Cost [estimate, to be measured in the plan]: ≈ 1,530 state gas per stored byte
+under EIP-8037, so ≈ 1.7 M state gas per wrap; a two-person session with one key each ≈ 3.5 M state gas plus calldata,
+which fits one transaction and one block on every chain we target.
 
-**E7 — Transport: off chain.** m1, m2 and messages travel over any channel (the node mesh bus, an HTTPS relay, a
-mailbox service): the format does not depend on it. **Not on chain by default**: calldata and events are public
-forever, so they would be stored for an attacker who breaks ML-KEM later ("harvest now, decrypt later"), and they cost
-gas. The chain is used only for E2 (publishing / rotating the key).
+**C6 — Messages (off chain, for example Matrix).** Messages never go on chain. Each sender uses its own subkey so that
+several senders never share a nonce: `k_send = HKDF(K, "scaas/pqchat/v1/msg" ‖ sessionId ‖ epoch ‖ senderUA ‖ keyId)`,
+nonce = the sender's 96-bit message counter, AES-256-GCM with aad = `sessionId ‖ epoch ‖ senderUA ‖ keyId ‖ counter`.
+A sender stops at 2^32 messages per epoch (in practice C4 rekeys long before).
 
-**E8 — Rotation and loss.** A new KEM key (E2) affects only new handshakes; open sessions keep their keys until they
-rekey or end. A lost KEM secret: publish a new key; sessions protected by `ss_e` stay closed to the thief.
+**C7 — Matrix.** Yes, the AES key works over Matrix: Matrix is only the transport. Each message is a Matrix event of a
+custom type (proposal `vn.scaas.pqchat.v1`, content: `sessionId`, `epoch`, `sender`, `keyId`, `counter`, ciphertext in
+base64) in a Matrix room tied to the session (the room id may be stored in the session as a public field). Matrix's own
+end-to-end encryption (Megolm) may stay on as an outer layer; ours is the PQ layer inside. Limits: the Matrix server
+still sees metadata (who talks, when, message sizes) and standard clients such as Element cannot read the custom
+events — our clients (`clients/ua-qt`, the JS wallet) or a widget / bot decrypt them.
 
-**E9 — Libraries (no precompile, no contract crypto).** .NET 10 `System.Security.Cryptography.MLKem` (same family as
-the `MLDsa` the Nethermind plugin uses), OpenSSL ≥ 3.5 (Qt client), Rust `ml-kem`, JS `@noble/post-quantum`; X-Wing
-where the library has it. Clients: `clients/ua-rs`, `ua-cs`, `ua-qt`, the JS wallet. Test vectors under
-`smartcontracts/vectors/ua7/` (handshake transcripts, keys, messages) shared by all clients.
+**C8 — What the on-chain key store does not give.** Everything on chain is public forever. Whoever obtains a member's
+KEM secret key later — or breaks ML-KEM one day — can open every session key wrapped to that key, and with the Matrix
+ciphertexts the chat history of those epochs ("harvest now, decrypt later"). There is no forward secrecy beyond what
+C4 provides. Mitigations in this design: X-Wing (the hybrid), frequent rekeys, revoking and replacing device keys
+(C2), deleting old secret keys on the devices. A chat that needs full forward secrecy should add an off-chain ratchet
+on top (later, not in this design).
+
+**C9 — Libraries (no precompile, no crypto in the contract).** The contract only stores and checks shapes / sizes /
+membership; KEM and AES run in the clients: .NET 10 `System.Security.Cryptography.MLKem`, OpenSSL ≥ 3.5 (Qt client),
+Rust `ml-kem`, JS `@noble/post-quantum`; X-Wing where the library has it. Vectors under
+`smartcontracts/vectors/pqchat/` (keys, wraps, messages) shared by all clients.
 
 ## 3. Work (for the plan after 5h)
 
-1. Registry: E2 (attribute, `setKemKey`, `_keyOwner` group, event, views), `UAKinds` scheme ids, forge tests, gas;
-   accounts.md section; decisions entry.
-2. Protocol spec text (E4–E6, byte layout of m1 / m2 / messages) in `docs/contracts/` and the vectors.
-3. One reference client (`ua-rs`), then the others against the vectors.
+1. `PqChat.sol` (C1–C5): KEM keys, sessions, epochs, SSTORE2 wraps, events, views; forge tests and gas per wrap.
+2. Byte layouts (C3, C6, C7) in `docs/contracts/`; vectors.
+3. One reference client (`clients/ua-rs`: create / join / rekey / encrypt / decrypt), then a Matrix demo
+   (a small bot or the Qt client sending `vn.scaas.pqchat.v1` events).
 
 ## 4. Open for the owner
 
-1. ML-KEM-768 alone, or X-Wing by default (my proposal: **X-Wing**, the hybrid hedge, +64 B per key and ciphertext).
-2. Several KEM keys per UA (one per device) now, or one per UA first (my proposal: **one per UA first**; devices share
-   it or each device gets its own UA under an `msig`).
-3. Group chats (one key for several UAs): out of scope here; later a sender key sent through pairwise sessions, or MLS.
+1. Default scheme: ML-KEM-768 alone or **X-Wing** (proposal: X-Wing, +64 B per key and wrap).
+2. Who may create a session with a UA: anyone (spam costs the creator gas) or only UAs the member allowed (proposal:
+   **anyone**, the client hides sessions from unknown UAs).
