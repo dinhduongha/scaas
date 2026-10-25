@@ -81,6 +81,14 @@ an event; event `PqChatMessage(sessionId, index, sender, epoch, counter)` lets c
 fixed cost; a client may store a whole conversation, only chosen messages (a record, a contract term, a key), or
 nothing.
 
+**Why store on chain (owner 2026-10-25).** No intermediate server: no Matrix homeserver to run, trust or lose; the
+messages live as long as the chain, and any node (one's own included) serves them — fully decentralised delivery and
+storage. `PqChat` is plain EVM code, so it can be deployed on a **cheap layer 2** (any EVM rollup) where storage costs a
+small fraction of layer 1; the chain only needs `UARegistry` (C1 reads `requireAuthorized`) and an mtx relayer, both
+deployable there too. What on chain does not hide: the member list and who posts when are public on chain (on Matrix
+only the homeserver sees them); an L2 sequencer can delay a transaction (the rollup's forced inclusion through L1 is the
+fallback); an L2's gas rules differ from EIP-8037, so the cost estimates above are layer-1 figures.
+
 **C7 — Matrix.** Yes, the AES key works over Matrix: Matrix is only the transport. Each message is a Matrix event of a
 custom type (proposal `vn.scaas.pqchat.v1`, content: `sessionId`, `epoch`, `sender`, `keyId`, `counter`, ciphertext in
 base64) in a Matrix room tied to the session (the room id may be stored in the session as a public field). Matrix's own
