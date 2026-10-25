@@ -31,7 +31,9 @@ the `MetaTokenBase` pattern). Upgrades by a new release, as for the other applic
 **C2 — The KEM key: one per UA first.** `mtxSetKemKey(ua, scheme, pk)` under `requireAuthorized(ua, purpose "kem")`
 sets or replaces the UA's key (`keyId` = a version counter, + 1 on every change); `mtxSetKemKey(ua, 0, "")` revokes it.
 Schemes: **X-Wing** by default (X25519 + ML-KEM-768; pk 1,216 B, ciphertext 1,120 B; secure while either part holds)
-and **ML-KEM-768** alone (FIPS 203; pk 1,184 B, ciphertext 1,088 B) for clients without X25519. A replaced or revoked
+**ML-KEM-1024 + X25519** for a higher margin (NIST level 5 lattice part; the X-Wing combiner with ML-KEM-1024, the QSF
+construction of the CFRG hybrid-KEM draft; pk 1,600 B, ciphertext 1,600 B) and **ML-KEM-768** alone (FIPS 203; pk
+1,184 B, ciphertext 1,088 B) for clients without X25519. Each session's wraps use each member's own scheme. A replaced or revoked
 key gets no new session keys; it stays readable for history. **Several keys per UA (one per device) later** (owner
 2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `mtxAddKemKey` later
 changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
@@ -45,7 +47,7 @@ creator's client draws a random 32-byte session key `K` for epoch 0 and, for **t
 ```
 (ct, ss) ← KEM.Encaps(pk)
 kek      = HKDF-SHA-256(ss, "scaas/pqchat/v1/wrap" ‖ chainId ‖ PqChat ‖ sessionId ‖ epoch ‖ member ‖ keyId)
-wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // 1,168 B (X-Wing)
+wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // 1,168 B (X-Wing), 1,648 B (ML-KEM-1024 + X25519)
 ```
 
 A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
@@ -59,7 +61,7 @@ decrypted. Only members can rekey; the member list is public.
 **C5 — Storage: on chain, in state.** Each epoch's wraps are stored as one SSTORE2 blob per epoch (the full bytes stay
 in contract state, readable by `eth_call`; not only in events, which nodes may drop under history expiry), plus the
 member list and the epoch counter. Cost [estimate, to be measured in the plan]: ≈ 1,530 state gas per stored byte
-under EIP-8037, so ≈ 1.8 M state gas per wrap; a two-person session with one key each ≈ 3.6 M state gas plus calldata (paid by the relayer under mtx),
+under EIP-8037, so ≈ 1.8 M state gas per X-Wing wrap (≈ 2.5 M for ML-KEM-1024 + X25519); a two-person session with one key each ≈ 3.6 M state gas plus calldata (paid by the relayer under mtx),
 which fits one transaction and one block on every chain we target.
 
 **C6 — Messages (off chain, for example Matrix).** Messages never go on chain. Each sender uses its own subkey so that
@@ -100,7 +102,8 @@ Rust `ml-kem`, JS `@noble/post-quantum`; X-Wing where the library has it. Vector
 
 ## 4. Owner answers (2026-10-25)
 
-1. Default scheme: **X-Wing** (ML-KEM-768 alone stays accepted for clients without X25519).
+1. Default scheme: **X-Wing**; **ML-KEM-1024 + X25519** also offered (owner, later the same day); ML-KEM-768 alone
+   stays accepted for clients without X25519.
 2. Who may create a session with a UA: **anyone** (the creator pays the gas; clients hide sessions from unknown UAs).
 3. KEM keys per UA: **one first**; several (one per device) later (C2).
 4. Every write through **mtx** (a relayer pays the transaction fee): key registration, session creation, rekey (C1).
