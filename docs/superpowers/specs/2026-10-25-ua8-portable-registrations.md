@@ -70,7 +70,9 @@ on chain and off chain (P5). The balance (PQZ) key never changes. **Several keys
 changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
 kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
 
-Views: `kemKeyOf(ua) → (version, pk)` (the highest stored version), `kemKeyAt(ua, version)`. Event `UAKemKeySet(ua, version, keyHash)`.
+**No one-owner check for KEM keys** (unlike the signer and PQZ keys): a KEM record carries no proof of possession of
+the KEM secret, so a uniqueness check would let anyone who sees a key first register it under their own UA and block
+the real owner on that chain; a UA that lists someone else's KEM key gains nothing (it cannot decrypt). Views: `kemKeyOf(ua) → (version, pk)` (the highest stored version), `kemKeyAt(ua, version)`. Event `UAKemKeySet(ua, version, keyHash)`.
 
 ## 3. Work (for the plan after 5h)
 
