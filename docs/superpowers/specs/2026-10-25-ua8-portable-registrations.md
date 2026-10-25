@@ -87,7 +87,7 @@ kind caps, write authorization (chain-bound), ML-DSA expanded-key caches (per ch
 **P7 — The KEM (chat) key in `UARegistry` (owner 2026-10-25: registered in UA-8; every version needs the UA's
 signature, and the signature is stored with it).** The UA signs a **chain-independent** record
 `kemRecord = (ua, version, pk)` (the digest has no chain id and no registry address, P4); `UARegistry.setKemKey(ua, version, pk, sig)` stores it on any chain, submitted by **anyone**
-(the submitter pays the gas; through mtx when a relayer charges the UA a fee): the contract checks the signature
+(the submitter pays the gas; no fee, P9): the contract checks the signature
 against the UA's registered key and stores the record under `(ua, version)` if that version is not stored yet (any
 order, P4). So a key set on Ethereum can be copied to any other chain by anyone, every version likewise (owner 2026-10-25: "UA accounts do
 not depend on the chain; the KEM keys too"). `keyId` = `version`. **One
@@ -145,8 +145,7 @@ On Ethereum the cost of a registration is then the signer's signature check (che
 gas for ML-DSA in Solidity) plus storage; when the UA is copied to a chain with PQZ, anyone attaches the `R_REG` proof
 and the key becomes proven.
 
-**P9 — The later writes, and their mtx forms (owner 2026-10-25: a relayer may pay, so every write has an `mtx*`
-form).** Besides `register`, two writes, each with a chain-independent signature that is **stored** with the data:
+**P9 — The later writes (owner 2026-10-25: relayable, no fee).** Besides `register`, two writes, each with a chain-independent signature that is **stored** with the data:
 
 ```solidity
 function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
@@ -159,24 +158,10 @@ so the call only checks `keccak256(pqzPop) == pqzPopHash` — garbage cannot mat
 already stored. Where the PQZ verifier exists it also checks the proof (`proven = true`). `setKemKey` keeps its
 signature (a new KEM version is new consent); an `msig` signs it with its m-of-n members.
 
-**Anyone may submit the plain forms** (the submitter pays the gas). **The `mtx*` forms add the relayer's fee**, paid
-atomically from the UA's public ledger balance in a SCaaS token, with the token's existing UA meta-transfer:
-
-```solidity
-function mtxRegister(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
-    bytes calldata pqzPop, IUALedger feeToken, MetaTxLib.UAMetaTransfer calldata pay, bytes calldata payAuth) external;
-function mtxSetKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig,
-    IUALedger feeToken, MetaTxLib.UAMetaTransfer calldata pay, bytes calldata payAuth) external;
-function mtxStorePqzPop(bytes32 ua, bytes calldata pqzPop,
-    IUALedger feeToken, MetaTxLib.UAMetaTransfer calldata pay, bytes calldata payAuth) external;
-```
-
-Each runs the plain form, then `feeToken.uaExecuteTransfer(pay, payAuth)` with `pay.from == ua`, `pay.to` = the
-relayer the UA chose, `pay.value` = the fee, and `pay.entryRef` = the digest of this write (so the fee cannot be taken
-for anything else); the whole call reverts if either part fails. `pay` is chain-bound (the token's domain) and is
-not stored — only the portable signature (and the proof bytes) are, since only they are needed to copy the write. **The fee is optional** (owner
-2026-10-25): an empty `pay` means no fee and no transfer, the same as the plain form. In `mtxRegister` the UA is registered first and pays in the same call. Cost: two signature checks (the portable
-one and `payAuth`; ≈ 2 × 6–19 M gas for ML-DSA in Solidity on Ethereum).
+**All of them are mtx-style writes without a chain and without a fee** (owner 2026-10-25): signed by the UA, relayable
+by anyone (the submitter — the UA or a relayer — pays the gas), chain-independent, so the same record can be moved to
+any chain. **There are no `mtx*` fee forms** (`mtxRegister` / `mtxSetKemKey` / `mtxStorePqzPop` dropped): these writes
+are not token operations, so there is no token to take a fee from; a relayer that wants payment arranges it off chain.
 
 ## 3. Work (for the plan after 5h)
 
@@ -188,9 +173,8 @@ one and `payAuth`; ≈ 2 × 6–19 M gas for ML-DSA in Solidity on Ethereum).
 3. P7: `setKemKey` / `kemKeyOf` / `kemKeyAt`, the record digest (`UAKinds.recordDigest`), the 1,600-byte key check,
    write-once per version (any order), the event; forge tests (copy key records between two registries, a lower
    version after a higher one, a repeated version refused).
-4. P9: `setKemKey` (signature), `storePqzPop` (hash check against the stored `pqzPopHash`, no-op when stored),
-   `mtxRegister` / `mtxSetKemKey` / `mtxStorePqzPop` with the fee meta-transfer bound by `entryRef`; forge tests (fee
-   paid atomically, a fee bound to another write refused, a `storePqzPop` with other bytes refused).
+4. P9: `setKemKey` (signature), `storePqzPop` (hash check against the stored `pqzPopHash`, no-op when stored); forge
+   tests (submitted by a third party, a `storePqzPop` with other bytes refused).
 5. Clients (`ua-rs`, `ua-cs`, `ua-qt`, JS) and vectors (`smartcontracts/vectors/ua/`: portable PoP rows, KEM
    key record rows); accounts.md, decisions entry; `pqz_reg_message` in the clients and the PQZ e2e scripts on the new digest (the
    `R_REG` relation, statement and precompile do not change — only the 32-byte message's pre-image).
