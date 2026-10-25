@@ -149,3 +149,10 @@ non-audited R_TXM keeps its sizes and gas; G = ⌈M / s_aud⌉ or ⌈M / 4⌉ by
 frozen set): no R_TXM there (R_TX only), since no group size ≥ 2 meets both bounds with the auditor and today's R_TXM is
 already below 450 on dual_hybrid with or without it; alternatives s = 1 (≈ +99 M state gas at M = 8) or a widened
 exception. Pending the owner's answers.
+
+**Owner ruling 2026-10-25 (group sizes).** (1) The group size `s` changes only with the auditor on: audited R_TXM uses
+`s_aud`, R_TXM without the auditor keeps groups of 4 (G = ⌈M / s_aud⌉ or ⌈M / 4⌉ by the auditor flag). (2)
+n2048-kmax1024: the exception is widened to dual_hybrid ≈ 444 (measured 443.92 classical / 444.92 quantum at 64 hints;
+DDGR20 451.92), so `s_aud = 2` there; R_TXM without the auditor at s = 4 is the same 64-hint instance and falls under
+the same exception. Resulting `s_aud`: n2048 2, n2304 3, n2560 4, n2816 4; without the auditor 4 everywhere. Extra `u`
+vs today for audited R_TXM M = 2 / 4 / 8: n2048 0 / +1 / +2, n2304 0 / +1 / +1, n2560 and n2816 none.
