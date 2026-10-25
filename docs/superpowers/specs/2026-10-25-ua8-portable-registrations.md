@@ -22,16 +22,21 @@ The KEM keys likewise."
 ## 2. Design
 
 **P1 — Portable proof of possession.** New digest without chain or registry:
-`portablePopDigest = keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash)` under a new versioned tag (`PURPOSE_POP_V2`). The
+`portablePopDigest = keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)` under a new versioned tag
+(`PURPOSE_POP_V2`; `kemRecordHash` = the hash of the initial KEM record `(version, pk)` given in `register`, P2; each
+hash 0 when that attribute is absent). The
 signer's `pop` and the PQZ key's `R_REG` proof are made once, over `uaMessage(kind, POP_V2, portablePopDigest)`, and
 are valid on every chain. `register` accepts only this form (one rule; all chains are test-only, so the registries are
 redeployed with no migration).
 
-**P2 — Anyone may register.** `register(kind, keyData, pop, pqzKey, pqzPop)` stays permissionless (it already is): the
-submitter pays the gas. Copying a UA to another chain = sending the same five fields to that chain's registry; a
-client or a relayer service can do it for any UA it sees on another chain. Today `UARegistered(ua, kind, keyData,
-pqzKey)` keeps the key data and the PQZ key's pointer but not the proofs; UA-8 adds `pop` and `pqzPop` to the event so
-anyone can read all five fields from the source chain and re-submit them.
+**P2 — One `register`, everything in one call; anyone may submit it.**
+`register(kind, keyData, pop, pqzKey, pqzPop, kemVersion, kemPk)` registers the UA **with its attributes** in one
+transaction (owner 2026-10-25: not two steps); the proofs may be empty (P8). It stays permissionless: the submitter
+pays the gas. Copying a UA to another chain = sending the same fields to that chain's registry; a client or a relayer
+service can do it for any UA it sees on another chain. Today `UARegistered(ua, kind, keyData, pqzKey)` keeps the key
+data and the PQZ key's pointer but not the proofs; UA-8 emits every `register` field (`pop`, `pqzPop` and the KEM
+record included) so anyone can read them from the source chain and re-submit them. Later KEM versions come by
+`setKemKey` (P7).
 
 **P3 — What must match.** The same kind must be enabled in the target registry's generation (a PQ kind needs its
 verifier there; a PQZ key needs `UAPqzVerifier` and the PQZ precompile of the same parameter set — otherwise the copy
@@ -77,29 +82,32 @@ kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show 
 the KEM secret, so a uniqueness check would let anyone who sees a key first register it under their own UA and block
 the real owner on that chain; a UA that lists someone else's KEM key gains nothing (it cannot decrypt). Views: `kemKeyOf(ua) → (version, pk)` (the highest stored version), `kemKeyAt(ua, version)`. Event `UAKemKeySet(ua, version, keyHash)`.
 
-**P8 — Proofs optional where they cannot or need not be checked (owner 2026-10-25).** So that keys can be registered
-on chains without the PQZ precompile (Ethereum, for example): signing keys, the PQZ (balance) key and the KEM key. Two
-different things were both called "proof":
+**P8 — The balance-key proof is optional (owner 2026-10-25).** So that a UA with all its keys — signing key, PQZ
+(balance) key, KEM key — can be registered on chains without the PQZ precompile (Ethereum, for example). The two
+checks in a registration:
 
 | What | Proves | Checked where |
 |---|---|---|
-| the **signer's signature** over a record | the UA agrees to attach this attribute (PQZ key, KEM key) | every chain where the kind is enabled: secp256k1 (`ecrecover`), P256 (precompile), ML-DSA / FN-DSA / SLH-DSA (Solidity verifiers; ≈ 6–19 M gas on Ethereum, accounts.md §1.6) |
+| the **signer's signature** (`pop`) | possession of the signing key, and the UA's consent to its attributes (PQZ key, KEM key) | every chain where the kind is enabled: secp256k1 (`ecrecover`), P256 (precompile), ML-DSA / FN-DSA / SLH-DSA (Solidity verifiers; ≈ 6–19 M gas on Ethereum, accounts.md §1.6) |
 | the **`R_REG` proof** | possession of the PQZ secret key | only chains with the PQZ precompile |
 
-1. **A bare UA record `(kind, keyData)` needs no proof.** The UA id is a function of the key, so registering someone
-   else's key creates exactly that UA, usable only by the key holder. The PoP becomes optional.
-2. **Attributes (PQZ key, KEM key) always need the signer's signature.** Without it, anyone could attach their own
-   PQZ key to someone else's UA first; the PQZ key never changes, so payments to that UA would be encrypted to the
-   attacker's key. The PQZ key and a KEM record may share one signature (one verification).
-3. **The `R_REG` proof is optional: each PQZ key carries a `proven` flag.** Without the proof (a chain without the
-   precompile) the key is stored with `proven = false`. Anyone may later submit `provePqzKey(ua, pqzPop)` on a chain
-   with the precompile; with the portable digest (P1) the proof bytes made once are valid everywhere. PQZ token
+In the one `register` call (P2):
+
+1. **`pop` (the signer's signature over `portablePopDigest`) is always required and checked**, as today. It also
+   binds the attributes: without it, anyone could attach their own PQZ key to someone else's UA first; the PQZ key
+   never changes, so payments to that UA would be encrypted to the attacker's key. One signature covers the UA and
+   both attributes (the digest holds both hashes, P1), so one verification.
+2. **Only the proof for the balance-encryption key is optional (owner 2026-10-25): `pqzPop` (the `R_REG` proof) may be empty; each PQZ key carries a `proven` flag.** Empty: the key is stored with
+   `proven = false`. Non-empty on a chain with the PQZ verifier: checked, `proven = true` (a bad proof reverts).
+   Non-empty on a chain without it: not checked, emitted with the registration (P2), `proven = false`. Anyone may
+   later submit `provePqzKey(ua, pqzPop)` on a chain with the precompile; with the portable digest (P1) the proof bytes
+   made once are valid everywhere. PQZ token
    contracts accept only proven keys; a chain without the precompile has no PQZ tokens, so an unproven key there is a
    directory entry to copy elsewhere.
-4. **The one-UA-per-PQZ-key check applies only to proven keys.** If unproven keys claimed the key, anyone could list a
+3. **The one-UA-per-PQZ-key check applies only to proven keys.** If unproven keys claimed the key, anyone could list a
    victim's PQZ key without a proof and block the victim. A UA that lists someone else's PQZ key without a proof gains
    nothing: PQZ tokens do not accept it.
-5. **The kind rule stays:** a kind must be enabled on the chain (its verifier exists), so that nothing can be received
+4. **The kind rule stays:** a kind must be enabled on the chain (its verifier exists), so that nothing can be received
    that can never be spent.
 
 On Ethereum the cost of a registration is then the signer's signature check (cheap for secp256k1 / P256; ≈ 6–19 M
@@ -111,8 +119,7 @@ and the key becomes proven.
 1. `UAKinds` (`PURPOSE_POP_V2`, `portablePopDigest`), `UARegistry.register` on the portable digest, `pop` / `pqzPop`
    in `UARegistered`; forge tests (copy a registration between two registries with different chain ids /
    addresses; disabled kind reverts; msig).
-2. P8: optional PoP for a bare record, attributes under the signer's signature, the `proven` flag and
-   `provePqzKey`, uniqueness only for proven PQZ keys; PQZ token contracts read `proven`; forge tests (register on a
+2. P8: the optional `pqzPop`, the `proven` flag and `provePqzKey`, uniqueness only for proven PQZ keys; PQZ token contracts read `proven`; forge tests (register on a
    registry without the PQZ verifier, prove later on one with it; an unproven listing does not block the owner).
 3. P7: `setKemKey` / `kemKeyOf` / `kemKeyAt`, the record digest (`UAKinds.recordDigest`), the 1,600-byte key check,
    write-once per version (any order), the event; forge tests (copy key records between two registries, a lower
