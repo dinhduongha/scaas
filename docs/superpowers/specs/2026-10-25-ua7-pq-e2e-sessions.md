@@ -87,8 +87,7 @@ Rust `ml-kem`, JS `@noble/post-quantum`; X-Wing where the library has it. Vector
 3. One reference client (`clients/ua-rs`: create / join / rekey / encrypt / decrypt), then a Matrix demo
    (a small bot or the Qt client sending `vn.scaas.pqchat.v1` events).
 
-## 4. Open for the owner
+## 4. Owner answers (2026-10-25)
 
-1. Default scheme: ML-KEM-768 alone or **X-Wing** (proposal: X-Wing, +64 B per key and wrap).
-2. Who may create a session with a UA: anyone (spam costs the creator gas) or only UAs the member allowed (proposal:
-   **anyone**, the client hides sessions from unknown UAs).
+1. Default scheme: **X-Wing** (ML-KEM-768 alone stays accepted for clients without X25519).
+2. Who may create a session with a UA: **anyone** (the creator pays the gas; clients hide sessions from unknown UAs).
