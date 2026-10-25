@@ -12,7 +12,9 @@ approval, max_input, [pqzh_preset], the proofSystemId labels pqzl_id / pqzh_id: 
                       set and proof system, checked distinct across the sets and from the retired ids)
   set.json            every derived constant the Python tools need (pqz_kat.py, e_s0_set.py)
   PqzSet.sol          the Solidity constants of the set (make.sh <set> sol compiles it; PQZ_SOL_INSTALL=1 copies it to
-                      smartcontracts/evm/src/pqz/)
+                      smartcontracts/evm/src/pqz/, where the contracts read it: plan 5h Task 8d part 2): HAS_PQZH and
+                      PQZH_ID (0 without PQZH), the P46 packed `acc` slot count, and from the set's vectors (zero words
+                      until the set has them) the precompile's self-test hash and UAPqzVerifier's R_REG probe hashes
   pqzh_set.rs         a set with `pqzh = true`: PQZH's (Ligero, pqz-core/pqzh/ligero) constants from set.toml's
                       [pqzh_preset] (radices, n, k, t) and q (the factors of q - 1, the generator, the non-square)
 
@@ -25,7 +27,7 @@ Barrett) are computed here. Stdlib only (Python >= 3.11: tomllib), deterministic
   python3 -I pqz-core/params/sets/gen_set.py <set> | --all --check    exit 1 if a committed file differs, a set
                                                                        directory holds a file no step writes or lacks a
                                                                        codegen header, or the contracts' PqzSet.sol is
-                                                                       not n2048-kmax1024's (until plan 5h Task 8d)
+                                                                       not n2304-kmax4096's (the committed set, CONTRACTS)
 
 Adding a set: write sets/<set>/set.toml, then pqz-core/params/sets/make.sh <set> all (README.md beside this file).
 """
@@ -43,7 +45,8 @@ REPO = os.path.normpath(os.path.join(CORE, ".."))
 sys.path.insert(0, os.path.join(CORE, "pqzl", "params", "n-study"))
 from budget import budget  # noqa: E402
 
-V3 = "n2048-kmax1024"  # the frozen v3 set: the contracts', pqz-stmt's and pqz-ffi's default until plan 5h Task 8d
+V3 = "n2048-kmax1024"  # the frozen set n2048-kmax1024: pqz-stmt's set without a feature (pqz-ffi's default is n2304-kmax4096)
+CONTRACTS = "n2304-kmax4096"  # the committed smartcontracts/evm/src/pqz/PqzSet.sol (plan 5h Task 8d part 2; one set per build)
 SOL_EVM = os.path.join(REPO, "smartcontracts", "evm", "src", "pqz", "PqzSet.sol")
 U64 = ("Q", "ZETA", "IROOT", "ZETA3", "INV2", "INVZ", "INVI", "INVZ3", "R64", "MUX")
 
@@ -374,6 +377,41 @@ def json_text(name):
     return json.dumps(j, indent=1) + "\n"
 
 
+def vec_dir(name):
+    """the set's vectors (pqz-ffi vectors/run.sh): smartcontracts/vectors/pqz/ for n2048-kmax1024, else /<set>/"""
+    return os.path.join(REPO, "smartcontracts", "vectors", "pqz", *([] if name == V3 else [name]))
+
+
+def sol_vectors(name):
+    """(SELFTEST, PROBE_PQZL, PROBE_PQZH) of the set's vectors: selftest.json's hash, and keccak256(psid || message ||
+    pk || proof) of the self-test's R_REG vector (statement_register.json row 0, proof_<sys>.json row 4 REGISTER) per
+    proof system, UAPqzVerifier's pinned probe. Zero words where the set has no vectors (yet) or no PQZH."""
+    d, z = vec_dir(name), bytes(32)
+    if not os.path.exists(os.path.join(d, "selftest.json")):
+        return z, z, z
+    rd = lambda f: json.load(open(os.path.join(d, f), encoding="utf-8"))  # noqa: E731
+    st = bytes.fromhex(rd("statement_register.json")["rows"][0]["stmt"])
+    out = [bytes.fromhex(rd("selftest.json")["hash"])]
+    for sys_ in ("pqzl", "pqzh"):
+        if sys_ not in ids(name):
+            out.append(z)
+            continue
+        row = rd(f"proof_{sys_}.json")["rows"][4]
+        assert row["form"] == "REGISTER", f"{name}: proof_{sys_}.json row 4 is {row['form']}"
+        out.append(keccak256(ids(name)[sys_][1] + st[64:] + bytes.fromhex(row["proof"])))
+    assert st[32:64] == ids(name)["pqzl"][1], f"{name}: statement_register.json row 0 is not under the set's PQZL id"
+    return tuple(out)
+
+
+def acc_words(name):
+    """the slots of a materialised `acc` under P46 (owner 2026-10-21): CT / 32 words of four coefficients, each word
+    packed into 4 * PACK_BITS / 8 bytes (PACK_BITS = ceil(log2 q), even at every set), in 32-byte slots"""
+    t = load(name)
+    pack = math.ceil(math.log2(t["q"]))
+    assert pack % 2 == 0, f"{name}: PACK_BITS {pack} is odd (a packed word would not be whole bytes)"
+    return -(-lengths(t["n"] // 64)["ct"] // 32 * pack // 2 // 32)
+
+
 def sol_text(name):
     t, b, cs = consts(name)
     c = {k: v for k, v, s, d in cs if s is None}
@@ -384,7 +422,7 @@ def sol_text(name):
             ("Q", c["Q"], "the modulus"), ("DELTA", c["DELTA"], f"floor(q / 2^{c['MBITS'] + 2})"),
             ("K_MAX", c["K_MAX"], "credits per account between refreshes"),
             ("LOG2Q", c["LOG2Q"], "ceil(log2(q - 1))"),
-            ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in 8d)"),
+            ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)"),
             ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"), ("V", ln["v"], "v bytes (16 be8)"),
             ("CT", ln["ct"], "ciphertext u || v bytes"),
             ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
@@ -396,20 +434,40 @@ def sol_text(name):
     out = ["// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0", "pragma solidity ^0.8.24;", "",
            f"/// @title PqzSet: the PQZ parameter set `{name}` ({t['description']})",
            "/// @notice Generated by pqz-core/params/sets/gen_set.py from the set's set.toml: do not edit. One set per build",
-           "/// (owner 2026-10-21): `PQZ_SOL_INSTALL=1 pqz-core/params/sets/make.sh <set> sol` writes this file; the committed",
-           "/// one is the set the contracts use (n2048-kmax1024 until plan 5h Task 8d, which wires PqzCt / PqzCore to it).",
+           "/// (owner 2026-10-21): `PQZ_SOL_INSTALL=1 pqz-core/params/sets/make.sh <set> sol` writes this file; every PQZ",
+           f"/// contract reads its set from it (plan 5h Task 8d part 2). The committed one is {CONTRACTS}; another set's",
+           "/// build: smartcontracts/evm/script/pqz/at-set.sh <set> (installs, runs forge, restores).",
            "library PqzSet {", f'    string internal constant NAME = "{name}";']
     for k, v, doc in rows:
         out.append(f"    /// {doc}\n    uint256 internal constant {k} = {u(v)};")
-    for sys_, (lab, h) in ids(name).items():
-        out.append(f"    /// {sys_.upper()}'s proofSystemId: keccak256(\"{lab}\")\n    bytes32 internal constant {sys_.upper()}_ID = 0x{h.hex()};")
+    i = ids(name)
+    lab, h = i["pqzl"]
+    out.append(f"    /// PQZL's proofSystemId: keccak256(\"{lab}\")\n    bytes32 internal constant PQZL_ID = 0x{h.hex()};")
+    has = "pqzh" in i
+    out.append(f"    /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): {'true' if has else 'false: PQZH_ID is the zero word, never accepted'}\n"
+               f"    bool internal constant HAS_PQZH = {'true' if has else 'false'};")
+    lab, h = i["pqzh"] if has else ("none at this set", bytes(32))
+    out.append(f"    /// PQZH's proofSystemId: {'keccak256(\"' + lab + '\")' if has else lab}\n    bytes32 internal constant PQZH_ID = 0x{h.hex()};")
+    ctp = ln["ct"] // 32 * pack // 2
+    out.append(f"    /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS ({ctp:,} zero bytes: a new account's `acc`, P46)\n"
+               f"    bytes32 internal constant ZERO_HASH = 0x{keccak256(bytes(ctp)).hex()};")
+    sv = sol_vectors(name)
+    src = os.path.relpath(vec_dir(name), REPO)
+    out.append(f"    /// the precompile's OP_SELFTEST answer at this set ({src}/selftest.json hash; 0: no vectors yet)\n"
+               f"    bytes32 internal constant SELFTEST = 0x{sv[0].hex()};")
+    out.append("    /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,\n"
+               "    /// proof_<sys>.json row 4): UAPqzVerifier's pinned probe per proof system (0: no vectors / no PQZH)\n"
+               f"    bytes32 internal constant PROBE_PQZL = 0x{sv[1].hex()};\n    bytes32 internal constant PROBE_PQZH = 0x{sv[2].hex()};")
     out += ["", "    /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f",
             "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / 4) (pqz-stmt multi_len)",
             "    function multiLen(uint256 m, bool aud) internal pure returns (uint256) {",
             "        uint256 a = aud ? 1 : 0;",
             "        uint256 g = (m + 3) / 4; // randomness groups of <= 4 legs",
             "        return 640 + (1 + m + a + g) * PK + CT + (m + 1 + a * m) * V;",
-            "    }", "}", ""]
+            "    }", "}", "",
+            "// The slots of a materialised `acc` under P46 (owner 2026-10-21): CT / 32 words of four coefficients, each packed into",
+            "// 4 * PACK_BITS / 8 bytes, in 32-byte slots. At file level: Solidity takes no library member as an array length.",
+            f"uint256 constant PQZ_ACC_WORDS = {acc_words(name)};", ""]
     return "\n".join(out)
 
 
@@ -520,8 +578,8 @@ def main(argv):
             with open(p, "w", encoding="utf-8", newline="\n") as f:
                 f.write(t)
     if check:
-        # the contracts' PqzSet.sol: exactly n2048-kmax1024's generated text until plan 5h Task 8d (8b review m7)
-        if not os.path.exists(SOL_EVM) or open(SOL_EVM, encoding="utf-8").read() != sol_text(V3):
+        # the contracts' PqzSet.sol: exactly the committed set's generated text (plan 5h Task 8d part 2)
+        if not os.path.exists(SOL_EVM) or open(SOL_EVM, encoding="utf-8").read() != sol_text(CONTRACTS):
             diff.append(os.path.relpath(SOL_EVM, REPO))
         diff += [os.path.relpath(p, REPO) for s in names for p in stray(s)]
     print("gen_set.py%s: %d sets, %d files%s" % (" --check" if check else "", len(names), len(fs) + check,

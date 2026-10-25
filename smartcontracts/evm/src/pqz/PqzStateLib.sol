@@ -10,6 +10,7 @@ import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
 import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
+import {PQZ_ACC_WORDS} from "./PqzSet.sol";
 
 /// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
@@ -66,8 +67,9 @@ library PqzStateLib {
 
     /// @notice Anyone (plan 5h D8): `acc += Σ pending[rolled .. rolled + n')` strictly in order, `n' = min(n, K_MAX − 1 −
     ///         accUnits)` (`CapReached` at 0), `1 ≤ n ≤ ROLL_MAX`, each entry at least `ROLL_AGE` blocks old
-    ///         (`RollTooYoung`), the account prepared (`AccNotPrepared`); the sum is written to the `acc` words with its
-    ///         `accHash` (over the unmarked words; each slot stores `ACC_MARK | word`, so none is zeroed); the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`).
+    ///         (`RollTooYoung`), the account prepared (`AccNotPrepared`); the sum is packed (P46) and written to the
+    ///         `acc` slots as `not(stream word)` (never 0, so none is zeroed; D3) with `accHash = keccak256(packed
+    ///         stream)`; the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`).
     function rollOver(bytes32 ua, uint256 n) public {
         if (n == 0 || n > PqzCore.ROLL_MAX) revert IPqzToken.RollOverRange(n);
         PqzCore.Account storage a = PqzCore.$().acct[ua];
@@ -80,14 +82,15 @@ library PqzStateLib {
         bytes memory c = PqzCore._accOf(a, msg.data[0:0]);
         PqzCore._window(a, c, r, n, true, true);
         PqzCt.reduce(c);
-        uint256[516] storage w = a.accWords;
-        uint256 mk = PqzCore.ACC_MARK;
+        bytes memory pk_ = PqzCt.packMem(c); // `CTP` bytes and 32 of zero slack: the last slot's padding stores as ones
+        uint256[PQZ_ACC_WORDS] storage w = a.accWords;
+        uint256 nw = PqzCt.ACC_WORDS;
         assembly ("memory-safe") {
             let b := w.slot
-            let d := add(c, 32)
-            for { let i := 0 } lt(i, 516) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
+            let d := add(pk_, 32)
+            for { let i := 0 } lt(i, nw) { i := add(i, 1) } { sstore(add(b, i), not(mload(add(d, shl(5, i))))) }
         }
-        bytes32 h = keccak256(c);
+        bytes32 h = keccak256(pk_);
         uint64 nr = uint64(r + n);
         a.accHash = h;
         a.rolled = nr;
@@ -104,20 +107,21 @@ library PqzStateLib {
     }
 
     /// @notice Permissionless, idempotent (plan 5h D8): writes the non-zero `ACC_MARK` into half `half` (0 or 1) of the
-    ///         account's `acc` words, so the first rollover rewrites instead of creating 516 slots (≈ 11.4 M); a no-op
-    ///         once done (a materialised `acc` has both).
+    ///         account's `acc` slots (`HALF_WORDS` and the rest of `PqzCt.ACC_WORDS`), so the first rollover rewrites
+    ///         instead of creating them; a no-op once done (a materialised `acc` has both).
     function prepareAcc(bytes32 ua, uint256 half, address registry) public {
         if (half > 1) revert IPqzToken.BadPayload(half);
         PqzCore.Account storage a = PqzCore.$().acct[ua];
         uint8 bit = uint8(2 << half);
         if (a.flags & bit != 0) return;
         if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
-        uint256[516] storage w = a.accWords;
+        uint256[PQZ_ACC_WORDS] storage w = a.accWords;
         uint256 hw = PqzCore.HALF_WORDS;
+        uint256 cnt = half == 0 ? hw : PqzCt.ACC_WORDS - hw;
         uint256 mk = PqzCore.ACC_MARK;
         assembly ("memory-safe") {
             let b := add(w.slot, mul(half, hw))
-            for { let i := 0 } lt(i, hw) { i := add(i, 1) } { sstore(add(b, i), mk) }
+            for { let i := 0 } lt(i, cnt) { i := add(i, 1) } { sstore(add(b, i), mk) }
         }
         a.flags |= bit;
     }

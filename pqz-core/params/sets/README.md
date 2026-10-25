@@ -11,7 +11,7 @@ pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm featu
 
 | Set | n, k | q | `K_MAX` | Status | `SET.md` |
 |---|---|---|---|---|---|
-| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the frozen set (the parameters of the retired PQZL v3 id): the committed vectors at `smartcontracts/vectors/pqz/`, the contracts until 8d part 2 | [SET.md](n2048-kmax1024/SET.md) |
+| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the frozen set (the parameters of the retired PQZL v3 id): the committed vectors at `smartcontracts/vectors/pqz/`; the contracts' set until 8d part 2 (since then `n2304-kmax4096`; every set builds with `at-set.sh`) | [SET.md](n2048-kmax1024/SET.md) |
 | `n2304-kmax4096` | 2304, 36 | 61,275,424,977,257 (2^45.80) | 4,096 | owner 2026-10-21: the default set on chain; the default of the `pqzl` crate, `gate.sh` and (since 8d part 1) `pqz-ffi` | [SET.md](n2304-kmax4096/SET.md) |
 | `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | approved 2026-10-20 as the Task 8 set, superseded as the default by `n2304-kmax4096` 2026-10-21: shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
 | `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21 core only; **owner 2026-10-24: a full PQZL set for customers** (pqz-stmt, precompile, vectors, gate since plan 5h Task 8d part 1b; contracts in 8d part 2); **no PQZH** (none of the current Ligero radices divides q − 1; a radix-1,789 preset is unexplored, not in scope) | [SET.md](n2816-kmax65536/SET.md) |
@@ -303,8 +303,9 @@ the set's `set.toml` `[pqzh_preset]` (preset, `max_proof`).
 |---|---|
 | C core (`pqzl/build.sh`, `sz/build.sh`, harnesses) | `PQZ_SET=<set>` (default `n2304-kmax4096`); `pqzl/set.sh` copies the set's headers into `build/include` |
 | Rust `pqzl` | cargo feature `set-<set>` (default `set-n2304-kmax4096`; another set: `--no-default-features --features sv,set-<set>`) |
-| `pqz-stmt` | cargo feature `set-<set>` (none = `n2048-kmax1024`, the contracts' set until 8d part 2) |
+| `pqz-stmt` | cargo feature `set-<set>` (none = `n2048-kmax1024`, the frozen set) |
 | `pqzh-ligero` | cargo feature `set-<set>` for a set with PQZH (none = `n2048-kmax1024`), forwarded to `pqz-stmt` |
+| contracts (`smartcontracts/evm`) | the generated `src/pqz/PqzSet.sol` (committed: `n2304-kmax4096`, which `gen_set.py --check` wants); another set: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> [forge args]` installs that set's `PqzSet.sol`, runs forge (default: the PQZ suites) in `out/at-set-<set>` and restores the committed file (plan 5h Task 8d part 2) |
 | `pqz-ffi` (precompile, prover API, `pqz-vectors`) | cargo feature `set-<set>` (default `set-n2304-kmax4096` since plan 5h Task 8d part 1, forwarded to `pqz-stmt`, `pqzl` and, for a set with PQZH, `pqzh-ligero` with feature `pqzh`) |
 | gate | `PQZ_SET=<set> scripts/capped pqz-core/gate.sh <label>`; the gates of different sets may run at the same time from one worktree, one `scripts/capped` slot each (every build / output path per set: `pqzl/build/<set>/`, `…/target/<set>/`, `build/fuzz-<set>/`; owner 2026-10-23) |
 
@@ -319,7 +320,7 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 | `set.json` | every derived constant the Python tools read (`pqz_kat.py`, `e_s0_set.py`, `ligero_params.py`, the tests' `core_only`; the limits and the PQZH preset) | `gen_set.py` |
 | `pqzh_set.rs` | a set with PQZH: q − 1's factors, generator, F_q^4 non-residue, radices, the Ligero preset (n, k, t) | `gen_set.py` |
 | `pqzh_set_fallback.rs`, `pqzh_set_spike_b.rs` | `n2304-kmax4096` only, hand-written research files kept as they are (plan 5h Task 8c part 1b): THE preset for fallback A (pqzh-ligero feature `fallback-retry`, never in production) and the superseded t = 119 spike (not compiled) | by hand |
-| `PqzSet.sol` | the set's Solidity constants (with `PQZL_ID` / `PQZH_ID` since 8d part 1); `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (the `n2048-kmax1024` one until 8d part 2) | `gen_set.py` |
+| `PqzSet.sol` | the set's Solidity constants, **read by every PQZ contract since plan 5h Task 8d part 2** (`PqzCt`, `PqzCore`, `PqzSafety`, `UAPqzVerifier`): sizes, q, Δ, `K_MAX`, `PACK_BITS` (P46), `PQZL_ID`, `HAS_PQZH` / `PQZH_ID` (the zero word without PQZH), `ZERO_HASH` (the packed `Trivial(0)`), from the set's vectors (zero words until the set has them) the precompile's `SELFTEST` hash and `UAPqzVerifier`'s `PROBE_PQZL` / `PROBE_PQZH`, and the file-level `PQZ_ACC_WORDS` (the packed `acc` slots; Solidity takes no library member as an array length); `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (committed: `n2304-kmax4096`) | `gen_set.py` (reads the set's `selftest.json`, `statement_register.json`, `proof_*.json`) |
 | `<rel>_params.sage` | LaZer codegen specs of the 14 relations (reg, tx, tx0, burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (`n2048-kmax1024`'s have the shapes of `pqzl/params/*.sage`, the record) |
 | `pqz_<rel>_params.h`, `codegen.txt` | LaZer codegen headers and the codegen log (`codegen-check.txt` for the frozen `n2048-kmax1024`: the regenerated headers byte-identical) | `make.sh <set> codegen` (LaZer 3330e48, pinned Sage image) |
 | `rust/<rel>.rs`, `rust/mod.rs` | the headers' Rust form | `pqzl/params/to_rust.py` (`make.sh <set> rust`) |
@@ -330,5 +331,5 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 
 `gen_set.py --all --check` (the gate's `rust` step) fails on a file in a set directory that is not in this table.
 
-Vectors: `smartcontracts/vectors/pqz/` for `n2048-kmax1024` (read by the contracts until 8d part 2),
+Vectors: `smartcontracts/vectors/pqz/` for `n2048-kmax1024`,
 `smartcontracts/vectors/pqz/<set>/` for every other set (`pqz-ffi/vectors/run.sh`, `PQZ_SET=<set>`).

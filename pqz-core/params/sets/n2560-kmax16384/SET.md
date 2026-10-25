@@ -19,7 +19,7 @@ derived (see [`../README.md`](../README.md)).
 | e_s0 | budget, exactness of every norm proof (14 relations) and Fiat–Shamir rounds (final challenge 2^-129.79): MET (`e-s0.txt`) |
 | proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4")` = `0xa3db21fc…70262d`; PQZH `keccak256("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2")` = `0xe83ad1da…109851` (set.toml `pqzl_id` / `pqzh_id`; plan 5h Task 8d, the one bump of Task 8: controller proposal, decisions CTR-PQZ-09) |
 | owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by `n2304-kmax4096`; kept shippable) |
-| stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits (P50); `PqzSet.sol` `PACK_BITS`; built in 8d |
+| stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits; `PqzSet.sol` `PACK_BITS`; built in 8d part 2: stored `ct` 16,100 B (64-bit lanes 20,608), `acc` 504 slots |
 | PQZH | built (plan 5h Task 8c part 2): THE preset's radices and n / k (n 32,756, k 817) with t = 122 (owner 2026-10-23), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; debit bounds 303,412–305,120 B exceed 262,144 → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (decisions CTR-PQZ-10), in `pqz-stmt` with `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
 | LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |

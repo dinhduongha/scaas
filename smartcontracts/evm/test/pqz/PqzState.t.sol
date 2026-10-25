@@ -217,13 +217,13 @@ contract PqzStateTest is PqzSlots {
             vm.roll(block.number + 1);
         }
         _roll(tok, alice, 3);
-        bytes memory h1 = tok.pqzAcc(alice);
-        assertEq(h1, accOf[alice]);
+        assertEq(tok.pqzAcc(alice), accOf[alice]);
+        bytes memory h1 = _packed(tok.pqzAcc(alice)); // a hint is the packed `acc` stream (P46)
         bytes memory pl = _pl(4, alice, bob, 1, false);
         bytes memory st = tok.transferSingleStatement(pl, 0);
         assertEq(_tOf(st, false), _expectT(alice, new bytes(PqzCt.CT), 0, 4, 0));
         _roll(tok, alice, 1); // anyone: h1 is stale now
-        bytes memory h2 = tok.pqzAcc(alice); // the materialised acc the debit below replaces
+        bytes memory h2 = _packed(tok.pqzAcc(alice)); // the materialised acc the debit below replaces
         assertEq(keccak256(h2), tok.pqzAccount(alice).accHash);
         assertEq(tok.transferSingleStatement(pl, 0), st, "same T after the rollover");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
@@ -238,21 +238,21 @@ contract PqzStateTest is PqzSlots {
         bytes memory pl2 = _pl(4, alice, bob, 2, false);
         st = tok.transferSingleStatement(pl2, 0);
         assertEq(_tOf(st, false), accOf[alice], "T = the reference (p = rolled)");
-        assertTrue(keccak256(_tOf(st, false)) != keccak256(h2), "h2 would give another T");
+        assertTrue(keccak256(_tOf(st, false)) != keccak256(PqzCt.unpackCt(h2)), "h2 would give another T");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
         _send(pl2, h2);
         _mirrorDebit(alice, bob, pl2);
         // a materialised acc with its fresh hint, and with a malformed one: the same statement
         _fund(tok, alice, 7);
         _roll(tok, alice, 1);
-        bytes memory h3 = tok.pqzAcc(alice);
+        bytes memory h3 = _packed(tok.pqzAcc(alice));
         bytes memory pl3 = _pl(5, alice, bob, 3, false);
         st = tok.transferSingleStatement(pl3, 0);
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
         uint256 g = gasleft();
         _send(pl3, h3);
         console2.log("op 1 with a valid hint (materialised acc) gas", g - gasleft());
-        assertEq(_tOf(st, false), h3, "T = acc (p = rolled)");
+        assertEq(_tOf(st, false), PqzCt.unpackCt(h3), "T = acc (p = rolled)");
         _mirrorDebit(alice, bob, pl3);
         bytes memory bad = bytes.concat(h3);
         bad[3] ^= 0x01;
@@ -543,7 +543,7 @@ contract PqzStateTest is PqzSlots {
         IPqzToken.AccountState memory a = tok.pqzAccount(ua);
         assertEq(tok.pqzAcc(ua), _acc(ua), "acc from state");
         for (uint256 i = a.rolled; i < a.pendingCount; ++i) assertEq(tok.pqzPendingCt(ua, uint64(i)), _entCt(ua, i), "pending ct");
-        if (a.flags & 1 != 0) assertEq(a.accHash, keccak256(tok.pqzAcc(ua)), "accHash of the materialised acc");
+        if (a.flags & 1 != 0) assertEq(a.accHash, keccak256(_packed(tok.pqzAcc(ua))), "accHash of the materialised acc (packed)");
     }
 
     // ------------------------------------------------------------------ D1: the op blob is the bundle
@@ -551,11 +551,11 @@ contract PqzStateTest is PqzSlots {
     /// BUNDLE: `entryPtr` is the op blob (`R ‖ v_f`): no second SSTORE2, `transferEntry` = `R`, the hash unchanged.
     function test_opBlobIsTheBundle() public {
         (bytes32 ref, bytes memory out) = _transfer(tok, alice, bob, bytes32(0), 7, true);
-        bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
+        bytes memory r = _rOf(out, bob);
         assertEq(tok.transferEntry(ref), r);
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));
         IPqzToken.AccountState memory a = tok.pqzAccount(alice);
-        assertEq(a.accBlob.code.length, 1 + r.length + PqzCt.V, "STOP, R, v_f");
+        assertEq(a.accBlob.code.length, 1 + r.length + PqzCt.VP, "STOP, R, P(v_f)");
         uint256 e = tok.pqzPending(bob, 0);
         assertEq(address(uint160(e >> 96)), a.accBlob, "the credit points into the sender's blob");
     }
@@ -605,17 +605,23 @@ contract PqzStateHandler is Test {
         }
     }
 
+    function _sl(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory r) {
+        r = new bytes(len);
+        assembly ("memory-safe") { mcopy(add(r, 32), add(add(b, 32), off), len) }
+    }
+
     function _triv(uint256 a) internal view returns (bytes memory) {
         return ct.sum(new bytes(PqzCt.CT), none, none, a);
     }
 
     function credit() external {
-        bytes memory out = _blob(++seed, 16_640);
+        bytes memory out = _blob(++seed, PqzCore.OUT_OFF);
         bytes memory pl = bytes.concat(abi.encode(tok.pqzAccount(carol).pendingCount, block.number + 100, uint256(0),
             carol, alice, bytes32(0)), bytes16(uint128(seed)), out);
         tok.mtxConfidentialTransferSingle(pl, hex"c0de", auth, bytes32(0), "");
         bytes memory u = new bytes(PqzCt.CT);
-        assembly ("memory-safe") { mcopy(add(u, 32), add(out, 32), 16512) }
+        uint256 n = PqzCt.CT;
+        assembly ("memory-safe") { mcopy(add(u, 32), add(out, 32), n) }
         ents.push(u);
         amts.push(0);
         blks.push(block.number);
@@ -660,7 +666,7 @@ contract PqzStateHandler is Test {
         uint256 hi = a.rolled + 16 < a.pendingCount ? a.rolled + 16 : a.pendingCount;
         if (hi < lo) return;
         uint256 p = bound(sel, lo, hi);
-        bytes memory out = _blob(++seed, 16_640);
+        bytes memory out = _blob(++seed, PqzCore.OUT_OFF);
         bytes memory pl = bytes.concat(abi.encode(p, block.number + 100, uint256(0), alice, bob, bytes32(0)),
             bytes16(uint128(seed)), out);
         bytes memory st = tok.transferSingleStatement(pl, 0);
@@ -668,21 +674,18 @@ contract PqzStateHandler is Test {
         for (uint256 i; i < win.length; ++i) win[i] = entAt(lastP + i);
         bytes memory want = ct.sum(ref, win, none, 0);
         bytes memory got = new bytes(PqzCt.CT);
-        assembly ("memory-safe") { mcopy(add(got, 32), add(add(st, 32), 33408), 16512) }
+        (uint256 at_, uint256 n) = (640 + 2 * PqzCt.PK, PqzCt.CT); // R_TX0: header ‖ pk_f ‖ pk_t ‖ T
+        assembly ("memory-safe") { mcopy(add(got, 32), add(add(st, 32), at_), n) }
         assertEq(got, want, "T = ref + sum [lastP, p)");
         hint %= 3;
-        bytes memory h = hint == 1 ? tok.pqzAcc(alice) : hint == 2 ? lastMat : bytes("");
+        // the hint is the packed `acc` stream (P46): the current one (hashes to `accHash` when materialised) or a stale one
+        bytes memory h = hint == 1 ? PqzCt.packMem(tok.pqzAcc(alice)) : hint == 2 ? PqzCt.packMem(lastMat) : bytes("");
         // the precompile accepts exactly the state's statement: a hint that changed `T` would be `ProofRejected`
         vm.mockCall(PqzSafety.PQZ, abi.encodePacked(uint8(1)), abi.encode(uint256(0)));
         vm.mockCall(PqzSafety.PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"), abi.encode(uint256(1)));
         tok.mtxConfidentialTransferSingle(pl, hex"c0de", auth, bytes32(0), h);
         vm.mockCall(PqzSafety.PQZ, abi.encodePacked(uint8(1)), abi.encode(uint256(1)));
-        bytes memory r = new bytes(PqzCt.CT);
-        assembly ("memory-safe") {
-            mcopy(add(r, 32), add(out, 32), 16384)
-            mcopy(add(r, 16416), add(out, 16544), 128)
-        }
-        ref = r;
+        ref = bytes.concat(_sl(out, 0, PqzCt.PK), _sl(out, PqzCt.CT, PqzCt.V)); // u ‖ v_f
         lastP = p;
         ++debits;
     }

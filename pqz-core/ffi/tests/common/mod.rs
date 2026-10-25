@@ -61,6 +61,22 @@ pub fn ids() -> Vec<Word> {
     if PQZH { vec![PQZL_ID, PQZH_ID] } else { vec![PQZL_ID] }
 }
 
+/// The "other id" of a negative case: the other proof system's, and at a set without PQZH (PQZL inputs only) another
+/// set's PQZL id, n2304-kmax4096's keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4") (review 8d1b M2: not the zero word,
+/// which the "unknown id" case already sends; pqz-vectors' rows use the same id)
+pub fn other_id(pqzl: bool) -> Word {
+    const FOREIGN: &str = "15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a";
+    match (pqzl, stmt::HAS_PQZH) {
+        (false, _) => PQZL_ID,
+        (true, true) => PQZH_ID,
+        (true, false) => {
+            let w: Word = std::array::from_fn(|i| u8::from_str_radix(&FOREIGN[2 * i..2 * i + 2], 16).unwrap());
+            assert_ne!(w, PQZL_ID, "the foreign id is this set's");
+            w
+        }
+    }
+}
+
 /// Every form of both ids, then every built op 7 shape of both ids, proved (fixture, rnd32 = RND).
 pub fn prove_all() -> Vec<Honest> {
     let mut v = Vec::new();
@@ -206,8 +222,8 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         ("proof bit 0".into(), { let mut p = pf.clone(); p[0] ^= 1; inp(op, st, &p) }, None),
         ("proof last bit".into(), { let mut p = pf.clone(); *p.last_mut().unwrap() ^= 0x80; inp(op, st, &p) }, None),
         ("proof middle byte".into(), { let mut p = pf.clone(); let m = p.len() / 2; p[m] ^= 0x5a; inp(op, st, &p) }, None),
-        ("other system's id".into(), inp(op, &with(32, &|s| s[..32].copy_from_slice(if h.pqzl() { &PQZH_ID } else { &PQZL_ID })), pf),
-            // a set without PQZH knows no PQZH id: its zero word is refused by the decoder
+        ("other system's id".into(), inp(op, &with(32, &|s| s[..32].copy_from_slice(&other_id(h.pqzl()))), pf),
+            // a set without PQZH: another set's PQZL id (review 8d1b M2), an unknown id refused by the decoder
             (h.pqzl() && !stmt::HAS_PQZH).then_some(Reject::ProofSystemId)),
         ("statement last coefficient - 1".into(), inp(op, &with(st.len() - 1, &|s| s[0] ^= 1), pf), None),
     ];

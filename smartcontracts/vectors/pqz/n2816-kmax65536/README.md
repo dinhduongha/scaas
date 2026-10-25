@@ -8,7 +8,9 @@ q = 2^54 − 327; a full PQZL set for customers since plan 5h Task 8d part 1b, o
   current Ligero presets' radices; a radix-1,789 preset would be new, unexplored work, not in scope), so
   there is no `proof_pqzh.json`; `fee0.json` and the statement files carry the PQZL id only; `selftest.json` has no
   Ligero FFT (`fft` empty, ok false) and results 1, 0, 0, 0. pqz-stmt knows no PQZH id at this set (its `PQZH_ID` is
-  the zero word, refused): `negative.json`'s "other system's id" rows are decoder rejects (`ProofSystemId`).
+  the zero word, refused). Instead of "the other system's proofSystemId" (the zero word there would repeat the
+  "unknown proofSystemId (zero word)" rows), `negative.json` has "another set's proofSystemId (n2304-kmax4096 PQZL)"
+  rows (plan 5h Task 8d part 2a, review 8d1b M2): a real foreign id, decoder rejects (`ProofSystemId`).
 - **The set's own proofSystemId** (plan 5h Task 8d, `set.json`; decisions CTR-PQZ-09): PQZL
   `keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4")` = `0x9d23a0de…bd53a3`; the retired PQZL v2 / v3 and PQZH v1 ids
   only in `negative.json`'s "retired … proofSystemId" rows (all three on the PQZL inputs here).

@@ -18,8 +18,10 @@
 #   fixtures the cheating fixtures the Rust suite reads (pqzl/rust/tests/fixtures/cheating/export.sh -> <set>/)  (capped)
 #   vectors pqz-ffi/vectors/run.sh write (PQZ_SET=<set>): smartcontracts/vectors/pqz[/<set>]   (not for core_only)
 #   sol     forge build of <set>/PqzSet.sol in a scratch project <set>/.solcheck (the contracts' file is untouched);
-#           PQZ_SOL_INSTALL=1 also copies it to smartcontracts/evm/src/pqz/PqzSet.sol (gen_set.py --check wants the
-#           n2048-kmax1024 one there until plan 5h Task 8d)                                    (not for core_only)
+#           PQZ_SOL_INSTALL=1 also copies it to smartcontracts/evm/src/pqz/PqzSet.sol, the contracts' set (gen_set.py
+#           --check wants n2304-kmax4096's committed there; another set's contracts: smartcontracts/evm/script/pqz/
+#           at-set.sh <set>). Run after `vectors`: PqzSet.sol carries the self-test / probe hashes of the set's
+#           vectors (`specs` again first)                                                      (not for core_only)
 #   gate    PQZ_SET=<set> pqz-core/gate.sh (run alone; label = the set, an interrupted gate resumes)
 # Environment: PQZ_TOOLS = a directory with the pinned checkouts lk (leaky-LWE-Estimator 0a9caf8), le
 # (lattice-estimator 53da598), lz (LaZer 3330e48) (e_s1, codegen); PQZ_WORK = a work directory for the KAT build
@@ -31,7 +33,7 @@ CORE=$(cd "$HERE/../.." && pwd)
 REPO=$(cd "$CORE/.." && pwd)
 CAP="$REPO/scripts/capped"
 IMG=sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528   # tag 10.7
-[ $# -ge 2 ] || { sed -n '2,24p' "$0"; exit 2; }
+[ $# -ge 2 ] || { sed -n '2,26p' "$0"; exit 2; }
 S=$1
 shift
 D=$HERE/$S

@@ -65,7 +65,7 @@ contract PqzRelayTest is PqzFixture {
         assertEq(bytes32(_cut(st, 544, 32)), _relayed(b, ZetherTypes.TransferMode.BUNDLE), "D15: the mode folded in");
         // the proof of the bound statement is valid only there: the mocked precompile accepts exactly that input
         _mockOp(1, 0);
-        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(83_072), st, hex"c0de"), abi.encode(uint256(1)));
+        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(ST_TX), st, hex"c0de"), abi.encode(uint256(1)));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
         tok.mtxConfidentialTransferSingle(pl, hex"c0de", _mlAuth(), _benT(pl), ""); // stripped out of its envelope: the direct binding
         MetaTxLib.MetaTransaction memory other = _m(data, 2, 0); // another nonce: another binding
@@ -131,7 +131,7 @@ contract PqzRelayTest is PqzFixture {
             fee, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
         bytes memory st = tok.transferSingleStatement(pl, b);
         _mockOp(1, 0);
-        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(66_560), st, hex"c0de"), abi.encode(uint256(1)));
+        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(ST_TX0), st, hex"c0de"), abi.encode(uint256(1)));
         uint256 g = gasleft();
         tok.uaExecute(m, _mlAuth());
         console2.log("mtxConfidentialTransfer in a v3 envelope (mldsa65 fee UA, mocked proof) gas", g - gasleft());

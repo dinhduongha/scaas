@@ -9,7 +9,8 @@ import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 interface IPqzToken is IConfidentialToken {
     /// @notice `pqzAccount` (pq-zero-knowledge.md §9.4; plan 5h D2 / D3, D13): the counters, the `acc` reference (`accBlob`,
     ///         0 for `Trivial(0)`; ignored while `flags & 1`, the materialised `acc`), `flags` (1 MATERIALISED, 2 / 4 the
-    ///         prepared halves), `accHash` (the materialised `acc`'s keccak; stale once a debit clears flag 1).
+    ///         prepared halves), `accHash` (the keccak of the materialised `acc`'s
+    ///         packed stream, P46: `PqzCt.CTP` bytes; stale once a debit clears flag 1).
     struct AccountState {
         uint64 pendingCount;
         uint64 rolled;

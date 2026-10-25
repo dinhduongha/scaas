@@ -6,17 +6,19 @@ import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../../src/ua/MlDsa.sol";
 import {UAPqzVerifier} from "../../../src/pqz/UAPqzVerifier.sol";
+import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 
 bytes32 constant PQZ_UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464; // chain 7622's genesis
-bytes32 constant PQZL_ID = 0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef; // v3 (lazer#28 fix); v2 retired
-bytes32 constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
+// the build's set's ids (plan 5h Task 8d; PQZH_ID is the zero word at a set without PQZH)
+bytes32 constant PQZL_ID = PqzSet.PQZL_ID;
+bytes32 constant PQZH_ID = PqzSet.PQZH_ID;
 
 /// @notice A gen-1 `UARegistry` as on chain 7622 (P6g plan D15): `mldsa65` on its precompile candidate (mocked: every
 ///         input ⇒ 1 except the probe's invalid one) and the PQZ key verifier `UAPqzVerifier` (slot 0x0142; the `PQZ`
 ///         precompile mocked, `PqzMock`). ML-DSA signatures are filler bytes of the right length; what is real is every
 ///         registry and verifier path between them.
 abstract contract PqzRegistryBase is PqzMock {
-    address internal constant ML65 = 0x5CAA500000000000000000000000000000000013;
+    address internal constant ML65 = 0x000000000000000000000000000000005CAa0013; // 32-bit form (plan 5h Task 8d)
     uint256 internal constant ML65_PK = 1952;
     uint256 internal constant ML65_SIG = 3309;
     uint64 internal constant CAP_PQZ = 3_500_000;
@@ -24,8 +26,8 @@ abstract contract PqzRegistryBase is PqzMock {
     UARegistry internal reg;
     UAMldsaVerifier internal mlv;
     UAPqzVerifier internal pqv;
-    bytes internal regStmt; // statement_register.json: opTag ‖ PQZL id ‖ message ‖ pk (the self-test's)
-    bytes internal regProof; // proof_pqzl.json REGISTER
+    bytes internal regStmt; // statement_register.json: opTag ‖ PQZL id ‖ message ‖ pk (the self-test's), the set's
+    bytes internal regProof; // proof_pqzl.json REGISTER, the set's
 
     function _mockMlDsa() internal returns (bytes memory valid, bytes memory invalid) {
         valid = new bytes(ML65_PK + ML65_SIG + 32);
@@ -39,16 +41,18 @@ abstract contract PqzRegistryBase is PqzMock {
     /// exactly that input.
     function _newPqzVerifier(bytes32 psid) internal returns (UAPqzVerifier v) {
         regStmt = _vecHex("statement_register.json", ".rows[0].stmt");
-        // PQZH: `proof_pqzh.json` row 4 (REGISTER) extracted to a hex file (keccak d7e6cdb5… = selftest.json's): the
-        // 7 MB JSON exceeds forge's per-test gas in memory expansion
-        regProof = psid == PQZH_ID
-            ? vm.parseBytes(string.concat("0x", vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqzh/register_proof.hex"))))
+        // PQZH: the set's `proof_pqzh.json` row 4 (REGISTER) extracted to `test/vectors/pqzh/<set>/register_proof.hex`
+        // (its keccak = the set's selftest.json `register.pqzh.proof_keccak`; the probe pin `PqzSet.PROBE_PQZH` checks it):
+        // the 7 MB JSON exceeds forge's per-test gas in memory expansion
+        regProof = psid == PQZH_ID && PqzSet.HAS_PQZH
+            ? vm.parseBytes(string.concat("0x", vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqzh/",
+                PqzSet.NAME, "/register_proof.hex"))))
             : _vecHex("proof_pqzl.json", ".rows[4].proof");
         _mockSelfTest();
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(0)));
-        bytes memory st = bytes.concat(_slice(regStmt, 0, 32), psid, _slice(regStmt, 64, 16_416));
-        vm.mockCall(PQZ, abi.encodePacked(uint8(3), uint32(16_480), st, regProof), abi.encode(uint256(1)));
-        v = new UAPqzVerifier(PQZ, psid, _slice(regStmt, 96, 16_384), bytes32(_slice(regStmt, 64, 32)), regProof);
+        bytes memory st = bytes.concat(_slice(regStmt, 0, 32), psid, _slice(regStmt, 64, PqzSet.STMT_REGISTER - 64));
+        vm.mockCall(PQZ, abi.encodePacked(uint8(3), uint32(PqzSet.STMT_REGISTER), st, regProof), abi.encode(uint256(1)));
+        v = new UAPqzVerifier(PQZ, psid, _slice(regStmt, 96, PqzSet.PK), bytes32(_slice(regStmt, 64, 32)), regProof);
     }
 
     function _registryStack() internal {

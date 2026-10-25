@@ -108,6 +108,9 @@ PQZL_ID = keccak256(_S["pqzl_label"].encode())
 # a set without PQZH (set.json pqzh false, n2816-kmax65536) has no PQZH id: the zero word, refused (as pqz-stmt)
 PQZH_ID = keccak256(_S["pqzh_label"].encode()) if HAS_PQZH else bytes(32)
 KNOWN_IDS = (PQZL_ID, PQZH_ID) if HAS_PQZH else (PQZL_ID,)
+# the "other id" negative rows: the other proof system's id, at a set without PQZH another set's PQZL id (n2304-kmax4096's;
+# review 8d1b M2: not the zero word, which the "unknown proofSystemId" rows already carry)
+OTHER_ROW = "the other system's proofSystemId" if HAS_PQZH else "another set's proofSystemId (n2304-kmax4096 PQZL)"
 ID2 = PQZH_ID if HAS_PQZH else PQZL_ID  # the second id the self-test mixes in (PQZL at a set without PQZH)
 RETIRED_IDS = {"PQZL v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",  # forgeable (lazer#28, F9)
                "PQZL v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",  # .../mlwe-d64k32-q42l4/v3
@@ -1447,7 +1450,7 @@ def check_negative(j, d):
     for f in STMT_BYTES:
         op = OP_BYTE[f.rstrip("0")]
         want = [f"{f}: statement length - 1", f"{f}: statement length + 1", f"{f}: unknown proofSystemId (zero word)",
-                f"{f}: the other system's proofSystemId", f"{f}: proof truncated by 1 byte",
+                f"{f}: {OTHER_ROW}", f"{f}: proof truncated by 1 byte",
                 f"{f}: proof extended by 1 zero byte", f"{f}: proof byte 0 bit 0 flipped",
                 f"{f}: proof middle byte bit 3 flipped", f"{f}: proof last byte bit 7 flipped"]
         want += [f"{f}: under op {o}" for o in range(1, 6) if o != op]
@@ -1457,7 +1460,7 @@ def check_negative(j, d):
                 bad.append(f"{f} {n}: missing rows {sorted(set(want) - have)}")
     for c, m, a in MULTI_CASES[:8]:  # op 7 (P6-ANON S4): per built shape and id
         want = [f"{c}: {x}" for x in ("statement length - 1", "statement length + 1", "unknown proofSystemId (zero word)",
-                                      "the other system's proofSystemId", "proof truncated by 1 byte",
+                                      OTHER_ROW, "proof truncated by 1 byte",
                                       "proof extended by 1 zero byte", "proof byte 0 bit 0 flipped",
                                       "proof middle byte bit 3 flipped", "proof last byte bit 7 flipped")]
         want += [f"{c}: under op {o}" for o in range(7)]

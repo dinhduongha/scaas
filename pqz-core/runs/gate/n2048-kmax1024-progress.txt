@@ -489,3 +489,161 @@
 2026-10-25T03:23:13 ok      fuzz/codec (0h1m34s)
 2026-10-25T03:23:13 ok      step/fuzz (0h5m7s)
 2026-10-25T03:23:13 gate n2048-kmax1024 (set n2048-kmax1024): PASS
+2026-10-25T08:01:58 gate n2048-kmax1024 (set n2048-kmax1024) started at df474f70, tree n2048-kmax1024-04188e271876871f
+2026-10-25T08:01:58 start   step/kat
+2026-10-25T08:02:15 ok      step/kat (0h0m17s)
+2026-10-25T08:02:15 start   step/tbox
+2026-10-25T08:04:02 ok      step/tbox (0h1m47s)
+2026-10-25T08:04:02 start   step/sv
+2026-10-25T08:08:10 ok      step/sv (0h4m8s)
+2026-10-25T08:08:10 start   step/diff
+2026-10-25T08:08:59 start   diff/portable
+2026-10-25T08:35:05 not recorded diff/portable: files changed during the run
+2026-10-25T08:35:06 ok      diff/portable (0h26m6s)
+2026-10-25T08:35:06 start   diff/x86v3
+2026-10-25T08:48:36 not recorded diff/x86v3: files changed during the run
+2026-10-25T08:48:36 ok      diff/x86v3 (0h13m30s)
+2026-10-25T08:48:36 start   diff/z21diff
+2026-10-25T09:08:12 not recorded diff/z21diff: files changed during the run
+2026-10-25T09:08:12 ok      diff/z21diff (0h19m36s)
+2026-10-25T09:08:13 not recorded step/diff: files changed during the run
+2026-10-25T09:08:13 ok      step/diff (1h0m3s)
+2026-10-25T09:08:13 start   step/fnv
+2026-10-25T09:08:13 start   fnv/c
+2026-10-25T09:11:16 not recorded fnv/c: files changed during the run
+2026-10-25T09:11:16 ok      fnv/c (0h3m3s)
+2026-10-25T09:11:16 start   fnv/rust
+2026-10-25T09:12:29 not recorded fnv/rust: files changed during the run
+2026-10-25T09:12:29 ok      fnv/rust (0h1m13s)
+2026-10-25T09:12:29 start   fnv/wasm
+2026-10-25T09:15:29 not recorded fnv/wasm: files changed during the run
+2026-10-25T09:15:29 ok      fnv/wasm (0h3m0s)
+2026-10-25T09:15:29 not recorded step/fnv: files changed during the run
+2026-10-25T09:15:29 ok      step/fnv (0h7m16s)
+2026-10-25T09:15:29 start   step/vectors
+2026-10-25T09:15:46 start   vectors/check
+2026-10-25T09:17:26 not recorded vectors/check: files changed during the run
+2026-10-25T09:17:26 ok      vectors/check (0h1m40s)
+2026-10-25T09:17:26 start   vectors/pqz_kat
+2026-10-25T09:18:08 not recorded vectors/pqz_kat: files changed during the run
+2026-10-25T09:18:08 ok      vectors/pqz_kat (0h0m42s)
+2026-10-25T09:18:08 start   vectors/tamper
+2026-10-25T09:19:57 not recorded vectors/tamper: files changed during the run
+2026-10-25T09:19:57 ok      vectors/tamper (0h1m49s)
+2026-10-25T09:19:57 start   vectors/ffi-test
+2026-10-25T09:22:11 not recorded vectors/ffi-test: files changed during the run
+2026-10-25T09:22:11 ok      vectors/ffi-test (0h2m14s)
+2026-10-25T09:22:22 start   vectors/wasm-replay
+2026-10-25T09:24:37 not recorded vectors/wasm-replay: files changed during the run
+2026-10-25T09:24:37 ok      vectors/wasm-replay (0h2m15s)
+2026-10-25T09:24:37 not recorded step/vectors: files changed during the run
+2026-10-25T09:24:37 ok      step/vectors (0h9m8s)
+2026-10-25T09:24:37 start   step/ffi
+2026-10-25T09:24:37 start   ffi/test
+2026-10-25T09:26:43 not recorded ffi/test: files changed during the run
+2026-10-25T09:26:43 ok      ffi/test (0h2m6s)
+2026-10-25T09:26:43 start   ffi/native
+2026-10-25T09:26:48 not recorded ffi/native: files changed during the run
+2026-10-25T09:26:48 ok      ffi/native (0h0m5s)
+2026-10-25T09:26:48 start   ffi/wasm
+2026-10-25T09:27:54 not recorded ffi/wasm: files changed during the run
+2026-10-25T09:27:54 ok      ffi/wasm (0h1m6s)
+2026-10-25T09:27:54 start   ffi/bench
+2026-10-25T09:31:09 not recorded ffi/bench: files changed during the run
+2026-10-25T09:31:09 ok      ffi/bench (0h3m15s)
+2026-10-25T09:31:09 not recorded step/ffi: files changed during the run
+2026-10-25T09:31:09 ok      step/ffi (0h6m32s)
+2026-10-25T09:31:09 start   step/rust
+2026-10-25T09:31:57 start   rust/lib-pqzl
+2026-10-25T09:31:59 not recorded rust/lib-pqzl: files changed during the run
+2026-10-25T09:31:59 ok      rust/lib-pqzl (0h0m2s)
+2026-10-25T09:31:59 start   rust/test-oracle_smoke
+2026-10-25T09:31:59 not recorded rust/test-oracle_smoke: files changed during the run
+2026-10-25T09:31:59 ok      rust/test-oracle_smoke (0h0m0s)
+2026-10-25T09:31:59 start   rust/test-keys
+2026-10-25T09:32:00 not recorded rust/test-keys: files changed during the run
+2026-10-25T09:32:00 ok      rust/test-keys (0h0m1s)
+2026-10-25T09:32:00 start   rust/test-oracle_params
+2026-10-25T09:32:00 not recorded rust/test-oracle_params: files changed during the run
+2026-10-25T09:32:00 ok      rust/test-oracle_params (0h0m0s)
+2026-10-25T09:32:00 start   rust/test-oracle_codec
+2026-10-25T09:34:24 not recorded rust/test-oracle_codec: files changed during the run
+2026-10-25T09:34:24 ok      rust/test-oracle_codec (0h2m24s)
+2026-10-25T09:34:24 start   rust/bin-bench
+2026-10-25T09:34:24 not recorded rust/bin-bench: files changed during the run
+2026-10-25T09:34:24 ok      rust/bin-bench (0h0m0s)
+2026-10-25T09:34:24 start   rust/bin-kat_dump
+2026-10-25T09:34:24 not recorded rust/bin-kat_dump: files changed during the run
+2026-10-25T09:34:24 ok      rust/bin-kat_dump (0h0m0s)
+2026-10-25T09:34:24 start   rust/test-oracle_prove
+2026-10-25T09:35:28 not recorded rust/test-oracle_prove: files changed during the run
+2026-10-25T09:35:28 ok      rust/test-oracle_prove (0h1m4s)
+2026-10-25T09:35:28 start   rust/test-cheat_b1
+2026-10-25T09:37:47 not recorded rust/test-cheat_b1: files changed during the run
+2026-10-25T09:37:47 ok      rust/test-cheat_b1 (0h2m19s)
+2026-10-25T09:37:47 start   rust/test-oracle_arith
+2026-10-25T09:37:52 not recorded rust/test-oracle_arith: files changed during the run
+2026-10-25T09:37:52 ok      rust/test-oracle_arith (0h0m5s)
+2026-10-25T09:37:52 start   rust/test-oracle_rand
+2026-10-25T09:37:53 not recorded rust/test-oracle_rand: files changed during the run
+2026-10-25T09:37:53 ok      rust/test-oracle_rand (0h0m1s)
+2026-10-25T09:37:53 start   rust/test-memory
+2026-10-25T09:46:08 not recorded rust/test-memory: files changed during the run
+2026-10-25T09:46:08 ok      rust/test-memory (0h8m15s)
+2026-10-25T09:46:08 start   rust/test-oracle_verify
+2026-10-25T09:53:15 not recorded rust/test-oracle_verify: files changed during the run
+2026-10-25T09:53:15 ok      rust/test-oracle_verify (0h7m7s)
+2026-10-25T09:53:15 start   rust/test-threads
+2026-10-25T09:56:07 not recorded rust/test-threads: files changed during the run
+2026-10-25T09:56:07 ok      rust/test-threads (0h2m52s)
+2026-10-25T09:56:07 start   rust/test-sv_diff
+2026-10-25T10:06:52 not recorded rust/test-sv_diff: files changed during the run
+2026-10-25T10:06:52 ok      rust/test-sv_diff (0h10m45s)
+2026-10-25T10:06:52 start   rust/test-fs_bind
+2026-10-25T10:06:54 not recorded rust/test-fs_bind: files changed during the run
+2026-10-25T10:06:54 ok      rust/test-fs_bind (0h0m2s)
+2026-10-25T10:06:54 start   rust/test-oracle_keys
+2026-10-25T10:07:02 not recorded rust/test-oracle_keys: files changed during the run
+2026-10-25T10:07:02 ok      rust/test-oracle_keys (0h0m8s)
+2026-10-25T10:07:02 start   rust/bin-keys_kat
+2026-10-25T10:07:02 not recorded rust/bin-keys_kat: files changed during the run
+2026-10-25T10:07:02 ok      rust/bin-keys_kat (0h0m0s)
+2026-10-25T10:07:02 start   rust/test-vectors
+2026-10-25T10:08:40 not recorded rust/test-vectors: files changed during the run
+2026-10-25T10:08:40 ok      rust/test-vectors (0h1m38s)
+2026-10-25T10:08:40 start   rust/doc
+2026-10-25T10:08:41 not recorded rust/doc: files changed during the run
+2026-10-25T10:08:41 ok      rust/doc (0h0m1s)
+2026-10-25T10:08:44 not recorded step/rust: files changed during the run
+2026-10-25T10:08:44 ok      step/rust (0h37m35s)
+2026-10-25T10:08:44 start   step/cargo
+2026-10-25T10:08:44 start   cargo/stmt
+2026-10-25T10:08:46 not recorded cargo/stmt: files changed during the run
+2026-10-25T10:08:46 ok      cargo/stmt (0h0m2s)
+2026-10-25T10:08:46 start   cargo/ligero
+2026-10-25T10:11:54 not recorded cargo/ligero: files changed during the run
+2026-10-25T10:11:54 ok      cargo/ligero (0h3m8s)
+2026-10-25T10:11:54 not recorded step/cargo: files changed during the run
+2026-10-25T10:11:54 ok      step/cargo (0h3m10s)
+2026-10-25T10:11:54 start   step/xcheck
+2026-10-25T10:11:54 start   xcheck/stark
+2026-10-25T10:13:21 not recorded xcheck/stark: files changed during the run
+2026-10-25T10:13:21 ok      xcheck/stark (0h1m27s)
+2026-10-25T10:13:21 start   xcheck/ligero
+2026-10-25T10:13:42 not recorded xcheck/ligero: files changed during the run
+2026-10-25T10:13:42 ok      xcheck/ligero (0h0m21s)
+2026-10-25T10:13:42 not recorded step/xcheck: files changed during the run
+2026-10-25T10:13:42 ok      step/xcheck (0h1m48s)
+2026-10-25T10:13:42 start   step/fuzz
+2026-10-25T10:13:54 start   fuzz/precompile
+2026-10-25T10:15:22 not recorded fuzz/precompile: files changed during the run
+2026-10-25T10:15:22 ok      fuzz/precompile (0h1m28s)
+2026-10-25T10:15:22 start   fuzz/mutate
+2026-10-25T10:17:23 not recorded fuzz/mutate: files changed during the run
+2026-10-25T10:17:23 ok      fuzz/mutate (0h2m1s)
+2026-10-25T10:17:23 start   fuzz/codec
+2026-10-25T10:19:00 not recorded fuzz/codec: files changed during the run
+2026-10-25T10:19:00 ok      fuzz/codec (0h1m37s)
+2026-10-25T10:19:00 not recorded step/fuzz: files changed during the run
+2026-10-25T10:19:00 ok      step/fuzz (0h5m18s)
+2026-10-25T10:19:00 gate n2048-kmax1024 (set n2048-kmax1024): PASS

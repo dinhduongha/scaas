@@ -260,10 +260,22 @@ fn auth_digest(stmt: &[u8]) -> Word {
 /// the ids whose proofs this build writes: PQZL, and PQZH where it is compiled in
 const IDS: &[(&str, Word)] = if pqz_ffi::PQZH { &[("pqzl", PQZL_ID), ("pqzh", PQZH_ID)] } else { &[("pqzl", PQZL_ID)] };
 
-/// the other proof system's id (a negative row: the input under it; without PQZH in the build that id has no verifier
-/// here, so the precompile's answer is 0 by "verify")
-fn other_id(id: usize) -> Word {
-    if id == 0 { PQZH_ID } else { PQZL_ID }
+/// another set's PQZL id, keccak256 of n2304-kmax4096's label: the foreign id of the "other id" rows at a set without
+/// PQZH (review 8d1b M2: its zero PQZH word would repeat the "unknown proofSystemId (zero word)" rows byte for byte)
+const FOREIGN_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4";
+
+/// the "other id" of a negative row (its name and word): the other proof system's id, and at a set without PQZH (PQZL
+/// rows only) another set's PQZL id; both are unknown ids to this set's decoder or verifier
+fn other_id(id: usize) -> (&'static str, Word) {
+    if id != 0 {
+        ("the other system's proofSystemId", PQZL_ID)
+    } else if st::HAS_PQZH {
+        ("the other system's proofSystemId", PQZH_ID)
+    } else {
+        let w = keccak(&[FOREIGN_LABEL.as_bytes()]);
+        assert_ne!(w, PQZL_ID, "the foreign id is this set's");
+        ("another set's proofSystemId (n2304-kmax4096 PQZL)", w)
+    }
 }
 
 /// The retired ids of a system (decisions CTR-PQZ-09): PQZL v2 (forgeable, lazer#28; F6 / F9 path B) and v3, PQZH v1
@@ -1037,7 +1049,7 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
                 }
             }
             add(format!("{nm}: unknown proofSystemId (zero word)"), f, vec![E::StmtSet(32, vec![0; 32])]);
-            add(format!("{nm}: the other system's proofSystemId"), f, vec![E::StmtSet(32, other_id(id).to_vec())]);
+            add(format!("{nm}: {}", other_id(id).0), f, vec![E::StmtSet(32, other_id(id).1.to_vec())]);
             for (r, w) in retired_ids(id) {
                 add(format!("{nm}: retired {r} proofSystemId"), f, vec![E::StmtSet(32, w.to_vec())]);
             }
@@ -1764,7 +1776,7 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
                 add(format!("under op {op}"), c, vec![E::Op(op)]);
             }
             add("unknown proofSystemId (zero word)".into(), c, vec![E::StmtSet(32, vec![0; 32])]);
-            add("the other system's proofSystemId".into(), c, vec![E::StmtSet(32, other_id(id).to_vec())]);
+            add(other_id(id).0.into(), c, vec![E::StmtSet(32, other_id(id).1.to_vec())]);
             for (r, w) in retired_ids(id) {
                 add(format!("retired {r} proofSystemId"), c, vec![E::StmtSet(32, w.to_vec())]);
             }

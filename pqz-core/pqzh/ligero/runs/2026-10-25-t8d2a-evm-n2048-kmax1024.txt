@@ -1,0 +1,9 @@
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.15s
+     Running tests/attacks.rs (target/release/deps/attacks-382d72cde7540d74)
+
+running 1 test
+test evm_fixtures ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.12s
+

@@ -4,12 +4,14 @@ pragma solidity ^0.8.24;
 import {IUAPopVerifier} from "../ua/IUAVerifier.sol";
 import {PqzSafety} from "./PqzSafety.sol";
 import {PqzCt} from "./PqzCt.sol";
+import {PqzSet} from "./PqzSet.sol";
 
 /// @title PQZ key PoK verifier of slot 0x0142 (UA-6 U10; CTR-PQZ-13, pq-zero-knowledge.md §7.2 step 6; P6g plan D3): the PoP is an `R_REG`
-///        proof through the `PQZ` precompile, op 3, on `opTag(REGISTER) ‖ PROOF_SYSTEM_ID ‖ message ‖ pk` (16,480 B).
+///        proof through the `PQZ` precompile, op 3, on `opTag(REGISTER) ‖ PROOF_SYSTEM_ID ‖ message ‖ pk` (`96 + PK` bytes at
+///        the build's parameter set, `PqzSet`; plan 5h Task 8d part 2: the set's ids, probe and sizes).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Stateless; the precompile and the proof system are immutables. The
-///         constructor runs only on an allowed chain (`PqzSafety`), for exactly the `PQZ` precompile and one of its two
-///         proof systems, after the precompile's self-test and an `R_REG` probe through this contract's own `verify`
+///         constructor runs only on an allowed chain (`PqzSafety`), for exactly the `PQZ` precompile and one of the set's
+///         proof systems (PQZL; PQZH where the set has it), after the precompile's self-test and an `R_REG` probe through this contract's own `verify`
 ///         (the pinned vector of that proof system ⇒ true, the same proof with one bit flipped ⇒ false), so a deployed
 ///         instance has watched the precompile accept and refuse (review W-B, 2026-10-19). The same contract is the
 ///         `verifier` of a PQZ token's `ConfidentialConfig` (P6g plan D9): the token takes `PRECOMPILE` and
@@ -19,12 +21,12 @@ contract UAPqzVerifier is IUAPopVerifier {
     /// @notice `keccak256("SCAAS-PQZ-OP-REGISTER-V1")` (pq-zero-knowledge.md §8.1).
     bytes32 internal constant OP_TAG_REGISTER = 0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088;
     uint8 internal constant OP_REGISTER = 3;
-    uint32 internal constant STMT_REGISTER = 16_480;
+    uint32 internal constant STMT_REGISTER = uint32(PqzSet.STMT_REGISTER);
     /// @notice `SELFTEST_VECTOR_HASH` per proof system (pq-zero-knowledge.md §10, self-test): `keccak256(psid ‖ message
-    ///         ‖ pk ‖ proof)` of the self-test's `R_REG` vector (`statement_register.json` row 0, `proof_pqzl.json` /
-    ///         `proof_pqzh.json` row 4 REGISTER).
-    bytes32 internal constant PROBE_PQZL = 0x517488fac253ba7d53c533e0ea580b231637e1bdb66d9933069735ee4f9923f3;
-    bytes32 internal constant PROBE_PQZH = 0x36c3b5f321f2fd59201c4efe63f65ff94649cb44435405cd6b80884584a65160;
+    ///         ‖ pk ‖ proof)` of the set's self-test `R_REG` vector (`statement_register.json` row 0, `proof_pqzl.json` /
+    ///         `proof_pqzh.json` row 4 REGISTER), generated into `PqzSet` from the set's vectors.
+    bytes32 internal constant PROBE_PQZL = PqzSet.PROBE_PQZL;
+    bytes32 internal constant PROBE_PQZH = PqzSet.PROBE_PQZH;
 
     address public immutable PRECOMPILE;
     bytes32 public immutable PROOF_SYSTEM_ID;
@@ -45,7 +47,7 @@ contract UAPqzVerifier is IUAPopVerifier {
         PROOF_SYSTEM_ID = psid;
     }
 
-    /// @notice The `R_REG` proof `sig` for `pk` (16,384 bytes, every coefficient `< q`) over `message`.
+    /// @notice The `R_REG` proof `sig` for `pk` (`PK` bytes, every coefficient `< q`) over `message`.
     function verifyPop(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
         if (keyData.length != PqzCt.PK || !PqzCt.isCanonical(keyData)) return false;
         return _call(PRECOMPILE, PROOF_SYSTEM_ID, keyData, message, sig);
@@ -60,7 +62,7 @@ contract UAPqzVerifier is IUAPopVerifier {
         return PqzSafety.isAllowedChain() && PqzSafety.selfTest(PRECOMPILE);
     }
 
-    /// @dev `u8(3) ‖ be32(16,480) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; true only on exactly the word 1.
+    /// @dev `u8(3) ‖ be32(STMT_REGISTER) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; true only on exactly the word 1.
     function _call(address pqz, bytes32 psid, bytes memory pk, bytes32 message, bytes memory proof)
         private view returns (bool ok)
     {

@@ -2,44 +2,44 @@ set n2048-kmax1024, vectors ../../smartcontracts/vectors/pqz; PQZL backend: the 
    Compiling version_check v0.9.5
    Compiling typenum v1.20.1
    Compiling subtle v2.6.1
+   Compiling cfg-if v1.0.5
    Compiling keccak v0.1.6
    Compiling cpufeatures v0.2.17
-   Compiling cfg-if v1.0.5
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/stmt)
    Compiling generic-array v0.14.7
    Compiling crypto-common v0.1.7
    Compiling block-buffer v0.10.4
    Compiling inout v0.1.4
    Compiling cipher v0.4.4
    Compiling digest v0.10.7
+   Compiling aes v0.8.4
    Compiling sha3 v0.10.8
    Compiling hmac v0.12.1
    Compiling sha2 v0.10.9
-   Compiling aes v0.8.4
    Compiling hkdf v0.12.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
-    Finished `release` profile [optimized + debuginfo] target(s) in 18.06s
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 17.06s
    Compiling version_check v0.9.5
    Compiling typenum v1.20.1
    Compiling subtle v2.6.1
-   Compiling cfg-if v1.0.5
    Compiling keccak v0.1.6
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzl/rust)
-   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/stmt)
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
+   Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/stmt)
    Compiling generic-array v0.14.7
    Compiling crypto-common v0.1.7
    Compiling block-buffer v0.10.4
    Compiling inout v0.1.4
-   Compiling cipher v0.4.4
    Compiling digest v0.10.7
+   Compiling cipher v0.4.4
+   Compiling aes v0.8.4
    Compiling sha3 v0.10.8
    Compiling hmac v0.12.1
    Compiling sha2 v0.10.9
-   Compiling aes v0.8.4
    Compiling hkdf v0.12.4
-   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/pqzh/ligero)
-   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/wasm)
-    Finished `release` profile [optimized] target(s) in 11.11s
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 10.32s

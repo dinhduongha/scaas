@@ -48,7 +48,8 @@ library PqzViewLib {
         PqzCore.Env memory e) public view returns (bool)
     {
         bytes memory buf = PqzCore.disclosureBuffer(ref, leg, amount, kind, e, proof.length);
-        assembly ("memory-safe") { calldatacopy(add(add(buf, 37), 33184), proof.offset, proof.length) }
+        uint256 off = PqzCore.DISCLOSE;
+        assembly ("memory-safe") { calldatacopy(add(add(buf, 37), off), proof.offset, proof.length) }
         return PqzCore.verdict(PqzCore.$().pqz, buf);
     }
 }

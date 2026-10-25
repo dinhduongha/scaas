@@ -193,7 +193,7 @@ node wasm/run_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.w
 - `multi_limits_and_memo`: the worst-case multi-recipient inputs against `MAX_INPUT`, the PQZH (M = 4, auditor on)
   boundary, oversize M refused, and the memo;
 - every decoder rejection: each D15 / R6 rule with its `Reject`; op / opTag / id confusion; lengths ± 1;
-  `MAX_PROOF + 1`; truncated, extended and bit-flipped proofs; the other system's id; framing; `MAX_INPUT + 1` =
+  `MAX_PROOF + 1`; truncated, extended and bit-flipped proofs; the other system's id (at a set without PQZH another set's PQZL id); framing; `MAX_INPUT + 1` =
   revert;
 - the PQZL differential test (SV against the generic verifier, through the FFI, on honest and mutated proofs);
 - the C ABI's arguments; `pqz_ffi.h`'s constants;

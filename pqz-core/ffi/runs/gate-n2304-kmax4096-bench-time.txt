@@ -1,24 +1,24 @@
-   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi)
-    Finished `release` profile [optimized + debuginfo] target(s) in 2.52s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.79s
      Running `target/n2304-kmax4096/release/examples/ffi_bench 200`
 	Command being timed: "cargo run --release --offline --features prove,test-hooks --example ffi_bench 200"
-	User time (seconds): 253.66
-	System time (seconds): 1.36
-	Percent of CPU this job got: 95%
-	Elapsed (wall clock) time (h:mm:ss or m:ss): 4:25.95
+	User time (seconds): 230.61
+	System time (seconds): 1.26
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 3:50.34
 	Average shared text size (kbytes): 0
 	Average unshared data size (kbytes): 0
 	Average stack size (kbytes): 0
 	Average total size (kbytes): 0
-	Maximum resident set size (kbytes): 244344
+	Maximum resident set size (kbytes): 244384
 	Average resident set size (kbytes): 0
-	Major (requiring I/O) page faults: 78
-	Minor (reclaiming a frame) page faults: 300946
-	Voluntary context switches: 20945
-	Involuntary context switches: 41317
+	Major (requiring I/O) page faults: 88
+	Minor (reclaiming a frame) page faults: 300861
+	Voluntary context switches: 21064
+	Involuntary context switches: 8699
 	Swaps: 0
-	File system inputs: 8
-	File system outputs: 139960
+	File system inputs: 0
+	File system outputs: 139920
 	Socket messages sent: 0
 	Socket messages received: 0
 	Signals delivered: 0

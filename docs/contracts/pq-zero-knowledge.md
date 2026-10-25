@@ -268,7 +268,10 @@ module form matches the LNP22 proof ring.
 
 ### <a id="parameters"></a>4.1 Parameters
 
-> **Decided, not built (plan 5h part B).** The owner ruled (2026-10-20, CTR-PQZ-06 Change) `K_MAX = 16,384` with n = 2560 (k = 40),
+> **Built per parameter set (plan 5h Task 8b–8d):** the sets are `pqz-core/params/sets/<set>/` (`n2048-kmax1024` the frozen
+> set, whose values CTR-PQZ-03 below states; `n2304-kmax4096` the default of the node, the library and the contracts;
+> `n2560-kmax16384`; `n2816-kmax65536` PQZL only), one set per build, the contracts' set the generated `PqzSet.sol`
+> ([§8.1](#serialization)). History: the owner ruled (2026-10-20, CTR-PQZ-06 Change) `K_MAX = 16,384` with n = 2560 (k = 40),
 > Δ = ⌊q / 2^20⌋ and, after owner question Q1, **q = 2^50 − 42,310,535** (prime, q ≡ 9 mod 16, q − 1 = 2^3·19·43·431·5659·70627, so
 > PQZH's Ligero domains exist; the first ruled q = 2^50 − 71 has none), Δ = 2^30 − 41, under **one** new `proofSystemId` that
 > also carries the B-1 transcript fix, A-2 and the `R_REG` message bound to the UA id ([CTR-PQZ-09](#CTR-PQZ-09)). Part A (the
@@ -456,9 +459,25 @@ PQZL v3 figures: the vectors regenerated in plan `pqzl-fs3` Task 5 (`8af584b`,
 form (`R_TX0` 42,431, `R_BURN` 41,904 / 41,915, `R_REG` 28,093, `R_DS` / `R_DR` 28,977 / 28,996, 28,986), the
 `rnd32` noise noted above: v3 changes the transcript and the prover's rejection, not the layout or the parameters.
 
-`be8` coefficients waste 22 bits each (≈ 34 %) against tight 42-bit packing; accepted: the Solidity `Add` works on
-aligned 64-bit lanes, and bytes 0–1 of each word are zero (cheap calldata tokens: ≈ 25.2 tokens per coefficient
-against 32 for random bytes). Boring wins.
+`be8` coefficients waste 22 bits each (≈ 34 %) against tight 42-bit packing; accepted **on the wire** (calldata, the
+statement, the precompile input, the proofs): the Solidity `Add` works on aligned 64-bit lanes, and bytes 0–1 of each
+word are zero (cheap calldata tokens: ≈ 25.2 tokens per coefficient against 32 for random bytes). Boring wins.
+
+<a id="stored-form"></a>**Stored form P46 (owner 2026-10-21; built in plan 5h Task 8d part 2).** What a token **stores** — the
+op blobs (SSTORE2) and a materialised `acc` — holds every coefficient in `PACK_BITS = ⌈log2 q⌉` bits: one 64-bit-lane word
+of four coefficients `c0 ‖ c1 ‖ c2 ‖ c3` becomes `PACK_BITS / 2` bytes, so the stored stream is the coefficients'
+`PACK_BITS`-bit fields concatenated big-endian, coefficient 0 first, byte-aligned, with `u` and each `v` packed apart
+(their coefficient counts are multiples of 4). The token packs `out` into the blob and expands what it reads (`T`, the
+statement, the views `pqzAcc` / `pqzPendingCt`, disclosure), so the statement, `pqz-stmt`, the precompile and the
+proofs are unchanged. State gas is paid per stored byte (EIP-8037), hence the format (research note `docs/research/pqz-pack.md`, decisions [CTR-PQZ-07](#CTR-PQZ-07)).
+Sizes per parameter set (the contracts' set is the generated `PqzSet.sol`, [§8.1](#serialization)):
+
+| Set | `PACK_BITS` | stored `pk`-size `u` / `v` / `ct` (B) | `acc` slots | 64-bit-lane `ct` (B) |
+|---|---|---|---|---|
+| `n2048-kmax1024` | 42 | 10,752 / 84 / 10,836 | 339 | 16,512 |
+| `n2304-kmax4096` (committed) | 46 | 13,248 / 92 / 13,340 | 417 | 18,560 |
+| `n2560-kmax16384` | 50 | 16,000 / 100 / 16,100 | 504 | 20,608 |
+| `n2816-kmax65536` | 54 | 19,008 / 108 / 19,116 | 598 | 22,656 |
 
 ### 4.5 Shared randomness against malicious recipients
 
@@ -660,15 +679,17 @@ All ciphertext bytes an account needs are in contract state; logs and calldata a
 | `cleared` | uint64 | debit, rollover | pending slots `< cleared` are deleted (`cleared ≤ floor ≤ rolled ≤ pendingCount`) |
 | `pending[i]` | one slot: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` | credit, shield; deleted below `rolled − INLINE_MAX` | where the credit's `u` and `v_j` sit inside the op blob (byte offsets) and the block it was made in; **TRIVIAL entry** (a shield): `blob = 0`, `vOff = 0`, the amount in the low 64 bits of the blob field |
 | `acc` | `accBlob(160)`, the offsets of `u_0` and `v_f` in it, `accUnits` (uint32), `flags` | debit (→ a reference to the debit's blob, `accUnits = 1`), rollover (→ materialised) | the account's encrypted balance; flags `1` MATERIALISED, `2` / `4` the two prepared halves of `accWords` |
-| `accWords[516]` | 516 words | `mtxPrepareAcc` (placeholder), rollover (the sum) | the materialised `acc`; overwritten in place, never zeroed |
-| `accHash` | bytes32 | rollover | `keccak256` of the materialised `acc`; the check of the optional calldata hint, meaningful only while `flags & 1` |
+| `accWords[ACC_WORDS]` | `⌈CTP / 32⌉` slots (339 / 417 / 504 / 598 per set, [stored form](#stored-form)) | `mtxPrepareAcc` (placeholder), rollover (the sum) | the materialised `acc`, packed: each slot `not(stream word)`, so no slot is ever 0 (every 32-byte window holds a whole `PACK_BITS`-bit field and `2^PACK_BITS − 1 ≥ q`); overwritten in place |
+| `accHash` | bytes32 | rollover | `keccak256` of the materialised `acc`'s packed stream (`CTP` bytes); the check of the optional calldata hint (that stream), meaningful only while `flags & 1` |
 | `sendCounter` | uint64 | debit (+1) | in the statement; replay protection; [CTR-PQZ-19](#CTR-PQZ-19) |
 | `entryPtr[entryRef]`, `memos[entryRef]` | address, bytes | transfer | the **op blob** of the transfer (both storage modes) and, on commit-reveal, the sender memo ([CTR-PQZ-23](#CTR-PQZ-23)) |
 
 An account that never debited has `acc = Trivial(0)` (no blob, `accUnits = 0`). The op blob is one SSTORE2 per debit,
 written once and never deleted: a transfer's `R ‖ v_f` with `R = salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}`
-exactly as [CTR-PQZ-23](#CTR-PQZ-23) / [CTR-PQZ-26](#CTR-PQZ-26), a burn's or refresh's `u′ ‖ v_f`. Credits and `acc` point
-into it, so a ciphertext is stored once however many legs share it ([CTR-PQZ-04](#CTR-PQZ-04)).
+in the field order of [CTR-PQZ-23](#CTR-PQZ-23) / [CTR-PQZ-26](#CTR-PQZ-26), a burn's or refresh's `u′ ‖ v_f`, every `u` and
+`v` in the [stored form](#stored-form) (so `R` here is the packed bundle; `pqzEntryBlob` and `transferEntry` return it as
+stored, `transferCiphertextHash` is its keccak). Credits and `acc` point into it (byte offsets into the packed data), so a
+ciphertext is stored once however many legs share it ([CTR-PQZ-04](#CTR-PQZ-04)).
 
 Removed against the earlier layout: `pendingHash[i]`, `plainPending` ([CTR-PQZ-06](#CTR-PQZ-06)), the W-E base
 (`baseHash`, `baseRolled`, `baseUnits`; [CTR-PQZ-08](#CTR-PQZ-08)), the `entry` hash map (the blob is the entry).
@@ -681,7 +702,7 @@ flowchart LR
     TX -->|"one slot per leg"| PEND["pending[ua][i]<br/>(blob, uOff, vOff, block)"]
     SH["mtxShield (no proof, any account)"] -->|"TRIVIAL entry (amount, block),<br/>merged within one block"| PEND
     TX -->|"acc = reference, rolled = floor = p"| ACC0["acc (fresh)<br/>→ (blob, u_0, v_f)"]
-    PEND -->|"mtxRollOver(ua, n): strict order,<br/>age ≥ ROLL_AGE, stops at K_MAX − 1"| ACCM["acc (materialised)<br/>516 words + accHash"]
+    PEND -->|"mtxRollOver(ua, n): strict order,<br/>age ≥ ROLL_AGE, stops at K_MAX − 1"| ACCM["acc (materialised)<br/>ACC_WORDS packed slots + accHash"]
     ACC0 --> ACCM
     ACCM -->|"T = acc ± Σ pending[window)<br/>+ Trivial(shieldIn), read from state"| TX
 ```
@@ -741,10 +762,11 @@ plan 5h part A.) The account can debit, roll over, decrypt and disclose from sta
 strand funds. Layout: one SSTORE2 op blob per debit (200 gas per code byte, ≈ 3.4 M for an op 1 blob; 16,816 B with the
 auditor, 35,216 B for op 7 M = 8 with the auditor; the test chains allow 64 KiB of code, so mainnet 22776 must keep
 `maxCodeSize ≥ 64 KiB` or split op 7 blobs per group); one slot per pending entry; `acc` a reference to the last debit's
-blob until a rollover materialises it in 516 words. A debit **reads** `acc` and its inline window from state
-(`EXTCODECOPY` ≈ 4 k gas per 16 KB; a cold materialised `acc` is 516 SLOADs ≈ 1.1 M gas), so the debit entry points have no
-`acc` / `inline` argument; an optional calldata `accHint` (the materialised `acc`) replaces the SLOADs when
-`keccak256(hint) == accHash` and the MATERIALISED flag is set, and is ignored otherwise (a stale hint never reverts).
+blob until a rollover materialises it in `ACC_WORDS` packed slots ([stored form](#stored-form); 516 unpacked words before
+plan 5h Task 8d part 2). A debit **reads** `acc` and its inline window from state (`EXTCODECOPY` ≈ 4 k gas per 16 KB; a
+cold materialised `acc` is `ACC_WORDS` SLOADs), so the debit entry points have no `acc` / `inline` argument; an optional
+calldata `accHint` (the materialised `acc`'s packed stream, `CTP` bytes) replaces the SLOADs when `keccak256(hint) ==
+accHash` and the MATERIALISED flag is set, and is ignored otherwise (a stale hint never reverts).
 Public keys (PQZ and ML-DSA) are written once with SSTORE2. Wallets restore from state alone (views of [§7.8](#78-events-and-indexing));
 indexers follow events for "what changed" and read bytes from state. Contract code is split into four DELEGATECALL libraries in
 the same namespace (D14): `PqzStateLib` (init, shield, rollover, prepare), `PqzTransferLib` (op 1, op 7), `PqzBurnLib`
@@ -905,7 +927,7 @@ in another form.
 <a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `ConfidentialTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`), as implemented (P6e D6): PQZL seeds the commitment randomness from `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)[0..32)` and every mask from the same with `"SCAAS-PQZ-PROVER-SUB-V2"`, `wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)[0..32)`, `hash0` the statement digest ([transcript](#transcript)); PQZH draws all prover randomness from `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ wit)` (`wit` the prover-API witness bytes, [serialization v1](#serialization)); a repeated `rnd32` with another witness or statement gives unrelated masks, equal inputs give equal proofs. **Burn and refresh are outside this derivation** (owner 2026-10-13): their encryption randomness `r, e1, e2_f` is fresh CSPRNG output (hedging it with `pqzKeySeed` is allowed), never `seed_enc` or any other value fixed by the counter. Their header salt is 0 ([statement](#statement)), so a counter-derived seed would give two burns or refreshes built at one `sendCounter` for different balances `b' ≠ b''` (a re-proof after `InlineTooFar`, another `shieldIn`) the same `r` and `e2_f`, and `v_f − v_f'` would be `Δ·(b' − b'')` exactly. No disclosure re-derives them: the burned amount is public and `v_f` is the sender's own balance. Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built). **Op 7 groups** (P6-ANON D13): group 0 uses `seed_enc`; group `g ≥ 1` uses `seed_enc_g = SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ‖ seed_enc ‖ be4(g))[0..32)`; inside a group `Enc` draws `r_g, e1_g`, then `e2` for the group's legs, then (group 0) `e2_f`, then the group's auditor copies.
 
 <a id="pqz-storage-modes"></a>
-<a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo** (owner, 2026-10-11; built in plan 5h part A): `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA` (16,688 B with the auditor, 16,560 B without). **Every transfer stores its op blob `R ‖ v_f`** (one SSTORE2, [CTR-PQZ-07](#CTR-PQZ-07)); the mode decides only what else the entry holds. `entryPtr[entryRef]` = the op blob in both modes. `mtxConfidentialTransfer*` is the token's default mode: on a BUNDLE token `entryRef` resolves to `R` (the blob minus its trailing 128 B of `v_f`, `transferEntry(entryRef) = R`); on a COMPACT token it is commit-reveal and the entry is `keccak256(R) ‖ memo` (HASH). `…Compact` is commit-reveal on both. `transferCiphertextHash(entryRef) = keccak256(R)` is read from the blob. **The NONE mode is retired on PQZ** (owner 2026-10-20, O5): `…NoBundle` (op 1 and op 7) and `TransferEntryDisabled`-on-NONE are gone, since the blob is written for the credits anyway and NONE saved nothing; Zether keeps `mtxConfidentialTransferNoBundle`. Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt`: `memo = salt ‖ ((flags ‖ be8(v) ‖ toUA) XOR ks)` (`flags` bit0 = `auditorOn`; `ks` of 41 B), 57 B for the one recipient (owner 2026-10-13: `be32` counter, as classical Zether — it only enters the off-chain HKDF, so it costs nothing; `be8` amount, because amounts are `< 2^64` by the plaintext encoding and a wider field would only add calldata) (labels `"PQZ/memo/v1"`, `"SCAAS-PQZ-ENC-V2"`: controller ruling, pending the owner), `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → the hash check → a `SENDER_S` proof. Receiver and auditor read `R` from the blob (`pqzEntryBlob`). Disclosure reads `R` from the blob, so `disclosureStatement(entryRef, leg, amount, kind)` has no bundle argument and `verifyTransferAmount(entryRef, leg, amount, kind, proof)` takes the proof alone as the opening (the W-I canonical-opening check is moot: nothing is decoded).
+<a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo** (owner, 2026-10-11; built in plan 5h part A): `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ P(u ‖ v_t) ‖ [P(v_a)] ‖ toUA`, with `P` the [stored form](#stored-form) (P46: every coefficient in `PACK_BITS` bits, `u` and each `v` packed apart; `P(v_a)` only with the auditor): 13,480 B with the auditor, 13,388 B without at the committed `n2304-kmax4096` (`n2048-kmax1024` 10,968 / 10,884 B, `n2560-kmax16384` 16,248 / 16,148 B, `n2816-kmax65536` 19,272 / 19,164 B; `16 + PKP + 2·VP + 32` / `16 + PKP + VP + 32`, [§4.4](#stored-form)). **Every transfer stores its op blob `R ‖ P(v_f)`** (one SSTORE2, [CTR-PQZ-07](#CTR-PQZ-07)); the mode decides only what else the entry holds. `entryPtr[entryRef]` = the op blob in both modes. `mtxConfidentialTransfer*` is the token's default mode: on a BUNDLE token `entryRef` resolves to `R` (the blob minus its trailing `PqzCt.VP` bytes of `P(v_f)`, `transferEntry(entryRef) = R`, packed as stored); on a COMPACT token it is commit-reveal and the entry is `keccak256(R) ‖ memo` (HASH). `…Compact` is commit-reveal on both. `transferCiphertextHash(entryRef) = keccak256(R)`, over the packed `R`, is read from the blob. **The NONE mode is retired on PQZ** (owner 2026-10-20, O5): `…NoBundle` (op 1 and op 7) and `TransferEntryDisabled`-on-NONE are gone, since the blob is written for the credits anyway and NONE saved nothing; Zether keeps `mtxConfidentialTransferNoBundle`. Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt`: `memo = salt ‖ ((flags ‖ be8(v) ‖ toUA) XOR ks)` (`flags` bit0 = `auditorOn`; `ks` of 41 B), 57 B for the one recipient (owner 2026-10-13: `be32` counter, as classical Zether — it only enters the off-chain HKDF, so it costs nothing; `be8` amount, because amounts are `< 2^64` by the plaintext encoding and a wider field would only add calldata) (labels `"PQZ/memo/v1"`, `"SCAAS-PQZ-ENC-V2"`: controller ruling, pending the owner), `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → packed (`P`, as stored) into `R` → the hash check against `transferCiphertextHash` (over the packed `R`, never the `be8` form) → a `SENDER_S` proof. Receiver and auditor read `R` from the blob (`pqzEntryBlob`). Disclosure reads `R` from the blob, so `disclosureStatement(entryRef, leg, amount, kind)` has no bundle argument and `verifyTransferAmount(entryRef, leg, amount, kind, proof)` takes the proof alone as the opening (the W-I canonical-opening check is moot: nothing is decoded).
 
 <a id="pqz-auditor-mode"></a>
 <a id="CTR-PQZ-24"></a>**CTR-PQZ-24** — **Auditor modes as classical** (owner, 2026-10-11; spec only): `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable ([CTR-ZTH-49](zether.md#CTR-ZTH-49)), with `auditorUA`. NONE: `auditorUA = 0`, `auditorOn = 0` and no `v_a`. FULL: `auditorOn = 1` on every transfer, else `AuditorRequired`; the auditor reads every transfer from creation and can rebuild balances by bookkeeping. OPTIONAL: the sender's per-transfer choice, publicly visible as `auditorOn = 0` (no `v_a`), statement row 5 skipped. The auditor-off transfer is its own relation `R_TX0` (P6e D8): `R_TX` without `pk_a`, `v_a`, `e2_a`, every other row and norm kept; op 1 with a 66,560-byte statement, and the `auditorOn` word must be what the length says (1 for 83,072 B, 0 for 66,560 B; [serialization v1](#serialization)). The factory refuses FULL or OPTIONAL without `auditorUA`, NONE with one and unknown values (`BadAuditorMode`).
@@ -1044,10 +1066,12 @@ account's `acc` words; `CapReached(ua)` when `accUnits ≥ K_MAX − 1`; `n′ =
 pendingCount` (`RollOverRange`, no clamp to what is pending); every rolled entry must be at least `ROLL_AGE = 5` blocks old
 (`RollTooYoung(index)`, TRIVIAL entries too). The entries `[rolled, rolled + n′)` are read **from state** (a credit's `u ‖ v`
 from its blob, a TRIVIAL entry as `Trivial(digits(amount))` with no blob read), added lane-wise to `acc` (64-bit lanes, one
-`mod q` per lane at the end: `ROLL_MAX + 16 + 1` terms of `q − 1` stay far below 2^64), and the 516 words are rewritten
-in place, each stored as `ACC_MARK | word` (bit 255; lanes are `< 2^42`), so no slot is ever zeroed — not even by a
-TRIVIAL-only first rollover, whose `u` is 0 (final review I1) — and the mark is masked off on read (`accHash` and hints are
-over the unmarked bytes); `accHash` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
+`mod q` per lane at the end; the stored credits are summed as loaded into two accumulators with a `PACK_BITS`-bit carry
+gap above each field and spread once per rollover; every lane stays below 2^64 while `(ROLL_MAX + 1) · q < 2^64`, i.e.
+up to 2^(64 − PACK_BITS) − 1 terms: 1,023 at `n2816-kmax65536`), and the packed sum is rewritten into the `ACC_WORDS`
+slots in place, each stored as `not(stream word)` ([stored form](#stored-form)), so no slot is ever zeroed — not even by a
+TRIVIAL-only first rollover, whose `u` is 0 (final review I1; its slots are all ones); `accHash = keccak256(packed
+stream)` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
 are deleted (`cleared` and, when passed, `floor` follow); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
 `(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is also an allowlisted envelope op on both paths (Task R, owner 2026-10-20, [CTR-PQZ-21](#CTR-PQZ-21)): anyone calls it
 directly or through a relayer; the relayed `ROLL_MAX` rollover measures 12,185,595 gas (under `0.75 · 2^24`). Cost (contract side, measured on the built token, `ROLL_AGE = 5`, each rollover its own
@@ -1058,8 +1082,9 @@ before `ACC_MARK`).
 
 **`mtxPrepareAcc(bytes32 ua, uint256 half)`** (PQZ only; permissionless, idempotent, `half ∈ {0, 1}`, else `BadPayload(half)`;
 the account must be a registered PQZ holder, else `AccountNotRegistered`): writes a non-zero placeholder into one half of the
-516 `acc` words, so the first rollover rewrites (5 k per word) instead of creating 516 slots (≈ 11.4 M, which no useful batch
-could share). ≈ 5.76 M per half. Keepers (or the owner) run it once per `(UA, token)`; it is not an allowlisted envelope op.
+`ACC_WORDS` `acc` slots (`⌈ACC_WORDS / 2⌉`, then the rest), so the first rollover rewrites instead of creating them (which no
+useful batch could share). The gas figures of this section are the 516-word (n2048-kmax1024, unpacked) build's; plan 5h
+Task 8d part 2b measures each set and re-pins `ROLL_MAX` (provisional per set until then: 96 / 80 / 64 / 48). Keepers (or the owner) run it once per `(UA, token)`; it is not an allowlisted envelope op.
 
 <a id="rollover"></a>
 <a id="CTR-PQZ-08"></a>**CTR-PQZ-08** — **Public rollover, strict order, race-free debits without a base.** (Built in plan 5h part A.)
@@ -1146,7 +1171,8 @@ reverts `BeneficiaryMismatch(payload, given)`.
 (`accHash` is meaningful only while `flags & 1`); `pqzAcc(ua)` → the `acc` bytes (the materialised words, or the
 reference's `u_0 ‖ v_f`); `pqzPending(ua, i)` → the raw slot word `blob ‖ uOff ‖ vOff ‖ block`; `pqzPendingCt(ua, i)` → `u ‖ v`
 (a TRIVIAL entry: `Trivial(digits(amount))`); `pqzEntryBlob(entryRef)` → `R ‖ v_f` (empty if unknown); `transferEntry`,
-`transferCiphertextHash`, `minDecoyFee()`, `confidentialFee()`. **Restore from state alone** (all `eth_call`, no logs): seed →
+`transferCiphertextHash` (the blob bytes and the hash are of the [stored form](#stored-form); `pqzAcc`, `pqzPendingCt` and
+the statements return 64-bit lanes), `minDecoyFee()`, `confidentialFee()`. **Restore from state alone** (all `eth_call`, no logs): seed →
 UA → `pqzAccount` → `pqzAcc` and `pqzPendingCt` for `[rolled, pendingCount)` → decrypt → balance = Dec(acc) + Σ Dec(pending)
 (TRIVIAL entries: their public amount); fee income sits in the public balance (`balanceOf` / the UA ledger); sender
 disclosure: `sendCounter` → `entryRef` → `pqzEntryBlob` (+ memo) → the leg. Indexers follow events for "what changed" and read
@@ -1161,13 +1187,13 @@ the bytes from state. The node's indexer normalizes `MetaTransactionExecuted`, `
 2026-10-13). Classical Zether added `SENDER_CP` ([CTR-ZTH-40](zether.md#CTR-ZTH-40)) because its `SENDER_S` hands over `s`,
 which opens every leg of a multi-recipient transfer, decoys included; PQZ's `SENDER_S` is already a zero-knowledge proof
 that reveals neither `r` nor noise, and a PQZ transfer has one recipient, so a one-leg sender proof would add nothing;
-`opening = bundle ‖ proof`. `transferCiphertext(entryRef)`
-reverts `CiphertextOffState(bundleHash)`; new view `transferCiphertextHash(entryRef)`. Shared randomness and decryption
-noise must not leak ([CTR-PQZ-04](#CTR-PQZ-04)); the indexer or the parties supply the bundle bytes.
+the opening is the proof alone (D11 / D13). The bundle bytes are read from state, the op blob (`pqzEntryBlob`, D11), and
+`transferCiphertextHash(entryRef)` is the stored `R`'s hash. Shared randomness and decryption noise must not leak
+([CTR-PQZ-04](#CTR-PQZ-04)).
 
-`verifyTransferAmount(entryRef, leg, amount, kind, opening)` (leg 0 for a single entry; leg `j` of an op 7 entry,
-[CTR-PQZ-26](#CTR-PQZ-26)) with `opening = abi.encode(bytes bundle, bytes proof)`,
-`bundle = R` ([CTR-PQZ-23](#CTR-PQZ-23)), `keccak256(bundle) == entry[entryRef]` (or the stored `R`), `amount < 2^64`; statement
+`verifyTransferAmount(entryRef, leg, amount, kind, proof)` (leg 0 for a single entry; leg `j` of an op 7 entry,
+[CTR-PQZ-26](#CTR-PQZ-26)) reads `R` ([CTR-PQZ-23](#CTR-PQZ-23)) from the entry's op blob and expands it into the
+statement, `amount < 2^64`; statement
 (33,184 B, every scalar a 32-byte word as [encodings](#encodings), so `pk` starts word-aligned; owner 2026-10-13):
 
 | Offset | Field |
@@ -1197,8 +1223,8 @@ token's `auditorUA` for `AUDITOR`), never from the opening; `v = v_t`, or `v_a` 
 Uniqueness by [noise](#noise). `verifyTransferAmount` is a view (the precompile runs in `eth_call`);
 there is **no on-chain attestation** — no `attestTransferAmount`, no `AmountAttested` (owner 2026-10-13, as classical
 [CTR-ZTH-39](zether.md#CTR-ZTH-39): any contract can call the view, and one that needs a trace records the result
-itself). `transferCiphertextHash(entryRef)` returns the bundle hash;
-the bundle bytes come from `ConfidentialTransfer` logs. Nothing reveals `r` (which would open `v_f`, the sender's balance) or
+itself). `transferCiphertextHash(entryRef)` returns the hash of the stored (packed) bundle; the bundle bytes come from
+state (`pqzEntryBlob`) and the disclosure statement expands them. Nothing reveals `r` (which would open `v_f`, the sender's balance) or
 decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, checked with
 the `verifyTransferAmount` view ([integration.md](../integration.md#confidential-payments)).
 
@@ -1659,6 +1685,16 @@ decoder compares the two), `pk` 288, `u` 16,672, `v` 33,056.
 - `pk`, `u`: 16,384 B = 32 polynomials × 64 coefficients × `be8`, polynomial 0 and coefficient 0 first, each `< q`;
   `v`: 128 B = coefficients 0..15 as `be8`, each `< q`.
 - Ciphertext `ct = u ‖ v`, 16,512 B (also `acc`, the inline credits and `T = u_T ‖ v_T`); `ctHash = keccak256(ct)`.
+- **Stored form** (contract state only, [P46](#stored-form)): every coefficient in `PACK_BITS = ⌈log2 q⌉` bits,
+  concatenated big-endian, coefficient 0 first; a 64-bit-lane word (4 coefficients) → `PACK_BITS / 2` bytes. The op
+  blob is `R ‖ v_f` with `u` / `v` so packed (`toUA` and the salt as they are); the hint is the materialised `acc`'s
+  packed stream and `accHash` its keccak; `transferCiphertextHash` = `keccak256` of the packed `R`; `PqzSet.ZERO_HASH`
+  = `keccak256` of the packed `Trivial(0)`. The statement and every object above keep `be8`.
+- **The contracts' parameter set** (plan 5h Task 8d part 2; one set per build, owner 2026-10-21): every PQZ contract reads
+  its sizes, `q`, `Δ`, `K_MAX`, `PACK_BITS`, its ids, the precompile's self-test hash and the `R_REG` probe hashes from the
+  generated `smartcontracts/evm/src/pqz/PqzSet.sol` (`pqz-core/params/sets/gen_set.py`; committed: `n2304-kmax4096`);
+  another set's build and tests: `smartcontracts/evm/script/pqz/at-set.sh <set>`. The sizes quoted in this section are
+  `n2048-kmax1024`'s (the frozen set); every set's are in `pqz-core/params/sets/README.md`.
 - `out = u ‖ v_t ‖ v_f ‖ v_a`, 16,768 B, 16,640 B without `v_a`; burn / refresh `u ‖ v_f`, 16,512 B.
 - Secret: the 32-byte KeyGen seed ([algorithms](#42-algorithms)); never on the wire.
 - Disclosure bundle `R = salt(16) ‖ u ‖ v_t ‖ v_a ‖ toUA(word)`, 16,688 B; without `v_a` 16,560 B (the length says
@@ -2012,12 +2048,12 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 
 | Contract | Role | Notes |
 |---|---|---|
-| `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | BUILT (P6g D2): {31337, 1337, 7622}; `selfTest` = op 6 answers exactly `0xed910a2c…d205` |
-| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
+| `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | BUILT (P6g D2): {31337, 1337, 7622}; `selfTest` = op 6 answers exactly the build's set's hash (`PqzSet.SELFTEST`: `n2304-kmax4096` `0x23d7a1db…c97c0`, `n2048-kmax1024` `0xed910a2c…d205`, `n2560-kmax16384` `0x167c772e…45e7`, `n2816-kmax65536` `0x0aa1dfe2…1882`); the set's ids only, at `0x…5caa0f01` (plan 5h Task 8d part 2) |
+| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NONE_PQZ` / `UNDERLYING_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
 | `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1, state redesign plan 5h part A) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + four external libraries in the one namespace `scaas.pqz` over the internal `PqzCore` (`PqzStateLib` init / shield / rollover / prepare, `PqzTransferLib` op 1 and op 7, `PqzBurnLib` burn / refresh / unwrap debit, `PqzViewLib` statement views and disclosure; they are the release's `Env.libs`, code hashes checked by `deployImplementation`, plan 5g-Z2); clones via `OpenFactory.createToken` behind the kind gate (`setKindEnabled`); disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `minDecoyFee`. Sizes at the 5h Task 3 fix: `UnderlyingPqzToken` 60,907 B, `NoUnderlyingPqzToken` 48,412 B (hard limit 65,536; the 4 KiB margin target was dropped), libraries 6,378 / 13,194 / 7,633 / 12,111 B (each < 24,576) |
-| `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the `shieldIn` term and `subTrivial` / `addMem` / `subMem` / `loadBlob` / `isZero` for the queue, `reduce`, the `< q` check | BUILT (P6g): pure Solidity, no precompile; checked on the P6e vectors |
+| `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the `shieldIn` term and `subTrivial` / `addMem` / `subMem` / `loadBlob` / `isZero` for the queue, `reduce`, the `< q` check; the [stored form](#stored-form) (`packCd` / `packMem`, `expandAt`, `addBlob`, the rollover accumulators `addBlobEO` / `combineEO`) | BUILT (P6g; P46 and `PqzSet` in plan 5h Task 8d part 2): pure Solidity, no precompile; checked on the set's vectors (round trip, all `q − 1`, the bit layout) |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
 Selectors (normative ABI; the proof-taking ones share the signature `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint[, …])`
@@ -2102,8 +2138,9 @@ split, never a silent acceptance (fail closed).
 
 <a id="self-test"></a>**Contract self-test.** The constructor of `UAPqzVerifier` and
 `PqzToken.initialize` (`PqzStateLib.init`) require the precompile to be exactly `PqzSafety.PQZ` and the proof system to be
-PQZL or PQZH (`NotPqz`), then call `OP_SELFTEST` and require the expected hash (a constant compiled into the contract;
-it folds in the precompile's own valid and invalid `R_REG` verdicts for both ids). A token takes the precompile and the
+the set's PQZL id or, where the set has PQZH, its PQZH id (`NotPqz`), then call `OP_SELFTEST` and require the expected
+hash (`PqzSet.SELFTEST`, the set's, compiled into the contract; it folds in the precompile's own valid and invalid
+`R_REG` verdicts for the set's ids). A token takes the precompile and the
 id from its `verifier` (a `UAPqzVerifier`) but never trusts that contract: a verifier naming another "precompile" that
 answers 1 to everything is refused at creation (review W-B, 2026-10-19). Since plan 5g-Z1 the creator names no verifier
 at all (plan 5g-Z2: `ConfidentialConfig` has no verifier field): it is an immutable of the implementation release, the

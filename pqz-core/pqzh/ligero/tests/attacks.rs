@@ -478,13 +478,26 @@ fn transfer_forms_cross_rejected() {
     }
 }
 
-/// the EVM fixtures (ligero_export) verify natively: honest and other-statement proofs accepted, negative witnesses
-/// rejected. The fixtures are n2048-kmax1024's under the retired PQZH v1 id (smartcontracts/evm/test/vectors/pqzh-ligero,
-/// with the EVM LigeroVerifier test): regenerated with the contracts in plan 5h Task 8d part 2, ignored until then
+/// the EVM fixtures (ligero_export) of the built set verify natively: honest and other-statement proofs accepted,
+/// negative witnesses rejected. n2048-kmax1024's are the committed smartcontracts/evm/test/vectors/pqzh-ligero (the EVM
+/// LigeroVerifier test's; that port is n2048-kmax1024's); at every other PQZH set the test exports them itself into the
+/// target's temp dir and checks there, nothing committed (owner 2026-10-25, review 8d2a question 3)
 #[test]
-#[ignore = "the EVM fixtures carry the retired PQZH v1 id (contract vectors: plan 5h Task 8d part 2)"]
 fn evm_fixtures() {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../smartcontracts/evm/test/vectors/pqzh-ligero");
+    let set = pqzh_ligero::set::NAME;
+    let dir = if set == "n2048-kmax1024" {
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../../smartcontracts/evm/test/vectors/pqzh-ligero").to_string()
+    } else {
+        let d = format!("{}/evm-fixtures-{set}", env!("CARGO_TARGET_TMPDIR"));
+        let ok = std::process::Command::new(env!("CARGO_BIN_EXE_ligero_export"))
+            .args([d.as_str(), "proven", "conj", "johnson"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "ligero_export {d}");
+        d
+    };
     let rd = |n: &str| std::fs::read(format!("{dir}/{n}")).unwrap();
     for (op, rel) in [(OP_REGISTER, "reg"), (OP_TRANSFER, "tx")] {
         for (pre, pp) in [("proven", p(op)), ("conj", Params::preset(op, false, true)), ("johnson", Params::johnson_preset())] {

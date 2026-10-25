@@ -4,6 +4,8 @@ pragma solidity ^0.8.24;
 import {PqzRegistryBase, PQZL_ID, PQZH_ID} from "./helpers/PqzRegistryBase.sol";
 import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
+import {PqzCt} from "../../src/pqz/PqzCt.sol";
+import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 
@@ -14,7 +16,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         assertEq(v.PRECOMPILE(), PQZ);
         assertEq(v.PROOF_SYSTEM_ID(), PQZL_ID);
         assertTrue(v.isSupportedOnThisChain());
-        bytes memory pk = _slice(regStmt, 96, 16_384);
+        bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         bytes32 m = bytes32(_slice(regStmt, 64, 32));
         // the precompile accepting the flipped proof too: refused
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
@@ -37,10 +39,21 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
     }
 
+    /// Plan 5h Task 8d: at a set without PQZH its (zero) id is no proof system: refused like any other.
+    function test_noPqzhRefused() public {
+        if (PqzSet.HAS_PQZH) return;
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, PQZH_ID));
+        this.newVerifier(PQZH_ID);
+    }
+
+    function newVerifier(bytes32 id) external returns (UAPqzVerifier) {
+        return _newPqzVerifier(id);
+    }
+
     /// Review W-B: only the `PQZ` precompile, only PQZL / PQZH, only the pinned vector of that id.
     function test_constructorPins() public {
         UAPqzVerifier v = _newPqzVerifier(PQZL_ID);
-        bytes memory pk = _slice(regStmt, 96, 16_384);
+        bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         bytes32 m = bytes32(_slice(regStmt, 64, 32));
         address fake = address(0xFA4E);
         vm.mockCall(fake, hex"0600000000", abi.encode(PqzSafety.SELFTEST));
@@ -50,10 +63,12 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         bytes32 other = keccak256("another proof system");
         vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, other));
         new UAPqzVerifier(PQZ, other, pk, m, regProof);
-        // the PQZL vector under the PQZH id: the precompile (mocked) would accept it, the pin does not
-        bytes memory st = bytes.concat(_slice(regStmt, 0, 32), PQZH_ID, _slice(regStmt, 64, 16_416));
-        vm.mockCall(PQZ, abi.encodePacked(uint8(3), uint32(16_480), st, regProof), abi.encode(uint256(1)));
-        vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
+        // the PQZL vector under the PQZH id: the precompile (mocked) would accept it, the pin does not (no PQZH at the
+        // set: its zero id is no proof system)
+        bytes memory st = bytes.concat(_slice(regStmt, 0, 32), PQZH_ID, _slice(regStmt, 64, (ST_REG - 64)));
+        vm.mockCall(PQZ, abi.encodePacked(uint8(3), uint32(ST_REG), st, regProof), abi.encode(uint256(1)));
+        if (PqzSet.HAS_PQZH) vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
+        else vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, PQZH_ID));
         new UAPqzVerifier(PQZ, PQZH_ID, pk, m, regProof);
         // another message or key with the right proof: refused before the precompile
         vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
@@ -61,12 +76,14 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         assertEq(v.PRECOMPILE(), PQZ);
     }
 
-    /// The input is exactly `u8(3) ‖ be32(16,480) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; the verdict only the word 1.
+    /// The input is exactly `u8(3) ‖ be32(STMT_REGISTER) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; the verdict only the
+    /// word 1 (under PQZH where the set has it, else PQZL).
     function test_verifyInputAndVerdict() public {
-        UAPqzVerifier v = _newPqzVerifier(PQZH_ID);
-        bytes memory pk = _slice(regStmt, 96, 16_384);
+        bytes32 id = PqzSet.HAS_PQZH ? PQZH_ID : PQZL_ID;
+        UAPqzVerifier v = _newPqzVerifier(id);
+        bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         bytes32 m = keccak256("message");
-        bytes memory input = abi.encodePacked(uint8(3), uint32(16_480), _slice(regStmt, 0, 32), PQZH_ID, m, pk, hex"0102");
+        bytes memory input = abi.encodePacked(uint8(3), uint32(ST_REG), _slice(regStmt, 0, 32), id, m, pk, hex"0102");
         vm.mockCall(PQZ, input, abi.encode(uint256(1)));
         vm.expectCall(PQZ, input);
         assertTrue(v.verifyPop(pk, m, hex"0102"));
@@ -78,9 +95,9 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         vm.mockCall(PQZ, input, abi.encode(uint256(1)));
         // a coefficient = q, or a short key: false without asking the precompile
         bytes memory bad = bytes.concat(pk);
-        bad[2] = 0x04; // coefficient 0 ≥ 2^42 > q
+        bad[0] = 0xff; // coefficient 0 ≥ 2^56 > q (every set)
         assertFalse(v.verifyPop(bad, m, hex"0102"));
-        assertFalse(v.verifyPop(_slice(pk, 0, 16_352), m, hex"0102"));
+        assertFalse(v.verifyPop(_slice(pk, 0, PqzCt.PK - 32), m, hex"0102"));
     }
 
     /// UA-6: an `mldsa65` holder registers with its PQZ key in one call; `R_REG` reaches the precompile over
@@ -89,11 +106,11 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         _registryStack();
         assertTrue(reg.kindEnabled(UAKinds.PQZ_MLWE));
         assertEq(reg.verifyCap(UAKinds.PQZ_MLWE), CAP_PQZ);
-        bytes memory pk = _slice(regStmt, 96, 16_384);
+        bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         bytes32 ua = reg.uaOf(UAKinds.MLDSA65, _mlPk(1));
         bytes32 h = reg.keyHashOf(UAKinds.PQZ_MLWE, pk);
         bytes32 msg_ = reg.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP, reg.popDigest(ua, h));
-        bytes memory input = abi.encodePacked(uint8(3), uint32(16_480), _slice(regStmt, 0, 32), PQZL_ID, msg_, pk, hex"aa");
+        bytes memory input = abi.encodePacked(uint8(3), uint32(ST_REG), _slice(regStmt, 0, 32), PQZL_ID, msg_, pk, hex"aa");
         vm.mockCall(PQZ, input, abi.encode(uint256(1)));
         vm.expectCall(PQZ, input);
         uint256 g = gasleft();
@@ -108,7 +125,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
 
     function test_registerRefused() public {
         _registryStack();
-        bytes memory pk = _slice(regStmt, 96, 16_384);
+        bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         // R_REG refused by the precompile (the default op-3 answer is 0)
         vm.expectRevert(IUARegistry.UAPoP.selector);
         _pqzUA(pk, 1);

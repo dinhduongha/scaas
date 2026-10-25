@@ -8,6 +8,7 @@ import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
+import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
@@ -75,18 +76,19 @@ contract PqzMultiTest is PqzFixture {
         );
         assertEq(_cut(st, 0, 640), head, "header: word 192 recipientsHash, 320 M");
         assertEq(_cut(st, 640, PqzCt.PK), _keyOf(alice), "pk_f");
-        for (uint256 j; j < 4; ++j) assertEq(_cut(st, 17_024 + PqzCt.PK * j, PqzCt.PK), _keyOf(rec[j]), "pk_j");
-        assertEq(_cut(st, 17_024 + PqzCt.PK * 4, PqzCt.PK), _keyOf(aud), "pk_a");
-        assertEq(_cut(st, 17_024 + PqzCt.PK * 5 + PqzCt.CT, out.length), out, "out after T");
+        for (uint256 j; j < 4; ++j) assertEq(_cut(st, O_PK1 + PqzCt.PK * j, PqzCt.PK), _keyOf(rec[j]), "pk_j");
+        assertEq(_cut(st, O_PK1 + PqzCt.PK * 4, PqzCt.PK), _keyOf(aud), "pk_a");
+        assertEq(_cut(st, O_PK1 + PqzCt.PK * 5 + PqzCt.CT, out.length), out, "out after T");
     }
 
     /// `R` of a one-group transfer with the auditor.
+    /// `R = salt ‖ P(u_0) ‖ (P(v_j) ‖ P(v_{a,j}) ‖ UA_j)_j` of one group with the auditor (P46: `u`, `v` packed).
     function _bundleOn(bytes memory out, bytes32[] memory rec) internal view returns (bytes memory r) {
         uint256 m = rec.length;
-        r = bytes.concat(salt, _cut(out, 0, PqzCt.PK));
+        r = bytes.concat(salt, _packed(_cut(out, 0, PqzCt.PK)));
         for (uint256 j; j < m; ++j) {
-            r = bytes.concat(r, _cut(out, PqzCt.PK + PqzCt.V * j, PqzCt.V),
-                _cut(out, PqzCt.PK + PqzCt.V * (m + 1 + j), PqzCt.V), rec[j]);
+            r = bytes.concat(r, _packed(_cut(out, PqzCt.PK + PqzCt.V * j, PqzCt.V)),
+                _packed(_cut(out, PqzCt.PK + PqzCt.V * (m + 1 + j), PqzCt.V)), rec[j]);
         }
     }
 
@@ -106,7 +108,7 @@ contract PqzMultiTest is PqzFixture {
         bytes memory out = _blob(7, _outLen(4, true));
         bytes memory pl = _mpayload(0, 1000, alice, carol, rec, out, "");
         bytes memory st = tok.transferStatement(pl, 0);
-        assertEq(st.length, 50_048 + 16_640 * 4 + 16_384, "len(M = 4, A = 1)");
+        assertEq(st.length, PqzSet.multiLen(4, true), "len(M = 4, A = 1)");
         _checkLayout(st, rec, out);
 
         bytes memory proof = hex"0a0b0c";
@@ -146,7 +148,7 @@ contract PqzMultiTest is PqzFixture {
         console2.log("mtxConfidentialTransfer op 7 M = 8 (BUNDLE, no auditor, mocked proof) gas", g - gasleft());
         for (uint256 j; j < 8; ++j) assertEq(tok.pqzPendingCt(rec[j], 0), pend[rec[j]][0]);
         assertEq(_cut(pend[rec[5]][0], 0, PqzCt.PK), _cut(out, PqzCt.PK, PqzCt.PK), "leg 5 uses u_1");
-        assertEq(tok.transferEntry(ref).length, 16 + 2 * PqzCt.PK + 160 * 8);
+        assertEq(tok.transferEntry(ref).length, 16 + 2 * PqzCt.PKP + (PqzCt.VP + 32) * 8, "R of M = 8, no auditor (packed)");
         _roll(tok, rec[7], 1);
         bytes32[] memory back = new bytes32[](1);
         back[0] = alice;
@@ -159,7 +161,7 @@ contract PqzMultiTest is PqzFixture {
         _fund(tok, alice, 1000);
         bytes32[] memory rec = _legsOf(1);
         (bytes32 ref, bytes memory out) = _multi(tok, alice, bytes32(0), rec, 11, true);
-        bytes memory single = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
+        bytes memory single = _rOf(out, bob);
         assertEq(tok.transferEntry(ref), single);
     }
 
@@ -252,13 +254,13 @@ contract PqzMultiTest is PqzFixture {
         uint256 us = 2 * PqzCt.PK;
         for (uint256 j = 3; j < 6; ++j) {
             bytes memory st = tok.disclosureStatement(ref, j, 77, 1);
-            assertEq(st.length, 33_184);
+            assertEq(st.length, ST_DISC);
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(rec[j]), "the leg's key");
-            assertEq(_cut(st, 16_672, PqzCt.PK), _cut(out, PqzCt.PK * (j / 4), PqzCt.PK), "u of the leg's group");
-            assertEq(_cut(st, 33_056, 128), _cut(out, us + PqzCt.V * j, PqzCt.V), "v_j");
+            assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / 4), PqzCt.PK), "u of the leg's group");
+            assertEq(_cut(st, O_DV, 128), _cut(out, us + PqzCt.V * j, PqzCt.V), "v_j");
             st = tok.disclosureStatement(ref, j, 77, 2);
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(aud), "the auditor's key");
-            assertEq(_cut(st, 33_056, 128), _cut(out, us + PqzCt.V * (9 + j), PqzCt.V), "v_aj");
+            assertEq(_cut(st, O_DV, 128), _cut(out, us + PqzCt.V * (9 + j), PqzCt.V), "v_aj");
         }
         bytes memory opening = hex"0a0b"; // the proof: `R` is read from the op blob (D11)
         assertTrue(tok.verifyTransferAmount(ref, 5, 77, 1, opening));
@@ -339,6 +341,7 @@ contract PqzMultiTest is PqzFixture {
 
     /// A PQZH token: M = 8 is not built; at most 10 inline credits on op 7 (16 on op 1).
     function test_multi_pqzh() public {
+        if (!PqzSet.HAS_PQZH) return; // no PQZH at this set (refused: UAPqzVerifierTest.test_noPqzhRefused)
         // a PQZH release: its verifier is the env's, an immutable (CTR-ZTH-20)
         pqv = _newPqzVerifier(PQZH_ID);
         factory = new OpenFactory(registrar, PQZ_UID, 0);

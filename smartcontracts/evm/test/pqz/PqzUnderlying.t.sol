@@ -61,7 +61,7 @@ contract PqzUnderlyingTest is PqzFixture {
         bytes memory st = w.unshieldUnwrapStatement(pl, x, 0);
         assertEq(bytes32(_cut(st, 544, 32)), w.unwrapBinding(address(usd), 400 * SCALE), "direct: leg and minOut bound");
         assertEq(uint256(bytes32(_cut(st, 288, 32))), 400);
-        vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(50_048), st, hex"c0de"));
+        vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(ST_BURN), st, hex"c0de"));
         g = gasleft();
         w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
         console2.log("mtxUnshieldUnwrap (mocked proof) gas", g - gasleft());

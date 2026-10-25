@@ -26,6 +26,22 @@ contract GasBurner {
 // four `ROLL_MAX` rows below assert a ceiling just above today's measurement instead of the cap (17.9 M at 256 entries),
 // so further growth still fails; at or below it they assert the cap again. TODO(5h Task 8d): re-pin and delete both.
 uint256 constant AMS_ROLL_MAX = 128;
+
+/// A single transfer's op blob as SSTORE2 code, `STOP ‖ salt(16) ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)` (P46 packed, plan 5h Task 8d
+/// part 2), every coefficient `q − 1`: the credits the gas pins roll (the lanes' worst case).
+function _qm1BlobCode() pure returns (bytes memory) {
+    uint256 qm1 = PqzCt.Q - 1;
+    uint256 w = qm1 << 192 | qm1 << 128 | qm1 << 64 | qm1;
+    bytes memory ct = new bytes(PqzCt.CT);
+    for (uint256 o; o < PqzCt.CT; o += 32) {
+        assembly ("memory-safe") { mstore(add(add(ct, 32), o), w) }
+    }
+    bytes memory v = new bytes(PqzCt.V);
+    for (uint256 o; o < PqzCt.V; o += 32) {
+        assembly ("memory-safe") { mstore(add(add(v, 32), o), w) }
+    }
+    return bytes.concat(hex"00", bytes16(0), PqzCt.packMem(ct), bytes32(0), PqzCt.packMem(v));
+}
 uint256 constant ROLL_CEILING = 18_500_000;
 
 /// Plan 5h Task 2 gas (Review Focus 5, 6; spec §5.3 / §5.4) on the real token: `ROLL_MAX` and the `mtxPrepareAcc` halves
@@ -81,13 +97,9 @@ contract PqzStatePinGasTest is PqzSlots {
         vm.resumeGasMetering();
     }
 
-    /// `STOP ‖ salt(16) ‖ u ‖ v_t ‖ toUA ‖ v_f`, every coefficient `q − 1` (the lane-overflow worst case).
+    /// `STOP ‖ salt(16) ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)` (P46), every coefficient `q − 1` (the lane-overflow worst case).
     function _blobCode() internal pure returns (bytes memory c) {
-        c = new bytes(1 + 16 + PqzCt.PK + 128 + 32 + 128);
-        uint256 w = QM1 << 192 | QM1 << 128 | QM1 << 64 | QM1;
-        for (uint256 o = 17; o < 17 + PqzCt.CT; o += 32) {
-            assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
-        }
+        c = _qm1BlobCode();
     }
 
     /// `k` credits of `ua`, each pointing into its own etched blob (block 1, so old enough after `setUp`'s roll).
@@ -95,7 +107,7 @@ contract PqzStatePinGasTest is PqzSlots {
         for (uint256 i; i < k; ++i) {
             address b = address(uint160(++nextBlob));
             vm.etch(b, code);
-            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PK) << 64 | 1;
+            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PKP) << 64 | 1;
             vm.store(address(tok), _pendingSlot(ua, i), bytes32(e));
         }
         vm.store(address(tok), bytes32(_acctSlot(ua)), bytes32(k));
@@ -438,7 +450,7 @@ contract PqzStatePinGasTest is PqzSlots {
 }
 
 /// Final review I1 (D3 "the `acc` slots are never zeroed"): a shield-only account's first rollover sums TRIVIAL entries
-/// only, so every `u` coefficient of its `acc` is 0. Each stored word carries a marker bit, so no slot goes back to zero
+/// only, so every `u` coefficient of its `acc` is 0. Each slot stores `not(packed word)` (P46), so no slot goes back to zero
 /// and the next rollover of `ROLL_MAX` cold credits still rewrites (2,900 gas a word), not re-creates (22,100), and
 /// fits `0.75 · 2^24`. Each test is one transaction after `setUp`.
 contract PqzStateTrivialRollGasTest is PqzSlots {
@@ -449,11 +461,7 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
     bytes32 internal gina;
 
     function _blobCode() internal pure returns (bytes memory c) {
-        c = new bytes(1 + 16 + PqzCt.PK + 128 + 32 + 128);
-        uint256 w = QM1 << 192 | QM1 << 128 | QM1 << 64 | QM1;
-        for (uint256 o = 17; o < 17 + PqzCt.CT; o += 32) {
-            assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
-        }
+        c = _qm1BlobCode();
     }
 
     function _gas(bytes memory data) internal returns (uint256 used) {
@@ -484,7 +492,7 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
         for (uint256 i; i < PqzCore.ROLL_MAX; ++i) {
             address b = address(uint160(++nextBlob));
             vm.etch(b, code);
-            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PK) << 64 | 1;
+            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PKP) << 64 | 1;
             vm.store(address(tok), _pendingSlot(gina, TRIV + i), bytes32(e));
         }
         bytes32 k = bytes32(_acctSlot(gina));
@@ -495,7 +503,7 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
 
     /// No `acc` slot is zero after the TRIVIAL-only rollover (D3), and the `u` half still reads as zero.
     function test_trivialRoll_noZeroSlot() public view {
-        for (uint256 i; i < PqzCt.CT / 32; ++i) {
+        for (uint256 i; i < PqzCt.ACC_WORDS; ++i) {
             assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 5 + i)) != 0, "acc slot zeroed");
         }
         bytes memory acc = tok.pqzAcc(gina);
@@ -504,7 +512,7 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
             assertEq(x, 0, "u of Trivial(4)");
         }
-        assertEq(keccak256(acc), tok.pqzAccount(gina).accHash, "accHash over the unmarked bytes");
+        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina).accHash, "accHash over the packed stream");
     }
 
     /// The regression pin: `ROLL_MAX` cold credits after the TRIVIAL-only rollover fit `0.75 · 2^24` (10.6 M for
@@ -522,6 +530,6 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
             assertEq(x, want);
         }
-        assertEq(keccak256(acc), tok.pqzAccount(gina).accHash);
+        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina).accHash);
     }
 }

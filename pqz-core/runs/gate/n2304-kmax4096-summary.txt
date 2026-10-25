@@ -1,4 +1,4 @@
-# gate n2304-kmax4096 (set n2304-kmax4096): 962f21efa641aa23f57e28abf51f05f2fc109bb2, 2026-10-24T17:56Z
+# gate n2304-kmax4096 (set n2304-kmax4096): df474f7026cfd2deb9292bf80514e0d7b5804e77, 2026-10-25T01:02Z
 set n2304-kmax4096
 == kat
    ok

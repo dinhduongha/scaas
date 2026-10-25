@@ -66,9 +66,9 @@ abstract contract PqzFixture is PqzRegistryBase {
         for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
         txStmt = _vecHex("statement_transfer.json", ".rows[0].stmt");
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1))); // PoPs of the fixture's keys
-        alice = _pqzUA(_slice(txStmt, 640, PqzCt.PK), 1);
-        bob = _pqzUA(_slice(txStmt, 17_024, PqzCt.PK), 2);
-        aud = _pqzUA(_slice(txStmt, 33_408, PqzCt.PK), 3);
+        alice = _pqzUA(_slice(txStmt, 640, PqzCt.PK), 1); // R_TX: header ‖ pk_f ‖ pk_t ‖ pk_a ‖ T ‖ out
+        bob = _pqzUA(_slice(txStmt, 640 + PqzCt.PK, PqzCt.PK), 2);
+        aud = _pqzUA(_slice(txStmt, 640 + 2 * PqzCt.PK, PqzCt.PK), 3);
         carol = _pqzUA(_pk(7), 4);
     }
 
@@ -105,13 +105,13 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     // ------------------------------------------------------------------ ciphertexts
 
-    /// A canonical 16,384-byte key: zero but coefficient 0 = `seed`.
+    /// A canonical `PK`-byte key: zero but coefficient 0 = `seed`.
     function _pk(uint8 seed) internal pure returns (bytes memory k) {
         k = new bytes(PqzCt.PK);
         k[7] = bytes1(seed);
     }
 
-    /// `n` canonical bytes from `seed` (every 64-bit lane < 2^40 < q).
+    /// `n` canonical bytes from `seed` (every 64-bit lane < 2^40 < q at every set).
     function _blob(uint256 seed, uint256 n) internal pure returns (bytes memory b) {
         b = new bytes(n);
         for (uint256 i; i < n; i += 32) {
@@ -122,7 +122,7 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     /// `out = u ‖ v_t ‖ v_f ‖ [v_a]`.
     function _out(uint256 seed, bool withAud) internal pure returns (bytes memory) {
-        return _blob(seed, withAud ? 16_768 : 16_640);
+        return _blob(seed, withAud ? PqzCore.OUT_ON : PqzCore.OUT_OFF);
     }
 
     function _payload(uint256 p, uint256 shieldIn, bytes32 from, bytes32 to, bytes32 ben, bytes memory out,
@@ -143,6 +143,13 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     function _outLen(uint256 m, bool withAud) internal pure returns (uint256) {
         return PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
+    }
+
+    /// The op blob's `R` of a single transfer for `out = u ‖ v_t ‖ v_f ‖ [v_a]` (P46: every `u`, `v` packed):
+    /// `salt ‖ P(u ‖ v_t) ‖ [P(v_a)] ‖ toUA`; the blob is `R ‖ P(v_f)`.
+    function _rOf(bytes memory out, bytes32 to) internal view returns (bytes memory) {
+        bytes memory va = out.length == PqzCore.OUT_ON ? _packed(_cut(out, PqzCore.OUT_OFF, PqzCt.V)) : bytes("");
+        return bytes.concat(salt, _packed(_cut(out, 0, PqzCt.CT)), va, to);
     }
 
     function _memo() internal view returns (bytes memory) {
