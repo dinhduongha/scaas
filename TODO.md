@@ -76,6 +76,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - [ ] **Research (owner 2026-10-21, not blocking):** PQZH proof below ≈ 170 KB at the proven soundness (the debit
   inputs must fit one tx under EIP-7976, ≈ 261,909 B with the statement); Kyber-style compression of `u` (noise vs
   `K_MAX`); both only if PQZH on chain or smaller blobs are wanted.
+- [ ] **UA-8: portable UA registrations** (owner 2026-10-25, queued **after 5h, before UA-7**): a UA registered on one
+  chain can be registered on any other by anyone (chain-independent PoP digest; mutable attributes such as UA-7's KEM
+  key as signed versioned records); short design
+  [`2026-10-25-ua8-portable-registrations.md`](docs/superpowers/specs/2026-10-25-ua8-portable-registrations.md), then a plan.
 - [ ] **UA-7: PQ chat sessions** (owner 2026-10-25, queued **after 5h**): application contract `PqChat` — one
   ML-KEM-1024 + X25519 key per UA first, sessions whose AES-256 key is KEM-wrapped per member key and stored on chain (epochs
   for rekey / members), messages off chain (e.g. Matrix custom events); short design

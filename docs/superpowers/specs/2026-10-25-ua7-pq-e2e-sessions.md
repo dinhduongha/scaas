@@ -28,8 +28,13 @@ registration, session creation, rekey — all of them): the UA signs the envelop
 pays its gas, and the UA pays the relayer a fee (which may be 0) the same way as the other `mtx*` writes (CTR-MTX-20,
 the `MetaTokenBase` pattern). Upgrades by a new release, as for the other application contracts.
 
-**C2 — The KEM key: one per UA first.** `mtxSetKemKey(ua, pk)` under `requireAuthorized(ua, purpose "kem")` sets or
-replaces the UA's key (`keyId` = a version counter, + 1 on every change); `mtxSetKemKey(ua, "")` revokes it. **One
+**C2 — The KEM key: one per UA first, the same on every chain.** The UA signs a **chain-independent** record
+`kemRecord = (ua, version, pk)` (`pk` empty = revoked; the digest has no chain id and no registry / contract address,
+UA-8 §2); `setKemKey(ua, version, pk, sig)` stores it on any chain where `PqChat` is deployed, submitted by **anyone**
+(the submitter pays the gas; through mtx when a relayer charges the UA a fee): the contract checks the signature
+against the UA's key in that chain's `UARegistry` and requires `version` > the stored one. So a key set on Ethereum
+can be copied to any other chain by anyone, and a rotation or revocation likewise (owner 2026-10-25: "UA accounts do
+not depend on the chain; the KEM keys too"). `keyId` = `version`. **One
 scheme only: ML-KEM-1024 + X25519** (owner 2026-10-25: the default and the only one): the X-Wing combiner with
 ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF construction of the CFRG hybrid-KEM draft; pk
 1,600 B, ciphertext 1,600 B, shared secret 32 B; secure while either part holds. The contract accepts only 1,600-byte
@@ -85,9 +90,26 @@ nothing.
 messages live as long as the chain, and any node (one's own included) serves them — fully decentralised delivery and
 storage. `PqChat` is plain EVM code, so it can be deployed on a **cheap layer 2** (any EVM rollup) where storage costs a
 small fraction of layer 1; the chain only needs `UARegistry` (C1 reads `requireAuthorized`) and an mtx relayer, both
-deployable there too. What on chain does not hide: the member list and who posts when are public on chain (on Matrix
-only the homeserver sees them); an L2 sequencer can delay a transaction (the rollup's forced inclusion through L1 is the
-fallback); an L2's gas rules differ from EIP-8037, so the cost estimates above are layer-1 figures.
+deployable there too (registrations copied from another chain, UA-8). **A layer 2 is treated like layer 1** (owner
+2026-10-25: both are infrastructure services; rollup internals such as the sequencer are not a design concern). What
+on chain does not hide: the member list and who posts when are public on chain (on Matrix only the homeserver sees
+them).
+
+**Fee of one stored message, 1 KB of text [estimate, 2026-10-25; measured in the plan].** Layer 1 under the
+Glamsterdam rules of `pqz-core/params/sets/README.md`:
+
+| Part | Signer secp256k1 | Signer ML-DSA-65 |
+|---|---|---|
+| calldata: ciphertext 1,040 B + header + mtx envelope + signature | ≈ 1.5 KB | ≈ 4.8 KB (signature 3,309 B) |
+| regular gas = max(intrinsic 15,000 + calldata + execution, floor 15,000 + 64 / byte) | ≈ 0.14 M | ≈ 0.4 M |
+| state gas, SSTORE2 blob 1,041 B × 1,530 | ≈ 1.59 M | ≈ 1.59 M |
+| state gas, blob account + two new slots (counter uniqueness, list pointer) | ≈ 0.37 M | ≈ 0.37 M |
+| **total** | **≈ 2.1 M gas** | **≈ 2.4 M gas** |
+
+In money (example ETH = $3,000): Ethereum at 1 gwei ≈ 0.0022 ETH ≈ **$6–7** per message (≈ $2 at 0.3 gwei); an EVM
+layer 2 (≈ 0.35 M L2 gas under the pre-Glamsterdam code-deposit price of 200 gas / byte, ≈ 0.005 gwei, plus its layer-1
+data fee) ≈ **$0.005–0.02** per message, so 1,000 messages ≈ $5–20. Storing is what costs; the signature size adds
+≈ 15 %. Under mtx the relayer pays and charges the UA its fee (which may be 0).
 
 **C7 — Matrix.** Yes, the AES key works over Matrix: Matrix is only the transport. Each message is a Matrix event of a
 custom type (proposal `vn.scaas.pqchat.v1`, content: `sessionId`, `epoch`, `sender`, `keyId`, `counter`, ciphertext in
