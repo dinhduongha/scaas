@@ -4,7 +4,7 @@ PQZH (Ligero over F_q, `pqz-core/pqzh/ligero`) is the **backup** proof system (o
 chain. This file says what a chain needs before it can accept PQZH proofs at this parameter set. Plan 5h Task 8c
 part 1 and 1b (preset B, owner 2026-10-22), part 2 (the preset in `set.toml` `[pqzh_preset]`, `pqzh_set.rs` generated;
 PQZH in pqz-ffi, the vectors `smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json` and the gate); the PQZH
-`proofSystemId` of this set (Task 8d) is `keccak256("scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2")` = `0xe4bc6d17…885730`. [`SET.md`](SET.md) is this set's main description.
+`proofSystemId` of this set (Task 8d) is `keccak256("scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3")` = `0x046859a8…944ead` (R0 review fix; v2 `0xe4bc6d17…885730` retired). [`SET.md`](SET.md) is this set's main description.
 
 Sources: `[crate]` = the Rust crate built with `--features set-n2304-kmax4096` (`pqz-core/pqzh/ligero/runs/c8b-a-*`,
 preset B); `[model]` = `python3 -I pqz-core/pqzh/ligero/ligero_params.py --set n2304-kmax4096`

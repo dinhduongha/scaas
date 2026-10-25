@@ -38,7 +38,7 @@ extern "C" {
 int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);
 
 /* the library's precompile input limit (pqz-stmt MAX_INPUT of the parameter set it was built for, set.toml max_input:
-   524,288 at n2304-kmax4096, the default build, and n2560-kmax16384; 393,216 at n2048-kmax1024). The node takes its
+   524,288 at every set since the R0 review fix; n2048-kmax1024 had 393,216). The node takes its
    limit from here (plan 5h Task 8d: no second literal). */
 size_t pqz_max_input (void);
 

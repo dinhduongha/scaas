@@ -11,7 +11,7 @@ pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm featu
 
 | Set | n, k | q | `K_MAX` | Status | `SET.md` |
 |---|---|---|---|---|---|
-| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the frozen set (the parameters of the retired PQZL v3 id): the committed vectors at `smartcontracts/vectors/pqz/`; the contracts' set until 8d part 2 (since then `n2304-kmax4096`; every set builds with `at-set.sh`) | [SET.md](n2048-kmax1024/SET.md) |
+| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the v3 parameters, frozen until the R0 review fix (2026-10-25: `frozen = false`, its reg / dr / audited txm headers regenerated): the committed vectors at `smartcontracts/vectors/pqz/`; the contracts' set until 8d part 2 (since then `n2304-kmax4096`; every set builds with `at-set.sh`) | [SET.md](n2048-kmax1024/SET.md) |
 | `n2304-kmax4096` | 2304, 36 | 61,275,424,977,257 (2^45.80) | 4,096 | owner 2026-10-21: the default set on chain; the default of the `pqzl` crate, `gate.sh` and (since 8d part 1) `pqz-ffi` | [SET.md](n2304-kmax4096/SET.md) |
 | `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | approved 2026-10-20 as the Task 8 set, superseded as the default by `n2304-kmax4096` 2026-10-21: shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
 | `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21 core only; **owner 2026-10-24: a full PQZL set for customers** (pqz-stmt, precompile, vectors, gate since plan 5h Task 8d part 1b; contracts in 8d part 2); **no PQZH** (none of the current Ligero radices divides q − 1; a radix-1,789 preset is unexplored, not in scope) | [SET.md](n2816-kmax65536/SET.md) |
@@ -65,7 +65,7 @@ live in the same directory `params/sets/<set>/` and are built for one set per li
 | file in `<set>/` | `pqz_set.h`, `rust/set.rs`, `<rel>_params.sage`, `pqz_<rel>_params.h`, `rust/<rel>.rs` | `pqzh_set.rs` (generated from `set.toml` `[pqzh_preset]`) |
 | proof parameters | proof MLWE rank `kmlwe`, norm bounds, codegen shapes per relation | the Ligero preset: domain radices, code length n, message length k, query count t |
 | security measure | lattice estimator β ≥ 450 (MSIS, MLWE uSVP / dual_hybrid, `e-s1.txt`), norm-proof exactness and Fiat–Shamir rounds (`e-s0.txt`) | soundness bits of the preset (query and total soundness, `PQZH.md`; `n2304-kmax4096` preset B: 127.40 bits total) |
-| size limit | `MAX_PROOF` 98,304 B | `MAX_PROOF_PQZH` per set (`set.toml` `[pqzh_preset] max_proof`, in `rust/set.rs` for pqz-stmt): 262,144 B; `n2560-kmax16384` only: 327,680 B (owner 2026-10-23) |
+| size limit | `MAX_PROOF` 98,304 B | `MAX_PROOF_PQZH` per set (`set.toml` `[pqzh_preset] max_proof`, in `rust/set.rs` for pqz-stmt): 327,680 B at every PQZH set (owner 2026-10-23 for `n2560-kmax16384`, 2026-10-25 for `n2048-kmax1024` / `n2304-kmax4096`: the audited R_TXM M = 4 with the R0-1 groups; it was 262,144 B there) |
 
 **Not every set has PQZH.** Ligero's evaluation domains need q − 1 to be divisible by small radices, so whether PQZH
 exists at a set depends on q:
@@ -249,23 +249,28 @@ plan 5h Task 8d part 1 the node takes its precompile input limit from the librar
 in the table fits; the former node literal 393,216 did not fit the largest inputs of `n2304-kmax4096` (R_TXM M = 4) and
 `n2560-kmax16384` (R_TX, R_TXM M = 1, 2, 4).
 
-### proofSystemIds per set (plan 5h Task 8d part 1)
+### proofSystemIds per set (plan 5h Task 8d part 1; bumped by the R0 review fix 2026-10-25)
 
 The one `proofSystemId` bump of plan 5h Task 8 (B-1, A-2, `R_REG` and the new parameters; decisions CTR-PQZ-09 / D23)
-gives every set its own ids, so a proof of one set never verifies under another set's id. `set.toml` holds the labels
+gave every set its own ids, so a proof of one set never verifies under another set's id. The R0 review fix
+(2026-10-25, `pqz-core/research/code-review-2026-10-25/`: R0-1 the auditor copies' windows and the `s_aud` groups,
+R0-C2 `Bprime` 8, R0-C3 the eta-filtered final challenge) bumped every set once more: PQZL `…/v5`, PQZH `…/v3`; the
+Task 8d ids (PQZL v4, PQZH v2) are retired. `set.toml` holds the labels
 (`pqzl_id`, `pqzh_id`; a controller proposal, the owner may override), `gen_set.py` writes keccak256 of each into
 `pqz_set.h` (`PQZ_PROOF_SYSTEM_ID`, `PQZ_PQZH_ID`), `rust/set.rs` (`PQZL_ID` / `PQZH_ID` and the labels, read by
 `pqz-stmt` and the `pqzl` crate), `set.json` (`pqz_kat.py`) and `PqzSet.sol` (`PQZL_ID` / `PQZH_ID`). It checks that a
 label names its set (PQZL `d64k<k>-q<log2q>`, PQZH `fq<log2q>-n<n>k<k>t<t>` of `[pqzh_preset]`), that all ids of all
-sets differ and that none is retired (PQZL v2 `0x2e07e6ed…798c2f`, v3 `0x8079d65b…16baef`, PQZH v1 `0x0a47a768…2fead4`;
-`pqz-stmt` refuses them, test `retired_ids_refused`, and every vector set has a negative row per retired id).
+sets differ and that none is retired (`gen_set.py` RETIRED: PQZL v2 `0x2e07e6ed…798c2f`, v3 `0x8079d65b…16baef`, the
+four v4 of the table below's previous version, PQZH v1 `0x0a47a768…2fead4`, the three v2, the STARK backup's
+`0xaa1f92dd…284304`; `pqz-stmt` refuses them, test `retired_ids_refused` reads `stmt/src/sets.rs`' generated
+`RETIRED_IDS`, and every vector set has a negative row per retired id of its own: PQZL v2 / v3 / v4, PQZH v1 / v2).
 
 | Set | PQZL label → id | PQZH label → id |
 |---|---|---|
-| `n2048-kmax1024` | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4` → `0x19fad50a…9a326d` | `scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2` → `0x9d945089…a7dca4` |
-| `n2304-kmax4096` | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4` → `0x15d16d77…cb608a` | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2` → `0xe4bc6d17…885730` |
-| `n2560-kmax16384` | `scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4` → `0xa3db21fc…70262d` | `scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2` → `0xe83ad1da…109851` |
-| `n2816-kmax65536` | `scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4` → `0x9d23a0de…bd53a3` | — (no PQZH: pqz-stmt's `HAS_PQZH` false, its `PQZH_ID` the zero word, refused; plan 5h Task 8d part 1b) |
+| `n2048-kmax1024` | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5` → `0xc752e7f5…c6cdfe` (v4 `0x19fad50a…9a326d` retired) | `scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3` → `0x56293621…a7df5d` (v2 `0x9d945089…a7dca4` retired) |
+| `n2304-kmax4096` | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5` → `0xef1ffbcb…90336e` (v4 `0x15d16d77…cb608a` retired) | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3` → `0x046859a8…944ead` (v2 `0xe4bc6d17…885730` retired) |
+| `n2560-kmax16384` | `scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5` → `0xeacf34a3…276882` (v4 `0xa3db21fc…70262d` retired) | `scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3` → `0xc93f3bdd…3f3662` (v2 `0xe83ad1da…109851` retired) |
+| `n2816-kmax65536` | `scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5` → `0xa801f5c4…8e8aa9` (v4 `0x9d23a0de…bd53a3` retired) | — (no PQZH: pqz-stmt's `HAS_PQZH` false, its `PQZH_ID` the zero word, refused; plan 5h Task 8d part 1b) |
 
 **Changing a label (an owner override, or a later bump).** Edit the set's `pqzl_id` / `pqzh_id` in `set.toml`, then:
 `python3 -I pqz-core/params/sets/gen_set.py --all` (the generated files, `stmt/src/sets.rs`' `ALL_IDS`; at

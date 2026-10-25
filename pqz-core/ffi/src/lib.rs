@@ -169,7 +169,7 @@ pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut 
 }
 
 /// C ABI for the node: this build's precompile input limit, pqz-stmt's `MAX_INPUT` (the parameter set's `set.toml`
-/// `max_input`: 524,288 at `n2304-kmax4096` / `n2560-kmax16384`, 393,216 at `n2048-kmax1024`). The node reads it from
+/// `max_input`: 524,288 at every set since the R0 review fix; `n2048-kmax1024` had 393,216). The node reads it from
 /// the library it loads (`pqz_ffi.h`, Nethermind `PqzNative.MaxInput`; plan 5h Task 8d: no second literal), so its
 /// limit is always the one `pqz_precompile` reverts above.
 #[no_mangle]

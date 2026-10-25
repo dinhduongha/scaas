@@ -19,3 +19,71 @@ pqzl M1-on              proof  42771 B  prove+verify 1.83 s
 pqzh M1-on              proof 232046 B  prove+verify 1.41 s
 pqzl M2-on              proof  43575 B  prove+verify 1.52 s
 pqzh M2-on              proof 232366 B  prove+verify 1.44 s
+pqzl M4-on              proof  58319 B  prove+verify 6.56 s
+pqzh M4-on              proof 277036 B  prove+verify 2.04 s
+pqzl M8-on              proof  85126 B  prove+verify 6.63 s
+pqzl M1-off             proof  42401 B  prove+verify 1.40 s
+pqzh M1-off             proof 229640 B  prove+verify 1.39 s
+pqzl M2-off             proof  42940 B  prove+verify 3.71 s
+pqzh M2-off             proof 230306 B  prove+verify 1.42 s
+pqzl M4-off             proof  43935 B  prove+verify 3.47 s
+pqzh M4-off             proof 232494 B  prove+verify 1.42 s
+pqzl M8-off             proof  59005 B  prove+verify 2.71 s
+pqzl M2-off-two-real    proof  42889 B  prove+verify 2.36 s
+pqzh M2-off-two-real    proof 230658 B  prove+verify 1.44 s
+pqzl M4-off-decoys      proof  43932 B  prove+verify 2.17 s
+pqzh M4-off-decoys      proof 232206 B  prove+verify 1.46 s
+pqzl M8-on-boundary     proof  85167 B  prove+verify 7.49 s
+pqzl M8-on-boundary-leg3-auditor proof  29094 B
+pqzh M8-on-boundary-leg3-auditor proof 186554 B
+pqzl M8-on-boundary-leg4-auditor proof  29079 B
+pqzh M8-on-boundary-leg4-auditor proof 186328 B
+pqzl M4-on-leg2-auditor proof  29062 B
+pqzh M4-on-leg2-auditor proof 186810 B
+pqzl M8-on-boundary-leg4-receiver proof  29094 B
+pqzh M8-on-boundary-leg4-receiver proof 187096 B
+proofs: 80.0 s
+negative: 824 rows (511 decoder, 313 verifier): 118.4 s
+worst case: 131.1 s
+total: 140.4 s
+self-test proofs compiled into this binary differ from the REGISTER rows: rebuild, then --check
+wrote matrix.json 1051 B
+wrote cbd.json 4356 B
+wrote keygen.json 2986 B
+wrote enc.json 7897 B
+wrote statement_transfer.json 304699 B
+wrote statement_burn.json 102686 B
+wrote statement_refresh.json 102610 B
+wrote statement_register.json 34421 B
+wrote statement_disclose.json 203876 B
+wrote statement_transfer_multi.json 3296534 B
+wrote proof_pqzl.json 2569051 B
+wrote proof_pqzh.json 9058458 B
+wrote negative.json 281542 B
+wrote selftest.json 2356 B
+wrote worstcase_noise.json 3465113 B
+wrote fee0.json 2802165 B
+pqz-vectors: 16 files, 22239801 B
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024/release/pqz-vectors"
+	User time (seconds): 129.20
+	System time (seconds): 2.44
+	Percent of CPU this job got: 93%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:20.50
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 412100
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 987453
+	Voluntary context switches: 3157
+	Involuntary context switches: 12216
+	Swaps: 0
+	File system inputs: 24
+	File system outputs: 43536
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

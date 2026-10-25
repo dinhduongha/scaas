@@ -52,13 +52,13 @@ fn multi_limits_and_memo() {
         largest = largest.max(worst);
     }
     eprintln!("op 7 largest worst-case input {largest} B of MAX_INPUT {MAX_INPUT}");
-    // PQZH (4, on) padded to exactly MAX_INPUT (n2048-kmax1024: 5 + 132,992 + 260,219) decodes or fails ProofLength, so
-    // invalid; one byte more reverts (the set's MAX_INPUT, plan 5h Task 8c part 2)
+    // PQZH (4, on) padded to exactly MAX_INPUT (n2048-kmax1024: 5 + 149,376 + 374,907, G = 2 since the R0 review fix)
+    // decodes or fails ProofLength, so invalid; one byte more reverts (the set's MAX_INPUT, plan 5h Task 8c part 2)
     if PQZH {
         let h = honest().iter().find(|h| !h.pqzl() && h.multi == Some((4, true))).unwrap();
         let pad = |n: usize| stmt::input(7, &h.stmt, &[&h.proof[..], &vec![0; n - h.proof.len()]].concat());
         let room = MAX_INPUT - 5 - h.stmt.len();
-        assert!(stmt::SET != "n2048-kmax1024" || room == 260_219);
+        assert!(stmt::SET != "n2048-kmax1024" || room == 374_907);
         assert_eq!(pad(room).len(), MAX_INPUT);
         assert_eq!(precompile(&pad(room)), Ok(INVALID));
         assert_eq!(precompile(&pad(room + 1)), Err(Error::Revert));
@@ -251,7 +251,7 @@ fn header_matches() {
     assert!(!h.contains("#define PQZ_FFI_MAX_INPUT"));
     assert!(h.contains("size_t pqz_max_input (void);"));
     assert_eq!(pqz_ffi::pqz_max_input(), MAX_INPUT);
-    assert_eq!(MAX_INPUT, if stmt::SET == "n2048-kmax1024" { 393_216 } else { 524_288 });
+    assert_eq!(MAX_INPUT, 524_288); // every set since the R0 review fix (owner 2026-10-25; n2048-kmax1024 was 393,216)
     assert_eq!(def("PQZ_FFI_OUT_BYTES"), 32);
     assert!(h.contains("int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);"));
 }
