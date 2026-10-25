@@ -50,8 +50,38 @@ core are made only for confirmed findings, then the affected gate steps re-run (
 
 ## Results
 
-**Interim (2026-10-25; the Claude UltraCode pass is still running; nothing below is triaged yet except R0-1).** Raw
-outputs: `codex-R*.md`, `agy-R*.md` (local absolute paths stripped); the prompts `prompt-R*.txt`.
+**Consolidated 2026-10-25** (four reviewers done: Codex, agy, Claude UltraCode — 350 agents, three-vote refutation —
+and Fable on R0 as adjudicator). Raw outputs: `codex-R*.md`, `agy-R*.md`, `claude-R*.md`, `fable-R0.md`; prompts
+`prompt-R*.txt` (local absolute paths stripped). Severity = the adjudicated one.
+
+**Fix in the next proofSystemId bump (core change):**
+
+| Id | Sev. | Found by | Finding | Status / fix |
+|---|---|---|---|---|
+| R0-1 = R0-C1 = F-1 | **P1** | Codex, Claude, Fable (agy missed) | audited R_TXM: auditor copies of a group share `pk_a`, `r_g` and the coefficient → digit differences public | owner: direction 2, `s_aud` 2 / 3 / 4 / 4 — [R0-1 note](R0-1-auditor-shared-randomness.md); Fable: design sound, four required additions (below) |
+| R0-C2 = F-2 | **P2** | Claude, Fable | z4 bimodal rejection in R_REG / R_DR / R_DA sized with `Bprime = 1` (read as ℓ∞) while `s4 = s[0]` has ℓ2 ≈ 5.7 → z4 not D_σ4, slow leak of `s[0]` over many proofs of one key (R_DA repeats) | `Bprime = 8` (ℓ2 bound) in reg / dr specs, +96 B per proof; codegen assertion; same id bump |
+| R0-C3 = F-3 | P3 | Claude, Fable | the final challenge `c` is never filtered to ‖c‖ ≤ η = 140; ≥ 0.71 % fall outside the set the knowledge error is stated for (no attack) | resample `c` from (cseed, counter) until the η test passes, prover and all verifiers, same id bump — or re-derive B |
+| F-4 | P3 | Fable | the auditor UA as sender or as a recipient leg collides masks (before and after the R0-1 fix) | contract: refuse `fromUA == auditorUA` and `auditorUA ∈ legs` when `auditorOn` |
+
+**Required additions to the R0-1 fix (Fable):** (1) the auditor disclosure R_DR kind AUDITOR (R_DA) decrypts at
+coefficient `16·(j mod s_aud) + i` → the disclosure statement needs the offset (a new word or folded into `kind`):
+pqz-stmt, `PqzCore.disclosureStatement`, provers / verifiers, vectors; (2) the group map `g(j) = ⌊j / s_aud⌋` (auditor on)
+/ `⌊j / 4⌋` (off) everywhere (`pqz_rel.c` shapes, `pqz.h` `PQZ_TXM_GROUPS`, pqz-stmt, `PqzCore._legOf`, `cs.rs`, `sv.rs`,
+the Enc group seeds, the auditor's Dec) — new R_TXM shapes need codegen / e-s1 / e-s0 runs and `MAX_PROOF` checks;
+(3) state in SET.md / CTR-PQZ-04 that `s_aud` at n2304 rests on the dual_hybrid − offset heuristic with a 3-β margin;
+(4) F-4's contract rule.
+
+**Fix without an id bump (tooling, docs, robustness), triage in the fix brief:** R0-2 = R0-C7 = F-5 (e_s0 certifies a
+computed λ = 3, headers use 4), R0-C4 / F-6 (n2048 exception text: dual figure now measured), agy R0-a / F-7 (aprime
+specs lack `kmlwe_min`), R1-1 = R1-C7 (dead `lnp-quad-eval.c` without the `h` fix — remove or patch), R3-1 = R0-C15 =
+R3-C1 / R4-C5 (`fallback-retry` keeps the production id — own id or remove; pqz-ffi guard), R2-C3 (KeyGen without set
+separation), R1-C1 / R2-C2 (n2048 Power2Round edge), R1-C2 / R4-C1 / R4-C2 (C prover arena sized from n2048),
+R4-C3 (start-up does not check schedule ids against the library's ids), R4-C4 (no ML-DSA known-answer test at
+start-up), R2-C1 / R1-C12 (`LOG2Q ≤ 56` guard vs correctness up to 55), R2-C4 (`PACK_BITS` by float log2), R2-C8
+(e_s1 output overwritten on a failed run), and the remaining P3 / P4 documentation items of `claude-R*.md` / `agy-R*.md`
+(n2048-only constants in comments and the spec's serialization section, retired addresses in a README, etc.).
+
+Interim table (Codex + agy only, superseded by the above):
 
 | Id | Sev. | Source | Finding | Status |
 |---|---|---|---|---|
