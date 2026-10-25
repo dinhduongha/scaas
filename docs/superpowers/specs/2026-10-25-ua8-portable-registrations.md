@@ -1,7 +1,7 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
 **Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8). Nothing is built. Queued **after plan 5h,
-before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P8) are controller proposals; the owner may override them.
+before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P9) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
 that information and register it on another chain: a UA account does not depend on the chain (its transactions do).
@@ -24,9 +24,11 @@ The KEM keys likewise."
 **P1 — Portable proof of possession.** New digest without chain or registry:
 `portablePopDigest = keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)` under a new versioned tag
 (`PURPOSE_POP_V2`; `kemRecordHash` = the hash of the initial KEM record `(version, pk)` given in `register`, P2; each
-hash 0 when that attribute is absent). The
-signer's `pop` and the PQZ key's `R_REG` proof are made once, over `uaMessage(kind, POP_V2, portablePopDigest)`, and
-are valid on every chain. `register` accepts only this form (one rule; all chains are test-only, so the registries are
+hash 0 when that attribute is absent). The PQZ key's `R_REG` proof is made over
+`uaMessage(0x0142, POP_V2, portablePopDigest)`; the signer's `pop` over `uaMessage(kind, POP_V2,
+keccak256(portablePopDigest ‖ pqzPopHash))` (`pqzPopHash` = keccak256 of the `R_REG` proof, 0 when none is given): the
+proof is made first, then signed, so one signature also covers the proof (no cycle: the proof's own message does not
+contain its hash). Both are made once and valid on every chain. `register` accepts only this form (one rule; all chains are test-only, so the registries are
 redeployed with no migration).
 
 **P2 — One `register`, everything in one call; anyone may submit it.**
@@ -53,8 +55,7 @@ state and re-submit it elsewhere even when logs are gone (history expiry); the e
 [estimate, ≈ 1,530 state gas per byte]: `pop` 65 B (secp256k1) to 3,309 B (ML-DSA-65), ≈ 0.1–5 M; `pqzPop` (the
 `R_REG` proof, 28,080–35,420 B by set) ≈ 43–54 M; the PQZ key itself (16–22 KB) ≈ 25–35 M is stored already. A full
 PQ registration with a stored proof is then ≈ 75–95 M of state gas: more than a 60 M block, so on such a chain the
-proof is stored by a second call `storePqzPop(ua, pqzPop)` (anyone; checked where the PQZ verifier exists, else kept
-unchecked as in P8) — on chains with larger blocks (SCaaS testnet 200 M) one `register` holds everything. Later KEM versions come by
+proof is stored by a second call `storePqzPop` (P9) — on chains with larger blocks (SCaaS testnet 200 M) one `register` holds everything. Later KEM versions come by
 `setKemKey` (P7).
 
 **P3 — What must match.** The same kind must be enabled in the target registry's generation (a PQ kind needs its
@@ -142,6 +143,40 @@ On Ethereum the cost of a registration is then the signer's signature check (che
 gas for ML-DSA in Solidity) plus storage; when the UA is copied to a chain with PQZ, anyone attaches the `R_REG` proof
 and the key becomes proven.
 
+**P9 — The later writes, and their mtx forms (owner 2026-10-25: a relayer may pay, so every write has an `mtx*`
+form).** Besides `register`, two writes, each with a chain-independent signature that is **stored** with the data:
+
+```solidity
+function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
+// sig over uaMessage(kind, PURPOSE_KEM, keccak256(KEM_TAG ‖ ua ‖ version ‖ keccak256(kemPk)))     (P7)
+function storePqzPop(bytes32 ua, bytes calldata pqzPop, bytes calldata sig) external;
+// sig over uaMessage(kind, POP_V2, keccak256(portablePopDigest(ua) ‖ keccak256(pqzPop)))           (P1 form)
+```
+
+`storePqzPop` needs the signature (owner 2026-10-25): on a chain without the PQZ verifier the proof cannot be checked,
+and without a signature anyone could fill the UA's write-once `pqzPop` slot with garbage and spoil every later copy;
+where the verifier exists the proof is checked too (`proven = true`). An `msig` signs every record with its m-of-n
+members.
+
+**Anyone may submit the plain forms** (the submitter pays the gas). **The `mtx*` forms add the relayer's fee**, paid
+atomically from the UA's public ledger balance in a SCaaS token, with the token's existing UA meta-transfer:
+
+```solidity
+function mtxRegister(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+    bytes calldata pqzPop, IUALedger feeToken, MetaTxLib.UAMetaTransfer calldata pay, bytes calldata payAuth) external;
+function mtxSetKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig,
+    IUALedger feeToken, MetaTxLib.UAMetaTransfer calldata pay, bytes calldata payAuth) external;
+function mtxStorePqzPop(bytes32 ua, bytes calldata pqzPop, bytes calldata sig,
+    IUALedger feeToken, MetaTxLib.UAMetaTransfer calldata pay, bytes calldata payAuth) external;
+```
+
+Each runs the plain form, then `feeToken.uaExecuteTransfer(pay, payAuth)` with `pay.from == ua`, `pay.to` = the
+relayer the UA chose, `pay.value` = the fee, and `pay.entryRef` = the digest of this write (so the fee cannot be taken
+for anything else); the whole call reverts if either part fails. `pay` is chain-bound (the token's domain) and is
+not stored — only the portable signature is, since only it is needed to copy the write. A zero fee uses the plain
+form. In `mtxRegister` the UA is registered first and pays in the same call. Cost: two signature checks (the portable
+one and `payAuth`; ≈ 2 × 6–19 M gas for ML-DSA in Solidity on Ethereum).
+
 ## 3. Work (for the plan after 5h)
 
 1. `UAKinds` (`PURPOSE_POP_V2`, `portablePopDigest`), `UARegistry.register` on the portable digest, `pop` / `pqzPop`
@@ -152,6 +187,9 @@ and the key becomes proven.
 3. P7: `setKemKey` / `kemKeyOf` / `kemKeyAt`, the record digest (`UAKinds.recordDigest`), the 1,600-byte key check,
    write-once per version (any order), the event; forge tests (copy key records between two registries, a lower
    version after a higher one, a repeated version refused).
-4. Clients (`ua-rs`, `ua-cs`, `ua-qt`, JS) and vectors (`smartcontracts/vectors/ua/`: portable PoP rows, KEM
+4. P9: `setKemKey` / `storePqzPop` signatures, `mtxRegister` / `mtxSetKemKey` / `mtxStorePqzPop` with the fee
+   meta-transfer bound by `entryRef`; forge tests (fee paid atomically, a fee bound to another write refused, a
+   garbage `storePqzPop` without the UA's signature refused).
+5. Clients (`ua-rs`, `ua-cs`, `ua-qt`, JS) and vectors (`smartcontracts/vectors/ua/`: portable PoP rows, KEM
    key record rows); accounts.md, decisions entry; `pqz_reg_message` in the clients and the PQZ e2e scripts on the new digest (the
    `R_REG` relation, statement and precompile do not change — only the 32-byte message's pre-image).
