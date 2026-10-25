@@ -308,9 +308,12 @@ fn negative_rows_reject() {
     // set n2304-kmax4096: 367 (its proofs' last bytes give one coder-padding row fewer); n2560-kmax16384: 370.
     // The set's own ids (5h Task 8d part 1): + 16 "retired PQZL v3 proofSystemId" rows each, and the new proofs' last
     // bytes move the coder-padding rows: n2048-kmax1024 383 (- 1), n2304-kmax4096 384 (+ 1), n2560-kmax16384 384 (- 2)
+    // The R0 review fix (2026-10-25): + 16 "retired PQZL v4 proofSystemId" rows, + 4 kind-word rows (decoder Kind), + 6
+    // op 7 disclosure rows (3 auditor disclosures x {another window, window S_AUD}; the window-shift rows need
+    // S_AUD > 1); the coder-padding rows as the new proofs' last bytes give them
     let want = match pqzl::SET {
-        "n2048-kmax1024" => 383,
-        "n2304-kmax4096" => 384,
+        "n2048-kmax1024" => 409,
+        "n2304-kmax4096" => 410,
         "n2560-kmax16384" => 384,
         // full PQZL set since 5h Task 8d part 1b, PQZL only. Against n2560-kmax16384's 384: + 16 "retired PQZH v1
         // proofSystemId" rows on its PQZL inputs, + 1 coder-padding row ("coder padding bit 7 set after the final 1-bit",

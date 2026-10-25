@@ -186,7 +186,8 @@ pub fn negative_inputs() -> Vec<(String, Vec<u8>)> {
             continue;
         }
         let form = r["form"].as_str().unwrap();
-        let key = if form == "TRANSFER-MULTI" { r["case"].as_str().unwrap() } else { form };
+        // an op 7 row or an op 7 disclosure (R0-1) by its case, the other rows by their form
+        let key = r.get("case").and_then(Value::as_str).unwrap_or(form);
         let (mut op, mut s, mut p) = if form == "-" { (0, vec![], vec![]) } else { (op_of(form), st[key].clone(), proofs[key].clone()) };
         let (mut lenf, mut raw, mut size) = (None, None, None);
         for e in r["edits"].as_array().unwrap() {
