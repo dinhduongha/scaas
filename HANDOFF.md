@@ -1,3 +1,36 @@
+## Session 2026-10-25 (8d part 1b merged, testnet on pqz4, 8d part 2a built; UA-7 / UA-8 specs) — resume here
+
+**State:** main + this note. Shutdown ≈ 11:15 (owner). SDD ledger (git-ignored):
+`.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/` — `progress.md` (last lines = this
+session), `task-8d-report.md` ("Part 1", "Part 1b", "Part 2a — Result"), `task-8d2a-brief.md`, reviews `task-8d1-review.md`,
+`task-8d1b-review.md`.
+
+**Done today:**
+- **8d part 1b** (`n2816-kmax65536` a full PQZL set; no PQZH — reason in its SET.md / decisions, owner: no spike):
+  review → fix round → re-review approved; **merged into `pqz-16k`** (fast-forward `46069582`), pushed.
+- **SCaaS testnet (7622) runs `scaas/nethermind-pqz:2.2.0-pqz4`** (8d part 1 node, set `n2304-kmax4096`, provisional
+  rows × 1.3 until Task 9; reset on path B, no backup, owner-authorised); probe 398 ok / 0 FAIL. No PQZ contracts yet.
+- **8d part 2 split:** 2a (contracts correct at all four sets) / 2b (gas: `ROLL_MAX` per set, gas per relation per set,
+  R_TXM M = 8 under EIP-8037, calldata vs spec §12, README gas columns, e2e on the testnet).
+- **8d part 2a built** on branch **`pqz-8d2a`** (worktree `.claude/worktrees/pqz-8d2a`, from `46069582`): contracts read
+  `PqzSet` (committed `PqzSet.sol` = `n2304-kmax4096`), P46 packing generic in `PACK_BITS`, M7 `HAS_PQZH`, `PqzSafety`
+  ids / self-test / 32-bit addresses, `UAPqzVerifier` / Env / release roll-out, contract vectors per set, EVM Ligero
+  fixtures + `evm_fixtures` un-ignored, `e2e.py` per set, M2 foreign-id negative rows. Forge suite PASS at all four
+  sets; gates n2048 / n2304 PASS; n2560 / n2816 full gates stopped (owner: full gates only for core changes — memory
+  `full-gate-only-for-core`). **Next: review 2a → fix round → merge into `pqz-16k` → write the 2b brief → 2b.**
+- LaZer: comment posted on lazer#28 (B-1 / A-2 described, links only to commits on main); issue **lazer#31** filed
+  (D-2 / D-3).
+- Specs on main (owner decisions inside): **UA-7** `PqChat` (ML-KEM-1024 + X25519 only; sessions with KEM-wrapped AES
+  keys on chain; messages off chain via Matrix or stored on chain; ua-qt on libQuotient), **UA-8** portable
+  registrations (chain-independent PoP; one `register(kind, keyData, UAAttrs, pop, pqzPop)`; optional `R_REG` with a
+  `proven` flag; KEM key in `UARegistry` with signed versions in any order; everything stored in state; `mtx*` forms
+  with an optional fee). Order: 5h → **UA-8 before fs3 Task 13** → UA-7.
+
+**Branches:** `pqz-16k` head `008e196c` (one local docs commit not pushed: n2816 no-PQZH reason); `pqz-8d2a` (not
+merged, not pushed); `pqz-8d1` (merged, worktree removable).
+
+**Owner rules added today (memory):** push in batches (not after every edit); full gate only for core changes.
+
 ## Session 2026-10-23 (evening; 8b DONE, 8c part 2 half done) — resume here
 
 **State:** main `be0e102b` + this note. No agent, gate, capped job or background shell running (paused for the
