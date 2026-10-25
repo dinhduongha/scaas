@@ -161,9 +161,10 @@ for l in open(sys.argv[1]):
             print(j["rel"], j["proofs_fnv"])
 sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
-# pqz-stmt at the set; Ligero's tests at the set where it has PQZH (per-set target, plan 5h Task 8c part 2)
-cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --no-default-features --features "set-$PQZ_SET") &&
-  if [ "$PQZH" = True ]; then (cd pqzh/ligero && part cargo/ligero env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --features "set-$PQZ_SET"); else echo "Ligero: $NOPQZH"; fi; }
+# pqz-stmt at the set; Ligero's tests at the set where it has PQZH (per-set target, plan 5h Task 8c part 2);
+# --no-fail-fast: one failing test binary must not hide the others (R0 fix round I1)
+cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --no-fail-fast --no-default-features --features "set-$PQZ_SET") &&
+  if [ "$PQZH" = True ]; then (cd pqzh/ligero && part cargo/ligero env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --no-fail-fast --features "set-$PQZ_SET"); else echo "Ligero: $NOPQZH"; fi; }
 # PQZH cross-checks: the STARK backup's (R_REG / R_TX, Plonky3 crate: n2048-kmax1024 only) and Ligero's (all six forms
 # and pqz_kat.py's statement rebuild, at the set)
 xcheck() { if [ "$PQZ_SET" = $V3 ]; then part xcheck/stark pqzh/xcheck/run.sh || return 1; fi; part xcheck/ligero pqzh/xcheck/ligero.sh; }

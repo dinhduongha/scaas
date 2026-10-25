@@ -1,0 +1,38 @@
+# forge test --match-path 'test/pqzh/ligero/*' (n2048-kmax1024 EVM fixtures, PQZH v3 id; R0 fix round I1), 37d2971f, forge Version: 1.8.5
+No files changed, compilation skipped
+
+Ran 1 test for test/pqzh/ligero/LigeroUnits.t.sol:LigeroUnitsTest
+[PASS] test_units() (gas: 29754964)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 259.84ms (238.34ms CPU time)
+
+Ran 26 tests for test/pqzh/ligero/LigeroTest.t.sol:LigeroTest
+[PASS] test_cross_form_tx_tx0() (gas: 8736589)
+[PASS] test_gas_reg_conj() (gas: 79417400)
+[PASS] test_gas_reg_johnson() (gas: 447792066)
+[PASS] test_gas_reg_proven() (gas: 367271389)
+[PASS] test_gas_tx0_proven() (gas: 570835756)
+[PASS] test_gas_tx_conj() (gas: 198472808)
+[PASS] test_gas_tx_johnson() (gas: 705506654)
+[PASS] test_gas_tx_proven() (gas: 585305963)
+[PASS] test_mutations_reg_conj() (gas: 992310840)
+[PASS] test_mutations_reg_johnson() (gas: 2922579693)
+[PASS] test_mutations_reg_proven() (gas: 2709922305)
+[PASS] test_mutations_tx0_proven() (gas: 3675130896)
+[PASS] test_mutations_tx_conj() (gas: 1861168033)
+[PASS] test_mutations_tx_johnson() (gas: 4155206888)
+[PASS] test_mutations_tx_proven() (gas: 3795078952)
+[PASS] test_negative_witnesses() (gas: 628599101)
+[PASS] test_other_reg_conj() (gas: 65707825)
+[PASS] test_other_reg_johnson() (gas: 411007613)
+[PASS] test_other_reg_proven() (gas: 326011568)
+[PASS] test_other_tx0_proven() (gas: 517192320)
+[PASS] test_other_tx_conj() (gas: 178248617)
+[PASS] test_other_tx_johnson() (gas: 653727998)
+[PASS] test_other_tx_proven() (gas: 531489673)
+[PASS] test_stmt_and_length_reg() (gas: 332704685)
+[PASS] test_stmt_and_length_tx() (gas: 549680849)
+[PASS] test_stmt_and_length_tx0() (gas: 533341943)
+Suite result: ok. 26 passed; 0 failed; 0 skipped; finished in 12.80s (91.20s CPU time)
+
+Ran 2 test suites in 12.81s (13.06s CPU time): 27 tests passed, 0 failed, 0 skipped (27 total tests)
+rc=0
