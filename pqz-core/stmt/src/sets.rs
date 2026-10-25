@@ -18,11 +18,26 @@ pub const SETS: &[&str] = &["n2048-kmax1024", "n2304-kmax4096", "n2560-kmax16384
 /// every set's proofSystemIds (set, system, id; core_only sets too): the tests refuse each other set's
 #[cfg(test)]
 pub(crate) const ALL_IDS: &[(&str, &str, Word)] = &[
-    ("n2048-kmax1024", "pqzl", hex32("19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d")),
-    ("n2048-kmax1024", "pqzh", hex32("9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4")),
-    ("n2304-kmax4096", "pqzl", hex32("15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a")),
-    ("n2304-kmax4096", "pqzh", hex32("e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730")),
-    ("n2560-kmax16384", "pqzl", hex32("a3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d")),
-    ("n2560-kmax16384", "pqzh", hex32("e83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851")),
-    ("n2816-kmax65536", "pqzl", hex32("9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3")),
+    ("n2048-kmax1024", "pqzl", hex32("c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe")),
+    ("n2048-kmax1024", "pqzh", hex32("56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d")),
+    ("n2304-kmax4096", "pqzl", hex32("ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e")),
+    ("n2304-kmax4096", "pqzh", hex32("046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead")),
+    ("n2560-kmax16384", "pqzl", hex32("eacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882")),
+    ("n2560-kmax16384", "pqzh", hex32("c93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662")),
+    ("n2816-kmax65536", "pqzl", hex32("a801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9")),
+];
+/// the retired ids (gen_set.py RETIRED, decisions CTR-PQZ-09; label, id): the tests refuse each
+#[cfg(test)]
+pub(crate) const RETIRED_IDS: &[(&str, Word)] = &[
+    ("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2", hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f")),
+    ("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3", hex32("8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef")),
+    ("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1", hex32("0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4")),
+    ("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1", hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304")),
+    ("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4", hex32("19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d")),
+    ("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4", hex32("15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a")),
+    ("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4", hex32("a3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d")),
+    ("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4", hex32("9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3")),
+    ("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2", hex32("9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4")),
+    ("scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2", hex32("e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730")),
+    ("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2", hex32("e83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851")),
 ];

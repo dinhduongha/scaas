@@ -545,7 +545,10 @@ def wiring():
         f"/// the sets this crate builds for (set.toml without core_only)\npub const SETS: &[&str] = &[{', '.join(repr(s).replace(chr(39), chr(34)) for s in rs)}];\n"
         "/// every set's proofSystemIds (set, system, id; core_only sets too): the tests refuse each other set's\n"
         "#[cfg(test)]\npub(crate) const ALL_IDS: &[(&str, &str, Word)] = &[\n"
-        + "".join(f'    ("{s}", "{k}", hex32("{h.hex()}")),\n' for s in ss for k, (_, h) in ids(s).items()) + "];\n")
+        + "".join(f'    ("{s}", "{k}", hex32("{h.hex()}")),\n' for s in ss for k, (_, h) in ids(s).items()) + "];\n"
+        "/// the retired ids (gen_set.py RETIRED, decisions CTR-PQZ-09; label, id): the tests refuse each\n"
+        "#[cfg(test)]\npub(crate) const RETIRED_IDS: &[(&str, Word)] = &[\n"
+        + "".join(f'    ("{lab}", hex32("{h}")),\n' for lab, h in RETIRED.items() if h) + "];\n")
     return out
 
 

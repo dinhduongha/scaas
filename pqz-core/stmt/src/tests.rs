@@ -105,7 +105,7 @@ fn lengths_and_constants() {
         assert_eq!(Form::Transfer0.wit_len(), 12_384);
         assert_eq!(Form::Transfer.wit_len(), 12_416);
         assert_eq!((BUNDLE_BYTES, BUNDLE0_BYTES), (16_688, 16_560));
-        assert_eq!(5 + Form::Transfer.stmt_len() + MAX_PROOF_PQZH, 345_221);
+        assert_eq!(5 + Form::Transfer.stmt_len() + MAX_PROOF_PQZH, 410_757);
     }
     assert!(345_221 <= MAX_INPUT);
     assert_eq!(max_proof(&PQZL_ID), Some(98_304));
@@ -113,7 +113,7 @@ fn lengths_and_constants() {
     // there PQZH_ID is the zero word, refused
     assert_eq!(HAS_PQZH, SET != "n2816-kmax65536");
     if HAS_PQZH {
-        assert_eq!(max_proof(&PQZH_ID), Some(if SET == "n2560-kmax16384" { 327_680 } else { 262_144 }));
+        assert_eq!(max_proof(&PQZH_ID), Some(327_680)); // every PQZH set since the R0 review fix (owner 2026-10-25)
     } else {
         assert_eq!((PQZH_ID, MAX_PROOF_PQZH, PQZH_LABEL), ([0; 32], 0, ""));
         assert_eq!(max_proof(&PQZH_ID), None);
@@ -122,20 +122,20 @@ fn lengths_and_constants() {
         assert_eq!(parse(OP_REGISTER, &rg).err(), Some(Reject::ProofSystemId));
         assert_eq!(parse_multi(&build_multi(&PQZH_ID, 1, true, 0)).err(), Some(Reject::ProofSystemId));
     }
-    assert_eq!(MAX_INPUT, if SET == "n2048-kmax1024" { 393_216 } else { 524_288 });
+    assert_eq!(MAX_INPUT, 524_288); // every set since the R0 review fix (owner 2026-10-25; n2048-kmax1024 was 393,216)
     assert_eq!(max_proof(&[0; 32]), None);
-    for id in RETIRED {
+    assert_eq!(RETIRED_IDS.len(), 11); // PQZL v2, v3, the four v4; PQZH v1, the three v2; the STARK backup's
+    for id in retired() {
         assert_eq!(max_proof(&id), None);
     }
 }
 
-/// the retired ids (decisions CTR-PQZ-09: PQZL v2, forgeable, lazer#28 / F9; PQZL v3 and PQZH v1, replaced by the per-set
-/// ids of plan 5h Task 8d) are unknown ids: refused by every parser, never this set's
-const RETIRED: [Word; 3] = [
-    hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f"),
-    hex32("8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"),
-    hex32("0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"),
-];
+/// the retired ids (gen_set.py RETIRED, decisions CTR-PQZ-09: PQZL v2, forgeable, lazer#28 / F9; PQZL v3 and PQZH v1;
+/// the per-set PQZL v4 / PQZH v2 of plan 5h Task 8d, retired by the R0 review fix; the STARK backup's) are unknown ids:
+/// refused by every parser, never this set's
+fn retired() -> impl Iterator<Item = Word> {
+    RETIRED_IDS.iter().map(|r| r.1)
+}
 
 /// a proof of one set never verifies under another set's id (plan 5h Task 8d): every other set's ids (gen_set.py's
 /// `ALL_IDS`, from every set.toml) are unknown ids at this set, refused like the retired ones (review 8d1 M6)
@@ -161,8 +161,8 @@ fn other_sets_ids_refused() {
 #[test]
 fn retired_ids_refused() {
     let o = objs();
-    assert!(!RETIRED.contains(&PQZL_ID) && !RETIRED.contains(&PQZH_ID) && PQZL_ID != PQZH_ID);
-    for id in RETIRED {
+    assert!(!retired().any(|r| r == PQZL_ID || r == PQZH_ID) && PQZL_ID != PQZH_ID);
+    for id in retired() {
         for f in FORMS {
             assert_eq!(parse(f.op(), &build(f, &o, &id)).err(), Some(Reject::ProofSystemId), "{f:?}");
         }
@@ -230,6 +230,8 @@ fn every_d15_r6_rule_rejects() {
     let bu = build(Form::Burn, &o, &PQZL_ID);
     let rf = build(Form::Refresh, &o, &ID2);
     let ds = build(Form::DiscloseSender, &o, &PQZL_ID);
+    let dr = build(Form::DiscloseReceiver, &o, &ID2);
+    let da = build(Form::DiscloseAuditor, &o, &PQZL_ID);
     let rg = build(Form::Register, &o, &ID2);
     let cases: Vec<(&str, u8, Vec<u8>, Reject)> = vec![
         ("coefficient = q", 1, with(&t, 640, &Q.to_be_bytes()), Reject::Coefficient),
@@ -242,6 +244,13 @@ fn every_d15_r6_rule_rejects() {
         ("fee = 2^64", 1, with(&t, 256 + 23, &[1]), Reject::Fee),
         ("burn amount >= 2^64", 2, with(&bu, 288 + 5, &[0x80]), Reject::Amount),
         ("disclosure amount >= 2^64", 4, with(&ds, 224, &[1]), Reject::Amount),
+        // kind = OpeningKind + 256 w (R0-1): w = 0 for SENDER_S / RECEIVER_X, w < S_AUD for AUDITOR, the word < 2^16
+        ("SENDER_S kind window 1", 4, with(&ds, 256 + 30, &[1]), Reject::Kind),
+        ("RECEIVER_X kind window 1", 5, with(&dr, 256 + 30, &[1]), Reject::Kind),
+        ("AUDITOR kind window S_AUD", 5, with(&da, 256 + 30, &[S_AUD as u8]), Reject::Kind),
+        ("AUDITOR kind window 255", 5, with(&da, 256 + 30, &[0xff]), Reject::Kind),
+        ("kind word >= 2^16", 5, with(&da, 256 + 29, &[1]), Reject::Kind),
+        ("kind word >= 2^64", 4, with(&ds, 256, &[1]), Reject::Kind),
         ("transfer amount >= 2^64 (decoder stricter than R_TX)", 1, with(&t, 288, &[1]), Reject::Amount),
         ("salt word top byte set", 1, with(&t, 576, &[1]), Reject::Salt),
         ("salt word byte 15 set (R_TX0)", 1, with(&t0, 591, &[0x80]), Reject::Salt),
@@ -270,7 +279,7 @@ fn every_d15_r6_rule_rejects() {
         ("REFRESH tag under op 1", 1, with(&t, 0, &Form::Refresh.op_tag()), Reject::OpTag),
         ("AUDITOR tag under op 4", 4, with(&ds, 0, &Form::DiscloseAuditor.op_tag()), Reject::OpTag),
         ("unknown proofSystemId", 1, with(&t, 32, &[0; 32]), Reject::ProofSystemId),
-        ("retired STARK id", 3, with(&rg, 32, &[0xaa; 32]), Reject::ProofSystemId),
+        ("retired STARK id", 3, with(&rg, 32, &RETIRED_IDS.iter().find(|r| r.0.contains("stark")).unwrap().1), Reject::ProofSystemId),
         ("unknown op 0", 0, t.clone(), Reject::Op),
         ("op 1 statement under op 7", 7, t.clone(), Reject::OpTag),
         ("unknown op 8", 8, t.clone(), Reject::Op),
@@ -281,6 +290,10 @@ fn every_d15_r6_rule_rejects() {
         assert_eq!(parse(op, &b).err(), Some(want), "{what}");
     }
     assert_eq!(parse(6, &[]), Ok(Stmt::SelfTest));
+    // the AUDITOR windows below S_AUD are accepted (R0-1)
+    for w in 0..S_AUD {
+        assert!(parse(5, &with(&da, 256 + 30, &[w as u8])).is_ok(), "AUDITOR window {w}");
+    }
 }
 
 #[test]
@@ -377,7 +390,7 @@ fn coefficient_codec() {
 
 /// A valid op 7 statement: M keys / legs, G groups, auditor on / off, the given fee.
 fn build_multi(id: &Word, m: usize, aud: bool, fee: u64) -> Vec<u8> {
-    let g = groups(m);
+    let g = groups(m, aud);
     let (pks, us, vs, v_as) =
         (poly_bytes(m * K * D, 11), poly_bytes(g * K * D, 12), poly_bytes(16 * m, 13), poly_bytes(16 * m, 14));
     let (pk_f, pk_a, t, v_f) = (poly_bytes(K * D, 1), poly_bytes(K * D, 3), poly_bytes(K * D + 16, 4), poly_bytes(16, 7));
@@ -402,22 +415,24 @@ fn build_multi(id: &Word, m: usize, aud: bool, fee: u64) -> Vec<u8> {
 
 #[test]
 fn multi_lengths_and_sets() {
+    // n2048-kmax1024 (S_AUD = 2): the audited lengths with ceil(M / 2) groups (R0-1)
     let want = [
         (1, 83_072, 66_560),
         (2, 99_712, 83_072),
-        (4, 132_992, 116_096),
-        (8, 215_936, 198_528),
-        (16, 381_824, 363_392),
+        (4, 149_376, 116_096),
+        (8, 248_704, 198_528),
+        (16, 447_360, 363_392),
     ];
     for (m, on, off) in want {
         if SET == "n2048-kmax1024" {
             assert_eq!((multi_len(m, true), multi_len(m, false)), (on, off), "M = {m}");
         }
         let (pk, v) = (PK_BYTES, V_BYTES);
-        assert_eq!(multi_len(m, true), 640 + 3 * pk + 2 * v + (pk + 2 * v) * m + pk * groups(m));
-        assert_eq!(multi_len(m, false), 640 + 2 * pk + 2 * v + (pk + v) * m + pk * groups(m));
+        assert_eq!(multi_len(m, true), 640 + 3 * pk + 2 * v + (pk + 2 * v) * m + pk * m.div_ceil(S_AUD));
+        assert_eq!(multi_len(m, false), 640 + 2 * pk + 2 * v + (pk + v) * m + pk * m.div_ceil(4));
     }
-    assert_eq!([1, 2, 4, 5, 8, 9, 16].map(groups), [1, 1, 1, 2, 2, 3, 4]);
+    assert_eq!([1, 2, 4, 5, 8, 9, 16].map(|m| groups(m, false)), [1, 1, 1, 2, 2, 3, 4]);
+    assert_eq!([1, 2, 3, 4, 8].map(|m| groups(m, true)), [1, 2, 3, 4, 8].map(|m: usize| m.div_ceil(S_AUD)));
     // M = 1 has op 1's lengths (F6); the lengths of the union of built sets are distinct except (M = 1, on) =
     // (M = 2, off), whose object counts are equal: the header's M and auditorOn words pick the shape (R4 as built)
     assert_eq!((multi_len(1, true), multi_len(1, false)), (Form::Transfer.stmt_len(), Form::Transfer0.stmt_len()));
@@ -431,22 +446,17 @@ fn multi_lengths_and_sets() {
     #[cfg(not(feature = "oversize"))]
     assert_eq!((built_legs(&PQZL_ID), built_legs(&PQZH_ID)), (&[1, 2, 4, 8][..], if HAS_PQZH { &[1, 2, 4][..] } else { &[][..] }));
     assert!(built_legs(&[0; 32]).is_empty());
-    // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT, except at n2048-kmax1024 PQZH
-    // (4, on): 5 + 132,992 + 262,144 = 395,141 > 393,216 (a PQZH proof over 260,219 B makes that input exceed MAX_INPUT;
-    // Ligero's exact bound there is 236,196). The other sets' MAX_INPUT 512 KiB holds every shape (largest: n2560-kmax16384
-    // PQZH (4, on), 5 + 165,760 + 327,680 = 493,445; plan 5h Task 8c part 2; n2816-kmax65536, PQZL only: (8, on),
-    // 5 + 295,808 + 98,304 = 394,117)
+    // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT (owner 2026-10-25, the R0 review
+    // fix: MAX_INPUT 512 KiB and MAX_PROOF_PQZH 320 KiB at every PQZH set; the largest PQZH input 5 + 165,760 + 327,680
+    // = 493,445 at n2560-kmax16384 (4, on), n2304-kmax4096 (4, on) with G = 2: 5 + 167,808 + 327,680 = 495,493;
+    // n2816-kmax65536, PQZL only: (8, on), 5 + 295,808 + 98,304 = 394,117)
     #[cfg(not(feature = "oversize"))]
     for id in ids() {
         for aud in [true, false] {
             for &m in built_legs(&id) {
-                let fits = 5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT;
-                assert_eq!(fits, !(SET == "n2048-kmax1024" && id == PQZH_ID && m == 4 && aud), "M = {m}, A = {aud}");
+                assert!(5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT, "M = {m}, A = {aud}");
             }
         }
-    }
-    if SET == "n2048-kmax1024" {
-        assert_eq!(MAX_INPUT - 5 - multi_len(4, true), 260_219);
     }
     assert_eq!(OP_TAG_TRANSFER_MULTI[..4], [0x6f, 0x6a, 0x77, 0x3a]);
 }
@@ -460,7 +470,7 @@ fn multi_round_trip_every_built_shape_fee_0() {
                     let b = build_multi(&id, m, aud, fee);
                     assert_eq!(b.len(), multi_len(m, aud));
                     let s = parse_multi(&b).unwrap_or_else(|e| panic!("M = {m}, A = {aud}: {e:?}"));
-                    let g = groups(m);
+                    let g = groups(m, aud);
                     assert_eq!((s.m, s.pk_a.is_some(), s.fee(), s.groups()), (m, aud, fee, g));
                     assert_eq!(s.encode().unwrap(), b, "encode(parse(x)) != x, M = {m}, A = {aud}");
                     // §4 offsets
@@ -587,14 +597,14 @@ fn multi_every_rule_rejects() {
     }
     // op 7 bytes under op 1 and op 1 bytes under op 7: OpTag both ways
     assert_eq!(parse(OP_TRANSFER, &l).err(), Some(Reject::OpTag));
-    // PQZH (4, on) at n2048-kmax1024: a proof of MAX_INPUT − 5 − 132,992 = 260,219 B is exactly MAX_INPUT; one byte more
-    // is Input. Every other set (MAX_INPUT 512 KiB): MAX_PROOF_PQZH fits, one byte more is ProofLength (n2816-kmax65536,
-    // no PQZH: the same with PQZL's MAX_PROOF_PQZL)
+    // PQZH (4, on): MAX_PROOF_PQZH fits within MAX_INPUT 512 KiB at every set, one byte more is ProofLength
+    // (n2816-kmax65536, no PQZH: the same with PQZL's MAX_PROOF_PQZL); n2048-kmax1024 had Input below 393,216 until the
+    // R0 review fix
     let h4 = build_multi(&ID2, 4, true, 0);
     let mp = max_proof(&ID2).unwrap();
-    let room = MAX_INPUT - 5 - multi_len(4, true); // v3: 260,219
+    let room = MAX_INPUT - 5 - multi_len(4, true);
     let (fit, over) = if room <= mp { (room, Reject::Input) } else { (mp, Reject::ProofLength) };
-    assert_eq!(room <= mp, SET == "n2048-kmax1024");
+    assert!(room > mp);
     assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit])).is_ok());
     assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit + 1])).err(), Some(over));
     // an op 1 statement under op 7's decoder

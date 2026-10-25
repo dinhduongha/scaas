@@ -81,7 +81,10 @@ pub const H_CHAIN_UID: usize = 16;
 pub const H_ENVELOPE: usize = 17;
 pub const H_SALT: usize = 18;
 pub const H_MEMO_HASH: usize = 19;
-/// §7.9 disclosure words: opTag, proofSystemId, chainId, chainUid, token, registry, entryRef, amount, kind
+/// §7.9 disclosure words: opTag, proofSystemId, chainId, chainUid, token, registry, entryRef, amount, kind. `kind` =
+/// OpeningKind + 256 w (owner 2026-10-25, R0-1): w the window of the disclosed v — 0 for SENDER_S / RECEIVER_X, the
+/// auditor copy's j mod S_AUD for AUDITOR (the auditor's v of R_TXM leg j sits at coefficients [16 w, 16 w + 16) of
+/// pk_a^T r_g); the relations read w, the low byte is hashed only
 pub const DISC_WORDS: usize = 9;
 pub const DW_AMOUNT: usize = 7;
 pub const DW_KIND: usize = 8;
@@ -113,10 +116,11 @@ const fn nib(c: u8) -> u8 {
     }
 }
 
-/// PQZL's id at this set: keccak256 of set.toml's `pqzl_id` (gen_set.py, rust/set.rs; plan 5h Task 8d, the one bump of
-/// Task 8: `.../mlwe-d64k<k>-q<log2q>l4/v4`, one id per set, CTR-PQZ-09 / D23). The retired ids — PQZL v2
-/// `0x2e07e6ed…798c2f` (forgeable, F9 path B), v3 `0x8079d65b…16baef`, PQZH v1 `0x0a47a768…2fead4` — and every other
-/// set's ids are unknown ids here (`Reject::ProofSystemId`).
+/// PQZL's id at this set: keccak256 of set.toml's `pqzl_id` (gen_set.py, rust/set.rs; one id per set, CTR-PQZ-09 / D23;
+/// `.../mlwe-d64k<k>-q<log2q>l4/v5` since the R0 review fix, 2026-10-25). The retired ids (gen_set.py RETIRED: PQZL v2
+/// `0x2e07e6ed…798c2f`, forgeable, F9 path B; v3 `0x8079d65b…16baef`; the per-set v4 of plan 5h Task 8d; PQZH v1
+/// `0x0a47a768…2fead4`, the per-set v2, the STARK backup's) and every other set's ids are unknown ids here
+/// (`Reject::ProofSystemId`).
 pub const PQZL_ID: Word = set::PQZL_ID;
 /// the string `PQZL_ID` hashes (a test of pqzh-ligero recomputes the keccak256)
 pub const PQZL_LABEL: &str = set::PQZL_LABEL;
@@ -124,7 +128,7 @@ pub const PQZL_LABEL: &str = set::PQZL_LABEL;
 /// its q − 1). Without it this codec knows no PQZH id: `PQZH_ID` is the zero word and refused like any unknown id
 /// (`Reject::ProofSystemId`)
 pub const HAS_PQZH: bool = set::PQZH;
-/// PQZH's id at this set: keccak256 of set.toml's `pqzh_id` (`.../ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v2`);
+/// PQZH's id at this set: keccak256 of set.toml's `pqzh_id` (`.../ligero-fq<log2q>-n<n>k<k>t<t>-keccak256-zk-proven/v3`);
 /// the zero word at a set without PQZH (`HAS_PQZH`), never accepted there
 pub const PQZH_ID: Word = set::PQZH_ID;
 /// the string `PQZH_ID` hashes
@@ -264,6 +268,9 @@ pub enum Reject {
     Opening,
     /// op 7: the `M` word is not one of the id's built leg counts
     Legs,
+    /// disclosure: the `kind` word is not `OpeningKind + 256 w` with w = 0 (SENDER_S, RECEIVER_X) or w < S_AUD
+    /// (AUDITOR), R0-1
+    Kind,
 }
 
 /// The header words the contract always writes as 0 for a debit form, in header order (§7.7: `toUA` 0 for burn /
@@ -563,6 +570,11 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             if word_u64(&words[DW_AMOUNT]).is_none() {
                 return Err(Reject::Amount);
             }
+            // kind = OpeningKind + 256 w < 2^16: w = 0 but for AUDITOR, w < S_AUD there (R0-1)
+            let wmax = if form == Form::DiscloseAuditor { S_AUD } else { 1 };
+            if !matches!(word_u64(&words[DW_KIND]), Some(k) if k >> 16 == 0 && ((k >> 8) as usize) < wmax) {
+                return Err(Reject::Kind);
+            }
             let body = &stmt[32 * DISC_WORDS..];
             if !coeffs_ok(body) {
                 return Err(Reject::Coefficient);
@@ -627,10 +639,16 @@ pub const OP_TAG_TRANSFER_MULTI: Word = hex32("6f6a773a4c94af3a446a226ef43f6f540
 pub const H_RECIPIENTS_HASH: usize = H_TO;
 /// op 7 header: word 320 (op 1's `recipient`) = `M`
 pub const H_LEGS: usize = H_RECIPIENT;
-/// Legs per randomness group `(r_g, e1_g, u_g)`, with or without the auditor (P6-ANON D4; S1's DDGR20 run,
-/// `params/anon/hints-anon.txt`: 4 legs + the auditor's copies = 80 perfect hints give β 446.0 in the worst case,
-/// owner-accepted on 2026-10-15 as above Kyber-512's 406, an exception to CTR-PQZ-03's 450 margin)
+/// Legs per randomness group `(r_g, e1_g, u_g)` without the auditor (P6-ANON D4)
 pub const LEGS_PER_GROUP: usize = 4;
+/// Legs per randomness group with the auditor (set.toml `s_aud`; owner 2026-10-25, R0-1 direction 2: the auditor copy
+/// of leg j uses the window j mod S_AUD of pk_a^T r_g, and a group of S_AUD legs gives 32 S_AUD worst-case hints:
+/// `pqzl/params/anon/hints-s.txt`)
+pub const S_AUD: usize = set::S_AUD;
+/// legs per group: [`S_AUD`] with the auditor, [`LEGS_PER_GROUP`] without
+pub const fn legs_per_group(aud: bool) -> usize {
+    if aud { S_AUD } else { LEGS_PER_GROUP }
+}
 
 /// The leg counts op 7 accepts for `id`, with or without the auditor (P6-ANON D3 / D20: PQZL {1, 2, 4, 8}, PQZH
 /// {1, 2, 4}); feature `oversize` (bench only, never in the precompile build: pqz-ffi refuses it) adds M = 8, 16 for
@@ -653,17 +671,17 @@ pub fn built_legs(id: &Word) -> &'static [usize] {
 /// the precompile)
 pub const OVERSIZE: bool = cfg!(feature = "oversize");
 
-/// `G = ⌈M / 4⌉`; leg j is in group `⌊j / 4⌋`
-pub const fn groups(m: usize) -> usize {
-    m.div_ceil(LEGS_PER_GROUP)
+/// `G = ⌈M / s⌉`, s = [`legs_per_group`]`(aud)`; leg j is in group `⌊j / s⌋`, its auditor copy at window `j mod s`
+pub const fn groups(m: usize, aud: bool) -> usize {
+    m.div_ceil(legs_per_group(aud))
 }
 
-/// Op 7 statement bytes, one value per `(M, A)` except `multi_len(1, true) == multi_len(2, false)` = 83,072:
-/// 640 ‖ `pk_f ‖ pk_0…pk_{M−1} ‖ [pk_a] ‖ T ‖ u_0…u_{G−1} ‖ v_0…v_{M−1} ‖ v_f ‖ [v_{a,0}…v_{a,M−1}]`
-/// = 50,048 + 16,640·M + 16,384·⌈M/4⌉ (auditor on) / 33,664 + 16,512·M + 16,384·⌈M/4⌉ (off).
+/// Op 7 statement bytes, one value per `(M, A)` except `multi_len(1, true) == multi_len(2, false)` (the same object
+/// counts): 640 ‖ `pk_f ‖ pk_0…pk_{M−1} ‖ [pk_a] ‖ T ‖ u_0…u_{G−1} ‖ v_0…v_{M−1} ‖ v_f ‖ [v_{a,0}…v_{a,M−1}]`,
+/// G = [`groups`]`(M, aud)`.
 pub const fn multi_len(m: usize, aud: bool) -> usize {
     let a = aud as usize;
-    HEADER_BYTES + (1 + m + a) * PK_BYTES + CT_BYTES + groups(m) * PK_BYTES + (m + 1 + a * m) * V_BYTES
+    HEADER_BYTES + (1 + m + a) * PK_BYTES + CT_BYTES + groups(m, aud) * PK_BYTES + (m + 1 + a * m) * V_BYTES
 }
 
 /// `R_TXM` (op 7): header ‖ `pk_f ‖ pks ‖ [pk_a] ‖ T ‖ us ‖ vs ‖ v_f ‖ [v_as]`; the per-leg / per-group objects are
@@ -699,7 +717,7 @@ impl<'a> Multi<'a> {
         h
     }
     pub fn groups(&self) -> usize {
-        groups(self.m)
+        groups(self.m, self.pk_a.is_some())
     }
     pub fn fee(&self) -> u64 {
         word_u64(&self.header[H_FEE]).unwrap_or(u64::MAX)
@@ -726,7 +744,7 @@ impl<'a> Multi<'a> {
             (self.pks.len(), m * PK_BYTES),
             (self.pk_a.map_or(0, <[u8]>::len), aud as usize * PK_BYTES),
             (self.t.len(), CT_BYTES),
-            (self.us.len(), groups(m) * PK_BYTES),
+            (self.us.len(), groups(m, aud) * PK_BYTES),
             (self.vs.len(), m * V_BYTES),
             (self.v_f.len(), V_BYTES),
             (self.v_as.map_or(0, <[u8]>::len), aud as usize * m * V_BYTES),
@@ -812,7 +830,7 @@ pub fn parse_multi(stmt: &[u8]) -> Result<Multi<'_>, Reject> {
     let pks = take(m * PK_BYTES);
     let pk_a = if aud { Some(take(PK_BYTES)) } else { None };
     let t = take(CT_BYTES);
-    let us = take(groups(m) * PK_BYTES);
+    let us = take(groups(m, aud) * PK_BYTES);
     let vs = take(m * V_BYTES);
     let v_f = take(V_BYTES);
     let v_as = if aud { Some(take(m * V_BYTES)) } else { None };
