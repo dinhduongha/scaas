@@ -29,17 +29,17 @@ pays its gas, and the UA pays the relayer a fee (which may be 0) the same way as
 the `MetaTokenBase` pattern). Upgrades by a new release, as for the other application contracts.
 
 **C2 — The KEM key: one per UA first, the same on every chain.** The UA signs a **chain-independent** record
-`kemRecord = (ua, version, pk)` (`pk` empty = revoked; the digest has no chain id and no registry / contract address,
-UA-8 §2); `setKemKey(ua, version, pk, sig)` stores it on any chain where `PqChat` is deployed, submitted by **anyone**
+`kemRecord = (ua, version, pk)` (the digest has no chain id and no registry / contract address, UA-8 P4); `setKemKey(ua, version, pk, sig)` stores it on any chain where `PqChat` is deployed, submitted by **anyone**
 (the submitter pays the gas; through mtx when a relayer charges the UA a fee): the contract checks the signature
 against the UA's key in that chain's `UARegistry` and requires `version` > the stored one. So a key set on Ethereum
-can be copied to any other chain by anyone, and a rotation or revocation likewise (owner 2026-10-25: "UA accounts do
+can be copied to any other chain by anyone, and a newer key likewise (owner 2026-10-25: "UA accounts do
 not depend on the chain; the KEM keys too"). `keyId` = `version`. **One
 scheme only: ML-KEM-1024 + X25519** (owner 2026-10-25: the default and the only one): the X-Wing combiner with
 ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF construction of the CFRG hybrid-KEM draft; pk
 1,600 B, ciphertext 1,600 B, shared secret 32 B; secure while either part holds. The contract accepts only 1,600-byte
-keys. A replaced or revoked
-key gets no new session keys; it stays readable for history. **Several keys per UA (one per device) later** (owner
+keys. **No revocation** (owner 2026-10-25: what is on chain cannot be withdrawn): a replaced key gets no new on-chain
+session keys on that chain (C3 checks the current version), but it stays public and anyone can still encrypt to it
+off chain or where the newer record has not been copied (UA-8 P5). The balance (PQZ) key never changes. **Several keys per UA (one per device) later** (owner
 2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `mtxAddKemKey` later
 changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
 kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
@@ -55,7 +55,7 @@ kek      = HKDF-SHA-256(ss, "scaas/pqchat/v1/wrap" ‖ chainId ‖ PqChat ‖ se
 wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // 1,648 B
 ```
 
-A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
+The contract requires one wrap per member, naming that member's **current** `keyId` on this chain (C2). A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
 group chat are the same thing (a group has more members).
 
 **C4 — Epochs (new AES key).** `mtxRekey(member, sessionId, members[], wraps[])` by any member writes epoch + 1 with a new `K`.
@@ -126,8 +126,8 @@ fork of NeoChat / Quaternion / Nheko.
 **C8 — What the on-chain key store does not give.** Everything on chain is public forever. Whoever obtains a member's
 KEM secret key later — or breaks ML-KEM-1024 and X25519 one day — can open every session key wrapped to that key, and
 with the stored (C6b) or captured Matrix ciphertexts the chat history of those epochs ("harvest now, decrypt later"). There is no forward secrecy beyond what
-C4 provides. Mitigations in this design: the hybrid ML-KEM-1024 + X25519, frequent rekeys, revoking and replacing device keys
-(C2), deleting old secret keys on the devices. A chat that needs full forward secrecy should add an off-chain ratchet
+C4 provides. Mitigations in this design: the hybrid ML-KEM-1024 + X25519, frequent rekeys, replacing the KEM key
+(C2; it does not withdraw the old one), deleting old secret keys on the devices. A chat that needs full forward secrecy should add an off-chain ratchet
 on top (later, not in this design).
 
 **C9 — Libraries (no precompile, no crypto in the contract).** The contract only stores and checks shapes / sizes /

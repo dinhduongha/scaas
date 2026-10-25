@@ -38,17 +38,21 @@ verifier there; a PQZ key needs `UAPqzVerifier` and the PQZ precompile of the sa
 reverts like any registration of a disabled kind). `msig` UAs: the structure is key data, so the id and the members'
 PoP are portable the same way (members sign `uaMessage(MSIG, POP_V2, portablePopDigest)`).
 
-**P4 — Mutable attributes travel as signed, versioned records.** Anything a UA may change after registration (UA-7's
-KEM key today) is a record `(ua, version, value)` signed by the UA over a chain-independent digest
-`uaMessage(kind, purpose, keccak256(tag ‖ ua ‖ version ‖ keccak256(value)))`, stored by anyone on any chain, accepted
-only with `version` > the stored one. Revocation is a record with an empty value. Immutable attributes (the PQZ key,
-UA-6) need no version: they are part of the registration.
+**P4 — Only the chat (KEM) key changes; the balance key never does.** The PQZ key (balance encryption, UA-6) is
+immutable: part of the registration, set once and copied unchanged to every chain (owner 2026-10-25). The only
+attribute a UA may change is UA-7's KEM (chat) key: a new key is a record `(ua, version, pk)` signed by the UA over a
+chain-independent digest `uaMessage(kind, purpose, keccak256(tag ‖ ua ‖ version ‖ keccak256(pk)))`, stored by anyone
+on any chain, accepted only with `version` > the stored one. **There is no revocation** (owner 2026-10-25): a key
+that has been on chain stays public forever and cannot be withdrawn; a newer version only says which key is current.
 
-**P5 — Staleness (stated, not solved).** A chain holds whatever records someone copied to it: a rotation or a
-revocation done on Ethereum reaches chain X only when someone submits it there. Clients therefore read a UA's record
-on the chain they use **and** on its home chain when they know one, and use the highest version; the UA (or a relayer
-service it pays) propagates revocations to every chain it uses. Copying an *older* record is refused by the version
-check, so nobody can roll a chain back below what it already has.
+**P5 — What the version does and does not do (stated, not solved).** It orders the keys: on a chain, the contract
+uses the highest version it holds for new on-chain sessions (UA-7 C3 checks that each wrap names the member's current
+version on that chain). It does **not** stop anyone from encrypting to an older key: the old public key stays on
+every chain where it was stored, and a sender can use it off chain, or on a chain where nobody has copied the newer
+record yet. A new key reaches chain X only when someone submits it there. So: honest clients use the highest version
+they can see (the chain they use and the UA's home chain when known); the recipient's client shows a warning for
+anything wrapped to an older key; and if an old secret key may have leaked, the UA must assume that anything sent to
+that key — before or after the change — can be read.
 
 **P6 — Unchanged.** UA ids, key data, `keyHash` and `_keyOwner` uniqueness (per chain), the per-chain generations and
 kind caps, write authorization (chain-bound), ML-DSA expanded-key caches (per chain, rebuilt on registration).
