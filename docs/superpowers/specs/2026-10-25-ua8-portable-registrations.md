@@ -30,8 +30,21 @@ are valid on every chain. `register` accepts only this form (one rule; all chain
 redeployed with no migration).
 
 **P2 — One `register`, everything in one call; anyone may submit it.**
-`register(kind, keyData, pop, pqzKey, pqzPop, kemVersion, kemPk)` registers the UA **with its attributes** in one
-transaction (owner 2026-10-25: not two steps); the proofs may be empty (P8). It stays permissionless: the submitter
+
+```solidity
+struct UAAttrs { bytes pqzKey; uint64 kemVersion; bytes kemPk; }   // empty = absent
+
+function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs,
+    bytes calldata pop,      // required: the signer's signature over portablePopDigest(ua, pqzKeyHash, kemRecordHash)
+    bytes calldata pqzPop)   // optional: the R_REG proof; given and the PQZ verifier present => proven
+    external returns (bytes32 ua);
+```
+
+registers the UA **with its attributes** in one transaction (owner 2026-10-25: not two steps; this form approved the
+same day). `keyData` is the identity (it alone defines the UA id, so it never holds the attributes: a PQZ key inside
+it would make the same signing key two UAs, and a new KEM version would change the id); `attrs` are the keys
+attached to the UA; `pop` is the consent over identity and attributes; `pqzPop` (a zero-knowledge proof about a
+different key, the PQZ one, made by a different proof system) is optional (P8). It stays permissionless: the submitter
 pays the gas. Copying a UA to another chain = sending the same fields to that chain's registry; a client or a relayer
 service can do it for any UA it sees on another chain. Today the registry stores `keyData` and the PQZ key (SSTORE2)
 but not `pop` / `pqzPop`; **UA-8 stores every `register` field in contract state** (owner 2026-10-25: "store all of
