@@ -20,6 +20,6 @@ nbin = 0
 n = [36, 36]
 B = [38, 173]
 
-# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (s[0], in [-1, 1]).
+# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (s[0]: 64 coefficients in [-1, 1], l2 <= 8).
 nprime = 1
-Bprime = 1
+Bprime = 8

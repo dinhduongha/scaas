@@ -5,11 +5,13 @@ n = 2304
 k_max = 4096
 q = 61275424977257                # 2^45.80, q = 9 mod 16, q - 1 divisible by 2^3 * 19 * 43 * 431
 pqz_delta = 1.00366               # e-s1.txt: every spec meets MSIS beta >= 450
+s_aud = 3                         # legs per randomness group of an audited R_TXM (owner 2026-10-25, R0-1 direction 2: the hint study
+                                  # pqzl/params/anon/hints-s.txt, 32 s_aud worst-case hints); without the auditor groups of 4
 kmlwe_min = 36                    # e-s1.txt: hiding MLWE uSVP and dual_hybrid beta >= 450
 pqzh = true                       # PQZH (Ligero over this q) is built for this set
 max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (decisions 2026-10-20 O8, 2026-10-21 (7); the node reads it, pqz_max_input())
-pqzl_id = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4"   # PQZL proofSystemId = keccak256(label) (plan 5h Task 8d, the one bump: controller proposal, owner may override)
-pqzh_id = "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2"   # PQZH proofSystemId (the same bump; field and [pqzh_preset] named)
+pqzl_id = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5"   # PQZL proofSystemId = keccak256(label) (R0 review fix 2026-10-25: R0-1 auditor windows, R0-C2 Bprime, R0-C3 challenge filter; v4 retired)
+pqzh_id = "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3"   # PQZH proofSystemId (the same bump, R0-1 auditor windows; v2 retired; field and [pqzh_preset] named)
 
 [pqzh_preset]                     # PQZH's Ligero preset: gen_set.py writes pqzh_set.rs (+ q - 1's factors, generator, non-square)
 description = "preset B (owner 2026-10-22), the radices 7 and 17 of this q - 1, so that every debit proof bound is below MAX_PROOF_PQZH (THE preset's were 263,784-265,236 B; fallbacks in ./pqzh_set_fallback.rs, docs/research/pqzh-set-a-proof-limit.md); t = 120 is one above the preset search's minimum 119, so the total soundness stays above THE preset's 127.23 bits"
@@ -17,7 +19,7 @@ radices = [2, 7, 17, 19, 43, 431] # FFT radices, each dividing q - 1
 n = 45752                         # code length (on the coset 3 H_n)
 k = 952                           # message length (H_k)
 t = 120                           # column queries
-max_proof = 262144                # MAX_PROOF_PQZH (B): the precompile's and the prover's proof limit
+max_proof = 327680                # MAX_PROOF_PQZH (B), 320 KiB (owner 2026-10-25, as n2560-kmax16384: R0-1 audited R_TXM M = 4 with G = 2 above 262,144)
 
 [approval]
 date = "2026-10-21"

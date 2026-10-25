@@ -22,6 +22,7 @@
  "beta_s": 42,
  "beta_e": 189,
  "beta_2": 64,
+ "s_aud": 4,
  "zeta": 7116548313613552,
  "iroot": 10509716668589144,
  "zeta3": 11869929050165375,
@@ -56,6 +57,6 @@
  },
  "max_proof_pqzh": 0,
  "max_input": 524288,
- "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4",
- "pqzl_id": "9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3"
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5",
+ "pqzl_id": "a801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9"
 }

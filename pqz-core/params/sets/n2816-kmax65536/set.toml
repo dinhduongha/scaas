@@ -6,13 +6,15 @@ n = 2816
 k_max = 65536
 q = 18014398509481657             # 2^54 - 327 (aprime/aprime.sage budget)
 pqz_delta = 1.00366               # e-s1.txt
+s_aud = 4                         # legs per randomness group of an audited R_TXM (owner 2026-10-25, R0-1 direction 2: the hint study
+                                  # pqzl/params/anon/hints-s.txt, 32 s_aud worst-case hints); without the auditor groups of 4
 kmlwe_min = 42                    # e-s1.txt: dual_hybrid 462 / 463 at 42; 41 (aprime/proof-aprime.txt, uSVP only)
                                   # gives dual_hybrid 447 / 448 < 450 (make.sh e_s1 stop, 2026-10-23; 8b report)
 core_only = false                 # owner 2026-10-24: pqz-stmt, precompile, vectors, gate (contracts in plan 5h Task 8d part 2)
 pqzh = false                      # owner 2026-10-24: no PQZH. q - 1 = 2^3 * 3 * 1,789 * 419,563,967,521: smooth part 24, none of the
                                   # current Ligero radices; a radix-1,789 preset (subgroups 1,789 / 42,936) is unexplored, not in scope
 max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (the other sets' ruling); largest input 5 + 295,808 + 98,304 = 394,117
-pqzl_id = "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4"   # PQZL proofSystemId = keccak256(label) (plan 5h Task 8d, the one bump: controller proposal, owner may override)
+pqzl_id = "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5"   # PQZL proofSystemId = keccak256(label) (R0 review fix 2026-10-25: R0-1 auditor windows, R0-C2 Bprime, R0-C3 challenge filter; v4 retired)
 
 [approval]
 date = "2026-10-24"

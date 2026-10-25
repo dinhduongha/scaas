@@ -20,6 +20,6 @@ nbin = 0
 n = [40, 40, 1]
 B = [40, 182, 64]
 
-# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (e2_t, |coefficients| <= 20 < 64).
+# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (e2_t, |coefficients| <= 20, l2 <= 64 (its exact-l2 block)).
 nprime = 1
 Bprime = 64

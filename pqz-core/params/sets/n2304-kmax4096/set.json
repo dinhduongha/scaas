@@ -22,6 +22,7 @@
  "beta_s": 38,
  "beta_e": 173,
  "beta_2": 64,
+ "s_aud": 3,
  "zeta": 21683259334335,
  "iroot": 26738786277572,
  "zeta3": 54577927353337,
@@ -54,12 +55,12 @@
   "bundle": 18736,
   "bundle0": 18608
  },
- "max_proof_pqzh": 262144,
+ "max_proof_pqzh": 327680,
  "max_input": 524288,
- "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4",
- "pqzl_id": "15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a",
- "pqzh_label": "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2",
- "pqzh_id": "e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730",
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5",
+ "pqzl_id": "ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e",
+ "pqzh_label": "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3",
+ "pqzh_id": "046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead",
  "pqzh_preset": {
   "radices": [
    2,

@@ -16,6 +16,7 @@
 #define PQZ_BETA_S 42 /* ||s||, ||r|| bound (CBD(1)) */
 #define PQZ_BETA_E 189 /* ||e||, ||e1|| bound (CBD(20)) */
 #define PQZ_BETA_2 64 /* ||e2_j|| bound (16 coefficients) */
+#define PQZ_S_AUD 4 /* legs per randomness group of an audited R_TXM (auditor copy of leg j at window j mod S_AUD) */
 #define PQZ_ZETA 7116548313613552ULL /* 5^((q - 1) / 8), a primitive 8th root of unity */
 #define PQZ_IROOT 10509716668589144ULL /* zeta^2 */
 #define PQZ_ZETA3 11869929050165375ULL /* zeta^3 */
@@ -27,7 +28,7 @@
 #define PQZ_BARX 112 /* Barrett input range: x < 2^BARX = 2^(2 log2q + 4) > 16 q^2 (a basemul column sum) */
 #define PQZ_MUX 288230376151716976ULL /* floor(2^BARX / q) < 2^(log2q + 5) */
 #define PQZ_SV_NP 5 /* 30-bit CRT primes of the specialised verifier (pqz_sv.c): P / 2 above its largest sum */
-/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4"): the cores only hash it */
-#define PQZ_PROOF_SYSTEM_ID { 0x9d, 0x23, 0xa0, 0xde, 0x64, 0x03, 0xd1, 0xa3, 0x7a, 0xef, 0xcf, 0x61, 0x82, 0x1f, 0xcf, 0xb4, 0x6d, 0xc5, 0x30, 0x21, 0xd1, 0x2a, 0x92, 0x32, 0x46, 0x7b, 0x57, 0x0a, 0xc3, 0xbd, 0x53, 0xa3 }
+/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5"): the cores only hash it */
+#define PQZ_PROOF_SYSTEM_ID { 0xa8, 0x01, 0xf5, 0xc4, 0x69, 0x7a, 0x35, 0xa8, 0x8b, 0x90, 0xa2, 0x82, 0x49, 0xd7, 0x3c, 0xf2, 0xe1, 0x63, 0x4d, 0x88, 0x75, 0xbf, 0x1a, 0x5f, 0x6a, 0xf6, 0xc2, 0x83, 0xac, 0x8e, 0x8a, 0xa9 }
 
 #endif

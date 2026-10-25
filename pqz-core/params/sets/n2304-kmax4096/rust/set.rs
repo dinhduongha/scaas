@@ -27,6 +27,8 @@ pub(crate) const BETA_S: usize = 38;
 pub(crate) const BETA_E: usize = 173;
 /// ||e2_j|| bound (16 coefficients)
 pub(crate) const BETA_2: usize = 64;
+/// legs per randomness group of an audited R_TXM (auditor copy of leg j at window j mod S_AUD)
+pub(crate) const S_AUD: usize = 3;
 /// 3^((q - 1) / 8), a primitive 8th root of unity
 pub(crate) const ZETA: u64 = 21_683_259_334_335;
 /// zeta^2
@@ -50,17 +52,17 @@ pub(crate) const MUX: u64 = 1_292_984_300_699_190;
 /// 30-bit CRT primes of the specialised verifier (pqz_sv.c): P / 2 above its largest sum
 pub(crate) const SV_NP: usize = 4;
 /// MAX_PROOF(PQZH id): the precompile's and the PQZH prover's proof limit (set.toml [pqzh_preset] max_proof)
-pub(crate) const MAX_PROOF_PQZH: usize = 262_144;
+pub(crate) const MAX_PROOF_PQZH: usize = 327_680;
 /// MAX_INPUT: the precompile input limit of pqz-stmt (set.toml max_input)
 pub(crate) const MAX_INPUT: usize = 524_288;
 /// whether this set has PQZH (set.toml pqzh): without it pqz-stmt knows no PQZH id (PQZH_ID below is the zero
 /// word, never accepted) and pqz-ffi has no PQZH build
 pub(crate) const PQZH: bool = true;
 /// PQZL's proofSystemId label (set.toml pqzl_id)
-pub(crate) const PQZL_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4";
+pub(crate) const PQZL_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5";
 /// PQZL's proofSystemId: keccak256(PQZL_LABEL)
-pub(crate) const PQZL_ID: [u8; 32] = [0x15, 0xd1, 0x6d, 0x77, 0x5b, 0xae, 0xd2, 0x37, 0x4e, 0x6e, 0x41, 0xfd, 0x15, 0x3e, 0xb6, 0xd0, 0xcf, 0xc7, 0x5b, 0x3b, 0x59, 0xa7, 0x05, 0x79, 0x43, 0xbe, 0x23, 0x38, 0xe0, 0xcb, 0x60, 0x8a];
+pub(crate) const PQZL_ID: [u8; 32] = [0xef, 0x1f, 0xfb, 0xcb, 0xd0, 0x53, 0x94, 0xf8, 0x27, 0x6e, 0x50, 0xa6, 0xc2, 0x54, 0x02, 0x2e, 0xdf, 0x53, 0xbb, 0xd0, 0x8a, 0x56, 0xe2, 0x2a, 0xad, 0xdd, 0xac, 0x2b, 0x9b, 0x90, 0x33, 0x6e];
 /// PQZH's proofSystemId label (set.toml pqzh_id)
-pub(crate) const PQZH_LABEL: &str = "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2";
+pub(crate) const PQZH_LABEL: &str = "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3";
 /// PQZH's proofSystemId: keccak256(PQZH_LABEL)
-pub(crate) const PQZH_ID: [u8; 32] = [0xe4, 0xbc, 0x6d, 0x17, 0xac, 0x13, 0x95, 0x67, 0x01, 0x58, 0xd1, 0x49, 0xb0, 0x18, 0x98, 0x47, 0x6e, 0xa3, 0x2f, 0xfa, 0x48, 0x2c, 0xe3, 0xf4, 0xc3, 0xf4, 0x95, 0xd6, 0xb9, 0x88, 0x57, 0x30];
+pub(crate) const PQZH_ID: [u8; 32] = [0x04, 0x68, 0x59, 0xa8, 0x59, 0x2a, 0x38, 0xd3, 0x74, 0x19, 0x5f, 0x4c, 0xdd, 0xc1, 0x02, 0xff, 0x54, 0x65, 0x6c, 0x6e, 0x14, 0xc6, 0xdc, 0xfa, 0x2e, 0xea, 0xfd, 0x27, 0x24, 0x94, 0x4e, 0xad];

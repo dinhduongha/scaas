@@ -87,6 +87,12 @@ RETIRED = {"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1": None,
            "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",
            "scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
            "scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1": "aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304"}
+# the per-set ids of plan 5h Task 8d (PQZL v4, PQZH v2), retired by the R0 review fix (2026-10-25: R0-1 / R0-C2 / R0-C3)
+RETIRED |= {lab: keccak256(lab.encode()).hex() for lab in (
+    "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4", "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4", "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4",
+    "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4", "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2",
+    "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2",
+    "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2")}
 
 
 def ids(name):
@@ -139,6 +145,11 @@ def consts(name):
     assert b["ok"] and q % 16 == 9, f"{name}: the §4.3 budget fails or q != 9 mod 16"
     L = (q - 1).bit_length()                  # the ring's log2q (LaZer codegen: ceil(log2(q - 1)))
     assert 2**(L - 1) < q < 2**L
+    # the specialised verifiers' int64 JL fold sums 256 terms in [0, q) and pqz_modq_i64 takes |x| <= q 2^(63 - L): both
+    # need 256 q < 2^63, i.e. L <= 55 (review R2-C1 / R1-C12; pqz_sv.c and sv.rs assert the same)
+    assert L <= 55, f"{name}: log2 q = {L} > 55 (the SV's JL fold / modq_i64 bound)"
+    s_aud = t["s_aud"]
+    assert 1 <= s_aud <= 4, f"{name}: s_aud {s_aud} (one pk_a^T r_g of 64 coefficients holds at most 4 windows of 16)"
     # g: the smallest quadratic non-residue >= 3, so zeta = g^((q - 1) / 8) has order 8 (g^((q - 1) / 2) = -1); 3 for
     # n2048-kmax1024, n2304-kmax4096 and n2560-kmax16384, 5 for n2816-kmax65536 (q = 2^54 - 327: 3 is a residue). Any
     # primitive 8th root gives the same ring arithmetic: the NTT is internal to the cores (2026-10-22, 8b item 6)
@@ -153,6 +164,9 @@ def consts(name):
     # n2304-kmax4096, 68 at n2816-kmax65536, pqz_sv.c asserts <= 128), 2^9 for c: < 2^(2L + 22);
     # NP primes near 2^30 hold |x| < P / 2 ~ 2^(30 NP - 1)
     sv_np = next(m for m in range(4, 8) if 30 * m - 1 > 2 * L + 22 + 1)
+    # pqz_sv.c / sv.rs: (SVPR + SVBIN) * 64 * 512 <= 2^22 (review R2-C6): SVPR <= 33 + the binary polys of R_TXM M = 8
+    tx_bits = 64 + 16 * mbits + 15 * (mbits - 3) + 16 * ebits + 64 * 8
+    assert (34 + -(-tx_bits // 64)) * 64 * 512 <= 1 << 22, f"{name}: the SV evaluation sum bound"
     c = [("SET_NAME", None, f'"{name}"', "the set's name"),
          ("K", b["k"], None, "polys per key / ciphertext vector u"), ("N", n, None, "ring dimension n = k d"),
          ("Q", q, None, "the modulus (prime, q = 9 mod 16)"), ("LOG2Q", L, None, "ceil(log2(q - 1)): coder / urandom width of a value mod q, A expansion"),
@@ -162,6 +176,7 @@ def consts(name):
          ("EBITS", ebits, None, f"e_T,i + 2^{ebits - 1} and e'_i + 2^{ebits - 1} (|e| < E = 2^{ebits - 1})"),
          ("BETA_S", b["bs"], None, "||s||, ||r|| bound (CBD(1))"), ("BETA_E", b["be"], None, "||e||, ||e1|| bound (CBD(20))"),
          ("BETA_2", 64, None, "||e2_j|| bound (16 coefficients)"),
+         ("S_AUD", s_aud, None, "legs per randomness group of an audited R_TXM (auditor copy of leg j at window j mod S_AUD)"),
          ("ZETA", z, None, f"{g}^((q - 1) / 8), a primitive 8th root of unity"), ("IROOT", i, None, "zeta^2"),
          ("ZETA3", z3, None, "zeta^3"), ("INV2", inv(2), None, "1/2"), ("INVZ", inv(z), None, "1/zeta"),
          ("INVI", inv(i), None, "1/zeta^2"), ("INVZ3", inv(z3), None, "1/zeta^3"),
@@ -307,7 +322,10 @@ def specs(name):
     kml = f"kmlwe_min = {t['kmlwe_min']}\n" if "kmlwe_min" in t else ""
     out = {}
 
-    def spec(rel, what, ks, Bs, e2, bits, bprime, filler):
+    def spec(rel, what, ks, Bs, e2, bits, bprime, filler, l2):
+        # LaZer's codegen reads Bprime as the l2 bound alpha4 of the filler (stdev4 = gamma4 sqrt(337) alpha4; bimodal z4
+        # is exact only for ||R' s4|| <= sqrt(337) alpha4): it must bound the filler's l2 norm (review R0-C2)
+        assert bprime >= l2, f"{name} {rel}: Bprime {bprime} below the filler's l2 bound {l2}"
         nbin = math.ceil(bits / 64) if bits else 0
         m1 = len(ks) * k + e2 + nbin
         alpha = " + ".join(x for x in (f"{len(ks) // 2} * ({blk})" if len(ks) > 2 else blk,
@@ -324,28 +342,30 @@ def specs(name):
     def debit(G):
         return [k] * (2 + 2 * G), [bs, be] * (1 + G)
 
-    spec("reg", f"R_REG pk = A s + e; s1 = s, e ({k} polys each)", [k, k], [bs, be], 0, 0, 1, "s[0], in [-1, 1]")
+    s0 = "s[0]: 64 coefficients in [-1, 1], l2 <= 8"
+    e20 = "|coefficients| <= 20, l2 <= 64 (its exact-l2 block)"
+    spec("reg", f"R_REG pk = A s + e; s1 = s, e ({k} polys each)", [k, k], [bs, be], 0, 0, 8, s0, 8)
     ks, Bs = debit(1)
     spec("tx", f"R_TX: s_f, e_f, r, e1 ({k} polys each), e2_t, e2_f, e2_a; {tx_bits} bits (d 64, d' 64, M 16x{m}, "
-         f"c 15x{m - 3}, e_T 16x{eb})", ks, Bs, 3, tx_bits, 64, "e2_t, |coefficients| <= 20 < 64")
-    spec("tx0", f"R_TX0 (auditor off): R_TX without e2_a; {tx_bits} bits", ks, Bs, 2, tx_bits, 64,
-         "e2_t, |coefficients| <= 20 < 64")
+         f"c 15x{m - 3}, e_T 16x{eb})", ks, Bs, 3, tx_bits, 64, "e2_t, " + e20, 64)
+    spec("tx0", f"R_TX0 (auditor off): R_TX without e2_a; {tx_bits} bits", ks, Bs, 2, tx_bits, 64, "e2_t, " + e20, 64)
     spec("burn", f"R_BURN / REFRESH: s_f, e_f, r, e1, e2_f; {tx_bits - 64} bits (d public)", ks, Bs, 1, tx_bits - 64,
-         64, "e2_f, |coefficients| <= 20 < 64")
-    spec("ds", f"R_DS: s1 = r, e1 ({k} polys each), e2_t", [k, k], [bs, be], 1, 0, 64, "e2_t, |coefficients| <= 20 < 64")
+         64, "e2_f, " + e20, 64)
+    spec("ds", f"R_DS: s1 = r, e1 ({k} polys each), e2_t", [k, k], [bs, be], 1, 0, 64, "e2_t, " + e20, 64)
     spec("dr", f"R_DR: s1 = s, e ({k} polys each), e'_i + 2^{eb - 1} in {eb} bits ({16 * eb} bits)", [k, k], [bs, be], 0,
-         16 * eb, 1, "s[0], in [-1, 1]")
+         16 * eb, 8, s0, 8)
     for M in (2, 4, 8, 16):
-        G = (M + 3) // 4
         bits = tx_bits - 64 + 64 * M
-        ks, Bs = debit(G)
         for aud in (1, 0):
+            sg = t["s_aud"] if aud else 4  # owner 2026-10-25: s_aud legs per group with the auditor, 4 without
+            G = -(-M // sg)
+            ks, Bs = debit(G)
             e2 = M + 1 + aud * M
             rel = f"txm{M}" + ("" if aud else "0")
-            what = (f"R_TXM M = {M}, G = {G} randomness group(s) of <= 4 legs, auditor {'on' if aud else 'off'}: s_f, "
+            what = (f"R_TXM M = {M}, G = {G} randomness group(s) of <= {sg} legs, auditor {'on' if aud else 'off'}: s_f, "
                     f"e_f, (r_g, e1_g) x {G}, e2_j, e2_f" + (", e2_{a,j}" if aud else "") +
                     f"; {e2} e2 blocks, {bits} bits" + ("; OVERSIZE (bench builds only, -DPQZ_TXM_OVERSIZE)" if M == 16 else ""))
-            spec(rel, what, ks, Bs, e2, bits, 64, "e2_0, the first leg's noise, |coefficients| <= 20 < 64")
+            spec(rel, what, ks, Bs, e2, bits, 64, "e2_0, the first leg's noise, " + e20, 64)
     return out
 
 
@@ -366,7 +386,7 @@ def json_text(name):
     j = {"set": name, "description": t["description"], "approval": t["approval"], "core_only": t.get("core_only", False),
          "pqzh": t.get("pqzh", False), "pqz_delta": t["pqz_delta"], "kmlwe_min": t.get("kmlwe_min"), "d": 64} | c | {
         "e": 2**(c["ebits"] - 1), "b_fresh": 2 * c["beta_e"] * c["beta_s"] + c["beta_2"],
-        "pack_bits": math.ceil(math.log2(t["q"])), "lengths": lengths(c["k"])}
+        "pack_bits": pack_bits(t["q"]), "lengths": lengths(c["k"])}
     if not t.get("core_only"):
         j["max_proof_pqzh"], j["max_input"] = limits(name)
     for sys_, (lab, h) in ids(name).items():
@@ -391,6 +411,8 @@ def sol_vectors(name):
         return z, z, z
     rd = lambda f: json.load(open(os.path.join(d, f), encoding="utf-8"))  # noqa: E731
     st = bytes.fromhex(rd("statement_register.json")["rows"][0]["stmt"])
+    if st[32:64] != ids(name)["pqzl"][1]:
+        return z, z, z  # the vectors are another id's (an id bump before `make.sh <set> vectors`): no hashes yet
     out = [bytes.fromhex(rd("selftest.json")["hash"])]
     for sys_ in ("pqzl", "pqzh"):
         if sys_ not in ids(name):
@@ -399,15 +421,22 @@ def sol_vectors(name):
         row = rd(f"proof_{sys_}.json")["rows"][4]
         assert row["form"] == "REGISTER", f"{name}: proof_{sys_}.json row 4 is {row['form']}"
         out.append(keccak256(ids(name)[sys_][1] + st[64:] + bytes.fromhex(row["proof"])))
-    assert st[32:64] == ids(name)["pqzl"][1], f"{name}: statement_register.json row 0 is not under the set's PQZL id"
     return tuple(out)
+
+
+def pack_bits(q):
+    """ceil(log2 q) by integer arithmetic (review R2-C4: a float log2 rounds q just above a power of two down): q is a
+    prime, not a power of two, so it is q's bit length"""
+    b = q.bit_length()
+    assert 2**(b - 1) < q < 2**b
+    return b
 
 
 def acc_words(name):
     """the slots of a materialised `acc` under P46 (owner 2026-10-21): CT / 32 words of four coefficients, each word
     packed into 4 * PACK_BITS / 8 bytes (PACK_BITS = ceil(log2 q), even at every set), in 32-byte slots"""
     t = load(name)
-    pack = math.ceil(math.log2(t["q"]))
+    pack = pack_bits(t["q"])
     assert pack % 2 == 0, f"{name}: PACK_BITS {pack} is odd (a packed word would not be whole bytes)"
     return -(-lengths(t["n"] // 64)["ct"] // 32 * pack // 2 // 32)
 
@@ -417,12 +446,13 @@ def sol_text(name):
     c = {k: v for k, v, s, d in cs if s is None}
     ln = lengths(c["K"])
     u = lambda x: f"{x:_}"  # noqa: E731
-    pack = math.ceil(math.log2(t["q"]))
+    pack = pack_bits(t["q"])
     rows = [("N", c["N"], "ring dimension n = k d"), ("K", c["K"], "polys per key / ciphertext vector u"),
             ("Q", c["Q"], "the modulus"), ("DELTA", c["DELTA"], f"floor(q / 2^{c['MBITS'] + 2})"),
             ("K_MAX", c["K_MAX"], "credits per account between refreshes"),
             ("LOG2Q", c["LOG2Q"], "ceil(log2(q - 1))"),
             ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)"),
+            ("S_AUD", c["S_AUD"], "legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)"),
             ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"), ("V", ln["v"], "v bytes (16 be8)"),
             ("CT", ln["ct"], "ciphertext u || v bytes"),
             ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
@@ -459,10 +489,10 @@ def sol_text(name):
                "    /// proof_<sys>.json row 4): UAPqzVerifier's pinned probe per proof system (0: no vectors / no PQZH)\n"
                f"    bytes32 internal constant PROBE_PQZL = 0x{sv[1].hex()};\n    bytes32 internal constant PROBE_PQZH = 0x{sv[2].hex()};")
     out += ["", "    /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f",
-            "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / 4) (pqz-stmt multi_len)",
+            "    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)",
             "    function multiLen(uint256 m, bool aud) internal pure returns (uint256) {",
             "        uint256 a = aud ? 1 : 0;",
-            "        uint256 g = (m + 3) / 4; // randomness groups of <= 4 legs",
+            "        uint256 g = aud ? (m + S_AUD - 1) / S_AUD : (m + 3) / 4; // randomness groups (R0-1)",
             "        return 640 + (1 + m + a + g) * PK + CT + (m + 1 + a * m) * V;",
             "    }", "}", "",
             "// The slots of a materialised `acc` under P46 (owner 2026-10-21): CT / 32 words of four coefficients, each packed into",
@@ -599,14 +629,16 @@ def selfcheck():
     assert lengths(32)["stmt"]["TRANSFER"] == 83_072 and lengths(32)["bundle"] == 16_688
     # the v3 specs' shapes are pqzl/params/*.sage's (the record the v3 headers were made from)
     s = specs(V3)
-    assert "m1 = 146\n" in s["tx"] and "nbin = 15\n" in s["tx"] and "m1 = 231\n" in s["txm8"] and "nbin = 22\n" in s["txm8"]
+    assert "m1 = 146\n" in s["tx"] and "nbin = 15\n" in s["tx"] and "m1 = 223\n" in s["txm80"] and "nbin = 22\n" in s["txm8"]
+    assert "m1 = 359\n" in s["txm8"] and "m1 = 219\n" in s["txm4"] and "Bprime = 8\n" in s["reg"]  # s_aud = 2 (R0-1)
     if "n2304-kmax4096" in sets():
         c = {k: v for k, v, s, d in consts("n2304-kmax4096")[2]}
         assert (c["K"], c["DELTA"], c["MBITS"], c["EBITS"], c["BETA_S"], c["BETA_E"]) == (36, 233747196, 16, 27, 38, 173)
         s = specs("n2304-kmax4096")  # as gen_pa.py (now legacy/) wrote them, comment lines aside
         assert "m1 = 163\n" in s["tx"] and "nbin = 16\n" in s["tx"] and "m1 = 160\n" in s["burn"] and "nbin = 15\n" in s["burn"]
         assert "m1 = 79\n" in s["dr"] and "m1 = 73\n" in s["ds"] and "m1 = 72\n" in s["reg"] and "log2q = 45\n" in s["tx"]
-        assert "m1 = 172\n" in s["txm4"] and "m1 = 256\n" in s["txm8"] and "nbin = 23\n" in s["txm8"]
+        assert "m1 = 168\n" in s["txm40"] and "m1 = 248\n" in s["txm80"] and "nbin = 23\n" in s["txm8"]
+        assert "m1 = 244\n" in s["txm4"] and "m1 = 328\n" in s["txm8"] and "Bprime = 8\n" in s["dr"]  # s_aud = 3 (R0-1)
 
 
 if __name__ == "__main__":

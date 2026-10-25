@@ -1,6 +1,6 @@
 {
  "set": "n2048-kmax1024",
- "description": "the frozen set (the parameters of the retired v3 proofSystemId; own ids since plan 5h Task 8d)",
+ "description": "the v3 parameters (frozen until the R0 review fix 2026-10-25; own ids since plan 5h Task 8d)",
  "approval": {
   "date": "2026-10-07",
   "what": "CTR-PQZ-03 (lattice parameters at or above Kyber-512); the v3 proofSystemId since the Fiat-Shamir fix (CTR-PQZ-09 F6); kept frozen as the reference set (owner 2026-10-21)"
@@ -8,7 +8,7 @@
  "core_only": false,
  "pqzh": true,
  "pqz_delta": 1.00366,
- "kmlwe_min": null,
+ "kmlwe_min": 33,
  "d": 64,
  "k": 32,
  "n": 2048,
@@ -22,6 +22,7 @@
  "beta_s": 36,
  "beta_e": 164,
  "beta_2": 64,
+ "s_aud": 2,
  "zeta": 3367489746414,
  "iroot": 2273236395452,
  "zeta3": 969320936632,
@@ -54,12 +55,12 @@
   "bundle": 16688,
   "bundle0": 16560
  },
- "max_proof_pqzh": 262144,
- "max_input": 393216,
- "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v4",
- "pqzl_id": "19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d",
- "pqzh_label": "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v2",
- "pqzh_id": "9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4",
+ "max_proof_pqzh": 327680,
+ "max_input": 524288,
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5",
+ "pqzl_id": "c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe",
+ "pqzh_label": "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3",
+ "pqzh_id": "56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d",
  "pqzh_preset": {
   "radices": [
    2,

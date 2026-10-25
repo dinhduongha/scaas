@@ -6,11 +6,12 @@
 #   specs   gen_set.py <set>: the 14 LaZer codegen specs, pqz_set.h, rust/set.rs, set.json, PqzSet.sol, the crates'
 #           per-set feature lists                                                       (stdlib, seconds)
 #   e_s1    lattice-estimator check of every spec (pqzl/params/n-study/e_s1_n.sage, pinned Sage image): MSIS beta,
-#           hiding MLWE uSVP and dual_hybrid >= 450 -> <set>/e-s1.txt; then every spec's pqz_delta / kmlwe_min must
-#           be set.toml's: if not (or missing), stop and print the values to put into set.toml   (heavy, capped)
+#           hiding MLWE uSVP and dual_hybrid >= 450 -> <set>/e-s1.txt (only a complete run whose check passes replaces
+#           it); every spec's pqz_delta / kmlwe_min must be set.toml's: if not (or missing), stop and print the values to
+#           put into set.toml                                                                      (heavy, capped)
 #   codegen LaZer 3330e48 codegen of the 14 specs into <set>/.codegen/, moved to <set>/pqz_<rel>_params.h and
 #           <set>/codegen.txt only when all 14 succeed (a failure leaves the committed headers untouched); a set with
-#           `frozen = true` (n2048-kmax1024) is compared byte for byte instead -> <set>/codegen-check.txt (capped)
+#           `frozen = true` (none since 2026-10-25; was n2048-kmax1024) is compared byte for byte instead -> <set>/codegen-check.txt (capped)
 #   rust    pqzl/params/to_rust.py <set>: the headers' Rust form <set>/rust/<rel>.rs and the crate's params/mod.rs
 #   e_s0    e_s0_set.py: the set's budget checks, exactness of the norm proofs per relation, FS rounds -> <set>/e-s0.txt
 #   kat     the upstream LaZer golden arithmetic KAT at the set's q (pqzl/kat/build-lazer-dump.sh, docker, x86-64-v3)
@@ -55,16 +56,17 @@ step_e_s1() {
     -e LK_COMMIT=0a9caf8bf0f80097724e0c6147194c52c6b90f86 -e PYTHONUNBUFFERED=1 -v "$T/le":/le:ro -v "$T/lz/third_party":/lz/third_party:ro \
     -v "$CORE/pqzl/params/n-study":/p:ro -v "$CORE/pqzl/params":/params:ro -v "$D":/set:ro --entrypoint /bin/sh "$IMG" -c \
     "mkdir -p /tmp/w && cp -r /params/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cp /p/*.sage /tmp/w/ &&
-     cd /tmp/w/codegen && sage /tmp/w/e_s1_n.sage $specs" > "$D/e-s1.txt" 2> "$D/.e-s1.err" || return 1
+     cd /tmp/w/codegen && sage /tmp/w/e_s1_n.sage $specs" > "$D/.e-s1.txt.new" 2> "$D/.e-s1.err" || return 1
   rm -f "$D/.e-s1.err" # the estimator's stderr (kept only when the run fails)
-  python3 -I - "$D" <<'EOF'
+  # the committed e-s1.txt is replaced only by a complete run that passes the check (review R2-C8)
+  python3 -I - "$D" <<'EOF' && mv "$D/.e-s1.txt.new" "$D/e-s1.txt"
 import os, re, sys, tomllib
 d = sys.argv[1]
 t = tomllib.load(open(os.path.join(d, "set.toml"), "rb"))
-got = re.findall(r"^=> \S*?(\w+)_params\.sage: pqz_delta = ([\d.]+), kmlwe_min = (\d+)", open(os.path.join(d, "e-s1.txt")).read(), re.M)
+got = re.findall(r"^=> \S*?(\w+)_params\.sage: pqz_delta = ([\d.]+), kmlwe_min = (\d+)", open(os.path.join(d, ".e-s1.txt.new")).read(), re.M)
 deltas, kmlwes = {float(x[1]) for x in got}, {int(x[2]) for x in got}
 if len(got) != 14:
-    sys.exit(f"e_s1: {len(got)} of 14 specs have a result line (see e-s1.txt)")
+    sys.exit(f"e_s1: {len(got)} of 14 specs have a result line (see .e-s1.txt.new)")
 want = (min(deltas), max(kmlwes))  # one set-wide value: the smallest pqz_delta and the largest rank any spec needs
 if (t.get("pqz_delta"), t.get("kmlwe_min")) != want:
     sys.exit(f"e_s1: set.toml must say pqz_delta = {want[0]}, kmlwe_min = {want[1]} (per spec: {got}); "
@@ -109,7 +111,9 @@ step_codegen() {
 
 step_rust() { python3 -I "$CORE/pqzl/params/to_rust.py" "$S"; }
 
-step_e_s0() { SET=$S "$CAP" "$HERE/run_e_s0_set.sh" > "$D/e-s0.txt" && grep -q "GATE .*: MET" "$D/e-s0.txt"; }
+# (written beside, moved over the committed e-s0.txt only when the gate line says MET: review R2-C8)
+step_e_s0() { SET=$S "$CAP" "$HERE/run_e_s0_set.sh" > "$D/.e-s0.txt.new" && grep -q "GATE .*: MET" "$D/.e-s0.txt.new" &&
+  mv "$D/.e-s0.txt.new" "$D/e-s0.txt"; }
 
 step_kat() {
   [ -n "${PQZ_WORK:-}" ] || { echo "PQZ_WORK: a work directory for the KAT build" >&2; return 1; }

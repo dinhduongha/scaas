@@ -27,6 +27,8 @@ pub(crate) const BETA_S: usize = 42;
 pub(crate) const BETA_E: usize = 189;
 /// ||e2_j|| bound (16 coefficients)
 pub(crate) const BETA_2: usize = 64;
+/// legs per randomness group of an audited R_TXM (auditor copy of leg j at window j mod S_AUD)
+pub(crate) const S_AUD: usize = 4;
 /// 5^((q - 1) / 8), a primitive 8th root of unity
 pub(crate) const ZETA: u64 = 7_116_548_313_613_552;
 /// zeta^2
@@ -61,6 +63,6 @@ pub(crate) const PQZH_LABEL: &str = "";
 /// no PQZH at this set: the zero word (pqz-stmt refuses it: `PQZH` is false)
 pub(crate) const PQZH_ID: [u8; 32] = [0; 32];
 /// PQZL's proofSystemId label (set.toml pqzl_id)
-pub(crate) const PQZL_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4";
+pub(crate) const PQZL_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5";
 /// PQZL's proofSystemId: keccak256(PQZL_LABEL)
-pub(crate) const PQZL_ID: [u8; 32] = [0x9d, 0x23, 0xa0, 0xde, 0x64, 0x03, 0xd1, 0xa3, 0x7a, 0xef, 0xcf, 0x61, 0x82, 0x1f, 0xcf, 0xb4, 0x6d, 0xc5, 0x30, 0x21, 0xd1, 0x2a, 0x92, 0x32, 0x46, 0x7b, 0x57, 0x0a, 0xc3, 0xbd, 0x53, 0xa3];
+pub(crate) const PQZL_ID: [u8; 32] = [0xa8, 0x01, 0xf5, 0xc4, 0x69, 0x7a, 0x35, 0xa8, 0x8b, 0x90, 0xa2, 0x82, 0x49, 0xd7, 0x3c, 0xf2, 0xe1, 0x63, 0x4d, 0x88, 0x75, 0xbf, 0x1a, 0x5f, 0x6a, 0xf6, 0xc2, 0x83, 0xac, 0x8e, 0x8a, 0xa9];

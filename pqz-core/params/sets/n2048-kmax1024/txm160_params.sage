@@ -9,6 +9,7 @@ q_fixed = 4398046510889
 pqz_L = 4
 log2q = 42
 pqz_delta = 1.00366
+kmlwe_min = 33
 d = 64
 
 m1 = 367
@@ -19,6 +20,6 @@ nbin = 30
 n = [32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 B = [36, 164, 36, 164, 36, 164, 36, 164, 36, 164, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64]
 
-# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (e2_0, the first leg's noise, |coefficients| <= 20 < 64).
+# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (e2_0, the first leg's noise, |coefficients| <= 20, l2 <= 64 (its exact-l2 block)).
 nprime = 1
 Bprime = 64

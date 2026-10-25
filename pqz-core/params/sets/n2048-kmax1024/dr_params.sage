@@ -9,6 +9,7 @@ q_fixed = 4398046510889
 pqz_L = 4
 log2q = 42
 pqz_delta = 1.00366
+kmlwe_min = 33
 d = 64
 
 m1 = 71
@@ -19,6 +20,6 @@ nbin = 7
 n = [32, 32]
 B = [36, 164]
 
-# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (s[0], in [-1, 1]).
+# LaZer's tbox needs nprime > 0: a one-poly approximate l_inf proof as filler (s[0]: 64 coefficients in [-1, 1], l2 <= 8).
 nprime = 1
-Bprime = 1
+Bprime = 8

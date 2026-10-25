@@ -22,6 +22,7 @@
  "beta_s": 40,
  "beta_e": 182,
  "beta_2": 64,
+ "s_aud": 4,
  "zeta": 678622666313846,
  "iroot": 131055030577624,
  "zeta3": 177154614389703,
@@ -56,10 +57,10 @@
  },
  "max_proof_pqzh": 327680,
  "max_input": 524288,
- "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4",
- "pqzl_id": "a3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d",
- "pqzh_label": "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v2",
- "pqzh_id": "e83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851",
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5",
+ "pqzl_id": "eacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882",
+ "pqzh_label": "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3",
+ "pqzh_id": "c93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662",
  "pqzh_preset": {
   "radices": [
    2,

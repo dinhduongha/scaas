@@ -22,6 +22,8 @@ library PqzSet {
     uint256 internal constant LOG2Q = 54;
     /// stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)
     uint256 internal constant PACK_BITS = 54;
+    /// legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)
+    uint256 internal constant S_AUD = 4;
     /// pk / u bytes (k polys x 64 be8)
     uint256 internal constant PK = 22_528;
     /// v bytes (16 be8)
@@ -42,8 +44,8 @@ library PqzSet {
     uint256 internal constant BUNDLE = 22_832;
     /// disclosure bundle, auditor off
     uint256 internal constant BUNDLE0 = 22_704;
-    /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v4")
-    bytes32 internal constant PQZL_ID = 0x9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3;
+    /// PQZL's proofSystemId: keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5")
+    bytes32 internal constant PQZL_ID = 0xa801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): false: PQZH_ID is the zero word, never accepted
     bool internal constant HAS_PQZH = false;
     /// PQZH's proofSystemId: none at this set
@@ -51,17 +53,17 @@ library PqzSet {
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (19,116 zero bytes: a new account's `acc`, P46)
     bytes32 internal constant ZERO_HASH = 0xa42ada50b294e23016b521f6058aec3d96141779bc8e65388c1187fd87cbd7d9;
     /// the precompile's OP_SELFTEST answer at this set (smartcontracts/vectors/pqz/n2816-kmax65536/selftest.json hash; 0: no vectors yet)
-    bytes32 internal constant SELFTEST = 0x0aa1dfe291b81f0c8efa859405c9f14cdc0fa744584b4d5b30bd0a6472491882;
+    bytes32 internal constant SELFTEST = 0x0000000000000000000000000000000000000000000000000000000000000000;
     /// keccak256(psid || message || pk || proof) of the self-test's R_REG vector (statement_register.json row 0,
     /// proof_<sys>.json row 4): UAPqzVerifier's pinned probe per proof system (0: no vectors / no PQZH)
-    bytes32 internal constant PROBE_PQZL = 0x479ca69640ca7056ba44b765d2168518528948f9098d8fc09f6cae4744f96493;
+    bytes32 internal constant PROBE_PQZL = 0x0000000000000000000000000000000000000000000000000000000000000000;
     bytes32 internal constant PROBE_PQZH = 0x0000000000000000000000000000000000000000000000000000000000000000;
 
     /// op 7 statement bytes: header || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f
-    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / 4) (pqz-stmt multi_len)
+    /// || [v_{a,0}..v_{a,M-1}], G = ceil(M / S_AUD) with the auditor, ceil(M / 4) without (pqz-stmt multi_len)
     function multiLen(uint256 m, bool aud) internal pure returns (uint256) {
         uint256 a = aud ? 1 : 0;
-        uint256 g = (m + 3) / 4; // randomness groups of <= 4 legs
+        uint256 g = aud ? (m + S_AUD - 1) / S_AUD : (m + 3) / 4; // randomness groups (R0-1)
         return 640 + (1 + m + a + g) * PK + CT + (m + 1 + a * m) * V;
     }
 }
