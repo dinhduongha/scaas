@@ -87,11 +87,11 @@ def main(argv):
             psid = rng.choice([kat.PQZL_ID, kat.PQZH_ID])
             op = form.rstrip("0")
             if op == "REGISTER":
-                st = kat.build_register(rng.randbytes(32), coeffs(2048), psid=psid)
+                st = kat.build_register(rng.randbytes(32), coeffs(kat.N), psid=psid)
             elif op.startswith("DISCLOSE"):
                 f = {k: rng.randbytes(32) for k in kat.DISC[2:]}
                 f.update(proofSystemId=psid, amount=rng.getrandbits(64), kind=rng.randrange(3))
-                st = kat.build_disclose(op, f, coeffs(2048), coeffs(2048), coeffs(16))
+                st = kat.build_disclose(op, f, coeffs(kat.N), coeffs(kat.N), coeffs(16))
             else:
                 f = {k: rng.randbytes(32) for k in kat.HEADER[2:]}
                 f.update(proofSystemId=psid, fee=rng.getrandbits(64), amount=rng.getrandbits(64),
@@ -100,9 +100,9 @@ def main(argv):
                 for k in kat.ZERO_WORDS[op]:
                     f[k] = 0
                 tr, aud = op == "TRANSFER", form == "TRANSFER"
-                out = coeffs(2048 + 16 * (2 + aud if tr else 1))
-                st = kat.build_debit(op, f, coeffs(2048), coeffs(2048 + 16), out, pk_t=coeffs(2048) if tr else None,
-                                     pk_a=coeffs(2048) if aud else None)
+                out = coeffs(kat.N + 16 * (2 + aud if tr else 1))
+                st = kat.build_debit(op, f, coeffs(kat.N), coeffs(kat.N + 16), out, pk_t=coeffs(kat.N) if tr else None,
+                                     pk_a=coeffs(kat.N) if aud else None)
             assert len(st) == kat.STMT_BYTES[form] and rebuild(form, st) == st
             kat.parse(op_of(form), st)
             valid.append((form, st))
@@ -118,9 +118,9 @@ def main(argv):
                 f.update(proofSystemId=psid, fee=0 if i % 2 == 0 else rng.getrandbits(64), amount=0,
                          salt=rng.randbytes(16))
                 i += 1
-                st = kat.build_multi(f, coeffs(2048), [coeffs(2048) for _ in range(m)], coeffs(2048 + 16),
-                                     [coeffs(2048) for _ in range(kat.groups(m))], [coeffs(16) for _ in range(m)],
-                                     coeffs(16), pk_a=coeffs(2048) if aud else None,
+                st = kat.build_multi(f, coeffs(kat.N), [coeffs(kat.N) for _ in range(m)], coeffs(kat.N + 16),
+                                     [coeffs(kat.N) for _ in range(kat.groups(m, aud))], [coeffs(16) for _ in range(m)],
+                                     coeffs(16), pk_a=coeffs(kat.N) if aud else None,
                                      v_as=[coeffs(16) for _ in range(m)] if aud else None)
                 p = kat.parse(7, st)
                 back = kat.build_multi({k: p[k] for k in kat.MULTI_HEADER if k not in ("opTag", "M", "auditorOn")} |
@@ -144,11 +144,12 @@ def main(argv):
             return
         raise AssertionError(f"pqz_kat.py accepted: {what}")
 
+    L = kat.Q.bit_length()
     for form, st in valid[:16]:
         op = op_of(form)
         body0 = {"REGISTER": 96}.get(form, 288 if form.startswith("DISCLOSE") else HB)
         c = body0 + 8 * rng.randrange((len(st) - body0) // 8)
-        for v in (kat.Q, 2**42, 2**64 - 1, kat.Q + rng.randrange(2**42 - kat.Q)):
+        for v in (kat.Q, 2**L, 2**64 - 1, kat.Q + rng.randrange(2**L - kat.Q)):  # L = ceil(log2 q)
             bad(op, st[:c] + v.to_bytes(8, "big") + st[c + 8:], "coefficient")
         bad(op, st[:-1], "length - 1")
         bad(op, st + b"\0", "length + 1")
@@ -158,6 +159,11 @@ def main(argv):
         if form.startswith("DISCLOSE"):
             i = 224 + rng.randrange(24)
             bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], "amount")
+            # the kind word = OpeningKind + 256 w (R0-1): w = 0 but for AUDITOR, w < S_AUD there; < 2^16
+            k = int.from_bytes(st[256:288], "big") & 255
+            wmax = kat.S_AUD if form == "DISCLOSE-AUDITOR" else 1
+            for v, what in ((k + 256 * wmax, "kind window"), (k + 2**16, "kind word >= 2^16")):
+                bad(op, st[:256] + kat.word(v) + st[288:], what)
         elif form != "REGISTER":
             for k in kat.ZERO_WORDS[form.rstrip("0")]:
                 i = 32 * kat.HEADER.index(k) + 16 + rng.randrange(16)  # the low half: the salt form still holds

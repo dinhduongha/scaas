@@ -1,0 +1,34 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running unittests src/lib.rs (target/xcheck-n2048-kmax1024/cargo/release/deps/pqz_stmt-73b2f32bbca7c6f9)
+
+running 13 tests
+test tests::coefficient_codec ... ok
+test tests::lengths_and_constants ... ok
+test tests::multi_lengths_and_sets ... ok
+test tests::fields_land_where_the_spec_says ... ok
+test tests::bundle_and_opening ... ok
+test tests::multi_m1_body_is_op1_body ... ok
+test tests::other_sets_ids_refused ... ok
+test tests::retired_ids_refused ... ok
+test tests::precompile_input ... ok
+test tests::round_trip_every_form_both_ids ... ok
+test tests::every_d15_r6_rule_rejects ... ok
+test tests::multi_round_trip_every_built_shape_fee_0 ... ok
+test tests::multi_every_rule_rejects ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/xcheck.rs (target/xcheck-n2048-kmax1024/cargo/release/deps/xcheck-34909bd80b0bed2c)
+
+running 1 test
+xcheck: C 6 / 6 forms equal; pqz_kat.py: 32 statements + 14 op 7 statements equal (fields and bytes), 370 rejections (141 op 7) with the same reason
+test xcheck_c_and_pqz_kat ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+   Doc-tests pqz_stmt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
