@@ -76,6 +76,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - [ ] **Research (owner 2026-10-21, not blocking):** PQZH proof below ≈ 170 KB at the proven soundness (the debit
   inputs must fit one tx under EIP-7976, ≈ 261,909 B with the statement); Kyber-style compression of `u` (noise vs
   `K_MAX`); both only if PQZH on chain or smaller blobs are wanted.
+- [ ] **UA-7: PQ end-to-end encryption between UAs** (owner 2026-10-25, queued **after 5h**): KEM key (ML-KEM-768 /
+  X-Wing) as a rotatable registry attribute, off-chain KEM handshake with one AES-256 key per chat session, forward
+  secrecy by an ephemeral KEM; short design [`2026-10-25-ua7-pq-e2e-sessions.md`](docs/superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md)
+  (three owner questions in §4), then a plan.
 - [ ] **Metatx split** (owner 2026-10-20 "kiểu gì cũng phải tách"; governance goes to a lib or module): spec → plan →
   build **after 5h part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code** (timing ruled 2026-10-21).
   **Owner 2026-10-21: variant A** (DELEGATECALL library, the token keeps the entry points); pass the library only the
