@@ -28,12 +28,12 @@ registration, session creation, rekey — all of them): the UA signs the envelop
 pays its gas, and the UA pays the relayer a fee (which may be 0) the same way as the other `mtx*` writes (CTR-MTX-20,
 the `MetaTokenBase` pattern). Upgrades by a new release, as for the other application contracts.
 
-**C2 — The KEM key: one per UA first.** `mtxSetKemKey(ua, scheme, pk)` under `requireAuthorized(ua, purpose "kem")`
-sets or replaces the UA's key (`keyId` = a version counter, + 1 on every change); `mtxSetKemKey(ua, 0, "")` revokes it.
-Schemes: **X-Wing** by default (X25519 + ML-KEM-768; pk 1,216 B, ciphertext 1,120 B; secure while either part holds)
-**ML-KEM-1024 + X25519** for a higher margin (NIST level 5 lattice part; the X-Wing combiner with ML-KEM-1024, the QSF
-construction of the CFRG hybrid-KEM draft; pk 1,600 B, ciphertext 1,600 B) and **ML-KEM-768** alone (FIPS 203; pk
-1,184 B, ciphertext 1,088 B) for clients without X25519. Each session's wraps use each member's own scheme. A replaced or revoked
+**C2 — The KEM key: one per UA first.** `mtxSetKemKey(ua, pk)` under `requireAuthorized(ua, purpose "kem")` sets or
+replaces the UA's key (`keyId` = a version counter, + 1 on every change); `mtxSetKemKey(ua, "")` revokes it. **One
+scheme only: ML-KEM-1024 + X25519** (owner 2026-10-25: the default and the only one): the X-Wing combiner with
+ML-KEM-1024 (FIPS 203, NIST level 5) in place of ML-KEM-768, the QSF construction of the CFRG hybrid-KEM draft; pk
+1,600 B, ciphertext 1,600 B, shared secret 32 B; secure while either part holds. The contract accepts only 1,600-byte
+keys. A replaced or revoked
 key gets no new session keys; it stays readable for history. **Several keys per UA (one per device) later** (owner
 2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `mtxAddKemKey` later
 changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
@@ -47,7 +47,7 @@ creator's client draws a random 32-byte session key `K` for epoch 0 and, for **t
 ```
 (ct, ss) ← KEM.Encaps(pk)
 kek      = HKDF-SHA-256(ss, "scaas/pqchat/v1/wrap" ‖ chainId ‖ PqChat ‖ sessionId ‖ epoch ‖ member ‖ keyId)
-wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // 1,168 B (X-Wing), 1,648 B (ML-KEM-1024 + X25519)
+wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // 1,648 B
 ```
 
 A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
@@ -61,7 +61,7 @@ decrypted. Only members can rekey; the member list is public.
 **C5 — Storage: on chain, in state.** Each epoch's wraps are stored as one SSTORE2 blob per epoch (the full bytes stay
 in contract state, readable by `eth_call`; not only in events, which nodes may drop under history expiry), plus the
 member list and the epoch counter. Cost [estimate, to be measured in the plan]: ≈ 1,530 state gas per stored byte
-under EIP-8037, so ≈ 1.8 M state gas per X-Wing wrap (≈ 2.5 M for ML-KEM-1024 + X25519); a two-person session with one key each ≈ 3.6 M state gas plus calldata (paid by the relayer under mtx),
+under EIP-8037, so ≈ 2.5 M state gas per wrap; a two-person session ≈ 5.0 M state gas plus calldata (paid by the relayer under mtx),
 which fits one transaction and one block on every chain we target.
 
 **C6 — Messages (off chain, for example Matrix).** Messages never go on chain. Each sender uses its own subkey so that
@@ -78,19 +78,19 @@ events — our clients (`clients/ua-qt`, the JS wallet) or a widget / bot decryp
 **Qt client (owner 2026-10-25):** `clients/ua-qt` (Qt 6.12) gains a chat screen built on **libQuotient** (the C++/Qt
 Matrix library behind NeoChat and Quaternion, Qt 6; it registers custom event types, so `vn.scaas.pqchat.v1` is a
 first-class event): libQuotient handles login, rooms and sync; ua-qt's existing code signs the `mtx*` envelopes and
-reads `PqChat`; OpenSSL ≥ 3.5 does ML-KEM, X25519 (X-Wing combined per its draft, a few dozen lines) and AES-GCM. No
+reads `PqChat`; OpenSSL ≥ 3.5 does ML-KEM-1024, X25519 (combined per C2, a few dozen lines) and AES-GCM. No
 fork of NeoChat / Quaternion / Nheko.
 
 **C8 — What the on-chain key store does not give.** Everything on chain is public forever. Whoever obtains a member's
 KEM secret key later — or breaks ML-KEM one day — can open every session key wrapped to that key, and with the Matrix
 ciphertexts the chat history of those epochs ("harvest now, decrypt later"). There is no forward secrecy beyond what
-C4 provides. Mitigations in this design: X-Wing (the hybrid), frequent rekeys, revoking and replacing device keys
+C4 provides. Mitigations in this design: the hybrid ML-KEM-1024 + X25519, frequent rekeys, revoking and replacing device keys
 (C2), deleting old secret keys on the devices. A chat that needs full forward secrecy should add an off-chain ratchet
 on top (later, not in this design).
 
 **C9 — Libraries (no precompile, no crypto in the contract).** The contract only stores and checks shapes / sizes /
 membership; KEM and AES run in the clients: .NET 10 `System.Security.Cryptography.MLKem`, OpenSSL ≥ 3.5 (Qt client),
-Rust `ml-kem`, JS `@noble/post-quantum`; X-Wing where the library has it. Vectors under
+Rust `ml-kem` + `x25519-dalek`, JS `@noble/post-quantum` + `@noble/curves`; the combiner in each client (C2). Vectors under
 `smartcontracts/vectors/pqchat/` (keys, wraps, messages) shared by all clients.
 
 ## 3. Work (for the plan after 5h)
@@ -102,8 +102,8 @@ Rust `ml-kem`, JS `@noble/post-quantum`; X-Wing where the library has it. Vector
 
 ## 4. Owner answers (2026-10-25)
 
-1. Default scheme: **X-Wing**; **ML-KEM-1024 + X25519** also offered (owner, later the same day); ML-KEM-768 alone
-   stays accepted for clients without X25519.
+1. Scheme: **ML-KEM-1024 + X25519, the default and the only one** (owner 2026-10-25; X-Wing with ML-KEM-768 and
+   ML-KEM-768 alone dropped).
 2. Who may create a session with a UA: **anyone** (the creator pays the gas; clients hide sessions from unknown UAs).
 3. KEM keys per UA: **one first**; several (one per device) later (C2).
 4. Every write through **mtx** (a relayer pays the transaction fee): key registration, session creation, rekey (C1).

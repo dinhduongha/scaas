@@ -76,11 +76,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - [ ] **Research (owner 2026-10-21, not blocking):** PQZH proof below ≈ 170 KB at the proven soundness (the debit
   inputs must fit one tx under EIP-7976, ≈ 261,909 B with the statement); Kyber-style compression of `u` (noise vs
   `K_MAX`); both only if PQZH on chain or smaller blobs are wanted.
-- [ ] **UA-7: PQ chat sessions** (owner 2026-10-25, queued **after 5h**): application contract `PqChat` — several
-  ML-KEM / X-Wing keys per UA, sessions whose AES-256 key is KEM-wrapped per member key and stored on chain (epochs
+- [ ] **UA-7: PQ chat sessions** (owner 2026-10-25, queued **after 5h**): application contract `PqChat` — one
+  ML-KEM-1024 + X25519 key per UA first, sessions whose AES-256 key is KEM-wrapped per member key and stored on chain (epochs
   for rekey / members), messages off chain (e.g. Matrix custom events); short design
-  [`2026-10-25-ua7-pq-e2e-sessions.md`](docs/superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md) (owner 2026-10-25: X-Wing default,
-  anyone may create a session), then a plan.
+  [`2026-10-25-ua7-pq-e2e-sessions.md`](docs/superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md) (owner 2026-10-25: ML-KEM-1024 + X25519 only,
+  anyone may create a session, every write through mtx), then a plan.
 - [ ] **Metatx split** (owner 2026-10-20 "kiểu gì cũng phải tách"; governance goes to a lib or module): spec → plan →
   build **after 5h part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code** (timing ruled 2026-10-21).
   **Owner 2026-10-21: variant A** (DELEGATECALL library, the token keeps the entry points); pass the library only the
