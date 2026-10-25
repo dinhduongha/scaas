@@ -16,7 +16,8 @@ Delta parity: odd (an even Delta allows a rounding tie at |noise| = Delta / 2 = 
 ====================================================================================================
 3a. Challenge space of each relation's header (LNP22 4.4), 2 omega below the LS18 bound
 ====================================================================================================
-omega = 8, eta = 140: P(accept) = 0.9929, |C| = 2^130.79, 2/|C| = 2^-129.79, 2 omega = 16 < 5793: OK
+omega = 8, eta = 140: P(sqrt ||o(c) c||_1 <= eta) = 0.9143 (the sampled set; operator norm <= eta: 0.9929), |C| = 2^130.67, 2/|C| = 2^-129.67, 2 omega = 16 < 5793: OK
+  every challenge of the sampled set has max |c(zeta_j)| <= eta: OK
 
 ====================================================================================================
 4. Exactness of the norm proofs per relation (no wrap-around mod q)
@@ -43,22 +44,23 @@ R_DR: e' + E in 31 bits, Delta d + e' < q: OK
 ====================================================================================================
 5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own) and the headers' knowledge error
 ====================================================================================================
+lambda of every header [4]: even, lambda log2 q = 216.00 >= 128: OK
 R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)             128.00 bits OK  unit-vector case 2^-128.99
-R2 Z_q amortization, lambda = 3 repetitions (q^-lambda)                    162.00 bits OK  
+R2 Z_q amortization, lambda = 4 repetitions (q^-lambda, the headers')      216.00 bits OK  
 R3 R_q aggregation of quadratic relations (q^-(d/l) = q^-16)               864.00 bits OK  
-R4 burn    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 dr      c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 ds      c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 reg     c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 tx0     c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 tx      c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm160  c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm16   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm20   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm2    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm40   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm4    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm80   c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
-R4 txm8    c in [-8,8], eta 140: 2/|C| = 2^-129.79; header knowledge error 2^-127.0: OK
+R4 burn    c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 dr      c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 ds      c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 reg     c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 tx0     c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 tx      c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm160  c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm16   c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm20   c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm2    c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm40   c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm4    c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm80   c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
+R4 txm8    c in [-8,8], eta 140: 2/|C| = 2^-129.67; header knowledge error 2^-127.0: OK
 
 GATE (n2816-kmax65536: set checks, exactness and FS rounds of 14 relations): MET

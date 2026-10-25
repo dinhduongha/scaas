@@ -1,8 +1,8 @@
 
 == /set/reg_params.sage
-LaZer codegen as is: kmsis 19, kmlwe 39, m2 70, B 2^35.63, D 11, gamma 973348: MSIS beta 458, MLWE uSVP beta 475, proof ~33734 B
-  pqz_delta 1.00366, kmlwe_min 39: kmsis 19, kmlwe 39, m2 70, B 2^35.63, D 11, gamma 973348, lambda 4: MSIS beta 458, MLWE uSVP beta 475, dual_hybrid beta 462 / 463, proof ~33734 B
-=> /set/reg_params.sage: pqz_delta = 1.00366, kmlwe_min = 39 (kmsis = 19, m2 = 70, D = 11, gamma = 973348, lambda = 4, MSIS beta 458, MLWE uSVP beta 475, dual_hybrid 462 / 463, codegen proof size ~33734 B)
+LaZer codegen as is: kmsis 19, kmlwe 39, m2 70, B 2^35.63, D 11, gamma 973348: MSIS beta 458, MLWE uSVP beta 475, proof ~33830 B
+  pqz_delta 1.00366, kmlwe_min 39: kmsis 19, kmlwe 39, m2 70, B 2^35.63, D 11, gamma 973348, lambda 4: MSIS beta 458, MLWE uSVP beta 475, dual_hybrid beta 462 / 463, proof ~33830 B
+=> /set/reg_params.sage: pqz_delta = 1.00366, kmlwe_min = 39 (kmsis = 19, m2 = 70, D = 11, gamma = 973348, lambda = 4, MSIS beta 458, MLWE uSVP beta 475, dual_hybrid 462 / 463, codegen proof size ~33830 B)
 
 == /set/tx_params.sage
 LaZer codegen as is: kmsis 20, kmlwe 39, m2 71, B 2^36.64, D 13, gamma 2817016: MSIS beta 455, MLWE uSVP beta 473, proof ~52624 B
@@ -25,9 +25,9 @@ LaZer codegen as is: kmsis 19, kmlwe 39, m2 70, B 2^35.64, D 11, gamma 973348: M
 => /set/ds_params.sage: pqz_delta = 1.00366, kmlwe_min = 39 (kmsis = 19, m2 = 70, D = 11, gamma = 973348, lambda = 4, MSIS beta 458, MLWE uSVP beta 475, dual_hybrid 462 / 463, codegen proof size ~34278 B)
 
 == /set/dr_params.sage
-LaZer codegen as is: kmsis 19, kmlwe 39, m2 70, B 2^35.68, D 11, gamma 973348: MSIS beta 456, MLWE uSVP beta 475, proof ~35142 B
-  pqz_delta 1.00366, kmlwe_min 39: kmsis 19, kmlwe 39, m2 70, B 2^35.68, D 11, gamma 973348, lambda 4: MSIS beta 456, MLWE uSVP beta 475, dual_hybrid beta 462 / 463, proof ~35142 B
-=> /set/dr_params.sage: pqz_delta = 1.00366, kmlwe_min = 39 (kmsis = 19, m2 = 70, D = 11, gamma = 973348, lambda = 4, MSIS beta 456, MLWE uSVP beta 475, dual_hybrid 462 / 463, codegen proof size ~35142 B)
+LaZer codegen as is: kmsis 19, kmlwe 39, m2 70, B 2^35.68, D 11, gamma 973348: MSIS beta 456, MLWE uSVP beta 475, proof ~35238 B
+  pqz_delta 1.00366, kmlwe_min 39: kmsis 19, kmlwe 39, m2 70, B 2^35.68, D 11, gamma 973348, lambda 4: MSIS beta 456, MLWE uSVP beta 475, dual_hybrid beta 462 / 463, proof ~35238 B
+=> /set/dr_params.sage: pqz_delta = 1.00366, kmlwe_min = 39 (kmsis = 19, m2 = 70, D = 11, gamma = 973348, lambda = 4, MSIS beta 456, MLWE uSVP beta 475, dual_hybrid 462 / 463, codegen proof size ~35238 B)
 
 == /set/txm2_params.sage
 LaZer codegen as is: kmsis 20, kmlwe 39, m2 71, B 2^36.64, D 13, gamma 2817016: MSIS beta 455, MLWE uSVP beta 473, proof ~53504 B
@@ -70,12 +70,12 @@ LaZer codegen as is: kmsis 22, kmlwe 39, m2 73, B 2^38.06, D 14, gamma 6073922: 
 => /set/txm160_params.sage: pqz_delta = 1.00366, kmlwe_min = 39 (kmsis = 22, m2 = 73, D = 14, gamma = 6073922, lambda = 4, MSIS beta 468, MLWE uSVP beta 470, dual_hybrid 462 / 463, codegen proof size ~107788 B)
 
 SUMMARY
-/set/reg_params.sage: kmlwe_min 39, kmsis 19, MSIS 458, MLWE uSVP 475, dual_hybrid 462 / 463, proof 33734 B
+/set/reg_params.sage: kmlwe_min 39, kmsis 19, MSIS 458, MLWE uSVP 475, dual_hybrid 462 / 463, proof 33830 B
 /set/tx_params.sage: kmlwe_min 39, kmsis 20, MSIS 455, MLWE uSVP 473, dual_hybrid 462 / 463, proof 52624 B
 /set/tx0_params.sage: kmlwe_min 39, kmsis 20, MSIS 455, MLWE uSVP 473, dual_hybrid 462 / 463, proof 52272 B
 /set/burn_params.sage: kmlwe_min 39, kmsis 20, MSIS 455, MLWE uSVP 473, dual_hybrid 462 / 463, proof 51744 B
 /set/ds_params.sage: kmlwe_min 39, kmsis 19, MSIS 458, MLWE uSVP 475, dual_hybrid 462 / 463, proof 34278 B
-/set/dr_params.sage: kmlwe_min 39, kmsis 19, MSIS 456, MLWE uSVP 475, dual_hybrid 462 / 463, proof 35142 B
+/set/dr_params.sage: kmlwe_min 39, kmsis 19, MSIS 456, MLWE uSVP 475, dual_hybrid 462 / 463, proof 35238 B
 /set/txm2_params.sage: kmlwe_min 39, kmsis 20, MSIS 455, MLWE uSVP 473, dual_hybrid 462 / 463, proof 53504 B
 /set/txm20_params.sage: kmlwe_min 39, kmsis 20, MSIS 455, MLWE uSVP 473, dual_hybrid 462 / 463, proof 52800 B
 /set/txm4_params.sage: kmlwe_min 39, kmsis 21, MSIS 464, MLWE uSVP 471, dual_hybrid 462 / 463, proof 57202 B
