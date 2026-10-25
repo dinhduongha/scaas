@@ -2,11 +2,12 @@
 
 **Status:** short design for the owner's review (controller, 2026-10-25; revised the same day after the owner's
 answer). Nothing is built. Queued **after plan 5h** (owner 2026-10-25: "viết spec ngắn, xếp sau 5h"). The choices
-below (C1–C9) are controller proposals inside the owner's request; the owner may override any of them.
+below (C1–C9) are controller proposals inside the owner's request, with the owner's answers in §4.
 
 **Request (owner 2026-10-25).** A smart contract for chat sessions, as an application: a UA creates a session; the
 session's AES key goes **on chain**, encrypted with post-quantum cryptography for each member; a UA may register
-**several ML-KEM keys**; one AES key per session; the AES key is then used to chat over **Matrix** (or any other
+**several ML-KEM keys** (owner, later the same day: **one key per UA first**); one AES key per session; every write may
+go through **mtx**, so another party (a relayer) pays the transaction fee; the AES key is then used to chat over **Matrix** (or any other
 channel).
 
 **What it is called.** On-chain **key distribution** (a key-encapsulation directory and a session-key store); the
@@ -22,38 +23,43 @@ public KEM keys and KEM-wrapped session keys.
 ## 2. Design
 
 **C1 — One application contract, `PqChat`.** Standalone (not part of `UARegistry`, no change to it): it reads
-`UARegistry` only for `requireAuthorized(ua, …)`. Every write is relayable like every state-changing `mtx*` write
-(fee may be 0). Upgrades by a new release, as for the other application contracts.
+`UARegistry` only for `requireAuthorized(ua, …)`. **Every write is an `mtx*` entry point** (owner 2026-10-25: key
+registration, session creation, rekey — all of them): the UA signs the envelope, a relayer submits the transaction and
+pays its gas, and the UA pays the relayer a fee (which may be 0) the same way as the other `mtx*` writes (CTR-MTX-20,
+the `MetaTokenBase` pattern). Upgrades by a new release, as for the other application contracts.
 
-**C2 — KEM keys, several per UA.** `addKemKey(ua, scheme, pk, label) → keyId` and `revokeKemKey(ua, keyId)`, both
-under `requireAuthorized(ua, purpose "kem")`. Schemes: **ML-KEM-768** (FIPS 203; pk 1,184 B, ciphertext 1,088 B) and
-**X-Wing** (X25519 + ML-KEM-768; pk 1,216 B, ciphertext 1,120 B; secure while either part holds). A UA keeps any
-number of keys (one per device, for example); `label` is a short public name ("phone", "laptop"). A revoked key gets no
-new session keys; it stays readable for history. The key is post-quantum authenticated only if the UA's signer is a PQ
+**C2 — The KEM key: one per UA first.** `mtxSetKemKey(ua, scheme, pk)` under `requireAuthorized(ua, purpose "kem")`
+sets or replaces the UA's key (`keyId` = a version counter, + 1 on every change); `mtxSetKemKey(ua, 0, "")` revokes it.
+Schemes: **X-Wing** by default (X25519 + ML-KEM-768; pk 1,216 B, ciphertext 1,120 B; secure while either part holds)
+and **ML-KEM-768** alone (FIPS 203; pk 1,184 B, ciphertext 1,088 B) for clients without X25519. A replaced or revoked
+key gets no new session keys; it stays readable for history. **Several keys per UA (one per device) later** (owner
+2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `mtxAddKemKey` later
+changes no layout; until then the devices of one UA share its key. The key is post-quantum authenticated only if the UA's signer is a PQ
 kind (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-dominant `msig`); clients show the others as "not PQ-authenticated".
 
-**C3 — Sessions.** `createSession(creator, members[], wraps[]) → sessionId`. The creator's client draws a random
-32-byte session key `K` for epoch 0 and, for **every active KEM key of every member** (the creator's own keys
-included, so the creator's other devices can read it), writes one wrap:
+**C3 — Sessions.** `mtxCreateSession(creator, members[], wraps[]) → sessionId`; **anyone** may create a session with
+any UA (owner 2026-10-25; the creator, or its relayer, pays the gas; clients hide sessions from unknown UAs). The
+creator's client draws a random 32-byte session key `K` for epoch 0 and, for **the current KEM key of every member**
+(the creator's own included), writes one wrap:
 
 ```
 (ct, ss) ← KEM.Encaps(pk)
 kek      = HKDF-SHA-256(ss, "scaas/pqchat/v1/wrap" ‖ chainId ‖ PqChat ‖ sessionId ‖ epoch ‖ member ‖ keyId)
-wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // ≈ 1,136 B (ML-KEM-768)
+wrap     = ct ‖ AES-256-GCM(kek, nonce = 0^96, K, aad = sessionId ‖ epoch ‖ member ‖ keyId)   // 1,168 B (X-Wing)
 ```
 
 A member reads its wrap from the contract, decapsulates with the matching secret key and gets `K`. Two-person chat and
 group chat are the same thing (a group has more members).
 
-**C4 — Epochs (new AES key).** `rekey(sessionId, members[], wraps[])` by any member writes epoch + 1 with a new `K`.
-Used to add a member, remove one (the removed member gets no wrap of the new key), after a device loss, or on a
+**C4 — Epochs (new AES key).** `mtxRekey(member, sessionId, members[], wraps[])` by any member writes epoch + 1 with a new `K`.
+Used to add a member, remove one (the removed member gets no wrap of the new key), after a key change, or on a
 schedule (proposal: the client rekeys every 1,000 messages or 7 days). Old epochs stay readable so history can be
 decrypted. Only members can rekey; the member list is public.
 
 **C5 — Storage: on chain, in state.** Each epoch's wraps are stored as one SSTORE2 blob per epoch (the full bytes stay
 in contract state, readable by `eth_call`; not only in events, which nodes may drop under history expiry), plus the
 member list and the epoch counter. Cost [estimate, to be measured in the plan]: ≈ 1,530 state gas per stored byte
-under EIP-8037, so ≈ 1.7 M state gas per wrap; a two-person session with one key each ≈ 3.5 M state gas plus calldata,
+under EIP-8037, so ≈ 1.8 M state gas per wrap; a two-person session with one key each ≈ 3.6 M state gas plus calldata (paid by the relayer under mtx),
 which fits one transaction and one block on every chain we target.
 
 **C6 — Messages (off chain, for example Matrix).** Messages never go on chain. Each sender uses its own subkey so that
@@ -67,6 +73,11 @@ base64) in a Matrix room tied to the session (the room id may be stored in the s
 end-to-end encryption (Megolm) may stay on as an outer layer; ours is the PQ layer inside. Limits: the Matrix server
 still sees metadata (who talks, when, message sizes) and standard clients such as Element cannot read the custom
 events — our clients (`clients/ua-qt`, the JS wallet) or a widget / bot decrypt them.
+**Qt client (owner 2026-10-25):** `clients/ua-qt` (Qt 6.12) gains a chat screen built on **libQuotient** (the C++/Qt
+Matrix library behind NeoChat and Quaternion, Qt 6; it registers custom event types, so `vn.scaas.pqchat.v1` is a
+first-class event): libQuotient handles login, rooms and sync; ua-qt's existing code signs the `mtx*` envelopes and
+reads `PqChat`; OpenSSL ≥ 3.5 does ML-KEM, X25519 (X-Wing combined per its draft, a few dozen lines) and AES-GCM. No
+fork of NeoChat / Quaternion / Nheko.
 
 **C8 — What the on-chain key store does not give.** Everything on chain is public forever. Whoever obtains a member's
 KEM secret key later — or breaks ML-KEM one day — can open every session key wrapped to that key, and with the Matrix
@@ -84,10 +95,13 @@ Rust `ml-kem`, JS `@noble/post-quantum`; X-Wing where the library has it. Vector
 
 1. `PqChat.sol` (C1–C5): KEM keys, sessions, epochs, SSTORE2 wraps, events, views; forge tests and gas per wrap.
 2. Byte layouts (C3, C6, C7) in `docs/contracts/`; vectors.
-3. One reference client (`clients/ua-rs`: create / join / rekey / encrypt / decrypt), then a Matrix demo
-   (a small bot or the Qt client sending `vn.scaas.pqchat.v1` events).
+3. One reference client (`clients/ua-rs`: create / join / rekey / encrypt / decrypt) against the vectors, then the
+   `clients/ua-qt` chat screen on libQuotient (C7).
 
 ## 4. Owner answers (2026-10-25)
 
 1. Default scheme: **X-Wing** (ML-KEM-768 alone stays accepted for clients without X25519).
 2. Who may create a session with a UA: **anyone** (the creator pays the gas; clients hide sessions from unknown UAs).
+3. KEM keys per UA: **one first**; several (one per device) later (C2).
+4. Every write through **mtx** (a relayer pays the transaction fee): key registration, session creation, rekey (C1).
+5. Qt client: `clients/ua-qt` on **libQuotient** (C7).
