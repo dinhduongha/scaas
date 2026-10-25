@@ -134,9 +134,10 @@ pub struct Enc {
     pub ctr: u32,
 }
 
-/// One `R_TXM` encryption (P6-ANON §4, D13): per group `g < ⌈M/4⌉` one `enc` from `enc_group_seed(seed_enc, g)` to the
-/// group's legs, then (group 0) `pk_f`, then (auditor on) the group's auditor copies; the result re-sorted into the
-/// statement's and the witness's leg order.
+/// One `R_TXM` encryption (P6-ANON §4, D13): per group `g < ⌈M/s⌉` (s = S_AUD with the auditor, 4 without; R0-1) one
+/// `enc` from `enc_group_seed(seed_enc, g)` to the group's legs, then (group 0) `pk_f`, then (auditor on) the group's
+/// auditor copies, the copy of the group's i-th leg at window i (`enc_win`); the result re-sorted into the statement's
+/// and the witness's leg order.
 pub struct EncMulti {
     /// `(u_g, r_g, e1_g)` per group (the `Enc` of group g; its `vs` / `e2` are also in `v`, `e2`, … below)
     pub groups: Vec<Enc>,
@@ -168,18 +169,20 @@ pub fn enc_multi(
         v_a: Vec::new(),
         e2_a: Vec::new(),
     };
-    for (g, grp) in legs.chunks(pqz_stmt::LEGS_PER_GROUP).enumerate() {
+    for (g, grp) in legs.chunks(pqz_stmt::legs_per_group(pk_a.is_some())).enumerate() {
         let n = grp.len();
         let (mut pks, mut msgs): (Vec<&[u8; PK_BYTES]>, Vec<[u8; 16]>) = grp.iter().copied().unzip();
         if g == 0 {
             pks.push(pk_f);
             msgs.push(d_f);
         }
+        let mut win = vec![0u8; pks.len()];
         if let Some(a) = pk_a {
             pks.extend(std::iter::repeat_n(a, n));
             msgs.extend(grp.iter().map(|l| l.1));
+            win.extend((0..n).map(|i| i as u8)); // the copy of the group's i-th leg at window i (R0-1)
         }
-        let c = enc(&pks, &msgs, &enc_group_seed(seed_enc, g))?;
+        let c = enc_win(&pks, Some(&win), &msgs, &enc_group_seed(seed_enc, g))?;
         out.v.extend_from_slice(&c.vs[..n]);
         out.e2.extend_from_slice(&c.e2[..n]);
         let a0 = n + (g == 0) as usize;

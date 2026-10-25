@@ -145,10 +145,20 @@ pub fn keygen(seed32: &[u8; 32]) -> Option<Key> {
 }
 
 pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
+    enc_win(pks, None, msgs, seed_enc)
+}
+
+/// `pqz_enc_seed_win`: recipient j's v at window `win[j]` < 4 (None: every window 0; R0-1)
+pub fn enc_win(pks: &[&[u8; PK_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
     if pks.is_empty() {
         return None; // as the C backend (the core takes a count; the lengths it checks)
     }
-    let c = with_ctx(|c| c.enc_seed(pks, msgs, seed_enc)).ok()?.ok()?;
+    let c = match win {
+        None => with_ctx(|c| c.enc_seed(pks, msgs, seed_enc)),
+        Some(w) => with_ctx(|c| c.enc_seed_win(pks, w, msgs, seed_enc)),
+    }
+    .ok()?
+    .ok()?;
     Some(Enc { u: c.u, vs: c.vs, r: c.r, e1: c.e1, e2: c.e2, ctr: c.ctr })
 }
 
@@ -160,7 +170,12 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
 
 /// Dec of `ct = u ‖ v` (16,512 B) with `s`: the 16 digits `M` and their noise (§4.2, `pqz_dec`).
 pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
-    with_ctx(|_| ::pqzl::dec(s, ct)).ok()?.ok()
+    dec_win(s, ct, 0)
+}
+
+/// Dec of a v at window `win` < 4 (`pqz_dec_win`; the auditor's copy of an R_TXM leg j: win = j mod S_AUD, R0-1).
+pub fn dec_win(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Option<([i64; 16], [i64; 16])> {
+    with_ctx(|_| ::pqzl::dec_win(s, ct, win)).ok()?.ok()
 }
 
 /// `pqz_prove`: the proof, or the core's error code (pqz_rt.h: 1 internal, 2 memory, 3 input, 4 rejection cap; -1 a
@@ -186,10 +201,28 @@ pub fn encrypt(
     e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Option<super::Encrypted> {
+    encrypt_win(pks, None, msgs, r, e1, e2)
+}
+
+/// `pqz_encrypt_win` (recipient j at window `win[j]`, R0-1)
+#[cfg(feature = "prove")]
+pub fn encrypt_win(
+    pks: &[&[u8; PK_BYTES]],
+    win: Option<&[u8]>,
+    msgs: &[[u8; 16]],
+    r: &[i8; N],
+    e1: &[i16; N],
+    e2: &[[i16; 16]],
+) -> Option<super::Encrypted> {
     if pks.is_empty() {
         return None;
     }
-    let c = with_ctx(|c| c.encrypt(pks, msgs, r, e1, e2)).ok()?.ok()?;
+    let c = match win {
+        None => with_ctx(|c| c.encrypt(pks, msgs, r, e1, e2)),
+        Some(w) => with_ctx(|c| c.encrypt_win(pks, w, msgs, r, e1, e2)),
+    }
+    .ok()?
+    .ok()?;
     Some((c.u, c.vs))
 }
 

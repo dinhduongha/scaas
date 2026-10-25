@@ -866,13 +866,14 @@ mod tests {
                 (Form::DiscloseReceiver, 234_238, true),
                 (Form::Transfer0, 304_266, true),
             ],
+            // the fallback build (THE preset at n2304-kmax4096): within MAX_PROOF_PQZH 327,680 since the R0 review fix
             _ => [
                 (Form::Register, 204_978, true),
-                (Form::Transfer, 264_510, false),
-                (Form::Burn, 263_784, false),
+                (Form::Transfer, 264_510, true),
+                (Form::Burn, 263_784, true),
                 (Form::DiscloseSender, 204_978, true),
                 (Form::DiscloseReceiver, 204_978, true),
-                (Form::Transfer0, 263_784, false),
+                (Form::Transfer0, 263_784, true),
             ],
         };
         assert_eq!(expect.map(|e| e.0), RELS);
@@ -884,21 +885,21 @@ mod tests {
             assert_eq!(cs::form_of(f.op(), f.stmt_len()), Some(f));
         }
         assert!([0, 6, 7, 255].iter().all(|&op| cs::form_of(op, 0).is_none()));
-        // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound (n2048-kmax1024 = the pre-review H-3
-        // table, measured max_len_exact in runs/l16-txm-*; the others: runs/c8*-sizes.jsonl); built shapes (M <= 4)
-        // within MAX_PROOF_PQZH and MAX_INPUT except n2048-kmax1024 none above and the fallback build's (all above
-        // MAX_PROOF_PQZH); the oversize ones (M = 8, 16) above
+        // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound, audited shapes with ceil(M / S_AUD)
+        // groups (R0 review fix 2026-10-25: S_AUD 2 at n2048-kmax1024, 3 at n2304-kmax4096, 4 at n2560-kmax16384); built
+        // shapes (M <= 4) within MAX_PROOF_PQZH (327,680 at every PQZH set) and MAX_INPUT (524,288), the fallback build's
+        // too
         let multi = match set {
             "n2304-kmax4096" if !fb => [
                 ((1, true), 251_608, 344_925),
                 ((1, false), 251_608, 326_365),
                 ((2, true), 252_328, 364_333),
                 ((2, false), 251_608, 344_925),
-                ((4, true), 253_048, 402_429),
+                ((4, true), 296_248, 464_061),
                 ((4, false), 252_328, 382_765),
-                ((8, true), 296_968, 539_533),
+                ((8, true), 340_168, 601_165),
                 ((8, false), 296_248, 519_357),
-                ((16, true), 387_688, 816_621),
+                ((16, true), 474_088, 939_885),
                 ((16, false), 384_088, 792_541),
             ],
             "n2048-kmax1024" => [
@@ -906,11 +907,11 @@ mod tests {
                 ((1, false), 234_744, 301_309),
                 ((2, true), 235_470, 335_187),
                 ((2, false), 235_470, 318_547),
-                ((4, true), 236_196, 369_193),
+                ((4, true), 279_756, 429_137),
                 ((4, false), 235_470, 351_571),
-                ((8, true), 281_208, 497_149),
+                ((8, true), 368_328, 617_037),
                 ((8, false), 279_756, 478_289),
-                ((16, true), 372_684, 754_513),
+                ((16, true), 546_924, 994_289),
                 ((16, false), 369_054, 732_451),
             ],
             "n2560-kmax16384" => [
@@ -930,20 +931,21 @@ mod tests {
                 ((1, false), 263_784, 338_541),
                 ((2, true), 264_510, 376_515),
                 ((2, false), 264_510, 357_827),
-                ((4, true), 265_236, 414_617),
+                ((4, true), 323_316, 491_129),
                 ((4, false), 264_510, 394_947),
-                ((8, true), 324_768, 567_333),
+                ((8, true), 382_848, 643_845),
                 ((8, false), 324_042, 547_151),
-                ((16, true), 445_284, 874_217),
+                ((16, true), 561_444, 1_027_241),
                 ((16, false), 441_654, 850_107),
             ],
         };
         for ((m, aud), max, input) in multi {
             let r = Rel::Multi { m, aud };
             assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
-            // every built shape within the set's limits, except the fallback build's (THE preset at n2304-kmax4096)
-            let fits = m <= 4 && !(set == "n2304-kmax4096" && fb);
-            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, fits, "M {m} {aud}");
+            // every built shape within the set's limits (the oversize M = 8, 16 mostly above: only their margins differ)
+            if m <= 4 {
+                assert!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, "M {m} {aud}");
+            }
             assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
         }
         let built = cs::multi_rels();

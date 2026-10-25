@@ -59,7 +59,7 @@ pub fn wit_multi(kf: &Key, c: &pqzl::EncMulti, d_legs: &[[u8; 16]], d_f: [u8; 16
 
 /// `R_TXM` witness bytes
 pub const fn multi_wit_len(m: usize, aud: bool) -> usize {
-    3 * pqzl::N * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1)
+    3 * pqzl::N * (1 + groups(m, aud)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1)
 }
 
 /// `recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})` (32-byte words, leg order; P6-ANON §4)

@@ -26,6 +26,10 @@ compile_error!("pqz-ffi needs panic = \"unwind\" on native targets (catch_unwind
 // P6-ANON: pqz-stmt's bench-only `oversize` (op 7 M = 8 / 16 for both ids) must never be in the precompile build;
 // feature unification would carry it in from any crate of the graph, so refuse to compile.
 const _: () = assert!(!pqz_stmt::OVERSIZE, "pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build");
+// pqzh-ligero's research feature `fallback-retry` swaps n2304-kmax4096's preset under the same PQZH_ID (review R3-1 /
+// R4-C5): never in a pqz-ffi build
+#[cfg(feature = "pqzh")]
+const _: () = assert!(!pqzh_ligero::FALLBACK_RETRY, "pqzh-ligero feature `fallback-retry` is research only: not in pqz-ffi's build");
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 

@@ -25,6 +25,11 @@ pub mod ring;
 pub mod set;
 pub mod transcript;
 
+/// Whether the research feature `fallback-retry` (n2304-kmax4096's THE preset with the prover's retry, fallback A) is on.
+/// Such a build has no proofSystemId of its own (its preset is not the one PQZH_ID's label names: the test
+/// `ids_are_the_labels_keccak` fails there by design), so pqz-ffi refuses to compile with it (review R3-1 / R4-C5)
+pub const FALLBACK_RETRY: bool = cfg!(feature = "fallback-retry");
+
 pub use cs::{RELS, Rel, form_of, multi_rels, rel_of};
 pub use ligero::{Params, prove, try_verify, verify};
 #[cfg(feature = "bench")]

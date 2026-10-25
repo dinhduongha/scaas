@@ -52,9 +52,10 @@ extern "C" {
     fn pqz_verify_fast(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
     fn pqz_keypair_from_secret(s: *const i8, e: *const i16, pk: *mut u8) -> i32;
     fn pqz_keygen(seed32: *const u8, pk: *mut u8, s: *mut i8, e: *mut i16, ctr: *mut u32) -> i32;
-    fn pqz_enc_seed(
+    fn pqz_enc_seed_win(
         pks: *const *const u8,
         npk: u32,
+        win: *const u8,
         msgs: *const [u8; 16],
         seed_enc: *const u8,
         u: *mut u8,
@@ -65,9 +66,10 @@ extern "C" {
         ctr: *mut u32,
     ) -> i32;
     #[cfg(feature = "prove")]
-    fn pqz_encrypt(
+    fn pqz_encrypt_win(
         pks: *const *const u8,
         npk: u32,
+        win: *const u8,
         msgs: *const [u8; 16],
         r: *const i8,
         e1: *const i16,
@@ -75,7 +77,7 @@ extern "C" {
         u: *mut u8,
         vs: *mut [u8; 128],
     ) -> i32;
-    fn pqz_dec(s: *const i8, ct: *const u8, m: *mut i64, noise: *mut i64) -> i32;
+    fn pqz_dec_win(s: *const i8, ct: *const u8, win: u32, m: *mut i64, noise: *mut i64) -> i32;
     fn pqz_enc_group_seed(seed_enc: *const u8, g: u32, out: *mut u8);
     #[cfg(feature = "fuzz")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8, outlen: *mut usize) -> i32;
@@ -229,8 +231,13 @@ pub fn keygen(seed32: &[u8; 32]) -> Option<Key> {
 }
 
 pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
+    enc_win(pks, None, msgs, seed_enc)
+}
+
+/// `pqz_enc_seed_win`: recipient j's v at window `win[j]` < 4 (None: every window 0; R0-1)
+pub fn enc_win(pks: &[&[u8; PK_BYTES]], win: Option<&[u8]>, msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
     let n = pks.len();
-    if n == 0 || msgs.len() != n {
+    if n == 0 || msgs.len() != n || win.is_some_and(|w| w.len() != n) {
         return None;
     }
     let mut c = Enc {
@@ -243,9 +250,10 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
     };
     let rc = with_core(ARENA_SMALL, || unsafe {
         let ptrs: Vec<*const u8> = pks.iter().map(|p| p.as_ptr()).collect();
-        pqz_enc_seed(
+        pqz_enc_seed_win(
             ptrs.as_ptr(),
             n as u32,
+            win.map_or(std::ptr::null(), |w| w.as_ptr()),
             msgs.as_ptr(),
             seed_enc.as_ptr(),
             c.u.as_mut_ptr(),
@@ -271,9 +279,15 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
 
 /// Dec of `ct = u ‖ v` (16,512 B) with `s`: the 16 digits `M` and their noise (§4.2, `pqz_dec`).
 pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
+    dec_win(s, ct, 0)
+}
+
+/// Dec of a v at window `win` < 4 (`pqz_dec_win`; the auditor's copy of an R_TXM leg j: win = j mod S_AUD, R0-1).
+pub fn dec_win(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Option<([i64; 16], [i64; 16])> {
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
-    let rc =
-        with_core(ARENA_SMALL, || unsafe { pqz_dec(s.as_ptr(), ct.as_ptr(), m.as_mut_ptr(), noise.as_mut_ptr()) }).ok()?;
+    let w = u32::try_from(win).ok()?;
+    let rc = with_core(ARENA_SMALL, || unsafe { pqz_dec_win(s.as_ptr(), ct.as_ptr(), w, m.as_mut_ptr(), noise.as_mut_ptr()) })
+        .ok()?;
     (rc == 0).then_some((m, noise))
 }
 
@@ -303,14 +317,28 @@ pub fn encrypt(
     e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Option<super::Encrypted> {
+    encrypt_win(pks, None, msgs, r, e1, e2)
+}
+
+/// `pqz_encrypt_win` (recipient j at window `win[j]`, R0-1)
+#[cfg(feature = "prove")]
+pub fn encrypt_win(
+    pks: &[&[u8; PK_BYTES]],
+    win: Option<&[u8]>,
+    msgs: &[[u8; 16]],
+    r: &[i8; N],
+    e1: &[i16; N],
+    e2: &[[i16; 16]],
+) -> Option<super::Encrypted> {
     let n = pks.len();
-    if n == 0 || msgs.len() != n || e2.len() != n {
+    if n == 0 || msgs.len() != n || e2.len() != n || win.is_some_and(|w| w.len() != n) {
         return None;
     }
     let (mut u, mut vs) = (Box::new([0u8; PK_BYTES]), vec![[0u8; 128]; n]);
     let rc = with_core(ARENA_SMALL, || unsafe {
         let ptrs: Vec<*const u8> = pks.iter().map(|p| p.as_ptr()).collect();
-        pqz_encrypt(ptrs.as_ptr(), n as u32, msgs.as_ptr(), r.as_ptr(), e1.as_ptr(), e2.as_ptr(), u.as_mut_ptr(), vs.as_mut_ptr())
+        let w = win.map_or(std::ptr::null(), |w| w.as_ptr());
+        pqz_encrypt_win(ptrs.as_ptr(), n as u32, w, msgs.as_ptr(), r.as_ptr(), e1.as_ptr(), e2.as_ptr(), u.as_mut_ptr(), vs.as_mut_ptr())
     })
     .ok()?;
     (rc == 0).then_some((u, vs))

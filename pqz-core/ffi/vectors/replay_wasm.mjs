@@ -25,6 +25,8 @@ for (const f of ['statement_transfer.json', 'statement_burn.json', 'statement_re
   'statement_disclose.json']) for (const r of J(f).rows) stmts[r.form] = r.stmt;
 const multi = {};
 for (const r of J('statement_transfer_multi.json').rows) multi[r.case] = r;
+// the op 7 disclosures (R0-1) by case, under their own op
+for (const r of J('statement_transfer_multi.json').disclosures || []) stmts[r.case] = r.stmt;
 
 const cases = [];
 const add = (name, op, stmt, wit, rnd, o) => { for (const id of IDS)
@@ -32,7 +34,7 @@ const add = (name, op, stmt, wit, rnd, o) => { for (const id of IDS)
 for (const id of IDS)
   for (const r of J(`proof_${id}.json`).rows) {
     const m = r.case && multi[r.case];
-    cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.form], id),
+    cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.case || r.form], id),
       wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof, pqzlM: m && id === 'pqzl' ? m.M : 0 });
   }
 const w = J('worstcase_noise.json');

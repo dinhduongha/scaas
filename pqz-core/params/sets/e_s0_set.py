@@ -4,12 +4,16 @@ txm4 / txm8). pqz-core/pqzl/params/n-study/e_s0_n.py (itself ../p16k/e_s0_16k.py
 the set's constants read from sets/<set>/pqz_set.h (gen_set.py) and, per relation, the spec (m1, alpha, nbin) and the
 codegen header (stdev3, challenge omega / eta, knowledge error) of sets/<set>/; checks unchanged:
   part 0  the set's budget checks (§4.3);
-  part 3a challenge space of each header's (omega, eta) (sampled, LNP22 4.4), 2 omega below the LS18 bound;
+  part 3a challenge space of each header's (omega, eta) (sampled, LNP22 4.4), 2 omega below the LS18 bound: |C| counts
+          the set the cores sample since the R0 review fix (R0-C3), c autostable with sqrt(||o(c) c||_1) <= eta (the
+          resampled challenge: lazer poly.c poly_urandom_challenge, Rust Poly::urandom_challenge); the operator norm
+          max_j |c(zeta_j)| <= eta (the bound the extractor's argument uses, implied by the l1 one) is printed beside it;
   part 4  exactness of the norm proofs per relation: the JL-extracted bound b' = 2 sqrt(512) s3 / sqrt(30) with
           s3 = the larger of e_s0.py's 11 sqrt(337) alpha and the header's stdev3; b'^2 + beta_e^2 < q,
           41 (m1 d) b' < q, binary rows < q;
-  part 5  per-round Fiat-Shamir soundness (R1 JL, R2 lambda = ceil(128 / log2 q), R3 q^-16, R4 the relation's 2/|C|)
-          and the header's knowledge error.
+  part 5  per-round Fiat-Shamir soundness (R1 JL, R2 q^-lambda with lambda read from each header's quad_eval
+          parameters, even and lambda log2 q >= 128 (review R0-2 / R0-C7), R3 q^-16, R4 the relation's 2/|C|) and the
+          header's knowledge error.
 Stdlib + numpy; in the pinned Sage image (numpy pinned with it):
   SET=<set> scripts/capped pqz-core/params/sets/run_e_s0_set.sh > pqz-core/params/sets/<set>/e-s0.txt
 """
@@ -76,7 +80,9 @@ def rel(spec):
     om, eta = map(int, re.search(r"\[-omega,omega\] = \[-(\d+),\d+\].*eta = (\d+)", h).groups())
     ke = float(re.search(r"knowledge error <= 2\^\(([-\d.]+)\)", h)[1])
     assert int(re.search(r"s1: m1 = (\d+)", h)[1]) == m1
-    return name, m1, alpha, nbin, st3, om, eta, ke
+    # lambda: the last field of the relation's lnp_quad_eval_params_t (the cores read it there)
+    lam = int(re.search(r"lnp_quad_eval_params_t pqz_%s_quad_eval = \{\{[^}]*, (\d+)\}\};" % name, h)[1])
+    return name, m1, alpha, nbin, st3, om, eta, ke, lam
 
 
 RELS = [rel(p) for p in sorted(glob.glob(os.path.join(SD, "*_params.sage")))]
@@ -102,20 +108,41 @@ print(f"Delta parity: {'even' if DELTA % 2 == 0 else 'odd'} (an even Delta allow
 hr("3a. Challenge space of each relation's header (LNP22 4.4), 2 omega below the LS18 bound")
 theta = [math.pi * (2 * j + 1) / d for j in range(d // 2)]
 EMB = np.array([[1.0] + [2 * math.cos(i * t) for i in range(1, d // 2)] for t in theta])
+
+
+def l1_ocsq(c):
+    """||o(c) c||_1 of autostable challenges c (rows: c_0 .. c_31 as sampled; c_32 = 0, c_(64-i) = -c_i): o(c) = c, so
+    the negacyclic square, by an exact float FFT (|coefficients| <= 64 * 8^2)"""
+    out = []
+    for c in np.array_split(c, max(1, c.shape[0] // 20_000)):  # chunks: the run's --memory 1g
+        full = np.zeros((c.shape[0], d))
+        full[:, :d // 2] = c
+        full[:, d // 2 + 1:] = -c[:, :0:-1]
+        lin = np.rint(np.fft.irfft(np.fft.rfft(full, 2 * d) ** 2, 2 * d))
+        out.append(np.abs(lin[:, :d] - lin[:, d:]).sum(axis=1))
+    return np.concatenate(out)
+
+
 chal = {}
 for om, eta in sorted({(r[5], r[6]) for r in RELS}):
     rng = np.random.default_rng(20261013)
     c = rng.integers(-om, om + 1, size=(200_000, d // 2))
-    acc = float((np.abs(c @ EMB.T).max(axis=1) <= eta).mean())
+    acc_op = float((np.abs(c @ EMB.T).max(axis=1) <= eta).mean())
+    l1 = l1_ocsq(c)
+    acc = float((l1 <= eta * eta).mean())
     logc = (d // 2) * log2(2 * om + 1) + log2(acc)
     chal[om, eta] = logc
-    check(f"omega = {om}, eta = {eta}: P(accept) = {acc:.4f}, |C| = 2^{logc:.2f}, 2/|C| = 2^-{logc - 1:.2f}, "
-          f"2 omega = {2 * om} < {ls18:.0f}", 2 * om < ls18 and logc - 1 >= 128)
+    check(f"omega = {om}, eta = {eta}: P(sqrt ||o(c) c||_1 <= eta) = {acc:.4f} (the sampled set; operator norm "
+          f"<= eta: {acc_op:.4f}), |C| = 2^{logc:.2f}, 2/|C| = 2^-{logc - 1:.2f}, 2 omega = {2 * om} < {ls18:.0f}",
+          2 * om < ls18 and logc - 1 >= 128)
+    # every filtered challenge meets the operator-norm bound (sqrt of the l1 norm of c^2 bounds |c(zeta)|)
+    sel = l1 <= eta * eta
+    check("  every challenge of the sampled set has max |c(zeta_j)| <= eta", bool((np.abs(c[sel] @ EMB.T).max(axis=1) <= eta).all()))
 
 hr("4. Exactness of the norm proofs per relation (no wrap-around mod q)")
 print(f"{'rel':7s} {'m1':>4s} {'alpha':>8s} {'nbin':>4s} {'s3 e_s0':>10s} {'stdev3':>10s} {'log2 b_':>7s} "
       f"{'l2: b^2+be^2':>12s} {'JL: 41 N b':>11s}  (log2; q = 2^{lg(q):.2f})")
-for name, m1, alpha, nbin, st3, om, eta, ke in RELS:
+for name, m1, alpha, nbin, st3, om, eta, ke, lam in RELS:
     s3 = max(GAMMA * sqrt(337) * alpha, st3)
     b = 2 * sqrt(2 * 256) * s3 / sqrt(30)
     l2, jl = b**2 + BETA_E**2, 41 * m1 * d * b
@@ -128,15 +155,18 @@ check(f"row 7 terms |M_i + c_(i-1) - d'_i - d_i - 16 c_i| < 2^{M_BITS + 1} < q",
 check(f"R_DR: e' + E in {ET_BITS} bits, Delta d + e' < q", DELTA * 15 + 2**ET_BITS < q)
 
 hr("5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own) and the headers' knowledge error")
-LAM = math.ceil(128 / log2(q))
 jl_unit = log2(sum(comb(256, i) for i in range(30))) - 256
+lams = sorted({r[8] for r in RELS})
+LAM = min(lams)  # every header's lambda (review R0-2 / R0-C7: read, not computed)
+check(f"lambda of every header {lams}: even, lambda log2 q = {LAM * log2(q):.2f} >= 128",
+      all(x % 2 == 0 for x in lams) and LAM * log2(q) >= 128)
 rounds = [("R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)", 128.0, f"unit-vector case 2^{jl_unit:.2f}"),
-          (f"R2 Z_q amortization, lambda = {LAM} repetitions (q^-lambda)", LAM * log2(q), ""),
+          (f"R2 Z_q amortization, lambda = {LAM} repetitions (q^-lambda, the headers')", LAM * log2(q), ""),
           (f"R3 R_q aggregation of quadratic relations (q^-(d/l) = q^-{d // l})", (d // l) * log2(q), "")]
 for name, bits, note in rounds:
     print(f"{name:72s} {bits:8.2f} bits {'OK' if bits >= 128 else 'MISS'}  {note}")
     ok &= bits >= 128
-for name, m1, alpha, nbin, st3, om, eta, ke in RELS:
+for name, m1, alpha, nbin, st3, om, eta, ke, lam in RELS:
     r4 = chal[om, eta] - 1
     good = r4 >= 128 and ke <= -127
     ok &= good

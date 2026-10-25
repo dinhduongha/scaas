@@ -279,19 +279,28 @@ fn other_id(id: usize) -> (&'static str, Word) {
 }
 
 /// The retired ids of a system (decisions CTR-PQZ-09): PQZL v2 (forgeable, lazer#28; F6 / F9 path B) and v3, PQZH v1
-/// (both replaced by the per-set ids of plan 5h Task 8d); the negative rows "retired <name> proofSystemId" put each on
-/// an honest input of that system, which every verifier must reject as an unknown id
+/// (both replaced by the per-set ids of plan 5h Task 8d), and this set's own PQZL v4 / PQZH v2 of plan 5h Task 8d
+/// (retired by the R0 review fix, 2026-10-25: its label with /v5 -> /v4, /v3 -> /v2); the negative rows "retired <name>
+/// proofSystemId" put each on an honest input of that system, which every verifier must reject as an unknown id
 fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
     let k = |l: &str| keccak(&[l.as_bytes()]);
+    let prev = |l: &str, now: &str, was: &str| {
+        assert!(l.ends_with(now), "{l}: not a {now} label");
+        k(&format!("{}{was}", &l[..l.len() - now.len()]))
+    };
     if id == 0 {
-        let mut v = vec![("PQZL v2", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")), ("PQZL v3", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"))];
+        let mut v = vec![
+            ("PQZL v2", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")),
+            ("PQZL v3", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")),
+            ("PQZL v4", prev(st::PQZL_LABEL, "/v5", "/v4")),
+        ];
         // a set without PQZH (n2816-kmax65536) has no PQZH rows: the retired PQZH v1 id goes on its PQZL inputs
         if !st::HAS_PQZH {
             v.push(("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")));
         }
         v
     } else {
-        vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"))]
+        vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")), ("PQZH v2", prev(st::PQZH_LABEL, "/v3", "/v2"))]
     }
 }
 
@@ -730,10 +739,11 @@ fn keygen_file() -> (String, String) {
         .collect();
     file(
         "keygen.json",
-        leak(format!("KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V1 || seed || be4(ctr)), \
+        leak(format!("KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V2 || u8(len(set)) || set || \
+         seed || be4(ctr)), set = the parameter set's name ({}; review R2-C3), \
          s <- CBD_1, e <- CBD_20, resample above {BS} / {BE}, pk = A s + e. ctr = the counter used. The searched-resample row \
          was dropped (probability about 2^-70 per seed); the resample path and the counter-64 error are pinned by the \
-         test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).")),
+         test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).", st::SET)),
         vec![("rows", J::A(rows))],
     )
 }
@@ -742,7 +752,7 @@ fn cbd_file() -> (String, String) {
     let mut rows = Vec::new();
     for seed in [[0x00; 32], SEED_F] {
         let k = keygen(seed);
-        let stream = [&b"SCAAS-PQZ-KEYGEN-V1"[..], &seed, &k.ctr.to_be_bytes()].concat();
+        let stream = [&b"SCAAS-PQZ-KEYGEN-V2"[..], &[st::SET.len() as u8], st::SET.as_bytes(), &seed, &k.ctr.to_be_bytes()].concat();
         let e: Vec<i64> = k.e.iter().map(|&x| x as i64).collect();
         let s: Vec<i64> = k.s.iter().map(|&x| x as i64).collect();
         rows.push(o(vec![
@@ -1109,6 +1119,11 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             ("pk_f coefficient 0 low bit flipped", Transfer, vec![E::StmtFlip(640 + 7, 0)]),
             ("v_f low bit flipped", Transfer0, vec![E::StmtFlip(Transfer0.stmt_len() - 1, 0)]),
             ("kind word changed", DiscloseSender, vec![E::StmtFlip(256 + 31, 0)]),
+            // kind = OpeningKind + 256 w (R0-1): w = 0 but for AUDITOR (w < S_AUD), the word < 2^16 (decoder: Kind)
+            ("kind window 1", DiscloseSender, set(256 + 30, vec![1])),
+            ("kind window 1", DiscloseReceiver, set(256 + 30, vec![1])),
+            (leak(format!("kind window {} (S_AUD)", st::S_AUD)), DiscloseAuditor, set(256 + 30, vec![st::S_AUD as u8])),
+            ("kind word 2^16", DiscloseAuditor, set(256 + 29, vec![1])),
             ("amount + 1", DiscloseSender, set(224 + 24, qb(123_457))),
             ("amount + 1", Burn, set(288 + 24, qb(123_457))),
             ("TRANSFER0's proof", Transfer, vec![E::ProofFrom(Transfer0)]),
@@ -1703,6 +1718,74 @@ fn multi_rows() -> Vec<MRow> {
         .collect()
 }
 
+/// op 7 disclosures (R0-1: R_DR / R_DA at the window of the disclosed v): (case, op 7 case, leg, auditor). The auditor
+/// copies of legs 3 and 4 of M8-on-boundary and of leg 2 of M4-on (windows j mod S_AUD: some nonzero at every set) and
+/// the receiver of M8-on-boundary's leg 4 (window 0, its group's u)
+const MDISC: [(&str, &str, usize, bool); 4] = [
+    ("M8-on-boundary-leg3-auditor", "M8-on-boundary", 3, true),
+    ("M8-on-boundary-leg4-auditor", "M8-on-boundary", 4, true),
+    ("M4-on-leg2-auditor", "M4-on", 2, true),
+    ("M8-on-boundary-leg4-receiver", "M8-on-boundary", 4, false),
+];
+
+/// One op 7 disclosure statement (statement_transfer_multi.json `disclosures`)
+struct DRow {
+    case: String,
+    form: Form,
+    stmt: Vec<u8>,
+    wit: Vec<u8>,
+    rnd: [u8; 32],
+    json: Vec<(&'static str, J)>,
+}
+
+fn multi_disclosures(mrows: &[MRow]) -> Vec<DRow> {
+    let ka = keygen(SEED_A);
+    let specs = multi_specs();
+    MDISC
+        .iter()
+        .enumerate()
+        .map(|(i, &(case, mc, j, aud))| {
+            let r = mrows.iter().find(|r| r.case == mc).unwrap();
+            assert!(r.aud, "{mc}: an audited op 7 case");
+            let amount = specs.iter().find(|x| x.0 == mc).unwrap().4[j];
+            let s = st::parse_multi(&r.stmt).unwrap();
+            let lpg = st::legs_per_group(true);
+            let kr = keygen([SEED_LEG0 + j as u8; 32]);
+            let (form, kind, w, key, v) =
+                if aud { (Form::DiscloseAuditor, 2u64, j % lpg, &ka, s.v_a(j).unwrap()) } else { (Form::DiscloseReceiver, 1, 0, &kr, s.v(j)) };
+            let mut hw = r.header;
+            let f: Vec<(&str, V)> = vec![
+                ("chainId", V::B(hw[st::H_CHAIN_ID].to_vec())),
+                ("chainUid", V::B(hw[st::H_CHAIN_UID].to_vec())),
+                ("token", V::B(hw[st::H_TOKEN][12..].to_vec())),
+                ("registry", V::B(hw[st::H_REGISTRY][12..].to_vec())),
+                ("entryRef", V::B(mentry_ref(&mut hw).to_vec())),
+                ("amount", V::I(amount)),
+                ("kind", V::I(kind + 256 * w as u64)),
+            ];
+            let mut words = Disclose::words(form, &PQZL_ID);
+            set_words(&mut words, &DNAMES, &f);
+            let st_ = Stmt::Disclose(Disclose { form, words, pk: &key.pk, u: s.u(j / lpg), v }).encode().unwrap();
+            st::parse(form.op(), &st_).expect("op 7 disclosure canonical");
+            let objs = o(vec![
+                ("pk", keyref(key)),
+                ("multi_case", J::from(mc)),
+                ("leg", J::from(j)),
+                ("window", J::from(w)),
+            ]);
+            let mut json = stmt_json(form, &st_, fields_json(&f), objs, vec![]);
+            json.insert(1, ("case", J::from(case)));
+            DRow { case: case.into(), form, stmt: st_, wit: key.wit(), rnd: [0xD0 + i as u8; 32], json }
+        })
+        .collect()
+}
+
+/// entryRef of an op 7 header (as op 1: chainId, chainUid, token, fromUA, sendCounter)
+fn mentry_ref(h: &mut [Word; 20]) -> Word {
+    let t = keccak(&[b"SCAAS-PQZ-ENTRY-V1"]);
+    keccak(&[&t, &h[st::H_CHAIN_ID], &h[st::H_CHAIN_UID], &h[st::H_TOKEN], &h[st::H_FROM], &h[st::H_SEND_COUNTER]])
+}
+
 /// memo::open on edited memos of one row (§5.4): (name, key seed, edits, result)
 fn memo_opens(rows: &[MRow]) -> Vec<J> {
     let base = rows.iter().find(|r| r.case == "M2-on").unwrap();
@@ -1755,7 +1838,7 @@ fn moff(m: usize, aud: bool) -> (usize, usize, usize, usize, usize) {
     let a = aud as usize;
     let pk0 = st::HEADER_BYTES + PK;
     let u0 = pk0 + (m + a) * PK + st::CT_BYTES;
-    let v0 = u0 + st::groups(m) * PK;
+    let v0 = u0 + st::groups(m, aud) * PK;
     (pk0, u0, v0, v0 + 128 * m, v0 + 128 * (m + 1))
 }
 
@@ -1914,6 +1997,17 @@ fn generate() -> (Vec<(String, String)>, bool) {
             mp.insert((r.case.clone(), i), p);
         }
     }
+    // op 7 disclosures (R0-1): both ids' proofs
+    let mdisc = multi_disclosures(&mrows);
+    for r in &mdisc {
+        for (i, (nm, id)) in IDS.iter().enumerate() {
+            let s = with_id(&r.stmt, id);
+            let p = prove(id, r.form.op(), &s, &r.wit, &r.rnd);
+            assert_eq!(precompile(&st::input(r.form.op(), &s, &p)), ("1", "verify".to_string()), "{nm} {}", r.case);
+            eprintln!("{nm} {:18} proof {:6} B", r.case, p.len());
+            mp.insert((r.case.clone(), i), p);
+        }
+    }
     files.push(file(
         MULTI_FILE,
         "Op 7 R_TXM statements (P6-ANON plan §4, D15; pq-zether.md §8.1 op 7): every built (M, auditorOn) of each id with \
@@ -1929,8 +2023,17 @@ fn generate() -> (Vec<(String, String)>, bool) {
          token(20) || fromUA || be4(sendCounter) || salt)[32], ks = HKDF-Expand-SHA256(key, PQZ/memo/ks/v1, 2 + 40 M); \
          memoHash = keccak256(memo). memo_open: memo open (the sender's recovery) on edited memos (resize, flip [byte, \
          bit]) of the case, result = (auditorOn, [amount, UA]) or none. stmt = the PQZL-id bytes (PQZH: bytes 32..63 \
-         replaced); stmt_keccak / auth_digest per id; entry_ref as op 1.",
-        vec![("rows", J::A(mrows.iter().map(|r| o(r.json.clone())).collect())), ("memo_open", J::A(memo_opens(&mrows)))],
+         replaced); stmt_keccak / auth_digest per id; entry_ref as op 1. Groups of S_AUD legs with the auditor (set.json \
+         s_aud; owner 2026-10-25, R0-1), 4 without: leg j in group j / s, its auditor copy at the coefficients [16 w, 16 w + \
+         16) of pk_a^T r_g, w = j mod s (the group's i-th copy at window i). disclosures: §7.9 statements of op 7 legs \
+         (R_DR, the auditor's R_DA): words as statement_disclose.json with the case's chainId, chainUid, token, registry, \
+         entryRef, the leg's amount and kind = OpeningKind + 256 w (w = window: the auditor copy's j mod S_AUD, 0 for a \
+         receiver); pk the disclosing key, u = u_{j / s}, v = v_{a,j} (AUDITOR) or v_j (RECEIVER) of multi_case.",
+        vec![
+            ("rows", J::A(mrows.iter().map(|r| o(r.json.clone())).collect())),
+            ("memo_open", J::A(memo_opens(&mrows))),
+            ("disclosures", J::A(mdisc.iter().map(|r| o(r.json.clone())).collect())),
+        ],
     ));
     for (i, (nm, id)) in IDS.iter().enumerate() {
         let mut rows: Vec<J> = sc
@@ -1984,6 +2087,27 @@ fn generate() -> (Vec<(String, String)>, bool) {
             kv.extend([("expect", J::from(true)), ("proof", hx(p))]);
             rows.push(o(kv));
         }
+        for r in &mdisc {
+            let p = &mp[&(r.case.clone(), i)];
+            let mut kv = vec![
+                ("form", J::from(fname(r.form))),
+                ("case", J::from(r.case.as_str())),
+                ("op", J::from(r.form.op())),
+                ("statement", o(vec![("file", J::from(MULTI_FILE)), ("disclosure", J::from(r.case.as_str()))])),
+                ("stmt_keccak", hx(&keccak(&[&with_id(&r.stmt, id)]))),
+                ("wit", hx(&r.wit)),
+                ("wit_keccak", hx(&keccak(&[&r.wit]))),
+                ("rnd32", hx(&r.rnd)),
+                ("proof_bytes", J::from(p.len())),
+                ("proof_keccak", hx(&keccak(&[p]))),
+                ("proof_fnv", J::from(fnv(p))),
+            ];
+            if *id == PQZH_ID {
+                kv.push(("max_proof_len", J::from(ph::max_proof_len(ph::Shape::Form(r.form)))));
+            }
+            kv.extend([("expect", J::from(true)), ("proof", hx(p))]);
+            rows.push(o(kv));
+        }
         let (desc, params) = if *id == PQZL_ID {
             (
                 "PQZL proofs (the set's proofSystemId, set.json pqzl_label) of every statement form, from the C core (pqz_prove, hedged: CTR-PQZ-19), \
@@ -2028,6 +2152,19 @@ fn generate() -> (Vec<(String, String)>, bool) {
         ]));
     }
     let mnegs = multi_negatives(&mrows, &mp);
+    // op 7 disclosures (R0-1): another window than the copy's (a valid kind word, the proof fails), a window >= S_AUD
+    // (decoder: Kind)
+    let mut dneg: Vec<(String, String, usize, Vec<E>, u8)> = Vec::new();
+    for r in mdisc.iter().filter(|r| r.form == Form::DiscloseAuditor) {
+        let w = r.stmt[256 + 30];
+        for id in 0..IDS.len() {
+            if st::S_AUD > 1 {
+                let w2 = ((w as usize + 1) % st::S_AUD) as u8;
+                dneg.push((format!("{}: kind window {w} -> {w2}", r.case), r.case.clone(), id, vec![E::StmtSet(256 + 30, vec![w2])], 5));
+            }
+            dneg.push((format!("{}: kind window {}", r.case, st::S_AUD), r.case.clone(), id, vec![E::StmtSet(256 + 30, vec![st::S_AUD as u8])], 5));
+        }
+    }
     for (name, case, id, edits) in &mnegs {
         let r = mrows.iter().find(|r| &r.case == case).unwrap();
         let input = apply_to(edits, st::OP_TRANSFER_MULTI, with_id(&r.stmt, &IDS[*id].1), mp[&(case.clone(), *id)].clone(), *id, &proofs, &mp);
@@ -2037,6 +2174,24 @@ fn generate() -> (Vec<(String, String)>, bool) {
         nrows.push(o(vec![
             ("name", J::from(name.as_str())),
             ("form", J::from("TRANSFER-MULTI")),
+            ("case", J::from(case.as_str())),
+            ("id", J::from(IDS[*id].0)),
+            ("edits", J::A(edits.iter().map(E::json).collect())),
+            ("input_bytes", J::from(input.len())),
+            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            ("expect", J::from(out)),
+            ("reason", J::from(reason)),
+        ]));
+    }
+    for (name, case, id, edits, op) in &dneg {
+        let r = mdisc.iter().find(|r| &r.case == case).unwrap();
+        let input = apply_to(edits, *op, with_id(&r.stmt, &IDS[*id].1), mp[&(case.clone(), *id)].clone(), *id, &proofs, &mp);
+        let (out, reason) = precompile(&input);
+        assert!(out == "0" || out == "revert", "negative accepted: {name}");
+        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        nrows.push(o(vec![
+            ("name", J::from(name.as_str())),
+            ("form", J::from(fname(r.form))),
             ("case", J::from(case.as_str())),
             ("id", J::from(IDS[*id].0)),
             ("edits", J::A(edits.iter().map(E::json).collect())),

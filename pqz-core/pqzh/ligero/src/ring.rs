@@ -128,6 +128,13 @@ pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e
     (u, vs)
 }
 
+/// X^-o p in Z_q[X]/(X^64 + 1), o < 64 (centred stays centred): (X^-o p)_m = p_{m+o}, so the coefficients [o, o + 16) of
+/// pk^T r are those [0, 16) of (X^-o pk)^T r — an auditor copy's window (R0-1: v_{a,j} at o = 16 (j mod S_AUD); R_DR's
+/// u^T s at the kind word's window)
+pub fn xinv(p: &Poly, o: usize) -> Poly {
+    std::array::from_fn(|m| if m + o < D { p[m + o] } else { -p[m + o - D] })
+}
+
 /// the 16 base-16 digits of x, least significant first
 pub fn digits(x: u64) -> [u8; 16] {
     std::array::from_fn(|i| ((x >> (4 * i)) & 15) as u8)

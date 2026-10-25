@@ -12,8 +12,11 @@
 //!   R_DS   u = A^T r + e1; pk^T r + e2 = v - Delta d (k < 16)
 //!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^(EBITS-1) in EBITS bits (v3: + 2^24 in 25)
 //!   R_TXM  op 7 (P6-ANON plan §3): R_TX with M receiver legs j (digits d_j) and one randomness group (r_g, e1_g, u_g)
-//!          per 4 legs, g(j) = j / 4, v_f in group 0; auditor on: one copy v_{a,j} of every leg under pk_a (digits d_j,
-//!          group g(j)); row 7 with sum_j d_j. R_TX is R_TXM's M = 1 (one builder; op 1 keeps its own bytes).
+//!          per s legs (s = S_AUD with the auditor, 4 without: owner 2026-10-25, R0-1), g(j) = j / s, v_f in group 0;
+//!          auditor on: one copy v_{a,j} of every leg under pk_a (digits d_j, group g(j)) at the coefficients
+//!          [16 w, 16 w + 16) of pk_a^T r_g(j), w = j mod s (as the leg pk X^-16w pk_a: `ring::xinv`); row 7 with
+//!          sum_j d_j. R_TX is R_TXM's M = 1 (one builder; op 1 keeps its own bytes). R_DR reads v at the kind word's
+//!          window w (u^T s at [16 w, ..), as X^-16w u).
 //! with every exact l2 bound of pqz-core (BETA_S / BETA_E for CBD(1) / CBD(20) vectors: v3 36 / 164, set (a) 38 / 173;
 //! BETA_2 = 64 for e2) and the bit ranges of the parameter set (M_i < 2^MBITS, c_i + 64 < 2^CBITS, e_T + 2^(EBITS-1) <
 //! 2^EBITS: v3 14 / 11 / 25, set (a) 16 / 13 / 27; `crate::set`). R_TXM
@@ -36,11 +39,11 @@
 //! only the "own" vectors (big value rows, small rows) and the two shared ones.
 
 use pqz_stmt::{
-    Form, H_AUDITOR_ON, H_LEGS, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER,
-    OP_TRANSFER_MULTI, PK_BYTES, PQZH_ID, V_BYTES, built_legs, groups, multi_len, word_u64,
+    DW_KIND, Form, H_AUDITOR_ON, H_LEGS, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER,
+    OP_TRANSFER_MULTI, PK_BYTES, PQZH_ID, V_BYTES, built_legs, groups, legs_per_group, multi_len, word_u64,
 };
 
-use crate::ring::{D, DELTA, K, N, Poly, a_matrix, digits, dot_int, encrypt, keypair, modq, polys, polys_of};
+use crate::ring::{D, DELTA, K, N, Poly, a_matrix, digits, dot_int, encrypt, keypair, modq, polys, polys_of, xinv};
 use crate::set::{BETA_2, BETA_E, BETA_S, CBITS, EBITS, MBITS};
 
 use crate::fq::{Acc4, F4, Fq};
@@ -99,7 +102,7 @@ impl Rel {
     pub fn wit_len(self) -> usize {
         match self {
             Rel::Form(f) => f.wit_len(),
-            Rel::Multi { m, aud } => 3 * N * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1),
+            Rel::Multi { m, aud } => 3 * N * (1 + groups(m, aud)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1),
         }
     }
 }
@@ -194,7 +197,7 @@ impl Layout {
             Rel::Form(Form::DiscloseReceiver | Form::DiscloseAuditor) => (se.to_vec(), [vec![et], sl.to_vec()].concat(), 1),
             // legs j, f, [a_j]; pairs (s_f, e_f), (r_g, e1_g) for g < G
             Rel::Multi { m, aud } => {
-                let pairs = 1 + groups(m);
+                let pairs = 1 + groups(m, aud);
                 (vec![se; pairs].concat(), debit(m + 1 + aud as usize * m, m, pairs), 6)
             }
         };
@@ -379,7 +382,11 @@ pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
             Stmt::Debit(Debit { burn, pkf, legs, ut: vec(ut), vt: v(vt), us: vec![vec(d.u)], nd, fee: d.fee(), amount })
         }
         pqz_stmt::Stmt::Disclose(d) => {
-            let x = Disc { pk: vec(d.pk), u: vec(d.u), v: v(d.v), amount: d.amount() };
+            // the kind word's window w (R0-1; pqz-stmt checked kind < 2^16, w = 0 but for AUDITOR, w < S_AUD there):
+            // R_DR's u^T s at [16 w, ..) is (X^-16w u)^T s at [0, 16)
+            let w = (word_u64(&d.words[DW_KIND])? >> 8) as usize;
+            let u = vec(d.u).iter().map(|p| xinv(p, 16 * w)).collect();
+            let x = Disc { pk: vec(d.pk), u, v: v(d.v), amount: d.amount() };
             if d.form == Form::DiscloseSender { Stmt::Ds(x) } else { Stmt::Dr(x) }
         }
         // op 7 returned above (parse_multi); op 6 has no relation
@@ -387,7 +394,8 @@ pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
     })
 }
 
-/// op 7: legs 0..M (d_j, group j / 4), f (d', group 0), auditor copies a_j (d_j, group j / 4), in witness order
+/// op 7: legs 0..M (d_j, group j / s), f (d', group 0), auditor copies a_j (d_j, group j / s, the key X^-16w pk_a at
+/// the window w = j mod s: R0-1), in witness order; s = S_AUD with the auditor, 4 without
 fn parse_multi(stmt: &[u8]) -> Option<Stmt> {
     let s = pqz_stmt::parse_multi(stmt).ok()?;
     if s.header[1] != PQZH_ID {
@@ -395,14 +403,16 @@ fn parse_multi(stmt: &[u8]) -> Option<Stmt> {
     }
     let vec = |b: &[u8]| polys_of(b, D);
     let v = |b: &[u8]| polys_of(b, 16)[0];
-    let g = |j: usize| j / pqz_stmt::LEGS_PER_GROUP;
+    let s_ = legs_per_group(s.pk_a.is_some());
+    let g = |j: usize| j / s_;
     let pkf = vec(s.pk_f);
     let mut legs: Vec<Leg> = (0..s.m).map(|j| Leg { pk: vec(s.pk(j)), v: v(s.v(j)), dig: Some(j), g: g(j) }).collect();
     legs.push(Leg { pk: pkf.clone(), v: v(s.v_f), dig: None, g: 0 });
     if let Some(pk_a) = s.pk_a {
         let pka = vec(pk_a);
         for j in 0..s.m {
-            legs.push(Leg { pk: pka.clone(), v: v(s.v_a(j)?), dig: Some(j), g: g(j) });
+            let pkw = pka.iter().map(|p| xinv(p, 16 * (j % s_))).collect();
+            legs.push(Leg { pk: pkw, v: v(s.v_a(j)?), dig: Some(j), g: g(j) });
         }
     }
     let (ut, vt) = s.t.split_at(PK_BYTES);

@@ -6,7 +6,7 @@
 
 use pqz_stmt::{
     DISC_WORDS, DW_AMOUNT, DW_KIND, Form, H_AMOUNT, H_AUDITOR_ON, H_FEE, H_LEGS, H_RECIPIENTS_HASH, H_SALT,
-    HEADER_BYTES, LEGS_PER_GROUP, Multi, PQZH_ID, groups, u64_word,
+    HEADER_BYTES, Multi, PQZH_ID, groups, legs_per_group, u64_word,
 };
 
 use crate::cs::Rel;
@@ -369,7 +369,7 @@ pub struct MultiTweak {
     pub e_f: Option<Vec<i64>>,
     /// leg j encrypted under recipient k's key (k >= M: the auditor's); the statement keeps pk_j
     pub key: Option<(usize, usize)>,
-    /// leg j encrypted with group h's (r_h, e1_h); statement and witness keep group j / 4
+    /// leg j encrypted with group h's (r_h, e1_h); statement and witness keep group j / s
     pub group: Option<(usize, usize)>,
     /// the auditor copy of leg j encrypts these digits; the witness keeps d_j
     pub aud_d: Option<(usize, [u8; 16])>,
@@ -382,11 +382,11 @@ pub fn multi_ua(j: usize) -> [u8; 32] {
     u64_word(0x1000 + j as u64)
 }
 
-/// v = pk^T r + e2 + Delta m (16 coefficients)
-fn enc_v(pk: &[Poly], m: &[u8; 16], r: &[i64], e2: &[i64]) -> Poly {
+/// v = (pk^T r)_{o + i} + e2 + Delta m (16 coefficients; o = 16 w, the window, R0-1)
+fn enc_v(pk: &[Poly], m: &[u8; 16], r: &[i64], e2: &[i64], o: usize) -> Poly {
     let rp = polys(r);
     let y = dot_int(&pk.iter().collect::<Vec<_>>(), &rp.iter().collect::<Vec<_>>());
-    std::array::from_fn(|i| if i < 16 { modq(y[i] + e2[i] + DELTA * m[i] as i64) } else { 0 })
+    std::array::from_fn(|i| if i < 16 { modq(y[o + i] + e2[i] + DELTA * m[i] as i64) } else { 0 })
 }
 
 /// An op 7 statement and witness of shape (m, aud): sender F with balance 1,000,000 in T (as `setup`), leg amounts
@@ -405,7 +405,7 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
     kf.pk = keypair(&polys(&kf.s), &polys(&kf.e));
     let ka = keygen(&mut rng);
     let ks: Vec<Key> = (0..m).map(|_| keygen(&mut rng)).collect();
-    let g = groups(m);
+    let (g, lpg) = (groups(m, aud), legs_per_group(aud));
 
     let bal = 1_000_000u64;
     let amounts = tw.amounts.clone().unwrap_or_else(|| (0..m).map(|j| if j == m / 2 { 123_456 } else { 0 }).collect());
@@ -440,7 +440,7 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
     let us: Vec<Vec<Poly>> = (0..g).map(|i| encrypt(&[], &[], &polys(&rs[i]), &polys(&e1s[i]), &[]).0).collect();
     let grp = |j: usize| match tw.group {
         Some((jj, h)) if jj == j => h,
-        _ => j / LEGS_PER_GROUP,
+        _ => j / lpg,
     };
     let vs: Vec<Poly> = (0..m)
         .map(|j| {
@@ -448,17 +448,17 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
                 Some((jj, k)) if jj == j => ks.get(k).map_or(&ka.pk, |x| &x.pk),
                 _ => &ks[j].pk,
             };
-            enc_v(pk, &d[j], &rs[grp(j)], &e2[j])
+            enc_v(pk, &d[j], &rs[grp(j)], &e2[j], 0)
         })
         .collect();
-    let vf = enc_v(&kf.pk, &dp, &rs[0], &e2[m]);
+    let vf = enc_v(&kf.pk, &dp, &rs[0], &e2[m], 0);
     let vas: Vec<Poly> = (0..m * aud as usize)
         .map(|j| {
             let x = match tw.aud_d {
                 Some((jj, x)) if jj == j => x,
                 _ => d[j],
             };
-            enc_v(&ka.pk, &x, &rs[j / LEGS_PER_GROUP], &e2[m + 1 + j])
+            enc_v(&ka.pk, &x, &rs[j / lpg], &e2[m + 1 + j], 16 * (j % lpg)) // the copy's window (R0-1)
         })
         .collect();
 

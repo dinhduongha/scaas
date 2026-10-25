@@ -184,7 +184,7 @@ fn mutations_960_per_shape_rejected() {
 #[test]
 fn negative_witnesses() {
     for (m, aud) in shapes() {
-        let g = groups(m);
+        let g = groups(m, aud);
         let nv = m + 1 + aud as usize * m;
         let mut cases: Vec<(String, MultiTweak)> = vec![];
         let mut add = |w: String, t: MultiTweak| cases.push((w, t));
@@ -294,7 +294,7 @@ fn statement_changes_rejected() {
         s[HDR_RECIPIENTS_HASH + 5] ^= 1;
         assert!(cs::parse(OP7, &s).is_some() && !verify(OP7, &s, &pf, &p), "{} recipientsHash", name(m, aud));
         // legs swapped in the statement (keys and v together, or v only): leg 0 with leg M - 1, and across groups
-        let vs_at = HEADER_BYTES + (1 + m + aud as usize) * PK_BYTES + PK_BYTES + V_BYTES + groups(m) * PK_BYTES;
+        let vs_at = HEADER_BYTES + (1 + m + aud as usize) * PK_BYTES + PK_BYTES + V_BYTES + groups(m, aud) * PK_BYTES;
         let pk_at = HEADER_BYTES + PK_BYTES;
         let mut pairs = vec![];
         if m > 1 {

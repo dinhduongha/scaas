@@ -74,7 +74,9 @@ pub fn statements() -> HashMap<String, Vec<u8>> {
     let mut m = HashMap::new();
     for f in ["statement_transfer.json", "statement_burn.json", "statement_refresh.json", "statement_register.json",
               "statement_disclose.json", "statement_transfer_multi.json"] {
-        for r in json(f)["rows"].as_array().unwrap() {
+        let j = json(f);
+        // the op 7 disclosures (R0-1: statement_transfer_multi.json `disclosures`) by case, as the R_TXM rows
+        for r in j["rows"].as_array().unwrap().iter().chain(j.get("disclosures").and_then(Value::as_array).into_iter().flatten()) {
             let key = r.get("case").and_then(Value::as_str).unwrap_or_else(|| r["form"].as_str().unwrap());
             m.insert(key.to_string(), with_id(hex(&r["stmt"])));
         }
