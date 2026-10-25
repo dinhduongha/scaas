@@ -225,6 +225,12 @@ fn negative_witnesses() {
                 let x = digits(amount(j) + 1);
                 add(format!("auditor copy of leg {j} encrypts amount + 1"), MultiTweak { aud_d: Some((j, x)), ..d() });
             }
+            // the encoding R0-1 replaced, and a window mix-up (review R0 fix round m4): leg 1's copy at window 0 (every
+            // copy of a group at coefficients 0..16, the shared-randomness defect), leg 0's copy at leg 1's window
+            if m > 1 {
+                add("auditor copy of leg 1 at window 0 (pre-R0-1 encoding)".into(), MultiTweak { aud_win: Some((1, 0)), ..d() });
+            }
+            add("auditor copy of leg 0 at leg 1's window".into(), MultiTweak { aud_win: Some((0, 1)), ..d() });
         }
         if g > 1 {
             // the first leg of group 1 and the last of group 0 (s legs per group: S_AUD with the auditor, 4 without)

@@ -373,6 +373,9 @@ pub struct MultiTweak {
     pub group: Option<(usize, usize)>,
     /// the auditor copy of leg j encrypts these digits; the witness keeps d_j
     pub aud_d: Option<(usize, [u8; 16])>,
+    /// the auditor copy of leg j at window w (coefficients 16 w ..) instead of j mod s: the pre-R0-1 encoding (w = 0)
+    /// or another leg's window; the witness keeps everything (review R0 fix round m4)
+    pub aud_win: Option<(usize, usize)>,
     /// proofSystemId (default PQZH's)
     pub psid: Option<[u8; 32]>,
 }
@@ -458,7 +461,11 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
                 Some((jj, x)) if jj == j => x,
                 _ => d[j],
             };
-            enc_v(&ka.pk, &x, &rs[j / lpg], &e2[m + 1 + j], 16 * (j % lpg)) // the copy's window (R0-1)
+            let w = match tw.aud_win {
+                Some((jj, w)) if jj == j => w,
+                _ => j % lpg,
+            };
+            enc_v(&ka.pk, &x, &rs[j / lpg], &e2[m + 1 + j], 16 * w) // the copy's window (R0-1)
         })
         .collect();
 

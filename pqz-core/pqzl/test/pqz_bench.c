@@ -358,8 +358,9 @@ typedef struct
      norm 120 > 64); over0 (X-1, owner 2026-10-15: ||e2||^2 <= 64^2 = 4096 per e2 vector): bit 0 leg 0's e2,
      bit 1 the auditor copy 0's e2 set to (64, 32, 0, ..., 0) (||e2||^2 = 5120) and the other legs' / copies' e2 to 0,
      so the old one-block bound (||.||^2 <= 4096 M) holds for M >= 2; swap: the statement and witness positions 3 and 4 exchanged after
-     encryption (a leg moved between groups) */
-  unsigned key[MAXL], grp[MAXL], add0, aud0, big0, over0, swap;
+     encryption (a leg moved between groups); awin: 1 + j puts the auditor copy of leg j at window aww instead of
+     j mod s (the pre-R0-1 encoding at window 0, or another leg's window; review R0 fix round m4) */
+  unsigned key[MAXL], grp[MAXL], add0, aud0, big0, over0, swap, awin, aww;
   uint8_t tag; /* seed tag */
 } txspec_t;
 
@@ -441,7 +442,7 @@ txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *w
       memcpy (ma[0], dg[j], 16);
       if (j == 0)
         ma[0][0] += (uint8_t)X->aud0;
-      const uint8_t win[1] = { (uint8_t)(j % PQZ_TXM_LPG (a)) }; /* the copy's window in pk_a^T r_g (R0-1) */
+      const uint8_t win[1] = { (uint8_t)(X->awin == j + 1 ? X->aww : j % PQZ_TXM_LPG (a)) }; /* copy's window (R0-1) */
       if (a)
         rc |= pqz_encrypt_win (pa1, 1, win, (const uint8_t (*)[16])ma, r[X->grp[j]], e1[X->grp[j]],
                                (const int16_t (*)[16])e2a[j], utmp, &va[j]);
@@ -782,7 +783,7 @@ auditor_check (int rels)
    amount, the legs' noise block over its bound), and the honest proofs of the bench statements under changed
    statements (M word, auditorOn, recipientsHash, legs or groups swapped, (2, off) read as (1, on), op 7 against op 1
    both ways). */
-/* PQZ_TXM_CASE=k: run only witness case k (0..14, in txm_check's order) or, k = 15, the statement tampers (one
+/* PQZ_TXM_CASE=k: run only witness case k (0..16, in txm_check's order) or, k = 17, the statement tampers (one
    process per case keeps the ASan + libc-heap build under scripts/capped's 4 GB); unset: all */
 static int txm_sel = -1, txm_k;
 #define TXM_RUN(k) (txm_sel < 0 || txm_sel == (k))
@@ -884,10 +885,10 @@ txm_check (int rels)
   const int r81 = txm_rel (8, 1), r20 = txm_rel (2, 0), r11 = txm_rel (1, 1);
   const char *sel = getenv ("PQZ_TXM_CASE");
   txm_sel = sel != NULL ? atoi (sel) : -1, txm_k = 0;
-  for (int r = 6; r < NREL && TXM_RUN (15); r++) /* the honest proofs the tampers need */
+  for (int r = 6; r < NREL && TXM_RUN (17); r++) /* the honest proofs the tampers need */
     if ((r == r81 || r == r20 || r == r11) && lens[r] == 0)
       fails += step_prove (r, 0) != 0;
-  if (lens[1] == 0 && TXM_RUN (15))
+  if (lens[1] == 0 && TXM_RUN (17))
     fails += step_prove (1, 0) != 0;
 
   /* variants */
@@ -915,6 +916,10 @@ txm_check (int rels)
   fails += txm_case ("legs 3 and 4 moved between groups", &X, 0), n++;
   txspec (&X, 8, 1, 115), X.aud0 = 1;
   fails += txm_case ("auditor copy of leg 0 of another amount", &X, 0), n++;
+  txspec (&X, 8, 1, 120), X.awin = 2, X.aww = 0;
+  fails += txm_case ("auditor copy of leg 1 at window 0 (pre-R0-1 encoding)", &X, 0), n++;
+  txspec (&X, 8, 1, 121), X.awin = 1, X.aww = 1;
+  fails += txm_case ("auditor copy of leg 0 at leg 1's window", &X, 0), n++;
   txspec (&X, 2, 1, 116), X.big0 = 1;
   fails += txm_case ("leg 0's e2 norm 120 (over 64 and over 64 sqrt(2))", &X, 0), n++;
   txspec (&X, 2, 1, 117), X.over0 = 1;
@@ -925,7 +930,7 @@ txm_check (int rels)
   fails += txm_case ("M 8 off: leg 0's ||e2||^2 5120 > 4096, block 5120 < 32768 (X-1)", &X, 0), n++;
 
   /* honest proofs under changed statements */
-  if (r81 >= 0 && TXM_RUN (15))
+  if (r81 >= 0 && TXM_RUN (17))
     {
       const size_t sl = STLEN[r81];
       const unsigned m = 8, G = PQZ_TXM_GROUPS (8, 1);
@@ -950,12 +955,12 @@ txm_check (int rels)
       swap_bytes (st + u0, st + u0 + PQZ_POLYVEC_BYTES, PQZ_POLYVEC_BYTES);
       fails += txm_tamper ("u_0 and u_1 swapped", r81, 7, st, sl), n++;
     }
-  if (r20 >= 0 && TXM_RUN (15)) /* 83,072 B: also the length of (1, on) */
+  if (r20 >= 0 && TXM_RUN (17)) /* 83,072 B: also the length of (1, on) */
     {
       memcpy (st, STMT[r20], STLEN[r20]), st[PQZ_HDR_LEGS + 31] = 1, st[PQZ_HDR_AUDITOR_ON + 31] = 1;
       fails += txm_tamper ("(2, off) read as (1, on)", r20, 7, st, STLEN[r20]), n++;
     }
-  if (r11 >= 0 && TXM_RUN (15)) /* op 7 at M = 1 against op 1 (R_TX), both ways */
+  if (r11 >= 0 && TXM_RUN (17)) /* op 7 at M = 1 against op 1 (R_TX), both ways */
     {
       memcpy (st, STMT[r11], STLEN[r11]), wr_word (st + PQZ_HDR_LEGS, 0);
       fails += txm_tamper ("R_TXM 1 proof as op 1", r11, 1, st, STLEN[r11]), n++;
