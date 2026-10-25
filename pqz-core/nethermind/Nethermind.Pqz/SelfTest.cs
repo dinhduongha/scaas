@@ -11,9 +11,9 @@ namespace Nethermind.Pqz;
 public static class SelfTest
 {
 #if PQZ_SET_N2048_KMAX1024
-    public const string Set = "n2048-kmax1024", ExpectedHash = "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205";
+    public const string Set = "n2048-kmax1024", ExpectedHash = "37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d";
 #elif PQZ_SET_N2304_KMAX4096
-    public const string Set = "n2304-kmax4096", ExpectedHash = "23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0";
+    public const string Set = "n2304-kmax4096", ExpectedHash = "d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d";
 #elif PQZ_SET_N2560_KMAX16384
     public const string Set = "n2560-kmax16384", ExpectedHash = "167c772ef4d0911d60d6b3d2fad256902e1be2dd4a8f0aa9d01d3b3ed8bb45e7";
 #elif PQZ_SET_N2816_KMAX65536

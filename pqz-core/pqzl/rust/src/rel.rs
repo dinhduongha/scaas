@@ -1001,6 +1001,31 @@ mod tests {
     use crate::arith::ntt::Q;
     use alloc::vec;
 
+    /// R1-C1 / R2-C2 (the R0 review fix): Power2Round of every relation's parameters near q (the n2048-kmax1024 wrap:
+    /// q = 2^42 - 215) gives r1 < 2^(log2q - D) (the commitment field) and a low part tA2 = a' - r1 2^D with |tA2| <=
+    /// 2^(D-1) and r1 2^D + tA2 = a mod q; a' = a except in the wrap case
+    #[test]
+    fn power2round_fits_the_commitment_field() {
+        let q = Q as i64;
+        let l = 64 - (Q - 1).leading_zeros();
+        let mut wraps = 0;
+        for r in RELS.iter() {
+            let dc = r.p.tbox.dcompress;
+            let d = dc.d;
+            for a in (0..3 * (1i64 << d)).map(|x| q - 1 - x).chain([0, 1, 1 << (d - 1), (1 << (d - 1)) + 1]) {
+                let (r1, na) = dc.power2round(&Int::from_i64(1, a));
+                let (r1, na) = (r1.get_i64(), na.get_i64());
+                let low = na - (r1 << d);
+                assert!(r1 >= 0 && r1 < 1 << (l - d), "{} D {d}: a {a} r1 {r1}", r.name);
+                assert!(low.abs() <= 1 << (d - 1), "{} D {d}: a {a} low {low}", r.name);
+                assert_eq!(((r1 << d) + low - a).rem_euclid(q), 0, "{} D {d}: a {a}", r.name);
+                wraps += (na != a) as usize;
+            }
+        }
+        // the wrap exists where q is less than 2^(D-1) below 2^log2q: n2048-kmax1024 (2^42 - 215, D >= 9)
+        assert!(wraps > 0 || crate::SET != "n2048-kmax1024", "{wraps} wraps");
+    }
+
     /// an all-zero statement of relation ri with the header words its parser requires (auditorOn, M)
     fn zero_stmt(r: &Rel) -> Vec<u8> {
         let mut st = vec![0u8; stmt_bytes(r)];

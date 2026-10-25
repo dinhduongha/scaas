@@ -1,71 +1,71 @@
 {
  "file": "keygen.json",
- "description": "KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V1 || seed || be4(ctr)), s <- CBD_1, e <- CBD_20, resample above 38 / 173, pk = A s + e. ctr = the counter used. The searched-resample row was dropped (probability about 2^-70 per seed); the resample path and the counter-64 error are pinned by the test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).",
+ "description": "KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V2 || u8(len(set)) || set || seed || be4(ctr)), set = the parameter set's name (n2304-kmax4096; review R2-C3), s <- CBD_1, e <- CBD_20, resample above 38 / 173, pk = A s + e. ctr = the counter used. The searched-resample row was dropped (probability about 2^-70 per seed); the resample path and the counter-64 error are pinned by the test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).",
  "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
    "seed": "0000000000000000000000000000000000000000000000000000000000000000",
    "ctr": 0,
-   "pk_keccak": "c3d629739c13262e844944b64849ea1fecea200f8339fce0e5001b373fb7784c",
-   "pk_first4": [16282650813374, 7693528685229, 3231643897408, 15189719195472],
-   "s_sq": 1121,
-   "e_sq": 22964
+   "pk_keccak": "046c715fd2890ab468e1f9d7422f101f89f83be223666fb44401f5b4e3721111",
+   "pk_first4": [49112252735436, 10278411974778, 2547869586717, 55952884056847],
+   "s_sq": 1169,
+   "e_sq": 23744
   },
   {
    "seed": "0101010101010101010101010101010101010101010101010101010101010101",
    "ctr": 0,
-   "pk_keccak": "1a584d91813ac8de7db2def78c98a4878eac6fd3e25c13074c2f0a49f4a51a92",
-   "pk_first4": [29738815312925, 51605420510595, 4440961736702, 25664699634751],
-   "s_sq": 1182,
-   "e_sq": 23628
+   "pk_keccak": "cdd1017e3a214f4d946ce99e169d39eb82f6afe6d866e5f8cd6ff0251ecfabdb",
+   "pk_first4": [16693191931123, 54585337696905, 34383867501653, 34172002856559],
+   "s_sq": 1155,
+   "e_sq": 22855
   },
   {
    "seed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
    "ctr": 0,
-   "pk_keccak": "c6f004bbde6a0ef58b0c64e47ce48b621010c8ee94d8c33e84038be618c7c945",
-   "pk_first4": [52053745413901, 6636203174453, 9645982956162, 59665197446561],
-   "s_sq": 1162,
-   "e_sq": 23532
+   "pk_keccak": "38424e9fa1c4bdf0895074ee408c99b82460c11338fc3d50ae35b41640041bee",
+   "pk_first4": [12525348837351, 56522102422219, 10970464040503, 25422390100187],
+   "s_sq": 1148,
+   "e_sq": 23037
   },
   {
    "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
    "ctr": 0,
-   "pk_keccak": "1bcad02842aad9f85c6bac5100e7baac99545a8fe297fa29de9da4c1f2c13aa1",
-   "pk_first4": [57373327724879, 48844305427586, 20739741964153, 10098333353017],
-   "s_sq": 1156,
-   "e_sq": 23045
+   "pk_keccak": "bc3664fc2a30ef85fefae85aa6fc3ffcfa022253cc150f5bb2ae2114a3271321",
+   "pk_first4": [45294256105442, 16075672820618, 8286952243578, 12925720865920],
+   "s_sq": 1112,
+   "e_sq": 23431
   },
   {
    "seed": "4646464646464646464646464646464646464646464646464646464646464646",
    "ctr": 0,
-   "pk_keccak": "047d5c7e6df852bade3c7fe49ed1286f9733aded66c59946ec045ba1f5975b15",
-   "pk_first4": [39514896722858, 28517337706870, 3197501915605, 22106671266057],
-   "s_sq": 1136,
-   "e_sq": 21514
+   "pk_keccak": "ee9b8fabc93d6d580703d4222867bc0d655475716b36cf3c924640f4e99c07f5",
+   "pk_first4": [41408640279883, 51147785100564, 7227649288318, 54565840899210],
+   "s_sq": 1165,
+   "e_sq": 23222
   },
   {
    "seed": "5454545454545454545454545454545454545454545454545454545454545454",
    "ctr": 0,
-   "pk_keccak": "35ed51aebbe5002cc8d38de37670276f53ec7ce03ec388fbdedab1421e94b3c8",
-   "pk_first4": [10991332107721, 45673372653894, 15146953565002, 9825879731812],
-   "s_sq": 1176,
-   "e_sq": 23384
+   "pk_keccak": "24b39d54e3615b60aecf4cee8b67b5cc113230c1803b08c43836b7dda0083eef",
+   "pk_first4": [57988483871493, 54437591360400, 48025069221687, 57789175995239],
+   "s_sq": 1165,
+   "e_sq": 21346
   },
   {
    "seed": "4141414141414141414141414141414141414141414141414141414141414141",
    "ctr": 0,
-   "pk_keccak": "24b70c1db2023a630a6bde1da96b63aab164136122d6651501f5800e83cc3ba3",
-   "pk_first4": [1889788181952, 14973568670909, 14074922619960, 9423558809297],
-   "s_sq": 1146,
-   "e_sq": 22535
+   "pk_keccak": "d7a291aca4d441ec13ea2b1e83c7bd45523e9d61d48c82cda624bcc8e926fcbc",
+   "pk_first4": [60069115929981, 37549139617883, 3438400987455, 36124261520669],
+   "s_sq": 1126,
+   "e_sq": 22485
   },
   {
    "seed": "5151515151515151515151515151515151515151515151515151515151515151",
    "ctr": 0,
-   "pk_keccak": "8c2b1a956065bbdb4758d09fd2f50fb7f01017a6c31853cca602003be54bde70",
-   "pk_first4": [35030940068840, 21745168503831, 61007238597732, 44570026670451],
-   "s_sq": 1153,
-   "e_sq": 22869
+   "pk_keccak": "d2a175c96ae5bf409834f3e0085554625ead100b80b456544188b55a6841d3ab",
+   "pk_first4": [13795956292480, 39626913553398, 30805251640137, 3373575330985],
+   "s_sq": 1156,
+   "e_sq": 24810
   }
  ]
 }

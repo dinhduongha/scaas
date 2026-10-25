@@ -2,9 +2,9 @@
 //! field, re-encode) = `test_mutate` on the frozen proofs of every relation code (Review Focus 1: Rust rejects
 //! exactly where C rejects, and re-encodes to the same bytes where C accepts), malformed encodings, and the hint
 //! functions of `dcompress.c` (`use_ghint` / `make_ghint`) through `tests/oracle_shim.c`.
-use pqzl::c_oracle::{c_ghint, c_test_mutate};
+use pqzl::c_oracle::{c_ghint, c_p2r, c_test_mutate};
 use pqzl::test_mutate;
-use pqzl::testkit::{dcomp_gamma_m, ghint, synthetic_proof};
+use pqzl::testkit::{p2r, dcomp_gamma_m, ghint, synthetic_proof};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -180,6 +180,38 @@ fn malformed_eq_c() {
 /// `use_ghint (y, r)` and `make_ghint (z, r)` of every relation's dcompress: 2,000 inputs each in their domains
 /// (r in [-(q-1)/2, (q-1)/2], every 4th poly in (-q, q) for use_ghint; y in (-m/2, m/2]; z in [-gamma/2, gamma/2]) with
 /// the edges (multiples of gamma +-1, +-(q-1)/2, +-gamma/2, the r1 = (q-1)/gamma wrap), Rust = C word for word
+/// Power2Round of every relation's tbox dcompress (`abdlop_commit`) on the edge q - 1 - x, x < 3 2^D (the
+/// n2048-kmax1024 wrap, R1-C1 / R2-C2: r1 = 0 and the input moved to redp - q), small and random values: Rust = C word
+/// for word
+#[test]
+fn power2round_eq_c() {
+    let mut g = Rnd(0x7032_7200);
+    let q = Q as i64;
+    let mut i = 0;
+    loop {
+        let mut done = false;
+        for t in 0..400 {
+            let inp: [i64; 64] = core::array::from_fn(|k| match (t + k) % 4 {
+                0 => q - 1 - g.range(0, 3 << 14),
+                1 => g.range(0, q - 1),
+                2 => g.range(-(q - 1), q - 1),
+                _ => g.range(-(1 << 14), 1 << 14),
+            });
+            let c = c_p2r(i as u32, &inp);
+            if c.is_none() {
+                done = true;
+                break;
+            }
+            assert_eq!(p2r(i, &inp), c, "relation {i} input {t}");
+        }
+        if done {
+            break;
+        }
+        i += 1;
+    }
+    assert_eq!(i, if cfg!(feature = "oversize") { 14 } else { 12 });
+}
+
 #[test]
 fn ghint_eq_c() {
     let h = ((Q - 1) / 2) as i64;

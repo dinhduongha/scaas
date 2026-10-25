@@ -761,6 +761,19 @@ pub fn ghint(i: usize, inp: &[i64; 192]) -> Option<alloc::vec::Vec<u64>> {
     Some(o)
 }
 
+/// `pqz_shim_p2r`: relation i's (`c_params` order) Power2Round (`Poly::power2round` with its tbox dcompress, as
+/// `abdlop::commit`) of the 64 coefficients `inp`: r1, then the input as changed (the wrap case, R1-C1 / R2-C2)
+pub fn p2r(i: usize, inp: &[i64; 64]) -> Option<alloc::vec::Vec<u64>> {
+    let d = rels().get(i)?.1.tbox.dcompress;
+    let mut a = Poly::ZERO;
+    a.set_i64(inp);
+    let r = Poly::power2round(&mut a, d);
+    let mut o = alloc::vec::Vec::new();
+    dump(&mut o, &r);
+    dump(&mut o, &a);
+    Some(o)
+}
+
 /// A random proof of relation `code`'s shape, as long as an honest one (tB, h uniform below q, tA1 below
 /// 2^(log2q - D), c in [-8, 8], one hint in 8 in [-3, 3] and the rest 0, the Gaussian parts in [-2^(l+1), 2^(l+1))
 /// for stdev 1.55 * 2^l), encoded by the codec: decodable input for the relations without a frozen vector (the

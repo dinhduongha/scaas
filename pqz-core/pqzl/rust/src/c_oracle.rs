@@ -48,6 +48,7 @@ extern "C" {
     fn pqz_shim_autostable(seed: *const u8, dom: u32, bnd: i64, log2: u32, out: *mut u64) -> i32;
     fn pqz_shim_params(i: u32, out: *mut u64, n: *mut usize) -> i32;
     fn pqz_shim_ghint(i: u32, inp: *const i64, out: *mut u64) -> i32;
+    fn pqz_shim_p2r(i: u32, inp: *const i64, out: *mut u64) -> i32;
     #[cfg(feature = "test-hooks")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8,
                        outlen: *mut usize) -> i32;
@@ -258,6 +259,19 @@ pub fn c_ghint(i: u32, inp: &[i64; 192]) -> Option<Vec<u64>> {
         0 => Some(out),
         -1 => None,
         r => panic!("c_ghint: rc {r}"),
+    }
+}
+
+/// `pqz_shim_p2r`: relation i's Power2Round of `inp` (r1, then the changed input), as `testkit::p2r`; `None` past the
+/// last relation
+pub fn c_p2r(i: u32, inp: &[i64; 64]) -> Option<Vec<u64>> {
+    let mut out = vec![0u64; 2 * 66];
+    // SAFETY: 64 input words, 132 output words, as the shim reads / writes
+    let r = with_core(|| unsafe { pqz_shim_p2r(i, inp.as_ptr(), out.as_mut_ptr()) });
+    match r {
+        0 => Some(out),
+        -1 => None,
+        r => panic!("c_p2r: rc {r}"),
     }
 }
 

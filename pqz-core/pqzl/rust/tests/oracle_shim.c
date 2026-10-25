@@ -672,6 +672,28 @@ pqz_shim_params (unsigned i, uint64_t *out, size_t *n)
 
 /* testkit::ghint: relation i's (P above) quad_many dcompress: poly_dcompress_use_ghint (ret, y, r) and
    poly_dcompress_make_ghint (ret, z, r) of in = y[64], z[64], r[64], each result dumped; -1 past the last relation */
+/* poly_dcompress_power2round (r, a) with relation i's tbox dcompress (abdlop_commit's): r, then a (the R0 review fix
+   changes a in the wrap case, R1-C1 / R2-C2) */
+int
+pqz_shim_p2r (unsigned i, const int64_t *in, uint64_t *out)
+{
+  pqz_arena_mark_t mark;
+  poly_t r, a;
+  if (i >= NP)
+    return -1;
+  dcompress_params_srcptr d = P[i]->tbox->dcompress;
+  pqz_err = PQZ_OK;
+  pqz_arena_mark (&mark);
+  poly_alloc (r, pqz_tx_ring);
+  poly_alloc (a, pqz_tx_ring);
+  poly_set_coeffvec_i64 (a, in);
+  poly_dcompress_power2round (r, a, d);
+  dump_poly (&out, r);
+  dump_poly (&out, a);
+  pqz_arena_release (&mark);
+  return pqz_err;
+}
+
 int
 pqz_shim_ghint (unsigned i, const int64_t *in, uint64_t *out)
 {
