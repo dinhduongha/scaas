@@ -1,0 +1,62 @@
+{"id":"pqzl","form":"TRANSFER","proof_bytes":46662,"wasm_equal_native":true,"wasm_precompile":1,"ms":2526}
+{"id":"pqzl","form":"TRANSFER0","proof_bytes":46329,"wasm_equal_native":true,"wasm_precompile":1,"ms":2231}
+{"id":"pqzl","form":"BURN","proof_bytes":45835,"wasm_equal_native":true,"wasm_precompile":1,"ms":2979}
+{"id":"pqzl","form":"REFRESH","proof_bytes":45819,"wasm_equal_native":true,"wasm_precompile":1,"ms":3354}
+{"id":"pqzl","form":"REGISTER","proof_bytes":30381,"wasm_equal_native":true,"wasm_precompile":1,"ms":1594}
+{"id":"pqzl","form":"DISCLOSE-SENDER","proof_bytes":30814,"wasm_equal_native":true,"wasm_precompile":1,"ms":975}
+{"id":"pqzl","form":"DISCLOSE-RECEIVER","proof_bytes":31546,"wasm_equal_native":true,"wasm_precompile":1,"ms":634}
+{"id":"pqzl","form":"DISCLOSE-AUDITOR","proof_bytes":31558,"wasm_equal_native":true,"wasm_precompile":1,"ms":617}
+{"id":"pqzl","form":"TRANSFER-MULTI M1-on","proof_bytes":46678,"wasm_equal_native":true,"wasm_precompile":1,"ms":5828}
+{"id":"pqzl","form":"TRANSFER-MULTI M2-on","proof_bytes":47503,"wasm_equal_native":true,"wasm_precompile":1,"ms":1830}
+{"id":"pqzl","form":"TRANSFER-MULTI M4-on","proof_bytes":63885,"wasm_equal_native":true,"wasm_precompile":1,"ms":3727}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-on","proof_bytes":80290,"wasm_equal_native":true,"wasm_precompile":1,"ms":8560}
+{"id":"pqzl","form":"TRANSFER-MULTI M1-off","proof_bytes":46342,"wasm_equal_native":true,"wasm_precompile":1,"ms":2098}
+{"id":"pqzl","form":"TRANSFER-MULTI M2-off","proof_bytes":46857,"wasm_equal_native":true,"wasm_precompile":1,"ms":9475}
+{"id":"pqzl","form":"TRANSFER-MULTI M4-off","proof_bytes":47821,"wasm_equal_native":true,"wasm_precompile":1,"ms":1736}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-off","proof_bytes":64607,"wasm_equal_native":true,"wasm_precompile":1,"ms":3596}
+{"id":"pqzl","form":"TRANSFER-MULTI M2-off-two-real","proof_bytes":46802,"wasm_equal_native":true,"wasm_precompile":1,"ms":4049}
+{"id":"pqzl","form":"TRANSFER-MULTI M4-off-decoys","proof_bytes":47801,"wasm_equal_native":true,"wasm_precompile":1,"ms":1544}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-on-boundary","proof_bytes":80288,"wasm_equal_native":true,"wasm_precompile":1,"ms":4105}
+{"id":"pqzl","form":"DISCLOSE-AUDITOR M8-on-boundary-leg5-auditor","proof_bytes":31571,"wasm_equal_native":true,"wasm_precompile":1,"ms":2815}
+{"id":"pqzl","form":"DISCLOSE-AUDITOR M8-on-boundary-leg6-auditor","proof_bytes":31543,"wasm_equal_native":true,"wasm_precompile":1,"ms":1057}
+{"id":"pqzl","form":"DISCLOSE-AUDITOR M4-on-leg2-auditor","proof_bytes":31547,"wasm_equal_native":true,"wasm_precompile":1,"ms":996}
+{"id":"pqzl","form":"DISCLOSE-RECEIVER M8-on-boundary-leg6-receiver","proof_bytes":31551,"wasm_equal_native":true,"wasm_precompile":1,"ms":797}
+{"id":"pqzh","form":"TRANSFER","proof_bytes":248120,"wasm_equal_native":true,"wasm_precompile":1,"ms":2261}
+{"id":"pqzh","form":"TRANSFER0","proof_bytes":247240,"wasm_equal_native":true,"wasm_precompile":1,"ms":2254}
+{"id":"pqzh","form":"BURN","proof_bytes":248504,"wasm_equal_native":true,"wasm_precompile":1,"ms":2260}
+{"id":"pqzh","form":"REFRESH","proof_bytes":248728,"wasm_equal_native":true,"wasm_precompile":1,"ms":2270}
+{"id":"pqzh","form":"REGISTER","proof_bytes":204872,"wasm_equal_native":true,"wasm_precompile":1,"ms":1323}
+{"id":"pqzh","form":"DISCLOSE-SENDER","proof_bytes":204872,"wasm_equal_native":true,"wasm_precompile":1,"ms":1334}
+{"id":"pqzh","form":"DISCLOSE-RECEIVER","proof_bytes":204968,"wasm_equal_native":true,"wasm_precompile":1,"ms":1320}
+{"id":"pqzh","form":"DISCLOSE-AUDITOR","proof_bytes":204680,"wasm_equal_native":true,"wasm_precompile":1,"ms":1310}
+{"id":"pqzh","form":"TRANSFER-MULTI M1-on","proof_bytes":249400,"wasm_equal_native":true,"wasm_precompile":1,"ms":2318}
+{"id":"pqzh","form":"TRANSFER-MULTI M2-on","proof_bytes":248872,"wasm_equal_native":true,"wasm_precompile":1,"ms":2251}
+{"id":"pqzh","form":"TRANSFER-MULTI M4-on","proof_bytes":293112,"wasm_equal_native":true,"wasm_precompile":1,"ms":3314}
+{"id":"pqzh","form":"TRANSFER-MULTI M1-off","proof_bytes":246984,"wasm_equal_native":true,"wasm_precompile":1,"ms":2277}
+{"id":"pqzh","form":"TRANSFER-MULTI M2-off","proof_bytes":248440,"wasm_equal_native":true,"wasm_precompile":1,"ms":2220}
+{"id":"pqzh","form":"TRANSFER-MULTI M4-off","proof_bytes":249512,"wasm_equal_native":true,"wasm_precompile":1,"ms":2290}
+{"id":"pqzh","form":"TRANSFER-MULTI M2-off-two-real","proof_bytes":248152,"wasm_equal_native":true,"wasm_precompile":1,"ms":2207}
+{"id":"pqzh","form":"TRANSFER-MULTI M4-off-decoys","proof_bytes":248872,"wasm_equal_native":true,"wasm_precompile":1,"ms":2252}
+{"id":"pqzh","form":"DISCLOSE-AUDITOR M8-on-boundary-leg5-auditor","proof_bytes":204584,"wasm_equal_native":true,"wasm_precompile":1,"ms":1287}
+{"id":"pqzh","form":"DISCLOSE-AUDITOR M8-on-boundary-leg6-auditor","proof_bytes":204840,"wasm_equal_native":true,"wasm_precompile":1,"ms":1340}
+{"id":"pqzh","form":"DISCLOSE-AUDITOR M4-on-leg2-auditor","proof_bytes":204680,"wasm_equal_native":true,"wasm_precompile":1,"ms":1346}
+{"id":"pqzh","form":"DISCLOSE-RECEIVER M8-on-boundary-leg6-receiver","proof_bytes":205640,"wasm_equal_native":true,"wasm_precompile":1,"ms":1305}
+{"id":"pqzl","form":"bound R_REG","proof_bytes":30369,"wasm_equal_native":true,"wasm_precompile":1,"ms":729}
+{"id":"pqzh","form":"bound R_REG","proof_bytes":204808,"wasm_equal_native":true,"wasm_precompile":1,"ms":1289}
+{"id":"pqzl","form":"bound sender R_TX credit 0","proof_bytes":46656,"wasm_equal_native":true,"wasm_precompile":1,"ms":2178}
+{"id":"pqzh","form":"bound sender R_TX credit 0","proof_bytes":247560,"wasm_equal_native":true,"wasm_precompile":1,"ms":2270}
+{"id":"pqzl","form":"bound sender R_TX credit 4094","proof_bytes":46678,"wasm_equal_native":true,"wasm_precompile":1,"ms":5694}
+{"id":"pqzh","form":"bound sender R_TX credit 4094","proof_bytes":247544,"wasm_equal_native":true,"wasm_precompile":1,"ms":2272}
+{"id":"pqzl","form":"bound debit","proof_bytes":46697,"wasm_equal_native":true,"wasm_precompile":1,"ms":1618}
+{"id":"pqzh","form":"bound debit","proof_bytes":248760,"wasm_equal_native":true,"wasm_precompile":1,"ms":2224}
+{"id":"pqzl","form":"illustrative debit","proof_bytes":46669,"wasm_equal_native":true,"wasm_precompile":1,"ms":3502}
+{"id":"pqzh","form":"illustrative debit","proof_bytes":248008,"wasm_equal_native":true,"wasm_precompile":1,"ms":2241}
+{"id":"pqzl","form":"fee 0 TRANSFER","proof_bytes":46646,"wasm_equal_native":true,"wasm_precompile":1,"ms":5033}
+{"id":"pqzh","form":"fee 0 TRANSFER","proof_bytes":249016,"wasm_equal_native":true,"wasm_precompile":1,"ms":2208}
+{"id":"pqzl","form":"fee 0 TRANSFER0","proof_bytes":46332,"wasm_equal_native":true,"wasm_precompile":1,"ms":1622}
+{"id":"pqzh","form":"fee 0 TRANSFER0","proof_bytes":248184,"wasm_equal_native":true,"wasm_precompile":1,"ms":2294}
+{"id":"pqzl","form":"fee 0 BURN","proof_bytes":45837,"wasm_equal_native":true,"wasm_precompile":1,"ms":4962}
+{"id":"pqzh","form":"fee 0 BURN","proof_bytes":248856,"wasm_equal_native":true,"wasm_precompile":1,"ms":2234}
+{"id":"pqzl","form":"fee 0 REFRESH","proof_bytes":45836,"wasm_equal_native":true,"wasm_precompile":1,"ms":7421}
+{"id":"pqzh","form":"fee 0 REFRESH","proof_bytes":248408,"wasm_equal_native":true,"wasm_precompile":1,"ms":2228}
+{"cases":61,"verify_only":0,"fails":0,"node":"v26.8.1"}

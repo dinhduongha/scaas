@@ -9069,20 +9069,20 @@
    "reason": "verify"
   },
   {
-   "name": "M8-on-boundary: v_3 and v_4 swapped (legs across groups 0 and 1)",
+   "name": "M8-on-boundary: v_5 and v_6 swapped (legs across groups 1 and 2)",
    "form": "TRANSFER-MULTI",
    "case": "M8-on-boundary",
    "id": "pqzl",
    "edits": [
     {
-     "stmt_set": [259200, "00001011e0298dcc000033b048d3a395000025473301cd17000005fba57e31d5000005b5a5c77dc2000008c894caa35400001108e46be48400002ab2aaf7a901000026071cf2ca6a00002caed528489d00000b402adda36500000460aa800b030000290801acd15400000d2e1badbc7d000018734080ea830000206bce059850"]
+     "stmt_set": [259456, "0000049f96244bcc00001ee80355ddd000001bfc66aebc0e0000171a61b49f7100002520b66bcf1f0000223495fdecf8000006fd9aebf06600001cd8dabcbd4600001889949efbe300002ed1a67f34ec0000339636f95a0f00000ecab64c2f190000267179850437000022cc948483190000001429bd880d00001710b604bee7"]
     },
     {
-     "stmt_set": [259328, "00001944ad42e25e0000134e96112cbc000030bbc9bec6bc0000045f386a6ab10000339f1d3effd200002bdb0f6b8199000026770f81ed4200002b005842efc3000017daa743b6100000179ed601c0e700002e81a116b38100000083cf1ff333000016a89781d89e00002b92a4928aa2000019304d40c25d0000133092352ef9"]
+     "stmt_set": [259584, "00000ed6024ed8ec0000033928979b8a00000f862f6120a300002b49634b3002000024ab78a0412900000ffe590c65ce000012b5150f4d1d0000328799057ea900002b8a79de9cfe00001599d79f7e7300000e3edff22a2c00000f710fabe5de00001b3ceffe6a3400001fea5145aebc0000314319c203b500001f86bd60876e"]
     }
    ],
-   "input_bytes": 341327,
-   "input_sha3": "c7ead8135691beedbeba870ae1cfac6ad4376f177916857ea687b64ea6d5ca8a",
+   "input_bytes": 341285,
+   "input_sha3": "93340f6f7925d4bb515e9d0a1d3f58d9ed4b2147b0afb966847edc1567fb8eb4",
    "expect": "0",
    "reason": "verify"
   },
@@ -9097,7 +9097,7 @@
     }
    ],
    "input_bytes": 325604,
-   "input_sha3": "5414e934c5eb0c41cc23e2ea0981d6ad507426f82717588e86e68e5144dfcd63",
+   "input_sha3": "775fbdfee076bf1b643461c5ed317c722056b8039b070c0a6e280d13c48a9b2f",
    "expect": "0",
    "reason": "verify"
   },
@@ -11778,9 +11778,69 @@
    "reason": "Legs"
   },
   {
-   "name": "M8-on-boundary-leg3-auditor: kind window 0 -> 1",
+   "name": "M8-on-boundary-leg5-auditor: kind window 2 -> 0",
    "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg3-auditor",
+   "case": "M8-on-boundary-leg5-auditor",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [286, "00"]
+    }
+   ],
+   "input_bytes": 68856,
+   "input_sha3": "10389a75815339cc29779867af80ec80060d39f2adb10f79bb36f5724c7d074f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on-boundary-leg5-auditor: kind window 3",
+   "form": "DISCLOSE-AUDITOR",
+   "case": "M8-on-boundary-leg5-auditor",
+   "id": "pqzl",
+   "edits": [
+    {
+     "stmt_set": [286, "03"]
+    }
+   ],
+   "input_bytes": 68856,
+   "input_sha3": "873675783af37d7cb1a981267c5f9fbe2247f3e93762f7a037c97cc0cd804905",
+   "expect": "0",
+   "reason": "Kind"
+  },
+  {
+   "name": "M8-on-boundary-leg5-auditor: kind window 2 -> 0",
+   "form": "DISCLOSE-AUDITOR",
+   "case": "M8-on-boundary-leg5-auditor",
+   "id": "pqzh",
+   "edits": [
+    {
+     "stmt_set": [286, "00"]
+    }
+   ],
+   "input_bytes": 241869,
+   "input_sha3": "033d8edb312378a161201d953bed395e64d469b0856105e7770aff09a4ec37c4",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "M8-on-boundary-leg5-auditor: kind window 3",
+   "form": "DISCLOSE-AUDITOR",
+   "case": "M8-on-boundary-leg5-auditor",
+   "id": "pqzh",
+   "edits": [
+    {
+     "stmt_set": [286, "03"]
+    }
+   ],
+   "input_bytes": 241869,
+   "input_sha3": "64335d8bf9a9ba7ca95ce6c1a6c614bb00f7581fd4b09d0a9d52ee0262d688f0",
+   "expect": "0",
+   "reason": "Kind"
+  },
+  {
+   "name": "M8-on-boundary-leg6-auditor: kind window 0 -> 1",
+   "form": "DISCLOSE-AUDITOR",
+   "case": "M8-on-boundary-leg6-auditor",
    "id": "pqzl",
    "edits": [
     {
@@ -11788,14 +11848,14 @@
     }
    ],
    "input_bytes": 68828,
-   "input_sha3": "ed7b2c02dcc921fa69f1659fcebe56344387f6b1ec227936ff4295c039cfe6be",
+   "input_sha3": "b012258a5ad33dd0a7143678325a0af517a266557be5966fd6f9d8e8260ee3b5",
    "expect": "0",
    "reason": "verify"
   },
   {
-   "name": "M8-on-boundary-leg3-auditor: kind window 3",
+   "name": "M8-on-boundary-leg6-auditor: kind window 3",
    "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg3-auditor",
+   "case": "M8-on-boundary-leg6-auditor",
    "id": "pqzl",
    "edits": [
     {
@@ -11803,97 +11863,37 @@
     }
    ],
    "input_bytes": 68828,
-   "input_sha3": "0683135c579b236d3c09e9febba64f5e66722ef9f8c1346b16eaad7030603f81",
+   "input_sha3": "2cdc4b39c2d70c394126b0bf729468dacee239bbafb23bfce84e262a96b7ce8f",
    "expect": "0",
    "reason": "Kind"
   },
   {
-   "name": "M8-on-boundary-leg3-auditor: kind window 0 -> 1",
+   "name": "M8-on-boundary-leg6-auditor: kind window 0 -> 1",
    "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg3-auditor",
+   "case": "M8-on-boundary-leg6-auditor",
    "id": "pqzh",
    "edits": [
     {
      "stmt_set": [286, "01"]
     }
    ],
-   "input_bytes": 239881,
-   "input_sha3": "2a0412ac26f2f45c2bd9f8f7f4b6d1220676bd00cfe5530b81d713a17ae0ecdf",
+   "input_bytes": 242125,
+   "input_sha3": "64c52b8c76248caa7cfc0070554f53afe22527586080a732912414c4449d51e4",
    "expect": "0",
    "reason": "verify"
   },
   {
-   "name": "M8-on-boundary-leg3-auditor: kind window 3",
+   "name": "M8-on-boundary-leg6-auditor: kind window 3",
    "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg3-auditor",
+   "case": "M8-on-boundary-leg6-auditor",
    "id": "pqzh",
    "edits": [
     {
      "stmt_set": [286, "03"]
     }
    ],
-   "input_bytes": 239881,
-   "input_sha3": "168b5ea40cc7b2467c8b22791d5d7a66af37275c1152e5f91978574d776f988e",
-   "expect": "0",
-   "reason": "Kind"
-  },
-  {
-   "name": "M8-on-boundary-leg4-auditor: kind window 1 -> 2",
-   "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg4-auditor",
-   "id": "pqzl",
-   "edits": [
-    {
-     "stmt_set": [286, "02"]
-    }
-   ],
-   "input_bytes": 68808,
-   "input_sha3": "78c59c3427c00282c68c82dd160c2909d8b3bf19bf279b27af9a5808aa9c4ec9",
-   "expect": "0",
-   "reason": "verify"
-  },
-  {
-   "name": "M8-on-boundary-leg4-auditor: kind window 3",
-   "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg4-auditor",
-   "id": "pqzl",
-   "edits": [
-    {
-     "stmt_set": [286, "03"]
-    }
-   ],
-   "input_bytes": 68808,
-   "input_sha3": "b4ed1b970f5e5f4cf3192507239fbabd8aeacaab3c4bc6e9ffc1af796067e8ac",
-   "expect": "0",
-   "reason": "Kind"
-  },
-  {
-   "name": "M8-on-boundary-leg4-auditor: kind window 1 -> 2",
-   "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg4-auditor",
-   "id": "pqzh",
-   "edits": [
-    {
-     "stmt_set": [286, "02"]
-    }
-   ],
-   "input_bytes": 240361,
-   "input_sha3": "15b79b56ecea1f2a329e5c63ef12ffe0727e6b245b2980da073a9a34c33bcda5",
-   "expect": "0",
-   "reason": "verify"
-  },
-  {
-   "name": "M8-on-boundary-leg4-auditor: kind window 3",
-   "form": "DISCLOSE-AUDITOR",
-   "case": "M8-on-boundary-leg4-auditor",
-   "id": "pqzh",
-   "edits": [
-    {
-     "stmt_set": [286, "03"]
-    }
-   ],
-   "input_bytes": 240361,
-   "input_sha3": "7a19cb9485081af6388ac15b41abefb34095dc1111340a62bcfa03dd0f968c21",
+   "input_bytes": 242125,
+   "input_sha3": "b43ad0e3c917c505649c458baadd75a0664f21e854177b3f65910fb6bbedfca9",
    "expect": "0",
    "reason": "Kind"
   },

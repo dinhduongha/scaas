@@ -9054,7 +9054,7 @@
    "reason": "verify"
   },
   {
-   "name": "M8-on-boundary: v_3 and v_4 swapped (legs across groups 0 and 1)",
+   "name": "M8-on-boundary: v_3 and v_4 swapped (legs across groups 1 and 2)",
    "form": "TRANSFER-MULTI",
    "case": "M8-on-boundary",
    "id": "pqzl",
