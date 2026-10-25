@@ -143,9 +143,15 @@ main (void)
 
   printf ("{\n  \"meta\": {\"backend\": \"%s\", \"lazer_commit\": \"3330e487228f633eceb322807b13a596b516770f\", "
           "\"build\": \"%s\", \"compiler\": \"%s\", \"cpu_avx512f\": %d, \"cpu_avx512ifma\": %d, "
-          "\"ring\": \"Z_q[X]/(X^64+1), q = %llu (set %s)\"},\n  \"cases\": {",
+          "\"ring\": \"Z_q[X]/(X^64+1), q = %llu (set %s)\"}",
           BACKEND, BUILD_FLAGS, __VERSION__, __builtin_cpu_supports ("avx512f") ? 1 : 0,
           __builtin_cpu_supports ("avx512ifma") ? 1 : 0, (unsigned long long)PQZ_Q, PQZ_SET_NAME);
+#ifdef PQZ_BACKEND
+  /* the one intended deviation from upstream (R0 review fix, R1-C1 / R2-C2): Power2Round's wrap case, r1 * 2^D >= q,
+     gives r1 = 0 here (upstream keeps that r1, no high part mod q); kat/check.py accepts exactly those coefficients */
+  printf (",\n  \"p2r_wrap\": {\"q\": %llu, \"D\": %u}", (unsigned long long)PQZ_Q, pqz_tx_dcomp->D);
+#endif
+  printf (",\n  \"cases\": {");
   first = 1;
 
   begin_case ("inputs_a");
