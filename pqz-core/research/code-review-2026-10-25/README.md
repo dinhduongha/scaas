@@ -50,4 +50,16 @@ core are made only for confirmed findings, then the affected gate steps re-run (
 
 ## Results
 
-_Pending._
+**Interim (2026-10-25; the Claude UltraCode pass is still running; nothing below is triaged yet except R0-1).** Raw
+outputs: `codex-R*.md`, `agy-R*.md` (local absolute paths stripped); the prompts `prompt-R*.txt`.
+
+| Id | Sev. | Source | Finding | Status |
+|---|---|---|---|---|
+| R0-1 | **P1** | Codex (agy: not found) | R_TXM auditor copies of a group share `pk_a`, `r_g` and 16 coefficients: their differences reveal every digit difference of the legs (decoys identifiable) — [R0-1-auditor-shared-randomness.md](R0-1-auditor-shared-randomness.md) | **confirmed** by the controller; owner: fix direction 2, hint study first |
+| R0-2 | P3 | Codex | E-S0's soundness gate uses a computed Schwartz–Zippel repetition count, not λ read from the generated parameters | to verify |
+| R0-a | P3 | agy | `pqzl/params/aprime/` research sizing specs omit `kmlwe_min = 42` (sub-450 dual_hybrid in the stale scripts) | to verify |
+| R1-1 | P2 / P3 | Codex P2, agy P3 (agree) | `lnp-quad-eval.c` (`lnp_quad_eval_verify`, not on the PQZ path) still derives μ without absorbing `h` | to verify reachability; patch or remove |
+| R2-a | P3 | agy | stale set constant in relation-reconstruction comments; `bb[0]` uninitialised in `basemul16` | to verify |
+| R3-1 | P3 | Codex, agy (agree) | the `fallback-retry` preset (experimental, off by default) keeps the production proofSystemId | to fix (own id or remove) |
+| R4-a | P3 | agy | `ExpectedLibrarySha256` not per set (known: review 8d1b M4); stale retired-id table row in the spec; `pqz_ffi.h` comment omits n2816 | to verify / docs |
+| R4-b | note | Codex | "never crashes" holds except allocation abort, documented in `pqz_ffi.h` | note |

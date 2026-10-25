@@ -1,0 +1,12 @@
+You are an independent security reviewer. Repository: the worktree in your current directory, a frozen detached checkout of the SCaaS repo (public) at commit 008e196c; the post-quantum confidential-payment core is under `pqz-core/` (PQZL: a lattice proof system forked from LaZer / LNP22, C core + Rust port; PQZH: a Ligero hash-based proof system in Rust; `pqz-stmt` statement decoding; `pqz-ffi` the C ABI of an EVM precompile; a Nethermind plugin). Four parameter sets, named by directory under `pqz-core/params/sets/`: n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536 (no PQZH at the last). Relations: R_REG, R_DS / R_DR, R_TX, R_TX0, R_BURN, R_TXM M = k.
+
+STRICTLY READ-ONLY: do not build, compile, run tests, benchmarks or timing; do not modify, create or delete any file; do not use git commands that change state. Read code and documents only.
+
+Prior review round (2026-10-19/20, at older code) and its findings: `pqz-core/research/code-review-2026-10-19/README.md` — do not re-report a finding that is listed there as fixed unless it has come back; do say if a fix is incomplete.
+
+Your unit: R3 — PQZH Ligero (code).
+Scope: `pqzh/ligero/src/{fq,fft,ligero,cs,client,merkle,ring,ct,set}.rs`, `params/sets/*/pqzh_set*.rs`
+(Paths starting with `docs/` are at the repository root; all other scope paths are under `pqz-core/`.)
+Invariants to check: field arithmetic correct at every PQZH q (native u128 and the wasm32 limb split); FFT domains (radices 2 / 7 / 17 / 19 / 43 / 431) and the `GEN·H_n ∩ H_k = ∅` condition; the verifier's checks complete (degree, linear, quadratic, Merkle); soundness bits per preset `t`; native = wasm32; the prover's constant-time paths (review O) still hold
+
+Report format (Markdown): for each finding — an id (R3-1, R3-2, …), severity P0 (soundness break / forgery / consensus split / funds) | P1 | P2 | P3, file:line(s), the claim, the evidence (quote the code or the document, give the reasoning or a concrete input), the suggested fix. Then a section "Checked and sound" listing each invariant above with one line of evidence, and a section "Not covered" naming what you did not read. Be precise; no speculation without evidence; prefer few true findings over many weak ones.
