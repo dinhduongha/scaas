@@ -1,3 +1,58 @@
+## Session 2026-10-26 (R0 fix part a built, reviewed, fix round paused) — resume here
+
+**State:** main + this note (main local commits not pushed: `4d6482ff` UA-7 / UA-8 / research note, and this note).
+SDD ledger (git-ignored): `.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/` —
+`progress.md` (last lines = this session), `task-r01a-brief.md`, `task-r01-report.md` ("Part a — Result",
+"Part a — Fix round (paused 2026-10-26)"), `task-r01a-review.md`, `task-r01a-fix-brief.md`.
+
+**Branches (none pushed):**
+- `pqz-16k` `bb324c56`: 8d part 2a squash-merged (`19f3135e`, `ab47f974`) and the whole-core review plan.
+- `pqz-r01` (worktree `.claude/worktrees/pqz-r01`): the review outputs (Codex / agy / Claude UltraCode / Fable, the
+  consolidated triage in `pqz-core/research/code-review-2026-10-25/README.md`) and **R0 fix part a** (`411dea7e` …
+  `37d2971f`, plus the fix-round commits after it).
+- `pqz-8d2a`: keep local, **never push** (about 10 MB of fixtures in its history).
+
+**Done:**
+- **Whole-core review 2026-10-25:** R0-1 (audited R_TXM auditor copies share randomness: P1), R0-C2 (`Bprime = 8`),
+  R0-C3 (η filter on the challenge), F-4 and the P3 / P4 items.
+  - Owner rulings: R0-1 direction 2; `s_aud` 2 / 3 / 4 / 4 with the auditor on (groups of 4 without it); the n2048
+    exception widened to dual_hybrid ≈ 444; one id bump per set ("gom").
+  - `MAX_PROOF_PQZH` = 327,680 and `MAX_INPUT` = 524,288 at the PQZH sets (CTR-PQZ-10).
+- **R0 fix part a (core):** PQZL `…/v5` and PQZH `…/v3` at all four sets.
+  - Every spec has β ≥ 450 (n2048 has its first `e-s1.txt`).
+  - Largest PQZL proofs are 85,167 / 80,330 / 72,761 / 79,208 B (n2048 / n2304 / n2560 / n2816).
+  - Full gates ran at all four sets. Five parts failed; all five were fixed and re-run individually.
+  - **Review: Approved with fixes** (I1: the cargo step stopped at the first failing binary; m1–m12).
+- **Fix round, paused at shutdown.** Done: I1 (`--no-fail-fast` and the logs), m1, m2, m3, m4, m6 / m7, m10 / m11 /
+  m12. Not done: see the report section "Part a — Fix round (paused 2026-10-26)" (m5, m8 `PQZL=c` ffi + C verify
+  arena, m9 `run.sh`, the vector regeneration for the moved group-boundary row at each set).
+
+**Next, in order:**
+1. **Finish the fix round** (resume commands in the report): the remaining findings and the vectors per set. Run only
+   the affected steps listed in `task-r01a-fix-brief.md` (Verify table). Then a short re-review, and part a is done.
+2. **Write the part b brief.**
+   - **Contracts:** the PqzCore group map / `_legOf` with `S_AUD`; `disclosureStatement` with `kind + 256·w`; the F-4
+     rule (the auditor as sender or recipient); the new ids; every `PqzSet.sol` consumer and its tests;
+     `PqzCt.t.sol` still lists the old ids.
+   - **Node:** a start-up check that the schedule ids match the library ids (R4-C3); an ML-DSA KAT (R4-C4);
+     `add-schedule.py` / the provisional rows with the new ids; `ExpectedLibrarySha256`.
+   - **Spec / docs:** KeyGen V2 (§4.2), the windows (§8.1 / §8.2), CTR-PQZ-03 / -04 / -26 row 5, anonymity §8.2,
+     the n2048 not-recommended note (dual_hybrid ≈ 444), the n2304 3-β heuristic margin, F-6, and the label-scheme
+     note (below).
+   - **Open:** a C wasm32 run to confirm the estimated leg limits at n2048 / n2304 / n2560.
+   - **Owner note:** a PQZH proof above about 261,909 B does not fit one transaction's calldata under the EIP-7825
+     2^24 cap. The largest PQZH proofs are 277,036 / 293,112 / 301,194 B, so 2b must handle this.
+   - Then review part b and merge `pqz-r01` into `pqz-16k` (owner approval).
+3. **8d part 2b (gas):** `ROLL_MAX` per set into `set.toml`; gas per relation; R_TXM M = 8 under EIP-8037; calldata
+   vs spec §12; the README gas columns; e2e on the testnet. Timing runs only with the owner's go.
+4. One Codex pass on the contracts after 2a / 2b (owner request, sandbox check first).
+5. Task 9 calibration (owner's timing go); a new node image (review the library hash).
+6. Then UA-8 (before fs3 Task 13), then UA-7.
+
+**Label-scheme ruling (owner 2026-10-25):** keep the current label scheme during development. At the production
+freeze, switch to `scaas/pqz/<set>/pqzl/v1` / `…/pqzh/v1`; every old id stays refused. Write this into the sets
+README in part b.
+
 ## Session 2026-10-25 (8d part 1b merged, testnet on pqz4, 8d part 2a built; UA-7 / UA-8 specs) — resume here
 
 **State:** main + this note. Shutdown ≈ 11:15 (owner). SDD ledger (git-ignored):

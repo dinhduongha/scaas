@@ -39,7 +39,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-23, evening shutdown):** `pqz-16k` `fe5abb63`: **Task 8b DONE** (four gates PASS, z21diff byte-identical
+- **Now (2026-10-26, shutdown):** branch `pqz-r01`: whole-core review 2026-10-25 done (triage in
+  `pqz-core/research/code-review-2026-10-25/README.md`); **R0 fix part a** built (PQZL `…/v5`, PQZH `…/v3`, `s_aud`
+  2 / 3 / 4 / 4), reviewed (Approved with fixes), **fix round paused** → finish it → part b (contracts, node, spec /
+  docs) → merge into `pqz-16k` → 8d part 2b. Order in HANDOFF.md top note.
+- [ ] **Label scheme at the production freeze** (owner 2026-10-25): keep the current labels during development; at
+  the freeze switch to `scaas/pqz/<set>/pqzl/v1` / `…/pqzh/v1`, every old id refused. Note it in the sets README
+  (part b).
+- **Earlier (2026-10-23, evening shutdown):** `pqz-16k` `fe5abb63`: **Task 8b DONE** (four gates PASS, z21diff byte-identical
   after N4), `pqz-8c` merged; **8c part 2 paused** on `pqz-8c2` (WIP `ea7beeae`: generator owns `pqzh_set.rs`, per-set
   PQZH limits, n2560 PQZH, ffi / vectors / gate per set; vectors, docs, gates left) — owner answers
   2026-10-23: `MAX_INPUT` per set OK, n2560 preset t = 122, generated header accepted. Order in HANDOFF.md top note.
