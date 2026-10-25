@@ -77,7 +77,8 @@ on chain and off chain (P5). The balance (PQZ) key never changes. **Several keys
 2026-10-25: one key first): the storage is keyed by `(ua, keyId)` from the start, so adding `addKemKey` later
 changes no layout; until then the devices of one UA share its key. **Only PQ kinds may hold a KEM key** (owner 2026-10-25), as
 for the PQZ key: the UA-6 U3 holder set — `mldsa44` / `mldsa65` / `fndsa512`, or an `msig` whose non-PQ weight
-(members outside 0x0130–0x0133) is below its threshold; `register` with a KEM record and `setKemKey` revert for any other kind
+(members outside 0x0130–0x0133) is below its threshold (`slhdsa128s` is not a direct holder of either key, owner
+2026-10-25); `register` with a KEM record and `setKemKey` revert for any other kind
 (`UAPqzHolder`-style error).
 
 **No one-owner check for KEM keys** (unlike the signer and PQZ keys): a KEM record carries no proof of possession of
