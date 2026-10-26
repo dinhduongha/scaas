@@ -1,0 +1,1314 @@
+$ cargo test -j2 --release --offline --no-fail-fast --no-default-features --features sv,set-n2560-kmax16384 --features c-oracle,test-hooks,bench -- --nocapture
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+warning: unused import: `std::path::PathBuf`
+ --> tests/oracle_codec.rs:9:5
+  |
+9 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `pqzl` (test "oracle_codec") generated 1 warning (run `cargo fix --test "oracle_codec" -p pqzl` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 35.19s
+     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqzl-78568917ecdc9891)
+
+running 11 tests
+test arith::spoly::tests::errors_and_order ... ok
+test arith::polymat::tests::views ... ok
+test keys::tests::canonical_short_chunk ... ok
+test rand::fixexp::tests::bernoulli_masked_add_eq_shift ... ok
+test rand::rejection::tests::saturation_near_2_63 ... ok
+test rel::tests::bad_length_refused_before_caches ... ok
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test rel::tests::power2round_fits_the_commitment_field ... ok
+test rel::tests::build_refuses_noncanonical ... ok
+test sv::tests::setup_limits_eq_generic ... ok
+test rand::rejection::tests::onetime_rej1 ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.60s
+
+     Running unittests src/bin/bench.rs (target/n2560-kmax16384/release/deps/bench-1e61e619ceeedd6b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/kat_dump.rs (target/n2560-kmax16384/release/deps/kat_dump-c3e70a28a417dfe6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/keys_kat.rs (target/n2560-kmax16384/release/deps/keys_kat-88dd66239cede4e4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cheat_b1.rs (target/n2560-kmax16384/release/deps/cheat_b1-826378ec471c5aaf)
+
+running 1 test
+TRANSFER             code 0x01: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+TRANSFER0            code 0x81: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+BURN                 code 0x02: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+REGISTER             code 0x03: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+DISCLOSE-SENDER      code 0x04: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+DISCLOSE-RECEIVER    code 0x05: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+M1-on                code 0x78: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+M2-on                code 0x79: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+test cheating_prover_rejected has been running for over 60 seconds
+M4-on                code 0x7a: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+M8-on                code 0x7b: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+M1-off               code 0x70: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+M2-off               code 0x71: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+M4-off               code 0x72: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+M8-off               code 0x73: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [false, false, false, false]; m2 [false, false, false, false];
+VERDICT: B-1 cheating prover rejected (0 accepted)
+test cheating_prover_rejected ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 150.37s
+
+     Running tests/fs_bind.rs (target/n2560-kmax16384/release/deps/fs_bind-2d1b1e1ef5546e9c)
+
+running 1 test
+P6-FS REGISTER verify honest: ACCEPT
+P6-FS REGISTER verify h-mutated (rejected) kind 5 mu seed: honest ed2e7ac2 mutated 9c21ea0e -> differ
+P6-FS REGISTER verify z3-mutated (rejected) kind 2 V4 seed: honest 5f64da11 mutated 01c94919 -> differ
+P6-FS REGISTER verify z3-mutated (rejected) kind 3 V3 seed: honest 5f64da11 mutated 01c94919 -> differ
+P6-FS REGISTER verify z4-mutated (rejected) kind 2 V4 seed: honest 5f64da11 mutated f13e9f99 -> differ
+P6-FS REGISTER verify z4-mutated (rejected) kind 3 V3 seed: honest 5f64da11 mutated f13e9f99 -> differ
+P6-FS REGISTER verify tg-mutated (rejected) kind 2 V4 seed: honest 5f64da11 mutated 90f62664 -> differ
+P6-FS REGISTER verify tg-mutated (rejected) kind 3 V3 seed: honest 5f64da11 mutated 90f62664 -> differ
+P6-FS REGISTER verify_fast honest: ACCEPT
+P6-FS REGISTER verify_fast h-mutated (rejected) kind 15 mu seed: honest ed2e7ac2 mutated 9c21ea0e -> differ
+P6-FS REGISTER verify_fast z3-mutated (rejected) kind 12 V4 seed: honest 5f64da11 mutated 01c94919 -> differ
+P6-FS REGISTER verify_fast z3-mutated (rejected) kind 13 V3 seed: honest 5f64da11 mutated 01c94919 -> differ
+P6-FS REGISTER verify_fast z4-mutated (rejected) kind 12 V4 seed: honest 5f64da11 mutated f13e9f99 -> differ
+P6-FS REGISTER verify_fast z4-mutated (rejected) kind 13 V3 seed: honest 5f64da11 mutated f13e9f99 -> differ
+P6-FS REGISTER verify_fast tg-mutated (rejected) kind 12 V4 seed: honest 5f64da11 mutated 90f62664 -> differ
+P6-FS REGISTER verify_fast tg-mutated (rejected) kind 13 V3 seed: honest 5f64da11 mutated 90f62664 -> differ
+P6-FS TRANSFER verify honest: ACCEPT
+P6-FS TRANSFER verify h-mutated (rejected) kind 5 mu seed: honest 65cf8a11 mutated c7071f8f -> differ
+P6-FS TRANSFER verify z3-mutated (rejected) kind 2 V4 seed: honest 3787570e mutated 5e07c617 -> differ
+P6-FS TRANSFER verify z3-mutated (rejected) kind 3 V3 seed: honest 3787570e mutated 5e07c617 -> differ
+P6-FS TRANSFER verify z4-mutated (rejected) kind 2 V4 seed: honest 3787570e mutated fe67a197 -> differ
+P6-FS TRANSFER verify z4-mutated (rejected) kind 3 V3 seed: honest 3787570e mutated fe67a197 -> differ
+P6-FS TRANSFER verify tg-mutated (rejected) kind 2 V4 seed: honest 3787570e mutated 311e8e3b -> differ
+P6-FS TRANSFER verify tg-mutated (rejected) kind 3 V3 seed: honest 3787570e mutated 311e8e3b -> differ
+P6-FS TRANSFER verify_fast honest: ACCEPT
+P6-FS TRANSFER verify_fast h-mutated (rejected) kind 15 mu seed: honest 65cf8a11 mutated c7071f8f -> differ
+P6-FS TRANSFER verify_fast z3-mutated (rejected) kind 12 V4 seed: honest 3787570e mutated 5e07c617 -> differ
+P6-FS TRANSFER verify_fast z3-mutated (rejected) kind 13 V3 seed: honest 3787570e mutated 5e07c617 -> differ
+P6-FS TRANSFER verify_fast z4-mutated (rejected) kind 12 V4 seed: honest 3787570e mutated fe67a197 -> differ
+P6-FS TRANSFER verify_fast z4-mutated (rejected) kind 13 V3 seed: honest 3787570e mutated fe67a197 -> differ
+P6-FS TRANSFER verify_fast tg-mutated (rejected) kind 12 V4 seed: honest 3787570e mutated 311e8e3b -> differ
+P6-FS TRANSFER verify_fast tg-mutated (rejected) kind 13 V3 seed: honest 3787570e mutated 311e8e3b -> differ
+P6-FS M8-on verify honest: ACCEPT
+P6-FS M8-on verify h-mutated (rejected) kind 5 mu seed: honest 542e96bc mutated 2934506c -> differ
+P6-FS M8-on verify z3-mutated (rejected) kind 2 V4 seed: honest fb2dbfa6 mutated 3010e6ff -> differ
+P6-FS M8-on verify z3-mutated (rejected) kind 3 V3 seed: honest fb2dbfa6 mutated 3010e6ff -> differ
+P6-FS M8-on verify z4-mutated (rejected) kind 2 V4 seed: honest fb2dbfa6 mutated da640733 -> differ
+P6-FS M8-on verify z4-mutated (rejected) kind 3 V3 seed: honest fb2dbfa6 mutated da640733 -> differ
+P6-FS M8-on verify tg-mutated (rejected) kind 2 V4 seed: honest fb2dbfa6 mutated 20d5df7e -> differ
+P6-FS M8-on verify tg-mutated (rejected) kind 3 V3 seed: honest fb2dbfa6 mutated 20d5df7e -> differ
+P6-FS M8-on verify_fast honest: ACCEPT
+P6-FS M8-on verify_fast h-mutated (rejected) kind 15 mu seed: honest 542e96bc mutated 2934506c -> differ
+P6-FS M8-on verify_fast z3-mutated (rejected) kind 12 V4 seed: honest fb2dbfa6 mutated 3010e6ff -> differ
+P6-FS M8-on verify_fast z3-mutated (rejected) kind 13 V3 seed: honest fb2dbfa6 mutated 3010e6ff -> differ
+P6-FS M8-on verify_fast z4-mutated (rejected) kind 12 V4 seed: honest fb2dbfa6 mutated da640733 -> differ
+P6-FS M8-on verify_fast z4-mutated (rejected) kind 13 V3 seed: honest fb2dbfa6 mutated da640733 -> differ
+P6-FS M8-on verify_fast tg-mutated (rejected) kind 12 V4 seed: honest fb2dbfa6 mutated 20d5df7e -> differ
+P6-FS M8-on verify_fast tg-mutated (rejected) kind 13 V3 seed: honest fb2dbfa6 mutated 20d5df7e -> differ
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) ok (0 failed checks of 60)
+test fs_bind ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.00s
+
+     Running tests/keys.rs (target/n2560-kmax16384/release/deps/keys-55676b90957f4367)
+
+running 1 test
+test ctx_eq_free ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.45s
+
+     Running tests/memory.rs (target/n2560-kmax16384/release/deps/memory-858842f63fcd8959)
+
+running 2 tests
+size_of::<Ctx>() = 45520 B (the specialised verifier's fixed tables inline, the rest on the heap)
+peak_per_op (bytes; cold = fresh Ctx, the call builds A / keys / SV tables; warm = second call)
+row                            prove cold   prove warm  verify cold  verify warm    fast cold    fast warm    allocs
+PQZL_MEM_* settings: none (the defaults)
+R_TX prove cold peak recorded 76418480 B: caps 77 / 38 MiB
+TRANSFER prove cold under 77 MiB: the vector's proof; the same Ctx then proves
+TRANSFER                         76418480     72726704     76033568     72341792     14188849      1538353     28140
+M8-on prove cold under 77 MiB: Error::Memory; the same Ctx then proves
+TRANSFER prove cold under 38 MiB: Error::Memory; the same Ctx then proves
+R_TX verify cold under 38016784 B (half its peak 76033568 B): try_ = Error::Memory, bool = false; the same Ctx then accepts
+R_TX verify_fast cold under 7094424 B (half its peak 14188849 B): try_ = Error::Memory, bool = false; the same Ctx then accepts
+TRANSFER0                        75451424     71780768     75069680     71399024     14101361      1524465     39356
+keys (free functions): each of the 45 allocations denied in turn: Error::Memory, then the same outputs
+BURN                             74095760     70456784     73718768     70079792     13971937      1504801     27028
+keys (Ctx methods, cold): each of the 41 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, warm): each of the 40 allocations denied in turn: Error::Memory, then the same outputs
+REGISTER                         26689232     24187040     26494400     23992208      9484121       913449     19033
+DISCLOSE-SENDER                  27769920     25247664     27571920     25049664      9566681       926025     20784
+TRANSFER verify_fast cold   : peak   14188849 B,  16685 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+DISCLOSE-RECEIVER                29189072     26606624     28960448     26378000      9805625       960137     19222
+TRANSFER verify_fast warm   : peak    1538353 B,    500 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (5 s)
+M1-on                            76418480     72726704     76033568     72341792     14188849      1538353     33197
+TRANSFER prove cold         : peak   76418480 B,  28140 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (19 s)
+M2-on                            78760208     75015632     78367376     74622800     14426241      1592385     37633
+M4-on                            85090872     81106584     84681144     80696856     15364121      1704313     33060
+TRANSFER prove warm         : peak   72726704 B,  11960 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (34 s)
+TRANSFER verify cold        : peak   76033568 B,  26981 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (43 s)
+M8-on                           183655624    178540360    183084328    177969064     19960985      2415641     52627
+TRANSFER0 verify_fast cold  : peak   14101361 B,  16563 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+test exhaustion_is_error has been running for over 60 seconds
+test peak_per_op has been running for over 60 seconds
+TRANSFER0 prove cold        : peak   75451424 B,  39356 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (48 s)
+TRANSFER0 verify_fast warm  : peak    1524465 B,    498 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M1-off                           75451424     71780768     75069680     71399024     14101361      1524465     50962
+TRANSFER0 verify cold       : peak   75069680 B,  26595 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (41 s)
+M2-off                           76815536     73113200     76429040     72726704     14251265      1564609     31938
+BURN prove cold             : peak   74095760 B,  27028 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (16 s)
+M4-off                           79569104     75803408     79173104     75407408     14551073      1644897     30741
+BURN prove warm             : peak   70456784 B,  11148 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (29 s)
+TRANSFER verify warm        : peak   72341792 B,  10801 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (84 s)
+M8-off                          164803336    159865480    164257384    159319528     19232153      2304537     42706
+R_TX prove (cold) 76418480 B = 0.24 x the C arena peak 312151904 B (target <= 1.1, fails > 2)
+test peak_per_op ... ok
+BURN verify_fast cold       : peak   13971937 B,  16381 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+BURN verify_fast warm       : peak    1504801 B,    496 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+BURN verify cold            : peak   73718768 B,  26140 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (36 s)
+TRANSFER0 prove warm        : peak   71780768 B,  23296 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (94 s)
+REGISTER prove cold         : peak   26689232 B,  19033 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (16 s)
+REGISTER verify_fast cold   : peak    9484121 B,   9832 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+REGISTER verify_fast warm   : peak     913449 B,    406 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+REGISTER verify cold        : peak   26494400 B,  13006 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (11 s)
+TRANSFER0 verify warm       : peak   71399024 B,  10535 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (75 s)
+DISCLOSE-SENDER prove cold  : peak   27769920 B,  20784 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (10 s)
+REGISTER prove warm         : peak   24187040 B,   9612 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (30 s)
+DISCLOSE-SENDER verify_fast cold: peak    9566681 B,   9950 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+DISCLOSE-SENDER verify_fast warm: peak     926025 B,    410 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+REGISTER verify warm        : peak   23992208 B,   3585 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (23 s)
+DISCLOSE-SENDER verify cold : peak   27571920 B,  17587 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (14 s)
+DISCLOSE-RECEIVER prove cold: peak   29189072 B,  19222 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (6 s)
+DISCLOSE-SENDER prove warm  : peak   25247664 B,  11249 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (21 s)
+DISCLOSE-RECEIVER verify_fast cold: peak    9805625 B,  10292 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+DISCLOSE-RECEIVER verify_fast warm: peak     960137 B,    410 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+BURN verify warm            : peak   70079792 B,  10260 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (68 s)
+DISCLOSE-RECEIVER prove warm: peak   26606624 B,   9345 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (14 s)
+DISCLOSE-RECEIVER verify cold: peak   28960448 B,  17931 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (17 s)
+DISCLOSE-SENDER verify warm : peak   25049664 B,   8052 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (27 s)
+M1-on verify_fast cold      : peak   14188849 B,  16686 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M1-on verify_fast warm      : peak    1538353 B,    501 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+DISCLOSE-RECEIVER verify warm: peak   26378000 B,   8054 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (27 s)
+M1-on prove cold            : peak   76418480 B,  33197 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (26 s)
+M1-on verify cold           : peak   76033568 B,  26982 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (38 s)
+M2-on prove cold            : peak   78760208 B,  37633 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (38 s)
+M1-on prove warm            : peak   72726704 B,  17017 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (54 s)
+M2-on verify_fast cold      : peak   14426241 B,  16989 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M2-on verify_fast warm      : peak    1592385 B,    504 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M2-on verify cold           : peak   78367376 B,  27804 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (44 s)
+M1-on verify warm           : peak   72341792 B,  10802 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (75 s)
+M4-on prove cold            : peak   85090872 B,  33060 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (23 s)
+M4-on verify_fast cold      : peak   15364121 B,  18359 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M4-on verify_fast warm      : peak    1704313 B,    512 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M2-on prove warm            : peak   75015632 B,  21153 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (73 s)
+M4-on prove warm            : peak   81106584 B,  15218 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (48 s)
+M2-on verify warm           : peak   74622800 B,  11324 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (81 s)
+M4-on verify cold           : peak   84681144 B,  30175 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (56 s)
+M8-on verify_fast cold      : peak   19960985 B,  24885 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (5 s)
+M8-on verify_fast warm      : peak    2415641 B,    612 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (6 s)
+M8-on prove cold            : peak  183655624 B,  52627 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (71 s)
+M4-on verify warm           : peak   80696856 B,  12333 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (117 s)
+M1-off prove cold           : peak   75451424 B,  50962 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (74 s)
+M8-on verify cold           : peak  183084328 B,  40872 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (113 s)
+M1-off verify_fast cold     : peak   14101361 B,  16563 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M1-off verify_fast warm     : peak    1524465 B,    498 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M1-off verify cold          : peak   75069680 B,  26595 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (33 s)
+M8-on prove warm            : peak  178540360 B,  28359 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (139 s)
+M2-off prove cold           : peak   76815536 B,  31938 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (23 s)
+M2-off verify cold          : peak   76429040 B,  27048 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (38 s)
+M2-off verify_fast cold     : peak   14251265 B,  16745 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M2-off prove warm           : peak   73113200 B,  15698 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (47 s)
+M2-off verify_fast warm     : peak    1564609 B,    500 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M1-off verify warm          : peak   71399024 B,  10535 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (70 s)
+M4-off prove cold           : peak   79569104 B,  30741 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (21 s)
+M1-off prove warm           : peak   71780768 B,  34902 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (140 s)
+M4-off verify_fast cold     : peak   14551073 B,  17109 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M4-off verify_fast warm     : peak    1644897 B,    504 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M4-off prove warm           : peak   75803408 B,  14141 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (41 s)
+M4-off verify cold          : peak   79173104 B,  27932 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (44 s)
+M2-off verify warm          : peak   72726704 B,  10808 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (77 s)
+M8-on verify warm           : peak  177969064 B,  16604 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (219 s)
+M8-off verify_fast cold     : peak   19232153 B,  23861 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (5 s)
+M8-off verify_fast warm     : peak    2304537 B,    596 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (5 s)
+M8-off prove cold           : peak  164803336 B,  42706 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (43 s)
+M4-off verify warm          : peak   75407408 B,  11332 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (76 s)
+M8-off prove warm           : peak  159865480 B,  19446 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (69 s)
+M8-off verify cold          : peak  164257384 B,  37668 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (70 s)
+M8-off verify warm          : peak  159319528 B,  14408 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (100 s)
+test exhaustion_is_error ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 580.24s
+
+     Running tests/oracle_arith.rs (target/n2560-kmax16384/release/deps/oracle_arith-c5b664393cde3ba1)
+
+running 4 tests
+test ntt_roundtrip_eq_c ... ok
+test basemul_eq_c ... ok
+test int_ops_eq_c ... ok
+test polyvec_ops_eq_c ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.60s
+
+     Running tests/oracle_codec.rs (target/n2560-kmax16384/release/deps/oracle_codec-a2b0a8720e54d963)
+
+running 5 tests
+test challenge_resample_kat ... ok
+code 0x01: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x81: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x02: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x03: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x04: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x05: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x78: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x79: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7a: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7b: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x70: refused 1 of 64 bit flips, 12 of 13 foreign proofs
+code 0x71: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x72: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x73: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+test malformed_eq_c ... ok
+test power2round_eq_c ... ok
+code 0x01: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test ghint_eq_c ... ok
+code 0x81: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x02: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x03: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x04: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x05: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c has been running for over 60 seconds
+code 0x78: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x79: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7a: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7b: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x70: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x71: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x72: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x73: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 168.90s
+
+     Running tests/oracle_keys.rs (target/n2560-kmax16384/release/deps/oracle_keys-cc3c8e169d43cb49)
+
+running 2 tests
+test keypair_encrypt_decrypt_raw_eq_c ... ok
+keygen_enc_dec_eq_c: 180 encryptions, 20 rejected inputs, all equal
+test keygen_enc_dec_eq_c ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.33s
+
+     Running tests/oracle_params.rs (target/n2560-kmax16384/release/deps/oracle_params-9269804ab0eb8ce0)
+
+running 1 test
+test constants_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle_prove.rs (target/n2560-kmax16384/release/deps/oracle_prove-10f7e4b4cff4ef4a)
+
+running 1 test
+prove_eq_c: 14 relation codes, Rust = C on every case; outcomes {"byte 0: Err(Input)": 12, "byte 0: Err(Internal)": 1, "byte 0: Ok(\"proof\")": 1, "byte 2048: Err(Input)": 12, "byte 2048: Err(Internal)": 1, "byte 2048: Ok(\"proof\")": 1, "honest: Ok(\"proof\")": 14, "last byte: Err(Input)": 14, "short: Err(Input)": 14}
+test prove_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.43s
+
+     Running tests/oracle_rand.rs (target/n2560-kmax16384/release/deps/oracle_rand-55a55578eecf8800)
+
+running 7 tests
+test cbd_eq_vectors ... ok
+test aes_ctr_eq_c ... ok
+test rejection_saturation_eq_c ... ok
+test shake_eq_c ... ok
+test grandom_eq_c ... ok
+test urandom_eq_c ... ok
+rejection_eq_c: 1069 rejects, 743 accepts, 188 errors, all equal
+test rejection_eq_c ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/oracle_smoke.rs (target/n2560-kmax16384/release/deps/oracle_smoke-54ca5319419bf6a5)
+
+running 2 tests
+test rust_verify_accepts ... ok
+test c_core_selftest_proofs_verify ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/oracle_verify.rs (target/n2560-kmax16384/release/deps/oracle_verify-d05da45d6731950a)
+
+running 5 tests
+test cheating_eq_c ... ok
+test bad_length_eq_c ... ok
+test c_out_of_range_rejected has been running for over 60 seconds
+test mutated_eq_c has been running for over 60 seconds
+test negative_eq_c has been running for over 60 seconds
+test c_out_of_range_rejected ... ok
+negative_eq_c: 407 rows, Rust = C = reject
+test negative_eq_c ... ok
+mutated_eq_c: 280 outputs, Rust = C (1 accepted by both)
+test mutated_eq_c ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 518.25s
+
+     Running tests/sv_diff.rs (target/n2560-kmax16384/release/deps/sv_diff-97f53a2d27c519f4)
+
+running 4 tests
+test cheating_rejected ... ok
+vectors_verify_fast: 23 honest rows accepted, 407 negative rows rejected
+test vectors_verify_fast ... ok
+test sv_eq_c_sv has been running for over 60 seconds
+test sv_eq_generic has been running for over 60 seconds
+{"rel": "R_REG", "kind": "honest", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_REG", "kind": "reencode", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_REG", "kind": "bitflip", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "byte_set", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "random_bytes", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "truncate", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "extend", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_coeff", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_oob", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_prefix", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "other_proof", "cases": 6, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "bench_k4_unary", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z21", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z3z4", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z1_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z1_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z4_bound", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z3_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_hint", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_c", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_tB", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_tA1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z21_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "fuzz", "cases": 40, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "honest", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_TX", "kind": "reencode", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_TX", "kind": "bitflip", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "byte_set", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "random_bytes", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "truncate", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "extend", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_coeff", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_oob", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_prefix", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_scalar", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "other_proof", "cases": 6, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "bench_k4_unary", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z21", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z3z4", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z1_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z1_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z4_bound", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z3_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_hint", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_c", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_tB", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_tA1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z21_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_auditor", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "fuzz", "cases": 40, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_BURN", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_BURN", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DS", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DS", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 1, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DR", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DR", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_TX0", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_TX0", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_auditor", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 1, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+sv_eq_c_sv: 3484 cases over the six forms, 4524 in all, 0 mismatches, 0 auditor / legs accepts
+test sv_eq_c_sv ... ok
+{"rel": "R_REG", "kind": "honest", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_REG", "kind": "reencode", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_REG", "kind": "bitflip", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "byte_set", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "random_bytes", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "truncate", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "extend", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_coeff", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_oob", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_prefix", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "other_proof", "cases": 6, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "bench_k4_unary", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z21", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z3z4", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z1_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z1_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z4_bound", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z3_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_hint", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_c", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_tB", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_tA1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z21_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "fuzz", "cases": 40, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "honest", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_TX", "kind": "reencode", "cases": 4, "reference_accepts": 4, "mismatches": 0}
+{"rel": "R_TX", "kind": "bitflip", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "byte_set", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "random_bytes", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "truncate", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "extend", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_coeff", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_oob", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_prefix", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_scalar", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "other_proof", "cases": 6, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "bench_k4_unary", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z21", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z3z4", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z1_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z1_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z4_bound", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z3_large", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_hint", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_c", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_tB", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_tA1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z21_pm1", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_h", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_auditor", "cases": 8, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "fuzz", "cases": 40, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_BURN", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_BURN", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_BURN", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DS", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DS", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 1, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DS", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DR", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_DR", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_DR", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "honest", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_TX0", "kind": "reencode", "cases": 12, "reference_accepts": 12, "mismatches": 0}
+{"rel": "R_TX0", "kind": "bitflip", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "byte_set", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "random_bytes", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "truncate", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "extend", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_coeff", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_oob", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_prefix", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_scalar", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "other_proof", "cases": 22, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "bench_k4_unary", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z21", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_z3z4", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z1_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z1_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z4_bound", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z3_large", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_hint", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_c", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_tB", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_tA1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_z21_pm1", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "m_swap_h", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "stmt_auditor", "cases": 24, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TX0", "kind": "fuzz", "cases": 120, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM1_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM2_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 1, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM4_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "honest", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "reencode", "cases": 2, "reference_accepts": 2, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "bitflip", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "byte_set", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "random_bytes", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "truncate", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "extend", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_coeff", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_oob", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_prefix", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_scalar", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "other_proof", "cases": 2, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "bench_k4_unary", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_z1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_z21", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_z3z4", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z1_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z1_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z4_bound", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z3_large", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_hint", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_c", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_tB", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_tA1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_z21_pm1", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "m_swap_h", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_legs", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "stmt_auditor", "cases": 4, "reference_accepts": 0, "mismatches": 0}
+{"rel": "R_TXM8_0", "kind": "fuzz", "cases": 20, "reference_accepts": 0, "mismatches": 0}
+sv_eq_generic: 3484 cases over the six forms, 4524 in all, 0 mismatches, 0 auditor / legs accepts
+test sv_eq_generic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 465.31s
+
+     Running tests/threads.rs (target/n2560-kmax16384/release/deps/threads-f8a08bbd79b5d622)
+
+running 1 test
+test concurrent_eq_sequential has been running for over 60 seconds
+separate Ctx: 8 threads x 27 rows (prove, verify, verify_fast) + 407 negative rows: equal
+one Ctx handed between 8 threads: 27 rows (prove, verify, verify_fast) + 407 negative rows: equal
+test concurrent_eq_sequential ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 251.30s
+
+     Running tests/vectors.rs (target/n2560-kmax16384/release/deps/vectors-391991b7f1310d46)
+
+running 12 tests
+test enc_group_seed_eq_shake ... ok
+test enc_dec_input_errors ... ok
+test keygen_json ... ok
+test codec_roundtrip ... ok
+test enc_json ... ok
+test prove_refuses_noncanonical_statement ... ok
+test matrix_json ... ok
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify ... ok
+test reprove_byte_equal ... ok
+test negative_rows_reject has been running for over 60 seconds
+test wasm_replay_inputs has been running for over 60 seconds
+negative_rows_reject: 407 of 410 rows split into (op, stmt, proof), all rejected
+test negative_rows_reject ... ok
+test wasm_replay_inputs ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 98.21s
+
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[rc=0]
+# arithmetic KAT: kat_dump vs the set's upstream LaZer golden file (params/sets/<set>/lazer-3330e48-kat.json;
+# review R2-C9: the file moved there in 15c929b3, and a failed check fails this job)
+$ cargo build -j2 --release --offline --no-default-features --features sv,set-n2560-kmax16384 --features test-hooks --bin kat_dump
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+[rc=0]
+$ python3 -I ../kat/check.py ../../params/sets/n2560-kmax16384/lazer-3330e48-kat.json target/n2560-kmax16384/kat-rust.json
+19/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v3: -march=x86-64-v3 -maes -mpclmul, avx512f=0); checked: pqzl-rust
+[rc=0]
+# keys KAT: keys_kat (pqzl/test/pqz_keys_kat.c's JSON lines) vs the independent Python check
+$ cargo build -j2 --release --offline --no-default-features --features sv,set-n2560-kmax16384 --features test-hooks --bin keys_kat
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.01s
+[rc=0]
+$ sh -c target/n2560-kmax16384/release/keys_kat 1000 > target/n2560-kmax16384/keys-rust.jsonl
+[rc=0]
+$ python3 -I ../../../smartcontracts/vectors/pqz/pqz_kat.py --c-keys target/n2560-kmax16384/keys-rust.jsonl
+     C's own claim (not recomputed here): {"lowered": {"keygen_resampled": 3, "enc_resampled": 4, "ctr64_errors": 2}}
+     C's own claim (not recomputed here): {"roundtrip": 1000, "max_abs_noise": 772, "bound": 14624, "max_ctr": 0, "noncanonical_rejected": 3, "fails": 0}
+     C keys KAT target/n2560-kmax16384/keys-rust.jsonl: {'shake256': 10, 'keygen': 20, 'enc': 20, 'dec': 40, 'keygen_lowered': 6, 'enc_lowered': 6, 'keygen_resampled': 3, 'enc_resampled': 4, 'ctr64_errors': 2, 'enc_group_seed': 16}
+pqz_kat: ok
+[rc=0]
+# keys KAT through the Ctx methods (Ctx::keygen / enc_seed, the cached A): the same lines
+$ sh -c target/n2560-kmax16384/release/keys_kat 1000 ctx > target/n2560-kmax16384/keys-rust-ctx.jsonl
+[rc=0]
+$ cmp target/n2560-kmax16384/keys-rust.jsonl target/n2560-kmax16384/keys-rust-ctx.jsonl
+[rc=0]
+$ python3 -I ../../../smartcontracts/vectors/pqz/pqz_kat.py --c-keys target/n2560-kmax16384/keys-rust-ctx.jsonl
+     C's own claim (not recomputed here): {"lowered": {"keygen_resampled": 3, "enc_resampled": 4, "ctr64_errors": 2}}
+     C's own claim (not recomputed here): {"roundtrip": 1000, "max_abs_noise": 772, "bound": 14624, "max_ctr": 0, "noncanonical_rejected": 3, "fails": 0}
+     C keys KAT target/n2560-kmax16384/keys-rust-ctx.jsonl: {'shake256': 10, 'keygen': 20, 'enc': 20, 'dec': 40, 'keygen_lowered': 6, 'enc_lowered': 6, 'keygen_resampled': 3, 'enc_resampled': 4, 'ctr64_errors': 2, 'enc_group_seed': 16}
+pqz_kat: ok
+[rc=0]
+# params (plan D8): src/params = pqzl/params/to_rust.py's text from the committed headers
+$ python3 -I ../params/to_rust.py --check
+to_rust.py --check: 61 files, equal
+[rc=0]
+# prover: bench proofs_fnv = the C core's pqz_bench at the set (5 5 63: the six P6e forms; 2 2 16320: the op 7 shapes)
+$ cargo build -j2 --release --offline --no-default-features --features sv,set-n2560-kmax16384 --features bench --bin bench
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.01s
+[rc=0]
+$ sh -c target/n2560-kmax16384/release/bench 5 5 63 > runs/r01a-fix-n2560-kmax16384-bench-63.jsonl
+[rc=0]
+fnv bench 5 5 63: equal to C (8c5fbdc6 e9044670 9c0648c0 9f9392d7 99e737f4 c80ae6e5 )
+$ sh -c target/n2560-kmax16384/release/bench 2 2 16320 > runs/r01a-fix-n2560-kmax16384-bench-16320.jsonl
+[rc=0]
+fnv bench 2 2 16320: equal to C (390b79c4 66a56a0d 3b293313 b3e863e2 3de026b5 9ec4a67a 00f7a4bb e438b91e )
+# specialised verifier: the same bench runs with PQZ_VERIFY=fast (honest and adversarial verify_fast, fails 0)
+$ sh -c PQZ_VERIFY=fast target/n2560-kmax16384/release/bench 5 50 63 > runs/r01a-fix-n2560-kmax16384-bench-fast-63.jsonl
+[rc=0]
+fnv bench fast 5 50 63: equal to C (8c5fbdc6 e9044670 9c0648c0 9f9392d7 99e737f4 c80ae6e5 )
+$ sh -c PQZ_VERIFY=fast target/n2560-kmax16384/release/bench 2 50 16320 > runs/r01a-fix-n2560-kmax16384-bench-fast-16320.jsonl
+[rc=0]
+fnv bench fast 2 50 16320: equal to C (390b79c4 66a56a0d 3b293313 b3e863e2 3de026b5 9ec4a67a 00f7a4bb e438b91e )
+runs/r01a-fix-n2560-kmax16384-bench-63.jsonl:{"fails": 0}
+runs/r01a-fix-n2560-kmax16384-bench-16320.jsonl:{"fails": 0}
+runs/r01a-fix-n2560-kmax16384-bench-fast-63.jsonl:{"fails": 0}
+runs/r01a-fix-n2560-kmax16384-bench-fast-16320.jsonl:{"fails": 0}
+# prover in wasm32: wasm/ (built for the set) in node = the C core's bench 3 1 63 at the set
+$ sh -c cd wasm && cargo build -j2 --release --offline --target wasm32-unknown-unknown --no-default-features --features set-n2560-kmax16384
+    Finished `release` profile [optimized] target(s) in 0.03s
+[rc=0]
+$ sh -c PQZL_WASM_FILE=wasm/target/n2560-kmax16384/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_wasm.mjs 3 1 63 > runs/r01a-fix-n2560-kmax16384-wasm-63.jsonl
+[rc=0]
+fnv wasm 3 1 63: equal to C (1c0fb302 3f180a0c 2eff6618 cd032df1 1e1506d3 3d1aacf4 )
+$ sh -c PQZL_WASM_FILE=wasm/target/n2560-kmax16384/wasm32-unknown-unknown/release/pqzl_wasm.wasm PQZ_VERIFY=fast node wasm/run_wasm.mjs 3 10 63 > runs/r01a-fix-n2560-kmax16384-wasm-fast-63.jsonl
+[rc=0]
+fnv wasm fast 3 10 63: equal to C (1c0fb302 3f180a0c 2eff6618 cd032df1 1e1506d3 3d1aacf4 )
+runs/r01a-fix-n2560-kmax16384-wasm-63.jsonl:{"fails":0}
+runs/r01a-fix-n2560-kmax16384-wasm-fast-63.jsonl:{"fails":0}
+# native = wasm32 on the vectors: wasm/run_vectors.mjs's digest lines = tests/vectors.rs wasm_replay_inputs'
+$ sh -c PQZL_WASM_FILE=wasm/target/n2560-kmax16384/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_vectors.mjs target/wasm-replay-n2560-kmax16384/in.txt > runs/r01a-fix-n2560-kmax16384-wasm-vectors.jsonl 2> runs/r01a-fix-n2560-kmax16384-wasm-vectors-stderr.txt
+[rc=0]
+native = wasm32: 434 digest lines equal
+wasm32 stack prove: max 27467 B of 1048571 B (row TRANSFER)
+wasm32 stack verify: max 16027 B of 1048571 B (row TRANSFER)
+wasm32 stack verify_fast: max 95707 B of 1048571 B (row TRANSFER)
+wasm32 M > 8 refused: 0; memory 328794112 B
