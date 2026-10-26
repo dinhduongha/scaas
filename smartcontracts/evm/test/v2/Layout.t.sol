@@ -13,7 +13,7 @@ contract LayoutTest is V2Fixture {
     using stdJson for string;
 
     function _pin(string memory file, string memory name) internal view {
-        string memory art = vm.readFile(string.concat("./out/", file, ".sol/", name, ".json"));
+        string memory art = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/", file, ".sol/", name, ".json"));
         string memory pin = vm.readFile(string.concat("./test/v2/layout/", name, ".json"));
         string[] memory pl = pin.readStringArray(".labels");
         string[] memory ps = pin.readStringArray(".slots");

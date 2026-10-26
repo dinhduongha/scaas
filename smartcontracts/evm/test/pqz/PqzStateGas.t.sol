@@ -11,6 +11,7 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
+import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
 contract GasBurner {
@@ -92,6 +93,7 @@ contract PqzStatePinGasTest is PqzSlots {
     uint256 internal nextBlob = 0x5EED0000;
     uint256 internal constant RKEY = 0xA11CE; // the envelope signer
     address internal constant RELAYER = address(0x7E1A7E); // a fresh relayer: the fee credit is a zero → non-zero write
+    bytes32 internal feeUA; // the `uaExecute` envelopes' signer: an `mldsa65` UA paying the outer fee from its ledger
 
     function setUp() public {
         // Task 7b: Amsterdam caps a transaction's regular gas at 2^24 and `setUp` is one transaction (the four
@@ -121,6 +123,9 @@ contract PqzStatePinGasTest is PqzSlots {
         _public(tok, address(this), 1000 * SCALE);
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
         _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
+        feeUA = _mldsaUA(50); // the ML-DSA relay path's signer (8d2b fix round, review I1 / I2)
+        NoUnderlyingPqzToken(address(tok)).mintToUA(feeUA, 1000);
+        minted += 1000;
         _tableSetUp();
         vm.resumeGasMetering();
     }
@@ -234,7 +239,18 @@ contract PqzStatePinGasTest is PqzSlots {
     /// gas before refunds (12,000 + 3,000 intrinsic, max(calldata 4 / 16 + execution, EIP-7976 floor 64 per byte),
     /// execution), `st` = EIP-8037 state gas. The precompile and ML-DSA stay mocked (not included).
     function _fullTx(bytes memory data, uint256 fee) internal returns (uint256 reg, uint256 st) {
-        bytes memory call = _envelope(data, fee);
+        return _fullTxVia(false, data, fee);
+    }
+
+    /// Plan 5h Task 8d part 2b fix round (review I1): `_fullTx` on either relay path, `ua` = `uaExecute` (`_envelopeVia`),
+    /// with ML-DSA-65 at 68,006 [estimate] (`GasBurner`, as the gas table): its mocks are cleared, so the precompile is
+    /// not available in the call (a rollover or a prepare does not use it).
+    function _fullTxVia(bool ua, bytes memory data, uint256 fee) internal returns (uint256 reg, uint256 st) {
+        if (ua) {
+            vm.clearMockedCalls();
+            vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        }
+        bytes memory call = _envelopeVia(ua, data, fee);
         uint256 zeros;
         for (uint256 i; i < call.length; ++i) if (call[i] == 0) ++zeros;
         vm.prank(RELAYER);
@@ -242,7 +258,8 @@ contract PqzStatePinGasTest is PqzSlots {
         st = lastState;
         int256 refund = vm.lastCallGas().gasRefunded;
         assertEq(tok.balanceOf(RELAYER), fee, "the outer fee was paid");
-        console2.log("  mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte)", call.length, zeros,
+        console2.log(string.concat(ua ? "  uaExecute" : "  mtxExecute",
+            " calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte)"), call.length, zeros,
             15_000 + 64 * call.length);
         console2.log("  calldata gas 4 / 16 / refund (not subtracted)", 4 * zeros + 16 * (call.length - zeros),
             uint256(refund));
@@ -252,6 +269,21 @@ contract PqzStatePinGasTest is PqzSlots {
     /// `data` in a signed `mtxExecute` envelope with a FIXED outer fee `fee` (0: none); the digest under a snapshot that
     /// is reverted (the clone's implementation and libraries stay cold for the measured call).
     function _envelope(bytes memory data, uint256 fee) internal returns (bytes memory) {
+        return _envelopeVia(false, data, fee);
+    }
+
+    /// `_envelope` on either relay path. `ua`: a `uaExecute` envelope of `feeUA` (the ML-DSA-65 fee UA, the outer fee
+    /// FIXED from its ledger to `msg.sender`) with a pseudo-random 3,309-byte signature (a real signature's calldata).
+    function _envelopeVia(bool ua, bytes memory data, uint256 fee) internal returns (bytes memory) {
+        if (ua) {
+            MetaTxLib.UAMetaTransaction memory u;
+            u.from = feeUA;
+            u.data = data;
+            u.validUntil = block.timestamp + 1 hours;
+            u.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
+            u.fee = fee;
+            return abi.encodeCall(tok.uaExecute, (u, abi.encode(bytes(""), _proof(ML65_SIG))));
+        }
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(RKEY);
         m.data = data;
@@ -269,32 +301,52 @@ contract PqzStatePinGasTest is PqzSlots {
     /// multiple of 16 — `ROLL_MAX + 16` (the linear fit through a `LO`-entry relayed rollover of `dave`, measured cold
     /// under a snapshot first) is over the cap. The token refuses `n > ROLL_MAX`, so `ROLL_MAX + 16` itself is measured
     /// by a build with a larger constant (`test/research/PqzPackGas.t.sol` `test_pack_scanRoll`,
-    /// `runs/2026-10-26-t8d2b-rollscan-<set>.txt`: per-entry steps equal within 0.01 %, so the fit is exact enough).
+    /// `runs/2026-10-26-t8d2b-fix-rollscan-<set>.txt`: per-entry steps equal within 0.01 %, so the fit is exact enough).
+    /// 8d2b fix round (review I1): on BOTH relay paths, `mtxExecute` (ECDSA) and `uaExecute` (the ML-DSA-65 fee UA):
+    /// `ROLL_MAX` fits on each, and `ROLL_MAX + 16` is over the cap on the costlier one.
     function test_gas_rollMax_relayedFullTx() public {
-        uint256 snap = vm.snapshotState();
-        console2.log("relayed mtxRollOver, full transaction, fee 7, entries (fit point)", LO);
-        (uint256 lo,) = _fullTx(abi.encodeCall(tok.mtxRollOver, (dave, LO)), 7);
-        vm.revertToState(snap);
-        console2.log("relayed mtxRollOver, full transaction, fee 7, entries", PqzCore.ROLL_MAX);
-        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)), 7);
-        uint256 next = reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO);
-        console2.log("ROLL_MAX + 16, relayed full transaction (linear fit) / per entry", next, (reg - lo) / (PqzCore.ROLL_MAX - LO));
-        assertLe(reg, CAP, "the full relayed transaction's regular gas under 0.75 * 2^24");
-        assertGt(next, CAP, "ROLL_MAX + 16 would fit too: ROLL_MAX is not the largest multiple of 16");
+        (uint256 e, uint256 en) = _rollMaxVia(false);
+        (uint256 u, uint256 un) = _rollMaxVia(true);
+        assertLe(e, CAP, "mtxExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
+        assertLe(u, CAP, "uaExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
+        assertGt(en > un ? en : un, CAP, "ROLL_MAX + 16 would fit too: ROLL_MAX is not the largest multiple of 16");
     }
 
-    /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee.
+    /// The `ROLL_MAX` relayed rollover on one path and its `ROLL_MAX + 16` fit (state restored afterwards).
+    function _rollMaxVia(bool ua) internal returns (uint256 reg, uint256 next) {
+        string memory p = ua ? "uaExecute" : "mtxExecute";
+        uint256 snap = vm.snapshotState();
+        console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries (fit point)"), LO);
+        (uint256 lo,) = _fullTxVia(ua, abi.encodeCall(tok.mtxRollOver, (dave, LO)), 7);
+        vm.revertToState(snap);
+        console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries"), PqzCore.ROLL_MAX);
+        (reg,) = _fullTxVia(ua, abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)), 7);
+        vm.revertToState(snap);
+        next = reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO);
+        console2.log(string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"), next,
+            (reg - lo) / (PqzCore.ROLL_MAX - LO));
+    }
+
+    /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee, on both relay paths
+    /// (8d2b fix round, review I1).
     function test_gas_prepareAcc_half0_relayedFullTx() public {
-        console2.log("relayed mtxPrepareAcc half 0, full transaction, fee 7");
-        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxPrepareAcc, (eve, 0)), 7);
-        assertLe(reg, CAP);
+        _prepareVia(0);
     }
 
     /// Task 7b: half 1 as a full relayed transaction too.
     function test_gas_prepareAcc_half1_relayedFullTx() public {
-        console2.log("relayed mtxPrepareAcc half 1, full transaction, fee 7");
-        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxPrepareAcc, (eve, 1)), 7);
-        assertLe(reg, CAP);
+        _prepareVia(1);
+    }
+
+    function _prepareVia(uint256 half) internal {
+        uint256 snap = vm.snapshotState();
+        console2.log("relayed mtxPrepareAcc (mtxExecute), full transaction, fee 7, half", half);
+        (uint256 e,) = _fullTxVia(false, abi.encodeCall(tok.mtxPrepareAcc, (eve, half)), 7);
+        vm.revertToState(snap);
+        console2.log("relayed mtxPrepareAcc (uaExecute), full transaction, fee 7, half", half);
+        (uint256 u,) = _fullTxVia(true, abi.encodeCall(tok.mtxPrepareAcc, (eve, half)), 7);
+        assertLe(e, CAP, "mtxExecute");
+        assertLe(u, CAP, "uaExecute");
     }
 
     /// The same `ROLL_MAX` rollover relayed (owner rule 2026-10-20: every mtx* write is relayable). Plan 5h Task 7:
@@ -577,6 +629,21 @@ contract PqzStatePinGasTest is PqzSlots {
         _gasTable("pqzh");
     }
 
+    /// 8d2b fix round (review I2): the same tables with every `mtx*` row relayed through `uaExecute` (the ML-DSA-65 fee
+    /// UA, `_envelopeVia`); logged as system `pqzl-ua` / `pqzh-ua`.
+    bool internal viaUA;
+
+    function test_gasTable_pqzl_ua() public {
+        viaUA = true;
+        _gasTable("pqzl");
+    }
+
+    function test_gasTable_pqzh_ua() public {
+        vm.skip(!PqzSet.HAS_PQZH);
+        viaUA = true;
+        _gasTable("pqzh");
+    }
+
     function _pf(string memory sys, string memory key) internal view returns (bytes memory) {
         return _proof(vm.parseJsonUint(gj, string.concat(".", sys, "['", key, "'].proof")));
     }
@@ -635,7 +702,7 @@ contract PqzStatePinGasTest is PqzSlots {
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
         vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
-        if (relay) data = _envelope(data, 7);
+        if (relay) data = _envelopeVia(viaUA, data, 7);
         uint256 snap = vm.snapshotState();
         vm.prank(RELAYER);
         uint256 reg = _gasTo(to, data);
@@ -649,7 +716,7 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _rowLog(string memory sys, string memory what, bytes memory data, uint256 pqzGas, uint256 exec, uint256 reg,
-        uint256 st) internal pure
+        uint256 st) internal view
     {
         uint256 n = data.length;
         uint256 z;
@@ -657,7 +724,7 @@ contract PqzStatePinGasTest is PqzSlots {
         uint256 std = 4 * z + 16 * (n - z);
         uint256 floor = 15_000 + 64 * n;
         uint256 model = 15_000 + std + exec + pqzGas;
-        console2.log(string.concat("GAS ", PqzSet.NAME, " ", sys, " | ", what, " | calldata ", vm.toString(n), " (zero ",
+        console2.log(string.concat("GAS ", PqzSet.NAME, " ", sys, viaUA ? "-ua" : "", " | ", what, " | calldata ", vm.toString(n), " (zero ",
             vm.toString(z), ") | std ", vm.toString(std), " | floor ", vm.toString(floor)));
         console2.log(string.concat("  | pqz ", vm.toString(pqzGas), " | exec ", vm.toString(exec), " | regular ",
             vm.toString(reg), " (model ", vm.toString(model > floor ? model : floor), ") | state ", vm.toString(st),
