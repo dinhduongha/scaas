@@ -4,7 +4,7 @@ one JSON-RPC endpoint (the follower behind nginx on the copy; 127.0.0.1:8545 on 
 (run with python3 -I) with eth.py (keccak, legacy EIP-155 signing); forge artifacts from
 smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) and retried on 429.
 Since plan 5h Task 8d part 1 this targets the next image (32-bit addresses, PQZ_SET's self-test hash / MAX_INPUT /
-corpus, default n2304-kmax4096), the SCaaS testnet's image 2.2.0-pqz4 since 2026-10-25; for an older image run the script of its commit (RUNBOOK.md).
+corpus, default n2304-kmax4096), the SCaaS testnet's image 2.2.0-pqz5 since 2026-10-26; for an older image run the script of its commit (RUNBOOK.md).
 
   e2e.py before  --engine E                 the three addresses empty (code, balance, nonce; eth_call answers nothing)
   e2e.py probe   --engine E [--genesis-hash H]   step 2: chain id, genesis hash, OP_SELFTEST, every vector 1 / 0,

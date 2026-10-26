@@ -15,14 +15,16 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21) — reset onto image `2.2.0-pqz3`, Amsterdam from block 1 | 2026-10-21 | `../runs/2026-10-21-testnet-2.2.0.txt` |
 | [Genesis gasLimit 200 M](#genesis-gaslimit-200-m-on-the-scaas-testnet-executed-2026-10-22) — the same chain reset with a 200 M genesis block | 2026-10-22 | `../runs/2026-10-22-testnet-200m.txt` |
 | [Image 2.2.0-pqz4: per-set ids, 32-bit addresses](#image-220-pqz4-on-the-scaas-testnet-executed-2026-10-25) — reset (path B, no backup) onto the plan 5h Task 8d part 1 library (`n2304-kmax4096`) with provisional rows | 2026-10-25 | `../runs/2026-10-25-pqz4-live.txt` |
+| [Image 2.2.0-pqz5: the R0 review fix part b ids](#image-220-pqz5-on-the-scaas-testnet-executed-2026-10-26) — reset (path B, no backup) onto the part b library (`n2304-kmax4096`, PQZL v5 / PQZH v3) with provisional rows | 2026-10-26 | `../runs/2026-10-26-pqz5-live.txt` |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
 [pq-zero-knowledge.md §10](../../../docs/contracts/pq-zero-knowledge.md#chain-integration). Logs of the executed runs:
 [`../runs/`](../runs/).
 
-**Scripts at `pqz-8d1` and later target image `2.2.0-pqz4`, live on the SCaaS testnet since 2026-10-25** (plan 5h Task
-8d part 1): `e2e.py`, `patch-chainspec.py` and the plugin use the 32-bit addresses
+**Scripts at `349b96b8` (R0 review fix part b) and later target image `2.2.0-pqz5`, live on the SCaaS testnet since
+2026-10-26** (the part b ids PQZL v5 / PQZH v3; the scripts of `pqz-8d1`, plan 5h Task 8d part 1, targeted `2.2.0-pqz4`
+with PQZL v4 / PQZH v2): `e2e.py`, `patch-chainspec.py` and the plugin use the 32-bit addresses
 `0x000000000000000000000000000000005caa0f01` / `…5caa0012` / `…5caa0013`, and `e2e.py` / `corpus.py` take the self-test
 hash, `MAX_INPUT` and the vectors of `PQZ_SET` (default `n2304-kmax4096`, the library's set). For an older image
 (`2.2.0-pqz3` and before: P6f D3's `0x5caa50…0f01` / `…0012` / `…0013`, the `n2048-kmax1024` library, the old-id rows)
@@ -286,7 +288,7 @@ Success: the head hash equals the rollback head written down in step 1. Then rep
 - `PQZ-START` is present in the log, and there is no `PQZ-REFUSE` or `PQZ-NODE-FAULT`.
 - The head advances every 5 s.
 - `eth_chainId` = `0x1dc6`.
-- `OP_SELFTEST` (op 6) = `ed910a2c…d205`.
+- `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (image `2.2.0-pqz5`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
 
 A node fault (plan D4) stops the node with exit code 120 and the tag `PQZ-NODE-FAULT` in its log. The block in
 progress is never sealed; a restart (`docker compose up -d blockchain-node`) re-processes it. The node has no restart
@@ -488,3 +490,29 @@ the testnet itself, instead of a copy-chain probe) and "no backup of chain 7622 
 
 Not done here: contracts (plan 5h Task 8d part 2 — the testnet has no PQZ contracts until their redeploy, fs3 Task
 13), the calibration (Task 9).
+
+## Image 2.2.0-pqz5 on the SCaaS testnet (executed 2026-10-26)
+
+*Live only.* Owner 2026-10-26: "làm roll-out testnet đi" (roll the R0 review fix part b out to the testnet); no backup
+of chain 7622's data (owner 2026-10-24). Logs `../runs/2026-10-26-image-pqz5.txt`, `../runs/2026-10-26-pqz5-live.txt`;
+branch `pqz-16k` at `349b96b8` (part b merged).
+
+1. Image: `CAPPED_SLOTS=4 CAPPED_MEM=3G FFI_REV=349b96b8 scripts/capped pqz-core/nethermind/build-image.sh pqz5` —
+   library `dd0e7668…e5601` = `SelfTest.ExpectedLibrarySha256` of `n2304-kmax4096` (one pass, no new hash to review),
+   corpus 877 inputs, `scaas/nethermind-pqz:2.2.0-pqz5` = `sha256:4d906b55…bd9334`, `build-image: ok`. Start-up check
+   (throwaway container, fresh volume, the new genesis): `PQZ-START sha256=dd0e7668… selftest=d6c01fbc…6f68d
+   set=n2304-kmax4096`, genesis `0xa17faef4…2ac2`.
+2. Chainspec: `patch-chainspec.py genesis.json engine-pqz-provisional-n2304.json 0x0 <out> --testnet-reset` — only the
+   rows' ids change (`0xe4bc6d17…` / `0x15d16d77…` → PQZH v3 `0x046859a8…` / PQZL v5 `0xef1ffbcb…`), params and genesis
+   header unchanged, so the genesis hash stays `0xa17faef4…2ac2`. Provisional prices (× 1.3) until plan 5h Task 9.
+3. Node (stopped since the host shutdown of 2026-10-25): `.bak-pqz4-20261026` copies of `genesis.json` and
+   `docker-compose.yml`, install `genesis.json`, compose image `2.2.0-pqz4` → `2.2.0-pqz5`, the pqz4 chain data deleted,
+   `docker compose up -d blockchain-node`.
+4. Health: `PQZ-START sha256=dd0e7668… selftest=d6c01fbc…6f68d max_input=524288 … set=n2304-kmax4096`, 26 rows; block 1
+   `0x39febd49…753b08`; blocks every 5 s; no `PQZ-REFUSE` / `PQZ-NODE-FAULT`.
+5. Probe: `PQZ_SET=n2304-kmax4096 e2e.py probe --engine chain/engine-pqz-provisional-n2304.json --rpc
+   http://127.0.0.1:8545 --genesis-hash 0xa17faef4…2ac2` — **420 ok, 0 FAIL**. e2e: `e2e.py e2e … --key 0x…04 --no-ua`
+   — **84 ok, 0 FAIL** (probe contract `0x060cc260…4ce6`, block 37; `check()` transactions in blocks 39–50).
+
+Rollback: stop, put the two `.bak-pqz4-20261026` files back, empty `data/nethermind_data`, start (a fresh pqz4 chain;
+the old pqz4 data is gone). Not done here: contracts (fs3 Task 13), the calibration (Task 9).

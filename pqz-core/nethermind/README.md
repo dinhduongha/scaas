@@ -8,13 +8,14 @@ Amsterdam (Glamsterdam) since its reset on 2026-10-21. What PQZ is and
 how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
 
-- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz4` (built locally, never
-  pushed; live on the SCaaS testnet since 2026-10-25): Nethermind 2.2.0 + the reviewed library `0894d191…64772` (set
-  `n2304-kmax4096`, the per-set proofSystemIds of plan 5h Task 8d part 1, `pqz_max_input()` 524,288; built from
-  `54c7c88e`), with provisional `engine.Pqz` rows (`chain/engine-pqz-provisional-n2304.json`) until the calibration of
-  plan 5h Task 9. History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
+- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz5` (built locally, never
+  pushed; live on the SCaaS testnet since 2026-10-26): Nethermind 2.2.0 + the reviewed library `dd0e7668…e5601` (set
+  `n2304-kmax4096`, the proofSystemIds of the R0 review fix part b, PQZL v5 `0xef1ffbcb…` / PQZH v3 `0x046859a8…`,
+  `pqz_max_input()` 524,288; built from `349b96b8`), with provisional `engine.Pqz` rows
+  (`chain/engine-pqz-provisional-n2304.json`) until the calibration of plan 5h Task 9. History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
   multi-recipient transfer, P6-ANON S8; C PQZL core), `1.39.0-pqz3` (2026-10-19, never ran on the testnet),
-  `2.2.0-pqz3` (2026-10-21; library `16dd99ce…` from `1adbd563`), `2.2.0-pqz4` (2026-10-25).
+  `2.2.0-pqz3` (2026-10-21; library `16dd99ce…` from `1adbd563`), `2.2.0-pqz4` (2026-10-25; library `0894d191…` from
+  `54c7c88e`, the plan 5h Task 8d ids PQZL v4 / PQZH v2), `2.2.0-pqz5` (2026-10-26).
 - **Nethermind 2.2.0 (2026-10-21):** the first release with Glamsterdam on Hoodi; 64 KiB contracts (EIP-7954) and
   200 M-gas blocks. What the port changed and what Amsterdam's gas rules mean for our pins (`ROLL_MAX`, op 7 M = 8,
   the precompile gas): [§ Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-2026-10-21) and
@@ -168,7 +169,7 @@ Dockerfile's `ffi` stage with `--build-arg PQZ_SET=<set>`, logs `runs/2026-10-26
 b), and `PQZ_SET=<set> build-image.sh <label>` builds that set's library, plugin and image (the `calib` target and
 `fresh-proofs`, which iterates both ids, stay the default set's). Provisional testnet rows per set:
 `chain/engine-pqz-provisional-<n>.json` (`n2048` / `n2304` / `n2560` / `n2816`, the R0 fix ids; the SCaaS testnet's live
-`2.2.0-pqz4` runs the plan 5h Task 8d rows of `engine-pqz-provisional-n2304.json` at `40366c76` until the next roll-out).
+`2.2.0-pqz5` runs `engine-pqz-provisional-n2304.json` since 2026-10-26).
 
 **The reviewed library (review W-G, 2026-10-19).** `build-image.sh` reads `ExpectedLibrarySha256` from
 `Nethermind.Pqz/SelfTest.cs`, builds `libpqz_ffi.so` (the `ffi-export` target) and stops with `FAIL the built library is
