@@ -55,7 +55,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      branches diverged at `61476cd0`), doc conflicts resolved (`pq-zero-knowledge.md`, `decisions.md`, `TODO.md`),
      `docs_check`, forge at n2304 and the size gate (no full gate: no core / set change). Pushing `main` needs the
      owner's go. From then on 8d part 2b and every later step branch from `main`.
-  2. [ ] **8d part 2b** (gas; PQZH calldata over the EIP-7825 cap), together with the part b open items:
+  2. [ ] **8d part 2b** — **paused 2026-10-26 at shutdown** (`pqz-8d2b` `6027eff5`: item 2 and (a)–(d) done, PQZH
+     calldata note + proposal written (owner decides), e2e on the testnet and the report left; resume steps in HANDOFF.md
+     top note) (gas; PQZH calldata over the EIP-7825 cap), together with the part b open items:
      (a) the C wasm32 arena peak and margin at M = 2 at n2048 / n2304 / n2560 (M = 2 known to fit 512 MiB; peak
      unmeasured; the leg limits stay labelled estimates until then); (b) the R4-C6 panic child-process test (needs a
      test-only panic export in `fault-hooks`; drop it if not cheap); (c) `PQZ-START` logs the head timestamp the id

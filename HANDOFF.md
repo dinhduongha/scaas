@@ -1,3 +1,65 @@
+## Session 2026-10-26 (part b merged, testnet on pqz5, pqz-16k merged into main, 8d part 2b paused, publication drafts) — resume here
+
+**State:** `main` has plan 5h part B, R0 fix part a + b and the pqz5 roll-out (merge `d07d0057`; forge 1361 / 0 / 9,
+size gate 0 errors); pushed up to `d14fe16f`. Local `main` commits not pushed: `fc0749db`, `ca57f2ae` (TODO), this note.
+`pqz-16k` `31af331e` pushed and now merged into `main`: later work branches from `main`. SDD ledger (git-ignored):
+`.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/` (`progress.md`, `task-8d-report.md`,
+`task-r01-report.md`, briefs and reviews).
+
+**Done today:**
+- **R0 fix part b** (contracts, node, spec / docs) + fix round + re-review **Approved** → fast-forwarded into `pqz-16k`
+  and pushed (`349b96b8`). Owner ruling I-1 option (a): the start-up id check reads the schedule at the block-tree head
+  + 1 (genesis on an empty DB), not the wall clock; an id switch on a running chain swaps after T (spec §9.1, RUNBOOK
+  path A, CTR-PQZ-10).
+- **SCaaS testnet (7622) on `scaas/nethermind-pqz:2.2.0-pqz5`** (`n2304-kmax4096`, PQZL v5 / PQZH v3, provisional
+  prices × 1.3 until Task 9): reset on path B, image `4d906b55…`, library `dd0e7668…`, probe 420 ok / 0 FAIL, e2e 84 ok
+  / 0 FAIL (`31af331e`; stack backups `*.bak-pqz4-20261026`). No PQZ / UA contracts deployed yet. The node container
+  has **no restart policy**: after the shutdown start it by hand (`docker compose up -d blockchain-node` in
+  `/home/dockers/mba-chain-nethermind`) or leave it stopped (owner's choice; the 2026-10-25 shutdown stopped it too).
+- **`pqz-16k` merged into `main`** (owner order 2026-10-26: right after the roll-out).
+- **Publication drafts** (P6-PUB; owner 2026-10-26 scope: only PQ + PQZ results) in `scratchpad/pub/` (git-ignored,
+  never commit / post): `ethresearch-post.md`, `eprint/main.tex` + `refs.bib`, `NOTES.md` (sources per number,
+  placeholders, owner rulings §5), `lazer-preview-mail.md`. Author Đinh Dương Hà ("Dinh Duong Ha"), SCaaS project,
+  `ai@dad.vn`; links to `main`; the 2026-10-25 review stated as AI-assisted; LaZer maintainers thanked; the licence
+  sentence of the mail kept. Placeholders: TBD-GAS (8d part 2b), TBD-TIME (Task 9), TBD-PKG (fs3 Task 6), the posting
+  date, attachments. LaZer gets the drafts 1–2 weeks before posting, no waiting for a reply; the G-LIC letter was sent
+  earlier and has no reply.
+
+**8d part 2b — paused** (branch `pqz-8d2b`, worktree `.claude/worktrees/pqz-8d2b`, from `main` `d14fe16f`; brief
+`task-8d2b-brief.md`): head `6027eff5` (5 commits), stopped by the owner at
+  shutdown right after the last forge run restored `PqzSet.sol` to HEAD.
+  - **Done, committed:** item 2: `ROLL_MAX` measured and pinned per set (96 / 80 / 64 / 48; `set.toml` → gen_set →
+    `PqzSet.ROLL_MAX`; `AMS_ROLL_MAX` / `ROLL_CEILING` deleted), the gas table per relation and set, the hint-test fix,
+    docs. Items 3 (a)–(d): the C wasm32 arena peak at M = 2 is 303.5 / 356.7 / 413.3 MiB at n2048 / n2304 / n2560, margins
+    1.69 / 1.44 / 1.24×; `PQZ-START` logs the id check's head; the R4-C6 panic child-process test; the Dockerfile
+    self-test label. Item 1: research note `docs/research/pqzh-calldata-cap.md` with a proposal. It gives both regimes:
+    the EIP-7976 floor allows 261,909 B, EIP-7623 alone 418,905 B. **The owner decides the option**; nothing is
+    implemented.
+  - **Uncommitted, on disk:** `smartcontracts/evm/script/pqz/e2e.py` (`CAP_PQZ` 3,000,000 → 4,500,000: `R_REG`
+    verify costs 3.62 M at n2304's provisional row, so 3 M would revert every testnet registration); the logs
+    `smartcontracts/evm/runs/2026-10-26-t8d2b-forge-<set>.txt` (4) and `…-t8d2b-sizes.txt`. Forge: 1,363 pass / 2 fail
+    at n2048 / n2304 / n2560 and 1,361 / 2 at n2816. The same 2 tests fail everywhere (`test_storageL…`,
+    `test_libraryErrorsAre…`), because they read `out/` artifacts that a fresh worktree lacks (`at-set.sh` builds into
+    `out/at-set-<set>`). Size gate: 0 errors.
+  - **Resume:** in the worktree run `forge build` once, then `script/pqz/at-set.sh <set> test` at all four sets (expect
+    0 fail). Commit e2e.py and the logs. Item 4: the e2e on the testnet with `script/pqz/e2e.py` (`pqz_prove` is built;
+    fresh factory; documented test key). Then write `task-8d-report.md` "Part 2b — Result" and a `progress.md` line →
+    review → fix round.
+  - **Findings for the owner** (in the committed docs): op 7 M = 8 uses 54–70 M state gas (EIP-8037), more than a 60 M
+    block at every set but n2560. PQZH debits fit one transaction only at n2048, and there not op 7 M = 4 with the
+    auditor and not with the hint. n2816's `ROLL_MAX` 48 is only 7,296 gas under `0.75 · 2^24`.
+
+**Next (order, TODO §00 "Now"):** (1) resume 8d part 2b (steps above) → review → fix
+round → owner ruling on the PQZH calldata option (`docs/research/pqzh-calldata-cap.md`) → merge into `main`;
+(2) one Codex pass on the contracts (`codex sandbox` check first); (3) Task 9 calibration (timing: owner stops the other
+heavy sessions first); (4) metatx split with `mtxPayMeta` → `MtxRelayFee`; then UA-8, fs3 Task 12 → 6 → 13 → 14, UA-7,
+governance. Publications: fill gas after (1), timing after (3), the package after fs3 Task 6, then the LaZer preview
+mail, 1–2 weeks, post.
+
+**Branches / worktrees:** `pqz-r01` (merged; removable), `pqz-8d1` (merged; removable), `pqz-8d2a` (keep local,
+**never push**: ≈ 10 MB of fixtures in its history; squash-merged), `review-2026-10-25` (detached, read-only review
+target; removable), `metatx-lib` (older, not part of this session).
+
 ## Session 2026-10-26 (R0 fix part a built, reviewed, fix round paused) — resume here
 
 **State:** main + this note (main local commits not pushed: `4d6482ff` UA-7 / UA-8 / research note, and this note).
