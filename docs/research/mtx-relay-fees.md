@@ -278,6 +278,8 @@ sequenceDiagram
    | GRAM (TON) | **no cross-contract atomicity:** the payment goes into the router's escrow; it is released to the relayer when the target's confirmation message arrives, and refunded to the payer on a bounce or after a timeout (as the GRAM DEX escrow, NET-TON-03) |
 
    Hedera: the EVM shape.
-7. **Sponsoring calls not yet signed (a budget): unclear** (owner; explained again 2026-10-26). It stays open: a mandate-like standing
+7. **Sponsoring calls not yet signed (a budget): not now** (owner 2026-10-26, after the explanation). The router
+   is built with one payment signature per call; a budget mode is added later, without changing B1, when a concrete
+   case needs a sponsor that cannot be online. It stays open: a mandate-like standing
    authorisation on the router (delegate = router, per-call and per-period caps, allowed targets), against one payment
    signature per call.
