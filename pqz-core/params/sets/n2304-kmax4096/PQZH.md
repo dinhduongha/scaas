@@ -54,7 +54,7 @@ Honest proofs: seeds 0 and 1 of the crate's test inputs (`runs/c8b-a-kat.jsonl`)
   (`pqz_max_input()`, 524,288 at this set) since Task 8d part 1; before, its 393,216 did not fit op 7 M = 4 with the
   auditor (402,429).
 
-## One transaction's calldata (EIP-7976) [model]
+## One transaction's calldata (EIP-7976) [measured, plan 5h Task 8d part 2b]
 
 A transaction pays at least 15,000 + 64 gas per calldata byte (EIP-7976 floor, Task 7b's formula [measured on
 Foundry 1.8.5 Amsterdam]); with Ethereum's per-transaction regular-gas cap 2^24 (EIP-7825) that is at most
@@ -67,10 +67,12 @@ Foundry 1.8.5 Amsterdam]); with Ethereum's per-transaction regular-gas cap 2^24 
 | R_DS / R_DR | `verifyTransferAmount` (`eth_call`) | 207,908 | 13,321,112 | yes | 13.32 M |
 | R_TX / R_TX0 | relayed `mtxExecute` (op 1) | 274,948 / 274,820 | 17,611,672 / 17,603,480 | **no** | 17.61 / 17.60 M |
 | R_BURN / refresh | relayed `mtxExecute` (op 2) | 274,692 | 17,595,288 | **no** | 17.60 M |
-| R_TXM op 7 M = 1 / 2 / 4, auditor | relayed `mtxExecute` | 275,012 / 276,036 / 277,316 | 17.62 / 17.68 / 17.76 M | **no** | 17.62 / 17.68 / 17.76 M |
+| R_TXM op 7 M = 1 / 2, auditor | relayed `mtxExecute` | 275,012 / 276,036 | 17.62 / 17.68 M | **no** | 17.62 / 17.68 M |
+| R_TXM op 7 M = 4, auditor (G = 2) / no auditor | relayed `mtxExecute` | 338,948 / 276,100 | 21.71 / 17.69 M | **no** | 21.71 / 17.69 M |
 
 The largest proof one 2^24 transaction can carry on the debit paths is ≈ 237.6–238.8 KB. **A PQZH debit needs a
-per-transaction regular-gas cap of at least ≈ 17.8 M** (e.g. 2^25); with 2^24 only registration and the disclosure
+per-transaction regular-gas cap of at least ≈ 17.7 M, ≈ 21.8 M for op 7 M = 4 with the auditor** (e.g. 2^25; measured
+through the token, `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2304-kmax4096.txt`); with 2^24 only registration and the disclosure
 `eth_call`s work. A direct call to the precompile carries the whole input as calldata: R_REG / R_DS / R_DR fit 2^24
 (226,221 / 244,973 B), the debit forms do not.
 

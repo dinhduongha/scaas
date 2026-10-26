@@ -756,7 +756,7 @@ TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; 
 - **Cap on `acc`.** A rollover takes `n′ = min(n, K_MAX − 1 − accUnits)` entries and reverts `CapReached(ua)` when
   `n′ = 0`; a debit re-encrypts the balance fresh and resets `accUnits` to 1, so a refresh (a burn of 0, [§7.5](#75-burn-and-refresh))
   frees a full account, which can always refresh with `p = rolled`. Head-of-line: a real credit behind `x` decoys becomes
-  spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 256`: 10,000 queued decoys take 40 rollovers, run by keepers,
+  spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 80` at `n2304-kmax4096`: 10,000 queued decoys take 125 rollovers, run by keepers,
   the owner or a relayer).
 - **Public amounts never become ciphertexts.** `mtxShield` appends (or merges into) a **TRIVIAL entry** of the receiver's
   queue ([§7.3](#73-shield)); a TRIVIAL entry is the ciphertext `u = 0, v = Δ·digits(amount)`: one `K_MAX` unit, zero noise,
@@ -782,14 +782,20 @@ TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; 
 <a id="calldata-storage"></a>
 <a id="CTR-PQZ-07"></a>**CTR-PQZ-07** — **Ciphertexts live in contract state; logs carry pointers.** (Owner 2026-10-19, built in
 plan 5h part A.) The account can debit, roll over, decrypt and disclose from state alone, so history expiry (EIP-4444) cannot
-strand funds. Layout: one SSTORE2 op blob per debit (200 gas per code byte, ≈ 3.4 M for an op 1 blob; 16,816 B with the
-auditor, 35,216 B for op 7 M = 8 with the auditor; the test chains allow 64 KiB of code, so mainnet 22776 must keep
+strand funds. Layout: one SSTORE2 op blob per debit (stored packed at `PACK_BITS`, [stored form](#stored-form): an op 1 blob with
+the auditor is 11,052 / 13,572 / 16,348 / 19,380 B at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` /
+`n2816-kmax65536`; under EIP-8037 a whole op 1 with the auditor costs 17.58 / 21.44 / 25.69 / 30.33 M of state gas, an op 7 M = 8 with the
+auditor 70.45 / 65.66 / 54.02 / 63.44 M, measured in plan 5h Task 8d part 2b, [§9.3](#93-gas-model); the test chains allow 64 KiB of code, so mainnet 22776 must keep
 `maxCodeSize ≥ 64 KiB` or split op 7 blobs per group); one slot per pending entry; `acc` a reference to the last debit's
 blob until a rollover materialises it in `ACC_WORDS` packed slots ([stored form](#stored-form); 516 unpacked words before
 plan 5h Task 8d part 2). A debit **reads** `acc` and its inline window from state (`EXTCODECOPY` ≈ 4 k gas per 16 KB; a
 cold materialised `acc` is `ACC_WORDS` SLOADs), so the debit entry points have no `acc` / `inline` argument; an optional
 calldata `accHint` (the materialised `acc`'s packed stream, `CTP` bytes) replaces the SLOADs when `keccak256(hint) ==
-accHash` and the MATERIALISED flag is set, and is ignored otherwise (a stale hint never reverts).
+accHash` and the MATERIALISED flag is set, and is ignored otherwise (a stale hint never reverts). Under the EIP-7976
+floor (64 gas per calldata byte) the hint costs about what it saves (`CTP` × 64 ≈ `ACC_WORDS` × 2,100), so it pays only
+when the transaction is not floor-bound: a PQZL op 1 saves 0.52–0.91 M with it; a PQZH debit (floor-bound) pays 0.69–1.04
+M more, and at `n2048-kmax1024` the hint alone takes it over 2^24 (plan 5h Task 8d part 2b; clients send no hint with a
+floor-bound debit).
 Public keys (PQZ and ML-DSA) are written once with SSTORE2. Wallets restore from state alone (views of [§7.8](#78-events-and-indexing));
 indexers follow events for "what changed" and read bytes from state. Contract code is split into four DELEGATECALL libraries in
 the same namespace (D14): `PqzStateLib` (init, shield, rollover, prepare), `PqzTransferLib` (op 1, op 7), `PqzBurnLib`
@@ -1094,7 +1100,8 @@ leg pays the underlying (a UA recipient: a SCaaS ledger leg through `transferToU
 <a id="rollover-op"></a>
 
 `mtxRollOver(bytes32 ua, uint256 n)` (shared with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); PQZ and Zether differ only in what `n`
-means): anyone; `1 ≤ n ≤ ROLL_MAX = 256` (`RollOverRange`); `AccNotPrepared(ua)` until `mtxPrepareAcc` wrote both halves of the
+means): anyone; `1 ≤ n ≤ ROLL_MAX` (the set's `PqzSet.ROLL_MAX`: 96 / 80 / 64 / 48 at `n2048-kmax1024` /
+`n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`) (`RollOverRange`); `AccNotPrepared(ua)` until `mtxPrepareAcc` wrote both halves of the
 account's `acc` words; `CapReached(ua)` when `accUnits ≥ K_MAX − 1`; `n′ = min(n, K_MAX − 1 − accUnits)`; `rolled + n′ ≤
 pendingCount` (`RollOverRange`, no clamp to what is pending); every rolled entry must be at least `ROLL_AGE = 5` blocks old
 (`RollTooYoung(index)`, TRIVIAL entries too). The entries `[rolled, rolled + n′)` are read **from state** (a credit's `u ‖ v`
@@ -1107,17 +1114,29 @@ TRIVIAL-only first rollover, whose `u` is 0 (final review I1; its slots are all 
 stream)` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
 are deleted (`cleared` and, when passed, `floor` follow); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
 `(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is also an allowlisted envelope op on both paths (Task R, owner 2026-10-20, [CTR-PQZ-21](#CTR-PQZ-21)): anyone calls it
-directly or through a relayer; the relayed `ROLL_MAX` rollover measures 12,185,595 gas (under `0.75 · 2^24`). Cost (contract side, measured on the built token, `ROLL_AGE = 5`, each rollover its own
-cold transaction): ≈ 2.85 M fixed (516 word rewrites) + ≈ 36.3 k per entry: 1 → 2.85 M, 16 → 3.43 M, 128 → 7.50 M,
-**256 → 12.15 M (72.4 % of 2^24)**; 272 would be 12.73 M, over the 0.75 · 2^24 = 12,582,912 rule, so `ROLL_MAX = 256`,
-pinned by `PqzStatePinGasTest`; 256 credits after a TRIVIAL-only rollover 12.09 M (`PqzStateTrivialRollGasTest`; 20.89 M
-before `ACC_MARK`).
+directly or through a relayer. **`ROLL_MAX` per set** (plan 5h Task 8d part 2b; `set.toml` `roll_max` → `gen_set.py` →
+`PqzSet.ROLL_MAX`): the largest multiple of 16 whose rollover, as a **relayed full transaction** (`mtxExecute`, outer fee)
+on a prepared account with every entry from its own cold blob (every coefficient `q − 1`), stays under `0.75 · 2^24 =
+12,582,912` regular gas; pinned by `PqzStatePinGasTest` (`ROLL_MAX` fits, `ROLL_MAX + 16` does not), measured by a
+build with a larger constant (`smartcontracts/evm/runs/2026-10-26-t8d2b-rollscan-<set>.txt`, Foundry 1.8.5, Amsterdam):
+
+| Set | `ROLL_MAX` | relayed full tx at `ROLL_MAX` / at `ROLL_MAX + 16` | direct: fixed + per entry (fit) | 1 / 16 entries (direct) | after a TRIVIAL-only rollover | `mtxPrepareAcc` half 0 / half 1 (relayed full tx: regular; state) |
+|---|---|---|---|---|---|---|
+| `n2048-kmax1024` | 96 | 11,703,844 / 12,864,324 | 4.68 M + 72,530 | 4.72 M / 5.84 M | 11.49 M | 2.18 M / 2.16 M; 16.94 M / 16.84 M |
+| `n2304-kmax4096` | 80 | 12,111,158 / 13,382,390 | 5.69 M + 79,452 | 5.74 M / 6.96 M | 11.90 M | 2.65 M / 2.64 M; 20.76 M / 20.66 M |
+| `n2560-kmax16384` | 64 | 12,410,516 / 13,792,932 | 6.82 M + 86,401 | 6.87 M / 8.20 M | 12.20 M | 3.17 M / 3.17 M; 24.97 M / 24.97 M |
+| `n2816-kmax65536` | 48 | 12,575,616 / 14,069,552 | 8.03 M + 93,371 | 8.09 M / 9.52 M | 12.36 M | 3.75 M / 3.75 M; 29.57 M / 29.57 M |
+
+The fixed part is the `ACC_WORDS` cold rewrites (EIP-8038: 2,100 + 10,000 each); a rollover writes no new slot, so its
+state gas is only the envelope's (195,840). `n2816-kmax65536`'s margin under the rule is 7,296 gas. The halves of
+`mtxPrepareAcc` are far under `0.75 · 2^24` in regular gas; their new slots are EIP-8037 state gas (≈ 97,920 per slot),
+which counts against the block (both halves of `n2816-kmax65536` ≈ 59 M, so one half per transaction). Logs
+`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-<set>.txt`.
 
 **`mtxPrepareAcc(bytes32 ua, uint256 half)`** (PQZ only; permissionless, idempotent, `half ∈ {0, 1}`, else `BadPayload(half)`;
 the account must be a registered PQZ holder, else `AccountNotRegistered`): writes a non-zero placeholder into one half of the
 `ACC_WORDS` `acc` slots (`⌈ACC_WORDS / 2⌉`, then the rest), so the first rollover rewrites instead of creating them (which no
-useful batch could share). The gas figures of this section are the 516-word (n2048-kmax1024, unpacked) build's; plan 5h
-Task 8d part 2b measures each set and re-pins `ROLL_MAX` (provisional per set until then: 96 / 80 / 64 / 48). Keepers (or the owner) run it once per `(UA, token)`; it is not an allowlisted envelope op.
+useful batch could share). Gas per set: the table above. Keepers (or the owner) run it once per `(UA, token)`; it is not an allowlisted envelope op.
 
 <a id="rollover"></a>
 <a id="CTR-PQZ-08"></a>**CTR-PQZ-08** — **Public rollover, strict order, race-free debits without a base.** (Built in plan 5h part A.)
@@ -1949,6 +1968,52 @@ the floor binds, ≈ 10 at the 50 ms verify kill threshold; ≈ 45 GB/day of arc
 node's default `max_gas_per_tx` of 3,000,000 already rejects classical Zether transfers (3.36 M), so a PQZ chain
 profile must raise it.
 
+<a id="gas-per-set"></a>
+**Measured gas per relation and set (plan 5h Task 8d part 2b; supersedes the older tables of this section, which are
+kept as history).** Forge 1.8.5 (Amsterdam) through the real token and registry, each row its own cold transaction:
+the relayed full transaction (`mtxExecute`, outer fee 7) for every `mtx*` write, a direct call for `UARegistry.register`
+and the disclosure view `verifyTransferAmount` (an `eth_call`). Proofs: PQZL the set's vector proof length, PQZH the
+crate's bound; the `PQZ` precompile at its **provisional** testnet row + 3 per input word
+(`pqz-core/nethermind/chain/engine-pqz-provisional-<n>.json`; Task 9's calibration replaces them), ML-DSA-65 at 68,006
+[estimate]. Cells: regular gas / EIP-8037 state gas, in M; ✗ = over EIP-7825's 2^24 (= 16.78 M). Regular gas =
+max(15,000 + standard calldata (4 / 16) + precompile + execution, EIP-7976 floor 15,000 + 64 per calldata byte); every
+PQZL row is execution-bound, every PQZH debit floor-bound. The per-row split into calldata (standard and floor),
+precompile and execution: `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-<set>.txt` (test
+`PqzStatePinGasTest.test_gasTable_*`, table script `runs/2026-10-26-t8d2b-gas-table.py`), the PQZH rows with both
+calldata-floor regimes in `docs/research/pqzh-calldata-cap.md` (research, non-normative).
+
+| System | Relation (form) | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
+|---|---|---|---|---|---|
+| PQZL | op 1 `R_TX`, auditor, fresh ref | 8.99 / 17.58 | 9.17 / 21.44 | 9.35 / 25.69 | 9.55 / 30.33 |
+| PQZL | op 1 `R_TX0`, no auditor | 8.70 / 17.46 | 8.88 / 21.30 | 9.05 / 25.53 | 9.25 / 30.16 |
+| PQZL | op 1, materialised `acc`, no hint / packed hint | 9.93 / 9.41 | 10.28 / 9.64 | 10.65 / 9.88 | 11.05 / 10.14 |
+| PQZL | op 7 M = 1, auditor / none | 6.69 / 7.07 | 6.87 / 7.25 | 7.05 / 7.42 | 7.25 / 7.62 |
+| PQZL | op 7 M = 2, auditor / none | 6.89 / 6.99 | 7.08 / 7.17 | 7.26 / 7.34 | 7.51 / 7.54 |
+| PQZL | op 7 M = 4, auditor | 8.39 / 35.54 | 8.70 / 43.29 | 8.05 / 27.34 | 8.27 / 32.05 |
+| PQZL | op 7 M = 4, no auditor | 7.34 / 18.58 | 7.52 / 22.46 | 7.71 / 26.73 | 7.97 / 31.39 |
+| PQZL | op 7 M = 8, auditor | 13.10 / **70.45** | 12.73 / **65.66** | 12.17 / 54.02 | 12.56 / **63.44** |
+| PQZL | op 7 M = 8, no auditor | 10.24 / 36.52 | 10.57 / 44.27 | 10.91 / 52.80 | 11.28 / **62.11** |
+| PQZL | burn / refresh | 6.68 / 6.67 | 6.85 / 6.84 | 7.02 / 7.01 | 7.21 / 7.20 |
+| PQZL | register (`UARegistry.register`, mldsa65 UA + PQZ key) | 4.49 / 29.21 | 4.56 / 32.34 | 4.62 / 35.47 | 4.71 / 38.61 |
+| PQZL | disclosure sender / receiver / auditor (op 1 entry) | 4.24 / 4.20 / 4.20 | 4.32 / 4.29 / 4.29 | 4.41 / 4.38 / 4.38 | 4.51 / 4.48 / 4.49 |
+| PQZH | op 1 / op 7 M ≤ 2 / op 7 M = 4 no auditor / burn / refresh | 16.38–16.48 | 17.60–17.69 ✗ | 21.04–21.14 ✗ | — |
+| PQZH | op 7 M = 4, auditor | 20.39 ✗ | 21.71 ✗ | 21.23 ✗ | — |
+| PQZH | op 1, materialised `acc`, packed hint | 17.14 ✗ | 18.47 ✗ | 22.15 ✗ | — |
+| PQZH | register / disclosure | 13.61 / 12.22 | 14.84 / 13.32 | 16.67 / 15.02 | — |
+
+The "no hint / packed hint" and "auditor / none" cells give two regular-gas figures (state gas as the row above it).
+State gas of the burn / refresh rows: 17.06 / 16.96, 20.89 / 20.79, 25.11 / 25.01, 29.73 / 29.63 M; disclosures have none.
+**Findings for the owner** (no rule changed here): (1) every built PQZL form fits 2^24 at every set (asserted by the
+test); (2) **op 7 M = 8 with the auditor carries more state gas than a 60 M mainnet-like block holds** at
+`n2048-kmax1024`, `n2304-kmax4096` and `n2816-kmax65536` (and without the auditor at `n2816-kmax65536`): under EIP-8037
+a block's gas used is max(Σ regular, Σ state), so such a transaction needs a block limit ≥ its state gas; it fits the
+SCaaS testnet's 200 M and the ≈ 200 M planned with Glamsterdam, not today's 60 M (spec 2026-10-20 §12 item 3 left
+"the total against a 60 M block" to this measurement); (3) PQZH debits fit one transaction only at `n2048-kmax1024`
+(not op 7 M = 4 with the auditor, not with the hint); (4) the register row's `R_REG` verification (the precompile row +
+the verifier's 0.11–0.69 M) is 3.63–5.03 M, above the 3,000,000 PQZ verify cap `script/pqz/e2e.py` gives the registry
+and the 3,500,000 of the forge fixture at the provisional rows: a registry deployment needs a `PQZ_MLWE` cap above the
+set's register row (≈ 3.7 M PQZL, ≈ 5.1 M PQZH) plus margin.
+
 **op 7 rows** (P6-ANON S8, plan D19): an op 7 row adds `(M, auditorOn)`, read from header words 320 / 448 without
 validation (a word ≥ 256 or an unbuilt shape is a miss), because the length alone does not fix the shape. Calibrated
 once on the chain host (`pqz-core/nethermind/runs/2026-10-17-calib-ops7.txt`, image `pqz2`, 0.357 M gas per ms) and live
@@ -2316,7 +2381,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T4 | Malformed ciphertexts (out-of-range coefficients, wrong lengths, huge noise) | `< q` checks in Solidity and precompile; every ciphertext comes with a proof of exact norms; the only trivial term (the plain term of `T`) is built by the contract |
 | T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
 | T6 | Decryption-noise leakage (IND-CPA^D style) | noise never leaves `pqz_dec`; disclosure is ZK ([CTR-PQZ-14](#CTR-PQZ-14)); no "decrypt and publish" API |
-| T7 | Credit and shield flood: filling a victim's queue | credits and shields are **never refused** (plan 5h, [CTR-PQZ-06](#CTR-PQZ-06)), so a flood no longer locks an account; it costs the victim delay and rollover work. Measured cost of the work: a rollover is ≈ 2.85 M + 36.3 k per entry (`ROLL_MAX = 256` = 12.13 M gas, 72.3 % of 2^24; a TRIVIAL entry costs less), 10,000 queued decoys = 40 rollovers, run by keepers, the owner or a relayer; recovery of a full `acc` is one refresh (≈ 3.9 M contract side). The flooder pays per entry: a proven transfer ≈ 4.0–4.5 M plus the proof, a decoy leg `decoyFee` to the victim (`d ≥ minDecoyFee`, paid to every leg), a shield one TRIVIAL slot per account and block (a merge within the block ≈ 52 k, an append ≈ 74 k; at one per 5 s block ≈ 17,280 entries a day ≈ 0.16 G gas of rollover work). Shields are free for the sender (owner 2026-10-20, gas only), so on the SCaaS testnet, where gas is free, permissioned submitters and node rate limits remain the real control; rollover is public |
+| T7 | Credit and shield flood: filling a victim's queue | credits and shields are **never refused** (plan 5h, [CTR-PQZ-06](#CTR-PQZ-06)), so a flood no longer locks an account; it costs the victim delay and rollover work. Measured cost of the work (plan 5h Task 8d part 2b, [§7.6](#76-rollover)): at `n2304-kmax4096` a rollover is ≈ 5.69 M + 79.5 k per entry (`ROLL_MAX = 80` ≈ 12.05 M direct, 12.11 M relayed; a TRIVIAL entry costs less), 10,000 queued decoys = 125 rollovers, run by keepers, the owner or a relayer; recovery of a full `acc` is one refresh (≈ 3.9 M contract side). The flooder pays per entry: a proven transfer ≈ 4.0–4.5 M plus the proof, a decoy leg `decoyFee` to the victim (`d ≥ minDecoyFee`, paid to every leg), a shield one TRIVIAL slot per account and block (a merge within the block ≈ 52 k, an append ≈ 74 k; at one per 5 s block ≈ 17,280 entries a day ≈ 0.16 G gas of rollover work). Shields are free for the sender (owner 2026-10-20, gas only), so on the SCaaS testnet, where gas is free, permissioned submitters and node rate limits remain the real control; rollover is public |
 | T8 | Rollover grief against in-flight proofs | proofs: impossible by construction (the same `T`, [CTR-PQZ-08](#CTR-PQZ-08)); calldata: none left, since `acc` and the inline window are read from state and a stale optional hint is ignored; **`ROLL_AGE = 5` blocks** keeps entries made after the proof from being rolled past `p`, so a debit submitted within five blocks of its proof never sees `rolled > p`, and after that it settles while `rolled − p ≤ INLINE_MAX` (the un-roll keeps order and loses nothing). Residuals, bounded harm and no loss: more than `INLINE_MAX` *old* entries above a capped `p` (re-prove at a new `p`), and a debit whose window holds an entry of its own block, revertible by a same-block merge ([§7.3](#73-shield)); clients prove at `p = pendingCount` and retry once on `InlineTooFar` or `ProofRejected` |
 | T9 | Replay / proof transplant | `sendCounter`, `chainId`, `chainUid`, `token`, `registry`, `validUntilBlock`, UAs, fee, beneficiary and `envelopeBinding` in the statement; envelope 2D nonce and `validUntil`; strong FS |
 | T10 | Fiat–Shamir for multi-round LNP22 (round-by-round grinding; QROM) | `op` and statement absorbed first; every challenge round ≥ 128-bit sound on its own, listed in `estimator.txt`; QROM soundness an assumption, stated; tracked for the audit. PQZH (Ligero): 128-bit classical in the ROM, QROM assumed likewise; a quantum Grover attack on the Fiat–Shamir grinding halves the query term (gate B review 2026-10-17, pqzh-ligero.md §5.1 and §12) |
@@ -2335,7 +2400,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T20 | Fee griefing: envelopes that fail late to burn relayer gas | outer fee checked before any SSTORE2 read or precompile call; fee and nonce taken only after verify, so a failing op reverts whole; relayers pre-simulate on a follower; gas on the SCaaS testnet is free, the cost is block capacity |
 | T21 | Malicious recipient keys extract hints on a multi transfer's shared `(r_g, e1_g)` (16 per leg and auditor window) | `s_aud` legs per group with the auditor (2 / 3 / 4 / 4 per set), 4 without: ≤ 32·s_aud / 64 hints; every auditor copy at its own window, the auditor never a party (F-4); β ≥ 450 at every set but `n2048-kmax1024` (DDGR20 451.9, dual_hybrid − offset ≈ 444: the owner-accepted exception to CTR-PQZ-03's 450); fresh randomness per operation ([CTR-PQZ-04](#CTR-PQZ-04), [CTR-PQZ-26](#CTR-PQZ-26)) |
 | T22 | Decoy flood: listing victims as decoys (`M − 1` victims per transfer) | each unit is a proven leg; the cap on `acc` keeps the noise budget and is never a refusal (head-of-line delay only); **`decoyFee`**: the sender pays `d ≥ minDecoyFee` to every leg, the victim included, so a flood pays its victims for the rollover work; T7's permissioned submitters and rate limits; wallet load spreading (P6h) |
-| T23 | Burying real credits behind junk (ordered roll-over) | strict order is deliberate (it hides which ring members were decoys); a real credit behind `x` decoys is spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 256`: 10,000 decoys = 40 rollovers, ≈ 12.1 M gas each), or at once in the owner's own debit with `p` within `INLINE_MAX` of `rolled`; the owner can always spend `acc` with `p = rolled`; keepers roll decoy credits (P6i); the decoy fee compensates the work |
+| T23 | Burying real credits behind junk (ordered roll-over) | strict order is deliberate (it hides which ring members were decoys); a real credit behind `x` decoys is spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 80` at `n2304-kmax4096`: 10,000 decoys = 125 rollovers, ≈ 12.1 M gas each), or at once in the owner's own debit with `p` within `INLINE_MAX` of `rolled`; the owner can always spend `acc` with `p = rolled`; keepers roll decoy credits (P6i); the decoy fee compensates the work |
 | T24 | Decoy selection and intersection (inactive or fixed decoys, repeated payments with varying decoys, the real recipient's next activity, colluding decoys) | wallet policy (P6h): recently active candidates from the registry's per-kind list ([accounts CTR-UA-29](accounts.md#CTR-UA-29)), stable sets per payee and week, load spreading; anonymity set ≤ `M` minus colluders |
 | T25 | Op confusion (op 1 vs op 7, sizes, groupings, auditor on / off) | distinct `opTag`, the length bound to `(id, M, A)`, `M` and `recipientsHash` in the statement; negative vectors |
 | T26 | A disclosure reveals that its leg was a decoy (amount 0), narrowing the other recipients' set | by consent of the discloser, as classical |

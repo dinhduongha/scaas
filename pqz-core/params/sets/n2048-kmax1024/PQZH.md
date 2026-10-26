@@ -30,16 +30,22 @@ l = 695, radices 2 / 19 / 43 / 431; wasm32: two 21-bit limbs in u64. Soundness 1
 Every built form is within `MAX_PROOF_PQZH` 262,144 and `MAX_INPUT` 393,216 (D5; unit test `limits_exact`). Honest
 proofs 185,462–233,604 B (`runs/c8-v3-kat.jsonl`).
 
-## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [model]
+## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [measured, plan 5h Task 8d part 2b]
 
 | relation | path | calldata B (proof at its bound) | floor gas | fits 2^24 |
 |---|---|---|---|---|
 | R_REG | `UARegistry.register` | 212,420 | 13,609,880 | yes |
 | R_DS / R_DR | `verifyTransferAmount` (`eth_call`) | 190,660 | 12,217,240 | yes |
 | R_TX / R_TX0 / R_BURN | relayed `mtxExecute` | 256,772 / 255,908 / 255,780 | 16.45 / 16.39 / 16.38 M | yes (margin ≈ 0.2–0.4 M) |
-| R_TXM op 7 M = 1 / 2 / 4, auditor | relayed `mtxExecute` | 256,836 / 257,124 / 258,436 | 16.45 / 16.47 / 16.55 M | yes |
+| R_TXM op 7 M = 1 / 2, auditor | relayed `mtxExecute` | 256,836 / 257,124 | 16.45 / 16.47 M | yes |
+| R_TXM op 7 M = 4, auditor (G = 2 since the R0 fix) | relayed `mtxExecute` | 318,372 | 20.39 M | **no** |
+| R_TXM op 7 M = 4, no auditor | relayed `mtxExecute` | 257,188 | 16.48 M | yes |
+| R_TX with the `acc` hint (materialised `acc`) | relayed `mtxExecute` | 267,620 | 17.14 M | **no** |
 
-Every form fits one 2^24 transaction under Amsterdam's floor, the debits only just (floor-bound). A direct call to the
+Measured through the token (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2048-kmax1024.txt`; the regular gas equals the
+floor: every debit is floor-bound). Every built form fits one 2^24 transaction under Amsterdam's floor, the debits only
+just, **except op 7 M = 4 with the auditor** (G = 2 since the R0 review fix) and any debit that carries the `acc` hint;
+under EIP-7623 alone (no EIP-7976) all would fit (`docs/research/pqzh-calldata-cap.md`). A direct call to the
 precompile (input as calldata) fits for R_REG / R_DS / R_DR only.
 
 ## Gas, block, verify time

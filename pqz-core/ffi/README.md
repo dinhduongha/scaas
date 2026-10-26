@@ -107,13 +107,15 @@ once:
   once. Running out inside LaZer stops the process (a trap: no write may follow a failed allocation), so the size is
   set above the largest relation's peak.
 - wasm32 has one 512 MiB arena for both. There, `prove` refuses PQZL multi-recipient transfers above the set's
-  `[pqzl_c] wasm_max_legs` (`ProveError::Statement(Reject::Legs)`); larger M is for native clients. Only n2816-kmax65536's
-  1 is measured (C wasm32 peaks R_TXM M = 1 / 2 / 4: 481 / 501 / 530 MiB); the 2 of n2048-kmax1024 / n2304-kmax4096 /
-  n2560-kmax16384 are **estimates** (the native C peaks × n2816's wasm32 / native ratio ≈ 0.77: M = 2 fits, M = 4 at
-  n2048 ≈ 508 MiB is too close). The R0 fix round's `PQZL=c` digest runs proved M = 2 (auditor on and off) in C wasm32
-  inside the 512 MiB arena at those three sets (`runs/r01a-fix-c-<set>-digests-wasm.jsonl`; total wasm memory 583 / 607
-  / 579 MiB, arena included), so the limit 2 works there; the arena peak and its margin at M = 2 are not measured (the
-  C core's wasm32 bench, gate part `fnv/cwasm`, runs only at log2 q > 50; open, no timing run in part b). The Rust backend
+  `[pqzl_c] wasm_max_legs` (`ProveError::Statement(Reject::Legs)`); larger M is for native clients. Measured: at
+  n2816-kmax65536 1 (C wasm32 peaks R_TXM M = 1 / 2 / 4: 481 / 501 / 530 MiB, gate `fnv/cwasm`); at n2048-kmax1024 /
+  n2304-kmax4096 / n2560-kmax16384 2 (plan 5h Task 8d part 2b, `pqzl/runs/2026-10-26-t8d2b-cwasm-m2-<set>.jsonl`: the
+  arena's high-water mark `pqz_arena_peak` in the production 512 MiB arena, every relation a wallet can prove there loaded
+  first — R_REG … R_TX0, R_TXM M = 1 / 2 with and without the auditor; a memory measurement, no timing used): R_TXM M = 2
+  peaks 291.7 / 344.7 / 402.2 MiB with the auditor and 303.5 / 356.7 / 413.3 MiB without (the last relation loaded),
+  **margin 1.69 / 1.44 / 1.24 ×**; every proof verified. M = 2 alone (a fresh arena) peaks 233.9 / 283.7 / 340.0 MiB.
+  The R0 fix round's `PQZL=c` digest runs had shown M = 2 fits (total wasm memory 583 / 607 / 579 MiB, arena included).
+  The Rust backend
   has no arena and proves M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of
   linear memory, run `d6`, Rust port Task 12, CTR-PQZ-09).
 

@@ -726,7 +726,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   ciphertexts from logs (anyone may; it is harmless). A proof in flight chose `p ≥` every credit older than its own
   state read, so the keeper never pushes `rolled` more than 16 past it. Clients prove at `p = pendingCount` and, on
   `InlineTooFar`, refresh state and re-prove once. *Since plan 5h (docs sync 2026-10-20) the contract enforces `ROLL_AGE = 5`
-  blocks per rolled entry and `mtxRollOver(ua, n)` (`n ≤ ROLL_MAX = 256`) reads the entries from state, with no ciphertexts from logs
+  blocks per rolled entry and `mtxRollOver(ua, n)` (`n ≤ ROLL_MAX`, the set's: 96 / 80 / 64 / 48 at n2048 / n2304 / n2560 / n2816, plan 5h Task 8d part 2b) reads the entries from state, with no ciphertexts from logs
   and no 16-credit batch; the keeper policy and its numbers above are to be updated in the node task that follows part A
   ([CTR-PQZ-08](../contracts/pq-zero-knowledge.md#CTR-PQZ-08)).*
 - **P6i, multi-recipient transfer (op 7, P6-ANON; SPECIFIED):**

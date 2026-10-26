@@ -53,7 +53,7 @@ memcheck, 12 relations): 0 secret-dependent reports.
   verifier bound, not R_TX (407,823), op 7 M = 1 with the auditor (407,823), M = 2 (407,823 / 428,559) or M = 4
   (449,039 / 470,885).
 
-## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [model]
+## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [measured, plan 5h Task 8d part 2b]
 
 | relation | path | calldata B | floor gas | fits 2^24 |
 |---|---|---|---|---|

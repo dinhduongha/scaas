@@ -56,10 +56,11 @@ Measured where marked; the rest [estimate]. Nothing here was timed (owner rule: 
    (`worstcase_noise.json` `margin_2_30`), mint margin 3.08.
 7. **No PQZH backup** at this set (above): a chain that wants the hash-based backup proof system needs another set; the radix-1,789 preset is not pursued (owner 2026-10-25, reason in the PQZH row above).
 
-Proof sizes (`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`, byte-identical C = Rust = wasm32): R_TX
-54,843 B, R_TX0 54,531, R_BURN 54,012 (burn) / 53,983 (refresh), R_REG 35,407, R_DS 35,924, R_DR 36,728 (receiver) /
-36,742 (auditor); R_TXM with the auditor M = 1 / 2 / 4 / 8: 54,844 / 57,746 / 59,508 / 79,196 B (the M = 8 boundary row
-79,199 B), without 54,506 / 55,024 / 58,148 / 76,350 B (all below `MAX_PROOF_PQZL` 98,304). Heap: C prover arena peaks
+Proof sizes (`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json` since the R0 review fix, byte-identical C =
+Rust = wasm32): R_TX 54,849 B, R_TX0 54,505, R_BURN 54,026 (burn) / 53,996 (refresh), R_REG 35,479, R_DS 35,913, R_DR
+36,828 (receiver) / 36,859 (auditor); R_TXM with the auditor M = 1 / 2 / 4 / 8: 54,824 / 57,779 / 59,548 / 79,208 B (the
+M = 8 boundary row 79,207 B), without 54,504 / 55,020 / 58,086 / 76,340 B (all below `MAX_PROOF_PQZL` 98,304; the
+pre-R0 values 79,196 / 79,199 B of this paragraph were stale, plan 5h Task 8d part 2b). Heap: C prover arena peaks
 538 MB (R_TX) … 1,259 MB (R_TXM M = 8 with the auditor: needs `PQZ_ARENA_MB=2048`).
 
 Files: `set.toml` (input), `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, `<rel>_params.sage` (gen_set.py),
