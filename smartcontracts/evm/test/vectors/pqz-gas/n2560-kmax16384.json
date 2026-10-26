@@ -1,0 +1,172 @@
+{
+ "pqzh": {
+  "BURN": {
+   "honest": 298116,
+   "input": 365753,
+   "proof": 303412,
+   "row": 4859000
+  },
+  "DISCLOSE-AUDITOR": {
+   "honest": 231230,
+   "input": 275619,
+   "proof": 234238,
+   "row": 3745000
+  },
+  "DISCLOSE-RECEIVER": {
+   "honest": 231614,
+   "input": 275619,
+   "proof": 234238,
+   "row": 3745000
+  },
+  "DISCLOSE-SENDER": {
+   "honest": 231454,
+   "input": 275619,
+   "proof": 234238,
+   "row": 4268000
+  },
+  "M1-off": {
+   "honest": 301162,
+   "input": 387215,
+   "proof": 304266,
+   "row": 5608000
+  },
+  "M1-on": {
+   "honest": 301066,
+   "input": 407823,
+   "proof": 304266,
+   "row": 5023000
+  },
+  "M2-off": {
+   "honest": 300650,
+   "input": 407823,
+   "proof": 304266,
+   "row": 5740000
+  },
+  "M2-on": {
+   "honest": 300714,
+   "input": 428559,
+   "proof": 304266,
+   "row": 5201000
+  },
+  "M4-off": {
+   "honest": 300554,
+   "input": 449039,
+   "proof": 304266,
+   "row": 6360000
+  },
+  "M4-on": {
+   "honest": 300610,
+   "input": 470885,
+   "proof": 305120,
+   "row": 6416000
+  },
+  "REFRESH": {
+   "honest": 299860,
+   "input": 365753,
+   "proof": 303412,
+   "row": 4859000
+  },
+  "REGISTER": {
+   "honest": 230910,
+   "input": 254819,
+   "proof": 234238,
+   "row": 4319000
+  },
+  "TRANSFER": {
+   "honest": 301194,
+   "input": 407823,
+   "proof": 304266,
+   "row": 5492000
+  },
+  "TRANSFER0": {
+   "honest": 299123,
+   "input": 387215,
+   "proof": 304266,
+   "row": 5227000
+  }
+ },
+ "pqzl": {
+  "BURN": {
+   "input": 111877,
+   "proof": 49536,
+   "row": 4840000
+  },
+  "DISCLOSE-AUDITOR": {
+   "input": 75253,
+   "proof": 33872,
+   "row": 3337000
+  },
+  "DISCLOSE-RECEIVER": {
+   "input": 75247,
+   "proof": 33866,
+   "row": 3337000
+  },
+  "DISCLOSE-SENDER": {
+   "input": 74348,
+   "proof": 32967,
+   "row": 3381000
+  },
+  "M1-off": {
+   "input": 133040,
+   "proof": 50091,
+   "row": 5139000
+  },
+  "M1-on": {
+   "input": 153933,
+   "proof": 50376,
+   "row": 4712000
+  },
+  "M2-off": {
+   "input": 154100,
+   "proof": 50543,
+   "row": 4975000
+  },
+  "M2-on": {
+   "input": 175512,
+   "proof": 51219,
+   "row": 4823000
+  },
+  "M4-off": {
+   "input": 196329,
+   "proof": 51556,
+   "row": 5164000
+  },
+  "M4-on": {
+   "input": 220626,
+   "proof": 54861,
+   "row": 5357000
+  },
+  "M8-off": {
+   "input": 317548,
+   "proof": 69863,
+   "row": 6941000
+  },
+  "M8-on": {
+   "input": 341950,
+   "proof": 72761,
+   "row": 8030000
+  },
+  "REFRESH": {
+   "input": 111883,
+   "proof": 49542,
+   "row": 4840000
+  },
+  "REGISTER": {
+   "input": 53120,
+   "proof": 32539,
+   "row": 3504000
+  },
+  "TRANSFER": {
+   "input": 153949,
+   "proof": 50392,
+   "row": 7032000
+  },
+  "TRANSFER0": {
+   "input": 133002,
+   "proof": 50053,
+   "row": 6790000
+  }
+ },
+ "set": "n2560-kmax16384",
+ "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), chain/engine-pqz-provisional-n2560.json (provisional rows, testnet only until Task 9)"
+}

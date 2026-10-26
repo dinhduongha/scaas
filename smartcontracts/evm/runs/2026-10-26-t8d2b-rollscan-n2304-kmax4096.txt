@@ -1,0 +1,228 @@
+# t8d2b ROLL_MAX scan at n2304-kmax4096, commit f9b0fd5c + PqzSet.ROLL_MAX = 192 (uncommitted, restored), test/research/PqzPackGas.t.sol
+== at-set.sh: n2304-kmax4096 (n2304-kmax4096), forge test --match-path test/research/PqzPackGas.t.sol --match-test test_pack_scanRoll -vv
+Compiling 174 files with Solc 0.8.37
+Solc 0.8.37 finished in 24.09s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:264:13:
+    |
+264 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:368:9:
+    |
+368 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/pqzh/Pqzh.sol:249:64:
+    |
+249 |     function pw(uint256[64] memory t, uint256 bits, uint256 n, uint256 off) internal pure returns (uint256 r) {
+    |                                                                ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/pqzh/Pqzh.sol:162:5:
+    |
+162 |     function off(bytes calldata x) internal pure returns (uint256 o) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:138:38:
+    |
+138 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:142:38:
+    |
+142 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:561:5:
+    |
+561 |     function _w(bytes calldata s, uint256 i) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:568:5:
+    |
+568 |     function _seed(Ctx memory c, bytes calldata stmt) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:573:5:
+    |
+573 |     function _observe(Ctx memory c, uint256 ptr, uint256 len) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:584:5:
+    |
+584 |     function _sample(Ctx memory c) private view returns (uint256 r) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:653:5:
+    |
+653 |     function _cd(uint256 p) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:661:5:
+    |
+661 |     function _alphaPowers(Ctx memory c) private view returns (uint256[] memory packed) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:700:5:
+    |
+700 |     function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private view returns (uint256 o, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:772:5:
+    |
+772 |     function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private view returns (uint256 rowsBytes, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:787:5:
+    |
+787 |     function _deep(Ctx memory c, uint256 x) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:846:5:
+    |
+846 |     function _gather(uint256[] memory ev, uint256 k, uint256 pos, uint256 folded, uint256 p, uint256 E)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:862:5:
+    |
+862 |     function _leaf(uint256[] memory ev, uint256 k, uint256 E) private view returns (bytes32 h) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:232:5:
+    |
+232 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 1 test for test/research/PqzPackGas.t.sol:PqzPackGasTest
+[PASS] test_pack_scanRoll() (gas: 60209902)
+Logs:
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 16
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 185856
+    full tx regular / state / total 7026230 195840 7222070
+  scan row: entries / regular / state 16 7026230 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 32
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 371712
+    full tx regular / state / total 8297462 195840 8493302
+  scan row: entries / regular / state 32 8297462 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 48
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 557568
+    full tx regular / state / total 9568694 195840 9764534
+  scan row: entries / regular / state 48 9568694 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 64
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 743424
+    full tx regular / state / total 10839914 195840 11035754
+  scan row: entries / regular / state 64 10839914 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 80
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 929280
+    full tx regular / state / total 12111158 195840 12306998
+  scan row: entries / regular / state 80 12111158 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 96
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1115136
+    full tx regular / state / total 13382390 195840 13578230
+  scan row: entries / regular / state 96 13382390 195840
+    OVER 0.75 * 2^24
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 530.74ms (137.31ms CPU time)
+
+Ran 1 test suite in 531.76ms (530.74ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+rc 0

@@ -3,9 +3,14 @@ pragma solidity ^0.8.24;
 
 import {console2, Vm} from "forge-std/Test.sol";
 import {PqzSlots} from "./PqzState.t.sol";
+import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {PqzSet} from "../../src/pqz/PqzSet.sol";
+import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
 contract GasBurner {
@@ -20,12 +25,35 @@ contract GasBurner {
     }
 }
 
-// F185 (Foundry 1.8.5, Amsterdam): the largest `ROLL_MAX` under `0.75 · 2^24` at the current sizes is 128 (a `mtxRollOver`
-// is 6,598,351 regular gas fixed + 44,123 per entry, the fit through 128 and 256 entries); the constant in `src/` is 256
-// until Task 8d re-pins it (owner checkpoint, Task 7b: 80 at the 16k sizes). While `ROLL_MAX` is above this figure the
-// four `ROLL_MAX` rows below assert a ceiling just above today's measurement instead of the cap (17.9 M at 256 entries),
-// so further growth still fails; at or below it they assert the cap again. TODO(5h Task 8d): re-pin and delete both.
-uint256 constant AMS_ROLL_MAX = 128;
+/// Plan 5h Task 8d part 2b: the `PQZ` precompile at a schedule row's price, `row + 3 · ⌈len / 32⌉` (CTR-PQZ-11), less
+/// 2,900 (this stand-in is a cold account, 3,000 gas; a precompile is warm, 100): answers 1.
+contract RowBurner {
+    uint256 internal immutable ROW;
+
+    constructor(uint256 r) { ROW = r; }
+
+    fallback(bytes calldata d) external returns (bytes memory) {
+        uint256 b = ROW + 3 * ((d.length + 31) / 32) - 2_900;
+        uint256 g0 = gasleft();
+        while (g0 - gasleft() < b) {}
+        return abi.encode(uint256(1));
+    }
+}
+
+/// Plan 5h Task 8d part 2b: the execution gas of one call, without the transaction's intrinsic gas and calldata (what
+/// the EIP-7976 floor hides when it binds). The call data is in memory before the first `gasleft`, so the meter's own
+/// copy is not counted; the callee is a cold account here (3,000), the transaction's `to` on chain (warm, 100). The
+/// call's EIP-8037 state gas is included (forge's `gasleft` pays it): subtract the transaction's `gasStateUsed`.
+contract GasMeter {
+    function measure(address t, bytes calldata d) external returns (uint256 used) {
+        bytes memory m = d;
+        bool ok;
+        uint256 g0 = gasleft();
+        assembly ("memory-safe") { ok := call(gas(), t, 0, add(m, 32), mload(m), 0, 0) }
+        used = g0 - gasleft();
+        if (!ok) assembly ("memory-safe") { returndatacopy(0, 0, returndatasize()) revert(0, returndatasize()) }
+    }
+}
 
 /// A single transfer's op blob as SSTORE2 code, `STOP ‖ salt(16) ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)` (P46 packed, plan 5h Task 8d
 /// part 2), every coefficient `q − 1`: the credits the gas pins roll (the lanes' worst case).
@@ -42,7 +70,6 @@ function _qm1BlobCode() pure returns (bytes memory) {
     }
     return bytes.concat(hex"00", bytes16(0), PqzCt.packMem(ct), bytes32(0), PqzCt.packMem(v));
 }
-uint256 constant ROLL_CEILING = 18_500_000;
 
 /// Plan 5h Task 2 gas (Review Focus 5, 6; spec §5.3 / §5.4) on the real token: `ROLL_MAX` and the `mtxPrepareAcc` halves
 /// pinned under `0.75 · 2^24`, the shield (append, merge) and the per-op table. Each test is one transaction after
@@ -55,7 +82,7 @@ uint256 constant ROLL_CEILING = 18_500_000;
 contract PqzStatePinGasTest is PqzSlots {
     uint256 internal constant CAP = (uint256(1) << 24) * 3 / 4; // 12,582,912
     uint256 internal constant PRE = 16; // entries rolled in setUp (acc materialised)
-    uint256 internal constant LO = PqzCore.ROLL_MAX / 2; // the fit's second point (128 at ROLL_MAX = 256; Task 7b)
+    uint256 internal constant LO = PqzCore.ROLL_MAX / 2; // the fit's second point
     uint256 internal constant QM1 = PqzCt.Q - 1;
 
     bytes32 internal dave; // a second rolling account (the slope of ROLL_MAX)
@@ -87,14 +114,39 @@ contract PqzStatePinGasTest is PqzSlots {
             tok.mtxPrepareAcc(ua, 1);
             tok.mtxRollOver(ua, PRE); // the first materialisation; the measured rollovers rewrite
         }
-        _transfer(tok, carol, bob, bytes32(0), 1, true); // carol's acc: a fresh blob reference
+        (discRef,) = _transfer(tok, carol, bob, bytes32(0), 1, true); // carol's acc: a fresh blob reference
         _fund(tok, bob, 1); // bob: an entry of an earlier block
         vm.roll(block.number + 1);
         _fund(tok, frank, 1); // frank: a TRIVIAL tail of the test's block
         _public(tok, address(this), 1000 * SCALE);
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
         _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
+        _tableSetUp();
         vm.resumeGasMetering();
+    }
+
+    /// The gas table's state (plan 5h Task 8d part 2b), on accounts no other test uses: an op 7 M = 8 entry (auditor) to
+    /// disclose, the meter, and registries whose PQZ verify cap (12 M) does not cut the register row. The PQZH verifier's
+    /// probe re-mocks op 3, so it comes after every registration and op 3 is mocked to 1 again.
+    function _tableSetUp() internal {
+        gus = _pqzUA(_pk(40), 40);
+        for (uint8 i; i < 8; ++i) ys[i] = _pqzUA(_pk(41 + i), 41 + i);
+        bytes memory r;
+        for (uint256 j; j < 8; ++j) r = bytes.concat(r, ys[j]);
+        discRef7 = tok.mtxConfidentialTransfer(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), gus,
+            alice, uint256(8), uint256(0)), salt, r, _blob(99, _outLen(8, true))), hex"c0de", _mlAuth(), alice, "");
+        meter = new GasMeter();
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
+        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), 12_000_000);
+        regL = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        verL = pqv;
+        if (PqzSet.HAS_PQZH) {
+            verH = _newPqzVerifier(PqzSet.PQZH_ID);
+            k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(verH), 12_000_000);
+            regH = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+            vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
+        }
     }
 
     /// `STOP ‖ salt(16) ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)` (P46), every coefficient `q − 1` (the lane-overflow worst case).
@@ -119,7 +171,11 @@ contract PqzStatePinGasTest is PqzSlots {
     uint256 internal lastState;
 
     function _gas(bytes memory data) internal returns (uint256 used) {
-        (bool ok, bytes memory ret) = address(tok).call(data);
+        used = _gasTo(address(tok), data);
+    }
+
+    function _gasTo(address t, bytes memory data) internal returns (uint256 used) {
+        (bool ok, bytes memory ret) = t.call(data);
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
         Vm.Gas memory g = vm.lastCallGas();
         used = g.gasTotalUsed;
@@ -149,8 +205,7 @@ contract PqzStatePinGasTest is PqzSlots {
         _log("mtxRollOver ROLL_MAX + 16 (linear fit)", next);
         console2.log("per entry / fixed (fit)", (gMax - g128) / (PqzCore.ROLL_MAX - LO),
             g128 - (gMax - g128) * LO / (PqzCore.ROLL_MAX - LO));
-        if (PqzCore.ROLL_MAX > AMS_ROLL_MAX) assertLe(gMax, ROLL_CEILING, "ROLL_MAX over the cap: ceiling"); // TODO(5h Task 8d): re-pin ROLL_MAX under Amsterdam, remove this ceiling
-        else assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
+        assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
         bytes memory acc = tok.pqzAcc(alice);
         uint256 want = PqzCt.Q - (PRE + PqzCore.ROLL_MAX);
         want = want << 192 | want << 128 | want << 64 | want;
@@ -179,16 +234,7 @@ contract PqzStatePinGasTest is PqzSlots {
     /// gas before refunds (12,000 + 3,000 intrinsic, max(calldata 4 / 16 + execution, EIP-7976 floor 64 per byte),
     /// execution), `st` = EIP-8037 state gas. The precompile and ML-DSA stay mocked (not included).
     function _fullTx(bytes memory data, uint256 fee) internal returns (uint256 reg, uint256 st) {
-        MetaTxLib.MetaTransaction memory m;
-        m.from = vm.addr(RKEY);
-        m.data = data;
-        m.validUntil = block.timestamp + 1 hours;
-        m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
-        m.fee = fee;
-        uint256 snap = vm.snapshotState();
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, tok.mtxDigest(m));
-        vm.revertToState(snap);
-        bytes memory call = abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
+        bytes memory call = _envelope(data, fee);
         uint256 zeros;
         for (uint256 i; i < call.length; ++i) if (call[i] == 0) ++zeros;
         vm.prank(RELAYER);
@@ -203,14 +249,38 @@ contract PqzStatePinGasTest is PqzSlots {
         console2.log("  full tx regular / state / total", reg, st, reg + st);
     }
 
-    /// Fix round 1 (I1): the `ROLL_MAX` rollover (or `PQZ_ROLL_N` entries) as a full relayed transaction with an outer
-    /// fee: the binding convention for `ROLL_MAX` (the whole transaction <= 0.75 · 2^24).
+    /// `data` in a signed `mtxExecute` envelope with a FIXED outer fee `fee` (0: none); the digest under a snapshot that
+    /// is reverted (the clone's implementation and libraries stay cold for the measured call).
+    function _envelope(bytes memory data, uint256 fee) internal returns (bytes memory) {
+        MetaTxLib.MetaTransaction memory m;
+        m.from = vm.addr(RKEY);
+        m.data = data;
+        m.validUntil = block.timestamp + 1 hours;
+        m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
+        m.fee = fee;
+        uint256 snap = vm.snapshotState();
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, tok.mtxDigest(m));
+        vm.revertToState(snap);
+        return abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
+    }
+
+    /// Fix round 1 (I1): the `ROLL_MAX` rollover as a full relayed transaction with an outer fee: the binding convention
+    /// for `ROLL_MAX` (the whole transaction <= 0.75 · 2^24). Plan 5h Task 8d part 2b: and `ROLL_MAX` is the LARGEST such
+    /// multiple of 16 — `ROLL_MAX + 16` (the linear fit through a `LO`-entry relayed rollover of `dave`, measured cold
+    /// under a snapshot first) is over the cap. The token refuses `n > ROLL_MAX`, so `ROLL_MAX + 16` itself is measured
+    /// by a build with a larger constant (`test/research/PqzPackGas.t.sol` `test_pack_scanRoll`,
+    /// `runs/2026-10-26-t8d2b-rollscan-<set>.txt`: per-entry steps equal within 0.01 %, so the fit is exact enough).
     function test_gas_rollMax_relayedFullTx() public {
-        uint256 n = vm.envOr("PQZ_ROLL_N", PqzCore.ROLL_MAX);
-        console2.log("relayed mtxRollOver, full transaction, fee 7, entries", n);
-        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxRollOver, (alice, n)), 7);
-        if (n > AMS_ROLL_MAX) assertLe(reg, ROLL_CEILING, "ROLL_MAX over the cap: ceiling"); // TODO(5h Task 8d): re-pin ROLL_MAX under Amsterdam, remove this ceiling
-        else assertLe(reg, CAP, "the full relayed transaction's regular gas under 0.75 * 2^24");
+        uint256 snap = vm.snapshotState();
+        console2.log("relayed mtxRollOver, full transaction, fee 7, entries (fit point)", LO);
+        (uint256 lo,) = _fullTx(abi.encodeCall(tok.mtxRollOver, (dave, LO)), 7);
+        vm.revertToState(snap);
+        console2.log("relayed mtxRollOver, full transaction, fee 7, entries", PqzCore.ROLL_MAX);
+        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)), 7);
+        uint256 next = reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO);
+        console2.log("ROLL_MAX + 16, relayed full transaction (linear fit) / per entry", next, (reg - lo) / (PqzCore.ROLL_MAX - LO));
+        assertLe(reg, CAP, "the full relayed transaction's regular gas under 0.75 * 2^24");
+        assertGt(next, CAP, "ROLL_MAX + 16 would fit too: ROLL_MAX is not the largest multiple of 16");
     }
 
     /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee.
@@ -232,8 +302,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_gas_rollMax_relayed() public {
         uint256 g = _relayed(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
         _log("relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0)", g);
-        if (PqzCore.ROLL_MAX > AMS_ROLL_MAX) assertLe(g, ROLL_CEILING, "ROLL_MAX over the cap: ceiling"); // TODO(5h Task 8d): re-pin ROLL_MAX under Amsterdam, remove this ceiling
-        else assertLe(g, CAP, "relayed ROLL_MAX under 0.75 * 2^24");
+        assertLe(g, CAP, "relayed ROLL_MAX under 0.75 * 2^24");
     }
 
     function test_gas_roll128() public {
@@ -344,9 +413,27 @@ contract PqzStatePinGasTest is PqzSlots {
         _log("op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference", _gas(_op1(carol, 0, true, "")));
     }
 
+    /// The hint path (plan 5h D5) under P46 (Task 8d part 2b, open item 2): the hint is the packed stream
+    /// (`pack(pqzAcc)`, `PqzCt.CTP` bytes) and replaces the `ACC_WORDS` cold slot reads, so the debit's EXECUTION is
+    /// cheaper with it (`GasMeter`, each cold under a snapshot); an unpacked hint is ignored (state read). The
+    /// transaction's regular gas is another matter: the hint adds `CTP` calldata bytes, 64 gas each under the EIP-7976
+    /// floor (853,760 at n2304, against 417 × 2,100 = 875,700 for the reads), so it saves gas only when the transaction is
+    /// not floor-bound (PQZL with its precompile price: yes, the gas table; this test's 2-byte proof: no).
     function test_gas_op1_bundle_materialised_hint() public {
-        bytes memory h = tok.pqzAcc(alice);
-        _log("op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint", _gas(_op1(alice, PRE, true, h)));
+        bytes memory h = _packed(tok.pqzAcc(alice));
+        assertEq(h.length, PqzCt.CTP);
+        uint256 snap = vm.snapshotState();
+        uint256 e0 = meter.measure(address(tok), _op1(alice, PRE, true, ""));
+        vm.revertToState(snap);
+        uint256 eu = meter.measure(address(tok), _op1(alice, PRE, true, tok.pqzAcc(alice)));
+        vm.revertToState(snap);
+        uint256 eh = meter.measure(address(tok), _op1(alice, PRE, true, h));
+        vm.revertToState(snap);
+        uint256 g = _gas(_op1(alice, PRE, true, h));
+        _log("op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint", g);
+        console2.log("  execution with the hint / without / with the unpacked (ignored) hint", eh, e0, eu);
+        assertLt(eh + PqzCt.ACC_WORDS * 1_000, e0, "the hint replaces the cold slot reads");
+        assertGe(eu, e0, "an unpacked hint is ignored");
     }
 
     function test_gas_op1_bundle_materialised_noHint() public {
@@ -354,7 +441,7 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_op1_bundle_16inline() public {
-        bytes memory h = tok.pqzAcc(alice);
+        bytes memory h = _packed(tok.pqzAcc(alice));
         _log("op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint", _gas(_op1(alice, PRE + 16, true, h)));
     }
 
@@ -375,9 +462,13 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _op7p(uint256 m, bytes memory proof) internal view returns (bytes memory) {
+        return _op7a(m, true, proof);
+    }
+
+    function _op7a(uint256 m, bool aud, bytes memory proof) internal view returns (bytes memory) {
         bytes memory r;
         for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
-        bytes memory out = _blob(81 + m, _outLen(m, true));
+        bytes memory out = _blob(81 + m, _outLen(m, aud));
         return abi.encodeCall(tok.mtxConfidentialTransfer, (bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
             carol, alice, m, uint256(0)), salt, r, out), proof, _mlAuth(), alice, ""));
     }
@@ -435,8 +526,12 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_gas_op7_relayedFullTx_M4() public { _op7Relayed(4, 57_202, 4_121_000); }
 
     function _burn(uint256 amount, address to) internal view returns (bytes memory) {
+        return _burnP(amount, to, hex"c0de");
+    }
+
+    function _burnP(uint256 amount, address to, bytes memory proof) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(tok.mtxUnshield, (pl, hex"c0de", _mlAuth(), _benM(pl), "", amount, bytes32(uint256(uint160(to)))));
+        return abi.encodeCall(tok.mtxUnshield, (pl, proof, _mlAuth(), _benM(pl), "", amount, bytes32(uint256(uint160(to)))));
     }
 
     function test_gas_refresh() public {
@@ -445,6 +540,129 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function test_gas_burn() public {
         _log("burn 1 to an address, fee, fresh ref", _gas(_burn(1, address(0xD00D))));
+    }
+
+    // ------------------------------------------------------------------ the gas table (plan 5h Task 8d part 2b)
+
+    uint256 internal constant TX_CAP = 1 << 24; // EIP-7825: regular gas per transaction
+    GasMeter internal meter;
+    bytes32 internal discRef; // setUp's op 1 (carol → bob, auditor): the op 1 disclosure rows
+    bytes32 internal discRef7; // _tableSetUp's op 7 M = 8 (gus, auditor): the op 7 disclosure rows
+    bytes32 internal gus;
+    bytes32[8] internal ys;
+    UARegistry internal regL; // the register rows: PQZ verify cap 12 M, the PQZL / PQZH verifier
+    UARegistry internal regH;
+    UAPqzVerifier internal verL;
+    UAPqzVerifier internal verH;
+    string internal gj; // test/vectors/pqz-gas/<set>.json (script/pqz/gas-inputs.py)
+
+    /// One row per relation and form at the build's set and proof system, each its own transaction after `setUp` under
+    /// a snapshot that is reverted (cold state per row): the relayed full transaction (`mtxExecute` from a fresh relayer,
+    /// outer fee 7) for every `mtx*` write, a direct call for `UARegistry.register`, the verifier's `verifyPop` and the
+    /// disclosure view (an `eth_call`, priced as a transaction). The proof is pseudo-random bytes of the set's length
+    /// (`test/vectors/pqz-gas/<set>.json`: PQZL the vector proof, PQZH its bound); the `PQZ` precompile burns its
+    /// provisional row + 3 · ⌈input / 32⌉ (`RowBurner`, `chain/engine-pqz-provisional-<n>.json`), ML-DSA-65 68,006
+    /// ([estimate], `GasBurner`). Columns: calldata bytes (zero bytes), standard calldata gas (4 / 16), the EIP-7976 floor
+    /// (15,000 + 64 per byte), the precompile, execution (`GasMeter`: the call less the precompile and the state gas, the
+    /// callee warm as a transaction's `to`; ML-DSA included), the transaction's regular gas (forge: max(15,000 + calldata + execution +
+    /// precompile, floor); "model" is that maximum from the columns) and EIP-8037 state gas. PQZL: every row fits 2^24
+    /// (asserted; D20 builds only what fits); PQZH: logged (the calldata-cap question of part 2b).
+    /// Run: `script/pqz/at-set.sh <set> test --match-test test_gasTable -vv` (logs `runs/2026-10-26-t8d2b-gas-<set>.txt`).
+    function test_gasTable_pqzl() public {
+        _gasTable("pqzl");
+    }
+
+    function test_gasTable_pqzh() public {
+        vm.skip(!PqzSet.HAS_PQZH);
+        _gasTable("pqzh");
+    }
+
+    function _pf(string memory sys, string memory key) internal view returns (bytes memory) {
+        return _proof(vm.parseJsonUint(gj, string.concat(".", sys, "['", key, "'].proof")));
+    }
+
+    function _gasTable(string memory sys) internal {
+        gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
+        bool h = keccak256(bytes(sys)) == keccak256("pqzh");
+        bytes memory hint = _packed(tok.pqzAcc(alice));
+        address t = address(tok);
+        _row(sys, "TRANSFER", "op 1, auditor, fresh ref", t, _op1p(carol, 0, true, "", _pf(sys, "TRANSFER")), true);
+        _row(sys, "TRANSFER0", "op 1, no auditor, fresh ref", t, _op1p(carol, 0, false, "", _pf(sys, "TRANSFER0")), true);
+        _row(sys, "TRANSFER", "op 1, auditor, materialised acc, no hint", t,
+            _op1p(alice, PRE, true, "", _pf(sys, "TRANSFER")), true);
+        _row(sys, "TRANSFER", "op 1, auditor, materialised acc, hint", t,
+            _op1p(alice, PRE, true, hint, _pf(sys, "TRANSFER")), true);
+        for (uint256 m = 1; m <= (h ? 4 : 8); m *= 2) {
+            for (uint256 a; a < 2; ++a) {
+                string memory key = string.concat("M", vm.toString(m), a == 0 ? "-on" : "-off");
+                _row(sys, key, string.concat("op 7 M = ", vm.toString(m), a == 0 ? ", auditor" : ", no auditor", ", fresh ref"),
+                    t, _op7a(m, a == 0, _pf(sys, key)), true);
+            }
+        }
+        _row(sys, "BURN", "burn 1 to an address, fresh ref", t, _burnP(1, address(0xD00D), _pf(sys, "BURN")), true);
+        _row(sys, "REFRESH", "refresh, fresh ref", t, _burnP(0, address(0), _pf(sys, "REFRESH")), true);
+        _registerRows(sys, h);
+        _discRow(sys, 0, discRef, 0, "op 1 entry");
+        _discRow(sys, 1, discRef, 0, "op 1 entry");
+        _discRow(sys, 2, discRef, 0, "op 1 entry");
+        _discRow(sys, 1, discRef7, 5, "op 7 M = 8 entry leg 5");
+        _discRow(sys, 2, discRef7, 5, "op 7 M = 8 entry leg 5");
+    }
+
+    function _discRow(string memory sys, uint8 kd, bytes32 ref, uint256 leg, string memory entry) internal {
+        string memory kn = kd == 0 ? "SENDER" : kd == 1 ? "RECEIVER" : "AUDITOR";
+        string memory key = string.concat("DISCLOSE-", kn);
+        bytes memory d = abi.encodeCall(tok.verifyTransferAmount, (ref, leg, 1, kd, _pf(sys, key)));
+        _row(sys, key, string.concat("disclosure ", kn, ", ", entry, " (verifyTransferAmount)"), address(tok), d, false);
+    }
+
+    function _registerRows(string memory sys, bool h) internal {
+        bytes memory proof = _pf(sys, "REGISTER");
+        UARegistry r = h ? regH : regL;
+        bytes memory d = abi.encodeCall(r.register, (UAKinds.MLDSA65, _mlPk(60), new bytes(ML65_SIG), _pk(60), proof));
+        _row(sys, "REGISTER", "register (UARegistry.register: mldsa65 UA with a PQZ key)", address(r), d, false);
+        UAPqzVerifier v = h ? verH : verL;
+        d = abi.encodeCall(v.verifyPop, (_pk(60), bytes32(uint256(1)), proof));
+        _row(sys, "REGISTER", "register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover)", address(v), d, false);
+    }
+
+    function _row(string memory sys, string memory key, string memory what, address to, bytes memory data, bool relay)
+        internal
+    {
+        string memory k = string.concat(".", sys, "['", key, "']");
+        uint256 row = vm.parseJsonUint(gj, string.concat(k, ".row"));
+        uint256 pqzGas = row + 3 * ((vm.parseJsonUint(gj, string.concat(k, ".input")) + 31) / 32);
+        vm.clearMockedCalls();
+        vm.etch(PQZ, address(new RowBurner(row)).code);
+        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        if (relay) data = _envelope(data, 7);
+        uint256 snap = vm.snapshotState();
+        vm.prank(RELAYER);
+        uint256 reg = _gasTo(to, data);
+        uint256 st = lastState;
+        vm.revertToState(snap);
+        uint256 inner = meter.measure(to, data);
+        vm.revertToState(snap);
+        // the meter's frame pays the EIP-8037 state gas out of its gas too (forge's reservoir is not visible to `gasleft`)
+        uint256 off = pqzGas + 2_900 + st;
+        _rowLog(sys, what, data, pqzGas, inner > off ? inner - off : 0, reg, st);
+    }
+
+    function _rowLog(string memory sys, string memory what, bytes memory data, uint256 pqzGas, uint256 exec, uint256 reg,
+        uint256 st) internal pure
+    {
+        uint256 n = data.length;
+        uint256 z;
+        for (uint256 i; i < n; ++i) if (data[i] == 0) ++z;
+        uint256 std = 4 * z + 16 * (n - z);
+        uint256 floor = 15_000 + 64 * n;
+        uint256 model = 15_000 + std + exec + pqzGas;
+        console2.log(string.concat("GAS ", PqzSet.NAME, " ", sys, " | ", what, " | calldata ", vm.toString(n), " (zero ",
+            vm.toString(z), ") | std ", vm.toString(std), " | floor ", vm.toString(floor)));
+        console2.log(string.concat("  | pqz ", vm.toString(pqzGas), " | exec ", vm.toString(exec), " | regular ",
+            vm.toString(reg), " (model ", vm.toString(model > floor ? model : floor), ") | state ", vm.toString(st),
+            " | fits 2^24 ", reg <= TX_CAP ? "yes" : "NO"));
+        if (keccak256(bytes(sys)) == keccak256("pqzl")) assertLe(reg, TX_CAP, string.concat("PQZL ", what, ": over 2^24"));
     }
 }
 
@@ -519,8 +737,7 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
     function test_gas_rollMax_afterTrivialRoll() public {
         uint256 g = _gas(abi.encodeCall(tok.mtxRollOver, (gina, PqzCore.ROLL_MAX)));
         console2.log("mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas", g);
-        if (PqzCore.ROLL_MAX > AMS_ROLL_MAX) assertLe(g, ROLL_CEILING, "ROLL_MAX over the cap: ceiling"); // TODO(5h Task 8d): re-pin ROLL_MAX under Amsterdam, remove this ceiling
-        else assertLe(g, CAP, "ROLL_MAX under 0.75 * 2^24");
+        assertLe(g, CAP, "ROLL_MAX under 0.75 * 2^24");
         bytes memory acc = tok.pqzAcc(gina);
         uint256 want = PqzCt.Q - PqzCore.ROLL_MAX;
         want = want << 192 | want << 128 | want << 64 | want;

@@ -5,15 +5,19 @@ import {console2} from "forge-std/Test.sol";
 import {PqzStatePinGasTest} from "../pqz/PqzStateGas.t.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 
-/// Spike PACK (plan 5h part B, research): the relayed full transactions at parameter set (a) (n = 2304, `K_MAX` 4,096),
-/// run in the size-swapped work tree of `pqz-core/pqzl/params/pa-pack/gasa.sh` (64-bit lanes, or `PACK=46` / `PACK=51`
-/// for the packed layouts). Measurement only; at the repository's sizes it compiles and measures today's n = 2048.
+/// Research (measurement only, not a pin): the relayed full transactions through the real token at the build's set (the
+/// stored form is the production P46 layout since plan 5h Task 8d part 2a; `script/pqz/at-set.sh <set>` picks the set).
+/// Spike PACK first ran it in the size-swapped work tree of `pqz-core/pqzl/params/pa-pack/gasa.sh`; its op 1 / op 7
+/// rows keep that spike's set (a) proof sizes and precompile estimates (the production table with each set's real proof
+/// sizes and provisional rows is ``PqzStatePinGasTest.test_gasTable_*` in `test/pqz/PqzStateGas.t.sol``). `test_pack_scanRoll` is the `ROLL_MAX` scan of plan 5h
+/// Task 8d part 2b: build with a larger `ROLL_MAX` (the set's `PqzSet.sol`, uncommitted) and read the rows.
 /// Every number is the parent's `_fullTx` convention: `mtxExecute` from a fresh relayer, ABSOLUTE outer fee 7, cold
 /// implementation, regular gas before refunds (intrinsic, calldata or the EIP-7976 floor, execution, the precompile
-/// stand-ins) and EIP-8037 state gas apart. Precompile prices [estimate]: today's PQZL v3 rows (auditor on) × 2304 / 2048.
+/// stand-ins) and EIP-8037 state gas apart.
 contract PqzPackGasTest is PqzStatePinGasTest {
     /// `mtxRollOver(alice, n)` for n = 16, 32, …, `ROLL_MAX` of the build, each from the same state (snapshot / revert;
-    /// every call is its own transaction, so cold access is per call): the `ROLL_MAX` scan in one run.
+    /// every call is its own transaction, so cold access is per call): the `ROLL_MAX` scan in one run. It stops after the
+    /// first row over `0.75 · 2^24` (the next would approach 2^24, where the transaction runs out of regular gas).
     function test_pack_scanRoll() public {
         for (uint256 n = 16; n <= PqzCore.ROLL_MAX; n += 16) {
             uint256 snap = vm.snapshotState();
@@ -22,6 +26,7 @@ contract PqzPackGasTest is PqzStatePinGasTest {
             console2.log("scan row: entries / regular / state", n, reg, st);
             console2.log(reg <= CAP ? "  fits 0.75 * 2^24" : "  OVER 0.75 * 2^24");
             vm.revertToState(snap);
+            if (reg > CAP) break;
         }
     }
 
