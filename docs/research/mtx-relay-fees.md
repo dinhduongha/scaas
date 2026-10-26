@@ -243,7 +243,10 @@ sequenceDiagram
      transaction, and the second consumer reads that mark instead of verifying again. The record stays portable,
      because on another chain the 32-byte `paymentDigest` travels with it as an opaque value. It needs both PqChat and
      the token to verify through the same verifier contract.
-   - **Owner 2026-10-26: (c).** What it needs, from today's code:
+   - **Owner 2026-10-26: (a)** — two signatures, each verified by its own consumer; the record stays portable and
+     nothing new is needed in `UARegistry`. (The owner first picked (c), then changed to (a) the same day. (c)'s
+     design is kept below as studied, not chosen.)
+   - (c), studied, not chosen — what it would need, from today's code:
      - **One bundle message.** The UA signs `uaMessage(kind, PURPOSE_BUNDLE, keccak256("scaas.ua.bundle" ‖ p₁ ‖ d₁ ‖
        p₂ ‖ d₂))` over two (purpose, digest) pairs: the record's (UA-7, chain-independent) and the payment's (the
        token's `UAMetaTransfer` digest). It has its own purpose tag, so it never equals a single-intent message.

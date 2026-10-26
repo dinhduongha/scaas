@@ -190,7 +190,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   tier (`PaymentMeta` event, `metaPayId` view; size gate), then every non-EVM family's pay relay; connectors /
   `clientkeys` recompute and show the meta, refuse a mismatch; vectors shared by the clients. The relay-fee router
   (`MtxRelayFee`, research `docs/research/mtx-relay-fees.md` §3, owner answers §5: open relayer, every tier, public
-  balances, non-EVM, two PQ signatures by option (c) bundle + transient mark in `UARegistry`) is next to specify;
+  balances, non-EVM, two PQ signatures: option (a), each consumer verifies its own) is next to specify;
   question 7 (budget sponsoring) still open.
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
