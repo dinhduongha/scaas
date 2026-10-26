@@ -298,6 +298,8 @@ callers; the rule is enforced in `_checkCall`), C6-10 (`increaseApproval` — do
 bounds a call), C4-3 (Hedera HIP-632 static frames — inherent to the system contract, fails closed, documented),
 C3-9 (`MAX_RECIPIENTS` — the chain refuses the rest; at most a NatSpec note), and the four refuted items above.
 
+**Owner 2026-10-27: no Codex refill** — C3–C6 stay without a Codex report; the paragraph below records what that leaves open.
+
 **What Codex C3–C6 would still add if the owner refills credits.** The three Claude-only P2 items sit in the units
 Codex did not run: **C0-4** (the disclosure challenge, C3 scope), **C0-5** (the msig holder gas bound, C4 scope) and
 **C0-6** (the rollover floor, C2 / C3 state-machine scope — Codex's C2 pass marked the queue sound without it). The
