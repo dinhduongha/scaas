@@ -49,7 +49,9 @@ The signer travels in a
 transient slot, never in calldata ([CTR-MTX-18](#CTR-MTX-18)); what may run is a fixed **selector** allowlist per
 implementation ([CTR-MTX-19](#CTR-MTX-19)), never a target allowlist. A contract that does not support gasless
 operation is wrapped into a meta-tx token (an `UnderlyingToken`, [token-wrappers.md](token-wrappers.md)); a generic forwarder is
-never added. **All or nothing, and the user never pays for an operation that did not happen:** transfer and payment
+never added. `MtxRelayFee` ([CTR-MTX-27](#CTR-MTX-27)) is not one: no target trusts it (each target checks its own
+signer, as above), it calls targets from an unprivileged executor, and it only binds a token payment to a call that
+anyone could submit directly. **All or nothing, and the user never pays for an operation that did not happen:** transfer and payment
 check everything before the fee and cannot fail afterwards; a self-call runs **first** and pays its fee **after**
 (so a wrap can pay from the units it mints), and any failure — of the call or of the fee transfer — reverts the whole
 transaction with the inner revert data, fee and nonce included. No `try/catch`, no mode switch. Smart-contract wallets
@@ -783,6 +785,7 @@ their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwra
 | **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built; the UA twin `uaPayReceiverFee` **SPECIFIED** (UA-5a) |
 | Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)); on-chain `SponsorshipPool` **PLANNED** later |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
+| **Token fee for a fee-less call** | The payer signs a token payment bound to one call on another contract (a PqChat record, a `UARegistry` write); `MtxRelayFee` runs the call, then the payment, atomically ([CTR-MTX-27](#CTR-MTX-27)) | Relayer, paid in token by the payer | **SPECIFIED** |
 | Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A); intake rules that stop door A being a free gas faucet **SPECIFIED** ([NODE-GW-01](../node/gateway.md#NODE-GW-01)) |
 
 Per-family equivalents (the subject never pays, a relayer lane submits): Hedera — the same Solidity on HSCS, no
@@ -793,6 +796,105 @@ Aptos — relayer lane sequence-number transaction, fee-payer/orderless only as 
 GRAM — a relayer W5 lane sends `SignedOp` to the payer's jetton wallet, subject W5 gasless extensions are not used;
 Solana — the relayer lane is the fee payer, the subject signature is checked through the Ed25519/Secp256r1 precompile
 instruction ([networks/README.md](../networks/README.md)).
+
+<a id="CTR-MTX-27"></a>**CTR-MTX-27** — **`MtxRelayFee`: a token fee to the relayer for a fee-less mtx call.**
+**SPECIFIED** (owner 2026-10-26; decision [CTR-MTX-27](../decisions.md#ctr-mtx-27--mtxrelayfee-token-fee-for-a-fee-less-call)).
+Two payers: the relayer pays the native gas, and the payer pays the relayer, or another payee, in a token, for one call
+that has no fee of its own: a PqChat record, a `UARegistry` write, a `MandateWallet` action, or any SCaaS contract's
+entry with fee `NONE`. The call and its contract are unchanged: no token logic in them, records stay chain-independent
+(UA-7 / UA-8). The payment is optional: the same call can always be submitted without it.
+
+**Deployment.** One stateless contract with no owner, no stored state and no constructor argument. `DeployBase`
+deploys it through the deterministic CREATE2 deployer, as `UARegistry` and the verifiers, so it has the same address
+on every EVM chain. Its constructor creates its executor (`CREATE`, so the executor's address is fixed too). No token
+and no target needs to know either address: the payer's signature names the router (`relayer = router`).
+
+```solidity
+function relay(address target, bytes calldata callData, address token,
+               MetaTxLib.MetaTransfer calldata t, bytes calldata sig) external;          // nonReentrant
+function uaRelay(address target, bytes calldata callData, address token,
+                 MetaTxLib.UAMetaTransfer calldata t, bytes calldata auth) external;     // nonReentrant
+function relayRef(address target, bytes calldata callData) external view returns (bytes32);
+event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, address payee,
+                   uint256 amount);
+error RelayFeeShape();
+```
+
+Steps (`relay`; `uaRelay` is the same with the UA struct and `uaExecuteTransfer`):
+1. `ref = keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, keccak256(callData)))`.
+2. Shape, else `RelayFeeShape`:
+   - `t.entryRef == ref`, `t.batch == payLane(ref)` (CTR-MTX-10's formula), `t.nonce == 0`;
+   - `MODE_RESTRICT_RELAYER` set and `t.relayer == address(this)`;
+   - fee mode `NONE`, `t.fee == 0` (the payment's `value` is the fee).
+3. The executor calls `target` with `callData` (no value). A failure reverts the whole transaction with the inner
+   revert data.
+4. `token.mtxExecuteTransfer(t, sig)` (UA: `uaExecuteTransfer(t, auth)`). The token checks the payer's signature and
+   moves `t.value` from the payer's **public** balance (never a confidential one), then emits
+   `PaymentSettled(…, entryRef = ref)`.
+5. **Open mode** (`t.to == address(this)`, the client default, owner 2026-10-26): the router transfers `t.value` to
+   `msg.sender`, so any relayer may take the job. **Bound payee** (any other `t.to`: one relayer, a service treasury,
+   a session creator): the payment goes straight there, and the router forwards nothing.
+6. Emit `RelayFeePaid`.
+
+Why it holds:
+- **Bound.** The payer's signature covers `ref`, that is the chain, the target and the exact call bytes (the call's own
+  signature included). A different but valid signature over the same record changes `ref`, so the payment no longer
+  matches and the transaction reverts; it fails safe.
+- **Only through the router.** The relayer binding means only the router can execute the payment, and the router does
+  so only right after executing exactly that call.
+- **The executor.** The router never calls a target itself. If it did, `callData` could be a token's
+  `mtxExecuteTransfer` of another router-bound payment, and the token would see the router as its bound relayer. The
+  executor has no privilege, holds nothing, and only the router may call it.
+- **Atomic and pay-once.** Steps 3–5 are one transaction, and any failure reverts all of them. The pay lane gives each
+  `ref` at most one payment per chain.
+- **Copying a record.** A record copied to another chain is either submitted free there, or paid by a new payment on
+  that chain (`ref` includes the chain id).
+
+**Scope.** Targets are SCaaS contracts, whose entries are all or nothing (CTR-MTX-16: no `try/catch`, no swallowed
+failure). A payment for a call on a contract that swallows failures is at the payer's risk, because a relayer could
+starve an inner call. Clients build relay payments only for SCaaS targets.
+
+**The router does not check the token.** The payer signed in the token's own domain, so a fake `token` moves nothing
+real. Whoever relies on being paid (a bound payee) reads `PaymentSettled` of the token it expects.
+
+**PQ-signing UA payers sign twice** (owner 2026-10-26, option (a)): the call's record and the payment, each verified by
+its own consumer.
+
+**No budget mode** (owner 2026-10-26): one payment signature per call. A standing, capped authorisation for calls not
+yet signed may be added later without changing these steps.
+
+**Clients:**
+- build the call with its own signature, then `ref = relayRef(target, callData)`;
+- build `t = {from: payer, to: router (open) or the payee, value: fee, entryRef: ref, batch: payLane(ref), nonce: 0,
+  validUntil, mode: RESTRICT_RELAYER, relayer: router}`;
+- show both intents (the call and its fee) in one prompt.
+
+**Nodes:** a relayer node quotes `(token, amount, validUntil)`, simulates the whole `relay`, and submits only if the
+fee covers the gas at its price. In open mode a mempool copy is an ordinary race for the fee.
+
+**Non-EVM** (owner 2026-10-26: must work too). Every family has the same rule: an on-chain check that the payment's
+reference commits to the call, and that the payment is consumed only together with the call.
+
+| Family | Shape |
+|---|---|
+| Soroban, Solana, Cosmos | a router contract / program invokes the target (cross-contract call, CPI, sub-message with reply), then the token's relay pay with the reference check; atomic |
+| Sui, Aptos | a router module's entry function calls the target's entry and the token's pay in one transaction; the pay checks the reference and the router as relayer |
+| GRAM | no cross-contract atomicity: the payment goes into the router's escrow; it is released to the relayer on the target's confirmation message, and refunded to the payer on a bounce or after a timeout (as the GRAM DEX escrow) |
+| Hedera | the EVM contract |
+
+**Cost [estimate; measured in the plan].** On top of the call: the token's payment path (`mtxPay` 53,868 measured),
+the payer's signature check, the pay lane's first-use slot (+17 k), the open-mode forward (≈ +10–30 k), and two events.
+With an ECDSA payer that is ≈ +80–100 k gas; with a PQ payer, one more PQ verification.
+
+**Conformance:**
+- a payment bound to another target, other call bytes or another chain is refused;
+- the token refuses the payment submitted directly by an EOA (relayer binding);
+- a `callData` that tries to execute another router-bound payment through the executor fails;
+- a target revert leaves no payment;
+- a second `relay` with the same `ref` fails (pay lane);
+- open mode pays `msg.sender`, and a bound payee is paid directly;
+- a UA payer works through `uaRelay`;
+- re-entry into the router is refused.
 
 ## <a id="receiver-pays"></a>13. Receiver-pays
 

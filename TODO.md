@@ -188,10 +188,12 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 - [ ] **`mtxPayMeta` / `uaPayMeta` — payment metadata by commitment (owner 2026-10-26; after P6 / PQZ)**: spec
   [CTR-MTX-26](docs/contracts/metatx.md#CTR-MTX-26) (SPECIFIED), decision CTR-MTX-26. Build on every `MetaTokenBase`
   tier (`PaymentMeta` event, `metaPayId` view; size gate), then every non-EVM family's pay relay; connectors /
-  `clientkeys` recompute and show the meta, refuse a mismatch; vectors shared by the clients. The relay-fee router
-  (`MtxRelayFee`, research `docs/research/mtx-relay-fees.md` §3, owner answers §5: open relayer, every tier, public
-  balances, non-EVM, two PQ signatures: option (a), each consumer verifies its own) is next to specify;
-  no budget sponsoring for now (owner 2026-10-26).
+  `clientkeys` recompute and show the meta, refuse a mismatch; vectors shared by the clients.
+- [ ] **`MtxRelayFee` — token fee for a fee-less mtx call (owner 2026-10-26; after P6 / PQZ, with or before UA-7)**:
+  spec [CTR-MTX-27](docs/contracts/metatx.md#CTR-MTX-27) (SPECIFIED), decision CTR-MTX-27. Router + executor in
+  `src/metatx/`, `DeployBase` CREATE2; forge conformance list of CTR-MTX-27; gas; node quote + simulation; clients
+  (ref, open-mode payment, one prompt); then the non-EVM shapes (GRAM escrow). The relay-fee router
+    research: `docs/research/mtx-relay-fees.md` §3, owner answers §5.
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
   P/Invoke) for the SCaaS testnet / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof

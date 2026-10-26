@@ -30,7 +30,8 @@ contract** with the author's key in `UARegistry`, and **submitted by anyone**: t
 These are **mtx-style writes — signed by the author, relayable by anyone — but not bound to a chain and without any
 fee** (owner 2026-10-25: a session and its messages are the same on every chain and can be moved to another; these
 writes are not token operations, so there is no fee and no token to take one from; a relayer that wants payment
-arranges it off chain). No session and no message can be locked. One rule on every chain (owner 2026-10-25: every
+arranges it off chain, or on chain through `MtxRelayFee`, metatx.md CTR-MTX-27, owner 2026-10-26: the payer pays the
+relayer in an mtx token, and the record itself stays fee-less). No session and no message can be locked. One rule on every chain (owner 2026-10-25: every
 chain is the same infrastructure). Upgrades by a new release, as for the other application contracts.
 
 **Record ids and nonces (owner 2026-10-25: unique on a chain, the same on every chain, never locked).**

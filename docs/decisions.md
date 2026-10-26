@@ -1792,6 +1792,23 @@ struct with a `meta` field (native wallet display) was rejected: a second struct
 user metadata the signature does not bind.
 **Source.** `research/mtx-relay-fees.md` §2, §5 (owner answers 2026-10-26: "OK, vậy phần mtxPayMeta như vậy đi").
 
+### CTR-MTX-27 — MtxRelayFee: token fee for a fee-less call
+- old: — · status: current · owner: yes · date: 2026-10-26 · normative: contracts/metatx.md#CTR-MTX-27 · superseded-by: —
+
+**Why.** The owner wants a payer to pay, in an mtx token, for a fee-less call such as a PqChat message: the relayer
+pays the gas, and the payer pays the relayer. Tender's deposit (CTR-TND-01) already binds a payment to an action
+through `entryRef` and the relayer binding. A stateless router generalises it to any target, without token logic in
+the target and without changing any token: `ref` commits to (chain, target, call bytes); the payment is bound to the
+router as relayer; the router runs the call through an unprivileged executor, then the payment. Owner answers
+(2026-10-26): the controller names it and places it in `src/metatx/` with a `DeployBase` CREATE2 deployment; open to
+every relayer by default; public balances only; every token tier; non-EVM too (GRAM by escrow); PQ payers sign twice
+(option (a), after first picking (c)); no budget mode for now. Rejected: a pay-and-call hook in every token (ERC-1363
+style: a new outbound call and bytecode in each token); one combined PQ signature with a transient verified mark
+(option (c), studied). CTR-MTX-16's "no generic forwarder" stands: the router grants no authority.
+**Cost if wrong.** If the router called targets itself, a `callData` could execute another router-bound payment
+through a token, with no call behind it.
+**Source.** `research/mtx-relay-fees.md` §3, §5 (owner answers 2026-10-26; "Có, viết spec luôn đi").
+
 ### CTR-MTX-80 — No named mtxPay; accepted gas cost
 - old: R2(cost) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-MTX-09, CTR-MTX-10, CTR-MTX-11
 

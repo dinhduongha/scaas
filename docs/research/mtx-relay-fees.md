@@ -98,6 +98,10 @@ PqChat `postMessage(record, sig)`, `createSession`, a UA-8 `UARegistry` write, a
 
 ### B1 (recommended): a stateless router, Tender's pattern generalised
 
+**Adopted** (owner 2026-10-26) as [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27), SPECIFIED. The spec adds an
+unprivileged executor for the target call (a `callData` could otherwise execute another router-bound payment) and
+limits the scope to all-or-nothing SCaaS targets.
+
 One small contract, `MtxRelayFee` (name open), with no owner and no stored state:
 
 ```text
