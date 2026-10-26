@@ -6,7 +6,8 @@ pragma solidity ^0.8.24;
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** One selector per function across both layers, no layer argument.
 ///         Ids are `bytes32` UAs. Every proof-taking entry point takes `(payload, proof, auth, beneficiary, accHint[,
 ///         …])`: PQZ — `auth` the signing UA's own signature over the statement digest, `beneficiary` equal to the
-///         payload's (`BeneficiaryMismatch`), `accHint` the optional materialised `acc`; Zether — the proof alone
+///         payload's (`BeneficiaryMismatch`), `accHint` the optional materialised `acc`, packed at
+///         `PACK_BITS` (P46: `PqzCt.CTP` bytes; `pqzAcc` returns 64-bit lanes); Zether — the proof alone
 ///         authorises (UA-6), so `auth` and `accHint` must be empty (`AuthNotEmpty`, `AccHintNotEmpty`). Layer-only
 ///         functions are in `IZetherToken` / `IPqzToken`. Events carry the fields of both layers; a field one layer
 ///         lacks is 0 there (Zether: `blob`, `accUnits`, `accHash`).

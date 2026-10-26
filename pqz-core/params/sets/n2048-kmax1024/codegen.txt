@@ -1,0 +1,72 @@
+LaZer 3330e487228f633eceb322807b13a596b516770f; image sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528; set n2048-kmax1024
+== reg: 6741 B, sha256 540aa0daa893545c
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(33,34,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(22,131,2^(35.295153))
+   // ~ 28.5976562500000 KiB
+== tx: 7425 B, sha256 9a81f03bd1b7d069
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,35,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,214,2^(35.97125))
+   // ~ 43.5917968750000 KiB
+== tx0: 7419 B, sha256 bdf886541e7fafac
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,35,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,213,2^(35.962772))
+   // ~ 43.2480468750000 KiB
+== burn: 7410 B, sha256 8f3637eb7c13cc55
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,35,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,211,2^(35.949866))
+   // ~ 42.7324218750000 KiB
+== ds: 6762 B, sha256 4b161e18bd86813e
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(33,34,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(22,132,2^(35.307606))
+   // ~ 29.3789062500000 KiB
+== dr: 6621 B, sha256 ac7964adc3e42961
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(33,35,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,139,2^(35.844264))
+   // ~ 29.5371093750000 KiB
+== txm2: 8072 B, sha256 bf5fd3abf2a4d437
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,35,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,217,2^(35.992017))
+   // ~ 44.4511718750000 KiB
+== txm20: 7893 B, sha256 ccf954a32a7771d0
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,35,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,215,2^(35.975451))
+   // ~ 43.7636718750000 KiB
+== txm4: 9093 B, sha256 bab771736a88e675
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(33,37,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(25,289,2^(37.425824))
+   // ~ 59.4707031250000 KiB
+== txm40: 8238 B, sha256 6e2d9f6224fdc952
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,35,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(23,219,2^(36.00016))
+   // ~ 44.7949218750000 KiB
+== txm8: 11137 B, sha256 481f6215ecc082cd
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,37,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(25,429,2^(37.592718))
+   // ~ 87.0097656250000 KiB
+== txm80: 9284 B, sha256 8e751f22652b04c5
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(33,37,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(25,293,2^(37.434744))
+   // ~ 60.1894531250000 KiB
+== txm16: 15553 B, sha256 7b0fa51aefe4e995
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(33,39,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(27,711,2^(39.068717))
+   // ~ 147.107421875000 KiB
+== txm160: 11613 B, sha256 963bf1125e7f5e71
+   // protocol is statistically complete with correctness error >= 1 - 2^(-4)
+   // protocol is simulatable under MLWE(33,37,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(25,437,2^(37.606822))
+   // ~ 88.4472656250000 KiB
+codegen rc=0

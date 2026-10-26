@@ -1,0 +1,10 @@
+evaluation-equation accumulator calls recorded: 516
+z4/z3 combination matrices (kind 2/3): 2    JL rows (kind 4): 1536
+
+
+129 evaluation doms; 129 have all four accumulator slots; of those 0 reuse subv1 across the two pairs (acc0==acc2).
+
+VERDICT: evaluation-step independent Z_q tests = 4 -> ok (lambda=4 expected)
+
+129 accumulate2 calls (R_REG, M = 0)
+0 shared dom(s)

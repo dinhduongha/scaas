@@ -1,5 +1,5 @@
 //! PQZH over Ligero (P6-PQZH, Ligero backend): R_REG, R_TX, R_TX0, R_BURN, R_DS, R_DR and R_TXM (op 7) of PQ Zether proved by
-//! Ligero over F_q itself (q = 2^42 - 215), challenges in F_q^4, Keccak-256 Merkle tree and transcript, zero knowledge.
+//! Ligero over F_q itself (q of the parameter set, `set`: v3 2^42 - 215), challenges in F_q^4, Keccak-256 Merkle tree and transcript, zero knowledge.
 //! See docs/research/pqzh-ligero.md. Statements are decoded by `pqz-stmt` (plan R2, D15); witness bytes as pqz-core
 //! (pqz.h). Depends on `sha3` and `pqz-stmt` only (D11). Feature `bench` (default): the reference presets, the float
 //! parameter model and soundness accounting, and the test client (`client`: pqz_bench.c's setup, mutations); the
@@ -22,7 +22,13 @@ pub mod fq;
 pub mod ligero;
 pub mod merkle;
 pub mod ring;
+pub mod set;
 pub mod transcript;
+
+/// Whether the research feature `fallback-retry` (n2304-kmax4096's THE preset with the prover's retry, fallback A) is on.
+/// Such a build has no proofSystemId of its own (its preset is not the one PQZH_ID's label names: the test
+/// `ids_are_the_labels_keccak` fails there by design), so pqz-ffi refuses to compile with it (review R3-1 / R4-C5)
+pub const FALLBACK_RETRY: bool = cfg!(feature = "fallback-retry");
 
 pub use cs::{RELS, Rel, form_of, multi_rels, rel_of};
 pub use ligero::{Params, prove, try_verify, verify};

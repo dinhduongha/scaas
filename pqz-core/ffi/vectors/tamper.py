@@ -4,7 +4,9 @@
 appended); each change must make that file's checker fail. Skipped by design: free text (description, generator, note,
 name, what, alignment) and rnd32 (any rnd32 gives a valid proof; pqz-vectors --check pins it, and selftest.json the
 REGISTER rows').
-  python3 -I tamper.py [vector dir] [leaves per file, default 12]"""
+  python3 -I tamper.py [vector dir] [leaves per file, default 12]
+The parameter set: PQZ_SET (pqz_kat.py's; default the v3 set and its directory smartcontracts/vectors/pqz, another set
+smartcontracts/vectors/pqz/<set>)."""
 import importlib.util
 import json
 import os
@@ -12,10 +14,11 @@ import shutil
 import sys
 import tempfile
 
-D = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                       "../../../smartcontracts/vectors/pqz")
+V = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../smartcontracts/vectors/pqz")
+SET = os.environ.get("PQZ_SET", "n2304-kmax4096")  # pqz_kat.py's and the builds' default (plan 5h Task 8d)
+D = sys.argv[1] if len(sys.argv) > 1 else (V if SET == "n2048-kmax1024" else os.path.join(V, SET))
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 12
-spec = importlib.util.spec_from_file_location("pqz_kat", os.path.join(D, "pqz_kat.py"))
+spec = importlib.util.spec_from_file_location("pqz_kat", os.path.join(V, "pqz_kat.py"))
 kat = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(kat)
 SKIP = {"description", "generator", "name", "what", "alignment", "note", "rnd32"}

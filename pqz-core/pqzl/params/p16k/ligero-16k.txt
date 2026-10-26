@@ -1,0 +1,43 @@
+# PQZH Ligero at the 16k parameters (plan 5h Task 7; every 16k number an [estimate] of the crate's layout model)
+
+self-check: 20 pinned bounds of today's crate (ligero.rs limits_exact, statement lengths) reproduced
+q = 2^50 - 42,310,535 = 1125899864532089: prime, q mod 16 = 9; q - 1 = 2 * 2 * 2 * 19 * 43 * 431 * 5659 * 70627
+3 is a non-square (X^4 - 3 irreducible, F_q^4 as today); 3 generates F_q^*: True
+F_q element: 50 bits in 7 bytes (today 42 bits in 6); |F_q^4| = 2^200.0
+domains: the crate's radices 2 / 19 / 43 / 431 divide q - 1 (2-adicity 3, as today): every smooth size of today's fft.rs is a subgroup of F_q^*; the preset n = 32,756 = 4 * 19 * 431 exists. New radices 5,659 and 70,627 not used (an FFT step of radix r costs ~ r products per point).
+lane check: 2^64 / q = 2^14.00 terms per 64-bit lane (Solidity accumulators)
+
+## THE preset kept: proven, n = 32756, k = 817, t = 121, l = 695 (factor 0.5249, soundness depends on n, k only)
+
+| relation | rows m today | rows m 16k | proof bound today B | proof bound 16k B | <= MAX_PROOF_PQZH 262,144 | statement 16k B | input 5 + stmt + proof B | <= 512 KiB | prover products 16k |
+|---|---|---|---|---|---|---|---|---|---|
+| R_REG | 63 | 83 | 190,458 | 233,289 | yes | 20,576 | 253,870 | yes | 1.44e+09 |
+| R_TX | 125 | 165 | 235,470 | 302,743 | NO | 103,552 | 406,300 | yes | 2.69e+09 |
+| R_TX0 | 124 | 165 | 234,744 | 302,743 | NO | 82,944 | 385,692 | yes | 2.69e+09 |
+| R_BURN | 124 | 164 | 234,744 | 301,896 | NO | 62,336 | 364,237 | yes | 2.67e+09 |
+| R_DS | 63 | 83 | 190,458 | 233,289 | yes | 41,376 | 274,670 | yes | 1.44e+09 |
+| R_DR / R_DA | 63 | 83 | 190,458 | 233,289 | yes | 41,376 | 274,670 | yes | 1.44e+09 |
+| R_TXM M=1 aud G=1 | 125 | 165 | 235,470 | 302,743 | NO | 103,552 | 406,300 | yes | 2.69e+09 |
+| R_TXM M=1 noaud G=1 | 124 | 165 | 234,744 | 302,743 | NO | 82,944 | 385,692 | yes | 2.69e+09 |
+| R_TXM M=2 aud G=1 | 125 | 165 | 235,470 | 302,743 | NO | 124,288 | 427,036 | yes | 2.69e+09 |
+| R_TXM M=2 noaud G=1 | 125 | 165 | 235,470 | 302,743 | NO | 103,552 | 406,300 | yes | 2.69e+09 |
+| R_TXM M=4 aud G=1 | 126 | 166 | 236,196 | 303,590 | NO | 165,760 | 469,355 | yes | 2.7e+09 |
+| R_TXM M=4 noaud G=1 | 125 | 165 | 235,470 | 302,743 | NO | 144,768 | 447,516 | yes | 2.69e+09 |
+| R_TXM M=8 aud G=2 | 188 | 248 | 281,208 | 373,044 | NO | 269,184 | 642,233 | NO | 3.95e+09 |
+| R_TXM M=8 noaud G=2 | 186 | 247 | 279,756 | 372,197 | NO | 247,680 | 619,882 | NO | 3.93e+09 |
+| R_TXM M=8 aud G=1 | 128 | 168 | 237,648 | 305,284 | NO | 248,704 | 553,993 | NO | 2.73e+09 |
+| R_TXM M=8 noaud G=1 | 126 | 167 | 236,196 | 304,437 | NO | 227,200 | 531,642 | NO | 2.72e+09 |
+
+## Preset search at 16k (proven, radices 2/19/43/431, n >= 4k, k >= 64, prover <= 4e+09 products): the three smallest R_TX / R_TXM M=4 aud bounds
+
+| relation | n | k | t | l | rows m | proof bound B | prover products |
+|---|---|---|---|---|---|---|---|
+| R_TX | 37066 | 817 | 120 | 696 | 165 | 301,956 | 3.17e+09 |
+| R_TX | 32756 | 817 | 121 | 695 | 165 | 302,743 | 2.69e+09 |
+| R_TX | 37066 | 862 | 120 | 741 | 165 | 308,256 | 3.36e+09 |
+| R_TXM M=4 aud G=1 | 37066 | 817 | 120 | 696 | 166 | 302,796 | 3.19e+09 |
+| R_TXM M=4 aud G=1 | 32756 | 817 | 121 | 695 | 166 | 303,590 | 2.7e+09 |
+| R_TXM M=4 aud G=1 | 37066 | 862 | 120 | 741 | 166 | 309,096 | 3.38e+09 |
+| R_TXM M=8 aud G=2 | 32756 | 817 | 121 | 695 | 248 | 373,044 | 3.95e+09 |
+| R_TXM M=8 aud G=2 | 18533 | 817 | 128 | 688 | 248 | 384,412 | 2.34e+09 |
+| R_TXM M=8 aud G=2 | 16378 | 817 | 130 | 686 | 248 | 387,756 | 1.98e+09 |

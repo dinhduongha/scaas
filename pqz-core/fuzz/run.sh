@@ -15,10 +15,18 @@ case ${PQZ_FUZZ_MODE:-} in
   pqzl-diff) X=$T-pqzl-diff ;;
   *) echo "PQZ_FUZZ_MODE=$PQZ_FUZZ_MODE: unset or pqzl-diff" >&2; exit 2 ;;
 esac
-B=$(cd .. && pwd)/build/fuzz
+B=$(cd .. && pwd)/build/fuzz${PQZ_BUILD_TAG:+-$PQZ_BUILD_TAG} # as build.sh
 W=$B/work/$T SEEDS=$B/seeds/$T M=$B/merged/$T LOG=runs/$L-$T.txt
-mkdir -p "$W" "$SEEDS" runs "corpus/$T" "regress/$T"
-case $T in precompile) ML=400000 ;; *) ML=512 ;; esac
+# the merged set goes to the committed corpus/<target>/, or under gate.sh (PQZ_BUILD_TAG set: a smoke run, concurrent
+# gates) to $B/corpus/<target>/ so corpus/ is only read
+C=corpus/$T; [ -z "${PQZ_BUILD_TAG:-}" ] || C=$B/corpus/$T
+mkdir -p "$W" "$SEEDS" runs "corpus/$T" "regress/$T" "$C"
+# precompile: above the set's MAX_INPUT (set.json max_input: 393,216 at n2048-kmax1024, 524,288 at the other sets; plan
+# 5h Task 8c part 2) so the revert path is reached and no honest seed is truncated; the others edit inputs in memory
+export PQZ_SET=${PQZ_SET:-n2304-kmax4096} # build.sh's default; seeds.py (pqz_kat.py) reads the same set
+MI=$(python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))['max_input'])" "../params/sets/$PQZ_SET/set.json")
+[ -n "$MI" ] || { echo "fuzz/run.sh: no max_input in set.json of $PQZ_SET" >&2; exit 2; } # 8c2 re-review N1
+case $T in precompile) ML=$((MI + 4096)) ;; *) ML=512 ;; esac
 # memory: the C core's arenas (mode pqzl-diff: ARENA_SMALL 512 MiB; the C generic verifier's ARENA_BIG = 1 GiB is one
 # malloc of exactly 1024 MiB, which -malloc_limit_mb=1024 reported as an OOM in P6-ANON S5); scripts/capped caps at 4 GB
 LIM="-rss_limit_mb=3072 -malloc_limit_mb=1536"
@@ -36,8 +44,8 @@ H=$(sha256sum "$B/honest.bin" | cut -c1-64)
   # -artifact_prefix: without it a crash in the merge step lands in this directory (P6e smoke3: the stray crash file)
   "$B/$X" -merge=1 -artifact_prefix="$B/crash-$T-merge-" -max_len=$ML $LIM -timeout=120 "$M" "$W" "corpus/$T"
   echo "[merge rc=$?]"
-  rm -f corpus/"$T"/*
-  find "$M" -type f -size -513c -exec cp {} "corpus/$T/" \;
-  echo "corpus/$T: $(ls "corpus/$T" | wc -l) inputs, $(du -sb "corpus/$T" | cut -f1) B (merged set $(ls "$M" | wc -l) inputs, $(du -sb "$M" | cut -f1) B)"
+  rm -f "$C"/*
+  find "$M" -type f -size -513c -exec cp {} "$C/" \;
+  echo "corpus/$T: $(ls "$C" | wc -l) inputs ($C), $(du -sb "$C" | cut -f1) B (merged set $(ls "$M" | wc -l) inputs, $(du -sb "$M" | cut -f1) B)"
 } >> "$LOG" 2>&1
 grep -E "pqz-fuzz (init|summary|FINDING)|^stat::|Done [0-9]+ runs|\[(fuzz|merge) rc|^corpus/|ERROR|SUMMARY" "$LOG"

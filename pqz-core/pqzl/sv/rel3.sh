@@ -33,7 +33,7 @@ SAN="-fsanitize=address,undefined -fno-sanitize=vla-bound,pointer-overflow -fno-
 ${CC:-clang} -O1 $INC $SAN -DPQZ_DEBUG_MALLOC -o build/sv-san/pqz_bench $SRC test/pqz_bench.c
 ASAN_OPTIONS=detect_leaks=0 PQZ_VERIFY=fast build/sv-san/pqz_bench 1 3 > "$R-asan.jsonl" 2>&1 || echo "asan rc=$?"
 build/native/kat_dump > build/native/kat-pqz.json
-python3 -I kat/check.py kat/lazer-3330e48.json build/native/kat-pqz.json > "$R-kat.txt" || echo "kat rc=$?"
+python3 -I kat/check.py ../params/sets/${PQZ_SET:-n2304-kmax4096}/lazer-3330e48-kat.json build/native/kat-pqz.json > "$R-kat.txt" || echo "kat rc=$?"
 ./check_tbox_fixes.sh > "$R-tbox-fixes.txt" 2>&1 || echo "check_tbox_fixes rc=$?"
 sv/check_sv_fixes.sh > "$R-sv-fixes.txt" 2>&1 || echo "check_sv_fixes rc=$?"
 cp build/svfix/tree.jsonl "$R-sv-fixes-tree.jsonl"

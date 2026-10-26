@@ -43,7 +43,7 @@ pub fn enc_seed_lowered(
     be: i64,
     b2: i64,
 ) -> Result<crate::Enc, crate::Error> {
-    crate::keys::enc_seed(ctx.map_or(&mut None, |c| &mut c.a), pks, msgs, seed_enc, (bs, be, b2))
+    crate::keys::enc_seed(ctx.map_or(&mut None, |c| &mut c.a), pks, None, msgs, seed_enc, (bs, be, b2))
 }
 
 /// `print_int`: up to two limbs as a decimal (a zero of either sign is `0`), else `"overflow"`
@@ -112,10 +112,13 @@ pub fn kat_json() -> Result<String, crate::Error> {
     }
 
     let mut o = String::new();
-    o.push_str(
-        "{\n  \"meta\": {\"backend\": \"pqzl-rust\", \"lazer_commit\": \"3330e487228f633eceb322807b13a596b516770f\", \
+    let _ = write!(
+        o,
+        "{{\n  \"meta\": {{\"backend\": \"pqzl-rust\", \"lazer_commit\": \"3330e487228f633eceb322807b13a596b516770f\", \
          \"build\": \"rust\", \"compiler\": \"rustc\", \"cpu_avx512f\": 0, \"cpu_avx512ifma\": 0, \
-         \"ring\": \"Z_q[X]/(X^64+1), q = 2^42 - 215\"},\n  \"cases\": {",
+         \"ring\": \"Z_q[X]/(X^64+1), q = {} (set {})\"}},\n  \"cases\": {{",
+        crate::params::set::Q,
+        crate::params::set::SET_NAME
     );
     let mut first = true;
     for (name, v) in [("inputs_a", &mut a), ("inputs_b", &mut b)] {
@@ -215,7 +218,7 @@ pub fn kat_json() -> Result<String, crate::Error> {
         let _ = write!(o, "{x:02x}");
     }
     o.push('"');
-    per_pair(&mut o, &mut first, "urandom", &mut a, &mut b, &|i, _, _| Poly::urandom(&RING_Q, 42, &seed, i as u64))?;
+    per_pair(&mut o, &mut first, "urandom", &mut a, &mut b, &|i, _, _| Poly::urandom(&RING_Q, crate::arith::poly::LOG2Q, &seed, i as u64))?;
     per_pair(&mut o, &mut first, "brandom", &mut a, &mut b, &|i, _, _| Poly::brandom(2, &seed, i as u64))?;
     o.push_str("\n  }\n}\n");
     Ok(o)
@@ -755,6 +758,30 @@ pub fn ghint(i: usize, inp: &[i64; 192]) -> Option<alloc::vec::Vec<u64>> {
     let mut o = alloc::vec::Vec::new();
     dump(&mut o, &Poly::use_ghint(&mut y, &mut r, d));
     dump(&mut o, &Poly::make_ghint(&mut z, &mut r, d));
+    Some(o)
+}
+
+/// the final challenge of `seed` (`Poly::urandom_challenge`, omega 8, log2 5, eta 140: every set's) and the autostable
+/// sample of dom 0 (upstream's challenge), as `c_oracle::c_chal`, and the dom of the chosen sample; `None` if no sample
+/// passed (review R0 fix round m3)
+pub fn chal(seed: &[u8; 32]) -> Option<([i64; 64], [i64; 64], u64)> {
+    let co = |p: &Poly| -> [i64; 64] { core::array::from_fn(|j| p.c(j).get_i64()) };
+    let c = co(&Poly::urandom_challenge(8, 5, 140, seed).ok()??);
+    let dom = (0..crate::arith::poly::CHAL_TRIES).find(|&d| Poly::urandom_autostable(8, 5, seed, d).is_ok_and(|p| co(&p) == c))?;
+    Some((c, co(&Poly::urandom_autostable(8, 5, seed, 0).ok()?), dom))
+}
+
+/// `pqz_shim_p2r`: relation i's (`c_params` order) Power2Round (`Poly::power2round` with its tbox dcompress, as
+/// `abdlop::commit`) of the 64 coefficients `inp`: r1, then the input as changed (the wrap case, R1-C1 / R2-C2)
+#[cfg(feature = "c-oracle")]
+pub fn p2r(i: usize, inp: &[i64; 64]) -> Option<alloc::vec::Vec<u64>> {
+    let d = rels().get(i)?.1.tbox.dcompress;
+    let mut a = Poly::ZERO;
+    a.set_i64(inp);
+    let r = Poly::power2round(&mut a, d);
+    let mut o = alloc::vec::Vec::new();
+    dump(&mut o, &r);
+    dump(&mut o, &a);
     Some(o)
 }
 

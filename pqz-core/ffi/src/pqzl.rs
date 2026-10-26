@@ -40,17 +40,21 @@ pub struct NodeFault;
 #[cfg(feature = "test-hooks")]
 pub static TEST_FAIL_WORKER: AtomicBool = AtomicBool::new(false);
 
-/// The largest PQZL op 7 M that `crate::prove` proves on wasm32; verify has no such limit. C backend 4 (controller
-/// proposal 2026-10-16, owner may override: the C core's `R_TXM4_0` with every relation loaded peaks at 432.7 MB in
-/// wasm32, M = 8 at 669 MB, `l3a-summary.txt`; M = 8 is for native clients). Rust backend 8 = `pqzl::WASM_MAX_LEGS`
-/// (port plan Task 12, owner 2026-10-18 "if it is enough, raise it": run `d6`, the M = 8 wasm32 prove peaks at
-/// 117.4 MiB, CTR-PQZ-09).
-pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else { 4 };
+/// The largest PQZL op 7 M that `crate::prove` proves on wasm32; verify has no such limit. C backend: per set
+/// (set.toml [pqzl_c] wasm_max_legs, pqz-stmt `C_WASM_MAX_LEGS`; review R4-C1: 4 for every set before, while the C
+/// core's wasm32 peak with every relation loaded exceeds the 512 MiB arena at M = 4 at n2816-kmax65536, and the R0
+/// review fix's audited groups raise it at n2048 / n2304). Rust backend 8 = `pqzl::WASM_MAX_LEGS` (port plan Task 12,
+/// owner 2026-10-18 "if it is enough, raise it": run `d6`, the M = 8 wasm32 prove peaks at 117.4 MiB, CTR-PQZ-09).
+pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else { pqz_stmt::C_WASM_MAX_LEGS };
 /// The worker thread's stack (pqz_bench runs the core on an 8 MiB main thread, the wasm builds on an 8 MiB stack).
 pub const STACK: usize = 16 << 20;
 
-pub const MAX_PROOF: usize = 98_304;
-pub const PK_BYTES: usize = 16_384;
+/// pqz-stmt's `MAX_PROOF_PQZL` (review R4-C7: one literal; the Rust backend's const assert ties it to
+/// `::pqzl::MAX_PROOF`, the C backend's test `header_matches` to `PQZ_MAX_PROOF` of `pqzl/src/pqz.h`)
+pub const MAX_PROOF: usize = pqz_stmt::MAX_PROOF_PQZL;
+/// the parameter set's ring dimension and object sizes (pqz-stmt, feature `set-<set>`; v3: 2,048 / 16,384 B)
+pub const N: usize = pqz_stmt::N;
+pub const PK_BYTES: usize = pqz_stmt::PK_BYTES;
 pub const CT_BYTES: usize = PK_BYTES + 128;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
@@ -114,8 +118,8 @@ pub type Encrypted = (Box<[u8; PK_BYTES]>, Vec<[u8; 128]>);
 /// A key pair from a seed (pq-zero-knowledge.md §4.2, `pqz_keygen`).
 pub struct Key {
     pub pk: Box<[u8; PK_BYTES]>,
-    pub s: Box<[i8; 2048]>,
-    pub e: Box<[i16; 2048]>,
+    pub s: Box<[i8; N]>,
+    pub e: Box<[i16; N]>,
     /// the counter of the accepted attempt (§4.2)
     pub ctr: u32,
 }
@@ -125,16 +129,17 @@ pub struct Key {
 pub struct Enc {
     pub u: Box<[u8; PK_BYTES]>,
     pub vs: Vec<[u8; 128]>,
-    pub r: Box<[i8; 2048]>,
-    pub e1: Box<[i16; 2048]>,
+    pub r: Box<[i8; N]>,
+    pub e1: Box<[i16; N]>,
     pub e2: Vec<[i16; 16]>,
     /// the counter of the accepted attempt (§4.2)
     pub ctr: u32,
 }
 
-/// One `R_TXM` encryption (P6-ANON §4, D13): per group `g < ⌈M/4⌉` one `enc` from `enc_group_seed(seed_enc, g)` to the
-/// group's legs, then (group 0) `pk_f`, then (auditor on) the group's auditor copies; the result re-sorted into the
-/// statement's and the witness's leg order.
+/// One `R_TXM` encryption (P6-ANON §4, D13): per group `g < ⌈M/s⌉` (s = S_AUD with the auditor, 4 without; R0-1) one
+/// `enc` from `enc_group_seed(seed_enc, g)` to the group's legs, then (group 0) `pk_f`, then (auditor on) the group's
+/// auditor copies, the copy of the group's i-th leg at window i (`enc_win`); the result re-sorted into the statement's
+/// and the witness's leg order.
 pub struct EncMulti {
     /// `(u_g, r_g, e1_g)` per group (the `Enc` of group g; its `vs` / `e2` are also in `v`, `e2`, … below)
     pub groups: Vec<Enc>,
@@ -166,18 +171,20 @@ pub fn enc_multi(
         v_a: Vec::new(),
         e2_a: Vec::new(),
     };
-    for (g, grp) in legs.chunks(pqz_stmt::LEGS_PER_GROUP).enumerate() {
+    for (g, grp) in legs.chunks(pqz_stmt::legs_per_group(pk_a.is_some())).enumerate() {
         let n = grp.len();
         let (mut pks, mut msgs): (Vec<&[u8; PK_BYTES]>, Vec<[u8; 16]>) = grp.iter().copied().unzip();
         if g == 0 {
             pks.push(pk_f);
             msgs.push(d_f);
         }
+        let mut win = vec![0u8; pks.len()];
         if let Some(a) = pk_a {
             pks.extend(std::iter::repeat_n(a, n));
             msgs.extend(grp.iter().map(|l| l.1));
+            win.extend((0..n).map(|i| i as u8)); // the copy of the group's i-th leg at window i (R0-1)
         }
-        let c = enc(&pks, &msgs, &enc_group_seed(seed_enc, g))?;
+        let c = enc_win(&pks, Some(&win), &msgs, &enc_group_seed(seed_enc, g))?;
         out.v.extend_from_slice(&c.vs[..n]);
         out.e2.extend_from_slice(&c.e2[..n]);
         let a0 = n + (g == 0) as usize;

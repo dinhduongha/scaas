@@ -44,6 +44,20 @@ contract MetaTxGasV2Test is Test {
     uint256 constant V1_G = 50_762;
     uint256 constant V1_P = 58_040;
     uint256 constant V1_H = 23_142;
+    // F185 (Foundry 1.8.5, Amsterdam, `isolate`): the bound is now `AMS_* + BUDGET`; `V1_*` stay as the logged history. Each
+    // call is its own transaction, so a row counts the intrinsic gas and the calldata (+27.3 k on Osaka: 21,000 + 4 / 16 per
+    // byte; EIP-2780 intrinsic, EIP-7976 calldata floor under Amsterdam) and, since EIP-8038 raises the storage write
+    // prices and EIP-8037 charges state gas for a new slot, the writes: a warm batch (A, C, D, E) 36,017 -> 80,249 /
+    // 95,950 / 95,889 / 95,993; a cold batch (B, F: the batch lane's first write) 53,117 -> 178,157; ERC-1271 (G) 50,762 ->
+    // 174,814; the pay op on a fresh lane (P) 58,040 -> 181,810. The v1 contract is gone, so the old rows cannot be re-run.
+    uint256 constant AMS_A = 80_249;
+    uint256 constant AMS_B = 178_157;
+    uint256 constant AMS_C = 95_950;
+    uint256 constant AMS_D = 95_889;
+    uint256 constant AMS_E = 95_993;
+    uint256 constant AMS_F = 178_157;
+    uint256 constant AMS_G = 174_814;
+    uint256 constant AMS_P = 181_810;
     address signer;
     address relayer = address(0xBEEF);
     address recipient = address(0xCAFE);
@@ -156,36 +170,36 @@ contract MetaTxGasV2Test is Test {
         assertTrue(ok);
     }
 
-    function _row(string memory label, MetaTxLib.MetaTransfer memory x, uint256 g1) internal returns (uint256 g2) {
+    function _row(string memory label, MetaTxLib.MetaTransfer memory x, uint256 g1, uint256 lim) internal returns (uint256 g2) {
         bytes memory c2 = _cdT(address(v2), x);
         _snap();
         g2 = _measure(address(v2), c2);
         console.log(label);
         console.log("   v1 (frozen) / v2 / delta", g1, g2, g2 > g1 ? g2 - g1 : 0);
-        assertLe(g2, g1 + BUDGET, label);
+        assertLe(g2, lim + BUDGET, label);
     }
 
-    function test_gasA_warmBatchNoFee() public { _row("A warm batch, NONE", _mt(0, WARM, 1, 0, address(0)), V1_A); }
+    function test_gasA_warmBatchNoFee() public { _row("A warm batch, NONE", _mt(0, WARM, 1, 0, address(0)), V1_A, AMS_A); }
 
-    function test_gasB_coldBatchNoFee() public { _row("B cold batch, NONE", _mt(0, COLD, 0, 0, address(0)), V1_B); }
+    function test_gasB_coldBatchNoFee() public { _row("B cold batch, NONE", _mt(0, COLD, 0, 0, address(0)), V1_B, AMS_B); }
 
     function test_gasC_warmFixedFee() public {
-        _row("C warm batch, FIXED fee", _mt(MetaTxLib.MODE_FEE_FIXED, WARM, 1, 0.001 ether, relayer), V1_C);
+        _row("C warm batch, FIXED fee", _mt(MetaTxLib.MODE_FEE_FIXED, WARM, 1, 0.001 ether, relayer), V1_C, AMS_C);
     }
 
     function test_gasD_warmPercentFee() public {
-        _row("D warm batch, PERCENT fee", _mt(MetaTxLib.MODE_FEE_PERCENT, WARM, 1, 5_000, relayer), V1_D);
+        _row("D warm batch, PERCENT fee", _mt(MetaTxLib.MODE_FEE_PERCENT, WARM, 1, 5_000, relayer), V1_D, AMS_D);
     }
 
     function test_gasE_warmFixedRestricted() public {
         _row("E warm batch, FIXED+restrict", _mt(MetaTxLib.MODE_FEE_FIXED | MetaTxLib.MODE_RESTRICT_RELAYER
-            | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, WARM, 1, 0.001 ether, feeTaker), V1_E);
+            | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT, WARM, 1, 0.001 ether, feeTaker), V1_E, AMS_E);
     }
 
     function test_gasF_newRecipient() public {
         MetaTxLib.MetaTransfer memory x = _mt(0, WARM, 1, 0, address(0));
         x.to = address(0xD00D);
-        _row("F warm batch, new recipient", x, V1_F);
+        _row("F warm batch, new recipient", x, V1_F, AMS_F);
     }
 
     function test_gasG_erc1271() public {
@@ -195,7 +209,7 @@ contract MetaTxGasV2Test is Test {
         _snap();
         uint256 g2 = _measure(address(v2), c2);
         console.log("G cold batch, ERC-1271  v1 (frozen) / v2", V1_G, g2);
-        assertLe(g2, V1_G + BUDGET);
+        assertLe(g2, AMS_G + BUDGET);
     }
 
     function test_gasP_payOpColdLane() public {
@@ -211,7 +225,7 @@ contract MetaTxGasV2Test is Test {
         vm.revertToState(s);
         uint256 gn = _measure(address(v2), cn);
         console.log("P pay, fresh lane  v1 op (frozen) / v2 mtxExecuteTransfer / mtxPay", V1_P, g2, gn);
-        assertLe(g2, V1_P + BUDGET);
+        assertLe(g2, AMS_P + BUDGET);
         // no longer holds on `ERC20MetaTx` (mtxPay ≈ +2.6k over mtxExecuteTransfer on a fresh lane: the PAYABLE gate's cold SLOAD): logged, not asserted
         emit log_named_uint("P mtxPay", gn);
         emit log_named_uint("P mtxExecuteTransfer", g2);

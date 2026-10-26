@@ -1,0 +1,4 @@
+set n2048-kmax1024, vectors ../../smartcontracts/vectors/pqz; PQZL backend: the default feature (cargo flags: none)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 6.01s
+    Finished `release` profile [optimized] target(s) in 0.03s

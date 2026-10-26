@@ -1,7 +1,7 @@
 /*
  * l2dom PoC (P6-L2, https://github.com/lazer-crypto/lazer/issues/25): does the tbox verifier enforce each exact-l2 bound separately?
- * R_REG proves pk = A s + e with ||s|| <= 36, ||e|| <= 164. The cheating prover (pqz_rel.c set_upsilon under
- * -DPQZ_L2DOM_POC) only needs ||s||^2 + ||e||^2 <= 36^2 + 164^2.
+ * R_REG proves pk = A s + e with ||s|| <= beta_s, ||e|| <= beta_e (the set's; v3 36 / 164). The cheating prover
+ * (pqz_rel.c set_upsilon under -DPQZ_L2DOM_POC) only needs ||s||^2 + ||e||^2 <= beta_s^2 + beta_e^2.
  *
  *   l2dom_poc prove DIR    (built with -DPQZ_L2DOM_POC) prove cases, verify in-process, write DIR/<case>.{stmt,proof}
  *   l2dom_poc verify DIR   (linked against the production libpqz.a) verify the written proofs
@@ -31,20 +31,23 @@ tern (void)
 }
 
 static const char *cases[] = { "honest", "s_over_A", "s_over_B" };
+#define BS2 (PQZ_BETA_S * PQZ_BETA_S)
+#define BE2 (PQZ_BETA_E * PQZ_BETA_E)
+#define NB4 ((BS2 + BE2) / 16)
 
-/* honest: cbd(1) s, small e. A: s polys 1..31 = +-3 (||s||^2 ~ 17,900), e cbd(1).
-   B: all of the budget in s: 1762 coefficients +-4 = 28192 = 36^2 + 164^2, e = 0. s[0] poly stays cbd(1)/0
+/* honest: cbd(1) s, small e. A: s polys 1..k-1 = +-3 (||s||^2 = 9 (n - 64)), e cbd(1).
+   B: all of the budget in s: NB4 = (beta_s^2 + beta_e^2) / 16 coefficients +-4 (v3 1762), e = 0. s[0] poly stays cbd(1)/0
    (it also carries the approximate filler proof). */
 static void
-witness (int c, int8_t s[2048], int16_t e[2048])
+witness (int c, int8_t s[PQZ_N], int16_t e[PQZ_N])
 {
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     {
       s[j] = (int8_t)(c == 2 ? 0 : tern ());
       e[j] = (int16_t)(c == 2 ? 0 : tern ());
       if (c == 1 && j >= 64)
         s[j] = (int8_t)((j & 1) ? 3 : -3);
-      if (c == 2 && j >= 64 && j < 64 + 1762)
+      if (c == 2 && j >= 64 && j < 64 + NB4)
         s[j] = (int8_t)((j & 1) ? 4 : -4);
     }
 }
@@ -52,20 +55,20 @@ witness (int c, int8_t s[2048], int16_t e[2048])
 static void
 build (int c, uint8_t *stmt, uint8_t *wit)
 {
-  static int8_t s[2048];
-  static int16_t e[2048];
+  static int8_t s[PQZ_N];
+  static int16_t e[PQZ_N];
   long ns = 0, ne = 0;
   witness (c, s, e);
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     ns += s[j] * s[j], ne += e[j] * e[j];
   memset (stmt, 0xA5, PQZ_PREFIX_BYTES);
   for (int i = 0; i < 32; i++)
     stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
   pqz_keypair_from_secret (s, e, stmt + PQZ_PREFIX_BYTES + 32);
-  for (int j = 0; j < 2048; j++)
-    wit[j] = (uint8_t)s[j], wit[2048 + 2 * j] = (uint8_t)e[j], wit[2049 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
-  printf ("%-9s ||s||^2=%ld (bound 1296) ||e||^2=%ld (bound 26896) sum=%ld (bound 28192)%s\n", cases[c], ns, ne,
-          ns + ne, ns > 1296 ? "  <-- s exceeds its own bound" : "");
+  for (int j = 0; j < PQZ_N; j++)
+    wit[j] = (uint8_t)s[j], wit[PQZ_N + 2 * j] = (uint8_t)e[j], wit[PQZ_N + 1 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
+  printf ("%-9s ||s||^2=%ld (bound %d) ||e||^2=%ld (bound %d) sum=%ld (bound %d)%s\n", cases[c], ns, BS2, ne, BE2,
+          ns + ne, BS2 + BE2, ns > BS2 ? "  <-- s exceeds its own bound" : "");
 }
 
 static int

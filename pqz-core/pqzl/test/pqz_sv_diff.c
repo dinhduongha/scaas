@@ -35,7 +35,7 @@ size_t pqz_arena_peak (void);
 void pqz_arena_peak_reset (void);
 
 #define ARENA_BYTES ((size_t)768 << 20)
-#define Q 4398046510889ULL
+#define Q PQZ_Q
 
 static uint64_t xs;
 static uint64_t
@@ -90,15 +90,15 @@ digits (uint8_t m[16], uint64_t x)
 }
 typedef struct
 {
-  int8_t s[2048];
-  int16_t e[2048];
+  int8_t s[PQZ_N];
+  int16_t e[PQZ_N];
   uint8_t pk[PQZ_POLYVEC_BYTES];
 } key_t_;
 static void
 keygen (key_t_ *k)
 {
-  short8 (k->s, 2048, 1, 36);
-  short16 (k->e, 2048, 20, 164);
+  short8 (k->s, PQZ_N, 1, PQZ_BETA_S);
+  short16 (k->e, PQZ_N, 20, PQZ_BETA_E);
   pqz_keypair_from_secret (k->s, k->e, k->pk);
 }
 
@@ -139,7 +139,7 @@ static size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, siz
 /* first coefficient byte of the polynomial part of each statement, and its length in coefficients */
 static size_t POLY0[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK, PQZ_DISC_PK,
                               PQZ_HEADER_BYTES };
-static size_t NCOEF[NREL] = { 2048, (PQZ_TX_STMT_BYTES - PQZ_HEADER_BYTES) / 8,
+static size_t NCOEF[NREL] = { PQZ_N, (PQZ_TX_STMT_BYTES - PQZ_HEADER_BYTES) / 8,
                               (PQZ_BURN_STMT_BYTES - PQZ_HEADER_BYTES) / 8, (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8,
                               (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8, (PQZ_TX0_STMT_BYTES - PQZ_HEADER_BYTES) / 8 };
 static void
@@ -175,8 +175,8 @@ make_reg (void)
   for (int i = 0; i < 32; i++)
     reg_stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)rnd ();
   memcpy (reg_stmt + PQZ_PREFIX_BYTES + 32, K.pk, PQZ_POLYVEC_BYTES);
-  for (int j = 0; j < 2048; j++)
-    reg_wit[j] = (uint8_t)K.s[j], le16 (reg_wit + 2048 + 2 * j, K.e[j]);
+  for (int j = 0; j < PQZ_N; j++)
+    reg_wit[j] = (uint8_t)K.s[j], le16 (reg_wit + PQZ_N + 2 * j, K.e[j]);
 }
 
 /* a fresh R_TX statement (as pqz_bench.c setup): new keys, balance, amount, fee; and the R_TX0 statement of the same
@@ -188,15 +188,15 @@ make_tx (void)
   keygen (&KF), keygen (&KT), keygen (&KA);
   const uint64_t B = rnd () % ((uint64_t)1 << 48), fee = rnd () % 4096 % (B + 1), v = rnd () % (B - fee + 1),
                  bp = B - v - fee;
-  static int8_t r[2048], r0[2048];
-  static int16_t e1[2048], e10[2048], e2[3][16], e20[1][16];
+  static int8_t r[PQZ_N], r0[PQZ_N];
+  static int16_t e1[PQZ_N], e10[PQZ_N], e2[3][16], e20[1][16];
   static uint8_t uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], u[PQZ_POLYVEC_BYTES], vs[3][PQZ_V_BYTES];
   uint8_t mT[1][16], m[3][16];
-  short8 (r0, 2048, 1, 36), short16 (e10, 2048, 20, 164), short16 (e20[0], 16, 20, 64);
+  short8 (r0, PQZ_N, 1, PQZ_BETA_S), short16 (e10, PQZ_N, 20, PQZ_BETA_E), short16 (e20[0], 16, 20, 64);
   digits (mT[0], B);
   const uint8_t *pkf[1] = { KF.pk };
   pqz_encrypt (pkf, 1, (const uint8_t (*)[16])mT, r0, e10, (const int16_t (*)[16])e20, uT, vT);
-  short8 (r, 2048, 1, 36), short16 (e1, 2048, 20, 164);
+  short8 (r, PQZ_N, 1, PQZ_BETA_S), short16 (e1, PQZ_N, 20, PQZ_BETA_E);
   for (int k = 0; k < 3; k++)
     short16 (e2[k], 16, 20, 64);
   digits (m[0], v), digits (m[1], bp), digits (m[2], v);
@@ -224,18 +224,18 @@ make_tx (void)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
 
   p = tx_wit;
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     p[j] = (uint8_t)KF.s[j];
-  p += 2048;
-  for (int j = 0; j < 2048; j++)
+  p += PQZ_N;
+  for (int j = 0; j < PQZ_N; j++)
     le16 (p + 2 * j, KF.e[j]);
-  p += 4096;
-  for (int j = 0; j < 2048; j++)
+  p += 2 * PQZ_N;
+  for (int j = 0; j < PQZ_N; j++)
     p[j] = (uint8_t)r[j];
-  p += 2048;
-  for (int j = 0; j < 2048; j++)
+  p += PQZ_N;
+  for (int j = 0; j < PQZ_N; j++)
     le16 (p + 2 * j, e1[j]);
-  p += 4096;
+  p += 2 * PQZ_N;
   for (int k = 0; k < 3; k++)
     for (int j = 0; j < 16; j++)
       le16 (p + 32 * k + 2 * j, e2[k][j]);
@@ -253,8 +253,8 @@ make_tx (void)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, vs[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
   memcpy (p, vs[1], PQZ_V_BYTES);
-  memcpy (tx0_wit, tx_wit, 12288 + 64); /* s_f, e_f, r, e1, e2_t, e2_f */
-  memcpy (tx0_wit + 12288 + 64, tx_wit + 12288 + 96, 32); /* d, d' */
+  memcpy (tx0_wit, tx_wit, (6 * PQZ_N) + 64); /* s_f, e_f, r, e1, e2_t, e2_f */
+  memcpy (tx0_wit + (6 * PQZ_N) + 64, tx_wit + (6 * PQZ_N) + 96, 32); /* d, d' */
 }
 
 /* a fresh R_BURN statement: new key, balance in T, amount, fee; fresh (r, e1, e2_f) for the new balance; random
@@ -266,15 +266,15 @@ make_burn (void)
   keygen (&KF);
   const uint64_t B = rnd () % ((uint64_t)1 << 48), fee = rnd () % 4096 % (B + 1), v = rnd () % (B - fee + 1),
                  bp = B - v - fee;
-  static int8_t r[2048], r0[2048];
-  static int16_t e1[2048], e10[2048], e2[1][16], e20[1][16];
+  static int8_t r[PQZ_N], r0[PQZ_N];
+  static int16_t e1[PQZ_N], e10[PQZ_N], e2[1][16], e20[1][16];
   static uint8_t uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], u[PQZ_POLYVEC_BYTES], vf[1][PQZ_V_BYTES];
   uint8_t mT[1][16], m[1][16];
   const uint8_t *pkf[1] = { KF.pk };
-  short8 (r0, 2048, 1, 36), short16 (e10, 2048, 20, 164), short16 (e20[0], 16, 20, 64);
+  short8 (r0, PQZ_N, 1, PQZ_BETA_S), short16 (e10, PQZ_N, 20, PQZ_BETA_E), short16 (e20[0], 16, 20, 64);
   digits (mT[0], B);
   pqz_encrypt (pkf, 1, (const uint8_t (*)[16])mT, r0, e10, (const int16_t (*)[16])e20, uT, vT);
-  short8 (r, 2048, 1, 36), short16 (e1, 2048, 20, 164), short16 (e2[0], 16, 20, 64);
+  short8 (r, PQZ_N, 1, PQZ_BETA_S), short16 (e1, PQZ_N, 20, PQZ_BETA_E), short16 (e2[0], 16, 20, 64);
   digits (m[0], bp);
   pqz_encrypt (pkf, 1, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vf);
   uint8_t *p = burn_stmt;
@@ -292,12 +292,12 @@ make_burn (void)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, vf[0], PQZ_V_BYTES);
   p = burn_wit;
-  for (int j = 0; j < 2048; j++)
-    p[j] = (uint8_t)KF.s[j], le16 (p + 2048 + 2 * j, KF.e[j]);
-  p += 6144;
-  for (int j = 0; j < 2048; j++)
-    p[j] = (uint8_t)r[j], le16 (p + 2048 + 2 * j, e1[j]);
-  p += 6144;
+  for (int j = 0; j < PQZ_N; j++)
+    p[j] = (uint8_t)KF.s[j], le16 (p + PQZ_N + 2 * j, KF.e[j]);
+  p += (3 * PQZ_N);
+  for (int j = 0; j < PQZ_N; j++)
+    p[j] = (uint8_t)r[j], le16 (p + PQZ_N + 2 * j, e1[j]);
+  p += (3 * PQZ_N);
   for (int j = 0; j < 16; j++)
     le16 (p + 2 * j, e2[0][j]);
   memcpy (p + 32, m[0], 16);
@@ -308,14 +308,14 @@ static void
 make_disc (void)
 {
   static key_t_ KT;
-  static int8_t r[2048];
-  static int16_t e1[2048], e2[1][16];
+  static int8_t r[PQZ_N];
+  static int16_t e1[PQZ_N], e2[1][16];
   static uint8_t u[PQZ_POLYVEC_BYTES], vt[1][PQZ_V_BYTES];
   uint8_t m[1][16];
   keygen (&KT);
   const uint64_t v = rnd () >> (rnd () % 64);
   const uint8_t *pkt[1] = { KT.pk };
-  short8 (r, 2048, 1, 36), short16 (e1, 2048, 20, 164), short16 (e2[0], 16, 20, 64);
+  short8 (r, PQZ_N, 1, PQZ_BETA_S), short16 (e1, PQZ_N, 20, PQZ_BETA_E), short16 (e2[0], 16, 20, 64);
   digits (m[0], v);
   pqz_encrypt (pkt, 1, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vt);
   for (int k = 0; k < 2; k++)
@@ -331,12 +331,12 @@ make_disc (void)
       memcpy (st + PQZ_DISC_PK + PQZ_POLYVEC_BYTES, u, PQZ_POLYVEC_BYTES);
       memcpy (st + PQZ_DISC_PK + 2 * PQZ_POLYVEC_BYTES, vt[0], PQZ_V_BYTES);
     }
-  for (int j = 0; j < 2048; j++)
-    ds_wit[j] = (uint8_t)r[j], le16 (ds_wit + 2048 + 2 * j, e1[j]);
+  for (int j = 0; j < PQZ_N; j++)
+    ds_wit[j] = (uint8_t)r[j], le16 (ds_wit + PQZ_N + 2 * j, e1[j]);
   for (int j = 0; j < 16; j++)
-    le16 (ds_wit + 6144 + 2 * j, e2[0][j]);
-  for (int j = 0; j < 2048; j++)
-    dr_wit[j] = (uint8_t)KT.s[j], le16 (dr_wit + 2048 + 2 * j, KT.e[j]);
+    le16 (ds_wit + (3 * PQZ_N) + 2 * j, e2[0][j]);
+  for (int j = 0; j < PQZ_N; j++)
+    dr_wit[j] = (uint8_t)KT.s[j], le16 (dr_wit + PQZ_N + 2 * j, KT.e[j]);
 }
 
 /* a fresh R_TXM statement of shape t (pqz.h layout): new keys; balance, fee (0 one time in four); each leg real with
@@ -345,11 +345,12 @@ make_disc (void)
 static void
 make_txm (int t)
 {
-  const unsigned m = TXD[t].m, a = TXD[t].a, G = PQZ_TXM_GROUPS (m);
+  const unsigned m = TXD[t].m, a = TXD[t].a, G = PQZ_TXM_GROUPS (m, a), lpg = PQZ_TXM_LPG (a);
+#define MAXG_ PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS, 1)
   static key_t_ KF, KR[PQZ_TXM_MAX_LEGS], KA;
-  static int8_t r[4][2048], r0[2048];
-  static int16_t e1[4][2048], e10[2048], e20[1][16], e2[PQZ_TXM_MAX_LEGS][16], e2f[1][16], e2a[PQZ_TXM_MAX_LEGS][16];
-  static uint8_t uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], u[4][PQZ_POLYVEC_BYTES], ut[PQZ_POLYVEC_BYTES];
+  static int8_t r[MAXG_][PQZ_N], r0[PQZ_N];
+  static int16_t e1[MAXG_][PQZ_N], e10[PQZ_N], e20[1][16], e2[PQZ_TXM_MAX_LEGS][16], e2f[1][16], e2a[PQZ_TXM_MAX_LEGS][16];
+  static uint8_t uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], u[MAXG_][PQZ_POLYVEC_BYTES], ut[PQZ_POLYVEC_BYTES];
   static uint8_t v[PQZ_TXM_MAX_LEGS][PQZ_V_BYTES], vf[1][PQZ_V_BYTES], va[PQZ_TXM_MAX_LEGS][PQZ_V_BYTES];
   uint8_t mT[1][16], dg[PQZ_TXM_MAX_LEGS][16], dp[1][16];
   unsigned j, g;
@@ -365,20 +366,21 @@ make_txm (int t)
     }
   digits (dp[0], left);
   const uint8_t *pkf[1] = { KF.pk }, *pka[1] = { KA.pk };
-  short8 (r0, 2048, 1, 36), short16 (e10, 2048, 20, 164), short16 (e20[0], 16, 20, 64);
+  short8 (r0, PQZ_N, 1, PQZ_BETA_S), short16 (e10, PQZ_N, 20, PQZ_BETA_E), short16 (e20[0], 16, 20, 64);
   digits (mT[0], B);
   pqz_encrypt (pkf, 1, (const uint8_t (*)[16])mT, r0, e10, (const int16_t (*)[16])e20, uT, vT);
   for (g = 0; g < G; g++)
-    short8 (r[g], 2048, 1, 36), short16 (e1[g], 2048, 20, 164);
+    short8 (r[g], PQZ_N, 1, PQZ_BETA_S), short16 (e1[g], PQZ_N, 20, PQZ_BETA_E);
   for (j = 0; j < m; j++)
     {
       const uint8_t *pk1[1] = { KR[j].pk };
       short16 (e2[j], 16, 20, 64), short16 (e2a[j], 16, 20, 64);
-      pqz_encrypt (pk1, 1, (const uint8_t (*)[16])dg[j], r[j / 4], e1[j / 4], (const int16_t (*)[16])e2[j], u[j / 4],
-                   &v[j]);
+      const unsigned g_ = j / lpg;
+      const uint8_t win[1] = { (uint8_t)(j % lpg) }; /* the auditor copy's window (R0-1) */
+      pqz_encrypt (pk1, 1, (const uint8_t (*)[16])dg[j], r[g_], e1[g_], (const int16_t (*)[16])e2[j], u[g_], &v[j]);
       if (a)
-        pqz_encrypt (pka, 1, (const uint8_t (*)[16])dg[j], r[j / 4], e1[j / 4], (const int16_t (*)[16])e2a[j], ut,
-                     &va[j]);
+        pqz_encrypt_win (pka, 1, win, (const uint8_t (*)[16])dg[j], r[g_], e1[g_], (const int16_t (*)[16])e2a[j], ut,
+                         &va[j]);
     }
   short16 (e2f[0], 16, 20, 64);
   pqz_encrypt (pkf, 1, (const uint8_t (*)[16])dp, r[0], e1[0], (const int16_t (*)[16])e2f, ut, vf);
@@ -408,12 +410,12 @@ make_txm (int t)
     memcpy (p, va[j], PQZ_V_BYTES), p += PQZ_V_BYTES;
 
   p = txm_wit[t];
-  for (int k = 0; k < 2048; k++)
-    p[k] = (uint8_t)KF.s[k], le16 (p + 2048 + 2 * k, KF.e[k]);
-  p += 6144;
-  for (g = 0; g < G; g++, p += 6144)
-    for (int k = 0; k < 2048; k++)
-      p[k] = (uint8_t)r[g][k], le16 (p + 2048 + 2 * k, e1[g][k]);
+  for (int k = 0; k < PQZ_N; k++)
+    p[k] = (uint8_t)KF.s[k], le16 (p + PQZ_N + 2 * k, KF.e[k]);
+  p += (3 * PQZ_N);
+  for (g = 0; g < G; g++, p += (3 * PQZ_N))
+    for (int k = 0; k < PQZ_N; k++)
+      p[k] = (uint8_t)r[g][k], le16 (p + PQZ_N + 2 * k, e1[g][k]);
   for (j = 0; j < m; j++, p += 32)
     for (int k = 0; k < 16; k++)
       le16 (p + 2 * k, e2[j][k]);

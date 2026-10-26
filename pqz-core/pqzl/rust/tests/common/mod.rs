@@ -7,8 +7,29 @@ use std::path::PathBuf;
 
 pub const PQZL_ID: [u8; 32] = pqzl::PROOF_SYSTEM_ID;
 
+/// set.json's `core_only` (gen_set.py, from set.toml): a core_only set has no vectors, every other set has them
+pub fn core_only() -> bool {
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../params/sets").join(pqzl::SET).join("set.json");
+    let j: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap();
+    j["core_only"].as_bool().unwrap_or_else(|| panic!("{}: no boolean core_only", p.display()))
+}
+
+/// the committed vectors of this build's parameter set (owner 2026-10-21, one set per build): the frozen v3 set
+/// n2048-kmax1024 at smartcontracts/vectors/pqz (what the contracts read until plan 5h Task 8d), any other set under
+/// smartcontracts/vectors/pqz/<set>/; None for a core_only set. Decided by set.json, not by a missing file (8b review
+/// m4): a set that is not core_only and has no proof_pqzl.json panics, so moved vectors cannot turn tests into skips.
+pub fn vectors_dir() -> Option<PathBuf> {
+    if core_only() {
+        return None;
+    }
+    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
+    let d = if pqzl::SET == "n2048-kmax1024" { base } else { base.join(pqzl::SET) };
+    assert!(d.join("proof_pqzl.json").is_file(), "set {} is not core_only (set.json) but {} has no proof_pqzl.json", pqzl::SET, d.display());
+    Some(d)
+}
+
 pub fn json(file: &str) -> Value {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz").join(file);
+    let p = vectors_dir().unwrap_or_else(|| panic!("no vectors of set {} (smartcontracts/vectors/pqz/{0}/)", pqzl::SET)).join(file);
     serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
 }
 
@@ -53,7 +74,9 @@ pub fn statements() -> HashMap<String, Vec<u8>> {
     let mut m = HashMap::new();
     for f in ["statement_transfer.json", "statement_burn.json", "statement_refresh.json", "statement_register.json",
               "statement_disclose.json", "statement_transfer_multi.json"] {
-        for r in json(f)["rows"].as_array().unwrap() {
+        let j = json(f);
+        // the op 7 disclosures (R0-1: statement_transfer_multi.json `disclosures`) by case, as the R_TXM rows
+        for r in j["rows"].as_array().unwrap().iter().chain(j.get("disclosures").and_then(Value::as_array).into_iter().flatten()) {
             let key = r.get("case").and_then(Value::as_str).unwrap_or_else(|| r["form"].as_str().unwrap());
             m.insert(key.to_string(), with_id(hex(&r["stmt"])));
         }
@@ -73,8 +96,13 @@ pub struct Row {
     pub rnd32: [u8; 32],
 }
 
-/// every PQZL row of proof_pqzl.json (19) and fee0.json (4)
+/// every PQZL row of proof_pqzl.json (19) and fee0.json (4); for a set without vectors, one honest row per bench
+/// relation (pqzl::bench, the 14 relations of pqz_bench.c), proved by the C core (feature c-oracle) with a fixed
+/// rnd32: the Rust prover must give the same bytes
 pub fn pqzl_rows() -> Vec<Row> {
+    if vectors_dir().is_none() {
+        return bench_rows();
+    }
     let st = statements();
     let mut out = Vec::new();
     for r in json("proof_pqzl.json")["rows"].as_array().unwrap() {
@@ -106,8 +134,45 @@ pub fn pqzl_rows() -> Vec<Row> {
     out
 }
 
-/// negative.json's PQZL rows as precompile inputs u8(op) || be32(len) || stmt || proof (pqz_kat.py `apply_edits`)
+#[cfg(all(feature = "bench", feature = "c-oracle"))]
+fn bench_rows() -> Vec<Row> {
+    let b = pqzl::bench::Bench::new().expect("bench setup");
+    (0..pqzl::bench::NREL)
+        .map(|rel| {
+            let (op, code, stmt, wit) = b.instance(rel);
+            let rnd32: [u8; 32] = core::array::from_fn(|i| (7 * rel + i) as u8);
+            let proof = pqzl::c_oracle::c_prove(op, stmt, wit, &rnd32).expect("C prove of a bench relation");
+            // the vectors' row name of the relation, so lookups by name (memory.rs, vectors.rs) find the bench row
+            let n = pqzl::bench::NAMES[rel];
+            let name = match n {
+                "R_REG" => "REGISTER".into(),
+                "R_TX" => "TRANSFER".into(),
+                "R_TX0" => "TRANSFER0".into(),
+                "R_BURN" => "BURN".into(),
+                "R_DS" => "DISCLOSE-SENDER".into(),
+                "R_DR" => "DISCLOSE-RECEIVER".into(),
+                _ => match n.strip_prefix("R_TXM").unwrap().split_once('_') {
+                    Some((m, _)) => format!("M{m}-off"),
+                    None => format!("M{}-on", &n[5..]),
+                },
+            };
+            Row { name, op, code, stmt: stmt.to_vec(), proof, wit: wit.to_vec(), rnd32 }
+        })
+        .collect()
+}
+
+#[cfg(not(all(feature = "bench", feature = "c-oracle")))]
+fn bench_rows() -> Vec<Row> {
+    panic!("set {} has no vectors: the rows come from pqzl::bench (features bench, c-oracle)", pqzl::SET)
+}
+
+/// negative.json's PQZL rows as precompile inputs u8(op) || be32(len) || stmt || proof (pqz_kat.py `apply_edits`);
+/// empty for a set without vectors (said once on stderr: the bench's adversarial verifies cover it there)
 pub fn negative_inputs() -> Vec<(String, Vec<u8>)> {
+    if vectors_dir().is_none() {
+        eprintln!("set {}: no negative.json yet (no vectors): no negative-vector rows", pqzl::SET);
+        return Vec::new();
+    }
     let j = json("negative.json");
     let st = statements();
     let mut proofs: HashMap<String, Vec<u8>> = HashMap::new();
@@ -121,7 +186,8 @@ pub fn negative_inputs() -> Vec<(String, Vec<u8>)> {
             continue;
         }
         let form = r["form"].as_str().unwrap();
-        let key = if form == "TRANSFER-MULTI" { r["case"].as_str().unwrap() } else { form };
+        // an op 7 row or an op 7 disclosure (R0-1) by its case, the other rows by their form
+        let key = r.get("case").and_then(Value::as_str).unwrap_or(form);
         let (mut op, mut s, mut p) = if form == "-" { (0, vec![], vec![]) } else { (op_of(form), st[key].clone(), proofs[key].clone()) };
         let (mut lenf, mut raw, mut size) = (None, None, None);
         for e in r["edits"].as_array().unwrap() {
@@ -190,7 +256,11 @@ pub fn split(b: &[u8]) -> Option<(u8, &[u8], &[u8])> {
 pub type Fixture = (&'static str, u8, Vec<u8>, Vec<u8>, bool);
 
 pub fn cheating() -> Vec<Fixture> {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cheating");
+    // the v3 set's fixtures at tests/fixtures/cheating, another set's under tests/fixtures/cheating/<set>/ (export.sh)
+    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cheating");
+    if pqzl::SET != "n2048-kmax1024" {
+        dir = dir.join(pqzl::SET);
+    }
     let rd = |f: String| std::fs::read(dir.join(&f)).unwrap_or_else(|e| panic!("{f}: {e}"));
     [
         "l2dom_honest",

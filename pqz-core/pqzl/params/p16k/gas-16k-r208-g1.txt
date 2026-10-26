@@ -1,0 +1,177 @@
+== p16k/gas16k.sh: repository a87795da, ROLL_MAX = 208, G1 = 1; the 16k edits:
+   src/pqz/PqzCt.sol: 12,14c12,14
+   src/pqz/PqzCt.sol: <     uint256 internal constant Q = 4_398_046_510_889; // 2^42 − 215
+   src/pqz/PqzCt.sol: <     uint256 internal constant DELTA = 67_108_863; // 2^26 − 1 = ⌊q / 2^16⌋
+   src/pqz/PqzCt.sol: <     uint256 internal constant PK = 16_384;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 internal constant Q = 1_125_899_864_532_089; // 16k: 2^50 − 42,310,535
+   src/pqz/PqzCt.sol: >     uint256 internal constant DELTA = 1_073_741_783; // 16k: 2^30 − 41
+   src/pqz/PqzCt.sol: >     uint256 internal constant PK = 20_480;
+   src/pqz/PqzCt.sol: 16c16
+   src/pqz/PqzCt.sol: <     uint256 internal constant CT = 16_512;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 internal constant CT = 20_608;
+   src/pqz/PqzCt.sol: 18c18
+   src/pqz/PqzCt.sol: <     bytes32 internal constant ZERO_HASH = 0xe21fb1ce17769d3b97b60b85064a46819cef2ccaede8163ddc683cf730e37e97;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     bytes32 internal constant ZERO_HASH = 0x4954e73f7cf34b1c245d58121c1fb244696ec961a09c6b1eb0b73aa0e31b0f13;
+   src/pqz/PqzCt.sol: 20c20
+   src/pqz/PqzCt.sol: <     uint256 private constant Q4 = 0x000003ffffffff29000003ffffffff29000003ffffffff29000003ffffffff29; // q in each lane
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 private constant Q4 = 0x0003fffffd7a64790003fffffd7a64790003fffffd7a64790003fffffd7a6479; // q in each lane
+   src/pqz/PqzCore.sol: 49c49
+   src/pqz/PqzCore.sol: <         uint256[516] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uint256[644] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+   src/pqz/PqzCore.sol: 150c150
+   src/pqz/PqzCore.sol: <     uint256 internal constant K_MAX = 1024;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant K_MAX = 16_384;
+   src/pqz/PqzCore.sol: 154c154
+   src/pqz/PqzCore.sol: <     uint256 internal constant ROLL_MAX = 256;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant ROLL_MAX = 208;
+   src/pqz/PqzCore.sol: 159c159
+   src/pqz/PqzCore.sol: <     uint256 internal constant HALF_WORDS = 258;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant HALF_WORDS = 322;
+   src/pqz/PqzCore.sol: 173,174c173,174
+   src/pqz/PqzCore.sol: <     uint256 internal constant OUT_ON = 16_768;
+   src/pqz/PqzCore.sol: <     uint256 internal constant OUT_OFF = 16_640;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant OUT_ON = 20_864;
+   src/pqz/PqzCore.sol: >     uint256 internal constant OUT_OFF = 20_736;
+   src/pqz/PqzCore.sol: 176c176
+   src/pqz/PqzCore.sol: <     uint256 internal constant DISCLOSE = 33_184;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant DISCLOSE = 41_376;
+   src/pqz/PqzCore.sol: 351c351
+   src/pqz/PqzCore.sol: <         uint256 base = M_OUT + 32 * m + PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uint256 base = M_OUT + 32 * m + PqzCt.PK * ((m + 7) / 8) + PqzCt.V * (m + 1);
+   src/pqz/PqzCore.sol: 366c366
+   src/pqz/PqzCore.sol: <         o.groups = (m + 3) / 4;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         o.groups = (m + 7) / 8;
+   src/pqz/PqzCore.sol: 454c454
+   src/pqz/PqzCore.sol: <             _credit(ua, ptr, 16 + PqzCt.PK * (j / 4), us + ls * j, ref);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             _credit(ua, ptr, 16 + PqzCt.PK * (j / 8), us + ls * j, ref);
+   src/pqz/PqzCore.sol: 565,566c565,566
+   src/pqz/PqzCore.sol: <             mcopy(d, add(add(bundle, 32), uOff), 16384)
+   src/pqz/PqzCore.sol: <             mcopy(add(d, 16384), add(add(bundle, 32), vOff), 128)
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             mcopy(d, add(add(bundle, 32), uOff), 20480)
+   src/pqz/PqzCore.sol: >             mcopy(add(d, 20480), add(add(bundle, 32), vOff), 128)
+   src/pqz/PqzCore.sol: 579c579
+   src/pqz/PqzCore.sol: <         uOff = 16 + PqzCt.PK * (j / 4);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uOff = 16 + PqzCt.PK * (j / 8);
+   src/pqz/PqzCore.sol: 595c595
+   src/pqz/PqzCore.sol: <             if (m != 0 && m <= 8 && rem == ls * m && (m + 3) / 4 == g) return (g, m, a);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             if (m != 0 && m <= 8 && rem == ls * m && (m + 7) / 8 == g) return (g, m, a);
+   src/pqz/PqzCore.sol: 706c706
+   src/pqz/PqzCore.sol: <             uint256[516] storage w = a.accWords;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             uint256[644] storage w = a.accWords;
+   src/pqz/PqzCore.sol: 711c711
+   src/pqz/PqzCore.sol: <                 for { let i := 0 } lt(i, 516) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >                 for { let i := 0 } lt(i, 644) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
+   src/pqz/PqzCore.sol: 820c820
+   src/pqz/PqzCore.sol: <         assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 16384) }
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 20480) }
+   src/pqz/PqzStateLib.sol: 83c83
+   src/pqz/PqzStateLib.sol: <         uint256[516] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >         uint256[644] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: 88c88
+   src/pqz/PqzStateLib.sol: <             for { let i := 0 } lt(i, 516) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >             for { let i := 0 } lt(i, 644) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
+   src/pqz/PqzStateLib.sol: 107c107
+   src/pqz/PqzStateLib.sol: <     ///         account's `acc` words, so the first rollover rewrites instead of creating 516 slots (≈ 11.4 M); a no-op
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >     ///         account's `acc` words, so the first rollover rewrites instead of creating 644 slots (≈ 11.4 M); a no-op
+   src/pqz/PqzStateLib.sol: 115c115
+   src/pqz/PqzStateLib.sol: <         uint256[516] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >         uint256[644] storage w = a.accWords;
+   src/pqz/PqzViewLib.sol: 51c51
+   src/pqz/PqzViewLib.sol: <         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), 33184), proof.offset, proof.length) }
+   src/pqz/PqzViewLib.sol: ---
+   src/pqz/PqzViewLib.sol: >         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), 41376), proof.offset, proof.length) }
+   test/pqz/helpers/PqzFixture.sol: 125c125
+   test/pqz/helpers/PqzFixture.sol: <         return _blob(seed, withAud ? 16_768 : 16_640);
+   test/pqz/helpers/PqzFixture.sol: ---
+   test/pqz/helpers/PqzFixture.sol: >         return _blob(seed, withAud ? 20_864 : 20_736);
+   test/pqz/helpers/PqzFixture.sol: 145c145
+   test/pqz/helpers/PqzFixture.sol: <         return PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
+   test/pqz/helpers/PqzFixture.sol: ---
+   test/pqz/helpers/PqzFixture.sol: >         return PqzCt.PK * ((m + 7) / 8) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
+   test/pqz/PqzStateGas.t.sol: 279c279
+   test/pqz/PqzStateGas.t.sol: <         uint256 g = (m + 3) / 4;
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         uint256 g = (m + 7) / 8;
+forge Version: 1.3.5-stable
+Compiling 12 files with Solc 0.8.37
+Solc 0.8.37 finished in 7.23s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+
+Ran 4 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_op7_M4() (gas: 5702469)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas 5419746
+
+[PASS] test_gas_op7_M8() (gas: 6365657)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas 6058863
+
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 20972883)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 60882
+    mtxExecute calldata bytes / execution / calldata gas / EIP-7623 floor 88356 6660849 1256664
+    floor / transaction total 3141660 7938513
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 20296915)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 87812 12645 60882
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref: execution (precompile mocked) gas 6414824
+  calldata gas EIP-2028 / all non-zero bound / EIP-7623 floor 1253252 1404992 3133130
+  tx total 21,000 + calldata + execution, without the precompile's schedule gas 7689076
+
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 195.03ms (91.00ms CPU time)
+
+Ran 1 test suite in 196.33ms (195.03ms CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)

@@ -27,7 +27,7 @@ contract Answer {
 
 contract PqzPrecompileProbeTest is Test {
     PqzPrecompileProbe probe = new PqzPrecompileProbe();
-    address constant PQZ = 0x5caA500000000000000000000000000000000F01;
+    address constant PQZ = 0x000000000000000000000000000000005caa0f01; // the 32-bit form (plan 5h Task 8d)
 
     function _mock(uint256 n, bool fail) internal {
         vm.etch(PQZ, address(new Answer(n, fail)).code);
@@ -54,7 +54,7 @@ contract PqzPrecompileProbeTest is Test {
     }
 
     function test_empty_account_answers_nothing() public view {
-        (uint256 w,, uint256 r) = probe.call(address(0x5cAA500000000000000000000000000000000012), hex"0102");
+        (uint256 w,, uint256 r) = probe.call(address(0x000000000000000000000000000000005Caa0012), hex"0102");
         assertEq(w, 0);
         assertEq(r, 0);
     }

@@ -1,0 +1,21 @@
+    Finished `release` profile [optimized] target(s) in 0.00s
+     Running unittests src/lib.rs (target/xcheck-n2048-kmax1024/cargo/release/deps/pqz_stmt-76db954f3fc9f351)
+
+running 14 tests
+test tests::coefficient_codec ... ok
+test tests::lengths_and_constants ... ok
+test tests::multi_lengths_and_sets ... ok
+test tests::fields_land_where_the_spec_says ... ok
+test tests::multi_m1_body_is_op1_body ... ok
+test tests::bundle_and_opening ... ok
+test tests::other_sets_ids_refused ... ok
+test tests::retired_ids_refused ... ok
+test tests::round_trip_every_form_both_ids ... ok
+test tests::precompile_input ... ok
+test tests::every_d15_r6_rule_rejects ... ok
+test tests::multi_every_rule_rejects ... ok
+test tests::multi_oversize_shapes ... ok
+test tests::multi_round_trip_every_built_shape_fee_0 ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

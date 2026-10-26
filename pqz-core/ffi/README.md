@@ -43,7 +43,7 @@ flowchart LR
 | Status | Meaning | `out` | What the node does |
 |---|---|---|---|
 | 0 | ok | `out[0..32]` holds `…01`, `…00` or the self-test hash | uses the answer |
-| 1 | revert: the input is over `MAX_INPUT` = 393,216 B | zeroed | the call reverts |
+| 1 | revert: the input is over the set's `MAX_INPUT` (`pqz_max_input()`: 524,288 B at `n2304-kmax4096`, the default build, `n2560-kmax16384` and `n2816-kmax65536` (largest input there 394,117 B, R_TXM M = 8 with the auditor at `MAX_PROOF`); 393,216 B at `n2048-kmax1024`); the node takes its limit from the same function (plan 5h Task 8d) | zeroed | the call reverts |
 | 2 | bad arguments (`input` NULL with `len` > 0, `out` NULL, or `out_len` < 32) | nothing written | — |
 | 3 | a panic in the decode / verify logic was caught. It is caused by the input, so every node hits it on the same input | `…00` (invalid) | treats the input as invalid and logs it |
 | 4 | node fault: a fault of this node, not of the input (see "Faults" below) | untouched, no result | stops block processing; never records the input as invalid |
@@ -56,6 +56,7 @@ clients only; a native build with `panic = abort` is a compile error.
 | Entry | What it does |
 |---|---|
 | `pqz_precompile(input, len, out, out_len) -> int` (`pqz_ffi.h`) | the C ABI the node calls (P/Invoke); status codes in the table above |
+| `pqz_max_input() -> size_t` (`pqz_ffi.h`) | the build's input limit (`MAX_INPUT` of its parameter set); the node's limit (Nethermind `PqzNative.MaxInput`), so it is never a second literal (plan 5h Task 8d) |
 | `precompile(&[u8]) -> Result<[u8; 32], Error>` | the same in Rust: `Error::Revert`, `Error::NodeFault`; a caught input-caused panic gives `…00` |
 | `decode(&[u8])` | `pqz_stmt::decode_input` (the crate re-exports `pqz_stmt` as `stmt`) |
 | `verify_input(&[u8]) -> Result<bool, NodeFault>` | decode, then run the id's verifier (ops 1–5 and 7) |
@@ -80,7 +81,7 @@ clients only; a native build with `panic = abort` is a compile error.
 - **Both** (`--features pqzl-c` on the default): `pqzl::` is the Rust core and `pqzl::c` the C core, in one binary
   (the fuzz mode `pqzl-diff`, `../fuzz/README.md`).
 
-The node image (`../nethermind/Dockerfile`) builds this crate's default and copies `pqz-core/pqzl/rust` (its Docker
+The node image (`../nethermind/Dockerfile`) builds this crate's default (the set `n2304-kmax4096` since plan 5h Task 8d) and copies `pqz-core/pqzl/rust` (its Docker
 build is checked in the Rust port's Task 12). The SCaaS testnet runs the C-backed library built before the switch until the
 live roll-out.
 
@@ -95,14 +96,26 @@ core keeps its arena, base mark, sticky error and SV tables in global variables.
 once:
 
 - `ARENA_SMALL`, 512 MiB, verify only: the precompile path. Sized when the multi-recipient transfer was added (owner
-  2026-10-16) at 2.00 × the measured adversarial peak of 268 MB: the specialised verifier over all six forms and every
-  multi-recipient shape, with their keys and tables kept, plus the self-test (run `s3a`).
-- `ARENA_BIG`, 1 GiB native: the first prove or generic verify moves the core to it, once. The peak with every
-  relation loaded is 854 MB (`R_TXM8_0`, M = 8 without the auditor).
-- wasm32 has one 512 MiB arena for both. There, `prove` refuses PQZL multi-recipient transfers above M = 4
-  (`ProveError::Statement(Reject::Legs)`); M = 8 is for native clients. The Rust backend has no arena and proves
-  M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of linear memory, run
-  `d6`, Rust port Task 12, CTR-PQZ-09).
+  2026-10-16) at 2.00 × the measured adversarial peak of 268 MB at n2048-kmax1024: the specialised verifier over all six
+  forms and every multi-recipient shape, with their keys and tables kept, plus the self-test (run `s3a`); per set
+  `tests/verify_only.rs` asserts ≥ 1.5 × under `PQZL=c` (review R4-C2). Measured at the R0 review fix (runs
+  `r01a-fix-c-<set>`): peak 289.0 / 296.0 / 303.2 / 306.9 MB at n2048-kmax1024 / n2304-kmax4096 / n2560-kmax16384 /
+  n2816-kmax65536, margin 1.86 / 1.81 / 1.77 / 1.75 ×.
+- `ARENA_BIG`, native, per set (set.toml `[pqzl_c] prove_arena_mib`, pqz-stmt `C_PROVE_ARENA`; review R1-C2 / R4-C1:
+  1 GiB for every set before, below the C peaks at n2560-kmax16384 and n2816-kmax65536): ≥ 1.5 × the gate's C peak
+  with every relation loaded (`runs/gate/<set>-fnv-c.jsonl`). The first prove or generic verify moves the core to it,
+  once. Running out inside LaZer stops the process (a trap: no write may follow a failed allocation), so the size is
+  set above the largest relation's peak.
+- wasm32 has one 512 MiB arena for both. There, `prove` refuses PQZL multi-recipient transfers above the set's
+  `[pqzl_c] wasm_max_legs` (`ProveError::Statement(Reject::Legs)`); larger M is for native clients. Only n2816-kmax65536's
+  1 is measured (C wasm32 peaks R_TXM M = 1 / 2 / 4: 481 / 501 / 530 MiB); the 2 of n2048-kmax1024 / n2304-kmax4096 /
+  n2560-kmax16384 are **estimates** (the native C peaks × n2816's wasm32 / native ratio ≈ 0.77: M = 2 fits, M = 4 at
+  n2048 ≈ 508 MiB is too close). The R0 fix round's `PQZL=c` digest runs proved M = 2 (auditor on and off) in C wasm32
+  inside the 512 MiB arena at those three sets (`runs/r01a-fix-c-<set>-digests-wasm.jsonl`; total wasm memory 583 / 607
+  / 579 MiB, arena included), so the limit 2 works there; the arena peak and its margin at M = 2 are not measured (the
+  C core's wasm32 bench, gate part `fnv/cwasm`, runs only at log2 q > 50; open, no timing run in part b). The Rust backend
+  has no arena and proves M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of
+  linear memory, run `d6`, Rust port Task 12, CTR-PQZ-09).
 
 A poisoned lock is recovered and the core re-initialised (the Rust backend: a fresh `Ctx`). The arena's pages are
 reserved, not touched, until the core uses them.
@@ -148,16 +161,18 @@ kat_digest = keccak256(A digest ‖ keccak256(pk) ‖ keccak256(u ‖ v) ‖ M �
 - `kat_digest` covers: the matrix A read from the core column by column (equal to `pqz_kat.py`'s A digest
   `f176b313…`), KeyGen(`0x51…`), Enc / Dec of 123,456, and one forward / inverse Ligero FFT over 1,634 points.
 - The four flags run the precompile path on one compiled-in `R_REG` proof per id, and on the same proof under the
-  statement with the last message byte flipped. The proofs are the REGISTER rows of
-  `smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json`, read by `build.rs` (plan D9: no copy), proved with
+  statement with the last message byte flipped. The proofs are the REGISTER rows of the set's
+  `proof_{pqzl,pqzh}.json` (`smartcontracts/vectors/pqz/<set>/`; `n2048-kmax1024`: `smartcontracts/vectors/pqz/`), read by `build.rs` (plan D9: no copy), proved with
   `rnd32 = 0x53…`; the statement is `opTag ‖ id ‖ keccak256("SCAAS-PQZ-SELFTEST-V1") ‖ pk`.
-- It is computed once per process. The same hash from either backend (`ed910a2c…`).
+- It is computed once per process. The same hash from either backend; one per parameter set (`n2304-kmax4096`, the
+  default build: `23d7a1db…`; `n2048-kmax1024`: `ed910a2c…`; `n2560-kmax16384`: `167c772e…`; `n2816-kmax65536`: `0aa1dfe2…`, PQZL only, so its PQZH flags are 0 and there is no Ligero FFT). It covers verdicts, not
+  proof bytes, so the `proofSystemId` bump of plan 5h Task 8d left each set's hash unchanged.
 - After a prover change, regenerate the vectors (from the repository root:
   `scripts/capped pqz-core/ffi/vectors/run.sh <label> write`), which rebuilds the crate; the test `selftest_vectors`
   checks that a fresh prove equals the compiled-in proofs.
 
-**Vectors (P6e Task 11).** `src/bin/pqz-vectors.rs` (feature `prove`) writes the test vectors in
-`smartcontracts/vectors/pqz/` (D9, R4). Every value comes from this crate (`pqzl` keygen / enc / dec / `encrypt`,
+**Vectors (P6e Task 11).** `src/bin/pqz-vectors.rs` (feature `prove`) writes the test vectors of the build's set in
+`smartcontracts/vectors/pqz/<set>/` (`n2048-kmax1024`: `smartcontracts/vectors/pqz/`; D9, R4). Every value comes from this crate (`pqzl` keygen / enc / dec / `encrypt`,
 `prove`), and every expected output from `pqz_precompile` and `selftest::selftest()`. `--check` regenerates them and
 compares byte for byte. `vectors/run.sh` runs it together with `pqz_kat.py --check`, `vectors/tamper.py` and the
 wasm32 replay `vectors/replay_wasm.mjs` (through `wasm/`).
@@ -190,7 +205,7 @@ node wasm/run_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.w
 - `multi_limits_and_memo`: the worst-case multi-recipient inputs against `MAX_INPUT`, the PQZH (M = 4, auditor on)
   boundary, oversize M refused, and the memo;
 - every decoder rejection: each D15 / R6 rule with its `Reject`; op / opTag / id confusion; lengths ± 1;
-  `MAX_PROOF + 1`; truncated, extended and bit-flipped proofs; the other system's id; framing; `MAX_INPUT + 1` =
+  `MAX_PROOF + 1`; truncated, extended and bit-flipped proofs; the other system's id (at a set without PQZH another set's PQZL id); framing; `MAX_INPUT + 1` =
   revert;
 - the PQZL differential test (SV against the generic verifier, through the FFI, on honest and mutated proofs);
 - the C ABI's arguments; `pqz_ffi.h`'s constants;

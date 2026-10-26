@@ -26,15 +26,30 @@ compile_error!("pqz-ffi needs panic = \"unwind\" on native targets (catch_unwind
 // P6-ANON: pqz-stmt's bench-only `oversize` (op 7 M = 8 / 16 for both ids) must never be in the precompile build;
 // feature unification would carry it in from any crate of the graph, so refuse to compile.
 const _: () = assert!(!pqz_stmt::OVERSIZE, "pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build");
+// pqzh-ligero's research feature `fallback-retry` swaps n2304-kmax4096's preset under the same PQZH_ID (review R3-1 /
+// R4-C5): never in a pqz-ffi build
+#[cfg(feature = "pqzh")]
+const _: () = assert!(!pqzh_ligero::FALLBACK_RETRY, "pqzh-ligero feature `fallback-retry` is research only: not in pqz-ffi's build");
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Word};
 
+// the parameter set (owner 2026-10-21: one per build): feature `set-<set>`, forwarded to pqz-stmt (which refuses to
+// build without exactly one) and pqzl; `stmt::SET` names it
+/// whether PQZH (Ligero) is compiled in: every set whose set.json says pqzh (plan 5h Task 8c part 2: three of the four
+/// sets with pqz-ffi; not n2816-kmax65536). A set without PQZH knows no PQZH id (pqz-stmt `HAS_PQZH`): its zero-word
+/// `PQZH_ID` is refused by the decoder, so the verdict is `…00`, and its prover refuses
+pub const PQZH: bool = cfg!(feature = "pqzh");
+// a set without PQZH (pqz-stmt HAS_PQZH false; n2816-kmax65536: none of the current Ligero radices divides its q - 1)
+// has no PQZH build
+const _: () = assert!(!PQZH || pqz_stmt::HAS_PQZH, "feature pqzh at a set without PQZH (set.toml pqzh = false)");
+
 #[cfg(feature = "prove")]
 pub mod fixture;
 #[cfg(feature = "prove")]
 pub mod memo;
+#[cfg_attr(not(feature = "pqzh"), path = "pqzh_none.rs")]
 pub mod pqzh;
 pub mod pqzl;
 pub mod selftest;
@@ -153,6 +168,15 @@ pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut 
     rc
 }
 
+/// C ABI for the node: this build's precompile input limit, pqz-stmt's `MAX_INPUT` (the parameter set's `set.toml`
+/// `max_input`: 524,288 at every set since the R0 review fix; `n2048-kmax1024` had 393,216). The node reads it from
+/// the library it loads (`pqz_ffi.h`, Nethermind `PqzNative.MaxInput`; plan 5h Task 8d: no second literal), so its
+/// limit is always the one `pqz_precompile` reverts above.
+#[no_mangle]
+pub extern "C" fn pqz_max_input() -> usize {
+    MAX_INPUT
+}
+
 /// Why `prove` failed.
 #[cfg(feature = "prove")]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -175,7 +199,7 @@ pub enum ProveError {
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, ProveError> {
     let st = pqz_stmt::parse(op, stmt).map_err(ProveError::Statement)?;
     let id = *st.proof_system_id().ok_or(ProveError::Statement(Reject::Op))?;
-    // wasm32: PQZL op 7 up to WASM_PQZL_MAX_LEGS (C backend 4: the one client arena; Rust backend 8)
+    // wasm32: PQZL op 7 up to WASM_PQZL_MAX_LEGS (C backend per set, set.toml [pqzl_c]: the one client arena; Rust backend 8)
     if let pqz_stmt::Stmt::Multi(m) = &st {
         if cfg!(target_arch = "wasm32") && id == PQZL_ID && m.m > pqzl::WASM_PQZL_MAX_LEGS {
             return Err(ProveError::Statement(Reject::Legs));

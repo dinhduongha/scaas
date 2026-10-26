@@ -1,0 +1,62 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqzl-a8627474d852f618)
+
+running 10 tests
+test arith::polymat::tests::views ... ok
+test keys::tests::canonical_short_chunk ... ok
+test arith::spoly::tests::errors_and_order ... ok
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test rand::fixexp::tests::bernoulli_masked_add_eq_shift ... ok
+test rel::tests::bad_length_refused_before_caches ... ok
+test rand::rejection::tests::saturation_near_2_63 ... ok
+test rel::tests::build_refuses_noncanonical ... ok
+test sv::tests::setup_limits_eq_generic ... ok
+test rand::rejection::tests::onetime_rej1 ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.85s
+
+     Running unittests src/bin/bench.rs (target/n2048-kmax1024/release/deps/bench-9f2b4c7d51de828f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/kat_dump.rs (target/n2048-kmax1024/release/deps/kat_dump-e68fc7d2a4fe476b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/keys_kat.rs (target/n2048-kmax1024/release/deps/keys_kat-36aa35ababaaf658)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cheat_b1.rs (target/n2048-kmax1024/release/deps/cheat_b1-3e9e10337a82c6dd)
+
+running 1 test
+test cheating_prover_rejected has been running for over 60 seconds
+test cheating_prover_rejected ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 102.53s
+
+     Running tests/fs_bind.rs (target/n2048-kmax1024/release/deps/fs_bind-6192b728b98e58f6)
+
+running 1 test
+test fs_bind ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+
+     Running tests/keys.rs (target/n2048-kmax1024/release/deps/keys-40b89336f27f5271)
+
+running 1 test
+test ctx_eq_free ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.94s
+
+     Running tests/memory.rs (target/n2048-kmax1024/release/deps/memory-f4d6264f7a399bbb)
+
+running 2 tests
+test peak_per_op ... ok
+test exhaustion_is_error has been running for over 60 seconds

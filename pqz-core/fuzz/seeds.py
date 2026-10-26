@@ -6,7 +6,8 @@
 <out>/honest.bin: the honest precompile inputs as be32(len) || input records: proof_pqzl.json's 8 forms (pqz-stmt
 FORMS order), proof_pqzh.json's 8, fee0.json's 4 forms under PQZL and PQZH (the first 24, P6e; src/lib.rs relies on
 the first 16 being PQZL then PQZH in FORMS order), then the op 7 R_TXM rows (P6-ANON S5): proof_pqzl.json's 11 and
-proof_pqzh.json's 8 (every built (id, M, auditorOn), statements from statement_transfer_multi.json), then the files of
+proof_pqzh.json's 8 (every built (id, M, auditorOn), statements from statement_transfer_multi.json), then the op 7
+disclosures of both ids (R0-1, statement_transfer_multi.json `disclosures`), then the files of
 regress/valid/ (valid inputs from outside the vectors, see README.md). <out>/seeds/precompile/: those inputs, the
 self-test input and every row of negative.json (input rebuilt by pqz_kat.py's apply_edits); seeds/mutate/,
 seeds/codec/: one empty edit script per honest input and mode / codec and selector.
@@ -16,9 +17,11 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-V = os.path.join(HERE, "../../smartcontracts/vectors/pqz")
-sys.path.insert(0, V)
-import pqz_kat as k  # noqa: E402
+sys.path.insert(0, os.path.join(HERE, "../../smartcontracts/vectors/pqz"))
+import pqz_kat as k  # noqa: E402  (PQZ_SET selects the parameter set and its vector directory)
+
+V = k.VEC_DIR
+IDN = list(k.IDS)  # "pqzl", and "pqzh" where the set has PQZH
 
 out = sys.argv[1]
 stmts = {f: bytes.fromhex(r["stmt"]) for f, r in k.statement_rows(V).items()}
@@ -27,19 +30,27 @@ rows = {n: k.load(V, f"proof_{n}.json")["rows"] for n in k.IDS}
 proofs = {(r.get("case", r["form"]), n): bytes.fromhex(r["proof"]) for n in k.IDS for r in rows[n]}
 
 
-def inputs(n, multi):
+def kind(r):
+    """form (the 8 forms), multi (op 7), disc (an op 7 disclosure, R0-1: a case, op 4 / 5)"""
+    return "multi" if r["op"] == 7 else "disc" if "case" in r else "form"
+
+
+def inputs(n, want):
     return [k.precompile_input(r["op"], k.with_id(stmts[r.get("case", r["form"])], k.IDS[n]), proofs[r.get("case", r["form"]), n])
-            for r in rows[n] if (r["op"] == 7) == multi]
+            for r in rows[n] if kind(r) == want]
 
 
-honest = inputs("pqzl", False) + inputs("pqzh", False)
+honest = [x for n in IDN for x in inputs(n, "form")]
 honest += [k.precompile_input(r["op"], k.with_id(bytes.fromhex(r["stmt"]), k.IDS[n]), bytes.fromhex(r[n]["proof"]))
-           for n in ("pqzl", "pqzh") for r in k.load(V, "fee0.json")["rows"]]
+           for n in IDN for r in k.load(V, "fee0.json")["rows"]]
 n_p6e = len(honest)
-honest += inputs("pqzl", True) + inputs("pqzh", True)
+honest += [x for n in IDN for x in inputs(n, "multi")]
 n_multi = len(honest) - n_p6e
+honest += [x for n in IDN for x in inputs(n, "disc")]  # after the op 7 rows: src/lib.rs's indices stay
+n_disc = len(honest) - n_p6e - n_multi
 rv = os.path.join(HERE, "regress", "valid")
-extra = [open(os.path.join(rv, f), "rb").read() for f in sorted(os.listdir(rv))] if os.path.isdir(rv) else []
+# regress/valid/ holds v3-set inputs (valid under that set only)
+extra = [open(os.path.join(rv, f), "rb").read() for f in sorted(os.listdir(rv))] if os.path.isdir(rv) and k.SET == k.V3 else []
 honest += extra
 with open(os.path.join(out, "honest.bin"), "wb") as f:
     for b in honest:
@@ -58,6 +69,7 @@ for t, seeds in (("mutate", [bytes([c, m]) for c in range(len(honest)) for m in 
     for i, b in enumerate(seeds):
         with open(os.path.join(out, "seeds", t, f"seed-{i:03}"), "wb") as f:
             f.write(b)
-print(f"seeds.py: {len(honest)} honest inputs -> honest.bin ({n_p6e} P6e, {n_multi} op 7, {len(extra)} regress/valid); "
+print(f"seeds.py: {len(honest)} honest inputs -> honest.bin ({n_p6e} P6e, {n_multi} op 7, {n_disc} op 7 disclosures, "
+      f"{len(extra)} regress/valid); "
       f"{len(honest) + 1 + len(neg)} precompile seeds ({len(neg)} negative.json rows, "
       f"{sum(r['form'] == 'TRANSFER-MULTI' for r in k.load(V, 'negative.json')['rows'])} of them op 7)")

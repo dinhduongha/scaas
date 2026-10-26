@@ -1,0 +1,20 @@
+one transaction's calldata: 15,000 + 64 * n <= 2^24  =>  n <= 261,909 B (floor at the limit 16,777,176); a direct call to PQZ carries its input as calldata: input <= 261,909
+
+form | stmt 16k | proof | input 5+stmt+proof | direct call fits | path | tx calldata | EIP-7976 floor | fits | max proof in one tx
+R_TX op 1, auditor | 103,552 | 52,624 | 156,181 | yes | relayed mtxExecute | 78,020 | 5,008,280 | yes | 236,512
+R_TX0 op 1, auditor off | 82,944 | 52,272 | 135,221 | yes | relayed mtxExecute | 77,540 | 4,977,560 | yes | 236,640
+R_BURN op 2 (burn / refresh) | 62,336 | 51,744 | 114,085 | yes | relayed mtxExecute | 76,868 | 4,934,552 | yes | 236,768
+R_REG op 3 | 20,576 | 33,734 | 54,315 | yes | UARegistry.register | 59,812 | 3,842,968 | yes | 235,840
+R_DS op 4 | 41,376 | 34,278 | 75,659 | yes | verifyTransferAmount (eth_call) | 34,500 | 2,223,000 | yes | 261,696
+R_DR op 5 | 41,376 | 35,142 | 76,523 | yes | verifyTransferAmount (eth_call) | 35,364 | 2,278,296 | yes | 261,696
+R_TXM op 7 M = 1, auditor | 103,552 | 52,624 | 156,181 | yes | relayed mtxExecute | 78,084 | 5,012,376 | yes | 236,448
+R_TXM op 7 M = 1, off | 82,944 | 52,272 | 135,221 | yes | relayed mtxExecute | 77,604 | 4,981,656 | yes | 236,576
+R_TXM op 7 M = 2, auditor | 124,288 | 53,504 | 177,797 | yes | relayed mtxExecute | 79,236 | 5,086,104 | yes | 236,160
+R_TXM op 7 M = 2, off | 103,552 | 52,800 | 156,357 | yes | relayed mtxExecute | 78,276 | 5,024,664 | yes | 236,416
+R_TXM op 7 M = 4, auditor | 165,760 | 57,202 | 222,967 | yes | relayed mtxExecute | 83,524 | 5,360,536 | yes | 235,584
+R_TXM op 7 M = 4, off | 144,768 | 53,856 | 198,629 | yes | relayed mtxExecute | 79,652 | 5,112,728 | yes | 236,096
+(ruled out) op 7 M = 8 G = 1, auditor | 248,704 | 60,882 | 309,591 | NO | relayed mtxExecute | 88,356 | 5,669,784 | yes | 234,432
+PQZH R_REG [estimate] | 20,576 | 233,289 | 253,870 | yes | UARegistry.register | 259,364 | 16,614,296 | yes | 235,840
+PQZH R_DS / R_DR [estimate] | 41,376 | 233,289 | 274,670 | NO | verifyTransferAmount (eth_call) | 233,508 | 14,959,512 | yes | 261,696
+PQZH R_TX op 1, auditor [estimate] | 103,552 | 302,743 | 406,300 | NO | relayed mtxExecute | 328,132 | 21,015,448 | NO | 236,512
+PQZH R_TXM op 7 M = 4, auditor [estimate] | 165,760 | 303,590 | 469,355 | NO | relayed mtxExecute | 329,924 | 21,130,136 | NO | 235,584

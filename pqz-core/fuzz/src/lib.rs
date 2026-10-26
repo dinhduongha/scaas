@@ -90,7 +90,9 @@ fn load(path: &str) -> Vec<Honest> {
         v.push(record(b[4..4 + n].to_vec()));
         b = &b[4 + n..];
     }
-    let order = v.len() >= 16 && v.iter().take(16).enumerate().all(|(i, h)| h.pqzl == (i < 8) && h.form == Some(stmt::FORMS[i % 8]));
+    // PQZL's 8 forms, then (a build with PQZH: every set with it, plan 5h Task 8c part 2) PQZH's 8
+    let n = if pqz_ffi::PQZH { 16 } else { 8 };
+    let order = v.len() >= n && v.iter().take(n).enumerate().all(|(i, h)| h.pqzl == (i < 8) && h.form == Some(stmt::FORMS[i % 8]));
     if !order {
         die(&format!("{path}: expected PQZL then PQZH in FORMS order first"));
     }

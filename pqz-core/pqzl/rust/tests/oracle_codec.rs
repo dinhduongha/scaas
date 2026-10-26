@@ -2,13 +2,15 @@
 //! field, re-encode) = `test_mutate` on the frozen proofs of every relation code (Review Focus 1: Rust rejects
 //! exactly where C rejects, and re-encodes to the same bytes where C accepts), malformed encodings, and the hint
 //! functions of `dcompress.c` (`use_ghint` / `make_ghint`) through `tests/oracle_shim.c`.
-use pqzl::c_oracle::{c_ghint, c_test_mutate};
+use pqzl::c_oracle::{c_chal, c_ghint, c_p2r, c_test_mutate};
 use pqzl::test_mutate;
-use pqzl::testkit::{dcomp_gamma_m, ghint, synthetic_proof};
+use pqzl::testkit::{chal, p2r, dcomp_gamma_m, ghint, synthetic_proof};
 use serde_json::Value;
 use std::path::PathBuf;
 
-const Q: u64 = 4_398_046_510_889;
+mod common;
+
+const Q: u64 = pqzl::Q;
 const MAX_PROOF: usize = pqzl::MAX_PROOF;
 
 /// xorshift64*
@@ -49,8 +51,18 @@ fn rel_code(r: &Value) -> u8 {
 
 /// one frozen proof per relation code (the first row of each), in file order
 fn proofs() -> Vec<(u8, Vec<u8>)> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz/proof_pqzl.json");
-    let j: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+    // the vectors of this build's parameter set (n2048-kmax1024 at the canonical path, another set below it; common::vectors_dir)
+    let Some(d) = common::vectors_dir() else {
+        // a core_only set (set.json, e.g. n2816-kmax65536): one C-proved bench proof per relation code
+        let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
+        for r in common::pqzl_rows() {
+            if !out.iter().any(|(c, _)| *c == r.code) {
+                out.push((r.code, r.proof));
+            }
+        }
+        return out;
+    };
+    let j: Value = serde_json::from_str(&std::fs::read_to_string(d.join("proof_pqzl.json")).unwrap()).unwrap();
     let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
     for r in j["rows"].as_array().unwrap() {
         let code = rel_code(r);
@@ -73,16 +85,16 @@ fn len(x: &Option<Vec<u8>>) -> Option<usize> {
     x.as_ref().map(Vec::len)
 }
 
-/// kinds 0..14 x 200 (r1, r2) seeds x every relation code: Rust = C. Within a seed the kinds chain (kind k mutates
+/// kinds 0..15 x 200 (r1, r2) seeds x every relation code: Rust = C. Within a seed the kinds chain (kind k mutates
 /// kind k - 1's output when there is one), so the decoders also meet what the mutations produce (long hints, large z).
 #[test]
 fn test_mutate_eq_c() {
     let mut g = Rnd(0x5EED_C0DE);
     for (code, proof) in proofs() {
-        let mut some = [0u32; 15];
+        let mut some = [0u32; 16];
         for s in 0..200 {
             let mut cur = proof.clone();
-            for kind in 0..15u32 {
+            for kind in 0..16u32 {
                 let (r1, r2) = (g.next(), g.next());
                 let r = test_mutate(code, &cur, kind, r1, r2).expect("Rust test_mutate error");
                 let c = c_test_mutate(code, &cur, kind, r1, r2);
@@ -120,14 +132,18 @@ fn malformed_eq_c() {
         x[n - 1] |= 0x80; // a one after the pad
         let must = x[n - 1] != proof[n - 1];
         v.push(("bit after pad".into(), x, must));
+        // tB[0][0]: the first LOG2Q bits, LSB first (the coder's width of a value mod q; v3: 42)
+        let l = 64 - (Q - 1).leading_zeros() as usize;
+        let put = |x: &mut [u8], v: u64| {
+            for b in 0..l {
+                x[b / 8] = (x[b / 8] & !(1 << (b % 8))) | ((((v >> b) & 1) as u8) << (b % 8));
+            }
+        };
         let mut x = proof.clone();
-        x[..5].fill(0xff); // tB[0][0] = 2^42 - 1 >= q
-        x[5] |= 3;
+        put(&mut x, (1 << l) - 1); // 2^LOG2Q - 1 >= q
         v.push(("tB coefficient >= q".into(), x, true));
         let mut x = proof.clone();
-        let q_le = Q.to_le_bytes(); // tB[0][0] = q exactly
-        x[..5].copy_from_slice(&q_le[..5]);
-        x[5] = (x[5] & !3) | (q_le[5] & 3);
+        put(&mut x, Q); // q exactly
         v.push(("tB coefficient = q".into(), x, true));
         let mut x = proof.clone();
         x.resize(MAX_PROOF + 1, 0);
@@ -164,6 +180,38 @@ fn malformed_eq_c() {
 /// `use_ghint (y, r)` and `make_ghint (z, r)` of every relation's dcompress: 2,000 inputs each in their domains
 /// (r in [-(q-1)/2, (q-1)/2], every 4th poly in (-q, q) for use_ghint; y in (-m/2, m/2]; z in [-gamma/2, gamma/2]) with
 /// the edges (multiples of gamma +-1, +-(q-1)/2, +-gamma/2, the r1 = (q-1)/gamma wrap), Rust = C word for word
+/// Power2Round of every relation's tbox dcompress (`abdlop_commit`) on the edge q - 1 - x, x < 3 2^D (the
+/// n2048-kmax1024 wrap, R1-C1 / R2-C2: r1 = 0 and the input moved to redp - q), small and random values: Rust = C word
+/// for word
+#[test]
+fn power2round_eq_c() {
+    let mut g = Rnd(0x7032_7200);
+    let q = Q as i64;
+    let mut i = 0;
+    loop {
+        let mut done = false;
+        for t in 0..400 {
+            let inp: [i64; 64] = core::array::from_fn(|k| match (t + k) % 4 {
+                0 => q - 1 - g.range(0, 3 << 14),
+                1 => g.range(0, q - 1),
+                2 => g.range(-(q - 1), q - 1),
+                _ => g.range(-(1 << 14), 1 << 14),
+            });
+            let c = c_p2r(i as u32, &inp);
+            if c.is_none() {
+                done = true;
+                break;
+            }
+            assert_eq!(p2r(i, &inp), c, "relation {i} input {t}");
+        }
+        if done {
+            break;
+        }
+        i += 1;
+    }
+    assert_eq!(i, if cfg!(feature = "oversize") { 14 } else { 12 });
+}
+
 #[test]
 fn ghint_eq_c() {
     let h = ((Q - 1) / 2) as i64;
@@ -191,4 +239,31 @@ fn ghint_eq_c() {
     }
     assert_eq!(i, if cfg!(feature = "oversize") { 14 } else { 12 });
     assert_eq!(c_ghint(i as u32, &[0; 192]), None, "C has more relations");
+}
+
+/// the eta filter's resample path (review R0 fix round m3), a known answer per core: for the seed below, the dom-0
+/// autostable sample (upstream's challenge) has ||o(c) c||_1 > eta^2, and so has dom 1, so both cores resample. Rust
+/// and C (oracle) must give the same challenge: the sample of dom KAT_DOM with the FNV-1a KAT_FNV of its coefficients
+/// (omega 8, eta 140 and the sampler are every set's, so one KAT for all sets; PQZ_CHAL_SEARCH=1 lists such seeds).
+/// With the filter removed the challenge would be the dom-0 sample and the test fails.
+#[test]
+fn challenge_resample_kat() {
+    const KAT_SEED: u8 = 17;
+    const KAT_DOM: u64 = 2;
+    const KAT_FNV: u64 = 0xc5da598f94ff083a;
+    let fnv = |c: &[i64; 64]| c.iter().fold(0xcbf29ce484222325u64, |h, &x| (h ^ x as u64).wrapping_mul(0x100000001b3));
+    if std::env::var("PQZ_CHAL_SEARCH").is_ok() {
+        for i in 0..=255u8 {
+            let (c, _, dom) = chal(&[i; 32]).unwrap();
+            if dom > 0 {
+                println!("KAT_SEED {i} KAT_DOM {dom} KAT_FNV {:#x}", fnv(&c));
+            }
+        }
+        return;
+    }
+    let seed = [KAT_SEED; 32];
+    let (c, c0, dom) = chal(&seed).expect("a passing sample");
+    assert_ne!(c, c0, "the dom-0 sample passes the filter: not a resample seed");
+    assert_eq!((dom, fnv(&c)), (KAT_DOM, KAT_FNV), "Rust challenge");
+    assert_eq!(c_chal(&seed), Some((c, c0)), "C = Rust");
 }

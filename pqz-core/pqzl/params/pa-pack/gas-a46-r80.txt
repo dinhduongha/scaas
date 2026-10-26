@@ -1,0 +1,1020 @@
+$ PACK=46 scripts/capped pqz-core/pqzl/params/pa-pack/gasa.sh <scratch>/w46 smartcontracts/evm/lib 80 --match-contract PqzStatePinGasTest|PqzStateTrivialRollGasTest|PqzPackGasTest|PqzPackRoundTripTest -vv
+== pa-pack/gasa.sh: repository 76fd9916, set (a), ROLL_MAX = 80, PACK = 46, EVM = amsterdam; the edits:
+   foundry.toml: 8c8,9
+   foundry.toml: < evm_version = "osaka"
+   foundry.toml: ---
+   foundry.toml: > evm_version = "amsterdam"
+   foundry.toml: > experimental = true
+   src/pqz/PqzCt.sol: 12,14c12,14
+   src/pqz/PqzCt.sol: <     uint256 internal constant Q = 4_398_046_510_889; // 2^42 − 215
+   src/pqz/PqzCt.sol: <     uint256 internal constant DELTA = 67_108_863; // 2^26 − 1 = ⌊q / 2^16⌋
+   src/pqz/PqzCt.sol: <     uint256 internal constant PK = 16_384;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 internal constant Q = 61_275_424_977_257; // set (a): 2^45.80
+   src/pqz/PqzCt.sol: >     uint256 internal constant DELTA = 233_747_196; // set (a): ⌊q / 2^18⌋
+   src/pqz/PqzCt.sol: >     uint256 internal constant PK = 18_432;
+   src/pqz/PqzCt.sol: 16c16
+   src/pqz/PqzCt.sol: <     uint256 internal constant CT = 16_512;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 internal constant CT = 18_560;
+   src/pqz/PqzCt.sol: 18c18
+   src/pqz/PqzCt.sol: <     bytes32 internal constant ZERO_HASH = 0xe21fb1ce17769d3b97b60b85064a46819cef2ccaede8163ddc683cf730e37e97;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     bytes32 internal constant ZERO_HASH = 0xc11732fdd2aa4672c880154f6c4240ddc2b2c55621b9b3ed3200b6151d8a24f1;
+   src/pqz/PqzCt.sol: 20c20
+   src/pqz/PqzCt.sol: <     uint256 private constant Q4 = 0x000003ffffffff29000003ffffffff29000003ffffffff29000003ffffffff29; // q in each lane
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 private constant Q4 = 0x000037bacbf07169000037bacbf07169000037bacbf07169000037bacbf07169; // q in each lane
+   src/pqz/PqzCt.sol: 96,97c96,97
+   src/pqz/PqzCt.sol: <             extcodecopy(blob, d, add(uOff, 1), PK)
+   src/pqz/PqzCt.sol: <             extcodecopy(blob, add(d, PK), add(vOff, 1), V)
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >             extcodecopy(blob, d, add(uOff, 1), PKP)
+   src/pqz/PqzCt.sol: >             extcodecopy(blob, add(d, PKP), add(vOff, 1), VP)
+   src/pqz/PqzCt.sol: 98a99
+   src/pqz/PqzCt.sol: >         expandAt(_ptr(t), CT / 32); // P46
+   src/pqz/PqzCt.sol: 159a161,352
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     // ------------------------------------------------------------------ spike PACK, layout P46 (measurement only)
+   src/pqz/PqzCt.sol: >     // Stored ciphertexts (op blobs, `acc` slots) hold every coefficient in 46 bits (⌈log2 q⌉): one 64-bit-lane word (4
+   src/pqz/PqzCt.sol: >     // coefficients) is 23 bytes, `x = c0 ‖ c1 ‖ c2 ‖ c3` big-endian, so the stream stays byte-aligned and `u`, `v`
+   src/pqz/PqzCt.sol: >     // pack apart (2304 and 16 are multiples of 4). Memory, calldata and the statement keep the 64-bit lanes.
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     uint256 internal constant PKP = 13_248; // PK / 32 · 23
+   src/pqz/PqzCt.sol: >     uint256 internal constant VP = 92;
+   src/pqz/PqzCt.sol: >     uint256 internal constant CTP = 13_340;
+   src/pqz/PqzCt.sol: >     uint256 internal constant ACC_WORDS = 417; // ⌈CTP / 32⌉ slots, each `not(stream word)`: never 0 for a canonical acc
+   src/pqz/PqzCt.sol: >     uint256 private constant M46 = 0x3fffffffffff;
+   src/pqz/PqzCt.sol: >     // the spread of a 184-bit record `c0 ‖ c1 ‖ c2 ‖ c3` into 64-bit lanes in two mask steps (c0|c1 up 36, then the
+   src/pqz/PqzCt.sol: >     // upper field of each half up 18)
+   src/pqz/PqzCt.sol: >     uint256 private constant HI92 = 0xfffffffffffffffffffffff00000000000000000000000;
+   src/pqz/PqzCt.sol: >     uint256 private constant M92 = 0xfffffffffffffffffffffff;
+   src/pqz/PqzCt.sol: >     uint256 private constant MUP = 0xfffffffffffc00000000000000000000fffffffffffc00000000000;
+   src/pqz/PqzCt.sol: >     uint256 private constant MUP18 = 0x3fffffffffff000000000000000000003fffffffffff0000000000000000; // the inverse (pack)
+   src/pqz/PqzCt.sol: >     uint256 private constant HI128 = 0xfffffffffffffffffffffff00000000000000000000000000000000;
+   src/pqz/PqzCt.sol: >     uint256 private constant MEA = 0x3fffffffffff000000000003fffffffffff000000000000000000; // c3, c1 of a group as loaded (`mload`: the group in bits 72..255); c2, c0 after `shr(46)`
+   src/pqz/PqzCt.sol: >     uint256 private constant MLO = 0x3fffffffffff000000000000000000003fffffffffff;
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     /// @notice `dst[dOff ..] = pack(src)` (each 32-byte word of canonical lanes → 23 bytes); writes 9 zero bytes past
+   src/pqz/PqzCt.sol: >     ///         the packed end, so callers write fields in ascending order and leave 9 bytes of slack.
+   src/pqz/PqzCt.sol: >     function packCd(bytes memory dst, uint256 dOff, bytes calldata src) internal pure {
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") {
+   src/pqz/PqzCt.sol: >             let d := add(add(dst, 32), dOff)
+   src/pqz/PqzCt.sol: >             let end := add(src.offset, src.length)
+   src/pqz/PqzCt.sol: >             for { let p := src.offset } lt(p, end) { p := add(p, 32) } {
+   src/pqz/PqzCt.sol: >                 let w := calldataload(p)
+   src/pqz/PqzCt.sol: >                 w := or(shr(18, and(w, MUP18)), and(w, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(d, shl(72, or(shr(36, and(w, HI128)), and(w, M92))))
+   src/pqz/PqzCt.sol: >                 d := add(d, 23)
+   src/pqz/PqzCt.sol: >             }
+   src/pqz/PqzCt.sol: >         }
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     /// @notice The packed form of a 64-bit-lane buffer (`src.length / 32 · 23` bytes; 32 bytes of slack allocated).
+   src/pqz/PqzCt.sol: >     function packMem(bytes memory src) internal pure returns (bytes memory r) {
+   src/pqz/PqzCt.sol: >         uint256 n = src.length / 32;
+   src/pqz/PqzCt.sol: >         r = new bytes(n * 23 + 32);
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") {
+   src/pqz/PqzCt.sol: >             let s := add(src, 32)
+   src/pqz/PqzCt.sol: >             let d := add(r, 32)
+   src/pqz/PqzCt.sol: >             for { let i := 0 } lt(i, n) { i := add(i, 1) } {
+   src/pqz/PqzCt.sol: >                 let w := mload(add(s, shl(5, i)))
+   src/pqz/PqzCt.sol: >                 w := or(shr(18, and(w, MUP18)), and(w, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, mul(23, i)), shl(72, or(shr(36, and(w, HI128)), and(w, M92))))
+   src/pqz/PqzCt.sol: >             }
+   src/pqz/PqzCt.sol: >             mstore(r, mul(n, 23))
+   src/pqz/PqzCt.sol: >         }
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     /// @notice In place: the `k` packed groups at memory `p` become `k` 64-bit-lane words at `p` (descending, so no
+   src/pqz/PqzCt.sol: >     ///         unread group is overwritten).
+   src/pqz/PqzCt.sol: >     function expandAt(uint256 p, uint256 k) internal pure {
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") {
+   src/pqz/PqzCt.sol: >             for { let i := k } i {} {
+   src/pqz/PqzCt.sol: >                 i := sub(i, 1)
+   src/pqz/PqzCt.sol: >                 let x := shr(72, mload(add(p, mul(23, i))))
+   src/pqz/PqzCt.sol: >                 x := or(shl(36, and(x, HI92)), and(x, M92))
+   src/pqz/PqzCt.sol: >                 mstore(add(p, shl(5, i)), or(shl(18, and(x, MUP)), and(x, MLO)))
+   src/pqz/PqzCt.sol: >             }
+   src/pqz/PqzCt.sol: >         }
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     /// @notice The 64-bit-lane ciphertext of a packed one (`CTP` bytes).
+   src/pqz/PqzCt.sol: >     function unpackCt(bytes memory packed) internal pure returns (bytes memory c) {
+   src/pqz/PqzCt.sol: >         c = new bytes(CT);
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") { mcopy(add(c, 32), add(packed, 32), CTP) }
+   src/pqz/PqzCt.sol: >         expandAt(_ptr(c), CT / 32);
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     function packCt(bytes memory c) internal pure returns (bytes memory) {
+   src/pqz/PqzCt.sol: >         return packMem(c);
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     function packV(bytes memory v) internal pure returns (bytes memory) {
+   src/pqz/PqzCt.sol: >         return packMem(v);
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     function _ptr(bytes memory b) private pure returns (uint256 p) {
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") { p := add(b, 32) }
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     /// @notice `c ±= u ‖ v` of a stored entry, unpacked on the fly (`x` scratch of ≥ `CTP + 9` bytes; `c` a ciphertext,
+   src/pqz/PqzCt.sol: >     ///         580 = 145 · 4 words, four groups per iteration).
+   src/pqz/PqzCt.sol: >     function addBlob(bytes memory c, bytes memory x, address blob, uint256 uOff, uint256 vOff, bool neg) internal view {
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") {
+   src/pqz/PqzCt.sol: >             let s := add(x, 32)
+   src/pqz/PqzCt.sol: >             extcodecopy(blob, s, add(uOff, 1), PKP)
+   src/pqz/PqzCt.sol: >             extcodecopy(blob, add(s, PKP), add(vOff, 1), VP)
+   src/pqz/PqzCt.sol: >             let d := add(c, 32)
+   src/pqz/PqzCt.sol: >             let e := add(d, mload(c))
+   src/pqz/PqzCt.sol: >             let y := 0
+   src/pqz/PqzCt.sol: >             switch neg
+   src/pqz/PqzCt.sol: >             case 0 {
+   src/pqz/PqzCt.sol: >                 for {} lt(d, e) {} {
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 0)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 0), add(mload(add(d, 0)), y))
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 23)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 32), add(mload(add(d, 32)), y))
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 46)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 64), add(mload(add(d, 64)), y))
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 69)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 96), add(mload(add(d, 96)), y))
+   src/pqz/PqzCt.sol: >                 s := add(s, 92)
+   src/pqz/PqzCt.sol: >                 d := add(d, 128)
+   src/pqz/PqzCt.sol: >                 }
+   src/pqz/PqzCt.sol: >             }
+   src/pqz/PqzCt.sol: >             default {
+   src/pqz/PqzCt.sol: >                 for {} lt(d, e) {} {
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 0)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 0), add(mload(add(d, 0)), sub(Q4, y)))
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 23)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 32), add(mload(add(d, 32)), sub(Q4, y)))
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 46)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 64), add(mload(add(d, 64)), sub(Q4, y)))
+   src/pqz/PqzCt.sol: >                 y := shr(72, mload(add(s, 69)))
+   src/pqz/PqzCt.sol: >                 y := or(shl(36, and(y, HI92)), and(y, M92))
+   src/pqz/PqzCt.sol: >                 y := or(shl(18, and(y, MUP)), and(y, MLO))
+   src/pqz/PqzCt.sol: >                 mstore(add(d, 96), add(mload(add(d, 96)), sub(Q4, y)))
+   src/pqz/PqzCt.sol: >                 s := add(s, 92)
+   src/pqz/PqzCt.sol: >                 d := add(d, 128)
+   src/pqz/PqzCt.sol: >                 }
+   src/pqz/PqzCt.sol: >             }
+   src/pqz/PqzCt.sol: >         }
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     /// @notice Rollover accumulation without the spread: the stored entry's groups summed as they are, `c1`, `c3` into
+   src/pqz/PqzCt.sol: >     ///         `A` and `c0`, `c2` into `B` (each field keeps a 46-bit gap above it for the carries: ≤ 2^46 terms).
+   src/pqz/PqzCt.sol: >     ///         `combineEO` adds the sums into `c` once at the end. `A`, `B` zeroed ciphertext-size buffers.
+   src/pqz/PqzCt.sol: >     function addBlobEO(bytes memory A, bytes memory B, bytes memory x, address blob, uint256 uOff, uint256 vOff)
+   src/pqz/PqzCt.sol: >         internal view
+   src/pqz/PqzCt.sol: >     {
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") {
+   src/pqz/PqzCt.sol: >             let s := add(x, 32)
+   src/pqz/PqzCt.sol: >             extcodecopy(blob, s, add(uOff, 1), PKP)
+   src/pqz/PqzCt.sol: >             extcodecopy(blob, add(s, PKP), add(vOff, 1), VP)
+   src/pqz/PqzCt.sol: >             let a := add(A, 32)
+   src/pqz/PqzCt.sol: >             let b := add(B, 32)
+   src/pqz/PqzCt.sol: >             let e := add(a, mload(A))
+   src/pqz/PqzCt.sol: >             let z := 0
+   src/pqz/PqzCt.sol: >             for {} lt(a, e) {} {
+   src/pqz/PqzCt.sol: >                 z := mload(add(s, 0))
+   src/pqz/PqzCt.sol: >                 mstore(add(a, 0), add(mload(add(a, 0)), and(z, MEA)))
+   src/pqz/PqzCt.sol: >                 mstore(add(b, 0), add(mload(add(b, 0)), and(shr(46, z), MEA)))
+   src/pqz/PqzCt.sol: >                 z := mload(add(s, 23))
+   src/pqz/PqzCt.sol: >                 mstore(add(a, 32), add(mload(add(a, 32)), and(z, MEA)))
+   src/pqz/PqzCt.sol: >                 mstore(add(b, 32), add(mload(add(b, 32)), and(shr(46, z), MEA)))
+   src/pqz/PqzCt.sol: >                 z := mload(add(s, 46))
+   src/pqz/PqzCt.sol: >                 mstore(add(a, 64), add(mload(add(a, 64)), and(z, MEA)))
+   src/pqz/PqzCt.sol: >                 mstore(add(b, 64), add(mload(add(b, 64)), and(shr(46, z), MEA)))
+   src/pqz/PqzCt.sol: >                 z := mload(add(s, 69))
+   src/pqz/PqzCt.sol: >                 mstore(add(a, 96), add(mload(add(a, 96)), and(z, MEA)))
+   src/pqz/PqzCt.sol: >                 mstore(add(b, 96), add(mload(add(b, 96)), and(shr(46, z), MEA)))
+   src/pqz/PqzCt.sol: >                 s := add(s, 92)
+   src/pqz/PqzCt.sol: >                 a := add(a, 128)
+   src/pqz/PqzCt.sol: >                 b := add(b, 128)
+   src/pqz/PqzCt.sol: >             }
+   src/pqz/PqzCt.sol: >         }
+   src/pqz/PqzCt.sol: >     }
+   src/pqz/PqzCt.sol: > 
+   src/pqz/PqzCt.sol: >     /// @notice `c += spread(A, B)` lane-wise (each field sum `< 2^64` for ≤ 2^18 terms; `c` then `reduce`d).
+   src/pqz/PqzCt.sol: >     function combineEO(bytes memory c, bytes memory A, bytes memory B) internal pure {
+   src/pqz/PqzCt.sol: >         assembly ("memory-safe") {
+   src/pqz/PqzCt.sol: >             let d := add(c, 32)
+   src/pqz/PqzCt.sol: >             let pa := add(A, 32)
+   src/pqz/PqzCt.sol: >             let pb := add(B, 32)
+   src/pqz/PqzCt.sol: >             let n := mload(c)
+   src/pqz/PqzCt.sol: >             for { let i := 0 } lt(i, n) { i := add(i, 32) } {
+   src/pqz/PqzCt.sol: >                 let a := mload(add(pa, i))
+   src/pqz/PqzCt.sol: >                 let b := mload(add(pb, i))
+   src/pqz/PqzCt.sol: >                 let p := add(d, i)
+   src/pqz/PqzCt.sol: >                 mstore(p, add(mload(p), or(or(shl(192, shr(164, b)), shl(128, shr(164, a))),
+   src/pqz/PqzCt.sol: >                     or(shl(64, and(shr(72, b), M92)), and(shr(72, a), M92)))))
+   src/pqz/PqzCt.sol: >             }
+   src/pqz/PqzCt.sol: >         }
+   src/pqz/PqzCore.sol: 49c49
+   src/pqz/PqzCore.sol: <         uint256[516] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uint256[417] accWords; // P46: `PqzCt.ACC_WORDS` slots of `not(packed word)`; CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+   src/pqz/PqzCore.sol: 150c150
+   src/pqz/PqzCore.sol: <     uint256 internal constant K_MAX = 1024;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant K_MAX = 4096;
+   src/pqz/PqzCore.sol: 154c154
+   src/pqz/PqzCore.sol: <     uint256 internal constant ROLL_MAX = 256;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant ROLL_MAX = 80;
+   src/pqz/PqzCore.sol: 159c159,162
+   src/pqz/PqzCore.sol: <     uint256 internal constant HALF_WORDS = 258;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant HALF_WORDS = 209; // P46: halves of 209 + 208 slots
+   src/pqz/PqzCore.sol: >     uint256 internal constant CTP_ = 13_340;
+   src/pqz/PqzCore.sol: >     uint256 internal constant PKP_ = 13_248;
+   src/pqz/PqzCore.sol: >     uint256 internal constant VP_ = 92;
+   src/pqz/PqzCore.sol: 173,174c176,177
+   src/pqz/PqzCore.sol: <     uint256 internal constant OUT_ON = 16_768;
+   src/pqz/PqzCore.sol: <     uint256 internal constant OUT_OFF = 16_640;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant OUT_ON = 18_816;
+   src/pqz/PqzCore.sol: >     uint256 internal constant OUT_OFF = 18_688;
+   src/pqz/PqzCore.sol: 176c179
+   src/pqz/PqzCore.sol: <     uint256 internal constant DISCLOSE = 33_184;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant DISCLOSE = 37_280;
+   src/pqz/PqzCore.sol: 273,274c276,288
+   src/pqz/PqzCore.sol: <         bytes memory blob =
+   src/pqz/PqzCore.sol: <             bytes.concat(o.salt, out[0:PqzCt.CT], out[OUT_OFF:o.outLen], o.to, out[PqzCt.CT:PqzCt.CT + PqzCt.V]);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         // P46: `salt ‖ P(u ‖ v_t) ‖ [P(v_a)] ‖ toUA ‖ P(v_f)`, written in ascending order (each pack spills 9 zero bytes)
+   src/pqz/PqzCore.sol: >         uint256 len = 16 + PqzCt.PKP + PqzCt.VP * (2 + o.auditorOn) + 32;
+   src/pqz/PqzCore.sol: >         bytes memory blob = new bytes(len + 32);
+   src/pqz/PqzCore.sol: >         _put(blob, 0, abi.encodePacked(o.salt));
+   src/pqz/PqzCore.sol: >         PqzCt.packCd(blob, 16, out[0:PqzCt.CT]);
+   src/pqz/PqzCore.sol: >         uint256 q = 16 + PqzCt.PKP + PqzCt.VP;
+   src/pqz/PqzCore.sol: >         if (o.auditorOn == 1) {
+   src/pqz/PqzCore.sol: >             PqzCt.packCd(blob, q, out[OUT_OFF:o.outLen]);
+   src/pqz/PqzCore.sol: >             q += PqzCt.VP;
+   src/pqz/PqzCore.sol: >         }
+   src/pqz/PqzCore.sol: >         _put(blob, q, abi.encode(o.to));
+   src/pqz/PqzCore.sol: >         PqzCt.packCd(blob, q + 32, out[PqzCt.CT:PqzCt.CT + PqzCt.V]);
+   src/pqz/PqzCore.sol: >         assembly ("memory-safe") { mstore(blob, len) }
+   src/pqz/PqzCore.sol: 276c290
+   src/pqz/PqzCore.sol: <         _debit(o, ptr, 16, blob.length - PqzCt.V);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         _debit(o, ptr, 16, len - PqzCt.VP);
+   src/pqz/PqzCore.sol: 278c292
+   src/pqz/PqzCore.sol: <         _credit(o.to, ptr, 16, 16 + PqzCt.PK, ref);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         _credit(o.to, ptr, 16, 16 + PqzCt.PKP, ref);
+   src/pqz/PqzCore.sol: 437c451
+   src/pqz/PqzCore.sol: <         _debit(o, ptr, 16, blob.length - PqzCt.V);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         _debit(o, ptr, 16, blob.length - PqzCt.VP);
+   src/pqz/PqzCore.sol: 450,451c464,465
+   src/pqz/PqzCore.sol: <         uint256 us = 16 + PqzCt.PK * o.groups;
+   src/pqz/PqzCore.sol: <         uint256 ls = 160 + PqzCt.V * o.auditorOn;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uint256 us = 16 + PqzCt.PKP * o.groups;
+   src/pqz/PqzCore.sol: >         uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
+   src/pqz/PqzCore.sol: 454c468
+   src/pqz/PqzCore.sol: <             _credit(ua, ptr, 16 + PqzCt.PK * (j / 4), us + ls * j, ref);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             _credit(ua, ptr, 16 + PqzCt.PKP * (j / 4), us + ls * j, ref);
+   src/pqz/PqzCore.sol: 460a475
+   src/pqz/PqzCore.sol: >         // P46: the same fields packed, written in ascending order (each pack spills 9 zero bytes)
+   src/pqz/PqzCore.sol: 462,465c477,481
+   src/pqz/PqzCore.sol: <         uint256 us = PqzCt.PK * o.groups;
+   src/pqz/PqzCore.sol: <         uint256 ls = 160 + PqzCt.V * o.auditorOn;
+   src/pqz/PqzCore.sol: <         r = new bytes(16 + us + ls * m + PqzCt.V);
+   src/pqz/PqzCore.sol: <         _putCd(r, 16 + us + ls * m, out[us + PqzCt.V * m:us + PqzCt.V * (m + 1)]);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uint256 us = PqzCt.PK * o.groups; // in `out` (64-bit lanes)
+   src/pqz/PqzCore.sol: >         uint256 ps = PqzCt.PKP * o.groups; // in the blob
+   src/pqz/PqzCore.sol: >         uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
+   src/pqz/PqzCore.sol: >         uint256 len = 16 + ps + ls * m + PqzCt.VP;
+   src/pqz/PqzCore.sol: >         r = new bytes(len + 32);
+   src/pqz/PqzCore.sol: 467c483
+   src/pqz/PqzCore.sol: <         _putCd(r, 16, out[0:us]);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         PqzCt.packCd(r, 16, out[0:us]);
+   src/pqz/PqzCore.sol: 469,471c485,487
+   src/pqz/PqzCore.sol: <             uint256 d = 16 + us + ls * j;
+   src/pqz/PqzCore.sol: <             _putCd(r, d, out[us + PqzCt.V * j:us + PqzCt.V * (j + 1)]);
+   src/pqz/PqzCore.sol: <             if (o.auditorOn == 1) _putCd(r, d + PqzCt.V, out[us + PqzCt.V * (m + 1 + j):us + PqzCt.V * (m + 2 + j)]);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             uint256 d = 16 + ps + ls * j;
+   src/pqz/PqzCore.sol: >             PqzCt.packCd(r, d, out[us + PqzCt.V * j:us + PqzCt.V * (j + 1)]);
+   src/pqz/PqzCore.sol: >             if (o.auditorOn == 1) PqzCt.packCd(r, d + PqzCt.VP, out[us + PqzCt.V * (m + 1 + j):us + PqzCt.V * (m + 2 + j)]);
+   src/pqz/PqzCore.sol: 473a490,491
+   src/pqz/PqzCore.sol: >         PqzCt.packCd(r, 16 + ps + ls * m, out[us + PqzCt.V * m:us + PqzCt.V * (m + 1)]);
+   src/pqz/PqzCore.sol: >         assembly ("memory-safe") { mstore(r, len) }
+   src/pqz/PqzCore.sol: 490,491c508,512
+   src/pqz/PqzCore.sol: <         address ptr = SSTORE2.write(out);
+   src/pqz/PqzCore.sol: <         _debit(o, ptr, 0, PqzCt.PK);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         bytes memory b = new bytes(PqzCt.CTP + 32); // P46: P(u' ‖ v_f)
+   src/pqz/PqzCore.sol: >         PqzCt.packCd(b, 0, out);
+   src/pqz/PqzCore.sol: >         assembly ("memory-safe") { mstore(b, CTP_) }
+   src/pqz/PqzCore.sol: >         address ptr = SSTORE2.write(b);
+   src/pqz/PqzCore.sol: >         _debit(o, ptr, 0, PqzCt.PKP);
+   src/pqz/PqzCore.sol: 564,567c585,591
+   src/pqz/PqzCore.sol: <             let d := add(add(buf, 37), 16672)
+   src/pqz/PqzCore.sol: <             mcopy(d, add(add(bundle, 32), uOff), 16384)
+   src/pqz/PqzCore.sol: <             mcopy(add(d, 16384), add(add(bundle, 32), vOff), 128)
+   src/pqz/PqzCore.sol: <         }
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             let d := add(add(buf, 37), 18720)
+   src/pqz/PqzCore.sol: >             mcopy(d, add(add(bundle, 32), uOff), PKP_)
+   src/pqz/PqzCore.sol: >             mcopy(add(d, PKP_), add(add(bundle, 32), vOff), VP_)
+   src/pqz/PqzCore.sol: >         }
+   src/pqz/PqzCore.sol: >         uint256 dp;
+   src/pqz/PqzCore.sol: >         assembly ("memory-safe") { dp := add(add(buf, 37), 18720) }
+   src/pqz/PqzCore.sol: >         PqzCt.expandAt(dp, PqzCt.CT / 32); // P46
+   src/pqz/PqzCore.sol: 577,580c601,604
+   src/pqz/PqzCore.sol: <         uint256 ls = 160 + PqzCt.V * a;
+   src/pqz/PqzCore.sol: <         uint256 leg = 16 + PqzCt.PK * g + ls * j;
+   src/pqz/PqzCore.sol: <         uOff = 16 + PqzCt.PK * (j / 4);
+   src/pqz/PqzCore.sol: <         vOff = kind == 2 ? leg + PqzCt.V : leg;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uint256 ls = 32 + PqzCt.VP * (1 + a);
+   src/pqz/PqzCore.sol: >         uint256 leg = 16 + PqzCt.PKP * g + ls * j;
+   src/pqz/PqzCore.sol: >         uOff = 16 + PqzCt.PKP * (j / 4);
+   src/pqz/PqzCore.sol: >         vOff = kind == 2 ? leg + PqzCt.VP : leg;
+   src/pqz/PqzCore.sol: 588,590c612,614
+   src/pqz/PqzCore.sol: <         if (bl < 16 + PqzCt.PK) revert IPqzToken.BadPayload(bl);
+   src/pqz/PqzCore.sol: <         g = (bl - 16) / PqzCt.PK;
+   src/pqz/PqzCore.sol: <         uint256 rem = bl - 16 - PqzCt.PK * g;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         if (bl < 16 + PqzCt.PKP) revert IPqzToken.BadPayload(bl);
+   src/pqz/PqzCore.sol: >         g = (bl - 16) / PqzCt.PKP;
+   src/pqz/PqzCore.sol: >         uint256 rem = bl - 16 - PqzCt.PKP * g;
+   src/pqz/PqzCore.sol: 593c617
+   src/pqz/PqzCore.sol: <             uint256 ls = 160 + PqzCt.V * a;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             uint256 ls = 32 + PqzCt.VP * (1 + a);
+   src/pqz/PqzCore.sol: 614c638
+   src/pqz/PqzCore.sol: <         r = new bytes(ptr.code.length - 1 - PqzCt.V);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         r = new bytes(ptr.code.length - 1 - PqzCt.VP);
+   src/pqz/PqzCore.sol: 704c728
+   src/pqz/PqzCore.sol: <             if (hint.length == PqzCt.CT && keccak256(hint) == a.accHash) return PqzCt.load(hint);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             // P46: `accHash` = keccak of the packed stream (`CTP` bytes), the hint is that stream
+   src/pqz/PqzCore.sol: 706,711c730,739
+   src/pqz/PqzCore.sol: <             uint256[516] storage w = a.accWords;
+   src/pqz/PqzCore.sol: <             assembly ("memory-safe") {
+   src/pqz/PqzCore.sol: <                 let b := w.slot
+   src/pqz/PqzCore.sol: <                 let d := add(c, 32)
+   src/pqz/PqzCore.sol: <                 let k := not(ACC_MARK)
+   src/pqz/PqzCore.sol: <                 for { let i := 0 } lt(i, 516) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             uint256 d;
+   src/pqz/PqzCore.sol: >             assembly ("memory-safe") { d := add(c, 32) }
+   src/pqz/PqzCore.sol: >             if (hint.length == PqzCt.CTP && keccak256(hint) == a.accHash) {
+   src/pqz/PqzCore.sol: >                 assembly ("memory-safe") { calldatacopy(d, hint.offset, CTP_) }
+   src/pqz/PqzCore.sol: >             } else {
+   src/pqz/PqzCore.sol: >                 uint256[417] storage w = a.accWords;
+   src/pqz/PqzCore.sol: >                 assembly ("memory-safe") {
+   src/pqz/PqzCore.sol: >                     let b := w.slot
+   src/pqz/PqzCore.sol: >                     for { let i := 0 } lt(i, 417) { i := add(i, 1) } { mstore(add(d, shl(5, i)), not(sload(add(b, i)))) }
+   src/pqz/PqzCore.sol: >                 }
+   src/pqz/PqzCore.sol: 712a741
+   src/pqz/PqzCore.sol: >             PqzCt.expandAt(d, PqzCt.CT / 32);
+   src/pqz/PqzCore.sol: 721a751,753
+   src/pqz/PqzCore.sol: >         // P46: a rollover (`aged`, always `up`) sums the packed groups unspread (`addBlobEO`), spread once at the end
+   src/pqz/PqzCore.sol: >         bytes memory ea = aged ? new bytes(PqzCt.CT) : x;
+   src/pqz/PqzCore.sol: >         bytes memory eb = aged ? new bytes(PqzCt.CT) : x;
+   src/pqz/PqzCore.sol: 727a760,761
+   src/pqz/PqzCore.sol: >             } else if (aged) {
+   src/pqz/PqzCore.sol: >                 PqzCt.addBlobEO(ea, eb, x, address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64));
+   src/pqz/PqzCore.sol: 729,731c763
+   src/pqz/PqzCore.sol: <                 PqzCt.loadBlob(address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), x);
+   src/pqz/PqzCore.sol: <                 if (up) PqzCt.addMem(c, x);
+   src/pqz/PqzCore.sol: <                 else PqzCt.subMem(c, x);
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >                 PqzCt.addBlob(c, x, address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), !up);
+   src/pqz/PqzCore.sol: 733a766
+   src/pqz/PqzCore.sol: >         if (aged) PqzCt.combineEO(c, ea, eb);
+   src/pqz/PqzCore.sol: 820c853
+   src/pqz/PqzCore.sol: <         assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 16384) }
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 18432) }
+   src/pqz/PqzStateLib.sol: 83,84c83,84
+   src/pqz/PqzStateLib.sol: <         uint256[516] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: <         uint256 mk = PqzCore.ACC_MARK;
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >         bytes memory pk_ = PqzCt.packMem(c); // P46: 417 slots of `not(packed word)`, `accHash` over the packed stream
+   src/pqz/PqzStateLib.sol: >         uint256[417] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: 87,88c87,88
+   src/pqz/PqzStateLib.sol: <             let d := add(c, 32)
+   src/pqz/PqzStateLib.sol: <             for { let i := 0 } lt(i, 516) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >             let d := add(pk_, 32)
+   src/pqz/PqzStateLib.sol: >             for { let i := 0 } lt(i, 417) { i := add(i, 1) } { sstore(add(b, i), not(mload(add(d, shl(5, i))))) }
+   src/pqz/PqzStateLib.sol: 90c90
+   src/pqz/PqzStateLib.sol: <         bytes32 h = keccak256(c);
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >         bytes32 h = keccak256(pk_);
+   src/pqz/PqzStateLib.sol: 107c107
+   src/pqz/PqzStateLib.sol: <     ///         account's `acc` words, so the first rollover rewrites instead of creating 516 slots (≈ 11.4 M); a no-op
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >     ///         account's `acc` words, so the first rollover rewrites instead of creating 580 slots (≈ 11.4 M); a no-op
+   src/pqz/PqzStateLib.sol: 115c115
+   src/pqz/PqzStateLib.sol: <         uint256[516] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >         uint256[417] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: 117a118
+   src/pqz/PqzStateLib.sol: >         uint256 cnt = half == 0 ? hw : 417 - hw; // P46: 209 + 208
+   src/pqz/PqzStateLib.sol: 120c121
+   src/pqz/PqzStateLib.sol: <             for { let i := 0 } lt(i, hw) { i := add(i, 1) } { sstore(add(b, i), mk) }
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >             for { let i := 0 } lt(i, cnt) { i := add(i, 1) } { sstore(add(b, i), mk) }
+   src/pqz/PqzViewLib.sol: 51c51
+   src/pqz/PqzViewLib.sol: <         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), 33184), proof.offset, proof.length) }
+   src/pqz/PqzViewLib.sol: ---
+   src/pqz/PqzViewLib.sol: >         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), 37280), proof.offset, proof.length) }
+   test/pqz/helpers/PqzFixture.sol: 125c125
+   test/pqz/helpers/PqzFixture.sol: <         return _blob(seed, withAud ? 16_768 : 16_640);
+   test/pqz/helpers/PqzFixture.sol: ---
+   test/pqz/helpers/PqzFixture.sol: >         return _blob(seed, withAud ? 18_816 : 18_688);
+   test/pqz/PqzStateGas.t.sol: 78c78,79
+   test/pqz/PqzStateGas.t.sol: <         c = new bytes(1 + 16 + PqzCt.PK + 128 + 32 + 128);
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         // spike PACK: `STOP ‖ salt ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)`, every coefficient q − 1
+   test/pqz/PqzStateGas.t.sol: >         bytes memory ct = new bytes(PqzCt.CT);
+   test/pqz/PqzStateGas.t.sol: 80,81c81,91
+   test/pqz/PqzStateGas.t.sol: <         for (uint256 o = 17; o < 17 + PqzCt.CT; o += 32) {
+   test/pqz/PqzStateGas.t.sol: <             assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         for (uint256 o; o < PqzCt.CT; o += 32) {
+   test/pqz/PqzStateGas.t.sol: >             assembly ("memory-safe") { mstore(add(add(ct, 32), o), w) }
+   test/pqz/PqzStateGas.t.sol: >         }
+   test/pqz/PqzStateGas.t.sol: >         bytes memory pc = PqzCt.packCt(ct);
+   test/pqz/PqzStateGas.t.sol: >         c = bytes.concat(hex"00", bytes16(0), pc, bytes32(0), _packV(w));
+   test/pqz/PqzStateGas.t.sol: >     }
+   test/pqz/PqzStateGas.t.sol: > 
+   test/pqz/PqzStateGas.t.sol: >     function _packV(uint256 w) internal pure returns (bytes memory) {
+   test/pqz/PqzStateGas.t.sol: >         bytes memory v = new bytes(PqzCt.V);
+   test/pqz/PqzStateGas.t.sol: >         for (uint256 o; o < PqzCt.V; o += 32) {
+   test/pqz/PqzStateGas.t.sol: >             assembly ("memory-safe") { mstore(add(add(v, 32), o), w) }
+   test/pqz/PqzStateGas.t.sol: 82a93
+   test/pqz/PqzStateGas.t.sol: >         return PqzCt.packV(v);
+   test/pqz/PqzStateGas.t.sol: 90c101
+   test/pqz/PqzStateGas.t.sol: <             uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PK) << 64 | 1;
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >             uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PKP) << 64 | 1;
+   test/pqz/PqzStateGas.t.sol: 441c452,453
+   test/pqz/PqzStateGas.t.sol: <         c = new bytes(1 + 16 + PqzCt.PK + 128 + 32 + 128);
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         // spike PACK: `STOP ‖ salt ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)`, every coefficient q − 1
+   test/pqz/PqzStateGas.t.sol: >         bytes memory ct = new bytes(PqzCt.CT);
+   test/pqz/PqzStateGas.t.sol: 443,444c455,465
+   test/pqz/PqzStateGas.t.sol: <         for (uint256 o = 17; o < 17 + PqzCt.CT; o += 32) {
+   test/pqz/PqzStateGas.t.sol: <             assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         for (uint256 o; o < PqzCt.CT; o += 32) {
+   test/pqz/PqzStateGas.t.sol: >             assembly ("memory-safe") { mstore(add(add(ct, 32), o), w) }
+   test/pqz/PqzStateGas.t.sol: >         }
+   test/pqz/PqzStateGas.t.sol: >         bytes memory pc = PqzCt.packCt(ct);
+   test/pqz/PqzStateGas.t.sol: >         c = bytes.concat(hex"00", bytes16(0), pc, bytes32(0), _packV(w));
+   test/pqz/PqzStateGas.t.sol: >     }
+   test/pqz/PqzStateGas.t.sol: > 
+   test/pqz/PqzStateGas.t.sol: >     function _packV(uint256 w) internal pure returns (bytes memory) {
+   test/pqz/PqzStateGas.t.sol: >         bytes memory v = new bytes(PqzCt.V);
+   test/pqz/PqzStateGas.t.sol: >         for (uint256 o; o < PqzCt.V; o += 32) {
+   test/pqz/PqzStateGas.t.sol: >             assembly ("memory-safe") { mstore(add(add(v, 32), o), w) }
+   test/pqz/PqzStateGas.t.sol: 445a467
+   test/pqz/PqzStateGas.t.sol: >         return PqzCt.packV(v);
+   test/pqz/PqzStateGas.t.sol: 476c498
+   test/pqz/PqzStateGas.t.sol: <             uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PK) << 64 | 1;
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >             uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PKP) << 64 | 1;
+   test/pqz/PqzStateGas.t.sol: 487c509
+   test/pqz/PqzStateGas.t.sol: <         for (uint256 i; i < PqzCt.CT / 32; ++i) {
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         for (uint256 i; i < PqzCt.ACC_WORDS; ++i) {
+   test/pqz/PqzStateGas.t.sol: 496c518
+   test/pqz/PqzStateGas.t.sol: <         assertEq(keccak256(acc), tok.pqzAccount(gina).accHash, "accHash over the unmarked bytes");
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         assertEq(keccak256(PqzCt.packCt(acc)), tok.pqzAccount(gina).accHash, "accHash over the unmarked bytes");
+   test/pqz/PqzStateGas.t.sol: 513c535
+   test/pqz/PqzStateGas.t.sol: <         assertEq(keccak256(acc), tok.pqzAccount(gina).accHash);
+   test/pqz/PqzStateGas.t.sol: ---
+   test/pqz/PqzStateGas.t.sol: >         assertEq(keccak256(PqzCt.packCt(acc)), tok.pqzAccount(gina).accHash);
+forge Version: 1.8.5
+Compiling 16 files with Solc 0.8.37
+Solc 0.8.37 finished in 9.39s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:264:13:
+    |
+264 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:368:9:
+    |
+368 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:138:38:
+    |
+138 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:142:38:
+    |
+142 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:232:5:
+    |
+232 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 2 tests for test/pqz/PqzStateGas.t.sol:PqzStateTrivialRollGasTest
+[PASS] test_gas_rollMax_afterTrivialRoll() (gas: 12561492)
+Logs:
+    (state gas) 0
+  mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas 12002660
+
+[PASS] test_trivialRoll_noZeroSlot() (gas: 1940323)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 366.32ms (68.17ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 37 tests for test/research/PqzPackGas.t.sol:PqzPackGasTest
+[PASS] test_gas_burn() (gas: 22711258)
+Logs:
+  burn 1 to an address, fee, fresh ref gas: regular / state / total 1459096 20889090 22348186
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 27251699)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas: regular / state / total 4661452 21439890 26101342
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 23187059)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas: regular / state / total 1475480 21341970 22817450
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 25439390)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas: regular / state / total 2663320 21439890 24103210
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 23865695)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas: regular / state / total 2240070 21439890 23679960
+
+[PASS] test_gas_op1_compact() (gas: 23498801)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas: regular / state / total 1479576 21635730 23115306
+
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 43913767)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11550 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076952 0
+    full tx regular / state / total 9060553 21537810 30598363
+
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 44940686)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11550 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076952 185856
+    full tx regular / state / total 10173473 21635730 31809203
+
+[PASS] test_gas_op1_shieldIn() (gas: 23188581)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas: regular / state / total 1475480 21341970 22817450
+
+[PASS] test_gas_op7_M4() (gas: 24944806)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas: regular / state / total 1534872 23018850 24553722
+
+[PASS] test_gas_op7_M8() (gas: 48898321)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas: regular / state / total 2788248 45393570 48181818
+
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 71052365)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 64578
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 108452 19296 6955928
+    calldata gas 4 / 16 / refund (not subtracted) 1503680 0
+    full tx regular / state / total 6955928 45589410 52545338
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 70194086)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 107908 18855 64578
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked) gas: regular / state / total 6921112 45393570 52314682
+  calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte 1500268 6921112
+
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 41819851)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4531250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 1 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 76036 11619 4881304
+    calldata gas 4 / 16 / refund (not subtracted) 1077148 0
+    full tx regular / state / total 6848665 21635730 28484395
+
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 42743847)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4637500 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 2 53504
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 77188 11708 4955032
+    calldata gas 4 / 16 / refund (not subtracted) 1094512 0
+    full tx regular / state / total 7048640 22162050 29210690
+
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 45275232)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 5151250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 4 57202
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 81476 11926 5229464
+    calldata gas 4 / 16 / refund (not subtracted) 1160504 0
+    full tx regular / state / total 7796922 23214690 31011612
+
+[PASS] test_gas_prepareAcc_half0() (gas: 23275980)
+Logs:
+  mtxPrepareAcc half 0 gas: regular / state / total 2586345 20563200 23149545
+
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 23427740)
+Logs:
+  relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas: regular / state / total 2622481 20661120 23283601
+
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 23683875)
+Logs:
+  relayed mtxPrepareAcc half 0, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 0
+    full tx regular / state / total 2651034 20759040 23410074
+
+[PASS] test_gas_prepareAcc_half1() (gas: 23165884)
+Logs:
+  mtxPrepareAcc half 1 gas: regular / state / total 2574281 20465280 23039561
+
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 23317643)
+Logs:
+  relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas: regular / state / total 2610417 20563200 23173617
+
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 23573798)
+Logs:
+  relayed mtxPrepareAcc half 1, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 0
+    full tx regular / state / total 2638970 20661120 23300090
+
+[PASS] test_gas_refresh() (gas: 22613238)
+Logs:
+  refresh, fee, fresh ref gas: regular / state / total 1459096 20791170 22250266
+
+[PASS] test_gas_roll128() (gas: 8510681)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 8956988 0 8956988
+
+[PASS] test_gas_rollMax() (gas: 20967297)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 8956988 0 8956988
+  mtxRollOver ROLL_MAX (steady, distinct cold blobs) gas: regular / state / total 12149948 0 12149948
+  mtxRollOver ROLL_MAX + 16 (linear fit) gas: regular / state / total 13427132 0 13427132
+  per entry / fixed (fit) 79824 5764028
+
+[PASS] test_gas_rollMax_relayed() (gas: 11498769)
+Logs:
+  relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas: regular / state / total 12185997 97920 12283917
+
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 11758252)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 80
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 929280
+    full tx regular / state / total 12214487 195840 12410327
+
+[PASS] test_gas_roll_1() (gas: 5820452)
+Logs:
+  mtxRollOver 1 (steady) gas: regular / state / total 5813852 0 5813852
+
+[PASS] test_gas_roll_16() (gas: 6873544)
+Logs:
+  mtxRollOver 16 (steady) gas: regular / state / total 7041212 0 7041212
+
+[PASS] test_gas_shield_append() (gas: 330797)
+Logs:
+  mtxShield, append (tail of an earlier block) gas: regular / state / total 106760 97920 204680
+
+[PASS] test_gas_shield_firstEntry() (gas: 425950)
+Logs:
+  mtxShield, the account's first entry (append) gas: regular / state / total 103939 195840 299779
+
+[PASS] test_gas_shield_merge() (gas: 129636)
+Logs:
+  mtxShield, merge (TRIVIAL tail of this block) gas: regular / state / total 94594 0 94594
+
+[PASS] test_pack_op1_relayedFullTx_freshRef() (gas: 42514341)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6085125 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 48724
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 72068 11528 4627352
+    calldata gas 4 / 16 / refund (not subtracted) 1014752 0
+    full tx regular / state / total 8305847 21537810 29843657
+
+[PASS] test_pack_op1_relayedFullTx_materialisedNoHint() (gas: 43541350)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6085125 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 48724
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 72068 11528 4627352
+    calldata gas 4 / 16 / refund (not subtracted) 1014752 185856
+    full tx regular / state / total 9418767 21635730 31054497
+
+[PASS] test_pack_op7_relayedFullTx_M4() (gas: 43959719)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4636125 68006
+  relayed op 7 M = 4 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52950
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 77220 11912 4957080
+    calldata gas 4 / 16 / refund (not subtracted) 1092576 0
+    full tx regular / state / total 7194398 23214690 30409088
+
+[PASS] test_pack_op7_relayedFullTx_M8() (gas: 76730809)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6949125 68006
+  relayed op 7 M = 8 (G = 2) BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 70353
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 114212 19300 7324568
+    calldata gas 4 / 16 / refund (not subtracted) 1595792 0
+    full tx regular / state / total 10833755 45589410 56423165
+
+[PASS] test_pack_scanRoll() (gas: 47918189)
+Logs:
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 16
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 185856
+    full tx regular / state / total 7105739 195840 7301579
+  scan row: entries / regular / state 16 7105739 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 32
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 371712
+    full tx regular / state / total 8382935 195840 8578775
+  scan row: entries / regular / state 32 8382935 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 48
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 557568
+    full tx regular / state / total 9660119 195840 9855959
+  scan row: entries / regular / state 48 9660119 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 64
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 743424
+    full tx regular / state / total 10937303 195840 11133143
+  scan row: entries / regular / state 64 10937303 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 80
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 929280
+    full tx regular / state / total 12214487 195840 12410327
+  scan row: entries / regular / state 80 12214487 195840
+    fits 0.75 * 2^24
+
+Suite result: ok. 37 passed; 0 failed; 0 skipped; finished in 1.32s (1.96s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 32 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_burn() (gas: 22711280)
+Logs:
+  burn 1 to an address, fee, fresh ref gas: regular / state / total 1459096 20889090 22348186
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 27251698)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas: regular / state / total 4661452 21439890 26101342
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 23187081)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas: regular / state / total 1475480 21341970 22817450
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 25439390)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas: regular / state / total 2663320 21439890 24103210
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 23865695)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas: regular / state / total 2240070 21439890 23679960
+
+[PASS] test_gas_op1_compact() (gas: 23498801)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas: regular / state / total 1479576 21635730 23115306
+
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 43913662)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11550 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076952 0
+    full tx regular / state / total 9060553 21537810 30598363
+
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 44940637)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11550 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076952 185856
+    full tx regular / state / total 10173473 21635730 31809203
+
+[PASS] test_gas_op1_shieldIn() (gas: 23188603)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas: regular / state / total 1475480 21341970 22817450
+
+[PASS] test_gas_op7_M4() (gas: 24944828)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas: regular / state / total 1534872 23018850 24553722
+
+[PASS] test_gas_op7_M8() (gas: 48898210)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas: regular / state / total 2788248 45393570 48181818
+
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 71052387)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 64578
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 108452 19296 6955928
+    calldata gas 4 / 16 / refund (not subtracted) 1503680 0
+    full tx regular / state / total 6955928 45589410 52545338
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 70194086)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 107908 18855 64578
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked) gas: regular / state / total 6921112 45393570 52314682
+  calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte 1500268 6921112
+
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 41819851)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4531250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 1 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 76036 11619 4881304
+    calldata gas 4 / 16 / refund (not subtracted) 1077148 0
+    full tx regular / state / total 6848665 21635730 28484395
+
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 42743869)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4637500 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 2 53504
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 77188 11708 4955032
+    calldata gas 4 / 16 / refund (not subtracted) 1094512 0
+    full tx regular / state / total 7048640 22162050 29210690
+
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 45275121)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 5151250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 4 57202
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 81476 11926 5229464
+    calldata gas 4 / 16 / refund (not subtracted) 1160504 0
+    full tx regular / state / total 7796922 23214690 31011612
+
+[PASS] test_gas_prepareAcc_half0() (gas: 23275870)
+Logs:
+  mtxPrepareAcc half 0 gas: regular / state / total 2586345 20563200 23149545
+
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 23427740)
+Logs:
+  relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas: regular / state / total 2622481 20661120 23283601
+
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 23683919)
+Logs:
+  relayed mtxPrepareAcc half 0, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 0
+    full tx regular / state / total 2651034 20759040 23410074
+
+[PASS] test_gas_prepareAcc_half1() (gas: 23165906)
+Logs:
+  mtxPrepareAcc half 1 gas: regular / state / total 2574281 20465280 23039561
+
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 23317643)
+Logs:
+  relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas: regular / state / total 2610417 20563200 23173617
+
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 23573753)
+Logs:
+  relayed mtxPrepareAcc half 1, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 0
+    full tx regular / state / total 2638970 20661120 23300090
+
+[PASS] test_gas_refresh() (gas: 22613260)
+Logs:
+  refresh, fee, fresh ref gas: regular / state / total 1459096 20791170 22250266
+
+[PASS] test_gas_roll128() (gas: 8510681)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 8956988 0 8956988
+
+[PASS] test_gas_rollMax() (gas: 20967319)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 8956988 0 8956988
+  mtxRollOver ROLL_MAX (steady, distinct cold blobs) gas: regular / state / total 12149948 0 12149948
+  mtxRollOver ROLL_MAX + 16 (linear fit) gas: regular / state / total 13427132 0 13427132
+  per entry / fixed (fit) 79824 5764028
+
+[PASS] test_gas_rollMax_relayed() (gas: 11498791)
+Logs:
+  relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas: regular / state / total 12185997 97920 12283917
+
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 11758252)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 80
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 929280
+    full tx regular / state / total 12214487 195840 12410327
+
+[PASS] test_gas_roll_1() (gas: 5820496)
+Logs:
+  mtxRollOver 1 (steady) gas: regular / state / total 5813852 0 5813852
+
+[PASS] test_gas_roll_16() (gas: 6873588)
+Logs:
+  mtxRollOver 16 (steady) gas: regular / state / total 7041212 0 7041212
+
+[PASS] test_gas_shield_append() (gas: 330797)
+Logs:
+  mtxShield, append (tail of an earlier block) gas: regular / state / total 106760 97920 204680
+
+[PASS] test_gas_shield_firstEntry() (gas: 425950)
+Logs:
+  mtxShield, the account's first entry (append) gas: regular / state / total 103939 195840 299779
+
+[PASS] test_gas_shield_merge() (gas: 129635)
+Logs:
+  mtxShield, merge (TRIVIAL tail of this block) gas: regular / state / total 94594 0 94594
+
+Suite result: ok. 32 passed; 0 failed; 0 skipped; finished in 1.32s (1.18s CPU time)
+
+Ran 2 tests for test/research/PqzPackRoundTrip.t.sol:PqzPackRoundTripTest
+[PASS] test_roundTrip_edges() (gas: 15701618)
+[PASS] test_roundTrip_random(uint256) (runs: 256, μ: 8329548, ~: 8329548)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 1.86s (1.94s CPU time)
+
+Ran 4 test suites in 1.86s (4.86s CPU time): 73 tests passed, 0 failed, 0 skipped (73 total tests)

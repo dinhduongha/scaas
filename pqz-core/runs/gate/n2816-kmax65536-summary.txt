@@ -1,0 +1,25 @@
+# gate n2816-kmax65536 (set n2816-kmax65536): 69542f9ca32a3b00b1912ffdb87f041c5b839db8, 2026-10-25T16:27Z
+set n2816-kmax65536
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   FAILED (rc=1)
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   skipped (set n2816-kmax65536 has no PQZH (set.json pqzh))
+== fuzz
+   ok
+gate n2816-kmax65536 (set n2816-kmax65536): FAIL

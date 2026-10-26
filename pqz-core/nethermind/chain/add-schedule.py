@@ -8,7 +8,8 @@ price unchanged. The timestamp must lie at least 5 minutes in the future (wall c
 already made would re-price history and split a re-synced node from the chain. Refuses an earlier timestamp, a
 chainspec without engine.Pqz, or any other difference. Prints the new rows (with the old price and the change when the
 last schedule had the row). --id (Rust PQZL roll-out, 2026-10-19) also limits the replaced rows to one proof system:
-pqzl, pqzh or a hex prefix of the proofSystemId; --selftest also takes selftestGas from the calibration file (every
+pqzl, pqzh (the ids of the library's set: PQZ_SET, default n2304-kmax4096, from pqz-core/params/sets/<set>/set.json,
+gen_set.py's) or a hex prefix of the proofSystemId; --selftest also takes selftestGas from the calibration file (every
 other price stays). Refuses a calibration file with other than one schedule, one that lacks a row of the replaced ops
 / id that the last schedule has (that shape would become a miss), and a duplicate row (review W-F, 2026-10-19).
 add-schedule.py --check runs the self-check. Run with python3 -I."""
@@ -19,14 +20,17 @@ import sys
 import tempfile
 import time
 
-IDS = {"pqzl": "0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",
-       "pqzh": "0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"}
+SET = os.environ.get("PQZ_SET", "n2304-kmax4096")
+_SJ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../params/sets", SET, "set.json")))
+IDS = {k: "0x" + _SJ[f"{k}_id"] for k in ("pqzl", "pqzh") if f"{k}_id" in _SJ}  # review R4-C3: the set's ids, not v3 / v1
 KEY = lambda r: (r["op"], r["id"].lower(), r["stmtLen"], r.get("legs"), r.get("auditorOn"))
 
 
 def main(src, cal, ts, out, *flags):
     ops = {int(x) for x in flags[flags.index("--ops") + 1].split(",")} if "--ops" in flags else {7}
     idp = flags[flags.index("--id") + 1].lower() if "--id" in flags else "0x"
+    if idp in ("pqzl", "pqzh") and idp not in IDS:
+        sys.exit(f"--id {idp}: set {SET} has no {idp}")
     idp = IDS.get(idp, idp)
     if not idp.startswith("0x"):
         sys.exit(f"--id {idp}: pqzl, pqzh or a 0x prefix")
@@ -80,7 +84,8 @@ def main(src, cal, ts, out, *flags):
 
 def check():
     """--check: a chainspec with one PQZL and one PQZH row; --id pqzl replaces only the PQZL row."""
-    row = lambda i, gas: {"op": 1, "id": IDS[i], "stmtLen": 83072, "gas": gas}
+    ids = IDS | {"pqzh": IDS.get("pqzh", "0x" + "11" * 32)}  # a set without PQZH: a stand-in second id
+    row = lambda i, gas: {"op": 1, "id": ids[i], "stmtLen": 83072, "gas": gas}
     sched = {"timestamp": "0x0", "pqz": [row("pqzl", 5), row("pqzh", 4)], "selftestGas": 4, "mldsa44Gas": 1, "mldsa65Gas": 2}
     with tempfile.TemporaryDirectory() as d:
         src, cal, out = (os.path.join(d, f) for f in ("g.json", "c.json", "o.json"))
@@ -88,6 +93,7 @@ def check():
         json.dump({"schedules": [dict(sched, pqz=[row("pqzl", 3), row("pqzh", 9)], selftestGas=3)]}, open(cal, "w"))
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--id", "pqzl")
         assert [r["gas"] for r in g["engine"]["Pqz"]["schedules"][1]["pqz"]] == [4, 3], g
+        assert g["engine"]["Pqz"]["schedules"][1]["pqz"][1]["id"] == IDS["pqzl"] == "0x" + _SJ["pqzl_id"], g
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1")
         assert sorted(r["gas"] for r in g["engine"]["Pqz"]["schedules"][1]["pqz"]) == [3, 9], g
         assert g["engine"]["Pqz"]["schedules"][1]["selftestGas"] == 4, g
@@ -114,7 +120,7 @@ def check():
         json.dump({"schedules": [dict(sched, pqz=[row("pqzl", 3), row("pqzh", 9), dict(row("pqzl", 8), op=2)])]}, open(cal, "w"))
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1,2")
         assert sorted(r["gas"] for r in g["engine"]["Pqz"]["schedules"][1]["pqz"]) == [3, 8, 9], g
-    print("add-schedule --check: ok")
+    print(f"add-schedule --check ({SET}, pqzl {IDS['pqzl'][:10]}…): ok")
 
 
 if __name__ == "__main__":

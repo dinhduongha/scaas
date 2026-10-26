@@ -1,0 +1,54 @@
+# r01b fix M-5: forge test --match-path test/pqz/PqzMulti.t.sol at n2304-kmax4096 (committed PqzSet.sol), commit 0ecace71 + PqzMulti.t.sol edit
+Compiling 1 files with Solc 0.8.37
+Solc 0.8.37 finished in 4.15s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+
+Ran 15 tests for test/pqz/PqzMulti.t.sol:PqzMultiTest
+[PASS] test_auditorAsParty_refused() (gas: 55511496)
+[PASS] test_bundleShape_unique() (gas: 1554869)
+[PASS] test_decoyFee_bounds() (gas: 30631875)
+[PASS] test_decoyFee_perLegUniform() (gas: 83530419)
+[PASS] test_minDecoyFee_initBounds() (gas: 275628)
+[PASS] test_multi_M1_bundleIsTheSingleBundle() (gas: 166931003)
+[PASS] test_multi_M8_twoGroups() (gas: 908573417)
+[PASS] test_multi_allowlisted() (gas: 31539)
+[PASS] test_multi_checks() (gas: 37545585)
+[PASS] test_multi_disclosureByLeg() (gas: 1722250593)
+[PASS] test_multi_disclosureKindWord_vectors() (gas: 2281853013)
+[PASS] test_multi_modes() (gas: 38163147)
+[PASS] test_multi_pqzh() (gas: 1924075974)
+[PASS] test_multi_shortPayloadIsBadPayload() (gas: 286437)
+[PASS] test_multi_statementAndEffects() (gas: 600873877)
+Suite result: ok. 15 passed; 0 failed; 0 skipped; finished in 2.82s (6.87s CPU time)
+
+Ran 1 test suite in 2.83s (2.82s CPU time): 15 tests passed, 0 failed, 0 skipped (15 total tests)

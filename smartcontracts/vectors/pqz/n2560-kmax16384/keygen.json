@@ -1,0 +1,71 @@
+{
+ "file": "keygen.json",
+ "description": "KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V2 || u8(len(set)) || set || seed || be4(ctr)), set = the parameter set's name (n2560-kmax16384; review R2-C3), s <- CBD_1, e <- CBD_20, resample above 40 / 182, pk = A s + e. ctr = the counter used. The searched-resample row was dropped (probability about 2^-70 per seed); the resample path and the counter-64 error are pinned by the test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
+ "rows": [
+  {
+   "seed": "0000000000000000000000000000000000000000000000000000000000000000",
+   "ctr": 0,
+   "pk_keccak": "c4d7300054dd0f578026a5276009172b3852afabfc9ed2c31f40c3c4b9fa8fbf",
+   "pk_first4": [336558402311069, 731535711248599, 814060567848090, 456415232135129],
+   "s_sq": 1243,
+   "e_sq": 25201
+  },
+  {
+   "seed": "0101010101010101010101010101010101010101010101010101010101010101",
+   "ctr": 0,
+   "pk_keccak": "e08ee20486a4b193f5ef14ccbae7a5ffa22270d8d3922396a84d8e8f42af320c",
+   "pk_first4": [180794106137445, 273401157456994, 295805643645903, 1003486375755251],
+   "s_sq": 1265,
+   "e_sq": 27489
+  },
+  {
+   "seed": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+   "ctr": 0,
+   "pk_keccak": "41ea0c4e456f945fae49074195786fb3d5bf05a8cf03963c64bc4aa852278edd",
+   "pk_first4": [716782426530008, 981450945594132, 809669139064461, 603480945916666],
+   "s_sq": 1250,
+   "e_sq": 25938
+  },
+  {
+   "seed": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "ctr": 0,
+   "pk_keccak": "4d3a8805cea1a59a66b74b64616783e9b97f632382100cf3fdb4737c7bf8747d",
+   "pk_first4": [875059251924165, 225270034725061, 162497859207374, 462994307686677],
+   "s_sq": 1293,
+   "e_sq": 25938
+  },
+  {
+   "seed": "4646464646464646464646464646464646464646464646464646464646464646",
+   "ctr": 0,
+   "pk_keccak": "d68da50363c14252cd7c5ee21dbf418731fd0d111fbf0e4c6504050b61923105",
+   "pk_first4": [917642378894039, 416339006307398, 596849226843675, 355119938641564],
+   "s_sq": 1285,
+   "e_sq": 26556
+  },
+  {
+   "seed": "5454545454545454545454545454545454545454545454545454545454545454",
+   "ctr": 0,
+   "pk_keccak": "5b9531087b1616735e3f60b0ee734f37e476ff4a48622a35e446caa2058c6c66",
+   "pk_first4": [369650206700624, 309947190160716, 971695113101098, 806412723763245],
+   "s_sq": 1295,
+   "e_sq": 25872
+  },
+  {
+   "seed": "4141414141414141414141414141414141414141414141414141414141414141",
+   "ctr": 0,
+   "pk_keccak": "7826b1f7779a4f6446c30b9eed6100c2d46dcfdba376ea835b5a3937dd1d08f8",
+   "pk_first4": [12974295639395, 139571121182769, 935332544526212, 158409621315075],
+   "s_sq": 1251,
+   "e_sq": 25784
+  },
+  {
+   "seed": "5151515151515151515151515151515151515151515151515151515151515151",
+   "ctr": 0,
+   "pk_keccak": "7e36477c792cf928cd3ea1a5186341ef05ef36d93f83c796112bdd93cbae1ebc",
+   "pk_first4": [367229482841096, 618879969974106, 691436606035730, 791793884019251],
+   "s_sq": 1290,
+   "e_sq": 25967
+  }
+ ]
+}

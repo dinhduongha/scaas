@@ -15,7 +15,7 @@ pub extern "C" fn run(sel: u32) -> u32 {
     let mut s = String::new();
     for (bit, id) in [(1, PQZL_ID), (2, PQZH_ID)] {
         if sel & bit != 0 {
-            s += &fixture::digest_lines(&id);
+            s += &fixture::digest_lines(&id, true);
         }
     }
     s += &fixture::selftest_line();
@@ -85,7 +85,7 @@ pub unsafe extern "C" fn precompile_v(input: *const u8, n: u32) -> u32 {
     }
 }
 
-/// P6-ANON S3: wasm32 refuses to prove PQZL op 7 above `WASM_PQZL_MAX_LEGS` (C backend 4, Rust backend 8): 1 if
+/// P6-ANON S3: wasm32 refuses to prove PQZL op 7 above `WASM_PQZL_MAX_LEGS` (C backend per set, set.toml `[pqzl_c] wasm_max_legs`; Rust backend 8): 1 if
 /// `prove` of a PQZL (M = 8, auditor on) statement gives `Statement(Legs)` before any core work (the C backend), 0
 /// otherwise (the Rust backend proves M = 8). `vectors/replay_wasm.mjs` reads it.
 #[no_mangle]

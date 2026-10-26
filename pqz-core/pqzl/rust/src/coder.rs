@@ -93,10 +93,12 @@ impl Dcomp {
         (r1, r0)
     }
 
-    /// `dcompress_power2round`, one coefficient in (-q, q)
-    pub(crate) fn power2round(&self, a: &Int) -> Int {
+    /// `dcompress_power2round`, one coefficient a in (-q, q): (r1, a'), a' = a except in the wrap case (C: r1 2^D >= q,
+    /// q less than 2^(D-1) below 2^log2q, n2048-kmax1024), where r1 = 0 and a' = redp(a) - q (review R1-C1 / R2-C2)
+    pub(crate) fn power2round(&self, a: &Int) -> (Int, Int) {
         let mut ret = Int::new(a.n);
         ret.redp(a, &self.q);
+        let rp = ret;
         let mut r0 = Int::new(a.n);
         r0.rshift(&ret, self.d);
         r0.lshift(&{ r0 }, self.d);
@@ -104,8 +106,18 @@ impl Dcomp {
         let hi = r0.absgt(&self.pow2dby2) as u64;
         cnd_addsub(&mut r0, &self.pow2d, hi, true);
         ret.sub(&{ ret }, &r0);
+        let wrap = ret.absge(&self.q) as u64;
+        let keep = crate::ct::mask(wrap ^ 1);
+        for x in &mut ret.l[..ret.n] {
+            *x &= keep;
+        }
+        let mut na = *a;
+        let mut dlt = Int::new(a.n);
+        dlt.sub(&rp, &self.q);
+        dlt.sub(&{ dlt }, a);
+        cnd_addsub(&mut na, &dlt, wrap, false);
         ret.rshift(&{ ret }, self.d);
-        ret
+        (ret, na)
     }
 
     /// `dcompress_use_ghint`, one coefficient: r in (-q, q), y in (-m/2, m/2]; result in [0, m)
@@ -462,7 +474,7 @@ pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error>
     Ok(w.b)
 }
 
-/// `pqz_test_mutate` (test hook): decode `proof` as relation `code`, change one field (`kind` 0..14 with `r1`, `r2`;
+/// `pqz_test_mutate` (test hook): decode `proof` as relation `code`, change one field (`kind` 0..15 with `r1`, `r2`;
 /// any other kind re-encodes only) and re-encode. `Ok(None)` where C returns 0: an unknown code, a proof that does
 /// not decode, an encoding over 2 MAX_PROOF bytes (the hook's buffer) or a fixed-width value out of range.
 #[cfg(feature = "test-hooks")]
@@ -487,6 +499,7 @@ pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -
         1 => f.z21.swap(ix(m2r), ((r1 / m2r + 1 + r1 % m2r) % m2r) as usize),
         2 => core::mem::swap(&mut f.z3[ix(4)], &mut f.z4[((r1 >> 8) % 4) as usize]),
         3 => add(&mut f.z1[ix(m1)], c64, sg),
+        // 4 / 6: large fixed magnitudes, the same at every set (as C: the norm check or the equations reject them)
         4 => set(&mut f.z1[ix(m1)], c64, sg * ((1 << 25) + (r1 % 1000) as i64)),
         5 => set(&mut f.z4[ix(4)], c64, sg * (p.bz4.get_i64() + ((r1 >> 8) as i64) % 2)),
         6 => add(&mut f.z3[ix(4)], c64, sg * (1 << 20)),
@@ -497,10 +510,15 @@ pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -
             set(&mut f.c, c64, v)
         }
         10 => set(&mut f.t_b[ix((tb.l + tb.lext) as u64)], c64, (r1 % Q) as i64),
-        11 => set(&mut f.t_a1[ix(km)], c64, ((r1 >> 8) % (1 << (42 - p.quad_eval.quad_many.dcompress.d))) as i64),
+        11 => set(&mut f.t_a1[ix(km)], c64, ((r1 >> 8) % (1 << (crate::params::set::LOG2Q - p.quad_eval.quad_many.dcompress.d))) as i64),
         12 => add(&mut f.z21[ix(m2r)], c64, sg),
         13 => f.h.swap(0, 1),
         14 => add(&mut f.z3[ix(4)], c64, sg),
+        15 => {
+            // tg (B-1's binding test, fs_bind): coefficient +1 mod q of one poly of the commitment to g
+            let x = &mut f.t_b[p.quad_eval.quad_eval.l as usize + ix(p.quad_eval.lambda as u64 / 2)];
+            set(x, c64, (get(x, c64) + 1) % Q as i64)
+        }
         _ => {}
     }
     match encode_proof(&f, 2 * MAX_PROOF) {

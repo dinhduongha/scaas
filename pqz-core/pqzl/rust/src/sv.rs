@@ -7,10 +7,11 @@
 //! w1)||). Only the verifier's polynomial v is computed differently: every equation is evaluated on z directly and
 //! combined with the same scalars, instead of building the sparse quadratic forms of `lnp_tbox_verify`.
 //!
-//! Ring products: complete negacyclic NTT of degree 64 over NP = 4 NTT-friendly 30-bit primes (product P ~ 2^120),
-//! Montgomery form throughout. An integer polynomial is exact while its coefficients stay below P/2 in absolute
-//! value; it is then CRT-reconstructed and reduced mod q (`red`). Inputs enter below 2^42 in absolute value; the
-//! largest sum formed is < 2^106 (bounds next to each sum, as in C), so no input, honest or adversarial, overflows it.
+//! Ring products: complete negacyclic NTT of degree 64 over NP = `set::SV_NP` NTT-friendly 30-bit primes (product P ~
+//! 2^(30 NP)), Montgomery form throughout. An integer polynomial is exact while its coefficients stay below P/2 in
+//! absolute value; it is then CRT-reconstructed and reduced mod q (`red`). Inputs enter below 2^L in absolute value
+//! (L = the set's log2q); the largest sum formed is < 2^(2L + 23) (pqz_sv.c's bounds, given there at L = 46), and
+//! gen_set.py picks NP with P/2 above it, so no input, honest or adversarial, overflows it.
 //!
 //! PRG: LaZer's AES-256-CTR (`rand::rng`, the `aes` crate of D1; C uses a table AES here, the stream is the same) and
 //! LaZer's `_urandom_i64` (`rand::urandom`, which C's local copy reproduces).
@@ -35,7 +36,13 @@ use crate::rel::{self, Rel, RELS};
 use crate::{Ctx, Error, HEADER_BYTES, MAX_PROOF, POLYVEC_BYTES, PREFIX_BYTES, V_BYTES};
 use alloc::vec::Vec;
 
-const NP: usize = 4;
+use crate::params::set;
+const NP: usize = set::SV_NP;
+const L: u32 = set::LOG2Q;
+// lift: two folds below 2^31; jl_fold: 256 q < 2^63 and >= -q 2^(63 - L) (review R2-C1)
+const _: () = assert!(L <= 55);
+// P / 2 above the largest sum 2^(2L + 23) (gen_set.py's NP rule; C pqz_sv.c, review R1-C6 / R2-C6)
+const _: () = assert!(30 * NP - 1 > 2 * L as usize + 23);
 const DEG: usize = 64;
 const LAMBDA: usize = 4;
 /// quad_many l: y3 (4), y4 (4), beta, g (2)
@@ -43,12 +50,10 @@ const NQL: usize = 11;
 /// quad_eval l: y3, y4, beta
 const NQEL: usize = 9;
 /// polys per public key / ciphertext vector
-const NPK: usize = 32;
+const NPK: usize = set::K;
 /// JL rows
 const JLR: usize = 256;
 const M30: u64 = (1 << 30) - 1;
-const M42: u64 = (1 << 42) - 1;
-const M21: u64 = (1 << 21) - 1;
 
 /// NTT domain, Montgomery form, entries in [0, 2p)
 type Nt = [[u32; DEG]; NP];
@@ -74,22 +79,15 @@ fn subq(a: u64, b: u64) -> u64 {
 fn negq(a: u64) -> u64 {
     csubq(Q - a)
 }
-/// a, b < 2^42: 21-bit limbs, 64-bit products only (wasm32 has no 64 x 64 -> 128)
+/// a, b < q (Barrett, `ntt::mulq`; the v3 2^42 - 215 folds it replaced gave the same values)
 #[inline]
 fn mulq(a: u64, b: u64) -> u64 {
-    let (a0, a1, b0, b1) = (a & M21, a >> 21, b & M21, b >> 21);
-    let (l, m, h) = (a0 * b0, a0 * b1 + a1 * b0, a1 * b1);
-    let x = (l & M42) + ((m & M21) << 21) + 215 * ((l >> 42) + (m >> 21) + h); // < 2^51
-    let x = (x >> 42) * 215 + (x & M42);
-    csubq(x)
+    ntt::mulq(a, b)
 }
-/// -q 2^20 <= x < 2^62 -> [0, q); every caller passes |x| < 2^51
+/// x >= -q 2^(63-L) -> [0, q); every caller passes |x| < 2^(L+9)
 #[inline]
 fn modq(x: i64) -> u64 {
-    let u = (x + ((Q as i64) << 20)) as u64; // in [0, 2^63) by the precondition
-    let u = (u & M42) + 215 * (u >> 42); // < 2^42 + 2^31
-    let u = (u & M42) + 215 * (u >> 42);
-    csubq(u)
+    ntt::modq_i64(x)
 }
 /// [0, q) -> (-q/2, q/2]
 #[inline]
@@ -135,7 +133,7 @@ struct Prime {
     f2: u32,
     /// 2^30 - p
     delta: u32,
-    /// a multiple of p >= 2^42 (lifts signed inputs)
+    /// a multiple of p >= 2^L (lifts signed inputs)
     k: u64,
     /// Garner: p_j^-1 2^32 mod p, j < this prime's index
     g: [u32; NP],
@@ -164,12 +162,12 @@ fn csub(x: u32, m: u32) -> u32 {
     let t = x.wrapping_sub(m);
     t.wrapping_add(m & (t >> 31).wrapping_neg())
 }
-/// |x| < 2^42 -> x 2^32 mod p in [0, 2p)
+/// |x| < 2^L -> x 2^32 mod p in [0, 2p)
 #[inline]
 fn lift(x: i64, p: &Prime) -> u32 {
-    let u = (x + p.k as i64) as u64; // < 2^44
-    let u = (u & M30) + (u >> 30) * p.delta as u64; // < 2^30 + 2^14 delta < 2^31
-    let u = (u & M30) + (u >> 30) * p.delta as u64;
+    let u = (x + p.k as i64) as u64; // < 2^(L+2)
+    let u = (u & M30) + (u >> 30) * p.delta as u64; // < 2^(L-12)
+    let u = (u & M30) + (u >> 30) * p.delta as u64; // < 2^31
     mmul(u as u32, p.r2, p)
 }
 
@@ -314,7 +312,7 @@ fn acc_sub(r: &mut Acc, a: &Nt, pr: &[Prime; NP]) {
         }
     }
 }
-/// r += / -= s a, s < 2^42
+/// r += / -= s a, s < 2^L
 #[inline]
 fn acc_scal(r: &mut Acc, a: &Nt, s: u64, sub: bool, pr: &[Prime; NP]) {
     for i in 0..NP {
@@ -328,7 +326,7 @@ fn acc_scal(r: &mut Acc, a: &Nt, s: u64, sub: bool, pr: &[Prime; NP]) {
 }
 
 /// What C keeps in static storage for every relation: the primes, the mod-q images of the CRT weights, the all-ones
-/// polynomial, and A (32 x 32) in this form.
+/// polynomial, and A (K x K) in this form.
 pub(crate) struct Ar {
     pr: [Prime; NP],
     /// p_0 ... p_{i-1} mod q, P mod q
@@ -343,7 +341,7 @@ pub(crate) struct Ar {
 }
 
 impl Ar {
-    /// |a_j| < 2^42
+    /// |a_j| < 2^L
     fn fwd(&self, a: &[i64]) -> Nt {
         let mut r = NT0;
         for i in 0..NP {
@@ -431,7 +429,7 @@ impl Ar {
         self.fwd(&a)
     }
 
-    /// `primes_init` (with `aes_tables`'s place taken by the `aes` crate) and A in this form (`lz_mat (A, 32, 32)`)
+    /// `primes_init` (with `aes_tables`'s place taken by the `aes` crate) and A in this form (`lz_mat (A, NPK, NPK)`, K x K)
     fn new(a: &PolyMat) -> Result<Ar, Error> {
         let mut ar = Ar { pr: [PRIME0; NP], mq: [0; NP], pq: 0, hd: [0; NP], nj: NT0, sa: Vec::new() };
         let mut p: u32 = (1 << 30) - 127; // = 1 mod 128
@@ -450,7 +448,7 @@ impl Ar {
                 if pm.delta >= 1 << 16 {
                     return Err(Error::Internal);
                 }
-                pm.k = ((1u64 << 42) / pp + 1) * pp;
+                pm.k = ((1u64 << L) / pp + 1) * pp;
                 let r = (1u64 << 32) % pp;
                 let mut g = 2;
                 let psi = loop {
@@ -573,10 +571,10 @@ fn vz<T: Clone>(n: usize, x: T) -> Result<Vec<T>, Error> {
 
 // ---------------------------------------------------------------- PRG
 
-/// `urandom_q (v, n, seed, dom)`: LaZer `_urandom_i64`, n values mod q in 42-bit fields
+/// `urandom_q (v, n, seed, dom)`: LaZer `_urandom_i64`, n values mod q in L-bit fields
 fn urandom_q(v: &mut [u64], seed: &[u8; 32], dom: u64) -> Result<(), Error> {
     let mut t = vz(v.len(), 0i64)?;
-    urandom_i64(&mut t, Q as i64, 42, seed, dom)?;
+    urandom_i64(&mut t, Q as i64, L, seed, dom)?;
     for (x, y) in v.iter_mut().zip(t) {
         *x = y as u64;
     }
@@ -606,7 +604,7 @@ fn tr8(mut x: u64) -> u64 {
 /// acc[4 j + k] = sum_{i < 256} V[k][i] R_i[j], j < ncols, R_i = LaZer `_brandom` (k = 1) of ncols entries from
 /// (seed, dom0 + i): ncols plus bits then ncols minus bits, LSB first. Eight rows at a time: T[x] = sum of the eight
 /// rows' challenges selected by the bits of x, indexed by each column's transposed plus / minus bits.
-/// |acc| < 256 q < 2^50. rows: scratch of 8 ncols / 4 bytes.
+/// |acc| < 256 q < 2^(L+8). rows: scratch of 8 ncols / 4 bytes.
 fn jl_fold(acc: &mut [i64], ncols: usize, v: &[[u64; JLR]; LAMBDA], seed: &[u8; 32], dom0: u64, rows: &mut [u8]) -> Result<(), Error> {
     let (rb, half) = (ncols / 4, ncols / 8);
     let mut t = [[0i64; LAMBDA]; 256];
@@ -644,16 +642,25 @@ fn jl_fold(acc: &mut [i64], ncols: usize, v: &[[u64; JLR]; LAMBDA], seed: &[u8; 
 
 /// legs of R_TXM (the oversize M = 16 included)
 const SVL: usize = 16;
-/// randomness groups
-const SVG: usize = 4;
+/// randomness groups (audited M = 16 with S_AUD legs each: R0-1)
+const SVG: usize = SVL.div_ceil(set::S_AUD);
 /// exact l2 blocks: s_f, e_f, r_g, e1_g, one per e2 vector (X-1)
 const SVZ: usize = 3 + 2 * SVG + 2 * SVL;
 /// evaluation-equation products
 const SVPR: usize = 2 + 2 * SVL;
 /// binary polys
-const SVBIN: usize = (853 + 64 * SVL).div_ceil(64);
+const SVBIN: usize = (BITS_BURN + 64 * SVL).div_ceil(64);
+const MB: usize = set::MBITS as usize;
+const CB: usize = set::CBITS as usize;
+const EB: usize = set::EBITS as usize;
+const EOFF: i64 = 1 << (EB - 1);
+const BITS_M: usize = 64;
+const BITS_C: usize = BITS_M + 16 * MB;
+const BITS_E: usize = BITS_C + 15 * CB;
+const BITS_BURN: usize = BITS_E + 16 * EB;
+const DR_NBIN: usize = (16 * EB).div_ceil(64);
 
-/// an R_q-linear row block of 32: (A or A^T) x[ox..] + y[oy + i] = vec[rhs][i]
+/// an R_q-linear row block of k: (A or A^T) x[ox..] + y[oy + i] = vec[rhs][i]
 #[derive(Clone, Copy, Default)]
 struct Rb {
     tr: bool,
@@ -667,6 +674,8 @@ struct Rb {
 struct Pr {
     v: usize,
     ox: usize,
+    /// the vec^T x part at coefficients [16 win, ..) (an auditor copy's window, R0-1)
+    win: usize,
     e2: Option<usize>,
 }
 
@@ -818,25 +827,25 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
     let mut ok = true;
     match r.code {
         3 => {
-            (s.n, s.m, s.nblk, s.dsel, s.pstart) = (32, 0, 2, 0, 0);
+            (s.n, s.m, s.nblk, s.dsel, s.pstart) = (NPK, 0, 2, 0, 0);
             s.nrb = 1;
-            s.rb[0] = Rb { tr: false, ox: 0, oy: 32, rhs: V_PK };
+            s.rb[0] = Rb { tr: false, ox: 0, oy: NPK, rhs: V_PK };
         }
         4 => {
             // u = A^T r + e1; pk^T r + e2_t
-            (s.n, s.m, s.nblk, s.dsel, s.pstart) = (32, 16, 3, 64, 65);
+            (s.n, s.m, s.nblk, s.dsel, s.pstart) = (NPK, 16, 3, 2 * NPK, 2 * NPK + 1);
             s.nrb = 1;
-            s.rb[0] = Rb { tr: true, ox: 0, oy: 32, rhs: V_U };
+            s.rb[0] = Rb { tr: true, ox: 0, oy: NPK, rhs: V_U };
             s.nprod = 1;
-            s.pr[0] = Pr { v: V_PKT, ox: 0, e2: Some(64) };
+            s.pr[0] = Pr { v: V_PKT, ox: 0, win: 0, e2: Some(2 * NPK) };
         }
         5 => {
             // pk = A s + e; u^T s
-            (s.n, s.m, s.nblk, s.dsel, s.pstart) = (32, 16, 2, 0, 64);
+            (s.n, s.m, s.nblk, s.dsel, s.pstart) = (NPK, 16, 2, 0, 2 * NPK);
             s.nrb = 1;
-            s.rb[0] = Rb { tr: false, ox: 0, oy: 32, rhs: V_PK };
+            s.rb[0] = Rb { tr: false, ox: 0, oy: NPK, rhs: V_PK };
             s.nprod = 1;
-            s.pr[0] = Pr { v: V_U, ox: 0, e2: None };
+            s.pr[0] = Pr { v: V_U, ox: 0, win: 0, e2: None };
         }
         _ => {
             // the debit relations R_TX, R_TX0, R_BURN, R_TXM (pqz_rel.c shape_t): rows 1, 2 per group; products
@@ -846,11 +855,12 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             let (m, a) = (r.legs, r.aud);
             s.burn = r.code == crate::OP_BURN;
             s.txm = r.op == crate::OP_TRANSFER_MULTI;
-            let g = if s.burn { 1 } else { m.div_ceil(4) };
-            let (e, e2f) = (64 + 64 * g, 64 + 64 * g + m);
+            let lpg = rel::lpg(a); // legs per group (R0-1)
+            let g = if s.burn { 1 } else { rel::groups(m, a) };
+            let (e, e2f) = (2 * NPK + 2 * NPK * g, 2 * NPK + 2 * NPK * g + m);
             (s.debit, s.legs, s.groups, s.aud) = (true, m, g, a);
             s.nvec = NVEC + m.saturating_sub(1) + (g - 1);
-            s.n = 32 * (1 + g);
+            s.n = NPK * (1 + g);
             s.m = 16 * (m + 1 + a * m + 2);
             s.nblk = 2 + 2 * g + m + 1 + a * m;
             s.dsel = e;
@@ -860,22 +870,22 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             if !ok {
                 return Err(Error::Internal);
             }
-            s.rb[0] = Rb { tr: false, ox: 0, oy: 32, rhs: V_PKF };
+            s.rb[0] = Rb { tr: false, ox: 0, oy: NPK, rhs: V_PKF };
             for gi in 0..g {
-                s.rb[1 + gi] = Rb { tr: true, ox: 64 + 64 * gi, oy: 96 + 64 * gi, rhs: s.v_u(gi) };
+                s.rb[1 + gi] = Rb { tr: true, ox: 2 * NPK + 2 * NPK * gi, oy: 3 * NPK + 2 * NPK * gi, rhs: s.v_u(gi) };
             }
             let mut k = 0;
             for j in 0..m {
-                s.pr[k] = Pr { v: s.v_pk(j), ox: 64 + 64 * (j / 4), e2: Some(e + j) };
+                s.pr[k] = Pr { v: s.v_pk(j), ox: 2 * NPK + 2 * NPK * (j / lpg), win: 0, e2: Some(e + j) };
                 k += 1;
             }
-            s.pr[k] = Pr { v: V_PKF, ox: 64, e2: Some(e2f) };
+            s.pr[k] = Pr { v: V_PKF, ox: 2 * NPK, win: 0, e2: Some(e2f) };
             k += 1;
             for j in 0..a * m {
-                s.pr[k] = Pr { v: V_PKA, ox: 64 + 64 * (j / 4), e2: Some(e2f + 1 + j) };
+                s.pr[k] = Pr { v: V_PKA, ox: 2 * NPK + 2 * NPK * (j / lpg), win: j % lpg, e2: Some(e2f + 1 + j) };
                 k += 1;
             }
-            s.pr[k] = Pr { v: V_UT, ox: 0, e2: None };
+            s.pr[k] = Pr { v: V_UT, ox: 0, win: 0, e2: None };
             k += 1;
             s.nprod = k;
         }
@@ -902,9 +912,10 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
         && qm.m1 as usize == s.mq
         && qe.m1 as usize == s.mq
         && qm.kmsis as usize == s.kmsis
-        && ring.log2q == 42
+        && ring.log2q == L
         && qm.omega == 8
-        && qm.log2omega == 5;
+        && qm.log2omega == 5
+        && qm.eta == 140;
     if !ok {
         return Err(Error::Internal);
     }
@@ -913,7 +924,7 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
     (s.bz3sqr, s.bz4, s.bsq) = (u(&p.bz3sqr)?, u(&p.bz4)?, u(&qm.bsqr)?);
     (s.gamma, s.gammaby2, s.dm, s.qm1) = (u(&dc.gamma)?, u(&dc.gammaby2)?, u(&dc.m)?, u(&dc.qminus1)?);
     (s.d, s.log2m) = (dc.d, dc.log2m);
-    ok &= s.log2m <= 42;
+    ok &= s.log2m <= L;
     s.inv2 = int_modq(&ring.inv2);
     s.inv4 = int_modq(&p.inv4);
     ok &= mulq(s.inv2, 2) == 1 && mulq(s.inv4, 4) == 1 && s.qm1 == Q - 1;
@@ -934,11 +945,11 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
     s.opow = vz(s.z, NT0)?;
     for i in 0..s.z {
         s.b2[i] = u(&p.l2bsqr[i])?;
-        if s.b2[i] >= 1 << 42 {
+        if s.b2[i] >= 1 << L {
             return Err(Error::Internal);
         }
         let mut a = [0i64; DEG];
-        for k in 0..42 {
+        for k in 0..L as usize {
             // int_binexp (NULL, powB, B^2)
             if 1u64 << k <= s.b2[i] {
                 a[k] = 1 << k;
@@ -969,6 +980,8 @@ struct Stmt {
     va: [[i64; 16]; SVL],
     fee: u64,
     amount: u64,
+    /// R_DS / R_DR: the kind word's window (rel.rs parse_disc; R0-1)
+    win: usize,
 }
 
 /// pqz_rel.c rd_poly: every value < q
@@ -1067,6 +1080,10 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
             let o;
             (t.amount, o) = rel::word64(&stmt[rel::DISC_AMOUNT..]);
             ok &= o;
+            let (kind, o) = rel::word64(&stmt[rel::DISC_AMOUNT + 32..]);
+            let wmax = if code == crate::OP_DISCLOSE_SENDER { 1 } else { set::S_AUD as u64 };
+            ok &= o & (kind >> 16 == 0) & ((kind >> 8) < wmax);
+            t.win = ((kind >> 8) & 3) as usize;
             let mut p = rel::DISC_PK;
             ok &= rd_vec(&mut t.vec[if code == crate::OP_DISCLOSE_SENDER { V_PKT } else { V_PK }], &stmt[p..]);
             p += POLYVEC_BYTES;
@@ -1084,7 +1101,7 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
 // (vec^T x (+ e2)), Gm[k] = sum over the equations on product k of g_e X^-i, Ab the weighted bit coefficients
 // (add_bit: coef X^-(slot % 64) on bit poly slot / 64), rho the weighted constants
 
-const TX_DELTA: i64 = (1 << 26) - 1;
+const TX_DELTA: i64 = set::DELTA;
 
 fn slot(base: usize, w: usize, i: usize, b: usize) -> usize {
     base + w * i + b
@@ -1115,12 +1132,12 @@ fn digit(x: u64, i: usize) -> i64 {
 }
 
 /// the debit relations (pqz_rel.c build_debit, its equation order): M legs (R_TX, R_TX0: 1; R_BURN: 0 with d =
-/// digits(amount) public; R_TXM: M), auditor copies on / off; bit slots d_j at 64 j, d' at 64 M, M_i at 64 M + 64,
-/// c_i + 64 at 64 M + 288, e_T + 2^24 at 64 M + 453; products as SvRel.pr (legs, pk_f, auditor copies, u_T)
+/// digits(amount) public; R_TXM: M), auditor copies on / off; bit slots d_j at 64 j, d' at 64 M, M_i at 64 M +
+/// BITS_M, c_i + 64 at 64 M + BITS_C, e_T + E at 64 M + BITS_E; products as SvRel.pr (legs, pk_f, auditor copies, u_T)
 fn debit_eval_fold(gm: &mut [Cp], ab: &mut [Cp], g: &[u64], t: &Stmt, s: &SvRel) -> u64 {
     let (m, a) = (s.legs, s.aud);
     let dp = 64 * m;
-    let (mb, cb, eb) = (dp + 64, dp + 288, dp + 453);
+    let (mb, cb, eb) = (dp + BITS_M, dp + BITS_C, dp + BITS_E);
     let (kf, kt) = (m, m + 1 + a * m);
     let mut e = 0;
     let mut r = 0u64;
@@ -1153,22 +1170,22 @@ fn debit_eval_fold(gm: &mut [Cp], ab: &mut [Cp], g: &[u64], t: &Stmt, s: &SvRel)
         }
         // row 6: (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^24) - 2^24 - v_T,i
         tx_xinv(&mut gm[kt], i, g[e]);
-        for b in 0..14 {
-            tx_bit(ab, slot(mb, 14, i, b), TX_DELTA << b, g[e]);
+        for b in 0..MB {
+            tx_bit(ab, slot(mb, MB, i, b), TX_DELTA << b, g[e]);
         }
-        for b in 0..25 {
-            tx_bit(ab, slot(eb, 25, i, b), 1 << b, g[e]);
+        for b in 0..EB {
+            tx_bit(ab, slot(eb, EB, i, b), 1 << b, g[e]);
         }
-        r = addq(r, mulq(g[e], modq(-t.vt[i] - (1 << 24))));
+        r = addq(r, mulq(g[e], modq(-t.vt[i] - EOFF)));
         e += 1;
         // row 7: M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i - 16 c_i (c = cbits - 64)
         let mut rhs = -digit(t.fee, i) - dpub;
-        for b in 0..14 {
-            tx_bit(ab, slot(mb, 14, i, b), 1 << b, g[e]);
+        for b in 0..MB {
+            tx_bit(ab, slot(mb, MB, i, b), 1 << b, g[e]);
         }
         if i >= 1 {
-            for b in 0..11 {
-                tx_bit(ab, slot(cb, 11, i - 1, b), 1 << b, g[e]);
+            for b in 0..CB {
+                tx_bit(ab, slot(cb, CB, i - 1, b), 1 << b, g[e]);
             }
             rhs -= 64;
         }
@@ -1179,8 +1196,8 @@ fn debit_eval_fold(gm: &mut [Cp], ab: &mut [Cp], g: &[u64], t: &Stmt, s: &SvRel)
             }
         }
         if i <= 14 {
-            for b in 0..11 {
-                tx_bit(ab, slot(cb, 11, i, b), -(16 << b), g[e]);
+            for b in 0..CB {
+                tx_bit(ab, slot(cb, CB, i, b), -(16 << b), g[e]);
             }
             rhs += 16 * 64;
         }
@@ -1190,19 +1207,19 @@ fn debit_eval_fold(gm: &mut [Cp], ab: &mut [Cp], g: &[u64], t: &Stmt, s: &SvRel)
     r
 }
 
-/// R_DS: (pk^T r)_i + e2_i + Delta d_i - v_i; R_DR: (u^T s)_i + (e'_i + 2^24) - 2^24 + Delta d_i - v_i
+/// R_DS: (pk^T r)_i + e2_i + Delta d_i - v_i; R_DR: (u^T s)_i + (e'_i + E) - E + Delta d_i - v_i
 fn disc_eval_fold(gm: &mut [Cp], ab: &mut [Cp], g: &[u64], t: &Stmt, recv: bool) -> u64 {
     let mut r = 0u64;
     gm[..1].fill([0; DEG]);
-    ab[..7].fill([0; DEG]);
+    ab[..DR_NBIN].fill([0; DEG]);
     for i in 0..16 {
         tx_xinv(&mut gm[0], i, g[i]);
         if recv {
-            for b in 0..25 {
-                tx_bit(ab, 25 * i + b, 1 << b, g[i]);
+            for b in 0..EB {
+                tx_bit(ab, EB * i + b, 1 << b, g[i]);
             }
         }
-        let c = TX_DELTA * digit(t.amount, i) - t.v[0][i] - if recv { 1 << 24 } else { 0 };
+        let c = TX_DELTA * digit(t.amount, i) - t.v[0][i] - if recv { EOFF } else { 0 };
         r = addq(r, mulq(g[i], modq(c)));
     }
     r
@@ -1243,7 +1260,7 @@ fn l2_le(a: &[i64], bnd: u64) -> bool {
 /// hash = SHAKE128(hash || enc(v)): one Fiat-Shamir round over urandom-coded polys mod q
 fn hash_enc(hash: &[u8; 32], v: &mut polyvec::Sv<'_>) -> Result<[u8; 32], Error> {
     let mut c = Coder::new();
-    c.urandom(v, &crate::arith::poly::RING_Q, 42)?;
+    c.urandom(v, &crate::arith::poly::RING_Q, L)?;
     Ok(hash2(hash, &c.end()?))
 }
 
@@ -1257,7 +1274,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let ntot = LAMBDA / 2 + 2 + s.n;
 
     // statement (pqz_rel.c build_reg / parse_debit / parse_disc: every coefficient < q)
-    let mut t = Stmt { vec: vz(s.nvec, [[0; DEG]; NPK])?, vt: [0; 16], vf: [0; 16], v: [[0; 16]; SVL], va: [[0; 16]; SVL], fee: 0, amount: 0 };
+    let mut t = Stmt { vec: vz(s.nvec, [[0; DEG]; NPK])?, vt: [0; 16], vf: [0; 16], v: [[0; 16]; SVL], va: [[0; 16]; SVL], fee: 0, amount: 0, win: 0 };
     if !parse_stmt(&mut t, s, code, stmt) {
         return Ok(false);
     }
@@ -1308,12 +1325,12 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
             polyvec::redp_self(&mut tv);
         }
         for (off, n) in [(0, 4), (4, 4), (8, 1)] {
-            c.urandom(&mut f.t_b.sub(off, n, 1), &crate::arith::poly::RING_Q, 42)?;
+            c.urandom(&mut f.t_b.sub(off, n, 1), &crate::arith::poly::RING_Q, L)?;
         }
         hash2(&hash, &c.end()?)
     };
-    // P6-FS (lazer#28, PQZL v3): hz = H(hash0 || grandom3(z3) || grandom3(z4)), the seed of V3 / V4 (g0) and of the
-    // tg round; the JL rows R / R' stay on hash0 (the prover's cseed, which z3 / z4 depend on)
+    // P6-FS (lazer#28, PQZL v3): hz = H(hash0 || grandom3(z3) || grandom3(z4)), the input of the tg round; the JL rows
+    // R / R' stay on hash0 (the prover's cseed, which z3 / z4 depend on)
     let mut hz = hash0;
     tbox::hash_z34(&mut hz, &f.z3, &f.z4, p)?;
     // h: coefficients 0 and d/2 are zero
@@ -1390,7 +1407,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let cbm = nt_mul(&wc, &bm_, pr);
 
     // challenges: the PRG seeds
-    let (g0, g1, g2) = (&hz, &hash1, &h2);
+    let (g1, g2) = (&hash1, &h2);
 
     // ---- the evaluation-equation polynomials that do not depend on the challenges ----
     // upsilon: sum_j o(u_j) (u_j - c J)   (Z <= 43 terms with X-1: |.| < 43 * 2^91)
@@ -1423,31 +1440,45 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let mut pke = vz(s.nprod.max(1), NT0)?;
     for k in 0..s.nprod {
         let pk = &s.pr[k];
+        // the window (R0-1): an auditor copy's vec^T x at coefficients [16 w, ..), R_DR's u^T s at the kind word's w;
+        // the e2 part stays at [0, 16): P_k = X^-16w vec^T x + e2
+        let w = if s.debit { pk.win } else { t.win };
         let mut acc = ACC0;
         for j in 0..NPK {
             let t1 = ar.fwd(&t.vec[pk.v][j]);
             acc_mul(&mut acc, &t1, &wz[pk.ox + j], pr);
         }
-        if let Some(e2) = pk.e2 {
+        if let (Some(e2), 0) = (pk.e2, w) {
             acc_add(&mut acc, &wz[e2]);
         }
-        pke[k] = ar.fwd(&ar.red(&acc));
+        let mut r = ar.red(&acc);
+        if w != 0 {
+            let o = 16 * w;
+            let sh: Cp = core::array::from_fn(|j| if j + o < DEG { r[j + o] } else { negq(r[j + o - DEG] as u64) as i64 });
+            r = sh;
+            if let Some(e2) = pk.e2 {
+                for j in 0..DEG {
+                    r[j] = addq(r[j] as u64, modq(zc[DEG * e2 + j])) as i64;
+                }
+            }
+        }
+        pke[k] = ar.fwd(&r);
     }
 
-    // ---- z3 / z4 (JL) rows: V from (hz, dom), R / R' rows from (hash0, i) / (hash0, 256 + i) ----
+    // ---- z3 / z4 (JL) rows: V from (hash1, dom) (B-1: after tg), R / R' rows from (hash0, i) / (hash0, 256 + i) ----
     let mut v3 = vz(1, [[0u64; JLR]; LAMBDA])?;
     let mut v4 = vz(1, [[0u64; JLR]; LAMBDA])?;
     let (v3, v4) = (&mut v3[0], &mut v4[0]);
     let mut gz = [NT0; LAMBDA]; // z3 + z4 term of accumulator half k (reduced)
-    let dom_z4 = (mm + 2 * (DEG - 1) + 2 + z) as u32;
+    let dom_z4 = (mm + 2 * (DEG - 1) + 3 + z) as u32; // A-2: upsilon, binary, l2 and V one domain up
     let dom_z3 = dom_z4 + 256;
     #[cfg(feature = "test-hooks")]
     {
-        crate::fstrace::rec(12, g0, dom_z4 as u64); // kinds + 10: the SV tag
-        crate::fstrace::rec(13, g0, dom_z3 as u64);
+        crate::fstrace::rec(12, g1, dom_z4 as u64); // kinds + 10: the SV tag
+        crate::fstrace::rec(13, g1, dom_z3 as u64);
     }
-    urandom_mat(v4, g0, dom_z4)?;
-    urandom_mat(v3, g0, dom_z3)?;
+    urandom_mat(v4, g1, dom_z4)?;
+    urandom_mat(v3, g1, dom_z3)?;
     {
         let mut ga = [ACC0; LAMBDA];
         // inv2 (beta + o(beta)), inv2 X^32 (o(beta) - beta) as coefficients mod q
@@ -1566,14 +1597,14 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         for i in 1..DEG {
             one(mm + DEG - 1 + i, &mut e)?; // beta4: dom M + d - 1 + i
         }
-        one(mm + 2 * (DEG - 1), &mut e)?; // upsilon
+        one(mm + 2 * (DEG - 1) + 1, &mut e)?; // upsilon (A-2: not the last beta4 row's dom)
         if s.nbin > 0 {
-            one(mm + 2 * (DEG - 1) + 1, &mut e)?; // binary
+            one(mm + 2 * (DEG - 1) + 2, &mut e)?; // binary
         } else {
             e += 1;
         }
         for i in 0..z {
-            one(mm + 2 * (DEG - 1) + 2 + i, &mut e)?; // l2: one call per equation, dom + i (P6-L2)
+            one(mm + 2 * (DEG - 1) + 3 + i, &mut e)?; // l2: one call per equation, dom + i (P6-L2)
         }
     }
     let (mut gm, mut abits) = (vz(SVPR, [0i64; DEG])?, vz(SVBIN, [0i64; DEG])?);
@@ -1732,12 +1763,16 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         polyvec::mod_self(&mut tt);
         polyvec::redp_self(&mut tt);
         let mut c = Coder::new();
-        c.urandom(&mut tt, &crate::arith::poly::RING_Q, 42)?;
-        c.urandom(core::slice::from_mut(&mut vv), &crate::arith::poly::RING_Q, 42)?;
+        c.urandom(&mut tt, &crate::arith::poly::RING_Q, L)?;
+        c.urandom(core::slice::from_mut(&mut vv), &crate::arith::poly::RING_Q, L)?;
         c.urandom(&mut *w1v, &Int::from_i64(1, s.dm as i64), s.log2m)?;
         let cseed = hash2(g2, &c.end()?);
-        let mut c2 = Poly::urandom_autostable(8, 5, &cseed, 0)?;
-        if !Poly::eq(&mut f.c, &mut c2) {
+        // the eta-filtered challenge (R0-C3)
+        let ok = match Poly::urandom_challenge(8, 5, 140, &cseed)? {
+            Some(mut c2) => Poly::eq(&mut f.c, &mut c2),
+            None => false,
+        };
+        if !ok {
             return Ok(false);
         }
     }

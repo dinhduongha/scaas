@@ -242,7 +242,9 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
       shake128_absorb (hstate, out, outlen);
       shake128_squeeze (hstate, cseed, 32);
 
-      poly_urandom_autostable (c, params->omega, params->log2omega, cseed, 0);
+      /* PQZ (R0-C3): c in the eta-filtered challenge set (none of 256 samples passes: try again) */
+      if (!poly_urandom_challenge (c, params->omega, params->log2omega, params->eta, cseed))
+        continue;
 
       polyvec_scale2 (cs1, c, s1);
       polyvec_scale2 (cs2, c, s2); // XXX correct
@@ -491,8 +493,9 @@ lnp_quad_verify (uint8_t hash[32], poly_t c, polyvec_t z1, polyvec_t z21,
   shake128_absorb (hstate, out, outlen);
   shake128_squeeze (hstate, cseed, 32);
 
-  poly_urandom_autostable (c2, params->omega, params->log2omega, cseed, 0);
-  b = poly_eq (c, c2);
+  /* PQZ (R0-C3): the eta-filtered challenge (none of 256 samples passes: reject) */
+  b = poly_urandom_challenge (c2, params->omega, params->log2omega, params->eta, cseed);
+  b = b && poly_eq (c, c2);
   if (!b) {
     //printf("XXX recovering challenge failed.\n");
     goto ret;

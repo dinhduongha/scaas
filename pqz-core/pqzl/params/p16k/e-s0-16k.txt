@@ -1,0 +1,45 @@
+
+====================================================================================================
+0. Environment and the 16k parameter checks (pq-zero-knowledge.md §4.3 with K = 16,384)
+====================================================================================================
+Python 3.12.5, numpy 2.2.4
+q = 2^50 - 42,310,535 = 1125899864532089 prime, q mod 16 = 9 (l = 4): OK
+Delta = floor(q / 2^20) = 1073741783 = 2^30 - 41: OK
+LS18 Cor. 1.2 invertibility bound q^(1/l)/sqrt(l) = 2896.3 (l_inf; today 724)
+B_FRESH = 14624; K_MAX * B_FRESH = 239599616 <= E = 2^28: OK
+15 K_MAX = 245760 < 2^18 (digit sums M_i): OK
+uniqueness 2E = 2^29 <= Delta: OK
+centring Delta (2^18 - 1) + E = 2^48.000 < q/2: OK
+mint margin (Delta - E) / ((K - 1) B_FRESH) = 3.36x (today 4.14x)
+Solidity lanes: 2^64 / q = 2^14.000 terms >= ROLL_MAX + 1 + INLINE_MAX for ROLL_MAX < 2^14 - 17: OK
+
+====================================================================================================
+3a. Challenge space (LNP22 4.4; independent of q, re-checked against the 16k LS18 bound)
+====================================================================================================
+kappa = 6: eta = 105, |C| = 2^118.40, 2/|C| = 2^-117.40, 2 kappa = 12 < 2896: True
+kappa = 7: eta = 121, |C| = 2^125.01, 2/|C| = 2^-124.01, 2 kappa = 14 < 2896: True
+kappa = 8: eta = 137, |C| = 2^130.78, 2/|C| = 2^-129.78, 2 kappa = 16 < 2896: True
+kappa = 9: eta = 154, |C| = 2^135.92, 2/|C| = 2^-134.92, 2 kappa = 18 < 2896: True
+=> kappa = 8, eta = 137; 2 kappa < LS18 bound: OK
+R_TX: 1105 bits, m1 = 183 ring elements (11712 coefficients), ||s1|| <= alpha = 288.0; lambda = 3 (q^-3 = 2^-150.00)
+
+====================================================================================================
+4. Exactness of the norm proofs (no wrap-around mod q)
+====================================================================================================
+JL extracted bound b' = 2 sqrt(512) s3 / sqrt(30) = 4.805e+05 = 2^18.87
+exact l2: b'^2 + beta_e^2 = 2^37.75 < q = 2^50.00: OK
+modular JL: 41 * N * b' = 2^37.75 < q: OK
+binary rows: largest reconstructed integer 2^29 (e_T + 2^28) < q: OK
+row 7 terms |M_i + c_(i-1) - d'_i - d_i - 16 c_i| < 2^19 < q: OK
+R_DR: e' + 2^28 in 29 bits, Delta d + e' < q: OK
+
+====================================================================================================
+5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own)
+====================================================================================================
+R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)             128.00 bits OK  unit-vector case 2^-128.99
+R2 Z_q amortization, lambda = 3 repetitions (q^-lambda)                    150.00 bits OK  
+R2 with lambda = 2 (for reference)                                         100.00 bits MISS  not used
+R3 R_q aggregation of quadratic relations (q^-(d/l) = q^-16)               800.00 bits OK  
+R4 final challenge c in C, kappa = 8, eta = 137 (2/|C|)                    129.78 bits OK  
+
+GATE (16k checks, exactness, FS rounds): MET

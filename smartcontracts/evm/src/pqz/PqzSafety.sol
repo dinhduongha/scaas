@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {PqzSet} from "./PqzSet.sol";
+
 /// @title The PQZ chain gate (CTR-PQZ-01, CTR-PQZ-10; P6g plan D2): a hard-coded allowlist and the precompile self-test.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The allowlist is code, not a parameter: adding a chain is a reviewed
 ///         change and a new deploy (as `ZetherSafety`). A chain id alone proves nothing (a missing chainspec key looks
 ///         exactly like an enabled one), so every deploy also asks the precompile for its frozen self-test hash.
 library PqzSafety {
-    /// @notice The `PQZ` precompile on chain 7622 (CTR-PQZ-10), the same address on the dev chains.
-    address internal constant PQZ = 0x5caA500000000000000000000000000000000F01;
-    /// @notice `OP_SELFTEST` (P6e D13, `selftest.json`): the precompile's answer to the input `06 00000000`.
-    bytes32 internal constant SELFTEST = 0xed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205;
-    /// @notice The proof systems the precompile verifies (CTR-PQZ-10): PQZL v3 (lazer#28 fix; v2 retired) and PQZH.
-    bytes32 internal constant PQZL_ID = 0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef;
-    bytes32 internal constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
+    /// @notice The `PQZ` precompile (CTR-PQZ-10; the 32-bit form `0x…5caa0f01` of plan 5h Task 8d, spec §12 item 9), the
+    ///         same address on the dev chains.
+    address internal constant PQZ = 0x000000000000000000000000000000005caa0f01;
+    /// @notice `OP_SELFTEST` (P6e D13, the set's `selftest.json`): the precompile's answer to the input `06 00000000` at
+    ///         the build's parameter set (`PqzSet`: a precompile built for another set answers another hash).
+    bytes32 internal constant SELFTEST = PqzSet.SELFTEST;
+    /// @notice The proof systems the precompile verifies at the build's set (CTR-PQZ-09 / CTR-PQZ-10, one id per set and
+    ///         system): PQZL, and PQZH where the set has it (`PqzSet.HAS_PQZH`; the zero word elsewhere, never accepted).
+    ///         Every other id — the retired PQZL v2 / v3 and PQZH v1, another set's — is refused.
+    bytes32 internal constant PQZL_ID = PqzSet.PQZL_ID;
+    bytes32 internal constant PQZH_ID = PqzSet.PQZH_ID;
 
     error NotAllowedChain(uint256 chainId);
     error SelfTestFailed(address pqz);
@@ -41,14 +47,19 @@ library PqzSafety {
         }
     }
 
+    /// @notice `psid` is the set's PQZL id, or its PQZH id where the set has PQZH.
+    function isPsid(bytes32 psid) internal pure returns (bool) {
+        return psid == PQZL_ID || (PqzSet.HAS_PQZH && psid == PQZH_ID);
+    }
+
     function requireSelfTest(address pqz) internal view {
         if (!selfTest(pqz)) revert SelfTestFailed(pqz);
     }
 
-    /// @notice What a token or a `UAPqzVerifier` may be bound to (review W-B): exactly `PQZ`, one of its two proof
+    /// @notice What a token or a `UAPqzVerifier` may be bound to (review W-B): exactly `PQZ`, one of the set's proof
     ///         systems, and its self-test now. A creator-chosen precompile could answer every proof with 1.
     function requirePqz(address pqz, bytes32 psid) internal view {
-        if (pqz != PQZ || (psid != PQZL_ID && psid != PQZH_ID)) revert NotPqz(pqz, psid);
+        if (pqz != PQZ || !isPsid(psid)) revert NotPqz(pqz, psid);
         requireSelfTest(pqz);
     }
 }

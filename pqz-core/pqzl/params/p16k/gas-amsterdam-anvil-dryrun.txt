@@ -1,0 +1,24 @@
+### dry run on anvil 1.8.5 (anvil --hardfork amsterdam --chain-id 7622 --gas-limit 36000000 --base-fee 7), same driver: anvil does NOT apply EIP-8037 / EIP-8038 (code deposit 200 / B, SSTORE 20,000 / 2,900: op blob 4,521,637 vs 32,327,187 on Nethermind and in cast run)
+== xcheck7622: chain 7622, head 0, client anvil/v1.8.5
+fresh key -> 0xb0fcaf18fea954ecf1b8ffda703ca7cdda4727ad (funded once from the dev key)
+  fund the fresh key: block 1 gasUsed 21000 estimate 21000 status 0x1
+MEASURED deploy PqzStateLib | calldata 6472 | estimate 1441248 | gasUsed 1441248
+MEASURED deploy PqzTransferLib | calldata 13632 | estimate 2989752 | gasUsed 2989752
+  deploy PqzOk: block 4 gasUsed 82425 estimate 82425 status 0x1
+  deploy PqzGasHarness: block 5 gasUsed 795608 estimate 795608 status 0x1
+harness 0xba0602cea4af412fceacc6a6733662430fda7de3, libs {'PqzStateLib': '0x7b7017f8c1ed23b618ba5a6d4447c6f4d0c326a9', 'PqzTransferLib': '0x2c57a2a8fb609a0571d110729276d197f3a910a0'}, PqzOk 0x28fc1a4359a8ff1a3fa236467ba4d0fbfee7ae7d
+MEASURED key pointer 0 | calldata 20580 | estimate 4308101 | gasUsed 4243141
+  setKey 0: block 7 gasUsed 44539 estimate 44539 status 0x1
+  key pointer 1: block 8 gasUsed 4243141 estimate 4308101 status 0x1
+  setKey 1: block 9 gasUsed 44539 estimate 44539 status 0x1
+  key pointer 2: block 10 gasUsed 4243141 estimate 4308101 status 0x1
+  setKey 2: block 11 gasUsed 44539 estimate 44539 status 0x1
+MEASURED op blob 0 | calldata 20868 | estimate 4587563 | gasUsed 4521637
+  seed 96 entries: block 108 gasUsed 2260120 estimate 2260120 status 0x1
+  setKey alice (any non-zero pointer: registered for prepareAcc): block 109 gasUsed 44527 estimate 44527 status 0x1
+MEASURED prepareAcc half 0 | calldata 68 | estimate 7300239 | gasUsed 7186606
+MEASURED prepareAcc half 1 | calldata 68 | estimate 7282879 | gasUsed 7169518
+MEASURED rollOver 16 (first materialisation) | calldata 68 | estimate 4199294 | gasUsed 4134115
+MEASURED rollOver 80 (ROLL_MAX, distinct cold blobs) | calldata 68 | estimate 7140395 | gasUsed 6645197
+MEASURED op 1 BUNDLE, auditor, fee, fresh sender, proof 52,624 B | calldata 77444 | estimate 6126168 | gasUsed 6048920
+fresh key nonce latest 113 pending 113 (no pending transaction: True)

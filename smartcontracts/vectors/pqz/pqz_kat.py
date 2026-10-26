@@ -3,7 +3,7 @@
 Keccak-256 checked against hashlib's SHA3 permutation): no numpy, no third-party package, runs under `python3 -I`.
 
 Implements everything of PQZL except the proofs: the matrix A (SHAKE128 "SCAAS-PQZ-A-V2"), CBD, KeyGen, Enc, Dec,
-Add / Sub / Trivial, digits, the opTags and both proofSystemIds, every statement layout (build and parse, with the
+Add / Sub / Trivial, digits, the opTags and the set's two proofSystemIds, every statement layout (build and parse, with the
 canonical-encoding rules of the plan's D15 / R6), ctHash, authDigest, the bundle and opening encodings, entryRef.
 
   pqz_kat.py --check [vector.json ...]   self-test, then recompute every non-proof field of every vector file
@@ -13,22 +13,37 @@ canonical-encoding rules of the plan's D15 / R6), ctHash, authDigest, the bundle
 
 A vector file without a checker here is a failure: the generator (P6e Task 11) adds the file and its checker
 together. Public data only: nothing here is constant-time.
+
+Parameter set (owner 2026-10-21: one per build): PQZ_SET=<set> (default n2304-kmax4096, the default of every build
+since plan 5h Task 8d; n2048-kmax1024's files are next to this script, every other set's in <set>/); the set's constants come from pqz-core/params/sets/<set>/set.json (gen_set.py), its files from
+<set>/ next to this script. PQZH files exist for every set whose set.json says pqzh (plan 5h Task 8c part 2: its preset,
+MAX_PROOF_PQZH and MAX_INPUT from set.json too); a set without PQZH has PQZL files only.
 """
 import glob
 import hashlib
 import hmac
 import json
+import math
 import os
 import sys
 
-Q = 2**42 - 215
+V3 = "n2048-kmax1024"
+SET = os.environ.get("PQZ_SET", "n2304-kmax4096")  # the builds' default (plan 5h Task 8d)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_S = json.load(open(os.path.join(_HERE, "..", "..", "..", "pqz-core", "params", "sets", SET, "set.json")))
+VEC_DIR = _HERE if SET == V3 else os.path.join(_HERE, SET)  # the set's vector files
+Q = _S["q"]  # v3: 2^42 - 215
 D = 64
-K = 32
-N = D * K  # 2048
-DELTA = 2**26 - 1
-B_S, B_E, B_2 = 36, 164, 64
-B_FRESH = B_E * B_S + B_S * B_E + B_2  # 11,872 (§4.3)
-PK_BYTES = 16384
+K = _S["k"]  # v3: 32
+N = D * K  # v3: 2048
+LOG2Q = _S["log2q"]  # the A expansion's width: values mod 2^LOG2Q, kept if < q (v3: 42)
+DELTA = _S["delta"]  # v3: 2^26 - 1
+K_MAX, M_BITS, E_BITS = _S["k_max"], _S["mbits"], _S["ebits"] - 1  # |e_T| < 2^E_BITS (v3: 1,024, 14, 24)
+B_S, B_E, B_2 = _S["beta_s"], _S["beta_e"], _S["beta_2"]  # v3: 36, 164, 64
+B_FRESH = B_E * B_S + B_S * B_E + B_2  # v3: 11,872 (§4.3)
+HAS_PQZH = _S["pqzh"]
+assert (_S["n"], _S["d"], B_FRESH, _S["lengths"]["pk"]) == (N, D, _S["b_fresh"], 512 * K) and Q % 16 == 9
+PK_BYTES = 512 * K  # v3: 16,384
 V_BYTES = 128
 CT_BYTES = PK_BYTES + V_BYTES
 HEADER_BYTES = 640
@@ -87,15 +102,34 @@ def shake256(data, n):
 
 
 # ---------------------------------------------------------------- ids, tags (§5, CTR-PQZ-09, P6e D2 / D3)
-PQZL_ID = keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")  # v2 retired (lazer#28, CTR-PQZ-09 F6)
-PQZH_ID = keccak256(b"scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
+# the set's ids (plan 5h Task 8d: one per set and proof system): keccak256 of set.json's labels (set.toml pqzl_id /
+# pqzh_id); the self-test compares them with gen_set.py's ids and refuses the retired ones
+PQZL_ID = keccak256(_S["pqzl_label"].encode())
+# a set without PQZH (set.json pqzh false, n2816-kmax65536) has no PQZH id: the zero word, refused (as pqz-stmt)
+PQZH_ID = keccak256(_S["pqzh_label"].encode()) if HAS_PQZH else bytes(32)
+KNOWN_IDS = (PQZL_ID, PQZH_ID) if HAS_PQZH else (PQZL_ID,)
+# the "other id" negative rows: the other proof system's id, at a set without PQZH another set's PQZL id (n2304-kmax4096's;
+# review 8d1b M2: not the zero word, which the "unknown proofSystemId" rows already carry)
+OTHER_ROW = "the other system's proofSystemId" if HAS_PQZH else "another set's proofSystemId (n2304-kmax4096 PQZL)"
+ID2 = PQZH_ID if HAS_PQZH else PQZL_ID  # the second id the self-test mixes in (PQZL at a set without PQZH)
+RETIRED_IDS = {"PQZL v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",  # forgeable (lazer#28, F9)
+               "PQZL v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",  # .../mlwe-d64k32-q42l4/v3
+               "PQZH v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"}  # .../ligero-fq-r431-.../v1
+# this set's ids of plan 5h Task 8d, retired by the R0 review fix (2026-10-25): its labels with /v5 -> /v4, /v3 -> /v2
+assert _S["pqzl_label"].endswith("/v5") and (not HAS_PQZH or _S["pqzh_label"].endswith("/v3"))
+RETIRED_IDS["PQZL v4"] = keccak256(_S["pqzl_label"][:-3].encode() + b"/v4").hex()
+if HAS_PQZH:
+    RETIRED_IDS["PQZH v2"] = keccak256(_S["pqzh_label"][:-3].encode() + b"/v2").hex()
 OP_NAMES = ["TRANSFER", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER", "DISCLOSE-AUDITOR",
             "TRANSFER-MULTI"]
 OP_TAG = {n: keccak256(b"SCAAS-PQZ-OP-" + n.encode() + b"-V1") for n in OP_NAMES}
 OP_BYTE = {"TRANSFER": 1, "BURN": 2, "REFRESH": 2, "REGISTER": 3, "DISCLOSE-SENDER": 4, "DISCLOSE-RECEIVER": 5,
            "DISCLOSE-AUDITOR": 5, "TRANSFER-MULTI": 7}
-STMT_BYTES = {"TRANSFER": 83072, "TRANSFER0": 66560, "BURN": 50048, "REFRESH": 50048, "REGISTER": 16480,
-              "DISCLOSE-SENDER": 33184, "DISCLOSE-RECEIVER": 33184, "DISCLOSE-AUDITOR": 33184}
+STMT_BYTES = {"TRANSFER": 640 + 5 * PK_BYTES + 4 * V_BYTES, "TRANSFER0": 640 + 4 * PK_BYTES + 3 * V_BYTES,
+              "BURN": 640 + 3 * PK_BYTES + 2 * V_BYTES, "REFRESH": 640 + 3 * PK_BYTES + 2 * V_BYTES, "REGISTER": 96 + PK_BYTES,
+              "DISCLOSE-SENDER": 288 + 2 * PK_BYTES + V_BYTES, "DISCLOSE-RECEIVER": 288 + 2 * PK_BYTES + V_BYTES,
+              "DISCLOSE-AUDITOR": 288 + 2 * PK_BYTES + V_BYTES}  # v3: 83,072 / 66,560 / 50,048 / 16,480 / 33,184
+assert STMT_BYTES == _S["lengths"]["stmt"]
 
 
 def word(x):
@@ -133,7 +167,7 @@ def _unpack(x, n):
 
 def dot(big, small):
     """sum_j big[j] * small[j] in R_q; big: polys with coefficients in [0, q) (or their _pack), small: polys with
-    coefficients in [-1, 1]. Slot sums stay below 32 * 64 * q < 2^64."""
+    coefficients in [-1, 1]. Slot sums stay below k * 64 * q < 2^64 (v3: 32 * 64 * q)."""
     accp = accn = 0
     for a, s in zip(big, small):
         a = a if isinstance(a, int) else _pack(a)
@@ -143,12 +177,12 @@ def dot(big, small):
     return [(p[k] - p[k + D] - n[k] + n[k + D]) % Q for k in range(D)]
 
 
-def polys(vec):  # 2048 coefficients -> 32 polys
+def polys(vec):  # N coefficients -> K polys
     return [list(vec[D * i:D * i + D]) for i in range(K)]
 
 
 def matrix_A():
-    """A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low 42 bits, keep if < q."""
+    """A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low LOG2Q bits, keep if < q."""
     A = []
     for i in range(K):
         row = []
@@ -156,7 +190,7 @@ def matrix_A():
             n, cs = 8 * D + 64, []
             while len(cs) < D:
                 st = shake128(b"SCAAS-PQZ-A-V2" + bytes([i, j]), n)
-                cs = [v for v in (int.from_bytes(st[o:o + 8], "big") & (2**42 - 1) for o in range(0, n, 8)) if v < Q]
+                cs = [v for v in (int.from_bytes(st[o:o + 8], "big") & (2**LOG2Q - 1) for o in range(0, n, 8)) if v < Q]
                 n *= 2
             row.append(cs[:D])
         A.append(row)
@@ -176,7 +210,7 @@ def A():
 
 
 def a_bytes():
-    return b"".join(enc_poly(p) for row in A() for p in row)  # A[0][0], A[0][1], ...: 32 x 32 x 512 B
+    return b"".join(enc_poly(p) for row in A() for p in row)  # A[0][0], A[0][1], ...: K x K x 512 B
 
 
 def mul_A(s):  # A·s
@@ -234,12 +268,15 @@ def sq(v):
     return sum(c * c for c in v)
 
 
+KEYGEN_TAG = b"SCAAS-PQZ-KEYGEN-V2" + bytes([len(SET)]) + SET.encode()  # the set's name in it (review R2-C3)
+
+
 def keygen_sample(seed32, max_ctr=64, bs=B_S, be=B_E):
-    """(s, e, ctr): SHAKE256("SCAAS-PQZ-KEYGEN-V1" || seed32 || be4(ctr)), s <- CBD_1^2048 then e <- CBD_20^2048 from
-    one stream; resample while ||s|| > 36 or ||e|| > 164; ctr >= 64 is an error."""
+    """(s, e, ctr): SHAKE256("SCAAS-PQZ-KEYGEN-V2" || u8(len(set)) || set || seed32 || be4(ctr)), s <- CBD_1^n then
+    e <- CBD_20^n from one stream; resample while ||s|| > beta_s or ||e|| > beta_e; ctr >= 64 is an error."""
     assert len(seed32) == 32
     for ctr in range(max_ctr):
-        bits = bits_lsb(shake256(b"SCAAS-PQZ-KEYGEN-V1" + seed32 + ctr.to_bytes(4, "big"), (2 * N + 40 * N) // 8))
+        bits = bits_lsb(shake256(KEYGEN_TAG + seed32 + ctr.to_bytes(4, "big"), (2 * N + 40 * N) // 8))
         s, p = cbd(bits, 0, 1, N)
         e, _ = cbd(bits, p, 20, N)
         if sq(s) <= bs * bs and sq(e) <= be * be:
@@ -272,22 +309,23 @@ def enc_sample(seed_enc, n, max_ctr=64, bs=B_S, be=B_E, b2=B_2):
     raise ValueError("Enc: counter 64 reached")
 
 
-def encrypt(pks, msgs, r, e1, e2):
-    """u = A^T r + e1; v_j[i] = (pk_j^T r)[i] + e2_j[i] + Delta * m_j[i] mod q. pks: bytes; msgs: 16 digits each."""
+def encrypt(pks, msgs, r, e1, e2, win=None):
+    """u = A^T r + e1; v_j[i] = (pk_j^T r)[16 w_j + i] + e2_j[i] + Delta * m_j[i] mod q (w_j = win[j], the window,
+    default 0; R0-1). pks: bytes; msgs: 16 digits each."""
     rp = polys(r)
     t = mul_AT(rp)
     u = enc_vec([[(t[i][k] + e1[D * i + k]) % Q for k in range(D)] for i in range(K)])
     vs = []
-    for pk, m, x in zip(pks, msgs, e2):
-        a = dot(dec_vec(pk), rp)
-        vs.append(enc_poly([(a[i] + x[i] + DELTA * m[i]) % Q for i in range(16)], 16))
+    for j, (pk, m, x) in enumerate(zip(pks, msgs, e2)):
+        a, o = dot(dec_vec(pk), rp), 16 * (win[j] if win else 0)
+        vs.append(enc_poly([(a[o + i] + x[i] + DELTA * m[i]) % Q for i in range(16)], 16))
     return u, vs
 
 
-def enc_seed(pks, msgs, seed_enc, bs=B_S, be=B_E, b2=B_2):
-    """(u, [v_j], ctr) = Enc({(pk_j, m_j)}, seed_enc)."""
+def enc_seed(pks, msgs, seed_enc, bs=B_S, be=B_E, b2=B_2, win=None):
+    """(u, [v_j], ctr) = Enc({(pk_j, m_j)}, seed_enc), recipient j at window win[j] (default 0)."""
     r, e1, e2, ctr = enc_sample(seed_enc, len(pks), bs=bs, be=be, b2=b2)
-    u, vs = encrypt(pks, msgs, r, e1, e2)
+    u, vs = encrypt(pks, msgs, r, e1, e2, win)
     return u, vs, ctr
 
 
@@ -296,13 +334,14 @@ def centre(x):
     return x - Q if x > Q // 2 else x
 
 
-def dec(s, ct):
-    """(M[16], noise[16], value): w_i = centre(v_i - (u^T s)_i), M_i = round(w_i / Delta) (no ties: Delta odd)."""
+def dec(s, ct, win=0):
+    """(M[16], noise[16], value): w_i = centre(v_i - (u^T s)_{16 win + i}) (win: the v's window, R0-1), M_i =
+    round(w_i / Delta) (no ties: Delta odd)."""
     u, v = dec_vec(ct[:PK_BYTES]), dec_coeffs(ct[PK_BYTES:])
     a = dot(u, polys(s))
     M, noise = [], []
     for i in range(16):
-        w = centre(v[i] - a[i])
+        w = centre(v[i] - a[16 * win + i])
         m = (2 * w + DELTA) // (2 * DELTA)
         M.append(m)
         noise.append(w - DELTA * m)
@@ -376,7 +415,7 @@ def _scalar(b, name):  # a header word the relations read: < 2^64
     return x
 
 
-def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
+def parse(op_byte, stmt, ids=KNOWN_IDS):
     """Statement -> dict (op name, words, objects), or NonCanonical / ValueError for every D15 / R6 rule: length of
     the op (op 1 by length: 83,072 auditor on, 66,560 off), opTag of the op, a known proofSystemId, coefficients < q,
     fee / amount < 2^64 (every debit form: the decoder is stricter than the relations, which read amount only for
@@ -407,6 +446,10 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
         for i, k in enumerate(DISC):
             out[k] = stmt[32 * i:32 * i + 32]
         _scalar(out["amount"], "amount")
+        # kind = OpeningKind + 256 w < 2^16: w = 0 but for AUDITOR, w < S_AUD there (R0-1)
+        k = int.from_bytes(out["kind"], "big")
+        if k >> 16 or (k >> 8) >= (S_AUD if op == "DISCLOSE-AUDITOR" else 1):
+            raise ValueError("kind")
         o = 32 * len(DISC)
         out["pk"], out["u"], out["v"] = stmt[o:o + PK_BYTES], stmt[o + PK_BYTES:o + 2 * PK_BYTES], stmt[o + 2 * PK_BYTES:]
         dec_coeffs(stmt[o:])
@@ -446,21 +489,26 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
 
 
 # ---------------------------------------------------------------- op 7 R_TXM (P6-ANON plan §4, D6, R4, D3 / D20)
-# legs per randomness group (r_g, e1_g, u_g), with or without the auditor (D4; S1's DDGR20 run: 80 hints give beta
-# 446.0, owner-accepted 2026-10-15; pqz-core/pqzl/params/anon/hints-anon.txt)
+# legs per randomness group (r_g, e1_g, u_g) without the auditor (D4); with it S_AUD (set.json s_aud; owner 2026-10-25,
+# R0-1 direction 2: the auditor copy of leg j at the window j mod S_AUD of pk_a^T r_g; pqzl/params/anon/hints-s.txt)
 LEGS_PER_GROUP = 4
+S_AUD = _S["s_aud"]
+
+
+def lpg(aud):
+    return S_AUD if aud else LEGS_PER_GROUP
 # op 7 leg counts per id, either auditor mode (pqz-stmt built_legs; D20)
-BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8), PQZH_ID: (1, 2, 4)}
+BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8)} | ({PQZH_ID: (1, 2, 4)} if HAS_PQZH else {})
 MULTI_HEADER = [{"toUA": "recipientsHash", "recipient": "M"}.get(k, k) for k in HEADER]
 
 
-def groups(m):
-    return -(-m // LEGS_PER_GROUP)
+def groups(m, aud):
+    return -(-m // lpg(aud))
 
 
 def multi_len(m, aud):
     """640 || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f || [v_{a,0}..v_{a,M-1}]"""
-    return HEADER_BYTES + (1 + m + aud) * PK_BYTES + CT_BYTES + groups(m) * PK_BYTES + \
+    return HEADER_BYTES + (1 + m + aud) * PK_BYTES + CT_BYTES + groups(m, aud) * PK_BYTES + \
         (m + 1 + aud * m) * V_BYTES
 
 
@@ -474,7 +522,7 @@ def build_multi(f, pk_f, pks, T, us, vs, v_f, pk_a=None, v_as=None):
     """Op 7 statement. f: header fields by MULTI_HEADER name (recipientsHash in word 192; M = len(pks) in word 320 and
     auditorOn from pk_a are set here); pks / us / vs / v_as: lists of objects."""
     m, aud = len(pks), pk_a is not None
-    assert len(us) == groups(m) and len(vs) == m and (v_as is not None) == aud and (not aud or len(v_as) == m)
+    assert len(us) == groups(m, aud) and len(vs) == m and (v_as is not None) == aud and (not aud or len(v_as) == m)
     w = dict(f, M=m, auditorOn=int(aud), opTag=OP_TAG["TRANSFER-MULTI"])
     w.setdefault("proofSystemId", PQZL_ID)
     return b"".join(word(w.get(k, 0)) for k in MULTI_HEADER) + pk_f + b"".join(pks) + (pk_a or b"") + T + \
@@ -517,7 +565,7 @@ def parse_multi(stmt, psid):
     if aud:
         out["pk_a"] = take(PK_BYTES)
     out["T"] = take(CT_BYTES)
-    out["us"] = [take(PK_BYTES) for _ in range(groups(m))]
+    out["us"] = [take(PK_BYTES) for _ in range(groups(m, aud))]
     out["vs"] = [take(V_BYTES) for _ in range(m)]
     out["v_f"] = take(V_BYTES)
     if aud:
@@ -533,17 +581,20 @@ def enc_group_seed(seed_enc, g):
 
 
 def enc_multi(pk_f, d_f, legs, pk_a, seed_enc):
-    """The R_TXM encryption (P6-ANON §4, D13): group g (legs j with j // 4 = g) is one Enc from enc_group_seed(seed_enc,
-    g) to its legs, then (g = 0) pk_f with d_f, then (pk_a given) pk_a once per leg of the group with that leg's digits.
-    legs: [(pk_j, digits_j)]. -> dict: us, vs, v_f, v_as, and the witness parts rs, e1s, e2 (legs), e2_f, e2_a, ctrs."""
+    """The R_TXM encryption (P6-ANON §4, D13): group g (legs j with j // s = g, s = S_AUD with the auditor, 4 without)
+    is one Enc from enc_group_seed(seed_enc, g) to its legs, then (g = 0) pk_f with d_f, then (pk_a given) pk_a once per
+    leg of the group with that leg's digits, the copy of the group's i-th leg at window i (R0-1). legs: [(pk_j,
+    digits_j)]. -> dict: us, vs, v_f, v_as, and the witness parts rs, e1s, e2 (legs), e2_f, e2_a, ctrs."""
     o = {k: [] for k in ("us", "vs", "v_as", "rs", "e1s", "e2", "e2_a", "ctrs")}
-    for g in range(groups(len(legs))):
-        grp = legs[LEGS_PER_GROUP * g:LEGS_PER_GROUP * (g + 1)]
+    sg = lpg(pk_a is not None)
+    for g in range(groups(len(legs), pk_a is not None)):
+        grp = legs[sg * g:sg * (g + 1)]
         n = len(grp)
         pks = [x[0] for x in grp] + ([pk_f] if g == 0 else []) + ([pk_a] * n if pk_a is not None else [])
         msgs = [x[1] for x in grp] + ([d_f] if g == 0 else []) + ([x[1] for x in grp] if pk_a is not None else [])
+        win = [0] * (n + (g == 0)) + (list(range(n)) if pk_a is not None else [])
         r, e1, e2, ctr = enc_sample(enc_group_seed(seed_enc, g), len(pks))
-        u, vs = encrypt(pks, msgs, r, e1, e2)
+        u, vs = encrypt(pks, msgs, r, e1, e2, win)
         a0 = n + (g == 0)
         o["us"].append(u), o["rs"].append(r), o["e1s"].append(e1), o["ctrs"].append(ctr)
         o["vs"] += vs[:n]
@@ -628,8 +679,14 @@ def selftest(log):
         m = bytes((7 * i + 1) & 255 for i in range(n))
         ok(_sponge(m, 0x06) == hashlib.sha3_256(m).digest(), f"Keccak-f permutation = hashlib sha3_256, {n} B")
     ok(keccak256(b"").hex() == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470", "keccak256('')")
-    ok(PQZL_ID.hex() == "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef", "PQZL proofSystemId (D2)")
-    ok(PQZH_ID.hex() == "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4", "PQZH proofSystemId (D3)")
+    ok(keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3").hex() == RETIRED_IDS["PQZL v3"], "keccak256 of the retired v3 label")
+    ok(PQZL_ID.hex() == _S["pqzl_id"] and f"/mlwe-d64k{K}-q{LOG2Q}l4/" in _S["pqzl_label"],
+       f"PQZL proofSystemId {_S['pqzl_label']} = {PQZL_ID.hex()[:8]}... (set.json)")
+    if HAS_PQZH:
+        ok(PQZH_ID.hex() == _S["pqzh_id"], f"PQZH proofSystemId {_S['pqzh_label']} = {PQZH_ID.hex()[:8]}... (set.json)")
+    else:
+        ok("pqzh_id" not in _S and _S["max_proof_pqzh"] == 0, "no PQZH id at this set (set.json)")
+    ok(not {PQZL_ID.hex(), PQZH_ID.hex()} & set(RETIRED_IDS.values()) and PQZL_ID != PQZH_ID, "ids not retired, distinct")
     plan = {"TRANSFER": "ef22f3d1", "BURN": "7383374d", "REFRESH": "f118f2df", "REGISTER": "69562a9c",
             "DISCLOSE-SENDER": "868cc07c", "DISCLOSE-RECEIVER": "d8356cfb", "DISCLOSE-AUDITOR": "d6019aa4",
             "TRANSFER-MULTI": "6f6a773a"}
@@ -678,9 +735,10 @@ def selftest(log):
     t = forms["TRANSFER"]
     rejects(t[:-1], 1, "length - 1", "length")
     rejects(t + b"\0", 1, "length + 1", "length")
-    rejects(t[:448] + word(0) + t[480:], 1, "auditorOn 0 on the 83,072-byte form", "auditorOn does not match the length")
-    rejects(forms["TRANSFER0"][:448] + word(1) + forms["TRANSFER0"][480:], 1, "auditorOn 1 on the 66,560-byte form",
+    rejects(t[:448] + word(0) + t[480:], 1, f"auditorOn 0 on the {STMT_BYTES['TRANSFER']:,}-byte form",
             "auditorOn does not match the length")
+    rejects(forms["TRANSFER0"][:448] + word(1) + forms["TRANSFER0"][480:], 1,
+            f"auditorOn 1 on the {STMT_BYTES['TRANSFER0']:,}-byte form", "auditorOn does not match the length")
     rejects(t[:448] + word(2) + t[480:], 1, "auditorOn 2", "auditorOn does not match the length")
     rejects(t[:256] + word(2**64) + t[288:], 1, "fee >= 2^64", "fee >= 2^64")
     rejects(t[:576] + b"\1" + t[577:], 1, "salt word top byte set", "salt word not 16 zero bytes || salt")
@@ -695,24 +753,31 @@ def selftest(log):
         st, w = forms[form], word(0x0101)  # low bytes only: the salt word keeps its 16-zero-byte form
         rejects(st[:at] + w + st[at + 32:], OP_BYTE[form.rstrip("0")], f"{form} {name} != 0", name + " must be 0")
     rejects(t[:640] + Q.to_bytes(8, "big") + t[648:], 1, "coefficient = q", "coefficient >= q")
-    rejects(t[:640] + (2**42).to_bytes(8, "big") + t[648:], 1, "coefficient = 2^42", "coefficient >= q")
+    rejects(t[:640] + (2**LOG2Q).to_bytes(8, "big") + t[648:], 1, f"coefficient = 2^{LOG2Q}", "coefficient >= q")
     rejects(t, 2, "TRANSFER statement under op 2", "opTag does not belong to op")
     rejects(t[:32] + bytes(32) + t[64:], 1, "unknown proofSystemId", "unknown proofSystemId")
     d = forms["DISCLOSE-SENDER"]
     rejects(d[:224] + word(2**64) + d[256:], 4, "disclosure amount >= 2^64", "amount >= 2^64")
+    rejects(d[:256] + word(256) + d[288:], 4, "SENDER_S kind window 1", "kind")
+    da = forms["DISCLOSE-AUDITOR"]
+    rejects(da[:256] + word(2 + 256 * S_AUD) + da[288:], 5, f"AUDITOR kind window {S_AUD} (S_AUD)", "kind")
+    rejects(da[:256] + word(2 + 2**16) + da[288:], 5, "kind word >= 2^16", "kind")
+    ok(parse(5, da[:256] + word(2 + 256 * (S_AUD - 1)) + da[288:])["op"] == "DISCLOSE-AUDITOR",
+       f"AUDITOR kind window {S_AUD - 1} accepted")
     # op 7 R_TXM: every built shape of both ids (fee 0 too), round trip, op 1's body at M = 1, every rule
     lens = {(m, a): multi_len(m, a) for m in (1, 2, 4, 8, 16) for a in (1, 0)}
-    ok(lens[1, 1] == 83072 and lens[1, 0] == 66560 and lens[2, 1] == 99712 and lens[2, 0] == 83072 and
-       lens[4, 1] == 132992 and lens[4, 0] == 116096 and lens[8, 1] == 215936 and lens[16, 0] == 363392 and
+    v3 = SET != V3 or (lens[1, 1] == 83072 and lens[1, 0] == 66560 and lens[2, 1] == 99712 and lens[2, 0] == 83072 and
+                       lens[4, 1] == 149376 and lens[4, 0] == 116096 and lens[8, 1] == 248704 and lens[16, 0] == 363392)
+    ok(v3 and lens[1, 1] == STMT_BYTES["TRANSFER"] and lens[1, 0] == STMT_BYTES["TRANSFER0"] and lens[2, 0] == lens[1, 1] and
        len(set(lens.values())) == 9,
-       "op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 83,072")
+       f"op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = {STMT_BYTES['TRANSFER']:,}")
 
     def multi(psid, m, aud, fee):
         f = dict(hdr, proofSystemId=psid, fee=fee, recipientsHash=recipients_hash(range(1, m + 1)))
-        return build_multi(f, pk, [keys[j % 3][0] for j in range(m)], ct, [u] * groups(m),
+        return build_multi(f, pk, [keys[j % 3][0] for j in range(m)], ct, [u] * groups(m, aud),
                            [vs[j % 3] for j in range(m)], vs[1], pk_a=pk if aud else None,
                            v_as=[vs[2]] * m if aud else None)
-    for psid, name in ((PQZL_ID, "PQZL"), (PQZH_ID, "PQZH")):
+    for psid, name in ((PQZL_ID, "PQZL"), (PQZH_ID, "PQZH"))[:1 + HAS_PQZH]:
         for aud in (1, 0):
             for m in BUILT_LEGS[psid]:
                 st = multi(psid, m, aud, 0 if m % 2 else 7)
@@ -728,7 +793,7 @@ def selftest(log):
         ok(st[HEADER_BYTES:] == build_debit("TRANSFER", hdr, pk, ct, u + vs[0] + vs[1] + (vs[2] if aud else b""),
                                               pk_t=keys[0][0], pk_a=pk if aud else None)[HEADER_BYTES:] and
            len(st) == len(t1), f"op 7 M = 1 body = op 1 body, auditor {'on' if aud else 'off'}")
-    s2, s4, l4 = multi(PQZL_ID, 2, 1, 0), multi(PQZH_ID, 4, 0, 5), multi(PQZL_ID, 4, 0, 0)
+    s2, s4, l4 = multi(PQZL_ID, 2, 1, 0), multi(ID2, 4, 0, 5), multi(PQZL_ID, 4, 0, 0)
     for st, op_byte, what, why in (
             (s2[:-1], 7, "length - 1", "length"), (s2 + b"\0", 7, "length + 1", "length"),
             (s2[:640] + bytes(multi_len(3, 1) - 640), 7, "M = 3 length, M word 2", "length"),
@@ -736,7 +801,7 @@ def selftest(log):
             (s2[:639], 7, "header cut", "length"),
             (s2[:320] + word(0) + s2[352:], 7, "M word 0", "M not a built leg count"),
             (s2[:320] + word(3) + s2[352:], 7, "M word 3", "M not a built leg count"),
-            (s4[:320] + word(8) + s4[352:], 7, "PQZH M word 8 (not built)", "M not a built leg count"),
+            *([(s4[:320] + word(8) + s4[352:], 7, "PQZH M word 8 (not built)", "M not a built leg count")] if HAS_PQZH else []),
             (s2[:320] + word(16) + s2[352:], 7, "PQZL M word 16 (oversize only)", "M not a built leg count"),
             (s2[:320] + word(2**64 + 2) + s2[352:], 7, "M word high bits", "M not a built leg count"),
             (s2[:320] + word(4) + s2[352:], 7, "M word 4 on the M = 2 length", "length"),
@@ -755,12 +820,14 @@ def selftest(log):
     one = multi(PQZL_ID, 1, 1, 0)
     two = parse(7, one[:320] + word(2) + one[352:448] + word(0) + one[480:])
     ok(two["legs"] == 2 and not two["auditor"] and two["pks"][1] == pk and two["v_f"] == vs[2],
-       "op 7 at 83,072 B: the M / auditorOn words pick (1, on) or (2, off)")
+       f"op 7 at {STMT_BYTES['TRANSFER']:,} B: the M / auditorOn words pick (1, on) or (2, off)")
     # the resample path and the counter-64 error, with lowered thresholds (the real ones are never exceeded)
-    ctrs = [keygen_sample(bytes([i]) * 32, bs=32, be=143)[2] for i in range(4)]
-    ok(any(c >= 1 for c in ctrs), f"KeyGen resamples with ||s|| <= 32, ||e|| <= 143: counters {ctrs}")
-    ctrs = [enc_sample(bytes([i]) * 32, 2, bs=32, be=143, b2=12)[3] for i in range(4)]
-    ok(any(c >= 1 for c in ctrs), f"Enc resamples with 32 / 143 / 12: counters {ctrs}")
+    # lowered to about the mean norms (v3: 32 / 143 / 12): ceil(sqrt(n / 2)), floor(sqrt(10 n)), floor(sqrt(160))
+    ls, le, l2 = math.isqrt(N // 2 - 1) + 1, math.isqrt(10 * N), math.isqrt(160)
+    ctrs = [keygen_sample(bytes([i]) * 32, bs=ls, be=le)[2] for i in range(4)]
+    ok(any(c >= 1 for c in ctrs), f"KeyGen resamples with ||s|| <= {ls}, ||e|| <= {le}: counters {ctrs}")
+    ctrs = [enc_sample(bytes([i]) * 32, 2, bs=ls, be=le, b2=l2)[3] for i in range(4)]
+    ok(any(c >= 1 for c in ctrs), f"Enc resamples with {ls} / {le} / {l2}: counters {ctrs}")
     for what, f in (("KeyGen", lambda: keygen_sample(bytes(32), bs=0)), ("Enc", lambda: enc_sample(bytes(32), 1, b2=0))):
         try:
             f()
@@ -768,8 +835,9 @@ def selftest(log):
         except ValueError as x:
             ok("counter 64" in str(x), f"{what}: counter 64 error")
     # bundle / opening sizes, entryRef / ctHash / authDigest shapes
-    ok(len(bundle(bytes(16), u, vs[0], vs[2], 1)) == 16688 and len(bundle(bytes(16), u, vs[0], None, 1)) == 16560,
-       "bundle 16,688 / 16,560 B")
+    bl = (len(bundle(bytes(16), u, vs[0], vs[2], 1)), len(bundle(bytes(16), u, vs[0], None, 1)))
+    ok(bl == (_S["lengths"]["bundle"], _S["lengths"]["bundle0"]) and (SET != V3 or bl == (16688, 16560)),
+       f"bundle {bl[0]:,} / {bl[1]:,} B")
     o = opening(b"\1" * 33, b"\2" * 5)
     ok(len(o) == 64 + 32 + 64 + 32 + 32 and o[:64] == word(64) + word(160), "opening = abi.encode(bytes, bytes)")
     log(f"     entryRef(7622, 1, token, 2, 0) = {entry_ref(7622, 1, bytes(range(20)), 2, 0).hex()}")
@@ -853,12 +921,12 @@ def check_c_keys(path, log):
 
 
 # ---------------------------------------------------------------- precompile decoder (pqz-stmt decode_input)
-MAX_INPUT = 393216  # D5
-MAX_PROOF = {PQZL_ID: 98304, PQZH_ID: 262144}
+MAX_INPUT = _S["max_input"]  # 524,288 at every set (n2048-kmax1024: 393,216 until the R0 review fix, owner 2026-10-25)
+MAX_PROOF = {PQZL_ID: 98304, PQZH_ID: _S["max_proof_pqzh"]}  # PQZH: 327,680 at every PQZH set (owner 2026-10-23 / 25)
 REASON = {"length": "Length", "opTag does not belong to op": "OpTag", "unknown proofSystemId": "ProofSystemId",
           "fee >= 2^64": "Fee", "amount >= 2^64": "Amount", "salt word not 16 zero bytes || salt": "Salt",
           "auditorOn does not match the length": "AuditorOn", "coefficient >= q": "Coefficient",
-          "M not a built leg count": "Legs"}
+          "M not a built leg count": "Legs", "kind": "Kind"}
 
 
 class Rejected(Exception):
@@ -896,13 +964,29 @@ def decode_input(b):
 # ---------------------------------------------------------------- vector files (P6e Task 11): one checker per file
 # Everything but proof validity is recomputed here from seeds; proof validity is the generator's (pqz-ffi's pqz-vectors,
 # the C verifiers and Ligero) and the wasm32 replay's. A file without a checker fails --check.
-IDS = {"pqzl": PQZL_ID, "pqzh": PQZH_ID}
+IDS = {"pqzl": PQZL_ID, "pqzh": PQZH_ID} if HAS_PQZH else {"pqzl": PQZL_ID}  # the ids with proofs in the set's files
 STATEMENT_FILES = ["statement_transfer.json", "statement_burn.json", "statement_refresh.json",
                    "statement_register.json", "statement_disclose.json"]
-LIGERO = {"n": 32756, "k": 817, "ell": 695, "t": 121, "pow_bits": 16, "max_proof": 262144}  # D3 preset, never read
-# the PQZH verifier's exact length bound per form at THE preset (decisions.md CTR-PQZ-10, D5; R_TX0 = R_BURN's m)
-LIGERO_MAX = {"TRANSFER": 235470, "TRANSFER0": 234744, "BURN": 234744, "REFRESH": 234744, "REGISTER": 190458,
-              "DISCLOSE-SENDER": 190458, "DISCLOSE-RECEIVER": 190458, "DISCLOSE-AUDITOR": 190458}
+# the set's PQZH preset (set.json pqzh_preset, from set.toml; n2048-kmax1024: THE preset of the D3 id; n2560-kmax16384:
+# its n / k with t = 122), never read from
+# the vectors; F_q elements of EB = ceil(LOG2Q / 8) bytes (6 at n2048-kmax1024 and n2304-kmax4096, 7 at n2560-kmax16384)
+_P = _S.get("pqzh_preset") or {"n": 0, "k": 0, "t": 0, "ell": 0}
+LIGERO = {"n": _P["n"], "k": _P["k"], "ell": _P["ell"], "t": _P["t"], "pow_bits": 16, "max_proof": MAX_PROOF[PQZH_ID]}
+EB = (LOG2Q + 7) // 8
+# the PQZH verifier's exact length bound per form at the set's preset (pqzh-ligero ligero.rs `limits_exact`; decisions.md
+# CTR-PQZ-10, D5), per op 7 shape (M, auditorOn) (n2048-kmax1024: pqzh-ligero.md §15.2, H2)
+_LIGERO_MAX = {
+    "n2048-kmax1024": ((235470, 234744, 234744, 190458), {(1, 1): 235470, (1, 0): 234744, (2, 1): 235470, (2, 0): 235470,
+                                                          (4, 1): 279756, (4, 0): 235470}),  # (4, 1): G = 2 (R0-1)
+    "n2304-kmax4096": ((251608, 251608, 251608, 207688), {(1, 1): 251608, (1, 0): 251608, (2, 1): 252328, (2, 0): 251608,
+                                                          (4, 1): 296248, (4, 0): 252328}),  # (4, 1): G = 2 (R0-1)
+    "n2560-kmax16384": ((304266, 304266, 303412, 234238), {(1, 1): 304266, (1, 0): 304266, (2, 1): 304266,
+                                                           (2, 0): 304266, (4, 1): 305120, (4, 0): 304266})}
+_lm = _LIGERO_MAX.get(SET, ((0, 0, 0, 0), {}))
+# (TRANSFER, TRANSFER0, BURN = REFRESH, REGISTER = the disclosures)
+LIGERO_MAX = {"TRANSFER": _lm[0][0], "TRANSFER0": _lm[0][1], "BURN": _lm[0][2], "REFRESH": _lm[0][2],
+              "REGISTER": _lm[0][3], "DISCLOSE-SENDER": _lm[0][3], "DISCLOSE-RECEIVER": _lm[0][3],
+              "DISCLOSE-AUDITOR": _lm[0][3]}
 _memo = {}
 
 
@@ -977,6 +1061,12 @@ def build_stmt(r):
     form, ob = r["form"], r["objects"]
     if form == "REGISTER":
         return build_register(bytes.fromhex(r["words"]["message"]), key(ob["pk"]["keygen"])[0])
+    if form.startswith("DISCLOSE") and "multi_case" in ob:  # an op 7 leg (R0-1): u of its group, v_{a,j} or v_j
+        e = multi_build(multi_rows_cached()[ob["multi_case"]])[4]
+        j, aud = ob["leg"], form == "DISCLOSE-AUDITOR"
+        v = e["v_as"][j] if aud else e["vs"][j]
+        return build_disclose(form, {k: fval(v_) for k, v_ in r["words"].items()}, key(ob["pk"]["keygen"])[0],
+                              e["us"][j // S_AUD], v)
     if form.startswith("DISCLOSE"):
         u, vs, _ = enc_of(ob["ct"])
         return build_disclose(form, {k: fval(v) for k, v in r["words"].items()}, key(ob["pk"]["keygen"])[0], u,
@@ -1009,15 +1099,17 @@ def build_wit(r):
 
 
 def statement_rows(d):
-    return {r["form"]: r for f in STATEMENT_FILES for r in load(d, f)["rows"]}
+    """the statement-file rows by form, and the op 7 disclosures (statement_transfer_multi.json, R0-1) by case"""
+    out = {r["form"]: r for f in STATEMENT_FILES for r in load(d, f)["rows"]}
+    return out | {r["case"]: r for r in load(d, "statement_transfer_multi.json").get("disclosures", [])}
 
 
 def check_matrix(j, d):
     bad = []
     a = a_bytes()
     for k, want in (("a_bytes", len(a)), ("a_keccak", kec(a).hex()), ("A_0_0_first8", A()[0][0][:8]),
-                    ("A_0_0_last8", A()[0][0][56:]), ("A_31_31_first8", A()[31][31][:8]),
-                    ("A_31_31_last8", A()[31][31][56:])):
+                    ("A_0_0_last8", A()[0][0][56:]), (f"A_{K - 1}_{K - 1}_first8", A()[K - 1][K - 1][:8]),
+                    (f"A_{K - 1}_{K - 1}_last8", A()[K - 1][K - 1][56:])):
         cmp(bad, k, j[k], want)
     return bad
 
@@ -1097,15 +1189,53 @@ def check_statement(j, d):
 # ---------------------------------------------------------------- op 7 R_TXM vectors (P6-ANON S4, plan D15)
 MULTI_FILE = "statement_transfer_multi.json"
 # (case, M, auditorOn): every built shape (one real leg, its position varying by shape), a two-real-leg row, an
-# all-decoy row, a group-boundary row (real legs 3 and 4: groups 0 and 1)
+# all-decoy row, a group-boundary row (real legs b - 1 and b, b = s ceil(4 / s), s = S_AUD: two audited groups; R0 fix m6)
 MULTI_CASES = [(f"M{m}-{'on' if a else 'off'}", m, a) for a in (1, 0) for m in (1, 2, 4, 8)] + \
     [("M2-off-two-real", 2, 0), ("M4-off-decoys", 4, 0), ("M8-on-boundary", 8, 1)]
-# the PQZH verifier's exact length bound per op 7 shape at THE preset (pqzh-ligero.md §15.2, H2)
-LIGERO_MAX_MULTI = {(1, 1): 235470, (1, 0): 234744, (2, 1): 235470, (2, 0): 235470, (4, 1): 236196, (4, 0): 235470}
+# the PQZH verifier's exact length bound per op 7 shape at the set's preset (_LIGERO_MAX above)
+LIGERO_MAX_MULTI = _lm[1]
 
 
 def multi_rows(d):
     return {r["case"]: r for r in load(d, MULTI_FILE)["rows"]}
+
+
+def multi_rows_cached():
+    return multi_rows(VEC_DIR)
+
+
+def check_mdisc(j, d):
+    """the op 7 disclosures (R0-1): statement from the case's multi-group Enc, kind = OpeningKind + 256 w with w =
+    j mod S_AUD (auditor copy) or 0 (receiver), the key decrypts the leg's amount at that window"""
+    bad = []
+    rows = multi_rows(d)
+    for r in j.get("disclosures", []):
+        case, form, ob = r["case"], r["form"], r["objects"]
+        aud = form == "DISCLOSE-AUDITOR"
+        cmp(bad, f"{case} name", case, f"{ob['multi_case']}-leg{ob['leg']}-{'auditor' if aud else 'receiver'}")
+        mr = rows[ob["multi_case"]]
+        st = build_stmt(r)
+        cmp(bad, f"{case} stmt", r["stmt"], st.hex())
+        w = ob["leg"] % S_AUD if aud else 0
+        cmp(bad, f"{case} window / kind / auditorOn", (ob["window"], r["words"]["kind"], mr["auditorOn"]),
+            (w, (2 if aud else 1) + 256 * w, 1))
+        amt = mr["objects"]["out"]["values"][ob["leg"]]
+        cmp(bad, f"{case} amount", r["words"]["amount"], amt)
+        e = multi_build(mr)[4]
+        _, _, val = dec(key(ob["pk"]["keygen"])[1], e["us"][ob["leg"] // S_AUD] +
+                        (e["v_as"] if aud else e["vs"])[ob["leg"]], w)
+        cmp(bad, f"{case} Dec at window {w}", val, amt)
+        h = {k: fval(v) for k, v in mr["header"].items()}
+        cmp(bad, f"{case} entryRef", r["words"]["entryRef"],
+            entry_ref(h["chainId"], h["chainUid"], h["token"], h["fromUA"], h["sendCounter"]).hex())
+        for n, idb in IDS.items():
+            s = with_id(st, idb)
+            parse(5, s)
+            cmp(bad, f"{case} {n} stmt_keccak", r["stmt_keccak"][n], kec(s).hex())
+            cmp(bad, f"{case} {n} auth_digest", r["auth_digest"][n], keccak256(b"SCAAS-PQZ-AUTH-V1", kec(s)).hex())
+    if not any(r["objects"]["window"] for r in j.get("disclosures", [])):
+        bad.append("disclosures: no nonzero window")
+    return bad
 
 
 def multi_ids(m):
@@ -1182,6 +1312,11 @@ def check_multi(j, d):
             entry_ref(h["chainId"], h["chainUid"], h["token"], h["fromUA"], h["sendCounter"]).hex())
     cmp(bad, "cases", seen, MULTI_CASES)
     rows = multi_rows(d)
+    # the key seeds: the case's own, and pqz-vectors' one other seed (0x4e * 32) for "another key seed" (a changed other
+    # seed would still give none: tamper.py)
+    for o in j["memo_open"]:
+        want = "4e" * 32 if o["name"] == "another key seed" else rows[o["case"]]["memo"]["key_seed"]
+        cmp(bad, f"memo_open {o['name']} key_seed", o["key_seed"], want)
     for o in j["memo_open"]:
         r = rows[o["case"]]
         b = bytearray(multi_build(r)[2])
@@ -1199,23 +1334,23 @@ def check_multi(j, d):
         cmp(bad, "memo_open " + o["name"], o["result"], got)
     if {type(o["result"]) for o in j["memo_open"]} != {str, dict}:
         bad.append("memo_open: need opened and refused memos")
-    return bad
+    return bad + check_mdisc(j, d)
 
 
 def proof_framing(idn, form, proof, params, row_max=None, bound=None):
     """what can be checked of a proof without verifying it: length within MAX_PROOF(id), PQZL ends in the coder's
-    final 1-bit (last byte != 0), PQZH: test polynomials w, q, h canonical (6-byte BE < q), the exact bound."""
+    final 1-bit (last byte != 0), PQZH: test polynomials w, q, h canonical (EB-byte BE < q), the exact bound."""
     bad = []
     if not 1 <= len(proof) <= MAX_PROOF[IDS[idn]]:
         bad.append(f"{form}: proof length {len(proof)}")
     if idn == "pqzl" and proof[-1] == 0:
         bad.append(f"{form}: PQZL proof ends in a zero byte")
     if idn == "pqzh":
-        cmp(bad, "PQZH params (D3 preset)", {k: params[k] for k in LIGERO}, LIGERO)
+        cmp(bad, "PQZH params (the set's preset)", {k: params[k] for k in LIGERO}, LIGERO)
         k, ell = params["k"], params["ell"]
         ne = 4 * (2 * (2 * k - 1) + (2 * k - 1 - ell))
-        if len(proof) <= 32 + 6 * ne + 8 or any(int.from_bytes(proof[32 + 6 * i:38 + 6 * i], "big") >= Q
-                                                 for i in range(ne)):
+        if len(proof) <= 32 + EB * ne + 8 or any(int.from_bytes(proof[32 + EB * i:32 + EB * (i + 1)], "big") >= Q
+                                                  for i in range(ne)):
             bad.append(f"{form}: PQZH test polynomials not canonical")
         if row_max is not None and not (len(proof) <= row_max == (bound or LIGERO_MAX[form]) <= LIGERO["max_proof"]):
             bad.append(f"{form}: max_proof_len {row_max}")
@@ -1256,8 +1391,12 @@ def check_proofs(j, d):
                                  LIGERO_MAX_MULTI.get((sr["M"], sr["auditorOn"])))
             cmp(bad, f"{case} expect", r["expect"], True)
             continue
-        sr = load(d, r["statement"]["file"])["rows"]
-        sr = [x for x in sr if x["form"] == r["statement"]["form"] == form][0]
+        if "disclosure" in r["statement"]:  # an op 7 disclosure (R0-1)
+            sr = statement_rows(d)[r["statement"]["disclosure"]]
+            cmp(bad, f"{form} {r['case']} statement", (r["statement"]["file"], r["case"], sr["form"]), (MULTI_FILE, sr["case"], form))
+        else:
+            sr = load(d, r["statement"]["file"])["rows"]
+            sr = [x for x in sr if x["form"] == r["statement"]["form"] == form][0]
         st = with_id(bytes.fromhex(sr["stmt"]), IDS[idn])
         cmp(bad, f"{form} stmt_keccak", r["stmt_keccak"], kec(st).hex())
         w = build_wit(sr)
@@ -1274,12 +1413,15 @@ def check_proofs(j, d):
         except Rejected as x:
             bad.append(f"{form}: the honest input is rejected: {x}")
         bad += proof_framing(idn, form, proof, j["params"], r.get("max_proof_len"))
-        if form.startswith("DISCLOSE"):
+        if form.startswith("DISCLOSE") and "case" not in r:
             o = opening(bnd, proof)
             cmp(bad, f"{form} opening", (r["opening_bytes"], r["opening_keccak"]), (len(o), kec(o).hex()))
         cmp(bad, f"{form} expect", r["expect"], True)
-        seen.append(form)
+        if "case" not in r:
+            seen.append(form)
     cmp(bad, "forms", sorted(seen), sorted(STMT_BYTES))
+    cmp(bad, "op 7 disclosures", sorted(r["case"] for r in j["rows"] if "disclosure" in r["statement"]),
+        sorted(r["case"] for r in load(d, MULTI_FILE).get("disclosures", [])))
     cmp(bad, "op 7 cases", seen_m, [c for c, m, _ in MULTI_CASES if idn in multi_ids(m)])
     return bad
 
@@ -1291,7 +1433,8 @@ def apply_edits(r, stmts, proofs):
     elif r["form"] == "TRANSFER-MULTI":
         op, s, p = 7, with_id(stmts[r["case"]], IDS[r["id"]]), proofs[r["case"], r["id"]]
     else:
-        op, s, p = OP_BYTE[r["form"].rstrip("0")], with_id(stmts[r["form"]], IDS[r["id"]]), proofs[r["form"], r["id"]]
+        f = r.get("case", r["form"])  # an op 7 disclosure (R0-1) by its case
+        op, s, p = OP_BYTE[r["form"].rstrip("0")], with_id(stmts[f], IDS[r["id"]]), proofs[f, r["id"]]
     s, p = bytearray(s), bytearray(p)
     lenf = raw = size = None
     for e in r["edits"]:
@@ -1365,11 +1508,16 @@ def check_negative(j, d):
     cmp(bad, "max_input", j["max_input"], MAX_INPUT)
     names = set()
     # every honest input (a multi case name has op 7)
-    honest = {precompile_input(OP_BYTE.get(f.rstrip("0"), 7), with_id(stmts[f], IDS[n]), proofs[f, n]) for f, n in proofs}
+    ops = {c: OP_BYTE[r["form"]] for c, r in statement_rows(d).items() if "case" in r}
+    honest = {precompile_input(ops.get(f) or OP_BYTE.get(f.rstrip("0"), 7), with_id(stmts[f], IDS[n]), proofs[f, n])
+              for f, n in proofs}
     for r in j["rows"]:
         if r["name"] + r["id"] in names:
             bad.append("duplicate row " + r["name"])
         names.add(r["name"] + r["id"])
+        # the id names the base input's system; a raw input (form "-") has none (8d part 1: a tamper of a raw row's id
+        # went unnoticed)
+        cmp(bad, r["name"] + " id", r["id"], "-" if r["form"] == "-" else r["id"] if r["id"] in IDS else "pqzl | pqzh")
         b = apply_edits(r, stmts, proofs)
         cmp(bad, r["name"] + " input", (r["input_bytes"], r["input_sha3"]), (len(b), hashlib.sha3_256(b).hexdigest()))
         try:
@@ -1384,14 +1532,14 @@ def check_negative(j, d):
     # the required coverage: every decoder reason (pqz-stmt Reject), verifier rejections, the revert, and per (form, id)
     # lengths +- 1, every other op byte, an unknown and the other id, the proof edits
     need = {"Op", "OpTag", "ProofSystemId", "Length", "Fee", "Amount", "Salt", "AuditorOn", "Coefficient", "Input",
-            "ProofLength", "Legs", "verify"} | {f"MustBeZero({f})" for f in ("amount", "recipient", "toUA", "auditorOn", "salt")}
+            "ProofLength", "Legs", "Kind", "verify"} | {f"MustBeZero({f})" for f in ("amount", "recipient", "toUA", "auditorOn", "salt")}
     got = {r["reason"] for r in j["rows"]}
     if need - got or "revert" not in {r["expect"] for r in j["rows"]}:
         bad.append(f"missing reasons: {sorted(need - got)}")
     for f in STMT_BYTES:
         op = OP_BYTE[f.rstrip("0")]
         want = [f"{f}: statement length - 1", f"{f}: statement length + 1", f"{f}: unknown proofSystemId (zero word)",
-                f"{f}: the other system's proofSystemId", f"{f}: proof truncated by 1 byte",
+                f"{f}: {OTHER_ROW}", f"{f}: proof truncated by 1 byte",
                 f"{f}: proof extended by 1 zero byte", f"{f}: proof byte 0 bit 0 flipped",
                 f"{f}: proof middle byte bit 3 flipped", f"{f}: proof last byte bit 7 flipped"]
         want += [f"{f}: under op {o}" for o in range(1, 6) if o != op]
@@ -1401,7 +1549,7 @@ def check_negative(j, d):
                 bad.append(f"{f} {n}: missing rows {sorted(set(want) - have)}")
     for c, m, a in MULTI_CASES[:8]:  # op 7 (P6-ANON S4): per built shape and id
         want = [f"{c}: {x}" for x in ("statement length - 1", "statement length + 1", "unknown proofSystemId (zero word)",
-                                      "the other system's proofSystemId", "proof truncated by 1 byte",
+                                      OTHER_ROW, "proof truncated by 1 byte",
                                       "proof extended by 1 zero byte", "proof byte 0 bit 0 flipped",
                                       "proof middle byte bit 3 flipped", "proof last byte bit 7 flipped")]
         want += [f"{c}: under op {o}" for o in range(7)]
@@ -1454,16 +1602,20 @@ def check_selftest(j, d):
     u, vs, _ = enc_of({"seed_enc": j["seed_enc"], "recipients": [j["seed_key"]], "values": [j["msg_value"]]})
     ct = u + vs[0]
     M, _, val = dec(s, ct)
-    n = j["fft"]["n"]
-    om = pow(3, (Q - 1) // n, Q)
-    W = [pow(om, i, Q) for i in range(n)]
-    f = dft([(i * i * 0x9E3779B9 + 1) % Q for i in range(n)], W)
-    fb = b"".join(x.to_bytes(6, "big") for x in f)
-    kat = keccak256(a_digest, kec(pk), kec(ct), bytes(M), kec(fb), b"\x01")
+    # a set without PQZH: no Ligero FFT (n 0, empty, not ok) and both PQZH results 0 (pqz-ffi selftest.rs)
+    n = 1634 if HAS_PQZH else 0
+    if n:
+        om = pow(3, (Q - 1) // n, Q)
+        W = [pow(om, i, Q) for i in range(n)]
+        f = dft([(i * i * 0x9E3779B9 + 1) % Q for i in range(n)], W)
+    else:
+        f = []
+    fb = b"".join(x.to_bytes(EB, "big") for x in f)  # EB-byte elements (6 at n2048-kmax1024, 7 at n2560-kmax16384)
+    kat = keccak256(a_digest, kec(pk), kec(ct), bytes(M), kec(fb), bytes([HAS_PQZH]))
     for k, want in (("input", "0600000000"), ("message", keccak256(b"SCAAS-PQZ-SELFTEST-V1").hex()),
                     ("a_digest", a_digest.hex()), ("pk_keccak", kec(pk).hex()), ("ct_keccak", kec(ct).hex()),
-                    ("M", M), ("fft", {"n": 1634, "keccak": kec(fb).hex(), "ok": True}), ("kat_digest", kat.hex()),
-                    ("results", [1, 0, 1, 0]), ("hash", keccak256(kat, bytes(j["results"])).hex()),
+                    ("M", M), ("fft", {"n": n, "keccak": kec(fb).hex(), "ok": HAS_PQZH}), ("kat_digest", kat.hex()),
+                    ("results", [1, 0, int(HAS_PQZH), 0]), ("hash", keccak256(kat, bytes(j["results"])).hex()),
                     ("rnd32", "53" * 32)):
         cmp(bad, k, j[k], want)
     cmp(bad, "Dec value", val, j["msg_value"])
@@ -1478,13 +1630,16 @@ def check_selftest(j, d):
     return bad
 
 
+MARGIN_E = f"margin_2_{E_BITS}"  # the worst-case files' margin against the proven range 2^E_BITS (v3: margin_2_24)
+
+
 def rot(x):  # coefficient-0 weights per poly: (x * y)[0] = sum_k rot(x)_k y_k in Z[X]/(X^64 + 1)
     return [x[i] if i % 64 == 0 else -x[i - i % 64 + 64 - i % 64] for i in range(N)]
 
 
 def align_r(w, b=B_S * B_S):
     from fractions import Fraction
-    c = sorted(((Fraction(-abs(w[k]), 2 * a + 1), k, a) for k in range(N) if w[k] for a in range(36)))
+    c = sorted(((Fraction(-abs(w[k]), 2 * a + 1), k, a) for k in range(N) if w[k] for a in range(B_S)))
     r, left = [0] * N, b
     for _, k, a in c:
         if 2 * a + 1 <= left:
@@ -1586,10 +1741,10 @@ def check_bound(bad, j, b):
     M, tn, val = dec(s, T)
     mx = max(map(abs, tn))
     cmp(bad, "bound T", (b["T_keccak"], b["T_M"], b["T_noise"], b["max_abs_noise"]), (kec(T).hex(), M, tn, mx))
-    cmp(bad, "bound T noise = 1,023 * B_FRESH", mx, nc * j["b_fresh"])
+    cmp(bad, f"bound T noise = {nc:,} * B_FRESH", mx, nc * j["b_fresh"])
     cmp(bad, "bound value", val, (nc + 1) * c["value"])
-    cmp(bad, "bound margins", (b["margin_2_24"], b["margin_mint"]), (ratio(2**24, mx), ratio(j["mint_threshold"], mx)))
-    if not (mx < 2**24 and max(M) < 2**14):
+    cmp(bad, "bound margins", (b[MARGIN_E], b["margin_mint"]), (ratio(2**E_BITS, mx), ratio(j["mint_threshold"], mx)))
+    if not (mx < 2**E_BITS and max(M) < 2**M_BITS):
         bad.append(f"bound T outside the proven ranges: noise {mx}, M {max(M)}")
     check_debit(bad, "bound", b["debit"], T)
 
@@ -1630,8 +1785,8 @@ def check_illustrative(bad, j, b):
     mx = max(map(abs, noise))
     cmp(bad, "T", (b["T_keccak"], b["T_M"], b["T_noise"], b["max_abs_noise"]), (kec(T).hex(), M, noise, mx))
     cmp(bad, "T value", val, (nc + 1) * credit)
-    cmp(bad, "margin", b["margin_2_24"], ratio(2**24, mx))
-    if not (mx < 2**24 and max(M) < 2**14):
+    cmp(bad, "margin", b[MARGIN_E], ratio(2**E_BITS, mx))
+    if not (mx < 2**E_BITS and max(M) < 2**M_BITS):
         bad.append(f"T outside the proven ranges: noise {mx}, M {max(M)}")
     check_debit(bad, "illustrative", b["debit"], T)
 
@@ -1653,7 +1808,7 @@ def check_fee0(j, d):
 def check_worstcase(j, d):
     bad = []
     cmp(bad, "constants", (j["k_max"], j["credits_n"], j["b_fresh"], j["e_T_range"], j["mint_threshold"]),
-        (1024, 1023, B_FRESH, 2**24, DELTA - 2**24))
+        (K_MAX, K_MAX - 1, B_FRESH, 2**E_BITS, DELTA - 2**E_BITS))
     check_bound(bad, j, j["bound"])
     check_illustrative(bad, j, j["illustrative"])
     return bad
@@ -1690,7 +1845,8 @@ def main(argv):
         bad = check_c_keys(argv[1], log)
     elif argv and argv[0] == "--check":
         bad = selftest(log)
-        files = argv[1:] or sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "*.json")))
+        files = argv[1:] or sorted(glob.glob(os.path.join(VEC_DIR, "*.json")))
+        log(f"     parameter set {SET} (q = {Q}, n = {N}, K_MAX = {K_MAX:,}{', PQZH' if HAS_PQZH else ', no PQZH'})")
         log(f"     vector files: {len(files)}")
         bad += check_files(files, log)
     else:

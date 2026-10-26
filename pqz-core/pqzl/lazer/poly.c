@@ -549,6 +549,41 @@ poly_urandom_autostable (poly_t r, int64_t bnd, unsigned int log2,
   _poly_urandom_autostable (r, bnd, log2, seed, dom);
 }
 
+/* PQZ (review R0-C3): the final challenge from the challenge set C = {c : o(c) = c, ||c||_inf <= bnd,
+   sqrt(||o(c) c||_1) <= eta} that LNP22's knowledge error and the codegen's |C| are stated for: the autostable
+   sample of (seed, dom) for dom = 0, 1, ... (the first that passes; dom 0 is upstream's sample), at most
+   PQZ_CHAL_TRIES of them. Returns 1, or 0 if none passed (the caller fails): the measured pass rate is 0.9143
+   (e_s0), so all 256 fail with probability 0.0857^256 ~ 2^-907. Public values, no constant-time need (c is sent). */
+int
+poly_urandom_challenge (poly_t r, int64_t bnd, unsigned int log2, uint64_t eta, const uint8_t seed[32])
+{
+  const unsigned int d = r->ring->d;
+  for (uint32_t dom = 0; dom < PQZ_CHAL_TRIES; dom++)
+    {
+      int64_t c[128], oc[128], l1 = 0;
+      _poly_urandom_autostable (r, bnd, log2, seed, dom);
+      ASSERT_ERR (d <= 128);
+      for (unsigned int i = 0; i < d; i++)
+        c[i] = int_get_i64 (poly_get_coeff (r, i));
+      oc[0] = c[0]; /* o(c) = c(X^-1) = c_0 - sum_{i >= 1} c_i X^(d - i) */
+      for (unsigned int i = 1; i < d; i++)
+        oc[d - i] = -c[i];
+      for (unsigned int k = 0; k < d; k++) /* ||o(c) c||_1, negacyclic: X^d = -1 */
+        {
+          int64_t t = 0;
+          for (unsigned int i = 0; i < d; i++)
+            {
+              const unsigned int j = (k + d - i) % d;
+              t += (i <= k ? 1 : -1) * oc[i] * c[j];
+            }
+          l1 += t < 0 ? -t : t;
+        }
+      if ((uint64_t)l1 <= eta * eta)
+        return 1;
+    }
+  return 0;
+}
+
 void
 poly_urandom_bnd (poly_t r, const int_t lo, const int_t hi,
                   const uint8_t seed[32], uint32_t dom)

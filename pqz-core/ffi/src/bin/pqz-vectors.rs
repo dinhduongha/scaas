@@ -4,7 +4,8 @@
 //! C ABI `pqz_precompile` (and `selftest::selftest()`); for PQZL the generic verifier must agree with it. This binary
 //! only drives them and writes JSON.
 //!
-//!   pqz-vectors [DIR]           write the files (default: ../../smartcontracts/vectors/pqz)
+//!   pqz-vectors [DIR]           write the files (default: ../../smartcontracts/vectors/pqz for the set n2048-kmax1024,
+//!                               ../../smartcontracts/vectors/pqz/<set> for another set: pqz-ffi feature set-<set>)
 //!   pqz-vectors --check [DIR]   regenerate in memory and compare byte for byte; exit 1 on any difference, on a
 //!                               *.json in DIR that this generator does not write, or on stale self-test proofs
 //!
@@ -16,13 +17,43 @@ use std::time::Instant;
 
 use pqz_ffi::stmt::{self as st, Bundle, Debit, Disclose, Form, Register, Stmt, FORMS};
 use pqz_ffi::{pqz_precompile, pqzl, selftest, Reject, Word, INVALID, PQZH_ID, PQZL_ID, VALID};
-use pqzh_ligero::Params;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::{Keccak256, Sha3_256, Shake256};
 
+// The parameter set of this build (pqz-ffi feature `set-<set>`, owner 2026-10-21): every set-dependent number below
+// comes from pqz-stmt's set constants (MAX_PROOF_PQZH and MAX_INPUT too) and, for PQZH, from pqzh-ligero at the set (its
+// preset, element bytes EB); the n2048-kmax1024 files stay byte-identical. PQZH is in every set whose set.json says pqzh (plan
+// 5h Task 8c part 2); a build without it writes the PQZL id's files only (no proof_pqzh.json, no PQZH rows).
 const Q: u64 = st::Q;
-const DELTA: u64 = (1 << 26) - 1;
+const DELTA: u64 = st::DELTA as u64;
 const PK: usize = st::PK_BYTES;
+const N: usize = st::N;
+const K: usize = st::K;
+const BS: i64 = st::BETA_S as i64;
+const BE: i64 = st::BETA_E as i64;
+/// E = 2^(EBITS - 1): the proven |e_T| range (v3: 2^24)
+const EB: u32 = st::EBITS - 1;
+const E_RANGE: i64 = 1 << EB;
+const V3: bool = matches!(st::SET.as_bytes(), b"n2048-kmax1024");
+
+/// 12345 -> "12,345" (the descriptions' number format)
+fn th(x: impl Into<i128>) -> String {
+    let d = x.into().to_string();
+    let (sign, d) = if let Some(t) = d.strip_prefix('-') { ("-", t.to_string()) } else { ("", d) };
+    let mut out = String::new();
+    for (i, c) in d.chars().enumerate() {
+        if i > 0 && (d.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    format!("{sign}{out}")
+}
+
+/// a `&'static str` of a formatted key or description (this binary runs once)
+fn leak(s: String) -> &'static str {
+    Box::leak(s.into_boxed_str())
+}
 
 // ---------------------------------------------------------------- the crate's API (pqzl, prove, pqz_precompile)
 struct Key {
@@ -226,12 +257,52 @@ fn auth_digest(stmt: &[u8]) -> Word {
     keccak(&[b"SCAAS-PQZ-AUTH-V1", &keccak(&[stmt])])
 }
 
-const IDS: [(&str, Word); 2] = [("pqzl", PQZL_ID), ("pqzh", PQZH_ID)];
+/// the ids whose proofs this build writes: PQZL, and PQZH where it is compiled in
+const IDS: &[(&str, Word)] = if pqz_ffi::PQZH { &[("pqzl", PQZL_ID), ("pqzh", PQZH_ID)] } else { &[("pqzl", PQZL_ID)] };
 
-/// The retired PQZL id v2 (forgeable, lazer#28; CTR-PQZ-09 F6 / F9 path B): the negative rows "retired PQZL v2
-/// proofSystemId" put it on an honest v3 input, which every verifier must reject as an unknown id
-fn pqzl_v2_id() -> Word {
-    keccak(&[b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2"])
+/// another set's PQZL id, keccak256 of n2304-kmax4096's current label: the foreign id of the "other id" rows at a set
+/// without PQZH (review 8d1b M2: its zero PQZH word would repeat the "unknown proofSystemId (zero word)" rows byte for
+/// byte; R0 fix round m7: a live id, the retired ones have their own rows)
+const FOREIGN_LABEL: &str = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5";
+
+/// the "other id" of a negative row (its name and word): the other proof system's id, and at a set without PQZH (PQZL
+/// rows only) another set's PQZL id; both are unknown ids to this set's decoder or verifier
+fn other_id(id: usize) -> (&'static str, Word) {
+    if id != 0 {
+        ("the other system's proofSystemId", PQZL_ID)
+    } else if st::HAS_PQZH {
+        ("the other system's proofSystemId", PQZH_ID)
+    } else {
+        let w = keccak(&[FOREIGN_LABEL.as_bytes()]);
+        assert_ne!(w, PQZL_ID, "the foreign id is this set's");
+        ("another set's proofSystemId (n2304-kmax4096 PQZL)", w)
+    }
+}
+
+/// The retired ids of a system (decisions CTR-PQZ-09): PQZL v2 (forgeable, lazer#28; F6 / F9 path B) and v3, PQZH v1
+/// (both replaced by the per-set ids of plan 5h Task 8d), and this set's own PQZL v4 / PQZH v2 of plan 5h Task 8d
+/// (retired by the R0 review fix, 2026-10-25: its label with /v5 -> /v4, /v3 -> /v2); the negative rows "retired <name>
+/// proofSystemId" put each on an honest input of that system, which every verifier must reject as an unknown id
+fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
+    let k = |l: &str| keccak(&[l.as_bytes()]);
+    let prev = |l: &str, now: &str, was: &str| {
+        assert!(l.ends_with(now), "{l}: not a {now} label");
+        k(&format!("{}{was}", &l[..l.len() - now.len()]))
+    };
+    if id == 0 {
+        let mut v = vec![
+            ("PQZL v2", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")),
+            ("PQZL v3", k("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")),
+            ("PQZL v4", prev(st::PQZL_LABEL, "/v5", "/v4")),
+        ];
+        // a set without PQZH (n2816-kmax65536) has no PQZH rows: the retired PQZH v1 id goes on its PQZL inputs
+        if !st::HAS_PQZH {
+            v.push(("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")));
+        }
+        v
+    } else {
+        vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")), ("PQZH v2", prev(st::PQZH_LABEL, "/v3", "/v2"))]
+    }
 }
 
 fn fname(f: Form) -> &'static str {
@@ -617,20 +688,21 @@ fn a_bytes() -> Vec<u8> {
 
 fn matrix_file() -> (String, String) {
     let a = a_bytes();
-    let poly = |i: usize, j: usize| coeffs(&a[(32 * i + j) * 512..(32 * i + j + 1) * 512]);
-    let (p0, p31) = (poly(0, 0), poly(31, 31));
+    let poly = |i: usize, j: usize| coeffs(&a[(K * i + j) * 512..(K * i + j + 1) * 512]);
+    let l = K - 1;
+    let (p0, pl) = (poly(0, 0), poly(l, l));
     file(
         "matrix.json",
-        "The public matrix A (CTR-PQZ-03; SHAKE128 SCAAS-PQZ-A-V2, rejection to [0, q)): keccak256 of its bytes \
-         (A[0][0], A[0][1], ..., 64 be8 coefficients each), first / last 8 coefficients of A[0][0] and A[31][31]. From the \
-         C core: column j = pqz_keypair_from_secret(unit vector at poly j, 0).",
+        leak(format!("The public matrix A (CTR-PQZ-03; SHAKE128 SCAAS-PQZ-A-V2, rejection to [0, q)): keccak256 of its bytes \
+         (A[0][0], A[0][1], ..., 64 be8 coefficients each), first / last 8 coefficients of A[0][0] and A[{l}][{l}]. From the \
+         C core: column j = pqz_keypair_from_secret(unit vector at poly j, 0).")),
         vec![
             ("a_bytes", J::from(a.len())),
             ("a_keccak", hx(&keccak(&[&a]))),
             ("A_0_0_first8", nums(&p0[..8])),
             ("A_0_0_last8", nums(&p0[56..])),
-            ("A_31_31_first8", nums(&p31[..8])),
-            ("A_31_31_last8", nums(&p31[56..])),
+            (leak(format!("A_{l}_{l}_first8")), nums(&pl[..8])),
+            (leak(format!("A_{l}_{l}_last8")), nums(&pl[56..])),
         ],
     )
 }
@@ -668,10 +740,11 @@ fn keygen_file() -> (String, String) {
         .collect();
     file(
         "keygen.json",
-        "KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V1 || seed || be4(ctr)), \
-         s <- CBD_1, e <- CBD_20, resample above 36 / 164, pk = A s + e. ctr = the counter used. The searched-resample row \
+        leak(format!("KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V2 || u8(len(set)) || set || \
+         seed || be4(ctr)), set = the parameter set's name ({}; review R2-C3), \
+         s <- CBD_1, e <- CBD_20, resample above {BS} / {BE}, pk = A s + e. ctr = the counter used. The searched-resample row \
          was dropped (probability about 2^-70 per seed); the resample path and the counter-64 error are pinned by the \
-         test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).",
+         test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).", st::SET)),
         vec![("rows", J::A(rows))],
     )
 }
@@ -680,16 +753,16 @@ fn cbd_file() -> (String, String) {
     let mut rows = Vec::new();
     for seed in [[0x00; 32], SEED_F] {
         let k = keygen(seed);
-        let stream = [&b"SCAAS-PQZ-KEYGEN-V1"[..], &seed, &k.ctr.to_be_bytes()].concat();
+        let stream = [&b"SCAAS-PQZ-KEYGEN-V2"[..], &[st::SET.len() as u8], st::SET.as_bytes(), &seed, &k.ctr.to_be_bytes()].concat();
         let e: Vec<i64> = k.e.iter().map(|&x| x as i64).collect();
         let s: Vec<i64> = k.s.iter().map(|&x| x as i64).collect();
         rows.push(o(vec![
             ("stream", hx(&stream)),
             ("parts", J::A(vec![
                 part("s[0..64]", 1, 0, &s[..64]),
-                part("s[1984..2048]", 1, 2 * 1984, &s[1984..]),
-                part("e[0..64]", 20, 2 * 2048, &e[..64]),
-                part("e[1984..2048]", 20, 2 * 2048 + 40 * 1984, &e[1984..]),
+                part(leak(format!("s[{}..{N}]", N - 64)), 1, 2 * (N - 64), &s[N - 64..]),
+                part("e[0..64]", 20, 2 * N, &e[..64]),
+                part(leak(format!("e[{}..{N}]", N - 64)), 20, 2 * N + 40 * (N - 64), &e[N - 64..]),
             ])),
         ]));
     }
@@ -699,21 +772,21 @@ fn cbd_file() -> (String, String) {
     let r: Vec<i64> = x.r.iter().map(|&v| v as i64).collect();
     let e1: Vec<i64> = x.e1.iter().map(|&v| v as i64).collect();
     let e2: Vec<Vec<i64>> = x.e2.iter().map(|l| l.iter().map(|&v| v as i64).collect()).collect();
-    let o2 = 2 * 2048 + 40 * 2048;
+    let o2 = 2 * N + 40 * N;
     rows.push(o(vec![
         ("stream", hx(&stream)),
         ("parts", J::A(vec![
             part("r[0..64]", 1, 0, &r[..64]),
-            part("e1[0..64]", 20, 2 * 2048, &e1[..64]),
+            part("e1[0..64]", 20, 2 * N, &e1[..64]),
             part("e2_0", 20, o2, &e2[0]),
             part("e2_2", 20, o2 + 2 * 40 * 16, &e2[2]),
         ])),
     ]));
     file(
         "cbd.json",
-        "CBD_eta samples of the C core's KeyGen / Enc streams (pq-zether.md 4.2): stream = the SHAKE256 input (tag || seed \
+        leak(format!("CBD_eta samples of the C core's KeyGen / Enc streams (pq-zether.md 4.2): stream = the SHAKE256 input (tag || seed \
          || be4(ctr)); bits LSB-first; a sample = (sum of eta bits) - (sum of the next eta bits) from bit_offset. KeyGen: s \
-         (CBD_1, 2048) then e (CBD_20, 2048); Enc (3 recipients): r, e1, then e2_j (16 each).",
+         (CBD_1, {N}) then e (CBD_20, {N}); Enc (3 recipients): r, e1, then e2_j (16 each).")),
         vec![("rows", J::A(rows))],
     )
 }
@@ -791,8 +864,94 @@ fn enc_file() -> (String, String) {
     )
 }
 
+// ---------------------------------------------------------------- PQZH (Ligero): only where it is compiled in
+/// Everything here that names the Ligero API; without PQZH in the build `IDS` has no PQZH id, so it is never called.
+mod ph {
+    use super::*;
+    #[cfg_attr(not(feature = "pqzh"), allow(dead_code))]
+    pub enum Shape {
+        Form(Form),
+        Multi(usize, bool),
+    }
+
+    #[cfg(feature = "pqzh")]
+    fn rel(s: &Shape) -> pqzh_ligero::Rel {
+        match *s {
+            Shape::Form(f) => f.into(),
+            Shape::Multi(m, aud) => pqzh_ligero::Rel::Multi { m, aud },
+        }
+    }
+
+    /// the verifier's exact proof-length bound for the shape
+    #[cfg(feature = "pqzh")]
+    pub fn max_proof_len(s: Shape) -> usize {
+        pqzh_ligero::Params::proven().max_proof_len(rel(&s))
+    }
+
+    /// D15 for PQZH proofs: canonical F_q elements (EB-byte BE < q; EB = 6 at n2048-kmax1024), opened columns in strictly increasing index order
+    /// without repeats (the indices come from the transcript, so a swapped or repeated column block is the
+    /// encoding-level form), the exact length bound
+    #[cfg(feature = "pqzh")]
+    pub fn negatives(s: Shape) -> Vec<(String, Vec<E>)> {
+        let pp = pqzh_ligero::Params::proven();
+        let eb = pqzh_ligero::fq::EB;
+        let fe = 4 * (2 * (2 * pp.k - 1) + (2 * pp.k - 1 - pp.ell)); // F_q elements of w, q, h
+        let col0 = 32 + eb * fe + 8;
+        let q6 = Q.to_be_bytes()[8 - eb..].to_vec();
+        let what = if matches!(s, Shape::Form(_)) { "form" } else { "shape" };
+        let rl = rel(&s);
+        let blk = 32 + eb * (pqzh_ligero::cs::Layout::new(rl, pp.ell).m + 12);
+        vec![
+            (format!("proof of max_proof_len({what}) + 1 bytes"), vec![E::ProofResize(pp.max_proof_len(rl) + 1)]),
+            ("w coefficient 0 element = q".into(), vec![E::ProofSet(32, q6.clone())]),
+            ("first opened column element 0 = q".into(), vec![E::ProofSet(col0 + 32, q6.clone())]),
+            ("opened columns 0 and 1 swapped (not increasing)".into(), vec![E::ProofSwap(col0, col0 + blk, blk)]),
+            ("opened column 0 repeated as column 1".into(), vec![E::ProofCopy(col0, col0 + blk, blk)]),
+        ]
+    }
+
+    /// proof_pqzh.json's params
+    #[cfg(feature = "pqzh")]
+    pub fn params() -> J {
+        let pp = pqzh_ligero::Params::proven();
+        o(vec![
+            ("n", J::from(pp.n)),
+            ("k", J::from(pp.k)),
+            ("ell", J::from(pp.ell)),
+            ("t", J::from(pp.t)),
+            ("pow_bits", J::from(pp.pow_bits)),
+            ("max_proof", J::from(st::MAX_PROOF_PQZH)),
+        ])
+    }
+
+    /// bytes per F_q element in PQZH proofs and the self-test's FFT
+    #[cfg(feature = "pqzh")]
+    pub fn eb() -> usize {
+        pqzh_ligero::fq::EB
+    }
+    /// no PQZH: the self-test description's number only
+    #[cfg(not(feature = "pqzh"))]
+    pub fn eb() -> usize {
+        6
+    }
+
+    #[cfg(not(feature = "pqzh"))]
+    pub fn max_proof_len(_: Shape) -> usize {
+        unreachable!("no PQZH in this build")
+    }
+    #[cfg(not(feature = "pqzh"))]
+    pub fn negatives(_: Shape) -> Vec<(String, Vec<E>)> {
+        unreachable!("no PQZH in this build")
+    }
+    #[cfg(not(feature = "pqzh"))]
+    pub fn params() -> J {
+        unreachable!("no PQZH in this build")
+    }
+}
+
 // ---------------------------------------------------------------- negative inputs
 #[derive(Clone)]
+#[cfg_attr(not(feature = "pqzh"), allow(dead_code))] // the proof-byte edits of the PQZH rows
 enum E {
     Op(u8),
     ProofFrom(Form),
@@ -888,7 +1047,7 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
     let mut v: Vec<(String, Option<Form>, Option<usize>, Vec<E>)> = Vec::new();
     let w = |x: u64| st::u64_word(x).to_vec();
     let qb = |x: u64| x.to_be_bytes().to_vec();
-    for id in 0..2 {
+    for id in 0..IDS.len() {
         let mut add = |name: String, f: Form, e: Vec<E>| v.push((name, Some(f), Some(id), e));
         let pl = |f: Form| proofs[id][fidx(f)].len();
         for f in FORMS {
@@ -901,9 +1060,9 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
                 }
             }
             add(format!("{nm}: unknown proofSystemId (zero word)"), f, vec![E::StmtSet(32, vec![0; 32])]);
-            add(format!("{nm}: the other system's proofSystemId"), f, vec![E::StmtSet(32, IDS[1 - id].1.to_vec())]);
-            if id == 0 {
-                add(format!("{nm}: retired PQZL v2 proofSystemId"), f, vec![E::StmtSet(32, pqzl_v2_id().to_vec())]);
+            add(format!("{nm}: {}", other_id(id).0), f, vec![E::StmtSet(32, other_id(id).1.to_vec())]);
+            for (r, w) in retired_ids(id) {
+                add(format!("{nm}: retired {r} proofSystemId"), f, vec![E::StmtSet(32, w.to_vec())]);
             }
             add(format!("{nm}: proof truncated by 1 byte"), f, vec![E::ProofResize(pl(f) - 1)]);
             add(format!("{nm}: proof extended by 1 zero byte"), f, vec![E::ProofResize(pl(f) + 1)]);
@@ -916,9 +1075,9 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
         }
         let set = |at: usize, b: Vec<u8>| vec![E::StmtSet(at, b)];
         let d15: Vec<(&str, Form, Vec<E>)> = vec![
-            ("auditorOn 0 on the 83,072-byte form (R6)", Transfer, set(448, w(0))),
+            (leak(format!("auditorOn 0 on the {}-byte form (R6)", th(Transfer.stmt_len() as i128))), Transfer, set(448, w(0))),
             ("auditorOn 2 (R6)", Transfer, set(448, w(2))),
-            ("auditorOn 1 on the 66,560-byte form (R6)", Transfer0, set(448, w(1))),
+            (leak(format!("auditorOn 1 on the {}-byte form (R6)", th(Transfer0.stmt_len() as i128))), Transfer0, set(448, w(1))),
             ("fee >= 2^64", Transfer, set(256 + 23, vec![1])),
             ("fee >= 2^64", Burn, set(256 + 23, vec![1])),
             ("fee >= 2^64", Refresh, set(256 + 23, vec![1])),
@@ -939,17 +1098,17 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             ("auditorOn != 0", Refresh, set(479, vec![1])),
             ("salt != 0", Refresh, set(607, vec![1])),
             ("pk_f coefficient 0 = q", Transfer, set(640, qb(Q))),
-            ("pk_a coefficient 0 = 2^42", Transfer, set(640 + 2 * PK, qb(1 << 42))),
+            (leak(format!("pk_a coefficient 0 = 2^{}", st::LOG2Q)), Transfer, set(640 + 2 * PK, qb(1 << st::LOG2Q))),
             ("T coefficient 0 = q", Transfer, set(640 + 3 * PK, qb(Q))),
             ("u coefficient 0 = 2^64 - 1", Transfer, set(640 + 3 * PK + st::CT_BYTES, qb(u64::MAX))),
-            ("v_a last coefficient = q", Transfer, set(83072 - 8, qb(Q))),
-            ("v_f last coefficient = q", Transfer0, set(66560 - 8, qb(Q))),
-            ("v_f last coefficient = q", Burn, set(50048 - 8, qb(Q))),
+            ("v_a last coefficient = q", Transfer, set(Transfer.stmt_len() - 8, qb(Q))),
+            ("v_f last coefficient = q", Transfer0, set(Transfer0.stmt_len() - 8, qb(Q))),
+            ("v_f last coefficient = q", Burn, set(Burn.stmt_len() - 8, qb(Q))),
             ("pk coefficient 0 = q", Register, set(96, qb(Q))),
-            ("pk last coefficient = 2^42", Register, set(16480 - 8, qb(1 << 42))),
+            (leak(format!("pk last coefficient = 2^{}", st::LOG2Q)), Register, set(Register.stmt_len() - 8, qb(1 << st::LOG2Q))),
             ("pk coefficient 0 = q", DiscloseSender, set(288, qb(Q))),
             ("u coefficient 0 = q", DiscloseReceiver, set(288 + PK, qb(Q))),
-            ("v last coefficient = q", DiscloseAuditor, set(33184 - 8, qb(Q))),
+            ("v last coefficient = q", DiscloseAuditor, set(DiscloseAuditor.stmt_len() - 8, qb(Q))),
             ("REFRESH opTag on the BURN statement", Burn, set(0, Refresh.op_tag().to_vec())),
             ("BURN opTag on the REFRESH statement", Refresh, set(0, Burn.op_tag().to_vec())),
             ("AUDITOR opTag on the RECEIVER statement", DiscloseReceiver, set(0, DiscloseAuditor.op_tag().to_vec())),
@@ -959,8 +1118,13 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             ("message bit flipped (the self-test's invalid case)", Register, vec![E::StmtFlip(95, 0)]),
             ("chainId bit flipped", Transfer, vec![E::StmtFlip(64 + 31, 0)]),
             ("pk_f coefficient 0 low bit flipped", Transfer, vec![E::StmtFlip(640 + 7, 0)]),
-            ("v_f low bit flipped", Transfer0, vec![E::StmtFlip(66560 - 1, 0)]),
+            ("v_f low bit flipped", Transfer0, vec![E::StmtFlip(Transfer0.stmt_len() - 1, 0)]),
             ("kind word changed", DiscloseSender, vec![E::StmtFlip(256 + 31, 0)]),
+            // kind = OpeningKind + 256 w (R0-1): w = 0 but for AUDITOR (w < S_AUD), the word < 2^16 (decoder: Kind)
+            ("kind window 1", DiscloseSender, set(256 + 30, vec![1])),
+            ("kind window 1", DiscloseReceiver, set(256 + 30, vec![1])),
+            (leak(format!("kind window {} (S_AUD)", st::S_AUD)), DiscloseAuditor, set(256 + 30, vec![st::S_AUD as u8])),
+            ("kind word 2^16", DiscloseAuditor, set(256 + 29, vec![1])),
             ("amount + 1", DiscloseSender, set(224 + 24, qb(123_457))),
             ("amount + 1", Burn, set(288 + 24, qb(123_457))),
             ("TRANSFER0's proof", Transfer, vec![E::ProofFrom(Transfer0)]),
@@ -973,8 +1137,8 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             ("proof of MAX_PROOF(id) + 1 bytes", Register, vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)]),
             ("input of MAX_INPUT + 1 bytes (expected revert, P6f)", Transfer, vec![E::InputResize(st::MAX_INPUT + 1)]),
             ("length field 0xffffffff", Transfer, vec![E::LenField(u32::MAX)]),
-            ("length field = statement + proof + 1", Transfer, vec![E::LenField((83072 + pl(Transfer) + 1) as u32)]),
-            ("length field = statement + 1", Transfer, vec![E::LenField(83073)]),
+            ("length field = statement + proof + 1", Transfer, vec![E::LenField((Transfer.stmt_len() + pl(Transfer) + 1) as u32)]),
+            ("length field = statement + 1", Transfer, vec![E::LenField(Transfer.stmt_len() as u32 + 1)]),
             ("input of 4 bytes", Transfer, vec![E::InputResize(4)]),
             ("proof of exactly MAX_PROOF(id) bytes", Transfer, vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap())]),
             ("input of exactly MAX_INPUT bytes (not a revert)", Transfer, vec![E::InputResize(st::MAX_INPUT)]),
@@ -983,21 +1147,10 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             add(format!("{}: {name}", fname(f)), f, e);
         }
         if IDS[id].1 == PQZH_ID {
-            // D15 for PQZH proofs: canonical F_q elements (6-byte BE < q), opened columns in strictly increasing index
-            // order without repeats (the indices come from the transcript, so a swapped or repeated column block is
-            // the encoding-level form), the exact length bound
-            let pp = Params::proven();
-            let fe = 4 * (2 * (2 * pp.k - 1) + (2 * pp.k - 1 - pp.ell)); // F_q elements of w, q, h
-            let col0 = 32 + 6 * fe + 8;
-            let q6 = Q.to_be_bytes()[2..].to_vec();
             for f in FORMS {
-                let nm = fname(f);
-                let blk = 32 + 6 * (pqzh_ligero::cs::Layout::new(f, pp.ell).m + 12);
-                add(format!("{nm}: proof of max_proof_len(form) + 1 bytes"), f, vec![E::ProofResize(pp.max_proof_len(f) + 1)]);
-                add(format!("{nm}: w coefficient 0 element = q"), f, vec![E::ProofSet(32, q6.clone())]);
-                add(format!("{nm}: first opened column element 0 = q"), f, vec![E::ProofSet(col0 + 32, q6.clone())]);
-                add(format!("{nm}: opened columns 0 and 1 swapped (not increasing)"), f, vec![E::ProofSwap(col0, col0 + blk, blk)]);
-                add(format!("{nm}: opened column 0 repeated as column 1"), f, vec![E::ProofCopy(col0, col0 + blk, blk)]);
+                for (name, e) in ph::negatives(ph::Shape::Form(f)) {
+                    add(format!("{}: {name}", fname(f)), f, e);
+                }
             }
         } else {
             // D15 for PQZL proofs: the LaZer coder's final 1-bit then zero padding (bits LSB-first): a padding bit set
@@ -1021,24 +1174,25 @@ const WC_RECV: [u8; 32] = [0x57; 32];
 const WC_GEN: [u8; 32] = [0x58; 32];
 const WC_OUT: [u8; 32] = [0x59; 32];
 const WC_RND: [u8; 32] = [0x90; 32];
-const K_MAX: usize = 1024;
-const B_R: i64 = 36 * 36;
-const B_E1: i64 = 164 * 164;
+const K_MAX: usize = st::K_MAX;
+const B_R: i64 = BS * BS;
+const B_E1: i64 = BE * BE;
 const CREDIT: u64 = (1 << 48) - 1;
-const B_FRESH: i64 = 164 * 36 + 36 * 164 + 64;
+const B_FRESH: i64 = BE * BS + BS * BE + 64;
+const _: () = assert!(K_MAX as u128 * CREDIT as u128 <= u64::MAX as u128, "worst case: K_MAX credits overflow a value");
 
 /// coefficient-0 weights: (x·y)[0] = Σ_k rot(x)_k y_k in Z[X]/(X^64 + 1), per poly
 fn rot(x: &[i64]) -> Vec<i64> {
-    (0..2048).map(|i| if i % 64 == 0 { x[i] } else { -x[i - i % 64 + 64 - i % 64] }).collect()
+    (0..N).map(|i| if i % 64 == 0 { x[i] } else { -x[i - i % 64 + 64 - i % 64] }).collect()
 }
 
 /// max Σ w_k r_k over integers with Σ r_k² ≤ b: greedy over the increments (k, a) (|r_k| a → a + 1, gain |w_k|,
 /// cost 2a + 1) by gain / cost descending, ties by (k, a); an increment is taken while the cost fits
 fn align_r(w: &[i64], b: i64) -> Vec<i64> {
     let mut c: Vec<(i64, i64, usize)> =
-        (0..2048).filter(|&k| w[k] != 0).flat_map(|k| (0..36).map(move |a| (w[k].abs(), a, k))).collect();
+        (0..N).filter(|&k| w[k] != 0).flat_map(|k| (0..BS).map(move |a| (w[k].abs(), a, k))).collect();
     c.sort_by(|x, y| (y.0 * (2 * x.1 + 1)).cmp(&(x.0 * (2 * y.1 + 1))).then(x.2.cmp(&y.2)).then(x.1.cmp(&y.1)));
-    let (mut r, mut left) = (vec![0i64; 2048], b);
+    let (mut r, mut left) = (vec![0i64; N], b);
     for (_, a, k) in c {
         if 2 * a + 1 <= left {
             left -= 2 * a + 1;
@@ -1052,22 +1206,33 @@ fn align_r(w: &[i64], b: i64) -> Vec<i64> {
 /// them at L + 1 (the X smallest by (prio, index), prio_i = be32 of SHAKE256(SCAAS-PQZ-WORSTCASE-V1 ‖ gen ‖ be4(k))
 /// bytes 4i..4i+4); sign −sign(z) so that −Σ z·e1 = L·N + X
 fn align_e1(z: &[i64], k: u32) -> Vec<i64> {
-    let s: Vec<usize> = (0..2048).filter(|&i| z[i] != 0).collect();
+    let s: Vec<usize> = (0..N).filter(|&i| z[i] != 0).collect();
     let n = s.len() as i64;
     let mut l = 0;
     while (l + 1) * (l + 1) * n <= B_E1 {
         l += 1;
     }
     let x = ((B_E1 - l * l * n) / (2 * l + 1)) as usize;
-    let pr = shake256(&[b"SCAAS-PQZ-WORSTCASE-V1", &WC_GEN, &k.to_be_bytes()], 4 * 2048);
+    let pr = shake256(&[b"SCAAS-PQZ-WORSTCASE-V1", &WC_GEN, &k.to_be_bytes()], 4 * N);
     let mut ord = s.clone();
     ord.sort_by_key(|&i| (u32::from_be_bytes(pr[4 * i..4 * i + 4].try_into().unwrap()), i));
-    let mut e1 = vec![0i64; 2048];
+    let mut e1 = vec![0i64; N];
     for (rank, &i) in ord.iter().enumerate() {
         e1[i] = -z[i].signum() * (l + (rank < x) as i64);
     }
     e1
 }
+
+/// the worst-case files' margin key: against the proven range E = 2^EB (v3: margin_2_24)
+const MARGIN_E: &str = match EB {
+    24 => "margin_2_24",
+    26 => "margin_2_26",
+    28 => "margin_2_28",
+    30 => "margin_2_30",
+    _ => panic!("margin key for this E"),
+};
+/// "both systems" (v3) or "PQZL" (a build without PQZH)
+const SYS: &str = if pqz_ffi::PQZH { "both systems" } else { "PQZL (PQZH not in this set's build)" };
 
 fn ids_keccak(stmt: &[u8]) -> J {
     J::O(IDS.iter().map(|(n, id)| (n.to_string(), hx(&keccak(&[&with_id(stmt, id)])))).collect())
@@ -1075,7 +1240,7 @@ fn ids_keccak(stmt: &[u8]) -> J {
 
 /// both ids' proofs of `stmt` (PQZL-id bytes), each valid through pqz_precompile (and the generic PQZL verifier)
 fn proofs_json(op: u8, stmt: &[u8], wit: &[u8], rnd: &[u8; 32]) -> Vec<(&'static str, J)> {
-    (0..2)
+    (0..IDS.len())
         .map(|i| {
             let s = with_id(stmt, &IDS[i].1);
             let p = prove(&IDS[i].1, op, &s, wit, rnd);
@@ -1163,10 +1328,10 @@ fn sparse<T: Copy + Into<i64>>(v: &[T]) -> J {
 /// The worst the verifier accepts (controller 2026-10-14): an attacker-registered receiver key at the norm bounds, its
 /// R_REG proved; each credit at B_FRESH exactly; the sender's R_TX of a credit proved (credit 0 and the last).
 fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
-    let mut s = vec![0i8; 2048];
-    s[64] = 36; // poly 1, coefficient 0 (poly 0 carries R_REG's approximate l_inf filler, |s[0]| <= 1)
-    let mut e = vec![0i16; 2048];
-    e[0] = 164; // poly 0, coefficient 0
+    let mut s = vec![0i8; N];
+    s[64] = BS as i8; // poly 1, coefficient 0 (poly 0 carries R_REG's approximate l_inf filler, |s[0]| <= 1)
+    let mut e = vec![0i16; N];
+    e[0] = BE as i16; // poly 0, coefficient 0
     let kr = key_from("receiver", s, e);
     let msg = keccak(&[b"SCAAS-PQZ-WORSTCASE-KEY-V1"]);
     let reg = Stmt::Register(Register { words: [Form::Register.op_tag(), PQZL_ID, msg], pk: &kr.pk }).encode().unwrap();
@@ -1181,15 +1346,15 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
 
     let w = rot(&kr.e.iter().map(|&x| x as i64).collect::<Vec<_>>());
     let z = rot(&kr.s.iter().map(|&x| x as i64).collect::<Vec<_>>());
-    let mut r = vec![0i8; 2048];
-    r[0] = 36; // along rot(e)
-    let mut e1 = vec![0i16; 2048];
-    e1[64] = -164; // against rot(s)
+    let mut r = vec![0i8; N];
+    r[0] = BS as i8; // along rot(e)
+    let mut e1 = vec![0i16; N];
+    e1[64] = -BE as i16; // against rot(s)
     let mut e2 = [0i16; 16];
     e2[0] = 64;
     let wr: i64 = w.iter().zip(&r).map(|(a, &b)| a * b as i64).sum();
     let ze: i64 = -z.iter().zip(&e1).map(|(a, &b)| a * b as i64).sum::<i64>();
-    assert_eq!((wr, ze), (164 * 36, 36 * 164));
+    assert_eq!((wr, ze), (BE * BS, BS * BE));
     let (u1, v1) = encrypt(&[&kr], &[CREDIT], &r, &e1, &[e2]);
     let ct = [&u1[..], &v1[0][..]].concat();
     let (_, nz) = dec(&kr.s, &ct);
@@ -1253,16 +1418,17 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
     let (tm, tn) = dec(&kr.s, &t);
     assert_eq!((value(&tm), tn[0]), (K_MAX as i128 * CREDIT as i128, ncr as i64 * B_FRESH));
     let maxn = tn.iter().map(|x| x.abs()).max().unwrap();
-    let mint = DELTA as i64 - (1 << 24);
+    let mint = DELTA as i64 - E_RANGE;
     o(vec![
-        ("note", J::from(
-            "The worst case the verifier accepts: a receiver key at the norm bounds (s = 36 at one coefficient outside poly 0, \
-             whose |coefficients| <= 1 R_REG's approximate l_inf filler proves; e = 164 at one coefficient), registered \
-             (its R_REG proves and verifies in both systems), every credit at noise B_FRESH = 164*36 + 36*164 + 64 in \
-             coefficient 0 (r = 36 along rot(e), e1 = -164 against rot(s), e2_t = (64, 0, ...)), each credit the same \
-             ciphertext (the maximum is unique), proved by its sender's R_TX (credit 0 and the last shown, both systems), \
-             plus the plain unit (noise 0): T noise = 1,023 * 11,872 = 12,145,056.",
-        )),
+        ("note", J::from(format!(
+            "The worst case the verifier accepts: a receiver key at the norm bounds (s = {BS} at one coefficient outside poly 0, \
+             whose |coefficients| <= 1 R_REG's approximate l_inf filler proves; e = {BE} at one coefficient), registered \
+             (its R_REG proves and verifies in {SYS}), every credit at noise B_FRESH = {BE}*{BS} + {BS}*{BE} + 64 in \
+             coefficient 0 (r = {BS} along rot(e), e1 = -{BE} against rot(s), e2_t = (64, 0, ...)), each credit the same \
+             ciphertext (the maximum is unique), proved by its sender's R_TX (credit 0 and the last shown, {SYS}), \
+             plus the plain unit (noise 0): T noise = {} * {} = {}.",
+            th(ncr as i128), th(B_FRESH), th(ncr as i128 * B_FRESH as i128),
+        ))),
         ("receiver", o(vec![("s", sparse(&kr.s)), ("e", sparse(&kr.e)), ("pk_keccak", hx(&keccak(&[&kr.pk]))), ("register", o(regj))])),
         ("credit", o(vec![
             ("r", sparse(&r)),
@@ -1291,7 +1457,7 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
         ("T_M", nums(&tm)),
         ("T_noise", nums(&tn)),
         ("max_abs_noise", J::from(maxn)),
-        ("margin_2_24", J::from(ratio(1 << 24, maxn))),
+        (MARGIN_E, J::from(ratio(E_RANGE, maxn))),
         ("margin_mint", J::from(ratio(mint, maxn))),
         ("debit", debit(&kr, kt, ka, &t, K_MAX as u64 * CREDIT, CREDIT, 0xB2, [0x94; 32])),
     ])
@@ -1339,7 +1505,7 @@ fn illustrative_case(kt: &Key, ka: &Key) -> J {
     assert_eq!(noise0.unwrap(), wr + ze + 64, "credit noise = <w, r> - <z, e1> + e2[0]");
     assert_eq!(tn[0], ncr as i64 * noise0.unwrap());
     let maxn = tn.iter().map(|x| x.abs()).max().unwrap();
-    assert!(maxn < 1 << 24);
+    assert!(maxn < E_RANGE);
     o(vec![
         ("note", J::from("Illustrative: an honest receiver key (KeyGen), credits aligned to it; below the bound case.")),
         ("receiver_seed", hx(&WC_RECV)),
@@ -1347,14 +1513,14 @@ fn illustrative_case(kt: &Key, ka: &Key) -> J {
         ("credit_value", J::from(CREDIT)),
         ("plain_used", J::from(plain)),
         ("alignment", J::from(
-            "Noise of a credit in coefficient 0 = <rot(e), r> - <rot(s), e1> + e2[0] for the receiver key (s, e), rot(x) \
+            format!("Noise of a credit in coefficient 0 = <rot(e), r> - <rot(s), e1> + e2[0] for the receiver key (s, e), rot(x) \
              per poly = (x_0, -x_63, ..., -x_1). r: the same for every credit, greedy max of <rot(e), r> with ||r||^2 <= \
-             1296 over integer increments (k, a) (gain |w_k|, cost 2a + 1) by gain / cost descending, ties by (k, a). \
-             e1 of credit k: every coordinate with rot(s) != 0 at level L (largest with L^2 N <= 26896), X = (26896 - L^2 \
+             {B_R} over integer increments (k, a) (gain |w_k|, cost 2a + 1) by gain / cost descending, ties by (k, a). \
+             e1 of credit k: every coordinate with rot(s) != 0 at level L (largest with L^2 N <= {B_E1}), X = ({B_E1} - L^2 \
              N) / (2L + 1) of them at L + 1, the X first by (prio, index), prio_i = be32 of SHAKE256(SCAAS-PQZ-WORSTCASE-V1 \
              || generator_seed || be4(k)) bytes 4i..4i+4, sign -sign(rot(s)). e2 = (64, 0, ..., 0). Message digits(credit_value). \
              Credits by pqz_encrypt (C), T = sum of the credits + Trivial(digits(plain_used)) mod q.",
-        )),
+        ))),
         ("credit_norms_sq", o(vec![("r", J::from(sq(&r))), ("e1", J::from(e1sq.unwrap())), ("e2", J::from(64 * 64u64))])),
         ("credit_noise0", J::from(noise0.unwrap())),
         ("credits_ct_keccak", J::A(hashes)),
@@ -1363,7 +1529,7 @@ fn illustrative_case(kt: &Key, ka: &Key) -> J {
         ("T_M", nums(&tm)),
         ("T_noise", nums(&tn)),
         ("max_abs_noise", J::from(maxn)),
-        ("margin_2_24", J::from(ratio(1 << 24, maxn))),
+        (MARGIN_E, J::from(ratio(E_RANGE, maxn))),
         ("debit", debit(&kr, kt, ka, &t, bal, plain, 0xB1, WC_RND)),
     ])
 }
@@ -1374,8 +1540,8 @@ fn worstcase() -> Vec<(&'static str, J)> {
         ("k_max", J::from(K_MAX)),
         ("credits_n", J::from(K_MAX - 1)),
         ("b_fresh", J::from(B_FRESH)),
-        ("e_T_range", J::from(1u64 << 24)),
-        ("mint_threshold", J::from(DELTA as i64 - (1 << 24))),
+        ("e_T_range", J::from(E_RANGE)),
+        ("mint_threshold", J::from(DELTA as i64 - E_RANGE)),
         ("bound", bound_case(&kf, &kt, &ka)),
         ("illustrative", illustrative_case(&kt, &ka)),
     ]
@@ -1410,7 +1576,7 @@ struct MRow {
 }
 
 /// (case, M, auditorOn, fee, leg amounts): every built (M, A) with one real leg at a position that varies by shape
-/// (D15), then a two-real-leg row, an all-decoy row and a group-boundary row (real legs 3 and 4, groups 0 and 1)
+/// (D15), then a two-real-leg row, an all-decoy row and a group-boundary row (real legs b - 1 and b: `boundary()`)
 fn multi_specs() -> Vec<(String, usize, bool, u64, Vec<u64>)> {
     let v = 123_456u64;
     let one = |m: usize, at: usize| (0..m).map(|j| if j == at { v } else { 0 }).collect::<Vec<u64>>();
@@ -1422,8 +1588,17 @@ fn multi_specs() -> Vec<(String, usize, bool, u64, Vec<u64>)> {
     }
     out.push(("M2-off-two-real".into(), 2, false, 7, vec![v, 7_000]));
     out.push(("M4-off-decoys".into(), 4, false, 0, vec![0; 4]));
-    out.push(("M8-on-boundary".into(), 8, true, 7, [vec![0; 3], vec![v, 7_000], vec![0; 3]].concat()));
+    let b = boundary();
+    out.push(("M8-on-boundary".into(), 8, true, 7, (0..8).map(|j| if j == b - 1 { v } else if j == b { 7_000 } else { 0 }).collect()));
     out
+}
+
+/// the first leg b of an audited group, the one at or after leg 4: b = s ceil(4 / s), s = S_AUD (R0 fix round m6).
+/// M8-on-boundary's real legs b - 1 and b are the last of one group and the first of the next at every set: 3 / 4 at
+/// s = 2 and 4, 5 / 6 at s = 3 (where the legs 3 / 4 of before sat in one group)
+fn boundary() -> usize {
+    let s = st::legs_per_group(true);
+    s * 4usize.div_ceil(s)
 }
 
 fn leg_addr(j: usize) -> Vec<u8> {
@@ -1445,7 +1620,7 @@ fn multi_rows() -> Vec<MRow> {
         .into_iter()
         .enumerate()
         .map(|(idx, (case, m, aud, fee, amounts))| {
-            let ids: Vec<usize> = (0..2).filter(|&i| st::built_legs(&IDS[i].1).contains(&m)).collect();
+            let ids: Vec<usize> = (0..IDS.len()).filter(|&i| st::built_legs(&IDS[i].1).contains(&m)).collect();
             let bp = bal - amounts.iter().sum::<u64>() - fee;
             let seed = [0x70 + idx as u8; 32];
             let legs: Vec<(&[u8; PK], [u8; 16])> = (0..m).map(|j| (pk_ref(&kr[j].pk), digits(amounts[j]))).collect();
@@ -1553,6 +1728,78 @@ fn multi_rows() -> Vec<MRow> {
         .collect()
 }
 
+/// op 7 disclosures (R0-1: R_DR / R_DA at the window of the disclosed v): (case, op 7 case, leg, auditor). The auditor
+/// copies of M8-on-boundary's real legs b - 1 and b (`boundary()`) and of leg 2 of M4-on (windows j mod S_AUD: some
+/// nonzero at every set) and the receiver of M8-on-boundary's leg b (window 0, its group's u)
+fn mdisc() -> [(&'static str, &'static str, usize, bool); 4] {
+    let b = boundary();
+    let nm = |j: usize, who: &str| leak(format!("M8-on-boundary-leg{j}-{who}"));
+    [
+        (nm(b - 1, "auditor"), "M8-on-boundary", b - 1, true),
+        (nm(b, "auditor"), "M8-on-boundary", b, true),
+        ("M4-on-leg2-auditor", "M4-on", 2, true),
+        (nm(b, "receiver"), "M8-on-boundary", b, false),
+    ]
+}
+
+/// One op 7 disclosure statement (statement_transfer_multi.json `disclosures`)
+struct DRow {
+    case: String,
+    form: Form,
+    stmt: Vec<u8>,
+    wit: Vec<u8>,
+    rnd: [u8; 32],
+    json: Vec<(&'static str, J)>,
+}
+
+fn multi_disclosures(mrows: &[MRow]) -> Vec<DRow> {
+    let ka = keygen(SEED_A);
+    let specs = multi_specs();
+    mdisc()
+        .iter()
+        .enumerate()
+        .map(|(i, &(case, mc, j, aud))| {
+            let r = mrows.iter().find(|r| r.case == mc).unwrap();
+            assert!(r.aud, "{mc}: an audited op 7 case");
+            let amount = specs.iter().find(|x| x.0 == mc).unwrap().4[j];
+            let s = st::parse_multi(&r.stmt).unwrap();
+            let lpg = st::legs_per_group(true);
+            let kr = keygen([SEED_LEG0 + j as u8; 32]);
+            let (form, kind, w, key, v) =
+                if aud { (Form::DiscloseAuditor, 2u64, j % lpg, &ka, s.v_a(j).unwrap()) } else { (Form::DiscloseReceiver, 1, 0, &kr, s.v(j)) };
+            let mut hw = r.header;
+            let f: Vec<(&str, V)> = vec![
+                ("chainId", V::B(hw[st::H_CHAIN_ID].to_vec())),
+                ("chainUid", V::B(hw[st::H_CHAIN_UID].to_vec())),
+                ("token", V::B(hw[st::H_TOKEN][12..].to_vec())),
+                ("registry", V::B(hw[st::H_REGISTRY][12..].to_vec())),
+                ("entryRef", V::B(mentry_ref(&mut hw).to_vec())),
+                ("amount", V::I(amount)),
+                ("kind", V::I(kind + 256 * w as u64)),
+            ];
+            let mut words = Disclose::words(form, &PQZL_ID);
+            set_words(&mut words, &DNAMES, &f);
+            let st_ = Stmt::Disclose(Disclose { form, words, pk: &key.pk, u: s.u(j / lpg), v }).encode().unwrap();
+            st::parse(form.op(), &st_).expect("op 7 disclosure canonical");
+            let objs = o(vec![
+                ("pk", keyref(key)),
+                ("multi_case", J::from(mc)),
+                ("leg", J::from(j)),
+                ("window", J::from(w)),
+            ]);
+            let mut json = stmt_json(form, &st_, fields_json(&f), objs, vec![]);
+            json.insert(1, ("case", J::from(case)));
+            DRow { case: case.into(), form, stmt: st_, wit: key.wit(), rnd: [0xD0 + i as u8; 32], json }
+        })
+        .collect()
+}
+
+/// entryRef of an op 7 header (as op 1: chainId, chainUid, token, fromUA, sendCounter)
+fn mentry_ref(h: &mut [Word; 20]) -> Word {
+    let t = keccak(&[b"SCAAS-PQZ-ENTRY-V1"]);
+    keccak(&[&t, &h[st::H_CHAIN_ID], &h[st::H_CHAIN_UID], &h[st::H_TOKEN], &h[st::H_FROM], &h[st::H_SEND_COUNTER]])
+}
+
 /// memo::open on edited memos of one row (§5.4): (name, key seed, edits, result)
 fn memo_opens(rows: &[MRow]) -> Vec<J> {
     let base = rows.iter().find(|r| r.case == "M2-on").unwrap();
@@ -1605,7 +1852,7 @@ fn moff(m: usize, aud: bool) -> (usize, usize, usize, usize, usize) {
     let a = aud as usize;
     let pk0 = st::HEADER_BYTES + PK;
     let u0 = pk0 + (m + a) * PK + st::CT_BYTES;
-    let v0 = u0 + st::groups(m) * PK;
+    let v0 = u0 + st::groups(m, aud) * PK;
     (pk0, u0, v0, v0 + 128 * m, v0 + 128 * (m + 1))
 }
 
@@ -1615,7 +1862,7 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
     let w = |x: u64| st::u64_word(x).to_vec();
     let qb = |x: u64| x.to_be_bytes().to_vec();
     let row = |c: &str| rows.iter().find(|r| r.case == c).unwrap();
-    for id in 0..2 {
+    for id in 0..IDS.len() {
         let mut add = |name: String, case: &str, e: Vec<E>| v.push((format!("{case}: {name}"), case.to_string(), id, e));
         let defaults: Vec<&MRow> = rows.iter().filter(|r| r.ids.contains(&id) && r.case == format!("M{}-{}", r.m, if r.aud { "on" } else { "off" })).collect();
         for r in &defaults {
@@ -1626,9 +1873,9 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
                 add(format!("under op {op}"), c, vec![E::Op(op)]);
             }
             add("unknown proofSystemId (zero word)".into(), c, vec![E::StmtSet(32, vec![0; 32])]);
-            add("the other system's proofSystemId".into(), c, vec![E::StmtSet(32, IDS[1 - id].1.to_vec())]);
-            if id == 0 {
-                add("retired PQZL v2 proofSystemId".into(), c, vec![E::StmtSet(32, pqzl_v2_id().to_vec())]);
+            add(other_id(id).0.into(), c, vec![E::StmtSet(32, other_id(id).1.to_vec())]);
+            for (r, w) in retired_ids(id) {
+                add(format!("retired {r} proofSystemId"), c, vec![E::StmtSet(32, w.to_vec())]);
             }
             add("proof truncated by 1 byte".into(), c, vec![E::ProofResize(pl - 1)]);
             add("proof extended by 1 zero byte".into(), c, vec![E::ProofResize(pl + 1)]);
@@ -1636,17 +1883,9 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
             add("proof middle byte bit 3 flipped".into(), c, vec![E::ProofFlip(pl / 2, 3)]);
             add("proof last byte bit 7 flipped".into(), c, vec![E::ProofFlip(pl - 1, 7)]);
             if IDS[id].1 == PQZH_ID {
-                let pp = Params::proven();
-                let rel = pqzh_ligero::Rel::Multi { m: r.m, aud: r.aud };
-                let fe = 4 * (2 * (2 * pp.k - 1) + (2 * pp.k - 1 - pp.ell));
-                let col0 = 32 + 6 * fe + 8;
-                let q6 = Q.to_be_bytes()[2..].to_vec();
-                let blk = 32 + 6 * (pqzh_ligero::cs::Layout::new(rel, pp.ell).m + 12);
-                add("proof of max_proof_len(shape) + 1 bytes".into(), c, vec![E::ProofResize(pp.max_proof_len(rel) + 1)]);
-                add("w coefficient 0 element = q".into(), c, vec![E::ProofSet(32, q6.clone())]);
-                add("first opened column element 0 = q".into(), c, vec![E::ProofSet(col0 + 32, q6.clone())]);
-                add("opened columns 0 and 1 swapped (not increasing)".into(), c, vec![E::ProofSwap(col0, col0 + blk, blk)]);
-                add("opened column 0 repeated as column 1".into(), c, vec![E::ProofCopy(col0, col0 + blk, blk)]);
+                for (name, e) in ph::negatives(ph::Shape::Multi(r.m, r.aud)) {
+                    add(name, c, e);
+                }
             } else if *mp[&(r.case.clone(), id)].last().unwrap() < 0x80 {
                 add("coder padding bit 7 set after the final 1-bit".into(), c, vec![E::ProofFlip(pl - 1, 7)]);
             }
@@ -1673,7 +1912,7 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
             ("salt word top byte set", "M2-on", set(576, vec![1])),
             ("salt word byte 15 set", "M4-off", set(591, vec![0x80])),
             ("pk_f coefficient 0 = q", "M2-on", set(640, qb(Q))),
-            ("pk_1 coefficient 0 = 2^42", "M2-on", set(pk0 + PK, qb(1 << 42))),
+            (leak(format!("pk_1 coefficient 0 = 2^{}", st::LOG2Q)), "M2-on", set(pk0 + PK, qb(1 << st::LOG2Q))),
             ("u_0 coefficient 0 = q", "M2-on", set(u0, qb(Q))),
             ("v_f last coefficient = q", "M2-on", set(vf + 120, qb(Q))),
             ("v_{a,M-1} last coefficient = 2^64 - 1", "M2-on", set(n2 - 8, qb(u64::MAX))),
@@ -1706,8 +1945,9 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
         } else {
             let b = row("M8-on-boundary");
             let (_, _, bv0, _, _) = moff(8, true);
-            let (v3, v4) = (bv0 + 3 * 128, bv0 + 4 * 128);
-            list.push(("v_3 and v_4 swapped (legs across groups 0 and 1)", "M8-on-boundary", vec![
+            let (j, g) = (boundary(), boundary() / st::legs_per_group(true)); // legs j - 1, j: groups g - 1, g
+            let (v3, v4) = (bv0 + (j - 1) * 128, bv0 + j * 128);
+            list.push((leak(format!("v_{} and v_{j} swapped (legs across groups {} and {g})", j - 1, g - 1)), "M8-on-boundary", vec![
                 E::StmtSet(v3, b.stmt[v4..v4 + 128].to_vec()),
                 E::StmtSet(v4, b.stmt[v3..v3 + 128].to_vec()),
             ]));
@@ -1772,23 +2012,44 @@ fn generate() -> (Vec<(String, String)>, bool) {
             mp.insert((r.case.clone(), i), p);
         }
     }
+    // op 7 disclosures (R0-1): both ids' proofs
+    let mdisc = multi_disclosures(&mrows);
+    for r in &mdisc {
+        for (i, (nm, id)) in IDS.iter().enumerate() {
+            let s = with_id(&r.stmt, id);
+            let p = prove(id, r.form.op(), &s, &r.wit, &r.rnd);
+            assert_eq!(precompile(&st::input(r.form.op(), &s, &p)), ("1", "verify".to_string()), "{nm} {}", r.case);
+            eprintln!("{nm} {:18} proof {:6} B", r.case, p.len());
+            mp.insert((r.case.clone(), i), p);
+        }
+    }
     files.push(file(
         MULTI_FILE,
         "Op 7 R_TXM statements (P6-ANON plan §4, D15; pq-zether.md §8.1 op 7): every built (M, auditorOn) of each id with \
          one real leg (123,456) at a position that varies by shape and decoy legs (0), plus a two-real-leg row, an \
-         all-decoy row and a group-boundary row (real legs 3 and 4 in groups 0 and 1). ids: the proofSystemIds whose \
+         all-decoy row and a group-boundary row (real legs b - 1 and b, b = s ceil(4 / s) with s = S_AUD: the last leg \
+         of one audited group and the first of the next). ids: the proofSystemIds whose \
          built leg counts contain M (PQZL {1, 2, 4, 8}, PQZH {1, 2, 4}). header: as statement_transfer.json with word \
          192 = recipientsHash = keccak256(UA_0 || ... || UA_{M-1}) (32-byte words of objects.uas) and word 320 = M; \
          auditorOn = 1 iff pk_a. objects: keys by KeyGen seed (pks: leg order), T = Enc + Trivial(plus_trivial), out: \
-         the multi-group Enc (D13): group g encrypts its legs (j / 4 = g), then (g = 0) pk_f with value_f, then (auditor \
+         the multi-group Enc (D13): group g encrypts its legs (j / s = g), then (g = 0) pk_f with value_f, then (auditor \
          on) pk_a once per leg of the group, from seed_enc_g = seed_enc (g = 0) or SHAKE256(SCAAS-PQZ-ENC-GROUP-V1 || \
          seed_enc || be4(g))[0..32), ctr = its counter. memo (§5.4, CTR-PQZ-23): salt || ((u8(auditorOn) || u8(M) || \
          (be8(a_j) || UA_j)_j) XOR ks), key = HKDF-SHA256(IKM key_seed, no salt, info PQZ/memo/v1 || chainUid || \
          token(20) || fromUA || be4(sendCounter) || salt)[32], ks = HKDF-Expand-SHA256(key, PQZ/memo/ks/v1, 2 + 40 M); \
          memoHash = keccak256(memo). memo_open: memo open (the sender's recovery) on edited memos (resize, flip [byte, \
          bit]) of the case, result = (auditorOn, [amount, UA]) or none. stmt = the PQZL-id bytes (PQZH: bytes 32..63 \
-         replaced); stmt_keccak / auth_digest per id; entry_ref as op 1.",
-        vec![("rows", J::A(mrows.iter().map(|r| o(r.json.clone())).collect())), ("memo_open", J::A(memo_opens(&mrows)))],
+         replaced); stmt_keccak / auth_digest per id; entry_ref as op 1. Groups of S_AUD legs with the auditor (set.json \
+         s_aud; owner 2026-10-25, R0-1), 4 without: leg j in group j / s, its auditor copy at the coefficients [16 w, 16 w + \
+         16) of pk_a^T r_g, w = j mod s (the group's i-th copy at window i). disclosures: §7.9 statements of op 7 legs \
+         (R_DR, the auditor's R_DA): words as statement_disclose.json with the case's chainId, chainUid, token, registry, \
+         entryRef, the leg's amount and kind = OpeningKind + 256 w (w = window: the auditor copy's j mod S_AUD, 0 for a \
+         receiver); pk the disclosing key, u = u_{j / s}, v = v_{a,j} (AUDITOR) or v_j (RECEIVER) of multi_case.",
+        vec![
+            ("rows", J::A(mrows.iter().map(|r| o(r.json.clone())).collect())),
+            ("memo_open", J::A(memo_opens(&mrows))),
+            ("disclosures", J::A(mdisc.iter().map(|r| o(r.json.clone())).collect())),
+        ],
     ));
     for (i, (nm, id)) in IDS.iter().enumerate() {
         let mut rows: Vec<J> = sc
@@ -1809,7 +2070,7 @@ fn generate() -> (Vec<(String, String)>, bool) {
                     ("proof_fnv", J::from(fnv(p))),
                 ];
                 if *id == PQZH_ID {
-                    kv.push(("max_proof_len", J::from(Params::proven().max_proof_len(r.form))));
+                    kv.push(("max_proof_len", J::from(ph::max_proof_len(ph::Shape::Form(r.form)))));
                 }
                 if matches!(r.form, Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor) {
                     let op = st::opening(&sc.bundle, p);
@@ -1837,15 +2098,35 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 ("proof_fnv", J::from(fnv(p))),
             ];
             if *id == PQZH_ID {
-                kv.push(("max_proof_len", J::from(Params::proven().max_proof_len(pqzh_ligero::Rel::Multi { m: r.m, aud: r.aud }))));
+                kv.push(("max_proof_len", J::from(ph::max_proof_len(ph::Shape::Multi(r.m, r.aud)))));
             }
             kv.extend([("expect", J::from(true)), ("proof", hx(p))]);
             rows.push(o(kv));
         }
-        let pp = Params::proven();
+        for r in &mdisc {
+            let p = &mp[&(r.case.clone(), i)];
+            let mut kv = vec![
+                ("form", J::from(fname(r.form))),
+                ("case", J::from(r.case.as_str())),
+                ("op", J::from(r.form.op())),
+                ("statement", o(vec![("file", J::from(MULTI_FILE)), ("disclosure", J::from(r.case.as_str()))])),
+                ("stmt_keccak", hx(&keccak(&[&with_id(&r.stmt, id)]))),
+                ("wit", hx(&r.wit)),
+                ("wit_keccak", hx(&keccak(&[&r.wit]))),
+                ("rnd32", hx(&r.rnd)),
+                ("proof_bytes", J::from(p.len())),
+                ("proof_keccak", hx(&keccak(&[p]))),
+                ("proof_fnv", J::from(fnv(p))),
+            ];
+            if *id == PQZH_ID {
+                kv.push(("max_proof_len", J::from(ph::max_proof_len(ph::Shape::Form(r.form)))));
+            }
+            kv.extend([("expect", J::from(true)), ("proof", hx(p))]);
+            rows.push(o(kv));
+        }
         let (desc, params) = if *id == PQZL_ID {
             (
-                "PQZL proofs (proofSystemId v2, D2) of every statement form, from the C core (pqz_prove, hedged: CTR-PQZ-19), \
+                "PQZL proofs (the set's proofSystemId, set.json pqzl_label) of every statement form, from the C core (pqz_prove, hedged: CTR-PQZ-19), \
                  fixed rnd32: deterministic, byte-exact on every build (native = wasm32). statement: the row of that file, \
                  under this id. wit: the prover-API witness (pqz.h, R3; not consensus), rebuilt by pqz_kat.py from the \
                  seeds. proof_fnv = FNV-1a 32 of the proof. Disclosures: opening = abi.encode(bytes bundle, bytes proof) \
@@ -1854,17 +2135,11 @@ fn generate() -> (Vec<(String, String)>, bool) {
             )
         } else {
             (
-                "PQZH proofs (Ligero over F_q, proofSystemId D3) of every statement form, from pqzh-ligero (THE proven \
+                leak(format!("PQZH proofs (Ligero over F_q, the set's proofSystemId, set.json pqzh_label) of every statement form, from pqzh-ligero ({} \
                  preset, params), fixed rnd32: deterministic, byte-exact native = wasm32. Fields as proof_pqzl.json; \
                  max_proof_len = the verifier's exact bound for the form. Validity: pqz-vectors --check (Ligero verify).",
-                o(vec![
-                    ("n", J::from(pp.n)),
-                    ("k", J::from(pp.k)),
-                    ("ell", J::from(pp.ell)),
-                    ("t", J::from(pp.t)),
-                    ("pow_bits", J::from(pp.pow_bits)),
-                    ("max_proof", J::from(st::MAX_PROOF_PQZH)),
-                ]),
+                 if V3 { "THE proven" } else { "the set's proven" })),
+                ph::params(),
             )
         };
         let name = format!("proof_{nm}.json");
@@ -1893,6 +2168,19 @@ fn generate() -> (Vec<(String, String)>, bool) {
         ]));
     }
     let mnegs = multi_negatives(&mrows, &mp);
+    // op 7 disclosures (R0-1): another window than the copy's (a valid kind word, the proof fails), a window >= S_AUD
+    // (decoder: Kind)
+    let mut dneg: Vec<(String, String, usize, Vec<E>, u8)> = Vec::new();
+    for r in mdisc.iter().filter(|r| r.form == Form::DiscloseAuditor) {
+        let w = r.stmt[256 + 30];
+        for id in 0..IDS.len() {
+            if st::S_AUD > 1 {
+                let w2 = ((w as usize + 1) % st::S_AUD) as u8;
+                dneg.push((format!("{}: kind window {w} -> {w2}", r.case), r.case.clone(), id, vec![E::StmtSet(256 + 30, vec![w2])], 5));
+            }
+            dneg.push((format!("{}: kind window {}", r.case, st::S_AUD), r.case.clone(), id, vec![E::StmtSet(256 + 30, vec![st::S_AUD as u8])], 5));
+        }
+    }
     for (name, case, id, edits) in &mnegs {
         let r = mrows.iter().find(|r| &r.case == case).unwrap();
         let input = apply_to(edits, st::OP_TRANSFER_MULTI, with_id(&r.stmt, &IDS[*id].1), mp[&(case.clone(), *id)].clone(), *id, &proofs, &mp);
@@ -1902,6 +2190,24 @@ fn generate() -> (Vec<(String, String)>, bool) {
         nrows.push(o(vec![
             ("name", J::from(name.as_str())),
             ("form", J::from("TRANSFER-MULTI")),
+            ("case", J::from(case.as_str())),
+            ("id", J::from(IDS[*id].0)),
+            ("edits", J::A(edits.iter().map(E::json).collect())),
+            ("input_bytes", J::from(input.len())),
+            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            ("expect", J::from(out)),
+            ("reason", J::from(reason)),
+        ]));
+    }
+    for (name, case, id, edits, op) in &dneg {
+        let r = mdisc.iter().find(|r| &r.case == case).unwrap();
+        let input = apply_to(edits, *op, with_id(&r.stmt, &IDS[*id].1), mp[&(case.clone(), *id)].clone(), *id, &proofs, &mp);
+        let (out, reason) = precompile(&input);
+        assert!(out == "0" || out == "revert", "negative accepted: {name}");
+        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        nrows.push(o(vec![
+            ("name", J::from(name.as_str())),
+            ("form", J::from(fname(r.form))),
             ("case", J::from(case.as_str())),
             ("id", J::from(IDS[*id].0)),
             ("edits", J::A(edits.iter().map(E::json).collect())),
@@ -1988,12 +2294,15 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 ("invalid", J::from(invalid as u8)),
             ])));
         }
-        assert_eq!(res, [1, 0, 1, 0]);
+        // a build without PQZH: no PQZH proof, its two results 0 (selftest.rs)
+        res.resize(4, 0);
+        assert_eq!(res, if pqz_ffi::PQZH { [1, 0, 1, 0] } else { [1, 0, 0, 0] });
         let hash = keccak(&[&kat, &res]);
         // the compiled-in proofs (build.rs: the REGISTER rows of the files) must be these; after a write that changed
         // them the crate must be rebuilt (stale: --check fails)
         stale = selftest::proofs() != [&proofs[0][reg][..], &proofs[1][reg][..]];
         if !stale {
+            assert_eq!(&res[..], &rep.results.map(|b| b as u8)[..]);
             let mut out = [0u8; 32];
             let rc = unsafe { pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, out.as_mut_ptr(), 32) };
             assert_eq!((rc, out, rep.hash), (pqz_ffi::PQZ_FFI_OK, hash, hash), "OP_SELFTEST through pqz_precompile");
@@ -2001,16 +2310,17 @@ fn generate() -> (Vec<(String, String)>, bool) {
         }
         files.push(file(
             "selftest.json",
-            "OP_SELFTEST (P6e D13; pq-zether.md 9.1): input exactly 06 00000000, output keccak256(kat_digest || \
+            leak(format!("OP_SELFTEST (P6e D13; pq-zether.md 9.1): input exactly 06 00000000, output keccak256(kat_digest || \
              u8(pqzl_valid) || u8(pqzl_invalid) || u8(pqzh_valid) || u8(pqzh_invalid)); kat_digest = keccak256(a_digest || \
              keccak256(pk) || keccak256(u || v) || M (16 bytes) || keccak256(fft) || u8(fft_ok)): a_digest = matrix.json \
              a_keccak; pk = KeyGen(seed_key); u || v = Enc(pk, digits(msg_value), seed_enc); M = Dec; fft = Ligero's \
-             forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, 6-byte \
+             forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, {}-byte \
              BE elements, fft_ok = the inverse gives a back. The four results: the precompile path on the REGISTER \
              statement (opTag || id || keccak256(SCAAS-PQZ-SELFTEST-V1) || pk) with the REGISTER proof of each id (rnd32 = \
              0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). Computed by pqz-ffi \
              (selftest::report, the hash also through pqz_precompile on 06 00000000), whose build.rs compiles in these \
-             REGISTER proofs.",
+             REGISTER proofs.{}", ph::eb(), if pqz_ffi::PQZH { "" } else { " This set's build has no PQZH: \
+             fft is empty (n 0, ok 0) and both PQZH results are 0." })),
             vec![
                 ("input", J::from("0600000000")),
                 ("seed_key", hx(&SEED_KEY)),
@@ -2022,7 +2332,7 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 ("pk_keccak", hx(&rep.pk_hash)),
                 ("ct_keccak", hx(&rep.ct_hash)),
                 ("M", nums(&m.map(|x| x as i64))),
-                ("fft", o(vec![("n", J::from(1634u32)), ("keccak", hx(&rep.fft_hash)), ("ok", J::from(fft_ok))])),
+                ("fft", o(vec![("n", J::from(if pqz_ffi::PQZH { 1634u32 } else { 0 })), ("keccak", hx(&rep.fft_hash)), ("ok", J::from(fft_ok))])),
                 ("kat_digest", hx(&kat)),
                 ("register", J::O(per)),
                 ("results", nums(&res)),
@@ -2035,12 +2345,12 @@ fn generate() -> (Vec<(String, String)>, bool) {
     eprintln!("worst case: {:.1} s", t0.elapsed().as_secs_f64());
     files.push(file(
         "worstcase_noise.json",
-        "Completeness at the noise cap (pq-zether.md 4.3, 14; P6e D9): K_MAX - 1 = 1,023 proven-norm credits to a known \
+        leak(format!("Completeness at the noise cap (pq-zether.md 4.3, 14; P6e D9): K_MAX - 1 = {c} proven-norm credits to a known \
          receiver key, aligned to maximise the decryption noise in coefficient 0, plus the plain unit, summed into T; the \
-         receiver's debit R_TX over T proves and verifies in both systems. Stored as seeds, per-credit ctHash and the \
-         aggregate (not 1,023 ciphertexts). bound: the worst case the verifier accepts (attacker-registered key at the \
-         norm bounds, T noise 1,023 * B_FRESH, the plain unit has noise 0); illustrative: an honest key. Margins against \
-         the proven range 2^24 and the mint threshold Delta - 2^24 (pq-zether.md 4.3).",
+         receiver's debit R_TX over T proves and verifies in {SYS}. Stored as seeds, per-credit ctHash and the \
+         aggregate (not {c} ciphertexts). bound: the worst case the verifier accepts (attacker-registered key at the \
+         norm bounds, T noise {c} * B_FRESH, the plain unit has noise 0); illustrative: an honest key. Margins against \
+         the proven range 2^{EB} and the mint threshold Delta - 2^{EB} (pq-zether.md 4.3).", c = th((K_MAX - 1) as i128))),
         wc,
     ));
     // fee = 0 (owner 2026-10-14: accepted for PQZ): an honest debit of every form with a fee word, both ids
@@ -2075,7 +2385,12 @@ fn main() {
         .iter()
         .find(|a| !a.starts_with("--"))
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../smartcontracts/vectors/pqz"));
+        .unwrap_or_else(|| {
+            // the set's vectors: v3 at the canonical path (the contracts' until plan 5h Task 8d), others below it
+            let v = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../smartcontracts/vectors/pqz");
+            if V3 { v } else { v.join(st::SET) }
+        });
+    std::fs::create_dir_all(&dir).unwrap();
     let (files, stale) = generate();
     if stale {
         println!("self-test proofs compiled into this binary differ from the REGISTER rows: rebuild, then --check");

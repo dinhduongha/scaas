@@ -1,0 +1,75 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running tests/fs_bind.rs (target/release/deps/fs_bind-81dfe0b27aa6f4de)
+
+running 1 test
+P6-FS verify honest: ACCEPT
+P6-FS verify h-mutated (rejected) kind 5 mu seed: honest 5f49d6a9 mutated 853e76fb -> differ
+P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest 5bb004e0 mutated e6b175b1 -> differ
+P6-FS verify z3-mutated (rejected) kind 3 V3 seed: honest 5bb004e0 mutated e6b175b1 -> differ
+P6-FS verify z4-mutated (rejected) kind 2 V4 seed: honest 5bb004e0 mutated 04a7e346 -> differ
+P6-FS verify z4-mutated (rejected) kind 3 V3 seed: honest 5bb004e0 mutated 04a7e346 -> differ
+P6-FS verify tg-mutated (rejected) kind 2 V4 seed: honest 5bb004e0 mutated 5bb004e0 -> EQUAL (FAIL)
+P6-FS verify tg-mutated (rejected) kind 3 V3 seed: honest 5bb004e0 mutated 5bb004e0 -> EQUAL (FAIL)
+P6-FS verify_fast honest: ACCEPT
+P6-FS verify_fast h-mutated (rejected) kind 15 mu seed: honest 5f49d6a9 mutated 853e76fb -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 12 V4 seed: honest 5bb004e0 mutated e6b175b1 -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 13 V3 seed: honest 5bb004e0 mutated e6b175b1 -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 12 V4 seed: honest 5bb004e0 mutated 04a7e346 -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 13 V3 seed: honest 5bb004e0 mutated 04a7e346 -> differ
+P6-FS verify_fast tg-mutated (rejected) kind 12 V4 seed: honest 5bb004e0 mutated 5bb004e0 -> EQUAL (FAIL)
+P6-FS verify_fast tg-mutated (rejected) kind 13 V3 seed: honest 5bb004e0 mutated 5bb004e0 -> EQUAL (FAIL)
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) FAIL (4 failed checks of 18)
+
+thread 'fs_bind' (28699) panicked at tests/fs_bind.rs:80:5:
+P6-FS binding failed: ["verify tg kind 2 EQUAL (FAIL)", "verify tg kind 3 EQUAL (FAIL)", "verify_fast tg kind 12 EQUAL (FAIL)", "verify_fast tg kind 13 EQUAL (FAIL)"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test fs_bind ... FAILED
+
+failures:
+
+failures:
+    fs_bind
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+error: test failed, to rerun pass `--test fs_bind`
+     Running tests/oracle_codec.rs (target/release/deps/oracle_codec-c7b0d1cf5dc9153b)
+
+running 3 tests
+code 0x01: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x81: refused 1 of 64 bit flips, 12 of 13 foreign proofs
+code 0x02: refused 2 of 64 bit flips, 13 of 13 foreign proofs
+code 0x03: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x04: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x05: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x78: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x79: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7a: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7b: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x70: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x71: refused 2 of 64 bit flips, 13 of 13 foreign proofs
+code 0x72: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x73: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+test malformed_eq_c ... ok
+code 0x01: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test ghint_eq_c ... ok
+code 0x81: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x02: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x03: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x04: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x05: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c has been running for over 60 seconds
+code 0x78: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x79: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7a: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7b: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x70: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x71: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x72: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x73: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 140.69s
+
+error: 1 target failed:
+    `--test fs_bind`

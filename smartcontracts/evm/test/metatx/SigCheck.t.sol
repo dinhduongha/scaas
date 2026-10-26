@@ -126,10 +126,12 @@ contract SigCheckTest is Test {
         assertFalse(h.isValid(address(wallet), D, _sig(PK, D), SigCheck.ERC1271_GAS));
     }
 
-    /// When the guard passes, the wallet gets the full cap: a wallet burning ~48k still answers valid.
+    /// When the guard passes, the wallet gets the full cap: a wallet burning ~46k still answers valid.
     function test_1271_guardPassed_walletGetsFullCap() public {
         wallet.setMode(Mock1271Wallet.Mode.Burn);
         bytes memory sig = _sig(PK, D);
-        assertTrue(h.isValid{gas: 58_000}(address(wallet), D, sig, SigCheck.ERC1271_GAS));
+        // F185: was 58,000. The guard needs 55,793 (50,000 * 64 / 63 + 5,000) and 4,276 are spent before it (the wallet's
+        // cold code read; Osaka: at most 2,207, EIP-8038 raises the cold account access under Amsterdam)
+        assertTrue(h.isValid{gas: 62_000}(address(wallet), D, sig, SigCheck.ERC1271_GAS));
     }
 }

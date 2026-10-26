@@ -1,0 +1,106 @@
+# verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one
+$ cargo build --release --offline --no-default-features --features pqzl-c,set-n2304-kmax4096
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.70s
+[rc=0]
+test hooks in the production cdylib (must be 0): 0
+$ ../pqzl/check_symbols.sh /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release/build/pqz-ffi-2f516159d3d79f9f/out/libpqz.a
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects, no test hook
+[rc=0]
+$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release/libpqz_ffi.so
+245af7b4b659403108d0b7332db133862867dd992b881eaa2339dd12fc001511  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release/libpqz_ffi.so
+[rc=0]
+$ readelf -d /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release/libpqz_ffi.so | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+$ nm -D --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release/libpqz_ffi.so
+                 U abort@GLIBC_2.2.5
+                 U bcmp@GLIBC_2.2.5
+                 U calloc@GLIBC_2.2.5
+                 U clock_gettime@GLIBC_2.17
+                 U close@GLIBC_2.2.5
+                 w __cxa_finalize@GLIBC_2.2.5
+                 w __cxa_thread_atexit_impl@GLIBC_2.18
+                 U dl_iterate_phdr@GLIBC_2.2.5
+                 U dlsym@GLIBC_2.34
+                 U __errno_location@GLIBC_2.2.5
+                 U free@GLIBC_2.2.5
+                 U fstat64@GLIBC_2.33
+                 U getauxval@GLIBC_2.16
+                 U getcwd@GLIBC_2.2.5
+                 U getenv@GLIBC_2.2.5
+                 w gettid@GLIBC_2.30
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U lseek64@GLIBC_2.2.5
+                 U malloc@GLIBC_2.2.5
+                 U memcpy@GLIBC_2.14
+                 U memmove@GLIBC_2.2.5
+                 U memset@GLIBC_2.2.5
+                 U mmap64@GLIBC_2.2.5
+                 U mprotect@GLIBC_2.2.5
+                 U munmap@GLIBC_2.2.5
+                 U open64@GLIBC_2.2.5
+                 U pause@GLIBC_2.2.5
+                 U posix_memalign@GLIBC_2.2.5
+                 U pthread_attr_destroy@GLIBC_2.2.5
+                 U pthread_attr_getguardsize@GLIBC_2.34
+                 U pthread_attr_getstack@GLIBC_2.34
+                 U pthread_attr_init@GLIBC_2.2.5
+                 U pthread_attr_setstacksize@GLIBC_2.34
+                 U pthread_create@GLIBC_2.34
+                 U pthread_detach@GLIBC_2.34
+                 U pthread_getattr_np@GLIBC_2.32
+                 U pthread_key_create@GLIBC_2.34
+                 U pthread_key_delete@GLIBC_2.34
+                 U pthread_self@GLIBC_2.2.5
+                 U pthread_setname_np@GLIBC_2.34
+                 U pthread_setspecific@GLIBC_2.34
+                 U read@GLIBC_2.2.5
+                 U readlink@GLIBC_2.2.5
+                 U realloc@GLIBC_2.2.5
+                 U realpath@GLIBC_2.3
+                 U sched_yield@GLIBC_2.2.5
+                 U sigaltstack@GLIBC_2.2.5
+                 U __stack_chk_fail@GLIBC_2.4
+                 U stat64@GLIBC_2.33
+                 w statx@GLIBC_2.28
+                 U strlen@GLIBC_2.2.5
+                 U syscall@GLIBC_2.2.5
+                 U sysconf@GLIBC_2.2.5
+                 U __tls_get_addr@GLIBC_2.3
+                 U _Unwind_Backtrace@GCC_3.3
+                 U _Unwind_DeleteException@GCC_3.0
+                 U _Unwind_GetDataRelBase@GCC_3.0
+                 U _Unwind_GetIP@GCC_3.0
+                 U _Unwind_GetIPInfo@GCC_4.2.0
+                 U _Unwind_GetLanguageSpecificData@GCC_3.0
+                 U _Unwind_GetRegionStart@GCC_3.0
+                 U _Unwind_GetTextRelBase@GCC_3.0
+                 U _Unwind_RaiseException@GCC_3.0
+                 U _Unwind_Resume@GCC_3.0
+                 U _Unwind_SetGR@GCC_3.0
+                 U _Unwind_SetIP@GCC_3.0
+                 U write@GLIBC_2.2.5
+                 U writev@GLIBC_2.2.5
+                 U __xpg_strerror_r@GLIBC_2.3.4
+$ nm -D --defined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release/libpqz_ffi.so | grep ' T '
+00000000000782f0 T pqz_max_input
+0000000000078300 T pqz_precompile
+# GMP / MPFR / HEXL names or strings (glic/absence.sh's pattern), libm and float imports
+symbols /gmp|mpfr|hexl/i: 0
+strings /gmp|mpfr|hexl/i: 0
+libm-style imports: 0
+# C smoke test against pqz_ffi.h
+$ clang -std=c11 -Wall -Wextra -DPQZ_SET_MAX_INPUT=524288 -o /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/run/c_abi tests/c_abi.c -L/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/release
+[rc=0]
+$ /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096-c/run/c_abi
+c_abi: selftest d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d
+c_abi: ok (0 failures)
+[rc=0]
+# clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate
+$ cargo clippy --release --offline --no-default-features --features pqzl-c,set-n2304-kmax4096 --features prove,test-hooks --lib -- -D clippy::float_arithmetic
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.09s
+[rc=0]

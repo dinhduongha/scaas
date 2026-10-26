@@ -1,0 +1,32 @@
+# PQZ parameter set n2048-kmax1024: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
+# derived from it; README.md beside this directory). The v3 parameters; frozen until the R0 review fix (2026-10-25).
+description = "the v3 parameters (frozen until the R0 review fix 2026-10-25; own ids since plan 5h Task 8d)"
+n = 2048
+k_max = 1024
+q = 4398046510889                 # 2^42 - 215
+pqz_delta = 1.00366               # the v3 specs' (pqzl/params/*.sage)
+kmlwe_min = 33                    # LaZer's default hiding rank, e_s1 (R0-C9: make.sh e_s1 compares it)
+s_aud = 2                         # legs per randomness group of an audited R_TXM (owner 2026-10-25, R0-1 direction 2: the hint study
+                                  # pqzl/params/anon/hints-s.txt, 32 s_aud worst-case hints); without the auditor groups of 4
+pqzh = true                       # PQZH (Ligero over this q) is built for this set
+frozen = false                    # was the v3 record; R0 review fix 2026-10-25 regenerates its reg / dr / txm headers (owner)
+max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB as the other sets (owner 2026-10-25: R0-1 audited R_TXM M = 4 PQZH input 429,137; was 393,216)
+pqzl_id = "scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5"   # PQZL proofSystemId = keccak256(label) (R0 review fix 2026-10-25: R0-1 auditor windows, R0-C2 Bprime, R0-C3 challenge filter; v4 retired)
+pqzh_id = "scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3"   # PQZH proofSystemId (the same bump, R0-1 auditor windows; v2 retired; field and [pqzh_preset] named)
+
+[pqzh_preset]                     # PQZH's Ligero preset: gen_set.py writes pqzh_set.rs (+ q - 1's factors, generator, non-square)
+description = "THE preset (owner 2026-10-14 (a), the D3 id), soundness depends on n, k only (ligero_params.py)"
+radices = [2, 19, 43, 431]        # FFT radices, each dividing q - 1
+n = 32756                         # code length (on the coset 3 H_n)
+k = 817                           # message length (H_k)
+t = 121                           # column queries
+max_proof = 327680                # MAX_PROOF_PQZH (B), 320 KiB (owner 2026-10-25, as n2560-kmax16384: R0-1 audited R_TXM M = 4 with G = 2 above 262,144)
+
+[pqzl_c]                          # pqz-ffi's opt-in C backend (feature pqzl-c; review R1-C2 / R4-C1): sized from the gate's
+                                  # C peaks with every relation loaded (runs/gate/<set>-fnv-c.jsonl, x 1.5; README.md beside this dir)
+prove_arena_mib = 2304             # native prover / generic-verifier arena (ARENA_BIG)
+wasm_max_legs = 2                 # the largest op 7 M the C backend proves in wasm32 (its 512 MiB arena); an estimate (native peak x 0.77), not measured
+
+[approval]
+date = "2026-10-07"
+what = "CTR-PQZ-03 (lattice parameters at or above Kyber-512); the v3 proofSystemId since the Fiat-Shamir fix (CTR-PQZ-09 F6); kept frozen as the reference set (owner 2026-10-21)"

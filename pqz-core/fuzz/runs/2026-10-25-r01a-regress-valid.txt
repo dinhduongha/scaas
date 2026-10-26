@@ -1,0 +1,47 @@
+# R0 review fix part a (2026-10-25): regress/valid/fixture-disclose-receiver-rnd33 re-proved under the set n2048-kmax1024's v5
+# PQZL id (sha1 6a2bb57bad7b8119a767e3f7d8151f8c3a3ae96e, 62266 B): fixture::cases DiscloseReceiver at the new keys (KeyGen V2 puts the set's
+# name in the stream, review R2-C3, so the old statement's keys changed) and id, the same rnd32 0x33..
+
+Why: the old input carried the retired v4 id (0x19fad50a...9a326d), refused as an unknown id since the R0 fix; seeds.py
+lists regress/valid/* as honest inputs of the n2048-kmax1024 set.
+
+## run (scratch crate depending on pqz-ffi --no-default-features --features prove,pqzl-rust,set-n2048-kmax1024; under scripts/capped)
+    Finished `release` profile [optimized] target(s) in 12.72s
+set n2048-kmax1024, PQZL id [c7, 52, e7, f5]
+old: precompile word Ok(00)
+old id word = retired v4: true
+old statement with the v5 id = fixture::cases DiscloseReceiver: false (KeyGen V2 changed the keys)
+new: proof 29077 B, input 62266 B, precompile word 01, generic verifier Ok(true)
+re-proved again: byte-equal true
+
+## source (src/main.rs; Cargo.toml as fuzz/runs/2026-10-23-t8d1-regress-valid.txt)
+// R0 review fix part a (2026-10-25): re-prove pqz-core/fuzz/regress/valid/fixture-disclose-receiver-rnd33 under the set
+// n2048-kmax1024's v5 PQZL id: fixture::cases(PQZL_ID) DiscloseReceiver (its keys changed with KeyGen V2), same
+// rnd32 = 0x33.. (as fuzz/runs/2026-10-23-t8d1-regress-valid.txt).  Usage: refix <old input> <new input out>
+use pqz_ffi::*;
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let old = std::fs::read(&a[1]).unwrap();
+    println!("set {}, PQZL id {:02x?}", stmt::SET, &PQZL_ID[..4]);
+    println!("old: precompile word {:02x?}", precompile(&old).map(|w| w[31]));
+    let n = u32::from_be_bytes(old[1..5].try_into().unwrap()) as usize;
+    let c = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::DiscloseReceiver).unwrap();
+    let mut o = old[5..5 + n].to_vec();
+    println!("old id word = retired v4: {}", o[32..64] == hex("19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d")[..]);
+    o[32..64].copy_from_slice(&PQZL_ID);
+    // KeyGen V2 (the set's name in the stream, R2-C3) changed the fixture's keys: the statement is fixture::cases'
+    // DiscloseReceiver at the new keys and id, not the old bytes with the id word replaced
+    println!("old statement with the v5 id = fixture::cases DiscloseReceiver: {} (KeyGen V2 changed the keys)", o == c.stmt);
+    let p = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    let mut x = vec![c.op()];
+    x.extend_from_slice(&(c.stmt.len() as u32).to_be_bytes());
+    x.extend_from_slice(&c.stmt);
+    x.extend_from_slice(&p);
+    let w = precompile(&x).unwrap();
+    println!("new: proof {} B, input {} B, precompile word {:02x}, generic verifier {:?}", p.len(), x.len(), w[31], pqzl::verify_generic(c.op(), &c.stmt, &p));
+    assert_eq!(w[31], 1);
+    let p2 = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    println!("re-proved again: byte-equal {}", p2 == p);
+    std::fs::write(&a[2], &x).unwrap();
+}
+fn hex(s: &str) -> Vec<u8> { (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect() }

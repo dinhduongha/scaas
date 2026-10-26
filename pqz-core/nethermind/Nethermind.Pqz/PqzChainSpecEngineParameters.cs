@@ -51,6 +51,23 @@ public class PqzChainSpecEngineParameters : IChainSpecEngineParameters
             throw new ArgumentException($"engine.Pqz: first timestamp {Schedules[0].Timestamp} is before genesis ({genesisTimestamp})");
     }
 
+    /// <summary>Review R4-C3: every row of the schedule in force at <paramref name="head"/> + 1 (the earliest timestamp
+    /// the next block can have: a child's timestamp is greater than its parent's; <paramref name="head"/> is the block
+    /// tree head's timestamp, the genesis timestamp on an empty database) and of every later schedule carries one of
+    /// <paramref name="ids"/> (the library's proofSystemIds, lower-case hex), else an exception (the plugin's
+    /// PQZ-REFUSE). Earlier schedules are not checked: the node never executes them again (owner 2026-10-26, review of
+    /// fix part b I-1).</summary>
+    public void CheckIds(ulong head, string[] ids)
+    {
+        Validate();
+        int first = 0;
+        for (int i = 0; i < Schedules.Count; i++) if (Schedules[i].Timestamp <= head + 1) first = i;
+        for (int i = first; i < Schedules.Count; i++)
+            foreach (PqzRow r in Schedules[i].Pqz)
+                if (Array.IndexOf(ids, Convert.ToHexStringLower(r.Id)) < 0)
+                    throw new ArgumentException($"engine.Pqz schedule {Schedules[i].Timestamp}: row op {r.Op} id {Convert.ToHexStringLower(r.Id)} is not the library's ({string.Join(", ", ids)})");
+    }
+
     /// <summary>The schedule in force at <paramref name="timestamp"/>: the last one whose timestamp is ≤ it; null before
     /// the first.</summary>
     public PqzSchedule? ScheduleAt(ulong? timestamp)

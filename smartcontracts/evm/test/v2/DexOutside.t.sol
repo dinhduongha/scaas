@@ -551,9 +551,20 @@ contract DexOutsideTest is Test {
         DexLegs.Settlement[] memory ss = _two(
             _settlement(_dave(address(usdc), 1, 2000), 1),
             _settlement(DexLegs.Leg(address(usdc), co, hex"00", 2000), 2));
-        vm.prank(relayer);
-        vm.expectPartialRevert(ISCaaSDex.SigCheckGasStarved.selector);
-        dex.mtxSettle{gas: 700_000}(DexLegs.wire(ss));
+        // F185: was `dex.mtxSettle{gas: 700_000}`. Under Amsterdam EIP-8037 moves the writes' state gas out of the call's
+        // regular gas, so 700,000 leaves enough for the check and nothing starves, and the window that settles the first
+        // settlement but starves the second one's check (620,000 to 650,000) is narrow and moves with the schedule: scan
+        // for the smallest call gas whose revert is `SigCheckGasStarved`.
+        bytes memory cd = abi.encodeCall(dex.mtxSettle, (DexLegs.wire(ss)));
+        bool starved;
+        for (uint256 g = 400_000; g <= 800_000 && !starved; g += 5_000) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(relayer);
+            (bool done, bytes memory ret) = address(dex).call{gas: g}(cd);
+            vm.revertToState(snap);
+            starved = !done && ret.length >= 4 && bytes4(ret) == ISCaaSDex.SigCheckGasStarved.selector;
+        }
+        assertTrue(starved, "a call gas starves the capped check and reverts the whole call");
         vm.prank(relayer);
         bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
         assertTrue(ok[0] && ok[1]);

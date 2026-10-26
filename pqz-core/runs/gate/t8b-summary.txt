@@ -1,0 +1,25 @@
+# gate t8b (set n2304-kmax4096): d24b4f41dd25fb857a5f5c0e3c2b5a0e39760214 + uncommitted changes, 2026-10-21T19:59Z
+set n2304-kmax4096
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   skipped (PQZH is not built for set n2304-kmax4096 until plan 5h Task 8c)
+== fuzz
+   ok
+gate t8b (set n2304-kmax4096): PASS

@@ -1,0 +1,88 @@
+keys / cbd / matrix / enc: 0.2 s
+pqzl TRANSFER           proof  50392 B  prove+verify 2.61 s
+pqzl TRANSFER0          proof  50053 B  prove+verify 5.36 s
+pqzl BURN               proof  49536 B  prove+verify 2.02 s
+pqzl REFRESH            proof  49542 B  prove+verify 3.18 s
+pqzl REGISTER           proof  32539 B  prove+verify 2.02 s
+pqzl DISCLOSE-SENDER    proof  32967 B  prove+verify 1.26 s
+pqzl DISCLOSE-RECEIVER  proof  33866 B  prove+verify 0.94 s
+pqzl DISCLOSE-AUDITOR   proof  33872 B  prove+verify 1.39 s
+pqzh TRANSFER           proof 301194 B  prove+verify 2.19 s
+pqzh TRANSFER0          proof 299123 B  prove+verify 2.07 s
+pqzh BURN               proof 298116 B  prove+verify 1.87 s
+pqzh REFRESH            proof 299860 B  prove+verify 2.16 s
+pqzh REGISTER           proof 230910 B  prove+verify 1.18 s
+pqzh DISCLOSE-SENDER    proof 231454 B  prove+verify 1.07 s
+pqzh DISCLOSE-RECEIVER  proof 231614 B  prove+verify 1.09 s
+pqzh DISCLOSE-AUDITOR   proof 231230 B  prove+verify 1.14 s
+pqzl M1-on              proof  50376 B  prove+verify 3.72 s
+pqzh M1-on              proof 301066 B  prove+verify 2.01 s
+pqzl M2-on              proof  51219 B  prove+verify 4.79 s
+pqzh M2-on              proof 300714 B  prove+verify 2.03 s
+pqzl M4-on              proof  54861 B  prove+verify 4.06 s
+pqzh M4-on              proof 300610 B  prove+verify 2.15 s
+pqzl M8-on              proof  72687 B  prove+verify 10.09 s
+pqzl M1-off             proof  50091 B  prove+verify 7.78 s
+pqzh M1-off             proof 301162 B  prove+verify 1.96 s
+pqzl M2-off             proof  50543 B  prove+verify 3.28 s
+pqzh M2-off             proof 300650 B  prove+verify 2.05 s
+pqzl M4-off             proof  51556 B  prove+verify 2.92 s
+pqzh M4-off             proof 300554 B  prove+verify 2.07 s
+pqzl M8-off             proof  69863 B  prove+verify 5.84 s
+pqzl M2-off-two-real    proof  50560 B  prove+verify 5.20 s
+pqzh M2-off-two-real    proof 300586 B  prove+verify 2.17 s
+pqzl M4-off-decoys      proof  51576 B  prove+verify 4.37 s
+pqzh M4-off-decoys      proof 301162 B  prove+verify 1.96 s
+pqzl M8-on-boundary     proof  72761 B  prove+verify 8.38 s
+pqzl M8-on-boundary-leg3-auditor proof  33875 B
+pqzh M8-on-boundary-leg3-auditor proof 228403 B
+pqzl M8-on-boundary-leg4-auditor proof  33871 B
+pqzh M8-on-boundary-leg4-auditor proof 231070 B
+pqzl M4-on-leg2-auditor proof  33875 B
+pqzh M4-on-leg2-auditor proof 229733 B
+pqzl M8-on-boundary-leg4-receiver proof  33881 B
+pqzh M8-on-boundary-leg4-receiver proof 228805 B
+proofs: 115.0 s
+negative: 825 rows (511 decoder, 314 verifier): 151.2 s
+worst case: 212.8 s
+total: 225.0 s
+wrote matrix.json 1121 B
+wrote cbd.json 4382 B
+wrote keygen.json 3058 B
+wrote enc.json 7897 B
+wrote statement_transfer.json 378428 B
+wrote statement_burn.json 127262 B
+wrote statement_refresh.json 127186 B
+wrote statement_register.json 42613 B
+wrote statement_disclose.json 253028 B
+wrote statement_transfer_multi.json 3893946 B
+wrote proof_pqzl.json 2840893 B
+wrote proof_pqzh.json 11404988 B
+wrote negative.json 282101 B
+wrote selftest.json 2356 B
+wrote worstcase_noise.json 5454592 B
+wrote fee0.json 3557186 B
+pqz-vectors: 16 files, 28381037 B
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2560-kmax16384/release/pqz-vectors"
+	User time (seconds): 217.50
+	System time (seconds): 1.51
+	Percent of CPU this job got: 97%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 3:45.12
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 390812
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 462106
+	Voluntary context switches: 33792
+	Involuntary context switches: 27582
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 55552
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

@@ -2,12 +2,13 @@
 //! including what the vectors and the keys KAT never feed: short vectors over the whole i8 / i16 range, digits up to
 //! 255 and non-canonical pk / u / v coefficients (up to 2^64 - 1) into `encrypt` / `decrypt_raw`, which check nothing,
 //! and non-canonical ciphertexts and keys into `dec` / `enc_seed`, which reject them.
-use pqzl::c_oracle::{c_dec, c_decrypt_raw, c_enc_group_seed, c_enc_seed, c_encrypt, c_keygen, c_keypair_from_secret};
-use pqzl::{dec, decrypt_raw, enc_group_seed, enc_seed, encrypt, keygen, keypair_from_secret, CT_BYTES, POLYVEC_BYTES,
-           V_BYTES};
+use pqzl::c_oracle::{c_dec_win, c_decrypt_raw_win, c_enc_group_seed, c_enc_seed_win, c_encrypt_win, c_keygen,
+                     c_keypair_from_secret};
+use pqzl::{dec_win, decrypt_raw_win, enc_group_seed, enc_seed, enc_seed_win, encrypt, encrypt_win, keygen,
+           keypair_from_secret, CT_BYTES, POLYVEC_BYTES, V_BYTES};
 
 const N: usize = 200;
-const Q: u64 = 4_398_046_510_889;
+const Q: u64 = pqzl::Q;
 
 /// xorshift64*
 struct Rnd(u64);
@@ -48,8 +49,8 @@ impl Rnd {
 fn keypair_encrypt_decrypt_raw_eq_c() {
     let mut rnd = Rnd(0x6b65_7973_2d6f_7261);
     for it in 0..N {
-        let s: [i8; 2048] = core::array::from_fn(|_| rnd.next() as i8);
-        let e: [i16; 2048] = core::array::from_fn(|_| rnd.next() as i16);
+        let s: [i8; pqzl::N] = core::array::from_fn(|_| rnd.next() as i8);
+        let e: [i16; pqzl::N] = core::array::from_fn(|_| rnd.next() as i16);
         let pk = keypair_from_secret(&s, &e);
         assert_eq!(pk.as_ref().ok(), c_keypair_from_secret(&s, &e).as_ref().ok(), "keypair_from_secret {it}");
 
@@ -57,12 +58,21 @@ fn keypair_encrypt_decrypt_raw_eq_c() {
         let pks: Vec<_> = (0..npk).map(|_| rnd.pk()).collect();
         let pkr: Vec<&[u8; POLYVEC_BYTES]> = pks.iter().map(|p| &**p).collect();
         let msgs: Vec<[u8; 16]> = (0..npk).map(|_| core::array::from_fn(|_| rnd.next() as u8)).collect();
-        let r: [i8; 2048] = core::array::from_fn(|_| rnd.next() as i8);
-        let e1: [i16; 2048] = core::array::from_fn(|_| rnd.next() as i16);
+        let r: [i8; pqzl::N] = core::array::from_fn(|_| rnd.next() as i8);
+        let e1: [i16; pqzl::N] = core::array::from_fn(|_| rnd.next() as i16);
         let e2: Vec<[i16; 16]> = (0..npk).map(|_| core::array::from_fn(|_| rnd.next() as i16)).collect();
-        let c = encrypt(&pkr, &msgs, &r, &e1, &e2).expect("encrypt");
-        let (u, vs) = c_encrypt(&pkr, &msgs, &r, &e1, &e2).expect("c encrypt");
-        assert_eq!((&c.u, &c.vs), (&u, &vs), "encrypt {it} (npk {npk})");
+        // windows (R0-1): none, valid ones, or (one call in 8) one >= 4 (Err(Input) in both)
+        let win: Vec<u8> = (0..npk).map(|_| (rnd.next() % if it % 8 == 7 { 6 } else { 4 }) as u8).collect();
+        let wo = if it % 2 == 0 { None } else { Some(&win[..]) };
+        let c = match wo {
+            None => encrypt(&pkr, &msgs, &r, &e1, &e2),
+            Some(w) => encrypt_win(&pkr, w, &msgs, &r, &e1, &e2),
+        };
+        let cc = c_encrypt_win(&pkr, wo, &msgs, &r, &e1, &e2);
+        assert_eq!(c.as_ref().map(|c| (&c.u, &c.vs)).err(), cc.as_ref().err(), "encrypt {it} error");
+        let Ok(c) = c else { continue };
+        let (u, vs) = cc.expect("c encrypt");
+        assert_eq!((&c.u, &c.vs), (&u, &vs), "encrypt {it} (npk {npk}, win {wo:?})");
         assert_eq!((&*c.r, &*c.e1, &c.e2, c.ctr), (&r, &e1, &e2, 0));
 
         let mut u = rnd.pk();
@@ -71,7 +81,8 @@ fn keypair_encrypt_decrypt_raw_eq_c() {
         if it % 2 == 0 {
             u.copy_from_slice(&c.u[..]); // a real u half the time
         }
-        assert_eq!(decrypt_raw(&s, &u, &v), c_decrypt_raw(&s, &u, &v), "decrypt_raw {it}");
+        let w = (rnd.next() % 5) as usize; // 4: Err(Input) in both
+        assert_eq!(decrypt_raw_win(&s, &u, &v, w), c_decrypt_raw_win(&s, &u, &v, w as u32), "decrypt_raw {it} win {w}");
     }
 }
 
@@ -94,8 +105,12 @@ fn keygen_enc_dec_eq_c() {
         }
         let pkr: Vec<&[u8; POLYVEC_BYTES]> = pks.iter().map(|p| &**p).collect();
         let se = rnd.seed();
-        let c = enc_seed(&pkr, &msgs, &se);
-        let cc = c_enc_seed(&pkr, &msgs, &se);
+        let win: Vec<u8> = (0..npk).map(|_| (rnd.next() % 4) as u8).collect();
+        let (c, cc) = if it % 2 == 0 {
+            (enc_seed(&pkr, &msgs, &se), c_enc_seed_win(&pkr, None, &msgs, &se))
+        } else {
+            (enc_seed_win(&pkr, &win, &msgs, &se), c_enc_seed_win(&pkr, Some(&win), &msgs, &se))
+        };
         match (&c, &cc) {
             (Ok(c), Ok(cc)) => {
                 assert_eq!((&c.u, &c.vs, &c.r, &c.e1, &c.e2, c.ctr), (&cc.u, &cc.vs, &cc.r, &cc.e1, &cc.e2, cc.ctr));
@@ -109,13 +124,19 @@ fn keygen_enc_dec_eq_c() {
 
         let mut ct = Box::new([0u8; CT_BYTES]);
         rnd.coeffs(&mut ct[..]);
+        let mut dw = (rnd.next() % 5) as usize; // 4: Err(Input) in both
         if let (Ok(c), true) = (&c, rnd.next().is_multiple_of(2)) {
             if let Some(v) = c.vs.first() {
-                ct[..POLYVEC_BYTES].copy_from_slice(&c.u[..]); // a real ciphertext half the time
+                ct[..POLYVEC_BYTES].copy_from_slice(&c.u[..]); // a real ciphertext half the time, at its window
                 ct[POLYVEC_BYTES..].copy_from_slice(v);
+                dw = if it % 2 == 0 { 0 } else { win[0] as usize };
+                if k.pk == pks[0] && msgs[0].iter().all(|&d| d < 16) {
+                    let (m, _) = dec_win(&k.s, &ct, dw).expect("dec of an honest ciphertext");
+                    assert!(m.iter().zip(&msgs[0]).all(|(&a, &b)| a == b as i64), "dec {it}: the digits at window {dw}");
+                }
             }
         }
-        assert_eq!(dec(&k.s, &ct), c_dec(&k.s, &ct), "dec {it}");
+        assert_eq!(dec_win(&k.s, &ct, dw), c_dec_win(&k.s, &ct, dw as u32), "dec {it} win {dw}");
 
         let g = [0, 1, rnd.next() as u32][it % 3];
         assert_eq!(enc_group_seed(&se, g), c_enc_group_seed(&se, g), "enc_group_seed {it} g {g}");

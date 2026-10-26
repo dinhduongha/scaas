@@ -1,0 +1,64 @@
+# cargo test --test multi (R0 fix round m4: auditor copy at window 0 / at another leg's window), 2026-10-25T22:15:01Z
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.01s
+     Running tests/multi.rs (target/n2560-kmax16384/release/deps/multi-f6b4225aae3d061e)
+
+running 8 tests
+test rel_of_words ... ok
+R_TXM1 default: 301450 B (bound 304266)
+R_TXM1 fee 0, all legs 0: 300682 B (bound 304266)
+R_TXM1 two real legs: 300458 B (bound 304266)
+test hedged_and_deterministic ... ok
+R_TXM1 real leg at j: 300874 B (bound 304266)
+R_TXM1 whole balance: 300106 B (bound 304266)
+test op1_op7_and_shapes_separated ... ok
+R_TXM2 default: 300083 B (bound 304266)
+R_TXM2 fee 0, all legs 0: 299251 B (bound 304266)
+R_TXM2 two real legs: 300714 B (bound 304266)
+test noise_range_edges ... ok
+R_TXM2 real leg at j: 301162 B (bound 304266)
+R_TXM2 real leg at j: 300234 B (bound 304266)
+R_TXM2 whole balance: 299955 B (bound 304266)
+R_TXM4 default: 302176 B (bound 305120)
+R_TXM4 fee 0, all legs 0: 300642 B (bound 305120)
+R_TXM4 two real legs: 302080 B (bound 305120)
+R_TXM4 real leg at j: 301920 B (bound 305120)
+R_TXM4 real leg at j: 300610 B (bound 305120)
+R_TXM4 real leg at j: 302240 B (bound 305120)
+6 x 960 mutated op 7 inputs rejected, 0 verifier panics caught
+test mutations_960_per_shape_rejected ... ok
+R_TXM4 whole balance: 302048 B (bound 305120)
+R_TXM1_0 default: 299667 B (bound 304266)
+R_TXM1_0 fee 0, all legs 0: 300426 B (bound 304266)
+R_TXM1_0 two real legs: 300586 B (bound 304266)
+R_TXM1_0 real leg at j: 301418 B (bound 304266)
+R_TXM1_0 whole balance: 300906 B (bound 304266)
+R_TXM2_0 default: 300938 B (bound 304266)
+R_TXM2_0 fee 0, all legs 0: 300458 B (bound 304266)
+R_TXM1: 25 negative witnesses + 3 ring rows refused and rejected
+R_TXM2_0 two real legs: 299315 B (bound 304266)
+test honest_every_shape has been running for over 60 seconds
+test negative_witnesses has been running for over 60 seconds
+test statement_changes_rejected has been running for over 60 seconds
+R_TXM2_0 real leg at j: 300970 B (bound 304266)
+R_TXM2_0 real leg at j: 300746 B (bound 304266)
+test statement_changes_rejected ... ok
+R_TXM2_0 whole balance: 301514 B (bound 304266)
+R_TXM4_0 default: 301738 B (bound 304266)
+R_TXM4_0 fee 0, all legs 0: 299539 B (bound 304266)
+R_TXM4_0 two real legs: 300938 B (bound 304266)
+R_TXM4_0 real leg at j: 299507 B (bound 304266)
+R_TXM4_0 real leg at j: 300682 B (bound 304266)
+R_TXM4_0 real leg at j: 300458 B (bound 304266)
+R_TXM4_0 whole balance: 301322 B (bound 304266)
+test honest_every_shape ... ok
+R_TXM2: 27 negative witnesses + 3 ring rows refused and rejected
+R_TXM4: 28 negative witnesses + 3 ring rows refused and rejected
+R_TXM1_0: 22 negative witnesses + 3 ring rows refused and rejected
+R_TXM2_0: 23 negative witnesses + 3 ring rows refused and rejected
+R_TXM4_0: 24 negative witnesses + 3 ring rows refused and rejected
+test negative_witnesses ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 248.35s
+
+rc=0

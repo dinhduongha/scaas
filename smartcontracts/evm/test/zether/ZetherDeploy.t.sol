@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, Vm} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -25,8 +25,17 @@ import {zetherEnv} from "../helpers/Catalogue.sol";
 
 /// @notice `DeployBase` with `DEPLOY_ZETHER` on a dev chain deploys and registers the Zether stack (kinds 2 and 3, the
 ///         gate on); without it (the default) or on any other chain (the e2e's 319xx, Hedera's 298) none of it.
+/// F185: a CREATE2 deployer the stack test calls, so each deploy is its own transaction (`isolate`) and
+/// `vm.lastCallGas()` splits its regular gas from the EIP-8037 state gas.
+contract Create2Probe {
+    function deploy(bytes calldata code, bytes32 salt) external returns (address a) {
+        bytes memory c = code;
+        assembly ("memory-safe") { a := create2(0, add(c, 32), mload(c), salt) }
+    }
+}
+
 contract ZetherDeployTest is Test {
-    /// EIP-7825 (Osaka): the per-transaction gas cap.
+    /// EIP-7825: the per-transaction gas cap (regular gas only under Amsterdam, EIP-8037).
     uint256 constant TX_GAS_CAP = 1 << 24;
     address ska = new SmartKeyAccountFactory(ZUID).IMPLEMENTATION();
 
@@ -171,19 +180,19 @@ contract ZetherDeployTest is Test {
             abi.encodePacked(type(NoUnderlyingZetherToken).creationCode, zArgs),
             abi.encodePacked(type(UnderlyingZetherToken).creationCode, zArgs)
         ];
+        Create2Probe probe = new Create2Probe();
         for (uint256 i; i < codes.length; ++i) {
             bytes memory code = codes[i];
-            uint256 g = gasleft();
-            address a;
-            assembly ("memory-safe") { a := create2(0, add(code, 32), mload(code), 7) }
-            g -= gasleft();
+            address a = probe.deploy(code, bytes32(uint256(7)));
             assertTrue(a != address(0), "deploys");
             assertLe(a.code.length, 65536, "anvil --code-size-limit 65536");
-            uint256 data = 32 * 16; // the salt word
-            for (uint256 j; j < code.length; ++j) data += code[j] == 0 ? 4 : 16;
-            uint256 txGas = 21_000 + data + g * 64 / 63;
-            emit log_named_uint("deploy tx gas", txGas);
-            assertLt(txGas * 105 * 105 / 10_000, TX_GAS_CAP, "fits EIP-7825 with --gas-estimate-multiplier 105");
+            // F185: regular gas with the intrinsic and the calldata (the probe's call is a transaction), x 64/63 for the
+            // deployer's call holding back 1/64; the EIP-8037 state gas (code deposit, the new account) comes apart
+            Vm.Gas memory vg = vm.lastCallGas();
+            uint256 txGas = vg.gasTotalUsed * 64 / 63;
+            emit log_named_uint("deploy tx regular gas", txGas);
+            emit log_named_uint("deploy tx state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
+            assertLt(txGas * 105 * 105 / 10_000, TX_GAS_CAP, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
         }
     }
 }

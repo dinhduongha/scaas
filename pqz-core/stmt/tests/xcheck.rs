@@ -34,6 +34,7 @@ fn reason(r: Reject) -> String {
         Reject::AuditorOn => "auditorOn_does_not_match_the_length",
         Reject::Coefficient => "coefficient_>=_q",
         Reject::Legs => "M_not_a_built_leg_count",
+        Reject::Kind => "kind",
         _ => "other",
     })
 }

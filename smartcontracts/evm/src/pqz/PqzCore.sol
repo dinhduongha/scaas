@@ -11,17 +11,20 @@ import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
 import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {PqzCt} from "./PqzCt.sol";
-import {PqzSafety} from "./PqzSafety.sol";
+import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
 import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 
 /// @title The PQZ layer of the `*_PQZ` kinds (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1), in the ERC-7201 namespace
 ///        `scaas.pqz`: statements, the precompile call, account updates, rollover, shield / burn, entries, disclosure.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** External library, run by `DELEGATECALL` (`address(this)` is the
 ///         token); the token keeps the public ERC-20 side and the entry points (`PqzLayer`). Byte layouts:
-///         pq-zero-knowledge.md §7.4–§7.9 and §8.1. Ciphertexts live in state (plan 5h D1–D3, CTR-PQZ-07): one SSTORE2 op
+///         pq-zero-knowledge.md §7.4–§7.9 and §8.1; every size from the build's parameter set (`PqzSet`, one set per
+///         build). Ciphertexts live in state (plan 5h D1–D3, CTR-PQZ-07): one SSTORE2 op
 ///         blob per debit (`R ‖ v_f`, or a burn's `u' ‖ v_f`), one slot per pending entry pointing into a blob (or a
 ///         TRIVIAL entry: a public amount), `acc` a reference to the last debit's blob or materialised in slots by
-///         rollovers; every debit rebuilds `T` from state (an optional calldata hint for a materialised `acc`). Every
+///         rollovers; stored coefficients packed at `PACK_BITS` (P46, `PqzCt`: blobs and `acc` slots; calldata, the
+///         statement and the precompile input keep 64-bit lanes); every debit rebuilds `T` from state (an optional
+///         calldata hint for a materialised `acc`: its packed stream). Every
 ///         statement is built once, in a buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof` that is the precompile input
 ///         (P6g D13); `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(stmt))` is checked by the registry
 ///         (`requireAuthorized`, the signing UA's own signature, purpose `zether-auth`) before the precompile. The account is
@@ -32,7 +35,8 @@ library PqzCore {
     ///      `[floor, rolled)` is inside `acc` (with the last debit's `(u, v_f)`), `pending[i]` exists for `i ≥ cleared`.
     ///      `pending[i]` = `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` (`u` and `v` at those byte offsets of the blob's
     ///      data); `vOff = 0` is a TRIVIAL entry (D18) whose amount is the low 64 bits of the blob field. `acc` is
-    ///      `(accBlob, accU, accV)` (0: `Trivial(0)`) unless `flags & MAT`: then `accWords`, with `accHash` its keccak.
+    ///      `(accBlob, accU, accV)` (0: `Trivial(0)`) unless `flags & MAT`: then `accWords`, with `accHash` the keccak of
+    ///      the packed stream (`PqzCt.CTP` bytes). Offsets are into the packed blob data (P46).
     struct Account {
         uint64 pendingCount;
         uint64 rolled;
@@ -46,7 +50,9 @@ library PqzCore {
         uint64 sendCounter;
         bytes32 accHash;
         mapping(uint64 => uint256) pending;
-        uint256[516] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+        // P46: `PqzCt.ACC_WORDS` slots, each `not(packed stream word)`; written non-zero (`ACC_MARK`) by `prepareAcc`, never
+        // zeroed (D3: a reduced `acc` never stores 0, see `PqzCt.ACC_WORDS`)
+        uint256[PQZ_ACC_WORDS] accWords;
     }
 
     /// @custom:storage-location erc7201:scaas.pqz
@@ -101,7 +107,7 @@ library PqzCore {
         address[] keys; // op 7: the legs' key pointers
         uint256 legs; // op 7: M
         uint256 decoyFee; // op 7: the sender's per-leg fee `d`
-        uint256 groups; // op 7: G = ⌈M / 4⌉
+        uint256 groups; // op 7: G = ⌈M / S_AUD⌉ with the auditor, ⌈M / 4⌉ without (`_groups`, R0-1)
         uint256 outLen;
         uint256 stLen;
         address registry;
@@ -145,20 +151,26 @@ library PqzCore {
     bytes32 internal constant OP_TRANSFER_MULTI = 0x6f6a773a4c94af3a446a226ef43f6f5403d6a00b95de446149f484cc02726b90;
     /// @notice The PQZH proof system id: op 7 built for M ∈ {1, 2, 4} and at most `INLINE_MAX_PQZH` inline credits
     ///         (PQZL: M ∈ {1, 2, 4, 8}, `INLINE_MAX`; CTR-PQZ-25).
-    bytes32 internal constant PQZH_ID = PqzSafety.PQZH_ID;
+    ///         The zero word at a set without PQZH (`PqzSet.HAS_PQZH` false): never a token's `psid` there.
+    bytes32 internal constant PQZH_ID = PqzSet.PQZH_ID;
 
-    uint256 internal constant K_MAX = 1024;
+    uint256 internal constant K_MAX = PqzSet.K_MAX;
     uint256 internal constant INLINE_MAX = 16;
     uint256 internal constant INLINE_MAX_PQZH = 10;
     /// @notice The largest rollover under `0.75 · 2^24` gas, a multiple of 16 (plan 5h D8; pinned by `PqzStateGasTest`).
-    uint256 internal constant ROLL_MAX = 256;
+    ///         **Provisional per set** (plan 5h Task 8d part 2a, P46; part 2b measures and pins it): `n2304-kmax4096` 80
+    ///         (the P46 spike, `pqz-core/pqzl/params/pa-pack/`), the others scaled from it by the per-entry cost (≈ CT).
+    ///         Lane headroom: `(ROLL_MAX + 1) · q < 2^64` at every set (`PqzCt`).
+    uint256 internal constant ROLL_MAX =
+        PqzSet.N == 2048 ? 96 : PqzSet.N == 2304 ? 80 : PqzSet.N == 2560 ? 64 : 48;
     /// @notice A rollover takes entry `i` only at `block ≥ block_i + ROLL_AGE` (D6; owner 2026-10-20: 5 blocks).
     uint64 internal constant ROLL_AGE = 5;
     uint8 internal constant MAT = 1; // `acc` is `accWords`
     uint8 internal constant PREP = 6; // both halves of `accWords` written (bits 2, 4: halves 0, 1)
-    uint256 internal constant HALF_WORDS = 258;
-    /// @dev Bit 255 of every stored `accWords` slot (lanes are `< 2^42`, so the bit is free): a word of four zero
-    ///      coefficients (a TRIVIAL-only `acc` has `u = 0`) never zeroes its slot (D3; final review I1). Masked off on read.
+    uint256 internal constant HALF_WORDS = (PqzCt.ACC_WORDS + 1) / 2; // half 0; half 1 the rest
+    /// @dev What `prepareAcc` writes into each `accWords` slot (non-zero). A rollover overwrites every slot with
+    ///      `not(packed word)`, never 0 for a reduced `acc` (a TRIVIAL-only `acc` has `u = 0`: its slots are all ones;
+    ///      D3, final review I1).
     uint256 internal constant ACC_MARK = 1 << 255;
     uint256 internal constant MAX_TOTAL_SHIELDED = 1 << 62;
     uint256 internal constant VALUE_BOUND = 1 << 64;
@@ -170,10 +182,10 @@ library PqzCore {
     uint256 internal constant M_OUT = 240;
     /// @dev Burn payload: `p ‖ validUntilBlock ‖ shieldIn ‖ fromUA ‖ beneficiaryUA`, then `u' ‖ v_f`.
     uint256 internal constant B_OUT = 160;
-    uint256 internal constant OUT_ON = 16_768;
-    uint256 internal constant OUT_OFF = 16_640;
+    uint256 internal constant OUT_ON = PqzCt.CT + 2 * PqzCt.V; // `u ‖ v_t ‖ v_f ‖ v_a`
+    uint256 internal constant OUT_OFF = PqzCt.CT + PqzCt.V;
     uint256 internal constant MEMO = 57;
-    uint256 internal constant DISCLOSE = 33_184;
+    uint256 internal constant DISCLOSE = PqzSet.STMT_DISCLOSE;
 
     function $() internal pure returns (PqzStorage storage s) {
         assembly ("memory-safe") { s.slot := _STORAGE }
@@ -207,15 +219,34 @@ library PqzCore {
         e.binding = keccak256(abi.encode(e.binding == 0 ? TAG_DIRECT_MODE : e.binding, uint8(e.mode)));
     }
 
-    /// @dev Not the sender; registered; the auditor's key when `auditorOn`. No credit cap: credits are never refused
-    ///      (plan 5h D7).
+    /// @dev Not the sender; registered; the auditor's key when `auditorOn`, and then neither party is the auditor (F-4).
+    ///      No credit cap: credits are never refused (plan 5h D7).
     function _receiver(Op memory o, Env memory e) internal view {
         if (o.from == o.to) revert IPqzToken.SelfTransfer();
+        _noAuditorParty(o, o.from);
+        _noAuditorParty(o, o.to);
         o.keyT = _keyPtr(e.registry, o.to);
         if (o.auditorOn == 1) o.keyA = _keyPtr(e.registry, $().auditorUA);
     }
 
-    /// @dev `header ‖ pk_f ‖ pk_t ‖ [pk_a] ‖ T ‖ out` (83,072 / 66,560 B).
+    /// @dev F-4 (R0 review 2026-10-25): with the auditor copies on, the auditor UA is neither the sender nor a recipient
+    ///      leg — its key under the same randomness as the auditor copy in window 0 would cancel the masks
+    ///      (`v − v_a = Δ·(d − d_a) + noise`, public). Every transfer form (op 1, op 7; relayed and direct) checks this.
+    function _noAuditorParty(Op memory o, bytes32 ua) internal view {
+        if (o.auditorOn == 1 && ua == $().auditorUA) revert IPqzToken.AuditorAsParty(ua);
+    }
+
+    /// @dev op 7's randomness groups (CTR-PQZ-26, R0-1): `⌈M / S_AUD⌉` with the auditor copies (`a = 1`), `⌈M / 4⌉`
+    ///      without; leg `j` uses `u_{_groupOf(j, a)}`.
+    function _groups(uint256 m, uint256 a) internal pure returns (uint256) {
+        return a == 1 ? (m + PqzSet.S_AUD - 1) / PqzSet.S_AUD : (m + 3) / 4;
+    }
+
+    function _groupOf(uint256 j, uint256 a) internal pure returns (uint256) {
+        return a == 1 ? j / PqzSet.S_AUD : j / 4;
+    }
+
+    /// @dev `header ‖ pk_f ‖ pk_t ‖ [pk_a] ‖ T ‖ out` (`PqzSet.STMT_TRANSFER` / `STMT_TRANSFER0` bytes).
     function _transferBuffer(
         Op memory o,
         Env memory e,
@@ -266,16 +297,28 @@ library PqzCore {
         }
     }
 
-    /// @dev The op blob `R ‖ v_f` with `R = salt ‖ u ‖ v_t ‖ [v_a] ‖ word(toUA)` (plan 5h D1), the debit (the fee out
-    ///      of `totalShielded`; the token pays it from `SHIELD_POOL`, D19), the credit `(u, v_t)`, the entry by mode.
+    /// @dev The op blob `R ‖ v_f` with `R = salt ‖ u ‖ v_t ‖ [v_a] ‖ word(toUA)` (plan 5h D1; every `u`, `v` packed,
+    ///      P46), the debit (the fee out of `totalShielded`; the token pays it from `SHIELD_POOL`, D19), the credit
+    ///      `(u, v_t)`, the entry by mode.
     function _settleTransfer(Op memory o, bytes calldata payload) internal returns (bytes32 ref) {
         bytes calldata out = payload[T_OUT:T_OUT + o.outLen];
-        bytes memory blob =
-            bytes.concat(o.salt, out[0:PqzCt.CT], out[OUT_OFF:o.outLen], o.to, out[PqzCt.CT:PqzCt.CT + PqzCt.V]);
+        // written in ascending order (each pack spills `32 − GROUP` zero bytes past its end; 32 bytes of slack)
+        uint256 len = 16 + PqzCt.PKP + PqzCt.VP * (2 + o.auditorOn) + 32;
+        bytes memory blob = new bytes(len + 32);
+        _put(blob, 0, abi.encodePacked(o.salt));
+        PqzCt.packCd(blob, 16, out[0:PqzCt.CT]);
+        uint256 q = 16 + PqzCt.PKP + PqzCt.VP;
+        if (o.auditorOn == 1) {
+            PqzCt.packCd(blob, q, out[OUT_OFF:o.outLen]);
+            q += PqzCt.VP;
+        }
+        _put(blob, q, abi.encode(o.to));
+        PqzCt.packCd(blob, q + 32, out[PqzCt.CT:PqzCt.CT + PqzCt.V]);
+        assembly ("memory-safe") { mstore(blob, len) }
         address ptr = SSTORE2.write(blob);
-        _debit(o, ptr, 16, blob.length - PqzCt.V);
+        _debit(o, ptr, 16, len - PqzCt.VP);
         ref = _sent(o);
-        _credit(o.to, ptr, 16, 16 + PqzCt.PK, ref);
+        _credit(o.to, ptr, 16, 16 + PqzCt.PKP, ref);
         _entry(o, ref, ptr, payload, MEMO);
         emit IConfidentialToken.ConfidentialTransfer(ref, o.from, o.to, o.ben, o.fee, o.sendCounter, ptr);
     }
@@ -348,9 +391,9 @@ library PqzCore {
         if (payload.length < M_OUT) return false;
         uint256 m = uint256(bytes32(payload[160:192]));
         if (m == 0 || m > 8) return false;
-        uint256 base = M_OUT + 32 * m + PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1);
-        uint256 memo = 18 + 40 * m;
-        return payload.length == base + memo || payload.length == base + PqzCt.V * m + memo;
+        uint256 base = M_OUT + 32 * m + PqzCt.V * (m + 1) + 18 + 40 * m;
+        return payload.length == base + PqzCt.PK * _groups(m, 0)
+            || payload.length == base + PqzCt.PK * _groups(m, 1) + PqzCt.V * m;
     }
 
     /// @dev `M` in the id's built set, the length fixing `auditorOn`, the auditor mode, the memo on HASH.
@@ -363,19 +406,20 @@ library PqzCore {
         uint256 m = uint256(bytes32(payload[160:192]));
         if (!(m == 1 || m == 2 || m == 4 || (m == 8 && s.psid != PQZH_ID))) revert IPqzToken.BadRecipientCount(m);
         o.legs = m;
-        o.groups = (m + 3) / 4;
         o.opTag = OP_TRANSFER_MULTI;
         o.mode = mode;
         o.op = 7;
         uint256 memo = mode == ZetherTypes.TransferMode.HASH ? 18 + 40 * m : 0;
-        o.outLen = PqzCt.PK * o.groups + PqzCt.V * (m + 1);
         if (payload.length < M_OUT + 32 * m + memo) revert IPqzToken.BadPayload(payload.length); // m ≤ 8: no overflow
+        // `out` = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]; the auditor's G is never below the other's,
+        // so the two lengths differ by at least V·M: the length fixes `auditorOn`
         uint256 rest = payload.length - M_OUT - 32 * m - memo;
-        if (rest == o.outLen + PqzCt.V * m) o.auditorOn = 1;
-        else if (rest != o.outLen) revert IPqzToken.BadPayload(payload.length);
+        if (rest == PqzCt.PK * _groups(m, 1) + PqzCt.V * (2 * m + 1)) o.auditorOn = 1;
+        else if (rest != PqzCt.PK * _groups(m, 0) + PqzCt.V * (m + 1)) revert IPqzToken.BadPayload(payload.length);
         if (o.auditorOn == 1 && s.auditorMode == ZetherTypes.AuditorMode.NONE) revert IPqzToken.AuditorForbidden();
         if (o.auditorOn == 0 && s.auditorMode == ZetherTypes.AuditorMode.FULL) revert IPqzToken.AuditorRequired();
-        o.outLen += PqzCt.V * m * o.auditorOn;
+        o.groups = _groups(m, o.auditorOn);
+        o.outLen = rest;
         _head(o, payload);
         o.ben = bytes32(payload[128:160]);
         o.salt = bytes16(payload[224:240]);
@@ -387,14 +431,17 @@ library PqzCore {
         }
     }
 
-    /// @dev Every leg: not the sender, pairwise distinct, a PQZ holder (its key); the auditor's key when `auditorOn`.
+    /// @dev Every leg: not the sender, pairwise distinct, a PQZ holder (its key); the auditor's key when `auditorOn`,
+    ///      and then neither the sender nor a leg is the auditor (F-4, `_noAuditorParty`).
     function _legs(Op memory o, Env memory e, bytes calldata payload) internal view {
         PqzStorage storage s = $();
         uint256 m = o.legs;
         o.keys = new address[](m);
+        _noAuditorParty(o, o.from);
         for (uint256 j; j < m; ++j) {
             bytes32 ua = bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
             if (ua == o.from) revert IPqzToken.SelfTransfer();
+            _noAuditorParty(o, ua);
             for (uint256 k; k < j; ++k) {
                 if (bytes32(payload[M_OUT + 32 * k:M_OUT + 32 * k + 32]) == ua) revert IPqzToken.DuplicateRecipient(ua);
             }
@@ -434,7 +481,7 @@ library PqzCore {
         bytes calldata out = payload[M_OUT + 32 * o.legs:M_OUT + 32 * o.legs + o.outLen];
         bytes memory blob = _bundleMulti(o, payload, out);
         address ptr = SSTORE2.write(blob);
-        _debit(o, ptr, 16, blob.length - PqzCt.V);
+        _debit(o, ptr, 16, blob.length - PqzCt.VP);
         ref = _sent(o);
         _creditLegs(o, ref, payload, ptr);
         _entry(o, ref, ptr, payload, 18 + 40 * o.legs);
@@ -445,32 +492,36 @@ library PqzCore {
         );
     }
 
-    /// @dev `pending[UA_j] ← (u_{⌊j/4⌋}, v_j)` of the blob, in leg order.
+    /// @dev `pending[UA_j] ← (u_{g(j)}, v_j)` of the blob (packed offsets, `g` = `_groupOf`), in leg order.
     function _creditLegs(Op memory o, bytes32 ref, bytes calldata payload, address ptr) internal {
-        uint256 us = 16 + PqzCt.PK * o.groups;
-        uint256 ls = 160 + PqzCt.V * o.auditorOn;
+        uint256 us = 16 + PqzCt.PKP * o.groups;
+        uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
         for (uint256 j; j < o.legs; ++j) {
             bytes32 ua = bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
-            _credit(ua, ptr, 16 + PqzCt.PK * (j / 4), us + ls * j, ref);
+            _credit(ua, ptr, 16 + PqzCt.PKP * _groupOf(j, o.auditorOn), us + ls * j, ref);
         }
     }
 
     /// @dev The op blob `R ‖ v_f`, `R = salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ word(UA_j))_{j<M}` — for `M = 1` the
-    ///      single transfer's bundle exactly (CTR-PQZ-26).
+    ///      single transfer's bundle exactly (CTR-PQZ-26). Every `u`, `v` packed (P46), written in ascending order (each
+    ///      pack spills `32 − GROUP` zero bytes past its end; 32 bytes of slack).
     function _bundleMulti(Op memory o, bytes calldata payload, bytes calldata out) internal pure returns (bytes memory r) {
         uint256 m = o.legs;
-        uint256 us = PqzCt.PK * o.groups;
-        uint256 ls = 160 + PqzCt.V * o.auditorOn;
-        r = new bytes(16 + us + ls * m + PqzCt.V);
-        _putCd(r, 16 + us + ls * m, out[us + PqzCt.V * m:us + PqzCt.V * (m + 1)]);
+        uint256 us = PqzCt.PK * o.groups; // in `out` (64-bit lanes)
+        uint256 ps = PqzCt.PKP * o.groups; // in the blob
+        uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
+        uint256 len = 16 + ps + ls * m + PqzCt.VP;
+        r = new bytes(len + 32);
         _put(r, 0, abi.encodePacked(o.salt));
-        _putCd(r, 16, out[0:us]);
+        PqzCt.packCd(r, 16, out[0:us]);
         for (uint256 j; j < m; ++j) {
-            uint256 d = 16 + us + ls * j;
-            _putCd(r, d, out[us + PqzCt.V * j:us + PqzCt.V * (j + 1)]);
-            if (o.auditorOn == 1) _putCd(r, d + PqzCt.V, out[us + PqzCt.V * (m + 1 + j):us + PqzCt.V * (m + 2 + j)]);
+            uint256 d = 16 + ps + ls * j;
+            PqzCt.packCd(r, d, out[us + PqzCt.V * j:us + PqzCt.V * (j + 1)]);
+            if (o.auditorOn == 1) PqzCt.packCd(r, d + PqzCt.VP, out[us + PqzCt.V * (m + 1 + j):us + PqzCt.V * (m + 2 + j)]);
             _putCd(r, d + ls - 32, payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
         }
+        PqzCt.packCd(r, 16 + ps + ls * m, out[us + PqzCt.V * m:us + PqzCt.V * (m + 1)]);
+        assembly ("memory-safe") { mstore(r, len) }
     }
 
     function _put(bytes memory r, uint256 off, bytes memory x) internal pure {
@@ -484,11 +535,15 @@ library PqzCore {
     // ------------------------------------------------------------------ burn and refresh (§7.5)
 
 
-    /// @dev The op blob `u' ‖ v_f` (D1), the debit (the amount and the fee out of `totalShielded`; the token moves both
-    ///      from `SHIELD_POOL`, D19).
+    /// @dev The op blob `u' ‖ v_f` (D1; packed, P46), the debit (the amount and the fee out of `totalShielded`; the
+    ///      token moves both from `SHIELD_POOL`, D19).
     function _settleBurn(Op memory o, bytes calldata out) internal {
-        address ptr = SSTORE2.write(out);
-        _debit(o, ptr, 0, PqzCt.PK);
+        bytes memory b = new bytes(PqzCt.CTP + 32);
+        PqzCt.packCd(b, 0, out);
+        uint256 ctp = PqzCt.CTP;
+        assembly ("memory-safe") { mstore(b, ctp) }
+        address ptr = SSTORE2.write(b);
+        _debit(o, ptr, 0, PqzCt.PKP);
         _sent(o);
         emit IConfidentialToken.Unshielded(o.from, o.amount, o.recipient, ptr);
     }
@@ -521,7 +576,7 @@ library PqzCore {
         buf = _burnBuffer(o, e, payload[B_OUT:B_OUT + PqzCt.CT], hint, proofLen);
     }
 
-    /// @dev `header ‖ pk_f ‖ T ‖ u' ‖ v_f` (50,048 B).
+    /// @dev `header ‖ pk_f ‖ T ‖ u' ‖ v_f` (`PqzSet.STMT_BURN` bytes).
     function _burnBuffer(
         Op memory o,
         Env memory e,
@@ -545,9 +600,10 @@ library PqzCore {
 
     // ------------------------------------------------------------------ disclosure (§7.9, P6g D11)
 
-    /// @notice The 33,184-byte disclosure statement of leg `j` of `entryRef` for `kind` (0 `SENDER_S`, 1 `RECEIVER_X`,
-    ///         2 `AUDITOR`) in its precompile buffer (CTR-PQZ-14, CTR-PQZ-26; a single entry is leg 0): `u_{⌊j/4⌋}` and
-    ///         `v_j` (or `v_{a,j}`), the key of `UA_j` (or the auditor), all read from the entry's op blob (D11). Reverts
+    /// @notice The disclosure statement (`PqzSet.STMT_DISCLOSE` bytes) of leg `j` of `entryRef` for `kind` (0 `SENDER_S`, 1 `RECEIVER_X`,
+    ///         2 `AUDITOR`) in its precompile buffer (CTR-PQZ-14, CTR-PQZ-26; a single entry is leg 0): `u_{g(j)}` and
+    ///         `v_j` (or `v_{a,j}`), the key of `UA_j` (or the auditor), all read from the entry's op blob (D11; `u`, `v`
+    ///         expanded from the packed blob into the statement). Reverts
     ///         on an unknown entry, no leg `j`, `kind > 2`, `AUDITOR` without the copies, `amount ≥ 2^64`.
     function disclosureBuffer(bytes32 ref, uint256 j, uint256 amount, uint8 kind, Env memory e, uint256 proofLen)
         internal view returns (bytes memory buf)
@@ -558,60 +614,68 @@ library PqzCore {
         if (kind > 2 || amount >= VALUE_BOUND) revert IPqzToken.BadPayload(bundle.length);
         (uint256 uOff, uint256 vOff, bytes32 owner) = _legOf(bundle, j, kind);
         buf = _buffer(kind == 0 ? 4 : 5, DISCLOSE, proofLen);
-        _discHead(buf, ref, amount, kind, e);
+        // the kind word `OpeningKind + 256·w` (R0-1, pqz-stmt DW_KIND): w = j mod S_AUD, the auditor copy's coefficient
+        // window, for AUDITOR (the bundle has the copies: `_legOf`); 0 for SENDER_S / RECEIVER_X
+        _discHead(buf, ref, amount, uint256(kind) + (kind == 2 ? 256 * (j % PqzSet.S_AUD) : 0), e);
         _key(buf, 288, _keyPtr(e.registry, owner));
+        (uint256 off, uint256 pkp, uint256 vp) = (288 + PqzCt.PK, PqzCt.PKP, PqzCt.VP);
+        uint256 d;
         assembly ("memory-safe") {
-            let d := add(add(buf, 37), 16672)
-            mcopy(d, add(add(bundle, 32), uOff), 16384)
-            mcopy(add(d, 16384), add(add(bundle, 32), vOff), 128)
+            d := add(add(buf, 37), off)
+            mcopy(d, add(add(bundle, 32), uOff), pkp)
+            mcopy(add(d, pkp), add(add(bundle, 32), vOff), vp)
         }
+        PqzCt.expandAt(d, PqzCt.CT / 32);
     }
 
-    /// @dev Leg `j` of a bundle: the offsets of `u_{⌊j/4⌋}` and of `v_j` (`v_{a,j}` for `AUDITOR`), and its owner.
+    /// @dev Leg `j` of a (packed) bundle: the offsets of `u_{g(j)}` (`_groupOf`) and of `v_j` (`v_{a,j}` for `AUDITOR`),
+    ///      its owner.
     function _legOf(bytes memory bundle, uint256 j, uint8 kind)
         internal view returns (uint256 uOff, uint256 vOff, bytes32 owner)
     {
         uint256 bl = bundle.length;
         (uint256 g, uint256 m, uint256 a) = _bundleShape(bl);
         if (j >= m || (kind == 2 && a == 0)) revert IPqzToken.BadPayload(bl);
-        uint256 ls = 160 + PqzCt.V * a;
-        uint256 leg = 16 + PqzCt.PK * g + ls * j;
-        uOff = 16 + PqzCt.PK * (j / 4);
-        vOff = kind == 2 ? leg + PqzCt.V : leg;
+        uint256 ls = 32 + PqzCt.VP * (1 + a);
+        uint256 leg = 16 + PqzCt.PKP * g + ls * j;
+        uOff = 16 + PqzCt.PKP * _groupOf(j, a);
+        vOff = kind == 2 ? leg + PqzCt.VP : leg;
         assembly ("memory-safe") { owner := mload(add(add(bundle, 32), sub(add(leg, ls), 32))) }
         if (kind == 2) owner = $().auditorUA;
     }
 
     /// @dev `(G, M, auditorOn)` of a bundle `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}` from its length:
-    ///      unique for every built `M` (≤ 8: the legs take < 16,384 bytes), else `BadPayload`.
+    ///      unique for every `M` ≤ 8 (the packed legs take < `PKP` bytes; `G` = `_groups(M, a)`; test
+    ///      `PqzMultiTest.test_bundleShape_unique` at every set), else `BadPayload`.
     function _bundleShape(uint256 bl) internal pure returns (uint256 g, uint256 m, uint256 a) {
-        if (bl < 16 + PqzCt.PK) revert IPqzToken.BadPayload(bl);
-        g = (bl - 16) / PqzCt.PK;
-        uint256 rem = bl - 16 - PqzCt.PK * g;
+        if (bl < 16 + PqzCt.PKP) revert IPqzToken.BadPayload(bl);
+        g = (bl - 16) / PqzCt.PKP;
+        uint256 rem = bl - 16 - PqzCt.PKP * g;
         for (uint256 i; i < 2; ++i) {
             a = 1 - i;
-            uint256 ls = 160 + PqzCt.V * a;
+            uint256 ls = 32 + PqzCt.VP * (1 + a);
             m = rem / ls;
-            if (m != 0 && m <= 8 && rem == ls * m && (m + 3) / 4 == g) return (g, m, a);
+            if (m != 0 && m <= 8 && rem == ls * m && _groups(m, a) == g) return (g, m, a);
         }
         revert IPqzToken.BadPayload(bl);
     }
 
-    function _discHead(bytes memory buf, bytes32 ref, uint256 amount, uint8 kind, Env memory e) internal view {
+    function _discHead(bytes memory buf, bytes32 ref, uint256 amount, uint256 kindWord, Env memory e) internal view {
+        uint256 kind = kindWord & 0xff;
         bytes32 tag = kind == 0 ? OP_DS : kind == 1 ? OP_DR : OP_DA;
         _mem(buf, 0, abi.encode(tag, $().psid, block.chainid, e.chainUid, address(this), e.registry, ref, amount,
-            uint256(kind)));
+            kindWord));
     }
 
-    /// @notice `keccak256(R)` of the entry (`R` read from its op blob; the value of the pre-5h stored hash), 0 if none.
+    /// @notice `keccak256(R)` of the entry, `R` the packed bytes of its op blob (P46), 0 if none.
     function ciphertextHash(bytes32 ref) internal view returns (bytes32 h) {
         address p = $().entryPtr[ref];
         if (p != address(0)) h = keccak256(rOf(p));
     }
 
-    /// @notice `R` of an op blob: its data without the trailing `v_f` (D1, D11).
+    /// @notice `R` of an op blob: its (packed) data without the trailing packed `v_f` (D1, D11).
     function rOf(address ptr) internal view returns (bytes memory r) {
-        r = new bytes(ptr.code.length - 1 - PqzCt.V);
+        r = new bytes(ptr.code.length - 1 - PqzCt.VP);
         assembly ("memory-safe") { extcodecopy(ptr, add(r, 32), 1, mload(r)) }
     }
 
@@ -697,40 +761,50 @@ library PqzCore {
         if (units > K_MAX) revert IPqzToken.UnitsInvariant();
     }
 
-    /// @dev `acc` (unreduced input to the sums): the materialised words (or the hint when `keccak(hint) == accHash`),
-    ///      else the reference's `(u, v)`, else `Trivial(0)`.
+    /// @dev `acc` (64-bit lanes; unreduced input to the sums): the materialised slots (or the hint, the packed stream,
+    ///      when `keccak(hint) == accHash`) expanded, else the reference's `(u, v)`, else `Trivial(0)`.
     function _accOf(Account storage a, bytes calldata hint) internal view returns (bytes memory c) {
         if (a.flags & MAT != 0) {
-            if (hint.length == PqzCt.CT && keccak256(hint) == a.accHash) return PqzCt.load(hint);
             c = new bytes(PqzCt.CT);
-            uint256[516] storage w = a.accWords;
-            assembly ("memory-safe") {
-                let b := w.slot
-                let d := add(c, 32)
-                let k := not(ACC_MARK)
-                for { let i := 0 } lt(i, 516) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
+            (uint256 ctp, uint256 nw) = (PqzCt.CTP, PqzCt.ACC_WORDS);
+            uint256 d;
+            assembly ("memory-safe") { d := add(c, 32) }
+            if (hint.length == ctp && keccak256(hint) == a.accHash) {
+                assembly ("memory-safe") { calldatacopy(d, hint.offset, ctp) }
+            } else {
+                uint256[PQZ_ACC_WORDS] storage w = a.accWords;
+                assembly ("memory-safe") {
+                    let b := w.slot
+                    for { let i := 0 } lt(i, nw) { i := add(i, 1) } { mstore(add(d, shl(5, i)), not(sload(add(b, i)))) }
+                }
             }
+            PqzCt.expandAt(d, PqzCt.CT / 32);
             return c;
         }
         c = new bytes(PqzCt.CT);
         if (a.accBlob != address(0)) PqzCt.loadBlob(a.accBlob, a.accU, a.accV, c);
     }
 
-    /// @dev `c ±= Σ pending[lo .. lo + n)` in order; with `aged`, entry `i` only at `block_i + ROLL_AGE` (D6).
+    /// @dev `c ±= Σ pending[lo .. lo + n)` in order; with `aged`, entry `i` only at `block_i + ROLL_AGE` (D6). A
+    ///      rollover (`aged`, always `up`) sums the packed groups unspread into two accumulators (`addBlobEO`) and spreads
+    ///      once at the end (P46); a debit's window expands each entry on the fly (`addBlob`).
     function _window(Account storage a, bytes memory c, uint256 lo, uint256 n, bool up, bool aged) internal view {
         bytes memory x = new bytes(PqzCt.CT);
+        bytes memory ea = aged ? new bytes(PqzCt.CT) : x;
+        bytes memory eb = aged ? new bytes(PqzCt.CT) : x;
         for (uint256 k; k < n; ++k) {
             uint256 e = a.pending[uint64(lo + k)];
             if (aged && uint64(e) + ROLL_AGE > block.number) revert IPqzToken.RollTooYoung(lo + k);
             if (uint16(e >> 64) == 0) {
                 if (up) PqzCt.addTrivial(c, uint64(e >> 96));
                 else PqzCt.subTrivial(c, uint64(e >> 96));
+            } else if (aged) {
+                PqzCt.addBlobEO(ea, eb, x, address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64));
             } else {
-                PqzCt.loadBlob(address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), x);
-                if (up) PqzCt.addMem(c, x);
-                else PqzCt.subMem(c, x);
+                PqzCt.addBlob(c, x, address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), !up);
             }
         }
+        if (aged) PqzCt.combineEO(c, ea, eb);
     }
 
     /// @dev The authority (registry: the signing UA `from` itself over `authDigest`, purpose `zether-auth`; UA-6 U7),
@@ -817,6 +891,7 @@ library PqzCore {
     }
 
     function _key(bytes memory buf, uint256 off, address ptr) internal view {
-        assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 16384) }
+        uint256 pk = PqzCt.PK;
+        assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, pk) }
     }
 }

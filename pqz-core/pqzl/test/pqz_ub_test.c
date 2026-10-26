@@ -256,7 +256,7 @@ test_onetime (void)
 
 /* ---- (b) pqz_encrypt / pqz_decrypt_raw on non-canonical coefficients ---- */
 
-#define PQZ_Q_ ((((uint64_t)1) << 42) - 215)
+#define PQZ_Q_ PQZ_Q /* q of the parameter set (pqz_set.h via pqz.h) */
 
 static void
 wr_be8 (uint8_t *p, uint64_t v)
@@ -279,8 +279,8 @@ canon (uint64_t V)
 static void
 test_enc_dec (void)
 {
-  static int8_t s[2048], r[2048];
-  static int16_t e[2048], e1[2048], e2[1][16];
+  static int8_t s[PQZ_N], r[PQZ_N];
+  static int16_t e[PQZ_N], e1[PQZ_N], e2[1][16];
   static uint8_t pk[PQZ_POLYVEC_BYTES], pkx[PQZ_POLYVEC_BYTES], pkc[PQZ_POLYVEC_BYTES];
   static uint8_t u[PQZ_POLYVEC_BYTES], ux[PQZ_POLYVEC_BYTES], uc[PQZ_POLYVEC_BYTES], v[1][PQZ_V_BYTES],
       vx[1][PQZ_V_BYTES], vc[1][PQZ_V_BYTES];
@@ -288,7 +288,7 @@ test_enc_dec (void)
   int64_t w[16], wx[16];
   const uint64_t Vs[] = { (uint64_t)1 << 63, ((uint64_t)1 << 63) + 5, ((uint64_t)1 << 63) + PQZ_Q_ - 1,
                           ((uint64_t)1 << 63) + PQZ_Q_ };
-  for (int i = 0; i < 2048; i++)
+  for (int i = 0; i < PQZ_N; i++)
     s[i] = (int8_t)(i % 3 - 1), r[i] = (int8_t)((i * 7) % 3 - 1), e[i] = (int16_t)(i % 5 - 2),
     e1[i] = (int16_t)((i * 3) % 5 - 2);
   for (int i = 0; i < 16; i++)
@@ -476,8 +476,8 @@ test_wipe (uint8_t *arena, size_t len)
   static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID;
   static uint8_t pk[PQZ_POLYVEC_BYTES], u[PQZ_POLYVEC_BYTES], vs[1][PQZ_V_BYTES], st[PQZ_REG_STMT_BYTES];
   static uint8_t wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
-  static int8_t s[2048], r[2048];
-  static int16_t e[2048], e1[2048], e2[1][16];
+  static int8_t s[PQZ_N], r[PQZ_N];
+  static int16_t e[PQZ_N], e1[PQZ_N], e2[1][16];
   uint8_t seed[32] = { 1 }, msg[1][16] = { { 3 } }, ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES];
   int64_t M[16], noise[16];
   unsigned ctr;
@@ -493,8 +493,8 @@ test_wipe (uint8_t *arena, size_t len)
          pqz_dec (s, ct, M, noise) == PQZ_OK && M[0] == 3 && zero_above (arena));
   memcpy (st + 32, PSID, 32);
   memcpy (st + PQZ_PREFIX_BYTES + 32, pk, sizeof pk);
-  for (int j = 0; j < 2048; j++)
-    wit[j] = (uint8_t)s[j], wit[2048 + 2 * j] = (uint8_t)e[j], wit[2049 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
+  for (int j = 0; j < PQZ_N; j++)
+    wit[j] = (uint8_t)s[j], wit[PQZ_N + 2 * j] = (uint8_t)e[j], wit[PQZ_N + 1 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
   size_t plen = sizeof proof;
   check ("Q-B pqz_prove R_REG; the arena above the mark is zero",
          pqz_prove (PQZ_OP_REGISTER, st, sizeof st, wit, sizeof wit, seed, proof, &plen) == PQZ_OK && zero_above (arena));

@@ -6,11 +6,16 @@
 
 use pqz_stmt::{
     DISC_WORDS, DW_AMOUNT, DW_KIND, Form, H_AMOUNT, H_AUDITOR_ON, H_FEE, H_LEGS, H_RECIPIENTS_HASH, H_SALT,
-    HEADER_BYTES, LEGS_PER_GROUP, Multi, PQZH_ID, groups, u64_word,
+    HEADER_BYTES, Multi, PQZH_ID, groups, legs_per_group, u64_word,
 };
 
 use crate::cs::Rel;
 use crate::ring::*;
+
+/// the l2 bounds of the samplers (KeyGen / Enc's resampling): CBD(1) vectors, CBD(20) vectors, e2 (v3 36 / 164 / 64)
+const BS: i64 = crate::set::BETA_S as i64;
+const BE: i64 = crate::set::BETA_E as i64;
+const B2: i64 = crate::set::BETA_2 as i64;
 
 /// byte offsets of the statement words the tests and mutations touch (pq-zero-knowledge.md §7.7, §7.9)
 pub const PREFIX: usize = 64;
@@ -87,8 +92,8 @@ pub struct Key {
 }
 
 pub fn keygen(rng: &mut Rng) -> Key {
-    let s = rng.short(2048, 1, 36);
-    let e = rng.short(2048, 20, 164);
+    let s = rng.short(N, 1, BS);
+    let e = rng.short(N, 20, BE);
     let pk = keypair(&polys(&s), &polys(&e));
     Key { s, e, pk }
 }
@@ -211,15 +216,15 @@ pub fn setup_with(tw: &Tweak) -> Setup {
 
     let (bal, v, fee) = (1_000_000u64, 123_456u64, 7u64);
     let bp = bal - v - fee;
-    let r0 = rng.short(2048, 1, 36);
-    let e10 = rng.short(2048, 20, 164);
-    let e20 = rng.short(16, 20, 64);
+    let r0 = rng.short(N, 1, BS);
+    let e10 = rng.short(N, 20, BE);
+    let e20 = rng.short(16, 20, B2);
     let (ut, vt) = encrypt(&[&kf.pk], &[digits(bal)], &polys(&r0), &polys(&e10), &[e20]);
-    let r = rng.short(2048, 1, 36);
-    let e1 = rng.short(2048, 20, 164);
+    let r = rng.short(N, 1, BS);
+    let e1 = rng.short(N, 20, BE);
     let r = tw.r.clone().unwrap_or(r);
     let e1 = tw.e1.clone().unwrap_or(e1);
-    let mut e2: Vec<Vec<i64>> = (0..3).map(|_| rng.short(16, 20, 64)).collect();
+    let mut e2: Vec<Vec<i64>> = (0..3).map(|_| rng.short(16, 20, B2)).collect();
     let mut m = [digits(v), digits(bp), digits(v)];
     if let Some(e) = &tw.e2_t {
         e2[0] = e.clone();
@@ -275,8 +280,8 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     wr_vec(&mut tx0, &u);
     wr_v(&mut tx0, &vs[0]);
     wr_v(&mut tx0, &vs[1]);
-    let mut w0 = w[..12288 + 64].to_vec();
-    w0.extend_from_slice(&w[12288 + 96..]);
+    let mut w0 = w[..6 * N + 64].to_vec();
+    w0.extend_from_slice(&w[6 * N + 96..]);
     assert_eq!((tx0.len(), w0.len()), (Form::Transfer0.stmt_len(), Form::Transfer0.wit_len()));
 
     // R_DS / R_DR: header words chainId .. entryRef = (i * 7), amount v, kind 0 / 1; pk_t, u, v_t
@@ -305,11 +310,11 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     );
 
     // R_BURN: fresh (r, e1, e2_f) for the new balance
-    let rb = rng.short(2048, 1, 36);
-    let e1b = rng.short(2048, 20, 164);
+    let rb = rng.short(N, 1, BS);
+    let e1b = rng.short(N, 20, BE);
     let rb = tw.r.clone().unwrap_or(rb);
     let e1b = tw.e1.clone().unwrap_or(e1b);
-    let mut e2b = rng.short(16, 20, 64);
+    let mut e2b = rng.short(16, 20, B2);
     if let Some(e) = &tw.burn_e2 {
         e2b = e.clone();
     }
@@ -330,7 +335,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     wr_v(&mut burn, &vt[0]);
     wr_vec(&mut burn, &ub);
     wr_v(&mut burn, &vb[0]);
-    let mut bw = w[..2048 + 4096].to_vec();
+    let mut bw = w[..3 * N].to_vec();
     bw.extend(rb.iter().map(|&x| x as i8 as u8));
     le16(&mut bw, &e1b);
     le16(&mut bw, &e2b);
@@ -364,10 +369,13 @@ pub struct MultiTweak {
     pub e_f: Option<Vec<i64>>,
     /// leg j encrypted under recipient k's key (k >= M: the auditor's); the statement keeps pk_j
     pub key: Option<(usize, usize)>,
-    /// leg j encrypted with group h's (r_h, e1_h); statement and witness keep group j / 4
+    /// leg j encrypted with group h's (r_h, e1_h); statement and witness keep group j / s
     pub group: Option<(usize, usize)>,
     /// the auditor copy of leg j encrypts these digits; the witness keeps d_j
     pub aud_d: Option<(usize, [u8; 16])>,
+    /// the auditor copy of leg j at window w (coefficients 16 w ..) instead of j mod s: the pre-R0-1 encoding (w = 0)
+    /// or another leg's window; the witness keeps everything (review R0 fix round m4)
+    pub aud_win: Option<(usize, usize)>,
     /// proofSystemId (default PQZH's)
     pub psid: Option<[u8; 32]>,
 }
@@ -377,11 +385,11 @@ pub fn multi_ua(j: usize) -> [u8; 32] {
     u64_word(0x1000 + j as u64)
 }
 
-/// v = pk^T r + e2 + Delta m (16 coefficients)
-fn enc_v(pk: &[Poly], m: &[u8; 16], r: &[i64], e2: &[i64]) -> Poly {
+/// v = (pk^T r)_{o + i} + e2 + Delta m (16 coefficients; o = 16 w, the window, R0-1)
+fn enc_v(pk: &[Poly], m: &[u8; 16], r: &[i64], e2: &[i64], o: usize) -> Poly {
     let rp = polys(r);
     let y = dot_int(&pk.iter().collect::<Vec<_>>(), &rp.iter().collect::<Vec<_>>());
-    std::array::from_fn(|i| if i < 16 { modq(y[i] + e2[i] + DELTA * m[i] as i64) } else { 0 })
+    std::array::from_fn(|i| if i < 16 { modq(y[o + i] + e2[i] + DELTA * m[i] as i64) } else { 0 })
 }
 
 /// An op 7 statement and witness of shape (m, aud): sender F with balance 1,000,000 in T (as `setup`), leg amounts
@@ -400,7 +408,7 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
     kf.pk = keypair(&polys(&kf.s), &polys(&kf.e));
     let ka = keygen(&mut rng);
     let ks: Vec<Key> = (0..m).map(|_| keygen(&mut rng)).collect();
-    let g = groups(m);
+    let (g, lpg) = (groups(m, aud), legs_per_group(aud));
 
     let bal = 1_000_000u64;
     let amounts = tw.amounts.clone().unwrap_or_else(|| (0..m).map(|j| if j == m / 2 { 123_456 } else { 0 }).collect());
@@ -411,15 +419,15 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
         d[j] = x;
     }
     let dp = tw.dp.unwrap_or(digits(bal.wrapping_sub(sum).wrapping_sub(fee)));
-    let r0 = rng.short(2048, 1, 36);
-    let e10 = rng.short(2048, 20, 164);
-    let e20 = rng.short(16, 20, 64);
+    let r0 = rng.short(N, 1, BS);
+    let e10 = rng.short(N, 20, BE);
+    let e20 = rng.short(16, 20, B2);
     let (ut, vt) = encrypt(&[&kf.pk], &[digits(bal)], &polys(&r0), &polys(&e10), &[e20]);
     let mut rs: Vec<Vec<i64>> = vec![];
     let mut e1s: Vec<Vec<i64>> = vec![];
     for _ in 0..g {
-        rs.push(rng.short(2048, 1, 36));
-        e1s.push(rng.short(2048, 20, 164));
+        rs.push(rng.short(N, 1, BS));
+        e1s.push(rng.short(N, 20, BE));
     }
     if let Some((i, x)) = &tw.r {
         rs[*i] = x.clone();
@@ -428,14 +436,14 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
         e1s[*i] = x.clone();
     }
     let nv = m + 1 + aud as usize * m;
-    let mut e2: Vec<Vec<i64>> = (0..nv).map(|_| rng.short(16, 20, 64)).collect();
+    let mut e2: Vec<Vec<i64>> = (0..nv).map(|_| rng.short(16, 20, B2)).collect();
     if let Some((x, v)) = &tw.e2 {
         e2[*x] = v.clone();
     }
     let us: Vec<Vec<Poly>> = (0..g).map(|i| encrypt(&[], &[], &polys(&rs[i]), &polys(&e1s[i]), &[]).0).collect();
     let grp = |j: usize| match tw.group {
         Some((jj, h)) if jj == j => h,
-        _ => j / LEGS_PER_GROUP,
+        _ => j / lpg,
     };
     let vs: Vec<Poly> = (0..m)
         .map(|j| {
@@ -443,17 +451,21 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
                 Some((jj, k)) if jj == j => ks.get(k).map_or(&ka.pk, |x| &x.pk),
                 _ => &ks[j].pk,
             };
-            enc_v(pk, &d[j], &rs[grp(j)], &e2[j])
+            enc_v(pk, &d[j], &rs[grp(j)], &e2[j], 0)
         })
         .collect();
-    let vf = enc_v(&kf.pk, &dp, &rs[0], &e2[m]);
+    let vf = enc_v(&kf.pk, &dp, &rs[0], &e2[m], 0);
     let vas: Vec<Poly> = (0..m * aud as usize)
         .map(|j| {
             let x = match tw.aud_d {
                 Some((jj, x)) if jj == j => x,
                 _ => d[j],
             };
-            enc_v(&ka.pk, &x, &rs[j / LEGS_PER_GROUP], &e2[m + 1 + j])
+            let w = match tw.aud_win {
+                Some((jj, w)) if jj == j => w,
+                _ => j % lpg,
+            };
+            enc_v(&ka.pk, &x, &rs[j / lpg], &e2[m + 1 + j], 16 * w) // the copy's window (R0-1)
         })
         .collect();
 

@@ -1,0 +1,67 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling keccak v0.1.6
+   Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling cpufeatures v0.2.17
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
+   Compiling generic-array v0.14.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling aes v0.8.4
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzh/ligero)
+   Compiling pqz-fuzz v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.83s
+-rwxrwxr-x 1 ha ha 14801704 Oct 21 11:07 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/codec
+-rwxrwxr-x 1 ha ha 14801704 Oct 21 11:07 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/mutate
+-rwxrwxr-x 1 ha ha 14802144 Oct 21 11:07 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/precompile
+pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+Done 5979 runs in 127 second(s)
+stat::number_of_executed_units: 5979
+stat::average_exec_per_sec:     47
+stat::new_units_added:          135
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              690
+pqz-fuzz summary (precompile): 5979 inputs checked, 1663 decoded (500 op 7), 46 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[fuzz rc=0]
+pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz summary (precompile): 132 inputs checked, 63 decoded (14 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+pqz-fuzz summary (precompile): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[merge rc=0]
+corpus/precompile: 13 inputs, 386 B (merged set 111 inputs, 12885335 B)
+pqz-fuzz init (mutate): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+Done 1528 runs in 61 second(s)
+stat::number_of_executed_units: 1528
+stat::average_exec_per_sec:     25
+stat::new_units_added:          7
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              815
+pqz-fuzz summary (mutate): 1302 inputs checked, 1042 decoded (340 op 7), 0 valid (= unmodified honest; mutate skips those), 3 differential SV = generic (1 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[fuzz rc=0]
+pqz-fuzz init (mutate): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz init (mutate): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz summary (mutate): 479 inputs checked, 393 decoded (134 op 7), 0 valid (= unmodified honest; mutate skips those), 1 differential SV = generic (1 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+pqz-fuzz summary (mutate): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[merge rc=0]
+corpus/mutate: 294 inputs, 3573 B (merged set 294 inputs, 3573 B)
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+Done 2709 runs in 101 second(s)
+stat::number_of_executed_units: 2709
+stat::average_exec_per_sec:     26
+stat::new_units_added:          4
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              695
+pqz-fuzz summary (codec): 2607 inputs checked, 1070 decoded (420 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 323 PQZL proof re-encodings equal, PQZL core: Rust
+[fuzz rc=0]
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, PQZL core: Rust
+pqz-fuzz summary (codec): 293 inputs checked, 94 decoded (40 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 71 PQZL proof re-encodings equal, PQZL core: Rust
+pqz-fuzz summary (codec): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[merge rc=0]
+corpus/codec: 182 inputs, 1712 B (merged set 182 inputs, 1712 B)

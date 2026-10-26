@@ -103,7 +103,7 @@ fn gt(a: &[u64], b: &[u64]) -> bool {
 }
 
 /// `_urandom` (`intvec_urandom`): uniform in [0, m) for log2mod < 60, else C's multi-limb path, `_urandom_bnd` on
-/// [0, (m - 1) >> 1] (as C: half the range; no caller of the core reaches it, every modulus is q, 42 bits)
+/// [0, (m - 1) >> 1] (as C: half the range; no caller of the core reaches it, every modulus is q, LOG2Q < 60 bits)
 pub(crate) fn urandom(r: &mut IntVec, m: &Int, log2mod: u32, seed: &[u8; 32], dom: u64) -> Result<(), Error> {
     if log2mod < 60 {
         let mut v = Vec::new();

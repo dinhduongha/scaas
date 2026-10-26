@@ -2,6 +2,8 @@
 # Independent review of pqz_sv.c (docs/reviews/specs/2026-10-13-pqz-sv-review.md): the reproducers. Heavy: run under
 # scripts/capped. Nothing here is linked into libpqz; production sources are only copied and patched under build/.
 #   sv/review/review.sh dom          finding 3: beta4 (i = d - 1) and upsilon share one (seed, dom) (sz trace hook)
+#   sv/review/review.sh domctl       the same on a copy of lnp-tbox.c with A-2 undone (upsilon back at M + 2 (d - 1)):
+#                                    the control must report the shared dom (8a review m2)
 #   sv/review/review.sh norm         cheating provers past the final hash: z1 / w / z21 norms (both verifiers must
 #                                    reject, and accept once that one check is removed). z21 was finding 1 (no bound,
 #                                    both accepted; lazer#26), fixed as P6-Z21: check_tbox_fixes.sh runs this mode
@@ -11,11 +13,12 @@
 #   sv/review/review.sh fuzz SECS    libFuzzer, fast verifier alone, six relations, ASan + UBSan
 set -eu
 cd "$(dirname "$0")/../.."
-B=build/review
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
+B=$PB/review
 mkdir -p $B
 CC=${CC:-clang}
-FL="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -Ibuild/include -Isrc -Ilazer -Iparams"
-[ -f build/native/libpqz.a ] || ./build.sh native >/dev/null
+FL="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -I$PB/include -Isrc -Ilazer -Iparams"
+[ -f $PB/native/libpqz.a ] || ./build.sh native >/dev/null
 
 lib () { # lib OUT INCDIR SVSRC EXTRA_CFLAGS: libpqz variant with lnp-quad.c / pqz_sv.c from INCDIR / SVSRC
   o=$B/$1
@@ -30,7 +33,7 @@ poc () { # the cheating prover: lnp_quad_prove (lines 1..335 of lnp-quad.c) with
   mkdir -p $B/poc
   { echo '#include "lazer.h"'; cat sv/review/normpoc_hooks.h; sed -e '1d' -e '1,335{
 s|^      polyvec_grandom (y1, params->log2stdev1, yseed, dom);$|&\n      if (pqz_poc_mode == 1) polyvec_lshift (y1, y1, 3);|
-s|^      polyvec_grandom (y2, params->log2stdev2, yseed, dom);$|&\n      if (pqz_poc_mode == 2) polyvec_lshift (y21, y21, 7);\n      if (pqz_poc_mode == 4) poc_mul0 (y21, pqz_poc_k);|
+s|^      polyvec_grandom (y2, params->log2stdev2, yseed, dom);$|&\n      if (pqz_poc_mode == 2) polyvec_lshift (y21, y21, pqz_poc_shift);\n      if (pqz_poc_mode == 4) poc_mul0 (y21, pqz_poc_k);|
 s|if (params->rej1)$|if (params->rej1 \&\& pqz_poc_mode != 1)|
 s|if (params->rej2)$|if (params->rej2 \&\& !POC_Z21)|
 s|rej = int_gt (norm, params->Bsqr);|rej = !POC_Z21 \&\& int_gt (norm, params->Bsqr);|
@@ -46,13 +49,24 @@ s|^  polyvec_dcompress_make_ghint (h, y22, w1, dcomp_param);$|&\n  if (pqz_poc_m
 case "${1:-}" in
 dom)
   for f in pqz_lazer pqz_ntt pqz_arena pqz_rel; do $CC $FL -DPQZ_SZ_TRACE -c src/$f.c -o $B/dom-$f.o; done
-  $CC -std=gnu11 -O2 -w -Isrc -o $B/dom_trace sv/review/dom_trace.c $B/dom-*.o
+  $CC -std=gnu11 -O2 -w -I$PB/include -Isrc -o $B/dom_trace sv/review/dom_trace.c $B/dom-*.o
   $B/dom_trace | grep -v '^dom=' || true
   ;;
+domctl)
+  U=$B/a2ctl
+  mkdir -p $U
+  sed 's|hash, M + 2 \* (d - 1) + 1, params);|hash, M + 2 * (d - 1), params);|' lazer/lnp-tbox.c > $U/lnp-tbox.c
+  echo "control: A-2 undone on $(diff lazer/lnp-tbox.c $U/lnp-tbox.c | grep -c '^>') line(s) of lnp-tbox.c"
+  $CC -I$U $FL -DPQZ_SZ_TRACE -c src/pqz_lazer.c -o $U/dom-pqz_lazer.o
+  for f in pqz_ntt pqz_arena pqz_rel; do $CC $FL -DPQZ_SZ_TRACE -c src/$f.c -o $U/dom-$f.o; done
+  $CC -std=gnu11 -O2 -w -I$PB/include -Isrc -o $U/dom_trace sv/review/dom_trace.c $U/dom-*.o
+  $U/dom_trace | grep -v '^dom=' || true
+  ;;
 norm)
-  mkdir -p $B/noz1 $B/now $B/noz21 $B/norm-out
+  rm -rf $B/norm-out # a previous run's proofs (another parameter set's) must never be verified or exported
+mkdir -p $B/noz1 $B/now $B/noz21 $B/norm-out
   poc
-  $CC -std=gnu11 -O2 -w -DPQZ_NORM_POC -Isrc -o $B/normpoc_prove sv/review/normpoc.c $B/poc/libpqz.a
+  $CC -std=gnu11 -O2 -w -DPQZ_NORM_POC -I$PB/include -Isrc -o $B/normpoc_prove sv/review/normpoc.c $B/poc/libpqz.a
   # controls: one check removed in both verifiers (lnp_quad_verify, pqz_sv.c verify_body)
   sed '336,$ s|b = int_le (l2sqr, bnd);|b = 1; /* review control */|' lazer/lnp-quad.c > $B/noz1/lnp-quad.c
   sed 's|if (!l2_le (W.zc, DEG \* mq, S->z1bnd))|if (0) /* review control */|' src/pqz_sv.c > $B/noz1/pqz_sv.c
@@ -67,12 +81,12 @@ norm)
       [ "$(diff $src $B/$v/$f | grep -c '^>' || true)" = 1 ] || echo "control $v: patch of $f did not apply"
     done
     lib $v $B/$v $B/$v/pqz_sv.c "-DPQZ_SV"
-    $CC -std=gnu11 -O2 -w -Isrc -o $B/normpoc_verify_$v sv/review/normpoc.c $B/$v/libpqz.a
+    $CC -std=gnu11 -O2 -w -I$PB/include -Isrc -o $B/normpoc_verify_$v sv/review/normpoc.c $B/$v/libpqz.a
   done
-  $CC -std=gnu11 -O2 -w -Isrc -o $B/normpoc_verify sv/review/normpoc.c build/native/libpqz.a
+  $CC -std=gnu11 -O2 -w -I$PB/include -Isrc -o $B/normpoc_verify sv/review/normpoc.c $PB/native/libpqz.a
   echo "== cheating prover"
   $B/normpoc_prove prove $B/norm-out
-  echo "== production verifiers (build/native/libpqz.a)"
+  echo "== production verifiers ($PB/native/libpqz.a)"
   $B/normpoc_verify verify $B/norm-out
   echo "== control: z1 norm check removed from both verifiers"
   $B/normpoc_verify_noz1 verify $B/norm-out
@@ -84,14 +98,14 @@ norm)
 zdiff)
   # P6-Z21 differential: z21-inflated proofs of every relation, both verifiers in-process (sv/review/z21diff.c)
   poc
-  $CC -std=gnu11 -O2 -w -Isrc -o $B/z21diff sv/review/z21diff.c $B/poc/libpqz.a -lm
+  $CC -std=gnu11 -O2 -w -I$PB/include -Isrc -o $B/z21diff sv/review/z21diff.c $B/poc/libpqz.a -lm
   PQZ_ARENA_MB=${PQZ_ARENA_MB:-2048} $B/z21diff "${2:-1}" "${3:-31}" "${4:-16383}" # mask: six P6e forms + eight R_TXM
   ;;
 fuzz)
   T=${2:-600}
   SAN="-fsanitize=address,undefined -fno-sanitize=vla-bound,pointer-overflow -fno-sanitize-recover=all"
   SRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c"
-  ${CC} -O1 -g -fno-omit-frame-pointer -std=gnu11 -w -DPQZ_SV -DPQZ_TEST_HOOKS -Ibuild/include -Isrc -Ilazer -Iparams \
+  ${CC} -O1 -g -fno-omit-frame-pointer -std=gnu11 -w -DPQZ_SV -DPQZ_TEST_HOOKS -I$PB/include -Isrc -Ilazer -Iparams \
     $SAN -fsanitize=fuzzer -o $B/sv_fuzz5 $SRC sv/review/sv_fuzz5.c
   mkdir -p $B/fuzz5-corpus
   ASAN_OPTIONS=detect_leaks=0 $B/sv_fuzz5 -max_total_time="$T" -max_len=128 -seed=7 -rss_limit_mb=3500 \

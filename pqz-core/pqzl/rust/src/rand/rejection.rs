@@ -152,7 +152,15 @@ mod tests {
         let m2 = pqz_reg_scm2.l[2] as f64 + pqz_reg_scm2.l[1] as f64 / 18446744073709551616.0;
         let (p, rate) = (1.0 / (2.0 * m2), acc as f64 / S as f64);
         assert!((rate - p).abs() <= 5.0 * (p * (1.0 - p) / S as f64).sqrt(), "rate {rate} vs 1/(2 M2) {p}");
-        assert_eq!((acc, neg, negstd), (11624, 5438, 5417), "= the C test's counts");
+        // the C test's counts per parameter set (test/runs/ub-t8b-<set>.txt part a; R_REG's M2 differs per set)
+        let want = match crate::SET {
+            "n2048-kmax1024" => (11624, 5438, 5417),
+            "n2304-kmax4096" => (11294, 5438, 5400),
+            "n2560-kmax16384" => (11127, 5438, 5385),
+            "n2816-kmax65536" => (10756, 5438, 5355),
+            s => panic!("no C counts recorded for set {s}: run test/ub_test.sh with PQZ_SET={s}"),
+        };
+        assert_eq!((acc, neg, negstd), want, "= the C test's counts");
     }
 
     /// pqz_ub_test.c part a's rejection cases: exponents near +-2^63, the verdict on 64 draws of u (scM = 1.5 2^128,

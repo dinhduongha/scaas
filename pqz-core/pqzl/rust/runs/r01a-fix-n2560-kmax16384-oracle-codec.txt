@@ -1,0 +1,46 @@
+# cargo test --test oracle_codec (C oracle; R0 fix round m3 challenge_resample_kat), set n2560-kmax16384
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling cc v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling keccak v0.1.6
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling cpufeatures v0.2.17
+   Compiling cfg-if v1.0.5
+   Compiling aes v0.8.4
+   Compiling sha3 v0.10.8
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.154
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+warning: unused import: `std::path::PathBuf`
+ --> tests/oracle_codec.rs:9:5
+  |
+9 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `pqzl` (test "oracle_codec") generated 1 warning (run `cargo fix --test "oracle_codec" -p pqzl` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 26.32s
+     Running tests/oracle_codec.rs (/tmp/claude-1000/-home-ha-work-ainative-scaas/42ffd63a-3cbe-4f3e-85ee-dd4ecfe74ea0/scratchpad/tgt-chal-n2560-kmax16384/release/deps/oracle_codec-1d6f3bb274bdcb12)
+
+running 5 tests
+test challenge_resample_kat ... ok
+test malformed_eq_c ... ok
+test power2round_eq_c ... ok
+test ghint_eq_c ... ok
+test test_mutate_eq_c has been running for over 60 seconds
+test test_mutate_eq_c ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 180.33s
+
+rc=0

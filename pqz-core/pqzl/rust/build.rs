@@ -1,4 +1,5 @@
-//! Feature `c-oracle` (dev / test only): builds the PQZL C core (../src, ../lazer, ../params) as the oracle, with
+//! Feature `c-oracle` (dev / test only): builds the PQZL C core (../src, ../lazer, the parameter set's headers
+//! pqz-core/params/sets/<set>/ named by the `set-<set>` feature) as the oracle, with
 //! build.sh's flags, as pqz-ffi's build.rs does (native only): `-std=gnu11 -O2 -fno-builtin -fno-math-errno
 //! -ffp-contract=off -DPQZ_SV`, plus `-DPQZ_TXM_OVERSIZE` with feature `oversize` and `-DPQZ_TEST_HOOKS` with feature
 //! `test-hooks` (pqz_test_mutate; the hooks' other knobs keep their libpqz values). Without `c-oracle` nothing is built.
@@ -46,15 +47,22 @@ mod oracle {
         if feat("TEST_HOOKS") {
             b.flag("-DPQZ_TEST_HOOKS");
         }
-        b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(core.join("params"));
+        // the one set-<set> feature (as pqz-ffi's build.rs): CARGO_FEATURE_SET_N2304_KMAX4096 -> n2304-kmax4096
+        let set: Vec<String> = env::vars()
+            .filter_map(|(k, _)| k.strip_prefix("CARGO_FEATURE_SET_").map(|x| x.to_lowercase().replace('_', "-")))
+            .collect();
+        assert_eq!(set.len(), 1, "exactly one parameter set feature set-<set>: {set:?}");
+        let setdir = core.join("../params/sets").join(&set[0]);
+        b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(&setdir);
         for f in ["pqz_lazer", "pqz_ntt", "pqz_arena", "pqz_rel", "pqz_keys", "pqz_sv"] {
             b.file(core.join(format!("src/{f}.c")));
         }
         b.file(core.join("rust/tests/oracle_shim.c")); // test entry points (never part of the core)
         b.compile("pqz");
         println!("cargo:rerun-if-changed={}", core.join("rust/tests/oracle_shim.c").display());
-        for d in ["src", "lazer", "params"] {
+        for d in ["src", "lazer"] {
             println!("cargo:rerun-if-changed={}", core.join(d).display());
         }
+        println!("cargo:rerun-if-changed={}", setdir.display());
     }
 }

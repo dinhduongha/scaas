@@ -3,6 +3,8 @@
 one JSON-RPC endpoint (the follower behind nginx on the copy; 127.0.0.1:8545 on 7622 in Task 10). Python stdlib
 (run with python3 -I) with eth.py (keccak, legacy EIP-155 signing); forge artifacts from
 smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) and retried on 429.
+Since plan 5h Task 8d part 1 this targets the next image (32-bit addresses, PQZ_SET's self-test hash / MAX_INPUT /
+corpus, default n2304-kmax4096), the SCaaS testnet's image 2.2.0-pqz5 since 2026-10-26; for an older image run the script of its commit (RUNBOOK.md).
 
   e2e.py before  --engine E                 the three addresses empty (code, balance, nonce; eth_call answers nothing)
   e2e.py probe   --engine E [--genesis-hash H]   step 2: chain id, genesis hash, OP_SELFTEST, every vector 1 / 0,
@@ -34,11 +36,16 @@ from eth import address, keccak256, legacy_tx  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../.."))
-PQZ = "0x5caa500000000000000000000000000000000f01"
-ML44 = "0x5caa500000000000000000000000000000000012"
-ML65 = "0x5caa500000000000000000000000000000000013"
+PQZ = "0x000000000000000000000000000000005caa0f01"
+ML44 = "0x000000000000000000000000000000005caa0012"
+ML65 = "0x000000000000000000000000000000005caa0013"
 PROBE_AT = "0x00000000000000000000000000000000000f6f01"  # eth_call state override: the probe without a deployment
-SELFTEST = "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
+# the node library's parameter set (PQZ_SET, default n2304-kmax4096 = pqz-ffi's default; plan 5h Task 8d): its
+# OP_SELFTEST hash and input limit (pqz_max_input () = set.json max_input)
+PQZ_SET = os.environ.get("PQZ_SET", "n2304-kmax4096")
+SELFTEST = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/pqz", "" if PQZ_SET == "n2048-kmax1024" else PQZ_SET,
+                                       "selftest.json")))["hash"]
+MAX_INPUT = json.load(open(os.path.join(ROOT, "pqz-core/params/sets", PQZ_SET, "set.json")))["max_input"]
 CHAIN_ID = 7622
 PK44, SIG44, PK65, SIG65 = 1312, 2420, 1952, 3309
 FAILS = []
@@ -309,7 +316,7 @@ def cmd_probe(a, expect_fail=False):
         word, used, rlen = call_probe(PQZ, b)
         check(rlen == 32 and word == 0 and used - 100 - oh == sch.gas(b) and sch.row(b) is None,
               f"PQZ miss {name}: …00, gas {used - 100 - oh} = smallest row + length term {sch.gas(b)}")
-    over = h + bytes(393217 - len(h))
+    over = h + bytes(MAX_INPUT + 1 - len(h))
     if AMS:
         check(refused(lambda: call_probe(PQZ, over)), "PQZ input of MAX_INPUT + 1: refused before the precompile (Amsterdam floor > 2^24)")
     else:

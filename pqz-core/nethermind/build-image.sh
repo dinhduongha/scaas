@@ -3,10 +3,14 @@
 #   scripts/capped pqz-core/nethermind/build-image.sh pqz1        -> runs/<date>-image-<label>.txt
 #   CALIB=1 ...                                                   also the calib target (Task 6): ...-<label>-calib
 #   FFI_REV=<commit> ...                                          the library from that commit (the reviewed one)
+#   PQZ_SET=<set> ...                                             another parameter set (default n2304-kmax4096): library,
+#                                                                 plugin (-p:PqzSet), corpus and the reviewed hash of that set
 set -eu
 L=${1:?label, e.g. pqz1}
 cd "$(dirname "$0")"
 ROOT=$(cd ../.. && pwd)
+SET=${PQZ_SET:-n2304-kmax4096}
+export PQZ_SET=$SET
 TAG=scaas/nethermind-pqz:2.2.0-$L
 OUT=runs/$(date +%F)-image-$L.txt
 mkdir -p runs bin
@@ -14,9 +18,11 @@ exec > "$OUT" 2>&1
 run() { echo "\$ $*"; "$@"; echo "[rc=$?]"; echo; }
 echo "# P6f image $TAG, $(date -u +%Y-%m-%dT%H:%MZ), commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" ':(top,exclude)pqz-core/nethermind/runs' || echo ' (dirty)')"
 COMMIT=$(git rev-parse HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" ':(top,exclude)pqz-core/nethermind/runs' || echo -dirty)
-# the reviewed library hash (review W-G, 2026-10-19), compiled into the plugin as well
-EXP=$(sed -n 's/.*ExpectedLibrarySha256 = "\([0-9a-f]\{64\}\)";.*/\1/p' Nethermind.Pqz/SelfTest.cs)
-[ ${#EXP} = 64 ] || { echo "FAIL no ExpectedLibrarySha256 in Nethermind.Pqz/SelfTest.cs"; exit 1; }
+# the reviewed library hash of the set (review W-G, 2026-10-19; per set since the R0 review fix part b), compiled into
+# the plugin as well
+EXP=$(sed -n 's/.*Set = "'"$SET"'",.*ExpectedLibrarySha256 = "\([0-9a-f]\{64\}\)";.*/\1/p' Nethermind.Pqz/SelfTest.cs)
+[ ${#EXP} = 64 ] || { echo "FAIL no ExpectedLibrarySha256 for $SET in Nethermind.Pqz/SelfTest.cs"; exit 1; }
+echo "set $SET"
 # FFI_REV=<commit>: libpqz_ffi.so from that commit's tree (the reviewed library), the plugin from the work tree
 CTX=
 if [ -n "${FFI_REV:-}" ]; then
@@ -27,15 +33,16 @@ if [ -n "${FFI_REV:-}" ]; then
   echo "library sources: $FFI_REV = $(git -C "$ROOT" rev-parse "$FFI_REV")"
 fi
 run ./ref.sh
-run python3 -I corpus.py bin/corpus.jsonl
+# the set's corpus (the calib target copies bin/corpus.jsonl: the default set's only)
+if [ "$SET" = n2304-kmax4096 ]; then run python3 -I corpus.py bin/corpus.jsonl; else run python3 -I corpus.py bin/corpus-$SET.jsonl; fi
 export DOCKER_BUILDKIT=1
-B="docker build -f Dockerfile --progress plain --resource memory=4g"   # BuildKit runs outside scripts/capped: cap it (oomd)
+B="docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=$SET"   # BuildKit runs outside scripts/capped: cap it (oomd)
 rm -rf bin/ffi-out
 run $B $CTX --target ffi-export -o bin/ffi-out "$ROOT"
 FFI=$(sha256sum bin/ffi-out/libpqz_ffi.so | cut -d' ' -f1)
 echo "libpqz_ffi.so sha256 $FFI, reviewed $EXP"
 # review W-G: the image carries only the reviewed library (the Dockerfile checks FFI_SHA256 again, the plugin at start-up)
-[ "$FFI" = "$EXP" ] || { echo "FAIL the built library is not the reviewed one: review the build, set ExpectedLibrarySha256 = \"$FFI\" in Nethermind.Pqz/SelfTest.cs, commit, rebuild"; exit 1; }
+[ "$FFI" = "$EXP" ] || { echo "FAIL the built library is not the reviewed one: review the build, set $SET's ExpectedLibrarySha256 = \"$FFI\" in Nethermind.Pqz/SelfTest.cs, commit, rebuild"; exit 1; }
 run $B $CTX --target node --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" -t "$TAG" "$ROOT"
 if [ "${CALIB:-0}" = 1 ]; then
   run $B $CTX --target calib --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" -t "$TAG-calib" "$ROOT"

@@ -1,0 +1,4 @@
+set n2560-kmax16384, vectors ../../smartcontracts/vectors/pqz/n2560-kmax16384; PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2560-kmax16384)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d2a/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 8.08s
+    Finished `release` profile [optimized] target(s) in 0.02s

@@ -1,0 +1,57 @@
+== n2048-kmax1024
+      6 warning: manual implementation of `.is_multiple_of()`
+      3 warning: the loop variable `k` is used to index `KINDS`
+      2 warning: the loop variable `k` is used to index `sv`
+      2 warning: method `next` can be confused for the standard trait method `std::iter::Iterator::next`
+      1 warning: very complex type used. Consider factoring parts into `type` definitions
+      1 warning: the loop variable `k` is used to index `p`
+      1 warning: the loop variable `k` is used to index `dpub`
+      1 warning: the loop variable `k` is used to index `a`
+      1 warning: the loop variable `i` is used to index `u`
+      1 warning: `pqzh-ligero` (test "multi") generated 1 warning
+      1 warning: `pqzh-ligero` (test "attacks") generated 2 warnings
+      1 warning: `pqzh-ligero` (lib test) generated 14 warnings (14 duplicates)
+      1 warning: `pqzh-ligero` (lib) generated 14 warnings (run `cargo clippy --fix --lib -p pqzh-ligero -- ` to apply 7 suggestions)
+      1 warning: `pqzh-ligero` (bin "ligero_export" test) generated 1 warning
+      1 warning: `pqzh-ligero` (bin "ligero_export") generated 1 warning (1 duplicate)
+      1 warning: `pqzh-ligero` (bin "ligero_bench" test) generated 1 warning
+      1 warning: `pqzh-ligero` (bin "ligero_bench") generated 1 warning (1 duplicate)
+      1 warning: manually reimplementing `div_ceil`
+== n2304-kmax4096
+      6 warning: manual implementation of `.is_multiple_of()`
+      3 warning: the loop variable `k` is used to index `KINDS`
+      2 warning: the loop variable `k` is used to index `sv`
+      2 warning: method `next` can be confused for the standard trait method `std::iter::Iterator::next`
+      1 warning: very complex type used. Consider factoring parts into `type` definitions
+      1 warning: the loop variable `k` is used to index `p`
+      1 warning: the loop variable `k` is used to index `dpub`
+      1 warning: the loop variable `k` is used to index `a`
+      1 warning: the loop variable `i` is used to index `u`
+      1 warning: `pqzh-ligero` (test "multi") generated 1 warning
+      1 warning: `pqzh-ligero` (test "attacks") generated 2 warnings
+      1 warning: `pqzh-ligero` (lib test) generated 14 warnings (14 duplicates)
+      1 warning: `pqzh-ligero` (lib) generated 14 warnings (run `cargo clippy --fix --lib -p pqzh-ligero -- ` to apply 7 suggestions)
+      1 warning: `pqzh-ligero` (bin "ligero_export" test) generated 1 warning (1 duplicate)
+      1 warning: `pqzh-ligero` (bin "ligero_export") generated 1 warning
+      1 warning: `pqzh-ligero` (bin "ligero_bench" test) generated 1 warning (1 duplicate)
+      1 warning: `pqzh-ligero` (bin "ligero_bench") generated 1 warning
+      1 warning: manually reimplementing `div_ceil`
+== n2560-kmax16384
+      6 warning: manual implementation of `.is_multiple_of()`
+      3 warning: the loop variable `k` is used to index `KINDS`
+      2 warning: the loop variable `k` is used to index `sv`
+      2 warning: method `next` can be confused for the standard trait method `std::iter::Iterator::next`
+      1 warning: very complex type used. Consider factoring parts into `type` definitions
+      1 warning: the loop variable `k` is used to index `p`
+      1 warning: the loop variable `k` is used to index `dpub`
+      1 warning: the loop variable `k` is used to index `a`
+      1 warning: the loop variable `i` is used to index `u`
+      1 warning: `pqzh-ligero` (test "multi") generated 1 warning
+      1 warning: `pqzh-ligero` (test "attacks") generated 2 warnings
+      1 warning: `pqzh-ligero` (lib test) generated 14 warnings (14 duplicates)
+      1 warning: `pqzh-ligero` (lib) generated 14 warnings (run `cargo clippy --fix --lib -p pqzh-ligero -- ` to apply 7 suggestions)
+      1 warning: `pqzh-ligero` (bin "ligero_export" test) generated 1 warning (1 duplicate)
+      1 warning: `pqzh-ligero` (bin "ligero_export") generated 1 warning
+      1 warning: `pqzh-ligero` (bin "ligero_bench" test) generated 1 warning
+      1 warning: `pqzh-ligero` (bin "ligero_bench") generated 1 warning (1 duplicate)
+      1 warning: manually reimplementing `div_ceil`

@@ -1,9 +1,12 @@
 /*
  * P6-Z21 differential (lazer#26, docs/research/pqz-z21-norm.md): z21-inflated proofs of all six relations, verified
  * by both verifiers in-process. Mutated proofs never reach the z2 norm check (they fail the final hash first), so the
- * proofs come from the cheating prover of sv/review/normpoc_hooks.h, mode 4: the first polynomial of y21 times k,
- * the z2 rejection and the prover's own ||y2|| check skipped. For k = round(1.25^j), j = 0 .. JMAX, ||(z21, z22)||^2
- * sweeps from honest to far above Bsq, through the bound. Per case: pqz_verify and pqz_verify_fast must agree, and
+ * proofs come from the cheating prover of sv/review/normpoc_hooks.h, mode 4: ||z21||^2 grown as with the first
+ * polynomial of y21 times k, in one coefficient (R0 fix gate), the z2 rejection and the prover's own ||y2|| check
+ * skipped. For k = round(1.25^j), j = 0 .. JMAX, ||(z21, z22)||^2
+ * sweeps from honest to far above Bsq, through the bound; a relation not yet rejected at JMAX goes on (j <= JCAP) until
+ * its first reject, so every relation crosses its own bound (8b review I1: at n2048-kmax1024 R_TXM8 and at n2560-kmax16384 most
+ * relations stayed below Bsq at k = 1010). Per case: pqz_verify and pqz_verify_fast must agree, and
  * both must accept exactly when the prover's ||(z21, z22)||^2 <= Bsq (the verifier's ||(z21, w - gamma w1)||^2 is
  * that same vector). Linked only against the patched-prover library of review.sh (build/review/poc), never into a
  * production build.
@@ -17,20 +20,39 @@
 #include "../../test/pqz_sv_diff.c"
 #undef main
 #include <math.h>
+#define JCAP 48 /* k = 1.25^48 ~ 45,000: z2sq stays far below 2^63 at every set (it stops at the first reject) */
 
 extern int pqz_poc_mode;
 extern int64_t pqz_poc_k, pqz_poc_z21sq, pqz_poc_z2sq;
 
-/* params/pqz_{reg,tx,burn,ds,dr,tx0}_params.h, then the R_TXM shapes' headers (M = 1: tx / tx0, txm2, txm4, txm8,
-   txm20, txm40, txm80, oversize txm16, txm160): <name>_Bsq = floor(Bound_()^2) */
-static const int64_t BSQ[NREL] = { 22226101053479LL,   384257620087633LL,  384257620087633LL,  4636547823165LL,
-                                   1490938094717228LL, 384257620087633LL,  384257620087633LL,  384257620087633LL,
-                                   384257620087633LL,  7393984317519398LL, 384257620087633LL,  384257620087633LL,
-                                   384257620087633LL,  7393984317519398LL,
+/* each relation's <rel>_Bsq = floor(Bound_()^2) from the set's generated headers (build/include, set.sh): the six P6e
+   forms, then the R_TXM shapes in TXD order (M = 1 on R_TX's / R_TX0's parameters, as pqz_rel.c's TXM[]) */
+#include "lazer.h"
+#include "pqz_burn_params.h"
+#include "pqz_dr_params.h"
+#include "pqz_ds_params.h"
+#include "pqz_reg_params.h"
+#include "pqz_tx0_params.h"
+#include "pqz_tx_params.h"
+#include "pqz_txm20_params.h"
+#include "pqz_txm2_params.h"
+#include "pqz_txm40_params.h"
+#include "pqz_txm4_params.h"
+#include "pqz_txm80_params.h"
+#include "pqz_txm8_params.h"
 #ifdef PQZ_TXM_OVERSIZE
-                                   416994374581420LL, 1619251171041139LL,
+#include "pqz_txm160_params.h"
+#include "pqz_txm16_params.h"
+#endif
+static const int_struct *const BSQL[NREL] = { pqz_reg_Bsq,  pqz_tx_Bsq,   pqz_burn_Bsq,  pqz_ds_Bsq,
+                                          pqz_dr_Bsq,   pqz_tx0_Bsq,  pqz_tx_Bsq,    pqz_txm2_Bsq,
+                                          pqz_txm4_Bsq, pqz_txm8_Bsq, pqz_tx0_Bsq,   pqz_txm20_Bsq,
+                                          pqz_txm40_Bsq, pqz_txm80_Bsq,
+#ifdef PQZ_TXM_OVERSIZE
+                                          pqz_txm16_Bsq, pqz_txm160_Bsq,
 #endif
 };
+static int64_t BSQ[NREL];
 
 int
 main (int argc, char **argv)
@@ -43,6 +65,15 @@ main (int argc, char **argv)
   const char *amb = getenv ("PQZ_ARENA_MB");
   const size_t arena_bytes = amb != NULL ? (size_t)atoi (amb) << 20 : ARENA_BYTES;
   xs = 0x5A21D1FF00000001ULL;
+  for (int rel = 0; rel < NREL; rel++) /* every set's Bsq is one limb < 2^63 (the header's higher limbs, if any, 0) */
+    {
+      if (BSQL[rel]->neg || BSQL[rel]->limbs[0] > INT64_MAX)
+        return 2;
+      for (unsigned int i = 1; i < BSQL[rel]->nlimbs; i++)
+        if (BSQL[rel]->limbs[i] != 0)
+          return 2;
+      BSQ[rel] = (int64_t)BSQL[rel]->limbs[0];
+    }
   if (pqz_init (malloc (arena_bytes), arena_bytes) != 0)
     return 2;
   txm_tables ();
@@ -55,7 +86,7 @@ main (int argc, char **argv)
       int64_t last = 0;
       if (!(mask >> rel & 1))
         continue;
-      for (int j = 0; j <= jmax; j++)
+      for (int j = 0; j <= jmax || (rej[rel] == 0 && j <= JCAP); j++)
         {
           const int64_t k = (int64_t)llround (pow (1.25, j));
           if (k == last)

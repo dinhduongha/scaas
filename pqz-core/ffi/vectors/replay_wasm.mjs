@@ -5,35 +5,44 @@
 // in wasm32 (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena; S3): there the native proof is verified through the wasm32
 // precompile. The Rust backend (default) proves M = 8 too (port plan Task 12); the module's m8_refused() tells which.
 // Prints JSON lines; exit 1 on any difference.
-//   node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
-import { readFileSync } from 'node:fs';
+//   [PQZ_SET=<set>] node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
+// default dir: the set's vectors, PQZ_SET default n2304-kmax4096 (the builds' default, plan 5h Task 8d; n2048-kmax1024:
+// smartcontracts/vectors/pqz/ itself)
+// A parameter set without PQZH (none of the sets with pqz-ffi since plan 5h Task 8c part 2): its directory has no
+// proof_pqzh.json, and only the PQZL id is replayed.
+import { existsSync, readFileSync } from 'node:fs';
 
-const [file, dir = new URL('../../../smartcontracts/vectors/pqz/', import.meta.url).pathname] = process.argv.slice(2);
+const SET = process.env.PQZ_SET || 'n2304-kmax4096';
+const [file, dir = new URL(`../../../smartcontracts/vectors/pqz/${SET === 'n2048-kmax1024' ? '' : SET + '/'}`, import.meta.url).pathname] = process.argv.slice(2);
 const J = (n) => JSON.parse(readFileSync(`${dir}/${n}`, 'utf8'));
 const hex = (s) => Uint8Array.from(s.match(/../g).map((b) => parseInt(b, 16)));
 const out = (o) => console.log(JSON.stringify(o));
-const ID = { pqzl: J('proof_pqzl.json').proof_system_id, pqzh: J('proof_pqzh.json').proof_system_id };
+const IDS = ['pqzl', 'pqzh'].filter((id) => existsSync(`${dir}/proof_${id}.json`));
+const ID = Object.fromEntries(IDS.map((id) => [id, J(`proof_${id}.json`).proof_system_id]));
 const withId = (s, id) => hex(s.slice(0, 64) + ID[id] + s.slice(128));
 const stmts = {};
 for (const f of ['statement_transfer.json', 'statement_burn.json', 'statement_refresh.json', 'statement_register.json',
   'statement_disclose.json']) for (const r of J(f).rows) stmts[r.form] = r.stmt;
 const multi = {};
 for (const r of J('statement_transfer_multi.json').rows) multi[r.case] = r;
+// the op 7 disclosures (R0-1) by case, under their own op
+for (const r of J('statement_transfer_multi.json').disclosures || []) stmts[r.case] = r.stmt;
 
 const cases = [];
-const add = (name, op, stmt, wit, rnd, o) => { for (const id of ['pqzl', 'pqzh'])
+const add = (name, op, stmt, wit, rnd, o) => { for (const id of IDS)
   cases.push({ id, form: name, op, stmt: withId(stmt, id), wit: hex(wit), rnd: hex(rnd), proof: o[id].proof }); };
-for (const id of ['pqzl', 'pqzh'])
+for (const id of IDS)
   for (const r of J(`proof_${id}.json`).rows) {
     const m = r.case && multi[r.case];
-    cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.form], id),
+    cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.case || r.form], id),
       wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof, pqzlM: m && id === 'pqzl' ? m.M : 0 });
   }
 const w = J('worstcase_noise.json');
 // the register statement: opTag || id || message || pk; pk comes from the receiver's R_REG witness only in C, so take
 // it from the bound debit's statement (pk_f at 640)
 const b = w.bound;
-const pk = b.debit.stmt.slice(2 * 640, 2 * (640 + 16384));
+const pkBytes = J('statement_register.json').rows[0].stmt_bytes - 96; // the set's pk (v3: 16,384 B)
+const pk = b.debit.stmt.slice(2 * 640, 2 * (640 + pkBytes));
 const regTag = J('statement_register.json').rows[0].stmt.slice(0, 64);
 add('bound R_REG', 3, regTag + ID.pqzl + b.receiver.register.message + pk, b.receiver.register.wit, b.receiver.register.rnd32,
   b.receiver.register);

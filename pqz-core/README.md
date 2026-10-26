@@ -168,7 +168,11 @@ prover-side zero-knowledge fixes, D-2 and D-3).
 The prices live in the chainspec section `engine.Pqz` (a new price, or a new op as op 7 was, takes effect as a new schedule at a future timestamp). Status 4 (a node
 fault) makes the node log `PQZ-NODE-FAULT` and exit with code 120; it never turns into a verdict. Live run: probes and e2e pass
 (`nethermind/runs/2026-10-16-live.txt`); roll-out and rollback: [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md).
-Chain 22776 (the future mainnet) gets the same addresses only after the audit and the licence clearance.
+The plugin of the next image moves the three addresses to the 32-bit form `0x000000000000000000000000000000005caa0f01`
+/ `…5caa0012` / `…5caa0013` and takes the input limit from the library (`pqz_max_input()`, 524,288 B at the default set
+`n2304-kmax4096`) (spec 2026-10-20 §12 items 7 and 9; built in plan 5h Task 8d part 1, not yet rolled out; the chainspec rows
+for the new sets' ids need the calibration of plan 5h Task 9). Chain 22776 (the future mainnet) gets the same addresses only
+after the audit and the licence clearance.
 
 ## 4. Statement forms, ids, limits
 
@@ -215,12 +219,17 @@ layout — statements, objects, both proof formats, the precompile input and `OP
   - in the browser (wasm32), PQZL proves up to M = 8 with the Rust core (`pqz-ffi`'s default backend, 117 MiB at
     M = 8, run `d6`); the C core proves only M ≤ 4 there (memory, §5.4).
 
-The two proof system ids (a change to either proof system needs a new id):
+The proof system ids (a change to either proof system needs a new id): since plan 5h Task 8d one PQZL and one PQZH id
+per parameter set, from the set's `set.toml` labels (all sets: [params/sets/README.md](params/sets/README.md#proofsystemids-per-set-plan-5h-task-8d-part-1)):
 
-| `proofSystemId` | keccak256 of | Value | Frozen at |
+| `proofSystemId` | keccak256 of | Value | Status |
 |---|---|---|---|
-| PQZL v3 | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3` | `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | vectors `8af584b` (branch `pqzl-fs3`); its final gate before the merge |
-| PQZH | `scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1` | `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | gate B |
+| PQZL, `n2304-kmax4096` (default) | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5` | `0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e` | current (R0 review fix, 2026-10-25) |
+| PQZH, `n2304-kmax4096` | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3` | `0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead` | current (R0 review fix, 2026-10-25) |
+| PQZL v4 (retired by the R0 fix) | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v4` | `0x15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a` | was current from plan 5h Task 8d part 1 |
+| PQZH v2 (retired by the R0 fix) | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v2` | `0xe4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730` | was current from plan 5h Task 8d part 1 |
+| PQZL v3 (retired by 8d) | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3` | `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | was frozen at vectors `8af584b` (branch `pqzl-fs3`) |
+| PQZH v1 (retired by 8d) | `scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1` | `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | was frozen at gate B |
 
 Retired: PQZL v2 (`…/v2`, `0x2e07e6ed…798c2f`, frozen at gate A), **forgeable** (lazer#28), removed from the accepted
 set and from `pqz-stmt` on 2026-10-19. The SCaaS testnet still runs it (image `pqz2`) until the v3 roll-out resets the chain
@@ -230,10 +239,10 @@ Size and time limits:
 
 | Limit (enforced by `pqz-stmt`) | Value |
 |---|---|
-| `MAX_INPUT` (a larger input makes the call revert) | 393,216 B |
+| `MAX_INPUT` (a larger input makes the call revert) | the set's, `pqz_max_input()`: 524,288 B at `n2304-kmax4096` (the default build), `n2560-kmax16384` and `n2816-kmax65536`, 393,216 B at `n2048-kmax1024` |
 | `MAX_PROOF`, PQZL | 98,304 B |
-| `MAX_PROOF`, PQZH | 262,144 B (exact maximum at the proven preset: 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor) |
-| Largest possible input | PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`) |
+| `MAX_PROOF`, PQZH | the set's: 262,144 B (`n2560-kmax16384`: 327,680 B; none at `n2816-kmax65536`, which has no PQZH); at `n2048-kmax1024`'s proven preset the exact maximum is 235,470 B for `R_TX`, 236,196 B for multi-recipient M = 4 with the auditor |
+| Largest possible input | `n2048-kmax1024`: PQZH 369,193 B (op 7, M = 4, auditor on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7, M = 8, auditor on, proof at `MAX_PROOF`). `n2816-kmax65536` (PQZL only): 394,117 B (R_TXM M = 8 with the auditor: 5 + 295,808 + 98,304). Other sets: [params/sets/README.md](params/sets/README.md#pqzh-per-set-preset-and-limits-plan-5h-task-8c-part-2) |
 | Proof length | `1 ≤ len(proof) ≤ MAX_PROOF(id)` |
 | Verify time | **≤ 60 ms at p99** on the chain host, and also in wasm32 (owner decision 2026-10-14) |
 
@@ -591,7 +600,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 |---|---|
 | run the full gate A / B checklist (KAT, fix checks, differential, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, fuzz smoke) | `scripts/capped pqz-core/gate.sh <label>` |
 | build PQZL (native + wasm) | `pqzl/build.sh all` |
-| check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py pqzl/kat/lazer-3330e48.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
+| check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py params/sets/<set>/lazer-3330e48-kat.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
 | test PQZH | `(cd pqzh/ligero && cargo test --release --offline)` |
 | test the precompile boundary | `scripts/capped pqz-core/ffi/run.sh <label>` |
 | check every vector file | `scripts/capped pqz-core/ffi/vectors/run.sh <label>` |
@@ -623,7 +632,7 @@ node pqzl/test/run_wasm.mjs 3 1                                  # the same unde
 PQZ_VERIFY=fast pqzl/build/native/pqz_bench 2 200                # time pqz_verify_fast (wasm: PQZ_VERIFY=fast|both node ...)
 pqzl/build/native/pqz_sv_diff 10 5 2 1 10                        # both verifiers on honest + mutated proofs, must agree
 pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json
-python3 -I pqzl/kat/check.py pqzl/kat/lazer-3330e48.json pqzl/build/native/kat-pqz.json   # must print 19/19
+python3 -I pqzl/kat/check.py params/sets/<set>/lazer-3330e48-kat.json pqzl/build/native/kat-pqz.json   # must print 19/19
 pqzl/check_tbox_fixes.sh                                       # after pqzl/build.sh native: the tbox fixes and the z21 check are in place
 pqzl/sv/review/review.sh zdiff 1                                 # z21-inflated proofs, all five relations: both verifiers agree
 pqzl/sv/check_sv_fixes.sh                                        # after pqzl/build.sh native: pqz_verify_fast follows both fixes
@@ -661,7 +670,7 @@ pqzl/kat/build-lazer-dump.sh <work dir> v4      # upstream golden dump (v3 = AVX
 
 All three refuse other LaZer / estimator commits and run pinned images. The codegen takes minutes; headers are checked
 in and regenerated only on purpose. The v4 golden dump needs an AVX-512 CPU or Intel SDE
-(`sde64 -spr -- ./lazer_dump-v4 > pqzl/kat/lazer-3330e48.json`). Sizing details: [pqzl/params/README.md](pqzl/params/README.md).
+(`sde64 -spr -- ./lazer_dump-v4 > params/sets/<set>/lazer-3330e48-kat.json`). Sizing details: [pqzl/params/README.md](pqzl/params/README.md).
 
 </details>
 
@@ -755,7 +764,7 @@ run files keep the paths of their day.
 | `pqzl/lazer/` | LaZer `3330e48` subset. The pristine copy is commit `c91b3ab`; changes are in place, marked `PQZ:`; SHAKE256 added to `shake128.c`. Licence `pqzl/lazer/LICENSE` |
 | `pqzl/src/` | the rewritten layers and the C ABI (`pqz.h`): `pqz_mpn.h`, `pqz_ntt.c`, `pqz_fixexp.h`, `pqz_arena.c`, `pqz_rt.h`, `pqz_aes_gen.h` (from `gen_aes.py`); relations `R_REG`, `R_TX`, `R_TX0` (op 1 by statement length), `R_BURN`, `R_DS`, `R_DR` (`pqz_rel.c`); KeyGen / Enc / Dec from seeds (`pqz_keys.c`, deterministic); the specialised verifier (`pqz_sv.c`); wasm runtime (`pqz_wasm_rt.c`), `freestanding/` headers |
 | `pqzl/params/` | LaZer codegen (`codegen/`), relation specs `{reg,tx,tx0,burn,ds,dr}_params.sage`, generated headers `pqz_*_params.h`, `regen.sh`, parameter sizing (`e_s0.py`, `e_s1_proof.sage`, `estimator*.txt`), `anon/` (multi-recipient transfer sizing); [pqzl/params/README.md](pqzl/params/README.md) |
-| `pqzl/kat/` | arithmetic-layer KAT: `lazer_dump.c` (one source, upstream or pqz-core backend), golden `lazer-3330e48.json`, `check.py`, `build-lazer-dump.sh` |
+| `pqzl/kat/` | arithmetic-layer KAT: `lazer_dump.c` (one source, upstream or pqz-core backend), `check.py`, `build-lazer-dump.sh` (the golden files per set: `params/sets/<set>/lazer-3330e48-kat.json`) |
 | `pqzl/test/` | `pqz_bench.c` (prove, verify, tamper checks, the hedging check, timings, a hash of the proofs), `run_wasm.mjs` (the same under node), `pqz_keys_kat.c` (SHAKE256 / KeyGen / Enc / Dec KAT and round trip, checked by `pqz_kat.py --c-keys`), `pqz_sv_diff.c`, `pqz_sv_fuzz.c`, runs `runs/` |
 | `pqzl/sv/` | specialised verifier checks (`docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`), `bench.sh` (portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer), `research/pqzl-measure.sh` (all relations in one capped job: diff, bench, wasm both, ASan, KAT, both fix checks, memory per op), `check_sv_fixes.sh` (fails unless the differential test catches either tbox fix reverted in `pqz_sv.c`), runs `runs/`; `review/` the independent review's reproducers (`review.sh dom | norm | zdiff | fuzz`: cheating provers past the final hash, the z21 differential `z21diff.c`; never compiled by `pqzl/build.sh`) |
 | `research/pqzl-measure/` | the PQZL measurement round: `bench.sh` (build, KAT, `R_REG` / `R_TX` proof hashes, timings), `relfix.sh` (after the owner's fix-ups of 2026-10-13: build, KAT, tbox fixes, proof hashes, arena peak per relation, ASan + UBSan, timings of all six), raw runs `runs/` (latest `fs4-*`, PQZL v3) |
@@ -803,6 +812,7 @@ run files keep the paths of their day.
 | 2026-10-17 | **gate A (PQZL) and gate B (PQZH) passed** (`gate.sh`, runs `runs/gate/2026-10-17-*`, decisions.md CTR-PQZ-09): KAT 19/19, fix checks, differential with 0 disagreements, vector checks, wasm32 replay byte-equal, `pqz-ffi` tests, clean fuzzing; for PQZH also every proof ≤ 262,144 B, every verify ≤ 60 ms p99, and the review of the modified Ligero zero-knowledge construction. Both ids are frozen. |
 | 2026-10-17 | **the freeze**: `artifact/runs/freeze-2026-10-17/` (233 checks ok), `expected-results.json` frozen |
 | 2026-10-19 | **PQZL v3** (branch `pqzl-fs3`, not merged yet): the Fiat–Shamir fix for lazer#28 in all four PQZL verifiers and both provers, the z2 rejection and β sign fixes, `proofSystemId` v3, regenerated vectors; v2 retired (STATUS.md, section "PQZL v3") |
+| 2026-10-22 | **parameter sets** (plan 5h Task 8b, branch `pqz-16k`): one directory per set under [`params/sets/`](params/README.md), chosen at compile time (C `PQZ_SET`, Rust feature `set-<set>`), one set per build; the PQZL C and Rust cores, `pqz-stmt`, `pqz-ffi`, `pqz-vectors`, the fuzz targets and `pqz_kat.py` set-generic; `n2048-kmax1024` (the frozen set, byte-identical), `n2304-kmax4096` (the default, owner 2026-10-21: its own vectors, PQZH compiled out until 8c), `n2560-kmax16384` (shippable: its own vectors, PQZH from 8c) and `n2816-kmax65536` (core only, no PQZH); add a set = `set.toml` + `params/sets/make.sh <set> all` |
 
 **In progress:** **PQZL in Rust** ([plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
 `pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate is the production PQZL core

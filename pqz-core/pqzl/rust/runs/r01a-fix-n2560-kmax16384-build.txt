@@ -1,0 +1,137 @@
+# clippy: no float arithmetic in the crate (the production build: default features; then with the oracle,
+# the hooks and the bench; then the wasm/ harness)
+$ cargo clippy -j2 --release --offline --lib -- -D clippy::float_arithmetic
+    Checking typenum v1.20.1
+    Checking keccak v0.1.6
+    Checking cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+    Checking cpufeatures v0.2.17
+    Checking generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking inout v0.1.4
+    Checking block-buffer v0.10.4
+    Checking cipher v0.4.4
+    Checking digest v0.10.7
+    Checking aes v0.8.4
+    Checking sha3 v0.10.8
+warning: the loop variable `i` is used to index `oc`
+   --> src/arith/poly.rs:487:18
+    |
+487 |         for i in 0..D {
+    |                  ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+    |
+487 -         for i in 0..D {
+487 +         for (i, <item>) in oc.iter().enumerate().take(D) {
+    |
+
+warning: this function has too many arguments (8/7)
+   --> src/rel.rs:252:5
+    |
+252 | /     fn evaleq(
+253 | |         &mut self,
+254 | |         pkrow: Option<&mut PolyVec>,
+255 | |         off_x: usize,
+...   |
+260 | |         rhs: i64,
+261 | |     ) -> Result<(), Error> {
+    | |__________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_arguments
+    = note: `#[warn(clippy::too_many_arguments)]` on by default
+
+warning: `pqzl` (lib) generated 2 warnings
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.77s
+[rc=0]
+$ cargo clippy -j2 --release --offline --features c-oracle,test-hooks,bench --lib --bins --tests -- -D clippy::float_arithmetic
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+    Checking zmij v1.0.23
+    Checking serde_core v1.0.229
+    Checking memchr v2.8.3
+    Checking itoa v1.0.18
+    Checking serde_json v1.0.154
+warning: the loop variable `i` is used to index `oc`
+   --> src/arith/poly.rs:487:18
+    |
+487 |         for i in 0..D {
+    |                  ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+    |
+487 -         for i in 0..D {
+487 +         for (i, <item>) in oc.iter().enumerate().take(D) {
+    |
+
+warning: this function has too many arguments (8/7)
+   --> src/rel.rs:252:5
+    |
+252 | /     fn evaleq(
+253 | |         &mut self,
+254 | |         pkrow: Option<&mut PolyVec>,
+255 | |         off_x: usize,
+...   |
+260 | |         rhs: i64,
+261 | |     ) -> Result<(), Error> {
+    | |__________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#too_many_arguments
+    = note: `#[warn(clippy::too_many_arguments)]` on by default
+
+warning: `pqzl` (lib) generated 2 warnings
+warning: `pqzl` (lib test) generated 2 warnings (2 duplicates)
+warning: unused import: `std::path::PathBuf`
+ --> tests/oracle_codec.rs:9:5
+  |
+9 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `pqzl` (test "oracle_codec") generated 1 warning (run `cargo clippy --fix --test "oracle_codec" -p pqzl -- -D clippy::float_arithmetic` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 14.75s
+[rc=0]
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings -D clippy::float_arithmetic
+   Compiling version_check v0.9.5
+    Checking typenum v1.20.1
+   Compiling generic-array v0.14.7
+    Checking cfg-if v1.0.5
+    Checking keccak v0.1.6
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking inout v0.1.4
+    Checking digest v0.10.7
+    Checking cipher v0.4.4
+    Checking sha3 v0.10.8
+    Checking aes v0.8.4
+    Checking pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 2.11s
+[rc=0]
+# the measurement build of wasm/ (d6.sh, reproduce.sh --multi-bench): features oversize and wasm-m8
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown --features pqzl/oversize,pqzl/wasm-m8 -- -D warnings -D clippy::float_arithmetic
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+    Checking pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 1.14s
+[rc=0]
+# wasm32 (default features)
+$ cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling keccak v0.1.6
+   Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling crypto-common v0.1.7
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling aes v0.8.4
+   Compiling sha3 v0.10.8
+    Finished `release` profile [optimized + debuginfo] target(s) in 5.54s
+[rc=0]

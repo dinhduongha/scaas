@@ -1,0 +1,135 @@
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
+    Finished `release` profile [optimized] target(s) in 1.95s
+     Running unittests src/lib.rs (target/n2304-kmax4096/release/deps/pqz_stmt-1598fd3638288aae)
+
+running 13 tests
+test tests::coefficient_codec ... ok
+test tests::lengths_and_constants ... ok
+test tests::bundle_and_opening ... ok
+test tests::fields_land_where_the_spec_says ... ok
+test tests::multi_lengths_and_sets ... ok
+test tests::multi_m1_body_is_op1_body ... ok
+test tests::other_sets_ids_refused ... ok
+test tests::every_d15_r6_rule_rejects ... ok
+test tests::round_trip_every_form_both_ids ... ok
+test tests::precompile_input ... ok
+test tests::retired_ids_refused ... ok
+test tests::multi_every_rule_rejects ... ok
+test tests::multi_round_trip_every_built_shape_fee_0 ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/xcheck.rs (target/n2304-kmax4096/release/deps/xcheck-1c38fd9159020fec)
+
+running 1 test
+test xcheck_c_and_pqz_kat ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pqz_stmt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 8.55s
+     Running unittests src/lib.rs (target/n2304-kmax4096/release/deps/pqzh_ligero-a069e9e9fea678f9)
+
+running 15 tests
+test cs::tests::ids_are_the_labels_keccak ... ok
+test cs::tests::op_tags_hash ... ok
+test fq::tests::field_facts_and_ext ... ok
+test cs::tests::ring_recurrence_matches_naive ... ok
+test ligero::tests::limits_exact ... ok
+test fq::tests::branch_free_matches_reference ... ok
+test ligero::tests::proven_is_the_model ... ok
+test ligero::tests::rng_hedged_with_witness ... ok
+test fq::tests::mul_and_red_match_naive ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+test cs::tests::branch_free_rounding_matches_reference ... ok
+test fq::tests::limb_matches_u128 ... ok
+test ligero::tests::max_len_exact_multiproof_tight ... ok
+test fft::tests::fft_matches_naive_all_radices ... ok
+test ligero::tests::prover_retries_over_limit ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.26s
+
+     Running unittests src/bin/ligero_bench.rs (target/n2304-kmax4096/release/deps/ligero_bench-0e53244200d04b54)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ligero_export.rs (target/n2304-kmax4096/release/deps/ligero_export-05ef068275053cf7)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ligero_kat.rs (target/n2304-kmax4096/release/deps/ligero_kat-0fb5034ac6ce2e35)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/spike_retry.rs (target/n2304-kmax4096/release/deps/spike_retry-d4504423d60c2644)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attacks.rs (target/n2304-kmax4096/release/deps/attacks-a4150c58339b279b)
+
+running 17 tests
+test dr_noise_range_edges ... ok
+test digit_out_of_range ... ok
+test e2_norm_exceeded ... ok
+test coefficient_out_of_range ... ok
+test norm_exceeded_small_coefficients ... ok
+test overspend ... ok
+test other_ids_and_length_bound_rejected ... ok
+test debit_noise_range_edges ... ok
+test transfer_forms_cross_rejected ... ok
+test hedged_proofs ... ok
+test scalar_word_above_2_64 ... ok
+test mutations_960_per_relation_rejected ... ok
+test wrong_public_amount ... ok
+test evm_fixtures ... ok
+test wrong_witness_ring_row ... ok
+test randomness_norm_and_range ... ok
+test honest_all_presets_cross_and_hiding ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 48.86s
+
+     Running tests/multi.rs (target/n2304-kmax4096/release/deps/multi-25011a8027bdd01f)
+
+running 8 tests
+test rel_of_words ... ok
+test hedged_and_deterministic ... ok
+test op1_op7_and_shapes_separated ... ok
+test noise_range_edges ... ok
+test mutations_960_per_shape_rejected ... ok
+test statement_changes_rejected ... ok
+test honest_every_shape ... ok
+test negative_witnesses has been running for over 60 seconds
+test negative_witnesses ... FAILED
+
+failures:
+
+---- negative_witnesses stdout ----
+R_TXM1: 24 negative witnesses + 3 ring rows refused and rejected
+R_TXM2: 25 negative witnesses + 3 ring rows refused and rejected
+
+thread 'negative_witnesses' (2632061) panicked at tests/multi.rs:235:13:
+R_TXM4 leg 4 encrypted with group 0's randomness
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    negative_witnesses
+
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 119.14s
+
+error: test failed, to rerun pass `--test multi`

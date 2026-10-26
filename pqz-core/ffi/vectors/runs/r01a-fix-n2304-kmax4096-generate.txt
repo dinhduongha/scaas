@@ -1,0 +1,88 @@
+keys / cbd / matrix / enc: 0.4 s
+pqzl TRANSFER           proof  46662 B  prove+verify 6.07 s
+pqzl TRANSFER0          proof  46329 B  prove+verify 4.83 s
+pqzl BURN               proof  45835 B  prove+verify 5.51 s
+pqzl REFRESH            proof  45819 B  prove+verify 5.51 s
+pqzl REGISTER           proof  30381 B  prove+verify 2.05 s
+pqzl DISCLOSE-SENDER    proof  30814 B  prove+verify 1.98 s
+pqzl DISCLOSE-RECEIVER  proof  31546 B  prove+verify 1.25 s
+pqzl DISCLOSE-AUDITOR   proof  31558 B  prove+verify 1.40 s
+pqzh TRANSFER           proof 248120 B  prove+verify 3.63 s
+pqzh TRANSFER0          proof 247240 B  prove+verify 4.36 s
+pqzh BURN               proof 248504 B  prove+verify 3.92 s
+pqzh REFRESH            proof 248728 B  prove+verify 4.33 s
+pqzh REGISTER           proof 204872 B  prove+verify 2.80 s
+pqzh DISCLOSE-SENDER    proof 204872 B  prove+verify 2.21 s
+pqzh DISCLOSE-RECEIVER  proof 204968 B  prove+verify 2.30 s
+pqzh DISCLOSE-AUDITOR   proof 204680 B  prove+verify 1.58 s
+pqzl M1-on              proof  46678 B  prove+verify 5.23 s
+pqzh M1-on              proof 249400 B  prove+verify 1.93 s
+pqzl M2-on              proof  47503 B  prove+verify 1.84 s
+pqzh M2-on              proof 248872 B  prove+verify 1.83 s
+pqzl M4-on              proof  63885 B  prove+verify 3.65 s
+pqzh M4-on              proof 293112 B  prove+verify 2.54 s
+pqzl M8-on              proof  80290 B  prove+verify 7.62 s
+pqzl M1-off             proof  46342 B  prove+verify 1.63 s
+pqzh M1-off             proof 246984 B  prove+verify 1.91 s
+pqzl M2-off             proof  46857 B  prove+verify 4.83 s
+pqzh M2-off             proof 248440 B  prove+verify 1.88 s
+pqzl M4-off             proof  47821 B  prove+verify 1.80 s
+pqzh M4-off             proof 249512 B  prove+verify 1.89 s
+pqzl M8-off             proof  64607 B  prove+verify 3.40 s
+pqzl M2-off-two-real    proof  46802 B  prove+verify 2.56 s
+pqzh M2-off-two-real    proof 248152 B  prove+verify 2.06 s
+pqzl M4-off-decoys      proof  47801 B  prove+verify 1.82 s
+pqzh M4-off-decoys      proof 248872 B  prove+verify 1.86 s
+pqzl M8-on-boundary     proof  80288 B  prove+verify 5.45 s
+pqzl M8-on-boundary-leg5-auditor proof  31571 B
+pqzh M8-on-boundary-leg5-auditor proof 204584 B
+pqzl M8-on-boundary-leg6-auditor proof  31543 B
+pqzh M8-on-boundary-leg6-auditor proof 204840 B
+pqzl M4-on-leg2-auditor proof  31547 B
+pqzh M4-on-leg2-auditor proof 204680 B
+pqzl M8-on-boundary-leg6-receiver proof  31551 B
+pqzh M8-on-boundary-leg6-receiver proof 205640 B
+proofs: 114.8 s
+negative: 825 rows (511 decoder, 314 verifier): 142.4 s
+worst case: 160.6 s
+total: 170.8 s
+wrote matrix.json 1087 B
+wrote cbd.json 4345 B
+wrote keygen.json 3020 B
+wrote enc.json 7897 B
+wrote statement_transfer.json 341563 B
+wrote statement_burn.json 114974 B
+wrote statement_refresh.json 114898 B
+wrote statement_register.json 38517 B
+wrote statement_disclose.json 228452 B
+wrote statement_transfer_multi.json 3624054 B
+wrote proof_pqzl.json 2738725 B
+wrote proof_pqzh.json 9803772 B
+wrote negative.json 281970 B
+wrote selftest.json 2356 B
+wrote worstcase_noise.json 3973965 B
+wrote fee0.json 3040777 B
+pqz-vectors: 16 files, 24320372 B
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2304-kmax4096/release/pqz-vectors"
+	User time (seconds): 150.26
+	System time (seconds): 1.34
+	Percent of CPU this job got: 88%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:50.85
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 422664
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 503042
+	Voluntary context switches: 9491
+	Involuntary context switches: 15361
+	Swaps: 0
+	File system inputs: 8
+	File system outputs: 47608
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

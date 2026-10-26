@@ -1,0 +1,52 @@
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling cc v1.8.0
+   Compiling zmij v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+    Finished `release` profile [optimized + debuginfo] target(s) in 33.38s
+     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqzl-78568917ecdc9891)
+
+running 10 tests
+test arith::polymat::tests::views ... ok
+test keys::tests::canonical_short_chunk ... ok
+test arith::spoly::tests::errors_and_order ... ok
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test rand::fixexp::tests::bernoulli_masked_add_eq_shift ... ok
+test rel::tests::bad_length_refused_before_caches ... ok
+test rand::rejection::tests::saturation_near_2_63 ... ok
+test rel::tests::build_refuses_noncanonical ... ok
+test sv::tests::setup_limits_eq_generic ... ok
+test rand::rejection::tests::onetime_rej1 ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.66s
+
+     Running unittests src/bin/bench.rs (target/n2560-kmax16384/release/deps/bench-1e61e619ceeedd6b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/kat_dump.rs (target/n2560-kmax16384/release/deps/kat_dump-c3e70a28a417dfe6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/keys_kat.rs (target/n2560-kmax16384/release/deps/keys_kat-88dd66239cede4e4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cheat_b1.rs (target/n2560-kmax16384/release/deps/cheat_b1-826378ec471c5aaf)
+
+running 1 test
+test cheating_prover_rejected has been running for over 60 seconds
+error: test failed, to rerun pass `--test cheat_b1`
+
+Caused by:
+  process didn't exit successfully: `/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/target/n2560-kmax16384/release/deps/cheat_b1-826378ec471c5aaf` (signal: 4, SIGILL: illegal instruction)

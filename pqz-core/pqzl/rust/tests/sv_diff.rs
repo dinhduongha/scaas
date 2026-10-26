@@ -41,7 +41,7 @@ fn vectors_verify_fast() {
 mod harness {
     use pqzl::{encrypt, keypair_from_secret, test_mutate, Ctx, MAX_PROOF, POLYVEC_BYTES as PV, PROOF_SYSTEM_ID, V_BYTES as VB};
 
-    const Q: u64 = 4_398_046_510_889;
+    const Q: u64 = pqzl::Q;
     const PREFIX: usize = 64;
     const HEADER: usize = 640;
     const HDR_FEE: usize = 256;
@@ -60,11 +60,11 @@ mod harness {
     const TX0_STMT: usize = HEADER + 2 * PV + (PV + VB) + (PV + 2 * VB);
     const BURN_STMT: usize = HEADER + PV + 2 * (PV + VB);
 
-    const fn groups(m: usize) -> usize {
-        m.div_ceil(4)
+    const fn groups(m: usize, a: usize) -> usize {
+        pqzl::txm_groups(m, a)
     }
     const fn txm_stmt(m: usize, a: usize) -> usize {
-        HEADER + (1 + m + a) * PV + (PV + VB) + groups(m) * PV + (m + 1 + a * m) * VB
+        HEADER + (1 + m + a) * PV + (PV + VB) + groups(m, a) * PV + (m + 1 + a * m) * VB
     }
 
     pub const KIND: [&str; 30] = [
@@ -124,7 +124,7 @@ mod harness {
     /// first coefficient byte of the polynomial part of each statement, and its length in coefficients
     fn poly0(rel: usize, stlen: usize) -> (usize, usize) {
         match rel {
-            0 => (PREFIX + 32, 2048),
+            0 => (PREFIX + 32, pqzl::N),
             3 | 4 => (DISC_PK, (DISC_STMT - DISC_PK) / 8),
             _ => (HEADER, (stlen - HEADER) / 8),
         }
@@ -141,8 +141,8 @@ mod harness {
     }
 
     struct Key {
-        s: [i8; 2048],
-        e: [i16; 2048],
+        s: [i8; pqzl::N],
+        e: [i16; pqzl::N],
         pk: Box<[u8; PV]>,
     }
 
@@ -193,8 +193,8 @@ mod harness {
             }
         }
         fn keygen(&mut self) -> Key {
-            let s = self.short8::<2048>(1, 36);
-            let e = self.short16::<2048>(20, 164);
+            let s = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
             let pk = keypair_from_secret(&s, &e).unwrap();
             Key { s, e, pk }
         }
@@ -213,10 +213,10 @@ mod harness {
             st[32..64].copy_from_slice(&PROOF_SYSTEM_ID);
             self.rnd_bytes(&mut st[PREFIX..PREFIX + 32]);
             st[PREFIX + 32..].copy_from_slice(&k.pk[..]);
-            let mut w = vec![0u8; 2048 + 4096];
-            for j in 0..2048 {
+            let mut w = vec![0u8; 3 * pqzl::N];
+            for j in 0..pqzl::N {
                 w[j] = k.s[j] as u8;
-                le16(&mut w[2048 + 2 * j..], k.e[j]);
+                le16(&mut w[pqzl::N + 2 * j..], k.e[j]);
             }
             (st, w)
         }
@@ -229,12 +229,12 @@ mod harness {
             let fee = self.rnd() % 4096 % (bal + 1);
             let v = self.rnd() % (bal - fee + 1);
             let bp = bal - v - fee;
-            let r0 = self.short8::<2048>(1, 36);
-            let e10 = self.short16::<2048>(20, 164);
+            let r0 = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e10 = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
             let e20 = self.short16::<16>(20, 64);
             let t = encrypt(&[&*kf.pk], &[digits(bal)], &r0, &e10, &[e20]).unwrap();
-            let r = self.short8::<2048>(1, 36);
-            let e1 = self.short16::<2048>(20, 164);
+            let r = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e1 = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
             let e2: [[i16; 16]; 3] = core::array::from_fn(|_| self.short16::<16>(20, 64));
             let m = [digits(v), digits(bp), digits(v)];
             let o = encrypt(&[&*kt.pk, &*kf.pk, &*ka.pk], &m, &r, &e1, &e2).unwrap();
@@ -254,20 +254,20 @@ mod harness {
                 st[p..p + part.len()].copy_from_slice(part);
                 p += part.len();
             }
-            let mut w = vec![0u8; 12288 + 96 + 32];
-            for j in 0..2048 {
+            let mut w = vec![0u8; (6 * pqzl::N) + 96 + 32];
+            for j in 0..pqzl::N {
                 w[j] = kf.s[j] as u8;
-                le16(&mut w[2048 + 2 * j..], kf.e[j]);
-                w[6144 + j] = r[j] as u8;
-                le16(&mut w[8192 + 2 * j..], e1[j]);
+                le16(&mut w[pqzl::N + 2 * j..], kf.e[j]);
+                w[(3 * pqzl::N) + j] = r[j] as u8;
+                le16(&mut w[(4 * pqzl::N) + 2 * j..], e1[j]);
             }
             for k in 0..3 {
                 for j in 0..16 {
-                    le16(&mut w[12288 + 32 * k + 2 * j..], e2[k][j]);
+                    le16(&mut w[(6 * pqzl::N) + 32 * k + 2 * j..], e2[k][j]);
                 }
             }
-            w[12384..12400].copy_from_slice(&m[0]);
-            w[12400..12416].copy_from_slice(&m[1]);
+            w[(6 * pqzl::N) + 96..(6 * pqzl::N) + 112].copy_from_slice(&m[0]);
+            w[(6 * pqzl::N) + 112..(6 * pqzl::N) + 128].copy_from_slice(&m[1]);
             if !tx0 {
                 return (st, w);
             }
@@ -279,8 +279,8 @@ mod harness {
                 s0[p..p + part.len()].copy_from_slice(part);
                 p += part.len();
             }
-            let mut w0 = w[..12288 + 64].to_vec(); // s_f, e_f, r, e1, e2_t, e2_f
-            w0.extend_from_slice(&w[12288 + 96..12288 + 128]); // d, d'
+            let mut w0 = w[..(6 * pqzl::N) + 64].to_vec(); // s_f, e_f, r, e1, e2_t, e2_f
+            w0.extend_from_slice(&w[(6 * pqzl::N) + 96..(6 * pqzl::N) + 128]); // d, d'
             (s0, w0)
         }
 
@@ -292,12 +292,12 @@ mod harness {
             let fee = self.rnd() % 4096 % (bal + 1);
             let v = self.rnd() % (bal - fee + 1);
             let bp = bal - v - fee;
-            let r0 = self.short8::<2048>(1, 36);
-            let e10 = self.short16::<2048>(20, 164);
+            let r0 = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e10 = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
             let e20 = self.short16::<16>(20, 64);
             let t = encrypt(&[&*kf.pk], &[digits(bal)], &r0, &e10, &[e20]).unwrap();
-            let r = self.short8::<2048>(1, 36);
-            let e1 = self.short16::<2048>(20, 164);
+            let r = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e1 = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
             let e2 = self.short16::<16>(20, 64);
             let m = digits(bp);
             let o = encrypt(&[&*kf.pk], &[m], &r, &e1, &[e2]).unwrap();
@@ -315,17 +315,17 @@ mod harness {
                 st[p..p + part.len()].copy_from_slice(part);
                 p += part.len();
             }
-            let mut w = vec![0u8; 12288 + 32 + 16];
-            for j in 0..2048 {
+            let mut w = vec![0u8; (6 * pqzl::N) + 32 + 16];
+            for j in 0..pqzl::N {
                 w[j] = kf.s[j] as u8;
-                le16(&mut w[2048 + 2 * j..], kf.e[j]);
-                w[6144 + j] = r[j] as u8;
-                le16(&mut w[8192 + 2 * j..], e1[j]);
+                le16(&mut w[pqzl::N + 2 * j..], kf.e[j]);
+                w[(3 * pqzl::N) + j] = r[j] as u8;
+                le16(&mut w[(4 * pqzl::N) + 2 * j..], e1[j]);
             }
             for j in 0..16 {
-                le16(&mut w[12288 + 2 * j..], e2[j]);
+                le16(&mut w[(6 * pqzl::N) + 2 * j..], e2[j]);
             }
-            w[12320..].copy_from_slice(&m);
+            w[(6 * pqzl::N) + 32..].copy_from_slice(&m);
             (st, w)
         }
 
@@ -334,8 +334,8 @@ mod harness {
             let kt = self.keygen();
             let v = self.rnd();
             let v = v >> (self.rnd() % 64);
-            let r = self.short8::<2048>(1, 36);
-            let e1 = self.short16::<2048>(20, 164);
+            let r = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e1 = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
             let e2 = self.short16::<16>(20, 64);
             let o = encrypt(&[&*kt.pk], &[digits(v)], &r, &e1, &[e2]).unwrap();
             let mut sts = Vec::new();
@@ -352,19 +352,19 @@ mod harness {
                 st[DISC_PK + 2 * PV..].copy_from_slice(&o.vs[0]);
                 sts.push(st);
             }
-            let mut w = vec![0u8; 6144 + if recv { 0 } else { 32 }];
-            for j in 0..2048 {
+            let mut w = vec![0u8; (3 * pqzl::N) + if recv { 0 } else { 32 }];
+            for j in 0..pqzl::N {
                 if recv {
                     w[j] = kt.s[j] as u8;
-                    le16(&mut w[2048 + 2 * j..], kt.e[j]);
+                    le16(&mut w[pqzl::N + 2 * j..], kt.e[j]);
                 } else {
                     w[j] = r[j] as u8;
-                    le16(&mut w[2048 + 2 * j..], e1[j]);
+                    le16(&mut w[pqzl::N + 2 * j..], e1[j]);
                 }
             }
             if !recv {
                 for j in 0..16 {
-                    le16(&mut w[6144 + 2 * j..], e2[j]);
+                    le16(&mut w[(3 * pqzl::N) + 2 * j..], e2[j]);
                 }
             }
             (sts.swap_remove(recv as usize), w)
@@ -376,7 +376,7 @@ mod harness {
         /// auditorOn, the salt form
         fn make_txm(&mut self, t: usize) -> (Vec<u8>, Vec<u8>) {
             let (m, a, _) = TXD[t];
-            let g = groups(m);
+            let (g, lpg) = (groups(m, a), pqzl::txm_lpg(a));
             let (kf, ka) = (self.keygen(), self.keygen());
             let kr: Vec<Key> = (0..m).map(|_| self.keygen()).collect();
             let bal = self.rnd() % (1 << 48);
@@ -389,25 +389,26 @@ mod harness {
                 left -= aj;
             }
             let dp = digits(left);
-            let r0 = self.short8::<2048>(1, 36);
-            let e10 = self.short16::<2048>(20, 164);
+            let r0 = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e10 = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
             let e20 = self.short16::<16>(20, 64);
             let tt = encrypt(&[&*kf.pk], &[digits(bal)], &r0, &e10, &[e20]).unwrap();
             let mut r = Vec::new();
             let mut e1 = Vec::new();
             for _ in 0..g {
-                r.push(self.short8::<2048>(1, 36));
-                e1.push(self.short16::<2048>(20, 164));
+                r.push(self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64));
+                e1.push(self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64));
             }
             let (mut e2, mut e2a, mut u, mut v, mut va) = (Vec::new(), Vec::new(), vec![None; g], Vec::new(), Vec::new());
             for j in 0..m {
                 e2.push(self.short16::<16>(20, 64));
                 e2a.push(self.short16::<16>(20, 64));
-                let o = encrypt(&[&*kr[j].pk], &[dg[j]], &r[j / 4], &e1[j / 4], &[e2[j]]).unwrap();
-                u[j / 4] = Some(o.u);
+                let o = encrypt(&[&*kr[j].pk], &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2[j]]).unwrap();
+                u[j / lpg] = Some(o.u);
                 v.push(o.vs[0]);
                 if a == 1 {
-                    let o = encrypt(&[&*ka.pk], &[dg[j]], &r[j / 4], &e1[j / 4], &[e2a[j]]).unwrap();
+                    let w = [(j % lpg) as u8]; // the copy's window (R0-1)
+                    let o = pqzl::encrypt_win(&[&*ka.pk], &w, &[dg[j]], &r[j / lpg], &e1[j / lpg], &[e2a[j]]).unwrap();
                     va.push(o.vs[0]);
                 }
             }
@@ -443,7 +444,7 @@ mod harness {
             assert_eq!(p, st.len());
 
             let mut w = Vec::new();
-            let se = |s: &[i8; 2048], e: &[i16; 2048], w: &mut Vec<u8>| {
+            let se = |s: &[i8; pqzl::N], e: &[i16; pqzl::N], w: &mut Vec<u8>| {
                 w.extend(s.iter().map(|&x| x as u8));
                 w.extend(e.iter().flat_map(|x| x.to_le_bytes()));
             };

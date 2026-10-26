@@ -36,7 +36,7 @@ mod ct;
 mod rand;
 mod keys;
 #[allow(dead_code)]
-mod params; // generated (plan D8): pqzl/params/to_rust.py
+mod params; // generated (plan D8): pqzl/params/to_rust.py; the parameter set's modules and `params::set`
 mod proof;
 mod rel;
 #[cfg(feature = "sv")]
@@ -53,8 +53,23 @@ pub const OP_DISCLOSE_RECEIVER: u8 = 5;
 pub const OP_TRANSFER_MULTI: u8 = 7;
 /// MAX_PROOF (pq-zero-knowledge.md §8)
 pub const MAX_PROOF: usize = 98_304;
-/// 32 polys x 64 coeffs x be8: a public key or `u`
-pub const POLYVEC_BYTES: usize = 16_384;
+/// The parameter set of this build (owner 2026-10-21: one per build, cargo feature `set-<set>`; pqz-core/params/sets/)
+pub const SET: &str = params::set::SET_NAME;
+/// ring dimension n = k d of the set (secret keys and encryption randomness have n coefficients)
+pub const N: usize = params::set::N;
+/// polys per public key / `u` (k)
+pub const K: usize = params::set::K;
+/// the modulus q of the set
+pub const Q: u64 = params::set::Q;
+/// Delta = floor(q / 2^(MBITS + 2)): the plaintext digits' scale
+pub const DELTA: i64 = params::set::DELTA;
+/// credits per account between refreshes
+pub const K_MAX: usize = params::set::K_MAX;
+/// the norm bounds ||s||, ||r|| (KeyGen / Enc thresholds) and ||e||, ||e1|| of the set
+pub const BETA_S: usize = params::set::BETA_S;
+pub const BETA_E: usize = params::set::BETA_E;
+/// k polys x 64 coeffs x be8: a public key or `u`
+pub const POLYVEC_BYTES: usize = K * 512;
 /// 16 coeffs x be8: one `v`
 pub const V_BYTES: usize = 128;
 /// ciphertext `u || v`
@@ -65,18 +80,26 @@ pub const PREFIX_BYTES: usize = 64;
 pub const HEADER_BYTES: usize = 640;
 /// R_TXM legs built (16 only with feature `oversize`, bench builds)
 pub const TXM_MAX_LEGS: usize = if cfg!(feature = "oversize") { 16 } else { 8 };
+/// legs per randomness group of an audited R_TXM (set.toml s_aud, owner 2026-10-25, R0-1: the auditor copy of leg j sits
+/// at window j mod S_AUD of pk_a^T r_g); groups of 4 without the auditor
+pub const S_AUD: usize = params::set::S_AUD;
+/// R_TXM's legs per group: [`S_AUD`] with the auditor (`aud` = 1), 4 without (`PQZ_TXM_LPG`)
+pub const fn txm_lpg(aud: usize) -> usize {
+    rel::lpg(aud)
+}
+/// R_TXM's randomness groups G = ceil(M / lpg) (`PQZ_TXM_GROUPS`)
+pub const fn txm_groups(m: usize, aud: usize) -> usize {
+    rel::groups(m, aud)
+}
 /// wasm32: `prove` of op 7 only up to this many legs, more is `Error::Input` before any work (= pqz-ffi's
 /// `WASM_PQZL_MAX_LEGS` on this backend); verify takes every M. 8 since port plan Task 12 (owner 2026-10-18, "if it is
 /// enough, raise it"; run `d6`: the M = 8 wasm32 prove peaks at 117.4 MiB, under the 255.6 MiB the C core's M = 4
 /// takes; the C core keeps 4, CTR-PQZ-09). Feature `wasm-m8` (bench builds only) lifts it to `TXM_MAX_LEGS` (16 with
 /// `oversize`)
 pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } else { 8 };
-/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3") (CTR-PQZ-09; v3: the Fiat-Shamir transcript absorbs z3, z4 and h,
-/// P6-FS, lazer#28; v2 is retired, forgeable)
-pub const PROOF_SYSTEM_ID: [u8; 32] = [
-    0x80, 0x79, 0xd6, 0x5b, 0x5e, 0x5c, 0x15, 0xe3, 0x30, 0xf7, 0xe6, 0x5c, 0x87, 0x57, 0x76, 0xdf, 0xc1, 0xb0, 0xf6, 0xc9,
-    0x3c, 0xed, 0x90, 0xc0, 0x45, 0xe8, 0x38, 0x65, 0xd1, 0x16, 0xba, 0xef,
-];
+/// the set's PQZL proofSystemId: keccak256 of its set.toml label `pqzl_id` (gen_set.py, rust/set.rs; plan 5h Task 8d:
+/// one id per set, `.../mlwe-d64k<k>-q<log2q>l4/v4`; v3 and v2 are retired, CTR-PQZ-09). The core only hashes it
+pub const PROOF_SYSTEM_ID: [u8; 32] = params::set::PQZL_ID;
 
 /// The C core's return codes (`pqz_rt.h`, D3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -100,7 +123,8 @@ pub enum Error {
 /// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. Also cleared,
 /// as the C core does since Q-B (`d08e3f9`; review A-3, 2026-10-20): the key helpers' secret key, noise and encryption
 /// randomness (`keys::keypair_from_secret`, `encrypt_raw` with each pk^T r, `decrypt_raw`'s key and plaintext, the
-/// rejected samples of `keygen` / `enc_seed` on their error exits) and the witness parsing's values (`rel::dec_w`,
+/// rejected samples of `keygen` / `enc_seed` on their error exits: C clears its output buffers there since the R0 review
+/// fix, R2-C10) and the witness parsing's values (`rel::dec_w`,
 /// `debit_witness`, `dr_witness`, `set_upsilon`). Not cleared (C clears them since Q-B with its arena,
 /// `pqz_arena_wipe_release`; a gap of this crate): the masks y / y3 / y4 and the z vectors built from them, `r_times`'
 /// products R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
@@ -237,7 +261,7 @@ impl Ctx {
     }
 
     /// [`keypair_from_secret`] with this `Ctx`'s A: same arguments, same result.
-    pub fn keypair_from_secret(&mut self, s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+    pub fn keypair_from_secret(&mut self, s: &[i8; N], e: &[i16; N]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
         keys::keypair_from_secret(&mut self.a, s, e)
     }
 
@@ -246,16 +270,40 @@ impl Ctx {
         &mut self,
         pks: &[&[u8; POLYVEC_BYTES]],
         msgs: &[[u8; 16]],
-        r: &[i8; 2048],
-        e1: &[i16; 2048],
+        r: &[i8; N],
+        e1: &[i16; N],
         e2: &[[i16; 16]],
     ) -> Result<Enc, Error> {
-        keys::encrypt(&mut self.a, pks, msgs, r, e1, e2)
+        keys::encrypt(&mut self.a, pks, None, msgs, r, e1, e2)
+    }
+
+    /// [`encrypt_win`] with this `Ctx`'s A: same arguments, same result.
+    pub fn encrypt_win(
+        &mut self,
+        pks: &[&[u8; POLYVEC_BYTES]],
+        win: &[u8],
+        msgs: &[[u8; 16]],
+        r: &[i8; N],
+        e1: &[i16; N],
+        e2: &[[i16; 16]],
+    ) -> Result<Enc, Error> {
+        keys::encrypt(&mut self.a, pks, Some(win), msgs, r, e1, e2)
     }
 
     /// [`enc_seed`] with this `Ctx`'s A: same arguments, same result.
     pub fn enc_seed(&mut self, pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
-        keys::enc_seed(&mut self.a, pks, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+        keys::enc_seed(&mut self.a, pks, None, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+    }
+
+    /// [`enc_seed_win`] with this `Ctx`'s A: same arguments, same result.
+    pub fn enc_seed_win(
+        &mut self,
+        pks: &[&[u8; POLYVEC_BYTES]],
+        win: &[u8],
+        msgs: &[[u8; 16]],
+        seed_enc: &[u8; 32],
+    ) -> Result<Enc, Error> {
+        keys::enc_seed(&mut self.a, pks, Some(win), msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
     }
 }
 
@@ -270,8 +318,8 @@ fn only_memory(r: Result<bool, Error>) -> Result<bool, Error> {
 /// A key pair from a seed (pq-zero-knowledge.md §4.2, `pqz_keygen`).
 pub struct Key {
     pub pk: Box<[u8; POLYVEC_BYTES]>,
-    pub s: Box<[i8; 2048]>,
-    pub e: Box<[i16; 2048]>,
+    pub s: Box<[i8; N]>,
+    pub e: Box<[i16; N]>,
     /// the counter of the accepted attempt
     pub ctr: u32,
 }
@@ -280,26 +328,33 @@ pub struct Key {
 pub struct Enc {
     pub u: Box<[u8; POLYVEC_BYTES]>,
     pub vs: Vec<[u8; V_BYTES]>,
-    pub r: Box<[i8; 2048]>,
-    pub e1: Box<[i16; 2048]>,
+    pub r: Box<[i8; N]>,
+    pub e1: Box<[i16; N]>,
     pub e2: Vec<[i16; 16]>,
     /// the counter of the accepted attempt
     pub ctr: u32,
 }
 
 /// `pqz_keypair_from_secret`: pk = A s + e (no norm check).
-pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+pub fn keypair_from_secret(s: &[i8; N], e: &[i16; N]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
     keys::keypair_from_secret(&mut None, s, e)
 }
 
-/// `pqz_keygen`: SHAKE256("SCAAS-PQZ-KEYGEN-V1" || seed32 || be4(ctr)), s <- CBD_1, e <- CBD_20, pk = A s + e.
+/// `pqz_keygen`: SHAKE256("SCAAS-PQZ-KEYGEN-V2" || u8(len(set)) || set || seed32 || be4(ctr)), set the parameter set's
+/// name (review R2-C3), s <- CBD_1, e <- CBD_20, pk = A s + e.
 pub fn keygen(seed32: &[u8; 32]) -> Result<Key, Error> {
     keys::keygen(&mut None, seed32, keys::BS, keys::BE)
 }
 
 /// `pqz_enc_seed`: one encryption of `msgs[j]` (16 digits < 16) to `pks[j]` from `seed_enc`.
 pub fn enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
-    keys::enc_seed(&mut None, pks, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+    keys::enc_seed(&mut None, pks, None, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+}
+
+/// `pqz_enc_seed_win`: [`enc_seed`] with recipient j's v at window `win[j]` < 4 (the coefficients [16 win, 16 win + 16)
+/// of pk_j^T r: an R_TXM auditor copy, R0-1).
+pub fn enc_seed_win(pks: &[&[u8; POLYVEC_BYTES]], win: &[u8], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
+    keys::enc_seed(&mut None, pks, Some(win), msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
 }
 
 /// `pqz_enc_group_seed`: R_TXM group `g`'s seed (seed_enc for g = 0, else SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ||
@@ -312,25 +367,47 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
 pub fn encrypt(
     pks: &[&[u8; POLYVEC_BYTES]],
     msgs: &[[u8; 16]],
-    r: &[i8; 2048],
-    e1: &[i16; 2048],
+    r: &[i8; N],
+    e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Result<Enc, Error> {
-    keys::encrypt(&mut None, pks, msgs, r, e1, e2)
+    keys::encrypt(&mut None, pks, None, msgs, r, e1, e2)
+}
+
+/// `pqz_encrypt_win`: [`encrypt`] with recipient j's v at window `win[j]` < 4 (R0-1).
+pub fn encrypt_win(
+    pks: &[&[u8; POLYVEC_BYTES]],
+    win: &[u8],
+    msgs: &[[u8; 16]],
+    r: &[i8; N],
+    e1: &[i16; N],
+    e2: &[[i16; 16]],
+) -> Result<Enc, Error> {
+    keys::encrypt(&mut None, pks, Some(win), msgs, r, e1, e2)
 }
 
 /// `pqz_decrypt_raw`: w_i = centre(v_i - (u^T s)_i).
-pub fn decrypt_raw(s: &[i8; 2048], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
-    keys::decrypt_raw(s, &u[..], &v[..])
+pub fn decrypt_raw(s: &[i8; N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
+    keys::decrypt_raw(s, &u[..], &v[..], 0)
+}
+
+/// `pqz_decrypt_raw_win`: w_i = centre(v_i - (u^T s)_{16 win + i}), win < 4 (R0-1).
+pub fn decrypt_raw_win(s: &[i8; N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES], win: usize) -> Result<[i64; 16], Error> {
+    keys::decrypt_raw(s, &u[..], &v[..], win)
 }
 
 /// `pqz_dec` of ct = u || v: the 16 digits M_i = round(w_i / Delta) and their noise w_i - Delta M_i.
-pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
-    keys::dec(s, ct)
+pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
+    keys::dec(s, ct, 0)
+}
+
+/// `pqz_dec_win`: [`dec`] of a v at window win < 4 (the auditor's copy of an R_TXM leg j: win = j mod S_AUD; R0-1).
+pub fn dec_win(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Result<([i64; 16], [i64; 16]), Error> {
+    keys::dec(s, ct, win)
 }
 
 /// `pqz_test_mutate` (test hook): decode `proof` for relation `rel` (an op, 0x81 = R_TX0, or an R_TXM shape code),
-/// change one field (`kind` 0..14 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
+/// change one field (`kind` 0..15 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
 /// C returns 0: an unknown relation, a proof that does not decode, an encoding that does not fit 2 MAX_PROOF bytes.
 #[cfg(feature = "test-hooks")]
 pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
@@ -372,4 +449,26 @@ pub mod fstrace {
             }
         });
     }
+}
+
+/// Review A's cheating prover (A-1 = review B's B-1; the regression fixture `tests/cheat_b1.rs`, test hook): this
+/// thread's `prove` calls, with `mode` 0 honest, 1 `z4[0][0] += 1` cancelled through g, 2 `z3 = y3` (no `β3·R·s3`)
+/// cancelled through g, 3 `z4[0][0] += 1` not cancelled (control). The cancellation folds the z3 / z4 error with the V
+/// the cheater can know before `tg`, i.e. V seeded from hz (`tbox::prove`); since B-1 V is drawn after `tg`, so the
+/// proofs of modes 1 and 2 no longer verify. Never set in a production build (no `test-hooks`: always 0).
+#[cfg(feature = "test-hooks")]
+pub fn set_cheat(mode: u32) {
+    CHEAT.with(|c| c.set(mode))
+}
+
+#[cfg(feature = "test-hooks")]
+std::thread_local! {
+    static CHEAT: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
+
+/// the mode `set_cheat` gave this thread; only with test-hooks (8a review m3: no production build has it, so no
+/// cheating step can be reached from one)
+#[cfg(feature = "test-hooks")]
+pub(crate) fn cheat() -> u32 {
+    CHEAT.with(|c| c.get())
 }

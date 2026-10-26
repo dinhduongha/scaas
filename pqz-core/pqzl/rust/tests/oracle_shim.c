@@ -672,6 +672,47 @@ pqz_shim_params (unsigned i, uint64_t *out, size_t *n)
 
 /* testkit::ghint: relation i's (P above) quad_many dcompress: poly_dcompress_use_ghint (ret, y, r) and
    poly_dcompress_make_ghint (ret, z, r) of in = y[64], z[64], r[64], each result dumped; -1 past the last relation */
+/* poly_dcompress_power2round (r, a) with relation i's tbox dcompress (abdlop_commit's): r, then a (the R0 review fix
+   changes a in the wrap case, R1-C1 / R2-C2) */
+int
+pqz_shim_p2r (unsigned i, const int64_t *in, uint64_t *out)
+{
+  pqz_arena_mark_t mark;
+  poly_t r, a;
+  if (i >= NP)
+    return -1;
+  dcompress_params_srcptr d = P[i]->tbox->dcompress;
+  pqz_err = PQZ_OK;
+  pqz_arena_mark (&mark);
+  poly_alloc (r, pqz_tx_ring);
+  poly_alloc (a, pqz_tx_ring);
+  poly_set_coeffvec_i64 (a, in);
+  poly_dcompress_power2round (r, a, d);
+  dump_poly (&out, r);
+  dump_poly (&out, a);
+  pqz_arena_release (&mark);
+  return pqz_err;
+}
+
+/* the final challenge of (seed) (review R0 fix round m3): out[0..64) = poly_urandom_challenge (omega 8, log2 5,
+   eta 140: every set's), out[64..128) = the autostable sample of dom 0 (upstream's challenge); rc 1 if none passed */
+int
+pqz_shim_chal (const uint8_t *seed, int64_t *out)
+{
+  pqz_arena_mark_t mark;
+  poly_t c, c0;
+  pqz_err = PQZ_OK;
+  pqz_arena_mark (&mark);
+  poly_alloc (c, pqz_tx_ring);
+  poly_alloc (c0, pqz_tx_ring);
+  const int ok = poly_urandom_challenge (c, 8, 5, 140, seed);
+  poly_urandom_autostable (c0, 8, 5, seed, 0);
+  for (unsigned j = 0; j < 64; j++)
+    out[j] = int_get_i64 (poly_get_coeff (c, j)), out[64 + j] = int_get_i64 (poly_get_coeff (c0, j));
+  pqz_arena_release (&mark);
+  return pqz_err != PQZ_OK ? pqz_err : !ok;
+}
+
 int
 pqz_shim_ghint (unsigned i, const int64_t *in, uint64_t *out)
 {

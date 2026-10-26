@@ -10,6 +10,11 @@ Plan 5h Task 4a: the new token API (state redesign: pqzAccount views, accHint in
 rollover by count after mtxPrepareAcc, txFee / decoyFee to public balances, wallet restore from the views); the entry-point
 names and signatures are the `API` table below (the shared `mtx*` interface of Task 3b).
 
+Plan 5h Task 8d part 2: the parameter set is pqz_kat's (PQZ_SET, default n2304-kmax4096; the contracts must be built at
+the same set, smartcontracts/evm/script/pqz/at-set.sh, and the node's library too): its vectors (self-test hash, the
+R_REG probe), sizes and offsets. Stored ciphertexts are packed at PACK_BITS = ceil(log2 q) (P46): the op blobs
+(`pqzEntryBlob`) and the hint (the packed `acc` stream) are compared in that form (`pack`).
+
   e2e.py --rpc http://127.0.0.1:8545 --log runs/2026-10-16-p6g-7622.txt [--keys 1,2,3]
   (a redeploy writes a new log, e.g. runs/2026-10-17-ua-index-7622.txt; it also checks the registry's per-kind list)
 
@@ -31,9 +36,9 @@ sys.path.insert(0, os.path.join(ROOT, "smartcontracts/vectors/pqz"))
 from eth import _mul, address, keccak256, legacy_tx, sign  # noqa: E402
 import pqz_kat as K  # noqa: E402
 
-PQZ = "0x5caa500000000000000000000000000000000f01"
-ML44 = "0x5caa500000000000000000000000000000000012"
-ML65 = "0x5caa500000000000000000000000000000000013"
+PQZ = "0x000000000000000000000000000000005caa0f01"
+ML44 = "0x000000000000000000000000000000005caa0012"
+ML65 = "0x000000000000000000000000000000005caa0013"
 PQZL_ID = K.PQZL_ID
 SCALE, MAXS, FEE = 10_000, 1 << 40, 3
 MIN_DECOY, DEC_FEE = 1, 2  # the tokens' minDecoyFee (plan 5h fee ruling) and the decoyFee this run puts in op 7 payloads
@@ -43,6 +48,16 @@ MLDSA44, MLDSA65, PQZ_MLWE, SECP256K1 = 0x0130, 0x0131, 0x0142, 0x0108
 CAP_ML, CAP_PQZ, BUDGET = 200_000, 3_000_000, 12_000_000
 FAILS, LOG = [], []
 RPC = None
+
+
+def pack(b):
+    """P46 (owner 2026-10-21): 64-bit-lane PQZ bytes (be8 coefficients < q) as the token stores them, every coefficient
+    in PACK_BITS = ceil(log2 q) bits, big-endian, four per PACK_BITS / 2 bytes"""
+    bits = K.Q.bit_length()
+    x, n = 0, len(b) // 8
+    for i in range(n):
+        x = x << bits | int.from_bytes(b[8 * i:8 * i + 8], "big")
+    return x.to_bytes(n * bits // 8, "big")
 
 
 def kc(*parts):
@@ -338,8 +353,9 @@ class Client:
         return dict(zip(ACCT, w))
 
     def hint(self, ua):
-        """The optional `accHint` (D5): the materialised `acc`, used by the token only while it hashes to `accHash`."""
-        return dec_bytes(call(self.tok, cd("pqzAcc(bytes32)", ["w"], ua.ua))) if self.state(ua)["flags"] & 1 else b""
+        """The optional `accHint` (D5): the materialised `acc` packed (P46), used by the token only while its keccak is
+        `accHash`."""
+        return pack(dec_bytes(call(self.tok, cd("pqzAcc(bytes32)", ["w"], ua.ua)))) if self.state(ua)["flags"] & 1 else b""
 
     def set_next(self, bal=(), pub=(), acc=None, total=0):
         self._next = dict(bal=list(bal), pub=list(pub), acc=acc or {}, total=total)
@@ -453,7 +469,8 @@ def run(kd, kr, ke):
     sd, sr, se = Sender(kd), Sender(kr), Sender(ke)
     log(f"deployer {sd.addr} (key {kd}), relayer {sr.addr} (key {kr}), envelope signer {se.addr} (key {ke})")
     st = call(PQZ, bytes.fromhex("0600000000"))
-    check(st[2:] == "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205", f"PQZ OP_SELFTEST = {st[:18]}…")
+    want = json.load(open(os.path.join(K.VEC_DIR, "selftest.json")))["hash"]
+    check(st[2:] == want, f"PQZ OP_SELFTEST = {st[:18]}… (set {K.SET})")
     pq = PQ()
     D = Deployer(sd)
 
@@ -472,8 +489,9 @@ def run(kd, kr, ke):
         got = words(call(v, cd("PRECOMPILE()", [])))[0][12:]
         check("0x" + got.hex() == at.lower(), f"UAMldsaVerifier({kind:#06x}).PRECOMPILE() = 0x{got.hex()} (probe passed)")
         mlv[kind] = v
-    reg_stmt = bytes.fromhex(json.load(open(os.path.join(ROOT, "smartcontracts/vectors/pqz/statement_register.json")))["rows"][0]["stmt"])
-    reg_proof = bytes.fromhex(json.load(open(os.path.join(ROOT, "smartcontracts/vectors/pqz/proof_pqzl.json")))["rows"][4]["proof"])
+    # the set's self-test R_REG vector (UAPqzVerifier's pinned probe, PqzSet.PROBE_PQZL; review 8d1 N1: per set)
+    reg_stmt = bytes.fromhex(json.load(open(os.path.join(K.VEC_DIR, "statement_register.json")))["rows"][0]["stmt"])
+    reg_proof = bytes.fromhex(json.load(open(os.path.join(K.VEC_DIR, "proof_pqzl.json")))["rows"][4]["proof"])
     pqv = D.deploy("UAPqzVerifier", encs(["w", "w", "b", "w", "b"], [PQZ, PQZL_ID, reg_stmt[96:], reg_stmt[64:96], reg_proof]),
                    label="UAPqzVerifier PQZL")
     check(words(call(pqv, cd("isSupportedOnThisChain()", [])))[0][-1] == 1, "UAPqzVerifier.isSupportedOnThisChain()")
@@ -759,11 +777,11 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     # the CTR-ZTH-50 HKDF memo is the client's (P6h)
     fee = FEE if ben != b"\0" * 32 else 0
     ben_ua = ben.ua if isinstance(ben, UA) else ben
-    blen = 16_768 if aud_on else 16_640
+    blen = K.CT_BYTES + K.V_BYTES * (2 if aud_on else 1)
     hdr = lambda out: W(p) + W(10**9) + W(shield_in) + frm.ua + to.ua + ben_ua + salt + out + memo  # noqa: E731
     view = lambda pl: dec_bytes(call(tok, cd(API["singleStmt"], ["b", "w"], pl, binding)))  # noqa: E731
     st0 = view(hdr(bytes(blen)))
-    tOff = 49_792 if aud_on else 33_408
+    tOff = K.HEADER_BYTES + K.PK_BYTES * (3 if aud_on else 2)
     T = st0[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
     rest = b - v - fee
@@ -791,14 +809,14 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     # the client's next state: the sender's acc is the new reference u ‖ v_f; the credit is the recipient's
     C.set_next(bal=[(frm, shield_in - v - fee), (to, v)], pub=[(ben, FEE)] if fee else [], acc={frm.ua: u + vs[1]},
                total=shield_in - fee)
-    bundle = salt + u + vs[0] + (vs[2] if aud_on else b"") + to.ua
+    bundle = salt + pack(u + vs[0]) + (pack(vs[2]) if aud_on else b"") + to.ua  # R as stored (P46)
     if not send:
         return None, data, bundle, (r_, e1, e2)
     rc = s.send(tok, data, f"{C.name} {what}")
     C.commit()
     ref = sent_ref(rc, tok, API["ev_single"])
     blob = dec_bytes(call(tok, cd("pqzEntryBlob(bytes32)", ["w"], ref)))
-    check(blob == bundle + vs[1], f"{C.name} pqzEntryBlob(ref) = R ‖ v_f as built ({len(blob):,} B)")
+    check(blob == bundle + pack(vs[1]), f"{C.name} pqzEntryBlob(ref) = R ‖ v_f as built, packed ({len(blob):,} B)")
     return rc, ref, bundle, (r_, e1, e2)
 
 
@@ -809,7 +827,7 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
     tok = C.tok
     stt = C.state(frm)
     p = stt["pendingCount"]
-    m, g = len(legs), (len(legs) + 3) // 4
+    m, g = len(legs), K.groups(len(legs), aud_on)  # R0-1: S_AUD legs per group with the auditor, 4 without
     compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
     salt = os.urandom(16)
     memo = salt + os.urandom(2 + 40 * m) if compact else b""  # ponytail: memo body random, as transfer()
@@ -817,11 +835,11 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
     assert DEC_FEE >= mind, (DEC_FEE, mind)
     fee = (FEE if ben != b"\0" * 32 else 0) + m * DEC_FEE
     ben_ua = ben.ua if isinstance(ben, UA) else ben
-    olen = 16_384 * g + 128 * (m + 1) + (128 * m if aud_on else 0)
+    olen = K.PK_BYTES * g + K.V_BYTES * (m + 1) + (K.V_BYTES * m if aud_on else 0)
     hdr = lambda out: (W(p) + W(10**9) + W(0) + frm.ua + ben_ua + W(m) + W(DEC_FEE) + salt  # noqa: E731
                        + b"".join(u.ua for u, _ in legs) + out + memo)
     view = lambda pl: dec_bytes(call(tok, cd(API["multiStmt"], ["b", "w"], pl, b"\0" * 32)))  # noqa: E731
-    tOff = 640 + 16_384 * (1 + m + (1 if aud_on else 0))
+    tOff = K.HEADER_BYTES + K.PK_BYTES * (1 + m + (1 if aud_on else 0))
     T = view(hdr(bytes(olen)))[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
     rest = b - sum(a for _, a in legs) - fee
@@ -850,13 +868,13 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
     C.set_next(bal=[(frm, -sum(a for _, a in legs) - fee)] + [(u, a) for u, a in legs],
                pub=([(ben, FEE)] if ben != b"\0" * 32 else []) + [(u, DEC_FEE) for u, _ in legs], acc={frm.ua: newacc},
                total=-fee)
-    bundle = salt + b"".join(e["us"]) + b"".join(e["vs"][j] + (e["v_as"][j] if aud_on else b"") + u.ua
-                                                 for j, (u, _) in enumerate(legs))
+    bundle = salt + b"".join(pack(x) for x in e["us"]) + b"".join(  # R as stored (P46)
+        pack(e["vs"][j]) + (pack(e["v_as"][j]) if aud_on else b"") + u.ua for j, (u, _) in enumerate(legs))
     rc = s.send(tok, data, f"{C.name} {what}")
     C.commit()
     ref = sent_ref(rc, tok, API["ev_multi"])
     blob = dec_bytes(call(tok, cd("pqzEntryBlob(bytes32)", ["w"], ref)))
-    check(blob == bundle + e["v_f"], f"{C.name} pqzEntryBlob(ref) = R ‖ v_f as built ({len(blob):,} B)")
+    check(blob == bundle + pack(e["v_f"]), f"{C.name} pqzEntryBlob(ref) = R ‖ v_f as built, packed ({len(blob):,} B)")
     return rc, ref, bundle, e
 
 
@@ -872,7 +890,8 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None):
         view = lambda pl: dec_bytes(call(tok, cd(API["unwrapStmt"], ["b", UNWRAP, "w"], pl, x, 0)))  # noqa: E731
     else:
         view = lambda pl: dec_bytes(call(tok, cd(API["burnStmt"], ["b", "w", "w", "w"], pl, amount, rcp, 0)))  # noqa: E731
-    T = view(hdr(bytes(K.CT_BYTES)))[17_024:17_024 + K.CT_BYTES]
+    tOff = K.HEADER_BYTES + K.PK_BYTES
+    T = view(hdr(bytes(K.CT_BYTES)))[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
     rest = b - amount
     r_, e1, e2, _ = K.enc_sample(os.urandom(32), 1)

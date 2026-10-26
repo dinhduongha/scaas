@@ -752,7 +752,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   ≈ 1,600 blocks ≈ 2.2 h; 200,000,000 since the Amsterdam reset of 2026-10-21, and the genesis `gasLimit` 200 M
   (`0xbebc200`, `chain/patch-chainspec.py --testnet-reset`) since the reset of 2026-10-22, so no ramp; a relayer never assumes
   this limit: it reads the block gas limit from the chain); the chainspec carries `engine.Pqz`. Health after any start: the log line `PQZ-START`
-  (library SHA-256 = the image label `scaas.pqz.ffi.sha256`, self-test hash `ed910a2c…d205`, the schedules, the
+  (library SHA-256 = the image label `scaas.pqz.ffi.sha256`, self-test hash `d6c01fbc…6f68d` (image `2.2.0-pqz5`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before), the schedules, the
   addresses), no `PQZ-REFUSE`. A node fault (D4: arena, worker) logs `PQZ-NODE-FAULT` and **exits with code 120**: the
   block in progress is never sealed, nothing is marked invalid, and a restart re-processes it; `PQZ-INPUT-PANIC` is an
   input-caused panic answered `…00` (should never appear). `pqz-core/nethermind/chain/watch.sh <container> <rpc>

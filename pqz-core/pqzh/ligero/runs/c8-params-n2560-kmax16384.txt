@@ -1,0 +1,73 @@
+# PQZH Ligero at parameter set n2560-kmax16384 (plan 5h Task 8c; [model] = this layout model, [crate] = the crate)
+
+constants: pqz-core/params/sets/n2560-kmax16384/rust/set.rs + pqzh_set.rs
+
+## Field and domains
+
+- q = 1,125,899,864,532,089 (2^50.00), prime, q mod 16 = 9; q - 1 = 2 * 2 * 2 * 19 * 43 * 431 * 5659 * 70627
+- F_q element 50 bits in 7 bytes (EB); F_q^4 = F_q[X]/(X^4 - 3) (3 a non-square, q = 1 mod 4), |F_q^4| = 2^200.0; generator 3
+- native: Barrett (products < 2^100, u128); wasm32: 3 limbs of 17 bits in u64
+- radices 2/19/43/431 divide q - 1 (domain sizes | 2,817,016); small primes of q - 1 the crate does not use: none
+- the preset (pqzh_set.rs): proven, n = 32,756 = 2 * 2 * 19 * 431 (H_n, the commitment coset 3 H_n), k = 817 = 19 * 43 (H_k), t = 122 (the model's minimum 121), l = 694, N2 = 1634; 3 H_n and H_k disjoint (3^lcm(n, k) != 1)
+
+## Soundness (the preset; per-query factor depends on n, k only)
+
+- query: t = 122 x 0.9298 + 16 grinding = 129.43 bits (v3 128.50); field terms grow with q: |F_q^4| = 2^200.0 (v3 2^168.0); the crate's per-relation totals: `ligero_kat sizes` (runs/c8-*-sizes.jsonl, runs/c8b-*-sizes.jsonl)
+
+## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)
+
+| relation | rows m | proof bound B | <= MAX_PROOF_PQZH 327,680 | statement B | input 5 + stmt + bound B | <= MAX_INPUT 524,288 (pqz-stmt) / 524,288 (8d) | crate bound [crate] | crate soundness bits |
+|---|---|---|---|---|---|---|---|---|
+| R_REG | 83 | 234,238 | yes | 20,576 | 254,819 | yes / yes | 234238 | 127.55 |
+| R_TX | 165 | 304,266 | yes | 103,552 | 407,823 | yes / yes | 304266 | 127.55 |
+| R_BURN | 164 | 303,412 | yes | 62,336 | 365,753 | yes / yes | 303412 | 127.55 |
+| R_DS | 83 | 234,238 | yes | 41,376 | 275,619 | yes / yes | 234238 | 127.55 |
+| R_DR | 83 | 234,238 | yes | 41,376 | 275,619 | yes / yes | 234238 | 127.55 |
+| R_TX0 | 165 | 304,266 | yes | 82,944 | 387,215 | yes / yes | 304266 | 127.55 |
+| R_TXM1 | 165 | 304,266 | yes | 103,552 | 407,823 | yes / yes | 304266 | 127.55 |
+| R_TXM1_0 | 165 | 304,266 | yes | 82,944 | 387,215 | yes / yes | 304266 | 127.55 |
+| R_TXM2 | 165 | 304,266 | yes | 124,288 | 428,559 | yes / yes | 304266 | 127.55 |
+| R_TXM2_0 | 165 | 304,266 | yes | 103,552 | 407,823 | yes / yes | 304266 | 127.55 |
+| R_TXM4 | 166 | 305,120 | yes | 165,760 | 470,885 | yes / yes | 305120 | 127.55 |
+| R_TXM4_0 | 165 | 304,266 | yes | 144,768 | 449,039 | yes / yes | 304266 | 127.55 |
+| R_TXM8 | 248 | 375,148 | NO | 269,184 | 644,337 | no / NO | 375148 | not built |
+| R_TXM8_0 | 247 | 374,294 | NO | 247,680 | 621,979 | no / NO | 374294 | not built |
+
+model = crate on 14 relations (c8c-n2560-sizes.jsonl); op 7 M = 8: G = 2, not a built PQZH shape
+
+## One transaction (EIP-7976: 15,000 + 64 x calldata bytes <= the regular-gas cap; at 2^24: <= 261,909 B)
+
+Calldata through the token / registry (Task 7b ABI model, inputs16k.py, pk = 8 N) with the proof at its bound; the precompile input itself is built in memory (only a direct call carries it as calldata).
+
+| relation | path | tx calldata B | EIP-7976 floor gas | fits 2^24 | smallest cap (floor) | direct-call input B | direct fits 2^24 | largest proof one 2^24 tx carries |
+|---|---|---|---|---|---|---|---|---|
+| R_REG | UARegistry.register | 260,292 | 16,673,688 | yes | 16.67 M | 254,819 | yes | 235,840 |
+| R_TX | relayed mtxExecute (op 1) | 329,668 | 21,113,752 | NO | 21.11 M | 407,823 | NO | 236,512 |
+| R_BURN | relayed mtxExecute (op 2) | 328,548 | 21,042,072 | NO | 21.04 M | 365,753 | NO | 236,768 |
+| R_DS | verifyTransferAmount (eth_call) | 234,436 | 15,018,904 | yes | 15.02 M | 275,619 | NO | 261,696 |
+| R_DR | verifyTransferAmount (eth_call) | 234,436 | 15,018,904 | yes | 15.02 M | 275,619 | NO | 261,696 |
+| R_TX0 | relayed mtxExecute (op 1) | 329,540 | 21,105,560 | NO | 21.11 M | 387,215 | NO | 236,640 |
+| R_TXM1 | relayed mtxExecute (op 7) | 329,732 | 21,117,848 | NO | 21.12 M | 407,823 | NO | 236,448 |
+| R_TXM1_0 | relayed mtxExecute (op 7) | 329,604 | 21,109,656 | NO | 21.11 M | 387,215 | NO | 236,576 |
+| R_TXM2 | relayed mtxExecute (op 7) | 330,020 | 21,136,280 | NO | 21.14 M | 428,559 | NO | 236,160 |
+| R_TXM2_0 | relayed mtxExecute (op 7) | 329,764 | 21,119,896 | NO | 21.12 M | 407,823 | NO | 236,416 |
+| R_TXM4 | relayed mtxExecute (op 7) | 331,428 | 21,226,392 | NO | 21.23 M | 470,885 | NO | 235,584 |
+| R_TXM4_0 | relayed mtxExecute (op 7) | 330,084 | 21,140,376 | NO | 21.14 M | 449,039 | NO | 236,096 |
+
+## Preset search (proven, n >= 4k, k >= 64, l >= 16, prover <= 4e+09 products): the smallest R_TX and R_TXM4 bounds, radices of the crate and with the small primes of q - 1 it does not use
+
+| radices | relation | n | k | t | l | rows m | proof bound B | <= 327,680 | prover products |
+|---|---|---|---|---|---|---|---|---|---|
+| 2/19/43/431 | R_TX | 74,132 | 817 | 116 | 700 | 165 | 299,576 | yes | 7.11e+08 |
+| 2/19/43/431 | R_TX | 148,264 | 817 | 114 | 702 | 165 | 300,114 | yes | 1.33e+09 |
+| 2/19/43/431 | R_TX | 65,512 | 817 | 117 | 699 | 165 | 300,395 | yes | 3.68e+08 |
+| 2/19/43/431 | R_TX | 37,066 | 817 | 120 | 696 | 165 | 301,956 | yes | 4.06e+08 |
+| 2/19/43/431 | R_TXM4 | 74,132 | 817 | 116 | 700 | 166 | 300,388 | yes | 7.16e+08 |
+| 2/19/43/431 | R_TXM4 | 148,264 | 817 | 114 | 702 | 166 | 300,912 | yes | 1.34e+09 |
+| 2/19/43/431 | R_TXM4 | 65,512 | 817 | 117 | 699 | 166 | 301,214 | yes | 3.71e+08 |
+| 2/19/43/431 | R_TXM4 | 37,066 | 817 | 120 | 696 | 166 | 302,796 | yes | 4.09e+08 |
+
+## Prover work: the model's FFT products vs the crate's counted products (fq::spike_count, all base-field products of one honest proof, seed 0; runs/*count*.jsonl of this set)
+
+| count file | n | k | t | relation | model FFT products | crate products | model / crate |
+|---|---|---|---|---|---|---|---|

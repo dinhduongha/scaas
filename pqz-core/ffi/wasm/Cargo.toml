@@ -17,9 +17,16 @@ pqz-ffi = { path = "..", default-features = false, features = ["prove"] }
 
 # the PQZL backend, forwarded to pqz-ffi (the same default as pqz-ffi's; ../run.sh's PQZL=rust|c picks one alone)
 [features]
-default = ["pqzl-rust"]
+default = ["pqzl-rust", "set-n2304-kmax4096"]
 pqzl-rust = ["pqz-ffi/pqzl-rust"]
 pqzl-c = ["pqz-ffi/pqzl-c"]
+# the parameter set, forwarded to pqz-ffi (exactly one; ../run.sh: PQZ_SET)
+# BEGIN gen_set.py sets
+set-n2048-kmax1024 = ["pqz-ffi/set-n2048-kmax1024"]
+set-n2304-kmax4096 = ["pqz-ffi/set-n2304-kmax4096"]
+set-n2560-kmax16384 = ["pqz-ffi/set-n2560-kmax16384"]
+set-n2816-kmax65536 = ["pqz-ffi/set-n2816-kmax65536"]
+# END gen_set.py sets
 
 [profile.release]
 panic = "abort"

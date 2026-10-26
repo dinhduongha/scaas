@@ -4,14 +4,20 @@
 # (dump_setup.c `pqzh`: opTag, the D3 id, auditorOn); byte-identical or exit 1. Then pqz_kat.py parses each statement
 # (PQZH id only) and rebuilds it byte for byte (kat_stmt.py).
 # Run alone under the machine lock: scripts/capped pqz-core/pqzh/xcheck/ligero.sh  (output: ligero/runs/<tag>-xcheck.txt)
+# PQZ_SET: a set with PQZH (default n2304-kmax4096, the builds' default since plan 5h Task 8d): the C core and the crate at that set.
+# PQZ_BUILD_TAG (gate.sh: the set): the C build and the outputs per tag (concurrent gates); unset: per set as well.
 set -eu
 cd "$(dirname "$0")/.."
-out=ligero/target/xcheck
+S=${PQZ_SET:-n2304-kmax4096}
+T=${PQZ_BUILD_TAG:-$S}
+export PQZ_SET=$S # pqz_kat.py (kat_stmt.py) reads the same set
+out=ligero/target/xcheck/$T
+XB=build/$T/xcheck-ligero # pqzl-relative C build of the set (its own dir)
 mkdir -p $out/c $out/rust
-(cd ../pqzl && ./build.sh native > /dev/null)
-${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -o $out/dump_setup xcheck/dump_setup.c ../pqzl/build/native/libpqz.a
+(cd ../pqzl && B=$XB ./build.sh native > /dev/null)
+${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -I../pqzl/$XB/include -o $out/dump_setup xcheck/dump_setup.c ../pqzl/$XB/native/libpqz.a
 $out/dump_setup $out/c pqzh
-(cd ligero && cargo run --release --offline --quiet --example dump_setup -- target/xcheck/rust)
+(cd ligero && CARGO_TARGET_DIR=target/$T cargo run --release --offline --quiet --features set-$S --example dump_setup -- target/xcheck/$T/rust)
 rc=0
 for r in reg tx burn ds dr tx0; do
   for f in ${r}_stmt ${r}_wit; do

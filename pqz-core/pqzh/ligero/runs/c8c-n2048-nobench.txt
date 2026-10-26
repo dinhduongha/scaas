@@ -1,0 +1,21 @@
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.40s
+     Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqzh_ligero-f7c9dd8bbb52102f)
+
+running 13 tests
+test cs::tests::op_tags_hash ... ok
+test cs::tests::pqzh_id_d3 ... ok
+test fq::tests::field_facts_and_ext ... ok
+test cs::tests::ring_recurrence_matches_naive ... ok
+test ligero::tests::limits_exact ... ok
+test fq::tests::branch_free_matches_reference ... ok
+test fq::tests::mul_and_red_match_naive ... ok
+test ligero::tests::rng_hedged_with_witness ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+test cs::tests::branch_free_rounding_matches_reference ... ok
+test fq::tests::limb_matches_u128 ... ok
+test ligero::tests::max_len_exact_multiproof_tight ... ok
+test fft::tests::fft_matches_naive_all_radices ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+

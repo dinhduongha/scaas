@@ -29,8 +29,8 @@ import sys
 import tempfile
 import time
 
-ADDR = ["5caa500000000000000000000000000000000f01", "5caa500000000000000000000000000000000012",
-        "5caa500000000000000000000000000000000013"]
+ADDR = ["000000000000000000000000000000005caa0f01", "000000000000000000000000000000005caa0012",
+        "000000000000000000000000000000005caa0013"]
 RESET = {"eip4895TransitionTimestamp": 1, "maximumExtraDataSize": "0xffff", "maxCodeSizeTransition": 0}
 TESTNET = 7622  # the only chain --testnet-reset may touch (owner 2026-10-15; 22776 is the future mainnet)
 RESET_GAS_LIMIT = "0xbebc200"  # 200,000,000 = config.json Blocks.TargetBlockGasLimit: no ramp after the reset

@@ -1,0 +1,51 @@
+    Blocking waiting for file lock on package cache
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling cc v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling cfg-if v1.0.5
+   Compiling keccak v0.1.6
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/pqzl/rust)
+   Compiling cpufeatures v0.2.17
+   Compiling aes v0.8.4
+   Compiling sha3 v0.10.8
+   Compiling zmij v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+    Finished `release` profile [optimized + debuginfo] target(s) in 25.52s
+     Running tests/memory.rs (target/n2560-kmax16384-fix/release/deps/memory-858842f63fcd8959)
+
+running 1 test
+size_of::<Ctx>() = 41712 B (the specialised verifier's fixed tables inline, the rest on the heap)
+peak_per_op (bytes; cold = fresh Ctx, the call builds A / keys / SV tables; warm = second call)
+row                            prove cold   prove warm  verify cold  verify warm    fast cold    fast warm    allocs
+TRANSFER                         76418480     72726704     76033568     72341792     14188849      1538353     41406
+TRANSFER0                        75451424     71780768     75069680     71399024     14101361      1524465     35397
+BURN                             74095760     70456784     73718768     70079792     13971937      1504801     43190
+REGISTER                         26689232     24187040     26494400     23992208      9484121       913449     13789
+DISCLOSE-SENDER                  27769920     25247664     27571920     25049664      9566681       926025     20140
+DISCLOSE-RECEIVER                29189072     26606624     28960448     26378000      9805625       960137     25257
+M1-on                            76418480     72726704     76033568     72341792     14188849      1538353     33452
+M2-on                            78760208     75015632     78367376     74622800     14426241      1592385     31679
+M4-on                            85090872     81106584     84681144     80696856     15364121      1704313     37567
+M8-on                           183655624    178540360    183084328    177969064     19960985      2415641     46874
+M1-off                           75451424     71780768     75069680     71399024     14101361      1524465     33809
+M2-off                           76815536     73113200     76429040     72726704     14251265      1564609     36739
+test peak_per_op has been running for over 60 seconds
+M4-off                           79569104     75803408     79173104     75407408     14551073      1644897     40275
+M8-off                          164803336    159865480    164257384    159319528     19232153      2304537     39401
+R_TX prove (cold) 76418480 B = 0.24 x the C arena peak 312151904 B (target <= 1.1, fails > 2)
+test peak_per_op ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 73.82s
+
+n2560 rc=0

@@ -251,7 +251,6 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
   poly_ptr r0prime_sz2[lambda / 2];
   shake128_state_t hstate;
   coder_state_t cstate;
-  uint8_t hash0[32];
   uint8_t hashr[32]; /* PQZ (P6-FS): cseed, the seed of R, R' */
   uint8_t expseed[3 * 32];
   const uint8_t *seed_rej34 = expseed;
@@ -412,10 +411,9 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
   _lnp_tbox_compute_z34 (hash, tB, z3, z4, s1, m, s2, Bprime, Es, Em, v, Ps,
                          Pm, f, Ds, Dm, u, seed_rej34, params);
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_z34);
-  /* PQZ (P6-FS, lazer#28): absorb z3, z4 before V3 / V4; R, R' stay on cseed */
+  /* PQZ (P6-FS, lazer#28): absorb z3, z4 before V3 / V4 (drawn after tg since B-1); R, R' stay on cseed */
   memcpy (hashr, hash, 32);
   _lnp_tbox_hash_z34 (hash, z3, z4, params);
-  memcpy (hash0, hash, 32); // save this level of FS hash for later
 
   /* tB = (tB_,tg,t) */
 
@@ -660,6 +658,8 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
           r0prime_sz2, R2t, r1t, r0t, hash, M + d - 1, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_beta4);
+  /* PQZ (A-2, review A): upsilon at M + 2 (d - 1) + 1, no longer the dom of the last beta4 row (M + d - 1 + d - 1);
+     binary, l2, z4 and z3 move up by one with it */
   STOPWATCH_START (stopwatch_lnp_tbox_prove_sz_upsilon,
                    "lnp_tbox_prove_sz_upsilon");
   if (Z > 0)
@@ -667,7 +667,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       DEBUG_PRINTF (DEBUG_LEVEL >= 2, "%s", "schwarz-zippel upsilon evalqs");
       __schwartz_zippel_accumulate_upsilon (
           R2prime_sz, r1prime_sz, r0prime_sz, R2prime_sz2, r1prime_sz2,
-          r0prime_sz2, R2t, r1t, r0t, hash, M + 2 * (d - 1), params);
+          r0prime_sz2, R2t, r1t, r0t, hash, M + 2 * (d - 1) + 1, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_upsilon);
   STOPWATCH_START (stopwatch_lnp_tbox_prove_sz_bin, "lnp_tbox_prove_sz_bin");
@@ -677,7 +677,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __schwartz_zippel_accumulate_bin (R2prime_sz, r1prime_sz, r0prime_sz,
                                         R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                         R2t, r1t, r0t, Ps, Pm, f, oPs, oPm, of,
-                                        hash, M + 2 * (d - 1) + 1, params);
+                                        hash, M + 2 * (d - 1) + 2, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_bin);
   STOPWATCH_START (stopwatch_lnp_tbox_prove_sz_l2, "lnp_tbox_prove_sz_l2");
@@ -687,9 +687,12 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __schwartz_zippel_accumulate_l2 (R2prime_sz, r1prime_sz, r0prime_sz,
                                        R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                        R2t, r1t, r0t, Es, Em, v, oEs, oEm, ov,
-                                       hash, M + 2 * (d - 1) + 2, params);
+                                       hash, M + 2 * (d - 1) + 3, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_l2);
+  /* PQZ (B-1, review B; review A's A-1): V4 / V3 from hash, the round over tg, as every other challenge combined
+     into the accumulators; upstream drew them from the hash before tg, so a prover could choose g to cancel the
+     V-folded error of z3 / z4 (pqzl/rust/tests/cheat_b1.rs). Transcript change, folded into the 16k proofSystemId */
   STOPWATCH_START (stopwatch_lnp_tbox_prove_sz_z4, "lnp_tbox_prove_sz_z4");
   if (nprime > 0)
     {
@@ -697,7 +700,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __schwartz_zippel_accumulate_z4 (R2prime_sz, r1prime_sz, r0prime_sz,
                                        R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                        R2t, r1t, r0t, Ds, Dm, u, oDs, oDm, z4,
-                                       hash0, hashr, M + 2 * (d - 1) + 2 + Z,
+                                       hash, hashr, M + 2 * (d - 1) + 3 + Z,
                                        params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_z4);
@@ -708,7 +711,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __schwartz_zippel_accumulate_z3 (
           R2prime_sz, r1prime_sz, r0prime_sz, R2prime_sz2, r1prime_sz2,
           r0prime_sz2, R2t, r1t, r0t, Es, Em, v, oEs, oEm, Ps, Pm, f, oPs, oPm,
-          z3, hash0, hashr, M + 2 * (d - 1) + 2 + Z + 256, params);
+          z3, hash, hashr, M + 2 * (d - 1) + 3 + Z + 256, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_z3);
 
@@ -942,7 +945,6 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
   spolymat_t R2t;
   spolyvec_t r1t;
   poly_t r0t;
-  uint8_t hash0[32];
   uint8_t hashr[32]; /* PQZ (P6-FS): cseed, the seed of R, R' */
   polymat_ptr oEs[Z + 1]; /* PQZ (review round 2, Q-F): + 1, never zero-length (Z = 0) */
   polymat_ptr oEm[Z + 1];
@@ -1180,10 +1182,9 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
                            params);
   if (b != 1)
     goto ret;
-  /* PQZ (P6-FS, lazer#28): absorb z3, z4 before V3 / V4; R, R' stay on cseed */
+  /* PQZ (P6-FS, lazer#28): absorb z3, z4 before V3 / V4 (drawn after tg since B-1); R, R' stay on cseed */
   memcpy (hashr, hash, 32);
   _lnp_tbox_hash_z34 (hash, z3, z4, params);
-  memcpy (hash0, hash, 32); // save this level of FS hash for later
 
   /* check if h's coeffs 0 and d/2 are zero. */
   b = 0;
@@ -1250,13 +1251,15 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
           r0prime_sz2, R2t, r1t, r0t, hash, M + d - 1, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_beta4);
+  /* PQZ (A-2, review A): upsilon at M + 2 (d - 1) + 1, no longer the dom of the last beta4 row (M + d - 1 + d - 1);
+     binary, l2, z4 and z3 move up by one with it */
   STOPWATCH_START (stopwatch_lnp_tbox_verify_sz_upsilon,
                    "lnp_tbox_verify_sz_upsilon");
   if (Z > 0)
     {
       __schwartz_zippel_accumulate_upsilon (
           R2prime_sz, r1prime_sz, r0prime_sz, R2prime_sz2, r1prime_sz2,
-          r0prime_sz2, R2t, r1t, r0t, hash, M + 2 * (d - 1), params);
+          r0prime_sz2, R2t, r1t, r0t, hash, M + 2 * (d - 1) + 1, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_upsilon);
   STOPWATCH_START (stopwatch_lnp_tbox_verify_sz_bin, "lnp_tbox_verify_sz_bin");
@@ -1265,7 +1268,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
       __schwartz_zippel_accumulate_bin (R2prime_sz, r1prime_sz, r0prime_sz,
                                         R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                         R2t, r1t, r0t, Ps, Pm, f, oPs, oPm, of,
-                                        hash, M + 2 * (d - 1) + 1, params);
+                                        hash, M + 2 * (d - 1) + 2, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_bin);
   STOPWATCH_START (stopwatch_lnp_tbox_verify_sz_l2, "lnp_tbox_verify_sz_l2");
@@ -1274,16 +1277,19 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
       __schwartz_zippel_accumulate_l2 (R2prime_sz, r1prime_sz, r0prime_sz,
                                        R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                        R2t, r1t, r0t, Es, Em, v, oEs, oEm, ov,
-                                       hash, M + 2 * (d - 1) + 2, params);
+                                       hash, M + 2 * (d - 1) + 3, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_l2);
+  /* PQZ (B-1, review B; review A's A-1): V4 / V3 from hash, the round over tg, as every other challenge combined
+     into the accumulators; upstream drew them from the hash before tg, so a prover could choose g to cancel the
+     V-folded error of z3 / z4 (pqzl/rust/tests/cheat_b1.rs). Transcript change, folded into the 16k proofSystemId */
   STOPWATCH_START (stopwatch_lnp_tbox_verify_sz_z4, "lnp_tbox_verify_sz_z4");
   if (nprime > 0)
     {
       __schwartz_zippel_accumulate_z4 (R2prime_sz, r1prime_sz, r0prime_sz,
                                        R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                        R2t, r1t, r0t, Ds, Dm, u, oDs, oDm, z4,
-                                       hash0, hashr, M + 2 * (d - 1) + 2 + Z,
+                                       hash, hashr, M + 2 * (d - 1) + 3 + Z,
                                        params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_z4);
@@ -1293,7 +1299,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
       __schwartz_zippel_accumulate_z3 (
           R2prime_sz, r1prime_sz, r0prime_sz, R2prime_sz2, r1prime_sz2,
           r0prime_sz2, R2t, r1t, r0t, Es, Em, v, oEs, oEm, Ps, Pm, f, oPs, oPm,
-          z3, hash0, hashr, M + 2 * (d - 1) + 2 + Z + 256, params);
+          z3, hash, hashr, M + 2 * (d - 1) + 3 + Z + 256, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_z3);
 
@@ -3274,7 +3280,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
       /* PQZ (P6-L2): one domain per exact-l2 equation. Upstream passes the same dom for every i < Z, so all
          Z equations get identical challenges and the verifier only checks their sum,
          sum_i (||x_i||^2 + <pow2, upsilon_i> - B_i^2) = 0, i.e. sum_i ||x_i||^2 <= sum_i B_i^2 instead of each
-         ||x_i|| <= B_i. The callers already reserve Z domains (z4 starts at this dom + Z, under hash0), and no
+         ||x_i|| <= B_i. The callers already reserve Z domains (z4 starts at this dom + Z, under the same seed since B-1), and no
          other equation uses (seed, dom + i), i > 0. Transcript change: proofSystemId v2 (CTR-PQZ-09).
          Upstream: https://github.com/lazer-crypto/lazer/issues/25 */
       __schwartz_zippel_accumulate2 (R2i, r1i, r0i, R2i2, r1i2, r0i2, R2tptr,

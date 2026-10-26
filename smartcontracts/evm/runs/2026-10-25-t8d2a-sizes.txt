@@ -1,0 +1,5 @@
+== size gate at the committed set (n2304-kmax4096): forge build src --sizes --json; size_gate.py
+size gate: 0 error(s), 42 contracts
+rc=0
+NoUnderlyingPqzToken {'runtime_size': 48908, 'init_size': 51430, 'runtime_margin': 16628, 'init_margin': 79642}
+UnderlyingPqzToken {'runtime_size': 61091, 'init_size': 63620, 'runtime_margin': 4445, 'init_margin': 67452}

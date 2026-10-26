@@ -7,6 +7,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
+import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
@@ -152,7 +153,7 @@ contract PqzPoolTest is PqzFixture {
         tok.mtxRollOver(bob, 2);
         IPqzToken.AccountState memory a = tok.pqzAccount(bob);
         assertEq(a.accUnits, 2); // bob never debited: 0 + 2
-        assertEq(a.accHash, keccak256(tok.pqzAcc(bob)));
+        assertEq(a.accHash, keccak256(_packed(tok.pqzAcc(bob))), "accHash: the packed acc (P46)");
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs[0].topics[0], IConfidentialToken.RolledOver.selector);
         assertEq(logs[0].topics[1], bob);
@@ -172,11 +173,11 @@ contract PqzPoolTest is PqzFixture {
         assertEq(a.accUnits, 1);
         assertEq(a.flags, 0);
         assertEq(a.sendCounter, 1);
-        bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
+        bytes memory r = _rOf(out, bob);
         bytes memory blob = tok.pqzEntryBlob(ref);
-        assertEq(blob, bytes.concat(r, _cut(out, PqzCt.CT, PqzCt.V)), "R || v_f");
+        assertEq(blob, bytes.concat(r, _packed(_cut(out, PqzCt.CT, PqzCt.V))), "R || P(v_f)");
         assertEq(a.accBlob.code, bytes.concat(hex"00", blob), "the acc reference is the op blob");
-        assertEq(tok.transferCiphertextHash(ref), keccak256(r), "ciphertextHash unchanged in value");
+        assertEq(tok.transferCiphertextHash(ref), keccak256(r), "ciphertextHash: keccak of the packed R");
         assertEq(tok.pqzEntryBlob(bytes32(0)), "");
         assertEq(tok.minDecoyFee(), 0);
         assertEq(tok.pqzPendingCt(bob, 0), _cut(out, 0, PqzCt.CT));
@@ -364,7 +365,7 @@ contract PqzPoolHandler is Test {
         top = bound(top, 0, w.balanceOf(address(this)) / SCALE);
         if (w.totalShielded() + top < _fee(ben)) return;
         bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, top, uas[0], uas[1], ben),
-            bytes16(uint128(seed)), _blob(16_640));
+            bytes16(uint128(seed)), _blob(PqzCore.OUT_OFF));
         w.mtxConfidentialTransferSingle(pl, hex"c0de", auth, ben, "");
         fees += _fee(ben);
     }
@@ -377,7 +378,7 @@ contract PqzPoolHandler is Test {
         if (w.totalShielded() < total) return;
         bytes memory legs = abi.encodePacked(uas[1], uas[2], uas[3], uas[4]);
         bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben, uint256(4), d),
-            bytes16(uint128(seed)), legs, _blob(16_384 + 128 * 5));
+            bytes16(uint128(seed)), legs, _blob(PqzCt.PK + 128 * 5));
         w.mtxConfidentialTransfer(pl, hex"c0de", auth, ben, "");
         fees += total;
     }
@@ -387,7 +388,7 @@ contract PqzPoolHandler is Test {
         uint256 f = _fee(ben);
         if (w.totalShielded() <= f) return;
         a = bound(a, 1, w.totalShielded() - f);
-        bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben), _blob(16_512));
+        bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben), _blob(PqzCt.CT));
         w.mtxUnshield(pl, hex"c0de", auth, ben, "", a, bytes32(uint256(uint160(PAYEE))));
         fees += f;
     }
@@ -397,7 +398,7 @@ contract PqzPoolHandler is Test {
         uint256 f = _fee(ben);
         if (w.totalShielded() <= f) return;
         a = bound(a, 1, w.totalShielded() - f);
-        bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben), _blob(16_512));
+        bytes memory pl = bytes.concat(abi.encode(_p(), block.number + 100, uint256(0), uas[0], ben), _blob(PqzCt.CT));
         w.mtxUnshieldUnwrap(pl, hex"c0de", auth, ben, "", IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(PAYEE))), a, 0));
         fees += f;
         supply -= a * SCALE;

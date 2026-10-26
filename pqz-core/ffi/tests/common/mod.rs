@@ -55,16 +55,39 @@ impl Honest {
     }
 }
 
+/// The ids of this build's parameter set (plan 5h Task 8d: one PQZL and one PQZH id per set): PQZL, and PQZH where it
+/// is compiled in.
+pub fn ids() -> Vec<Word> {
+    if PQZH { vec![PQZL_ID, PQZH_ID] } else { vec![PQZL_ID] }
+}
+
+/// The "other id" of a negative case: the other proof system's, and at a set without PQZH (PQZL inputs only) another
+/// set's PQZL id, n2304-kmax4096's current keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5") (review 8d1b M2: not the
+/// zero word, which the "unknown id" case already sends; R0 fix round m7: a live id, not a retired one; pqz-vectors' rows
+/// use the same id)
+pub fn other_id(pqzl: bool) -> Word {
+    const FOREIGN: &str = "ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e";
+    match (pqzl, stmt::HAS_PQZH) {
+        (false, _) => PQZL_ID,
+        (true, true) => PQZH_ID,
+        (true, false) => {
+            let w: Word = std::array::from_fn(|i| u8::from_str_radix(&FOREIGN[2 * i..2 * i + 2], 16).unwrap());
+            assert_ne!(w, PQZL_ID, "the foreign id is this set's");
+            w
+        }
+    }
+}
+
 /// Every form of both ids, then every built op 7 shape of both ids, proved (fixture, rnd32 = RND).
 pub fn prove_all() -> Vec<Honest> {
     let mut v = Vec::new();
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         for c in fixture::cases(&id).expect("fixture") {
             let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {:?}: {e:?}", id[0], c.form));
             v.push(Honest { id, op: c.op(), form: Some(c.form), multi: None, stmt: c.stmt, proof });
         }
     }
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         for c in fixture::multi_cases(&id, usize::MAX).expect("fixture op 7") {
             let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {}: {e:?}", id[0], c.name()));
             v.push(Honest { id, op: c.op(), form: None, multi: Some((c.m, c.aud)), stmt: c.stmt, proof });
@@ -171,8 +194,8 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         f(&mut s[off..]);
         s
     };
-    // an op 7 shape that fits MAX_PROOF + 1 within MAX_INPUT (all but PQZH (4, on): 5 + 132,992 + 262,145 > 393,216,
-    // whose boundary `multi_input_boundary` checks)
+    // an op 7 shape that fits MAX_PROOF + 1 within MAX_INPUT (every built shape since the R0 review fix: MAX_INPUT 512 KiB
+    // at every set; `multi_limits_and_memo` checks the PQZH (4, on) boundary)
     let over_fits = 5 + st.len() + max + 1 <= MAX_INPUT;
     let mut v: Vec<(String, Vec<u8>, Option<Reject>)> = vec![
         ("op 0".into(), inp(0, st, pf), Some(Reject::Op)),
@@ -190,7 +213,7 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         ("length field + 1".into(), { let mut i = inp(op, st, pf); i[4] += 1; i }, None),
         ("coefficient = q".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&stmt::Q.to_be_bytes())), pf),
             Some(Reject::Coefficient)),
-        ("coefficient = 2^42".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&(1u64 << 42).to_be_bytes())), pf),
+        ("coefficient = 2^LOG2Q".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&(1u64 << stmt::LOG2Q).to_be_bytes())), pf),
             Some(Reject::Coefficient)),
         ("coefficient top byte".into(), inp(op, &with(st.len() - 8, &|s| s[0] = 0x80), pf), Some(Reject::Coefficient)),
         ("empty proof".into(), inp(op, st, &[]), Some(Reject::ProofLength)),
@@ -200,7 +223,9 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         ("proof bit 0".into(), { let mut p = pf.clone(); p[0] ^= 1; inp(op, st, &p) }, None),
         ("proof last bit".into(), { let mut p = pf.clone(); *p.last_mut().unwrap() ^= 0x80; inp(op, st, &p) }, None),
         ("proof middle byte".into(), { let mut p = pf.clone(); let m = p.len() / 2; p[m] ^= 0x5a; inp(op, st, &p) }, None),
-        ("other system's id".into(), inp(op, &with(32, &|s| s[..32].copy_from_slice(if h.pqzl() { &PQZH_ID } else { &PQZL_ID })), pf), None),
+        ("other system's id".into(), inp(op, &with(32, &|s| s[..32].copy_from_slice(&other_id(h.pqzl()))), pf),
+            // a set without PQZH: another set's PQZL id (review 8d1b M2), an unknown id refused by the decoder
+            (h.pqzl() && !stmt::HAS_PQZH).then_some(Reject::ProofSystemId)),
         ("statement last coefficient - 1".into(), inp(op, &with(st.len() - 1, &|s| s[0] ^= 1), pf), None),
     ];
     if over_fits {

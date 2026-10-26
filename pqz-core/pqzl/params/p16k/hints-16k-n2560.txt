@@ -1,0 +1,130 @@
+p16k/run_hints16k.sh: ../anon/hints.sage with N = 2560, Q = 2^50 - 42310535, BETA_S = 40, BETA_E = 182
+
+====================================================================================================
+0. Environment and calibration
+====================================================================================================
+leaky-LWE-Estimator (DDGR20) commit: 0a9caf8bf0f80097724e0c6147194c52c6b90f86
+lattice-estimator commit: 53da5982597709ba0fdf94ea37a84d822310fd84
+SageMath 10.7, Python 3.12.5; DBDD_predict_diag, integrate_q_vectors, compute_beta_delta (non-probabilistic, interpolated)
+Kyber-512: DDGR20 beta = 405.53 (dim 1025); lattice-estimator primal_usvp beta = 406
+PQZ (u, v_f), no hints: DDGR20 beta = 507.31 (dim 5025); lattice-estimator primal_usvp beta = 508
+
+====================================================================================================
+1. A general (mixed) perfect hint w: the tool's DBDD_predict update equals dvol += (1/2) ln det(W Sigma W^T)
+====================================================================================================
+DBDD_predict_diag accepts hints on canonical directions only. For the mixed worst case the run applies the
+closed form of DBDD_predict's general update (Bvol += ln ||w||, Sigma projected: net dvol += (1/2) ln(w^T Sigma w) per
+orthogonal w), checked here against the tool's full-covariance DBDD_predict on a small instance (n = m = 32, q = 3329).
+6 random integer hints: tool dvol 257.975992053, closed form 257.975992053, difference 0.00e+00; dim 59 = 65 - 6
+
+====================================================================================================
+2. DDGR20 beta per number of perfect hints on one (r, e1)
+====================================================================================================
+V_max = 32562; target beta >= 450 (pq-zero-knowledge.md CTR-PQZ-03). Last column: lattice-estimator primal_usvp with the hints as removed secret dimensions (n - h), the approximation of pq-zero-knowledge.md §4.5 / params/anon/usvp.py.
+hints  unit on r  unit on e1  mixed (worst)  estimator n-h
+  [r 0: 507.31]
+  [r 16: 503.03]
+  [r 32: 498.76]
+  [r 48: 494.50]
+  [r 64: 490.24]
+  [r 80: 485.98]
+  [r 96: 481.74]
+  [r 112: 477.50]
+  [r 128: 473.26]
+  [r 144: 469.03]
+  [r 256: 439.58]
+  [r 272: 435.40]
+  [e1 0: 507.31]
+  [e1 16: 502.84]
+  [e1 32: 498.38]
+  [e1 48: 493.92]
+  [e1 64: 489.47]
+  [e1 80: 485.02]
+  [e1 96: 480.59]
+  [e1 112: 476.15]
+  [e1 128: 471.73]
+  [e1 144: 467.31]
+  [e1 256: 436.56]
+  [e1 272: 432.19]
+  [mixed 0: 507.31]
+  [mixed 16: 502.32]
+  [mixed 32: 497.34]
+  [mixed 48: 492.36]
+  [mixed 64: 487.39]
+  [mixed 80: 482.43]
+  [mixed 96: 477.48]
+  [mixed 112: 472.54]
+  [mixed 128: 467.60]
+  [mixed 144: 462.68]
+  [mixed 256: 428.41]
+  [mixed 272: 423.55]
+    0     507.31      507.31         507.31            508
+   16     503.03      502.84         502.32            504
+   32     498.76      498.38         497.34            499
+   48     494.50      493.92         492.36            495
+   64     490.24      489.47         487.39            491
+   80     485.98      485.02         482.43            486
+   96     481.74      480.59         477.48            482
+  112     477.50      476.15         472.54            478
+  128     473.26      471.73         467.60            474
+  144     469.03      467.31         462.68            470
+  256     439.58      436.56         428.41            440
+  272     435.40      432.19         423.55            436
+
+====================================================================================================
+3. Per M and leg grouping: the weakest group's hints (16 per leg + 16 with the auditor), worst-case beta
+====================================================================================================
+  M legs/group   G  auditor  hints  beta (mixed)  beta (unit r)  >= 450
+  1          1   1       on     32        497.34         498.76     yes
+  1          1   1      off     16        502.32         503.03     yes
+  2          1   2       on     32        497.34         498.76     yes
+  2          1   2      off     16        502.32         503.03     yes
+  2          2   1       on     48        492.36         494.50     yes
+  2          2   1      off     32        497.34         498.76     yes
+  4          1   4       on     32        497.34         498.76     yes
+  4          1   4      off     16        502.32         503.03     yes
+  4          2   2       on     48        492.36         494.50     yes
+  4          2   2      off     32        497.34         498.76     yes
+  4          3   2       on     64        487.39         490.24     yes
+  4          3   2      off     48        492.36         494.50     yes
+  4          4   1       on     80        482.43         485.98     yes
+  4          4   1      off     64        487.39         490.24     yes
+  8          1   8       on     32        497.34         498.76     yes
+  8          1   8      off     16        502.32         503.03     yes
+  8          2   4       on     48        492.36         494.50     yes
+  8          2   4      off     32        497.34         498.76     yes
+  8          3   3       on     64        487.39         490.24     yes
+  8          3   3      off     48        492.36         494.50     yes
+  8          4   2       on     80        482.43         485.98     yes
+  8          4   2      off     64        487.39         490.24     yes
+  8          8   1       on    144        462.68         469.03     yes
+  8          8   1      off    128        467.60         473.26     yes
+ 16          1  16       on     32        497.34         498.76     yes
+ 16          1  16      off     16        502.32         503.03     yes
+ 16          2   8       on     48        492.36         494.50     yes
+ 16          2   8      off     32        497.34         498.76     yes
+ 16          3   6       on     64        487.39         490.24     yes
+ 16          3   6      off     48        492.36         494.50     yes
+ 16          4   4       on     80        482.43         485.98     yes
+ 16          4   4      off     64        487.39         490.24     yes
+ 16         16   1       on    272        423.55         435.40      NO
+ 16         16   1      off    256        428.41         439.58      NO
+
+====================================================================================================
+4. Largest group size with beta >= 450 (worst-case mixed hints)
+====================================================================================================
+auditor on : legs per (r, e1) <= 8
+auditor off: legs per (r, e1) <= 8
+
+====================================================================================================
+6. Fix round 1 (I2): dual_hybrid on the hinted instance, n - h model (dual_hints16k.sage)
+====================================================================================================
+lattice-estimator 53da598; n = 2560, m = 2576, q = 1125899864532089, CBD(1) secret, CBD(20) error
+hints primal n-h  dual cl.  dual qu.  DDGR20 mixed  offset  dual cl. - off  dual qu. - off >= _sage_const_450 
+    0        508       499       500        507.31    0.69          498.31          499.31     yes
+   16        504       495       495        502.32    1.68          493.32          493.32     yes
+   32        499       490       493        497.34    1.66          488.34          491.34     yes
+   80        486       478       480        482.43    3.57          474.43          476.43     yes
+  128        474       465       467        467.60    6.40          458.60          460.60     yes
+  144        470       461       463        462.68    7.32          453.68          455.68     yes
+done

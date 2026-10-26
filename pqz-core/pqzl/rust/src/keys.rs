@@ -18,14 +18,15 @@ use crate::{Enc, Error, Key, Wiped, CT_BYTES, POLYVEC_BYTES, V_BYTES};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-const N: usize = 2048;
-const K: usize = 32;
-const DELTA: i64 = (1 << 26) - 1;
+use crate::params::set;
+const N: usize = set::N;
+const K: usize = set::K;
+const DELTA: i64 = set::DELTA;
 const MAXCTR: u32 = 64;
-/// the norm thresholds ‖s‖, ‖e‖ (KeyGen; Enc's r, e1) and ‖e2_j‖ (Enc)
-pub(crate) const BS: i64 = 36;
-pub(crate) const BE: i64 = 164;
-pub(crate) const B2: i64 = 64;
+/// the norm thresholds ‖s‖, ‖e‖ (KeyGen; Enc's r, e1) and ‖e2_j‖ (Enc): the set's
+pub(crate) const BS: i64 = set::BETA_S as i64;
+pub(crate) const BE: i64 = set::BETA_E as i64;
+pub(crate) const B2: i64 = set::BETA_2 as i64;
 
 /// `set_c`: coefficient j of p := v (via the coefficient domain)
 fn set_c(p: &mut Poly, j: usize, v: i64) {
@@ -37,7 +38,8 @@ fn cval(p: &mut Poly, j: usize) -> i64 {
     p.get_coeff(j).get_i64()
 }
 
-/// `expand_A`: A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)), 8-byte BE words, low 42 bits, accept if < q
+/// `expand_A`: A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)), 8-byte BE words, low LOG2Q bits (the set's),
+/// accept if < q
 /// (centred), then NTT form
 fn expand_a() -> Result<PolyMat, Error> {
     let mut a = PolyMat::new(K, K)?;
@@ -49,7 +51,7 @@ fn expand_a() -> Result<PolyMat, Error> {
             while k < D {
                 let mut w = [0u8; 8];
                 st.squeeze(&mut w);
-                let v = u64::from_be_bytes(w) & ((1 << 42) - 1);
+                let v = u64::from_be_bytes(w) & ((1 << set::LOG2Q) - 1);
                 if v < Q {
                     set_c(p, k, if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 });
                     k += 1;
@@ -105,7 +107,7 @@ fn wr_poly(out: &mut [u8], p: &mut Poly, n: usize) {
     }
 }
 
-/// `set_short`: 2048 small coefficients into K polys
+/// `set_short`: n small coefficients into K polys
 fn set_short(f: impl Fn(usize) -> i64) -> Result<PolyVec, Error> {
     let mut v = PolyVec::new(K)?;
     for j in 0..N {
@@ -178,7 +180,7 @@ pub(crate) fn keygen(a: &mut Option<PolyMat>, seed32: &[u8; 32], bs: i64, be: i6
     let (mut s, mut e) = (Wiped(boxed(0i8)?), Wiped(boxed(0i16)?));
     let blank = (boxed(0i8)?, boxed(0i16)?);
     for ctr in 0..MAXCTR {
-        let mut b = Stream::keys(b"SCAAS-PQZ-KEYGEN-V1", seed32, ctr);
+        let mut b = Stream::keys_set(b"SCAAS-PQZ-KEYGEN-V2", seed32, ctr); // the set's name in it (review R2-C3)
         let (ns, ne) = (cbd8(&mut b, &mut s[..]), cbd16(&mut b, &mut e[..]));
         // review E: the resample verdict is public (the counter is an output); the norms are not
         if crate::ct::verdict((ns <= bs * bs) & (ne <= be * be)) {
@@ -193,17 +195,22 @@ pub(crate) fn keygen(a: &mut Option<PolyMat>, seed32: &[u8; 32], bs: i64, be: i6
 /// `pqz_encrypt`'s outputs: u and one v per recipient
 type UVs = (Box<[u8; POLYVEC_BYTES]>, Vec<[u8; V_BYTES]>);
 
-/// `pqz_encrypt`: u = A^T r + e1, v_j = pk_j^T r + e2_j + Delta msgs_j (no input checks, as C)
+/// `pqz_encrypt_win`: u = A^T r + e1, v_j = (pk_j^T r)_{16 win_j + i} + e2_j + Delta msgs_j (win: None = all 0;
+/// R0-1; no other input checks, as C)
 fn encrypt_raw(
     a: &mut Option<PolyMat>,
     pks: &[&[u8; POLYVEC_BYTES]],
+    win: Option<&[u8]>,
     msgs: &[[u8; 16]],
     r: &[i8; N],
     e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Result<UVs, Error> {
-    if msgs.len() != pks.len() || e2.len() != pks.len() {
+    if msgs.len() != pks.len() || e2.len() != pks.len() || win.is_some_and(|w| w.len() != pks.len()) {
         return Err(Error::Input); // the C ABI takes one count for all three
+    }
+    if win.is_some_and(|w| w.iter().any(|&x| x >= 4)) {
+        return Err(Error::Input);
     }
     let a = a_of(a)?;
     // Q-B (review A-3): the encryption randomness, wiped on every exit (C `wipe_vec (rv), wipe_vec (ev)`)
@@ -226,8 +233,9 @@ fn encrypt_raw(
         // Q-B (review A-3 P2-1): pk^T r and its reduced copy, wiped (C clears acc with its arena)
         let mut acc = Wiped(polyvec::dot(&mut *pk, &mut *rv));
         acc.fromcrt();
+        let o = win.map_or(0, |w| 16 * w[k] as usize);
         for i in 0..16 {
-            let c = cval(&mut acc, i) + e2[k][i] as i64 + DELTA * msgs[k][i] as i64;
+            let c = cval(&mut acc, o + i) + e2[k][i] as i64 + DELTA * msgs[k][i] as i64;
             set_c(&mut acc, i, c);
         }
         let mut vr = Wiped(Poly::redc(&mut acc));
@@ -236,16 +244,17 @@ fn encrypt_raw(
     Ok((u, vs))
 }
 
-/// `pqz_encrypt` (public form: the short vectors come back in the `Enc`, ctr 0)
+/// `pqz_encrypt_win` (public form: the short vectors come back in the `Enc`, ctr 0)
 pub(crate) fn encrypt(
     a: &mut Option<PolyMat>,
     pks: &[&[u8; POLYVEC_BYTES]],
+    win: Option<&[u8]>,
     msgs: &[[u8; 16]],
     r: &[i8; N],
     e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Result<Enc, Error> {
-    let (u, vs) = encrypt_raw(a, pks, msgs, r, e1, e2)?;
+    let (u, vs) = encrypt_raw(a, pks, win, msgs, r, e1, e2)?;
     let (mut rb, mut e1b) = (boxed(0i8)?, boxed(0i16)?);
     let mut e2v = filled(e2.len(), [0i16; 16])?; // last: no allocation fails after the e2 copy (review A-3 Minor-3)
     e2v.copy_from_slice(e2);
@@ -254,15 +263,17 @@ pub(crate) fn encrypt(
     Ok(Enc { u, vs, r: rb, e1: e1b, e2: e2v, ctr: 0 })
 }
 
-/// `pqz_enc_seed` with the norm thresholds `bs`, `be`, `b2` (`BS`, `BE`, `B2`; lowered only by the test hooks)
+/// `pqz_enc_seed_win` with the norm thresholds `bs`, `be`, `b2` (`BS`, `BE`, `B2`; lowered only by the test hooks);
+/// recipient j at window win[j] (None = all 0, `pqz_enc_seed`; R0-1)
 pub(crate) fn enc_seed(
     a: &mut Option<PolyMat>,
     pks: &[&[u8; POLYVEC_BYTES]],
+    win: Option<&[u8]>,
     msgs: &[[u8; 16]],
     seed_enc: &[u8; 32],
     (bs, be, b2): (i64, i64, i64),
 ) -> Result<Enc, Error> {
-    if msgs.len() != pks.len() {
+    if msgs.len() != pks.len() || win.is_some_and(|w| w.len() != pks.len() || w.iter().any(|&x| x >= 4)) {
         return Err(Error::Input);
     }
     let mut bad = false;
@@ -287,7 +298,7 @@ pub(crate) fn enc_seed(
         }
         if crate::ct::verdict(ok) {
             // review E: the resample verdict is public
-            let (u, vs) = encrypt_raw(a, pks, msgs, &r, &e1, &e2)?;
+            let (u, vs) = encrypt_raw(a, pks, win, msgs, &r, &e1, &e2)?;
             return Ok(Enc { u, vs, r: r.take(blank.0), e1: e1.take(blank.1), e2: e2.take(Vec::new()), ctr });
         }
     }
@@ -304,9 +315,12 @@ pub(crate) fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     out
 }
 
-/// `pqz_decrypt_raw`: w_i = centre(v_i - (u^T s)_i) (no canonical check, as C)
+/// `pqz_decrypt_raw_win`: w_i = centre(v_i - (u^T s)_{16 win + i}) (no canonical check, as C; win < 4, R0-1)
 /// (`u`: POLYVEC_BYTES, `v`: V_BYTES)
-pub(crate) fn decrypt_raw(s: &[i8; N], u: &[u8], v: &[u8]) -> Result<[i64; 16], Error> {
+pub(crate) fn decrypt_raw(s: &[i8; N], u: &[u8], v: &[u8], win: usize) -> Result<[i64; 16], Error> {
+    if win >= 4 {
+        return Err(Error::Input);
+    }
     // Q-B (review A-3): the secret key, u^T s and the plaintext, wiped on every exit (C `wipe_vec (sv)`, the arena)
     let mut sv = Wiped(set_short(|j| s[j] as i64)?);
     let mut uv = PolyVec::new(K)?;
@@ -315,24 +329,31 @@ pub(crate) fn decrypt_raw(s: &[i8; N], u: &[u8], v: &[u8]) -> Result<[i64; 16], 
     rd_poly(&mut vv, v, 16);
     let mut acc = Wiped(polyvec::dot(&mut *uv, &mut *sv));
     acc.fromcrt();
-    vv.sub_assign(&mut acc, false);
+    let mut aw = Wiped(Poly::ZERO); // (u^T s) at window win into coefficients 0 .. 15
+    for i in 0..16 {
+        let c = cval(&mut acc, 16 * win + i);
+        set_c(&mut aw, i, c);
+    }
+    vv.sub_assign(&mut aw, false);
     Ok(core::array::from_fn(|i| cval(&mut vv, i)))
 }
 
-/// `pqz_dec`: M_i = round(w_i / Delta) = floor((2 w_i + Delta) / (2 Delta)) (no ties: Delta odd), noise
-/// w_i - Delta M_i; C's branch-free form: t = 2w + Delta + 2 Delta 2^17 > 0 (|w| < q/2 < 2^41), floor(t / (2 Delta))
-/// = M + 2^17
-pub(crate) fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
-    if !canonical(&ct[..]) {
+/// `pqz_dec`: M_i = round(w_i / Delta) = floor((2 w_i + Delta) / (2 Delta)) (ties up: v3's Delta is odd, no ties;
+/// an encryption's |noise| < Delta / 2 never ties), noise w_i - Delta M_i; C's branch-free form with SH = MBITS + 3:
+/// t = 2w + Delta + 2 Delta 2^SH > 0 (|w| < q/2, 2 Delta 2^SH ~ 4q), floor(t / (2 Delta)) = M + 2^SH
+/// (`pqz_dec_win`: a v at window win < 4, the auditor's copy of an R_TXM leg j: win = j mod S_AUD; R0-1)
+pub(crate) fn dec(s: &[i8; N], ct: &[u8; CT_BYTES], win: usize) -> Result<([i64; 16], [i64; 16]), Error> {
+    if !canonical(&ct[..]) || win >= 4 {
         return Err(Error::Input);
     }
     let (u, v) = ct.split_at(POLYVEC_BYTES);
-    let mut w = decrypt_raw(s, u, v)?;
+    let mut w = decrypt_raw(s, u, v, win)?;
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     for i in 0..16 {
         // review E: the fixed-step restoring division (w is secret; wasm32 keeps a 64-bit '/' as i64.div_u)
-        let mut t = [(2 * w[i] + DELTA + 2 * DELTA * (1 << 17)) as u64];
-        m[i] = crate::arith::mpn::div(None, &mut t, &[(2 * DELTA) as u64]) as i64 - (1 << 17);
+        const SH: u32 = set::MBITS + 3;
+        let mut t = [(2 * w[i] + DELTA + 2 * DELTA * (1 << SH)) as u64];
+        m[i] = crate::arith::mpn::div(None, &mut t, &[(2 * DELTA) as u64]) as i64 - (1 << SH);
         noise[i] = w[i] - DELTA * m[i];
     }
     crate::wipe(&mut w);

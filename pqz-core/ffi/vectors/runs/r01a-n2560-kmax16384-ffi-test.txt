@@ -1,0 +1,22 @@
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+error[E0425]: cannot find function `rels` in this scope
+   --> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust/src/testkit.rs:767:13
+    |
+767 |     let d = rels().get(i)?.1.tbox.dcompress;
+    |             ^^^^ not found in this scope
+
+error[E0425]: cannot find function `dump` in this scope
+   --> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust/src/testkit.rs:772:5
+    |
+772 |     dump(&mut o, &r);
+    |     ^^^^ not found in this scope
+
+error[E0425]: cannot find function `dump` in this scope
+   --> /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust/src/testkit.rs:773:5
+    |
+773 |     dump(&mut o, &a);
+    |     ^^^^ not found in this scope
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `pqzl` (lib) due to 3 previous errors

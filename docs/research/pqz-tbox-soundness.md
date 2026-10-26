@@ -309,3 +309,38 @@ The gate before the merge (plan Tasks 9, 12) and the reviews A / B (Tasks 10, 11
   (`coder_grandom3_nbits`), `pqz-core/pqzl/src/pqz_sv.c`, `pqz-core/pqzl/rust/src/proof/tbox.rs` (`hash_z34`,
   `hash_h`), `rust/src/sv.rs`; tests `pqz-core/pqzl/sz/fs_bind.c`, `rust/tests/fs_bind.rs`; runs `pqz-core/pqzl/runs/fs*`,
   `pqz-core/pqzl/rust/runs/fs*`, `pqz-core/research/pqzl-measure/runs/fs2-*`, `fs4-*`, `pqz-core/ffi/vectors/runs/fs5-*`.
+
+### 8.6 B-1: V3 / V4 after `tg`; A-2: distinct υ domain (5h Task 8a)
+
+Added 2026-10-21 (plan `docs/superpowers/plans/2026-10-20-pqz-state-redesign.md` Task 8, sub-task 8a). Review B
+(`pqz-core/research/code-review-2026-10-19/X-review-b-transcript.md`, B-1, P0) and review A (`W-review-a-pqzl-rust.md`,
+A-1 = B-1 confirmed by a cheating prover; A-2, P3). v3 closed "z after V" but not "g after V": V3 / V4 came from `hz`,
+before the round over `tg`, the commitment to the masking polynomial g whose coefficients 0 and d/2 nobody checks. A
+prover that knows V before committing g sets those two coefficients to minus the V-folded error of a false `z3` /
+`z4`, so `h_i = g_i + acc_i(s)` still has zero coefficients 0 and d/2 and every other check holds [code; measured
+below]. In LNP22's vanishing-constant-coefficient argument g is committed before the aggregation challenge; V is
+that challenge for the JL rows.
+
+| Prover message | Challenge combined with it | v3 | since 8a |
+|---|---|---|---|
+| `tg` (commitment to g) | V3, V4 | from `hz`, fixed before `tg` | from `hash1 = SHAKE128(hz ‖ urandom3(tg))`, as γ |
+
+**Fix** [code]: V3 / V4 from `hash1` with the same row construction (`dom << 32 | 256 i`, disjoint from every γ
+draw, dom < 2^32) in `lnp-tbox.c` (prover and verifier), `pqz_sv.c`, `proof/tbox.rs` (`accumulate_all` lost its
+`hash0` seed) and `sv.rs`. **A-2** in the same change: the last β4 row (`M + d − 1 + (d − 1)`) and υ (`M + 2(d − 1)`)
+shared a domain, so the accumulators enforced only their sum (not exploitable, review A); υ, binary, exact ℓ2, V4 and
+V3 each move up by one (`M + 2(d − 1) + 1`, `+ 2`, `+ 3 + i`, `+ 3 + Z`, `+ 3 + Z + 256`). Transcript change, folded
+into the 16k `proofSystemId` bump (plan D23, Task 8d); this step keeps today's parameters so the vector diff isolates
+it.
+
+**Evidence** [measured]:
+- review A's cheating prover, now `pqz-core/pqzl/rust/tests/cheat_b1.rs` (test hook `set_cheat`, feature
+  `test-hooks`; modes 1: `z4[0][0] + 1`, 2: `z3 = y3`, both cancelled through g with V guessed from `hz`; 3: the
+  uncancelled control): before the fix modes 1 and 2 were **accepted by all four verifiers** (Rust `verify` /
+  `verify_fast`, C `pqz_verify` / `pqz_verify_fast`) on all 14 relation codes, 28 forgeries
+  (`pqz-core/pqzl/rust/runs/t8a-red-test.txt`; review A had not run the C verifiers); after it every mode is rejected
+  by all four on all codes, mode 0 = the vectors (gate `t8a`, step rust);
+- the binding tests with a `tg` mutation (test_mutate kind 15): before the fix the V4 / V3 seeds equalled the honest
+  ones in both verifiers of both cores (4 failed checks of 18; `pqz-core/pqzl/runs/t8a-red-fsbind-c.txt`,
+  `pqz-core/pqzl/rust/runs/t8a-red-fsbind.txt`), after it 0 of 18 (`t8a-green-fsbind*.txt`);
+- A-2: `sv/review/review.sh dom` (a fifth check of `check_tbox_fixes.sh`) finds 0 shared domains in 129 calls.

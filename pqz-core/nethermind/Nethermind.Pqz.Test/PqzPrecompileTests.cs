@@ -48,7 +48,8 @@ public class PqzPrecompileTests
     [Test]
     public void Selftest_constant_equals_the_vector_file()
     {
-        JsonObject st = JsonNode.Parse(File.ReadAllText(Repo.Path_("smartcontracts", "vectors", "pqz", "selftest.json")))!.AsObject();
+        Assert.That(SelfTest.Set, Is.EqualTo(Repo.Set), "plugin built for another set (-p:PqzSet) than PQZ_SET");
+        JsonObject st = JsonNode.Parse(File.ReadAllText(Path.Combine(Repo.VectorDir, "selftest.json")))!.AsObject();
         Assert.That((string)st["hash"]!, Is.EqualTo(SelfTest.ExpectedHash));
         Assert.That(SelfTest.Run(), Is.EqualTo(SelfTest.ExpectedHash));
     }
@@ -62,8 +63,11 @@ public class PqzPrecompileTests
         Exception? e = Assert.Throws<InvalidOperationException>(() => SelfTest.CheckedLibrarySha256(new string('0', 64)));
         Assert.That(e!.Message, Does.Contain("!= the reviewed " + new string('0', 64)));
         string src = File.ReadAllText(Repo.Path_("pqz-core", "nethermind", "Nethermind.Pqz", "SelfTest.cs"));
-        var m = System.Text.RegularExpressions.Regex.Matches(src, @"ExpectedLibrarySha256 = ""([0-9a-f]{64})"";");
-        Assert.That(m.Select(x => x.Groups[1].Value), Is.EqualTo(new[] { SelfTest.ExpectedLibrarySha256 }));
+        // one reviewed value per set (R0 review fix part b), on the set's line, as build-image.sh reads it
+        var m = System.Text.RegularExpressions.Regex.Matches(src, @"Set = ""([a-z0-9-]+)"", ExpectedHash = ""[0-9a-f]{64}"", ExpectedLibrarySha256 = ""([0-9a-f]{64})"";");
+        Assert.That(m.Select(x => x.Groups[1].Value), Is.EqualTo(new[] { "n2048-kmax1024", "n2304-kmax4096", "n2560-kmax16384", "n2816-kmax65536" }));
+        Assert.That(m.Single(x => x.Groups[1].Value == SelfTest.Set).Groups[2].Value, Is.EqualTo(SelfTest.ExpectedLibrarySha256));
+        Assert.That(m.Select(x => x.Groups[2].Value).Distinct().Count(), Is.EqualTo(4), "a library per set");
         Assert.That(File.ReadAllText(Repo.Path_("pqz-core", "nethermind", "build-image.sh")), Does.Contain(@"ExpectedLibrarySha256 = ""\([0-9a-f]\{64\}\)"";"));
     }
 
@@ -85,7 +89,12 @@ public class PqzPrecompileTests
             int stmtEnd = 5 + (int)h.StmtLen;
             CorpusRow? f = Corpus.Rows.FirstOrDefault(r => r.Kind == "flip" && r.Id == h.Id && r.Input.Length == h.Input.Length
                 && r.Input.AsSpan(0, stmtEnd).SequenceEqual(h.Input.AsSpan(0, stmtEnd)));
-            if (f is null) { Assert.That(h.Op, Is.EqualTo(PqzSchedule.OpMulti), "every op 1-5 honest input has a flip"); continue; }
+            // no flip: op 7 rows, and the op 7 disclosures (op 5 rows named by their case, R0 review fix): same row and
+            // length as their form's honest input, which has one. Name-based on purpose (review m11, kept): corpus.py
+            // names an honest row "<form> <id>" and only the vectors' op 7 disclosures "<case> <id>", the one marker the
+            // corpus carries; a new honest op 1-5 row with a case name would skip this check, so give it a flip row
+            bool ofMulti = h.Op == PqzSchedule.OpMulti || !h.Name.StartsWith(h.Form + " ");
+            if (f is null) { Assert.That(ofMulti, Is.True, $"every op 1-5 honest input has a flip: {h.Name}"); continue; }
             Assert.That(PqzPrecompile.Gas(f.Input, s), Is.EqualTo(PqzPrecompile.Gas(h.Input, s)), h.Name);
         }
         // misses: the smallest row + the length term; op 6: selftestGas, fixed
@@ -161,6 +170,18 @@ public class PqzPrecompileTests
         Assert.That(PqzPrecompile.Run([], s).Data, Is.EqualTo(Zero), "len = 0");
         Assert.That(PqzNative.Call([], new byte[32]), Is.EqualTo(PqzNative.Ok), "len = 0 through the ABI (null pointer)");
         Assert.That(PqzPrecompile.Run([6], s).Data, Is.EqualTo(Zero), "op 6 with a short input: …00 from pqz-ffi");
+    }
+
+    /// <summary>Review R4-C6: <c>PqzNative</c>'s status constants are pqz_ffi.h's <c>#define PQZ_FFI_*</c> (a renumbered
+    /// status would otherwise land in <c>default:</c>, exit 120 on every node).</summary>
+    [Test]
+    public void Status_constants_are_the_header_s()
+    {
+        string h = File.ReadAllText(Repo.Path_("pqz-core", "ffi", "pqz_ffi.h"));
+        int Def(string n) => int.Parse(System.Text.RegularExpressions.Regex.Match(h, $@"^#define {n} (\d+)", System.Text.RegularExpressions.RegexOptions.Multiline) is { Success: true } m ? m.Groups[1].Value : throw new AssertionException(n));
+        Assert.That((Def("PQZ_FFI_OK"), Def("PQZ_FFI_REVERT"), Def("PQZ_FFI_BAD_ARGS"), Def("PQZ_FFI_INTERNAL"), Def("PQZ_FFI_NODE_FAULT")),
+            Is.EqualTo((PqzNative.Ok, PqzNative.Revert, PqzNative.BadArgs, PqzNative.InputPanic, PqzNative.NodeFault)));
+        Assert.That(Def("PQZ_FFI_OUT_BYTES"), Is.EqualTo(32));
     }
 
     [Test]

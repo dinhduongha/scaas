@@ -1,0 +1,25 @@
+# gate t8b-v3 (set n2048-kmax1024): 756713a298ed215124d625de28eb4c3a3a2f80c3, 2026-10-21T16:24Z
+set n2048-kmax1024
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== fnv
+   FAILED (rc=1)
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   FAILED (rc=1)
+== fuzz
+   ok
+gate t8b-v3 (set n2048-kmax1024): FAIL

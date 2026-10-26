@@ -4,7 +4,8 @@ merges, so pqz_kat.py is the byte oracle: every txm*_stmt.bin dumped by the Lige
 under pqz_kat.py's op 7 rules with PQZH's id only, be rebuilt byte for byte by build_multi from the parsed fields, carry
 recipientsHash = recipients_hash(UA_0..UA_{M-1}) (UA_j = 0x1000 + j) and the M / auditorOn words of its file name; and
 its witness (s_f || e_f || (r_g || e1_g)_g || e2 vectors || d_j || d', plan §4 prover API) must reproduce the
-statement's pk_f, every u_g, v_j, v_f, v_{a,j} with pqz_kat.py's own A, products and encryption (legs in group j // 4),
+statement's pk_f, every u_g, v_j, v_f, v_{a,j} with pqz_kat.py's own A, products and encryption (legs in group j // s,
+s = S_AUD with the auditor, 4 without; the auditor copy of leg j at window j mod s: R0-1),
 meet every norm, and satisfy the debit: Dec(s_f, T) = b' + sum_j a_j + fee with every digit < 16.
   python3 -I kat_multi.py DIR      (DIR holds txm<M>[_0][_fee0|_two]_{stmt,wit}.bin); exit 1 on any difference
 """
@@ -16,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../smartcontracts/vectors/pqz"))
 import pqz_kat as K  # noqa: E402
 
-N = 2048
+N = K.N
 
 
 def i8(b):
@@ -48,14 +49,14 @@ def check(st, wit, m, aud):
     if d["recipientsHash"] != K.recipients_hash([0x1000 + j for j in range(m)]):
         bad.append("recipientsHash")
     # witness
-    g = K.groups(m)
+    g, sg = K.groups(m, aud), K.lpg(aud)
     nv = m + 1 + aud * m
-    if len(wit) != 6144 * (1 + g) + 32 * nv + 16 * (m + 1):
+    if len(wit) != (3 * N) * (1 + g) + 32 * nv + 16 * (m + 1):
         return bad + [f"witness length {len(wit)}"]
     s_f, e_f = i8(wit[:N]), i16(wit[N:3 * N])
-    rs = [i8(wit[6144 * (1 + i):6144 * (1 + i) + N]) for i in range(g)]
-    e1s = [i16(wit[6144 * (1 + i) + N:6144 * (2 + i)]) for i in range(g)]
-    p = 6144 * (1 + g)
+    rs = [i8(wit[(3 * N) * (1 + i):(3 * N) * (1 + i) + N]) for i in range(g)]
+    e1s = [i16(wit[(3 * N) * (1 + i) + N:(3 * N) * (2 + i)]) for i in range(g)]
+    p = (3 * N) * (1 + g)
     e2 = [i16(wit[p + 32 * x:p + 32 * x + 32]) for x in range(nv)]
     p += 32 * nv
     ds = [list(wit[p + 16 * j:p + 16 * j + 16]) for j in range(m)]
@@ -68,14 +69,15 @@ def check(st, wit, m, aud):
     t = K.mul_A(K.polys(s_f))
     if K.enc_vec([[(t[i][k] + e_f[K.D * i + k]) % K.Q for k in range(K.D)] for i in range(K.K)]) != d["pk_f"]:
         bad.append("pk_f != A s_f + e_f")
-    # vectors in witness order: legs (d_j), f (d'), auditor copies (d_j); group of leg j: j // 4, v_f: 0
-    vecs = [(d["pks"][j], ds[j], j // K.LEGS_PER_GROUP, d["vs"][j]) for j in range(m)]
-    vecs.append((d["pk_f"], dp, 0, d["v_f"]))
+    # vectors in witness order: legs (d_j), f (d'), auditor copies (d_j, window j mod s); group of leg j: j // s, v_f: 0
+    vecs = [(d["pks"][j], ds[j], j // sg, d["vs"][j], 0) for j in range(m)]
+    vecs.append((d["pk_f"], dp, 0, d["v_f"], 0))
     if aud:
-        vecs += [(d["pk_a"], ds[j], j // K.LEGS_PER_GROUP, d["v_as"][j]) for j in range(m)]
+        vecs += [(d["pk_a"], ds[j], j // sg, d["v_as"][j], j % sg) for j in range(m)]
     for gi in range(g):
         xs = [x for x in range(nv) if vecs[x][2] == gi]
-        u, vs = K.encrypt([vecs[x][0] for x in xs], [vecs[x][1] for x in xs], rs[gi], e1s[gi], [e2[x] for x in xs])
+        u, vs = K.encrypt([vecs[x][0] for x in xs], [vecs[x][1] for x in xs], rs[gi], e1s[gi], [e2[x] for x in xs],
+                          [vecs[x][4] for x in xs])
         if u != d["us"][gi]:
             bad.append(f"u_{gi}")
         bad += [f"v vector {x}" for x, v in zip(xs, vs) if v != vecs[x][3]]

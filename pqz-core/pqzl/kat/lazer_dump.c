@@ -7,7 +7,7 @@
  *
  * Inputs are fixed: a xorshift64* stream with a fixed seed plus edge polynomials, no RNG of the library
  * except where the case is the library's PRNG (rng/urandom/brandom: AES-256-CTR, bit-exact by design).
- * Cases: ring products (R_q, q = 2^42 - 215, d = 64), matrix-vector and dot products, add/sub/neg/scale,
+ * Cases: ring products (R_q, q of the parameter set, d = 64), matrix-vector and dot products, add/sub/neg/scale,
  * the automorphism X -> X^-1, l2^2 and l_inf norms, Dilithium-style decompose/power2round (tbox params),
  * the AES-256-CTR stream, uniform and binomial samplers. Output: JSON on stdout.
  */
@@ -40,7 +40,8 @@ rnd (void)
   return xs * 2685821657736338717ULL;
 }
 
-#define Q 4398046510889LL
+#include "pqz_set.h" /* the parameter set (owner 2026-10-21; build-lazer-dump.sh copies it with the tx header) */
+#define Q ((long long)PQZ_Q)
 #define H ((Q - 1) / 2)
 
 static int first;
@@ -142,9 +143,15 @@ main (void)
 
   printf ("{\n  \"meta\": {\"backend\": \"%s\", \"lazer_commit\": \"3330e487228f633eceb322807b13a596b516770f\", "
           "\"build\": \"%s\", \"compiler\": \"%s\", \"cpu_avx512f\": %d, \"cpu_avx512ifma\": %d, "
-          "\"ring\": \"Z_q[X]/(X^64+1), q = 2^42 - 215\"},\n  \"cases\": {",
+          "\"ring\": \"Z_q[X]/(X^64+1), q = %llu (set %s)\"}",
           BACKEND, BUILD_FLAGS, __VERSION__, __builtin_cpu_supports ("avx512f") ? 1 : 0,
-          __builtin_cpu_supports ("avx512ifma") ? 1 : 0);
+          __builtin_cpu_supports ("avx512ifma") ? 1 : 0, (unsigned long long)PQZ_Q, PQZ_SET_NAME);
+#ifdef PQZ_BACKEND
+  /* the one intended deviation from upstream (R0 review fix, R1-C1 / R2-C2): Power2Round's wrap case, r1 * 2^D >= q,
+     gives r1 = 0 here (upstream keeps that r1, no high part mod q); kat/check.py accepts exactly those coefficients */
+  printf (",\n  \"p2r_wrap\": {\"q\": %llu, \"D\": %u}", (unsigned long long)PQZ_Q, pqz_tx_dcomp->D);
+#endif
+  printf (",\n  \"cases\": {");
   first = 1;
 
   begin_case ("inputs_a");
@@ -275,7 +282,7 @@ main (void)
     for (i = 0; i < 1024; i++)
       printf ("%02x", out[i]);
     printf ("\"");
-    PER_PAIR ("urandom", poly_urandom (r, R->q, 42, seed, i));
+    PER_PAIR ("urandom", poly_urandom (r, R->q, R->log2q, seed, i));
     PER_PAIR ("brandom", poly_brandom (r, 2, seed, i));
   }
 
@@ -283,7 +290,7 @@ main (void)
 #ifdef PQZ_BACKEND
   if (pqz_err != PQZ_OK)
     {
-      fprintf (stderr, "pqz_err = %d\n", pqz_err);
+      fprintf (stderr, "pqz_err = %d (%s:%d)\n", pqz_err, pqz_err_file ? pqz_err_file : "?", pqz_err_line);
       return 1;
     }
 #endif

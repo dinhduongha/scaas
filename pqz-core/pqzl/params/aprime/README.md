@@ -9,6 +9,11 @@ Owner choice A' (decisions CTR-PQZ-06, 2026-10-19): larger lattice parameters so
 | `aprime.sage`, `run.sh` → `aprime.txt` | per candidate (n, q, K): the noise and digit budget of pq-zero-knowledge.md §4.3 generalised, sizes, encryption security (lattice-estimator `53da598` primal uSVP and full `LWE.estimate`; leaky-LWE-Estimator `0a9caf8` DDGR20 worst-case mixed hints at 0 / 32 / 80) |
 | `ap<n>_<rel>_params.sage`, `run_proof.sh` → `proof-aprime.txt` | LaZer codegen sizing specs (n = 2688 and 2816, q = 2^54 − 327, the A' bit layouts) run through `../e_s1_proof.sage` unchanged: MSIS / MLWE ranks and the codegen proof size |
 
+**Superseded research record (review finding F-7, 2026-10-25).** The `ap2816_*.sage` specs carry `pqz_delta` but no
+`kmlwe_min`, so their proof MLWE rank came out at 41, where `proof-aprime.txt` shows dual_hybrid β 447 / 448 < 450; the
+production set `n2816-kmax65536` has `kmlwe_min = 42` (dual_hybrid 462 / 463, `pqz-core/params/sets/n2816-kmax65536/`
+`set.toml` and `SET.md` say why). Nothing builds from these specs.
+
 ## Rerun
 
 ```sh

@@ -1,22 +1,33 @@
-//! Mixed-radix FFT over F_q on subgroups H_n of order n | 2^3 * 19 * 43 * 431 (radices 2, 19, 43 and 431; owner
-//! decision 2026-10-14: the radix-431 stage for longer codes). Each radix-r stage is a direct r-point DFT with lazy
+//! Mixed-radix FFT over F_q on subgroups H_n of order n | 4 * 2 * 19 * 43 * 431 (the set's radices, pqzh_set.rs: 2, 19,
+//! 43 and 431 in every set so far, all dividing q - 1; owner decision 2026-10-14: the radix-431 stage for longer codes). Each radix-r stage is a direct r-point DFT with lazy
 //! u128 accumulation (r + 1 products per point and stage), decimation in time, natural order in and out.
 
 use crate::Wiped;
-use crate::fq::{Fq, Q, red};
+use crate::fq::{Fq, Q, cnt, red};
 
-pub const GEN: Fq = Fq(3);
+/// the set's generator of F_q^* (3 in every set so far)
+pub const GEN: Fq = Fq(crate::set::GEN);
 /// stage order, outermost first: the largest radix is the deepest stage (it sees the zero padding)
-pub const RADICES: [usize; 4] = [2, 19, 43, 431];
+pub const RADICES: &[usize] = &crate::set::RADICES;
+/// the largest domain: 2^3 * 19 * 43 * 431 (4 * the product of the radices)
+const NMAX: usize = {
+    let (mut p, mut i) = (4, 0);
+    while i < RADICES.len() {
+        p *= RADICES[i];
+        i += 1;
+    }
+    p
+};
+const _: () = assert!((Q - 1).is_multiple_of(NMAX as u64));
 
 pub fn smooth(n: usize) -> bool {
     let mut m = n;
-    for r in RADICES {
+    for &r in RADICES {
         while m % r == 0 {
             m /= r;
         }
     }
-    m == 1 && (2 * 19 * 43 * 431 * 4) % n == 0
+    m == 1 && NMAX % n == 0
 }
 
 pub struct Domain {
@@ -37,7 +48,7 @@ impl Domain {
         assert!(n >= 1 && smooth(n), "domain size {n} not 2^a 19^b 43^c 431^d dividing q - 1");
         let mut radices = Vec::new();
         let mut m = n;
-        for r in RADICES {
+        for &r in RADICES {
             while m % r == 0 {
                 radices.push(r);
                 m /= r;
@@ -132,13 +143,16 @@ impl Domain {
                 let v = out[s * m + k];
                 t[s] = if s == 0 { v.0 as u128 } else { red(w[ix(tstep * s * k)].0 as u128 * v.0 as u128) as u128 };
             }
+            cnt((r - 1) as u64);
             if ns * 4 < r {
+                cnt((r * ns) as u64);
                 for u in 0..r {
                     let acc: u128 = (0..ns).map(|s| t[s] * eps[s * u % r]).sum();
                     out[k + u * m] = Fq(red(acc));
                 }
                 continue;
             }
+            cnt((r * r) as u64);
             for u in 0..r {
                 let mut acc = 0u128;
                 let mut e = 0;
@@ -170,7 +184,12 @@ mod tests {
 
     #[test]
     fn fft_matches_naive_all_radices() {
-        for n in [1usize, 2, 4, 8, 19, 38, 43, 86, 152, 431, 862, 817, 1634, 3448, 18533, 32756] {
+        let mut sizes = vec![1usize, 2, 4, 8, 19, 38, 43, 86, 152, 431, 862, 817, 1634, 3448, 18533, 32756];
+        if RADICES.contains(&7) {
+            // research spike B: the radix-7 / 17 domains of its preset (n 45,752, k 952, N2) and small ones
+            sizes.extend([7, 17, 14, 119, 952, 2261, 45752]);
+        }
+        for n in sizes {
             let d = Domain::new(n);
             let a: Vec<Fq> = (0..n as u64).map(|i| Fq((i * 7919 + 13) * 1_000_003 % Q)).collect();
             let f = d.fft(&a);
@@ -191,5 +210,11 @@ mod tests {
             }
         }
         assert!(smooth(32756) && smooth(18533) && !smooth(431 * 431) && !smooth(16));
+        // the domains exist in F_q^* (q - 1 = 2^3 * 19 * 43 * 431 * ... in every set) and GEN H_n misses H_k for THE
+        // preset (the Lagrange denominators eta - omega_k^c of the verifier are nonzero): GEN^lcm(n, k) != 1
+        let (n, k) = (crate::set::PRESET_N, crate::set::PRESET_K);
+        assert!(smooth(n) && smooth(k));
+        let lcm = n / (1..=k).rev().find(|d| n % d == 0 && k % d == 0).unwrap() * k;
+        assert!((Q - 1).is_multiple_of(lcm as u64) && GEN.pow(lcm as u64) != Fq::ONE);
     }
 }

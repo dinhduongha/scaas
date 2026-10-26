@@ -1,5 +1,12 @@
 # pqz-core/pqzl/params — E-S0 parameter spike and E-S1 codegen
 
+> **Parameter sets moved (owner 2026-10-21, plan 5h Task 8b).** The headers the cores build with now live in one
+> directory per parameter set, [`pqz-core/params/sets/<set>/`](../../params/sets/README.md) (selected at compile time:
+> C `PQZ_SET`, Rust feature `set-<set>`; one set per library build; how to add a set:
+> [`pqz-core/params/README.md`](../../params/README.md)). The v3 set's headers and Rust params moved unchanged to
+> `sets/n2048-kmax1024/`; this folder keeps their specs (`*.sage`), the estimator logs and `codegen/`, and the research
+> records `n-study/`, `p16k/`, `aprime/`, `anon/` as before. The `pqz_*_params.h` named below are in `sets/n2048-kmax1024/`.
+
 This folder holds the security parameters of PQZL, the lattice proof system of PQZ, and the evidence that they are
 secure. For each relation (what a proof shows: a transfer, a burn, a registration, …) it has a small specification, the
 C header generated from it, and the output of the lattice-estimator runs that size it to at least 128-bit security.

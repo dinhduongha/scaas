@@ -73,7 +73,7 @@ fn c_out_of_range_rejected() {
     }
 }
 
-/// `test_mutate` outputs (kinds 0..14 and re-encode only, chained within a seed as in oracle_codec) over every
+/// `test_mutate` outputs (kinds 0..15 and re-encode only, chained within a seed as in oracle_codec) over every
 /// relation code: Rust verdict = C verdict. PQZL_MUTATED_N outputs (default 280, 20 per code; the brief's full
 /// sample is 20,000: about 0.3 s per output, so hours; run it as a separate job).
 #[test]

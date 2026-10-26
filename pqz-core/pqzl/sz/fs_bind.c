@@ -3,13 +3,16 @@
  *
  * Observes which bytes seed which Fiat-Shamir challenge in the two production verifiers, pqz_verify and
  * pqz_verify_fast, through the trace hook (-DPQZ_SZ_TRACE; lazer/lnp-tbox.c and src/pqz_sv.c). One honest R_REG
- * proof with a fixed rnd32, and three re-encodings of it with one field changed (pqz_test_mutate):
+ * proof with a fixed rnd32, and four re-encodings of it with one field changed (pqz_test_mutate):
  *   h  : kind 7, h_0 coefficient 5 +1 (r1 & 12 == 0: not coefficient 0 or 32, so it passes the h check)
  *   z3 : kind 14, z3 coefficient +1 (within Bz3)
  *   z4 : kind 5 at the bound, z4 coefficient = +Bz4 (passes the l_inf check)
- * Every prover message must be absorbed before the challenges that follow it: the V4 / V3 seeds (kinds 2 / 3) must
- * differ between the honest and the z3- and z4-changed proofs, the mu seed (kind 5) between the honest and the
- * h-changed proof. A record that is not emitted (the verifier rejected before the challenge) counts as a failure,
+ *   tg : kind 15, tg (the commitment to g) coefficient +1 mod q (B-1, review B)
+ *   c  : kind 9, one coefficient of the final challenge changed (R0-C3: the eta-filtered c is recomputed from the
+ *        transcript): must be rejected by both verifiers (the other relation shapes: rust/tests/fs_bind.rs, R1-C8)
+ * Every challenge must be drawn after every prover message it is combined with: the V4 / V3 seeds (kinds 2 / 3)
+ * must differ between the honest and the z3-, z4- and tg-changed proofs, the mu seed (kind 5) between the honest and
+ * the h-changed proof; the tg-changed proof must be rejected. A record that is not emitted (the verifier rejected before the challenge) counts as a failure,
  * never as "differ". The honest proof must verify. verify_fast must report pqz_sv.c's tagged kinds 12 / 13 / 15
  * (another path records the untagged ones: MISSING). Exit 0 = binding holds in both verifiers.
  *
@@ -97,31 +100,31 @@ int
 main (void)
 {
   static uint8_t arena[(size_t)768 << 20];
-  static uint8_t proof[PQZ_MAX_PROOF], mut[3][2 * PQZ_MAX_PROOF];
-  int8_t s[2048];
-  int16_t e[2048];
+  static uint8_t proof[PQZ_MAX_PROOF], mut[4][2 * PQZ_MAX_PROOF], mutc[2 * PQZ_MAX_PROOF];
+  int8_t s[PQZ_N];
+  int16_t e[PQZ_N];
   uint8_t pk[PQZ_POLYVEC_BYTES], wit[PQZ_REG_WIT_BYTES], rnd32[32];
-  size_t len = sizeof proof, mlen[3];
-  const char *mname[3] = { "h", "z3", "z4" };
-  const unsigned mkind[3] = { 7, 14, 5 };
+  size_t len = sizeof proof, mlen[4], mclen = sizeof mutc;
+  const char *mname[4] = { "h", "z3", "z4", "tg" };
+  const unsigned mkind[4] = { 7, 14, 5, 15 };
   const char *kname[6] = { "", "", "V4 seed", "V3 seed", "", "mu seed" };
   int fails = 0;
 
   if (pqz_init (arena, sizeof (arena)))
     return fprintf (stderr, "init failed\n"), 1;
-  short8 (s, 2048, 1, 36);
-  short16 (e, 2048, 20, 164);
+  short8 (s, PQZ_N, 1, PQZ_BETA_S);
+  short16 (e, PQZ_N, 20, PQZ_BETA_E);
   if (pqz_keypair_from_secret (s, e, pk))
     return fprintf (stderr, "keypair failed\n"), 1;
   memset (stmt, 0xA5, PQZ_PREFIX_BYTES);
   for (int i = 0; i < 32; i++)
     stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
   memcpy (stmt + PQZ_PREFIX_BYTES + 32, pk, PQZ_POLYVEC_BYTES);
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     {
       wit[j] = (uint8_t)s[j];
-      wit[2048 + 2 * j] = (uint8_t)(uint16_t)e[j];
-      wit[2048 + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
+      wit[PQZ_N + 2 * j] = (uint8_t)(uint16_t)e[j];
+      wit[PQZ_N + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
     }
   for (int i = 0; i < 32; i++)
     rnd32[i] = (uint8_t)(i * 31 + 7);
@@ -129,7 +132,7 @@ main (void)
     return fprintf (stderr, "prove failed\n"), 1;
 
   /* r1 = 0: h_0 / z3_0 / z4_0, (r1 >> 8) even (z4 at the bound), r1 & 12 == 0; r2 = 0x105: coefficient 5, sign + */
-  for (int m = 0; m < 3; m++)
+  for (int m = 0; m < 4; m++)
     {
       mlen[m] = sizeof mut[m];
       if (!pqz_test_mutate (PQZ_OP_REGISTER, proof, len, mkind[m], 0, 0x105, mut[m], &mlen[m])
@@ -137,6 +140,8 @@ main (void)
         return fprintf (stderr, "mutation %s failed\n", mname[m]), 1;
     }
 
+  if (!pqz_test_mutate (PQZ_OP_REGISTER, proof, len, 9, 0, 0x105, mutc, &mclen))
+    return fprintf (stderr, "mutation c failed\n"), 1;
   pqz_sz_trace_fn = trace;
   for (int fast = 0; fast < 2; fast++)
     {
@@ -147,9 +152,15 @@ main (void)
       memcpy (hon, cur.seed, sizeof hon), memcpy (hseen, cur.seen, sizeof hseen);
       printf ("P6-FS %s honest: %s\n", vn, ok == 1 ? "ACCEPT" : "REJECT (FAIL)");
       fails += ok != 1;
-      for (int m = 0; m < 3; m++)
+      if (run (fast, mutc, mclen) == 1)
+        printf ("P6-FS %s c-mutated: ACCEPT (FAIL)\n", vn), fails++;
+      else
+        printf ("P6-FS %s c-mutated: rejected\n", vn);
+      for (int m = 0; m < 4; m++)
         {
           int okm = run (fast, mut[m], mlen[m]);
+          if (m == 3 && okm == 1)
+            printf ("P6-FS %s tg-mutated: ACCEPT (FAIL)\n", vn), fails++;
           for (int k = 2; k <= 5; k++)
             {
               if ((m == 0) != (k == 5) || k == 4)
@@ -166,7 +177,7 @@ main (void)
         }
     }
   pqz_sz_trace_fn = 0;
-  printf ("\nVERDICT: P6-FS Fiat-Shamir binding (lazer#28) %s (%d failed checks of 12)\n", fails ? "FAIL" : "ok",
+  printf ("\nVERDICT: P6-FS Fiat-Shamir binding (lazer#28) %s (%d failed checks of 20)\n", fails ? "FAIL" : "ok",
           fails);
   return fails != 0;
 }

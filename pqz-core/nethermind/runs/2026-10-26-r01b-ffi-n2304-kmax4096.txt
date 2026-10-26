@@ -1,0 +1,197 @@
+# r01b: libpqz_ffi.so of n2304-kmax4096 from the Dockerfile's ffi stage (--build-arg PQZ_SET=n2304-kmax4096), 2026-10-26T05:00:48Z, commit c9c62f0f (library sources dirty) + work-tree Dockerfile
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2304-kmax4096 --target ffi-export -o bin/ffi-out-n2304-kmax4096 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 6.35kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 7.2s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#4 DONE 0.0s
+
+#5 [rust  1/14] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 27B
+#6 transferring context: 461.57MB 3.7s done
+#6 DONE 3.7s
+
+#7 [ffisrc 1/1] COPY . /
+#7 DONE 0.9s
+
+#8 [rust  2/14] RUN apt-get update && apt-get install -y --no-install-recommends clang=1:14.0-55.7~deb12u1 clang-14=1:14.0.6-12       libclang-cpp14=1:14.0.6-12 libllvm14=1:14.0.6-12 && rm -rf /var/lib/apt/lists/*
+#8 0.644 Get:1 http://deb.debian.org/debian bookworm InRelease [151 kB]
+#8 0.765 Get:2 http://deb.debian.org/debian bookworm-updates InRelease [55.4 kB]
+#8 0.810 Get:3 http://deb.debian.org/debian-security bookworm-security InRelease [34.8 kB]
+#8 0.927 Get:4 http://deb.debian.org/debian bookworm/main amd64 Packages [8790 kB]
+#8 2.395 Get:5 http://deb.debian.org/debian bookworm-updates/main amd64 Packages [6924 B]
+#8 2.395 Get:6 http://deb.debian.org/debian-security bookworm-security/main amd64 Packages [357 kB]
+#8 3.232 Fetched 9395 kB in 3s (3411 kB/s)
+#8 3.232 Reading package lists...
+#8 4.073 Reading package lists...
+#8 4.810 Building dependency tree...
+#8 5.049 Reading state information...
+#8 5.404 The following additional packages will be installed:
+#8 5.404   libclang-common-14-dev libclang1-14 libgc1 libobjc-12-dev libobjc4 libz3-4
+#8 5.404   llvm-14-linker-tools
+#8 5.409 Suggested packages:
+#8 5.409   clang-14-doc wasi-libc
+#8 5.409 Recommended packages:
+#8 5.409   llvm-14-dev libclang-rt-14-dev
+#8 5.562 The following NEW packages will be installed:
+#8 5.562   clang clang-14 libclang-common-14-dev libclang-cpp14 libclang1-14 libgc1
+#8 5.563   libllvm14 libobjc-12-dev libobjc4 libz3-4 llvm-14-linker-tools
+#8 5.840 0 upgraded, 11 newly installed, 0 to remove and 58 not upgraded.
+#8 5.840 Need to get 49.0 MB of archives.
+#8 5.840 After this operation, 250 MB of additional disk space will be used.
+#8 5.840 Get:1 http://deb.debian.org/debian bookworm/main amd64 libz3-4 amd64 4.8.12-3.1 [7216 kB]
+#8 7.088 Get:2 http://deb.debian.org/debian bookworm/main amd64 libllvm14 amd64 1:14.0.6-12 [21.8 MB]
+#8 12.51 Get:3 http://deb.debian.org/debian bookworm/main amd64 libclang-cpp14 amd64 1:14.0.6-12 [11.1 MB]
+#8 15.05 Get:4 http://deb.debian.org/debian bookworm/main amd64 libgc1 amd64 1:8.2.2-3 [245 kB]
+#8 15.16 Get:5 http://deb.debian.org/debian bookworm/main amd64 libobjc4 amd64 12.2.0-14+deb12u1 [43.2 kB]
+#8 15.16 Get:6 http://deb.debian.org/debian bookworm/main amd64 libobjc-12-dev amd64 12.2.0-14+deb12u1 [170 kB]
+#8 15.22 Get:7 http://deb.debian.org/debian bookworm/main amd64 libclang-common-14-dev all 1:14.0.6-12 [890 kB]
+#8 15.51 Get:8 http://deb.debian.org/debian bookworm/main amd64 llvm-14-linker-tools amd64 1:14.0.6-12 [1288 kB]
+#8 15.75 Get:9 http://deb.debian.org/debian bookworm/main amd64 libclang1-14 amd64 1:14.0.6-12 [6157 kB]
+#8 16.75 Get:10 http://deb.debian.org/debian bookworm/main amd64 clang-14 amd64 1:14.0.6-12 [102 kB]
+#8 16.81 Get:11 http://deb.debian.org/debian bookworm/main amd64 clang amd64 1:14.0-55.7~deb12u1 [5144 B]
+#8 25.09 debconf: delaying package configuration, since apt-utils is not installed
+#8 25.20 Fetched 49.0 MB in 11s (4366 kB/s)
+#8 25.60 Selecting previously unselected package libz3-4:amd64.
+#8 25.60 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 23256 files and directories currently installed.)
+#8 25.79 Preparing to unpack .../00-libz3-4_4.8.12-3.1_amd64.deb ...
+#8 25.86 Unpacking libz3-4:amd64 (4.8.12-3.1) ...
+#8 26.86 Selecting previously unselected package libllvm14:amd64.
+#8 26.86 Preparing to unpack .../01-libllvm14_1%3a14.0.6-12_amd64.deb ...
+#8 27.75 Unpacking libllvm14:amd64 (1:14.0.6-12) ...
+#8 32.61 Selecting previously unselected package libclang-cpp14.
+#8 32.61 Preparing to unpack .../02-libclang-cpp14_1%3a14.0.6-12_amd64.deb ...
+#8 33.85 Unpacking libclang-cpp14 (1:14.0.6-12) ...
+#8 37.59 Selecting previously unselected package libgc1:amd64.
+#8 37.59 Preparing to unpack .../03-libgc1_1%3a8.2.2-3_amd64.deb ...
+#8 38.25 Unpacking libgc1:amd64 (1:8.2.2-3) ...
+#8 41.57 Selecting previously unselected package libobjc4:amd64.
+#8 41.57 Preparing to unpack .../04-libobjc4_12.2.0-14+deb12u1_amd64.deb ...
+#8 41.87 Unpacking libobjc4:amd64 (12.2.0-14+deb12u1) ...
+#8 45.87 Selecting previously unselected package libobjc-12-dev:amd64.
+#8 45.87 Preparing to unpack .../05-libobjc-12-dev_12.2.0-14+deb12u1_amd64.deb ...
+#8 46.46 Unpacking libobjc-12-dev:amd64 (12.2.0-14+deb12u1) ...
+#8 48.80 Selecting previously unselected package libclang-common-14-dev.
+#8 48.80 Preparing to unpack .../06-libclang-common-14-dev_1%3a14.0.6-12_all.deb ...
+#8 49.40 Unpacking libclang-common-14-dev (1:14.0.6-12) ...
+#8 52.34 Selecting previously unselected package llvm-14-linker-tools.
+#8 52.35 Preparing to unpack .../07-llvm-14-linker-tools_1%3a14.0.6-12_amd64.deb ...
+#8 52.88 Unpacking llvm-14-linker-tools (1:14.0.6-12) ...
+#8 56.04 Selecting previously unselected package libclang1-14.
+#8 56.04 Preparing to unpack .../08-libclang1-14_1%3a14.0.6-12_amd64.deb ...
+#8 57.00 Unpacking libclang1-14 (1:14.0.6-12) ...
+#8 60.58 Selecting previously unselected package clang-14.
+#8 60.58 Preparing to unpack .../09-clang-14_1%3a14.0.6-12_amd64.deb ...
+#8 61.76 Unpacking clang-14 (1:14.0.6-12) ...
+#8 65.88 Selecting previously unselected package clang.
+#8 65.89 Preparing to unpack .../10-clang_1%3a14.0-55.7~deb12u1_amd64.deb ...
+#8 66.41 Unpacking clang (1:14.0-55.7~deb12u1) ...
+#8 69.56 Setting up libz3-4:amd64 (4.8.12-3.1) ...
+#8 70.91 Setting up libgc1:amd64 (1:8.2.2-3) ...
+#8 72.37 Setting up libllvm14:amd64 (1:14.0.6-12) ...
+#8 74.70 Setting up llvm-14-linker-tools (1:14.0.6-12) ...
+#8 76.47 Setting up libclang1-14 (1:14.0.6-12) ...
+#8 77.87 Setting up libobjc4:amd64 (12.2.0-14+deb12u1) ...
+#8 79.55 Setting up libclang-common-14-dev (1:14.0.6-12) ...
+#8 81.94 Setting up libclang-cpp14 (1:14.0.6-12) ...
+#8 83.82 Setting up libobjc-12-dev:amd64 (12.2.0-14+deb12u1) ...
+#8 85.21 Setting up clang-14 (1:14.0.6-12) ...
+#8 86.27 Setting up clang (1:14.0-55.7~deb12u1) ...
+#8 91.78 Processing triggers for libc-bin (2.36-9+deb12u14) ...
+#8 DONE 145.5s
+
+#9 [rust  3/14] WORKDIR /src
+#9 DONE 0.4s
+
+#10 [rust  4/14] COPY --from=ffisrc /LICENSE ./
+#10 DONE 0.1s
+
+#11 [rust  5/14] COPY --from=ffisrc /pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
+#11 DONE 0.1s
+
+#12 [rust  6/14] COPY --from=ffisrc /pqz-core/pqzl/src pqz-core/pqzl/src
+#12 DONE 0.1s
+
+#13 [rust  7/14] COPY --from=ffisrc /pqz-core/pqzl/lazer pqz-core/pqzl/lazer
+#13 DONE 0.1s
+
+#14 [rust  8/14] COPY --from=ffisrc /pqz-core/pqzl/params pqz-core/pqzl/params
+#14 DONE 0.1s
+
+#15 [rust  9/14] COPY --from=ffisrc /pqz-core/params/sets pqz-core/params/sets
+#15 DONE 0.2s
+
+#16 [rust 10/14] COPY --from=ffisrc /pqz-core/pqzl/rust pqz-core/pqzl/rust
+#16 DONE 0.2s
+
+#17 [rust 11/14] COPY --from=ffisrc /pqz-core/stmt pqz-core/stmt
+#17 DONE 0.5s
+
+#18 [rust 12/14] COPY --from=ffisrc /pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#18 DONE 0.4s
+
+#19 [rust 13/14] COPY --from=ffisrc /pqz-core/ffi pqz-core/ffi
+#19 DONE 0.2s
+
+#20 [rust 14/14] COPY --from=ffisrc /smartcontracts/vectors/pqz smartcontracts/vectors/pqz
+#20 DONE 0.1s
+
+#21 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 --no-default-features --features pqzl-rust,set-n2304-kmax4096  && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#21 0.857     Updating crates.io index
+#21 1.527  Downloading crates ...
+#21 1.725   Downloaded block-buffer v0.10.4
+#21 1.742   Downloaded cpufeatures v0.2.17
+#21 1.771   Downloaded cfg-if v1.0.5
+#21 1.783   Downloaded cipher v0.4.4
+#21 1.802   Downloaded crypto-common v0.1.7
+#21 1.806   Downloaded inout v0.1.4
+#21 1.813   Downloaded aes v0.8.4
+#21 1.820   Downloaded keccak v0.1.6
+#21 1.828   Downloaded version_check v0.9.5
+#21 1.831   Downloaded generic-array v0.14.7
+#21 1.834   Downloaded digest v0.10.7
+#21 1.862   Downloaded typenum v1.20.1
+#21 1.933   Downloaded sha3 v0.10.8
+#21 1.989    Compiling version_check v0.9.5
+#21 1.999    Compiling typenum v1.20.1
+#21 2.985    Compiling keccak v0.1.6
+#21 3.001    Compiling generic-array v0.14.7
+#21 4.359    Compiling pqzl v0.1.0 (/src/pqz-core/pqzl/rust)
+#21 4.453    Compiling crypto-common v0.1.7
+#21 4.483    Compiling block-buffer v0.10.4
+#21 4.523    Compiling inout v0.1.4
+#21 4.601    Compiling cipher v0.4.4
+#21 4.727    Compiling digest v0.10.7
+#21 4.854    Compiling cfg-if v1.0.5
+#21 4.880    Compiling cpufeatures v0.2.17
+#21 4.907    Compiling aes v0.8.4
+#21 5.037    Compiling sha3 v0.10.8
+#21 6.303    Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+#21 8.029    Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+#21 8.378    Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+#21 19.96     Finished `release` profile [optimized + debuginfo] target(s) in 19.45s
+#21 20.02 dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601  /out/libpqz_ffi.so
+#21 DONE 20.2s
+
+#22 [ffi-export 1/1] COPY --from=ffi /out/ /
+#22 DONE 0.1s
+
+#23 exporting to client directory
+#23 copying files 10.07MB 0.1s done
+#23 DONE 0.1s
+[rc=0]
+libpqz_ffi.so sha256 dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 (10066928 B), set n2304-kmax4096
+test-hook names (must be 0): 0 / strings 0
+exports: pqz_max_input pqz_precompile 

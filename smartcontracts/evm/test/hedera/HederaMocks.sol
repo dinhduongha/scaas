@@ -11,7 +11,6 @@ pragma solidity ^0.8.20;
 ///         Như mạng thật, gọi bằng STATICCALL thì HALT (`allowsStaticFrame() == false`): mock ghi một bộ đếm.
 contract MockHederaAccountService {
     mapping(address account => address edKey) public edKey;
-    uint256 public calls;
     mapping(address account => bool) public complexKey;
 
     function setEdKey(address account, address key) external { edKey[account] = key; }
@@ -20,7 +19,10 @@ contract MockHederaAccountService {
     function isAuthorizedRaw(address account, bytes calldata messageHash, bytes calldata sig)
         external returns (bool)
     {
-        calls += 1; // SSTORE: halts in a static frame, like the real system contract
+        // TSTORE halts in a static frame, like the real system contract. Not SSTORE: under Amsterdam a first write to a
+        // slot costs EIP-8037 state gas, which overran the 100,000 gas `HederaAccountAuth.HAS_GAS` forwards (Hedera does not
+        // price by Amsterdam; the real call costs 3,000, the `ecrecover` price).
+        assembly ("memory-safe") { tstore(0, 1) }
         if (sig.length == 64) {
             if (edKey[account] == address(0) && !complexKey[account]) revert("INVALID_ACCOUNT_ID");
             if (complexKey[account]) revert("INVALID_TRANSACTION_BODY");

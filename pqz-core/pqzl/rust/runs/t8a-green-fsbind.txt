@@ -1,0 +1,26 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 27.09s
+     Running tests/fs_bind.rs (target/release/deps/fs_bind-81dfe0b27aa6f4de)
+
+running 1 test
+P6-FS verify honest: ACCEPT
+P6-FS verify h-mutated (rejected) kind 5 mu seed: honest 475cd0c5 mutated e09f03be -> differ
+P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest 1ae13e59 mutated b9941b65 -> differ
+P6-FS verify z3-mutated (rejected) kind 3 V3 seed: honest 1ae13e59 mutated b9941b65 -> differ
+P6-FS verify z4-mutated (rejected) kind 2 V4 seed: honest 1ae13e59 mutated e1d14cd5 -> differ
+P6-FS verify z4-mutated (rejected) kind 3 V3 seed: honest 1ae13e59 mutated e1d14cd5 -> differ
+P6-FS verify tg-mutated (rejected) kind 2 V4 seed: honest 1ae13e59 mutated ffd8f8b2 -> differ
+P6-FS verify tg-mutated (rejected) kind 3 V3 seed: honest 1ae13e59 mutated ffd8f8b2 -> differ
+P6-FS verify_fast honest: ACCEPT
+P6-FS verify_fast h-mutated (rejected) kind 15 mu seed: honest 475cd0c5 mutated e09f03be -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 12 V4 seed: honest 1ae13e59 mutated b9941b65 -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 13 V3 seed: honest 1ae13e59 mutated b9941b65 -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 12 V4 seed: honest 1ae13e59 mutated e1d14cd5 -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 13 V3 seed: honest 1ae13e59 mutated e1d14cd5 -> differ
+P6-FS verify_fast tg-mutated (rejected) kind 12 V4 seed: honest 1ae13e59 mutated ffd8f8b2 -> differ
+P6-FS verify_fast tg-mutated (rejected) kind 13 V3 seed: honest 1ae13e59 mutated ffd8f8b2 -> differ
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) ok (0 failed checks of 18)
+test fs_bind ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.80s
+

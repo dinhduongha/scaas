@@ -1,0 +1,25 @@
+# gate n2048-kmax1024 (set n2048-kmax1024): 69542f9ca32a3b00b1912ffdb87f041c5b839db8, 2026-10-25T16:29Z
+set n2048-kmax1024
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   FAILED (rc=101)
+== xcheck
+   ok
+== fuzz
+   ok
+gate n2048-kmax1024 (set n2048-kmax1024): FAIL

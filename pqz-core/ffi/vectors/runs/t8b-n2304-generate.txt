@@ -1,0 +1,64 @@
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  46674 B  prove+verify 2.56 s
+pqzl TRANSFER0          proof  46333 B  prove+verify 2.26 s
+pqzl BURN               proof  45833 B  prove+verify 1.72 s
+pqzl REFRESH            proof  45845 B  prove+verify 2.98 s
+pqzl REGISTER           proof  30272 B  prove+verify 0.70 s
+pqzl DISCLOSE-SENDER    proof  30795 B  prove+verify 1.02 s
+pqzl DISCLOSE-RECEIVER  proof  31472 B  prove+verify 0.64 s
+pqzl DISCLOSE-AUDITOR   proof  31425 B  prove+verify 0.54 s
+pqzl M1-on              proof  46642 B  prove+verify 2.28 s
+pqzl M2-on              proof  47474 B  prove+verify 4.00 s
+pqzl M4-on              proof  50748 B  prove+verify 2.22 s
+pqzl M8-on              proof  67579 B  prove+verify 4.03 s
+pqzl M1-off             proof  46326 B  prove+verify 1.73 s
+pqzl M2-off             proof  46827 B  prove+verify 3.96 s
+pqzl M4-off             proof  47851 B  prove+verify 4.40 s
+pqzl M8-off             proof  64597 B  prove+verify 3.84 s
+pqzl M2-off-two-real    proof  46849 B  prove+verify 1.28 s
+pqzl M4-off-decoys      proof  47871 B  prove+verify 1.70 s
+pqzl M8-on-boundary     proof  67550 B  prove+verify 8.30 s
+proofs: 50.5 s
+negative: 370 rows (232 decoder, 138 verifier): 70.4 s
+worst case: 82.9 s
+total: 87.8 s
+self-test proofs compiled into this binary differ from the REGISTER rows: rebuild, then --check
+wrote matrix.json 1087 B
+wrote cbd.json 4286 B
+wrote keygen.json 2930 B
+wrote enc.json 7897 B
+wrote statement_transfer.json 341243 B
+wrote statement_burn.json 114814 B
+wrote statement_refresh.json 114738 B
+wrote statement_register.json 38357 B
+wrote statement_disclose.json 227972 B
+wrote statement_transfer_multi.json 3208363 B
+wrote proof_pqzl.json 2309214 B
+wrote negative.json 126332 B
+wrote selftest.json 2327 B
+wrote worstcase_noise.json 1579046 B
+wrote fee0.json 1050579 B
+pqz-vectors: 15 files, 9129185 B
+	Command being timed: "target/release/pqz-vectors"
+	User time (seconds): 86.71
+	System time (seconds): 1.03
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:27.86
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 296728
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 454269
+	Voluntary context switches: 9313
+	Involuntary context switches: 1705
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 17928
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

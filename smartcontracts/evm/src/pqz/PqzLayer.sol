@@ -83,13 +83,14 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return PqzStateLib.pendingCt(ua, i);
     }
 
-    /// @notice The op blob of a transfer, `R ‖ v_f` (D1, D13; both storage modes), empty if unknown.
+    /// @notice The op blob of a transfer as stored, `R ‖ v_f` packed at `PACK_BITS` (P46; `v_f` the trailing
+    ///         `PqzCt.VP` bytes; D1, D13; both storage modes), empty if unknown.
     function pqzEntryBlob(bytes32 entryRef) external view returns (bytes memory) {
         address p = PqzCore.$().entryPtr[entryRef];
         return p == address(0) ? bytes("") : SSTORE2.read(p);
     }
 
-    /// @notice `keccak256(R)` of the entry, `R` read from its op blob (0 = unknown).
+    /// @notice `keccak256(R)` of the entry over the stored (packed, P46) `R`, read from its op blob (0 = unknown).
     function transferCiphertextHash(bytes32 entryRef) external view returns (bytes32) {
         return PqzCore.ciphertextHash(entryRef);
     }
@@ -167,7 +168,8 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @notice The multi-recipient transfer, op 7 `R_TXM` (`M` legs, decoys included; CTR-PQZ-26), in the token's
     ///         default form: the bundle stored (BUNDLE token) or commit-reveal (COMPACT token). `accHint`: optional,
-    ///         the materialised `acc` (used only when it hashes to `accHash`; plan 5h D5).
+    ///         the materialised `acc` packed at `PACK_BITS` (P46: `PqzCt.CTP` bytes, `pack(pqzAcc(ua))`; `pqzAcc`
+    ///         returns 64-bit lanes), used only when it hashes to `accHash`, else ignored (plan 5h D5).
     function mtxConfidentialTransfer(bytes calldata payload, bytes calldata proof, bytes calldata auth,
         bytes32 beneficiary, bytes calldata accHint) external nonReentrant returns (bytes32)
     {

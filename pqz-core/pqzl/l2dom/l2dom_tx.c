@@ -1,7 +1,7 @@
 /*
  * l2dom PoC, R_TX (P6-L2, https://github.com/lazer-crypto/lazer/issues/25). A sender and a colluding recipient (the sender knows the recipient key
  * (s_t, e_t)) build a transfer whose (r, e1) is aligned with (e_t, -s_t) and uses the whole pooled l2 budget
- * sum_z B_z^2 = 2*36^2 + 2*164^2 + 3*64^2 = 68672 (‖r‖ <= 36 and ‖e1‖ <= 164 are not respected). The recipient's
+ * sum_z B_z^2 = 2 beta_s^2 + 2 beta_e^2 + 3*64^2 (v3 68672; ‖r‖ <= beta_s and ‖e1‖ <= beta_e are not respected). The recipient's
  * decryption noise on coefficient 0 then exceeds the spec's B_FRESH = 11,872 (pq-zero-knowledge.md §4.3).
  *
  *   l2dom_tx prove DIR    (built with -DPQZ_L2DOM_POC) prove, verify in-process, write DIR/tx_over.{stmt,proof}
@@ -20,7 +20,8 @@ extern int pqz_l2dom_poc, pqz_err, pqz_err_line;
 extern const char *pqz_err_file;
 #endif
 
-#define DELTA ((int64_t)((1 << 26) - 1))
+#define DELTA PQZ_DELTA
+#define BUDGET (2 * PQZ_BETA_S * PQZ_BETA_S + 2 * PQZ_BETA_E * PQZ_BETA_E + 3 * 64 * 64)
 
 static uint64_t xs = 0x243F6A8885A308D3ULL;
 static int
@@ -74,11 +75,11 @@ int
 main (int argc, char **argv)
 {
   static uint8_t stmt[PQZ_TX_STMT_BYTES], wit[PQZ_TX_WIT_BYTES], proof[PQZ_MAX_PROOF];
-  static int8_t sf[2048], st[2048], sa[2048], r8[2048], r0[2048];
-  static int16_t ef[2048], et[2048], ea[2048], e1[2048], e10[2048], e2[3][16], e20[1][16];
+  static int8_t sf[PQZ_N], st[PQZ_N], sa[PQZ_N], r8[PQZ_N], r0[PQZ_N];
+  static int16_t ef[PQZ_N], et[PQZ_N], ea[PQZ_N], e1[PQZ_N], e10[PQZ_N], e2[3][16], e20[1][16];
   static uint8_t pkf[PQZ_POLYVEC_BYTES], pkt[PQZ_POLYVEC_BYTES], pka[PQZ_POLYVEC_BYTES], uT[PQZ_POLYVEC_BYTES],
       vT[1][PQZ_V_BYTES], u[PQZ_POLYVEC_BYTES], vs[3][PQZ_V_BYTES];
-  static int64_t x[4096], y[4096];
+  static int64_t x[2 * PQZ_N], y[2 * PQZ_N];
   size_t arena_len = (size_t)768 << 20;
   void *arena = malloc (arena_len);
   if (argc < 3 || !arena || pqz_init (arena, arena_len))
@@ -103,7 +104,7 @@ main (int argc, char **argv)
 #else
   /* keys: recipient t and auditor a honest-shaped (s CBD(1), e CBD(20)); sender f small (both CBD(1)), leaving the
      budget to (r, e1) */
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     {
       sf[j] = (int8_t)cbd (1), ef[j] = (int16_t)cbd (1);
       st[j] = (int8_t)cbd (1), et[j] = (int16_t)cbd (20);
@@ -120,21 +121,21 @@ main (int argc, char **argv)
   pqz_encrypt (pf1, 1, (const uint8_t (*)[16])mT, r0, e10, (const int16_t (*)[16])e20, uT, vT);
 
   /* x = (e_t, -s_t); y = (r, e1) = c * aligned(x), ||y||^2 just under the pooled budget left by s_f, e_f */
-  for (int j = 0; j < 2048; j++)
-    x[j] = et[j], x[2048 + j] = -st[j];
+  for (int j = 0; j < PQZ_N; j++)
+    x[j] = et[j], x[PQZ_N + j] = -st[j];
   long nf = 0;
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     nf += sf[j] * sf[j] + ef[j] * ef[j];
-  const long budget = 68672 - nf - 64; /* keep a little room for rounding */
-  double c = sqrt ((double)budget / (double)n2 (x, 4096));
+  const long budget = BUDGET - nf - 64; /* keep a little room for rounding */
+  double c = sqrt ((double)budget / (double)n2 (x, 2 * PQZ_N));
   do
     {
-      align (y, x, c), align (y + 2048, x + 2048, c);
+      align (y, x, c), align (y + PQZ_N, x + PQZ_N, c);
       c *= 0.999;
     }
-  while (n2 (y, 4096) > budget);
-  for (int j = 0; j < 2048; j++)
-    r8[j] = (int8_t)y[j], e1[j] = (int16_t)y[2048 + j];
+  while (n2 (y, 2 * PQZ_N) > budget);
+  for (int j = 0; j < PQZ_N; j++)
+    r8[j] = (int8_t)y[j], e1[j] = (int16_t)y[PQZ_N + j];
   memset (e2, 0, sizeof e2);
   digits (m[0], v), digits (m[1], bp), digits (m[2], v);
   const uint8_t *pks[3] = { pkt, pkf, pka };
@@ -158,33 +159,33 @@ main (int argc, char **argv)
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
   p = wit;
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     p[j] = (uint8_t)sf[j];
-  p += 2048;
-  for (int j = 0; j < 2048; j++)
+  p += PQZ_N;
+  for (int j = 0; j < PQZ_N; j++)
     le16 (p + 2 * j, ef[j]);
-  p += 4096;
-  for (int j = 0; j < 2048; j++)
+  p += 2 * PQZ_N;
+  for (int j = 0; j < PQZ_N; j++)
     p[j] = (uint8_t)r8[j];
-  p += 2048;
-  for (int j = 0; j < 2048; j++)
+  p += PQZ_N;
+  for (int j = 0; j < PQZ_N; j++)
     le16 (p + 2 * j, e1[j]);
-  p += 4096 + 96; /* e2 = 0 */
+  p += 2 * PQZ_N + 96; /* e2 = 0 */
   for (int i = 0; i < 16; i++)
     p[i] = m[0][i], p[16 + i] = m[1][i];
 
-  long nr = n2 (y, 2048), ne1 = n2 (y + 2048, 2048);
+  long nr = n2 (y, PQZ_N), ne1 = n2 (y + PQZ_N, PQZ_N);
   int64_t w[16];
   pqz_decrypt_raw (st, u, vs[0], w);
   int64_t noise0 = w[0] - DELTA * m[0][0];
-  printf ("tx_over  ||s_f||^2+||e_f||^2=%ld ||r||^2=%ld (bound 1296, ||r||=%.1f vs 36) ||e1||^2=%ld (bound 26896) "
-          "sum=%ld (bound 68672)\n",
-          nf, nr, sqrt ((double)nr), ne1, nf + nr + ne1);
-  printf ("  recipient decryption noise, coefficient 0: %lld  (spec worst case B_FRESH = 11872; ratio %.2f)\n",
-          (long long)noise0, (double)noise0 / 11872.0);
-  printf ("  x 1023 credits = %.2f M  (2^24 = 16.78 M debit range; Delta/2 = 33.55 M; mint threshold Delta - 2^24 = "
-          "50.33 M)\n",
-          1023.0 * (double)noise0 / 1e6);
+  printf ("tx_over  ||s_f||^2+||e_f||^2=%ld ||r||^2=%ld (bound %d, ||r||=%.1f vs %d) ||e1||^2=%ld (bound %d) "
+          "sum=%ld (bound %d)\n",
+          nf, nr, PQZ_BETA_S * PQZ_BETA_S, sqrt ((double)nr), PQZ_BETA_S, ne1, PQZ_BETA_E * PQZ_BETA_E, nf + nr + ne1, BUDGET);
+  const double bf = 2.0 * PQZ_BETA_E * PQZ_BETA_S + 64, E = (double)((int64_t)1 << (PQZ_EBITS - 1));
+  printf ("  recipient decryption noise, coefficient 0: %lld  (spec worst case B_FRESH = %.0f; ratio %.2f)\n",
+          (long long)noise0, bf, (double)noise0 / bf);
+  printf ("  x %d credits = %.2f M  (E = %.2f M debit range; Delta/2 = %.2f M; mint threshold Delta - E = %.2f M)\n",
+          PQZ_K_MAX - 1, (PQZ_K_MAX - 1) * (double)noise0 / 1e6, E / 1e6, PQZ_DELTA / 2e6, (PQZ_DELTA - E) / 1e6);
   uint8_t rnd32[32];
   for (int i = 0; i < 32; i++)
     rnd32[i] = (uint8_t)(17 + i);

@@ -1,0 +1,32 @@
+{"init_ms": 173.8, "init_arena": 3116288, "verify": "generic"}
+{"txm_check": "M 4 on: real leg 0", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 8 on: real legs 3 and 4 (group boundary), fee 0", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 8 off: all legs decoys, fee 0", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 2 off: two real legs", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 8 on: sum + fee = balance", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "leg digit 16", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "sum + fee = balance + 1", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "v_1 encrypted to another recipient's key", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "leg 4 under group 0's randomness", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "legs 3 and 4 moved between groups", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "auditor copy of leg 0 of another amount", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "auditor copy of leg 1 at window 0 (pre-R0-1 encoding)", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "auditor copy of leg 0 at leg 1's window", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "leg 0's e2 norm 120 (over 64 and over 64 sqrt(2))", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "leg 0's ||e2||^2 5120 > 4096, legs' block 5120 < 8192 (X-1)", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "auditor copy 0's ||e2||^2 5120 > 4096, block 5120 < 8192 (X-1)", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "M 8 off: leg 0's ||e2||^2 5120 > 4096, block 5120 < 32768 (X-1)", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 4", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 3 (not built)", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 264", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "auditorOn 1 -> 0", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "recipientsHash changed", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "legs 3 and 4 swapped in the statement", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "u_0 and u_1 swapped", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "(2, off) read as (1, on)", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TXM 1 proof as op 1", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TXM 1 proof, op 7 statement, op 1", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TX proof as op 7", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": true, "cases": 28, "only": -1, "fails": 0}
+{"arena_resident_end": 176578144}
+{"fails": 0}

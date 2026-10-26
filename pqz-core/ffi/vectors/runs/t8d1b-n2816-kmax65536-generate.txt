@@ -1,0 +1,63 @@
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  54843 B  prove+verify 3.06 s
+pqzl TRANSFER0          proof  54531 B  prove+verify 2.89 s
+pqzl BURN               proof  54012 B  prove+verify 2.11 s
+pqzl REFRESH            proof  53983 B  prove+verify 5.85 s
+pqzl REGISTER           proof  35407 B  prove+verify 0.62 s
+pqzl DISCLOSE-SENDER    proof  35924 B  prove+verify 1.73 s
+pqzl DISCLOSE-RECEIVER  proof  36728 B  prove+verify 1.70 s
+pqzl DISCLOSE-AUDITOR   proof  36742 B  prove+verify 1.53 s
+pqzl M1-on              proof  54844 B  prove+verify 3.31 s
+pqzl M2-on              proof  57746 B  prove+verify 2.75 s
+pqzl M4-on              proof  59508 B  prove+verify 3.29 s
+pqzl M8-on              proof  79196 B  prove+verify 5.75 s
+pqzl M1-off             proof  54506 B  prove+verify 8.05 s
+pqzl M2-off             proof  55024 B  prove+verify 4.29 s
+pqzl M4-off             proof  58148 B  prove+verify 3.55 s
+pqzl M8-off             proof  76350 B  prove+verify 4.67 s
+pqzl M2-off-two-real    proof  54991 B  prove+verify 4.61 s
+pqzl M4-off-decoys      proof  58113 B  prove+verify 2.97 s
+pqzl M8-on-boundary     proof  79199 B  prove+verify 6.26 s
+proofs: 69.4 s
+negative: 404 rows (278 decoder, 126 verifier): 98.4 s
+worst case: 255.4 s
+total: 261.6 s
+wrote matrix.json 1167 B
+wrote cbd.json 4307 B
+wrote keygen.json 3016 B
+wrote enc.json 7897 B
+wrote statement_transfer.json 414972 B
+wrote statement_burn.json 139390 B
+wrote statement_refresh.json 139314 B
+wrote statement_register.json 46549 B
+wrote statement_disclose.json 277124 B
+wrote statement_transfer_multi.json 3904686 B
+wrote proof_pqzl.json 2744566 B
+wrote negative.json 139883 B
+wrote selftest.json 2303 B
+wrote worstcase_noise.json 6202428 B
+wrote fee0.json 1263456 B
+pqz-vectors: 15 files, 15291058 B
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8d1b/pqz-core/ffi/target/n2816-kmax65536/release/pqz-vectors"
+	User time (seconds): 257.11
+	System time (seconds): 2.44
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 4:21.63
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 361936
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 838887
+	Voluntary context switches: 132344
+	Involuntary context switches: 15065
+	Swaps: 0
+	File system inputs: 112
+	File system outputs: 29976
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

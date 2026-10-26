@@ -1,0 +1,25 @@
+# gate n2560-kmax16384 (set n2560-kmax16384): 69542f9ca32a3b00b1912ffdb87f041c5b839db8, 2026-10-25T16:27Z
+set n2560-kmax16384
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   FAILED (rc=1)
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate n2560-kmax16384 (set n2560-kmax16384): FAIL

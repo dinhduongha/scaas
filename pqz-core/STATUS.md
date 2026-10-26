@@ -34,6 +34,17 @@ Terms used throughout:
 
 ## Current state (2026-10-19)
 
+- **Parameter sets (plan 5h Task 8b, 2026-10-22, branch `pqz-16k`).** PQZ's parameters are now one directory per set,
+  [`params/sets/<set>/`](params/README.md), selected at compile time (C `PQZ_SET`, Rust feature `set-<set>`; one set
+  per library build); the only input of a set is its `set.toml`, `params/sets/gen_set.py` derives the rest and
+  `params/sets/make.sh <set> all` runs estimator → codegen → KATs → vectors → gate. Sets: `n2048-kmax1024` (the frozen
+  set: main's constants, vectors byte-identical, contracts until 8d), `n2304-kmax4096` (the default, owner
+  2026-10-21: C = Rust = wasm32, its own vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`, PQZH at its preset B
+  since 8c part 2, the `proofSystemId` label `…/v3` until 8d), `n2560-kmax16384` (shippable for customer chains: its own vectors under
+  `smartcontracts/vectors/pqz/n2560-kmax16384/`, PQZH since 8c part 2 with `MAX_PROOF_PQZH` 327,680) and `n2816-kmax65536` (research record; core only until
+  owner 2026-10-24 made it a full PQZL set for customers in plan 5h Task 8d part 1b: pqz-stmt, precompile, its own vectors under
+  `smartcontracts/vectors/pqz/n2816-kmax65536/`, gate; no PQZH: none of the current Ligero radices divides its q − 1, a radix-1,789 preset is unexplored and not in scope). Details: the sets' `SET.md` and [`params/sets/README.md`](params/sets/README.md).
+
 - **PQZL v2 is forgeable; PQZL v3 fixes it on branch `pqzl-fs3`, not merged yet.** The whole-code review of
   2026-10-19 found that LaZer's tbox absorbs `z3`, `z4` and `h` after the challenges that check them
   ([lazer#28](https://github.com/lazer-crypto/lazer/issues/28), Open item 11). The fix is in all four PQZL
@@ -1261,6 +1272,61 @@ did not move in this sample. The full v3 tables (both cores, wasm32, the special
 small `corpus/precompile` inputs still carry the v2 id and now reject on it); the gate and reviews A / B (Tasks 9–11);
 the merge (Task 12); the roll-out on the SCaaS testnet with a new image and gas re-calibration (Task 13). The external
 cryptographic audit before mainnet 22776 remains open.
+
+## Transcript B-1 / A-2 (5h Task 8a, branch `pqz-16k`, 2026-10-21)
+
+Plan `docs/superpowers/plans/2026-10-20-pqz-state-redesign.md` Task 8 (sub-task 8a), spec §6.4; reviews B
+(`research/code-review-2026-10-19/X-review-b-transcript.md`, B-1 P0, B-2) and A (`W-review-a-pqzl-rust.md`, A-1 = B-1,
+A-2 P3); analysis `docs/research/pqz-tbox-soundness.md` §8.6. On today's parameters (n = 2048, q = 2^42 − 215) and
+under the v3 id: the one `proofSystemId` bump for 16k + B-1 + A-2 is Task 8d's (D23), so this diff isolates the
+transcript change. Commits `de249614` (tests, RED), `4adea55c` (fix, GREEN, regeneration).
+
+- **B-1** (all four verifiers, both provers): V3 / V4 from the hash after `tg` (`hash1`, which seeds γ), no longer
+  from `hz`; `hz` is now only the tg round's input. C `lazer/lnp-tbox.c` (prover, verifier), `src/pqz_sv.c` (`g0`
+  gone, V on `g1`), Rust `proof/tbox.rs` (`accumulate_all` takes one seed for γ and V) and `sv.rs`.
+- **A-2**: υ `M + 2(d−1) + 1` (it shared `M + 2(d−1)` with the last β4 row), binary `+ 2`, exact ℓ2 `+ 3 + i`, V4
+  `+ 3 + Z`, V3 `+ 3 + Z + 256`, in all four.
+- **`R_REG` / UA-6** (controller ruling 2026-10-21): the message stays opaque (relation, statement, verifier,
+  vectors unchanged, UA-6 §9 / U13); `pqz-stmt`'s `Register` documents its pre-image
+  `uaMessage(0x0142, POP, popDigest(ua, keyHash(0x0142, pk)))`; `UAPqzVerifier.PROBE_PQZL` re-pinned
+  (`0x6c4573ab…5b04` → `0x517488fa…23f3`, the probe's message unchanged); `PqzSafety.SELFTEST` unchanged (it hashes
+  verdicts).
+- **Tests:** review A's cheating prover as `rust/tests/cheat_b1.rs` (the `set_cheat` test hook in `tbox::prove`,
+  feature `test-hooks`; gate step rust); `test_mutate` kind 15 (tg +1 mod q, C and Rust; `oracle_codec` kinds 0..15)
+  in `sz/fs_bind.c` and `rust/tests/fs_bind.rs` (18 checks: the V seeds must change with tg, the tg-changed proof is
+  rejected); A-2 as the fifth check of `check_tbox_fixes.sh` (`sv/review/review.sh dom`, no shared dom).
+- **Regenerated:** `proof_pqzl.json`, `fee0.json`, `worstcase_noise.json`, `negative.json` (744 → 745: the
+  coder-padding rows follow the proofs' last byte; PQZL 367 → 368, `tests/vectors.rs`), `selftest.json`'s
+  `proof_keccak`; the cheating fixtures (`export.sh`); the fuzz `regress/valid` input (re-proved,
+  `fuzz/runs/2026-10-21-t8a-regress-valid.txt`); the pinned `proofs_fnv` of `rust/run.sh`. PQZH files unchanged.
+
+Runs [measured]:
+
+- **RED** (`de249614`, before the fix): `cheat_b1` modes 1 / 2 **accepted by all four verifiers** (Rust `verify`,
+  `verify_fast`, C `pqz_verify`, `pqz_verify_fast`) on all 14 relation codes, 28 forgeries; the control (mode 3)
+  rejected (`pqzl/rust/runs/t8a-red-test.txt`). fs_bind: 4 failed checks of 18 in C and in Rust, the tg-changed
+  proof's V4 / V3 seeds equal to the honest ones in `verify` and `verify_fast` (`pqzl/runs/t8a-red-fsbind-c.txt`,
+  `pqzl/rust/runs/t8a-red-fsbind.txt`).
+- **GREEN**: `cheat_b1` every mode rejected by all four on all codes, mode 0 = the vectors; fs_bind 0 of 18 in both
+  cores (`pqzl/runs/t8a-green-fsbind-c.txt`, `pqzl/rust/runs/t8a-green-fsbind.txt`); `review.sh dom`: 129 calls, 0
+  shared doms (`pqzl/runs/t8a-dom-trace.txt`).
+- `ffi/vectors/run.sh t8a write` and `PQZL=c … t8a-c`: `pqz-vectors --check` 16 files, 19,656,112 B, ok on both
+  backends; `pqz_kat.py --check` ok; tamper 191 / 191; wasm32 replay 53 cases, 0 fails (`ffi/vectors/runs/t8a-*`).
+- `rust/run.sh t8a`: every test binary ok but `negative_rows_reject` (the count, fixed in the same commit; the gate
+  re-runs it); KAT 19/19; keys KAT ok; `to_rust.py --check` equal; native = wasm32 388 digest lines; `fails 0`.
+  `proofs_fnv`, Rust = C (C: `research/pqzl-measure/runs/t8a-fnv-*`):
+
+| `proofs_fnv` | native `5 5 63` (`R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, `R_TX0`) | wasm32 `3 1 63` |
+|---|---|---|
+| v3 → 8a | `b935013d 258418fb 85ab8aa8 cd5eccf7 b3cb29a2 06c6a4a5` → `84892d1b dd395fa2 19abd011 113c7085 e2c45af4 db4848a0` | `c5d0e8c6 …` → `4d60c711 559f032d b53e89fb dcd2be04 0dede50c c2b772e9` |
+| op 7 `2 2 16320` | `e839a31e … f22cc134` → `f4f4963b 01ed81bc 5b7fe45d 2ee1dbf5 2c099a2a 36dceac2 4f6ca003 77c19a3d` | |
+
+- `forge test` (Foundry 1.8.5): 1,331 passed, 0 failed, 9 skipped (`smartcontracts/evm/runs/2026-10-21-t8a-forge.txt`).
+- `gate.sh t8a`: `scripts/capped pqz-core/gate.sh t8a` on `4adea55c` (clean tree): **PASS**, every step ok (kat, tbox with A-2, sv, diff, vectors, ffi, rust with `cheat_b1` and `fs_bind`, cargo, xcheck, fuzz; `pqz-core/runs/gate/t8a-*`).
+
+**Not in 8a:** the 16k parameters (8b), PQZH at the new q (8c), the id bump, `PqzCt`, contracts and the 16k vectors
+(8d); `artifact/expected-results.json` (the package, fs3 Task 6, frozen 2026-10-17 before v3); `pqz-core/nethermind/`
+(not touched; another branch upgrades it).
 
 ## PQZH review fixes (branch `rev2-pqzh`, plan Task 5c; review round 2)
 

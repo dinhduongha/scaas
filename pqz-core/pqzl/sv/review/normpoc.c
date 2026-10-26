@@ -20,7 +20,10 @@
 #include "pqz.h"
 
 #ifdef PQZ_NORM_POC
+#include "lazer.h"
+#include "pqz_reg_params.h" /* the set's R_REG Bsq (build/include) */
 extern int pqz_poc_mode;
+extern int pqz_poc_shift;
 extern int64_t pqz_poc_z21sq;
 #endif
 
@@ -59,8 +62,8 @@ int
 main (int argc, char **argv)
 {
   static uint8_t stmt[PQZ_REG_STMT_BYTES], wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
-  static int8_t s[2048];
-  static int16_t e[2048];
+  static int8_t s[PQZ_N];
+  static int16_t e[PQZ_N];
   size_t arena_len = (size_t)512 << 20;
   void *arena = malloc (arena_len);
   if (argc < 3 || !arena || pqz_init (arena, arena_len))
@@ -76,29 +79,37 @@ main (int argc, char **argv)
           do
             {
               ns = ne = 0;
-              for (int j = 0; j < 2048; j++)
+              for (int j = 0; j < PQZ_N; j++)
                 s[j] = (int8_t)cbd (1), e[j] = (int16_t)cbd (20), ns += s[j] * s[j], ne += e[j] * e[j];
             }
-          while (ns > 36 * 36 || ne > 164 * 164);
+          while (ns > PQZ_BETA_S * PQZ_BETA_S || ne > PQZ_BETA_E * PQZ_BETA_E);
           memset (stmt, 0xA5, PQZ_PREFIX_BYTES);
           const uint8_t psid[32] = PQZ_PROOF_SYSTEM_ID;
           memcpy (stmt + 32, psid, 32);
           for (int i = 0; i < 32; i++)
             stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)(i + 7 * k);
           pqz_keypair_from_secret (s, e, stmt + PQZ_PREFIX_BYTES + 32);
-          for (int j = 0; j < 2048; j++)
-            wit[j] = (uint8_t)s[j], wit[2048 + 2 * j] = (uint8_t)e[j], wit[2049 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
+          for (int j = 0; j < PQZ_N; j++)
+            wit[j] = (uint8_t)s[j], wit[PQZ_N + 2 * j] = (uint8_t)e[j], wit[PQZ_N + 1 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
           uint8_t rnd32[32];
           for (int i = 0; i < 32; i++)
             rnd32[i] = (uint8_t)(k * 31 + i);
-          pqz_poc_mode = k;
-          pqz_poc_z21sq = 0;
-          int rc = pqz_prove (PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
-          pqz_poc_mode = 0;
+          /* mode 2: y21 << 7, or the largest shift whose proof fits PQZ_MAX_PROOF (a larger q encodes z21 wider) */
+          int rc;
+          for (pqz_poc_shift = 7;; pqz_poc_shift--)
+            {
+              pqz_poc_mode = k;
+              pqz_poc_z21sq = 0;
+              rc = pqz_prove (PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
+              pqz_poc_mode = 0;
+              if (rc == 0 || k != 2 || pqz_poc_shift == 1)
+                break;
+            }
           printf ("%-8s prove rc=%d proof %zu B", MODE[k], rc, pl);
           if (k == 2)
-            printf ("  ||z21||^2 = %lld (R_REG Bsq = 22226101053479, %.1fx)", (long long)pqz_poc_z21sq,
-                    pqz_poc_z21sq / 22226101053479.0);
+            printf ("  y21 << %d: ||z21||^2 = %lld (%.1fx the set's R_REG Bsq %llu)", pqz_poc_shift,
+                    (long long)pqz_poc_z21sq, pqz_poc_z21sq / (double)pqz_reg_Bsq_limbs[0],
+                    (unsigned long long)pqz_reg_Bsq_limbs[0]);
           printf ("\n");
           if (rc)
             continue;

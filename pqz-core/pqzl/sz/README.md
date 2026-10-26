@@ -54,27 +54,31 @@ challenge. Another transcript change, so **`proofSystemId` v3**; v2 is retired (
   - on the real tree — the production `libpqz.a` must **reject** them.
 - **Fiat–Shamir binding test (P6-FS)** — `sz/fs_bind.c`, built by `sz/build.sh` next to `sz_trace` (the same
   objects, `pqz_rel.c` / `pqz_sv.c` also with `-DPQZ_TEST_HOOKS -DPQZ_SV`). It proves one honest `R_REG` with a fixed
-  `rnd32` and makes three re-encodings of it with one field changed (`pqz_test_mutate`, r1 = 0, r2 = 0x105: poly 0,
+  `rnd32` and makes four re-encodings of it with one field changed (`pqz_test_mutate`, r1 = 0, r2 = 0x105: poly 0,
   coefficient 5, +):
   - `h`: kind 7, +1 (coefficient 5, not 0 or 32, so it passes the h check);
   - `z3`: kind 14, +1 (test-only, added for this test: kind 6 adds 2^20 and fails the Bz3 check);
-  - `z4`: kind 5 at the bound, the coefficient set to +Bz4 (passes the ℓ∞ check).
+  - `z4`: kind 5 at the bound, the coefficient set to +Bz4 (passes the ℓ∞ check);
+  - `tg`: kind 15, +1 mod q (test-only; B-1, review B, 5h Task 8a: the commitment to g, which V3 / V4 must follow).
 
   Each proof goes through both production verifiers, `pqz_verify` and `pqz_verify_fast`, with the trace hook on. The
   hook reports kind 2 (the seed of V4), 3 (V3) and 5 (the seed passed to `lnp_quad_many_verify`: `μ` and the final
   challenge) from `lnp-tbox.c`; the specialised verifier `pqz_sv.c` reports the same seeds as kinds 12 / 13 / 15, and
   the `verify_fast` run must see those, so a fast run that fell back to the generic code fails. The checks: kinds 2 / 3
-  differ between the honest and the z3-changed proof and between the honest and the z4-changed proof, kind 5 between
-  the honest and the h-changed proof, per verifier (12 checks), and the honest proof verifies. The changed proofs are
+  differ between the honest proof and each of the z3-, z4- and tg-changed proofs, kind 5 between the honest and the
+  h-changed proof, the honest proof verifies and the tg-changed one is rejected, per verifier (18 checks). The changed proofs are
   rejected later; what matters is the seed recorded before that. A **missing record** (the verifier rejected before
   the challenge, so nothing was derived) is a FAIL, never "differ". Observation only: no proof meant to verify is built
   or searched for, and there is no cheating prover. Output lines `P6-FS …` and `VERDICT: P6-FS Fiat-Shamir binding
-  (lazer#28) ok (0 failed checks of 12)`; before the fix 10 of the 12 failed (`runs/fs1-before.txt`, after:
-  `runs/fs2-tbox.txt`). The Rust crate has the same test (`rust/tests/fs_bind.rs`, `fs_trace_take`; `rust/README.md`).
+  (lazer#28) ok (0 failed checks of 18)`; before the fix 10 of the 12 failed (`runs/fs1-before.txt`, after:
+  `runs/fs2-tbox.txt`); before B-1 the 4 tg seed checks failed (`runs/t8a-red-fsbind-c.txt`, after:
+  `runs/t8a-green-fsbind-c.txt`). Review A's cheating prover for B-1 is `rust/tests/cheat_b1.rs`. The Rust crate has the same test (`rust/tests/fs_bind.rs`, `fs_trace_take`; `rust/README.md`).
 - **All checks together** — `check_tbox_fixes.sh`: runs both harnesses plus two more checks, and exits 1 unless
   all four fixes are in place. The third is a verifier-only fix that does not change the transcript: the z21 norm check
   ([lazer#26](https://github.com/lazer-crypto/lazer/issues/26), P6-Z21, through `sv/review/review.sh norm`). The
-  fourth is the P6-FS binding test (`build/sz/fs_bind`; no verdict, or not built, is a FAIL).
+  fourth is the P6-FS binding test (`build/sz/fs_bind`; no verdict, or not built, is a FAIL). A fifth (A-2, review
+  A, 5h Task 8a): `sv/review/review.sh dom` must find no Schwartz–Zippel domain used by two calls of one `R_REG`
+  prove (before A-2 the last β4 row and υ shared `M + 2(d − 1)`).
   `pqz-core/research/pqzl-measure/relfix.sh` runs it.
 
 The trace hook, the test hooks and the cheating prover are compiled only with `-DPQZ_SZ_TRACE`, `-DPQZ_TEST_HOOKS` /

@@ -27,7 +27,7 @@ fn round_trip_every_form() {
     }
     // 8 forms each; op 7: PQZL M in {1, 2, 4, 8}, PQZH {1, 2, 4}, auditor on and off (P6-ANON D3 / D20)
     assert_eq!(honest().iter().filter(|h| h.pqzl()).count(), 8 + 8);
-    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), 8 + 6);
+    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), if PQZH { 8 + 6 } else { 0 });
 }
 
 /// Op 7 (P6-ANON S3, D3): every built shape's input within `MAX_INPUT` with the id's worst-case proof (PQZL
@@ -38,7 +38,7 @@ fn multi_limits_and_memo() {
     let mut largest = 0;
     for h in honest().iter().filter(|h| h.multi.is_some()) {
         let (m, aud) = h.multi.unwrap();
-        let bound = if h.pqzl() { stmt::MAX_PROOF_PQZL } else { pqzh::PARAMS.max_proof_len(pqzh_ligero::Rel::Multi { m, aud }) };
+        let bound = if h.pqzl() { stmt::MAX_PROOF_PQZL } else { pqzh::max_proof_len_multi(m, aud) };
         let worst = 5 + h.stmt.len() + bound;
         eprintln!(
             "op 7 {} {}: statement {} B, proof {} B (bound {bound}), input {} B, worst-case input {worst} B (MAX_INPUT {MAX_INPUT})",
@@ -52,19 +52,27 @@ fn multi_limits_and_memo() {
         largest = largest.max(worst);
     }
     eprintln!("op 7 largest worst-case input {largest} B of MAX_INPUT {MAX_INPUT}");
-    // PQZH (4, on): 5 + 132,992 + 260,219 = MAX_INPUT
-    let h = honest().iter().find(|h| !h.pqzl() && h.multi == Some((4, true))).unwrap();
-    let pad = |n: usize| stmt::input(7, &h.stmt, &[&h.proof[..], &vec![0; n - h.proof.len()]].concat());
-    assert_eq!(pad(260_219).len(), MAX_INPUT);
-    assert_eq!(precompile(&pad(260_219)), Ok(INVALID));
-    assert_eq!(precompile(&pad(260_220)), Err(Error::Revert));
-    // oversize shapes (bench builds only) never decode here: PQZL M = 16, PQZH M = 8
-    for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)] {
+    // PQZH (4, on) padded to exactly MAX_INPUT (n2048-kmax1024: 5 + 149,376 + 374,907, G = 2 since the R0 review fix)
+    // decodes or fails ProofLength, so invalid; one byte more reverts (the set's MAX_INPUT, plan 5h Task 8c part 2)
+    if PQZH {
+        let h = honest().iter().find(|h| !h.pqzl() && h.multi == Some((4, true))).unwrap();
+        let pad = |n: usize| stmt::input(7, &h.stmt, &[&h.proof[..], &vec![0; n - h.proof.len()]].concat());
+        let room = MAX_INPUT - 5 - h.stmt.len();
+        assert!(stmt::SET != "n2048-kmax1024" || room == 374_907);
+        assert_eq!(pad(room).len(), MAX_INPUT);
+        assert_eq!(precompile(&pad(room)), Ok(INVALID));
+        assert_eq!(precompile(&pad(room + 1)), Err(Error::Revert));
+    }
+    // oversize shapes (bench builds only) never decode here: PQZL M = 16, PQZH M = 8 (the decoder knows both ids in
+    // every build of a set with PQZH; n2816-kmax65536 has none)
+    for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)].into_iter().filter(|&(id, _)| id == PQZL_ID || stmt::HAS_PQZH) {
         let mut st = vec![0u8; stmt::multi_len(m, true)];
         for (i, w) in stmt::Multi::header(&id, m, true).iter().enumerate() {
             st[32 * i..32 * i + 32].copy_from_slice(w);
         }
-        assert_eq!(decode(&stmt::input(7, &st, &[1])).err(), Some(Reject::Legs), "M = {m}");
+        // Legs; or Input where the oversize statement alone exceeds MAX_INPUT (PQZL M = 16 at k >= 36)
+        let e = decode(&stmt::input(7, &st, &[1])).err();
+        assert!(matches!(e, Some(Reject::Legs | Reject::Input)), "M = {m}: {e:?}");
     }
     // recipientsHash and the memo of the fixture
     for (m, aud) in [(1, false), (8, true)] {
@@ -124,7 +132,12 @@ fn pqzl_differential() {
             let i = next() as usize % p.len();
             match k {
                 0..=2 => p[i] ^= 1 << (next() % 8),
-                3 => p[i] = next() as u8,
+                // a random byte, never the same one (set n2560-kmax16384: a draw equal to the byte left the proof
+                // unchanged and accepted; every other draw is as before)
+                3 => {
+                    let b = next() as u8;
+                    p[i] = if b == p[i] { !b } else { b };
+                }
                 4 => p.truncate(i.max(1)),
                 _ => p[i..].iter_mut().for_each(|b| *b = 0),
             }
@@ -162,7 +175,7 @@ fn c_abi_arguments() {
     }
 }
 
-/// pqz_kat.py --check prints "A digest keccak256(A bytes) = f176b313…" (Python, independent of the C core)
+/// pqz_kat.py --check prints "A digest keccak256(A bytes) = f176b313…" (Python, independent of the C core); the v3 set
 const A_DIGEST: &str = "f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0";
 
 #[test]
@@ -170,10 +183,12 @@ fn selftest_report() {
     let r = selftest::report().unwrap();
     let hex = |w: &[u8]| w.iter().map(|b| format!("{b:02x}")).collect::<String>();
     eprintln!("selftest: {r:?}\nselftest hash {}", hex(&r.hash));
-    assert_eq!(hex(&r.a_digest), A_DIGEST);
-    assert!(r.fft_ok);
+    if stmt::SET == "n2048-kmax1024" {
+        assert_eq!(hex(&r.a_digest), A_DIGEST);
+    }
+    assert_eq!(r.fft_ok, PQZH);
     assert_eq!(r.m, selftest::digits(selftest::MSG_VALUE));
-    assert_eq!(r.results, [true, false, true, false]);
+    assert_eq!(r.results, [true, false, PQZH, false]);
     assert_eq!(precompile(&[6, 0, 0, 0, 0]), Ok(r.hash));
     assert_eq!(selftest::report().unwrap(), r, "deterministic");
 }
@@ -183,7 +198,7 @@ fn selftest_report() {
 #[test]
 fn selftest_vectors() {
     let key = pqzl::keygen(&selftest::SEED_KEY).unwrap();
-    for (i, id) in [PQZL_ID, PQZH_ID].into_iter().enumerate() {
+    for (i, id) in ids().into_iter().enumerate() {
         let st = selftest::reg_statement(&id, &key.pk[..]);
         let proof = prove(3, &st, &fixture::wit_key(&key), &selftest::RND).unwrap();
         assert_eq!(proof, selftest::proofs()[i], "self-test proof {i}: regenerate the vectors (pqz-vectors), then rebuild");
@@ -211,15 +226,20 @@ fn one_mib_stack() {
 /// `$PQZ_FFI_DIGESTS` when set (run.sh diffs them with wasm/run_wasm.mjs's output).
 #[test]
 fn digest_lines() {
-    let s = fixture::digest_lines(&PQZL_ID) + &fixture::digest_lines(&PQZH_ID) + &fixture::selftest_line();
-    // 8 forms + the op 7 shapes with M <= 4 (what wasm32 proves), each id
-    assert_eq!(s.matches("\"valid\": true").count(), 2 * (8 + 6), "{s}");
+    let s = fixture::digest_lines(&PQZL_ID, true) + &fixture::digest_lines(&PQZH_ID, true) + &fixture::selftest_line();
+    // 8 forms + the op 7 shapes with M <= 4, each id; PQZL without the shapes above WASM_PQZL_MAX_LEGS (the C backend's
+    // wasm32 refusal, printed natively as `Statement(Legs)`: fixture::digest_lines)
+    let shapes = |id: &Word| 2 * [1, 2, 4].iter().filter(|&&m| *id != PQZL_ID || m <= pqzl::WASM_PQZL_MAX_LEGS).count();
+    let valid: usize = ids().iter().map(|id| 8 + shapes(id)).sum();
+    assert_eq!(s.matches("\"valid\": true").count(), valid, "{s}");
+    assert_eq!(s.matches("\"proof\": \"Statement(Legs)\"").count(), ids().len() * 14 - valid, "{s}");
     if let Ok(p) = std::env::var("PQZ_FFI_DIGESTS") {
         std::fs::write(p, s).unwrap();
     }
 }
 
-/// pqz_ffi.h's constants are the crate's.
+/// pqz_ffi.h's constants are the crate's; the input limit is the library's `pqz_max_input()` = the set's MAX_INPUT (plan
+/// 5h Task 8d: the node reads it, the header has no literal)
 #[test]
 fn header_matches() {
     let h = include_str!("../pqz_ffi.h");
@@ -232,7 +252,16 @@ fn header_matches() {
     assert_eq!(def("PQZ_FFI_BAD_ARGS"), PQZ_FFI_BAD_ARGS as i64);
     assert_eq!(def("PQZ_FFI_INTERNAL"), PQZ_FFI_INTERNAL as i64);
     assert_eq!(def("PQZ_FFI_NODE_FAULT"), PQZ_FFI_NODE_FAULT as i64);
-    assert_eq!(def("PQZ_FFI_MAX_INPUT"), MAX_INPUT as i64);
+    assert!(!h.contains("#define PQZ_FFI_MAX_INPUT"));
+    assert!(h.contains("size_t pqz_max_input (void);"));
+    assert_eq!(pqz_ffi::pqz_max_input(), MAX_INPUT);
+    assert_eq!(MAX_INPUT, 524_288); // every set since the R0 review fix (owner 2026-10-25; n2048-kmax1024 was 393,216)
     assert_eq!(def("PQZ_FFI_OUT_BYTES"), 32);
     assert!(h.contains("int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);"));
+    // review R4-C7: the decoder's MAX_PROOF_PQZL = the backends' buffers = the C core's PQZ_MAX_PROOF (the Rust core's
+    // ::pqzl::MAX_PROOF is const-asserted in src/pqzl/rust.rs)
+    let c = include_str!("../../pqzl/src/pqz.h");
+    let l = c.lines().find(|l| l.starts_with("#define PQZ_MAX_PROOF ")).expect("PQZ_MAX_PROOF");
+    assert_eq!(l.split_whitespace().nth(2).unwrap().parse::<usize>().unwrap(), stmt::MAX_PROOF_PQZL);
+    assert_eq!(pqz_ffi::pqzl::MAX_PROOF, stmt::MAX_PROOF_PQZL);
 }

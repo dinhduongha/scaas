@@ -102,7 +102,7 @@ fn child_task() {
             let b = u8::from_str_radix(a[1], 16).unwrap();
             pqzl::TEST_ARENA_FILL.store(0x100 | b as u32, Relaxed);
             let hs = from_bytes(&std::fs::read(a[2]).unwrap());
-            let mut s = fixture::digest_lines(&PQZL_ID) + &fixture::digest_lines(&PQZH_ID) + &fixture::selftest_line();
+            let mut s = fixture::digest_lines(&PQZL_ID, false) + &fixture::digest_lines(&PQZH_ID, false) + &fixture::selftest_line();
             assert!(pqzl::reinit(pqzl::ARENA_SMALL));
             for inp in corpus(&hs, 2048) {
                 let (rc, w) = call(&inp);
@@ -122,7 +122,7 @@ fn verify_only_arena() {
     let f = tmp("verify_only_inputs.bin");
     child("child_task", &format!("gen:{f}"));
     let hs = from_bytes(&std::fs::read(&f).unwrap());
-    assert_eq!(hs.len(), 16 + 14);
+    assert_eq!(hs.len(), if PQZH { 16 + 14 } else { 16 }); // PQZL 8 forms + 8 op 7 shapes; PQZH 8 + 6
     let honest: Vec<Vec<u8>> = hs.iter().map(|h| h.input()).collect();
     let c = corpus(&hs, N_GEN);
     let gen_from = c.len() - N_GEN;
@@ -189,7 +189,7 @@ fn verify_only_arena() {
     let loop_peak = heap::PEAK.load(Relaxed);
     #[cfg(feature = "pqzl-rust")]
     assert!(loop_peak <= warm_peak, "Rust heap peak of the mixed calls {loop_peak} B over the warm-up's {warm_peak} B");
-    let lp = pqzh_ligero::ligero::VERIFY_PANICS.load(Relaxed);
+    let lp = pqzh::verify_panics();
     #[cfg(feature = "pqzl-rust")]
     let mem = format!(
         "Rust backend (no arena): heap in use after the 5,000 mixed calls {lo}..={hi} B (before them {heap0} B), their \
@@ -246,9 +246,10 @@ fn fill_determinism() {
     assert_eq!(outs[0], outs[2], "0x00 vs 0x5A");
     let lines = outs[0].lines().count();
     let valid = outs[0].matches("\"valid\": true").count();
-    assert_eq!(valid, 2 * (8 + 6));
+    let ids = if PQZH { 2 } else { 1 }; // n2816-kmax65536: PQZL only (its first PQZL=c run, R0 review fix round m8)
+    assert_eq!(valid, ids * (8 + 6));
     if let Ok(p) = std::env::var("PQZ_FFI_FILL_OUT") {
         std::fs::write(p, &outs[0]).unwrap();
     }
-    eprintln!("fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: {lines} result lines identical (digest lines of 16 forms and 12 op 7 shapes incl. proofs, self-test, {} corpus results)", lines - 29);
+    eprintln!("fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: {lines} result lines identical (digest lines of {} forms and {} op 7 shapes incl. proofs, self-test, {} corpus results)", 8 * ids, 6 * ids, lines - 14 * ids - 1);
 }

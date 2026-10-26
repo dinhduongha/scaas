@@ -1,0 +1,93 @@
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 8.31s
+     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqzh_ligero-b3b7c541f1ccdb0a)
+
+running 15 tests
+test cs::tests::branch_free_rounding_matches_reference ... ok
+test cs::tests::op_tags_hash ... ok
+test cs::tests::pqzh_id_d3 ... ok
+test cs::tests::ring_recurrence_matches_naive ... ok
+test fft::tests::fft_matches_naive_all_radices ... ok
+test fq::tests::branch_free_matches_reference ... ok
+test fq::tests::field_facts_and_ext ... ok
+test fq::tests::limb_matches_u128 ... ok
+test fq::tests::mul_and_red_match_naive ... ok
+test ligero::tests::limits_exact ... ok
+test ligero::tests::max_len_exact_multiproof_tight ... ok
+test ligero::tests::proven_is_the_model ... ok
+test ligero::tests::prover_retries_over_limit ... ok
+test ligero::tests::rng_hedged_with_witness ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.13s
+
+     Running unittests src/bin/ligero_bench.rs (target/n2560-kmax16384/release/deps/ligero_bench-f286da730e034a08)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ligero_export.rs (target/n2560-kmax16384/release/deps/ligero_export-ff656182ab002179)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ligero_kat.rs (target/n2560-kmax16384/release/deps/ligero_kat-f17fa69ea1fffa22)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/spike_retry.rs (target/n2560-kmax16384/release/deps/spike_retry-eaa2e1eea8944a0d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attacks.rs (target/n2560-kmax16384/release/deps/attacks-61771a196c8994c4)
+
+running 17 tests
+test coefficient_out_of_range ... ok
+test debit_noise_range_edges ... ok
+test digit_out_of_range ... ok
+test dr_noise_range_edges ... ok
+test e2_norm_exceeded ... ok
+test evm_fixtures ... ignored, the EVM fixtures are n2048-kmax1024's
+test hedged_proofs ... ok
+test honest_all_presets_cross_and_hiding ... ok
+test mutations_960_per_relation_rejected ... ok
+test norm_exceeded_small_coefficients ... ok
+test other_ids_and_length_bound_rejected ... ok
+test overspend ... ok
+test randomness_norm_and_range ... ok
+test scalar_word_above_2_64 ... ok
+test transfer_forms_cross_rejected ... ok
+test wrong_public_amount ... ok
+test wrong_witness_ring_row ... ok
+
+test result: ok. 16 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 112.79s
+
+     Running tests/multi.rs (target/n2560-kmax16384/release/deps/multi-5b6322d416bcdea3)
+
+running 8 tests
+test hedged_and_deterministic ... ok
+test honest_every_shape ... ok
+test mutations_960_per_shape_rejected ... ok
+test negative_witnesses ... ok
+test noise_range_edges ... ok
+test op1_op7_and_shapes_separated ... ok
+test rel_of_words ... ok
+test statement_changes_rejected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 226.60s
+
+     Running tests/oom.rs (target/n2560-kmax16384/release/deps/oom-d9211c425cdc6bfa)
+
+running 1 test
+test verifier_out_of_memory_is_a_fault ... memory allocation of 20480 bytes failed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `--test oom`
+
+Caused by:
+  process didn't exit successfully: `/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c2/pqz-core/pqzh/ligero/target/n2560-kmax16384/release/deps/oom-d9211c425cdc6bfa --test-threads 1` (signal: 6, SIGABRT: process abort signal)

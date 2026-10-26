@@ -18,7 +18,7 @@ for m in 35 64 128 256 512 1024 2048 4096 8192; do # R_REG + R_TX + R_TX0, then 
     PQZ_VERIFY=$v build/asan/pqz_bench 1 1 $m >> "$R-asan.jsonl" 2>> "$R-asan-stderr.txt" || echo "asan $m $v rc=$?"
   done
 done
-for k in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do # txm_check, one case per process (15: the statement tampers)
+for k in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do # txm_check, one case per process (17: the statement tampers)
   PQZ_TXM_CASE=$k build/asan/pqz_bench 0 0 0 1 >> "$R-asan.jsonl" 2>> "$R-asan-stderr.txt" || echo "asan txm_check $k rc=$?"
 done
 grep -h -e '"fails"' -e '"txm_check": [tf]' "$R-asan.jsonl" | sort | uniq -c

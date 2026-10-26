@@ -1,0 +1,16 @@
+set n2560-kmax16384, vectors ../../smartcontracts/vectors/pqz/n2560-kmax16384; PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2560-kmax16384)
+pqz-vectors --check: 15 files, 10867170 B: ok
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8b-fix/pqz-core/ffi/target/n2560-kmax16384/release/pqz-vectors --check"
+pqz_kat: ok
+71140 KB
+tamper: 177 / 177 caught: ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.12s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 69.08s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 16.47s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 82.10s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+{"cases":28,"verify_only":0,"fails":0,"node":"v26.8.1"}
+run.sh fix1-n2560-kmax16384: ok
+n2560-kmax16384 rc=0

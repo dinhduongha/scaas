@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {console2} from "forge-std/Test.sol";
+import {console2, Vm} from "forge-std/Test.sol";
 import {IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -61,7 +61,7 @@ contract PqzUnderlyingTest is PqzFixture {
         bytes memory st = w.unshieldUnwrapStatement(pl, x, 0);
         assertEq(bytes32(_cut(st, 544, 32)), w.unwrapBinding(address(usd), 400 * SCALE), "direct: leg and minOut bound");
         assertEq(uint256(bytes32(_cut(st, 288, 32))), 400);
-        vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(50_048), st, hex"c0de"));
+        vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(ST_BURN), st, hex"c0de"));
         g = gasleft();
         w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
         console2.log("mtxUnshieldUnwrap (mocked proof) gas", g - gasleft());
@@ -117,22 +117,22 @@ contract PqzUnderlyingTest is PqzFixture {
         assertEq(usd.balanceOf(address(w)), w.totalSupply());
     }
 
-    /// The largest implementation (`UnderlyingPqzToken`, plan 5g-Z) fits one Osaka transaction as `deploy.sh` sends a
-    /// deploy (gas limit = forge's estimate × `--gas-estimate-multiplier 105`; forge's estimate ran ~1.05× the measured
-    /// CREATE2 + intrinsic + calldata, ZetherDeploy.t): not with forge's default ×1.30. Init code over EIP-3860's 49,152
+    /// The largest implementation (`UnderlyingPqzToken`, plan 5g-Z) fits one transaction's regular-gas cap as `deploy.sh`
+    /// sends a deploy (gas limit = forge's estimate × `--gas-estimate-multiplier 105`; forge's estimate ran ~1.05× the
+    /// measured CREATE2 + intrinsic + calldata, ZetherDeploy.t; Osaka: the limit itself, ×1.30 did not fit). Init code over EIP-3860's 49,152
     /// fits 7622 / anvil (131,072 with `--code-size-limit 65536`).
     /// Plan 5g-Z2: measured through `OpenFactory.deployImplementation` itself (the env appended, the release's checks),
     /// as the registrar's transaction: intrinsic + calldata + the call.
     function test_largestImplementationFitsOneOsakaTx() public {
         bytes memory code = type(UnderlyingPqzToken).creationCode;
-        bytes memory data_ = abi.encodeCall(factory.deployImplementation, (IOpenFactory.TokenKind.UNDERLYING_PQZ, 2, 1, code, ""));
         vm.prank(registrar);
-        uint256 g = gasleft();
         address a = factory.deployImplementation(IOpenFactory.TokenKind.UNDERLYING_PQZ, 2, 1, code, "");
-        g -= gasleft();
-        uint256 data;
-        for (uint256 j; j < data_.length; ++j) data += data_[j] == 0 ? 4 : 16;
-        uint256 txGas = 21_000 + data + g;
+        // F185: the call is its own transaction (`isolate`); under Amsterdam EIP-7825's 2^24 caps the REGULAR gas, which
+        // `lastCallGas` reports with the intrinsic and the calldata (or the EIP-7976 floor), and EIP-8037 state gas (the
+        // 64 KiB of code, the new slots) comes apart: it needs a limit above 2^24, which a transaction may have.
+        Vm.Gas memory vg = vm.lastCallGas();
+        uint256 txGas = vg.gasTotalUsed;
+        emit log_named_uint("UnderlyingPqzToken deployImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
         uint256 init = code.length + abi.encode(uint16(1), factory.envOf(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1),
             bytes("")).length;
         emit log_named_uint("UnderlyingPqzToken init code bytes (with the env)", init);
@@ -140,7 +140,6 @@ contract PqzUnderlyingTest is PqzFixture {
         emit log_named_uint("UnderlyingPqzToken deployImplementation tx gas", txGas);
         assertGt(init, 49_152, "over EIP-3860: 64 KiB chains only");
         assertLe(init, 131_072);
-        assertLt(txGas * 105 * 105 / 10_000, 1 << 24, "fits EIP-7825 with --gas-estimate-multiplier 105");
-        assertGt(txGas * 105 * 130 / 10_000, 1 << 24, "forge's default x1.30 would not");
+        assertLt(txGas * 105 * 105 / 10_000, 1 << 24, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
     }
 }

@@ -43,8 +43,8 @@ main (int argc, char **argv)
     {
       static uint8_t seed[32], seed_enc[32], pk[2][PQZ_POLYVEC_BYTES], msgs[2][16], ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES];
       static uint8_t vs[2][PQZ_V_BYTES];
-      static int8_t s[2][2048], r[2048];
-      static int16_t e[2048], e1[2048], e2[2][16];
+      static int8_t s[2][PQZ_N], r[PQZ_N];
+      static int16_t e[PQZ_N], e1[PQZ_N], e2[2][16];
       int64_t M[16], noise[16];
       unsigned ctr = 0, ctr2 = 0;
       int rc = 0, ok = 1;

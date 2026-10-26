@@ -11,8 +11,29 @@ use sha3::{Digest, Keccak256, Shake256};
 mod common;
 use common::{hex, json};
 
-const Q: u64 = 4_398_046_510_889;
-const DELTA: u64 = (1 << 26) - 1;
+const Q: u64 = pqzl::Q;
+const DELTA: u64 = pqzl::DELTA as u64;
+
+/// false (said on stderr) for a core_only set (set.json, e.g. n2816-kmax65536; common::vectors_dir): the tests that
+/// read the vectors' key / ciphertext files skip (keys and Enc are C = Rust through oracle_keys there)
+fn have_vectors(test: &str) -> bool {
+    let h = common::vectors_dir().is_some();
+    if !h {
+        eprintln!("set {}: core_only (set.json): {test} skipped", pqzl::SET);
+    }
+    h
+}
+
+/// the vectors give 27 PQZL rows (proof_pqzl.json, with the four op 7 disclosures since the R0 fix, + fee0.json); a set without vectors (core_only) gives one C-proved
+/// bench row per relation (`common::pqzl_rows`), so the C = Rust checks still run there
+fn check_row_count(rows: &[common::Row]) {
+    #[cfg(feature = "bench")]
+    let bench = pqzl::bench::NREL;
+    #[cfg(not(feature = "bench"))]
+    let bench = 0; // unreachable: without vectors and feature bench, pqzl_rows panics first
+    let want = if common::vectors_dir().is_some() { 27 } else { bench };
+    assert_eq!(rows.len(), want);
+}
 
 fn hex32(s: &Value) -> [u8; 32] {
     hex(s).try_into().expect("32 bytes")
@@ -41,6 +62,9 @@ fn value(m: &[i64; 16]) -> i128 {
 
 #[test]
 fn keygen_json() {
+    if !have_vectors("keygen_json") {
+        return;
+    }
     let j = json("keygen.json");
     let rows = j["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 8);
@@ -58,16 +82,19 @@ fn keygen_json() {
 /// A = the columns pqz_keypair_from_secret(unit vector at poly j, 0) (matrix.json's own derivation)
 #[test]
 fn matrix_json() {
+    if !have_vectors("matrix_json") {
+        return;
+    }
     let j = json("matrix.json");
-    let cols: Vec<Box<[u8; POLYVEC_BYTES]>> = (0..32)
+    let cols: Vec<Box<[u8; POLYVEC_BYTES]>> = (0..pqzl::K)
         .map(|c| {
-            let mut s = [0i8; 2048];
+            let mut s = [0i8; pqzl::N];
             s[64 * c] = 1;
-            keypair_from_secret(&s, &[0; 2048]).expect("keypair_from_secret")
+            keypair_from_secret(&s, &[0; pqzl::N]).expect("keypair_from_secret")
         })
         .collect();
     let mut a = Vec::new(); // A[0][0], A[0][1], ...: row i of A is poly i of every column
-    for i in 0..32 {
+    for i in 0..pqzl::K {
         for col in &cols {
             a.extend_from_slice(&col[512 * i..512 * (i + 1)]);
         }
@@ -78,8 +105,9 @@ fn matrix_json() {
     let want = |k: &str| ints(&j[k]).iter().map(|&x| x as u64).collect::<Vec<_>>();
     assert_eq!(coeffs(0, 0, 0), want("A_0_0_first8"));
     assert_eq!(coeffs(0, 0, 56), want("A_0_0_last8"));
-    assert_eq!(coeffs(31, 31, 0), want("A_31_31_first8"));
-    assert_eq!(coeffs(31, 31, 56), want("A_31_31_last8"));
+    let l = pqzl::K - 1; // the last poly of A (v3: A_31_31)
+    assert_eq!(coeffs(l, l, 0), want(&format!("A_{l}_{l}_first8")));
+    assert_eq!(coeffs(l, l, 56), want(&format!("A_{l}_{l}_last8")));
 }
 
 fn ct_of(u: &[u8], v: &[u8]) -> Box<[u8; CT_BYTES]> {
@@ -101,6 +129,9 @@ fn ct_op(a: &[u8; CT_BYTES], b: &[u8; CT_BYTES], add: bool) -> Box<[u8; CT_BYTES
 
 #[test]
 fn enc_json() {
+    if !have_vectors("enc_json") {
+        return;
+    }
     let j = json("enc.json");
     let mut cts = Vec::new();
     let rows = j["rows"].as_array().unwrap();
@@ -202,17 +233,11 @@ fn enc_dec_input_errors() {
 #[cfg(feature = "test-hooks")]
 #[test]
 fn codec_roundtrip() {
-    let mut n = 0;
-    let pqzl = json("proof_pqzl.json");
-    let fee0 = json("fee0.json");
-    let rows = pqzl["rows"].as_array().unwrap().iter().map(|r| (r, &r["proof"]));
-    for (r, proof) in rows.chain(fee0["rows"].as_array().unwrap().iter().map(|r| (r, &r["pqzl"]["proof"]))) {
-        let code = common::rel_code(r["form"].as_str().unwrap(), r["statement"]["case"].as_str());
-        let p = hex(proof);
-        assert!(pqzl::test_mutate(code, &p, 99, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
-        n += 1;
+    let rows = common::pqzl_rows();
+    check_row_count(&rows);
+    for r in &rows {
+        assert!(pqzl::test_mutate(r.code, &r.proof, 99, 0, 0) == Ok(Some(r.proof.clone())), "{}", r.name);
     }
-    assert_eq!(n, 23);
 }
 
 /// every PQZL proof of proof_pqzl.json and fee0.json, re-proved from the row's witness and rnd32, is the same bytes
@@ -220,7 +245,7 @@ fn codec_roundtrip() {
 #[test]
 fn reprove_byte_equal() {
     let rows = common::pqzl_rows();
-    assert_eq!(rows.len(), 23);
+    check_row_count(&rows);
     let only = std::env::var("PQZL_REPROVE").unwrap_or_default();
     let mut ctx = pqzl::Ctx::new();
     for r in rows.iter().filter(|r| r.name.contains(&only)) {
@@ -263,7 +288,7 @@ fn prove_refuses_noncanonical_statement() {
 #[test]
 fn all_pqzl_proofs_verify() {
     let rows = common::pqzl_rows();
-    assert_eq!(rows.len(), 23);
+    check_row_count(&rows);
     let mut ctx = pqzl::Ctx::new();
     for r in &rows {
         assert!(ctx.verify(r.op, &r.stmt, &r.proof), "{}", r.name);
@@ -278,8 +303,25 @@ fn negative_rows_reject() {
     let mut ctx = pqzl::Ctx::new();
     let rows = common::negative_inputs();
     // 367 since PQZL v3 (pqzl-fs3 Task 5): + 16 "retired PQZL v2 proofSystemId" rows, - 3 coder-padding rows (the
-    // generator adds those only when the proof's last byte is < 0x80)
-    assert_eq!(rows.len(), 367);
+    // generator adds those only when the proof's last byte is < 0x80); 368 since B-1 / A-2 (5h Task 8a): the new
+    // proofs' last bytes give + 3 - 2 such rows
+    // set n2304-kmax4096: 367 (its proofs' last bytes give one coder-padding row fewer); n2560-kmax16384: 370.
+    // The set's own ids (5h Task 8d part 1): + 16 "retired PQZL v3 proofSystemId" rows each, and the new proofs' last
+    // bytes move the coder-padding rows: n2048-kmax1024 383 (- 1), n2304-kmax4096 384 (+ 1), n2560-kmax16384 384 (- 2)
+    // The R0 review fix (2026-10-25): + 16 "retired PQZL v4 proofSystemId" rows, + 4 kind-word rows (decoder Kind), + 6
+    // op 7 disclosure rows (3 auditor disclosures x {another window, window S_AUD}; the window-shift rows need
+    // S_AUD > 1); the coder-padding rows as the new proofs' last bytes give them
+    let want = match pqzl::SET {
+        "n2048-kmax1024" => 409,
+        "n2304-kmax4096" => 410,
+        "n2560-kmax16384" => 410,
+        // full PQZL set since 5h Task 8d part 1b, PQZL only. Against n2560-kmax16384's 384: + 16 "retired PQZH v1
+        // proofSystemId" rows on its PQZL inputs, + 1 coder-padding row ("coder padding bit 7 set after the final 1-bit",
+        // 15 here, 14 there: the proofs' last bytes) = 401; R0 fix as above: 428
+        "n2816-kmax65536" => 428,
+        s => panic!("no negative.json row count recorded for set {s}"),
+    };
+    assert_eq!(rows.len(), want);
     let mut n = 0;
     for (name, b) in &rows {
         if let Some((op, stmt, proof)) = common::split(b) {
@@ -321,7 +363,9 @@ fn hx(b: &[u8]) -> String {
 /// `WASM_MAX_LEGS`, refused on wasm32), the verify and verify_fast verdicts on this target. run.sh diffs the two.
 #[test]
 fn wasm_replay_inputs() {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/wasm-replay");
+    // under gate.sh (PQZ_BUILD_TAG = the set; concurrent gates) target/wasm-replay-<set>, else target/wasm-replay
+    let tag = std::env::var("PQZ_BUILD_TAG").map(|t| format!("-{t}")).unwrap_or_default();
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("target/wasm-replay{tag}"));
     std::fs::create_dir_all(&dir).unwrap();
     let (mut inp, mut out) = (String::new(), String::new());
     let mut c = Ctx::new();

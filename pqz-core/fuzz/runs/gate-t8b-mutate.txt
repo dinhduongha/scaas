@@ -1,0 +1,64 @@
+seeds.py: 23 honest inputs -> honest.bin (12 P6e, 11 op 7, 0 regress/valid); 394 precompile seeds (370 negative.json rows, 182 of them op 7)
+# fuzz mutate (binary mutate), 60 s, 2026-10-22T04:49:14+07:00, commit d24b4f41, Ubuntu clang version 18.1.3 (1ubuntu1), rustc 1.97.1 (8bab26f4f 2026-07-14)
+pqz-fuzz init (mutate): 23 honest inputs valid, self-test 70ec3b7c3c9d9d8cdc5f5fa11b658fa37e1dd29a5ba239f6e3fece7414c3d2a8, PQZL core: Rust
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2808721327
+INFO: Loaded 1 modules   (17488 inline 8-bit counters): 17488 [0x581625b75198, 0x581625b795e8), 
+INFO: Loaded 1 PC tables (17488 PCs): 17488 [0x581625b795e8,0x581625bbdae8), 
+INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/work/mutate
+INFO:      483 files found in corpus/mutate
+INFO:        0 files found in regress/mutate
+INFO:       92 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/build/fuzz/seeds/mutate
+INFO: seed corpus: files: 575 min: 1b max: 147b total: 9260b rss: 398Mb
+#256	pulse  cov: 1350 ft: 2101 corp: 96/475b exec/s: 28 rss: 583Mb
+#512	pulse  cov: 2633 ft: 3975 corp: 176/1785b exec/s: 15 rss: 783Mb
+#576	INITED cov: 2634 ft: 3992 corp: 187/2415b exec/s: 15 rss: 783Mb
+	NEW_FUNC[1/4]: 0x58162597cc80 in <pqzl::arith::int::Int>::mul /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/src/arith/int.rs:289
+	NEW_FUNC[2/4]: 0x58162597d2b0 in <pqzl::arith::int::Int>::sgn /home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/src/arith/int.rs:131
+#617	NEW    cov: 2668 ft: 4352 corp: 188/2421b lim: 142 exec/s: 11 rss: 783Mb L: 6/142 MS: 1 ShuffleBytes-
+#670	NEW    cov: 2668 ft: 4353 corp: 189/2513b lim: 142 exec/s: 12 rss: 783Mb L: 92/142 MS: 3 CrossOver-InsertRepeatedBytes-CopyPart-
+#673	NEW    cov: 2668 ft: 4354 corp: 190/2519b lim: 142 exec/s: 12 rss: 783Mb L: 6/142 MS: 3 ChangeBit-ChangeByte-ShuffleBytes-
+#744	NEW    cov: 2668 ft: 4355 corp: 191/2586b lim: 142 exec/s: 13 rss: 783Mb L: 67/142 MS: 1 InsertByte-
+#756	NEW    cov: 2668 ft: 4357 corp: 192/2606b lim: 142 exec/s: 13 rss: 783Mb L: 20/142 MS: 2 ChangeByte-InsertByte-
+#772	NEW    cov: 2672 ft: 4398 corp: 193/2612b lim: 142 exec/s: 13 rss: 783Mb L: 6/142 MS: 1 ChangeBinInt-
+#872	DONE   cov: 2672 ft: 4398 corp: 193/2612b lim: 142 exec/s: 14 rss: 783Mb
+Done 872 runs in 61 second(s)
+stat::number_of_executed_units: 872
+stat::average_exec_per_sec:     14
+stat::new_units_added:          6
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              783
+pqz-fuzz summary (mutate): 740 inputs checked, 592 decoded (188 op 7), 0 valid (= unmodified honest; mutate skips those), 2 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[fuzz rc=0]
+pqz-fuzz init (mutate): 23 honest inputs valid, self-test 70ec3b7c3c9d9d8cdc5f5fa11b658fa37e1dd29a5ba239f6e3fece7414c3d2a8, PQZL core: Rust
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2442020295
+INFO: Loaded 1 modules   (17488 inline 8-bit counters): 17488 [0x644395363198, 0x6443953675e8), 
+INFO: Loaded 1 PC tables (17488 PCs): 17488 [0x6443953675e8,0x6443953abae8), 
+MERGE-OUTER: 489 files, 0 in the initial corpus, 0 processed earlier
+MERGE-OUTER: attempt 1
+pqz-fuzz init (mutate): 23 honest inputs valid, self-test 70ec3b7c3c9d9d8cdc5f5fa11b658fa37e1dd29a5ba239f6e3fece7414c3d2a8, PQZL core: Rust
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1176620355
+INFO: Loaded 1 modules   (17488 inline 8-bit counters): 17488 [0x648ddc532198, 0x648ddc5365e8), 
+INFO: Loaded 1 PC tables (17488 PCs): 17488 [0x648ddc5365e8,0x648ddc57aae8), 
+MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge1236504.txt'
+MERGE-INNER: 489 total files; 0 processed earlier; will process 489 files now
+#1	pulse  cov: 3 ft: 3 exec/s: 0 rss: 397Mb
+#2	pulse  cov: 10 ft: 10 exec/s: 0 rss: 397Mb
+#4	pulse  cov: 12 ft: 12 exec/s: 0 rss: 397Mb
+#8	pulse  cov: 451 ft: 486 exec/s: 0 rss: 400Mb
+#16	pulse  cov: 485 ft: 635 exec/s: 0 rss: 407Mb
+#32	pulse  cov: 527 ft: 694 exec/s: 0 rss: 419Mb
+#64	pulse  cov: 545 ft: 746 exec/s: 0 rss: 446Mb
+#128	pulse  cov: 1338 ft: 2079 exec/s: 21 rss: 556Mb
+#256	pulse  cov: 1460 ft: 2393 exec/s: 18 rss: 584Mb
+#489	DONE   cov: 2645 ft: 4010 exec/s: 13 rss: 776Mb
+pqz-fuzz summary (mutate): 482 inputs checked, 406 decoded (134 op 7), 0 valid (= unmodified honest; mutate skips those), 1 differential SV = generic (1 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+MERGE-OUTER: successful in 1 attempt(s)
+MERGE-OUTER: the control file has 81103 bytes
+MERGE-OUTER: consumed 0Mb (398Mb rss) to parse the control file
+MERGE-OUTER: 194 new files with 4010 new features added; 2645 new coverage edges
+pqz-fuzz summary (mutate): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, PQZL core: Rust
+[merge rc=0]
+corpus/mutate: 194 inputs, 2658 B (merged set 194 inputs, 2658 B)

@@ -1,0 +1,54 @@
+{"id":"pqzl","form":"TRANSFER","proof_bytes":50374,"wasm_equal_native":true,"wasm_precompile":1,"ms":2149}
+{"id":"pqzl","form":"TRANSFER0","proof_bytes":50076,"wasm_equal_native":true,"wasm_precompile":1,"ms":4030}
+{"id":"pqzl","form":"BURN","proof_bytes":49543,"wasm_equal_native":true,"wasm_precompile":1,"ms":7109}
+{"id":"pqzl","form":"REFRESH","proof_bytes":49512,"wasm_equal_native":true,"wasm_precompile":1,"ms":3559}
+{"id":"pqzl","form":"REGISTER","proof_bytes":32422,"wasm_equal_native":true,"wasm_precompile":1,"ms":1309}
+{"id":"pqzl","form":"DISCLOSE-SENDER","proof_bytes":32981,"wasm_equal_native":true,"wasm_precompile":1,"ms":3250}
+{"id":"pqzl","form":"DISCLOSE-RECEIVER","proof_bytes":33785,"wasm_equal_native":true,"wasm_precompile":1,"ms":1716}
+{"id":"pqzl","form":"DISCLOSE-AUDITOR","proof_bytes":33766,"wasm_equal_native":true,"wasm_precompile":1,"ms":4264}
+{"id":"pqzl","form":"TRANSFER-MULTI M1-on","proof_bytes":50397,"wasm_equal_native":true,"wasm_precompile":1,"ms":2964}
+{"id":"pqzl","form":"TRANSFER-MULTI M2-on","proof_bytes":51214,"wasm_equal_native":true,"wasm_precompile":1,"ms":4401}
+{"id":"pqzl","form":"TRANSFER-MULTI M4-on","proof_bytes":54820,"wasm_equal_native":true,"wasm_precompile":1,"ms":5062}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-on","proof_bytes":72721,"wasm_equal_native":true,"wasm_precompile":1,"ms":6149}
+{"id":"pqzl","form":"TRANSFER-MULTI M1-off","proof_bytes":50035,"wasm_equal_native":true,"wasm_precompile":1,"ms":3169}
+{"id":"pqzl","form":"TRANSFER-MULTI M2-off","proof_bytes":50594,"wasm_equal_native":true,"wasm_precompile":1,"ms":1987}
+{"id":"pqzl","form":"TRANSFER-MULTI M4-off","proof_bytes":51562,"wasm_equal_native":true,"wasm_precompile":1,"ms":7882}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-off","proof_bytes":69936,"wasm_equal_native":true,"wasm_precompile":1,"ms":4320}
+{"id":"pqzl","form":"TRANSFER-MULTI M2-off-two-real","proof_bytes":50545,"wasm_equal_native":true,"wasm_precompile":1,"ms":6356}
+{"id":"pqzl","form":"TRANSFER-MULTI M4-off-decoys","proof_bytes":51577,"wasm_equal_native":true,"wasm_precompile":1,"ms":4117}
+{"id":"pqzl","form":"TRANSFER-MULTI M8-on-boundary","proof_bytes":72724,"wasm_equal_native":true,"wasm_precompile":1,"ms":12778}
+{"id":"pqzh","form":"TRANSFER","proof_bytes":301322,"wasm_equal_native":true,"wasm_precompile":1,"ms":2400}
+{"id":"pqzh","form":"TRANSFER0","proof_bytes":300682,"wasm_equal_native":true,"wasm_precompile":1,"ms":2353}
+{"id":"pqzh","form":"BURN","proof_bytes":299956,"wasm_equal_native":true,"wasm_precompile":1,"ms":2415}
+{"id":"pqzh","form":"REFRESH","proof_bytes":299924,"wasm_equal_native":true,"wasm_precompile":1,"ms":2351}
+{"id":"pqzh","form":"REGISTER","proof_bytes":230910,"wasm_equal_native":true,"wasm_precompile":1,"ms":1391}
+{"id":"pqzh","form":"DISCLOSE-SENDER","proof_bytes":229125,"wasm_equal_native":true,"wasm_precompile":1,"ms":1340}
+{"id":"pqzh","form":"DISCLOSE-RECEIVER","proof_bytes":231486,"wasm_equal_native":true,"wasm_precompile":1,"ms":1306}
+{"id":"pqzh","form":"DISCLOSE-AUDITOR","proof_bytes":229989,"wasm_equal_native":true,"wasm_precompile":1,"ms":1437}
+{"id":"pqzh","form":"TRANSFER-MULTI M1-on","proof_bytes":300714,"wasm_equal_native":true,"wasm_precompile":1,"ms":2384}
+{"id":"pqzh","form":"TRANSFER-MULTI M2-on","proof_bytes":301354,"wasm_equal_native":true,"wasm_precompile":1,"ms":2289}
+{"id":"pqzh","form":"TRANSFER-MULTI M4-on","proof_bytes":301122,"wasm_equal_native":true,"wasm_precompile":1,"ms":2453}
+{"id":"pqzh","form":"TRANSFER-MULTI M1-off","proof_bytes":299923,"wasm_equal_native":true,"wasm_precompile":1,"ms":2678}
+{"id":"pqzh","form":"TRANSFER-MULTI M2-off","proof_bytes":301386,"wasm_equal_native":true,"wasm_precompile":1,"ms":2367}
+{"id":"pqzh","form":"TRANSFER-MULTI M4-off","proof_bytes":300458,"wasm_equal_native":true,"wasm_precompile":1,"ms":2351}
+{"id":"pqzh","form":"TRANSFER-MULTI M2-off-two-real","proof_bytes":300938,"wasm_equal_native":true,"wasm_precompile":1,"ms":2333}
+{"id":"pqzh","form":"TRANSFER-MULTI M4-off-decoys","proof_bytes":301066,"wasm_equal_native":true,"wasm_precompile":1,"ms":2318}
+{"id":"pqzl","form":"bound R_REG","proof_bytes":32442,"wasm_equal_native":true,"wasm_precompile":1,"ms":1043}
+{"id":"pqzh","form":"bound R_REG","proof_bytes":231358,"wasm_equal_native":true,"wasm_precompile":1,"ms":1405}
+{"id":"pqzl","form":"bound sender R_TX credit 0","proof_bytes":50379,"wasm_equal_native":true,"wasm_precompile":1,"ms":6501}
+{"id":"pqzh","form":"bound sender R_TX credit 0","proof_bytes":299251,"wasm_equal_native":true,"wasm_precompile":1,"ms":2310}
+{"id":"pqzl","form":"bound sender R_TX credit 16382","proof_bytes":50378,"wasm_equal_native":true,"wasm_precompile":1,"ms":4135}
+{"id":"pqzh","form":"bound sender R_TX credit 16382","proof_bytes":299955,"wasm_equal_native":true,"wasm_precompile":1,"ms":2277}
+{"id":"pqzl","form":"bound debit","proof_bytes":50427,"wasm_equal_native":true,"wasm_precompile":1,"ms":5943}
+{"id":"pqzh","form":"bound debit","proof_bytes":300746,"wasm_equal_native":true,"wasm_precompile":1,"ms":2302}
+{"id":"pqzl","form":"illustrative debit","proof_bytes":50415,"wasm_equal_native":true,"wasm_precompile":1,"ms":2815}
+{"id":"pqzh","form":"illustrative debit","proof_bytes":301546,"wasm_equal_native":true,"wasm_precompile":1,"ms":2411}
+{"id":"pqzl","form":"fee 0 TRANSFER","proof_bytes":50379,"wasm_equal_native":true,"wasm_precompile":1,"ms":3213}
+{"id":"pqzh","form":"fee 0 TRANSFER","proof_bytes":299763,"wasm_equal_native":true,"wasm_precompile":1,"ms":2404}
+{"id":"pqzl","form":"fee 0 TRANSFER0","proof_bytes":50059,"wasm_equal_native":true,"wasm_precompile":1,"ms":3592}
+{"id":"pqzh","form":"fee 0 TRANSFER0","proof_bytes":301034,"wasm_equal_native":true,"wasm_precompile":1,"ms":2277}
+{"id":"pqzl","form":"fee 0 BURN","proof_bytes":49546,"wasm_equal_native":true,"wasm_precompile":1,"ms":2475}
+{"id":"pqzh","form":"fee 0 BURN","proof_bytes":300756,"wasm_equal_native":true,"wasm_precompile":1,"ms":2284}
+{"id":"pqzl","form":"fee 0 REFRESH","proof_bytes":49562,"wasm_equal_native":true,"wasm_precompile":1,"ms":2118}
+{"id":"pqzh","form":"fee 0 REFRESH","proof_bytes":298436,"wasm_equal_native":true,"wasm_precompile":1,"ms":2267}
+{"cases":53,"verify_only":0,"fails":0,"node":"v26.8.1"}

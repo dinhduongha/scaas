@@ -17,7 +17,7 @@ use crate::Error;
 
 /// the one ring of every relation (pqz_*_params.h): q, log2 q, 2^-1 mod q as `int_t` (-(q-1)/2)
 pub(crate) const RING_Q: Int = Int::from_limbs(&[Q], 0);
-pub(crate) const LOG2Q: u32 = 42;
+pub(crate) const LOG2Q: u32 = crate::params::set::LOG2Q;
 pub(crate) const RING_INV2: Int = Int::from_limbs(&[(Q - 1) / 2], 1);
 
 #[derive(Clone, Debug)]
@@ -377,8 +377,16 @@ impl Poly {
     }
 
     /// `poly_dcompress_power2round`
+    /// (and a := the wrap case's redp(a) - q, C `dcompress_power2round`; review R1-C1 / R2-C2)
     pub(crate) fn power2round(a: &mut Poly, p: &Dcomp) -> Poly {
-        Poly::coeffwise(a, |r, x| *r = p.power2round(x))
+        a.fromcrt();
+        let mut r = Poly::ZERO;
+        for j in 0..D {
+            let (r1, na) = p.power2round(&a.c(j));
+            r.put(j, &r1);
+            a.put(j, &na);
+        }
+        r
     }
 
     /// `poly_dcompress_decompose`: (r1, r0)
@@ -430,6 +438,22 @@ impl Poly {
         Ok(r)
     }
 
+    /// `poly_urandom_challenge (r, bnd, log2, eta, seed)` (PQZ, review R0-C3): the autostable sample of (seed, dom) for
+    /// dom = 0, 1, ... < `CHAL_TRIES`, the first with ||o(c) c||_1 <= eta^2 (the eta-filtered challenge set C of LNP22
+    /// and the codegen's |C|); `None` if none passes (the prover tries again, a verifier rejects)
+    pub(crate) fn urandom_challenge(bnd: i64, log2: u32, eta: u64, seed: &[u8; 32]) -> Result<Option<Poly>, Error> {
+        for dom in 0..CHAL_TRIES {
+            let mut c = [0i64; D];
+            crate::rand::urandom::urandom_autostable(&mut c, bnd, log2, seed, dom)?;
+            if chal_l1(&c) <= eta * eta {
+                let mut r = Poly::ZERO;
+                r.set_i64(&c);
+                return Ok(Some(r));
+            }
+        }
+        Ok(None)
+    }
+
     /// `poly_grandom (r, log2o, seed, dom)`: discrete Gaussian, sigma = 1.55 * 2^log2o
     pub(crate) fn grandom(log2o: u32, seed: &[u8; 32], dom: u64) -> Result<Poly, Error> {
         let mut v = [0i64; D];
@@ -445,4 +469,26 @@ impl Poly {
         crate::rand::brandom::brandom(&mut v, k, seed, dom)?;
         Ok(Poly::from_fn(|j| Int::from_i64(1, v[j] as i64)))
     }
+}
+
+/// `PQZ_CHAL_TRIES`: the challenge samples `Poly::urandom_challenge` draws at most (C lazer-in2.h)
+pub(crate) const CHAL_TRIES: u64 = 256;
+
+/// ||o(c) c||_1 of a challenge c (o: X -> X^-1, negacyclic product; C `poly_urandom_challenge`)
+pub(crate) fn chal_l1(c: &[i64; D]) -> u64 {
+    let mut oc = [0i64; D];
+    oc[0] = c[0];
+    for i in 1..D {
+        oc[D - i] = -c[i];
+    }
+    let mut l1 = 0u64;
+    for k in 0..D {
+        let mut t = 0i64;
+        for i in 0..D {
+            let j = (k + D - i) % D;
+            t += if i <= k { 1 } else { -1 } * oc[i] * c[j];
+        }
+        l1 += t.unsigned_abs();
+    }
+    l1
 }

@@ -10,14 +10,19 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
 /// @notice EIP-7825 (zether.md §19, CTR-ZTH-38): a transaction's gas LIMIT is capped at 2^24. Every call below runs
 ///         isolated (inline `isolate`): forge executes it as its own transaction, accounts and slots cold, charging the
-///         calldata and applying the EIP-7623 floor; the call's gas is the limit less the 21,000 base.
-///         - `test_edge_*`: the most recipients the prover admits per (form, auditor) settles at a limit of exactly
-///           2^24, direct and through `mtxExecute` (clone → implementation → `ZetherLib` → verifier, 63/64 per frame).
+///         calldata and applying the calldata floor (EIP-7623; EIP-7976 under Amsterdam); the call's gas is the limit less
+///         the 21,000 base.
+///         - `test_edge_*`: the most recipients the prover admits per (form, auditor) settles at a limit of 2^25 (`EDGE_LIMIT`; exactly
+///           2^24 before Amsterdam), direct and through `mtxExecute` (clone → implementation → `ZetherLib` → verifier, 63/64 per frame).
 ///         - `test_measure_*`: the smallest limit per `M` by binary search, the prover's table. Opt-in, past forge's
 ///           2^30 test gas: `ZETHER_GAS_PROBE=1 forge test --gas-limit 9000000000000000000 --match-test test_measure -vv`.
 abstract contract ZetherGasLimitSuite is ZetherFixture {
     uint256 internal constant CAP = 1 << 24;
     uint256 internal constant MARGIN = CAP / 100;
+    /// @dev F185: under Amsterdam EIP-7825's 2^24 caps a transaction's REGULAR gas and EIP-8037 state gas (the new
+    ///      accounts' slots: every recipient's first credit) comes on top. The edge cells need 21.4 M to 31.2 M in total
+    ///      (BLS12-381, measured), so the edge limit is 2^25 (was 2^24 = CAP, state gas included).
+    uint256 internal constant EDGE_LIMIT = 2 * CAP;
     uint256 internal constant PAYER_PK = 0x9A7E5;
     User[12] internal rs;
 
@@ -85,8 +90,8 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             ZetherTypes.TransferMode.NONE][cell / 2];
         audOut = cell % 2 == 1;
         uint8[12] memory e = _edges();
-        assertTrue(_ok(_build(e[2 * cell], mode, false), CAP, false), "direct edge at 2^24");
-        assertTrue(_ok(_build(e[2 * cell + 1], mode, true), CAP, true), "relayed edge at 2^24");
+        assertTrue(_ok(_build(e[2 * cell], mode, false), EDGE_LIMIT, false), "direct edge at 2^25");
+        assertTrue(_ok(_build(e[2 * cell + 1], mode, true), EDGE_LIMIT, true), "relayed edge at 2^25");
     }
 
     function test_edge_compactOn() public { _edge(0); }
@@ -115,11 +120,12 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         }
     }
 
-    /// @dev The calls run isolated: 100,000 zero calldata bytes alone need a limit over 1 M (the EIP-7623 floor).
+    /// @dev The calls run isolated: 100,000 zero calldata bytes alone need a limit over 1 M (EIP-7623's floor, 10 per
+    ///      zero byte) and over 6.4 M under Amsterdam (F185: EIP-7976's floor, 15,000 + 64 per byte).
     function test_isolated() public {
         bytes memory cd = bytes.concat(abi.encodeWithSignature("decimals()"), new bytes(100_000));
         assertFalse(_ok(cd, 500_000, false), "isolated");
-        assertTrue(_ok(cd, 1_100_000, false), "fits");
+        assertTrue(_ok(cd, 6_500_000, false), "fits");
     }
 
     /// @dev `mtxConfidentialTransferSingle` alice → rs[0], auditor on and out, direct and relayed (§19 node cap).

@@ -1,0 +1,16 @@
+    4305 cbd.json
+    7897 enc.json
+ 1154074 fee0.json
+    2973 keygen.json
+    1121 matrix.json
+  127412 negative.json
+ 2504996 proof_pqzl.json
+    2327 selftest.json
+  127102 statement_burn.json
+  252548 statement_disclose.json
+  127026 statement_refresh.json
+   42453 statement_register.json
+  378108 statement_transfer.json
+ 3556526 statement_transfer_multi.json
+ 2578302 worstcase_noise.json
+10867170 total

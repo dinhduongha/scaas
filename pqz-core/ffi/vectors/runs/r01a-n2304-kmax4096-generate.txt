@@ -1,0 +1,45 @@
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  46662 B  prove+verify 2.25 s
+pqzl TRANSFER0          proof  46329 B  prove+verify 2.40 s
+pqzl BURN               proof  45835 B  prove+verify 2.68 s
+pqzl REFRESH            proof  45819 B  prove+verify 2.59 s
+pqzl REGISTER           proof  30381 B  prove+verify 1.09 s
+pqzl DISCLOSE-SENDER    proof  30814 B  prove+verify 0.85 s
+pqzl DISCLOSE-RECEIVER  proof  31546 B  prove+verify 0.75 s
+pqzl DISCLOSE-AUDITOR   proof  31558 B  prove+verify 0.70 s
+pqzh TRANSFER           proof 248120 B  prove+verify 2.14 s
+pqzh TRANSFER0          proof 247240 B  prove+verify 2.13 s
+pqzh BURN               proof 248504 B  prove+verify 2.20 s
+pqzh REFRESH            proof 248728 B  prove+verify 2.42 s
+pqzh REGISTER           proof 204872 B  prove+verify 1.36 s
+pqzh DISCLOSE-SENDER    proof 204872 B  prove+verify 1.38 s
+pqzh DISCLOSE-RECEIVER  proof 204968 B  prove+verify 1.26 s
+pqzh DISCLOSE-AUDITOR   proof 204680 B  prove+verify 1.26 s
+pqzl M1-on              proof  46678 B  prove+verify 4.06 s
+pqzh M1-on              proof 249400 B  prove+verify 2.22 s
+pqzl M2-on              proof  47503 B  prove+verify 2.27 s
+pqzh M2-on              proof 248872 B  prove+verify 2.09 s
+pqzl M4-on              proof  63885 B  prove+verify 4.34 s
+pqzh M4-on              proof 293112 B  prove+verify 3.16 s
+pqzl M8-on              proof  80290 B  prove+verify 9.88 s
+pqzl M1-off             proof  46342 B  prove+verify 2.31 s
+pqzh M1-off             proof 246984 B  prove+verify 2.49 s
+pqzl M2-off             proof  46857 B  prove+verify 6.23 s
+pqzh M2-off             proof 248440 B  prove+verify 2.08 s
+pqzl M4-off             proof  47821 B  prove+verify 2.09 s
+pqzh M4-off             proof 249512 B  prove+verify 2.15 s
+pqzl M8-off             proof  64607 B  prove+verify 4.20 s
+pqzl M2-off-two-real    proof  46802 B  prove+verify 3.19 s
+pqzh M2-off-two-real    proof 248152 B  prove+verify 2.19 s
+pqzl M4-off-decoys      proof  47801 B  prove+verify 1.96 s
+pqzh M4-off-decoys      proof 248872 B  prove+verify 2.09 s
+pqzl M8-on-boundary     proof  80330 B  prove+verify 9.09 s
+pqzl M8-on-boundary-leg3-auditor proof  31543 B
+pqzh M8-on-boundary-leg3-auditor proof 202596 B
+pqzl M8-on-boundary-leg4-auditor proof  31523 B
+pqzh M8-on-boundary-leg4-auditor proof 203076 B
+pqzl M4-on-leg2-auditor proof  31547 B
+pqzh M4-on-leg2-auditor proof 204680 B
+pqzl M8-on-boundary-leg4-receiver proof  31545 B
+pqzh M8-on-boundary-leg4-receiver proof 204680 B
+proofs: 101.6 s

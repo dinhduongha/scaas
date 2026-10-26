@@ -8,11 +8,14 @@ Amsterdam (Glamsterdam) since its reset on 2026-10-21. What PQZ is and
 how the library works: the parent [pqz-core README](../README.md), §3
 ["Two proof systems, one precompile"](../README.md#3-two-proof-systems-one-precompile).
 
-- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz3` (built locally, never
-  pushed): Nethermind 2.2.0 + the reviewed library of `pqz3` (`16dd99ce…`, the Rust PQZL core, built from commit
-  `1adbd563` with `FFI_REV`, see below). History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
+- **Image:** the plugin ships in the local Docker image `scaas/nethermind-pqz:2.2.0-pqz5` (built locally, never
+  pushed; live on the SCaaS testnet since 2026-10-26): Nethermind 2.2.0 + the reviewed library `dd0e7668…e5601` (set
+  `n2304-kmax4096`, the proofSystemIds of the R0 review fix part b, PQZL v5 `0xef1ffbcb…` / PQZH v3 `0x046859a8…`,
+  `pqz_max_input()` 524,288; built from `349b96b8`), with provisional `engine.Pqz` rows
+  (`chain/engine-pqz-provisional-n2304.json`) until the calibration of plan 5h Task 9. History: `1.39.0-pqz1` (2026-10-16), `1.39.0-pqz2` (2026-10-17, the
   multi-recipient transfer, P6-ANON S8; C PQZL core), `1.39.0-pqz3` (2026-10-19, never ran on the testnet),
-  `2.2.0-pqz3` (2026-10-21).
+  `2.2.0-pqz3` (2026-10-21; library `16dd99ce…` from `1adbd563`), `2.2.0-pqz4` (2026-10-25; library `0894d191…` from
+  `54c7c88e`, the plan 5h Task 8d ids PQZL v4 / PQZH v2), `2.2.0-pqz5` (2026-10-26).
 - **Nethermind 2.2.0 (2026-10-21):** the first release with Glamsterdam on Hoodi; 64 KiB contracts (EIP-7954) and
   200 M-gas blocks. What the port changed and what Amsterdam's gas rules mean for our pins (`ROLL_MAX`, op 7 M = 8,
   the precompile gas): [§ Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-2026-10-21) and
@@ -36,11 +39,17 @@ how the library works: the parent [pqz-core README](../README.md), §3
 
 ## The three precompiles
 
+The addresses are the 32-bit form (spec 2026-10-20 §12 item 9, plan 5h Task 8d part 1); live on the SCaaS testnet since image
+`2.2.0-pqz4` (2026-10-25); the earlier images served P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` / `…0013`.
+`PQZ`'s input limit (`PqzNative.MaxInput`, an input above it is a failed call) is the loaded library's
+`pqz_max_input()`, the `MAX_INPUT` of the parameter set it was built for (524,288 B at the default `n2304-kmax4096`;
+was the literal 393,216 of `n2048-kmax1024`).
+
 | Address | Name | What it checks | Gas |
 |---|---|---|---|
-| `0x5caa500000000000000000000000000000000f01` | `PQZ` | a proof of either proof system (PQZL or PQZH), through `pqz-ffi`'s C function `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — the multi-recipient transfer (op 7) also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
-| `0x5caa500000000000000000000000000000000012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
-| `0x5caa500000000000000000000000000000000013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
+| `0x000000000000000000000000000000005caa0f01` | `PQZ` | a proof of either proof system (PQZL or PQZH), through `pqz-ffi`'s C function `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — the multi-recipient transfer (op 7) also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
+| `0x000000000000000000000000000000005caa0012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
+| `0x000000000000000000000000000000005caa0013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
 
 How to read the gas column: `id` is the statement's `proofSystemId`, `stmtLen` its length in bytes and `len` the
 length of the whole input, so `PQZ` adds 3 gas per 32-byte input word to the row price. For ML-DSA, `L` is the input
@@ -76,9 +85,17 @@ block-number transition (for example `maxCodeSizeTransition`) carries the schedu
 and from the first timestamp transition on Nethermind looks releases up by timestamp alone, so a block-number
 transition never drops the precompiles (review W-D, 2026-10-19: refuted, the test
 `A_block_number_transition_keeps_the_schedule` is the proof). At start-up the plugin checks that its registrations
-took effect, that .NET supports ML-DSA, that the library's SHA-256 equals the reviewed value compiled into the plugin
-(`SelfTest.ExpectedLibrarySha256`, review W-G) and that the library's self-test (op 6) returns the expected hash; it
-then logs `PQZ-START` (library SHA-256, self-test, schedules, addresses). Any failure logs `PQZ-REFUSE` and the node
+took effect, that .NET supports ML-DSA and gives the compiled-in known answers (`MlDsaKat`: 8 cases per level through
+the precompile path, the verdicts' SHA-256 against a constant; review R4-C4), that the library's SHA-256 equals the
+reviewed value of its set compiled into the plugin (`SelfTest.ExpectedLibrarySha256`, review W-G; one per set since the
+R0 review fix part b), that the library's self-test (op 6) returns the expected hash and that the schedule in force at
+the next block (block-tree head timestamp + 1, the genesis on an empty database) and every later one carry only the
+set's proofSystemIds (`PqzSetIds`, generated by `gen_set.py`; review R4-C3, owner 2026-10-26: so after an id switch at
+T a new-library node starts once its head reaches T − 1 — in practice after T, see §9.1 — and a fresh node needs a
+data copy past T,
+`pq-zero-knowledge.md` §9.1); it then logs
+`PQZ-START` (library SHA-256, self-test, `max_input`, the OpenSSL version, the ML-DSA KAT hash, the set, addresses,
+schedules). Any failure logs `PQZ-REFUSE` and the node
 exits with code 120 instead of running without the precompiles. On Nethermind 2.x these checks are the init step
 `PqzStartupCheck` (after `InitializeBlockTree`, before `LoadGenesisBlock`): 2.x no longer calls a plugin's `Init`.
 
@@ -107,7 +124,7 @@ The labels in brackets (R1, D1–D6, Task 1–6) point to the decisions and task
 | `fault-hooks/` | test-only shared library: `pqz-ffi` with `test-hooks` + `pqz_test_fail_worker` (never in the image) |
 | `fresh-proofs/` | N fresh honest proofs per form (used for calibration only) |
 | `Calibrate/` | the gas calibration (Task 6), run inside the image's `calib` target |
-| `corpus.py` | builds the flat input corpus from `smartcontracts/vectors/pqz` (`bin/corpus.jsonl`) for every consumer |
+| `corpus.py` | builds the flat input corpus from the parameter set's vectors (`PQZ_SET`, default `n2304-kmax4096` = `pqz-ffi`'s default build: `smartcontracts/vectors/pqz/n2304-kmax4096/`) into `bin/corpus.jsonl` for every consumer |
 | `Dockerfile`, `Dockerfile.dockerignore`, `build-image.sh`, `NOTICE-pqz.txt` | the image (Task 5) |
 | `chain/` | the copy and the live runbook: `copy.sh`, `docker-compose.copy.yml`, `config.{signer,follower}.json`, `nginx-rpc.conf`, `patch-chainspec.py`, `probe.sh`, `e2e.py`, `watch.sh`, `engine-pqz.json` |
 | `runs/` | every run's output (text) |
@@ -121,7 +138,7 @@ otherwise keep holding the lock.
 ```sh
 # 1. Extract the pinned Nethermind reference and build the input corpus
 scripts/capped sh -c 'pqz-core/nethermind/ref.sh && python3 -I pqz-core/nethermind/corpus.py pqz-core/nethermind/bin/corpus.jsonl'
-# 2. Build the pqz-ffi shared library the tests load
+# 2. Build the pqz-ffi shared library the tests load (default features: the set n2304-kmax4096, the corpus' set)
 scripts/capped sh -c 'cd pqz-core/ffi && cargo build --release --offline'                     # cdylib for the tests
 # 3. Build the test-only fault-hook library
 scripts/capped sh -c 'cd pqz-core/nethermind/fault-hooks && cargo build --release --offline && mkdir -p ../bin/test-hooks && cp target/release/libpqz_ffi_fault_hooks.so ../bin/test-hooks/libpqz_ffi.so'
@@ -138,6 +155,21 @@ FFI_REV=1adbd56318b3d07af76d8f61ffbbb27b4b4fd2b0 scripts/capped pqz-core/netherm
 # 7. Calibrate the gas prices, once, on the chain host
 scripts/capped pqz-core/nethermind/calibrate.sh pqz1                                       # ONE run: runs/<date>-calib.txt, chain/engine-pqz.json
 ```
+
+**Another parameter set (plan 5h Task 8d part 1b).** The plugin is built for the set of the library it loads: the
+MSBuild property `PqzSet` (`Directory.Build.props`, default `n2304-kmax4096`) selects `SelfTest.ExpectedHash` (the
+set's `selftest.json` hash) and an unknown set does not compile. The tests of another set, e.g. `n2816-kmax65536`
+(PQZL only): build its library (`cd pqz-core/ffi && CARGO_TARGET_DIR=target/neth-<set> cargo build --release --offline
+--no-default-features --features pqzl-rust,set-<set>`), its fault-hook library (`cd fault-hooks && cargo build --release
+--offline --no-default-features --features pqz-ffi/set-<set>`, copied to a directory of its own as `libpqz_ffi.so`) and
+its corpus (`PQZ_SET=<set> corpus.py bin/corpus-<set>.jsonl`), then `PQZ_SET=<set> PQZ_FFI_DIR=<abs dir> PQZ_CORPUS=<abs
+file> PQZ_HOOKS_DIR=<abs dir> scripts/capped pqz-core/nethermind/run-tests.sh` (log `runs/<date>-test-<set>.txt`; the
+script passes `-p:PqzSet=$PQZ_SET`). `SelfTest.ExpectedLibrarySha256` holds each set's reviewed library (the
+Dockerfile's `ffi` stage with `--build-arg PQZ_SET=<set>`, logs `runs/2026-10-26-r01b-ffi-<set>.txt`; R0 review fix part
+b), and `PQZ_SET=<set> build-image.sh <label>` builds that set's library, plugin and image (the `calib` target and
+`fresh-proofs`, which iterates both ids, stay the default set's). Provisional testnet rows per set:
+`chain/engine-pqz-provisional-<n>.json` (`n2048` / `n2304` / `n2560` / `n2816`, the R0 fix ids; the SCaaS testnet's live
+`2.2.0-pqz5` runs `engine-pqz-provisional-n2304.json` since 2026-10-26).
 
 **The reviewed library (review W-G, 2026-10-19).** `build-image.sh` reads `ExpectedLibrarySha256` from
 `Nethermind.Pqz/SelfTest.cs`, builds `libpqz_ffi.so` (the `ffi-export` target) and stops with `FAIL the built library is

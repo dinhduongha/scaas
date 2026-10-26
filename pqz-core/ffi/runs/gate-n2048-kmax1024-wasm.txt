@@ -1,0 +1,35 @@
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+$ cargo build --release --offline --no-default-features --features pqzl-rust,set-n2048-kmax1024 --lib --target wasm32-unknown-unknown
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling keccak v0.1.6
+   Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzl/rust)
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi)
+   Compiling generic-array v0.14.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling aes v0.8.4
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 8.59s
+[rc=0]
+$ cargo build --release --offline --no-default-features --features pqzl-rust,set-n2048-kmax1024 --target wasm32-unknown-unknown
+    Finished `release` profile [optimized] target(s) in 0.02s
+[rc=0]
+$ sha256sum /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+75dcdfbfb2f40bb0fa7b83f3c8af00160fdb0a20da4239e7041ec33382019955  /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+[rc=0]
+wasm bytes 952046
+$ llvm-nm-18 --undefined-only /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01/pqz-core/ffi/target/n2048-kmax1024-wasm/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+strings /gmp|mpfr|hexl/i: 0
+node rc=0
+wasm run 70330 ms, memory 170262528 B
+wasm PQZL op 7 M = 8 prove refused (Statement(Legs); C backend true, Rust backend false): false
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:10.69
+	Maximum resident set size (kbytes): 251220
+native = wasm32: 29 lines equal

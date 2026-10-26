@@ -139,8 +139,11 @@ fn verify(
     enc.urandom(core::slice::from_mut(&mut v), q, log2q)?;
     enc.urandom(&mut *w1, &dc.m, dc.log2m)?;
     let cseed = hash2(hash, &enc.end()?);
-    let mut c2 = Poly::urandom_autostable(p.omega, p.log2omega, &cseed, 0)?;
-    let mut ok = Poly::eq(c, &mut c2);
+    // PQZ (R0-C3): the eta-filtered challenge (none of CHAL_TRIES samples passes: reject)
+    let mut ok = match Poly::urandom_challenge(p.omega, p.log2omega, p.eta, &cseed)? {
+        Some(mut c2) => Poly::eq(c, &mut c2),
+        None => false,
+    };
 
     // l2(z1)^2 <= 1.55^2 2^(2 log2stdev1) 2 m1 d (scaled by 400: 962 / 400)
     let mut bnd = Int::from_i64(2, 2 * m1 as i64 * 64 * 962);
@@ -303,7 +306,11 @@ fn prove(
         enc.urandom(core::slice::from_mut(&mut v), q, log2q)?;
         enc.urandom(&mut *w1, &dc.m, dc.log2m)?;
         let cseed = hash2(hash, &enc.end()?);
-        f.c = Poly::urandom_autostable(p.omega, p.log2omega, &cseed, 0)?;
+        // PQZ (R0-C3): c in the eta-filtered challenge set (none of CHAL_TRIES samples passes: try again)
+        f.c = match Poly::urandom_challenge(p.omega, p.log2omega, p.eta, &cseed)? {
+            Some(c) => c,
+            None => continue,
+        };
 
         polyvec::scale2(&mut *cs1, &mut f.c, &mut **s1);
         polyvec::scale2(&mut *cs2, &mut f.c, &mut **s2);

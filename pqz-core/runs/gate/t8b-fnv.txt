@@ -1,0 +1,31 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 4.80s
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling keccak v0.1.6
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling aes v0.8.4
+   Compiling pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 5.74s
+R_REG 64c1ba39
+R_TX e951ef3c
+R_BURN 98a6fe99
+R_DS c076a909
+R_DR c63f6246
+R_TX0 e22e44a6
+R_TXM1 094cf36d
+R_TXM2 5defead6
+R_TXM4 6ceadf74
+R_TXM8 99b6b6e1
+R_TXM1_0 a737d98d
+R_TXM2_0 6dde60ab
+R_TXM4_0 adcd309b
+R_TXM8_0 cdfd88de

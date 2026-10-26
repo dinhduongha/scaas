@@ -1,0 +1,3 @@
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects, no test hook
+power2round: 113 wrap-case coefficients r1 = 0 (golden r1 << D >= q; the intended deviation)
+19/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, avx512f=1); checked: pqz-core

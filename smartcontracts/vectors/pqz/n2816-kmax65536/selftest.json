@@ -1,0 +1,30 @@
+{
+ "file": "selftest.json",
+ "description": "OP_SELFTEST (P6e D13; pq-zether.md 9.1): input exactly 06 00000000, output keccak256(kat_digest || u8(pqzl_valid) || u8(pqzl_invalid) || u8(pqzh_valid) || u8(pqzh_invalid)); kat_digest = keccak256(a_digest || keccak256(pk) || keccak256(u || v) || M (16 bytes) || keccak256(fft) || u8(fft_ok)): a_digest = matrix.json a_keccak; pk = KeyGen(seed_key); u || v = Enc(pk, digits(msg_value), seed_enc); M = Dec; fft = Ligero's forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, 6-byte BE elements, fft_ok = the inverse gives a back. The four results: the precompile path on the REGISTER statement (opTag || id || keccak256(SCAAS-PQZ-SELFTEST-V1) || pk) with the REGISTER proof of each id (rnd32 = 0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). Computed by pqz-ffi (selftest::report, the hash also through pqz_precompile on 06 00000000), whose build.rs compiles in these REGISTER proofs. This set's build has no PQZH: fft is empty (n 0, ok 0) and both PQZH results are 0.",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
+ "input": "0600000000",
+ "seed_key": "5151515151515151515151515151515151515151515151515151515151515151",
+ "seed_enc": "5252525252525252525252525252525252525252525252525252525252525252",
+ "rnd32": "5353535353535353535353535353535353535353535353535353535353535353",
+ "msg_value": 123456,
+ "message": "a24ed67f5a86fbe2b694db8e3d826fc7c93cde94f0cb2ad2fb724c744f872275",
+ "a_digest": "7015404598ec353de2dba769c9d40e111000cc1452dd9604a7dbca09981e252d",
+ "pk_keccak": "f89e028f6ec023c22f0ad6e6eb8596eb69851bec2aa2732d14fd335e9af76668",
+ "ct_keccak": "35e06f0e8947c72ac7f2465102254e4ff828ed474a44a3843fcf6ce25450b65d",
+ "M": [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ "fft": {
+  "n": 0,
+  "keccak": "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+  "ok": false
+ },
+ "kat_digest": "47f40205905fb1a1398a231b3c24d6a2f89ee78e7316e25ac70e8c6f9cf5551c",
+ "register": {
+  "pqzl": {
+   "proof_keccak": "5fb8eaabc11d625cd792b867fc15df17ffff165c96a62a04f15077d2c7b63c4f",
+   "valid": 1,
+   "invalid": 0
+  }
+ },
+ "results": [1, 0, 0, 0],
+ "hash": "1e69e3cd195ff67983e603a8ea969e73e6edcd70f4ac04fa4e5d75c09ddee740"
+}

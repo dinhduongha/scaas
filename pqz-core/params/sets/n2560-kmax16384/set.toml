@@ -1,0 +1,32 @@
+# PQZ parameter set n2560-kmax16384: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
+# derived from it; README.md beside this directory). The K_MAX 16,384 set of plan 5h Task 7 (research record
+# pqz-core/pqzl/params/p16k/), shippable for customer chains that need K_MAX 16,384.
+description = "K_MAX 16,384, owner 2026-10-21: shippable (customer chains may choose it)"
+n = 2560
+k_max = 16384
+q = 1125899864532089              # 2^50 - 42,310,535 (owner ruling Q1, 2026-10-20)
+pqz_delta = 1.00366               # e-s1.txt
+s_aud = 4                         # legs per randomness group of an audited R_TXM (owner 2026-10-25, R0-1 direction 2: the hint study
+                                  # pqzl/params/anon/hints-s.txt, 32 s_aud worst-case hints); without the auditor groups of 4
+kmlwe_min = 39                    # e-s1.txt (p16k: codegen's default rank 38 gives dual_hybrid 446 / 447)
+pqzh = true                       # PQZH (Ligero over this q) is built for this set
+max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (decisions 2026-10-20 O8, 2026-10-21 (7); the node reads it, pqz_max_input())
+pqzl_id = "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5"   # PQZL proofSystemId = keccak256(label) (R0 review fix 2026-10-25: R0-1 auditor windows, R0-C2 Bprime, R0-C3 challenge filter; v4 retired)
+pqzh_id = "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3"   # PQZH proofSystemId (the same bump, R0-1 auditor windows; v2 retired; field and [pqzh_preset] named)
+
+[pqzh_preset]                     # PQZH's Ligero preset: gen_set.py writes pqzh_set.rs (+ q - 1's factors, generator, non-square)
+description = "THE preset's radices and n / k (q - 1 has no other small radix) with t = 122 (owner 2026-10-23: soundness ≈ 127.55 bits, above the other sets'), and MAX_PROOF_PQZH 327,680 B for this set only (owner 2026-10-23, the per-set limit raise; decisions CTR-PQZ-10)"
+radices = [2, 19, 43, 431]        # FFT radices, each dividing q - 1
+n = 32756                         # code length (on the coset 3 H_n)
+k = 817                           # message length (H_k)
+t = 122                           # column queries (owner 2026-10-23: 122, not THE preset's 121)
+max_proof = 327680                # MAX_PROOF_PQZH (B), 320 KiB: the precompile's and the prover's proof limit
+
+[pqzl_c]                          # pqz-ffi's opt-in C backend (feature pqzl-c; review R1-C2 / R4-C1): sized from the gate's
+                                  # C peaks with every relation loaded (runs/gate/<set>-fnv-c.jsonl, x 1.5; README.md beside this dir)
+prove_arena_mib = 1792             # native prover / generic-verifier arena (ARENA_BIG)
+wasm_max_legs = 2                 # the largest op 7 M the C backend proves in wasm32 (its 512 MiB arena); an estimate (native peak x 0.77), not measured
+
+[approval]
+date = "2026-10-21"
+what = "approved as the Task 8 set on 2026-10-20 (Q1), superseded as the default by n2304-kmax4096 on 2026-10-21; kept as a shippable set (owner 2026-10-21: full vectors, gate, SET.md conditions)"

@@ -14,11 +14,15 @@ publish = false
 crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
-pqz-stmt = { path = "../stmt" }
-pqzh-ligero = { path = "../pqzh/ligero", default-features = false }
+pqz-stmt = { path = "../stmt", default-features = false }
+# PQZH: Ligero over the set's F_q (plan 5h Task 8c part 2): feature `pqzh`, implied by `set-<set>` for every set whose
+# set.toml says pqzh, which also forwards the set to pqzh-ligero (gen_set.py writes the set lines below)
+pqzh-ligero = { path = "../pqzh/ligero", default-features = false, optional = true }
 sha3 = "=0.10.8"
-# feature `pqzl-rust`: the PQZL core in Rust (pqz-core/pqzl/rust), byte-for-byte equal to the C core
-pqzl = { path = "../pqzl/rust", optional = true }
+# feature `pqzl-rust`: the PQZL core in Rust (pqz-core/pqzl/rust), byte-for-byte equal to the C core. Parameter set
+# (owner 2026-10-21: one per build): the feature `set-<set>` below, forwarded to pqz-stmt and pqzl (build.rs compiles
+# the C core with the same set)
+pqzl = { path = "../pqzl/rust", optional = true, default-features = false, features = ["sv"] }
 # feature `prove` only: the op 7 sender memo (P6-ANON §5.4, CTR-PQZ-23 / CTR-ZTH-50: HKDF-SHA256)
 hkdf = { version = "=0.12.4", optional = true }
 sha2 = { version = "=0.10.9", optional = true }
@@ -28,8 +32,20 @@ sha2 = { version = "=0.10.9", optional = true }
 cc = { version = "1", optional = true }
 
 [features]
-# the PQZL backend (CTR-PQZ-09, owner 2026-10-18): the Rust crate by default, no C compiled
-default = ["pqzl-rust"]
+# the PQZL backend (CTR-PQZ-09, owner 2026-10-18): the Rust crate by default, no C compiled; the parameter set
+# n2304-kmax4096, the default set on chain (owner 2026-10-21; plan 5h Task 8d)
+default = ["pqzl-rust", "set-n2304-kmax4096"]
+# the parameter set (pqz-core/params/sets/<set>, owner 2026-10-21): exactly one; another set than the default needs
+# --no-default-features --features pqzl-rust,set-<set>. Vectors: smartcontracts/vectors/pqz/<set>/
+# (n2048-kmax1024: smartcontracts/vectors/pqz/).
+# BEGIN gen_set.py sets
+set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024", "pqzl?/set-n2048-kmax1024", "pqzh-ligero?/set-n2048-kmax1024", "pqzh"]
+set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096", "pqzl?/set-n2304-kmax4096", "pqzh-ligero?/set-n2304-kmax4096", "pqzh"]
+set-n2560-kmax16384 = ["pqz-stmt/set-n2560-kmax16384", "pqzl?/set-n2560-kmax16384", "pqzh-ligero?/set-n2560-kmax16384", "pqzh"]
+set-n2816-kmax65536 = ["pqz-stmt/set-n2816-kmax65536", "pqzl?/set-n2816-kmax65536"]
+# END gen_set.py sets
+# PQZH (Ligero) compiled in: every set with pqzh (the set lines above)
+pqzh = ["dep:pqzh-ligero"]
 # `pqzl::` = the Rust crate `pqzl`; with `pqzl-c` too, the C core is `pqzl::c` (the differential and the fuzz mode
 # `pqzl-diff`)
 pqzl-rust = ["dep:pqzl"]

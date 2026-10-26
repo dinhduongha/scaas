@@ -16,6 +16,20 @@ pqz-stmt = { path = "../../stmt" }
 # Production users (pqz-ffi, Task 7) depend with default-features = false and get Params::proven() only, no floats.
 [features]
 default = ["bench"]
+# FALLBACK A (owner 2026-10-22; never in a default or production build): set (a) with THE preset of v3
+# (params/sets/n2304-kmax4096/pqzh_set_fallback.rs) and the prover re-proving while a proof is above MAX_PROOF_PQZH
+# (32 attempts); docs/research/pqzh-set-a-proof-limit.md "Fallbacks". The production set (a) uses preset B.
+fallback-retry = []
+# RESEARCH SPIKE: count the prover's / verifier's field products (thread-local counter; src/bin/spike_count.rs)
+spike-count = ["bench"]
+# Parameter set (owner 2026-10-21: one per build; pqz-core/params/sets/<set>/{rust/set.rs, pqzh_set.rs}; plan 5h Task
+# 8c): at most one `set-<set>`, for every set whose set.toml says pqzh; none = the frozen set n2048-kmax1024 (a plain
+# `cargo test`; pqz-ffi forwards its set-<set>). Forwarded to pqz-stmt (statement lengths, MAX_PROOF_PQZH, MAX_INPUT).
+set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024"]
+# n 2304, K_MAX 4,096, q = 61,275,424,977,257 (owner 2026-10-21): preset B (radices 2/7/17/19/43/431)
+set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096"]
+# n 2560, K_MAX 16,384, q = 2^50 - 42,310,535: THE preset's n / k with t = 122, MAX_PROOF_PQZH 327,680 (owner 2026-10-23)
+set-n2560-kmax16384 = ["pqz-stmt/set-n2560-kmax16384"]
 bench = []
 # bench only (P6-ANON plan, global constraints): op 7 also at M = 8, 16 (pqz-stmt's `oversize`), proofs above
 # MAX_PROOF_PQZH; never in a production build (pqz-ffi refuses pqz-stmt's `oversize`)
@@ -33,6 +47,21 @@ required-features = ["bench"]
 name = "ligero_export"
 path = "src/bin/ligero_export.rs"
 required-features = ["bench"]
+
+[[bin]]
+name = "ligero_kat"
+path = "src/bin/ligero_kat.rs"
+required-features = ["bench"]
+
+[[bin]]
+name = "spike_retry"
+path = "src/bin/spike_retry.rs"
+required-features = ["bench"]
+
+[[bin]]
+name = "spike_count"
+path = "src/bin/spike_count.rs"
+required-features = ["spike-count"]
 
 [[bin]]
 name = "ct"

@@ -19,7 +19,7 @@
 #include <stdint.h>
 
 #define PQZ_FFI_OK 0       /* out[0..32] holds the result */
-#define PQZ_FFI_REVERT 1   /* len > PQZ_FFI_MAX_INPUT: the precompile reverts (consumes all gas); out zeroed */
+#define PQZ_FFI_REVERT 1   /* len > pqz_max_input (): the precompile reverts (consumes all gas); out zeroed */
 #define PQZ_FFI_BAD_ARGS 2 /* input NULL with len > 0, out NULL, or out_len < 32: nothing written */
 #define PQZ_FFI_INTERNAL 3 /* a panic in the decode / verify logic was caught: input-caused, the same on every
                               node; out = ...00 (the input is invalid); log it */
@@ -29,7 +29,6 @@
                                 no result, out untouched; abort block processing, never treat the input as invalid
                                 (controller 2026-10-14) */
 
-#define PQZ_FFI_MAX_INPUT 393216 /* P6e D5: 5 + 83,072 + 262,144 = 345,221 <= 393,216 */
 #define PQZ_FFI_OUT_BYTES 32
 
 #ifdef __cplusplus
@@ -37,6 +36,11 @@ extern "C" {
 #endif
 
 int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);
+
+/* the library's precompile input limit (pqz-stmt MAX_INPUT of the parameter set it was built for, set.toml max_input:
+   524,288 at every set since the R0 review fix; n2048-kmax1024 had 393,216). The node takes its
+   limit from here (plan 5h Task 8d: no second literal). */
+size_t pqz_max_input (void);
 
 #ifdef __cplusplus
 }

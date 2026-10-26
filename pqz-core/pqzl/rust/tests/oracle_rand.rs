@@ -1,6 +1,7 @@
 //! Hashing, the rng and the samplers against the C core (feature `c-oracle`) and the frozen CBD vectors: 1,000
 //! seeded inputs per oracle test, Rust = C (outputs and error codes). The C halves are `pqz_shim_*` in
 //! tests/oracle_shim.c, the Rust halves `testkit::rand_*`.
+mod common;
 use pqzl::c_oracle::{c_autostable, c_grandom, c_rej, c_rej_limbs, c_rng, c_shake, c_urandom, c_urandom_bnd};
 use pqzl::testkit::{rand_autostable, rand_cbd, rand_grandom, rand_rej, rand_rej_limbs, rand_rng, rand_shake,
                     rand_urandom, rand_urandom_bnd};
@@ -34,7 +35,12 @@ fn hex(s: &str) -> Vec<u8> {
 
 #[test]
 fn cbd_eq_vectors() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../smartcontracts/vectors/pqz/cbd.json");
+    // the vectors of this build's parameter set (n2048-kmax1024 at the canonical path, another set below it; none if core_only)
+    let Some(d) = common::vectors_dir() else {
+        eprintln!("set {}: core_only (set.json): no vectors, no cbd.json", pqzl::SET);
+        return;
+    };
+    let path = d.join("cbd.json");
     let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let mut parts = 0;
     for row in doc["rows"].as_array().unwrap() {

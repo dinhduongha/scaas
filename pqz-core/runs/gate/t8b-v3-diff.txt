@@ -1,0 +1,18 @@
+z21diff rc=1
+{"z21diff": 1, "cases": 406, "disagreements": 0, "expect_mismatches": 0, "prove_errors": 0, "closest_z2sq_over_bsq": 0.955454, "both_verdicts_every_relation": 0}
+{"prg_mismatches": 0}
+{"rel": "R_REG", "arena_base": 10640000, "sv_tables": 4102208, "verify_peak_generic": 80654384, "verify_peak_fast": 1084464}
+{"rel": "R_TX", "arena_base": 28271920, "sv_tables": 5216304, "verify_peak_generic": 272876784, "verify_peak_fast": 1713024}
+{"rel": "R_BURN", "arena_base": 46712496, "sv_tables": 5098544, "verify_peak_generic": 258372576, "verify_peak_fast": 1673728}
+{"rel": "R_DS", "arena_base": 59848144, "sv_tables": 3098672, "verify_peak_generic": 84679344, "verify_peak_fast": 1100080}
+{"rel": "R_DR", "arena_base": 71589488, "sv_tables": 3332144, "verify_peak_generic": 91484064, "verify_peak_fast": 1142304}
+{"rel": "R_TX0", "arena_base": 88329168, "sv_tables": 5169200, "verify_peak_generic": 267002144, "verify_peak_fast": 1696928}
+{"seed": 1, "cases": 4328, "mismatches": 0, "other_fails": 0}
+{"prg_mismatches": 0}
+{"rel": "R_REG", "arena_base": 10640000, "sv_tables": 4102208, "verify_peak_generic": 80654384, "verify_peak_fast": 1084448}
+{"rel": "R_TX", "arena_base": 28271920, "sv_tables": 5216304, "verify_peak_generic": 272876784, "verify_peak_fast": 1713056}
+{"rel": "R_BURN", "arena_base": 46712496, "sv_tables": 5098544, "verify_peak_generic": 258372576, "verify_peak_fast": 1673744}
+{"rel": "R_DS", "arena_base": 59848144, "sv_tables": 3098672, "verify_peak_generic": 84679344, "verify_peak_fast": 1100080}
+{"rel": "R_DR", "arena_base": 71589488, "sv_tables": 3332144, "verify_peak_generic": 91484064, "verify_peak_fast": 1142320}
+{"rel": "R_TX0", "arena_base": 88329168, "sv_tables": 5169200, "verify_peak_generic": 267002144, "verify_peak_fast": 1696880}
+{"seed": 2, "cases": 2158, "mismatches": 0, "other_fails": 0}

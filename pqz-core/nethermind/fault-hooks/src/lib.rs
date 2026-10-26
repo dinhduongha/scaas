@@ -2,7 +2,7 @@
 //! the node-fault status (4) through `PqzPrecompile.Run` (P6f D4).
 use std::sync::atomic::Ordering::Relaxed;
 
-pub use pqz_ffi::pqz_precompile;
+pub use pqz_ffi::{pqz_max_input, pqz_precompile};
 
 #[no_mangle]
 pub extern "C" fn pqz_test_fail_worker(on: bool) {

@@ -53,10 +53,21 @@ fn vec_of<T>(n: usize, f: impl FnMut(usize) -> T) -> Result<Vec<T>, Error> {
     Ok(v)
 }
 
+/// review A's cheating prover, mode 2 (`z3 = y3`: no `β3·R·s3`, no rej3): test hook only (8a review m3)
+#[cfg(feature = "test-hooks")]
+fn cheat_skips_s3() -> bool {
+    crate::cheat() == 2
+}
+#[cfg(not(feature = "test-hooks"))]
+#[inline(always)]
+const fn cheat_skips_s3() -> bool {
+    false
+}
+
 /// `n` uniform values mod q from (seed, dom) (`intvec_urandom (V, q, log2q, seed, dom)`, `dom` not shifted)
 fn urandom_q(n: usize, seed: &[u8; 32], dom: u64) -> Result<Vec<i64>, Error> {
     let mut v = vec_of(n, |_| 0i64)?;
-    urandom_i64(&mut v, Q as i64, 42, seed, dom)?;
+    urandom_i64(&mut v, Q as i64, crate::params::set::LOG2Q, seed, dom)?;
     Ok(v)
 }
 
@@ -594,8 +605,11 @@ fn beta_eqs(p: &Tbox) -> Result<[Eq; 2], Error> {
 
 /// The Schwartz–Zippel accumulation, prover and verifier alike (C: from `__schwartz_zippel_accumulate2` of the
 /// relation's evaluation equations to `__schwartz_zippel_auto`): the relation's equations, then the norm proofs'
-/// internal ones (beta3, beta4, upsilon, binary, exact l2 with P6-L2's domain per block, z4, z3). `hash0` = hz seeds
-/// V3 / V4, `cseed` (the round over ty3, ty4, tbeta) the JL rows R / R' (P6-FS, lazer#28)
+/// internal ones (beta3, beta4, upsilon, binary, exact l2 with P6-L2's domain per block, z4, z3). `hash` (the round
+/// over tg) seeds Gamma and, since B-1 (review B; review A's A-1), V3 / V4; `cseed` (the round over ty3, ty4, tbeta)
+/// the JL rows R / R' (P6-FS, lazer#28). Domains: input equations 0, beta3 M + i, beta4 M + d - 1 + i (i = 1..d-1),
+/// then, one apart since A-2 (review A: upsilon shared the last beta4 row's M + 2(d - 1)), upsilon M + 2(d - 1) + 1,
+/// binary + 2, exact l2 + 3 + i, V4 + 3 + Z, V3 + 3 + Z + 256
 #[allow(clippy::too_many_arguments)]
 fn accumulate_all(
     a1: &mut [Acc],
@@ -605,7 +619,6 @@ fn accumulate_all(
     z3: &mut PolyVec,
     z4: &mut PolyVec,
     hash: &[u8; 32],
-    hash0: &[u8; 32],
     cseed: &[u8; 32],
     p: &Tbox,
 ) -> Result<(), Error> {
@@ -659,7 +672,7 @@ fn accumulate_all(
         }
         r2.set_sorted(true);
         r1.set_sorted(true);
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), None), hash, mm + 2 * (dd - 1), qe)?;
+        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), None), hash, mm + 2 * (dd - 1) + 1, qe)?;
     }
     if nbin > 0 {
         // Ps s1 binary: <Ps s1, Ps s1 - 1> = 0 over Z
@@ -687,7 +700,7 @@ fn accumulate_all(
         if !r2.is_upperdiag() {
             return Err(Error::Internal);
         }
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(Poly::ZERO)), hash, mm + 2 * (dd - 1) + 1, qe)?;
+        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(Poly::ZERO)), hash, mm + 2 * (dd - 1) + 2, qe)?;
     }
     // exact l2 (P6-L2: domain dom + i per block): ||Es_i s1||^2 + <pow2, upsilon_i> - B_i^2 = 0 over Z
     #[allow(clippy::needless_range_loop)] // i indexes es, oes, l2bsqr and the domain
@@ -708,17 +721,17 @@ fn accumulate_all(
         if !r2.is_upperdiag() {
             return Err(Error::Internal);
         }
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(mono(0, &a_))), hash, mm + 2 * (dd - 1) + 2 + i as u32, qe)?;
+        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(mono(0, &a_))), hash, mm + 2 * (dd - 1) + 3 + i as u32, qe)?;
     }
     if nprime > 0 {
         #[cfg(feature = "test-hooks")]
-        crate::fstrace::rec(2, hash0, (mm + 2 * (dd - 1) + 2 + z as u32) as u64);
-        sz_z4(a1, a2, &mut au.ods, z4, hash0, cseed, mm + 2 * (dd - 1) + 2 + z as u32, p)?;
+        crate::fstrace::rec(2, hash, (mm + 2 * (dd - 1) + 3 + z as u32) as u64);
+        sz_z4(a1, a2, &mut au.ods, z4, hash, cseed, mm + 2 * (dd - 1) + 3 + z as u32, p)?;
     }
     if nex > 0 {
         #[cfg(feature = "test-hooks")]
-        crate::fstrace::rec(3, hash0, (mm + 2 * (dd - 1) + 2 + z as u32 + 256) as u64);
-        sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash0, cseed, mm + 2 * (dd - 1) + 2 + z as u32 + 256, p)?;
+        crate::fstrace::rec(3, hash, (mm + 2 * (dd - 1) + 3 + z as u32 + 256) as u64);
+        sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash, cseed, mm + 2 * (dd - 1) + 3 + z as u32 + 256, p)?;
     }
     for (x, y) in a1.iter_mut().zip(a2.iter_mut()) {
         sz_auto(x, y, qe)?;
@@ -780,7 +793,6 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     }
     let cseed = *hash;
     hash_z34(hash, &f.z3, &f.z4, p)?;
-    let hash0 = *hash;
     for h in f.h.iter_mut() {
         if !(h.get_coeff(0).eqzero() && h.get_coeff(D / 2).eqzero()) {
             return Ok(false);
@@ -793,7 +805,7 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     enc.urandom(&mut tg, q, log2q)?;
     *hash = hash2(hash, &enc.end()?);
 
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, &cseed, p)?;
+    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p)?;
     for (i, a) in a1.iter_mut().enumerate() {
         finish(a, &mut f.h[i], i, p)?;
     }
@@ -1012,7 +1024,9 @@ fn compute_z34(
             let s3c = Wiped(coeffs_i64(&mut s3)?);
             z3v = coeffs_i64(&mut y3)?;
             rs3 = r_times(&s3c, &cseed, 0)?;
-            z3v.iter_mut().zip(&rs3).for_each(|(z, &r)| *z += beta3 * r);
+            if !cheat_skips_s3() {
+                z3v.iter_mut().zip(&rs3).for_each(|(z, &r)| *z += beta3 * r);
+            }
         }
         let mut rs4 = Vec::new();
         if nprime > 0 {
@@ -1022,7 +1036,7 @@ fn compute_z34(
             z4v.iter_mut().zip(&rs4).for_each(|(z, &r)| *z += beta4 * r);
         }
         // rejection sampling (rej3 = rej4 = 2 in every relation: bimodal)
-        if nex > 0 && p.rej3 != 0 {
+        if nex > 0 && p.rej3 != 0 && !cheat_skips_s3() {
             let rej = rej_bimodal(&mut rstate, &intvec(&z3v)?, &intvec(&rs3)?, &p.scm3, &p.stdev3sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
@@ -1088,9 +1102,21 @@ pub(crate) fn prove(
 
     let mut au = autos(s, p)?;
     compute_z34(hash, f, s1, m, s2, &mut keys[2], s, seed_rej34)?;
+    // review A's cheating prover (8a review m3): every cheating step is compiled only with the feature test-hooks;
+    // without it `mode` is the constant 0 and only the honest prover's checks are left
+    #[cfg(feature = "test-hooks")]
+    let mode = crate::cheat();
+    #[cfg(not(feature = "test-hooks"))]
+    let mode = 0u32;
+    #[cfg(feature = "test-hooks")]
+    if (mode == 1 || mode == 3) && p.nprime > 0 {
+        let v = f.z4[0].get_coeff(0).get_i64();
+        f.z4[0].set_coeff(0, &int(v + 1));
+    }
     let cseed = *hash;
     hash_z34(hash, &f.z3, &f.z4, p)?;
-    let hash0 = *hash;
+    #[cfg(feature = "test-hooks")]
+    let hz = *hash; // the cheating prover's guess of V's seed (B-1: V is drawn after tg, from the next hash)
 
     // s = (<s1>, <m>, <y3>, <y4>, <beta>) (and <g> before the last check)
     let mut sv = Wiped(PolyVec::new(np)?);
@@ -1099,11 +1125,29 @@ pub(crate) fn prove(
     polyvec::set(&mut sv.sub((m1 + z) * 2, loff + 1, 2), &m.sub(l, loff + 1, 1));
     polyvec::auto(&mut sv.sub((m1 + z) * 2 + 1, loff + 1, 2), &mut m.sub(l, loff + 1, 1));
 
+    // cheating modes 1, 2: the z3 / z4 part of each accumulator at coefficients 0 and d/2 as the cheater can know it
+    // before tg (Gamma and V from hz: Gamma's part is 0 there for an otherwise honest s), cancelled through g
+    #[cfg(feature = "test-hooks")]
+    let mut offs = Vec::new();
+    #[cfg(feature = "test-hooks")]
+    if mode == 1 || mode == 2 {
+        let (mut c1, mut c2) = accs(p)?;
+        let mut au2 = autos(s, p)?;
+        accumulate_all(&mut c1, &mut c2, s, &mut au2, &mut f.z3, &mut f.z4, &hz, &cseed, p)?;
+        for a in c1.iter_mut() {
+            let t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sv.sub(0, n_, 1))?;
+            offs.push((t.c(0).get_i64(), t.c(D / 2).get_i64()));
+        }
+    }
     // g = h: uniform with coefficients 0 and d/2 zero, appended to m; tg = B_ext s2 + g, hashed
     for i in 0..lambda / 2 {
         let mut v = urandom_q(D, seed_cont, i as u64)?;
         v[0] = 0;
         v[D / 2] = 0;
+        #[cfg(feature = "test-hooks")]
+        if let Some(&(o0, o32)) = offs.get(i) {
+            (v[0], v[D / 2]) = (-o0, -o32);
+        }
         f.h[i].set_i64(&v);
     }
     polyvec::set(&mut m.sub(qe.l as usize, lambda / 2, 1), &*f.h);
@@ -1125,16 +1169,24 @@ pub(crate) fn prove(
 
     let (mut a1, mut a2) = accs(p)?;
     let beta = beta_eqs(p)?;
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, &cseed, p)?;
+    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p)?;
 
     // h_i = g_i + the accumulated evaluation i (coefficients 0 and d/2 zero), then the quadratic equations
     for (i, a) in a1.iter_mut().enumerate() {
         let mut sub = sv.sub(0, n_, 1);
-        check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub, Some(false))?;
+        if mode == 0 {
+            check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub, Some(false))?;
+        }
         let mut t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub)?;
         f.h[i].add_assign(&mut t, false);
         crate::ct::public(&f.h[i]); // review E: hi, a proof field
-        if !(f.h[i].get_coeff(0).eqzero() && f.h[i].get_coeff(D / 2).eqzero()) {
+        #[cfg(feature = "test-hooks")]
+        if mode == 1 || mode == 2 {
+            // what the cancellation left (zero only if it guessed V) is dropped: the proof is sent anyway
+            f.h[i].set_coeff(0, &int(0));
+            f.h[i].set_coeff(D / 2, &int(0));
+        }
+        if mode != 3 && !(f.h[i].get_coeff(0).eqzero() && f.h[i].get_coeff(D / 2).eqzero()) {
             return Err(Error::Internal);
         }
         finish(a, &mut f.h[i], i, p)?;
@@ -1143,7 +1195,7 @@ pub(crate) fn prove(
     let og = (m1 + z + l + loff + 1) * 2;
     polyvec::set(&mut sv.sub(og, lambda / 2, 2), &m.sub(l + loff + 1, lambda / 2, 1));
     polyvec::auto(&mut sv.sub(og + 1, lambda / 2, 2), &mut m.sub(l + loff + 1, lambda / 2, 1));
-    for a in a1.iter_mut() {
+    for a in a1.iter_mut().filter(|_| mode == 0) {
         check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut *sv, Some(true))?;
     }
 

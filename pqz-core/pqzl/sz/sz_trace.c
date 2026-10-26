@@ -33,6 +33,8 @@ static struct
 static unsigned nrec;
 static int phase; /* 0 = prove, 1 = verify */
 static unsigned n_v_z4z3, n_jl;
+static uint64_t vdom[8]; /* the dom of each V4 / V3 matrix (kind 2 / 3) of the prove pass (sv/review/dom_trace.c) */
+static int vkind[8];
 
 static void
 trace (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v, unsigned int n)
@@ -47,6 +49,8 @@ trace (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v
     return; /* only record the prove pass; verify re-derives the same transcript */
   if (kind == 2 || kind == 3)
     {
+      if (n_v_z4z3 < 8)
+        vdom[n_v_z4z3] = dom, vkind[n_v_z4z3] = kind;
       n_v_z4z3++;
       return;
     }
@@ -119,8 +123,8 @@ int
 main (void)
 {
   static uint8_t arena[(size_t)768 << 20];
-  int8_t s[2048];
-  int16_t e[2048];
+  int8_t s[PQZ_N];
+  int16_t e[PQZ_N];
   uint8_t pk[PQZ_POLYVEC_BYTES], stmt[PQZ_REG_STMT_BYTES], wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
   uint8_t rnd32[32];
   size_t len = sizeof (proof);
@@ -128,8 +132,8 @@ main (void)
   if (pqz_init (arena, sizeof (arena)))
     return fprintf (stderr, "init failed\n"), 1;
 
-  short8 (s, 2048, 1, 36);
-  short16 (e, 2048, 20, 164);
+  short8 (s, PQZ_N, 1, PQZ_BETA_S);
+  short16 (e, PQZ_N, 20, PQZ_BETA_E);
   if (pqz_keypair_from_secret (s, e, pk))
     return fprintf (stderr, "keypair failed\n"), 1;
 
@@ -137,11 +141,11 @@ main (void)
   for (int i = 0; i < 32; i++)
     stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
   memcpy (stmt + PQZ_PREFIX_BYTES + 32, pk, PQZ_POLYVEC_BYTES);
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     {
       wit[j] = (uint8_t)s[j];
-      wit[2048 + 2 * j] = (uint8_t)(uint16_t)e[j];
-      wit[2048 + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
+      wit[PQZ_N + 2 * j] = (uint8_t)(uint16_t)e[j];
+      wit[PQZ_N + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
     }
   for (int i = 0; i < 32; i++)
     rnd32[i] = (uint8_t)(i * 31 + 7);

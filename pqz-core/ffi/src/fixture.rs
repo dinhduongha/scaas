@@ -27,7 +27,7 @@ pub fn put_i16(out: &mut Vec<u8>, v: &[i16]) {
 
 /// Witness of `R_REG` / `R_DR`: `s ‖ e` (6,144 B).
 pub fn wit_key(k: &Key) -> Vec<u8> {
-    let mut w = Vec::with_capacity(6144);
+    let mut w = Vec::with_capacity(3 * pqzl::N);
     put_i8(&mut w, &k.s[..]);
     put_i16(&mut w, &k.e[..]);
     w
@@ -59,7 +59,7 @@ pub fn wit_multi(kf: &Key, c: &pqzl::EncMulti, d_legs: &[[u8; 16]], d_f: [u8; 16
 
 /// `R_TXM` witness bytes
 pub const fn multi_wit_len(m: usize, aud: bool) -> usize {
-    6144 * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1)
+    3 * pqzl::N * (1 + groups(m, aud)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1)
 }
 
 /// `recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})` (32-byte words, leg order; P6-ANON §4)
@@ -70,7 +70,7 @@ pub fn recipients_hash(uas: &[Word]) -> Word {
 
 /// Witness of `R_DS`: `r ‖ e1 ‖ e2_t`.
 pub fn wit_ds(c: &pqzl::Enc) -> Vec<u8> {
-    let mut w = Vec::with_capacity(6176);
+    let mut w = Vec::with_capacity(3 * pqzl::N + 32);
     put_i8(&mut w, &c.r[..]);
     put_i16(&mut w, &c.e1[..]);
     put_i16(&mut w, &c.e2[0]);
@@ -274,18 +274,30 @@ fn hex(b: &[u8]) -> String {
 /// replay (`vectors/replay_wasm.mjs`: proved again, byte-equal).
 const DIGEST_MAX_LEGS: usize = 4;
 
-/// One JSON line per form of `id`, then per op 7 shape with M ≤ `DIGEST_MAX_LEGS` (what wasm32 proves on both backends):
-/// keccak256 of statement, witness and proof (`rnd32` = 0x33…, the tests' value), the proof length, and the
-/// precompile's verdict. Native (test `digest_lines`) and wasm32 (`wasm/`) must print the same lines: byte-equal
-/// fixtures and proofs, the same verdicts.
-pub fn digest_lines(id: &Word) -> String {
+/// One JSON line per form of `id`, then per op 7 shape with M ≤ `DIGEST_MAX_LEGS`: keccak256 of statement, witness and
+/// proof (`rnd32` = 0x33…, the tests' value), the proof length, and the precompile's verdict. Native (test
+/// `digest_lines`) and wasm32 (`wasm/`) must print the same lines: byte-equal fixtures and proofs, the same verdicts.
+/// `wasm_view`: a PQZL shape above `WASM_PQZL_MAX_LEGS` (the C backend: set.toml `[pqzl_c] wasm_max_legs`, below 4
+/// since the R0 review fix) is wasm32's `Statement(Legs)` refusal, so native prints that line without proving and the
+/// diff checks that wasm32 refuses exactly those shapes (review R0 fix round m8; the Rust backend's limit 8 leaves every
+/// line proved). Without it native proves every shape (`tests/verify_only.rs` fill determinism).
+pub fn digest_lines(id: &Word, wasm_view: bool) -> String {
+    if *id == crate::PQZH_ID && !crate::PQZH {
+        return String::new(); // PQZH not in this build (parameter set without PQZH)
+    }
     let sys = if *id == PQZL_ID { "PQZL" } else { "PQZH" };
-    let forms = cases(id).unwrap_or_default().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit));
-    let multi = multi_cases(id, DIGEST_MAX_LEGS).unwrap_or_default().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit));
+    let forms = cases(id).unwrap_or_default().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit, 0));
+    let multi = multi_cases(id, DIGEST_MAX_LEGS).unwrap_or_default().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit, c.m));
     let mut s = String::new();
-    for (name, op, stmt, wit) in forms.chain(multi) {
+    for (name, op, stmt, wit, m) in forms.chain(multi) {
         let k = |b: &[u8]| hex(&crate::selftest::keccak(&[b]));
-        let (pf, len, ok) = match crate::prove(op, &stmt, &wit, &[0x33; 32]) {
+        let refused = wasm_view && !cfg!(target_arch = "wasm32") && *id == PQZL_ID && m > crate::pqzl::WASM_PQZL_MAX_LEGS;
+        let proved = if refused {
+            Err(crate::ProveError::Statement(crate::Reject::Legs))
+        } else {
+            crate::prove(op, &stmt, &wit, &[0x33; 32])
+        };
+        let (pf, len, ok) = match proved {
             Ok(p) => (k(&p), p.len(), crate::precompile(&input(op, &stmt, &p)) == Ok(crate::VALID)),
             Err(e) => (format!("{e:?}"), 0, false),
         };

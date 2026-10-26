@@ -25,8 +25,9 @@ contract LigeroVerifier {
     uint256 internal constant TX_STMT = 83_072;
     uint256 internal constant TX0_STMT = 66_560;
     uint256 internal constant REG_STMT = 16_480;
-    /// proofSystemId, statement bytes 32..63 (plan D3): keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
-    bytes32 internal constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
+    /// proofSystemId, statement bytes 32..63 (plan D3): n2048-kmax1024's PQZH id since the R0 review fix (2026-10-25),
+    /// keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3") (the retired v1 / v2 ids are refused)
+    bytes32 internal constant PQZH_ID = 0x56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d;
     /// opTags keccak256("SCAAS-PQZ-OP-<NAME>-V1"), statement bytes 0..31
     bytes32 internal constant TAG_TRANSFER = 0xef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414;
     bytes32 internal constant TAG_REGISTER = 0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088;

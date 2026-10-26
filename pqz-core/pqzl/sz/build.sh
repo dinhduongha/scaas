@@ -8,7 +8,8 @@
 # scripts/capped like the other heavy builds.
 set -eu
 cd "$(dirname "$0")/.."
-B=build
+PB=build${PQZ_BUILD_TAG:+/$PQZ_BUILD_TAG} # the C build root; gate.sh sets PQZ_BUILD_TAG = the set (concurrent gates: build/<set>/)
+B=$PB
 mkdir -p "$B/include" "$B/sz"
 CC=${CC:-clang}
 # lazer.h, as build.sh assembles it
@@ -16,6 +17,7 @@ CC=${CC:-clang}
   cat lazer/config.h; echo "#endif"; echo; cat lazer/lazer-in2.h; echo
   echo "#define moduli_d64 ((const modulus_srcptr *)0)"
   echo "#define moduli_d128 ((const modulus_srcptr *)0)"; } > "$B/include/lazer.h"
+. ./set.sh
 
 CFLAGS="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SZ_TRACE -DPQZ_SV \
   -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-sign-compare -I$B/include -Isrc -Ilazer -Iparams"
