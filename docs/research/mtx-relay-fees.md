@@ -280,6 +280,5 @@ sequenceDiagram
    Hedera: the EVM shape.
 7. **Sponsoring calls not yet signed (a budget): not now** (owner 2026-10-26, after the explanation). The router
    is built with one payment signature per call; a budget mode is added later, without changing B1, when a concrete
-   case needs a sponsor that cannot be online. It stays open: a mandate-like standing
-   authorisation on the router (delegate = router, per-call and per-period caps, allowed targets), against one payment
-   signature per call.
+   case needs a sponsor that cannot be online. The deferred shape: a mandate-like standing authorisation on the router
+   (delegate = router, per-call and per-period caps, allowed targets).
