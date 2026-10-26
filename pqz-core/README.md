@@ -306,7 +306,7 @@ below are kept up to date.
 |---|---|---|
 | Proof sizes per relation and set: PQZL, PQZH bounds and honest proofs | measured after the R0 review fix (gate benches, logs of 2026-10-26; the Ligero crate's exact bounds) | [params/sets/README.md](params/sets/README.md), "PQZL per set" and "PQZH per set"; each set's `SET.md` |
 | Gas of one transaction per relation and set (calldata, regular and EIP-8037 state gas) | measured (forge 1.8.5, Amsterdam; plan 5h Task 8d part 2b), with the provisional precompile rows | [params/sets/README.md](params/sets/README.md), "One transaction's gas per relation"; [pq-zero-knowledge.md](../docs/contracts/pq-zero-knowledge.md) §9.3; `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-<set>.txt` |
-| `ROLL_MAX` per set | measured: 96 / 80 / 64 / 48 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` | `set.toml` `roll_max`; decisions.md CTR-PQZ-07, Change 2026-10-26 |
+| `ROLL_MAX` per set | measured on both relay paths (`mtxExecute`, `uaExecute`): 96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` (controller proposal, owner may override) | `set.toml` `roll_max`; decisions.md CTR-PQZ-07, Change 2026-10-26 |
 | Memory: C prover arena, C verify arena, C wasm32 leg limit | measured | [params/sets/README.md](params/sets/README.md) (C prover arena peak); [ffi/README.md](ffi/README.md), "Arenas" |
 | Prove and verify times, both cores, native and wasm32 | **not measured at the current ids** | plan 5h Task 9, the calibration, which also replaces the provisional precompile prices (it needs the owner's go for timing runs) |
 
@@ -825,8 +825,8 @@ run files keep the paths of their day.
 | 2026-10-26 | **R0 review fix** of the whole-core review of 2026-10-25 ([research/code-review-2026-10-25/](research/code-review-2026-10-25/README.md)): PQZL `…/v5` / PQZH `…/v3` at all four sets, the `s_aud` randomness groups, `MAX_PROOF_PQZH` 327,680 B at the PQZH sets and `MAX_INPUT` 524,288 B at `n2048-kmax1024` too; full gates at all four sets, the failed parts fixed and re-run one by one; review approved with fixes (HANDOFF.md, notes of 2026-10-26). SCaaS testnet on image `2.2.0-pqz5` (`n2304-kmax4096`); merged into `main` (`d07d0057`) |
 
 **In progress:** **plan 5h Task 8d part 2b** (branch `pqz-8d2b`): `ROLL_MAX` per set and the gas per relation and set
-are measured (§5), and so is the C wasm32 arena at M = 2; the PQZ contracts' end-to-end run on the SCaaS testnet is
-next. The owner decides how PQZH should handle the per-transaction calldata cap
+are measured (§5, on both relay paths since the review fix round), and so is the C wasm32 arena at M = 2; the PQZ
+contracts' end-to-end run on the SCaaS testnet is done (217 ok / 0 FAIL). Left: the review of the fix round, and the owner decides how PQZH should handle the per-transaction calldata cap
 ([pqzh-calldata-cap.md](../docs/research/pqzh-calldata-cap.md), research). After that (TODO.md §00): one Codex pass
 on the contracts, then **plan 5h Task 9**, the calibration: prove / verify times at the current ids and the final
 precompile prices, which replace the provisional rows.

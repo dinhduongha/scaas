@@ -99,7 +99,10 @@ data copy past T,
 `pq-zero-knowledge.md` §9.1); it then logs
 `PQZ-START` (library SHA-256, self-test, `max_input`, the OpenSSL version, the ML-DSA KAT hash, the set, addresses,
 schedules; since plan 5h Task 8d part 2b, not yet in the live `2.2.0-pqz5` image, also the head the id check read:
-`id_check_head=<timestamp> (block <n>)`, or `(genesis, empty database)`, `runs/2026-10-26-t8d2b-startup-n2304-kmax4096.txt`). Any failure logs `PQZ-REFUSE` and the node
+`id_check_head=<timestamp> (block <n>)`, or `(genesis, empty database)`, `runs/2026-10-26-t8d2b-startup-n2304-kmax4096.txt`;
+with a non-zero genesis timestamp 16 both paths log `id_check_head=16`, `runs/2026-10-26-t8d2b-fix-startup-ts16-n2304-kmax4096.txt`.
+The runs show the field on an empty database and on one whose head is block 0 only: a head past genesis needs produced
+blocks, which these throwaway runs do not have; that branch is covered by the `IdCheckHead` unit test). Any failure logs `PQZ-REFUSE` and the node
 exits with code 120 instead of running without the precompiles. On Nethermind 2.x these checks are the init step
 `PqzStartupCheck` (after `InitializeBlockTree`, before `LoadGenesisBlock`): 2.x no longer calls a plugin's `Init`.
 
@@ -235,8 +238,8 @@ every PQZH TRANSFER / BURN / REFRESH / op 7 input and PQZL op 7 M = 8 with the a
 input is the transaction's calldata (measured, probe / e2e of 2026-10-21), and the op 7 M = 8 input of `n2560-kmax16384` at its plan 5h
 Task 7 sizes (309,591 B) can never be calldata; (2) EIP-8038's 10,000-gas storage write puts that set's `ROLL_MAX` =
 192 rollover at ≈ 16.6–18.0 M, so `ROLL_MAX` under 0.75 · 2^24 becomes ≈ 80–96 [estimate; measured since plan 5h Task
-8d part 2b: 96 / 80 / 64 / 48 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`, the
-sets' `set.toml` `roll_max`]; (3) the precompile prices are unchanged (every probed row = formula); (4) every SSTORE2
+8d part 2b: 96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`, the
+sets' `set.toml` `roll_max`, on both relay paths]; (3) the precompile prices are unchanged (every probed row = formula); (4) every SSTORE2
 op blob becomes ≈ 26–32 M of state gas. Through the token the precompile input is built in memory, so only the call's
 calldata counts: the measured gas per relation and set is in
 [`../params/sets/README.md`](../params/sets/README.md#one-transactions-gas-per-relation-measured-plan-5h-task-8d-part-2b).
@@ -294,7 +297,7 @@ run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3)
 | Nethermind 2.2.0 + Amsterdam | port tests 46 / 46; image `2.2.0-pqz3` (library `16dd99ce…` from `1adbd563`); **SCaaS testnet reset** 2026-10-21 with Amsterdam from block 1: `PQZ-START`, genesis hash unchanged, probe all checks passed (input refusals over the floor included), e2e 76 ok, one ordinary transfer; the 64 KiB deploy check waited for the gas-limit ramp and passed after the 200 M genesis reset of 2026-10-22 (RUNBOOK) | `runs/2026-10-21-*` |
 | Image `2.2.0-pqz4` (plan 5h Task 8d part 1) | image `sha256:55037b0b…`, library `0894d191…`, set `n2304-kmax4096`, 26 provisional rows; SCaaS testnet reset on path B 2026-10-25; probe 398 ok / 0 FAIL | `runs/2026-10-25-*` |
 | Image `2.2.0-pqz5` (R0 review fix part b) | tests 49 / 49 at `n2304-kmax4096` and `n2816-kmax65536`; image `sha256:4d906b55…`, library `dd0e7668…`, PQZL v5 / PQZH v3; SCaaS testnet reset on path B 2026-10-26: `PQZ-START`, genesis hash `0xa17faef4…2ac2` unchanged, probe 420 ok / 0 FAIL, e2e 84 ok / 0 FAIL | `runs/2026-10-26-r01b-*`, `runs/2026-10-26-*pqz5*` |
-| plan 5h Task 8d part 2b (not in an image yet) | tests 51 / 51 at `n2304-kmax4096` and `n2816-kmax65536` (the input-panic child process and `IdCheckHead` added); start-up runs with the `id_check_head` field on an empty and on an initialised database; `docker build --check` of the Dockerfile: no warnings | `runs/2026-10-26-t8d2b-*` |
+| plan 5h Task 8d part 2b (not in an image yet) | tests 51 / 51 at `n2304-kmax4096` and `n2816-kmax65536` (the input-panic child process and `IdCheckHead` added); start-up runs with the `id_check_head` field on an empty and on an initialised database (head block 0; with genesis timestamp 0 and 16; no head past genesis); `docker build --check` of the Dockerfile: no warnings | `runs/2026-10-26-t8d2b-*` |
 
 In this table, "path A" and "path B" are the two ways to switch the precompiles on (a future timestamp, or from
 genesis; see the [runbook](chain/RUNBOOK.md)); "probe" and "e2e" count the checks that passed in `chain/probe.sh` (read-only

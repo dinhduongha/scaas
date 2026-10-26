@@ -127,7 +127,7 @@ a minimum on the regular one. The block limit is a separate, larger limit.
 | new state (storage slots, SSTORE2 blobs) | state | ≈ 1,530 gas per stored byte of an SSTORE2 blob (measured, plan 5h Task 7b); a cold storage-word rewrite ≈ 12,100 ([EIP-8038](https://eips.ethereum.org/EIPS/eip-8038)); paid first from the reservoir = `tx.gas` − 2^24, then from regular gas | EIP-8037 |
 | **`tx.gas` per transaction** | both | **≤ 4,294,967,295 (2^32 − 1)**: state gas may take a transaction far above 2^24 | EIP-8037 |
 | **gas used per block** | both | **max(Σ execution gas, Σ state gas) ≤ block gas limit** — the two dimensions are not added | EIP-8037 |
-| **block gas limit** | — | **60,000,000 on Ethereum mainnet** (October 2026); ≈ 200,000,000 planned with Glamsterdam; SCaaS testnet genesis 200,000,000. 60 M is a block limit, not a transaction limit | [ethereum.org](https://ethereum.org/latest/building-on-ethereum-in-2026/) |
+| **block gas limit** | — | **60,000,000 on Ethereum mainnet** (October 2026); SCaaS testnet genesis 200,000,000; no rule assumes a larger limit (a transaction needs a block limit ≥ its state gas). 60 M is a block limit, not a transaction limit | [ethereum.org](https://ethereum.org/latest/building-on-ethereum-in-2026/) |
 
 Example, a relayed PQZL transfer (R_TX, auditor) at `n2304-kmax4096` (measured, plan 5h Task 8d part 2b): 70,020 B of
 calldata → standard calldata 0.98 M, the precompile's provisional row 7.05 M, execution 1.13 M: regular gas 9.17 M; the
@@ -237,7 +237,10 @@ split (standard calldata, floor, precompile, execution): `smartcontracts/evm/run
 `PqzStatePinGasTest.test_gasTable_*`; the summary in `docs/contracts/pq-zero-knowledge.md` §9.3 ("Measured gas per
 relation and set"). Under EIP-7623 alone (no EIP-7976: 40 gas per non-zero byte) the floor would allow ≈ 418,905 B and
 every row below would pass it; the SCaaS testnet activates EIP-7976 and every rule is judged in that stricter regime
-(`docs/research/pqzh-calldata-cap.md`, research).
+(`docs/research/pqzh-calldata-cap.md`, research). The other relay path, `uaExecute` with an `mldsa65` fee UA (review
+fix round of 2026-10-26, `runs/2026-10-26-t8d2b-fix-gas-<set>.txt`, systems `pqzl-ua` / `pqzh-ua`), adds 3,360 B of
+calldata to every `mtx*` row and no state gas: +0.137–0.138 M regular on the PQZL rows (all still fit 2^24), +215,040
+(the floor) on the PQZH debits; the verdicts below hold on both paths.
 
 | Relation — call path | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
 |---|---|---|---|---|
@@ -261,7 +264,7 @@ every row below would pass it; the SCaaS testnet activates EIP-7976 and every ru
 PQZL fits every path at every set (the test asserts it), op 7 M = 8 included; but op 7 M = 8 carries **54–70 M of state
 gas**, more than a 60 M mainnet-like block holds at every set but `n2560-kmax16384` (with the auditor) — a finding for
 the owner (block gas used = max(Σ regular, Σ state) under EIP-8037). PQZH debits fit only at `n2048-kmax1024`, with
-0.30–0.40 M of headroom and not op 7 M = 4 with the auditor, nor with the `acc` hint (17.14 M); at `n2304-kmax4096` and
+0.30–0.39 M of headroom via `mtxExecute` and only 0.09–0.18 M (1,361–2,769 B) via `uaExecute`, and not op 7 M = 4 with the auditor, nor with the `acc` hint (17.14 M); at `n2304-kmax4096` and
 `n2560-kmax16384` only registration and disclosure fit. The previous [model] table of this section (pre-R0 sizes) showed
 `n2048-kmax1024`'s PQZH R_TXM M = 4 as fitting; with G = 2 since the R0 fix it does not.
 

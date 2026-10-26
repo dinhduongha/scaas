@@ -40,14 +40,18 @@ the M = 4 bound and input: `pqz-core/research/code-review-2026-10-25/r01a-limits
 |---|---|---|---|---|
 | R_REG | `UARegistry.register` | 212,420 | 13,609,880 | yes |
 | R_DS / R_DR | `verifyTransferAmount` (`eth_call`) | 190,660 | 12,217,240 | yes |
-| R_TX / R_TX0 / R_BURN | relayed `mtxExecute` | 256,772 / 255,908 / 255,780 | 16.45 / 16.39 / 16.38 M | yes (margin ≈ 0.2–0.4 M) |
+| R_TX / R_TX0 / R_BURN | relayed `mtxExecute` | 256,772 / 255,908 / 255,780 | 16.45 / 16.39 / 16.38 M | yes (margin 0.33–0.39 M) |
+| R_TX / R_TX0 / R_BURN | relayed `uaExecute` (`mldsa65` fee UA) | 260,132 / 259,268 / 259,140 | 16.66 / 16.61 / 16.60 M | yes (margin 0.11–0.18 M) |
 | R_TXM op 7 M = 1 / 2, auditor | relayed `mtxExecute` | 256,836 / 257,124 | 16.45 / 16.47 M | yes |
 | R_TXM op 7 M = 4, auditor (G = 2 since the R0 fix) | relayed `mtxExecute` | 318,372 | 20.39 M | **no** |
-| R_TXM op 7 M = 4, no auditor | relayed `mtxExecute` | 257,188 | 16.48 M | yes |
+| R_TXM op 7 M = 4, no auditor | relayed `mtxExecute` | 257,188 | 16.48 M | yes (margin 302,184 gas ≈ 4,721 B) |
+| R_TXM op 7 M = 1 / 2 with the auditor, M = 4 without | relayed `uaExecute` | 260,196 / 260,484 / 260,548 | 16.67 / 16.69 / 16.69 M | yes (margin down to 87,144 gas ≈ 1,361 B at M = 4) |
 | R_TX with the `acc` hint (materialised `acc`) | relayed `mtxExecute` | 267,620 | 17.14 M | **no** |
 
-Measured through the token (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2048-kmax1024.txt`; the regular gas equals the
-floor: every debit is floor-bound). Every built form fits one 2^24 transaction under Amsterdam's floor, the debits only
+Measured through the token (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2048-kmax1024.txt`, both relay paths in
+`…-t8d2b-fix-gas-n2048-kmax1024.txt`; the regular gas equals the floor: every debit is floor-bound). The `uaExecute`
+envelope carries a 3,309-byte ML-DSA-65 signature: 3,360 B more calldata than `mtxExecute`, so the fitting debits keep
+only 0.09–0.18 M there; any envelope growth must re-check this set. Every built form fits one 2^24 transaction under Amsterdam's floor, the debits only
 just, **except op 7 M = 4 with the auditor** (G = 2 since the R0 review fix) and any debit that carries the `acc` hint;
 under EIP-7623 alone (no EIP-7976) all would fit (`docs/research/pqzh-calldata-cap.md`). A direct call to the
 precompile (input as calldata) fits for R_REG / R_DS / R_DR only.
@@ -67,6 +71,7 @@ precompile (input as calldata) fits for R_REG / R_DS / R_DR only.
 
 ## Summary
 
-The shipped PQZH: works under a 2^24 per-transaction cap for every form (debits floor-bound, ≈ 0.2–0.4 M margin)
+The shipped PQZH: works under a 2^24 per-transaction cap for every form (debits floor-bound, margin 0.30–0.39 M via
+`mtxExecute`, 0.09–0.18 M via `uaExecute`)
 except op 7 M = 4 with the auditor (G = 2 since the R0 review fix) and a debit that carries the `acc` hint; proof and
 input limits met; verify time measured before Task 8c, to re-measure with the new reduction.

@@ -4,7 +4,9 @@
                                                           execution, regular (forge), state, fits 2^24
   python3 -I runs/2026-10-26-t8d2b-gas-table.py pqzh     PQZH rows with both calldata-floor regimes (EIP-7976 15,000 + 64 /
                                                           byte; EIP-7623 alone 21,000 + 40 / non-zero + 10 / zero byte)
-  python3 -I runs/2026-10-26-t8d2b-gas-table.py sets     regular / state per row, one column per set (README)"""
+  python3 -I runs/2026-10-26-t8d2b-gas-table.py sets     regular / state per row, one column per set (README)
+A second argument names the logs' prefix (default 2026-10-26-t8d2b-gas; the fix round's 2026-10-26-t8d2b-fix-gas, whose
+logs also carry the uaExecute rows as systems pqzl-ua / pqzh-ua: review I2)."""
 import os, re, sys
 H = os.path.dirname(os.path.abspath(__file__))
 SETS = ["n2048-kmax1024", "n2304-kmax4096", "n2560-kmax16384", "n2816-kmax65536"]
@@ -14,7 +16,7 @@ m = lambda g: f"{g / 1e6:.2f}"  # noqa: E731
 
 def rows():
     for s in SETS:
-        t = open(os.path.join(H, f"2026-10-26-t8d2b-gas-{s}.txt")).read().split("\n")
+        t = open(os.path.join(H, f"{PRE}-{s}.txt")).read().split("\n")
         for i, l in enumerate(t):
             a = re.search(r"GAS (\S+) (\S+) \| (.*) \| calldata (\d+) \(zero (\d+)\) \| std (\d+) \| floor (\d+)", l)
             if a:
@@ -26,6 +28,7 @@ def rows():
 
 
 mode = sys.argv[1] if len(sys.argv) > 1 else "rows"
+PRE = sys.argv[2] if len(sys.argv) > 2 else "2026-10-26-t8d2b-gas"
 R = list(rows())
 if mode == "rows":
     print("| set | system | row | calldata B | standard / floor | precompile | execution | regular | state | ≤ 2^24 |")
@@ -34,12 +37,12 @@ if mode == "rows":
         print(f"| {r['set']} | {r['sys']} | {r['row']} | {r['n']:,} | {m(r['std'])} / {m(r['fl'])} | {m(r['pq'])} | {m(r['ex'])} | "
               f"{m(r['reg'])} | {m(r['st'])} | {'yes' if r['reg'] <= CAP else '**no**'} |")
 elif mode == "pqzh":
-    for s in SETS[:3]:
-        print(f"\n`{s}`\n")
+    for s, sy in [(s, sy) for s in SETS[:3] for sy in ("pqzh", "pqzh-ua") if any(r["sys"] == sy for r in R)]:
+        print(f"\n`{s}` ({'uaExecute' if sy.endswith('-ua') else 'mtxExecute'})\n")
         print("| PQZH form | calldata B | standard | precompile | execution | EIP-7976 floor | regular (forge) | fits 2^24 | EIP-7623-only floor | fits by that floor |")
         print("|---|---|---|---|---|---|---|---|---|---|")
         for r in R:
-            if r["set"] == s and r["sys"] == "pqzh" and "verifyPop" not in r["row"]:
+            if r["set"] == s and r["sys"] == sy and "verifyPop" not in r["row"]:
                 print(f"| {r['row']} | {r['n']:,} | {m(r['std'])} | {m(r['pq'])} | {m(r['ex'])} | {m(r['fl'])} | {m(r['reg'])} | "
                       f"{'yes' if r['reg'] <= CAP else '**no**'} | {m(r['f23'])} | {'yes' if r['f23'] <= CAP else '**no**'} |")
 elif mode == "sets":

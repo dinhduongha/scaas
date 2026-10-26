@@ -815,14 +815,22 @@ Each ruling, with its content and status:
    legs, ≤ 80 hints per group), regenerated at set (a) (8b). The G = 1 specs of §6.2 / Task 7 (`txm8g1`, `txm80g1`) are
    not built. Status: cores decided and built in 8b; on-chain M = 8 open until 8d's measurement.
    **Measured in 8d part 2b** (2026-10-26, `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-<set>.txt`): relayed op 7 M = 8
-   with the auditor 12.73 M regular gas at set (a) (≤ 2^24 at every set: 12.17–13.10 M; calldata 142,596 B at set (a),
-   not the ≈ 124 KB estimated above: three groups since R0-1), but **65.66 M of EIP-8037 state gas** at set (a) (70.45 /
+   with the auditor 12.73 M regular gas at `n2304-kmax4096` (≤ 2^24 at every set: 12.17–13.10 M; calldata 142,596 B at
+   `n2304-kmax4096`, not the ≈ 124 KB estimated above: three groups since R0-1), but **65.66 M of EIP-8037 state gas** at
+   `n2304-kmax4096` (70.45 /
    54.02 / 63.44 M at `n2048-kmax1024` / `n2560-kmax16384` / `n2816-kmax65536`): over a 60 M block except at
    `n2560-kmax16384`. Status: measured; whether M = 8 stays on chain is the owner's call (decisions CTR-PQZ-07 Change
    2026-10-26).
 4. **PQZH is a backup only.** Its debit inputs (406–469 KB at 16k, Task 7b) exceed what one transaction can carry
    (≈ 261,909 B of calldata), so PQZH is not offered on chain; 8c moves it to the new q as a backup.
    `MAX_PROOF_PQZH` stays 262,144. Status: decided; 8c.
+   **Measured in 8d part 2b** (2026-10-26, `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-<set>.txt` and the fix round's
+   `…-t8d2b-fix-gas-<set>.txt`): `MAX_PROOF_PQZH` is 327,680 at every PQZH set since the R0 review fix (owner
+   2026-10-25). Under the EIP-7976 floor (≤ 261,909 B of calldata) PQZH debits fit one transaction only at
+   `n2048-kmax1024` (not op 7 M = 4 with the auditor, not with the `acc` hint), on both relay paths (headroom 0.30–0.39 M
+   via `mtxExecute`, 0.09–0.18 M via `uaExecute`); at `n2304-kmax4096` / `n2560-kmax16384` only registration and
+   disclosure fit. The options and a controller proposal are in the research note `docs/research/pqzh-calldata-cap.md`;
+   status: the owner decides.
 5. **Set (a) replaces 16k** (n-study candidate E, `pqz-core/pqzl/params/n-study/results-n-study.md`): n = 2304
    (k = 36), `K_MAX` = 4,096, q = 61,275,424,977,257 (≈ 2^45.80, q ≡ 9 mod 16, q − 1 divisible by 2^3 · 19 · 43 · 431),
    Δ = ⌊q / 2^18⌋ = 233,747,196, β_s / β_e = 38 / 173, digit sums `M_i` 16 bits, carries 13 bits, `e_T` / `e'` + 2^26 in
@@ -842,9 +850,10 @@ Each ruling, with its content and status:
    | G | 2048 | 1,024 | 2^41.69 | 450.5 / 442.5 | −20 % | 44,712 / 47,352 | 128 |
 
 6. **`ROLL_MAX` is re-pinned in 8d** on the as-built code at set (a): ≈ 96 [estimate, n-study §6] instead of 16k's 80
-   (Amsterdam) / 192 (old rules). Status: **measured and pinned in 8d part 2b**: 80 at set (a) (96 / 64 / 48 at
-   `n2048-kmax1024` / `n2560-kmax16384` / `n2816-kmax65536`), `set.toml` `roll_max` (decisions CTR-PQZ-07 Change
-   2026-10-26).
+   (Amsterdam) / 192 (old rules). Status: **measured and pinned in 8d part 2b**: 80 at `n2304-kmax4096` (96 / 64 / 32 at
+   `n2048-kmax1024` / `n2560-kmax16384` / `n2816-kmax65536`; `n2816-kmax65536` 48 → 32 in the review fix round, when
+   the rule was measured on both relay paths and `uaExecute` binds), `set.toml` `roll_max` (decisions CTR-PQZ-07
+   Change 2026-10-26; controller proposal, owner may override).
 7. **`MAX_INPUT` stays 512 KiB** (O8): the precompile input is built in memory by the token, so the calldata limit does
    not bound it. Task 7b's 261,120 (255 KiB) proposal is dropped. Status: decided (owner 2026-10-21); **built in 8d part
    1** (off chain): pqz-stmt's per-set `MAX_INPUT` (524,288 at `n2304-kmax4096` / `n2560-kmax16384`, 393,216 at

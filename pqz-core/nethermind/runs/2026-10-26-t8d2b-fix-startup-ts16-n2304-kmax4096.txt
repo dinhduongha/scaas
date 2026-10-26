@@ -1,0 +1,26 @@
+# 8d2b fix round m7: the start-up run of runs/2026-10-26-t8d2b-startup.sh with the genesis timestamp 0x10 and the engine.Pqz schedule at 0x10 (genesis-new.json copy, only those two fields changed; a schedule before genesis is refused), so id_check_head shows a value read from the header (not 0); a head past genesis needs blocks (no mining in this config)
+# t8d2b start-up runs, 2026-10-26T14:47:04Z, commit 43c0ab39; image scaas/nethermind-pqz:2.2.0-pqz5 (4d906b5511c4)
+# plugin d0c260c58ff0bcef172fe057cda1b5708ba50ff87589cd79d677129418257f5b (-p:PqzSet=n2304-kmax4096)
+
+## empty database: the id check reads the genesis timestamp
+state: running exit 0
+[97m  Init.ChainSpecPath = "/x/genesis.json"[0m
+[97m[37m26 Oct 14:47:05[97m[37m | [97mDid not find ChainSpec in embedded resources: /x/genesis.json [0m
+[97m[37m26 Oct 14:47:05[97m[37m | [97mLoading ChainSpec from file: /x/genesis.json [0m
+PQZ-START sha256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 selftest=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d max_input=524288 id_check_head=16 (genesis, empty database) openssl=0x30500050 mldsa_kat=814dd7b9784d57c15b9c2972e9b4fd6cf7e164f8162a934bdb2452a413dab1f7 set=n2304-kmax4096 addresses=PQZ:0x000000000000000000000000000000005caa0f01,MLDSA44:0x000000000000000000000000000000005caa0012,MLDSA65:0x000000000000000000000000000000005caa0013 schedules=[{ts 16, rows 26 [op1/046859a8/74752=5227000, op1/046859a8/93312=5492000, op1/ef1ffbcb/74752=6790000, op1/ef1ffbcb/93312=7032000, op2/046859a8/56192=4859000, op2/ef1ffbcb/56192=4840000, op3/046859a8/185
+[97m[37m26 Oct 14:47:07[97m[37m | [97mBlock tree initialized, last processed is 0, best queued is 0, best known is 0, lowest inserted header , lowest sync inserted block number  [0m
+[97m[37m26 Oct 14:47:07[97m[37m | [97mPQZ-START sha256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 selftest=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d max_input=[93m524288[97m id_check_head=16 (genesis, empty database) openssl=[37m0x30500050[97m mldsa_kat=814dd7b9784d57c15b9c2972e9b4fd6cf7e164f8162a934bdb2452a413dab1f7 set=n2304-kmax4096 addresses=PQZ:[37m0x000000000000000000000000000000005caa0f01[97m,MLDSA44:[37m0x000000000000000000000000000000005caa0012[97m,MLDSA65:[37m0x000000000000000000000000000000005caa0013[97m schedules=[{ts 16, rows 26 [op1/046859a8/74752=[93m5227000[97m, op1/046859a8/93312=[93m5492000[97m, op1/ef1ffbcb/74
+[97mGenesis hash : [37m0x4f66c7aa470d2e481b9a217154193713d1e714fbe2e67fb44d4059792468e394[97m[0m
+[97mChainspec    : /x/genesis.json[0m
+
+## restart on the database the first start initialised: the id check reads the head (block 0)
+state: running exit 0
+[97m  Init.ChainSpecPath = "/x/genesis.json"[0m
+[97m[37m26 Oct 14:47:15[97m[37m | [97mDid not find ChainSpec in embedded resources: /x/genesis.json [0m
+[97m[37m26 Oct 14:47:15[97m[37m | [97mLoading ChainSpec from file: /x/genesis.json [0m
+PQZ-START sha256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 selftest=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d max_input=524288 id_check_head=16 (block 0) openssl=0x30500050 mldsa_kat=814dd7b9784d57c15b9c2972e9b4fd6cf7e164f8162a934bdb2452a413dab1f7 set=n2304-kmax4096 addresses=PQZ:0x000000000000000000000000000000005caa0f01,MLDSA44:0x000000000000000000000000000000005caa0012,MLDSA65:0x000000000000000000000000000000005caa0013 schedules=[{ts 16, rows 26 [op1/046859a8/74752=5227000, op1/046859a8/93312=5492000, op1/ef1ffbcb/74752=6790000, op1/ef1ffbcb/93312=7032000, op2/046859a8/56192=4859000, op2/ef1ffbcb/56192=4840000, op3/046859a8/18528=4319000, op3/
+[97m[37m26 Oct 14:47:18[97m[37m | [97mBlock tree initialized, last processed is 0 ([37m0x4f66c7...68e394[97m), best queued is 0, best known is 0, lowest inserted header , lowest sync inserted block number  [0m
+[97m[37m26 Oct 14:47:18[97m[37m | [97mPQZ-START sha256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 selftest=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d max_input=[93m524288[97m id_check_head=16 (block 0) openssl=[37m0x30500050[97m mldsa_kat=814dd7b9784d57c15b9c2972e9b4fd6cf7e164f8162a934bdb2452a413dab1f7 set=n2304-kmax4096 addresses=PQZ:[37m0x000000000000000000000000000000005caa0f01[97m,MLDSA44:[37m0x000000000000000000000000000000005caa0012[97m,MLDSA65:[37m0x000000000000000000000000000000005caa0013[97m schedules=[{ts 16, rows 26 [op1/046859a8/74752=[93m5227000[97m, op1/046859a8/93312=[93m5492000[97m, op1/ef1ffbcb/74752=[93m6790000
+[97mChainspec    : /x/genesis.json[0m
+
+# 2026-10-26T14:47:25Z container and volume removed

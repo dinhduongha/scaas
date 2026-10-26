@@ -34,7 +34,7 @@ alone would accept more, but no rule may depend on that.
 ## 2. Measurements per set (PQZH proof at its bound)
 
 Every PQZH form the token builds (op 7 M ∈ {1, 2, 4}; M = 8 is not offered), as the relayed full transaction
-(`mtxExecute`, outer fee 7), plus the registration (`UARegistry.register` with the PQZ key) and the disclosure view
+(`mtxExecute`, outer fee 7; the other relay path, `uaExecute`, below the tables), plus the registration (`UARegistry.register` with the PQZ key) and the disclosure view
 (`verifyTransferAmount`, an `eth_call`: Nethermind applies the same intrinsic / floor check to `eth_call`). Calldata =
 the whole transaction's data (envelope + payload + proof + ML-DSA auth [+ hint]); the precompile input is built in
 memory by the contract, so the statement itself is not calldata. The proof is the crate's bound `max_proof_len` (the
@@ -106,14 +106,36 @@ differently) is **not** measured here.
 | disclosure sender / receiver / auditor, op 1 entry | 234,436 | 3.74 | 4.29 / 3.77 / 3.77 | 1.03 | 15.02 | 15.02 | yes | 9.37 | yes |
 | disclosure receiver / auditor, op 7 M = 8 entry | 234,436 | 3.74 | 3.77 | 1.07 | 15.02 | 15.02 | yes | 9.37 | yes |
 
+**The other relay path, `uaExecute`** (review fix round of 2026-10-26, logs `runs/2026-10-26-t8d2b-fix-gas-<set>.txt`,
+test `PqzStatePinGasTest.test_gasTable_pqzh_ua`, table script `runs/2026-10-26-t8d2b-gas-table.py pqzh
+2026-10-26-t8d2b-fix-gas`). Every state-changing `mtx*` is relayable on both paths (owner rule), so a form is "built"
+only if it fits on the costlier one. The `mldsa65` fee UA's envelope (a 3,309-byte ML-DSA-65 signature instead of
+ECDSA's 65) adds **3,360 B** of calldata to every debit, so +215,040 gas under the floor (the e2e on the SCaaS testnet,
+`runs/2026-10-26-t8d2b-e2e-7622.txt` section 5, shows 73,348 − 70,020 = 3,328 B for a pair of op 1 calls whose proofs
+differ by 40 B: ≈ 3,368 B of envelope, the payloads not identical). Every debit is floor-bound on both paths, so the verdicts above stay; at `n2048-kmax1024`:
+
+| PQZH form at `n2048-kmax1024` | calldata B `mtxExecute` / `uaExecute` | regular gas `mtxExecute` / `uaExecute` | headroom to 2^24 `mtxExecute` / `uaExecute` |
+|---|---|---|---|
+| op 1, auditor, fresh ref (also materialised, no hint) | 256,772 / 260,132 | 16,448,408 / 16,663,448 | 328,808 (5,137 B) / 113,768 (1,777 B) |
+| op 1, no auditor | 255,908 / 259,268 | 16,393,112 / 16,608,152 | 384,104 (6,001 B) / 169,064 (2,641 B) |
+| op 7 M = 1, auditor / no auditor | 256,836 / 260,196; 255,972 / 259,332 | 16,452,504 / 16,667,544; 16,397,208 / 16,612,248 | 324,712 / 109,672; 380,008 / 164,968 |
+| op 7 M = 2, auditor / no auditor | 257,124 / 260,484; 256,868 / 260,228 | 16,470,936 / 16,685,976; 16,454,552 / 16,669,592 | 306,280 / 91,240; 322,664 / 107,624 |
+| op 7 M = 4, no auditor (the largest that fits) | 257,188 / 260,548 | 16,475,032 / 16,690,072 | 302,184 (4,721 B) / **87,144 (1,361 B)** |
+| burn / refresh | 255,780 / 259,140 | 16,384,920 / 16,599,960 | 392,296 (6,129 B) / 177,256 (2,769 B) |
+| op 1, materialised, hint; op 7 M = 4, auditor | 267,620 / 270,980; 318,372 / 321,732 | 17.14 / 17.36 M; 20.39 / 20.61 M | do not fit |
+
+So on the post-quantum relay path the margin of every fitting n2048 debit is 0.09–0.18 M, one to two ML-DSA signatures'
+worth of bytes: any envelope growth (for example the planned metatx split / `MtxRelayFee`) must re-check it.
+
 `n2816-kmax65536` has no PQZH (owner 2026-10-24).
 
 **Largest PQZH form that fits 2^24 under EIP-7976:**
 
 - `n2048-kmax1024`: every built debit form **except op 7 M = 4 with the auditor** (G = 2 since the R0 fix), and only
   **without the `acc` hint** (the hint's 10,848 B push the materialised op 1 to 17.14 M). Largest that fits: op 7
-  M = 4 without the auditor, 257,188 B, 16.48 M (0.30 M ≈ 4,600 B left). Every debit there is floor-bound with 0.30–0.40 M
-  of headroom; the vector proofs (3–4 KB under the bounds) do not change the verdicts.
+  M = 4 without the auditor, 257,188 B, 16.48 M (302,184 gas ≈ 4,721 B left via `mtxExecute`; 87,144 gas ≈ 1,361 B via
+  `uaExecute`). Every debit there is floor-bound with 0.30–0.39 M of headroom via `mtxExecute` and 0.09–0.18 M via
+  `uaExecute`; the vector proofs (3–4 KB under the bounds) do not change the verdicts.
 - `n2304-kmax4096`: **no debit form** (op 1, op 7, burn, refresh all ≥ 17.60 M; even the honest vector proofs, e.g.
   R_TX 248,120 B → ≈ 271,460 B of calldata, stay above 261,909). Only registration (14.84 M) and the disclosure view
   (13.32 M) fit.
@@ -124,6 +146,10 @@ needs a floor of 12.99 M), and a debit's standard path (15,000 + standard + prec
 is 11.1–15.6 M; its regular gas under Osaka pricing was not measured here.
 
 What a debit proof would have to shrink to (EIP-7976, the bound, the measured per-form overhead = calldata − proof):
+
+The overheads are `mtxExecute`'s; `uaExecute` adds 3,360 B, so every "bound needed" is 3,360 B lower on that path (at
+`n2048-kmax1024` op 1 / burn / op 7 M ≤ 2: ≤ 237,247, still above today's 235,470). The op 1 / burn / op 7 M ≤ 2 bound
+column gives op 1's bound; op 7 M = 2 with the auditor has 252,328 at `n2304-kmax4096` (−5.5 % needed).
 
 | set | op 1 / burn / op 7 M ≤ 2 overhead → proof bound needed | today's bound | op 7 M = 4 auditor overhead → bound needed | today's bound |
 |---|---|---|---|---|
@@ -204,7 +230,8 @@ precompile cannot read them without a consensus change, and KZG is not post-quan
 ## 4. Controller proposal (owner decides)
 
 **(A), recorded as a ruling:** PQZH stays the backup proof system and offers on chain exactly what fits one 2^24
-transaction under EIP-7976 — at `n2048-kmax1024` every built form but op 7 M = 4 with the auditor, without the hint; at
+transaction under EIP-7976 on both relay paths — at `n2048-kmax1024` every built form but op 7 M = 4 with the auditor,
+without the hint (on `uaExecute` with only 1.3–2.8 KB to spare, so any envelope change re-checks it); at
 `n2304-kmax4096` and `n2560-kmax16384` registration and disclosure only — with a deploy-time rule that no PQZH token
 release is published at a set whose debits do not fit. No core change, the dev-freeze holds. (B) is possible but costs
 ≈ 385 M state gas per debit and permanent state, (C) cannot reach the needed sizes at the proven soundness, (D) cannot
