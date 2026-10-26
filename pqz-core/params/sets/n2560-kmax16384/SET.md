@@ -33,8 +33,8 @@ Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-
 [`../README.md`](../README.md#one-transactions-gas-per-relation-measured-plan-5h-task-8d-part-2b)). The rest [estimate].
 
 1. **Contracts built for this set.** The contracts read `PqzSet.sol` since plan 5h Task 8d part 2a; `at-set.sh
-   n2560-kmax16384` installs this set's file and runs forge (1,365 passed / 0 failed / 9 skipped,
-   `smartcontracts/evm/runs/2026-10-26-t8d2b-forge-n2560-kmax16384.txt`). A chain also needs the node library and
+   n2560-kmax16384` installs this set's file and runs forge (1,369 passed / 0 failed / 9 skipped,
+   `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-forge-n2560-kmax16384.txt`). A chain also needs the node library and
    plugin of this set (`PQZ_SET=n2560-kmax16384 build-image.sh`, its reviewed `ExpectedLibrarySha256` `5d113f32…`).
 2. **Per-transaction regular gas ≤ 2^24** (Ethereum-like cap; no zero-gas or own-block-limit assumption, owner
    2026-10-21) [measured]: relayed op 1 (auditor) 9.35 M; op 7 M = 1 / 2 / 4 (auditor) 7.05 / 7.26 / 8.05 M; op 7 M = 8

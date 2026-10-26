@@ -47,9 +47,12 @@ Nothing here was timed (owner rule: no timing runs).
    yet). The plugin's tests pass at this set: 51 / 51 (`run-tests.sh` with `PQZ_SET=n2816-kmax65536`,
    `pqz-core/nethermind/runs/2026-10-26-t8d2b-test-n2816-kmax65536.txt`).
 2. **Contracts built for this set**: wired to `PqzSet.sol` and tested at this set since plan 5h Task 8d part 2a; in part
-   2b `ROLL_MAX` 48 is pinned (the relayed full rollover 12,575,616 gas, only 7,296 under 0.75 · 2^24; 64 would be
-   14,069,552; `smartcontracts/evm/runs/2026-10-26-t8d2b-rollscan-n2816-kmax65536.txt`) and forge passes at this set
-   (1,363 passed / 0 failed / 11 skipped, `smartcontracts/evm/runs/2026-10-26-t8d2b-forge-n2816-kmax65536.txt`).
+   2b `ROLL_MAX` is pinned at **32** (controller proposal, owner may override): the largest multiple of 16 under
+   0.75 · 2^24 on both relay paths, the relayed full rollover 11,081,668 gas via `mtxExecute`, 11,238,795 via
+   `uaExecute` (1,344,117 under); 48 would be 12,575,616 / 12,732,731, over the cap on `uaExecute`
+   (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2816-kmax65536.txt`; the first pin, 48, measured
+   `mtxExecute` only, review fix of 2026-10-26). Forge passes at this set (1,365 passed / 0 failed / 13 skipped,
+   `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-forge-n2816-kmax65536.txt`).
 3. **Per-transaction regular gas ≤ 2^24** [measured]: relayed op 1 (auditor) 9.55 M; op 7 M = 1 / 2 / 4 (auditor)
    7.25 / 7.51 / 8.27 M; op 7 M = 8 12.56 M with the auditor (131,268 B of calldata), 11.28 M without;
    `UARegistry.register` 4.71 M; `mtxPrepareAcc` halves 3.75 M each (spec §7.6).
