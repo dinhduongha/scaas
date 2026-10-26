@@ -17,7 +17,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   docs checkers and review pass; decisions that come up are picked from the measurements and recorded in
   `docs/decisions.md` as "controller proposal, owner may override"; UA F5 unpaused only as far as P6i needs it
   (`ua_metatx` for `kind = pqz`). Owner steps (controller drafts only): ethresear.ch / ePrint posts, LaZer mails,
-  Zenodo, G-LIC, the lawyer.
+  Zenodo, G-LIC, the lawyer. G-LIC: the letter (`scratchpad/sz-private/g-lic-letter-lazer.md`) was sent, **no reply** as
+  of 2026-10-26 (owner); it stays a production gate, not a publication gate.
 - **Priority** (owner 2026-10-13): P6 / PQZ first; UA-5c and UA F5 paused until then. Owner 2026-10-19: the P0 PQZL
   Fiat–Shamir fix first; the token-family rename before P6h / P6i / P6j / P6-PUB.
 - **Gas calibration** (owner 2026-10-15): one run; re-calibrate before 22776; timing on a quiet host (ask the owner to
@@ -190,13 +191,14 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 - [ ] **P6-PUB drafts** (owner 2026-10-14, session 4): after P6, the live precompiles and P6-ANON, the controller drafts
   the ePrint paper (LaTeX, citing the frozen package) and the ethresear.ch post (Markdown, results-first), kept private
   in `scratchpad/pub/` until the owner posts; the results mail to the LaZer maintainers
-  (`scratchpad/sz-private/results-letter-lazer.md`) goes first (ruled 2026-10-13). Full scope in COMPLETED.md.
+  (`scratchpad/sz-private/results-letter-lazer.md`) goes first (ruled 2026-10-13; **changed owner 2026-10-26: send them the
+  drafts 1–2 weeks before posting, do not wait for a reply**; the mail also gently follows up the G-LIC question). Full scope in COMPLETED.md.
 - [ ] **P6-PUB publish PQZL** (owner 2026-10-13; **scope owner 2026-10-26: only the PQ and PQZ results** — the PQ
   signature verification (ML-DSA-44 / -65 precompiles, EIP-8355 layout) and PQZ (PQZL + PQZH: relations, parameter sets,
   proofs, precompile, contract state); not the rest of SCaaS): ethresear.ch post + ePrint paper; source-only package
   `pqz-core/artifact/` (PQZL + PQZH, Docker + `reproduce.sh`), source tag + Zenodo DOI; re-measured headline numbers in
   README §11, a five-relation table in `pqz-core/README.md`, the posts' opening line (not the spec); the owner mails the
-  LaZer maintainers first. Status: freeze `--full` 2026-10-17; fs3 Task 6 updates the package to the current id.
+  LaZer maintainers the drafts 1–2 weeks before posting, without waiting for a reply (owner 2026-10-26). Status: freeze `--full` 2026-10-17; fs3 Task 6 updates the package to the current id.
 - [ ] **P6-ANON leftovers:** `PQZ_DEBUG_MALLOC` sanitizer variant (ASan inside the arena; not scheduled); op 7
   disclosure-bundle / per-leg opening vectors (pqz-stmt codec; from S4); identity hiding beyond the receiver ring =
   research only (`docs/research/pqz-anonymity.md`), owner decides.
