@@ -191,7 +191,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   the ePrint paper (LaTeX, citing the frozen package) and the ethresear.ch post (Markdown, results-first), kept private
   in `scratchpad/pub/` until the owner posts; the results mail to the LaZer maintainers
   (`scratchpad/sz-private/results-letter-lazer.md`) goes first (ruled 2026-10-13). Full scope in COMPLETED.md.
-- [ ] **P6-PUB publish PQZL** (owner 2026-10-13): ethresear.ch post + ePrint paper; source-only package
+- [ ] **P6-PUB publish PQZL** (owner 2026-10-13; **scope owner 2026-10-26: only the PQ and PQZ results** — the PQ
+  signature verification (ML-DSA-44 / -65 precompiles, EIP-8355 layout) and PQZ (PQZL + PQZH: relations, parameter sets,
+  proofs, precompile, contract state); not the rest of SCaaS): ethresear.ch post + ePrint paper; source-only package
   `pqz-core/artifact/` (PQZL + PQZH, Docker + `reproduce.sh`), source tag + Zenodo DOI; re-measured headline numbers in
   README §11, a five-relation table in `pqz-core/README.md`, the posts' opening line (not the spec); the owner mails the
   LaZer maintainers first. Status: freeze `--full` 2026-10-17; fs3 Task 6 updates the package to the current id.
