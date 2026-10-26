@@ -47,8 +47,9 @@ ROLL_AGE = 5  # PqzCore.ROLL_AGE: an entry rolls up at block_i + ROLL_AGE
 SHIELD_POOL = "0x" + keccak256(b"scaas.shield.pool.v1")[12:].hex()
 MLDSA44, MLDSA65, PQZ_MLWE, SECP256K1 = 0x0130, 0x0131, 0x0142, 0x0108
 # CAP_PQZ: the registry's verify cap for the PQZ key's R_REG proof; it must cover the precompile's register row + 3 per
-# input word + the verifier (plan 5h Task 8d part 2b: 3.62 M at n2304-kmax4096's provisional row 3,504,000, test
-# PqzStatePinGasTest.test_gasTable_pqzl; 3,000,000 refused every PQZ key registration under those rows)
+# input word + the verifier (plan 5h Task 8d part 2b: PQZL 3.62-3.67 M at the four sets, 3,634,962 at n2304-kmax4096's
+# provisional row 3,504,000, test PqzStatePinGasTest.test_gasTable_pqzl; 3,000,000 refused every PQZ key registration
+# under those rows). PQZL only: a PQZH registry needs >= 5.1 M (its verifyPop 4.82-5.03 M)
 CAP_ML, CAP_PQZ, BUDGET = 200_000, 4_500_000, 12_000_000
 FAILS, LOG = [], []
 RPC = None
@@ -74,7 +75,9 @@ def pqz_key(ua):
     """A holder's PQZ key as the token reads it (UA-6: an attribute, `recordOf(ua).pqzKey` = its SSTORE2 pointer; data
     after the pointer's leading 0x00); `keyOf` is the UA's signing key."""
     ptr = "0x" + words(call(REG[0], cd("recordOf(bytes32)", ["w"], ua)))[-1][12:].hex()
-    return bytes.fromhex(rpc("eth_getCode", [ptr, "latest"])[2:])[1:]
+    k = bytes.fromhex(rpc("eth_getCode", [ptr, "latest"])[2:])[1:]
+    assert len(k) == K.PK_BYTES, f"pqz_key: {len(k)} B at {ptr}, want {K.PK_BYTES} (a UA without a PQZ key?)"
+    return k
 
 
 def kc(*parts):

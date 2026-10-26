@@ -67,7 +67,7 @@ GOT=$(sha256sum $SO | cut -d' ' -f1)
 [ "$GOT" = "$LABEL" ] && echo "ffi sha256 in the image = label: $GOT" || { echo "FAIL ffi sha256 $GOT != label $LABEL"; exit 1; }
 ST=$(docker image inspect "$TAG" --format '{{index .Config.Labels "scaas.pqz.selftest"}}')
 [ "$ST" = "$SELF" ] && echo "selftest label = $SET's ExpectedHash: $ST" || { echo "FAIL selftest label $ST != $SET's ExpectedHash $SELF"; exit 1; }
-echo "test-hook names in the image's library (must be 0): $(nm -D $SO | grep -ciE 'test_|pqz_test|TEST_ARENA|TEST_FAIL') / strings $(strings -a $SO | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER|pqz_test_fail_worker')"
+echo "test-hook names in the image's library (must be 0): $(nm -D $SO | grep -ciE 'test_|pqz_test|TEST_ARENA|TEST_FAIL') / strings $(strings -a $SO | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER|TEST_PANIC|pqz_test_fail_worker|pqz_test_panic')"
 echo "GMP / MPFR / HEXL (glic/absence.sh's pattern /gmp|mpfr|hexl/i): symbols $(nm -A $SO 2>/dev/null | grep -ciE 'gmp|mpfr|hexl'), dynamic $(nm -D $SO | grep -ciE 'gmp|mpfr|hexl'), strings $(strings -a $SO | grep -ciE 'gmp|mpfr|hexl')"
 echo "\$ readelf -d $SO | grep NEEDED"; readelf -d $SO | grep NEEDED
 echo "\$ nm -D --defined-only $SO | grep ' T '"; nm -D --defined-only $SO | grep ' T '
