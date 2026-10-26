@@ -511,6 +511,10 @@ def sol_text(name):
     has = "pqzh" in i
     out.append(f"    /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): {'true' if has else 'false: PQZH_ID is the zero word, never accepted'}\n"
                f"    bool internal constant HAS_PQZH = {'true' if has else 'false'};")
+    val = bool(t.get("pqzh_value", False))
+    assert not val or has, f"{name}: pqzh_value without pqzh"
+    out.append("    /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies\n"
+               f"    bool internal constant PQZH_VALUE = {'true' if val else 'false'};")
     lab, h = i["pqzh"] if has else ("none at this set", bytes(32))
     out.append(f"    /// PQZH's proofSystemId: {'keccak256(\"' + lab + '\")' if has else lab}\n    bytes32 internal constant PQZH_ID = 0x{h.hex()};")
     ctp = ln["ct"] // 32 * pack // 2

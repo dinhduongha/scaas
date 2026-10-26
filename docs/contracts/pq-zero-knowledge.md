@@ -885,8 +885,8 @@ refused ([CTR-PQZ-06](#CTR-PQZ-06)).
 
 <a id="transfer"></a>
 
-Caller: anyone, directly (`envelopeBinding` = the direct mode binding, [CTR-PQZ-25](#CTR-PQZ-25)) or as an envelope op ([CTR-PQZ-15](#CTR-PQZ-15); the outer-fee balance
-check then runs before everything below). Entry points (the shared signature of the `mtx*` interface,
+Caller: anyone, directly (`envelopeBinding` = the direct mode binding, [CTR-PQZ-25](#CTR-PQZ-25)) or as an envelope op ([CTR-PQZ-15](#CTR-PQZ-15); the signer's `shieldIn·shieldScale` is
+pulled into the pool before everything below, C2-5; the outer fee is the base's step 6, after the call, [§7.11](#metatx)). Entry points (the shared signature of the `mtx*` interface,
 [CTR-ZTH-45](zether.md#CTR-ZTH-45)): `mtxConfidentialTransferSingle(bytes payload, bytes proof, bytes auth, bytes32 beneficiary,
 bytes accHint)` and `…SingleCompact` (op 1), `mtxConfidentialTransfer` / `…Compact` (op 7, [§7.4.1](#multi-transfer)). `auth` is
 the signing UA's signature over `authDigest` (formerly `authSig`); `beneficiary` must equal the payload's beneficiary or the call reverts;
@@ -894,11 +894,12 @@ the signing UA's signature over `authDigest` (formerly `authSig`); `beneficiary`
 both are read from state. `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(shieldIn) ‖ fromUA ‖ toUA ‖ beneficiaryUA ‖
 salt(16) ‖ out` (a commit-reveal payload appends `memo`; `out = u ‖ v_t ‖ v_f ‖ v_a`).
 
-Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered with a PQZ key (`AccountNotRegistered`),
+Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered with a PQZ key (`AccountNotRegistered`), and on a PQZH value token the receiver a single-key
+`mldsa44` / `mldsa65` / `fndsa512` holder (`PqzhHolderKind(ua, kind)`, owner 2026-10-27, C0-2; likewise every shield target and every op 7 leg),
 `from ≠ to`; with the auditor on, neither `fromUA` nor `toUA` is the token's `auditorUA` (`AuditorAsParty(ua)`, finding F-4,
-[CTR-PQZ-04](#CTR-PQZ-04)); beneficiary registered or 0; `u` not all zero (`ZeroU`, Codex T2 CHAIN-01: such a credit would leave `acc`
+[CTR-PQZ-04](#CTR-PQZ-04)); beneficiary 0 or any registered UA-ledger receiver (`kindOf ≠ 0`; no PQZ key, owner 2026-10-27, C0-7 option (1)); `u` not all zero (`ZeroU`, Codex T2 CHAIN-01: such a credit would leave `acc`
 unchanged while `rolled` advances); `floor ≤ p ≤ pendingCount` (`PendingRange`); with `n = |p − rolled|`: `n ≤ INLINE_MAX`
-(`InlineTooFar`); the signer's public balance covers `shieldIn·shieldScale`; every coefficient `< q`. There is **no receiver
+(`InlineTooFar`); the signer's public balance covers `shieldIn·shieldScale` (checked first: the token pulls it into the pool before the authorization and the precompile); every coefficient `< q`. There is **no receiver
 cap check** (the receiver's queue is unbounded). Then `T` is built from state:
 
 ```
@@ -1286,7 +1287,7 @@ token's `auditorUA` for `AUDITOR`), never from the opening; `v = v_t`, or `v_a` 
 | `RECEIVER_X` | receiver | `pk_t = A s + e`, `v_t[i] − (u^T s)[i] = Δ·digits(amount)_i + e'_i`, `e'_i ∈ [−2^24, 2^24)` |
 | `AUDITOR` | auditor | as `RECEIVER_X` with `pk_a`, `v_a`, at the window: `v_a[i] − (u^T s)[16w + i] = Δ·digits(amount)_i + e'_i` |
 
-Uniqueness by [noise](#noise). `verifyTransferAmount` is a view (the precompile runs in `eth_call`);
+Uniqueness by [noise](#noise). `verifyTransferAmount` is a view (the precompile runs in `eth_call`); a precompile call that fails (out of gas, no schedule, input over `MAX_INPUT`) reverts `UAVerifyGas`, it is never a verdict, and only the statement's shape errors read `false` (C2-6, here and on every debit);
 there is **no on-chain attestation** — no `attestTransferAmount`, no `AmountAttested` (owner 2026-10-13, as classical
 [CTR-ZTH-39](zether.md#CTR-ZTH-39): any contract can call the view, and one that needs a trace records the result
 itself). `transferCiphertextHash(entryRef)` returns the hash of the stored (packed) bundle; the bundle bytes come from
@@ -1317,7 +1318,7 @@ valid here is valid through `UARegistry.requireAuthorized(fromUA, PURPOSE_ZETHER
 versa (vectors). The UA `zether-auth` purpose covers the PQZ digest, which carries its own domain string. Both the
 proof (knowledge of the PQZ key) **and** the signature (the signing UA) are required (classical invariant #1 does not
 apply here: classical Zether spends by its proof alone). The auditor and every credited leg are holders too
-(`AccountNotRegistered`); fees go to the beneficiary's public UA-ledger balance (CTR-PQZ-06), which needs no PQZ key.
+(`AccountNotRegistered`); fees go to the beneficiary's public UA-ledger balance (CTR-PQZ-06), which needs no PQZ key: any registered UA-ledger receiver can be named (owner 2026-10-27, C0-7). A PQZH value token (only at `n2048-kmax1024`, `PqzSet.PQZH_VALUE`; `init` refuses PQZH elsewhere, `PqzhValueUnsupported`) takes only single-key `mldsa44` / `mldsa65` / `fndsa512` holders on every entry that creates a pending entry (shield, op 1 credit, op 7 legs; `PqzhHolderKind`); the fee beneficiary is exempt. The auditor `auditorKey` of a FULL or OPTIONAL token must be a registered holder (the zero id is refused, `AccountNotRegistered(0)`); shield, `mtxPrepareAcc` and the auditor check the key as every debit does (`_keyPtr`: also its length).
 
 ### 7.11 Meta-transactions
 
@@ -2419,7 +2420,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
 | T18 | Broken v1 envelope key (quantum ECDSA, leaked EOA) | authority split ([CTR-PQZ-15](#CTR-PQZ-15)): the envelope signer authorizes only its public balance and nonces; confidential value needs the PQ `authSig` + proof; bound ops cannot be re-pointed (their amounts, recipients and outputs). Residual: loss of that signer's public float and liveness of its own relayed ops; on a relayed op the storage mode (BUNDLE / HASH / NONE) and an unwrap's leg / `minOut` are bound by the envelope signature only (the PQ `authSig` covers `envelopeBinding`, which excludes `data`), so the key holder can re-sign the same op with another mode (`…NoBundle`), as `mtxUnshield` instead of `mtxUnshieldUnwrap`, or with another leg / `minOut`, and front-run: at worst no entry is stored or the payout takes another form, with no value lost beyond the public float above (review 5g L1, 2026-10-19). **Closed by plan 5h D15:** the mode is folded into every relayed binding (`keccak256(abi.encode(envelopeBinding, uint8(mode)))`) and an unwrap's leg / `minOut` likewise, so a re-signed envelope with another mode or leg no longer verifies against the proof; NONE is retired, so `…NoBundle` no longer exists; v3 path with an `mldsa65` fee UA removes the classical key |
 | T19 | Envelope stripping or re-wrapping (relayer takes the op out, or into an envelope with its own fee/recipient) | `envelopeBinding` in the statement (direct calls: 0, a transfer's mode binding, the unwrap binding), checked through the `authSig` before the precompile, as classical [CTR-ZTH-06](zether.md#CTR-ZTH-06) |
-| T20 | Fee griefing: envelopes that fail late to burn relayer gas | outer fee checked before any SSTORE2 read or precompile call; fee and nonce taken only after verify, so a failing op reverts whole; relayers pre-simulate on a follower; gas on the SCaaS testnet is free, the cost is block capacity |
+| T20 | Fee griefing: envelopes that fail late to burn relayer gas | the signer's `shieldIn·shieldScale` pulled before the authorization and the precompile (a cheap revert; owner 2026-10-27, C2-5); the outer fee and nonce taken after verify (§7.11), so a failing op reverts whole; relayers pre-simulate on a follower; gas on the SCaaS testnet is free, the cost is block capacity |
 | T21 | Malicious recipient keys extract hints on a multi transfer's shared `(r_g, e1_g)` (16 per leg and auditor window) | `s_aud` legs per group with the auditor (2 / 3 / 4 / 4 per set), 4 without: ≤ 32·s_aud / 64 hints; every auditor copy at its own window, the auditor never a party (F-4); β ≥ 450 at every set but `n2048-kmax1024` (DDGR20 451.9, dual_hybrid − offset ≈ 444: the owner-accepted exception to CTR-PQZ-03's 450); fresh randomness per operation ([CTR-PQZ-04](#CTR-PQZ-04), [CTR-PQZ-26](#CTR-PQZ-26)) |
 | T22 | Decoy flood: listing victims as decoys (`M − 1` victims per transfer) | each unit is a proven leg; the cap on `acc` keeps the noise budget and is never a refusal (head-of-line delay only); **`decoyFee`**: the sender pays `d ≥ minDecoyFee` to every leg, the victim included, so a flood pays its victims for the rollover work; T7's permissioned submitters and rate limits; wallet load spreading (P6h) |
 | T23 | Burying real credits behind junk (ordered roll-over) | strict order is deliberate (it hides which ring members were decoys); a real credit behind `x` decoys is spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 80` at `n2304-kmax4096`: 10,000 decoys = 125 rollovers, ≈ 12.1–12.3 M gas each relayed), or at once in the owner's own debit with `p` within `INLINE_MAX` of `rolled`; the owner can always spend `acc` with `p = rolled`; keepers roll decoy credits (P6i); the decoy fee compensates the work |

@@ -472,8 +472,9 @@ contract PqzNoneTest is PqzFixture {
         factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "mainnet");
     }
 
-    /// UA-6 (RF6): a registered `mldsa65` UA without a PQZ key is no PQZ account: as sender, leg, beneficiary,
-    /// shield target and auditor alike (`AccountNotRegistered`).
+    /// UA-6 (RF6): a registered `mldsa65` UA without a PQZ key is no PQZ account: as sender, leg,
+    /// shield target and auditor alike (`AccountNotRegistered`); not as the fee beneficiary, which needs only a registered
+    /// UA (C0-7, owner 2026-10-27: `PqzGuards.t.sol` test_beneficiary_anyRegisteredUA).
     function test_keylessUAIsNoPqzAccount() public {
         bytes32 k = _mldsaUA(20);
         bytes memory out = _out(60, true);
@@ -481,9 +482,6 @@ contract PqzNoneTest is PqzFixture {
         _credits(alice, 1);
         bytes memory pl = _payload(1, 0, alice, k, bytes32(0), out, "");
         vm.expectRevert(err); // recipient leg
-        tok.mtxConfidentialTransferSingle(pl, hex"01", _mlAuth(), _benT(pl), "");
-        pl = _payload(1, 0, alice, bob, k, out, "");
-        vm.expectRevert(err); // beneficiary
         tok.mtxConfidentialTransferSingle(pl, hex"01", _mlAuth(), _benT(pl), "");
         pl = _payload(1, 0, k, bob, bytes32(0), out, "");
         vm.expectRevert(err); // sender

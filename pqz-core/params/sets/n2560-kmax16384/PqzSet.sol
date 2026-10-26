@@ -50,6 +50,8 @@ library PqzSet {
     bytes32 internal constant PQZL_ID = 0xeacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): true
     bool internal constant HAS_PQZH = true;
+    /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies
+    bool internal constant PQZH_VALUE = false;
     /// PQZH's proofSystemId: keccak256("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3")
     bytes32 internal constant PQZH_ID = 0xc93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662;
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (16,100 zero bytes: a new account's `acc`, P46)

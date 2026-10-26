@@ -30,6 +30,12 @@ interface IPqzToken is IConfidentialToken {
     event Debited(bytes32 indexed ua, uint64 rolled, uint64 floor, address blob);
 
     error BadInit();
+    /// @notice `init` with the PQZH proof system at a set without PQZH value tokens (`PqzSet.PQZH_VALUE`): no debit of
+    ///         such a token fits one transaction (C2-1; owner 2026-10-27, C0-2).
+    error PqzhValueUnsupported();
+    /// @notice A PQZH value token refuses a holder that is not a single-key `mldsa44` / `mldsa65` / `fndsa512` UA on
+    ///         every entry that creates its pending entry (shield, op 1 and op 7 legs; owner 2026-10-27, C0-2).
+    error PqzhHolderKind(bytes32 ua, uint16 kind);
     error BadDisclosureMode(uint8 mode);
     error BadAuditorMode(uint8 mode);
     error AccountNotRegistered(bytes32 ua);
@@ -77,6 +83,16 @@ interface IPqzToken is IConfidentialToken {
         bytes32 beneficiary,
         bytes calldata accHint
     ) external returns (bytes32 entryRef);
+    /// @notice The account (pq-zero-knowledge.md §9.4): counters, the `acc` reference, `accUnits`, flags, `sendCounter`, `accHash`.
+    function pqzAccount(bytes32 ua) external view returns (AccountState memory);
+    /// @notice Pending slot `i`: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`; 0 once deleted.
+    function pqzPending(bytes32 ua, uint64 i) external view returns (uint256);
+    /// @notice The `acc` ciphertext from state.
+    function pqzAcc(bytes32 ua) external view returns (bytes memory);
+    /// @notice Entry `i` as a ciphertext from state.
+    function pqzPendingCt(bytes32 ua, uint64 i) external view returns (bytes memory);
+    /// @notice The op blob of a transfer as stored (empty if unknown).
+    function pqzEntryBlob(bytes32 entryRef) external view returns (bytes memory);
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent; plan 5h D8).
     function mtxPrepareAcc(bytes32 ua, uint256 half) external;
 }

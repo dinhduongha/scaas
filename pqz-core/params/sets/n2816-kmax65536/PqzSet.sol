@@ -50,6 +50,8 @@ library PqzSet {
     bytes32 internal constant PQZL_ID = 0xa801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): false: PQZH_ID is the zero word, never accepted
     bool internal constant HAS_PQZH = false;
+    /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies
+    bool internal constant PQZH_VALUE = false;
     /// PQZH's proofSystemId: none at this set
     bytes32 internal constant PQZH_ID = 0x0000000000000000000000000000000000000000000000000000000000000000;
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (19,116 zero bytes: a new account's `acc`, P46)
