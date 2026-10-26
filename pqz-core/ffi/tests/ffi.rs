@@ -258,4 +258,10 @@ fn header_matches() {
     assert_eq!(MAX_INPUT, 524_288); // every set since the R0 review fix (owner 2026-10-25; n2048-kmax1024 was 393,216)
     assert_eq!(def("PQZ_FFI_OUT_BYTES"), 32);
     assert!(h.contains("int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);"));
+    // review R4-C7: the decoder's MAX_PROOF_PQZL = the backends' buffers = the C core's PQZ_MAX_PROOF (the Rust core's
+    // ::pqzl::MAX_PROOF is const-asserted in src/pqzl/rust.rs)
+    let c = include_str!("../../pqzl/src/pqz.h");
+    let l = c.lines().find(|l| l.starts_with("#define PQZ_MAX_PROOF ")).expect("PQZ_MAX_PROOF");
+    assert_eq!(l.split_whitespace().nth(2).unwrap().parse::<usize>().unwrap(), stmt::MAX_PROOF_PQZL);
+    assert_eq!(pqz_ffi::pqzl::MAX_PROOF, stmt::MAX_PROOF_PQZL);
 }

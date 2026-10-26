@@ -39,7 +39,8 @@ fn stream(key_seed: &[u8], header: &[Word; 20], salt: &[u8], len: usize) -> Opti
 }
 
 /// The memo of a transfer with `legs` = `(a_j, toUA_j)` in leg order under `header` (its salt, chainUid, token,
-/// fromUA, sendCounter); `None` if `sendCounter ≥ 2^32` or M is 0 or over 255.
+/// fromUA, sendCounter); `None` if `sendCounter ≥ 2^32` or M is 0 or over 203 (the keystream is one HKDF-SHA256
+/// expand, at most 255 · 32 = 8,160 B, and M = 204 needs 2 + 40·M = 8,162 B; review R4-C8; op 7 builds M ≤ 8).
 pub fn seal(key_seed: &[u8], header: &[Word; 20], aud: bool, legs: &[(u64, Word)]) -> Option<Vec<u8>> {
     let m = u8::try_from(legs.len()).ok().filter(|&m| m > 0)?;
     let mut plain = vec![aud as u8, m];
@@ -55,7 +56,8 @@ pub fn seal(key_seed: &[u8], header: &[Word; 20], aud: bool, legs: &[(u64, Word)
 }
 
 /// [`seal`] backwards (the salt from the memo, the rest of the key's inputs from `header`): `(auditorOn, legs)`;
-/// `None` for a length that is not `18 + 40·M`, an M byte that disagrees with it, or a flags byte other than 0 / 1.
+/// `None` for a length that is not `18 + 40·M`, an M byte that disagrees with it, a flags byte other than 0 / 1, or M
+/// over 203 (the HKDF-SHA256 output limit, as in [`seal`]).
 pub fn open(key_seed: &[u8], header: &[Word; 20], memo: &[u8]) -> Option<(bool, Vec<(u64, Word)>)> {
     if memo.len() < memo_len(1) || !(memo.len() - 18).is_multiple_of(40) {
         return None;

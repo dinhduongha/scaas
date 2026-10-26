@@ -884,6 +884,8 @@ txm_check (int rels)
   int fails = 0, n = 0;
   const int r81 = txm_rel (8, 1), r20 = txm_rel (2, 0), r11 = txm_rel (1, 1);
   const char *sel = getenv ("PQZ_TXM_CASE");
+  /* legs 3 and 4 straddle an audited group boundary at s = 2 / 4 (groups 1 | 2, 0 | 1), not at s = 3 (both group 1) */
+  const int bnd = 3 / PQZ_TXM_LPG (1) != 4 / PQZ_TXM_LPG (1);
   txm_sel = sel != NULL ? atoi (sel) : -1, txm_k = 0;
   for (int r = 6; r < NREL && TXM_RUN (17); r++) /* the honest proofs the tampers need */
     if ((r == r81 || r == r20 || r == r11) && lens[r] == 0)
@@ -895,7 +897,8 @@ txm_check (int rels)
   txspec (&X, 4, 1, 100), X.amount[3] = 0, X.amount[0] = 5000;
   fails += txm_case ("M 4 on: real leg 0", &X, 1), n++;
   txspec (&X, 8, 1, 101), X.amount[7] = 0, X.amount[3] = 1111, X.amount[4] = 2222, X.fee = 0;
-  fails += txm_case ("M 8 on: real legs 3 and 4 (group boundary), fee 0", &X, 1), n++;
+  fails += txm_case (bnd ? "M 8 on: real legs 3 and 4 (group boundary), fee 0"
+                         : "M 8 on: real legs 3 and 4 (one group at this set), fee 0", &X, 1), n++;
   txspec (&X, 8, 0, 102), X.amount[7] = 0, X.fee = 0;
   fails += txm_case ("M 8 off: all legs decoys, fee 0", &X, 1), n++;
   txspec (&X, 2, 0, 103), X.amount[0] = 77, X.amount[1] = 88;
@@ -913,7 +916,8 @@ txm_check (int rels)
   txspec (&X, 8, 1, 113), X.grp[4] = 0, X.amount[4] = 9;
   fails += txm_case ("leg 4 under group 0's randomness", &X, 0), n++;
   txspec (&X, 8, 1, 114), X.swap = 1, X.amount[3] = 5;
-  fails += txm_case ("legs 3 and 4 moved between groups", &X, 0), n++;
+  fails += txm_case (bnd ? "legs 3 and 4 moved between groups"
+                         : "legs 3 and 4 swapped (one group at this set: keys and windows differ)", &X, 0), n++;
   txspec (&X, 8, 1, 115), X.aud0 = 1;
   fails += txm_case ("auditor copy of leg 0 of another amount", &X, 0), n++;
   txspec (&X, 8, 1, 120), X.awin = 2, X.aww = 0;

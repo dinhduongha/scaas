@@ -8,10 +8,12 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use pqz_ffi::*;
 
-/// the middle of the set's graceful band (status 4, then a fresh core verifies R_REG), probed per set in the R0 review
-/// fix round (`runs/r01a-fix-c-arena-probe.txt`; the first probe, `runs/ffi1d-arena-probe.txt`, was n2048-kmax1024
-/// only): n2048 16–20, n2304 18–24, n2560 20–28, n2816 22–28 MiB. Below the band the exhaustion is inside LaZer (a
-/// trap, SIGILL); above it R_TX verifies.
+/// the middle of the set's graceful band (status 4, then a fresh core verifies R_REG), probed per set at even sizes in
+/// the R0 review fix round (`runs/r01a-fix-c-arena-probe.txt`; the first probe, `runs/ffi1d-arena-probe.txt`, was the
+/// n2048-kmax1024 core before the R0 fix): graceful at n2048 16–20, n2304 18–24, n2560 20–28, n2816 22–28 MiB. Below
+/// the band the exhaustion is inside LaZer's key generation (a trap, SIGILL; n2816 at 20 MiB: R_REG does not fit the
+/// fresh core); above it n2048 traps again at 22 MiB and R_TX verifies from 24 MiB, n2304 from 26, n2560 / n2816 from 30
+/// MiB. The odd sizes 21 (n2304) and 25 (n2816) were not probe points; the test runs pass at them.
 #[cfg(not(feature = "pqzl-rust"))]
 const ARENA_MIB: usize = match stmt::N {
     2048 => 18,
@@ -144,12 +146,11 @@ fn c_abi(inp: &[u8]) -> (i32, [u8; 32]) {
 fn arena_exhaustion(input: &[u8], op: u8, st: &[u8], proof: &[u8]) {
     let r = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Register).unwrap();
     let reg_input = stmt::input(r.op(), &r.stmt, &prove(r.op(), &r.stmt, &r.wit, &[7; 32]).unwrap());
-    // arena exhaustion: 18 MiB holds A, R_REG's whole verify, and R_TX's ABDLOP keys but not its whole verify (R_TX
-    // alone needs 20–24 MiB);
-    // the core then fails gracefully (the specialised verifier's own allocations, pqz_arena_try_alloc). Below 14 MiB
-    // the exhaustion is inside the relation's key generation (LaZer), which stops the process (a trap since review
-    // round 2, Q-C; before it a SIGSEGV after writing past the shared sink: STATUS.md Open 2), so the probe
-    // ffi1d-arena-probe.txt picked the middle of the 14–20 MiB band.
+    // arena exhaustion: `ARENA_MIB` (the set's probed band, above) holds A, R_REG's whole verify, and R_TX's ABDLOP keys
+    // but not its whole verify; the core then fails gracefully (the specialised verifier's own allocations,
+    // pqz_arena_try_alloc). Below the band the exhaustion is inside the relation's key generation (LaZer), which stops
+    // the process (a trap since review round 2, Q-C; before it a SIGSEGV after writing past the shared sink: STATUS.md
+    // Open 2).
     let mib: usize = std::env::var("PQZ_FAULT_ARENA_MIB").ok().and_then(|v| v.parse().ok()).unwrap_or(ARENA_MIB);
     eprintln!("fault arena {mib} MiB");
     pqzl::TEST_ARENA_BYTES.store(mib << 20, Relaxed);

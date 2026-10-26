@@ -49,7 +49,9 @@ pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else 
 /// The worker thread's stack (pqz_bench runs the core on an 8 MiB main thread, the wasm builds on an 8 MiB stack).
 pub const STACK: usize = 16 << 20;
 
-pub const MAX_PROOF: usize = 98_304;
+/// pqz-stmt's `MAX_PROOF_PQZL` (review R4-C7: one literal; the Rust backend's const assert ties it to
+/// `::pqzl::MAX_PROOF`, the C backend's test `header_matches` to `PQZ_MAX_PROOF` of `pqzl/src/pqz.h`)
+pub const MAX_PROOF: usize = pqz_stmt::MAX_PROOF_PQZL;
 /// the parameter set's ring dimension and object sizes (pqz-stmt, feature `set-<set>`; v3: 2,048 / 16,384 B)
 pub const N: usize = pqz_stmt::N;
 pub const PK_BYTES: usize = pqz_stmt::PK_BYTES;
