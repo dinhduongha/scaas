@@ -1,0 +1,40 @@
+# r01b fix-round start-up runs, 2026-10-26T07:33:47Z, commit bd248bb5; image scaas/nethermind-pqz:2.2.0-pqz4 (55037b0b14a7)
+# library dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 (the reviewed n2304-kmax4096 build, SelfTest.ExpectedLibrarySha256)
+# plugin 333c898f32f35b24738d033b8f8ba0927e2caaa858180ee46d534e25a3c38852 (pqz-core/nethermind/Nethermind.Pqz, -p:PqzSet=n2304-kmax4096)
+
+## normal: the set's own ids (engine-pqz-provisional-n2304.json, timestamp 0x0), fresh database: a normal start
+genesis genesis-new.json: engine.Pqz schedule ids 0x0: 0x046859a8,0xef1ffbcb
+state: running exit 0 started 2026-10-26T07:33:47.533885035Z finished 0001-01-01T00:00:00Z
+$ docker logs | grep -E 'PQZ-|Block tree|Genesis|Exit'
+  Init.ChainSpecPath = "/x/genesis.json"
+26 Oct 07:33:49 | Did not find ChainSpec in embedded resources: /x/genesis.json 
+26 Oct 07:33:49 | Loading ChainSpec from file: /x/genesis.json 
+26 Oct 07:33:53 | Block tree initialized, last processed is 0, best queued is 0, best known is 0, lowest inserted header , lowest sync inserted block number  
+PQZ-START sha256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 selftest=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d max_input=524288 openssl=0x30500050 mldsa_kat=814dd7b9784d57c15b9c2972e9b4fd6cf7e164f8162a934bdb2452a413dab1f7 set=n2304-kmax4096 addresses=PQZ:0x000000000000000000000000000000005caa0f01,MLDSA44:0x000000000000000000000000000000005caa0012,MLDSA65:0x000000000000000000000000000000005caa0013 schedules=[{ts 0, rows 26 [op1/046859a8/74752=5227000, op1/046859a8/93312=5492000, op1/ef1ffbcb/74752=6790000, op1/ef1ffbcb/93312=7032000, op2/046859a8/56192=4859000, op2/ef1ffbcb/56192=4840000, op3/046859a8/18528=4319000, op3/ef1ffbcb/18528=3504000, op4/046859a8/37280=4268000, op4/ef1ffbcb/37280=3381000, op5/046859a8/37280=3745000, op5/ef1ffbcb/37280=3337000, op7/046859a8/74752/M1=5608000, op7/046859a8/93312/M1a=5023000, op7/046859a8/93312/M2=5740000
+26 Oct 07:33:53 | PQZ-START sha256=dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601 selftest=d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d max_input=524288 openssl=0x30500050 mldsa_kat=814dd7b9784d57c15b9c2972e9b4fd6cf7e164f8162a934bdb2452a413dab1f7 set=n2304-kmax4096 addresses=PQZ:0x000000000000000000000000000000005caa0f01,MLDSA44:0x000000000000000000000000000000005caa0012,MLDSA65:0x000000000000000000000000000000005caa0013 schedules=[{ts 0, rows 26 [op1/046859a8/74752=5227000, op1/046859a8/93312=5492000, op1/ef1ffbcb/74752=6790000, op1/ef1ffbcb/93312=7032000, op2/046859a8/56192=4859000, op2/ef1ffbcb/56192=4840000, op3/046859a8/18528=4319000, op3/ef1ffbcb/18528=3504000, op4/046859a8/37280=4268000
+Genesis hash : 0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2
+Chainspec    : /x/genesis.json
+
+## earlier-foreign: the live testnet's schedule (PQZL v4 / PQZH v2) from 0x0, the set's own ids from 0x65000000 (2023-09-12, before the wall clock), fresh database (head = genesis 0x0): PQZ-REFUSE (the wall-clock rule of part b started here)
+genesis genesis-earlier-foreign.json: engine.Pqz schedule ids 0x0: 0x15d16d77,0xe4bc6d17; 0x65000000: 0x046859a8,0xef1ffbcb
+state: exited exit 120 started 2026-10-26T07:34:00.042905291Z finished 2026-10-26T07:34:04.770799314Z
+$ docker logs | grep -E 'PQZ-|Block tree|Genesis|Exit'
+  Init.ChainSpecPath = "/x/genesis.json"
+26 Oct 07:34:00 | Did not find ChainSpec in embedded resources: /x/genesis.json 
+26 Oct 07:34:00 | Loading ChainSpec from file: /x/genesis.json 
+PQZ-REFUSE ArgumentException: engine.Pqz schedule 0: row op 1 id e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730 is not the library's (ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, 046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead); exit 120
+26 Oct 07:34:04 | Block tree initialized, last processed is 0, best queued is 0, best known is 0, lowest inserted header , lowest sync inserted block number  
+26 Oct 07:34:04 | PQZ-REFUSE ArgumentException: engine.Pqz schedule 0: row op 1 id e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730 is not the library's (ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, 046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead); exit 120 System.ArgumentException: engine.Pqz schedule 0: row op 1 id e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730 is not the library's (ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, 046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead)
+
+## foreign-live: the live SCaaS testnet's schedule (plan 5h Task 8d ids PQZL v4 / PQZH v2, in force from 0x0): PQZ-REFUSE
+genesis genesis-live.json: engine.Pqz schedule ids 0x0: 0x15d16d77,0xe4bc6d17
+state: exited exit 120 started 2026-10-26T07:34:05.908457605Z finished 2026-10-26T07:34:10.524777844Z
+$ docker logs | grep -E 'PQZ-|Block tree|Genesis|Exit'
+  Init.ChainSpecPath = "/x/genesis.json"
+26 Oct 07:34:06 | Did not find ChainSpec in embedded resources: /x/genesis.json 
+26 Oct 07:34:06 | Loading ChainSpec from file: /x/genesis.json 
+PQZ-REFUSE ArgumentException: engine.Pqz schedule 0: row op 1 id e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730 is not the library's (ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, 046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead); exit 120
+26 Oct 07:34:10 | Block tree initialized, last processed is 0, best queued is 0, best known is 0, lowest inserted header , lowest sync inserted block number  
+26 Oct 07:34:10 | PQZ-REFUSE ArgumentException: engine.Pqz schedule 0: row op 1 id e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730 is not the library's (ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, 046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead); exit 120 System.ArgumentException: engine.Pqz schedule 0: row op 1 id e4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730 is not the library's (ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, 046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead)
+
+# 2026-10-26T07:34:11Z containers removed, data dirs deleted
