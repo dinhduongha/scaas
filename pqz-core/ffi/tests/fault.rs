@@ -8,9 +8,18 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use pqz_ffi::*;
 
-/// the graceful band 14–20 MiB of `runs/ffi1d-arena-probe.txt`
+/// the middle of the set's graceful band (status 4, then a fresh core verifies R_REG), probed per set in the R0 review
+/// fix round (`runs/r01a-fix-c-arena-probe.txt`; the first probe, `runs/ffi1d-arena-probe.txt`, was n2048-kmax1024
+/// only): n2048 16–20, n2304 18–24, n2560 20–28, n2816 22–28 MiB. Below the band the exhaustion is inside LaZer (a
+/// trap, SIGILL); above it R_TX verifies.
 #[cfg(not(feature = "pqzl-rust"))]
-const ARENA_MIB: usize = 18;
+const ARENA_MIB: usize = match stmt::N {
+    2048 => 18,
+    2304 => 21,
+    2560 => 24,
+    2816 => 25,
+    _ => panic!("no probed fault arena for this set"),
+};
 
 #[test]
 fn node_faults_are_status_4() {

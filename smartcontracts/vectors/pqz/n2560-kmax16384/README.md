@@ -5,7 +5,7 @@ plan 5h Task 8d), for the parameter set [`n2560-kmax16384`](../../../../pqz-core
 (n = 2560, k = 40, `K_MAX` 16,384, q = 2^50 − 42,310,535; shippable for customer chains, owner 2026-10-21).
 Differences:
 
-- **PQZH with the set's preset** (plan 5h Task 8c part 2): `proof_pqzh.json` (16 rows) from pqzh-ligero at THE
+- **PQZH with the set's preset** (plan 5h Task 8c part 2): `proof_pqzh.json` (20 rows) from pqzh-ligero at THE
   preset's radices and n / k with t = 122 (n 32,756, k 817, l 694; owner 2026-10-23; its `params`), F_q elements of
   7 bytes; statement files carry both ids' hashes; `selftest.json` has the Ligero FFT (`fft` n 1,634, 7-byte elements,
   ok true) and results 1, 0, 1, 0. Limits: `MAX_PROOF_PQZH` 327,680 (this set only, owner 2026-10-23), `MAX_INPUT`

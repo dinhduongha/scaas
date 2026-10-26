@@ -4,7 +4,7 @@ The same files as [the n2048-kmax1024 directory](../README.md) (`smartcontracts/
 plan 5h Task 8d), for the parameter set [`n2304-kmax4096`](../../../../pqz-core/params/sets/n2304-kmax4096/SET.md)
 (n = 2304, k = 36, `K_MAX` 4,096, q = 61,275,424,977,257; owner 2026-10-21). Differences:
 
-- **PQZH with the set's preset** (plan 5h Task 8c part 2): `proof_pqzh.json` (16 rows) from pqzh-ligero at preset B
+- **PQZH with the set's preset** (plan 5h Task 8c part 2): `proof_pqzh.json` (20 rows) from pqzh-ligero at preset B
   (radices 2 / 7 / 17 / 19 / 43 / 431, n 45,752, k 952, t 120, l 831; its `params`), F_q elements of 6 bytes;
   statement files carry both ids' hashes; `selftest.json` has the Ligero FFT (`fft` n 1,634, ok true) and results
   1, 0, 1, 0. Limits: `MAX_PROOF_PQZH` 327,680 (262,144 before the R0 review fix; owner 2026-10-25), `MAX_INPUT` 524,288 (pqz-stmt at this set; the node reads it from the library,

@@ -226,9 +226,13 @@ fn one_mib_stack() {
 /// `$PQZ_FFI_DIGESTS` when set (run.sh diffs them with wasm/run_wasm.mjs's output).
 #[test]
 fn digest_lines() {
-    let s = fixture::digest_lines(&PQZL_ID) + &fixture::digest_lines(&PQZH_ID) + &fixture::selftest_line();
-    // 8 forms + the op 7 shapes with M <= 4 (what wasm32 proves), each id
-    assert_eq!(s.matches("\"valid\": true").count(), ids().len() * (8 + 6), "{s}");
+    let s = fixture::digest_lines(&PQZL_ID, true) + &fixture::digest_lines(&PQZH_ID, true) + &fixture::selftest_line();
+    // 8 forms + the op 7 shapes with M <= 4, each id; PQZL without the shapes above WASM_PQZL_MAX_LEGS (the C backend's
+    // wasm32 refusal, printed natively as `Statement(Legs)`: fixture::digest_lines)
+    let shapes = |id: &Word| 2 * [1, 2, 4].iter().filter(|&&m| *id != PQZL_ID || m <= pqzl::WASM_PQZL_MAX_LEGS).count();
+    let valid: usize = ids().iter().map(|id| 8 + shapes(id)).sum();
+    assert_eq!(s.matches("\"valid\": true").count(), valid, "{s}");
+    assert_eq!(s.matches("\"proof\": \"Statement(Legs)\"").count(), ids().len() * 14 - valid, "{s}");
     if let Ok(p) = std::env::var("PQZ_FFI_DIGESTS") {
         std::fs::write(p, s).unwrap();
     }

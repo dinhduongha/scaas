@@ -19,7 +19,7 @@ pqzl_id = "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5"   # PQZL proofSystemId = keccak
 [pqzl_c]                          # pqz-ffi's opt-in C backend (feature pqzl-c; review R1-C2 / R4-C1): sized from the gate's
                                   # C peaks with every relation loaded (runs/gate/<set>-fnv-c.jsonl, x 1.5; README.md beside this dir)
 prove_arena_mib = 2048             # native prover / generic-verifier arena (ARENA_BIG)
-wasm_max_legs = 1                 # the largest op 7 M the C backend proves in wasm32 (its 512 MiB arena)
+wasm_max_legs = 1                 # the largest op 7 M the C backend proves in wasm32 (its 512 MiB arena); measured (M = 1 / 2 peak 481 / 501 MiB)
 
 [approval]
 date = "2026-10-24"

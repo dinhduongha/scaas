@@ -1,0 +1,50 @@
+# R0 review fix round m8 (2026-10-26): tests/fault.rs' arena_exhaustion at fixed arena sizes (PQZ_FAULT_ARENA_MIB), C backend,
+# per set (target/<set>-c/release/deps/fault-*, built by run.sh r01a-fix-c-<set>); rc 0 = status 4 then R_REG verifies on a fresh core;
+# rc 132 = SIGILL (exhaustion inside LaZer's key generation: the trap); panicked at :148 = no exhaustion (R_TX verifies);
+# :155 = R_REG does not fit the fresh core. The old 18 MiB trapped at n2560 / n2816 (the first PQZL=c runs there).
+# n2560-kmax16384 (C backend)
+arena 14 MiB: rc=132  
+arena 16 MiB: rc=132  
+arena 18 MiB: rc=132  
+arena 20 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 22 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 24 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 26 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 28 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 30 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 32 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 36 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 40 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 48 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+# n2816-kmax65536 (C backend)
+arena 14 MiB: rc=132  
+arena 16 MiB: rc=132  
+arena 18 MiB: rc=132  
+arena 20 MiB: rc=101 panicked at tests/fault.rs:155:5: 
+arena 22 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 24 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 26 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 28 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 30 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 32 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 36 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 40 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 48 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+# n2048-kmax1024 (C backend)
+arena 12 MiB: rc=132  
+arena 14 MiB: rc=132  
+arena 16 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 18 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 20 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 22 MiB: rc=132  
+arena 24 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+arena 26 MiB: rc=101 panicked at tests/fault.rs:148:5: 
+# n2304-kmax4096 (C backend)
+arena 12 MiB: rc=132  
+arena 14 MiB: rc=132  
+arena 16 MiB: rc=132  
+arena 18 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 20 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 22 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 24 MiB: rc=0  node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+arena 26 MiB: rc=101 panicked at tests/fault.rs:148:5: 

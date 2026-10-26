@@ -102,7 +102,7 @@ fn child_task() {
             let b = u8::from_str_radix(a[1], 16).unwrap();
             pqzl::TEST_ARENA_FILL.store(0x100 | b as u32, Relaxed);
             let hs = from_bytes(&std::fs::read(a[2]).unwrap());
-            let mut s = fixture::digest_lines(&PQZL_ID) + &fixture::digest_lines(&PQZH_ID) + &fixture::selftest_line();
+            let mut s = fixture::digest_lines(&PQZL_ID, false) + &fixture::digest_lines(&PQZH_ID, false) + &fixture::selftest_line();
             assert!(pqzl::reinit(pqzl::ARENA_SMALL));
             for inp in corpus(&hs, 2048) {
                 let (rc, w) = call(&inp);
@@ -246,9 +246,10 @@ fn fill_determinism() {
     assert_eq!(outs[0], outs[2], "0x00 vs 0x5A");
     let lines = outs[0].lines().count();
     let valid = outs[0].matches("\"valid\": true").count();
-    assert_eq!(valid, 2 * (8 + 6));
+    let ids = if PQZH { 2 } else { 1 }; // n2816-kmax65536: PQZL only (its first PQZL=c run, R0 review fix round m8)
+    assert_eq!(valid, ids * (8 + 6));
     if let Ok(p) = std::env::var("PQZ_FFI_FILL_OUT") {
         std::fs::write(p, &outs[0]).unwrap();
     }
-    eprintln!("fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: {lines} result lines identical (digest lines of 16 forms and 12 op 7 shapes incl. proofs, self-test, {} corpus results)", lines - 29);
+    eprintln!("fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: {lines} result lines identical (digest lines of {} forms and {} op 7 shapes incl. proofs, self-test, {} corpus results)", 8 * ids, 6 * ids, lines - 14 * ids - 1);
 }

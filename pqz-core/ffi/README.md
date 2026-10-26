@@ -98,14 +98,19 @@ once:
 - `ARENA_SMALL`, 512 MiB, verify only: the precompile path. Sized when the multi-recipient transfer was added (owner
   2026-10-16) at 2.00 × the measured adversarial peak of 268 MB at n2048-kmax1024: the specialised verifier over all six
   forms and every multi-recipient shape, with their keys and tables kept, plus the self-test (run `s3a`); per set
-  `tests/verify_only.rs` asserts ≥ 1.5 × under `PQZL=c` (review R4-C2).
+  `tests/verify_only.rs` asserts ≥ 1.5 × under `PQZL=c` (review R4-C2). Measured at the R0 review fix (runs
+  `r01a-fix-c-<set>`): peak 289.0 / 296.0 / 303.2 / 306.9 MB at n2048-kmax1024 / n2304-kmax4096 / n2560-kmax16384 /
+  n2816-kmax65536, margin 1.86 / 1.81 / 1.77 / 1.75 ×.
 - `ARENA_BIG`, native, per set (set.toml `[pqzl_c] prove_arena_mib`, pqz-stmt `C_PROVE_ARENA`; review R1-C2 / R4-C1:
   1 GiB for every set before, below the C peaks at n2560-kmax16384 and n2816-kmax65536): ≥ 1.5 × the gate's C peak
   with every relation loaded (`runs/gate/<set>-fnv-c.jsonl`). The first prove or generic verify moves the core to it,
   once. Running out inside LaZer stops the process (a trap: no write may follow a failed allocation), so the size is
   set above the largest relation's peak.
 - wasm32 has one 512 MiB arena for both. There, `prove` refuses PQZL multi-recipient transfers above the set's
-  `[pqzl_c] wasm_max_legs` (`ProveError::Statement(Reject::Legs)`); larger M is for native clients. The Rust backend
+  `[pqzl_c] wasm_max_legs` (`ProveError::Statement(Reject::Legs)`); larger M is for native clients. Only n2816-kmax65536's
+  1 is measured (C wasm32 peaks R_TXM M = 1 / 2 / 4: 481 / 501 / 530 MiB); the 2 of n2048-kmax1024 / n2304-kmax4096 /
+  n2560-kmax16384 are **estimates** (the native C peaks × n2816's wasm32 / native ratio ≈ 0.77: M = 2 fits, M = 4 at
+  n2048 ≈ 508 MiB is too close). A C wasm32 run at those three sets is open (R0 review fix part b). The Rust backend
   has no arena and proves M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of
   linear memory, run `d6`, Rust port Task 12, CTR-PQZ-09).
 
