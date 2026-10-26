@@ -50,7 +50,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 
 | Path | When | chainspec | Data |
 |---|---|---|---|
-| **A. Transition timestamp** (an upgrade of a running chain) | 22776 later, any chain upgrade, a re-price or a new op such as the multi-recipient transfer (`R_TXM`, op 7), added as a second schedule | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged | kept |
+| **A. Transition timestamp** (an upgrade of a running chain) | 22776 later, any chain upgrade, a re-price or a new op such as the multi-recipient transfer (`R_TXM`, op 7), added as a second schedule | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged; a proofSystemId change at T: a node with the new library starts only once its head has reached T − 1, a node with the old library is refused at any restart once the schedule is in the chainspec, a fresh node needs a data copy past T (`pq-zero-knowledge.md` §9.1) | kept |
 | **B. From genesis** (a new chain, the SCaaS testnet reset, owner 2026-10-15) | Task 10 on the SCaaS testnet (used on 2026-10-16) | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
 
 The plugin refuses a first timestamp *before* genesis; a timestamp equal to genesis is path B.

@@ -502,7 +502,10 @@ dual estimate exists (the lattice-estimator has no hints), the heuristic's direc
 of the legs to anyone (finding R0-1, P1; no deployment affected). **The auditor is never a party** (finding F-4): with the
 auditor copies on, a sender or recipient key equal to `pk_a` meets the copy in window 0 under the same `r` and cancels
 the mask (`v − v_a = Δ·(d − d_a) + noise`), so the token refuses `fromUA = auditorUA` and a recipient (op 1's `toUA`,
-every op 7 leg) `= auditorUA` with `AuditorAsParty(ua)` on every transfer form, relayed and direct. If the estimate misses the target, the fallback is **split randomness**: `(r, e1)` shared by `v_t` and `v_a` only, and the sender's `v_f` under its own `(r_f, e1_f)` and `u_f` (+16,384 B, ≈ +0.5 M gas per transfer), so hints only open ciphertexts of amounts the hinting parties already know.
+every op 7 leg) `= auditorUA` with `AuditorAsParty(ua)` on every transfer form, relayed and direct. The check compares UAs, so a related key such as a
+ring rotation `X^c·pk_a` under another UA passes it and can meet an auditor copy the same way; only the auditor can
+register one (the `R_REG` proof of possession needs `s_a`), and what it opens the auditor already decrypts, so related
+keys are out of scope (review of fix part b, M-3). If the estimate misses the target, the fallback is **split randomness**: `(r, e1)` shared by `v_t` and `v_a` only, and the sender's `v_f` under its own `(r_f, e1_f)` and `u_f` (+16,384 B, ≈ +0.5 M gas per transfer), so hints only open ciphertexts of amounts the hinting parties already know.
 
 KKPP-style mKEM security holds for honestly generated keys. `R_REG` proves only the ℓ2 norms of `(s, e)`, not their
 distribution, and every recipient learns its own decryption-noise term. For a registered `pk = A s + e` the recipient
@@ -1898,6 +1901,15 @@ canonical rule of [serialization v1](#serialization), and `1 ≤ len(proof) ≤ 
 fields its equations use (of the disclosure `kind` word only its window `w`, which `pqz-stmt` has bounded), and `opTag`, `proofSystemId` and `kind` bind the proof because the whole statement is hashed
 into the transcript.
 
+**Start-up id check.** The node refuses to start (`PQZ-REFUSE`, exit 120) on a chainspec whose schedule in force at the
+next block (the block-tree head's timestamp + 1, a child's timestamp being greater than its parent's; the head is the
+genesis on an empty database) or any later schedule has a row with a `proofSystemId` other than its library set's
+(`PqzSetIds`; code review 2026-10-25, precompile unit, finding C3). Earlier schedules are not checked: the node never
+executes them again. Consequences for a `proofSystemId` change at T on a running chain: a node with the new library
+starts only once its head has reached T − 1; a node with the old library is refused at any restart once the later
+schedule is in the chainspec; a fresh node cannot full-sync across a past id switch (it would have to run the old ids)
+— it needs a data copy past the switch. Owner 2026-10-26 (review of fix part b, I-1).
+
 ### 9.2 Precompiles `MLDSA44` and `MLDSA65`
 
 `MLDSA44` at `0x000000000000000000000000000000005caa0012`, `MLDSA65` at `0x000000000000000000000000000000005caa0013` (before image `2.2.0-pqz4`, 2026-10-25: `0x5caa50…0012` / `…0013`):
@@ -1908,8 +1920,8 @@ output always 32 bytes, `…01` / `…00`. The UA signs the 32-byte `pq_msg` wit
 (`MLDsa.IsSupported` checked at start-up; P6f D5). Since the R0 review fix part b the plugin also runs a compiled-in
 ML-DSA-44 / -65 known-answer set through this path at start-up (valid, c̃ bit flip, hint indices out of order, non-zero
 hint padding, hint count over ω, z out of range, t1 at its maximum, message bit flip; the verdicts' SHA-256 against a
-constant, `PQZ-REFUSE` on a mismatch; code review 2026-10-25, precompile unit, finding C4) and logs the OpenSSL version in `PQZ-START`; and it refuses a
-schedule whose row in force at start-up or later carries a proofSystemId other than its library's set's (the same review, finding C3). The low address bytes repeat EIP-8355's own `0x12` / `0x13`; the
+constant, `PQZ-REFUSE` on a mismatch; code review 2026-10-25, precompile unit, finding C4) and logs the OpenSSL version in `PQZ-START` (the start-up
+proofSystemId check is in [§9.1](#91-precompile-pqz)). The low address bytes repeat EIP-8355's own `0x12` / `0x13`; the
 `0x5caa5` prefix keeps them off the contested `0x12`–`0x15` (EIP-8051 / EIP-8355). The UA `mldsa44` / `mldsa65`
 verifier for the SCaaS testnet (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
 argument checked by self-test, so a later standard precompile means a new verifier in a new registry generation.
@@ -2311,7 +2323,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T12 | Randomness reuse | salted derivation for transfers, fresh CSPRNG randomness for burn / refresh ([CTR-PQZ-19](#CTR-PQZ-19)); hedged proof masks |
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; continuous ASan/UBSan fuzzing of `pqz_verify`; fail-closed returndata check; deterministic integer code |
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
-| T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9), and for `R_TXM` ≤ 80 hints per `(r_g, e1_g)` with groups of 4 legs, auditor included (β 446.0 ≥ Kyber-512's 406, owner-accepted exception to [CTR-PQZ-03](#CTR-PQZ-03)'s 450 margin; `pqz-core/pqzl/params/anon/hints-anon.txt`); fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
+| T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9); for `R_TXM` per `(r_g, e1_g)` see T21; fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
 | T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
 | T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the UA `popDigest(ua, pqzKeyHash)` (chain key, `chain_uid`, registry, the signer's UA, the key hash) beside the signer's own PoP over the same digest ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
