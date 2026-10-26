@@ -41,7 +41,8 @@ arrangement on chain, as an option.
 **Goal.** The payment states what it pays for (an invoice, a service action, a note), and the metadata is bound to the
 payer's signature, all without breaking `payId`'s unlinkability.
 
-**Proposal A1: the payment id commits to its metadata, with no typehash change.**
+**Proposal A1: the payment id commits to its metadata, with no typehash change.** **Adopted** (owner 2026-10-26) as
+[CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26), SPECIFIED.
 
 ```text
 salt  = 32 bytes from a CSPRNG
@@ -219,7 +220,14 @@ sequenceDiagram
 ## 5. Owner answers (2026-10-26) and what is still open
 
 1. **Name and place: controller's choice** — `MtxRelayFee` in `smartcontracts/evm/src/metatx/` (it sits next to the
-   token's mtx path it calls; no application owns it).
+   token's mtx path it calls; no application owns it). **Deployment** (owner question 2026-10-26, "in OpenFactory,
+   like UARegistry and the verifiers?"): `OpenFactory` deploys neither of those. `script/DeployBase.sol` deploys
+   `UARegistry` and the UA / Zether / PQZ verifiers through the deterministic CREATE2 deployer (`0x4e59…`,
+   `DEPLOY_SALT`), and the factory only names the registry in the env it publishes (`IFactoryToken.Env.registry`,
+   `deps`). The router goes the same way: `DeployBase`, CREATE2, no constructor argument, no owner, so it has **the same
+   address on every EVM chain**. No token needs to know it, because the payer's signature names it
+   (`relayer = router`), and clients take the address from the deployment record. Deploying it through the factory's
+   registrar would add a trust root it does not need.
 2. **Open to every relayer** (owner): the client default is open mode, `t.to = router`, forwarded to `msg.sender`.
    A bound payee (`t.to = R`) stays possible, but it is not the default.
 3. **Two PQ signatures — explained, still open.** A UA that signs with a PQ key signs twice for one paid call: the

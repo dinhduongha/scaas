@@ -648,6 +648,35 @@ reconciliation exception, never as a second payment. A client that wants a diffe
 same value clients derive off chain, so "at most once" holds per path. The node and the client store the derived lane
 with the job, so a pay job never changes lanes after it is signed.
 
+<a id="CTR-MTX-26"></a>**CTR-MTX-26** — **Payment metadata: `mtxPayMeta` / `uaPayMeta`, the payment id commits to
+its metadata.** **SPECIFIED** (owner 2026-10-26; decision [CTR-MTX-26](../decisions.md#ctr-mtx-26--payment-metadata-by-commitment-mtxpaymeta--uapaymeta)). The
+payment id is a commitment, so the payer's signature over `entryRef` binds the metadata with no new struct field and no
+new typehash ([CTR-MTX-11](#CTR-MTX-11)):
+
+```text
+salt  = 32 bytes from a CSPRNG
+meta  = abi.encode(uint16 schema, bytes body)
+payId = metaPayId(salt, meta) = keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)))
+```
+
+- **On chain:** `mtxPayMeta(from, to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient, signature)` and
+  its UA twin `uaPayMeta(bytes32 from, bytes32 to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient,
+  auth)` compute `payId = metaPayId(salt, meta)` and then run exactly `mtxPay` / `uaPay` with it: the same
+  `MetaTransfer` / `UAMetaTransfer`, lane `payLane(payId)`, nonce 0, the same digest, signature and `PAYABLE` gate. They
+  emit `PaymentMeta(bytes32 indexed payId, bytes meta)` before `PaymentSettled`. View: `metaPayId(salt, meta)`.
+- **Off chain:** plain `mtxPay` / `uaPay` with `payId = metaPayId(salt, meta)`. The payee receives `(salt, meta)` on
+  its own channel and checks the commitment; nothing is published.
+- **Every tier** (owner 2026-10-26): every `MetaTokenBase` kind, and every non-EVM family's pay relay with the same
+  derivation (owner: non-EVM must work too).
+- The contract does not parse `meta`. The schemas are a client convention: 1 UTF-8 note; 2 structured reference
+  (creditor reference, invoice number, due date); 3 an on-chain call the payment is bound to, `(chainid, target,
+  callHash)`; 4 any of these encrypted to the payee (a KEM wrap to the payee's `UARegistry` KEM key ‖ AES-256-GCM).
+- **Privacy:** a `meta` emitted in clear is public forever, so [CTR-MTX-03](#CTR-MTX-03)'s warning about business
+  identifiers applies to it. `payId` stays unlinkable (the salt is random). Private metadata uses schema 4 or the
+  off-chain path.
+- **Wallets:** EIP-712 shows `entryRef` only. Connectors and `clientkeys` recompute `payId` from `(salt, meta)`, show
+  the decoded meta next to the typed data, and refuse to sign on a mismatch.
+
 <a id="CTR-MTX-11"></a>**CTR-MTX-11** — **One intent, one digest; no second typehash for the same struct.** A transfer
 or payment is signed only as a `MetaTransfer` and a call only as a `MetaTransaction` ([CTR-MTX-15](#CTR-MTX-15)); there
 is no `PAY_TYPEHASH` and no `batchMtxPay` with a partial-success bitmap: one type per intent means one wallet display.
@@ -729,6 +758,12 @@ function mtxExecuteWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata 
 function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
                 address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
 function payLane(bytes32 payId) external view returns (uint256);
+// CTR-MTX-26, SPECIFIED
+event PaymentMeta(bytes32 indexed payId, bytes meta);
+function mtxPayMeta(address from, address to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
+                    uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature)
+    external returns (bool);
+function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (bytes32);
 ```
 
 `MetaTokenBase` adds `NotFactory()`, `AlreadyInitialized()` and the provenance getters (the pay functions work only with `PAYABLE`, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the trade entry points and

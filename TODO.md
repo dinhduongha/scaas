@@ -185,6 +185,12 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
+- [ ] **`mtxPayMeta` / `uaPayMeta` — payment metadata by commitment (owner 2026-10-26; after P6 / PQZ)**: spec
+  [CTR-MTX-26](docs/contracts/metatx.md#CTR-MTX-26) (SPECIFIED), decision CTR-MTX-26. Build on every `MetaTokenBase`
+  tier (`PaymentMeta` event, `metaPayId` view; size gate), then every non-EVM family's pay relay; connectors /
+  `clientkeys` recompute and show the meta, refuse a mismatch; vectors shared by the clients. The relay-fee router
+  (`MtxRelayFee`, research `docs/research/mtx-relay-fees.md` §3, owner answers §5) stays research until the owner decides
+  the two-PQ-signature option.
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
   P/Invoke) for the SCaaS testnet / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof

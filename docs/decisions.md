@@ -1780,6 +1780,18 @@ Change (2026-10-13): owner — the generic UA path (`uaExecute`, `uaBatch`, `uaC
 **Cost if wrong.** Copies drift: a fix to the gas cap or the low-s rule lands in one contract and not in the others.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §4.
 
+### CTR-MTX-26 — Payment metadata by commitment: mtxPayMeta / uaPayMeta
+- old: — · status: current · owner: yes · date: 2026-10-26 · normative: contracts/metatx.md#CTR-MTX-26 · superseded-by: —
+
+**Why.** The owner asked for metadata on a payment id. `payId = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`
+lets the existing signature over `entryRef` bind the metadata, so there is no new struct field, no second typehash
+(CTR-MTX-11), and `payId` stays unlinkable (CTR-MTX-03). `mtxPayMeta` / `uaPayMeta` publish it in `PaymentMeta`; plain
+`mtxPay` with the same id keeps it off chain. Every tier and every non-EVM family (owner 2026-10-26). A new typed
+struct with a `meta` field (native wallet display) was rejected: a second struct path and more bytecode in every token.
+**Cost if wrong.** Wallets show only the opaque `entryRef`, so a connector that skips the commitment check shows the
+user metadata the signature does not bind.
+**Source.** `research/mtx-relay-fees.md` §2, §5 (owner answers 2026-10-26: "OK, vậy phần mtxPayMeta như vậy đi").
+
 ### CTR-MTX-80 — No named mtxPay; accepted gas cost
 - old: R2(cost) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-MTX-09, CTR-MTX-10, CTR-MTX-11
 
