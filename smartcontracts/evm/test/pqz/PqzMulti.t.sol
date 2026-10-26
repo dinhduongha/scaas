@@ -308,8 +308,8 @@ contract PqzMultiTest is PqzFixture {
     }
 
     /// `_bundleShape`: the length of `R` fixes (G, M, auditorOn) for every M ≤ 8 (owner rule R0-1: G = ⌈M / S_AUD⌉ with
-    /// the auditor, ⌈M / 4⌉ without). At the build's set through the library code; at all four sets by the arithmetic
-    /// the code relies on — every leg block below `PKP` (so `G = ⌊(len − 16) / PKP⌋`) and all 16 lengths distinct.
+    /// the auditor, ⌈M / 4⌉ without). Through the library code at the build's set; all 16 lengths round-trip, so they
+    /// are distinct. The other sets: the same test through `script/pqz/at-set.sh <set>` (review of fix part b, M-5).
     function test_bundleShape_unique() public {
         BundleShapeHarness h = new BundleShapeHarness();
         for (uint256 m = 1; m <= 8; ++m) {
@@ -317,23 +317,6 @@ contract PqzMultiTest is PqzFixture {
                 uint256 g = _groups(m, a == 1);
                 (uint256 g2, uint256 m2, uint256 a2) = h.shape(16 + PqzCt.PKP * g + (32 + PqzCt.VP * (1 + a)) * m);
                 assertEq(abi.encode(g2, m2, a2), abi.encode(g, m, a), "the shape from the length");
-            }
-        }
-        // (k, PACK_BITS, S_AUD) of n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536 (PqzSet.sol)
-        uint256[3][4] memory sets = [[uint256(32), 42, 2], [uint256(36), 46, 3], [uint256(40), 50, 4], [uint256(44), 54, 4]];
-        for (uint256 si; si < 4; ++si) {
-            (uint256 pkp, uint256 vp, uint256 sa) = (sets[si][0] * 512 / 32 * (sets[si][1] / 2), sets[si][1] * 2, sets[si][2]);
-            uint256[16] memory lens;
-            for (uint256 m = 1; m <= 8; ++m) {
-                for (uint256 a; a < 2; ++a) {
-                    uint256 g = a == 1 ? (m + sa - 1) / sa : (m + 3) / 4;
-                    uint256 legs = (32 + vp * (1 + a)) * m;
-                    assertLt(legs, pkp, "the legs take < PKP bytes");
-                    lens[2 * (m - 1) + a] = 16 + pkp * g + legs;
-                }
-            }
-            for (uint256 x; x < 16; ++x) {
-                for (uint256 y; y < x; ++y) assertTrue(lens[x] != lens[y], "two shapes, one length");
             }
         }
     }
