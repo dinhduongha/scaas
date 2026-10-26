@@ -39,10 +39,12 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-26, shutdown):** branch `pqz-r01`: whole-core review 2026-10-25 done (triage in
-  `pqz-core/research/code-review-2026-10-25/README.md`); **R0 fix part a** built (PQZL `…/v5`, PQZH `…/v3`, `s_aud`
-  2 / 3 / 4 / 4), reviewed (Approved with fixes), **fix round paused** → finish it → part b (contracts, node, spec /
-  docs) → merge into `pqz-16k` → 8d part 2b. Order in HANDOFF.md top note.
+- **Now (2026-10-26, owner order):** R0 fix part a + fix round **DONE**, re-review **Approved** (`pqz-r01`
+  `40366c76`, Nethermind 46 / 46 at n2304 / n2816) → (1) merge `pqz-r01` into `pqz-16k` (fast-forward) and push
+  `pqz-16k` (owner 2026-10-26) → (2) part b (contracts, node, spec / docs; brief `task-r01b-brief.md`, plus the
+  re-review nits) on a branch from `pqz-16k` → (3) 8d part 2b (gas; PQZH calldata over the EIP-7825 cap) → (4) the
+  metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → (5) `MtxRelayFee` (CTR-MTX-27), with or
+  before UA-7. `pqz-core` is a dev-freeze at the current ids; 8d part 2b may reopen it (PQZH calldata).
 - [ ] **Label scheme at the production freeze** (owner 2026-10-25): keep the current labels during development; at
   the freeze switch to `scaas/pqz/<set>/pqzl/v1` / `…/pqzh/v1`, every old id refused. Note it in the sets README
   (part b).
