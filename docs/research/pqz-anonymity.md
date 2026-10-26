@@ -272,9 +272,9 @@ per-group `(r_g, e1_g)`):
 | # | Relation | Note |
 |---|---|---|
 | 1, 4, 6 | as `R_TX` (sender key, sender's fresh `v_f`, `T` decrypts to digits `M_i`) | unchanged |
-| 2 | `u_g = Aᵀ r_g + e1_g` for each randomness group `g < G` | G = ⌈M / 4⌉ (§8.2) |
+| 2 | `u_g = Aᵀ r_g + e1_g` for each randomness group `g < G` | G = ⌈M / s⌉, s = `s_aud` with the auditor, 4 without (§8.2) |
 | 3 | `v_j[i] = (pk_jᵀ r_{g(j)})[i] + e2_j[i] + Δ·d_{j,i}`, `j < M` | one row per leg |
-| 5 | `v_{a,j}[i] = (pk_aᵀ r_{g(j)})[i] + e2_{a,j}[i] + Δ·d_{j,i}` (auditor on) | one auditor copy per leg, as classical `C_aud_j` |
+| 5 | `v_{a,j}[i] = (pk_aᵀ r_{g(j)})[16·(j mod s) + i] + e2_{a,j}[i] + Δ·d_{j,i}` (auditor on) | one auditor copy per leg, as classical `C_aud_j`, each at its own coefficient window (R0 review fix R0-1, 2026-10-25; before it every copy of a group sat at coefficients 0..15) |
 | 7 | over Z: `M_i + c_{i−1} = d′_i + Σ_j d_{j,i} + f_i + 16·c_i`, `c_{−1} = c_15 = 0` | `Σ M_i 16^i = b′ + Σ_j a_j + fee`; honest carries in `[−(15M + 31)/16, 1093]` ⊂ the proven `[−64, 1984)` for M ≤ 64 |
 | norms | `R_TX`'s; `d_{j,i} ∈ [0, 16)` (64 bits per leg); one exact-ℓ2 block over all `e2_j` with bound `64·√M`, one over all `e2_{a,j}` | binary part 917 − 64 + 64·M bits |
 
@@ -293,8 +293,15 @@ SSTORE2; calldata carries `acc` (+ inline), the `u_g`, the `v`s, the proof, `aut
 
 CTR-PQZ-04 assumes MLWE on `(r, e1)` stays hard given ≤ 32 adversarial perfect hints (receiver + auditor, 16 each).
 In an M-leg transfer every recipient key yields 16 hints on the same `(r, e1)`, and a sender cannot know which
-registered keys were crafted (§4.5's examples pass `R_REG`): up to `16·M + 16` hints (the M auditor copies are under
-one key and repeat the same 16 linear forms). Recovering `(r, e1)` opens `v_f` (the sender's new balance) and every
+registered keys were crafted (§4.5's examples pass `R_REG`): up to `16·M + 16` hints as first counted (the M auditor
+copies under one key were taken to repeat the same 16 linear forms). **Corrected by the R0 review (2026-10-25,
+finding R0-1):** copies that repeat the same forms are worse than hints — two auditor copies of one group at the same
+coefficients cancel the mask outright (`v_{a,j} − v_{a,k} = Δ·(d_j − d_k) + noise`). Since the fix every leg's auditor
+copy sits at its own window `[16·(j mod s), +16)` of `pk_aᵀ r_g`, so a group of `s` legs gives `16·s` recipient forms
+and `16·s` distinct auditor forms: **`32·s` hints with the auditor, `16·s` without**; groups are `s = s_aud` = 2 / 3 /
+4 / 4 legs with the auditor at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` and 4
+without (owner 2026-10-25; `pqz-core/research/code-review-2026-10-25/R0-1-auditor-shared-randomness.md`, hint study
+`pqz-core/pqzl/params/anon/hints-s.txt`). Recovering `(r, e1)` opens `v_f` (the sender's new balance) and every
 leg. Same approximation as §4.5 (one dimension per hint, ADPS16 primal uSVP; `pqz-core/pqzl/params/anon/usvp.py` reproduces
 406 / 476 / 466) [estimate]:
 
@@ -326,7 +333,10 @@ The approximation matched the unit-hint case, but a malicious key chooses mixed 
 `‖s‖ ≤ 36`): at 80 hints (4 legs + the auditor copy) the worst case is **446.0**, below the self-imposed 450 margin
 and above Kyber-512's 406. The **owner accepted β 446 for `R_TXM` on 2026-10-15** (pq-zero-knowledge.md CTR-PQZ-03, the one
 exception), so groups stay at **4 legs per `(r_g, e1_g)` with or without the auditor** (`G = ⌈M/4⌉`, plan D4); an
-interim proposal of 3 legs with the auditor (64 hints, β 451.9) is withdrawn. `R_TX` (32 hints) keeps 463.9, as
+interim proposal of 3 legs with the auditor (64 hints, β 451.9) is withdrawn. *Superseded 2026-10-25 (R0 review fix):*
+with the windows above the count is `32·s`, and the owner's `s_aud` 2 / 3 / 4 / 4 keeps DDGR20 ≥ 450 at every set and
+dual_hybrid − offset ≥ 450 at every set but `n2048-kmax1024` (443.92 / 444.92 at 64 hints: the widened exception;
+`n2304-kmax4096` passes by 3 β on that heuristic). `R_TX` (32 hints) keeps 463.9, as
 `e_s0.py`'s 464. The shortcut used for mixed hints (a perfect hint's volume `½ ln(w^T Σ w)` put on an `r` coordinate)
 is checked against the tool's full-covariance `DBDD_predict` after its q-vector step in `hints_q.sage` (section 5 of
 `hints-anon.txt`; n = m = 256, real mixed hints with a dense e1 part, one e1 coordinate, or an r part only, at 10 and

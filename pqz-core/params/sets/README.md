@@ -33,8 +33,12 @@ security or correctness; gas, state and calldata only follow from the sizes they
 | norm-proof exactness, Fiat–Shamir rounds (`e-s0.txt`) | soundness of the proofs, checked again for every set |
 
 What is the same across sets: the target security bar — every set must reach β ≥ 450 (MSIS, hiding MLWE uSVP and
-dual_hybrid, `e-s1.txt`). One recorded exception: `n2048-kmax1024`, encryption with 80 worst-case hints, DDGR20 β 446.0
-(owner-accepted, CTR-PQZ-03, 2026-10-15); the larger sets clear 450 there without an exception.
+dual_hybrid, `e-s1.txt`). One recorded exception: `n2048-kmax1024`, encryption with op 7's 64 worst-case hints
+(since the R0 review fix: audited groups of `s_aud` = 2 legs, 4 without) at DDGR20 β 451.92 but dual_hybrid − offset
+443.92 / 444.92 [estimate] — the owner widened the exception to dual ≈ 444 on 2026-10-25 (CTR-PQZ-03; it read DDGR20
+446.0 at 80 hints with the dual "not measured" before the fix, review finding F-6), and **`n2048-kmax1024` is not
+recommended** (owner 2026-10-25). The larger sets clear 450 without an exception (`n2304-kmax4096`'s `s_aud` = 3 by a
+3-β margin on the dual_hybrid − offset heuristic, its SET.md).
 
 What differs: the capacity `K_MAX`. A larger `K_MAX` needs a larger q (more noise room), and a larger q needs a larger n
 to keep the same security; larger n and q make keys, ciphertexts and proofs larger, and that is where the cost comes
@@ -171,7 +175,9 @@ peak. R_TXM rows: M recipients, with the auditor unless the row says "no auditor
 
 R_TXM M = 8 needs `PQZ_ARENA_MB=2048` in the C bench at every set (above its default 768 MiB). The C backend's wasm32 leg limit (`set.toml`
 `[pqzl_c] wasm_max_legs`, one 512 MiB arena) is measured only at `n2816-kmax65536` (1); the other sets' 2 are estimates
-from the native peaks ([`ffi/README.md`](../../ffi/README.md) Arenas). `n2816-kmax65536` (a
+from the native peaks ([`ffi/README.md`](../../ffi/README.md) Arenas): the R0 fix round's C wasm32 digest runs proved
+M = 2 inside the arena at all three (total wasm memory 583 / 607 / 579 MiB), while the arena peak and margin there stay
+unmeasured (open). `n2816-kmax65536` (a
 full PQZL set since plan 5h Task 8d part 1b): its vectors' largest proof is 79,208 B (R_TXM M = 8 with the auditor,
 `smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`), 19,096 B under `MAX_PROOF_PQZL`; its `MAX_INPUT` is
 524,288 like the other non-frozen sets' (largest input at the limit 5 + 295,808 + 98,304 = 394,117 B, R_TXM M = 8 with
@@ -275,6 +281,11 @@ four v4 of the table below's previous version, PQZH v1 `0x0a47a768…2fead4`, th
 | `n2304-kmax4096` | `scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5` → `0xef1ffbcb…90336e` (v4 `0x15d16d77…cb608a` retired) | `scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3` → `0x046859a8…944ead` (v2 `0xe4bc6d17…885730` retired) |
 | `n2560-kmax16384` | `scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5` → `0xeacf34a3…276882` (v4 `0xa3db21fc…70262d` retired) | `scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3` → `0xc93f3bdd…3f3662` (v2 `0xe83ad1da…109851` retired) |
 | `n2816-kmax65536` | `scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5` → `0xa801f5c4…8e8aa9` (v4 `0x9d23a0de…bd53a3` retired) | — (no PQZH: pqz-stmt's `HAS_PQZH` false, its `PQZH_ID` the zero word, refused; plan 5h Task 8d part 1b) |
+
+**Label scheme (owner 2026-10-25).** The current labels (which name the parameters and carry a version, `…/v5`,
+`…/v3`) stay during development; at the production freeze every set switches to `scaas/pqz/<set>/pqzl/v1` and
+`scaas/pqz/<set>/pqzh/v1` (the set's directory name, e.g. `scaas/pqz/n2304-kmax4096/pqzl/v1`), and every older id stays
+refused (`gen_set.py` `RETIRED`).
 
 **Changing a label (an owner override, or a later bump).** Edit the set's `pqzl_id` / `pqzh_id` in `set.toml`, then:
 `python3 -I pqz-core/params/sets/gen_set.py --all` (the generated files, `stmt/src/sets.rs`' `ALL_IDS`; at

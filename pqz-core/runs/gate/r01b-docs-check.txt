@@ -1,0 +1,5 @@
+# r01b docs_check (scripts/docs_check.py check), 2026-10-26T05:18:03Z, commit 4d90a2ce + the docs work tree
+  warn: budget clients/signers-clientkeys.md: 849 lines > 1.3 x 650
+  warn: budget contracts/token-wrappers.md: 1018 lines > 1.3 x 650
+  warn: budget node/ops.md: 749 lines > 1.3 x 550
+check: 0 error(s), 3 warning(s), 15 note(s)

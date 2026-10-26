@@ -110,7 +110,10 @@ once:
   `[pqzl_c] wasm_max_legs` (`ProveError::Statement(Reject::Legs)`); larger M is for native clients. Only n2816-kmax65536's
   1 is measured (C wasm32 peaks R_TXM M = 1 / 2 / 4: 481 / 501 / 530 MiB); the 2 of n2048-kmax1024 / n2304-kmax4096 /
   n2560-kmax16384 are **estimates** (the native C peaks × n2816's wasm32 / native ratio ≈ 0.77: M = 2 fits, M = 4 at
-  n2048 ≈ 508 MiB is too close). A C wasm32 run at those three sets is open (R0 review fix part b). The Rust backend
+  n2048 ≈ 508 MiB is too close). The R0 fix round's `PQZL=c` digest runs proved M = 2 (auditor on and off) in C wasm32
+  inside the 512 MiB arena at those three sets (`runs/r01a-fix-c-<set>-digests-wasm.jsonl`; total wasm memory 583 / 607
+  / 579 MiB, arena included), so the limit 2 works there; the arena peak and its margin at M = 2 are not measured (the
+  C core's wasm32 bench, gate part `fnv/cwasm`, runs only at log2 q > 50; open, no timing run in part b). The Rust backend
   has no arena and proves M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of
   linear memory, run `d6`, Rust port Task 12, CTR-PQZ-09).
 
