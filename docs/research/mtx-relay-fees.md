@@ -243,7 +243,25 @@ sequenceDiagram
      transaction, and the second consumer reads that mark instead of verifying again. The record stays portable,
      because on another chain the 32-byte `paymentDigest` travels with it as an opaque value. It needs both PqChat and
      the token to verify through the same verifier contract.
-   - Controller lean: (c) where PQ payers are common, (a) as the first build.
+   - **Owner 2026-10-26: (c).** What it needs, from today's code:
+     - **One bundle message.** The UA signs `uaMessage(kind, PURPOSE_BUNDLE, keccak256("scaas.ua.bundle" ‖ p₁ ‖ d₁ ‖
+       p₂ ‖ d₂))` over two (purpose, digest) pairs: the record's (UA-7, chain-independent) and the payment's (the
+       token's `UAMetaTransfer` digest). It has its own purpose tag, so it never equals a single-intent message.
+     - **Verify once, then mark.** `UARegistry.requireAuthorized` is `view` today (`UARegistry.sol:510`; the token
+       calls it from `_uaAuthorize`, `ERC20MetaTx.sol:448`), so it cannot write transient storage. A new non-view entry
+       `requireAuthorizedBundle(ua, p, d, pOther, dOther, auth)` verifies the signature (ML-DSA through
+       `verifyCached`) and writes `TSTORE(keccak256(ua, bundleDigest)) = 1`. A second call in the same transaction
+       with the same bundle finds the mark and skips the verification. Only the registry writes the mark, and only
+       after a real verification.
+     - **Callers.** PqChat and the token both call that entry when `auth` carries a bundle; `_uaAuthorize` becomes
+       non-view on that path. The router's order does not matter: whichever consumer runs first pays for the one
+       verification.
+     - **Portability.** On another chain, the record travels with `(p₂, d₂)` as opaque values. PqChat verifies the
+       bundle signature in full there (no mark), so the record is still accepted.
+     - **Where there is no EIP-1153** (a chain without Cancun, non-EVM families without transient storage): the
+       second consumer verifies again, the same verdict at double cost. One rule, two costs.
+     - Measure in the plan: gas of `verifyCached` once against twice; the bundle signature's size (unchanged, one
+       signature).
 4. **`mtxPayMeta` / `uaPayMeta` on every token tier** (owner).
 5. **Fees only from public balances** (owner): the fee token is any mtx token's public balance (a PQZ / Zether token's
    public side included); no confidential payment of a fee.
@@ -257,6 +275,6 @@ sequenceDiagram
    | GRAM (TON) | **no cross-contract atomicity:** the payment goes into the router's escrow; it is released to the relayer when the target's confirmation message arrives, and refunded to the payer on a bounce or after a timeout (as the GRAM DEX escrow, NET-TON-03) |
 
    Hedera: the EVM shape.
-7. **Sponsoring calls not yet signed (a budget): unclear** (owner). It stays open: a mandate-like standing
+7. **Sponsoring calls not yet signed (a budget): unclear** (owner; explained again 2026-10-26). It stays open: a mandate-like standing
    authorisation on the router (delegate = router, per-call and per-period caps, allowed targets), against one payment
    signature per call.
