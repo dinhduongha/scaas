@@ -1048,7 +1048,7 @@ beneficiary, fee, sendCounter, recipients, mode, blob)` and `Credited(ua indexed
 (packed, [§4.4](#stored-form): `16 + PKP·G + (2·VP + 32)·M` B with the auditor, `16 + PKP·G + (VP + 32)·M` without) — for
 `M = 1` exactly the single transfer's bundle, and `(G, M, auditorOn)` follow uniquely from the length for every `M ≤ 8` at
 every set (`PqzCore._bundleShape`; the legs take fewer than `PKP` bytes; forge test `test_bundleShape_unique` proves the
-16 lengths distinct at all four sets); memo `salt ‖ ((flags ‖ M ‖ (be8(a_j) ‖
+16 lengths distinct at each set through `at-set.sh`); memo `salt ‖ ((flags ‖ M ‖ (be8(a_j) ‖
 toUA_j)_{j<M}) XOR ks)`, `ks` from HKDF-SHA256 as CTR-PQZ-23 expanded to `2 + 40·M` bytes; the sender recovers every
 leg from storage alone.
 
@@ -1908,7 +1908,8 @@ genesis on an empty database) or any later schedule has a row with a `proofSyste
 executes them again. Consequences for a `proofSystemId` change at T on a running chain: a node with the new library
 starts only once its head has reached T − 1; a node with the old library is refused at any restart once the later
 schedule is in the chainspec; a fresh node cannot full-sync across a past id switch (it would have to run the old ids)
-— it needs a data copy past the switch. Owner 2026-10-26 (review of fix part b, I-1).
+— it needs a data copy past the switch. On a chain with a block period the last block before T usually lies below T − 1, so in practice the swap comes after T: the old-library nodes, still on the old chainspec, seal the first blocks at or after T under the old ids (send no PQZ call between T and the swap). Owner 2026-10-26 (review of fix part b, I-1;
+re-review m-1).
 
 ### 9.2 Precompiles `MLDSA44` and `MLDSA65`
 

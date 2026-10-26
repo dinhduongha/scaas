@@ -201,8 +201,9 @@ public class SpecTests
         Assert.That(m, Does.Not.Contain("Could not load file").And.Not.Contain("No seal engine"), "fails for the section, not for the test set-up");
     }
 
-    /// <summary>Review R4-C3: the schedule in force and every later one carry only the library's ids (compiled in,
-    /// <see cref="PqzSetIds"/> = gen_set.py's set.json); an earlier schedule may keep another (history).</summary>
+    /// <summary>Review R4-C3: the schedule in force at the next block (head + 1) and every later one carry only the
+    /// library's ids (compiled in, <see cref="PqzSetIds"/> = gen_set.py's set.json); a schedule the node never executes
+    /// again may keep another.</summary>
     [Test]
     public void Schedule_ids_are_the_library_ids_from_the_current_schedule_on()
     {
