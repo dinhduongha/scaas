@@ -22,6 +22,9 @@ COMMIT=$(git rev-parse HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" ':(top,e
 # the plugin as well
 EXP=$(sed -n 's/.*Set = "'"$SET"'",.*ExpectedLibrarySha256 = "\([0-9a-f]\{64\}\)";.*/\1/p' Nethermind.Pqz/SelfTest.cs)
 [ ${#EXP} = 64 ] || { echo "FAIL no ExpectedLibrarySha256 for $SET in Nethermind.Pqz/SelfTest.cs"; exit 1; }
+# the set's OP_SELFTEST hash for the image label scaas.pqz.selftest (plan 5h Task 8d part 2b; was a Dockerfile literal)
+SELF=$(sed -n 's/.*Set = "'"$SET"'", ExpectedHash = "\([0-9a-f]\{64\}\)".*/\1/p' Nethermind.Pqz/SelfTest.cs)
+[ ${#SELF} = 64 ] || { echo "FAIL no ExpectedHash for $SET in Nethermind.Pqz/SelfTest.cs"; exit 1; }
 echo "set $SET"
 # FFI_REV=<commit>: libpqz_ffi.so from that commit's tree (the reviewed library), the plugin from the work tree
 CTX=
@@ -43,9 +46,9 @@ FFI=$(sha256sum bin/ffi-out/libpqz_ffi.so | cut -d' ' -f1)
 echo "libpqz_ffi.so sha256 $FFI, reviewed $EXP"
 # review W-G: the image carries only the reviewed library (the Dockerfile checks FFI_SHA256 again, the plugin at start-up)
 [ "$FFI" = "$EXP" ] || { echo "FAIL the built library is not the reviewed one: review the build, set $SET's ExpectedLibrarySha256 = \"$FFI\" in Nethermind.Pqz/SelfTest.cs, commit, rebuild"; exit 1; }
-run $B $CTX --target node --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" -t "$TAG" "$ROOT"
+run $B $CTX --target node --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" --build-arg SELFTEST="$SELF" -t "$TAG" "$ROOT"
 if [ "${CALIB:-0}" = 1 ]; then
-  run $B $CTX --target calib --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" -t "$TAG-calib" "$ROOT"
+  run $B $CTX --target calib --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" --build-arg SELFTEST="$SELF" -t "$TAG-calib" "$ROOT"
 fi
 
 echo "## checks"
@@ -62,6 +65,8 @@ SO=$X/libpqz_ffi.so
 LABEL=$(docker image inspect "$TAG" --format '{{index .Config.Labels "scaas.pqz.ffi.sha256"}}')
 GOT=$(sha256sum $SO | cut -d' ' -f1)
 [ "$GOT" = "$LABEL" ] && echo "ffi sha256 in the image = label: $GOT" || { echo "FAIL ffi sha256 $GOT != label $LABEL"; exit 1; }
+ST=$(docker image inspect "$TAG" --format '{{index .Config.Labels "scaas.pqz.selftest"}}')
+[ "$ST" = "$SELF" ] && echo "selftest label = $SET's ExpectedHash: $ST" || { echo "FAIL selftest label $ST != $SET's ExpectedHash $SELF"; exit 1; }
 echo "test-hook names in the image's library (must be 0): $(nm -D $SO | grep -ciE 'test_|pqz_test|TEST_ARENA|TEST_FAIL') / strings $(strings -a $SO | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER|pqz_test_fail_worker')"
 echo "GMP / MPFR / HEXL (glic/absence.sh's pattern /gmp|mpfr|hexl/i): symbols $(nm -A $SO 2>/dev/null | grep -ciE 'gmp|mpfr|hexl'), dynamic $(nm -D $SO | grep -ciE 'gmp|mpfr|hexl'), strings $(strings -a $SO | grep -ciE 'gmp|mpfr|hexl')"
 echo "\$ readelf -d $SO | grep NEEDED"; readelf -d $SO | grep NEEDED
