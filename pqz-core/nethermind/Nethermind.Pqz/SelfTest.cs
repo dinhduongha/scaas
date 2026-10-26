@@ -11,27 +11,23 @@ namespace Nethermind.Pqz;
 public static class SelfTest
 {
 #if PQZ_SET_N2048_KMAX1024
-    public const string Set = "n2048-kmax1024", ExpectedHash = "37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d";
+    public const string Set = "n2048-kmax1024", ExpectedHash = "37c45f201c3f7a8f4dd3c84df85176f85f574d31a0209435761b1056519bfa9d", ExpectedLibrarySha256 = "1800cae75eff24417c365b95959b3408bfbde3a811dcabca9a575a7497adeeb4";
 #elif PQZ_SET_N2304_KMAX4096
-    public const string Set = "n2304-kmax4096", ExpectedHash = "d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d";
+    public const string Set = "n2304-kmax4096", ExpectedHash = "d6c01fbcda23be8d8dc72d0b245be63713bd37a5ffa58c4093b39c83d6c4f68d", ExpectedLibrarySha256 = "dd0e7668eeb70972c89ad1b0bbccd7aca8a48a4bbfadbdad6655c0464afe5601";
 #elif PQZ_SET_N2560_KMAX16384
-    public const string Set = "n2560-kmax16384", ExpectedHash = "fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb";
+    public const string Set = "n2560-kmax16384", ExpectedHash = "fb14244dbd6a4ca4c44f673ef878937d2437f164246260ef45f427a9f98de1cb", ExpectedLibrarySha256 = "5d113f320504db1a2062649efee897a31fa6ebc2f3b80be6f5c7fd981a488cb6";
 #elif PQZ_SET_N2816_KMAX65536
-    public const string Set = "n2816-kmax65536", ExpectedHash = "1e69e3cd195ff67983e603a8ea969e73e6edcd70f4ac04fa4e5d75c09ddee740";
+    public const string Set = "n2816-kmax65536", ExpectedHash = "1e69e3cd195ff67983e603a8ea969e73e6edcd70f4ac04fa4e5d75c09ddee740", ExpectedLibrarySha256 = "17947f64197cc6ba0818cfe5a5dc1acecf85a2d0d102d2510d3c145cc7158fb7";
 #else
 #error "unknown PqzSet (MSBuild -p:PqzSet=<set>, a directory of pqz-core/params/sets)"
 #endif
 
-    /// <summary>Review W-G (2026-10-19): the SHA-256 of the reviewed <c>libpqz_ffi.so</c> (the Dockerfile's <c>ffi</c>
-    /// stage, a reproducible build). The plugin refuses to start with any other library; <c>build-image.sh</c> reads
-    /// this line and refuses an image whose freshly built library differs. A library change = a reviewed new value
-    /// here. Today the library of image <c>2.2.0-pqz4</c> (2026-10-25, plan 5h Task 8d part 1, set n2304-kmax4096, built
-    /// from 54c7c88e; reviewed: exports pqz_max_input / pqz_precompile only, no test hooks, no GMP / MPFR / HEXL,
-    /// pqz_max_input() = 524,288).
-    /// This value is the default set's library only: a plugin built with another <c>-p:PqzSet</c> (e.g.
-    /// <c>n2816-kmax65536</c>) passes the tests but refuses to start a node until that set's library has its own reviewed
-    /// hash here (customer-image work, plan 5h Task 8d part 1b review M4; not done).</summary>
-    public const string ExpectedLibrarySha256 = "0894d1916b4e2f8270c5bac6e7f9a87a19137e51c6f7f93263d05b9756e64772";
+    // ExpectedLibrarySha256 (review W-G, 2026-10-19; per set since the R0 review fix part b, 2026-10-26): the SHA-256 of
+    // the set's reviewed libpqz_ffi.so, the Dockerfile's `ffi` stage with --build-arg PQZ_SET=<set> (a reproducible
+    // build: features pqzl-rust + set-<set>, no prove, no test-hooks). The plugin refuses to start with any other
+    // library; build-image.sh reads the set's line and refuses an image whose freshly built library differs. A library
+    // change = a reviewed new value here. The values above: the R0 review fix part b tree (branch pqz-r01, logs
+    // runs/2026-10-26-r01b-ffi-<set>.txt); before them one value for n2304-kmax4096 only (image 2.2.0-pqz4, 54c7c88e).
     public static ReadOnlySpan<byte> Input => [6, 0, 0, 0, 0];
 
     public static string Run()

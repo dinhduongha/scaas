@@ -1,0 +1,113 @@
+# r01b: libpqz_ffi.so of n2816-kmax65536 from the Dockerfile's ffi stage (--build-arg PQZ_SET=n2816-kmax65536), 2026-10-26T05:04:32Z, commit c9c62f0f (library sources dirty) + work-tree Dockerfile
+$ docker build -f Dockerfile --progress plain --resource memory=4g --build-arg PQZ_SET=n2816-kmax65536 --target ffi-export -o bin/ffi-out-n2816-kmax65536 /home/ha/work/ainative/scaas/.claude/worktrees/pqz-r01
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 6.35kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.3s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#4 DONE 0.0s
+
+#5 [rust  1/14] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 706B 0.1s
+#6 transferring context: 161.30kB 0.5s done
+#6 DONE 0.5s
+
+#7 [ffisrc 1/1] COPY . /
+#7 DONE 1.0s
+
+#8 [rust  2/14] RUN apt-get update && apt-get install -y --no-install-recommends clang=1:14.0-55.7~deb12u1 clang-14=1:14.0.6-12       libclang-cpp14=1:14.0.6-12 libllvm14=1:14.0.6-12 && rm -rf /var/lib/apt/lists/*
+#8 CACHED
+
+#9 [rust  3/14] WORKDIR /src
+#9 CACHED
+
+#10 [rust  4/14] COPY --from=ffisrc /LICENSE ./
+#10 CACHED
+
+#11 [rust  5/14] COPY --from=ffisrc /pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
+#11 CACHED
+
+#12 [rust  6/14] COPY --from=ffisrc /pqz-core/pqzl/src pqz-core/pqzl/src
+#12 CACHED
+
+#13 [rust  7/14] COPY --from=ffisrc /pqz-core/pqzl/lazer pqz-core/pqzl/lazer
+#13 CACHED
+
+#14 [rust  8/14] COPY --from=ffisrc /pqz-core/pqzl/params pqz-core/pqzl/params
+#14 CACHED
+
+#15 [rust  9/14] COPY --from=ffisrc /pqz-core/params/sets pqz-core/params/sets
+#15 DONE 0.8s
+
+#16 [rust 10/14] COPY --from=ffisrc /pqz-core/pqzl/rust pqz-core/pqzl/rust
+#16 DONE 0.1s
+
+#17 [rust 11/14] COPY --from=ffisrc /pqz-core/stmt pqz-core/stmt
+#17 DONE 0.1s
+
+#18 [rust 12/14] COPY --from=ffisrc /pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#18 DONE 0.1s
+
+#19 [rust 13/14] COPY --from=ffisrc /pqz-core/ffi pqz-core/ffi
+#19 DONE 0.1s
+
+#20 [rust 14/14] COPY --from=ffisrc /smartcontracts/vectors/pqz smartcontracts/vectors/pqz
+#20 DONE 0.1s
+
+#21 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 --no-default-features --features pqzl-rust,set-n2816-kmax65536  && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#21 0.667     Updating crates.io index
+#21 2.375  Downloading crates ...
+#21 2.561   Downloaded cpufeatures v0.2.17
+#21 2.635   Downloaded aes v0.8.4
+#21 2.650   Downloaded cfg-if v1.0.5
+#21 2.654   Downloaded block-buffer v0.10.4
+#21 2.655   Downloaded cipher v0.4.4
+#21 2.657   Downloaded keccak v0.1.6
+#21 2.668   Downloaded generic-array v0.14.7
+#21 2.668   Downloaded inout v0.1.4
+#21 2.671   Downloaded version_check v0.9.5
+#21 2.673   Downloaded crypto-common v0.1.7
+#21 2.747   Downloaded digest v0.10.7
+#21 2.750   Downloaded typenum v1.20.1
+#21 3.006   Downloaded sha3 v0.10.8
+#21 3.091    Compiling version_check v0.9.5
+#21 3.093    Compiling typenum v1.20.1
+#21 3.373    Compiling generic-array v0.14.7
+#21 3.711    Compiling cpufeatures v0.2.17
+#21 3.769    Compiling pqzl v0.1.0 (/src/pqz-core/pqzl/rust)
+#21 3.853    Compiling keccak v0.1.6
+#21 4.288    Compiling crypto-common v0.1.7
+#21 4.360    Compiling block-buffer v0.10.4
+#21 4.459    Compiling inout v0.1.4
+#21 4.534    Compiling cipher v0.4.4
+#21 4.605    Compiling digest v0.10.7
+#21 4.732    Compiling cfg-if v1.0.5
+#21 4.772    Compiling sha3 v0.10.8
+#21 4.790    Compiling aes v0.8.4
+#21 5.155    Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+#21 5.959    Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+#21 13.62     Finished `release` profile [optimized + debuginfo] target(s) in 13.17s
+#21 13.68 17947f64197cc6ba0818cfe5a5dc1acecf85a2d0d102d2510d3c145cc7158fb7  /out/libpqz_ffi.so
+#21 DONE 13.8s
+
+#22 [ffi-export 1/1] COPY --from=ffi /out/ /
+#22 DONE 0.5s
+
+#23 exporting to client directory
+#23 copying files 7.71MB 0.1s done
+#23 DONE 0.1s
+[rc=0]
+libpqz_ffi.so sha256 17947f64197cc6ba0818cfe5a5dc1acecf85a2d0d102d2510d3c145cc7158fb7 (7709520 B), set n2816-kmax65536
+test-hook names (must be 0): 0 / strings 0
+exports: pqz_max_input pqz_precompile 

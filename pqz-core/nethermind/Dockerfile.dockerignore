@@ -18,8 +18,10 @@
 !pqz-core/nethermind/Calibrate
 !pqz-core/nethermind/NOTICE-pqz.txt
 !pqz-core/nethermind/bin/corpus.jsonl
-!smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzl.json
-!smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json
+!smartcontracts/vectors/pqz/proof_pqzl.json
+!smartcontracts/vectors/pqz/proof_pqzh.json
+!smartcontracts/vectors/pqz/*/proof_pqzl.json
+!smartcontracts/vectors/pqz/*/proof_pqzh.json
 !smartcontracts/vectors/ua/pq_external.json
 **/target
 **/bin/Release

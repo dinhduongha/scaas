@@ -201,6 +201,34 @@ public class SpecTests
         Assert.That(m, Does.Not.Contain("Could not load file").And.Not.Contain("No seal engine"), "fails for the section, not for the test set-up");
     }
 
+    /// <summary>Review R4-C3: the schedule in force and every later one carry only the library's ids (compiled in,
+    /// <see cref="PqzSetIds"/> = gen_set.py's set.json); an earlier schedule may keep another (history).</summary>
+    [Test]
+    public void Schedule_ids_are_the_library_ids_from_the_current_schedule_on()
+    {
+        JsonObject st = JsonNode.Parse(File.ReadAllText(Repo.Path_("pqz-core", "params", "sets", Repo.Set, "set.json")))!.AsObject();
+        Assert.That(PqzSetIds.PqzlId, Is.EqualTo((string)st["pqzl_id"]!), "compiled-in PQZL id = set.json");
+        Assert.That(PqzSetIds.PqzhId, Is.EqualTo((string?)st["pqzh_id"] ?? ""), "compiled-in PQZH id = set.json (empty: no PQZH)");
+        Assert.That(Corpus.Ids["pqzl"], Is.EqualTo(PqzSetIds.PqzlId), "the corpus' honest PQZL id");
+        string[] lib = PqzSetIds.PqzhId == "" ? [PqzSetIds.PqzlId] : [PqzSetIds.PqzlId, PqzSetIds.PqzhId];
+        JsonObject Foreign(ulong ts)
+        {
+            JsonObject s = Schedule(ts);
+            JsonArray rows = s["pqz"]!.AsArray();
+            rows[0]!["id"] = "0x" + Convert.ToHexStringLower(new byte[32]).Remove(0, 2) + "01"; // not a library id
+            return s;
+        }
+        PqzChainSpecEngineParameters P(params JsonObject[] s) =>
+            WithPqz(s).EngineChainSpecParametersProvider.GetChainSpecParameters<PqzChainSpecEngineParameters>();
+        Assert.DoesNotThrow(() => P(Schedule(T1)).CheckIds(T1, lib));
+        Assert.DoesNotThrow(() => P(Foreign(T1), Schedule(T2)).CheckIds(T2, lib), "a foreign id in an earlier schedule: history");
+        Exception? e = Assert.Throws<ArgumentException>(() => P(Foreign(T1)).CheckIds(T1 + 5, lib), "in force");
+        Assert.That(e!.Message, Does.Contain("is not the library's"));
+        Assert.Throws<ArgumentException>(() => P(Schedule(T1), Foreign(T2)).CheckIds(T1, lib), "a later schedule");
+        Assert.Throws<ArgumentException>(() => P(Foreign(T1)).CheckIds(T1 - 1, lib), "every schedule still ahead");
+        Assert.Throws<ArgumentException>(() => P(Schedule(T1)).CheckIds(T1, [PqzSetIds.PqzlId[..62] + "00"]), "another library");
+    }
+
     [Test]
     public void Stock_provider_with_the_section_fails_closed()
     {

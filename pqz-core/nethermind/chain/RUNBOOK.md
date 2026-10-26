@@ -77,7 +77,8 @@ not the SCaaS testnet's `0x24e43dcb…c464`; on the live chain, step 2 of the pr
 
 ```sh
 C=pqz-core/nethermind/chain
-E=pqz-core/nethermind/chain/engine-pqz.json           # the calibrated schedule (Task 6), timestamp patched below
+E=pqz-core/nethermind/chain/engine-pqz-provisional-n2304.json  # the set's engine file (engine-pqz-provisional-<n>.json per set, R0 review fix part b;
+                                                        # engine-pqz.json = the retired v3 / PQZH v1 calibration, refused at start-up), timestamp patched below
 $C/copy.sh init                                         # key, password, genesis.stock.json, configs (scratchpad/p6f-copy)
 $C/copy.sh up nethermind/nethermind:1.39.0 genesis.stock.json      # history with the stock image
 python3 -I $C/e2e.py head

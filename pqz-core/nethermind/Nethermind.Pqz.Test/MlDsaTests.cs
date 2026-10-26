@@ -172,6 +172,27 @@ public class MlDsaTests
         }
     }
 
+    /// <summary>Review R4-C4: the start-up known-answer set gives (1, then seven 0) per level through the precompile
+    /// path, and its hash is the compiled-in constant; every case differs from the valid input.</summary>
+    [Test]
+    public void Startup_known_answers()
+    {
+        for (int l = 0; l < 2; l++)
+        {
+            byte[][] c = MlDsaKat.Cases(l);
+            Assert.That(c.Length, Is.EqualTo(8));
+            var (_, pk, sig, run) = Level(c[0].Length > MlDsa.Pk65 + MlDsa.Sig65 ? MlDsa.Pk65 : MlDsa.Pk44);
+            for (int i = 0; i < c.Length; i++)
+            {
+                Assert.That(run(c[i]), Is.EqualTo(Word(i == 0)), $"level {l} case {i}");
+                if (i > 0) Assert.That(c[i], Is.Not.EqualTo(c[0]), $"level {l} case {i} changes the input");
+            }
+        }
+        Assert.That(MlDsaKat.Run(), Is.EqualTo(MlDsaKat.ExpectedHash));
+        Assert.That(Convert.ToHexStringLower(SHA256.HashData([1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])), Is.EqualTo(MlDsaKat.ExpectedHash));
+        TestContext.Progress.WriteLine($"ML-DSA KAT {MlDsaKat.Run()}, OpenSSL {MlDsaKat.OpenSslVersion}");
+    }
+
     [Test]
     public void Gas_is_eip8355_at_minimum()
     {

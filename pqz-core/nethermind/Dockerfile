@@ -1,13 +1,16 @@
 # syntax=docker/dockerfile:1
 # P6f D13: scaas/nethermind-pqz:2.2.0-pqz<n> = the pinned Nethermind 2.2.0 image + /nethermind/plugins/{Nethermind.Pqz.dll,
 # libpqz_ffi.so, NOTICE-pqz.txt, NOTICE-pqz-core.txt, LICENSE-lazer.txt}. Built locally by build-image.sh (context = the repo root), never pushed. Targets:
-#   ffi   - libpqz_ffi.so (release, default features: the set n2304-kmax4096, no prove, no test-hooks)
+#   ffi   - libpqz_ffi.so (release, features pqzl-rust + set-$PQZ_SET, no prove, no test-hooks)
+# ARG PQZ_SET (default n2304-kmax4096, pqz-ffi's default set): the parameter set of the library and of the plugin
+# (-p:PqzSet; SelfTest.cs holds each set's reviewed library hash; review R4-C3 / part b of the R0 review fix)
 #   node  - the node image (default)
 #   calib - the node image + /opt/pqz-calibrate (Calibrate.dll, fresh proofs, the corpus): Task 6 only, never run as a node
 # BuildKit runs outside scripts/capped, so the stages cap themselves: cargo -j 2, dotnet -m:2.
 ARG BASE=nethermind/nethermind:2.2.0@sha256:5cc0061e6a317e9249e1e1f537a0a40a2036525c62f1cb250943432f4c000a38
 ARG RUST=rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
 ARG SDK=mcr.microsoft.com/dotnet/sdk:10.0.402-resolute@sha256:6924c5c6564690089a67509f5a6ae85d7afa28d7f0f6466ec1b8a5439764ca92
+ARG PQZ_SET=n2304-kmax4096
 
 FROM ${BASE} AS base
 
@@ -35,11 +38,14 @@ COPY --from=ffisrc /pqz-core/pqzl/rust pqz-core/pqzl/rust
 COPY --from=ffisrc /pqz-core/stmt pqz-core/stmt
 COPY --from=ffisrc /pqz-core/pqzh/ligero pqz-core/pqzh/ligero
 COPY --from=ffisrc /pqz-core/ffi pqz-core/ffi
-# the self-test's compiled-in REGISTER proofs (ffi/build.rs): the default set's vectors
-COPY --from=ffisrc /smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzl.json /smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzh.json smartcontracts/vectors/pqz/n2304-kmax4096/
+# the self-test's compiled-in REGISTER proofs (ffi/build.rs): every set's proof_<sys>.json (the context's allowlist,
+# Dockerfile.dockerignore; n2048-kmax1024's at the top of smartcontracts/vectors/pqz/)
+COPY --from=ffisrc /smartcontracts/vectors/pqz smartcontracts/vectors/pqz
 
 FROM rust AS ffi
-RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/ \
+ARG PQZ_SET
+RUN cd pqz-core/ffi && cargo build --release --locked -j 2 --no-default-features --features pqzl-rust,set-${PQZ_SET} \
+ && mkdir /out && cp target/release/libpqz_ffi.so /out/ \
  && sha256sum /out/libpqz_ffi.so
 
 FROM scratch AS ffi-export
@@ -52,11 +58,12 @@ RUN cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2 \
  && mkdir /out && ./target/release/pqz-fresh-proofs ${FRESH} > /out/fresh.jsonl
 
 FROM ${SDK} AS plugin
+ARG PQZ_SET
 WORKDIR /src/pqz-core/nethermind
 COPY --from=base /nethermind ref
 COPY pqz-core/nethermind/Directory.Build.props pqz-core/nethermind/Directory.Build.targets ./
 COPY pqz-core/nethermind/Nethermind.Pqz Nethermind.Pqz
-RUN dotnet build Nethermind.Pqz/Nethermind.Pqz.csproj -c Release -m:2 -o /out \
+RUN dotnet build Nethermind.Pqz/Nethermind.Pqz.csproj -c Release -m:2 -p:PqzSet=${PQZ_SET} -o /out \
  && ls -la /out
 
 FROM plugin AS calibtool

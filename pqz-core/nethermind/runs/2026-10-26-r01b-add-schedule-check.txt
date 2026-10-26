@@ -1,0 +1,4 @@
+add-schedule --check (n2048-kmax1024, pqzl 0xc752e7f5…): ok
+add-schedule --check (n2304-kmax4096, pqzl 0xef1ffbcb…): ok
+add-schedule --check (n2560-kmax16384, pqzl 0xeacf34a3…): ok
+add-schedule --check (n2816-kmax65536, pqzl 0xa801f5c4…): ok
