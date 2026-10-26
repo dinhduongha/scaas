@@ -206,8 +206,8 @@ Checked sound (Claude and agy; Codex did not run C6): the 13-field order typehas
 **(a) Needs a new proofSystemId or a protocol change (prover, verifier, vectors, spec):**
 
 1. **C0-1** (P0) — the classical Zether audited multi-recipient auditor mask. New `proofSystemIdMulti`; fix (i) per-leg
-   auditor key derivation `h_j` (controller proposal: sizes unchanged, one DDH instance) or (ii) independent `s_j` per
-   copy. **Interim refusal in this fix round:** audited multi with `M ≥ 2` reverts (`_auditorPoint`, auditor on and
+   auditor key derivation `h_j` (sizes unchanged, but broken: see the owner rulings below) or (ii) independent `s_j` per
+   copy (ruled). **Interim refusal in this fix round:** audited multi with `M ≥ 2` reverts (`_auditorPoint`, auditor on and
    `m > 1`), and `Y_tj == Y_a` / `Y_f == Y_a` with the auditor on reverts (the Zether F-4, stays after the bump).
 2. **C0-4** (P2) — strong Fiat–Shamir in the Zether disclosure challenge (`e` absorbs `G, K, B, M`); prover, vectors,
    zether.md §14, CTR-ZTH-40. Not a proofSystemId item (a view), shipped with the C0-1 bump.
@@ -241,8 +241,14 @@ C5-11, C5-12, C5-13, C6-4, C6-6, C6-8; plus the spec side of C0-6 (CTR-PQZ-08 (a
 **Owner rulings 2026-10-27** (the rows below keep the options as asked):
 - 8d part 2b: `ROLL_MAX` bounded on **both relay paths** (96 / 80 / 64 / 32); PQZH per-transaction cap **option (A)**
   of `docs/research/pqzh-calldata-cap.md` (decisions CTR-PQZ-07 / CTR-PQZ-11, 2026-10-27).
-- Item 1 (C0-1): **(i) per-leg auditor key derivation `h_j`** with the `proofSystemIdMulti` bump; the interim is the
-  `M ≥ 2` refusal (controller proposal, not asked separately).
+- Item 1 (C0-1): **(ii) independent auditor randomness per leg** — `C_aud_j = [v_j]G + [t_j]Y_a`, `D_aud_j = [t_j]G`,
+  an E6′_j for `D_aud_j` (+1 point, +1 commitment, +1 scalar per leg) — with the `proofSystemIdMulti` bump; the interim
+  is the `M ≥ 2` refusal (controller proposal, not asked separately). The owner first took (i) on the controller's
+  proposal; the controller then found (i) broken and the owner switched to (ii) (2026-10-27): with public `h_j`,
+  `h_k·C_aud_j − h_j·C_aud_k = [h_k·v_j − h_j·v_k]G` (the `[s·h_j·h_k]Y_a` terms cancel), so two decoys still give `O`
+  and a real leg against a decoy gives its amount by discrete log. Any single-`s` scheme with public per-leg coefficients
+  leaks the same way (every `C_aud_j` lies in span{G, [s]G, [s]Y_a} with public coefficients); PQZ's R0-1 windows work
+  only because distinct coefficients of `pk_a · r` are independent under MLWE.
 - Item 2 (C0-2): **(2) PQZH value tokens at `n2048-kmax1024` with single-key `mldsa44` / `mldsa65` / `fndsa512`
   holders only** (the token checks the holder kind on credit / shield); `n2304-kmax4096` / `n2560-kmax16384`
   registration and disclosure only (C2-1's refusal in `init`). Not the controller's (1).
