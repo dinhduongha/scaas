@@ -1,11 +1,12 @@
-# Conditions for a chain to run PQZH — set `n2048-kmax1024` (the frozen v3 set)
+# Conditions for a chain to run PQZH — set `n2048-kmax1024` (not recommended; frozen until the R0 review fix)
 
 PQZH (Ligero over F_q, `pqz-core/pqzh/ligero`) is the **backup** proof system (owner 2026-10-21). At this set it is
 the shipped PQZH (THE preset of the D3 id; `proofSystemId` since plan 5h Task 8d `keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3")` = `0x56293621…a7df5d` (R0 review fix; v2 `0x9d945089…a7dca4` retired), the D3 id v1 `0x0a47a768…2fead4` retired); the crate
 built with `--features set-n2048-kmax1024` (or no set feature) reproduces its proofs byte for byte (plan 5h Task 8c:
 `pqz-core/pqzh/ligero/runs/c8-v3-kat-vs-base.txt`, `c8-v3-replay.txt`). `SET.md` (Task 8b) is this set's main
 description ([`SET.md`](SET.md)). Since plan 5h Task 8c part 2 its constants are generated: `pqzh_set.rs` from
-`set.toml` `[pqzh_preset]` (THE preset), `MAX_PROOF_PQZH` 262,144 / `MAX_INPUT` 393,216 in `rust/set.rs`; the
+`set.toml` `[pqzh_preset]` (THE preset), `MAX_PROOF_PQZH` / `MAX_INPUT` in `rust/set.rs` (327,680 / 524,288 since
+the R0 review fix, owner 2026-10-25; were 262,144 / 393,216); the
 proofs, the vectors and the crate's outputs were byte-identical (`pqz-core/pqzh/ligero/runs/c8c-n2048-*`) until the id
 bump of Task 8d, which changes every statement's id word and so every proof.
 
@@ -24,11 +25,14 @@ l = 695, radices 2 / 19 / 43 / 431; wasm32: two 21-bit limbs in u64. Soundness 1
 |---|---|---|---|---|
 | R_REG / R_DS / R_DR | 63 | 190,458 | 16,480 / 33,184 / 33,184 | 206,943 / 223,647 / 223,647 |
 | R_TX / R_TX0 / R_BURN | 125 / 124 / 124 | 235,470 / 234,744 / 234,744 | 83,072 / 66,560 / 50,048 | 318,547 / 301,309 / 284,797 |
-| R_TXM op 7 M = 1 / 2 / 4, auditor | 125 / 125 / 126 | 235,470 / 235,470 / 236,196 | 83,072 / 99,712 / 132,992 | 318,547 / 335,187 / 369,193 |
+| R_TXM op 7 M = 1 / 2, auditor | 125 / 125 | 235,470 / 235,470 | 83,072 / 99,712 | 318,547 / 335,187 |
+| R_TXM op 7 M = 4, auditor (G = 2 since the R0 review fix; was 126 rows, 236,196 / 132,992 / 369,193 at G = 1) | — | 279,756 | 149,376 | 429,137 |
 | R_TXM op 7 M = 1 / 2 / 4, no auditor | 124 / 125 / 125 | 234,744 / 235,470 / 235,470 | 66,560 / 83,072 / 116,096 | 301,309 / 318,547 / 351,571 |
 
-Every built form is within `MAX_PROOF_PQZH` 262,144 and `MAX_INPUT` 393,216 (D5; unit test `limits_exact`). Honest
-proofs 185,462–233,604 B (`runs/c8-v3-kat.jsonl`).
+Every built form is within `MAX_PROOF_PQZH` 327,680 and `MAX_INPUT` 524,288 (unit test `limits_exact`); before the R0
+review fix every form was within 262,144 / 393,216 (D5). Honest proofs 185,462–233,604 B (`runs/c8-v3-kat.jsonl`,
+before the fix); the audited M = 4 at G = 2: 275,916–277,196 B (`pqz-core/runs/gate/r01a-fix-n2048-kmax1024-ligero-multi.txt`;
+the M = 4 bound and input: `pqz-core/research/code-review-2026-10-25/r01a-limits/`).
 
 ## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [measured, plan 5h Task 8d part 2b]
 
@@ -50,16 +54,19 @@ precompile (input as calldata) fits for R_REG / R_DS / R_DR only.
 
 ## Gas, block, verify time
 
-- PQZH rows `G_op` [measured, P6f 2026-10-15, `pqz-core/nethermind/chain/engine-pqz.json`]: transfer 4,225,000,
-  transfer0 4,021,000, burn / refresh 3,738,000, register 3,322,000, disclose 3,283,000 / 2,881,000; the largest honest
-  direct transaction 11.67 M (before Amsterdam's floor).
-- Regular gas of a debit under Amsterdam: ≥ the floor ≈ 16.4–16.6 M (above) [model]; state gas as PQZL's debit at this
-  set (not re-measured for v3 under Amsterdam in plan 5h).
-- Block: a debit's regular gas alone is ≈ 16.5 M; the state part depends on the stored layout of the chain's contracts.
+- PQZH rows `G_op` [measured, P6f 2026-10-15, the retired calibration at the old ids, `pqz-core/nethermind/chain/engine-pqz.json`]:
+  transfer 4,225,000, transfer0 4,021,000, burn / refresh 3,738,000, register 3,322,000, disclose 3,283,000 /
+  2,881,000; the largest honest direct transaction 11.67 M (before Amsterdam's floor). The provisional rows
+  `engine-pqz-provisional-n2048.json` (at this set's ids, until plan 5h Task 9) are these × 1.3, rounded to 1,000 gas (transfer 5,492,000, register 4,319,000).
+- Regular gas of a debit under Amsterdam [measured, plan 5h Task 8d part 2b]: floor-bound, 16.38–16.48 M (above);
+  state gas of a relayed R_TX 17.58 M (P46 packing; `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2048-kmax1024.txt`).
+- Block: block gas used = max(Σ regular, Σ state) (EIP-8037), so a 60 M block holds three such debits [estimate, from
+  the measured gas].
 - Verify p99 [measured, `pqz-core/pqzh/ligero/runs/rev2-proven-wasm.jsonl`, wasm32, 1,000 honest verifies]: 15–24 ms
   (target 60 ms). The set-generic field of Task 8c changed the wasm32 reduction (same values): **not re-measured**.
 
 ## Summary
 
-The shipped PQZH: works under a 2^24 per-transaction cap for every form (debits floor-bound, ≈ 0.2–0.4 M margin), proof
-and input limits met; verify time measured before Task 8c, to re-measure with the new reduction.
+The shipped PQZH: works under a 2^24 per-transaction cap for every form (debits floor-bound, ≈ 0.2–0.4 M margin)
+except op 7 M = 4 with the auditor (G = 2 since the R0 review fix) and a debit that carries the `acc` hint; proof and
+input limits met; verify time measured before Task 8c, to re-measure with the new reduction.

@@ -11,12 +11,12 @@ pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm featu
 
 | Set | n, k | q | `K_MAX` | Status | `SET.md` |
 |---|---|---|---|---|---|
-| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the v3 parameters, frozen until the R0 review fix (2026-10-25: `frozen = false`, its reg / dr / audited txm headers regenerated): the committed vectors at `smartcontracts/vectors/pqz/`; the contracts' set until 8d part 2 (since then `n2304-kmax4096`; every set builds with `at-set.sh`) | [SET.md](n2048-kmax1024/SET.md) |
-| `n2304-kmax4096` | 2304, 36 | 61,275,424,977,257 (2^45.80) | 4,096 | owner 2026-10-21: the default set on chain; the default of the `pqzl` crate, `gate.sh` and (since 8d part 1) `pqz-ffi` | [SET.md](n2304-kmax4096/SET.md) |
+| `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the P6 parameters, frozen until the R0 review fix (2026-10-25: `frozen = false`, its reg / dr / audited txm headers regenerated); **not recommended** (owner 2026-10-25); the committed vectors at the top level of `smartcontracts/vectors/pqz/`; the contracts' set until 8d part 2 (since then `n2304-kmax4096`; every set builds with `at-set.sh`) | [SET.md](n2048-kmax1024/SET.md) |
+| `n2304-kmax4096` | 2304, 36 | 61,275,424,977,257 (2^45.80) | 4,096 | owner 2026-10-21: the default set on chain; the default of the `pqzl` crate, `gate.sh`, (since 8d part 1) `pqz-ffi` and (since 8d part 2) the contracts' committed `PqzSet.sol`; the SCaaS testnet's set (image `2.2.0-pqz5`) | [SET.md](n2304-kmax4096/SET.md) |
 | `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | approved 2026-10-20 as the Task 8 set, superseded as the default by `n2304-kmax4096` 2026-10-21: shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
 | `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21 core only; **owner 2026-10-24: a full PQZL set for customers** (pqz-stmt, precompile, vectors, gate since plan 5h Task 8d part 1b; contracts in 8d part 2); **no PQZH** (none of the current Ligero radices divides q − 1; a radix-1,789 preset is unexplored, not in scope) | [SET.md](n2816-kmax65536/SET.md) |
 
-Older notes and plans use short names for three of these sets: "set (a)" = `n2304-kmax4096`, "16k" = `n2560-kmax16384`,
+Older notes and plans use short names for these sets: "the v3 set" / "the frozen set" = `n2048-kmax1024`, "set (a)" = `n2304-kmax4096`, "16k" = `n2560-kmax16384`,
 "A′" = `n2816-kmax65536`; new text uses the directory names only.
 
 ## What a set fixes: cryptography first, cost follows (owner question 2026-10-23)
@@ -76,9 +76,9 @@ exists at a set depends on q:
 
 | Set | PQZH |
 |---|---|
-| `n2048-kmax1024` | built and running (`pqz-ffi`, vectors, gate): THE preset (D3 id) |
-| `n2304-kmax4096` | built (plan 5h Task 8c part 2; owner 2026-10-22): the **radix-7/17 preset** (radices 2 / 7 / 17 / 19 / 43 / 431, n 45,752, k 952, t 120), debit proofs 251,608–253,048 B (9–10 KB under 262,144), soundness 127.40 bits; the two other options below stay as fallbacks (re-prove under the limit: Cargo feature `fallback-retry`, never in production builds; per-set limit raise: documented only) |
-| `n2560-kmax16384` | built (plan 5h Task 8c part 2): debit proofs above 262,144 and no set-specific preset (q − 1 = 2^3 · 19 · 43 · 431 · 5,659 · 70,627 has no other small radix; re-proving cannot close a ≈ 40 KB gap) → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (per-set limit raise; decisions CTR-PQZ-10) and t = 122 on THE preset's n / k (soundness 127.55 bits, above the other sets'): debit bounds 303,412–305,120 B |
+| `n2048-kmax1024` | built (`pqz-ffi`, vectors, gate): THE preset (of the D3 id, PQZH v1 `0x0a47a768…`, retired; the id is PQZH `…/v3` since the R0 review fix) |
+| `n2304-kmax4096` | built (plan 5h Task 8c part 2; owner 2026-10-22): the **radix-7/17 preset** (radices 2 / 7 / 17 / 19 / 43 / 431, n 45,752, k 952, t 120), debit bounds 251,608–252,328 B, 296,248 B for the audited R_TXM M = 4 (G = 2 since the R0 review fix), under `MAX_PROOF_PQZH` 327,680 (262,144 until 2026-10-25), soundness 127.40 bits; the two other options below stay as fallbacks (re-prove under the limit: Cargo feature `fallback-retry`, never in production builds; per-set limit raise: documented only) |
+| `n2560-kmax16384` | built (plan 5h Task 8c part 2): debit proofs above 262,144 and no set-specific preset (q − 1 = 2^3 · 19 · 43 · 431 · 5,659 · 70,627 has no other small radix; re-proving cannot close a ≈ 40 KB gap) → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB)** (per-set limit raise, decisions CTR-PQZ-10; first for this set only, since 2026-10-25 the limit of every PQZH set) and t = 122 on THE preset's n / k (soundness 127.55 bits, above the other sets'): debit bounds 303,412–305,120 B |
 | `n2816-kmax65536` | none (owner ruling 2026-10-24): q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has no power-of-two part beyond 2^3 and a smooth part of only 24, none of the radices the current Ligero presets use (19 / 43 / 431; 7 / 17 at `n2304-kmax4096`). F_q^* does have subgroups of order 1,789 and 42,936 (= 24 · 1,789), so PQZH here would need a radix-1,789 FFT step and a new preset at a different rate (k = 1,789, n = 42,936: rate 1/24 against ≈ 1/40 today, more column queries, a fresh soundness and size analysis) — unexplored work, not in scope — or another q, i.e. another set. **Not pursued (owner ruling 2026-10-25: no spike, write the reason down).** Controller estimate from the cost model of `pqz-core/pqzh/ligero/ligero_params.py` (`fft_cost(n) = n · Σ (r + 1)` over the radices of n; computed by hand, not run): (1) a radix-r stage costs ≈ r + 1 products per point, so the largest FFT at n = 42,936 = 2^3 · 3 · 1,789 is ≈ 77.4 M products against ≈ 3.7 M at `n2304-kmax4096`'s n = 45,752 (≈ 21×); k = 1,789 about halves the row count, so the prover's work is ≈ 10× `n2304-kmax4096`'s, most likely over the prover budget (`PMAX` 4e9 base products), and the prover runs on the client (wasm32 in the browser). (2) A fast 1,789-point DFT (Rader) needs a cyclic convolution of length 1,788 = 2^2 · 3 · 149, which has no NTT in F_q (149 does not divide q − 1); an extension field does not help (q + 1 = 2 · 31 · 109 · 409 · 6,517,458,439 is not smooth either); only nested Winograd-style convolutions remain — several days of work with an uncertain result. (3) The verifier (the precompile) would not be the problem: it evaluates at the t opened columns (Lagrange), with no size-n FFT. A chain that needs PQZH with `K_MAX` 65,536 needs another parameter set whose q − 1 is smooth like the other sets' (2^3 · 19 · 43 · 431 divides q − 1), with a full parameter and estimator run. The set is PQZL only (`set.toml` `pqzh = false`): pqz-stmt knows no PQZH id there, pqz-ffi has no PQZH build, the gate skips Ligero and the cross-checks |
 
 Details per set: `<set>/PQZH.md`.
@@ -170,7 +170,7 @@ set is `MAX_PROOF_PQZL` = 98,304 B (96 KiB), the same for all four sets. The com
 | R_TXM M = 4, no auditor | 43,928 | 47,820 | 51,538 | 58,127 |
 | R_TXM M = 8, no auditor | 58,997 | 64,606 | 69,894 | 76,354 |
 | largest / `MAX_PROOF_PQZL` | 85,138 / 98,304 | 80,289 / 98,304 | 72,745 / 98,304 | 79,207 / 98,304 |
-| largest in the vectors (R_TXM M = 8 with the auditor) | 85,167 (13,137 under) | 80,330 (17,974 under) | 72,761 (25,543 under) | 79,208 (19,096 under) |
+| largest in the vectors (R_TXM M = 8 with the auditor) | 85,167 (13,137 under) | 80,290 (18,014 under) | 72,761 (25,543 under) | 79,208 (19,096 under) |
 | pk / ciphertext (B) | 16,384 / 16,512 | 18,432 / 18,560 | 20,480 / 20,608 | 22,528 / 22,656 |
 | R_TX statement (B) | 83,072 | 93,312 | 103,552 | 113,792 |
 | C prover arena peak: R_TX / R_TXM M = 2 / R_TXM M = 8 | 312 / 398 / 1,514 MB | 380 / 471 / 1,345 MB | 457 / 550 / 1,094 MB | 538 / 633 / 1,259 MB |
@@ -210,7 +210,7 @@ and 1, all verify), then the largest precompile input (5 + statement + bound), a
 | R_BURN | 234,744 (231,256–232,344) / 284,797 | 251,608 (247,176–248,440) / 307,805 | 303,412 (300,148–301,204) / 365,753 |
 | R_TXM M = 1 | 235,470 (230,242–231,598) / 318,547 | 251,608 (247,304–248,344) / 344,925 | 304,266 (299,923–301,226) / 407,823 |
 | R_TXM M = 2 | 235,470 (231,128–232,462) / 335,187 | 252,328 (248,424–248,434) / 364,333 | 304,266 (300,170–300,586) / 428,559 |
-| R_TXM M = 4 (G = 2 at n2048 / n2304 since the R0 review fix; the vectors' proof in brackets) | 279,756 (277,036) / 429,137 | 296,248 (293,112) / 464,061 | 305,120 (301,824–302,112) / 470,885 |
+| R_TXM M = 4 (G = 2 at n2048 / n2304 since the R0 review fix; there the vectors' proof in brackets, at n2560 the honest proofs) | 279,756 (277,036) / 429,137 | 296,248 (293,112) / 464,061 | 305,120 (301,824–302,112) / 470,885 |
 | R_TXM M = 1, no auditor | 234,744 (231,304–232,024) / 301,309 | 251,608 (247,304–248,440) / 326,365 | 304,266 (301,450–301,610) / 387,215 |
 | R_TXM M = 2, no auditor | 235,470 (231,438–232,366) / 318,547 | 251,608 (246,792–248,088) / 344,925 | 304,266 (300,019–300,682) / 407,823 |
 | R_TXM M = 4, no auditor | 235,470 (230,872–232,526) / 351,571 | 252,328 (249,160–249,384) / 382,765 | 304,266 (299,219–301,098) / 449,039 |
@@ -265,7 +265,8 @@ the owner (block gas used = max(Σ regular, Σ state) under EIP-8037). PQZH debi
 `n2560-kmax16384` only registration and disclosure fit. The previous [model] table of this section (pre-R0 sizes) showed
 `n2048-kmax1024`'s PQZH R_TXM M = 4 as fitting; with G = 2 since the R0 fix it does not.
 
-`MAX_INPUT` 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)) is pqz-stmt's at the non-frozen sets. Since
+`MAX_INPUT` 524,288 (512 KiB, decisions 2026-10-20 O8 / 2026-10-21 (7)) is pqz-stmt's at every set since the R0
+review fix (`n2048-kmax1024` had 393,216 until then). Since
 plan 5h Task 8d part 1 the node takes its precompile input limit from the library it loads (`pqz-ffi`'s
 `pqz_max_input()` = the set's `MAX_INPUT`; `pqz_ffi.h`, the Nethermind plugin's `PqzNative.MaxInput`), so every input
 in the table fits; the former node literal 393,216 did not fit the largest inputs of `n2304-kmax4096` (R_TXM M = 4) and
@@ -301,7 +302,7 @@ refused (`gen_set.py` `RETIRED`).
 
 **Changing a label (an owner override, or a later bump).** Edit the set's `pqzl_id` / `pqzh_id` in `set.toml`, then:
 `python3 -I pqz-core/params/sets/gen_set.py --all` (the generated files, `stmt/src/sets.rs`' `ALL_IDS`; at
-`n2048-kmax1024` also `PQZ_SOL_INSTALL=1 make.sh n2048-kmax1024 sol`, the contracts' `PqzSet.sol`), regenerate the
+`n2304-kmax4096`, the contracts' set, also `PQZ_SOL_INSTALL=1 make.sh n2304-kmax4096 sol`, the contracts' `PqzSet.sol`), regenerate the
 set's vectors (`PQZ_SET=<set> scripts/capped pqz-core/ffi/vectors/run.sh <label> write`) and the pinned
 `negative_rows_reject` counts in `pqzl/rust/tests/vectors.rs` if the coder-padding rows move, and run the set's gate.
 Copies that are not generated: at `n2048-kmax1024` the PQZL id literal in `pqzh/stark-backup/src/rel.rs`
@@ -321,8 +322,8 @@ are used here):
 | Option (8c letter) | What it does | Cost / limits | Where used |
 |---|---|---|---|
 | **re-prove under the limit** (A) | keep the preset; when a proof comes out over the limit, prove again with fresh randomness until it fits. The proof length depends only on the query indices (public), so dropping a long proof reveals nothing about the witness (ZK argument in the research note) | extra prover runs: at `n2304-kmax4096` 0.9 % of runs for most forms, 27.6 % for R_TXM M = 4 (average 1.38 runs, at most 7 in 200); useless when the gap is larger than the spread of honest proof lengths (a few KB) | `n2304-kmax4096` fallback: Cargo feature `fallback-retry`, never in default or production builds; tag `pqzh-set-a-fallback-A` |
-| **set-specific preset** (B; at `n2304-kmax4096` the radix-7/17 preset) | a new Ligero preset whose evaluation domain uses extra small radices of q − 1 (there 7 and 17, through the existing generic FFT stage), so the code length / message length / query count fit under the limit | needs q − 1 to have such radices; soundness must stay at or above the old preset's | **`n2304-kmax4096` production** (owner 2026-10-22): debits 251,608–253,048 B, soundness 127.40 bits, prover 4–5 % fewer products |
-| **per-set limit raise** (C) | keep the preset; raise `MAX_PROOF_PQZH` for that set only (one constant per set in `pqz-stmt` and the prover) | larger precompile inputs (`MAX_INPUT` must cover 5 + largest statement + limit) and calldata; every chain running the set must accept the larger limit | **`n2560-kmax16384`** (owner 2026-10-23): 327,680 B (320 KiB), largest bound 305,120 B at t = 122 (22,560 B headroom), largest input 493,445 B ≤ `MAX_INPUT` 512 KiB; `n2304-kmax4096` fallback (≥ 265,236 B, documented only) |
+| **set-specific preset** (B; at `n2304-kmax4096` the radix-7/17 preset) | a new Ligero preset whose evaluation domain uses extra small radices of q − 1 (there 7 and 17, through the existing generic FFT stage), so the code length / message length / query count fit under the limit | needs q − 1 to have such radices; soundness must stay at or above the old preset's | **`n2304-kmax4096` production** (owner 2026-10-22): debit bounds 251,608–253,048 B then (the audited R_TXM M = 4 is 296,248 B since the R0 review fix, under the raised limit), soundness 127.40 bits, prover 4–5 % fewer products |
+| **per-set limit raise** (C) | keep the preset; raise `MAX_PROOF_PQZH` for that set only (one constant per set in `pqz-stmt` and the prover) | larger precompile inputs (`MAX_INPUT` must cover 5 + largest statement + limit) and calldata; every chain running the set must accept the larger limit | **`n2560-kmax16384`** (owner 2026-10-23): 327,680 B (320 KiB), largest bound 305,120 B at t = 122 (22,560 B headroom), largest input 493,445 B ≤ `MAX_INPUT` 512 KiB; since 2026-10-25 also **`n2048-kmax1024`** / **`n2304-kmax4096`** (327,680 B for the R0-1 audited R_TXM M = 4, bounds 279,756 / 296,248 B; decisions CTR-PQZ-10); `n2304-kmax4096` fallback with THE preset (≥ 265,236 B, documented only) |
 
 Picking an option for a new set: try a set-specific preset first (no limit change, no extra prover runs); re-proving
 fits only a gap of a few KB; the per-set raise always works but changes the chain-facing limits. Whatever is chosen is
@@ -335,7 +336,7 @@ the set's `set.toml` `[pqzh_preset]` (preset, `max_proof`).
 |---|---|
 | C core (`pqzl/build.sh`, `sz/build.sh`, harnesses) | `PQZ_SET=<set>` (default `n2304-kmax4096`); `pqzl/set.sh` copies the set's headers into `build/include` |
 | Rust `pqzl` | cargo feature `set-<set>` (default `set-n2304-kmax4096`; another set: `--no-default-features --features sv,set-<set>`) |
-| `pqz-stmt` | cargo feature `set-<set>` (none = `n2048-kmax1024`, the frozen set) |
+| `pqz-stmt` | cargo feature `set-<set>` (none = `n2048-kmax1024`) |
 | `pqzh-ligero` | cargo feature `set-<set>` for a set with PQZH (none = `n2048-kmax1024`), forwarded to `pqz-stmt` |
 | contracts (`smartcontracts/evm`) | the generated `src/pqz/PqzSet.sol` (committed: `n2304-kmax4096`, which `gen_set.py --check` wants); another set: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> [forge args]` installs that set's `PqzSet.sol`, runs forge (default: the PQZ suites) in `out/at-set-<set>` and restores the committed file (plan 5h Task 8d part 2) |
 | `pqz-ffi` (precompile, prover API, `pqz-vectors`) | cargo feature `set-<set>` (default `set-n2304-kmax4096` since plan 5h Task 8d part 1, forwarded to `pqz-stmt`, `pqzl` and, for a set with PQZH, `pqzh-ligero` with feature `pqzh`) |
@@ -347,14 +348,14 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 
 | File | What | Made by |
 |---|---|---|
-| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input` (sets with pqz-stmt), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with PQZH), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
+| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, `s_aud`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input` and `roll_max` (sets with pqz-stmt), `[pqzl_c]` (the C backend's arena and wasm32 leg limit), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with PQZH), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
 | `pqz_set.h`, `rust/set.rs` | n, k, q, log2 q, Δ, `K_MAX`, digit / carry / noise widths, norm bounds, NTT roots, Barrett constants, the specialised verifier's CRT prime count, the `proofSystemId`s (keccak256 of the labels) | [`gen_set.py`](gen_set.py) (`--check` in the gate) |
 | `set.json` | every derived constant the Python tools read (`pqz_kat.py`, `e_s0_set.py`, `ligero_params.py`, the tests' `core_only`; the limits and the PQZH preset) | `gen_set.py` |
 | `pqzh_set.rs` | a set with PQZH: q − 1's factors, generator, F_q^4 non-residue, radices, the Ligero preset (n, k, t) | `gen_set.py` |
 | `pqzh_set_fallback.rs`, `pqzh_set_spike_b.rs` | `n2304-kmax4096` only, hand-written research files kept as they are (plan 5h Task 8c part 1b): THE preset for fallback A (pqzh-ligero feature `fallback-retry`, never in production) and the superseded t = 119 spike (not compiled) | by hand |
-| `PqzSet.sol` | the set's Solidity constants, **read by every PQZ contract since plan 5h Task 8d part 2** (`PqzCt`, `PqzCore`, `PqzSafety`, `UAPqzVerifier`): sizes, q, Δ, `K_MAX`, `PACK_BITS` (P46), `PQZL_ID`, `HAS_PQZH` / `PQZH_ID` (the zero word without PQZH), `ZERO_HASH` (the packed `Trivial(0)`), from the set's vectors (zero words until the set has them) the precompile's `SELFTEST` hash and `UAPqzVerifier`'s `PROBE_PQZL` / `PROBE_PQZH`, and the file-level `PQZ_ACC_WORDS` (the packed `acc` slots; Solidity takes no library member as an array length); `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (committed: `n2304-kmax4096`) | `gen_set.py` (reads the set's `selftest.json`, `statement_register.json`, `proof_*.json`) |
+| `PqzSet.sol` | the set's Solidity constants, **read by every PQZ contract since plan 5h Task 8d part 2** (`PqzCt`, `PqzCore`, `PqzSafety`, `UAPqzVerifier`): sizes, q, Δ, `K_MAX`, `PACK_BITS` (P46), `ROLL_MAX` (`set.toml` `roll_max`, plan 5h Task 8d part 2b), `PQZL_ID`, `HAS_PQZH` / `PQZH_ID` (the zero word without PQZH), `ZERO_HASH` (the packed `Trivial(0)`), from the set's vectors (zero words until the set has them) the precompile's `SELFTEST` hash and `UAPqzVerifier`'s `PROBE_PQZL` / `PROBE_PQZH`, and the file-level `PQZ_ACC_WORDS` (the packed `acc` slots; Solidity takes no library member as an array length); `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (committed: `n2304-kmax4096`) | `gen_set.py` (reads the set's `selftest.json`, `statement_register.json`, `proof_*.json`) |
 | `<rel>_params.sage` | LaZer codegen specs of the 14 relations (reg, tx, tx0, burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (`n2048-kmax1024`'s have the shapes of `pqzl/params/*.sage`, the record) |
-| `pqz_<rel>_params.h`, `codegen.txt` | LaZer codegen headers and the codegen log (`codegen-check.txt` for the frozen `n2048-kmax1024`: the regenerated headers byte-identical) | `make.sh <set> codegen` (LaZer 3330e48, pinned Sage image) |
+| `pqz_<rel>_params.h`, `codegen.txt` | LaZer codegen headers and the codegen log (`codegen-check.txt` for a set with `frozen = true`: the regenerated headers byte-identical; none since 2026-10-25, was `n2048-kmax1024`) | `make.sh <set> codegen` (LaZer 3330e48, pinned Sage image) |
 | `rust/<rel>.rs`, `rust/mod.rs` | the headers' Rust form | `pqzl/params/to_rust.py` (`make.sh <set> rust`) |
 | `e-s1.txt` | lattice-estimator check of every spec (MSIS β, hiding MLWE uSVP and dual_hybrid ≥ 450) | `pqzl/params/n-study/e_s1_n.sage` |
 | `e-s0.txt` | set budget checks, exactness of the norm proofs per relation, per-round Fiat–Shamir soundness | [`e_s0_set.py`](e_s0_set.py) (`SET=<set> scripts/capped …/run_e_s0_set.sh`) |

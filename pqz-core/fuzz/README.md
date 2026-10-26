@@ -13,7 +13,7 @@ on the owner's machine; CI runs only a short smoke test (see "Run"). For the ter
   the Rust core and the mode `pqzl-diff` since the PQZL Rust port, Task 11.
 - **Words used here:** a *target* is one libFuzzer entry point; an *oracle* is the code that decides whether a result
   is wrong (`src/lib.rs`); an *edit script* is a short fuzzer input that describes edits to a known valid input; an
-  *honest input* is a valid input with a valid proof from the frozen vectors.
+  *honest input* is a valid input with a valid proof from the set's vectors.
 
 ```mermaid
 flowchart LR
@@ -36,14 +36,15 @@ section.
 **`precompile`** — raw bytes straight into `pqz_precompile`.
 
 - `targets/precompile.c` calls the C ABI itself.
-- `-max_len` = the set's `MAX_INPUT` + 4,096 (set.json `max_input`: 397,312 at `n2048-kmax1024`, 528,384 at the
-  other sets), so the revert path is reached and no honest seed is truncated.
+- `-max_len` = the set's `MAX_INPUT` + 4,096 (set.json `max_input` 524,288 at every set since the R0 review fix, so
+  528,384; 397,312 at `n2048-kmax1024` before), so the revert path is reached and no honest seed is truncated.
 - Seeds: the vectors' honest and negative inputs (the multi-recipient ones included) and `06 00000000` (the
   self-test).
 - Extra checks: none.
 
-**`mutate`** — an edit script of at most 512 B, applied to one of the 44 honest inputs (PQZL and PQZH × 8 forms, the
-fee-0 forms, every built multi-recipient (id, M, auditorOn), and `regress/valid/`).
+**`mutate`** — an edit script of at most 512 B, applied to one of the set's honest inputs (PQZL and PQZH × 8 forms, the
+fee-0 forms, every built multi-recipient (id, M, auditorOn), the op 7 disclosures, and at `n2048-kmax1024`
+`regress/valid/`; see "Inputs").
 
 - Byte 0 picks the honest input.
 - Byte 1 picks the mode: edits anywhere, including the op and the length field / one decoded PQZL proof field changed
@@ -73,8 +74,8 @@ The common oracle is in `src/lib.rs`. A violation aborts, which libFuzzer report
 - **Status.** Never 3 (an input-caused panic) or 4 (a node fault: worker, C arena exhaustion). Status 1 (revert)
   exactly for the inputs over `MAX_INPUT`.
 - **Determinism.** Every precompile input runs twice and must give the same status and output.
-- **Verdict.** `…01` exactly for the 44 unmodified honest inputs, the self-test hash (`ed910a2c…`) for `06 00000000`,
-  and `…00` for everything else. A modified input that verifies is a wrong accept or a malleable encoding.
+- **Verdict.** `…01` exactly for the unmodified honest inputs, the set's self-test hash for `06 00000000` (e.g.
+  `d6c01fbc…` at `n2304-kmax4096`; every set: `../ffi/README.md`, "Self-test"), and `…00` for everything else. A modified input that verifies is a wrong accept or a malleable encoding.
 - **Arena bound (mode `pqzl-diff`; the Rust core has no arena).** The C core runs on the verify-only arena, as in a
   long-running node: `ARENA_SMALL` = 512 MiB since P6-ANON S3 (144 MiB in the P6e campaigns below). A warm-up pass
   first builds the keys and tables of every form and every multi-recipient shape. The arena's high-water mark must
@@ -96,18 +97,21 @@ Its log lines: `pqz-fuzz init … mode pqzl-diff …` and the summary's `PQZL ve
 
 ## Inputs
 
-`seeds.py` rebuilds the inputs from the frozen vectors (`smartcontracts/vectors/pqz/`, P6e D9, P6-ANON S4) at the start
-of every run. It is light: it uses `pqz_kat.py`'s helpers, and the fuzz process never proves.
+`seeds.py` rebuilds the inputs from the set's vectors (`smartcontracts/vectors/pqz/` for `n2048-kmax1024`,
+`smartcontracts/vectors/pqz/<set>/` for the others; P6e D9, P6-ANON S4; `PQZ_SET`, default `n2304-kmax4096`) at the
+start of every run. It is light: it uses `pqz_kat.py`'s helpers, and the fuzz process never proves.
 
-- **The 44 honest inputs** (`pqz-core/build/fuzz/honest.bin`):
+- **The honest inputs** (`pqz-core/build/fuzz/honest.bin`; per set 52 / 51 / 51 / 27 at `n2048-kmax1024` /
+  `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`, the gates' `pqz-fuzz init` lines in
+  `pqz-core/runs/gate/<set>-fuzz.txt`):
   - P6e's 24: `proof_pqzl.json` and `proof_pqzh.json`, 8 forms each, and the 4 fee-0 forms of `fee0.json` under both
-    ids;
+    ids (at `n2816-kmax65536`, which has no PQZH, only the PQZL rows, here and below);
   - 19 multi-recipient (`R_TXM`) rows: `proof_pqzl.json` 11 (M ∈ {1, 2, 4, 8} × auditor on / off, and 3 special
     cases), `proof_pqzh.json` 8 (M ∈ {1, 2, 4}); the statements come from `statement_transfer_multi.json`; oversize M
     is never built;
-  - the files of `regress/valid/`.
-- **The `precompile` seeds:** those inputs, plus `06 00000000` and the 745 rows of `negative.json` (350 of them
-  multi-recipient).
+  - the op 7 disclosures of both ids (R0 review fix: `statement_transfer_multi.json` `disclosures`);
+  - at `n2048-kmax1024` only, the files of `regress/valid/`.
+- **The `precompile` seeds:** those inputs, plus `06 00000000` and every row of the set's `negative.json`.
 
 `regress/valid/` holds valid inputs from outside the vectors, which the oracle must know as honest. Today it holds one
 file, `fixture-disclose-receiver-rnd33`:
@@ -121,12 +125,14 @@ file, `fixture-disclose-receiver-rnd33`:
   byte-equal);
 - PQZL v3 (lazer#28 fix, 2026-10-19): `crash-b9881dfc…` carried the retired v2 id, so it was re-proved under v3 with the
   same statement (id word aside) and `rnd32`, and renamed: `runs/2026-10-19-fs5-regress-valid.txt`. Re-proved rather
-  than deleted, so the honest set stays at 44 and the committed `mutate` / `codec` edit scripts keep their meaning.
+  than deleted, so the honest set stayed at 44 then and the committed `mutate` / `codec` edit scripts keep their meaning.
 - B-1 / A-2 (5h Task 8a, 2026-10-21): re-proved again under the new transcript, same statement and `rnd32`
   (`runs/2026-10-21-t8a-regress-valid.txt`).
 - The set's own ids (5h Task 8d part 1, 2026-10-23): the statement's id word set to `n2048-kmax1024`'s PQZL id
   (`…/mlwe-d64k32-q42l4/v4`; the v3 id is retired) and re-proved with the same `rnd32`
   (`runs/2026-10-23-t8d1-regress-valid.txt`). It is an input of that set only (`seeds.py` adds it there).
+- R0 review fix (2026-10-25): re-proved under that set's `…/v5` id, as `fixture::cases`' DISCLOSE-RECEIVER at the new
+  keys (KeyGen V2 changed them, review R2-C3) with the same `rnd32` (`runs/2026-10-25-r01a-regress-valid.txt`).
 
 ## Build (D12)
 
@@ -154,6 +160,8 @@ From the repository root:
 ```sh
 scripts/capped pqz-core/fuzz/build.sh
 scripts/capped pqz-core/fuzz/run.sh <precompile|mutate|codec> <seconds> [label]   # log: pqz-core/fuzz/runs/<label>-<target>.txt
+PQZ_SET=n2048-kmax1024 scripts/capped pqz-core/fuzz/build.sh                    # another set (default n2304-kmax4096;
+PQZ_SET=n2048-kmax1024 scripts/capped pqz-core/fuzz/run.sh mutate 7200 <label>   #  the same PQZ_SET for both)
 ```
 
 What `run.sh` does:
@@ -175,8 +183,9 @@ targets one after the other, for example nightly (owner step 2 of the plan).
 
 **Smoke runs.** Two places run all three targets for 60 s each:
 
-- `pqz-core/gate.sh` (the gate A / B checklist), which afterwards restores the committed corpora, because a smoke run
-  is too short to replace the corpora of the 2-hour campaigns;
+- `pqz-core/gate.sh` (the gate A / B checklist, per set): its smoke run merges into `pqz-core/build/fuzz-<set>/corpus/`
+  and only reads the committed corpora, because a smoke run is too short to replace the corpora of the 2-hour
+  campaigns;
 - the CI job `pqz` in `.github/workflows/ci.yml` (added with `gate.sh`, P6e Task 10), on the committed corpora
   (`fuzz/run.sh "$t" 60 ci`). Until then the decision was local runs only (controller 2026-10-14).
 
@@ -195,6 +204,18 @@ target under `scripts/capped`, with ASan + UBSan; logs in `runs/`.
 | `2026-10-16-s5-precompile` | precompile with the multi-recipient transfer (seeds: 776, 342 multi-recipient; 44 honest, 19 multi-recipient) | 120 min | 3,012,684 (418) | 2,269 / 4,697, 401 inputs (43 MB) | 879,386 decoded, 205,263 of them multi-recipient; 3,461 valid = unmodified honest |
 | `2026-10-16-s5-mutate` | mutate with the multi-recipient transfer | 120 min | 192,360 (26) | 3,513 / 8,241, 600 inputs | 149,586 decoded, 42,191 multi-recipient; 473 SV = generic differentials, 108 of them multi-recipient |
 | `2026-10-16-s5-codec` | codec with the multi-recipient transfer | 120 min | 1,103,090 (153) | 917 / 1,729, 294 inputs | 382,784 decoded, 130,232 multi-recipient; 137,333 PQZL proofs re-encoded byte-equal |
+| `rust1-pqzl-diff-precompile` | precompile, mode `pqzl-diff` (Rust core = C core) | 120 min | 1,252,401 (173) | 3,315 / 6,861, 571 inputs (58 MB) | peak RSS 978 MB |
+| `rust1-pqzl-diff-mutate` | mutate, mode `pqzl-diff` | 120 min | 134,348 (18) | 4,341 / 9,269, 566 inputs | peak RSS 1,148 MB |
+| `rust1-pqzl-diff-codec` | codec, mode `pqzl-diff` | 120 min | 517,545 (71) | 1,142 / 2,165, 304 inputs | peak RSS 890 MB |
+| `fs7-precompile` | precompile, mode `pqzl-diff`, PQZL v3 | 120 min | 766,921 (106) | 3,259 / 6,694, 554 inputs (59 MB) | peak RSS 915 MB |
+| `fs7-mutate` | mutate, mode `pqzl-diff`, PQZL v3 | 120 min | 86,955 (12) | 4,320 / 9,122, 570 inputs | peak RSS 1,056 MB |
+| `fs7-codec` | codec, mode `pqzl-diff`, PQZL v3 | 120 min | 287,503 (39) | 1,152 / 2,194, 323 inputs | peak RSS 811 MB |
+
+**PQZL Rust port Task 11 (`rust1-pqzl-diff-*`, 2026-10-18) and PQZL v3 (`fs7-*`, 2026-10-19, plan `pqzl-fs3` Task 7,
+the three targets at once, so exec/s is not comparable).** Mode `pqzl-diff`, 2 h per target, no finding (every
+`[fuzz rc=0]`, `[merge rc=0]`); 44 honest inputs (the parameters that are now `n2048-kmax1024`); C arena high-water
+mark 268,240,256 B (`rust1`) and 268,297,200 B (`fs7`), bound 341 MiB. No 2-hour campaign has run since the parameter
+sets and the R0 review fix; the gates run the 60 s smoke runs per set (`pqz-core/runs/gate/<set>-fuzz.txt`).
 
 **P6-ANON S5 (the multi-recipient transfer, 2 h per target, 2026-10-16/17).** No finding.
 

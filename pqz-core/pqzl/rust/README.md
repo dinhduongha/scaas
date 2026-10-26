@@ -8,8 +8,13 @@ and applications can use the proof system without the C build. Plan: `docs/super
 Status: **port done** (Tasks 1–12 and 10b of the plan, 2026-10-18/19): every API function is ported and checked
 against the C core (vectors re-proved byte-equal, the C oracle tests, the 2 h fuzz differential, the package's
 "Rust = C" stage). Owner 2026-10-18: this crate is the production PQZL core of the `PQZ` precompile; `pqz-ffi` builds
-it by default (feature `pqzl-rust`, Task 11), the C core is the opt-in reference. The SCaaS testnet keeps the C-backed node
-image until the live roll-out.
+it by default (feature `pqzl-rust`, Task 11), the C core is the opt-in reference. Branch `pqzl-rust` merged into `main`
+2026-10-19 (`5952951a`); the SCaaS testnet's node image (`2.2.0-pqz5` since 2026-10-26, set `n2304-kmax4096`;
+`pqz-core/nethermind/README.md`) builds `pqz-ffi` with `pqzl-rust`. Unaudited, not for production funds.
+
+Parameter sets (owner 2026-10-21): one set per build, the cargo feature `set-<set>` (default `set-n2304-kmax4096`;
+another set: `--no-default-features --features sv,set-<set>`). The set's constants (`rust/set.rs`) and relation
+parameters (`rust/<rel>.rs`) are generated under `pqz-core/params/sets/<set>/` and included by `src/params/mod.rs`.
 
 ## Layout
 
@@ -18,14 +23,15 @@ Crate-internal layers in the C core's order: `src/arith/` (`pqz_mpn.h`; LaZer's 
 `src/rand/` (SHAKE128 / SHAKE256 and the keys' CBD stream, the AES-256-CTR PRNG, the uniform, binomial and
 Gaussian samplers, the rejection tests on `pqz_fixexp.h`'s integer exp), `src/coder.rs` (`dcompress.c`; the proof codec: `coder.c`'s bounded decoder / encoder as `pqz_rel.c`'s `encproof` /
 `pqz_decproof` drive them, serialization v1, and the `pqz_test_mutate` hook; `bytes.c` has no caller in the core),
-`src/params/` (generated, plan D8: one module per `pqzl/params/pqz_*_params.h`, written by `pqzl/params/to_rust.py`;
-do not edit; `txm16` / `txm160` only with feature `oversize`),
+`src/params/` (plan D8: `mod.rs` holds the structs and includes the chosen set's generated modules, one per
+`pqz-core/params/sets/<set>/pqz_*_params.h`, written to `params/sets/<set>/rust/` by `pqzl/params/to_rust.py`; do not
+edit; `txm16` / `txm160` only with feature `oversize`),
 `src/keys.rs` (`pqz_keys.c` and the ring work of `pqz_rel.c` it calls: A, `pqz_keypair_from_secret`, `pqz_encrypt`,
 `pqz_decrypt_raw`; the free functions expand A per call, as there is no `pqz_init`; the `Ctx` methods use the
 `Ctx`'s A), `src/proof/` (the LaZer proof layers the
 relations use, prover and verifier: `abdlop.c`'s keys, commitment and commitment hash, `lnp-quad.c` /
-`lnp-quad-many.c`, `lnp-tbox.c` with the P6-SZ / P6-L2 fixes, the P6-Z21 norm check and the P6-FS transcript rounds
-of PQZL v3, `hash_z34` and `hash_h` in `proof/tbox.rs`; only the forms `pqz_rel.c` passes), `src/rel.rs` (`pqz_rel.c`: the one relation table, statement parsing, the relation builders, the witness
+`lnp-quad-many.c` (with the R0 review fix's η-filtered final challenge, R0-C3), `lnp-tbox.c` with the P6-SZ / P6-L2
+fixes, the P6-Z21 norm check, the P6-FS transcript rounds (PQZL v3) and B-1 / A-2, `hash_z34` and `hash_h` in `proof/tbox.rs`; only the forms `pqz_rel.c` passes), `src/rel.rs` (`pqz_rel.c`: the one relation table, statement parsing, the relation builders, the witness
 parsers, the hedged prover seeds of CTR-PQZ-19, `pqz_prove`'s and `pqz_verify`'s dispatch; A and each relation's
 ABDLOP keys are cached in `Ctx` at first use), `src/sv.rs` (`pqz_sv.c`, feature `sv`: the specialised verifier,
 `pqz_verify_fast`; its prime tables, A in its form and each relation's tables are built in `Ctx` at the relation's
@@ -62,10 +68,14 @@ floating point.
 - Memory: every buffer that scales with the input is reserved with `try_reserve`; running out is `Error::Memory`
   from `prove`, `try_verify` and `try_verify_fast` and false from `verify` / `verify_fast`, never a panic or an
   abort, and the `Ctx` stays usable
-  (`tests/memory.rs`, a test-only counting / capping allocator). Peak heap (release, cold `Ctx`): R_TX prove 63 MB
-  (the C arena: 312 MB), R_TXM8 prove 115 MB, R_TX verify 63 MB, R_TX verify_fast 11 MB (1.2 MB warm).
+  (`tests/memory.rs`, a test-only counting / capping allocator). Peak heap (release, cold `Ctx`), history at the
+  `n2048-kmax1024` parameters, PQZL v2 (run `t12`, `runs/t12-test.txt`): R_TX prove 62.9 MB (the C
+  arena: 312 MB), R_TXM8 prove 115.5 MB, R_TX verify 62.6 MB, R_TX verify_fast 10.7 MB (1.2 MB warm). At
+  `n2560-kmax16384` after the R0 fix (`runs/r01a-fix-n2560-kmax16384-test.txt`): R_TX prove 76.4 MB, verify 76.0 MB,
+  verify_fast 14.2 MB (1.5 MB warm).
 - wasm32: `prove` of op 7 with M > `WASM_MAX_LEGS` (8) is `Error::Input` (= pqz-ffi's `WASM_PQZL_MAX_LEGS` on the
-  Rust backend; raised from 4 in Task 12, see "The wasm32 op 7 limit" below; the C backend keeps 4).
+  Rust backend; raised from 4 in Task 12, see "The wasm32 op 7 limit" below; the C backend's limit is per set,
+  `set.toml` `[pqzl_c] wasm_max_legs`: 2, and 1 at `n2816-kmax65536`, `pqz-core/ffi/README.md` "Arenas").
 - PQZL v3 (P6-FS, [lazer#28](https://github.com/lazer-crypto/lazer/issues/28)): `proof/tbox.rs` `hash_z34` absorbs
   `grandom3(z3) ‖ grandom3(z4)` (one `Coder` session over centred copies, the proof's encoding) after `compute_z34` /
   a successful `check_z34`; the result `hz` is the input of the tg round, while the JL rows R / R' stay on `cseed`
@@ -84,12 +94,13 @@ floating point.
 
 | Feature | |
 |---|---|
+| `set-<set>` (default `set-n2304-kmax4096`) | the parameter set, exactly one: `set-n2048-kmax1024`, `set-n2304-kmax4096`, `set-n2560-kmax16384`, `set-n2816-kmax65536` |
 | `sv` (default) | the specialised verifier, `Ctx::verify_fast` |
 | `oversize` | R_TXM with M = 16 (bench only) |
-| `test-hooks` | `test_mutate` (kind 14, z3 ± 1, for the P6-FS test), `fs_trace_take` (below), the `testkit` module (`kat_dump`, `keys_kat`); with `c-oracle` the C core is built with `-DPQZ_TEST_HOOKS` |
+| `test-hooks` | `test_mutate` (kinds 14 and 15 test-only: z3 ± 1, tg + 1, for the P6-FS test), `fs_trace_take` (below), the `testkit` module (`kat_dump`, `keys_kat`); with `c-oracle` the C core is built with `-DPQZ_TEST_HOOKS` |
 | `bench` | the `bench` module (`src/bin/bench.rs`, `wasm/`) |
 | `wasm-m8` | bench builds only (implies `bench`): `WASM_MAX_LEGS` = `TXM_MAX_LEGS`, so wasm32 proves op 7 with M = 16 with `oversize` (without it, 8 = the default since Task 12; the D6 measurement of the limit was built with it), never in a production build |
-| `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_keypair_from_secret, c_encrypt, c_decrypt_raw, c_enc_group_seed, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`, `c_params`, `c_ghint`) call them |
+| `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer` and the set's headers, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_keypair_from_secret, c_encrypt, c_decrypt_raw, c_enc_group_seed, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`, `c_params`, `c_ghint`) call them |
 | `ctgrind` | test only (x86-64): valgrind memcheck client requests (`ct::secret`, `ct::public`, `ct::verdict`) and the `ct` binary, the constant-time check of the prover (`pqzl/test/ct.sh`; review fix E, [E-constant-time.md](../../research/code-review-2026-10-19/E-constant-time.md)); implies `bench` |
 
 A default build compiles no C and has neither test entry points nor the bench.
@@ -106,9 +117,10 @@ record; a record whose allocation fails is dropped, and the test counts a missin
 
 ```sh
 scripts/capped pqz-core/pqzl/rust/run.sh <label>    # from the repo root; logs in pqzl/rust/runs/<label>-*.txt
+PQZ_SET=n2560-kmax16384 scripts/capped pqz-core/pqzl/rust/run.sh <label>   # another set (default n2304-kmax4096)
 ```
 
-Tests (release, `c-oracle,test-hooks`; `tests/vectors.rs` checks the frozen keygen / enc / matrix vectors,
+Tests (release, `c-oracle,test-hooks,bench`, `--no-fail-fast`; `tests/vectors.rs` checks the frozen keygen / enc / matrix vectors,
 re-encodes every PQZL proof to itself, re-proves every PQZL proof from its witness and rnd32 to the same bytes,
 refuses non-canonical statements in `prove`, verifies every PQZL proof, rejects every PQZL row of negative.json and the
 cheating provers' proofs of `check_tbox_fixes.sh` and of `tests/fixtures/cheating/z34poc.sh` (z3 / z4 over their bounds;
@@ -136,14 +148,19 @@ the sequential results), the arithmetic KAT (`kat_dump` against the upstream gol
 `smartcontracts/vectors/pqz/pqz_kat.py --c-keys`; again with `keys_kat 1000 ctx` through the `Ctx` methods, the same
 lines), the generated params (`python3 -I ../params/to_rust.py --check`;
 `tests/oracle_params.rs` compares every field with the C headers), the prover's `proofs_fnv` against the C core's
-runs (PQZL v3 since 2026-10-19: `bench 5 5 63` = `research/pqzl-measure/runs/fs4-fnv-native.jsonl`, `bench 2 2 16320`
-= `fs4-fnv-native-16320.jsonl`, `node wasm/run_wasm.mjs 3 1 63` = `fs4-fnv-wasm.jsonl`; under v2 they were
-`tx0c-fnv-native`, `l3a-native-fast`, `tx0c-fnv-wasm`; the bench runs again with `PQZ_VERIFY=fast`, natively and
-in wasm32), native = wasm32 on the vectors (`node wasm/run_vectors.mjs`: proofs, verify and verify_fast verdicts of
+`pqz_bench` at the same set and arguments, run in the same job (`bench 5 5 63`, `bench 2 2 16320`, `node
+wasm/run_wasm.mjs 3 1 63`; the bench runs again with `PQZ_VERIFY=fast`, natively and in wasm32; history: until the R0
+id bump they were compared with frozen files in `research/pqzl-measure/runs/`, `fs4-fnv-*.jsonl` for PQZL v3, then
+`t8a-fnv-native*.jsonl`), native = wasm32 on the vectors (`node wasm/run_vectors.mjs`: proofs, verify and verify_fast verdicts of
 every PQZL vector and negative row, op 7 M = 8 proved too; the shadow stack's use), clippy `-D
 clippy::float_arithmetic` (production build, all features, `wasm/`), the wasm32 build.
 
-## D6: Rust against C (plan D6, Task 12)
+## D6: Rust against C (plan D6, Task 12; history)
+
+<a id="d6-rust-against-c-plan-d6-task-12"></a>
+
+This section is a dated record, not the current state: PQZL v2 at the `n2048-kmax1024` parameters, before the
+parameter sets, PQZL v3 and the later id bumps. Current timings wait on the calibration of plan 5h Task 9.
 
 Run `d6` (2026-10-18, `scripts/capped pqz-core/pqzl/rust/d6.sh d6`, files in `runs/d6/`, table `runs/d6/results-d6.md`)
 measured the C core and this crate in the same session on the same machine (AMD Ryzen 5 7235HS, clang 18.1.3,
@@ -152,8 +169,9 @@ measured at different times, so their times are **not comparable** and are not u
 gate: the owner uses it for the production choice. Every bench reported `fails 0`, and every relation's `proofs_fnv`
 is the same for both cores (native n = 10, wasm32 n = 5), so both sides timed the same proofs. D6 measured
 `proofSystemId` v2. PQZL v3 (2026-10-19) adds two hashes per proof and, with the z2 rejection fix D-2, about twice
-the z1 / z2 rejection attempts, so the prove times above are v2 figures; the v3 times are to be re-measured (plan
-`pqzl-fs3` Task 13; first C figures in `pqz-core/STATUS.md`, section "PQZL v3"). Verify does no rejection sampling.
+the z1 / z2 rejection attempts, so the prove times below are v2 figures (first v3 C figures in `pqz-core/STATUS.md`,
+section "PQZL v3"); no later cross-core timing run exists, the next is the Task 9 calibration. Verify does no
+rejection sampling.
 
 Times are p50 / p99 in ms (verify p99: the larger of the honest and the adversarial p99, as in STATUS.md). Samples:
 native 10 proves / 100 verifies, wasm32 5 / 30, verify_fast 200 native / 100 wasm32 (the `reproduce.sh --full`
@@ -234,9 +252,12 @@ wasm32 prove of M = 8, with the auditor on and off, in a bench build with the li
   111,017,984 B = 105.9 MiB (auditor off; p50 2,827 ms); native = wasm32 on all 374 vector digest lines, the three
   M = 8 rows proved in wasm32 with the native proof's digest (`runs/d6/rust-m8-*`). Both peaks are for one
   relation per process; a `Ctx` holding every relation's keys (all the vectors, M = 8 included) reaches
-  229,638,144 B = 219.0 MiB, still under 255.6 MiB.
+  229,638,144 B = 219.0 MiB, still under 255.6 MiB. Later, at `n2560-kmax16384` after the R0 review fix, the same
+  all-vectors replay reached 328,794,112 B = 313.6 MiB of linear memory
+  (`runs/r01a-fix-n2560-kmax16384-wasm-vectors-stderr.txt`), above that budget; no per-relation M = 8 peak is
+  measured at the larger sets.
 - **Done (Task 12):** `pqzl::WASM_MAX_LEGS` = 8, and `pqz-ffi`'s `WASM_PQZL_MAX_LEGS` = 8 on the Rust backend; the C
-  backend (opt-in) keeps 4. The wasm32 replays (`wasm/run_vectors.mjs`, `pqz-ffi`'s `vectors/replay_wasm.mjs`) prove
+  backend (opt-in) kept 4 then (today per set, `[pqzl_c] wasm_max_legs`: 2, and 1 at `n2816-kmax65536`). The wasm32 replays (`wasm/run_vectors.mjs`, `pqz-ffi`'s `vectors/replay_wasm.mjs`) prove
   the three M = 8 rows instead of refusing them. `pqz-ffi`'s digest lines keep their frozen M ≤ 4 set. Recorded in
   `docs/decisions.md` CTR-PQZ-09. The feature `wasm-m8` now only matters with `oversize` (M = 16, benches).
 
