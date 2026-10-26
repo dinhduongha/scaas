@@ -3,14 +3,23 @@
 > **Parameter sets moved (owner 2026-10-21, plan 5h Task 8b).** The headers the cores build with now live in one
 > directory per parameter set, [`pqz-core/params/sets/<set>/`](../../params/sets/README.md) (selected at compile time:
 > C `PQZ_SET`, Rust feature `set-<set>`; one set per library build; how to add a set:
-> [`pqz-core/params/README.md`](../../params/README.md)). The v3 set's headers and Rust params moved unchanged to
-> `sets/n2048-kmax1024/`; this folder keeps their specs (`*.sage`), the estimator logs and `codegen/`, and the research
-> records `n-study/`, `p16k/`, `aprime/`, `anon/` as before. The `pqz_*_params.h` named below are in `sets/n2048-kmax1024/`.
+> [`pqz-core/params/README.md`](../../params/README.md)). Each set's specs, headers, Rust params and estimator logs
+> (`e-s1.txt`, `e-s0.txt`) are generated there by `gen_set.py` / `make.sh <set> all`. The first-generation headers and
+> Rust params moved unchanged to `sets/n2048-kmax1024/` (2026-10-21); since the R0 review fix (2026-10-25) that set is no
+> longer frozen and its reg, dr and audited txm headers were regenerated (audited `R_TXM` legs in groups of `s_aud` =
+> 2, not 4). **Everything below is therefore the history of the first specs** (the shapes and numbers before the
+> parameter sets and before the R0 fix), kept as the record: this folder keeps those specs (`*.sage`), their estimator
+> logs, `codegen/` (used by every set), `to_rust.py`, and the research records `n-study/` (the ring-dimension study),
+> `p16k/` (the `n2560-kmax16384` study), `aprime/` (the `n2816-kmax65536` candidates), `anon/` (the op 7 sizing and hint
+> studies, with the `s_aud` hint study `hints-s.txt`) and `pa-pack/` (the coefficient-packing spike). The `pqz_*_params.h`
+> named below are the headers then checked in here (moved to `sets/n2048-kmax1024/` in `d68e0fc8`, 2026-10-21; git
+> history has them). Current numbers: each set's `SET.md`, `e-s1.txt` and `codegen.txt`.
 
-This folder holds the security parameters of PQZL, the lattice proof system of PQZ, and the evidence that they are
-secure. For each relation (what a proof shows: a transfer, a burn, a registration, …) it has a small specification, the
-C header generated from it, and the output of the lattice-estimator runs that size it to at least 128-bit security.
-The C prover and verifier include these headers; reviewers and anyone re-checking the security numbers use the rest.
+This folder holds the first security parameters of PQZL, the lattice proof system of PQZ, and the evidence that they
+were secure. For each relation (what a proof shows: a transfer, a burn, a registration, …) it has a small
+specification and the output of the lattice-estimator runs that sized it to at least 128-bit security; the C header
+generated from it was checked in here until the parameter sets. The cores now build with the per-set headers;
+reviewers re-checking the history and the method use this folder.
 How PQZL fits into PQZ: the parent [pqz-core README](../../README.md), §3
 ["Two proof systems, one precompile"](../../README.md#3-two-proof-systems-one-precompile).
 
@@ -45,7 +54,7 @@ them with the estimator.
 | `burn_params.sage`, `ds_params.sage`, `dr_params.sage` → `pqz_{burn,ds,dr}_params.h` | the `R_BURN` / `R_DS` / `R_DR` specs, sized in `estimator-e-s1-rel3.txt` |
 | `tx0_params.sage` → `pqz_tx0_params.h` | `R_TX0`, the transfer without the auditor, sized in `estimator-e-s1-tx0.txt` |
 | `txm{2,4,8,16}[0]_params.sage` → `pqz_txm*_params.h` | `R_TXM`, sized in `estimator-e-s1-txm.txt` |
-| `regen.sh`, `codegen-*.txt` | reruns the codegen and compares with the checked-in headers; the recorded runs |
+| `regen.sh`, `codegen-*.txt` | history (P6e D1): reran the codegen and compared with the headers then checked in here; the recorded runs. The headers left this folder (2026-10-21), so today it only reports "new"; per set: `make.sh <set> codegen` |
 | `z21_msis.sage` → `estimator-z21.txt` | the z21 norm check (P6-Z21, `SCRIPT=z21_msis.sage ./run_e_s1.sh <LaZer> <estimator> reg tx burn ds dr`) |
 | `anon/` | the P6-ANON sizing and hint scripts (`hints.sage` → `hints-anon.txt`, run by `run_hints.sh`) |
 
@@ -91,10 +100,11 @@ It takes about 30 s per spec.
 
 The sizes of the transfer relations (MSIS β: the attack's block size, with its classical / quantum cost):
 
-Rust (plan D8, the pure-Rust port `pqzl/rust`): `to_rust.py` (stdlib Python) converts every checked-in header into
-`pqzl/rust/src/params/<rel>.rs` (typed constants, the C names lower-cased, lazer-in2.h's structs field for field).
-After copying a header here run `python3 -I pqz-core/pqzl/params/to_rust.py`; `--check` (no Sage needed) compares the
-committed `.rs` files with the regenerated text, and `regen.sh` and `pqzl/rust/run.sh` run it.
+Rust (plan D8, the pure-Rust port `pqzl/rust`): `to_rust.py` (stdlib Python) converts every set's headers
+`pqz-core/params/sets/<set>/pqz_*_params.h` into `pqz-core/params/sets/<set>/rust/<rel>.rs` (typed constants, the C
+names lower-cased, lazer-in2.h's structs field for field; the structs are in `pqzl/rust/src/params/mod.rs`). After a
+codegen run `python3 -I pqz-core/pqzl/params/to_rust.py [set ...]` (or `make.sh <set> rust`); `--check` (no Sage
+needed) compares the committed `.rs` files with the regenerated text, and `regen.sh` and `pqzl/rust/run.sh` run it.
 
 | Relation | kmsis | kmlwe | m1 + m2 | MSIS β (classical / quantum) | MLWE uSVP β (dual_hybrid β) | knowledge error | codegen proof estimate |
 |---|---|---|---|---|---|---|---|
@@ -125,7 +135,7 @@ try, as the other relations did.
 - All eight meet β ≥ 450 on the first try. M = 16 (oversize, built only with `-DPQZ_TXM_OVERSIZE`) does not fit the
   precompile's `MAX_INPUT` (P6-ANON D3 / D20).
 
-## Relations v2 (frozen, P6e plan R1)
+## Relations v2 (history: frozen in P6e plan R1, at the first specs)
 
 **Where the relation is defined.** Each relation is defined by three things together: the LaZer spec file, the
 generated header and the builder in `src/pqz_rel.c` (see its header comment). The KATs (known-answer tests,

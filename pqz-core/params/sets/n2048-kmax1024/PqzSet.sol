@@ -24,6 +24,8 @@ library PqzSet {
     uint256 internal constant PACK_BITS = 42;
     /// legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)
     uint256 internal constant S_AUD = 2;
+    /// entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)
+    uint256 internal constant ROLL_MAX = 96;
     /// pk / u bytes (k polys x 64 be8)
     uint256 internal constant PK = 16_384;
     /// v bytes (16 be8)

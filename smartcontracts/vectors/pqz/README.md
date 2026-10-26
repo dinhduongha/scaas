@@ -110,7 +110,7 @@ Sender F, auditor A and `T` as the scenario (`T = Enc_F(1,000,000; 0x61…) + Tr
 i`, `sendCounter` 3 + i and `rnd32` `0xB0 + i`; memo key seed `0x4d…` (`pqz-ffi` `fixture::MEMO_KEY_SEED`). The
 statement is written once under the PQZL id; `ids` lists where M is built (M = 8: PQZL only). In wasm32 the replay proves
 PQZL M = 8 again on `pqz-ffi`'s Rust backend (the default; `WASM_PQZL_MAX_LEGS` = 8 since the Rust port's Task 12); the
-C backend (opt-in) does not prove it (`WASM_PQZL_MAX_LEGS` = the set's `[pqzl_c] wasm_max_legs`, 2 here, an estimate from the native peaks: one 512 MiB arena; review R4-C1), and the replay verifies the
+C backend (opt-in) does not prove it (`WASM_PQZL_MAX_LEGS` = the set's `[pqzl_c] wasm_max_legs`, 2 here, measured in plan 5h Task 8d part 2b: arena peak at M = 2 303.5 MiB of one 512 MiB arena, margin 1.69×; review R4-C1), and the replay verifies the
 native proof there. No op 7
 disclosure bundle (§5.4) vectors: `pqz-stmt` has no codec for it yet.
 

@@ -236,6 +236,16 @@ public class SpecTests
         Assert.Throws<ArgumentException>(() => P(Schedule(T1)).CheckIds(T1, [PqzSetIds.PqzlId[..62] + "00"]), "another library");
     }
 
+    /// <summary>Plan 5h Task 8d part 2b: the head timestamp the id check reads (and <c>PQZ-START</c> logs) is the block
+    /// tree head's when there is one, else the genesis timestamp (empty database), else 0.</summary>
+    [Test]
+    public void Id_check_head_is_the_block_tree_head_else_the_genesis()
+    {
+        Assert.That(PqzStartupCheck.IdCheckHead(T2, 7, T1), Is.EqualTo((T2, "block 7")));
+        Assert.That(PqzStartupCheck.IdCheckHead(null, null, T1), Is.EqualTo((T1, "genesis, empty database")));
+        Assert.That(PqzStartupCheck.IdCheckHead(null, null, null), Is.EqualTo((0UL, "genesis, empty database")));
+    }
+
     [Test]
     public void Stock_provider_with_the_section_fails_closed()
     {

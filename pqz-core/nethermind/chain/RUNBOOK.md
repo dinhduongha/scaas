@@ -43,7 +43,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 | copy | a replica of the SCaaS testnet with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
 | chainspec | the chain's JSON configuration (`genesis.json`); the precompiles are switched on by its `engine.Pqz` section |
 | schedule, T | one entry of `engine.Pqz.schedules`: gas prices that apply from its timestamp T on |
-| stock image | the unmodified `nethermind/nethermind:1.39.0`; it ignores `engine.Pqz` |
+| stock image | the unmodified Nethermind image (`nethermind/nethermind:1.39.0` in the copy and the roll-out of 2026-10-16); it ignores `engine.Pqz` |
 | probe | `probe.sh` / `e2e.py probe`: read-only calls that check chain id, genesis hash, self-test, every test vector and its gas |
 | e2e | `e2e.py e2e`: real transactions that call the precompiles through a test contract |
 | rollback head | the last block of the old chain, read from the backup in step 1; after a rollback the head must equal it |
@@ -65,7 +65,8 @@ The plugin refuses a first timestamp *before* genesis; a timestamp equal to gene
 (`../Nethermind.Pqz.Test/chainspecs/genesis-7622.json`) with a throwaway signer key in `extraData`. The stock image
 first produces some history on it. The live directory is never read beyond read-only `cat` / `ls` /
 `docker image inspect`, and no live data or key material is copied. As a result the copy's genesis hash is its own,
-not the SCaaS testnet's `0x24e43dcb…c464`; on the live chain, step 2 of the probe checks the live hash.
+not the SCaaS testnet's (`0x24e43dcb…c464` then, `0xa17faef4…2ac2` since the 200 M genesis reset of 2026-10-22); on the
+live chain, step 2 of the probe checks the live hash.
 
 **Changes the copy needed** (found in runs `2026-10-1[56]-copy-*.txt`):
 
@@ -75,7 +76,10 @@ not the SCaaS testnet's `0x24e43dcb…c464`; on the live chain, step 2 of the pr
 - both node configs set `Network.FilterPeersByRecentIp` false (otherwise a restarted follower was refused for minutes);
 - `copy.sh up` starts the signer first.
 
-**Commands.** Run from the repository root on the dev host. The comments say what each group demonstrates.
+**Commands.** Run from the repository root on the dev host. The comments say what each group demonstrates. The image
+tags are those of the 2026-10-15 / 16 run (the stock `nethermind/nethermind:1.39.0`, `scaas/nethermind-pqz:1.39.0-pqz1`;
+`E` was `engine-pqz.json` then). `copy.sh up` takes any image, so a rehearsal today passes the current image and the
+set's engine file (`E` below); the copy has not been re-run since 2026-10-17.
 
 ```sh
 C=pqz-core/nethermind/chain
@@ -114,8 +118,9 @@ Results: `../runs/*-copy-*.txt`, `../runs/*-rehearsal.txt`.
 
 ## Live roll-out on the SCaaS testnet (Task 10, executed 2026-10-16)
 
-*Live only.* **Executed on 2026-10-16** with image `pqz1`; log `../runs/2026-10-16-live.txt`. The chain has run `pqz2` since
-2026-10-17 ([op 7 section](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17)).
+*Live only.* **Executed on 2026-10-16** with image `pqz1`; log `../runs/2026-10-16-live.txt`. It ran `pqz2` from
+2026-10-17 ([op 7 section](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17)); the image
+today is in the status table above.
 
 **The decision** (owner 2026-10-15, TODO.md, explicit): once the copy gate (Tasks 7–9) passes, back up the current
 SCaaS testnet data, then **reset** the SCaaS testnet with a fresh genesis carrying the precompiles from block 0 (path B). Keep chain id
@@ -309,11 +314,15 @@ use an image built by `build-image.sh` from the reviewed commit.
 
 ### Owner steps outside this runbook
 
-- The follower node and the rate-limited public RPC on the SCaaS testnet. The copy's `docker-compose.copy.yml`,
-  `config.follower.json` and `nginx-rpc.conf` are the rehearsed configs.
-- A restart policy for the node.
-- When to delete the `*.bak-pqz-*` backups (the runbook's backups are the dated directories `pqz-<TS>` and
-  `op7-<TS>` in `/home/dockers/mba-chain-nethermind-backups/`).
+- The follower node and the rate-limited public RPC that the rule above asks for on mainnet 22776 (not needed on the
+  SCaaS testnet, owner 2026-10-19). The copy's `docker-compose.copy.yml`, `config.follower.json` and `nginx-rpc.conf`
+  are the rehearsed configs.
+- A restart policy for the node (the live `docker-compose.yml` has none: after a host restart the node stays stopped
+  until someone runs `docker compose up -d blockchain-node`).
+- When to delete the backups left in the live directory: `genesis.json.bak-pre-200m-20261022`,
+  `data/nethermind_data.pre-200m-20261022`, `genesis.json.bak-pqz4-20261026`, `docker-compose.yml.bak-pqz4-20261026`
+  (listed 2026-10-26; the dated `pqz-<TS>` / `op7-<TS>` directories of `/home/dockers/mba-chain-nethermind-backups/`
+  were empty then).
 
 ## The multi-recipient transfer (op 7) on the SCaaS testnet (executed 2026-10-17)
 
@@ -404,7 +413,8 @@ work the same way with `eip<N>TransitionTimestamp` = T > now (Clique forks by ti
 5 s with a `blockAccessListHash` in the header; `eth_chainId` 0x1dc6; genesis hash unchanged; `e2e.py probe` all
 checks passed with the reviewed library's corpus (`--corpus bin/corpus-ffi-1adbd563.jsonl`), every input whose
 calldata floor exceeds 2^24 refused by `eth_call`; `e2e.py e2e` all checks passed (76), the same inputs refused by the
-pool; one ordinary value transfer (21,000 gas = 12,000 + 3,000 + 6,000, with its EIP-7708 log). **Not yet run:**
+pool; one ordinary value transfer (21,000 gas = 12,000 + 3,000 + 6,000, with its EIP-7708 log). **Not run in this
+reset** (it passed after the [200 M genesis reset](#genesis-gaslimit-200-m-on-the-scaas-testnet-executed-2026-10-22)):
 `e2e.py codesize` (65,536 B of code must deploy, 65,537 B fail). It needs a block gas limit above its `tx.gas` of
 110 M, and after the reset the limit ramps from the genesis `gasLimit` 0x1000000 (16,777,216) toward
 `TargetBlockGasLimit` 200 M by only 1/1024 per block: ≈ 1,780 blocks (≈ 2.5 h) to 110 M, ≈ 2,540 blocks (≈ 3.5 h) to
@@ -415,9 +425,10 @@ pool; one ordinary value transfer (21,000 gas = 12,000 + 3,000 + 6,000, with its
 current block gas limit is not included (EIP-8037 reserves `tx.gas` in the state dimension), so large deploys wait.
 Changing the genesis `gasLimit` would change the genesis hash.
 
-**Rollback** to 1.39.0 (not needed): stop the node, put the three `*.bak-1.39.0-20261021` files back, swap the data
-dirs back (`data/nethermind_data.pre-2.2.0-20261021` → `data/nethermind_data`), start. The 1.39.0 head is the one in
-that data dir.
+**Rollback** to 1.39.0 (not needed, and no longer possible: neither the `*.bak-1.39.0-20261021` files nor
+`data/nethermind_data.pre-2.2.0-20261021` are in the live directory on 2026-10-26): stop the node, put the three
+`*.bak-1.39.0-20261021` files back, swap the data dirs back (`data/nethermind_data.pre-2.2.0-20261021` →
+`data/nethermind_data`), start. The 1.39.0 head is the one in that data dir.
 
 **Amsterdam rules the operator must know** ([gas impact](../runs/2026-10-21-glamsterdam-gas-impact.md)): `tx.gas` may
 exceed 2^24 (up to 2^32 − 1) but execution gas may not; the calldata floor is 64 gas per byte and must stay ≤ 2^24, so

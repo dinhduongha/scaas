@@ -1,13 +1,15 @@
-# pqz-core/pqzl/params/aprime — A' parameter candidates (plan Task 5h, design)
+# pqz-core/pqzl/params/aprime — parameter candidates for `K_MAX` ≈ 65,536 (plan Task 5h, design; history)
 
-Owner choice A' (decisions CTR-PQZ-06, 2026-10-19): larger lattice parameters so that the credit cap `K_MAX` reaches
-≈ 65,536. This folder measures the candidates; nothing here is a frozen relation. Design and conclusions:
+Owner choice of 2026-10-19 (decisions CTR-PQZ-06): larger lattice parameters so that the credit cap `K_MAX` reaches
+≈ 65,536. This folder measured the candidates; nothing here is a frozen relation. The outcome is the parameter set
+`n2816-kmax65536` ([`pqz-core/params/sets/n2816-kmax65536/`](../../../params/sets/README.md); a full PQZL set since
+owner 2026-10-24, no PQZH), whose specs `gen_set.py` generates there; this folder is its research record. Design and conclusions:
 [`docs/superpowers/specs/2026-10-20-pqz-state-redesign.md`](../../../../docs/superpowers/specs/2026-10-20-pqz-state-redesign.md) §6.
 
 | File | What |
 |---|---|
 | `aprime.sage`, `run.sh` → `aprime.txt` | per candidate (n, q, K): the noise and digit budget of pq-zero-knowledge.md §4.3 generalised, sizes, encryption security (lattice-estimator `53da598` primal uSVP and full `LWE.estimate`; leaky-LWE-Estimator `0a9caf8` DDGR20 worst-case mixed hints at 0 / 32 / 80) |
-| `ap<n>_<rel>_params.sage`, `run_proof.sh` → `proof-aprime.txt` | LaZer codegen sizing specs (n = 2688 and 2816, q = 2^54 − 327, the A' bit layouts) run through `../e_s1_proof.sage` unchanged: MSIS / MLWE ranks and the codegen proof size |
+| `ap<n>_<rel>_params.sage`, `run_proof.sh` → `proof-aprime.txt` | LaZer codegen sizing specs (n = 2688 and 2816, q = 2^54 − 327, the candidates' bit layouts) run through `../e_s1_proof.sage` unchanged: MSIS / MLWE ranks and the codegen proof size |
 
 **Superseded research record (review finding F-7, 2026-10-25).** The `ap2816_*.sage` specs carry `pqz_delta` but no
 `kmlwe_min`, so their proof MLWE rank came out at 41, where `proof-aprime.txt` shows dual_hybrid β 447 / 448 < 450; the

@@ -25,7 +25,7 @@ plan 5h Task 8d part 1b; its contracts build and pass their suites since 8d part
 | proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5")` = `0xa801f5c4…8e8aa9` (R0 review fix 2026-10-25; v4 `0x9d23a0de…bd53a3` retired) (set.toml `pqzl_id`, plan 5h Task 8d; controller proposal, decisions CTR-PQZ-09); no PQZH id (pqz-stmt `HAS_PQZH` false: its `PQZH_ID` is the zero word, refused like any unknown id) |
 | owner approval | 2026-10-21: keep this set as a core-only set; 2026-10-24: a full PQZL set for customers (progress.md); its values are the research record's, not a frozen relation |
 | stored-blob packing width | ⌈log2 q⌉ = 54 bits (`PqzSet.sol` `PACK_BITS`; built in 8d part 2: stored `ct` 19,116 B (64-bit lanes 22,656), `acc` 598 slots; lanes hold `(ROLL_MAX + 1) · q < 2^64`, i.e. at most 1,023 terms per rollover) |
-| limits | `MAX_PROOF_PQZL` 98,304 B (every set's): largest proof 79,208 B (R_TXM M = 8 with the auditor, the vectors since the R0 fix), margin 19,096 B; `MAX_INPUT` 524,288 B (`set.toml` `max_input`, 512 KiB like the other non-frozen sets; `pqz_max_input()` gives it to the node): largest input at the limit 5 + 295,808 + 98,304 = 394,117 B (R_TXM M = 8 with the auditor), above the frozen set's 393,216 |
+| limits | `MAX_PROOF_PQZL` 98,304 B (every set's): largest proof 79,208 B (R_TXM M = 8 with the auditor, the vectors since the R0 fix), margin 19,096 B; `MAX_INPUT` 524,288 B (`set.toml` `max_input`, 512 KiB, every set's since the R0 review fix; `pqz_max_input()` gives it to the node): largest input at the limit 5 + 295,808 + 98,304 = 394,117 B (R_TXM M = 8 with the auditor), above `n2048-kmax1024`'s former 393,216 |
 | self-test | `OP_SELFTEST` = `0x1e69e3cd…dee740` (R0 review fix; was `0x0aa1dfe2…491882`) (`selftest.json`: results 1, 0, 0, 0, no Ligero FFT); the Nethermind plugin built with `-p:PqzSet=n2816-kmax65536` pins it (`SelfTest.cs`) |
 | PQZH | **none at this set** (owner ruling 2026-10-24): q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has no power-of-two part beyond 2^3 and a smooth part of only 24, none of the radices the current Ligero presets use (19 / 43 / 431; 7 / 17 at `n2304-kmax4096`). F_q^* does have subgroups of order 1,789 and 42,936 (= 24 · 1,789), so PQZH here would need a radix-1,789 FFT step and a new preset at a different rate (k = 1,789, n = 42,936: rate 1/24 against ≈ 1/40 today, more column queries, a fresh soundness and size analysis) — unexplored work, not in scope — or another q, i.e. another set. **Not pursued (owner ruling 2026-10-25: no spike, write the reason down).** Controller estimate from the cost model of `pqz-core/pqzh/ligero/ligero_params.py` (`fft_cost(n) = n · Σ (r + 1)` over the radices of n; computed by hand, not run): (1) a radix-r stage costs ≈ r + 1 products per point, so the largest FFT at n = 42,936 = 2^3 · 3 · 1,789 is ≈ 77.4 M products against ≈ 3.7 M at `n2304-kmax4096`'s n = 45,752 (≈ 21×); k = 1,789 about halves the row count, so the prover's work is ≈ 10× `n2304-kmax4096`'s, most likely over the prover budget (`PMAX` 4e9 base products), and the prover runs on the client (wasm32 in the browser). (2) A fast 1,789-point DFT (Rader) needs a cyclic convolution of length 1,788 = 2^2 · 3 · 149, which has no NTT in F_q (149 does not divide q − 1); an extension field does not help (q + 1 = 2 · 31 · 109 · 409 · 6,517,458,439 is not smooth either); only nested Winograd-style convolutions remain — several days of work with an uncertain result. (3) The verifier (the precompile) would not be the problem: it evaluates at the t opened columns (Lagrange), with no size-n FFT. A chain that needs PQZH with `K_MAX` 65,536 needs another parameter set whose q − 1 is smooth like the other sets' (2^3 · 19 · 43 · 431 divides q − 1), with a full parameter and estimator run. pqz-ffi is built without PQZH (feature `pqzh` off; a compile-time check refuses it at this set), the vectors are PQZL only, the gate skips Ligero and the cross-checks |
 
@@ -33,33 +33,46 @@ Object sizes: pk 22,528 B, ciphertext 22,656 B, R_TX statement 113,792 B (audito
 
 ## What a chain needs for this set
 
-Measured where marked; the rest [estimate]. Nothing here was timed (owner rule: no timing runs).
+Measured where marked (plan 5h Task 8d part 2b: forge 1.8.5 under Amsterdam through the real token and registry, the
+`PQZ` precompile at its provisional testnet row `pqz-core/nethermind/chain/engine-pqz-provisional-n2816.json` + 3 per
+input word; `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2816-kmax65536.txt`, the table in
+[`../README.md`](../README.md#one-transactions-gas-per-relation-measured-plan-5h-task-8d-part-2b)); the rest [estimate].
+Nothing here was timed (owner rule: no timing runs).
 
 1. **The node library and plugin of this set.** `pqz-ffi` built with `--no-default-features --features
    pqzl-rust,set-n2816-kmax65536` (`pqz_max_input()` = 524,288) and the Nethermind plugin with `-p:PqzSet=n2816-kmax65536`
-   (its `OP_SELFTEST` pin); the image build (`Dockerfile`, `build-image.sh`) is for the default set only today, so a
-   customer image of this set needs those two flags there and its own reviewed `ExpectedLibrarySha256`. The plugin's
-   tests pass at this set (`run-tests.sh` with `PQZ_SET=n2816-kmax65536`).
-2. **Contracts built for this set**: wired to `PqzSet.sol` and tested at this set in plan 5h Task 8d part 2a (provisional
-   `ROLL_MAX` 48); `ROLL_MAX` pinned and the per-op gas measured in part 2b. Until then: not deployable on chain.
-3. **Per-transaction regular gas ≤ 2^24**: the EIP-7976 calldata floor of the largest PQZL path (relayed R_TXM M = 8)
-   is ≈ 6.98 M [model, `../README.md`], leaving ≈ 9.8 M for execution and the precompile; the execution gas is
-   measured in 8d part 2.
-4. **State gas:** every debit stores its op blob (ciphertexts never only in calldata / events); the objects are ≈ 10 %
-   larger than `n2560-kmax16384`'s (ciphertext 22,656 vs 20,608 B), so the state gas per debit grows about as much
-   [estimate; measured in 8d part 2], and with it the block gas limit a debit needs (`n2560-kmax16384`: ≥ ≈ 43 M per
-   debit, [SET.md](../n2560-kmax16384/SET.md#conditions-for-this-set-to-work-on-a-chain)).
+   (its `OP_SELFTEST` pin and the set's ids `PqzSetIds`); `PQZ_SET=n2816-kmax65536 build-image.sh <label>` builds that
+   library, plugin and image, against the set's reviewed `ExpectedLibrarySha256` `17947f64…` in `SelfTest.cs` (R0
+   review fix part b, `pqz-core/nethermind/runs/2026-10-26-r01b-ffi-n2816-kmax65536.txt`; no image of this set built
+   yet). The plugin's tests pass at this set: 51 / 51 (`run-tests.sh` with `PQZ_SET=n2816-kmax65536`,
+   `pqz-core/nethermind/runs/2026-10-26-t8d2b-test-n2816-kmax65536.txt`).
+2. **Contracts built for this set**: wired to `PqzSet.sol` and tested at this set since plan 5h Task 8d part 2a; in part
+   2b `ROLL_MAX` is pinned at **32** (controller proposal, owner may override): the largest multiple of 16 under
+   0.75 · 2^24 on both relay paths, the relayed full rollover 11,081,668 gas via `mtxExecute`, 11,238,795 via
+   `uaExecute` (1,344,117 under); 48 would be 12,575,616 / 12,732,731, over the cap on `uaExecute`
+   (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2816-kmax65536.txt`; the first pin, 48, measured
+   `mtxExecute` only, review fix of 2026-10-26). Forge passes at this set (1,365 passed / 0 failed / 13 skipped,
+   `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-forge-n2816-kmax65536.txt`).
+3. **Per-transaction regular gas ≤ 2^24** [measured]: relayed op 1 (auditor) 9.55 M; op 7 M = 1 / 2 / 4 (auditor)
+   7.25 / 7.51 / 8.27 M; op 7 M = 8 12.56 M with the auditor (131,268 B of calldata), 11.28 M without;
+   `UARegistry.register` 4.71 M; `mtxPrepareAcc` halves 3.75 M each (spec §7.6).
+4. **State gas:** every debit stores its op blob (ciphertexts never only in calldata / events), packed at 54 bits
+   (P46) [measured]: 30.33 M per relayed op 1, 29.57 M per prepare half, 63.44 M for op 7 M = 8 with the auditor,
+   62.11 M without. Block gas used = max(Σ regular, Σ state) (EIP-8037), so a 60 M block holds one op 1 debit of this
+   set and no op 7 M = 8 [estimate, from the measured state gas].
 5. **Precompile input:** ≤ 394,117 B at the limits (above), within `MAX_INPUT` 524,288; built in memory by the
    token / registry, so it is not calldata.
-6. **Security margins:** encryption uSVP β 520, 80 worst-case hints β 496.79; proof MSIS / MLWE β ≥ 450 per spec
+6. **Security margins:** encryption uSVP β 520; since the R0 review fix 128 worst-case hints (an audited op 7 group of
+   `s_aud` = 4 legs) DDGR20 β 483.09, dual_hybrid − offset 475.09 / 478.09 [estimate] (was 496.79 at 80 hints); proof MSIS / MLWE β ≥ 450 per spec
    (`e-s1.txt`); exactness and Fiat–Shamir rounds MET (`e-s0.txt`); worst-case noise margin 1.02 against 2^30
    (`worstcase_noise.json` `margin_2_30`), mint margin 3.08.
 7. **No PQZH backup** at this set (above): a chain that wants the hash-based backup proof system needs another set; the radix-1,789 preset is not pursued (owner 2026-10-25, reason in the PQZH row above).
 
-Proof sizes (`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json`, byte-identical C = Rust = wasm32): R_TX
-54,843 B, R_TX0 54,531, R_BURN 54,012 (burn) / 53,983 (refresh), R_REG 35,407, R_DS 35,924, R_DR 36,728 (receiver) /
-36,742 (auditor); R_TXM with the auditor M = 1 / 2 / 4 / 8: 54,844 / 57,746 / 59,508 / 79,196 B (the M = 8 boundary row
-79,199 B), without 54,506 / 55,024 / 58,148 / 76,350 B (all below `MAX_PROOF_PQZL` 98,304). Heap: C prover arena peaks
+Proof sizes (`smartcontracts/vectors/pqz/n2816-kmax65536/proof_pqzl.json` since the R0 review fix, byte-identical C =
+Rust = wasm32): R_TX 54,849 B, R_TX0 54,505, R_BURN 54,026 (burn) / 53,996 (refresh), R_REG 35,479, R_DS 35,913, R_DR
+36,828 (receiver) / 36,859 (auditor); R_TXM with the auditor M = 1 / 2 / 4 / 8: 54,824 / 57,779 / 59,548 / 79,208 B (the
+M = 8 boundary row 79,207 B), without 54,504 / 55,020 / 58,086 / 76,340 B (all below `MAX_PROOF_PQZL` 98,304; the
+pre-R0 values 79,196 / 79,199 B of this paragraph were stale, plan 5h Task 8d part 2b). Heap: C prover arena peaks
 538 MB (R_TX) … 1,259 MB (R_TXM M = 8 with the auditor: needs `PQZ_ARENA_MB=2048`).
 
 Files: `set.toml` (input), `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, `<rel>_params.sage` (gen_set.py),

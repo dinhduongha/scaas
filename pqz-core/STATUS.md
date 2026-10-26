@@ -34,6 +34,9 @@ Terms used throughout:
 
 ## Current state (2026-10-19)
 
+> Not kept current: written 2026-10-19, with a few later lines (up to 2026-10-24). Today's state is [README.md §9](README.md#9-status-and-whats-next) and
+> [TODO.md](../TODO.md) §00; this file stays the dated log.
+
 - **Parameter sets (plan 5h Task 8b, 2026-10-22, branch `pqz-16k`).** PQZ's parameters are now one directory per set,
   [`params/sets/<set>/`](params/README.md), selected at compile time (C `PQZ_SET`, Rust feature `set-<set>`; one set
   per library build); the only input of a set is its `set.toml`, `params/sets/gen_set.py` derives the rest and

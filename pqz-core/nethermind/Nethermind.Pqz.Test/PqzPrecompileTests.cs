@@ -184,6 +184,26 @@ public class PqzPrecompileTests
         Assert.That(Def("PQZ_FFI_OUT_BYTES"), Is.EqualTo(32));
     }
 
+    /// <summary>Review R4-C6 (plan 5h Task 8d part 2b): an input panic (status 3, the fault-hook library's
+    /// <c>pqz_test_panic</c>) through <c>PqzPrecompile.Run</c> in a child process: …00, one <c>PQZ-INPUT-PANIC</c>
+    /// warning, the process goes on (exit 0) and the next call verifies again.</summary>
+    [Test]
+    public void Input_panic_gives_zero_and_the_node_goes_on()
+    {
+        string hooks = Path.Combine(Repo.HooksDir, "libpqz_ffi.so");
+        Assert.That(File.Exists(hooks), $"{hooks} (fault-hooks build, run.sh)");
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "panic", Repo.HooksDir, Repo.CorpusPath]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        using Process p = Process.Start(psi)!;
+        string err = p.StandardError.ReadToEnd();
+        string outp = p.StandardOutput.ReadToEnd();
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"panic child: exit {p.ExitCode}; stdout: {outp.Trim()}; stderr: {err.Trim()}");
+        Assert.That(p.ExitCode, Is.EqualTo(0));
+        Assert.That(outp, Does.Contain("panic child: ok"));
+        Assert.That(err, Does.Contain("PQZ-INPUT-PANIC"));
+    }
+
     [Test]
     public void Node_fault_exits_120_with_the_tag()
     {

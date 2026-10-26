@@ -73,15 +73,19 @@ RUN dotnet build Calibrate/Calibrate.csproj -c Release -m:2 -o /opt/pqz-calibrat
 FROM ${BASE} AS node
 ARG COMMIT=unknown
 ARG FFI_SHA256
+# the set's OP_SELFTEST hash (SelfTest.cs ExpectedHash of PQZ_SET; build-image.sh passes it; plan 5h Task 8d part 2b:
+# was a literal, pqz4's n2304 hash, stale in pqz5)
+ARG SELFTEST
 COPY --from=plugin /out/Nethermind.Pqz.dll /nethermind/plugins/
 COPY --from=ffi /out/libpqz_ffi.so /nethermind/plugins/
 COPY pqz-core/nethermind/NOTICE-pqz.txt /nethermind/plugins/
 COPY pqz-core/NOTICE /nethermind/plugins/NOTICE-pqz-core.txt
 COPY pqz-core/pqzl/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
 RUN echo "${FFI_SHA256}  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
+RUN echo "${SELFTEST}" | grep -Eqx '[0-9a-f]{64}' || { echo "SELFTEST build arg missing or not 64 hex digits" >&2; exit 1; }
 LABEL scaas.pqz.commit="${COMMIT}" \
       scaas.pqz.ffi.sha256="${FFI_SHA256}" \
-      scaas.pqz.selftest="23d7a1db653449c52bfed0ebbfe664867bf2400261f8999406799dc1040c97c0" \
+      scaas.pqz.selftest="${SELFTEST}" \
       org.opencontainers.image.title="scaas/nethermind-pqz" \
       org.opencontainers.image.description="Nethermind 2.2.0 + the SCaaS PQZ / ML-DSA precompile plugin (local only, never pushed)"
 

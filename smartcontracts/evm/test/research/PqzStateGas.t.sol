@@ -4,6 +4,11 @@ pragma solidity ^0.8.24;
 import {Test, console2} from "forge-std/Test.sol";
 import {SSTORE2} from "../../src/common/SSTORE2.sol";
 
+// RESEARCH ONLY (plan 5h Task 8d part 2b, open item 4): this prototype models the PRE-P46 layout (64-bit lanes, the
+// Task 5h design of 2026-10-20) at n2048 / n2816 and is kept as the record of that design's measurements; it is not
+// updated to the packed (P46) stored form. The production gas of the built token at each set is
+// `test/pqz/PqzStateGas.t.sol` (`PqzStatePinGasTest`, `test_gasTable_*`); `test/research/PqzPackGas.t.sol` measures the
+// real token too.
 /// @title Plan Task 5h (design) measurement prototype, **not production code**: the proposed PQZ state layout of
 ///        docs/superpowers/specs/2026-10-20-pqz-state-redesign.md, reduced to its storage and arithmetic hot paths.
 /// @notice One SSTORE2 "op blob" per debit operation holds `u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_a …]` (the shared

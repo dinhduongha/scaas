@@ -23,7 +23,7 @@ namespace Nethermind.Pqz;
 /// gives the compiled-in known answers (review R4-C4, <see cref="MlDsaKat"/>), that the library's SHA-256 equals the
 /// reviewed one (review W-G), that <c>OP_SELFTEST</c> equals the compiled-in hash and that the schedule in force and
 /// every later one (from the block tree head on) carry only the library's proofSystemIds (review R4-C3, <see cref="PqzSetIds"/>), then logs
-/// <c>PQZ-START</c> (library SHA-256, self-test, input limit <c>max_input</c>, OpenSSL version, ML-DSA KAT, schedules,
+/// <c>PQZ-START</c> (library SHA-256, self-test, input limit <c>max_input</c>, the head timestamp the id check read, OpenSSL version, ML-DSA KAT, schedules,
 /// addresses). Any failure: <c>PQZ-REFUSE</c> and exit 120. The checks run in <see cref="PqzStartupCheck"/>.
 /// </summary>
 public class PqzPlugin(ChainSpec chainSpec) : INethermindPlugin
@@ -45,6 +45,11 @@ public class PqzPlugin(ChainSpec chainSpec) : INethermindPlugin
 [RunnerStepDependencies(dependencies: [typeof(InitializeBlockTree)], dependents: [typeof(LoadGenesisBlock)])]
 public class PqzStartupCheck(ChainSpec chainSpec, ISpecProvider sp, IPrecompileProvider pp, IBlockTree blockTree, ILogManager logManager) : IStep
 {
+    /// <summary>The timestamp the id check (R4-C3) reads and where it came from, logged in <c>PQZ-START</c> (plan 5h Task
+    /// 8d part 2b): the block tree head's (<c>block n</c>), or the genesis timestamp on an empty database.</summary>
+    public static (ulong Timestamp, string From) IdCheckHead(ulong? headTimestamp, ulong? headNumber, ulong? genesisTimestamp) =>
+        headTimestamp is { } t ? (t, $"block {headNumber}") : (genesisTimestamp ?? 0, "genesis, empty database");
+
     public Task Execute(CancellationToken cancellationToken)
     {
         ILogger log = logManager.GetClassLogger<PqzPlugin>();
@@ -60,7 +65,7 @@ public class PqzStartupCheck(ChainSpec chainSpec, ISpecProvider sp, IPrecompileP
             p.ValidateGenesis(chainSpec.Genesis?.Timestamp ?? 0);
             // R4-C3 from the block tree, not the wall clock (owner 2026-10-26, review of fix part b I-1): the head's
             // timestamp; on an empty database (no head yet: this step runs before LoadGenesisBlock) the genesis one
-            ulong head = blockTree.Head?.Timestamp ?? chainSpec.Genesis?.Timestamp ?? 0;
+            (ulong head, string headFrom) = IdCheckHead(blockTree.Head?.Timestamp, blockTree.Head?.Number, chainSpec.Genesis?.Timestamp);
             p.CheckIds(head, PqzSetIds.PqzhId == "" ? [PqzSetIds.PqzlId] : [PqzSetIds.PqzlId, PqzSetIds.PqzhId]);
             string sha = SelfTest.CheckedLibrarySha256();
             string st = SelfTest.Run();
@@ -69,7 +74,7 @@ public class PqzStartupCheck(ChainSpec chainSpec, ISpecProvider sp, IPrecompileP
             // an overflow is PQZ-REFUSE at start-up (review 8d1 M1)
             int maxInput = PqzNative.MaxInput;
             if (maxInput <= 0) throw new InvalidOperationException($"pqz_max_input() = {maxInput}");
-            string msg = $"PQZ-START sha256={sha} selftest={st} max_input={maxInput} openssl={MlDsaKat.OpenSslVersion} mldsa_kat={kat} set={SelfTest.Set} addresses=PQZ:{PqzAddresses.Pqz},MLDSA44:{PqzAddresses.MlDsa44},MLDSA65:{PqzAddresses.MlDsa65} schedules=[{string.Join("; ", p.Schedules)}]";
+            string msg = $"PQZ-START sha256={sha} selftest={st} max_input={maxInput} id_check_head={head} ({headFrom}) openssl={MlDsaKat.OpenSslVersion} mldsa_kat={kat} set={SelfTest.Set} addresses=PQZ:{PqzAddresses.Pqz},MLDSA44:{PqzAddresses.MlDsa44},MLDSA65:{PqzAddresses.MlDsa65} schedules=[{string.Join("; ", p.Schedules)}]";
             Console.Error.WriteLine(msg);
             if (log.IsInfo) log.Info(msg);
         }

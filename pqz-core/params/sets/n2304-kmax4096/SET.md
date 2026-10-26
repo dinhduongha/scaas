@@ -20,16 +20,20 @@ chain) and, since plan 5h Task 8d part 2, of the contracts (the committed `smart
 | proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5")` = `0xef1ffbcb…90336e` (R0 review fix 2026-10-25; v4 `0x15d16d77…cb608a` retired); PQZH `keccak256("scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3")` = `0x046859a8…944ead` (R0 review fix; v2 `0xe4bc6d17…885730` retired) (set.toml `pqzl_id` / `pqzh_id`; plan 5h Task 8d, the one bump of Task 8: controller proposal, decisions CTR-PQZ-09) |
 | owner approval | 2026-10-21 (supersedes the approved `n2560-kmax16384`; progress.md) |
 | stored-blob packing width (P46 ruling, owner 2026-10-21) | ⌈log2 q⌉ = 46 bits (P46: 4 coefficients per 23 bytes); `PqzSet.sol` `PACK_BITS`; built in 8d part 2: stored `ct` 13,340 B (64-bit lanes 18,560), `acc` 417 slots |
+| `ROLL_MAX` | 80 (`set.toml` `roll_max` → `PqzSet.ROLL_MAX`, plan 5h Task 8d part 2b; controller proposal, owner may override): the largest multiple of 16 under 0.75 · 2^24 on both relay paths, the relayed full rollover 12,111,158 gas via `mtxExecute`, 12,268,273 via `uaExecute` (the binding path; 314,639 under), 96 would be 13,382,390 / 13,539,505 (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2304-kmax4096.txt`) |
+| on chain | the SCaaS testnet's set: image `scaas/nethermind-pqz:2.2.0-pqz5` (library `dd0e7668…`, `OP_SELFTEST` `d6c01fbc…`) with provisional rows (`pqz-core/nethermind/chain/engine-pqz-provisional-n2304.json`) since 2026-10-26; measured gas per relation: [`../README.md`](../README.md#one-transactions-gas-per-relation-measured-plan-5h-task-8d-part-2b) |
 | PQZH | built (plan 5h Task 8c part 2): preset B (radices 2/7/17/19/43/431, n 45,752, k 952, t 120; owner 2026-10-22), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; `MAX_PROOF_PQZH` 327,680 (owner 2026-10-25: the audited R_TXM M = 4 with G = 2 has the bound 296,248 B; was 262,144), `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
 Proof sizes (`smartcontracts/vectors/pqz/n2304-kmax4096/proof_pqzl.json`, byte-identical C = Rust = wasm32): TRANSFER
 46,662 B, TRANSFER0 46,329, BURN 45,835, REFRESH 45,819, REGISTER 30,381, DISCLOSE-SENDER 30,814, -RECEIVER 31,546,
 -AUDITOR 31,558; op 7 with the auditor M = 1 / 2 / 4 / 8: 46,678 / 47,503 / 63,885 / 80,290 B (G = 1 / 1 / 2 / 3), without 46,342 /
-46,857 / 47,821 / 64,607 B (largest 80,330 B, M8-on-boundary: 17,974 B under `MAX_PROOF` 98,304); PQZH audited M = 4
+46,857 / 47,821 / 64,607 B (largest 80,290 B, the M = 8 row; M8-on-boundary 80,288 B; 18,014 B under `MAX_PROOF` 98,304); PQZH audited M = 4
 293,112 B (bound 296,248). Object sizes: pk 18,432 B, ciphertext 18,560 B, op 1
-statement 93,312 B (auditor on). Heap: C prover arena peaks 117 MB (R_REG) … 937 MB (R_TXM M = 8: needs
-`PQZ_ARENA_MB=2048`), `pqzl/runs/t8b-n2304-bench.txt`; Rust peaks in the 8b report.
+statement 93,312 B (auditor on). Heap: C prover arena peaks after the R0 review fix (the gate's bench,
+`pqz-core/runs/gate/n2304-kmax4096-fnv-c.jsonl`) 380 MB (R_TX) / 471 MB (R_TXM M = 2) / 1,345 MB (R_TXM M = 8 with the
+auditor: needs `PQZ_ARENA_MB=2048`); before it 117 MB (R_REG) … 937 MB (R_TXM M = 8), `pqzl/runs/t8b-n2304-bench.txt`;
+Rust peaks in the 8b report.
 
 Files: `set.toml` (input), `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, `<rel>_params.sage` (gen_set.py),
 `pqz_<rel>_params.h` + `codegen.txt` (LaZer codegen), `rust/<rel>.rs` (to_rust.py), `e-s1.txt`, `e-s0.txt`,

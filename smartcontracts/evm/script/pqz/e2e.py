@@ -26,6 +26,7 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -45,7 +46,11 @@ MIN_DECOY, DEC_FEE = 1, 2  # the tokens' minDecoyFee (plan 5h fee ruling) and th
 ROLL_AGE = 5  # PqzCore.ROLL_AGE: an entry rolls up at block_i + ROLL_AGE
 SHIELD_POOL = "0x" + keccak256(b"scaas.shield.pool.v1")[12:].hex()
 MLDSA44, MLDSA65, PQZ_MLWE, SECP256K1 = 0x0130, 0x0131, 0x0142, 0x0108
-CAP_ML, CAP_PQZ, BUDGET = 200_000, 3_000_000, 12_000_000
+# CAP_PQZ: the registry's verify cap for the PQZ key's R_REG proof; it must cover the precompile's register row + 3 per
+# input word + the verifier (plan 5h Task 8d part 2b: PQZL 3.62-3.67 M at the four sets, 3,634,962 at n2304-kmax4096's
+# provisional row 3,504,000, test PqzStatePinGasTest.test_gasTable_pqzl; 3,000,000 refused every PQZ key registration
+# under those rows). PQZL only: a PQZH registry needs >= 5.1 M (its verifyPop 4.82-5.03 M)
+CAP_ML, CAP_PQZ, BUDGET = 200_000, 4_500_000, 12_000_000
 FAILS, LOG = [], []
 RPC = None
 
@@ -58,6 +63,21 @@ def pack(b):
     for i in range(n):
         x = x << bits | int.from_bytes(b[8 * i:8 * i + 8], "big")
     return x.to_bytes(n * bits // 8, "big")
+
+
+def probe(n):
+    """`out` of n bytes with every 64-bit lane 1: canonical and no zero u group (the views refuse a zero u, ZeroU), so a
+    statement view called with it returns T, which does not depend on `out`."""
+    return (bytes(7) + b"\1") * (n // 8)
+
+
+def pqz_key(ua):
+    """A holder's PQZ key as the token reads it (UA-6: an attribute, `recordOf(ua).pqzKey` = its SSTORE2 pointer; data
+    after the pointer's leading 0x00); `keyOf` is the UA's signing key."""
+    ptr = "0x" + words(call(REG[0], cd("recordOf(bytes32)", ["w"], ua)))[-1][12:].hex()
+    k = bytes.fromhex(rpc("eth_getCode", [ptr, "latest"])[2:])[1:]
+    assert len(k) == K.PK_BYTES, f"pqz_key: {len(k)} B at {ptr}, want {K.PK_BYTES} (a UA without a PQZ key?)"
+    return k
 
 
 def kc(*parts):
@@ -448,7 +468,7 @@ def main():
     try:
         run(kd, kr, ke)
     except Exception as e:  # noqa: BLE001
-        check(False, f"aborted: {type(e).__name__}: {e}")
+        check(False, f"aborted: {type(e).__name__}: {e}\n{traceback.format_exc()}")
     finally:
         os.makedirs(os.path.dirname(a.log), exist_ok=True)
         with open(a.log, "w") as f:
@@ -780,7 +800,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     blen = K.CT_BYTES + K.V_BYTES * (2 if aud_on else 1)
     hdr = lambda out: W(p) + W(10**9) + W(shield_in) + frm.ua + to.ua + ben_ua + salt + out + memo  # noqa: E731
     view = lambda pl: dec_bytes(call(tok, cd(API["singleStmt"], ["b", "w"], pl, binding)))  # noqa: E731
-    st0 = view(hdr(bytes(blen)))
+    st0 = view(hdr(probe(blen)))
     tOff = K.HEADER_BYTES + K.PK_BYTES * (3 if aud_on else 2)
     T = st0[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
@@ -789,7 +809,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     aud_pk = None
     if aud_on:
         a_ua = bytes.fromhex(call(tok, cd("auditorUA()", []))[2:])
-        aud_pk = dec_bytes(call(REG[0], cd("keyOf(bytes32)", ["w"], a_ua)))
+        aud_pk = pqz_key(a_ua)
     pks = [to.pk, frm.pk] + ([aud_pk] if aud_on else [])
     vals = [v, rest] + ([v] if aud_on else [])
     r_, e1, e2, _ = K.enc_sample(os.urandom(32), len(pks))
@@ -840,13 +860,13 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
                        + b"".join(u.ua for u, _ in legs) + out + memo)
     view = lambda pl: dec_bytes(call(tok, cd(API["multiStmt"], ["b", "w"], pl, b"\0" * 32)))  # noqa: E731
     tOff = K.HEADER_BYTES + K.PK_BYTES * (1 + m + (1 if aud_on else 0))
-    T = view(hdr(bytes(olen)))[tOff:tOff + K.CT_BYTES]
+    T = view(hdr(probe(olen)))[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
     rest = b - sum(a for _, a in legs) - fee
     assert rest >= 0, (b, legs, fee)
     aud_pk = None
     if aud_on:
-        aud_pk = dec_bytes(call(REG[0], cd("keyOf(bytes32)", ["w"], bytes.fromhex(call(tok, cd("auditorUA()", []))[2:]))))
+        aud_pk = pqz_key(bytes.fromhex(call(tok, cd("auditorUA()", []))[2:]))
     e = K.enc_multi(frm.pk, K.digits(rest), [(u.pk, K.digits(a)) for u, a in legs], aud_pk, os.urandom(32))
     out = b"".join(e["us"]) + b"".join(e["vs"]) + e["v_f"] + (b"".join(e["v_as"]) if aud_on else b"")
     pl = hdr(out)
@@ -891,7 +911,7 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None):
     else:
         view = lambda pl: dec_bytes(call(tok, cd(API["burnStmt"], ["b", "w", "w", "w"], pl, amount, rcp, 0)))  # noqa: E731
     tOff = K.HEADER_BYTES + K.PK_BYTES
-    T = view(hdr(bytes(K.CT_BYTES)))[tOff:tOff + K.CT_BYTES]
+    T = view(hdr(probe(K.CT_BYTES)))[tOff:tOff + K.CT_BYTES]
     b = bal(frm.s, T)
     rest = b - amount
     r_, e1, e2, _ = K.enc_sample(os.urandom(32), 1)

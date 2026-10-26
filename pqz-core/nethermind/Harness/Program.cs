@@ -19,7 +19,8 @@ using Nethermind.Serialization.Json;
 // PqzPrecompile.Run / MlDsa*Precompile.Run, never the C ABI directly.
 //   Harness run   <ffiDir> <corpus.jsonl> <repoRoot> [--minutes N] [--threads 8] [--seed S]
 //   Harness fault <hooksDir> <corpus.jsonl>        (test child: status 4 through PqzPrecompile.Run ⇒ exit 120)
-return args.Length > 0 && args[0] == "fault" ? Fault.Exec(args) : Run.Exec(args);
+//   Harness panic <hooksDir> <corpus.jsonl>        (test child: status 3 through PqzPrecompile.Run ⇒ …00, exit 0)
+return args.Length > 0 && args[0] == "fault" ? Fault.Exec(args) : args.Length > 0 && args[0] == "panic" ? Panic.Exec(args) : Run.Exec(args);
 
 static class Shared
 {
@@ -74,6 +75,38 @@ static class Fault
         PqzPrecompile.Run(input, s);
         Console.WriteLine("fault child: returned (must not happen)");
         return 1;
+    }
+}
+
+/// <summary>Review R4-C6 (plan 5h Task 8d part 2b): the input-panic status (3) through <c>PqzPrecompile.Run</c> with the
+/// fault-hook library's <c>pqz_test_panic</c>: an honest input gives …01, with the hook on …00 and one
+/// <c>PQZ-INPUT-PANIC</c> warning (the node goes on), with the hook off …01 again (pqz-ffi rebuilt its context).</summary>
+static class Panic
+{
+    public static int Exec(string[] a)
+    {
+        PqzNative.LibraryDirectory = a[1];
+        var corpus = Shared.Corpus(a[2]);
+        PqzSchedule s = Shared.Schedule(corpus);
+        CountingLogger counter = new();
+        PqzPrecompile.Log = new ILogger(counter);
+        byte[] input = corpus.First(r => r.kind == "honest" && r.id == "pqzl").input;
+        string Call() => Convert.ToHexStringLower(PqzPrecompile.Run(input, s).Data!);
+        string before = Call();
+        IntPtr lib = NativeLibrary.Load(PqzNative.LibraryPath);
+        unsafe
+        {
+            var panic = (delegate* unmanaged<byte, void>)NativeLibrary.GetExport(lib, "pqz_test_panic");
+            panic(1);
+            string during = Call();
+            long panics = Interlocked.Read(ref counter.Panics);
+            panic(0);
+            string after = Call();
+            Console.WriteLine($"panic child: before {before[^2..]} during {during} (PQZ-INPUT-PANIC {panics}) after {after[^2..]}");
+            bool ok = before[^2..] == "01" && during == new string('0', 64) && panics == 1 && after[^2..] == "01";
+            Console.WriteLine(ok ? "panic child: ok" : "panic child: FAIL");
+            return ok ? 0 : 1;
+        }
     }
 }
 

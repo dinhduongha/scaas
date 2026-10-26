@@ -6,12 +6,22 @@ the frozen reference values in `expected-results.json`; it exits 0 only if every
 reviewers and auditors who want to confirm the numbers in the [pqz-core README](../README.md) (§5), and for the team
 before a release. For the terms used here (relation, form, op, SV, `proofSystemId`) see the glossary in that README.
 
-**Stale since plan 5h Task 8a (2026-10-21); refresh before use.** `expected-results.json` predates the B-1 / A-2
-transcript change (8a) and the per-set `proofSystemId`s (8d), so the proof hashes no longer match. Since 8d part 1
+**A historical record: this package reproduces the retired 2026-10-17 freeze; it does not check today's code.** The
+freeze was made at the parameters now called `n2048-kmax1024`, with the proof-system ids of that time, PQZL v2
+`0x2e07e6ed…` and PQZH v1 `0x0a47a768…` (`runs/freeze-2026-10-17/`); both ids are retired and refused today
+(`../params/sets/gen_set.py` `RETIRED`; the v2 transcript is the forgeable one, fixed by the PQZL v3 Fiat–Shamir fix
+of 2026-10-19, decisions CTR-PQZ-09). `expected-results.json` was last changed on 2026-10-18, so it predates that fix,
+the B-1 / A-2 transcript change (plan 5h Task 8a, 2026-10-21), the per-set ids (8d) and the R0 review fix (PQZL v5 /
+PQZH v3, 2026-10-25): its proof hashes no longer match, and a run against today's tree fails. Since 8d part 1
 `pqz-ffi`'s default parameter set is `n2304-kmax4096`: the package's `pqz-ffi` stages build that set (the C smoke test
 `tests/c_abi.c` gets its `max_input`, 524,288), while the rest of the package exports `PQZ_SET=n2048-kmax1024`. A
-refresh pins one set everywhere (`--no-default-features --features pqzl-rust,set-<set>` on every `pqz-ffi` cargo call)
-and regenerates `expected-results.json`.
+refresh would pin one set everywhere (`--no-default-features --features pqzl-rust,set-<set>` on every `pqz-ffi` cargo
+call) and regenerate `expected-results.json`.
+
+**The current checks are the per-set gates:** `PQZ_SET=<set> scripts/capped pqz-core/gate.sh [label]` (`../gate.sh`:
+KAT, the fix checks, the PQZL differential, C = Rust = wasm32, the vectors, pqz-ffi, pqz-stmt / Ligero tests, the
+PQZH cross-checks, fuzz and the Rust core, at each of the four sets; logs `../runs/gate/`). The sets and their numbers:
+[`../params/sets/README.md`](../params/sets/README.md).
 
 **What it covers** (scope: both systems, owner 2026-10-14, replacing "PQZL only" of 2026-10-13):
 
@@ -28,7 +38,7 @@ compares your results with `expected-results.json`.
 
 ## Status (2026-10-17): frozen
 
-The reference values are frozen. After gates A and B passed (`../gate.sh`, 2026-10-17), the freeze ran the package's
+The reference values are frozen (the retired freeze above: history, not today's state). After gates A and B passed (`../gate.sh`, 2026-10-17), the freeze ran the package's
 `--full` mode on the host toolchain under the machine lock (AMD Ryzen 5 7235HS, Ubuntu 24.04, clang 18.1.3,
 rustc 1.97.1, node v26.8.1). From the repository root:
 
@@ -128,7 +138,7 @@ without the auditor; decoy and boundary cases):
   verify-only, because the C core proves only up to M = 4 in wasm32);
 - the multi-recipient rows of `negative.json` (PQZL 177, PQZH 165) must give `…00` or a revert.
 
-**Rust = C** (port plan Task 12; the Rust core `../pqzl/rust/`, the production PQZL core once verified). `pqz-ffi`'s
+**Rust = C** (port plan Task 12; the Rust core `../pqzl/rust/`, the production PQZL core since 2026-10-19). `pqz-ffi`'s
 default PQZL backend is the Rust core (feature `pqzl-rust`, CTR-PQZ-09), so the pqz-ffi and vectors stages above
 already check it against the values the C core fixed: the self-test hash, the digest lines, `pqz-vectors --check`
 (every vector file byte-equal) and the wasm32 replay. The stage adds only what they do not cover, without repeating

@@ -1,0 +1,3 @@
+# t8d2b fix size gate at the committed set (n2304-kmax4096), commit d15468b7
+size gate: 0 error(s), 42 contracts
+rc=0

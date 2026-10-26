@@ -21,7 +21,7 @@ W=$B/work/$T SEEDS=$B/seeds/$T M=$B/merged/$T LOG=runs/$L-$T.txt
 # gates) to $B/corpus/<target>/ so corpus/ is only read
 C=corpus/$T; [ -z "${PQZ_BUILD_TAG:-}" ] || C=$B/corpus/$T
 mkdir -p "$W" "$SEEDS" runs "corpus/$T" "regress/$T" "$C"
-# precompile: above the set's MAX_INPUT (set.json max_input: 393,216 at n2048-kmax1024, 524,288 at the other sets; plan
+# precompile: above the set's MAX_INPUT (set.json max_input: 524,288 at every set since the R0 review fix 2026-10-25, n2048-kmax1024 was 393,216; plan
 # 5h Task 8c part 2) so the revert path is reached and no honest seed is truncated; the others edit inputs in memory
 export PQZ_SET=${PQZ_SET:-n2304-kmax4096} # build.sh's default; seeds.py (pqz_kat.py) reads the same set
 MI=$(python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))['max_input'])" "../params/sets/$PQZ_SET/set.json")

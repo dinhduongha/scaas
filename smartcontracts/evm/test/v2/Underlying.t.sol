@@ -237,8 +237,8 @@ contract UnderlyingTest is V2Fixture {
     /// Errors raised inside the external `UnderlyingLib` (OpenZeppelin's `FailedCall`, `SafeERC20FailedOperation`,
     /// `InsufficientBalance`) are in the token ABI only if `IUnderlyingToken` declares them.
     function test_libraryErrorsAreInTheTokenAbi() public view {
-        string memory lib = vm.readFile("./out/UnderlyingLib.sol/UnderlyingLib.json");
-        string memory tok = vm.readFile("./out/UnderlyingToken.sol/UnderlyingToken.json");
+        string memory lib = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/UnderlyingLib.sol/UnderlyingLib.json"));
+        string memory tok = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/UnderlyingToken.sol/UnderlyingToken.json"));
         bytes4[] memory have = _errorSelectors(tok);
         bytes4[] memory want = _errorSelectors(lib);
         assertGt(want.length, 0);

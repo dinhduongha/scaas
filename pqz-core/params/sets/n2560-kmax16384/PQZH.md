@@ -40,8 +40,9 @@ memcheck, 12 relations): 0 secret-dependent reports.
 
 ## Limits (owner 2026-10-23, decisions CTR-PQZ-10)
 
-- **`MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (per-set limit raise, option C of
-  `../README.md` "three options"): the debit bounds 303,412–305,120 exceed the 262,144 every other set keeps; no
+- **`MAX_PROOF_PQZH` = 327,680 B (320 KiB)** (per-set limit raise, option C of `../README.md` "three options"; for
+  this set only on 2026-10-23, since 2026-10-25 also `n2048-kmax1024` / `n2304-kmax4096`'s, for the R0-1 audited R_TXM
+  M = 4): the debit bounds 303,412–305,120 exceed 262,144, the limit the other sets kept until then; no
   set-specific preset (the search over the crate's radices, n up to 148,264, finds nothing below ≈ 299.6 KB [model]) and
   re-proving cannot close a ≈ 40 KB gap. Headroom over the largest bound: 22,560 B; over the largest honest proof:
   25,568 B. Built in `set.toml` `[pqzh_preset] max_proof` → `rust/set.rs` → pqz-stmt `max_proof(PQZH_ID)`; the prover's
@@ -53,7 +54,7 @@ memcheck, 12 relations): 0 secret-dependent reports.
   verifier bound, not R_TX (407,823), op 7 M = 1 with the auditor (407,823), M = 2 (407,823 / 428,559) or M = 4
   (449,039 / 470,885).
 
-## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [model]
+## One transaction's calldata (EIP-7976: 15,000 + 64 gas / byte ≤ the cap; 261,909 B at 2^24) [measured, plan 5h Task 8d part 2b]
 
 | relation | path | calldata B | floor gas | fits 2^24 |
 |---|---|---|---|---|
@@ -67,13 +68,17 @@ A PQZH debit needs a per-transaction regular-gas cap ≥ ≈ 21.3 M; under 2^24 
 
 ## Gas, block, verify time [estimate]
 
-- PQZH precompile rows: not calibrated (n2048-kmax1024 rows 2.9–4.2 M [measured]; ≈ 1.3× the rows here).
-- Regular gas of a debit: floor-bound, ≈ 21.0–21.3 M. State gas as PQZL's debit at this set: ≈ 32.8–34.8 M per op with
-  64-bit lanes (Task 7b [measured], precompile burnt). Total ≈ 54–56 M per PQZH debit: one per 60 M block.
+- PQZH precompile rows: not calibrated. The provisional rows (`pqz-core/nethermind/chain/engine-pqz-provisional-n2560.json`,
+  until plan 5h Task 9) are `n2048-kmax1024`'s retired rows (2.9–4.2 M [measured, P6f]) × 1.3: transfer 5,492,000,
+  register 4,319,000.
+- Regular gas of a debit: floor-bound, 21.04–21.23 M [measured, plan 5h Task 8d part 2b, table above]. State gas as
+  PQZL's debit at this set: 25.69 M per relayed op 1 with the P46 packing [measured, 8d part 2b, PQZL R_TX]; ≈ 32.8–34.8
+  M per op with 64-bit lanes (Task 7b [measured], precompile burnt). Total ≈ 47 M per PQZH debit (`tx.gas`, regular +
+  state) [estimate, from the measured parts]: one per 60 M block.
 - Verify p99 ≤ 60 ms wasm32: not measured (no timing runs).
 
 ## Summary: conditions for a chain to run PQZH at this set
 
 The set's PQZH `proofSystemId` (built in 8d part 1) in the chainspec rows; proofs up to 327,680 B and precompile inputs
-up to 493,445 B accepted (the node takes the library's 524,288 since 8d part 1); a per-transaction cap ≥ ≈ 21.3 M for debits; a block ≥ ≈ 56 M per debit; calibrated
+up to 493,445 B accepted (the node takes the library's 524,288 since 8d part 1); a per-transaction cap ≥ ≈ 21.3 M for debits; a block ≥ ≈ 47 M per debit (P46); calibrated
 `G_op`; measured verify time.

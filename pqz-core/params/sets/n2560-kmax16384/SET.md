@@ -20,51 +20,59 @@ derived (see [`../README.md`](../README.md)).
 | proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5")` = `0xeacf34a3…276882` (R0 review fix 2026-10-25; v4 `0xa3db21fc…70262d` retired); PQZH `keccak256("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3")` = `0xc93f3bdd…3f3662` (R0 review fix; v2 `0xe83ad1da…109851` retired) (set.toml `pqzl_id` / `pqzh_id`; plan 5h Task 8d, the one bump of Task 8: controller proposal, decisions CTR-PQZ-09) |
 | owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by `n2304-kmax4096`; kept shippable) |
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits; `PqzSet.sol` `PACK_BITS`; built in 8d part 2: stored `ct` 16,100 B (64-bit lanes 20,608), `acc` 504 slots |
-| PQZH | built (plan 5h Task 8c part 2): THE preset's radices and n / k (n 32,756, k 817) with t = 122 (owner 2026-10-23), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; debit bounds 303,412–305,120 B exceed 262,144 → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (decisions CTR-PQZ-10), in `pqz-stmt` with `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
-| LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) |
+| PQZH | built (plan 5h Task 8c part 2): THE preset's radices and n / k (n 32,756, k 817) with t = 122 (owner 2026-10-23), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; debit bounds 303,412–305,120 B exceed 262,144 → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB)** (decisions CTR-PQZ-10; first for this set only, since 2026-10-25 every PQZH set's), in `pqz-stmt` with `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
+| `ROLL_MAX` | 64 (`set.toml` `roll_max` → `PqzSet.ROLL_MAX`, plan 5h Task 8d part 2b; below) |
+| LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) until the R0 review fix, which regenerated reg / dr (`Bprime` 8, R0-C2; `9ac573ad`) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
 ## Conditions for this set to work on a chain
 
-Measured where marked; the rest [estimate]. Gas figures are Task 7b's under Ethereum's Amsterdam rules at this set's sizes
-(Foundry 1.8.5 = Nethermind 2.2.0 on the same transactions; `p16k/results-16k.md` §8), with the precompile priced at
-today's PQZL v3 rows × 1.25 [estimate].
+Measured where marked: plan 5h Task 8d part 2b, forge 1.8.5 under Amsterdam through the real token and registry, the
+`PQZ` precompile at its provisional testnet row (`pqz-core/nethermind/chain/engine-pqz-provisional-n2560.json`, until
+Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-kmax16384.txt`; the table in
+[`../README.md`](../README.md#one-transactions-gas-per-relation-measured-plan-5h-task-8d-part-2b)). The rest [estimate].
 
-1. **Contracts built for this set.** Today's contracts (`PqzCt`, `PqzCore`, …) carry the v3 constants; a chain runs
-   this set only after plan 5h Task 8d wires them to `PqzSet.sol` and the build selects this set
-   (`make.sh n2560-kmax16384 sol`). Until then: not deployable.
+1. **Contracts built for this set.** The contracts read `PqzSet.sol` since plan 5h Task 8d part 2a; `at-set.sh
+   n2560-kmax16384` installs this set's file and runs forge (1,369 passed / 0 failed / 9 skipped,
+   `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-forge-n2560-kmax16384.txt`). A chain also needs the node library and
+   plugin of this set (`PQZ_SET=n2560-kmax16384 build-image.sh`, its reviewed `ExpectedLibrarySha256` `5d113f32…`).
 2. **Per-transaction regular gas ≤ 2^24** (Ethereum-like cap; no zero-gas or own-block-limit assumption, owner
-   2026-10-21): relayed op 1 (auditor) 8.93 M fresh / 10.53 M with a materialised `acc` [measured, precompile
-   estimate]; op 7 M = 1 / 2 / 4 6.72 / 6.92 / 7.68 M; `mtxPrepareAcc` halves 4.02 M each; `mtxRollOver` at `ROLL_MAX`
-   80: 12.36 M (≤ 0.75·2^24, the rollover rule) [measured]. op 7 M = 8 (G = 2): 7.22 M with the precompile mocked
-   [measured], whether M = 8 is allowed on chain is decided in 8d.
-3. **Calldata ≤ the EIP-7976 floor's 261,909 B per transaction:** the largest relayed PQZL calldata is 83,524 B (op 7
-   M = 4, auditor) [measured]; the precompile input (≤ 222,967 B at M = 4) is built in memory by the token, bounded by
-   `MAX_INPUT`, not by calldata.
+   2026-10-21) [measured]: relayed op 1 (auditor) 9.35 M; op 7 M = 1 / 2 / 4 (auditor) 7.05 / 7.26 / 8.05 M; op 7 M = 8
+   12.17 M with the auditor (G = 2), 10.91 M without; `UARegistry.register` 4.62 M; `mtxPrepareAcc` halves 3.17 M each;
+   `mtxRollOver` at `ROLL_MAX` 64: 12,410,516 via `mtxExecute`, 12,567,631 via `uaExecute` (≤ 0.75 · 2^24, the
+   rollover rule on both relay paths; spec §7.6).
+3. **Calldata ≤ the EIP-7976 floor's 261,909 B per transaction:** the largest relayed PQZL calldata is 120,708 B (op 7
+   M = 8, auditor) [measured]; the precompile input is built in memory by the token, bounded by `MAX_INPUT`, not by
+   calldata.
 4. **Block gas limit for the state dimension (EIP-8037):** every debit stores its op blob in state (SSTORE2; "Không
-   được mất ciphertext": ciphertexts are never only in calldata / events): ≈ 32.8–34.8 M state gas per op 1 / op 7
-   M ≤ 4 and 31.8 M per prepare half [measured], ≈ 68.7 M for op 7 M = 8 [measured, precompile mocked]; so one debit
-   needs a block gas limit ≥ ≈ 43 M (regular + state), op 7 M = 8 ≥ ≈ 76 M. The P50 packing of 8d (stored data only,
-   ⌈log2 q⌉ = 50 bits) lowers the blob's state gas by about 22 % (50 of 64 bits per
-   stored coefficient) [estimate; the P46 spike measured −8.10 M per op 1 at `n2304-kmax4096`]. Ethereum mainnet's 60 M block holds one debit of this set; Glamsterdam's expected 200 M holds about
-   four. The real cost (state gas is paid) applies on a customer chain.
-5. **`ROLL_MAX` 80** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas) [measured, Task 7b].
-6. **PQZH:** a backup only — its debit proofs (bounds 303,412–305,120 B [crate]) need this set's `MAX_PROOF_PQZH` of
-   327,680 B (owner 2026-10-23, built in 8c part 2), and its debit inputs (largest 493,445 B at the limit, 470,885 B at
-   the bound ≤ `MAX_INPUT` 524,288, which the node takes from the library since 8d part 1) exceed one transaction's calldata; `R_REG`
-   fits. [PQZH.md](PQZH.md).
-7. **Security margins:** encryption β 508; ≤ 80 worst-case hints on one `(r_g, e1_g)` (op 7 group of 4 legs + auditor)
-   β 482.4 (above 450, no exception needed); proof MSIS / MLWE β ≥ 450 per spec (`e-s1.txt`); exactness and
-   Fiat–Shamir rounds MET (`e-s0.txt`); mint margin 3.36.
+   được mất ciphertext": ciphertexts are never only in calldata / events), packed at ⌈log2 q⌉ = 50 bits (P46):
+   25.69 M state gas per relayed op 1, 24.97 M per prepare half, 54.02 M for op 7 M = 8 with the auditor, 52.80 M
+   without [measured]. Block gas used = max(Σ regular, Σ state) (EIP-8037), so Ethereum mainnet's 60 M block holds two
+   op 1 debits of this set and one op 7 M = 8; a transaction needs a block limit ≥ its state gas (the SCaaS testnet:
+   200 M); no rule assumes a larger limit. The real cost (state gas is paid) applies on a customer chain.
+5. **`ROLL_MAX` 64** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas on both relay paths;
+   80 gives 13,792,932 / 13,950,047 via `mtxExecute` / `uaExecute`) [measured, `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2560-kmax16384.txt`;
+   the Task 7b measurement, with the contracts of then, gave 80]. **Tight:** on `uaExecute` (the binding path) 64 is
+   only 15,281 gas under the cap, so the next contract change may move it to 48: re-run the rollscan
+   (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan.sh`). Controller proposal, owner may override.
+6. **PQZH:** a backup only — its debit proofs (bounds 303,412–305,120 B [crate]) need `MAX_PROOF_PQZH` 327,680 B (owner
+   2026-10-23, built in 8c part 2), and its debits exceed one transaction's calldata (relayed op 1 329,668 B, 21.11 M
+   [measured]); `R_REG` (260,292 B, 16.67 M) and the disclosure `eth_call`s fit. [PQZH.md](PQZH.md).
+7. **Security margins:** encryption β 508; since the R0 review fix ≤ 128 worst-case hints on one `(r_g, e1_g)` (an
+   audited op 7 group of `s_aud` = 4 legs) DDGR20 β 467.60, dual_hybrid − offset 458.60 / 460.60 [estimate] (above 450,
+   no exception needed); proof MSIS / MLWE β ≥ 450 per spec (`e-s1.txt`); exactness and Fiat–Shamir rounds MET
+   (`e-s0.txt`); mint margin 3.36.
 8. **Verify time** (≤ 60 ms p99 wasm32, the precompile's budget): not re-measured for this set (owner rule: no timing
-   runs during this task); the proof sizes are 6–8 % above `n2304-kmax4096`'s (below).
+   runs without the owner's go); the single-recipient proofs are 7–8 % above `n2304-kmax4096`'s, the audited op 7 M = 4 / 8 proofs smaller
+   (fewer randomness groups: `s_aud` 4 against 3) (below).
 
-Proof sizes (`smartcontracts/vectors/pqz/n2560-kmax16384/proof_pqzl.json`, byte-identical C = Rust = wasm32): TRANSFER
-50,391 B, TRANSFER0 50,053, BURN 49,538, REFRESH 49,527, REGISTER 32,452, DISCLOSE-SENDER 32,985, -RECEIVER 33,763,
--AUDITOR 33,771; op 7 with the auditor M = 1 / 2 / 4 / 8: 50,390 / 51,216 / 54,817 / 72,704 B, without 50,031 /
-50,557 / 51,558 / 69,888 B (all below `MAX_PROOF` 98,304). Object sizes: pk 20,480 B, ciphertext 20,608 B, op 1
-statement 103,552 B (auditor on). Heap: C prover arena peaks (`pqz-core/runs/gate/t8b-n2560-fnv-c.jsonl`) 141 MB
-(R_REG) … 457 MB (R_TX) … 1,094 MB (R_TXM M = 8 with the auditor: needs `PQZ_ARENA_MB=2048`).
+Proof sizes (`smartcontracts/vectors/pqz/n2560-kmax16384/proof_pqzl.json`, since the R0 review fix, byte-identical C
+= Rust = wasm32): TRANSFER 50,392 B, TRANSFER0 50,053, BURN 49,536, REFRESH 49,542, REGISTER 32,539, DISCLOSE-SENDER
+32,967, -RECEIVER 33,866, -AUDITOR 33,872; op 7 with the auditor M = 1 / 2 / 4 / 8: 50,376 / 51,219 / 54,861 / 72,687 B
+(G = 1 / 1 / 1 / 2), without 50,091 / 50,543 / 51,556 / 69,863 B (largest 72,761 B, M8-on-boundary: 25,543 B under
+`MAX_PROOF` 98,304). Object sizes: pk 20,480 B, ciphertext 20,608 B, op 1 statement 103,552 B (auditor on). Heap: C
+prover arena peaks (the gate's bench after the R0 review fix, `pqz-core/runs/gate/n2560-kmax16384-fnv-c.jsonl`) 457 MB
+(R_TX) / 550 MB (R_TXM M = 2) / 1,094 MB (R_TXM M = 8 with the auditor: needs `PQZ_ARENA_MB=2048`).
 
 Files: `set.toml` (input), `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, `<rel>_params.sage` (gen_set.py),
 `pqz_<rel>_params.h` + `codegen.txt` (LaZer codegen), `rust/<rel>.rs` (to_rust.py), `e-s1.txt`, `e-s0.txt`,

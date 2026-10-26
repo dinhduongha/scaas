@@ -1,0 +1,460 @@
+# t8d2b fix gas at n2304-kmax4096, commit 43c0ab39
+== at-set.sh: n2304-kmax4096 (n2304-kmax4096), forge test --match-path test/pqz/PqzStateGas.t.sol -vv
+Compiling 22 files with Solc 0.8.37
+Solc 0.8.37 finished in 9.33s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:264:13:
+    |
+264 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:368:9:
+    |
+368 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:138:38:
+    |
+138 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:142:38:
+    |
+142 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:232:5:
+    |
+232 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 2 tests for test/pqz/PqzStateGas.t.sol:PqzStateTrivialRollGasTest
+[PASS] test_gas_rollMax_afterTrivialRoll() (gas: 12411832)
+Logs:
+    (state gas) 0
+  mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas 11899331
+
+[PASS] test_trivialRoll_noZeroSlot() (gas: 1893992)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 255.79ms (38.11ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 36 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gasTable_pqzh() (gas: 4426834550)
+Logs:
+  GAS n2304-kmax4096 pqzh | op 1, auditor, fresh ref | calldata 274948 (zero 12271) | std 4251916 | floor 17611672
+    | pqz 5524337 | exec 2605287 | regular 17611672 (model 17611672) | state 21439890 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 1, no auditor, fresh ref | calldata 274820 (zero 12224) | std 4250432 | floor 17603480
+    | pqz 5257597 | exec 2551414 | regular 17603480 (model 17603480) | state 21299130 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 1, auditor, materialised acc, no hint | calldata 274948 (zero 12270) | std 4251928 | floor 17611672
+    | pqz 5524337 | exec 3718238 | regular 17611672 (model 17611672) | state 21537810 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 1, auditor, materialised acc, hint | calldata 288292 (zero 12272) | std 4465408 | floor 18465688
+    | pqz 5524337 | exec 2933531 | regular 18465688 (model 18465688) | state 21537810 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 7 M = 1, auditor, fresh ref | calldata 275012 (zero 12342) | std 4252088 | floor 17615768
+    | pqz 5055337 | exec 2624235 | regular 17615768 (model 17615768) | state 21439890 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 7 M = 1, no auditor, fresh ref | calldata 274884 (zero 12292) | std 4250640 | floor 17607576
+    | pqz 5638597 | exec 2570011 | regular 17607576 (model 17607576) | state 21299130 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 7 M = 2, auditor, fresh ref | calldata 276036 (zero 12464) | std 4267008 | floor 17681304
+    | pqz 5235158 | exec 2722447 | regular 17681304 (model 17681304) | state 21966210 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 7 M = 2, no auditor, fresh ref | calldata 275044 (zero 12348) | std 4252528 | floor 17617816
+    | pqz 5772337 | exec 2654269 | regular 17617816 (model 17617816) | state 21684690 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 7 M = 4, auditor, fresh ref | calldata 338948 (zero 19788) | std 5185712 | floor 21707672
+    | pqz 6459506 | exec 3930011 | regular 21707672 (model 21707672) | state 43288290 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | op 7 M = 4, no auditor, fresh ref | calldata 276100 (zero 12467) | std 4267996 | floor 17685400
+    | pqz 6395886 | exec 2836576 | regular 17685400 (model 17685400) | state 22455810 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | burn 1 to an address, fresh ref | calldata 274692 (zero 12219) | std 4248444 | floor 17595288
+    | pqz 4887857 | exec 2473464 | regular 17595288 (model 17595288) | state 20889090 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | refresh, fresh ref | calldata 274692 (zero 12222) | std 4248408 | floor 17595288
+    | pqz 4887857 | exec 2457987 | regular 17595288 (model 17595288) | state 20791170 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh | register (UARegistry.register: mldsa65 UA with a PQZ key) | calldata 231716 (zero 24738) | std 3410600 | floor 14844824
+    | pqz 4340210 | exec 1079496 | regular 14844824 (model 14844824) | state 32341140 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 226308 (zero 19340) | std 3388848 | floor 14498712
+    | pqz 4340210 | exec 565381 | regular 14498712 (model 14498712) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
+    | pqz 4290968 | exec 869141 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+    | pqz 3767968 | exec 869300 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+    | pqz 3767968 | exec 872356 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
+    | pqz 3767968 | exec 929272 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
+    | pqz 3767968 | exec 932328 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+
+[PASS] test_gasTable_pqzh_ua() (gas: 4475622464)
+Logs:
+  GAS n2304-kmax4096 pqzh-ua | op 1, auditor, fresh ref | calldata 278308 (zero 12375) | std 4304428 | floor 17826712
+    | pqz 5524337 | exec 2691992 | regular 17826712 (model 17826712) | state 21439890 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 1, no auditor, fresh ref | calldata 278180 (zero 12328) | std 4302944 | floor 17818520
+    | pqz 5257597 | exec 2638119 | regular 17818520 (model 17818520) | state 21299130 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 1, auditor, materialised acc, no hint | calldata 278308 (zero 12374) | std 4304440 | floor 17826712
+    | pqz 5524337 | exec 3804943 | regular 17826712 (model 17826712) | state 21537810 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 1, auditor, materialised acc, hint | calldata 291652 (zero 12376) | std 4517920 | floor 18680728
+    | pqz 5524337 | exec 3020391 | regular 18680728 (model 18680728) | state 21537810 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 7 M = 1, auditor, fresh ref | calldata 278372 (zero 12445) | std 4304612 | floor 17830808
+    | pqz 5055337 | exec 2710865 | regular 17830808 (model 17830808) | state 21439890 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 7 M = 1, no auditor, fresh ref | calldata 278244 (zero 12396) | std 4303152 | floor 17822616
+    | pqz 5638597 | exec 2656641 | regular 17822616 (model 17822616) | state 21299130 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 7 M = 2, auditor, fresh ref | calldata 279396 (zero 12567) | std 4319532 | floor 17896344
+    | pqz 5235158 | exec 2809089 | regular 17896344 (model 17896344) | state 21966210 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 7 M = 2, no auditor, fresh ref | calldata 278404 (zero 12450) | std 4305064 | floor 17832856
+    | pqz 5772337 | exec 2740901 | regular 17832856 (model 17832856) | state 21684690 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 7 M = 4, auditor, fresh ref | calldata 342308 (zero 19892) | std 5238224 | floor 21922712
+    | pqz 6459506 | exec 4017383 | regular 21922712 (model 21922712) | state 43288290 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | op 7 M = 4, no auditor, fresh ref | calldata 279460 (zero 12571) | std 4320508 | floor 17900440
+    | pqz 6395886 | exec 2923219 | regular 17900440 (model 17900440) | state 22455810 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | burn 1 to an address, fresh ref | calldata 278052 (zero 12323) | std 4300956 | floor 17810328
+    | pqz 4887857 | exec 2560243 | regular 17810328 (model 17810328) | state 20889090 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | refresh, fresh ref | calldata 278052 (zero 12326) | std 4300920 | floor 17810328
+    | pqz 4887857 | exec 2544766 | regular 17810328 (model 17810328) | state 20791170 | fits 2^24 NO
+  GAS n2304-kmax4096 pqzh-ua | register (UARegistry.register: mldsa65 UA with a PQZ key) | calldata 231716 (zero 24738) | std 3410600 | floor 14844824
+    | pqz 4340210 | exec 1079496 | regular 14844824 (model 14844824) | state 32341140 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh-ua | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 226308 (zero 19340) | std 3388848 | floor 14498712
+    | pqz 4340210 | exec 565381 | regular 14498712 (model 14498712) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh-ua | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 912) | std 3315584 | floor 13321112
+    | pqz 4290968 | exec 869141 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh-ua | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+    | pqz 3767968 | exec 869300 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh-ua | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 207908 (zero 911) | std 3315596 | floor 13321112
+    | pqz 3767968 | exec 872356 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh-ua | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
+    | pqz 3767968 | exec 929272 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzh-ua | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 207908 (zero 910) | std 3315608 | floor 13321112
+    | pqz 3767968 | exec 932328 | regular 13321112 (model 13321112) | state 0 | fits 2^24 yes
+
+[PASS] test_gasTable_pqzl() (gas: 1585444350)
+Logs:
+  GAS n2304-kmax4096 pqzl | op 1, auditor, fresh ref | calldata 70020 (zero 11531) | std 981948 | floor 4496280
+    | pqz 7045125 | exec 1127787 | regular 9169722 (model 9169860) | state 21439890 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 1, no auditor, fresh ref | calldata 69540 (zero 11462) | std 975096 | floor 4465560
+    | pqz 6801352 | exec 1088018 | regular 8879328 (model 8879466) | state 21299130 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 1, auditor, materialised acc, no hint | calldata 70020 (zero 11529) | std 981972 | floor 4496280
+    | pqz 7045125 | exec 2240738 | regular 10282697 (model 10282835) | state 21537810 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 1, auditor, materialised acc, hint | calldata 83364 (zero 11531) | std 1195452 | floor 5350296
+    | pqz 7045125 | exec 1383012 | regular 9638451 (model 9638589) | state 21537810 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 1, auditor, fresh ref | calldata 70084 (zero 11582) | std 982360 | floor 4500376
+    | pqz 4725125 | exec 1146236 | regular 6868583 (model 6868721) | state 21439890 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 1, no auditor, fresh ref | calldata 69636 (zero 11549) | std 975588 | floor 4471704
+    | pqz 5150355 | exec 1106332 | regular 7247137 (model 7247275) | state 21299130 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 2, auditor, fresh ref | calldata 71204 (zero 11696) | std 998912 | floor 4572056
+    | pqz 4837955 | exec 1223426 | regular 7075155 (model 7075293) | state 21966210 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 2, no auditor, fresh ref | calldata 70308 (zero 11602) | std 985704 | floor 4514712
+    | pqz 4988143 | exec 1176801 | regular 7165510 (model 7165648) | state 21684690 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 4, auditor, fresh ref | calldata 106596 (zero 18900) | std 1478736 | floor 6837144
+    | pqz 5378723 | exec 1823593 | regular 8695914 (model 8696052) | state 43288290 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 4, no auditor, fresh ref | calldata 71588 (zero 11705) | std 1004948 | floor 4596632
+    | pqz 5180713 | exec 1323810 | regular 7524333 (model 7524471) | state 22455810 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 8, auditor, fresh ref | calldata 142596 (zero 26303) | std 1965900 | floor 9141144
+    | pqz 8061998 | exec 2689644 | regular 12732404 (model 12732542) | state 65663010 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | op 7 M = 8, no auditor, fresh ref | calldata 107428 (zero 18882) | std 1492264 | floor 6890392
+    | pqz 6967976 | exec 2097190 | regular 10572292 (model 10572430) | state 44267490 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | burn 1 to an address, fresh ref | calldata 68932 (zero 11472) | std 965248 | floor 4426648
+    | pqz 4849567 | exec 1024906 | regular 6854583 (model 6854721) | state 20889090 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | refresh, fresh ref | calldata 68900 (zero 11459) | std 964892 | floor 4424600
+    | pqz 4849564 | exec 1009306 | regular 6838624 (model 6838762) | state 20791170 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | register (UARegistry.register: mldsa65 UA with a PQZ key) | calldata 54404 (zero 24091) | std 581372 | floor 3496856
+    | pqz 3508587 | exec 451132 | regular 4555953 (model 4556091) | state 32341140 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 48996 (zero 18693) | std 559620 | floor 3150744
+    | pqz 3508587 | exec 126375 | regular 4209444 (model 4209582) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 31012 (zero 249) | std 493204 | floor 1999768
+    | pqz 3387387 | exec 425556 | regular 4321009 (model 4321147) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 31748 (zero 257) | std 504884 | floor 2046872
+    | pqz 3343453 | exec 426705 | regular 4289904 (model 4290042) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 31780 (zero 277) | std 505156 | floor 2048920
+    | pqz 3343456 | exec 429807 | regular 4293281 (model 4293419) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31748 (zero 256) | std 504896 | floor 2046872
+    | pqz 3343453 | exec 467862 | regular 4331073 (model 4331211) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31780 (zero 276) | std 505168 | floor 2048920
+    | pqz 3343456 | exec 470966 | regular 4334452 (model 4334590) | state 0 | fits 2^24 yes
+
+[PASS] test_gasTable_pqzl_ua() (gas: 1609273598)
+Logs:
+  GAS n2304-kmax4096 pqzl-ua | op 1, auditor, fresh ref | calldata 73380 (zero 11634) | std 1034472 | floor 4711320
+    | pqz 7045125 | exec 1212117 | regular 9306576 (model 9306714) | state 21439890 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 1, no auditor, fresh ref | calldata 72900 (zero 11565) | std 1027620 | floor 4680600
+    | pqz 6801352 | exec 1172342 | regular 9016176 (model 9016314) | state 21299130 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 1, auditor, materialised acc, no hint | calldata 73380 (zero 11633) | std 1034484 | floor 4711320
+    | pqz 7045125 | exec 2325068 | regular 10419539 (model 10419677) | state 21537810 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 1, auditor, materialised acc, hint | calldata 86724 (zero 11634) | std 1247976 | floor 5565336
+    | pqz 7045125 | exec 1467495 | regular 9775458 (model 9775596) | state 21537810 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 1, auditor, fresh ref | calldata 73444 (zero 11686) | std 1034872 | floor 4715416
+    | pqz 4725125 | exec 1230491 | regular 7005350 (model 7005488) | state 21439890 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 1, no auditor, fresh ref | calldata 72996 (zero 11653) | std 1028100 | floor 4686744
+    | pqz 5150355 | exec 1190581 | regular 7383898 (model 7384036) | state 21299130 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 2, auditor, fresh ref | calldata 74564 (zero 11799) | std 1051436 | floor 4787096
+    | pqz 4837955 | exec 1307693 | regular 7211946 (model 7212084) | state 21966210 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 2, no auditor, fresh ref | calldata 73668 (zero 11706) | std 1038216 | floor 4729752
+    | pqz 4988143 | exec 1261059 | regular 7302280 (model 7302418) | state 21684690 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 4, auditor, fresh ref | calldata 109956 (zero 19004) | std 1531248 | floor 7052184
+    | pqz 5378723 | exec 1908270 | regular 8833103 (model 8833241) | state 43288290 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 4, no auditor, fresh ref | calldata 74948 (zero 11808) | std 1057472 | floor 4811672
+    | pqz 5180713 | exec 1408082 | regular 7661129 (model 7661267) | state 22455810 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 8, auditor, fresh ref | calldata 145956 (zero 26407) | std 2018412 | floor 9356184
+    | pqz 8061998 | exec 2774740 | regular 12870012 (model 12870150) | state 65663010 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | op 7 M = 8, no auditor, fresh ref | calldata 110788 (zero 18986) | std 1544776 | floor 7105432
+    | pqz 6967976 | exec 2181877 | regular 10709491 (model 10709629) | state 44267490 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | burn 1 to an address, fresh ref | calldata 72292 (zero 11576) | std 1017760 | floor 4641688
+    | pqz 4849567 | exec 1109298 | regular 6991487 (model 6991625) | state 20889090 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | refresh, fresh ref | calldata 72260 (zero 11562) | std 1017416 | floor 4639640
+    | pqz 4849564 | exec 1093699 | regular 6975541 (model 6975679) | state 20791170 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | register (UARegistry.register: mldsa65 UA with a PQZ key) | calldata 54404 (zero 24091) | std 581372 | floor 3496856
+    | pqz 3508587 | exec 451132 | regular 4555953 (model 4556091) | state 32341140 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover) | calldata 48996 (zero 18693) | std 559620 | floor 3150744
+    | pqz 3508587 | exec 126375 | regular 4209444 (model 4209582) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure SENDER, op 1 entry (verifyTransferAmount) | calldata 31012 (zero 249) | std 493204 | floor 1999768
+    | pqz 3387387 | exec 425556 | regular 4321009 (model 4321147) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure RECEIVER, op 1 entry (verifyTransferAmount) | calldata 31748 (zero 257) | std 504884 | floor 2046872
+    | pqz 3343453 | exec 426705 | regular 4289904 (model 4290042) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure AUDITOR, op 1 entry (verifyTransferAmount) | calldata 31780 (zero 277) | std 505156 | floor 2048920
+    | pqz 3343456 | exec 429807 | regular 4293281 (model 4293419) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure RECEIVER, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31748 (zero 256) | std 504896 | floor 2046872
+    | pqz 3343453 | exec 467862 | regular 4331073 (model 4331211) | state 0 | fits 2^24 yes
+  GAS n2304-kmax4096 pqzl-ua | disclosure AUDITOR, op 7 M = 8 entry leg 5 (verifyTransferAmount) | calldata 31780 (zero 276) | std 505168 | floor 2048920
+    | pqz 3343456 | exec 470966 | regular 4334452 (model 4334590) | state 0 | fits 2^24 yes
+
+[PASS] test_gas_burn() (gas: 22515711)
+Logs:
+  burn 1 to an address, fee, fresh ref gas: regular / state / total 1459096 20693250 22152346
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 25620883)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas: regular / state / total 3077056 21341970 24419026
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 23089349)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas: regular / state / total 1475480 21244050 22719530
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 98185437)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas: regular / state / total 2329496 21341970 23671466
+    execution with the hint / without / with the unpacked (ignored) hint 22388928 23281024 23292622
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 23712723)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas: regular / state / total 2184808 21341970 23526778
+
+[PASS] test_gas_op1_compact() (gas: 23303153)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas: regular / state / total 1479576 21439890 22919466
+
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 43761148)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11551 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076940 0
+    full tx regular / state / total 9005248 21439890 30445138
+
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 44787975)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11549 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076964 185856
+    full tx regular / state / total 10118223 21537810 31656033
+
+[PASS] test_gas_op1_shieldIn() (gas: 22992933)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas: regular / state / total 1475480 21146130 22621610
+
+[PASS] test_gas_op7_M4() (gas: 46494148)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas: regular / state / total 2714520 43092450 45806970
+
+[PASS] test_gas_op7_M8() (gas: 70515356)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas: regular / state / total 3967896 65467170 69435066
+
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 95953754)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 64578
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 126884 26250 8135576
+    calldata gas 4 / 16 / refund (not subtracted) 1715144 0
+    full tx regular / state / total 8135576 65663010 73798586
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 94934469)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 126340 25809 64578
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked) gas: regular / state / total 8100760 65467170 73567930
+  calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte 1711732 8100760
+
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 41569962)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4531250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 1 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 76036 11619 4881304
+    calldata gas 4 / 16 / refund (not subtracted) 1077148 0
+    full tx regular / state / total 6793933 21439890 28233823
+
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 42495761)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4637500 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 2 53504
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 77188 11709 4955032
+    calldata gas 4 / 16 / refund (not subtracted) 1094500 0
+    full tx regular / state / total 6995621 21966210 28961831
+
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 69396068)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 5151250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 4 57202
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 99908 18878 6409112
+    calldata gas 4 / 16 / refund (not subtracted) 1371992 0
+    full tx regular / state / total 8325078 43288290 51613368
+
+[PASS] test_gas_prepareAcc_half0() (gas: 23276175)
+Logs:
+  mtxPrepareAcc half 0 gas: regular / state / total 2586486 20563200 23149686
+
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 23427935)
+Logs:
+  relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas: regular / state / total 2622622 20661120 23283742
+
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 48392116)
+Logs:
+  relayed mtxPrepareAcc (mtxExecute), full transaction, fee 7, half 0
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 0
+    full tx regular / state / total 2651175 20759040 23410215
+  relayed mtxPrepareAcc (uaExecute), full transaction, fee 7, half 0
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 580 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56592 0
+    full tx regular / state / total 2805427 20759040 23564467
+
+[PASS] test_gas_prepareAcc_half1() (gas: 23166101)
+Logs:
+  mtxPrepareAcc half 1 gas: regular / state / total 2574422 20465280 23039702
+
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 23317826)
+Logs:
+  relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas: regular / state / total 2610546 20563200 23173746
+
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 48171947)
+Logs:
+  relayed mtxPrepareAcc (mtxExecute), full transaction, fee 7, half 1
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 0
+    full tx regular / state / total 2639111 20661120 23300231
+  relayed mtxPrepareAcc (uaExecute), full transaction, fee 7, half 1
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 579 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56604 0
+    full tx regular / state / total 2793363 20661120 23454483
+
+[PASS] test_gas_refresh() (gas: 22417713)
+Logs:
+  refresh, fee, fresh ref gas: regular / state / total 1459096 20595330 22054426
+
+[PASS] test_gas_roll128() (gas: 8422308)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 8868539 0 8868539
+
+[PASS] test_gas_rollMax() (gas: 20733282)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 8868539 0 8868539
+  mtxRollOver ROLL_MAX (steady, distinct cold blobs) gas: regular / state / total 12046619 0 12046619
+  mtxRollOver ROLL_MAX + 16 (linear fit) gas: regular / state / total 13317851 0 13317851
+  per entry / fixed (fit) 79452 5690459
+
+[PASS] test_gas_rollMax_relayed() (gas: 11395528)
+Logs:
+  relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas: regular / state / total 12082680 97920 12180600
+
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 43253540)
+Logs:
+  relayed mtxRollOver (mtxExecute), full transaction, fee 7, entries (fit point) 40
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 464640
+    full tx regular / state / total 8933078 195840 9128918
+  relayed mtxRollOver (mtxExecute), full transaction, fee 7, entries 80
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 929280
+    full tx regular / state / total 12111158 195840 12306998
+  ROLL_MAX + 16, relayed full transaction (mtxExecute, linear fit) / per entry 13382390 79452
+  relayed mtxRollOver (uaExecute), full transaction, fee 7, entries (fit point) 40
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 579 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56604 464640
+    full tx regular / state / total 9090193 195840 9286033
+  relayed mtxRollOver (uaExecute), full transaction, fee 7, entries 80
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 579 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56604 929280
+    full tx regular / state / total 12268273 195840 12464113
+  ROLL_MAX + 16, relayed full transaction (uaExecute, linear fit) / per entry 13539505 79452
+
+[PASS] test_gas_roll_1() (gas: 5746609)
+Logs:
+  mtxRollOver 1 (steady) gas: regular / state / total 5739911 0 5739911
+
+[PASS] test_gas_roll_16() (gas: 6794121)
+Logs:
+  mtxRollOver 16 (steady) gas: regular / state / total 6961691 0 6961691
+
+[PASS] test_gas_shield_append() (gas: 330851)
+Logs:
+  mtxShield, append (tail of an earlier block) gas: regular / state / total 106760 97920 204680
+
+[PASS] test_gas_shield_firstEntry() (gas: 426004)
+Logs:
+  mtxShield, the account's first entry (append) gas: regular / state / total 103939 195840 299779
+
+[PASS] test_gas_shield_merge() (gas: 129689)
+Logs:
+  mtxShield, merge (TRIVIAL tail of this block) gas: regular / state / total 94594 0 94594
+
+Suite result: ok. 36 passed; 0 failed; 0 skipped; finished in 7.05s (11.81s CPU time)
+
+Ran 2 test suites in 7.05s (7.31s CPU time): 38 tests passed, 0 failed, 0 skipped (38 total tests)
+rc 0
