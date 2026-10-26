@@ -107,7 +107,7 @@ library PqzCore {
         address[] keys; // op 7: the legs' key pointers
         uint256 legs; // op 7: M
         uint256 decoyFee; // op 7: the sender's per-leg fee `d`
-        uint256 groups; // op 7: G = ⌈M / 4⌉
+        uint256 groups; // op 7: G = ⌈M / S_AUD⌉ with the auditor, ⌈M / 4⌉ without (`_groups`, R0-1)
         uint256 outLen;
         uint256 stLen;
         address registry;
@@ -219,12 +219,31 @@ library PqzCore {
         e.binding = keccak256(abi.encode(e.binding == 0 ? TAG_DIRECT_MODE : e.binding, uint8(e.mode)));
     }
 
-    /// @dev Not the sender; registered; the auditor's key when `auditorOn`. No credit cap: credits are never refused
-    ///      (plan 5h D7).
+    /// @dev Not the sender; registered; the auditor's key when `auditorOn`, and then neither party is the auditor (F-4).
+    ///      No credit cap: credits are never refused (plan 5h D7).
     function _receiver(Op memory o, Env memory e) internal view {
         if (o.from == o.to) revert IPqzToken.SelfTransfer();
+        _noAuditorParty(o, o.from);
+        _noAuditorParty(o, o.to);
         o.keyT = _keyPtr(e.registry, o.to);
         if (o.auditorOn == 1) o.keyA = _keyPtr(e.registry, $().auditorUA);
+    }
+
+    /// @dev F-4 (R0 review 2026-10-25): with the auditor copies on, the auditor UA is neither the sender nor a recipient
+    ///      leg — its key under the same randomness as the auditor copy in window 0 would cancel the masks
+    ///      (`v − v_a = Δ·(d − d_a) + noise`, public). Every transfer form (op 1, op 7; relayed and direct) checks this.
+    function _noAuditorParty(Op memory o, bytes32 ua) internal view {
+        if (o.auditorOn == 1 && ua == $().auditorUA) revert IPqzToken.AuditorAsParty(ua);
+    }
+
+    /// @dev op 7's randomness groups (CTR-PQZ-26, R0-1): `⌈M / S_AUD⌉` with the auditor copies (`a = 1`), `⌈M / 4⌉`
+    ///      without; leg `j` uses `u_{_groupOf(j, a)}`.
+    function _groups(uint256 m, uint256 a) internal pure returns (uint256) {
+        return a == 1 ? (m + PqzSet.S_AUD - 1) / PqzSet.S_AUD : (m + 3) / 4;
+    }
+
+    function _groupOf(uint256 j, uint256 a) internal pure returns (uint256) {
+        return a == 1 ? j / PqzSet.S_AUD : j / 4;
     }
 
     /// @dev `header ‖ pk_f ‖ pk_t ‖ [pk_a] ‖ T ‖ out` (`PqzSet.STMT_TRANSFER` / `STMT_TRANSFER0` bytes).
@@ -372,9 +391,9 @@ library PqzCore {
         if (payload.length < M_OUT) return false;
         uint256 m = uint256(bytes32(payload[160:192]));
         if (m == 0 || m > 8) return false;
-        uint256 base = M_OUT + 32 * m + PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1);
-        uint256 memo = 18 + 40 * m;
-        return payload.length == base + memo || payload.length == base + PqzCt.V * m + memo;
+        uint256 base = M_OUT + 32 * m + PqzCt.V * (m + 1) + 18 + 40 * m;
+        return payload.length == base + PqzCt.PK * _groups(m, 0)
+            || payload.length == base + PqzCt.PK * _groups(m, 1) + PqzCt.V * m;
     }
 
     /// @dev `M` in the id's built set, the length fixing `auditorOn`, the auditor mode, the memo on HASH.
@@ -387,19 +406,20 @@ library PqzCore {
         uint256 m = uint256(bytes32(payload[160:192]));
         if (!(m == 1 || m == 2 || m == 4 || (m == 8 && s.psid != PQZH_ID))) revert IPqzToken.BadRecipientCount(m);
         o.legs = m;
-        o.groups = (m + 3) / 4;
         o.opTag = OP_TRANSFER_MULTI;
         o.mode = mode;
         o.op = 7;
         uint256 memo = mode == ZetherTypes.TransferMode.HASH ? 18 + 40 * m : 0;
-        o.outLen = PqzCt.PK * o.groups + PqzCt.V * (m + 1);
         if (payload.length < M_OUT + 32 * m + memo) revert IPqzToken.BadPayload(payload.length); // m ≤ 8: no overflow
+        // `out` = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]; the auditor's G is never below the other's,
+        // so the two lengths differ by at least V·M: the length fixes `auditorOn`
         uint256 rest = payload.length - M_OUT - 32 * m - memo;
-        if (rest == o.outLen + PqzCt.V * m) o.auditorOn = 1;
-        else if (rest != o.outLen) revert IPqzToken.BadPayload(payload.length);
+        if (rest == PqzCt.PK * _groups(m, 1) + PqzCt.V * (2 * m + 1)) o.auditorOn = 1;
+        else if (rest != PqzCt.PK * _groups(m, 0) + PqzCt.V * (m + 1)) revert IPqzToken.BadPayload(payload.length);
         if (o.auditorOn == 1 && s.auditorMode == ZetherTypes.AuditorMode.NONE) revert IPqzToken.AuditorForbidden();
         if (o.auditorOn == 0 && s.auditorMode == ZetherTypes.AuditorMode.FULL) revert IPqzToken.AuditorRequired();
-        o.outLen += PqzCt.V * m * o.auditorOn;
+        o.groups = _groups(m, o.auditorOn);
+        o.outLen = rest;
         _head(o, payload);
         o.ben = bytes32(payload[128:160]);
         o.salt = bytes16(payload[224:240]);
@@ -411,14 +431,17 @@ library PqzCore {
         }
     }
 
-    /// @dev Every leg: not the sender, pairwise distinct, a PQZ holder (its key); the auditor's key when `auditorOn`.
+    /// @dev Every leg: not the sender, pairwise distinct, a PQZ holder (its key); the auditor's key when `auditorOn`,
+    ///      and then neither the sender nor a leg is the auditor (F-4, `_noAuditorParty`).
     function _legs(Op memory o, Env memory e, bytes calldata payload) internal view {
         PqzStorage storage s = $();
         uint256 m = o.legs;
         o.keys = new address[](m);
+        _noAuditorParty(o, o.from);
         for (uint256 j; j < m; ++j) {
             bytes32 ua = bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
             if (ua == o.from) revert IPqzToken.SelfTransfer();
+            _noAuditorParty(o, ua);
             for (uint256 k; k < j; ++k) {
                 if (bytes32(payload[M_OUT + 32 * k:M_OUT + 32 * k + 32]) == ua) revert IPqzToken.DuplicateRecipient(ua);
             }
@@ -469,13 +492,13 @@ library PqzCore {
         );
     }
 
-    /// @dev `pending[UA_j] ← (u_{⌊j/4⌋}, v_j)` of the blob (packed offsets), in leg order.
+    /// @dev `pending[UA_j] ← (u_{g(j)}, v_j)` of the blob (packed offsets, `g` = `_groupOf`), in leg order.
     function _creditLegs(Op memory o, bytes32 ref, bytes calldata payload, address ptr) internal {
         uint256 us = 16 + PqzCt.PKP * o.groups;
         uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
         for (uint256 j; j < o.legs; ++j) {
             bytes32 ua = bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
-            _credit(ua, ptr, 16 + PqzCt.PKP * (j / 4), us + ls * j, ref);
+            _credit(ua, ptr, 16 + PqzCt.PKP * _groupOf(j, o.auditorOn), us + ls * j, ref);
         }
     }
 
@@ -578,7 +601,7 @@ library PqzCore {
     // ------------------------------------------------------------------ disclosure (§7.9, P6g D11)
 
     /// @notice The disclosure statement (`PqzSet.STMT_DISCLOSE` bytes) of leg `j` of `entryRef` for `kind` (0 `SENDER_S`, 1 `RECEIVER_X`,
-    ///         2 `AUDITOR`) in its precompile buffer (CTR-PQZ-14, CTR-PQZ-26; a single entry is leg 0): `u_{⌊j/4⌋}` and
+    ///         2 `AUDITOR`) in its precompile buffer (CTR-PQZ-14, CTR-PQZ-26; a single entry is leg 0): `u_{g(j)}` and
     ///         `v_j` (or `v_{a,j}`), the key of `UA_j` (or the auditor), all read from the entry's op blob (D11; `u`, `v`
     ///         expanded from the packed blob into the statement). Reverts
     ///         on an unknown entry, no leg `j`, `kind > 2`, `AUDITOR` without the copies, `amount ≥ 2^64`.
@@ -591,7 +614,9 @@ library PqzCore {
         if (kind > 2 || amount >= VALUE_BOUND) revert IPqzToken.BadPayload(bundle.length);
         (uint256 uOff, uint256 vOff, bytes32 owner) = _legOf(bundle, j, kind);
         buf = _buffer(kind == 0 ? 4 : 5, DISCLOSE, proofLen);
-        _discHead(buf, ref, amount, kind, e);
+        // the kind word `OpeningKind + 256·w` (R0-1, pqz-stmt DW_KIND): w = j mod S_AUD, the auditor copy's coefficient
+        // window, for AUDITOR (the bundle has the copies: `_legOf`); 0 for SENDER_S / RECEIVER_X
+        _discHead(buf, ref, amount, uint256(kind) + (kind == 2 ? 256 * (j % PqzSet.S_AUD) : 0), e);
         _key(buf, 288, _keyPtr(e.registry, owner));
         (uint256 off, uint256 pkp, uint256 vp) = (288 + PqzCt.PK, PqzCt.PKP, PqzCt.VP);
         uint256 d;
@@ -603,7 +628,8 @@ library PqzCore {
         PqzCt.expandAt(d, PqzCt.CT / 32);
     }
 
-    /// @dev Leg `j` of a (packed) bundle: the offsets of `u_{⌊j/4⌋}` and of `v_j` (`v_{a,j}` for `AUDITOR`), its owner.
+    /// @dev Leg `j` of a (packed) bundle: the offsets of `u_{g(j)}` (`_groupOf`) and of `v_j` (`v_{a,j}` for `AUDITOR`),
+    ///      its owner.
     function _legOf(bytes memory bundle, uint256 j, uint8 kind)
         internal view returns (uint256 uOff, uint256 vOff, bytes32 owner)
     {
@@ -612,14 +638,15 @@ library PqzCore {
         if (j >= m || (kind == 2 && a == 0)) revert IPqzToken.BadPayload(bl);
         uint256 ls = 32 + PqzCt.VP * (1 + a);
         uint256 leg = 16 + PqzCt.PKP * g + ls * j;
-        uOff = 16 + PqzCt.PKP * (j / 4);
+        uOff = 16 + PqzCt.PKP * _groupOf(j, a);
         vOff = kind == 2 ? leg + PqzCt.VP : leg;
         assembly ("memory-safe") { owner := mload(add(add(bundle, 32), sub(add(leg, ls), 32))) }
         if (kind == 2) owner = $().auditorUA;
     }
 
     /// @dev `(G, M, auditorOn)` of a bundle `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}` from its length:
-    ///      unique for every built `M` (≤ 8: the packed legs take < `PKP` bytes), else `BadPayload`.
+    ///      unique for every `M` ≤ 8 (the packed legs take < `PKP` bytes; `G` = `_groups(M, a)`; test
+    ///      `PqzMultiTest.test_bundleShape_unique` at every set), else `BadPayload`.
     function _bundleShape(uint256 bl) internal pure returns (uint256 g, uint256 m, uint256 a) {
         if (bl < 16 + PqzCt.PKP) revert IPqzToken.BadPayload(bl);
         g = (bl - 16) / PqzCt.PKP;
@@ -628,15 +655,16 @@ library PqzCore {
             a = 1 - i;
             uint256 ls = 32 + PqzCt.VP * (1 + a);
             m = rem / ls;
-            if (m != 0 && m <= 8 && rem == ls * m && (m + 3) / 4 == g) return (g, m, a);
+            if (m != 0 && m <= 8 && rem == ls * m && _groups(m, a) == g) return (g, m, a);
         }
         revert IPqzToken.BadPayload(bl);
     }
 
-    function _discHead(bytes memory buf, bytes32 ref, uint256 amount, uint8 kind, Env memory e) internal view {
+    function _discHead(bytes memory buf, bytes32 ref, uint256 amount, uint256 kindWord, Env memory e) internal view {
+        uint256 kind = kindWord & 0xff;
         bytes32 tag = kind == 0 ? OP_DS : kind == 1 ? OP_DR : OP_DA;
         _mem(buf, 0, abi.encode(tag, $().psid, block.chainid, e.chainUid, address(this), e.registry, ref, amount,
-            uint256(kind)));
+            kindWord));
     }
 
     /// @notice `keccak256(R)` of the entry, `R` the packed bytes of its op blob (P46), 0 if none.

@@ -377,8 +377,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function _op7p(uint256 m, bytes memory proof) internal view returns (bytes memory) {
         bytes memory r;
         for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
-        uint256 g = (m + 3) / 4;
-        bytes memory out = _blob(81 + m, PqzCt.PK * g + PqzCt.V * (m + 1) + PqzCt.V * m);
+        bytes memory out = _blob(81 + m, _outLen(m, true));
         return abi.encodeCall(tok.mtxConfidentialTransfer, (bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
             carol, alice, m, uint256(0)), salt, r, out), proof, _mlAuth(), alice, ""));
     }

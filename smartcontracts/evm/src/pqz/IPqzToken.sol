@@ -48,6 +48,8 @@ interface IPqzToken is IConfidentialToken {
     error UnitsInvariant();
     error AuditorRequired();
     error AuditorForbidden();
+    /// F-4: with the auditor copies on, the auditor UA is neither the sender nor a recipient (op 1, op 7)
+    error AuditorAsParty(bytes32 ua);
     error MemoSaltMismatch();
     error TransferEntryDisabled(uint8 disclosureMode);
     error AuthRejected();

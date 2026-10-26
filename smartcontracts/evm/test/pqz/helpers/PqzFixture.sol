@@ -13,6 +13,7 @@ import {MockERC20} from "../../helpers/Mocks.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../../src/pqz/PqzCore.sol";
+import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
@@ -142,7 +143,16 @@ abstract contract PqzFixture is PqzRegistryBase {
     }
 
     function _outLen(uint256 m, bool withAud) internal pure returns (uint256) {
-        return PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
+        return PqzCt.PK * _groups(m, withAud) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
+    }
+
+    /// op 7's randomness groups (R0-1): `⌈M / S_AUD⌉` with the auditor copies, `⌈M / 4⌉` without; leg `j` in `_groupOf`.
+    function _groups(uint256 m, bool withAud) internal pure returns (uint256) {
+        return withAud ? (m + PqzSet.S_AUD - 1) / PqzSet.S_AUD : (m + 3) / 4;
+    }
+
+    function _groupOf(uint256 j, bool withAud) internal pure returns (uint256) {
+        return withAud ? j / PqzSet.S_AUD : j / 4;
     }
 
     /// The op blob's `R` of a single transfer for `out = u ‖ v_t ‖ v_f ‖ [v_a]` (P46: every `u`, `v` packed):

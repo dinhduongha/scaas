@@ -827,7 +827,7 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
     tok = C.tok
     stt = C.state(frm)
     p = stt["pendingCount"]
-    m, g = len(legs), (len(legs) + 3) // 4
+    m, g = len(legs), K.groups(len(legs), aud_on)  # R0-1: S_AUD legs per group with the auditor, 4 without
     compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
     salt = os.urandom(16)
     memo = salt + os.urandom(2 + 40 * m) if compact else b""  # ponytail: memo body random, as transfer()

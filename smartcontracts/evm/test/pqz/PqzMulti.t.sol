@@ -46,7 +46,7 @@ contract PqzMultiTest is PqzFixture {
     {
         out = _blob(seed, _outLen(rec.length, aud));
         ref = t.mtxConfidentialTransfer(_mplFor(t, from, ben, rec, out), hex"c0de", _mlAuth(), ben, "");
-        _mirror(from, rec, out);
+        _mirror(from, rec, out, aud);
     }
 
     /// The client's payload: `p = pendingCount`, `shieldIn = 0`, the memo on a COMPACT token.
@@ -57,12 +57,14 @@ contract PqzMultiTest is PqzFixture {
         return _mpayload(t.pqzAccount(from).pendingCount, 0, from, ben, rec, out, memo);
     }
 
-    function _mirror(bytes32 from, bytes32[] memory rec, bytes memory out) internal {
+    /// The client's mirror of an op 7: leg `j` credited `(u_{g(j)}, v_j)`, `g` by the auditor flag (R0-1).
+    function _mirror(bytes32 from, bytes32[] memory rec, bytes memory out, bool withAud) internal {
         uint256 m = rec.length;
-        uint256 us = PqzCt.PK * ((m + 3) / 4);
+        uint256 us = PqzCt.PK * _groups(m, withAud);
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, us + PqzCt.V * m, PqzCt.V));
         for (uint256 j; j < m; ++j) {
-            pend[rec[j]].push(bytes.concat(_cut(out, PqzCt.PK * (j / 4), PqzCt.PK), _cut(out, us + PqzCt.V * j, PqzCt.V)));
+            pend[rec[j]].push(bytes.concat(_cut(out, PqzCt.PK * _groupOf(j, withAud), PqzCt.PK),
+                _cut(out, us + PqzCt.V * j, PqzCt.V)));
         }
     }
 
@@ -81,14 +83,15 @@ contract PqzMultiTest is PqzFixture {
         assertEq(_cut(st, O_PK1 + PqzCt.PK * 5 + PqzCt.CT, out.length), out, "out after T");
     }
 
-    /// `R` of a one-group transfer with the auditor.
-    /// `R = salt ‖ P(u_0) ‖ (P(v_j) ‖ P(v_{a,j}) ‖ UA_j)_j` of one group with the auditor (P46: `u`, `v` packed).
+    /// `R = salt ‖ P(u_0 … u_{G−1}) ‖ (P(v_j) ‖ P(v_{a,j}) ‖ UA_j)_j` with the auditor (P46: `u`, `v` packed;
+    /// G = ⌈M / S_AUD⌉).
     function _bundleOn(bytes memory out, bytes32[] memory rec) internal view returns (bytes memory r) {
         uint256 m = rec.length;
-        r = bytes.concat(salt, _packed(_cut(out, 0, PqzCt.PK)));
+        uint256 us = PqzCt.PK * _groups(m, true);
+        r = bytes.concat(salt, _packed(_cut(out, 0, us)));
         for (uint256 j; j < m; ++j) {
-            r = bytes.concat(r, _packed(_cut(out, PqzCt.PK + PqzCt.V * j, PqzCt.V)),
-                _packed(_cut(out, PqzCt.PK + PqzCt.V * (m + 1 + j), PqzCt.V)), rec[j]);
+            r = bytes.concat(r, _packed(_cut(out, us + PqzCt.V * j, PqzCt.V)),
+                _packed(_cut(out, us + PqzCt.V * (m + 1 + j), PqzCt.V)), rec[j]);
         }
     }
 
@@ -101,7 +104,8 @@ contract PqzMultiTest is PqzFixture {
     // ------------------------------------------------------------------ statement and effects
 
     /// M = 4 with the auditor: the precompile input is `07 ‖ be32(len) ‖ stmt ‖ proof` with the §8.1 op 7 layout —
-    /// header word 192 `recipientsHash`, 320 `M`, keys in leg order, `T`, `out`; every leg credited `(u_0, v_j)`.
+    /// header word 192 `recipientsHash`, 320 `M`, keys in leg order, `T`, `out`; every leg credited `(u_{g(j)}, v_j)`
+    /// (G = ⌈4 / S_AUD⌉: two groups at n2048-kmax1024 / n2304-kmax4096).
     function test_multi_statementAndEffects() public {
         _public(tok, address(this), 1000 * SCALE); // topped up with `shieldIn`
         bytes32[] memory rec = _legsOf(4);
@@ -121,7 +125,7 @@ contract PqzMultiTest is PqzFixture {
         uint256 g = gasleft();
         bytes32 ref = tok.mtxConfidentialTransfer(pl, proof, _mlAuth(), _benM(pl), "");
         console2.log("mtxConfidentialTransfer op 7 M = 4 (BUNDLE, auditor, fee, mocked proof) gas", g - gasleft());
-        _mirror(alice, rec, out);
+        _mirror(alice, rec, out, true);
 
         IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(tok.pqzAcc(alice), accOf[alice], "acc = u_0 || v_f");
@@ -129,12 +133,12 @@ contract PqzMultiTest is PqzFixture {
         assertEq(a.accUnits, 1);
         for (uint256 j; j < 4; ++j) {
             assertEq(tok.pqzAccount(rec[j]).pendingCount, 1);
-            assertEq(tok.pqzPendingCt(rec[j], 0), pend[rec[j]][0], "credit (u_0, v_j)");
+            assertEq(tok.pqzPendingCt(rec[j], 0), pend[rec[j]][0], "credit (u_g(j), v_j)");
         }
         assertEq(tok.balanceOfUA(carol), FEE * SCALE, "txFee once, to the beneficiary's public balance");
         assertEq(tok.pqzAccount(carol).pendingCount, 0, "no TRIVIAL fee entry");
         assertEq(tok.totalShielded(), 1000 - FEE, "the fee left the pool");
-        assertEq(tok.transferEntry(ref), _bundleOn(out, rec), "BUNDLE stores R = salt || u_0 || (v_j || v_aj || UA_j)_j");
+        assertEq(tok.transferEntry(ref), _bundleOn(out, rec), "BUNDLE stores R = salt || u_0..u_G-1 || (v_j || v_aj || UA_j)_j");
         _roll(tok, bob, 1);
         _assertConservation(tok);
     }
@@ -247,26 +251,114 @@ contract PqzMultiTest is PqzFixture {
 
     // ------------------------------------------------------------------ disclosure by leg
 
+    /// Every leg of an audited M = 8: `u` of the leg's group `⌊j / S_AUD⌋`, `v_j` / `v_{a,j}`, and the kind word
+    /// `OpeningKind + 256·(j mod S_AUD)` for AUDITOR (R0-1; `OpeningKind` alone for RECEIVER_X).
     function test_multi_disclosureByLeg() public {
         _fund(tok, alice, 1000);
         bytes32[] memory rec = _legsOf(8);
         (bytes32 ref, bytes memory out) = _multi(tok, alice, bytes32(0), rec, 13, true);
-        uint256 us = 2 * PqzCt.PK;
-        for (uint256 j = 3; j < 6; ++j) {
+        uint256 us = _groups(8, true) * PqzCt.PK;
+        for (uint256 j; j < 8; ++j) {
             bytes memory st = tok.disclosureStatement(ref, j, 77, 1);
             assertEq(st.length, ST_DISC);
+            assertEq(uint256(bytes32(_cut(st, 256, 32))), 1, "RECEIVER_X kind word: w = 0");
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(rec[j]), "the leg's key");
-            assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / 4), PqzCt.PK), "u of the leg's group");
+            assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group");
             assertEq(_cut(st, O_DV, 128), _cut(out, us + PqzCt.V * j, PqzCt.V), "v_j");
             st = tok.disclosureStatement(ref, j, 77, 2);
+            assertEq(uint256(bytes32(_cut(st, 256, 32))), 2 + 256 * (j % PqzSet.S_AUD), "AUDITOR kind word: w = j mod S_AUD");
             assertEq(_cut(st, 288, PqzCt.PK), _keyOf(aud), "the auditor's key");
+            assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out, PqzCt.PK * (j / PqzSet.S_AUD), PqzCt.PK), "u of the leg's group");
             assertEq(_cut(st, O_DV, 128), _cut(out, us + PqzCt.V * (9 + j), PqzCt.V), "v_aj");
         }
+        // without the auditor: groups of 4, and no AUDITOR disclosure
+        (bytes32 ref0, bytes memory out0) = _multi(tok, alice, bytes32(0), rec, 14, false);
+        for (uint256 j; j < 8; ++j) {
+            bytes memory st = tok.disclosureStatement(ref0, j, 77, 1);
+            assertEq(_cut(st, O_DU, PqzCt.PK), _cut(out0, PqzCt.PK * (j / 4), PqzCt.PK), "off: u of group j / 4");
+        }
+        vm.expectRevert();
+        tok.disclosureStatement(ref0, 0, 77, 2);
         bytes memory opening = hex"0a0b"; // the proof: `R` is read from the op blob (D11)
         assertTrue(tok.verifyTransferAmount(ref, 5, 77, 1, opening));
         assertFalse(tok.verifyTransferAmount(ref, 8, 77, 1, opening), "no leg 8");
         _mockOp(5, 0);
         assertFalse(tok.verifyTransferAmount(ref, 5, 77, 1, opening), "the precompile says no");
+    }
+
+    /// The vectors' op 7 disclosures as the oracle (`disclosures` of the set's `statement_transfer_multi.json`, the head
+    /// words extracted to `test/vectors/pqz-disclosures/<set>.json`: the 3.5 MB file exceeds forge's memory gas): the
+    /// token's statement of the same leg and kind has the vectors' opTag, amount and kind word (`OpeningKind + 256·w`,
+    /// byte-identical to pqz-stmt's R_DR / R_DA statement).
+    function test_multi_disclosureKindWord_vectors() public {
+        _fund(tok, alice, 1000);
+        string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-disclosures/", PqzSet.NAME, ".json"));
+        for (uint256 i; i < 4; ++i) {
+            string memory r = string.concat(".rows[", vm.toString(i), "]");
+            uint256 m = vm.parseJsonUint(j, string.concat(r, ".legs"));
+            uint256 leg = vm.parseJsonUint(j, string.concat(r, ".leg"));
+            bytes memory head = vm.parseBytes(string.concat("0x", vm.parseJsonString(j, string.concat(r, ".head"))));
+            uint256 word = uint256(bytes32(_cut(head, 256, 32)));
+            (bytes32 ref,) = _multi(tok, alice, bytes32(0), _legsOf(m), 40 + i, true);
+            bytes memory st = tok.disclosureStatement(ref, leg, uint256(bytes32(_cut(head, 224, 32))), uint8(word & 0xff));
+            assertEq(_cut(st, 0, 32), _cut(head, 0, 32), "opTag");
+            assertEq(_cut(st, 224, 64), _cut(head, 224, 64), "amount and kind words as the vector");
+            if (word & 0xff == 2) assertEq(word >> 8, leg % PqzSet.S_AUD, "AUDITOR: w = leg mod S_AUD");
+        }
+    }
+
+    /// `_bundleShape`: the length of `R` fixes (G, M, auditorOn) for every M ≤ 8 (owner rule R0-1: G = ⌈M / S_AUD⌉ with
+    /// the auditor, ⌈M / 4⌉ without). At the build's set through the library code; at all four sets by the arithmetic
+    /// the code relies on — every leg block below `PKP` (so `G = ⌊(len − 16) / PKP⌋`) and all 16 lengths distinct.
+    function test_bundleShape_unique() public {
+        BundleShapeHarness h = new BundleShapeHarness();
+        for (uint256 m = 1; m <= 8; ++m) {
+            for (uint256 a; a < 2; ++a) {
+                uint256 g = _groups(m, a == 1);
+                (uint256 g2, uint256 m2, uint256 a2) = h.shape(16 + PqzCt.PKP * g + (32 + PqzCt.VP * (1 + a)) * m);
+                assertEq(abi.encode(g2, m2, a2), abi.encode(g, m, a), "the shape from the length");
+            }
+        }
+        // (k, PACK_BITS, S_AUD) of n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536 (PqzSet.sol)
+        uint256[3][4] memory sets = [[uint256(32), 42, 2], [uint256(36), 46, 3], [uint256(40), 50, 4], [uint256(44), 54, 4]];
+        for (uint256 si; si < 4; ++si) {
+            (uint256 pkp, uint256 vp, uint256 sa) = (sets[si][0] * 512 / 32 * (sets[si][1] / 2), sets[si][1] * 2, sets[si][2]);
+            uint256[16] memory lens;
+            for (uint256 m = 1; m <= 8; ++m) {
+                for (uint256 a; a < 2; ++a) {
+                    uint256 g = a == 1 ? (m + sa - 1) / sa : (m + 3) / 4;
+                    uint256 legs = (32 + vp * (1 + a)) * m;
+                    assertLt(legs, pkp, "the legs take < PKP bytes");
+                    lens[2 * (m - 1) + a] = 16 + pkp * g + legs;
+                }
+            }
+            for (uint256 x; x < 16; ++x) {
+                for (uint256 y; y < x; ++y) assertTrue(lens[x] != lens[y], "two shapes, one length");
+            }
+        }
+    }
+
+    /// F-4 (R0 review): with the auditor copies on, the auditor UA is neither the sender nor a leg (op 7 and op 1);
+    /// without them it may be either.
+    function test_auditorAsParty_refused() public {
+        _fund(tok, alice, 1000);
+        bytes32[] memory rec = _legsOf(2);
+        rec[1] = aud;
+        bytes memory out = _blob(3, _outLen(2, true));
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, out, ""), hex"01", _mlAuth(), bytes32(0), "");
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
+        tok.transferStatement(_mpayload(0, 0, alice, 0, rec, out, ""), 0);
+        _fund(tok, aud, 1000);
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, aud, 0, _legsOf(2), out, ""), hex"01", _mlAuth(), bytes32(0), "");
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
+        tok.mtxConfidentialTransferSingle(_payload(0, 0, aud, bob, bytes32(0), _out(4, true), ""), hex"01", _mlAuth(), bytes32(0), "");
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AuditorAsParty.selector, aud));
+        tok.mtxConfidentialTransferSingle(_payload(0, 0, alice, aud, bytes32(0), _out(5, true), ""), hex"01", _mlAuth(), bytes32(0), "");
+        // auditor off: no copies, no collision
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, _blob(6, _outLen(2, false)), ""), hex"01", _mlAuth(), bytes32(0), "");
+        tok.mtxConfidentialTransferSingle(_payload(0, 0, aud, bob, bytes32(0), _out(7, false), ""), hex"01", _mlAuth(), bytes32(0), "");
     }
 
     // ------------------------------------------------------------------ decoyFee (owner 2026-10-20) and PQZH
@@ -384,5 +476,12 @@ contract PqzMultiTest is PqzFixture {
         bytes4[2] memory gone = [bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)")),
             bytes4(keccak256("mtxConfidentialTransferSingleNoBundle(bytes,bytes,bytes,bytes32,bytes)"))];
         for (uint256 k; k < s.length; ++k) assertTrue(s[k] != gone[0] && s[k] != gone[1], "NONE retired");
+    }
+}
+
+/// `PqzCore._bundleShape` (internal) for `test_bundleShape_unique`.
+contract BundleShapeHarness {
+    function shape(uint256 bl) external pure returns (uint256, uint256, uint256) {
+        return PqzCore._bundleShape(bl);
     }
 }

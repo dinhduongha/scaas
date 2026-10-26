@@ -181,24 +181,32 @@ contract PqzCtTest is PqzMock {
     }
 
     /// The ids at the build's set (plan 5h Task 8d, CTR-PQZ-09): its PQZL id, its PQZH id only where the set has PQZH;
-    /// the retired PQZL v2 / v3 and PQZH v1, the zero word and every other set's ids refused.
+    /// the retired PQZL v2 / v3 / v4, PQZH v1 / v2 and the STARK backup id, the zero word and every other set's ids refused.
     function test_ids() public pure {
         assertEq(PqzSafety.PQZL_ID, PqzSet.PQZL_ID);
         assertTrue(PqzSafety.isPsid(PqzSet.PQZL_ID));
         assertEq(PqzSafety.isPsid(PqzSet.PQZH_ID), PqzSet.HAS_PQZH, "PQZH iff the set has it");
         if (!PqzSet.HAS_PQZH) assertEq(PqzSet.PQZH_ID, bytes32(0), "no PQZH: the zero word");
         assertFalse(PqzSafety.isPsid(0));
-        bytes32[11] memory all = [
+        bytes32[19] memory all = [
             bytes32(0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f), // retired PQZL v2
             0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef, // retired PQZL v3
             0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4, // retired PQZH v1
-            0x19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d, // n2048-kmax1024 PQZL
-            0x9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4, // n2048-kmax1024 PQZH
-            0x15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a, // n2304-kmax4096 PQZL
-            0xe4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730, // n2304-kmax4096 PQZH
-            0xa3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d, // n2560-kmax16384 PQZL
-            0xe83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851, // n2560-kmax16384 PQZH
-            0x9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3, // n2816-kmax65536 PQZL
+            0x19fad50a2dfdd6351dd0d52203ad440d7e6d5b345641f877bfcd7382079a326d, // retired n2048-kmax1024 PQZL v4
+            0x9d945089e2a5c39b287888bcd87974934d20181176465b1ab099b5cd1ca7dca4, // retired n2048-kmax1024 PQZH v2
+            0x15d16d775baed2374e6e41fd153eb6d0cfc75b3b59a7057943be2338e0cb608a, // retired n2304-kmax4096 PQZL v4
+            0xe4bc6d17ac1395670158d149b01898476ea32ffa482ce3f4c3f495d6b9885730, // retired n2304-kmax4096 PQZH v2
+            0xa3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d, // retired n2560-kmax16384 PQZL v4
+            0xe83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851, // retired n2560-kmax16384 PQZH v2
+            0x9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3, // retired n2816-kmax65536 PQZL v4
+            0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe, // n2048-kmax1024 PQZL v5
+            0x56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d, // n2048-kmax1024 PQZH v3
+            0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, // n2304-kmax4096 PQZL v5
+            0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead, // n2304-kmax4096 PQZH v3
+            0xeacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882, // n2560-kmax16384 PQZL v5
+            0xc93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662, // n2560-kmax16384 PQZH v3
+            0xa801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9, // n2816-kmax65536 PQZL v5
+            0xaa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304, // retired STARK backup
             bytes32(0)
         ];
         uint256 own;
