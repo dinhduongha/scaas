@@ -44,11 +44,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   option (a): the start-up id check reads the schedule at the block-tree head + 1, not the wall clock; Nethermind 49 / 49
   at n2304 / n2816) → re-review → on approval merge `pqz-r01` into `pqz-16k` (fast-forward) and push `pqz-16k` (owner
   2026-10-26) → then, in this order (owner 2026-10-26):
-  1. [ ] **New image + SCaaS testnet roll-out of part b**: image `2.2.0-pqz5` at `n2304-kmax4096`, reset via RUNBOOK
+  1. [x] **DONE 2026-10-26** (`31af331e`: image `4d906b55…`, library `dd0e7668…`, probe 420 ok / 0 FAIL, e2e 84 ok / 0
+     FAIL; stack backups `*.bak-pqz4-20261026`). **New image + SCaaS testnet roll-out of part b**: image `2.2.0-pqz5` at `n2304-kmax4096`, reset via RUNBOOK
      path B (the new plugin refuses the live v4 / v2 schedule by design), redeploy, probe + e2e; provisional prices
      (retired calibration × 1.3) until Task 9. The testnet node is stopped until then (host shutdown 2026-10-25; owner:
      leave it stopped).
-  1b. [ ] **Merge `pqz-16k` into `main`** (owner 2026-10-26), right after the roll-out passes: a merge commit (the
+  1b. [x] **DONE 2026-10-26** (merge commit on `main`, no conflicts; forge 1361 / 0 / 9, size gate 0 errors).
+     **Merge `pqz-16k` into `main`** (owner 2026-10-26), right after the roll-out passes: a merge commit (the
      branches diverged at `61476cd0`), doc conflicts resolved (`pq-zero-knowledge.md`, `decisions.md`, `TODO.md`),
      `docs_check`, forge at n2304 and the size gate (no full gate: no core / set change). Pushing `main` needs the
      owner's go. From then on 8d part 2b and every later step branch from `main`.
@@ -56,7 +58,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      (a) the C wasm32 arena peak and margin at M = 2 at n2048 / n2304 / n2560 (M = 2 known to fit 512 MiB; peak
      unmeasured; the leg limits stay labelled estimates until then); (b) the R4-C6 panic child-process test (needs a
      test-only panic export in `fault-hooks`; drop it if not cheap); (c) `PQZ-START` logs the head timestamp the id
-     check used.
+     check used; (d) the Dockerfile's `scaas.pqz.selftest` image label is hard-coded to pqz4's `23d7a1db…` (pqz5
+     carries it stale; the plugin's start-up check is right): take it from the set's `ExpectedHash` at the next image.
   3. [ ] **One Codex pass on the contracts** after 8d part 2a / 2b (owner request; `codex sandbox` check first).
   4. [ ] **Task 9 calibration** (timing: needs the owner's go) → final prices replace the provisional rows.
   5. [ ] the metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → `MtxRelayFee` (CTR-MTX-27), with or
