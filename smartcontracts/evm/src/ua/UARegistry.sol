@@ -9,6 +9,7 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 import {IUARegistry} from "./IUARegistry.sol";
 import {IUAKindVerifier, IUAPopVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
+import {PqzSet} from "../pqz/PqzSet.sol";
 import {UAMldsaVerifier} from "./MlDsa.sol";
 
 /// @title UA registry, UA-2a/2c/3, P6c and UA-6 scope (accounts.md §1.8): the single-key kinds 0x0100–0x0108, the
@@ -76,14 +77,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     error UAConfig(uint16 kind);
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
+    /// @notice EIP-7825 per-transaction gas cap, the bound of a PQZ `msig` holder (`_pqzAttr`).
+    uint256 internal constant TX_GAS_CAP = 1 << 24;
     /// @notice Registration bound for `msig` (register step 4): gas per member beyond its cap — MemberSig decoding,
     ///         `uaOf`, `uaMessage`, the call or the gen-1 hand-off, cold accounts (measured worst, cold under
     ///         `--isolate`: 19,987 for a member handed to gen 1), plus what the caller must hold for the largest cap
-    ///         (400 k / 63 + 5 k): 31,336, rounded up. Also added in `_checkMembers`: `(held - 400 k) / 63` for the
+    ///         (400 k / 63 + 5 k): 31,336, rounded up. Also added in `_membersWorst`: `(held - 400 k) / 63` for the
     ///         largest held member cap above 400 k, and for each member gen 2 hands to gen 1 the hold gen 2 keeps
     ///         around that call (the member counts `cap + cap / 63 + SigCheck.GAS_MARGIN`; gen 1 holds again
     ///         inside). `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
-    ///         registered exactly at `verifyBudget` within `verifyBudget`.
+    ///         registered exactly at `verifyBudget` within `verifyBudget`. `test_T_GAS_msigPqAtBudget` covers PQ signatures
+    ///         (8 x `slhdsa128s`, 7,856 B each, + 1 clone, exactly at the bound 11,930,873; least frame gas 11,873,766, 57 k
+    ///         spare): no per-kind size term (review2 C4-2).
     uint256 internal constant MSIG_MEMBER_GAS = 35_000;
 
     uint8 public immutable generation;
@@ -371,7 +376,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// Step 4: single-key kinds claim their keyHash (`UAKeyInUse`); structures check their members (no keyHash).
     function _claim(uint16 kind, bytes memory d, bool structure) private view returns (bytes32 kh) {
         if (structure) {
-            _checkMembers(d);
+            _membersWorst(d);
             return 0;
         }
         kh = UAKinds.keyHashOf(kind, d);
@@ -381,7 +386,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// Step 5 (UA-6 U3): the PQZ key attribute. Returns its keyHash `h` (group `pqz-mlwe`), 0 without a key.
     /// `UAKindDisabled(0x0142)` where this generation has no PQZ key verifier; `UAPqzHolder` for a kind (or an `msig`
-    /// that is not PQ-eligible) that may not hold one; `UAKeyInUse` for a key another UA holds (any kind, either
+    /// that is not PQ-eligible, or whose worst-case authorization + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds 2^24) that may not hold one; `UAKeyInUse` for a key another UA holds (any kind, either
     /// generation); `UAPoP` unless `pqzPop` is empty exactly when `pqzKey` is.
     function _pqzAttr(uint16 kind, bytes memory d, bytes32 ua, bytes calldata pqzKey, uint256 pqzPopLength)
         private
@@ -396,6 +401,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bool holder = kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512
             || (kind == UAKinds.MSIG && _pqEligible(d));
         if (!holder) revert UAPqzHolder(ua);
+        // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
+        // authorization plus the set's cheapest PQZL debit (its full relayed transaction, fee signer included) must fit
+        // one transaction at the EIP-7825 cap 2^24, else every credit to it could be locked. Not the chain's own limit.
+        if (kind == UAKinds.MSIG && _membersWorst(d) + PqzSet.PQZ_DEBIT_MIN_GAS > TX_GAS_CAP) revert UAPqzHolder(ua);
         h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqzKey);
         bytes32 owner = keyOwner(h);
         if (owner != 0) revert UAKeyInUse(h, owner);
@@ -461,7 +470,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// Step 4 for `msig`: every member ∈ MEMBER of this profile and native or registered under its stated kind; the
     /// worst case of a minimal authorizing set (the `c` largest caps + `c` × `MSIG_MEMBER_GAS`, + the caller's hold for
     /// the largest of this generation's caps beyond the 400 k that `MSIG_MEMBER_GAS` covers) fits `verifyBudget`.
-    function _checkMembers(bytes memory d) private view {
+    function _membersWorst(bytes memory d) private view returns (uint256 worst) {
         (uint256 threshold, uint256 count) = (_u16(d, 0), _u16(d, 2));
         uint256[] memory weights = new uint256[](count);
         uint256[] memory caps = new uint256[](count);
@@ -491,7 +500,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         for (uint256 acc; acc < threshold; ++c) {
             acc += weights[c];
         }
-        uint256 worst = c * MSIG_MEMBER_GAS;
+        worst = c * MSIG_MEMBER_GAS;
         for (uint256 i; i < c; ++i) {
             worst += caps[count - 1 - i];
         }

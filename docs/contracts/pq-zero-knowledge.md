@@ -651,7 +651,16 @@ whose non-PQ members' total weight is **below** its threshold — so no classica
 rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n ML-DSA form; the weight is summed over
 members whose kind is not 0x0130–0x0133 (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
-a classical-dominant `msig` — reverts `UAPqzHolder`. A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
+a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
+override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
+(register step 4's bound: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + the caller's hold) plus
+`PqzSet.PQZ_DEBIT_MIN_GAS` is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit).
+`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
+(burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,820,062 at
+`n2048-kmax1024`, 6,991,487 at `n2304-kmax4096`, 7,161,789 at `n2560-kmax16384`, 7,351,418 at `n2816-kmax65536`, from
+`runs/2026-10-26-t8d2b-fix-gas-<set>.txt`. So the worst-case authorization may not exceed 9.96 M / 9.79 M / 9.62 M /
+9.43 M; `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
+`mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
 PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
 (spends need the signer's signature); for an `msig` holder it is one view / prove key held by an operator, every spend

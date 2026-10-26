@@ -608,7 +608,7 @@ token derives the receiver UA from `Y` in the payload with one keccak and no loo
 supplied in `register(kind, keyData, pop, pqzKey, pqzPop)` and proven by `R_REG` over the same `popDigest` as the
 signer's PoP ([CTR-UA-07](#CTR-UA-07)). Holders: single-key `mldsa44`, `mldsa65`, `fndsa512`, and an `msig` whose
 members of kinds other than `0x0130`–`0x0133` weigh less than its threshold ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12));
-every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. A PQ-eligible `msig` always registers with
+every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. An `msig` holder whose worst-case authorization plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) exceeds 2^24 (EIP-7825) reverts `UAPqzHolder` too, so that no holder is registrable but unable to spend ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), review2 C0-5). A PQ-eligible `msig` always registers with
 its m-of-n `pop` (a squatter could otherwise fix it without a key forever). The PQZ key is not in the id: a PQ signer
 registered without one can never get one (a new signing key is a new UA, [CTR-UA-13](#CTR-UA-13)); wallets register both
 together. One PQZ key belongs to one UA (`UAKeyInUse`, group `pqz-mlwe`), `msig` included. A leaked PQZ secret is a

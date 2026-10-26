@@ -150,6 +150,44 @@ contract UAGasTest is UARegistryBase {
         }
     }
 
+    /// Review2 C4-2: `MSIG_MEMBER_GAS` was calibrated with signatures <= 512 B; PQ member signatures are copied three
+    /// times into memory (quadratic). 8 `slhdsa128s` (cap 1.4 M, 7,856 B signatures) + 1 native `SmartKeyAccount`
+    /// clone, threshold 9, registered exactly at `verifyBudget`-tight bound (one gas less: `UAKeyData`), authorizes with
+    /// the bound as the frame's gas, every capped call burning its whole cap.
+    function test_T_GAS_msigPqAtBudget() public {
+        BurnAll impl = new BurnAll();
+        _impl = address(impl);
+        _big = new bytes(7_856);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
+        c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000);
+        address clone = address(0x5cf40);
+        vm.etch(clone, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        // bound: 8 x (cap + member gas) + the clone (400 k + member gas) + the registry's own hold (1.4 M - 400 k) / 63
+        uint256 bound = 8 * (1_400_000 + MSIG_MEMBER_GAS) + SMART_KEY_1271_GAS + MSIG_MEMBER_GAS + (1_400_000 - SMART_KEY_1271_GAS) / 63;
+        UARegistry tight = _deploy(address(0x5ce30), chainUidA, address(0), false, uint64(bound - 1), _impl, true, c);
+        UARegistry r = _deploy(address(0x5ce31), chainUidA, address(0), false, uint64(bound), _impl, true, c);
+        Member[] memory m = new Member[](9);
+        for (uint256 i; i < 8; ++i) {
+            bytes memory pk = abi.encodePacked(keccak256(abi.encode("slh", i)));
+            tight.register(0x0133, pk, hex"01", "", "");
+            m[i] = Member(0x0133, r.register(0x0133, pk, hex"01", "", ""), 1);
+        }
+        m[8] = Member(UAKinds.EVM_EOA, _pad(clone), 1);
+        bytes memory d = _msigKey(9, m);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
+        tight.register(UAKinds.MSIG, d, "", "", "");
+        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](9);
+        for (uint16 j; j < 9; ++j) s[j] = UARegistry.MemberSig(j, "", _big);
+        bytes32 ua = r.register(UAKinds.MSIG, d, abi.encode(s), "", ""); // all PQ but the clone: PQ-eligible, m-of-n PoP
+        uint256 least = _leastGas(
+            address(r),
+            abi.encodeCall(r.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s))),
+            bound
+        );
+        emit log_named_uint("pq msig bound", bound);
+        emit log_named_uint("  least requireAuthorized frame gas", least);
+    }
+
     /// The bound of msig key data `d` whose threshold needs every member (weights 1, threshold = count) or whose only
     /// member is the threshold: Σ (cap + MSIG_MEMBER_GAS), + gen 1's hold for a derived member handed to gen 1, + the
     /// registry's own hold (held - 400 k) / 63 for the largest held cap above 400 k (a handed member holds in gen 2 too).

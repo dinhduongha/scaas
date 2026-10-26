@@ -351,7 +351,7 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 
 | File | What | Made by |
 |---|---|---|
-| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, `s_aud`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input`, `roll_max` and `pqzh_value` (sets with pqz-stmt; `pqzh_value` -> `PqzSet.PQZH_VALUE`, true only at n2048-kmax1024), `[pqzl_c]` (the C backend's arena and wasm32 leg limit), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with PQZH), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
+| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, `s_aud`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input`, `roll_max`, `debit_min_gas` (-> `PqzSet.PQZ_DEBIT_MIN_GAS`) and `pqzh_value` (sets with pqz-stmt; `pqzh_value` -> `PqzSet.PQZH_VALUE`, true only at n2048-kmax1024), `[pqzl_c]` (the C backend's arena and wasm32 leg limit), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with PQZH), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
 | `pqz_set.h`, `rust/set.rs` | n, k, q, log2 q, Δ, `K_MAX`, digit / carry / noise widths, norm bounds, NTT roots, Barrett constants, the specialised verifier's CRT prime count, the `proofSystemId`s (keccak256 of the labels) | [`gen_set.py`](gen_set.py) (`--check` in the gate) |
 | `set.json` | every derived constant the Python tools read (`pqz_kat.py`, `e_s0_set.py`, `ligero_params.py`, the tests' `core_only`; the limits and the PQZH preset) | `gen_set.py` |
 | `pqzh_set.rs` | a set with PQZH: q − 1's factors, generator, F_q^4 non-residue, radices, the Ligero preset (n, k, t) | `gen_set.py` |
