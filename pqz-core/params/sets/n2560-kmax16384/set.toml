@@ -11,6 +11,7 @@ s_aud = 4                         # legs per randomness group of an audited R_TX
 kmlwe_min = 39                    # e-s1.txt (p16k: codegen's default rank 38 gives dual_hybrid 446 / 447)
 pqzh = true                       # PQZH (Ligero over this q) is built for this set
 max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (decisions 2026-10-20 O8, 2026-10-21 (7); the node reads it, pqz_max_input())
+roll_max = 64                     # PROVISIONAL: the contracts' ROLL_MAX (PqzSet.ROLL_MAX), measured in plan 5h Task 8d part 2b
 pqzl_id = "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5"   # PQZL proofSystemId = keccak256(label) (R0 review fix 2026-10-25: R0-1 auditor windows, R0-C2 Bprime, R0-C3 challenge filter; v4 retired)
 pqzh_id = "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3"   # PQZH proofSystemId (the same bump, R0-1 auditor windows; v2 retired; field and [pqzh_preset] named)
 

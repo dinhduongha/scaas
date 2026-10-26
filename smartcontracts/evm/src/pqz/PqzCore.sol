@@ -157,12 +157,10 @@ library PqzCore {
     uint256 internal constant K_MAX = PqzSet.K_MAX;
     uint256 internal constant INLINE_MAX = 16;
     uint256 internal constant INLINE_MAX_PQZH = 10;
-    /// @notice The largest rollover under `0.75 · 2^24` gas, a multiple of 16 (plan 5h D8; pinned by `PqzStateGasTest`).
-    ///         **Provisional per set** (plan 5h Task 8d part 2a, P46; part 2b measures and pins it): `n2304-kmax4096` 80
-    ///         (the P46 spike, `pqz-core/pqzl/params/pa-pack/`), the others scaled from it by the per-entry cost (≈ CT).
-    ///         Lane headroom: `(ROLL_MAX + 1) · q < 2^64` at every set (`PqzCt`).
-    uint256 internal constant ROLL_MAX =
-        PqzSet.N == 2048 ? 96 : PqzSet.N == 2304 ? 80 : PqzSet.N == 2560 ? 64 : 48;
+    /// @notice The largest rollover under `0.75 · 2^24` gas, a multiple of 16 (plan 5h D8): the set's `set.toml`
+    ///         `roll_max` (`PqzSet.ROLL_MAX`), measured per set as a relayed full transaction and pinned by
+    ///         `PqzStatePinGasTest`. Lane headroom: `(ROLL_MAX + 1) · q < 2^64` (`gen_set.py`, `PqzCt.t.sol`).
+    uint256 internal constant ROLL_MAX = PqzSet.ROLL_MAX;
     /// @notice A rollover takes entry `i` only at `block ≥ block_i + ROLL_AGE` (D6; owner 2026-10-20: 5 blocks).
     uint64 internal constant ROLL_AGE = 5;
     uint8 internal constant MAT = 1; // `acc` is `accWords`

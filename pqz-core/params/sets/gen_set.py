@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PQZ parameter sets (owner 2026-10-21: one directory per set, chosen at compile time, one set per library build; one
 input file per set, one generic generator). From sets/<set>/set.toml (n, k_max, q, pqz_delta, kmlwe_min, description,
-approval, max_input, [pqzh_preset], the proofSystemId labels pqzl_id / pqzh_id: the only place these values are written) this writes every derived file of the set:
+approval, max_input, roll_max, [pqzh_preset], the proofSystemId labels pqzl_id / pqzh_id: the only place these values are written) this writes every derived file of the set:
 
   <rel>_params.sage   the LaZer codegen specs of the 14 PQZL relations (reg, tx, tx0, burn, ds, dr, R_TXM M = 2 / 4 / 8
                       with and without the auditor, G = ceil(M / 4) randomness groups, and the bench-only M = 16)
@@ -13,7 +13,7 @@ approval, max_input, [pqzh_preset], the proofSystemId labels pqzl_id / pqzh_id: 
   set.json            every derived constant the Python tools need (pqz_kat.py, e_s0_set.py)
   PqzSet.sol          the Solidity constants of the set (make.sh <set> sol compiles it; PQZ_SOL_INSTALL=1 copies it to
                       smartcontracts/evm/src/pqz/, where the contracts read it: plan 5h Task 8d part 2): HAS_PQZH and
-                      PQZH_ID (0 without PQZH), the P46 packed `acc` slot count, and from the set's vectors (zero words
+                      PQZH_ID (0 without PQZH), ROLL_MAX (set.toml roll_max: plan 5h Task 8d part 2b), the P46 packed `acc` slot count, and from the set's vectors (zero words
                       until the set has them) the precompile's self-test hash and UAPqzVerifier's R_REG probe hashes
   pqzh_set.rs         a set with `pqzh = true`: PQZH's (Ligero, pqz-core/pqzh/ligero) constants from set.toml's
                       [pqzh_preset] (radices, n, k, t) and q (the factors of q - 1, the generator, the non-square)
@@ -464,6 +464,17 @@ def acc_words(name):
     return -(-lengths(t["n"] // 64)["ct"] // 32 * pack // 2 // 32)
 
 
+def roll_max(name):
+    """set.toml roll_max: the contracts' ROLL_MAX (plan 5h D8, Review Focus 5; measured per set in Task 8d part 2b by
+    smartcontracts/evm/test/pqz/PqzStateGas.t.sol). A multiple of 16, below K_MAX, and a rollover's 64-bit lanes hold
+    ROLL_MAX + 1 terms of at most q - 1: (ROLL_MAX + 1) q < 2^64."""
+    t = load(name)
+    r, q = t["roll_max"], t["q"]
+    assert 0 < r < t["k_max"] and r % 16 == 0, f"{name}: roll_max {r} is not a positive multiple of 16 below K_MAX"
+    assert (r + 1) * q < 2**64, f"{name}: roll_max {r}: (ROLL_MAX + 1) q >= 2^64 (lane overflow, Review Focus 5)"
+    return r
+
+
 def sol_text(name):
     t, b, cs = consts(name)
     c = {k: v for k, v, s, d in cs if s is None}
@@ -476,6 +487,7 @@ def sol_text(name):
             ("LOG2Q", c["LOG2Q"], "ceil(log2(q - 1))"),
             ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)"),
             ("S_AUD", c["S_AUD"], "legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)"),
+            ("ROLL_MAX", roll_max(name), "entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 (set.toml roll_max)"),
             ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"), ("V", ln["v"], "v bytes (16 be8)"),
             ("CT", ln["ct"], "ciphertext u || v bytes"),
             ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
