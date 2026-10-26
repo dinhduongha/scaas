@@ -216,15 +216,39 @@ sequenceDiagram
     F-->>R: (open mode: forward fee)
 ```
 
-## 5. Open questions (research; none blocks a current phase)
+## 5. Owner answers (2026-10-26) and what is still open
 
-1. The router's name, and whether it lives in `src/metatx/` or with the applications.
-2. Bound payee or open mode as the client default.
-3. PQ-signing UA payers: accept the double signature, or study B3's "consent by payment" (chain-bound records).
-4. A `mtxPayMeta` / `uaPayMeta` on every token tier, against keeping metadata off chain (A1 off-chain variant needs no
-   contract change at all).
-5. Confidential tokens (classical Zether, PQZ) as the fee token: the amount is hidden, so the payee needs a proof of
-   at least the price. Out of scope here.
-6. Non-EVM families (Soroban, Sui, Aptos, Solana, GRAM, Cosmos): the same router shape on their mtx relays, later.
-7. Sponsoring calls not yet signed (a budget): a mandate-like standing authorisation on the router (delegate =
-   router, per-call and per-period caps, allowed targets), against one payment signature per call.
+1. **Name and place: controller's choice** — `MtxRelayFee` in `smartcontracts/evm/src/metatx/` (it sits next to the
+   token's mtx path it calls; no application owns it).
+2. **Open to every relayer** (owner): the client default is open mode, `t.to = router`, forwarded to `msg.sender`.
+   A bound payee (`t.to = R`) stays possible, but it is not the default.
+3. **Two PQ signatures — explained, still open.** A UA that signs with a PQ key signs twice for one paid call: the
+   record (`pq_msg` over the chain-independent record, checked by PqChat) and the payment (the token's
+   `UAMetaTransfer`, chain-bound), so the transaction verifies two PQ signatures. Cost per ML-DSA verify: small where
+   the EIP-8355 precompile exists (the SCaaS chains, `0x…5caa5…12 / 13`); ≈ 6–19 M gas in Solidity on a chain without
+   it (no-zero-gas rule: the contracts may run on customer chains). Options:
+   - (a) accept two signatures: simplest, the record stays portable;
+   - (b) "consent by payment" (B3): PqChat accepts the payment bound to `recordId` as the author's authorisation and
+     skips its own check: one verify, but that record cannot be copied to another chain;
+   - (c) one signature over both digests, verified once: the UA signs `keccak256(recordDigest ‖ paymentDigest)`; the
+     shared UA verifier marks `(key, message)` verified in transient storage (EIP-1153) for the rest of the
+     transaction, and the second consumer reads that mark instead of verifying again. The record stays portable,
+     because on another chain the 32-byte `paymentDigest` travels with it as an opaque value. It needs both PqChat and
+     the token to verify through the same verifier contract.
+   - Controller lean: (c) where PQ payers are common, (a) as the first build.
+4. **`mtxPayMeta` / `uaPayMeta` on every token tier** (owner).
+5. **Fees only from public balances** (owner): the fee token is any mtx token's public balance (a PQZ / Zether token's
+   public side included); no confidential payment of a fee.
+6. **Non-EVM must work too** (owner). The same rule per family: an on-chain check that the payment's reference commits
+   to the call, and that the payment is consumed only together with the call.
+
+   | Family | Shape |
+   |---|---|
+   | Soroban, Solana, Cosmos (CosmWasm) | a router contract / program that invokes the target, then the token's relay pay (cross-contract call, CPI, sub-messages with reply), atomic as on EVM |
+   | Sui, Aptos | a Move entry function in the router module that calls the target's entry and the token's `relay_pay` in one transaction; the pay function checks the reference and the router as relayer |
+   | GRAM (TON) | **no cross-contract atomicity:** the payment goes into the router's escrow; it is released to the relayer when the target's confirmation message arrives, and refunded to the payer on a bounce or after a timeout (as the GRAM DEX escrow, NET-TON-03) |
+
+   Hedera: the EVM shape.
+7. **Sponsoring calls not yet signed (a budget): unclear** (owner). It stays open: a mandate-like standing
+   authorisation on the router (delegate = router, per-call and per-period caps, allowed targets), against one payment
+   signature per call.
