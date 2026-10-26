@@ -238,6 +238,19 @@ C5-11, C5-12, C5-13, C6-4, C6-6, C6-8; plus the spec side of C0-6 (CTR-PQZ-08 (a
 
 **(d) Owner decisions** (each with the options and the controller proposal; owner may override):
 
+**Owner rulings 2026-10-27** (the rows below keep the options as asked):
+- 8d part 2b: `ROLL_MAX` bounded on **both relay paths** (96 / 80 / 64 / 32); PQZH per-transaction cap **option (A)**
+  of `docs/research/pqzh-calldata-cap.md` (decisions CTR-PQZ-07 / CTR-PQZ-11, 2026-10-27).
+- Item 1 (C0-1): **(i) per-leg auditor key derivation `h_j`** with the `proofSystemIdMulti` bump; the interim is the
+  `M ≥ 2` refusal (controller proposal, not asked separately).
+- Item 2 (C0-2): **(2) PQZH value tokens at `n2048-kmax1024` with single-key `mldsa44` / `mldsa65` / `fndsa512`
+  holders only** (the token checks the holder kind on credit / shield); `n2304-kmax4096` / `n2560-kmax16384`
+  registration and disclosure only (C2-1's refusal in `init`). Not the controller's (1).
+- Item 3 (C0-3): **(1) follow the ciphertext rule** — Zether HASH stores `R` by SSTORE2, NONE retired.
+- Item 4 (C0-6): **(3) accept** — correct the spec (CTR-PQZ-08 (a), T7, T8, redesign §5.6); wallets re-prove on
+  `PendingRange`. Not the controller's (2).
+- Items 5–10: not ruled yet; the controller proposals stand for the fix round (owner may override).
+
 1. **C0-1 fix direction** — (i) per-leg auditor key derivation `h_j` under the shared `s` (statement and proof sizes
    unchanged, one extra `mulmod` in E6_j, the auditor decrypts with `x_a · h_j`) or (ii) independent `s_j` per auditor
    copy (+1 point, +1 commitment, +1 scalar per leg). Both need the `proofSystemIdMulti` bump. **Proposal: (i).**
