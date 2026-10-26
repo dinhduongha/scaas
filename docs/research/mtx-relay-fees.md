@@ -46,7 +46,7 @@ payer's signature, all without breaking `payId`'s unlinkability.
 
 ```text
 salt  = 32 bytes from a CSPRNG
-payId = keccak256(abi.encode("scaas.pay.meta", salt, keccak256(meta)))
+payId = keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)))   # packed, as payLane
 ```
 
 The payer's signature already covers `entryRef = payId`, so it binds `meta` without a new field in `MetaTransfer`.
