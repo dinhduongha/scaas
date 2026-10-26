@@ -220,12 +220,18 @@ public class SpecTests
         }
         PqzChainSpecEngineParameters P(params JsonObject[] s) =>
             WithPqz(s).EngineChainSpecParametersProvider.GetChainSpecParameters<PqzChainSpecEngineParameters>();
+        // head semantics (owner 2026-10-26, review of fix part b I-1): the schedule in force at head + 1 and every later one
         Assert.DoesNotThrow(() => P(Schedule(T1)).CheckIds(T1, lib));
-        Assert.DoesNotThrow(() => P(Foreign(T1), Schedule(T2)).CheckIds(T2, lib), "a foreign id in an earlier schedule: history");
-        Exception? e = Assert.Throws<ArgumentException>(() => P(Foreign(T1)).CheckIds(T1 + 5, lib), "in force");
+        Assert.DoesNotThrow(() => P(Foreign(T1), Schedule(T2)).CheckIds(T2 - 1, lib), "head T2 - 1: the next block is at T2 or later, S2 only");
+        Exception? e = Assert.Throws<ArgumentException>(() => P(Foreign(T1), Schedule(T2)).CheckIds(T2 - 2, lib), "head T2 - 2: the next block may be before T2, under the foreign S1");
+        Assert.That(e!.Message, Does.Contain($"schedule {T1}: row op"));
+        Assert.DoesNotThrow(() => P(Foreign(T1), Schedule(T2)).CheckIds(T2 + 5, lib), "head past T2: the foreign S1 is never executed again");
+        Assert.Throws<ArgumentException>(() => P(Foreign(T1), Schedule(T2)).CheckIds(T1, lib), "a fresh database (head = genesis T1) would execute S1");
+        e = Assert.Throws<ArgumentException>(() => P(Foreign(T1)).CheckIds(T1 + 5, lib), "in force");
         Assert.That(e!.Message, Does.Contain("is not the library's"));
         Assert.Throws<ArgumentException>(() => P(Schedule(T1), Foreign(T2)).CheckIds(T1, lib), "a later schedule");
-        Assert.Throws<ArgumentException>(() => P(Foreign(T1)).CheckIds(T1 - 1, lib), "every schedule still ahead");
+        Assert.Throws<ArgumentException>(() => P(Foreign(T1)).CheckIds(T1 - 1, lib), "head T1 - 1: S1 in force at the next block");
+        Assert.Throws<ArgumentException>(() => P(Foreign(T1)).CheckIds(T1 - 2, lib), "every schedule still ahead");
         Assert.Throws<ArgumentException>(() => P(Schedule(T1)).CheckIds(T1, [PqzSetIds.PqzlId[..62] + "00"]), "another library");
     }
 
