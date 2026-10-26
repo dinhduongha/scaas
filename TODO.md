@@ -39,12 +39,30 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-26, owner order):** R0 fix part a + fix round **DONE**, re-review **Approved** (`pqz-r01`
-  `40366c76`, Nethermind 46 / 46 at n2304 / n2816) → (1) merge `pqz-r01` into `pqz-16k` (fast-forward) and push
-  `pqz-16k` (owner 2026-10-26) → (2) part b (contracts, node, spec / docs; brief `task-r01b-brief.md`, plus the
-  re-review nits) on a branch from `pqz-16k` → (3) 8d part 2b (gas; PQZH calldata over the EIP-7825 cap) → (4) the
-  metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → (5) `MtxRelayFee` (CTR-MTX-27), with or
-  before UA-7. `pqz-core` is a dev-freeze at the current ids; 8d part 2b may reopen it (PQZH calldata).
+- **Now (2026-10-26, owner order):** R0 fix part a **DONE**, merged into `pqz-16k` and pushed (`40366c76`). Part b
+  (contracts, node, spec / docs) + its fix round **DONE** on `pqz-r01` `0d22e165` (review Approved with fixes; I-1 owner
+  option (a): the start-up id check reads the schedule at the block-tree head + 1, not the wall clock; Nethermind 49 / 49
+  at n2304 / n2816) → re-review → on approval merge `pqz-r01` into `pqz-16k` (fast-forward) and push `pqz-16k` (owner
+  2026-10-26) → then, in this order (owner 2026-10-26):
+  1. [ ] **New image + SCaaS testnet roll-out of part b**: image `2.2.0-pqz5` at `n2304-kmax4096`, reset via RUNBOOK
+     path B (the new plugin refuses the live v4 / v2 schedule by design), redeploy, probe + e2e; provisional prices
+     (retired calibration × 1.3) until Task 9. The testnet node is stopped until then (host shutdown 2026-10-25; owner:
+     leave it stopped).
+  1b. [ ] **Merge `pqz-16k` into `main`** (owner 2026-10-26), right after the roll-out passes: a merge commit (the
+     branches diverged at `61476cd0`), doc conflicts resolved (`pq-zero-knowledge.md`, `decisions.md`, `TODO.md`),
+     `docs_check`, forge at n2304 and the size gate (no full gate: no core / set change). Pushing `main` needs the
+     owner's go. From then on 8d part 2b and every later step branch from `main`.
+  2. [ ] **8d part 2b** (gas; PQZH calldata over the EIP-7825 cap), together with the part b open items:
+     (a) the C wasm32 arena peak and margin at M = 2 at n2048 / n2304 / n2560 (M = 2 known to fit 512 MiB; peak
+     unmeasured; the leg limits stay labelled estimates until then); (b) the R4-C6 panic child-process test (needs a
+     test-only panic export in `fault-hooks`; drop it if not cheap); (c) `PQZ-START` logs the head timestamp the id
+     check used.
+  3. [ ] **One Codex pass on the contracts** after 8d part 2a / 2b (owner request; `codex sandbox` check first).
+  4. [ ] **Task 9 calibration** (timing: needs the owner's go) → final prices replace the provisional rows.
+  5. [ ] the metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → `MtxRelayFee` (CTR-MTX-27), with or
+     before UA-7. Then UA-8 (before fs3 Task 13), fs3 Task 12 → 6 → 13 → 14, UA-7, governance code.
+
+  `pqz-core` is a dev-freeze at the current ids; 8d part 2b may reopen it (PQZH calldata).
 - [ ] **Label scheme at the production freeze** (owner 2026-10-25): keep the current labels during development; at
   the freeze switch to `scaas/pqz/<set>/pqzl/v1` / `…/pqzh/v1`, every old id refused. Note it in the sets README
   (part b).
