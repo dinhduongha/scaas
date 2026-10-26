@@ -10,7 +10,7 @@ s_aud = 3                         # legs per randomness group of an audited R_TX
 kmlwe_min = 36                    # e-s1.txt: hiding MLWE uSVP and dual_hybrid beta >= 450
 pqzh = true                       # PQZH (Ligero over this q) is built for this set
 max_input = 524288                # pqz-stmt MAX_INPUT 512 KiB (decisions 2026-10-20 O8, 2026-10-21 (7); the node reads it, pqz_max_input())
-roll_max = 80                     # the contracts' ROLL_MAX (PqzSet.ROLL_MAX; plan 5h Task 8d part 2b, controller proposal): relayed full rollover 12,111,158 gas, 96: 13,382,390 > 0.75 * 2^24 (smartcontracts/evm/runs/2026-10-26-t8d2b-rollscan-n2304-kmax4096.txt)
+roll_max = 80                     # the contracts' ROLL_MAX (PqzSet.ROLL_MAX; plan 5h Task 8d part 2b, controller proposal, owner may override): the largest multiple of 16 under 0.75 * 2^24 on both relay paths: relayed full rollover 12,111,158 (mtxExecute) / 12,268,273 (uaExecute, ML-DSA-65 fee UA) gas, 96: 13,382,390 / 13,539,505 > 0.75 * 2^24 (smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2304-kmax4096.txt)
 pqzl_id = "scaas/pqz/lnp22/mlwe-d64k36-q46l4/v5"   # PQZL proofSystemId = keccak256(label) (R0 review fix 2026-10-25: R0-1 auditor windows, R0-C2 Bprime, R0-C3 challenge filter; v4 retired)
 pqzh_id = "scaas/pqz/pqzh/ligero-fq46-n45752k952t120-keccak256-zk-proven/v3"   # PQZH proofSystemId (the same bump, R0-1 auditor windows; v2 retired; field and [pqzh_preset] named)
 

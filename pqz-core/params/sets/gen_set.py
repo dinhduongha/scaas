@@ -466,7 +466,7 @@ def acc_words(name):
 
 def roll_max(name):
     """set.toml roll_max: the contracts' ROLL_MAX (plan 5h D8, Review Focus 5; measured per set in Task 8d part 2b by
-    smartcontracts/evm/test/pqz/PqzStateGas.t.sol). A multiple of 16, below K_MAX, and a rollover's 64-bit lanes hold
+    smartcontracts/evm/test/pqz/PqzStateGas.t.sol; on both relay paths since its fix round). A multiple of 16, below K_MAX, and a rollover's 64-bit lanes hold
     ROLL_MAX + 1 terms of at most q - 1: (ROLL_MAX + 1) q < 2^64."""
     t = load(name)
     r, q = t["roll_max"], t["q"]
@@ -487,7 +487,7 @@ def sol_text(name):
             ("LOG2Q", c["LOG2Q"], "ceil(log2(q - 1))"),
             ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)"),
             ("S_AUD", c["S_AUD"], "legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)"),
-            ("ROLL_MAX", roll_max(name), "entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 (set.toml roll_max)"),
+            ("ROLL_MAX", roll_max(name), "entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)"),
             ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"), ("V", ln["v"], "v bytes (16 be8)"),
             ("CT", ln["ct"], "ciphertext u || v bytes"),
             ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
