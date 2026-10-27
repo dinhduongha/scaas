@@ -264,6 +264,14 @@ fn field32(p: &Value, k: &str) -> Result<[u8; 32]> {
 /// `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0`, `meta` within the cap; the token's
 /// `RelayPayMeta`), `"relay_fee"` (`op.contract` = the router, `op.extra.target` bech32, `op.extra.msg` hex, optional
 /// `op.ref`: the policy, and the payment commits to exactly this call; the router's `Relay`); else the plain `Relay`.
+/// A job the router's executor must be known for: a relay-fee job, or a payload paying a contract (32-byte) address,
+/// which could be the executor. A pay to an account (20 bytes) never is.
+pub fn executor_needed(op: &Value) -> bool {
+    op["kind"] == "relay_fee"
+        || payload_of(op).ok().and_then(|(_, p)| p["to"].as_str().map(str::to_string))
+            .is_some_and(|to| crate::addresses::bech32_decode(&to).is_ok_and(|(_, d)| d.len() == 32))
+}
+
 /// The one `op.kind` rule (`adapter::op_kind`); outside a relay, never a payment to the router or its executor (`lane`
 /// = the submitting lane, `executor` = the router's `relayexec`, read from the router).
 pub fn job_msg(op: &Value, chain_id: &str, policy: &RelayFeePolicy, lane: &str, executor: Option<&str>) -> Result<(String, Vec<u8>, u64)> {
@@ -479,6 +487,7 @@ pub struct CosmosAdapter {
     relay_fee: RelayFeePolicy,
     /// The router's `relayexec` (`QueryMsg::Executor`, fixed at the router's instantiate): never a payee.
     executor: tokio::sync::OnceCell<String>,
+    executor_warned: Mutex<Option<std::time::Instant>>,
     /// tx đã gửi ⇒ khối kế tiếp cần quét khi indexer tx không trả lời (review M2).
     /// ponytail: mục của tx chết hết hạn không bị xoá (vài byte mỗi job), dọn theo `valid_until` nếu cần.
     scan_from: Mutex<HashMap<String, u64>>,
@@ -521,6 +530,7 @@ impl CosmosAdapter {
             account_numbers: Mutex::new(HashMap::new()),
             relay_fee,
             executor: tokio::sync::OnceCell::new(),
+            executor_warned: Mutex::new(None),
             scan_from: Mutex::new(HashMap::new()),
         })
     }
@@ -564,7 +574,17 @@ impl CosmosAdapter {
         Ok((an, seq))
     }
 
-    /// The router's executor (one smart query at `start_check`, then cached); `None` without a router.
+    /// At most one warning a minute while the router's executor does not answer.
+    fn warn_executor(&self, e: &anyhow::Error) {
+        if let Ok(mut at) = self.executor_warned.lock() {
+            if at.is_none_or(|t| t.elapsed() >= Duration::from_secs(60)) {
+                *at = Some(std::time::Instant::now());
+                tracing::warn!(chain = %self.key, "relay-fee router executor unresolved; relay-fee jobs wait: {e:#}");
+            }
+        }
+    }
+
+    /// The router's executor (one smart query on first need, then cached); `None` without a router.
     async fn executor(&self) -> Result<Option<&str>> {
         let Some(router) = &self.relay_fee.router else { return Ok(None) };
         let e = self.executor.get_or_try_init(|| async {
@@ -590,13 +610,6 @@ impl ChainAdapter for CosmosAdapter {
         &self.key
     }
 
-    /// T17 fix 1: with a relay-fee router, its `relayexec` is read here, once (a router that does not answer stops the
-    /// lanes at start, loudly, instead of failing every job).
-    async fn start_check(&self) -> Result<()> {
-        self.executor().await.context("params.relay_fee.router: the router's executor")?;
-        Ok(())
-    }
-
     fn lanes(&self) -> &[Lane] {
         &self.lanes
     }
@@ -620,10 +633,16 @@ impl ChainAdapter for CosmosAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let op = job.op.as_ref().ok_or_else(|| SimError::Revert("job has no op".into()))?;
         let sender = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
-        // resolved at start (`start_check`: the lane takes no job until it is); never a per-job read
-        let executor = match &self.relay_fee.router {
-            None => None,
-            Some(_) => Some(self.executor.get().map(String::as_str).ok_or_else(|| SimError::Transport("relay-fee router executor not resolved".into()))?),
+        // T17 fix 2: the router's executor is read lazily, only by a job that needs it (a relay-fee job, or a pay to a
+        // contract address that could be the executor), and cached; until it answers such a job is retried, every
+        // other job flows (a down router never stalls plain pays)
+        let executor = if self.relay_fee.router.is_some() && executor_needed(op) {
+            Some(self.executor().await.map_err(|e| {
+                self.warn_executor(&e);
+                SimError::Transport(format!("the relay-fee router's executor is not resolved yet: {e:#}"))
+            })?.unwrap_or_default())
+        } else {
+            self.executor.get().map(String::as_str)
         };
         let (contract, msg, valid_until) = job_msg(op, &self.chain_id, &self.relay_fee, &sender, executor)
             .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
@@ -1124,24 +1143,52 @@ mod tests {
         assert!(job_msg(&plain(&router()), CHAIN, &RelayFeePolicy::default(), &lane_c(), None).is_ok(), "no router configured");
     }
 
-    /// T17 fix 1: the router's executor is resolved once at start; a router that does not answer fails the start, not
-    /// every job; no router, nothing to read.
+    /// T17 fix 2: a router whose executor does not answer never stalls plain pays: a pay to an account builds, a
+    /// relay-fee job (or a pay to a contract address, which could be the executor) is retried; once it answers, cached.
     #[tokio::test]
-    async fn cosmos_executor_is_resolved_at_start() {
+    async fn cosmos_executor_is_lazy_and_never_stalls_plain_pays() {
+        let up = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let u = up.clone();
         let exec = exec_c();
-        let app = axum::Router::new().route("/cosmwasm/wasm/v1/contract/{c}/smart/{q}",
-            axum::routing::get(move || { let e = exec.clone(); async move { axum::Json(json!({"data": e})) } }));
+        let app = axum::Router::new()
+            .route("/cosmwasm/wasm/v1/contract/{c}/smart/{q}", axum::routing::get(move || {
+                let (e, u) = (exec.clone(), u.clone());
+                async move {
+                    if u.load(std::sync::atomic::Ordering::SeqCst) {
+                        (axum::http::StatusCode::OK, axum::Json(json!({"data": e})))
+                    } else {
+                        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(json!({"code": 2, "message": "no such contract"})))
+                    }
+                }
+            }))
+            .route("/cosmos/auth/v1beta1/accounts/{a}", axum::routing::get(|| async {
+                axum::Json(json!({"account": {"account_number": "1", "sequence": "0"}}))
+            }))
+            .route("/cosmos/tx/v1beta1/simulate", axum::routing::post(|| async { axum::Json(json!({"gas_info": {"gas_used": "100000"}})) }));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let rest = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-        let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
-        let cfg = |rest: &str, rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = \"{rest}\", prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
-        let rf = format!(", relay_fee = {{ router = \"{}\" }}", router());
-        let a = CosmosAdapter::new(&cfg(&rest, &rf), k()).unwrap();
-        a.start_check().await.unwrap();
-        assert_eq!(a.executor.get(), Some(&exec_c()));
-        assert!(CosmosAdapter::new(&cfg("http://127.0.0.1:9", &rf), k()).unwrap().start_check().await.is_err(), "a silent router stops the start");
-        CosmosAdapter::new(&cfg("http://127.0.0.1:9", ""), k()).unwrap().start_check().await.unwrap();
+        let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+        let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = \"{rest}\", prefix = \"wasm\", gas_price = \"0.025\", \
+                                  relay_fee = {{ router = \"{}\" }} }}", router()));
+        cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+        let a = CosmosAdapter::new(&cfg, k).unwrap();
+        let plain = |to: &str| {
+            let mut o = job("x", &token(), &pay_payload(&[1; 32], &[2; 32], 0, "", to, 10));
+            o.as_object_mut().unwrap().remove("kind");
+            Job { id: 1, op: Some(o), ..serde_json::from_value(json!({"id": 1})).unwrap() }
+        };
+        let rf = relay_ref("c-1", &[0x44; 32], b"{}");
+        let mut fee = job("relay_fee", &router(), &pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5));
+        fee["extra"] = json!({"target": bech32("wasm", &[0x44; 32]), "msg": "7b7d"});
+        let fee = Job { id: 2, op: Some(fee), ..serde_json::from_value(json!({"id": 2})).unwrap() };
+        a.build(&plain(&bech32("wasm", &[0x44; 20])), 0).await.expect("a plain pay builds while the router is down");
+        assert!(matches!(a.build(&fee, 0).await, Err(SimError::Transport(_))), "a relay-fee job retries");
+        assert!(matches!(a.build(&plain(&exec_c()), 0).await, Err(SimError::Transport(_))), "a pay to a contract waits too");
+        up.store(true, std::sync::atomic::Ordering::SeqCst);
+        a.build(&fee, 0).await.expect("the router answers: relayed");
+        assert_eq!(a.executor.get(), Some(&exec_c()), "cached");
+        assert!(matches!(a.build(&plain(&exec_c()), 0).await, Err(SimError::Revert(e)) if e.contains("refused")), "never pay the executor");
     }
 
     /// Rule 8: `params.relay_fee.router` set but unparsable is a startup error, never a silently disabled router.
