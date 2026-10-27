@@ -5394,6 +5394,54 @@ the caller (relayer or native sender) pays, as for the NEP-145 auto-registration
 storage call; the entry signatures stay, only the deposit check changes.
 **Source.** near-algorand Task 4 report; spec §2 row 15, §3.2.
 
+<a id="NET-NEAR-03"></a>
+### NET-NEAR-03 — NEAR subject accounts: SCaaS key records per holder in the token, key ops by key nonce
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-03 · superseded-by: —
+
+**Rule.** Each NEAR token keeps one subject record per `Holder` (prefix `a`): `keys` (≤ 8 `KeyRecord { kind u16,
+key_data }` = the key's UA kind and canonical key data: ed25519 `0x0102` 32 B, secp256k1 `0x0108` 64 B,
+webauthn-p256 `0x0100` `x ‖ y ‖ rpIdHash` 96 B, msig `0x0120`), `origins` (≤ 8, ≤ 128 B each), `guardian`
+(`Option<Holder>`), `recovery` (`key`, `origin`, `ready_at`) and `key_nonce`. Signatures are checked against these
+records only (spec §3.3, R7): ed25519 by `env::ed25519_verify` over the NEP-413 hash, secp256k1 by `env::ecrecover`
+over the op digest (malleability flag set, recovery id 0 / 1), P-256 by `webauthn::verify` with challenge = the op
+digest — never a NEAR access key, and not the `ua_msg` tagging of accounts.md CTR-UA-12 (spec §3.5 and the Task 3
+vectors fix the family form). A `Ua` id opens lazily on its first signed op when the signing key derives it
+(`UA(kind, keyData)`, kinds.json; top 96 bits non-zero), a passkey record starting with the assertion's own origin; a
+`Near` holder adds keys by `add_key_native(key, origin)` (predecessor) or a signed op of a current key. Key ops
+(codes 6–12) carry `amount` 0, `pay_ref` / `lane` zero, `nonce` = the signer's `key_nonce` (consumed: no replay),
+`to` = `from` (start_recovery: the subject), `extra = sha256(Borsh(entry parameters))`. Recovery: the guardian (a
+`Holder` signing with its own records) signs `mtx_start_recovery`; anyone calls `finish_recovery(subject)` after
+`RECOVERY_DELAY_S` = 172,800 s, which replaces every key and bumps the key nonce; a current key cancels. Storage: the
+record's growth × `env::storage_byte_cost()` from the attached deposit, the excess refunded; a record = 41 B +
+Borsh(holder) + Borsh(subject), measured in `new` (one ed25519 UA key: 130 B). `*_check(caller, op, auth, params…)`
+takes the predecessor explicitly (a view has none). Status: BUILT (near-algorand Task 5). Controller call 2026-10-28,
+owner may override.
+**Why.** Reading keys from another contract is asynchronous (spec §3.1), and access keys are unreadable and rotatable
+(spec §3.3); a key nonce in the record gives key ops replay protection without a lane record of their own.
+**Cost if wrong.** A record layout change is a token redeploy (all chains are test-only); clients re-derive the
+op fields.
+**Source.** near-algorand Task 5 report (`.superpowers/sdd/2026-10-28-near-algorand/task-5-report.md`); spec
+[2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §3.3, §3.5, R7.
+
+<a id="NET-NEAR-04"></a>
+### NET-NEAR-04 — NEAR msig: at most 12 members; a near-account member counts only as the predecessor
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-04 · superseded-by: —
+
+**Rule.** `msig` (kind 288) is verified in the token from its key data (`u16 threshold ‖ u16 count ‖ count × (u16
+kind ‖ id ‖ u16 weight)`, big-endian, ids strictly increasing, weights > 0, 0 < threshold ≤ total weight). Members:
+`near-account` (`0x0017`, id per accounts.md §1.6), ed25519, secp256k1, webauthn-p256; no nested msig. A
+`near-account` member's weight counts only when its id equals `native_id(predecessor)`; a signature offered for that
+member is refused. `MSIG_MAX_MEMBERS` = floor(250 Tgas / 20.005 Tgas per P-256 verify, Task 1 log) = 12: the worst
+call, a `relay_fee_<entry>` with a 12-passkey msig entry auth and a passkey payment, is 12 × 20.005 + 20.005 + 2.3
+(the rest of Task 1's two-passkey wrapper model, 42.271 − 2 × 20.0) ≈ 262 Tgas < 300 Tgas (ruling R1; Task 9 measures
+it). The spec names `near.md` for this cap; that page is written in Task 21. Status: BUILT (near-algorand Task 5).
+Controller call 2026-10-28, owner may override.
+**Why.** The contract cannot read access keys (spec §3.3); 12 keeps the costliest relayed msig call inside one
+transaction's 300 Tgas without assuming a chain's own higher limit (spec §3.5).
+**Cost if wrong.** A larger cap needs cheaper P-256 or a smaller per-member mix; the constant and the Task 9 test
+change.
+**Source.** near-algorand Task 5 report; `smartcontracts/near/runs/2026-10-28-p256-spike.txt`; spec §3.3, §3.5.
+
 ## 36. Clients — signers and clientkeys
 
 ### CLI-SGN-01 — Ephemeral agent session keys (1-8 h)

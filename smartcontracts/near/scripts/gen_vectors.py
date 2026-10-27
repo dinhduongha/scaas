@@ -42,6 +42,20 @@ dave = V.Ecdsa('dave', V.P256)                      # webauthn-p256 UA (kind 0x0
 UA_ERIN = V.ua_of(V.KIND_ED25519, erin.pk)
 UA_CAROL = V.ua_of(V.KIND_SECP256K1, carol.key)
 UA_DAVE = V.ua_of(V.KIND_WEBAUTHN_P256, dave.key + V.sha256(V.RP_ID.encode()))
+KIND_MSIG = 0x0120
+
+
+class Msig:
+    """`msig` (kind 0x0120) key data: u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ id 32 ‖ u16 weight), big-endian,
+    ids strictly increasing; `signers` = (member index, signer) of the derived members that sign."""
+
+    def __init__(self, threshold, members, signers):
+        members = sorted(members, key=lambda m: m[1])
+        self.key_data = struct.pack('>HH', threshold, len(members)) + b''.join(
+            struct.pack('>H', k) + i + struct.pack('>H', w) for k, i, w in members)
+        self.members = members
+        self.signers = [(next(n for n, m in enumerate(members) if m[1] == i), s) for i, s in signers]
+        self.ua = V.ua_of(KIND_MSIG, self.key_data)
 
 
 # ---------------------------------------------------------------- Borsh
@@ -88,6 +102,9 @@ def nep413(digest, recipient):
 
 
 def auth(signer, digest, recipient):
+    if isinstance(signer, Msig):
+        return {'kind': 'msig', 'keyData': V.hx(signer.key_data),
+                'sigs': [{'index': i, 'auth': auth(s, digest, recipient)} for i, s in signer.signers]}
     if isinstance(signer, V.Ed):
         payload, h = nep413(digest, recipient)
         return {'kind': 'ed25519', 'key': V.hx(signer.pk), 'message': V.text(digest).decode(), 'nonce': V.hx(digest),
@@ -103,8 +120,8 @@ METAOPS = []
 
 
 def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer=None, extra=V.ZERO32, valid_until=VU,
-           note=None):
-    op = {'contract': TOKEN, 'op': V.OP['pay'], 'from': frm, 'to': to, 'relayer': relayer, 'amount': amount,
+           note=None, code=V.OP['pay'], out=None):
+    op = {'contract': TOKEN, 'op': code, 'from': frm, 'to': to, 'relayer': relayer, 'amount': amount,
           'pay_ref': pay_ref, 'lane': lane, 'nonce': nonce, 'valid_until': valid_until, 'extra': extra}
     enc = encode(op)
     dg = V.sha256(enc)
@@ -115,7 +132,7 @@ def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer=None, 
         'encoding': V.hx(enc), 'digest': V.hx(dg), 'text': V.text(dg).decode(), 'auth': auth(signer, dg, TOKEN)}
     if note:
         row['note'] = note
-    METAOPS.append(row)
+    (METAOPS if out is None else out).append(row)
     return row
 
 
@@ -193,14 +210,68 @@ def transfer_vectors():
     return []
 
 
+# Key ops (Task 5, spec §3.3): amount 0, pay_ref / lane zero, nonce = the signer's key nonce, to = from (start_recovery:
+# to = the subject recovered), extra = sha256(Borsh(entry parameters)) — Borsh of the parameter tuple after (op, auth).
+def u16(n):
+    return struct.pack('<H', n)
+
+
+def key_record(kind, data):
+    """`KeyRecord { kind u16, key_data Vec<u8> }`: the subject key as its UA kind and canonical key data."""
+    return u16(kind) + u32(len(data)) + data
+
+
+def opt(b):
+    return b'\x00' if b is None else b'\x01' + b
+
+
+KIND_NEAR_ACCOUNT = 0x0017
+SEC_KEY = key_record(V.KIND_SECP256K1, carol.key)
+DAVE_KEY = key_record(V.KIND_WEBAUTHN_P256, dave.key + V.sha256(V.RP_ID.encode()))
+frank = V.Ed('frank')
+FRANK_KEY = key_record(V.KIND_ED25519, frank.pk)
+APP_ORIGIN = 'https://app.scaas.test'
+MSIG = Msig(2, [(KIND_NEAR_ACCOUNT, V.sha256(ALICE.encode()), 1), (V.KIND_ED25519, UA_ERIN, 1)],
+            [(UA_ERIN, erin)])
+KEY_OPS = []
+
+
+def key_op(name, code, signer, frm, params, nonce, to=None, note=None):
+    row = metaop(name, signer, frm, to or frm, 0, V.ZERO32, V.ZERO32, nonce=nonce, extra=V.sha256(params),
+                 note=note, code=V.OP[code], out=KEY_OPS)
+    row['params'] = V.hx(params)
+    return row
+
+
+key_op('add_key_secp256k1', 'add_key', erin, ua(UA_ERIN), SEC_KEY + opt(None), 0,
+       note='mtx_add_key(op, auth, key, origin None); opens UA erin lazily (key nonce 0)')
+key_op('add_key_passkey_with_origin', 'add_key', carol, ua(UA_CAROL), DAVE_KEY + opt(string(V.ORIGIN)), 0,
+       note='mtx_add_key(op, auth, key = webauthn-p256 x ‖ y ‖ rpIdHash, origin Some)')
+key_op('remove_key', 'remove_key', erin, ua(UA_ERIN), SEC_KEY, 1, note='mtx_remove_key(op, auth, key)')
+key_op('add_origin_passkey', 'add_origin', dave, ua(UA_DAVE), string(APP_ORIGIN), 0,
+       note='mtx_add_origin(op, auth, origin); passkey UA opened lazily with its assertion origin')
+key_op('remove_origin', 'remove_origin', dave, ua(UA_DAVE), string(APP_ORIGIN), 1,
+       note='mtx_remove_origin(op, auth, origin)')
+key_op('set_guardian', 'set_guardian', erin, ua(UA_ERIN), opt(holder(near(ALICE))), 2,
+       note='mtx_set_guardian(op, auth, guardian Some(Near(alice))); alice signs with its SCaaS key')
+key_op('set_guardian_msig', 'set_guardian', MSIG, ua(MSIG.ua), opt(None), 0,
+       note='msig UA: the near-account member alice.test.near counts only as the predecessor; erin signs')
+
+
 def key_op_vectors():
-    """Ops 6–10 (`mtx_add_key` … `mtx_set_guardian`): Task 5 adds rows, `extra = sha256(Borsh(params))`."""
-    return []
+    """Ops 6–10 (`mtx_add_key` … `mtx_set_guardian`), `extra = sha256(Borsh(params))`."""
+    return [r for r in KEY_OPS if r['fields']['op'] <= V.OP['set_guardian']]
+
+
+key_op('start_recovery', 'start_recovery', alice, near(ALICE), FRANK_KEY + opt(None), 0, to=ua(UA_ERIN),
+       note='mtx_start_recovery(op, auth, key, origin): from = the guardian, to = the subject; finish_recovery(subject) '
+            'after 172,800 s')
+key_op('cancel_recovery', 'cancel_recovery', erin, ua(UA_ERIN), b'', 3, note='mtx_cancel_recovery(op, auth): no params')
 
 
 def recovery_vectors():
-    """Ops 11 start_recovery, 12 cancel_recovery: Task 5 adds rows, `extra = sha256(Borsh(params))`."""
-    return []
+    """Ops 11 start_recovery, 12 cancel_recovery, `extra = sha256(Borsh(params))`."""
+    return [r for r in KEY_OPS if r['fields']['op'] >= V.OP['start_recovery']]
 
 
 def mandate_vectors():
@@ -230,7 +301,8 @@ NATIVE = []
 for acc in (alice.pk.hex(), ALICE, eth_implicit(carol.key), TOKEN):
     i, form = native_id(acc)
     NATIVE.append({'accountId': acc, 'form': form, 'id': V.hx(i)})
-NATIVE_INVALID = [{'accountId': alice.pk.hex().upper(), 'reason': 'upper-case hex is not a NEAR account id: refused'}]
+NATIVE_INVALID = [{'accountId': alice.pk.hex().upper(), 'reason': 'upper-case hex is not a NEAR account id: refused'},
+                  {'accountId': 'Alice.test.near', 'reason': 'upper case is not a NEAR account id: refused'}]
 
 
 # ---------------------------------------------------------------- storage (Task 4 onwards; spec §2 row 15)
@@ -241,6 +313,11 @@ MEASURED_STORAGE_BYTES = {
                      '16 B, record overhead 40 B (token ACCOUNT_STORAGE_BYTES; the fixed min == max of every holder)'),
     'uaBalance': (89, 'UA ledger record: key b"u" ‖ id 33 B, value u128 16 B, record overhead 40 B '
                       '(token UA_STORAGE_BYTES)'),
+    'subjectEd25519Ua': (130, 'subject account of a UA with one ed25519 key, no origin / guardian / recovery: key '
+                              'b"a" ‖ Borsh(Holder::Ua) 34 B, value Borsh(Subject) 56 B (keys 4 + 38, origins 4, '
+                              'guardian 1, recovery 1, key_nonce 8), record overhead 40 B; any subject record = 41 + '
+                              'Borsh(holder) + Borsh(subject) (token SUBJECT_RECORD_OVERHEAD, measured in `new`); '
+                              'a second ed25519 key +38 B (168 B, test ua_opened_lazily_relayer_pays_storage)'),
 }
 SANDBOX_BYTE_COST = 10**19                          # near-sandbox protocol config storage_amount_per_byte (yocto)
 
@@ -267,6 +344,8 @@ def selftest(doc):
     rows = {r['name']: r for r in V.paymeta_rows()}
     for m in doc['metaops']['vectors']:
         assert V.hx(V.sha256(V.unhx(m['encoding']))) == m['digest']
+        if 'params' in m:                            # key ops bind their parameters
+            assert m['fields']['extra'] == V.hx(V.sha256(V.unhx(m['params']))) and m['fields']['amount'] == '0'
         if 'paymetaRow' in m:
             r = rows[m['paymetaRow']]
             assert m['fields']['pay_ref'] == r['payId'] and m['fields']['lane'] == r['payLane']
@@ -309,7 +388,17 @@ def build():
                       'v': k1['auth']['v'], 'highS': {'sig': V.hx(hs), 'v': hv, 'expect': 'refused'}},
         'passkey': {'metaop': pk['name'], 'challenge': V.b64url(V.unhx(pk['digest'])), **pk['auth'],
                     'webauthnSoft': V.webauthn_soft()},
-        'nativeIds': {'kind': 0x17, 'rows': NATIVE, 'invalid': NATIVE_INVALID},
+        'nativeIds': {'kind': 0x17, 'rows': NATIVE, 'invalid': NATIVE_INVALID,
+                      'note': 'a 64-lower-case-hex id is always implicit, so a named id collides with it only through '
+                              'a sha256 preimage'},
+        'keyRecord': {'encoding': 'Borsh KeyRecord { kind u16, key_data Vec<u8> }; id = UA(kind, key_data)',
+                      'kinds': {'ed25519': V.KIND_ED25519, 'secp256k1': V.KIND_SECP256K1,
+                                'webauthn-p256': V.KIND_WEBAUTHN_P256, 'msig': KIND_MSIG},
+                      'msigMaxMembers': 12},
+        'msig': {'keyData': V.hx(MSIG.key_data), 'ua': V.hx(MSIG.ua), 'threshold': 2,
+                 'members': [{'kind': k, 'id': V.hx(i), 'weight': w} for k, i, w in MSIG.members],
+                 'predecessor': ALICE,
+                 'note': 'near-account member alice.test.near (id sha256 of the id) counts only as the predecessor'},
         'relayRefs': RELAY_REFS,
         'storage': storage_section(),
     }

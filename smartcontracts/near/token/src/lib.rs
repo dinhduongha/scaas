@@ -10,10 +10,15 @@ use near_contract_standards::fungible_token::FungibleToken;
 use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
 use near_sdk::{env, near, require, AccountId, PanicOnDefault};
-pub use scaas_near_common::Holder;
+pub use scaas_near_common::{Auth, Holder, MetaOp};
+use scaas_near_common::ua::{KeyRecord, KIND_ED25519};
 
+mod account;
 mod ft;
 mod storage;
+pub use account::{
+    record_bytes, Check, Recovery, Subject, MAX_KEYS, MAX_ORIGINS, RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
+};
 pub use storage::{ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
 
 #[near(contract_state)]
@@ -24,6 +29,11 @@ pub struct Token {
     metadata: FungibleTokenMetadata,
     ft: FungibleToken,
     ua: LookupMap<[u8; 32], u128>,
+    /// Subject accounts (keys, origins, guardian, recovery), spec §3.3.
+    subjects: LookupMap<Holder, Subject>,
+    /// Bytes of new records this call created, paid once by `charge_storage` (not state).
+    #[borsh(skip)]
+    storage_due: u64,
 }
 
 /// SCaaS events (NEP-297, standard `"scaas"`); holders in `Holder`'s display form.
@@ -31,6 +41,9 @@ pub struct Token {
 pub enum Event {
     #[event_version("1.0.0")]
     UaTransfer { from: String, to: String, amount: U128 },
+    /// A subject account's keys changed (`action`: the key op, `finish_recovery` or `add_key_native`).
+    #[event_version("1.0.0")]
+    KeyOp { subject: String, action: String },
 }
 
 #[near]
@@ -55,7 +68,18 @@ impl Token {
         require!(env::storage_usage() - u0 == UA_STORAGE_BYTES, "UA record size differs from the pin");
         ua.remove(&[0xff; 32]);
         ua.flush();
-        Self { network, admin, metadata, ft, ua }
+        let mut subjects = LookupMap::new(b"a");
+        let (h, s) = (Holder::Ua([0xff; 32]), Subject {
+            keys: vec![KeyRecord { kind: KIND_ED25519, key_data: vec![0; 32] }],
+            ..Default::default()
+        });
+        let u0 = env::storage_usage();
+        subjects.insert(h.clone(), s.clone());
+        subjects.flush();
+        require!(env::storage_usage() - u0 == record_bytes(&h, &s), "subject record size differs from the pin");
+        subjects.remove(&h);
+        subjects.flush();
+        Self { network, admin, metadata, ft, ua, subjects, storage_due: 0 }
     }
 
     /// Admin only (tier 1). An unregistered receiver is registered from the deposit, as `ft_transfer`.

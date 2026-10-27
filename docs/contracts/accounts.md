@@ -334,6 +334,11 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 | `0x0017` | `near-account` | 32 bytes: an implicit account (64 lower-case hex) is its raw 32 bytes, any other account id (named, ETH-implicit) `sha256(account_id bytes)`; told apart by the account-id string, which travels with the member | NEAR | the member is the call's predecessor (access keys are not readable on chain) |
 | `0x0018` | `algorand-address` | 32-byte address public key | Algorand | `ed25519verify_bare` by the current authority (`AcctAuthAddr` if set, else the address); rekeyed to a LogicSig or multisig: through an account record |
 
+`near-account` forms cannot collide: a 64-lower-case-hex account id is always an implicit account (raw bytes), so a
+named or ETH-implicit id meets one only through a sha256 preimage; upper-case ids are not NEAR account ids and are
+refused; like the other 32-byte natives the id is kind-free, so records dispatch by kind ([CTR-UA-03](#CTR-UA-03);
+vectors `smartcontracts/near/vectors/near-vectors.json` `nativeIds`).
+
 Derived kinds (registered; `d` = key data):
 
 | No. | Name (tag `scaas.ua.<name>.v1`) | `d` (bytes) | keyHash group | PoP | Verifier (EVM) | Families (v1 → later) |

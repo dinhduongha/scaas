@@ -39,6 +39,12 @@ impl Token {
         };
         take_storage_deposit(bytes);
     }
+
+    /// The end of a signed (`mtx_*`) entry: the attached deposit pays every byte of new records the call created
+    /// (`storage_due`), the excess refunded to the predecessor; no yoctoNEAR rule (the signature is the authority).
+    pub(crate) fn charge_storage(&mut self) {
+        charge(std::mem::take(&mut self.storage_due));
+    }
 }
 
 /// `bytes == 0`: exactly 1 yoctoNEAR; else attached ≥ `bytes × storage_byte_cost`, the excess refunded.
@@ -46,6 +52,11 @@ fn take_storage_deposit(bytes: u64) {
     if bytes == 0 {
         return assert_one_yocto();
     }
+    charge(bytes)
+}
+
+/// Attached ≥ `bytes × storage_byte_cost`, the excess refunded to the predecessor.
+fn charge(bytes: u64) {
     let need = env::storage_byte_cost().saturating_mul(bytes.into());
     let attached = env::attached_deposit();
     require!(attached >= need, "The attached deposit is less than the storage cost of the new record");

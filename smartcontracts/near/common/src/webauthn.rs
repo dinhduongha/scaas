@@ -50,6 +50,16 @@ pub fn verify(
     vk.verify_prehash(&env::sha256_array(&msg), &sig).map_err(|_| AuthError::BadSignature)
 }
 
+/// The first `"origin":"…"` value of clientDataJSON (the origin a lazily opened passkey account starts with); `None`
+/// when absent or escaped (an origin never contains `\` or `"`).
+pub fn origin(client_data_json: &[u8]) -> Option<String> {
+    const PAT: &[u8] = b"\"origin\":\"";
+    let at = client_data_json.windows(PAT.len()).position(|w| w == PAT)? + PAT.len();
+    let rest = &client_data_json[at..];
+    let v = &rest[..rest.iter().position(|c| *c == b'"')?];
+    (!v.contains(&b'\\')).then(|| String::from_utf8(v.to_vec()).ok()).flatten()
+}
+
 /// `"<field>":"<value>"` present verbatim. The browser JSON-escapes values, so a value cannot forge another pair.
 fn has_field(hay: &[u8], field: &[u8], value: &[u8]) -> bool {
     let mut pat = Vec::with_capacity(field.len() + value.len() + 5);

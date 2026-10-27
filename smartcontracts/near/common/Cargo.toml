@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-near-sdk = { workspace = true }
+near-sdk = { workspace = true, features = ["unstable"] }  # env::ecrecover
 p256 = { workspace = true }
 
 [dev-dependencies]

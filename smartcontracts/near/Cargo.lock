@@ -3306,6 +3306,7 @@ dependencies = [
  "borsh",
  "hex",
  "near-contract-standards",
+ "near-crypto",
  "near-sdk",
  "near-workspaces",
  "p256 0.13.2",
