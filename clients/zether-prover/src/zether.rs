@@ -772,10 +772,6 @@ fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'
         (false, Bundle, true, true) => &[3_766_809, 5_608_032, 7_453_356, 9_302_535, 11_155_836, 13_013_253, 14_874_606, 16_739_892],
         (false, Bundle, false, false) => &[3_538_940, 5_271_739, 7_008_161, 8_748_026, 10_491_746, 12_239_058, 13_990_088, 15_744_842, 17_503_407],
         (false, Bundle, false, true) => &[3_693_950, 5_482_779, 7_275_523, 9_071_916, 10_872_083, 12_676_303, 14_484_274, 16_295_902, 18_111_911],
-        (false, NoBundle, true, false) => &[3_377_330, 4_976_325, 6_579_193, 8_185_824, 9_796_159, 11_410_630, 13_028_468, 14_650_074, 16_275_709, 17_905_215],
-        (false, NoBundle, true, true) => &[3_527_161, 5_177_930, 6_832_869, 8_491_412, 10_154_291, 11_820_917, 13_491_606, 15_166_166, 16_844_747],
-        (false, NoBundle, false, false) => &[3_347_734, 4_916_520, 6_488_845, 8_064_756, 9_644_318, 11_227_464, 12_814_331, 14_404_524, 15_998_568, 17_595_998],
-        (false, NoBundle, false, true) => &[3_496_667, 5_116_235, 6_739_562, 8_366_775, 9_997_617, 11_632_490, 13_270_836, 14_913_003, 16_559_080, 18_208_894],
         (true, Hash, true, false) => &[3_972_477, 5_835_602, 7_677_109, 9_519_630, 11_362_946, 13_210_159, 15_076_920, 16_924_647],
         (true, Hash, true, true) => &[4_143_205, 6_067_704, 7_969_869, 9_873_697, 11_778_279, 13_686_874, 15_615_982, 17_525_754],
         (true, Hash, false, false) => &[3_928_577, 5_746_969, 7_543_429, 9_340_702, 11_138_674, 12_940_423, 14_761_256, 16_563_056, 18_365_576],
@@ -784,10 +780,6 @@ fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'
         (true, Bundle, true, true) => &[4_465_468, 6_715_522, 8_966_956, 11_219_857, 13_473_501, 15_728_743, 17_985_178],
         (true, Bundle, false, false) => &[4_158_866, 6_210_524, 8_263_263, 10_316_704, 12_370_838, 14_426_048, 16_482_217, 18_539_733],
         (true, Bundle, false, true) => &[4_335_571, 6_454_705, 8_574_830, 10_696_141, 12_818_465, 14_941_807, 17_066_376],
-        (true, NoBundle, true, false) => &[3_869_343, 5_680_401, 7_492_382, 9_305_373, 11_119_214, 12_934_328, 14_749_898, 16_566_909, 18_384_918],
-        (true, NoBundle, true, true) => &[4_036_885, 5_907_367, 7_779_320, 9_652_139, 11_526_236, 13_401_748, 15_278_242, 17_156_247],
-        (true, NoBundle, false, false) => &[3_825_587, 5_591_647, 7_358_701, 9_126_444, 10_894_856, 12_664_148, 14_434_412, 16_205_229, 17_977_092],
-        (true, NoBundle, false, true) => &[3_991_705, 5_816_041, 7_641_413, 9_467_908, 11_295_234, 13_123_778, 14_953_144, 16_783_617],
     }
 }
 
@@ -796,12 +788,19 @@ fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'
 pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize) -> u64 {
     let t = gas_limits(C::NAME == "bls12381", mode, auditor, relayed);
     let n = t.len();
-    if m <= n {
+    let row = if m <= n {
         t[m - 1]
     } else {
         t[n - 1] + (t[n - 1] - t[n - 2]) * (m - n) as u64
-    }
+    };
+    row + if mode == TransferMode::Hash { HASH_RECORD_GAS } else { 0 }
 }
+
+/// What commit-reveal's SSTORE2 write of `R` adds to a transfer's REGULAR gas (review C0-3): 12,900 at M = 1 to 16,100 at
+/// M = 8 measured (`ZetherMulti.test_gasM*Hash`, `vm.lastCallGas()`, BLS12-381, Amsterdam, isolated); the rows of
+/// [`gas_limits`] predate it. The bulk of its cost is EIP-8037 STATE gas (+1.19 M at M = 1, +8.04 M at M = 8), which the
+/// 2^24 cap does not count and a sender's gas limit must cover on top.
+pub const HASH_RECORD_GAS: u64 = 17_000;
 
 /// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`mtxConfidentialTransfer*` builds above it
 /// are refused, [`ZError::GasCap`]).
@@ -824,7 +823,7 @@ pub fn build_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m:
 }
 
 /// Refuse a build over the cap, naming the estimate, the most recipients this form takes and the cheaper forms that
-/// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle` and `none`
+/// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle`
 /// need a `BUNDLE` token). `relayed`: the build carries an envelope binding, so the relayed column applies; `decoy`:
 /// it pays a `decoyFee` ([`build_gas`]).
 fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> Result<(), ZError> {
@@ -858,32 +857,31 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
 /// Where the token keeps the disclosure bundles; part of `opTag`, so a relayer cannot switch it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
-    /// Commit-reveal: `keccak256(R)` and the sender memo stored, `R` in an event
-    /// (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` on a `COMPACT` token, its only form). JSON `compact`.
+    /// Commit-reveal: `R` stored by SSTORE2 (a pointer in the slot) with the sender memo next to it, `R` also in an
+    /// event (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` on a `COMPACT` token, its only form). JSON
+    /// `compact`.
     Hash,
-    /// `B_1 ‖ … ‖ B_M` stored (`mtxConfidentialTransfer` on a `BUNDLE` token, the default).
+    /// `R = salt ‖ B_1 ‖ … ‖ B_M` stored inline (`mtxConfidentialTransfer` on a `BUNDLE` token, the default).
     Bundle,
-    /// Nothing stored; disclosure off chain from calldata.
-    NoBundle,
+    // No "nothing stored" form: review C0-3 (owner 2026-10-27) retired `NONE` and `mtxConfidentialTransferNoBundle`;
+    // the ciphertext stays in contract state.
 }
 
 impl TransferMode {
-    pub const ALL: [Self; 3] = [Self::Hash, Self::Bundle, Self::NoBundle];
+    pub const ALL: [Self; 2] = [Self::Hash, Self::Bundle];
 
     pub fn op_tag(self) -> [u8; 32] {
         keccak256(match self {
             Self::Hash => b"SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH".as_slice(),
             Self::Bundle => b"SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE",
-            Self::NoBundle => b"SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE",
         })
     }
 
-    /// The JSON name (the entries: `mtxConfidentialTransfer` the token's default, `…Compact`, `…NoBundle`).
+    /// The JSON name (the entries: `mtxConfidentialTransfer` the token's default, `…Compact`).
     pub fn name(self) -> &'static str {
         match self {
             Self::Hash => "compact",
             Self::Bundle => "bundle",
-            Self::NoBundle => "none",
         }
     }
 

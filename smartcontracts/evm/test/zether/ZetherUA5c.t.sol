@@ -211,9 +211,9 @@ contract ZetherUA5cTest is ZetherFixture {
 
     /// `auth` and `accHint` are PQZ's arguments: non-empty on Zether ⇒ named errors, before anything else.
     function test_authAndAccHint_mustBeEmpty() public {
-        bytes4[4] memory sels = [ZetherLayer.mtxConfidentialTransfer.selector, ZetherLayer.mtxConfidentialTransferCompact.selector,
-            ZetherLayer.mtxConfidentialTransferNoBundle.selector, ZetherLayer.mtxConfidentialTransferSingle.selector];
-        for (uint256 i; i < 4; ++i) {
+        bytes4[3] memory sels = [ZetherLayer.mtxConfidentialTransfer.selector, ZetherLayer.mtxConfidentialTransferCompact.selector,
+            ZetherLayer.mtxConfidentialTransferSingle.selector];
+        for (uint256 i; i < 3; ++i) {
             (bool ok, bytes memory r) = address(tok).call(abi.encodeWithSelector(sels[i], bytes(""), bytes(""), hex"01", bytes32(0), bytes("")));
             assertFalse(ok);
             assertEq(r, abi.encodeWithSelector(IZetherToken.AuthNotEmpty.selector));

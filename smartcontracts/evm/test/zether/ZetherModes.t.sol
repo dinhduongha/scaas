@@ -81,7 +81,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         if (a == OPTIONAL) {
             audOut = true;
             (bytes32 ref, Tx memory t) = _multi(ZetherTypes.TransferMode.HASH, ZetherLayer.mtxConfidentialTransferCompact.selector, 5);
-            _openAll(ref, t.s, 5, _rebuild(_two(), _vs(5), t.s), 0);
+            _openAll(ref, t.s, 5, 0);
             audOut = false;
             return;
         }
@@ -101,28 +101,23 @@ abstract contract ZetherModesSuite is ZetherFixture {
         stm.transferStatementSingle(address(tok), single, _none(), 0);
     }
 
-    /// @dev `BUNDLE`: `mtxConfidentialTransfer` stores `R`, `mtxConfidentialTransferCompact` commits, `mtxConfidentialTransferNoBundle` stores
-    ///      nothing, the single format stores `R` with its one leg.
+    /// @dev `BUNDLE`: `mtxConfidentialTransfer` stores `R` inline, `mtxConfidentialTransferCompact` stores it by SSTORE2, the
+    ///      single format stores `R` with its one leg: every form keeps `R` in state (review C0-3).
     function _bundleForms(uint8 a) internal {
         bool audIn = a != NONE;
         (bytes32 ref, Tx memory t) = _multi(ZetherTypes.TransferMode.BUNDLE, ZetherLayer.mtxConfidentialTransfer.selector, 11);
         bytes memory r = _rebuild(_two(), _vs(11), t.s);
         assertEq(tok.transferEntry(ref), r, "mtxConfidentialTransfer on BUNDLE: R, the salt first");
-        _openAll(ref, t.s, 11, "", audIn ? 1 : 0);
+        _openAll(ref, t.s, 11, audIn ? 1 : 0);
         _hashForm(audIn, ZetherLayer.mtxConfidentialTransferCompact.selector);
-        (ref, t) = _multi(ZetherTypes.TransferMode.NONE, ZetherLayer.mtxConfidentialTransferNoBundle.selector, 13);
-        assertEq(tok.transferEntry(ref).length, 0, "NONE: nothing stored");
-        r = _rebuild(_two(), _vs(13), t.s); // before `expectRevert`: it calls out
-        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, ref));
-        _vta(tok, ref, 0, 13, S, abi.encode(t.s), r);
         t = _proveTransfer(tok, alice, bob, 14, bal, _none(), 0);
         ref = _direct(tok, t, _none());
         bal -= 14;
         assertEq(tok.transferEntry(ref), _rebuildSingle(t.s), "single: R with its one leg (4 points)");
-        _openAll(ref, t.s, 14, "", audIn ? 2 : 0);
+        _openAll(ref, t.s, 14, audIn ? 2 : 0);
     }
 
-    /// @dev `COMPACT`: `mtxConfidentialTransfer` and `mtxConfidentialTransferCompact` both commit; the no-bundle entry, the single format
+    /// @dev `COMPACT`: `mtxConfidentialTransfer` and `mtxConfidentialTransferCompact` both commit; the single format
     ///      and every form but HASH are refused (token and statement views).
     function _compactForms(uint8 a) internal {
         bool audIn = a != NONE;
@@ -130,11 +125,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         bytes memory pl = _multiPayload(tok, alice, _two(), _vs(11), 7, tok.accountState(alice.ua));
         bytes memory single = _payload(tok, alice, bob, 5, 7, tok.accountState(alice.ua));
         vm.expectRevert(dis_);
-        tok.mtxConfidentialTransferNoBundle(pl, "", "", bytes32(0), "");
-        vm.expectRevert(dis_);
         stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.BUNDLE, 0);
-        vm.expectRevert(dis_);
-        stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.NONE, 0);
         vm.expectRevert(dis_);
         tok.mtxConfidentialTransferSingle(single, "", "", bytes32(0), "");
         vm.expectRevert(dis_);
@@ -143,19 +134,16 @@ abstract contract ZetherModesSuite is ZetherFixture {
         _hashForm(audIn, ZetherLayer.mtxConfidentialTransferCompact.selector);
     }
 
-    /// @dev Commit-reveal through `sel`: `keccak256(R)` in one slot and the memo next to it (`transferEntry` = both),
-    ///      `R` in the event; the openings take the event's `R` and the sender's rebuilt one (the same bytes), and refuse
-    ///      others.
+    /// @dev Commit-reveal through `sel`: `R` by SSTORE2 (`transferEntry`) and the memo next to it (`transferMemo`), `R` in
+    ///      the event too; the sender's rebuilt `R` is the same bytes; the openings read `R` from state.
     function _hashForm(bool audIn, bytes4 sel) internal {
         vm.recordLogs();
         (bytes32 ref, Tx memory t) = _multi(ZetherTypes.TransferMode.HASH, sel, 12);
         bytes memory r = _eventBundles(ref);
         assertEq(_rebuild(_two(), _vs(12), t.s), r, "the sender rebuilds R from s and the values");
-        assertEq(tok.transferEntry(ref), abi.encodePacked(keccak256(r), _memo(2)), "keccak256(R) then the memo");
-        _openAll(ref, t.s, 12, r, audIn ? 1 : 0);
-        r[20] = bytes1(uint8(r[20]) ^ 1);
-        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, ref));
-        _vta(tok, ref, 0, 12, S, abi.encode(t.s), r);
+        assertEq(tok.transferEntry(ref), r, "R from state");
+        assertEq(tok.transferMemo(ref), _memo(2), "the sender memo");
+        _openAll(ref, t.s, 12, audIn ? 1 : 0);
     }
 
     // ------------------------------------------------------------------ the memo and the salt are signed
@@ -219,10 +207,10 @@ abstract contract ZetherModesSuite is ZetherFixture {
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         tok.mtxConfidentialTransfer(pl, "", "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
-        stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.NONE, 0);
+        stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.BUNDLE, 0);
         uint256 pk = 0x9A7E5;
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: vm.addr(pk), data: abi.encodeCall(ZetherLayer.mtxConfidentialTransferNoBundle, (pl, bytes(""), bytes(""), bytes32(0), bytes(""))),
+            from: vm.addr(pk), data: abi.encodeCall(ZetherLayer.mtxConfidentialTransfer, (pl, bytes(""), bytes(""), bytes32(0), bytes(""))),
             batch: 3, nonce: 0, validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
             fee: 0, feeRecipient: address(0)
         });
@@ -247,6 +235,15 @@ abstract contract ZetherModesSuite is ZetherFixture {
     }
 
     // ------------------------------------------------------------------ invalid configs (both kinds)
+
+    /// Review C0-3: the retired NONE position (`disclosureMode` 2) is refused at `init` with `BadDisclosureMode`; the
+    /// two modes left both keep `R` in state.
+    function test_init_noneModeRefused() public {
+        IFactoryToken.TokenConfig memory c = _kindCfg(false);
+        c.conf.disclosureMode = 2;
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadDisclosureMode.selector, uint8(2)));
+        factory.createToken(_kind(), 1, abi.encode(c), bytes32(uint256(777)));
+    }
 
     /// `FULL` / `OPTIONAL` need a key, `NONE` refuses one, an unknown mode is refused (`BadAuditorMode`,
     /// `BadDisclosureMode`).
@@ -334,17 +331,17 @@ abstract contract ZetherModesSuite is ZetherFixture {
 
     /// @dev The four openings of bob's leg (index 0); AUDITOR opens only with the auditor in (`aud` 1: a multi-recipient
     ///      transfer, over `D_aud_0 = [t_0]G`; 2: the single format, over `D_out`; 0: left out).
-    function _openAll(bytes32 ref, uint256 s, uint256 v, bytes memory bundles, uint8 aud) internal view {
-        _openAud(ref, v, bundles, aud != 0, ver.g1MulBase(aud == 2 ? s : _tAud(s, 0)));
+    function _openAll(bytes32 ref, uint256 s, uint256 v, uint8 aud) internal view {
+        _openAud(ref, v, aud != 0, ver.g1MulBase(aud == 2 ? s : _tAud(s, 0)));
         bytes memory dOut = ver.g1MulBase(s);
-        assertTrue(_vta(tok, ref, 0, v, S, abi.encode(s), bundles), "SENDER_S");
-        assertFalse(_vta(tok, ref, 0, v + 1, S, abi.encode(s), bundles), "SENDER_S wrong amount");
-        assertTrue(_vta(tok, ref, 0, v, RX, _cpOpening(tok, bob.x, ref, 0, v, RX, dOut), bundles), "RECEIVER_X");
-        assertTrue(_vta(tok, ref, 0, v, CP, _cpOpening(tok, s, ref, 0, v, CP, bob.y), bundles), "SENDER_CP");
+        assertTrue(_vta(tok, ref, 0, v, S, abi.encode(s)), "SENDER_S");
+        assertFalse(_vta(tok, ref, 0, v + 1, S, abi.encode(s)), "SENDER_S wrong amount");
+        assertTrue(_vta(tok, ref, 0, v, RX, _cpOpening(tok, bob.x, ref, 0, v, RX, dOut)), "RECEIVER_X");
+        assertTrue(_vta(tok, ref, 0, v, CP, _cpOpening(tok, s, ref, 0, v, CP, bob.y)), "SENDER_CP");
     }
 
-    function _openAud(bytes32 ref, uint256 v, bytes memory bundles, bool audIn, bytes memory dAud) internal view {
-        assertEq(_vta(tok, ref, 0, v, AUD, _cpOpening(tok, X_AUD, ref, 0, v, AUD, dAud), bundles), audIn, "AUDITOR");
+    function _openAud(bytes32 ref, uint256 v, bool audIn, bytes memory dAud) internal view {
+        assertEq(_vta(tok, ref, 0, v, AUD, _cpOpening(tok, X_AUD, ref, 0, v, AUD, dAud)), audIn, "AUDITOR");
     }
 }
 

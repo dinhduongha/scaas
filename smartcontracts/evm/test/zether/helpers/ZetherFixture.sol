@@ -368,8 +368,8 @@ abstract contract ZetherFixture is Test {
             return abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (t.payload, t.proof, bytes(""), bytes32(0), bytes("")));
         }
         ZetherTypes.TransferMode mode = sel == ZetherLayer.mtxConfidentialTransferCompact.selector ? ZetherTypes.TransferMode.HASH
-            : sel == ZetherLayer.mtxConfidentialTransfer.selector ? _defaultForm(tok) : ZetherTypes.TransferMode.NONE;
-        require(mode != ZetherTypes.TransferMode.NONE || sel == ZetherLayer.mtxConfidentialTransferNoBundle.selector, "not a Zether op");
+            : _defaultForm(tok);
+        require(sel == ZetherLayer.mtxConfidentialTransfer.selector || sel == ZetherLayer.mtxConfidentialTransferCompact.selector, "not a Zether op");
         return _multiCall(sel, mode, bal, b);
     }
 
@@ -401,10 +401,9 @@ abstract contract ZetherFixture is Test {
         uint256 j,
         uint256 amount,
         ITransferDisclosure.OpeningKind kind,
-        bytes memory opening,
-        bytes memory bundles
+        bytes memory opening
     ) internal view returns (bool) {
-        return dis.verifyTransferAmount(address(t), ref, j, amount, kind, opening, bundles);
+        return dis.verifyTransferAmount(address(t), ref, j, amount, kind, opening);
     }
 
     /// @dev Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` with key `x` on base `base` (`D_out` for RECEIVER_X and

@@ -9,6 +9,7 @@ import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
+import {SSTORE2} from "../common/SSTORE2.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {
     ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_INNER_PRODUCT, ENV_ZETHER_DISCLOSURE
@@ -85,12 +86,15 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function auditorMode() external view returns (ZetherTypes.AuditorMode) { return ZetherLib.$().auditorMode; }
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return ZetherLib.$().disclosureMode; }
     function totalShielded() external view returns (uint256) { return ZetherLib.$().totalShielded; }
-    /// @notice The raw record for `disclosure()`: `R` (BUNDLE, single), `keccak256(R) ‖ memo` (commit-reveal; the hash in
-    ///         one slot), empty (NONE, unknown).
+    /// @notice The record `R` for `disclosure()`, always from state: inline (BUNDLE, single) or read from its SSTORE2
+    ///         pointer (commit-reveal); empty for an unknown ref.
     function transferEntry(bytes32 entryRef) external view returns (bytes memory) {
-        bytes32 h = ZetherLib.$().entryHashes[entryRef];
-        return h != bytes32(0) ? abi.encodePacked(h, ZetherLib.$().memos[entryRef]) : ZetherLib.$().entries[entryRef];
+        address ptr = ZetherLib.$().entryPtrs[entryRef];
+        return ptr != address(0) ? SSTORE2.read(ptr) : ZetherLib.$().entries[entryRef];
     }
+
+    /// @notice The sender memo of a commit-reveal entry (CTR-ZTH-50), empty otherwise.
+    function transferMemo(bytes32 entryRef) external view returns (bytes memory) { return ZetherLib.$().memos[entryRef]; }
     function sendCounter(ZetherTypes.UA ua) external view returns (uint256) { return ZetherLib.$().acct[ua].sendCounter; }
 
     /// @notice Registered as this token's Zether kind (`registry.kindOf`, accounts.md §1.13).
@@ -144,12 +148,6 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         bytes32 beneficiary, bytes calldata accHint) external nonReentrant returns (bytes32)
     {
         return _multi(payload, proof, auth, beneficiary, accHint, ZetherTypes.TransferMode.HASH);
-    }
-
-    function mtxConfidentialTransferNoBundle(bytes calldata payload, bytes calldata proof, bytes calldata auth,
-        bytes32 beneficiary, bytes calldata accHint) external nonReentrant returns (bytes32)
-    {
-        return _multi(payload, proof, auth, beneficiary, accHint, ZetherTypes.TransferMode.NONE);
     }
 
     function mtxConfidentialTransferSingle(bytes calldata payload, bytes calldata proof, bytes calldata auth,
@@ -280,7 +278,6 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function _isZetherOp(bytes4 sel) internal pure returns (bool) {
         return sel == this.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
             || sel == this.mtxConfidentialTransferCompact.selector
-            || sel == this.mtxConfidentialTransferNoBundle.selector
             || sel == this.mtxConfidentialTransferSingle.selector || sel == this.mtxUnshield.selector
             || sel == this.mtxRollOver.selector || sel == this.mtxRollOverBatch.selector
             || sel == this.mtxRollOverSigned.selector || sel == this.mtxSetRollOverMode.selector;

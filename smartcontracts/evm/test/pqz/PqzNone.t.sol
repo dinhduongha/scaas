@@ -521,7 +521,7 @@ contract PqzNoneTest is PqzFixture {
         bytes memory st = tok.transferSingleStatement(pl, 0);
         assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.BUNDLE));
         bytes memory stN = tok.transferSingleStatement(pl, 0);
-        bytes32 nb = _direct(ZetherTypes.TransferMode.NONE);
+        bytes32 nb = _direct(ZetherTypes.TransferMode.HASH);
         assembly ("memory-safe") { mstore(add(stN, 576), nb) } // word 544: another mode's binding
         bytes memory proof = hex"b0b0";
         _mockOp(1, 0); // the precompile accepts exactly the other mode's statement

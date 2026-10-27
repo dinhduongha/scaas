@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {console2} from "forge-std/Test.sol";
+import {console2, Vm} from "forge-std/Test.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
@@ -29,18 +29,16 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     function _send(ZetherLayer t, ZetherTypes.TransferMode mode, Tx memory x, ZetherTypes.UA ben) internal returns (bytes32) {
         if (mode == ZetherTypes.TransferMode.HASH) return t.mtxConfidentialTransferCompact(x.payload, x.proof, "", ZetherTypes.UA.unwrap(ben), "");
-        if (mode == ZetherTypes.TransferMode.BUNDLE) return t.mtxConfidentialTransfer(x.payload, x.proof, "", ZetherTypes.UA.unwrap(ben), "");
-        return t.mtxConfidentialTransferNoBundle(x.payload, x.proof, "", ZetherTypes.UA.unwrap(ben), "");
+        return t.mtxConfidentialTransfer(x.payload, x.proof, "", ZetherTypes.UA.unwrap(ben), "");
     }
 
     function _selector(ZetherTypes.TransferMode mode) internal pure returns (bytes4) {
         if (mode == ZetherTypes.TransferMode.HASH) return ZetherLayer.mtxConfidentialTransferCompact.selector;
-        if (mode == ZetherTypes.TransferMode.BUNDLE) return ZetherLayer.mtxConfidentialTransfer.selector;
-        return ZetherLayer.mtxConfidentialTransferNoBundle.selector;
+        return ZetherLayer.mtxConfidentialTransfer.selector;
     }
 
     function _modeName(ZetherTypes.TransferMode mode) internal pure returns (string memory) {
-        return mode == ZetherTypes.TransferMode.HASH ? "HASH" : mode == ZetherTypes.TransferMode.BUNDLE ? "BUNDLE" : "NONE";
+        return mode == ZetherTypes.TransferMode.HASH ? "HASH" : "BUNDLE";
     }
 
     function _cut(bytes memory a, uint256 off, uint256 len) internal pure returns (bytes memory out) {
@@ -91,9 +89,11 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256 g0 = gasleft();
         _send(tok, mode, t, carol.ua);
         uint256 used = g0 - gasleft();
+        Vm.Gas memory lg = vm.lastCallGas(); // the isolated transaction: REGULAR gas, and EIP-8037 STATE gas apart
         console2.log(string.concat(
             bls ? "bls12-381" : "bn254", " mtxConfidentialTransfer M=", vm.toString(m), " ", _modeName(mode),
-            audOut ? " auditor-out" : "", " gas ", vm.toString(used), " calldata ", vm.toString(cd)
+            audOut ? " auditor-out" : "", " gas ", vm.toString(used), " calldata ", vm.toString(cd),
+            " regular ", vm.toString(lg.gasTotalUsed), " state ", vm.toString(uint256(int256(lg.gasStateUsed)))
         ));
         assertTrue(_holds(tok, alice, b - 1000 - FEE, true), "sender acc = b - sum(v) - fee");
     }
@@ -119,29 +119,21 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     function test_gasM1Hash() public { _gasRun(1, ZetherTypes.TransferMode.HASH); }
     function test_gasM1Bundle() public { _gasRun(1, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasM1None() public { _gasRun(1, ZetherTypes.TransferMode.NONE); }
     function test_gasM2Hash() public { _gasRun(2, ZetherTypes.TransferMode.HASH); }
     function test_gasM2Bundle() public { _gasRun(2, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasM2None() public { _gasRun(2, ZetherTypes.TransferMode.NONE); }
     function test_gasM4Hash() public { _gasRun(4, ZetherTypes.TransferMode.HASH); }
     function test_gasM4Bundle() public { _gasRun(4, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasM4None() public { _gasRun(4, ZetherTypes.TransferMode.NONE); }
     function test_gasM8Hash() public { _gasRun(8, ZetherTypes.TransferMode.HASH); }
     function test_gasM8Bundle() public { _gasRun(8, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasM8None() public { _gasRun(8, ZetherTypes.TransferMode.NONE); }
     // Z12: token có auditor, người gửi bỏ auditor (mọi C_aud = O)
     function test_gasOutM1Hash() public { audOut = true; _gasRun(1, ZetherTypes.TransferMode.HASH); }
     function test_gasOutM1Bundle() public { audOut = true; _gasRun(1, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasOutM1None() public { audOut = true; _gasRun(1, ZetherTypes.TransferMode.NONE); }
     function test_gasOutM2Hash() public { audOut = true; _gasRun(2, ZetherTypes.TransferMode.HASH); }
     function test_gasOutM2Bundle() public { audOut = true; _gasRun(2, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasOutM2None() public { audOut = true; _gasRun(2, ZetherTypes.TransferMode.NONE); }
     function test_gasOutM4Hash() public { audOut = true; _gasRun(4, ZetherTypes.TransferMode.HASH); }
     function test_gasOutM4Bundle() public { audOut = true; _gasRun(4, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasOutM4None() public { audOut = true; _gasRun(4, ZetherTypes.TransferMode.NONE); }
     function test_gasOutM8Hash() public { audOut = true; _gasRun(8, ZetherTypes.TransferMode.HASH); }
     function test_gasOutM8Bundle() public { audOut = true; _gasRun(8, ZetherTypes.TransferMode.BUNDLE); }
-    function test_gasOutM8None() public { audOut = true; _gasRun(8, ZetherTypes.TransferMode.NONE); }
 
     // ------------------------------------------------------------------ hiệu lực
 
@@ -272,81 +264,105 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         vm.expectEmit(true, false, false, true, address(tok));
         emit IZetherToken.TransferBundles(expected, bundles);
         bytes32 ref = _send(tok, ZetherTypes.TransferMode.HASH, t, _none());
-        // HASH stores one slot (CTR-ZTH-38): `entryHashes[ref]` in `scaas.zether`, nothing under `entries[ref]`
+        // HASH keeps R in state by SSTORE2 (CTR-ZTH-38, review C0-3): `entryPtrs[ref]` holds the pointer, nothing under
+        // `entries[ref]`, the memo next to it
         uint256 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
-        assertEq(vm.load(address(tok), keccak256(abi.encode(ref, ns + 10))), keccak256(bundles));
+        address ptr = address(uint160(uint256(vm.load(address(tok), keccak256(abi.encode(ref, ns + 10))))));
+        assertTrue(ptr != address(0) && ptr.code.length == bundles.length + 1, "the pointer: 0x00 || R");
         assertEq(vm.load(address(tok), keccak256(abi.encode(ref, ns + 9))), bytes32(0));
         assertEq(vm.load(address(tok), keccak256(abi.encode(ref, ns + 11))), bytes32(uint256(_memo(3).length * 2 + 1)),
             "the memo next to it (a long `bytes`: 2 * len + 1)");
-        assertEq(tok.transferEntry(ref), abi.encodePacked(keccak256(bundles), _memo(3)), "keccak256(R) then the memo");
-        _discloseAll(ref, t, bundles);
-        // bundles that do not match the stored hash
-        bytes memory wrong = bytes.concat(bundles);
-        wrong[0] = bytes1(uint8(wrong[0]) ^ 1);
-        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, ref));
-        _vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s), wrong);
-        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, ref));
-        _vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s), "");
+        assertEq(tok.transferEntry(ref), bundles, "R itself, from state");
+        assertEq(tok.transferMemo(ref), _memo(3), "the sender memo");
+        _discloseAll(ref, t);
     }
 
+    /// @dev Review C0-3: disclosure reads `R` from the token's state, with no `bundles` argument (the event is not needed).
+    function test_disclosure_readsRecordFromState() public {
+        _funded(500);
+        uint256[] memory vs = new uint256[](3);
+        vs[1] = 77;
+        Tx memory t = _proveMulti(tok, alice, _to(3), vs, 500, _none(), ZetherTypes.TransferMode.HASH);
+        vm.recordLogs();
+        bytes32 ref = _send(tok, ZetherTypes.TransferMode.HASH, t, _none());
+        vm.getRecordedLogs(); // the event is dropped: the opening still verifies
+        assertTrue(_vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
+        assertFalse(_vta(tok, ref, 1, 78, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
+    }
+
+    /// @dev Review C0-3: the stored bytes hash to the commitment `keccak256(R)` the event's `R` gives, so an off-chain
+    ///      indexer that keeps the old hash stays consistent.
+    function test_hashRecordMatchesR() public {
+        _funded(500);
+        uint256[] memory vs = new uint256[](3);
+        vs[1] = 77;
+        Tx memory t = _proveMulti(tok, alice, _to(3), vs, 500, _none(), ZetherTypes.TransferMode.HASH);
+        vm.recordLogs();
+        bytes32 ref = _send(tok, ZetherTypes.TransferMode.HASH, t, _none());
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes memory r;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].topics[0] == IZetherToken.TransferBundles.selector && logs[i].topics[1] == ref) r = abi.decode(logs[i].data, (bytes));
+        }
+        assertGt(r.length, 0, "event R");
+        assertEq(keccak256(tok.transferEntry(ref)), keccak256(r), "state R hashes to the event's commitment");
+        assertEq(r, _bundlesOf(t.payload));
+    }
+
+    /// @dev Review C0-3: the old `mtxConfidentialTransferNoBundle` selector is gone: a call to it hits the token's
+    ///      unknown-selector path and reverts (and no allow-list entry names it).
+    function test_noBundleRetired() public {
+        bytes4 old = bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)"));
+        (bool ok, bytes memory ret) = address(tok).call(abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
+        assertFalse(ok, "retired");
+        assertEq(ret.length, 0, "the plain fallback revert (no function by that selector)");
+        (bytes4[] memory s,,) = tok.mtxSelectors();
+        for (uint256 i; i < s.length; ++i) assertTrue(s[i] != old, "off the allow-list");
+    }
+
+    /// @dev A foreign token's entry that is not a record length: `RecordMalformed`.
     function test_disclosureBundleMode() public {
         _funded(500);
         uint256[] memory vs = new uint256[](3);
         vs[1] = 77;
         Tx memory t = _proveMulti(tok, alice, _to(3), vs, 500, _none(), ZetherTypes.TransferMode.BUNDLE);
         bytes32 ref = _send(tok, ZetherTypes.TransferMode.BUNDLE, t, _none());
-        _discloseAll(ref, t, ""); // stored: no bundles needed
-    }
-
-    function test_disclosureNoBundleModeIsOffChainOnly() public {
-        _funded(500);
-        uint256[] memory vs = new uint256[](3);
-        vs[1] = 77;
-        Tx memory t = _proveMulti(tok, alice, _to(3), vs, 500, _none(), ZetherTypes.TransferMode.NONE);
-        bytes32 ref = _send(tok, ZetherTypes.TransferMode.NONE, t, _none());
-        bytes memory bundles = _bundlesOf(t.payload);
-        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, ref));
-        _vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s), bundles);
-        // off chain: the sender's s opens the leg read from calldata
-        uint256 p = ver.g1EncodedBytes();
-        bytes memory b1 = _cut(_bundlesOf(t.payload), 16 + 5 * p, 5 * p);
-        assertEq(ver.g1MulBase(t.s), _cut(b1, 2 * p, p), "D_out = [s]G");
-        assertEq(ver.g1Add(ver.g1MulBase(77), ver.g1Mul(rs[1].y, t.s)), _cut(b1, p, p), "C_out = [v]G + [s]Y_t");
+        _discloseAll(ref, t);
     }
 
     /// @dev Cả bốn opening trên leg thật, `s` mở cả leg mồi (owner Z3), opening không chuyển leg, chỉ số ngoài khoảng.
-    function _discloseAll(bytes32 ref, Tx memory t, bytes memory bundles) internal {
-        _discloseCp(ref, t, bundles);
+    function _discloseAll(bytes32 ref, Tx memory t) internal {
+        _discloseCp(ref, t);
         ITransferDisclosure.OpeningKind S = ITransferDisclosure.OpeningKind.SENDER_S;
         ITransferDisclosure.OpeningKind RX = ITransferDisclosure.OpeningKind.RECEIVER_X;
-        assertTrue(_vta(tok, ref, 1, 77, S, abi.encode(t.s), bundles), "sender opens the real leg");
-        assertFalse(_vta(tok, ref, 1, 78, S, abi.encode(t.s), bundles));
-        assertTrue(_vta(tok, ref, 0, 0, S, abi.encode(t.s), bundles), "s also opens a decoy (Z3)");
+        assertTrue(_vta(tok, ref, 1, 77, S, abi.encode(t.s)), "sender opens the real leg");
+        assertFalse(_vta(tok, ref, 1, 78, S, abi.encode(t.s)));
+        assertTrue(_vta(tok, ref, 0, 0, S, abi.encode(t.s)), "s also opens a decoy (Z3)");
         bytes memory rx = _cp(rs[1].x, ref, 1, 77, RX, t.payload);
-        assertTrue(_vta(tok, ref, 1, 77, RX, rx, bundles));
-        assertFalse(_vta(tok, ref, 2, 77, RX, rx, bundles), "an opening does not move to another leg");
+        assertTrue(_vta(tok, ref, 1, 77, RX, rx));
+        assertFalse(_vta(tok, ref, 2, 77, RX, rx), "an opening does not move to another leg");
         bytes memory au = _cp(X_AUD, ref, 1, 77, ITransferDisclosure.OpeningKind.AUDITOR, t.payload);
-        assertEq(_vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.AUDITOR, au, bundles), !audOut,
+        assertEq(_vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.AUDITOR, au), !audOut,
             "auditor opens unless left out (Z12)");
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BadRecipientIndex.selector, 3));
-        _vta(tok, ref, 3, 0, S, abi.encode(t.s), bundles);
-        (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 1, bundles);
+        _vta(tok, ref, 3, 0, S, abi.encode(t.s));
+        (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 1);
         assertEq(yTo, rs[1].y);
         assertEq(ct.length, 4 * ver.g1EncodedBytes(), "C_out D_out C_aud D_aud");
     }
 
     /// @dev SENDER_CP (Z10): chỉ leg j mở, challenge ràng j.
-    function _discloseCp(bytes32 ref, Tx memory t, bytes memory bundles) internal view {
+    function _discloseCp(bytes32 ref, Tx memory t) internal view {
         ITransferDisclosure.OpeningKind CP = ITransferDisclosure.OpeningKind.SENDER_CP;
         bytes memory cp = _cp(t.s, ref, 1, 77, CP, t.payload);
-        assertTrue(_vta(tok, ref, 1, 77, CP, cp, bundles), "sender CP opens leg 1");
-        assertFalse(_vta(tok, ref, 1, 78, CP, cp, bundles), "wrong amount");
-        assertFalse(_vta(tok, ref, 0, 77, CP, cp, bundles), "wrong leg");
-        assertFalse(_vta(tok, ref, 0, 0, CP, cp, bundles), "a proof for leg 1 does not open leg 0");
-        assertFalse(_vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.RECEIVER_X, cp, bundles), "kind is bound");
+        assertTrue(_vta(tok, ref, 1, 77, CP, cp), "sender CP opens leg 1");
+        assertFalse(_vta(tok, ref, 1, 78, CP, cp), "wrong amount");
+        assertFalse(_vta(tok, ref, 0, 77, CP, cp), "wrong leg");
+        assertFalse(_vta(tok, ref, 0, 0, CP, cp), "a proof for leg 1 does not open leg 0");
+        assertFalse(_vta(tok, ref, 1, 77, ITransferDisclosure.OpeningKind.RECEIVER_X, cp), "kind is bound");
         bytes memory cp0 = _cp(t.s, ref, 0, 0, CP, t.payload);
-        assertTrue(_vta(tok, ref, 0, 0, CP, cp0, bundles), "decoy opens with its own proof");
-        assertFalse(_vta(tok, ref, 1, 0, CP, cp0, bundles));
+        assertTrue(_vta(tok, ref, 0, 0, CP, cp0), "decoy opens with its own proof");
+        assertFalse(_vta(tok, ref, 1, 0, CP, cp0));
     }
 
     // ------------------------------------------------------------------ bỏ auditor theo transfer (Z12)
@@ -368,7 +384,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         assertTrue(_holds(tok, rs[1], 77, false));
         assertTrue(_holds(tok, alice, 423, true));
         audOut = true;
-        _discloseAll(ref, t, "");
+        _discloseAll(ref, t);
     }
 
     function test_auditorLegsMixedReverts() public {
@@ -470,13 +486,13 @@ abstract contract ZetherMultiSuite is ZetherFixture {
             assertEq(_decrypt(_recPt(rec, j, 3), _recPt(rec, j, 4), X_AUD, 100), vs[j], "auditor reads leg j");
             assertEq(_recPt(rec, j, 4), ver.g1MulBase(_tAud(t.s, j)), "D_aud_j = [t_j]G");
             bytes memory au = _cp(X_AUD, ref, j, vs[j], ITransferDisclosure.OpeningKind.AUDITOR, t.payload);
-            assertTrue(_vta(tok, ref, j, vs[j], ITransferDisclosure.OpeningKind.AUDITOR, au, ""), "AUDITOR opens leg j");
-            assertFalse(_vta(tok, ref, j, vs[j] + 1, ITransferDisclosure.OpeningKind.AUDITOR, au, ""));
+            assertTrue(_vta(tok, ref, j, vs[j], ITransferDisclosure.OpeningKind.AUDITOR, au), "AUDITOR opens leg j");
+            assertFalse(_vta(tok, ref, j, vs[j] + 1, ITransferDisclosure.OpeningKind.AUDITOR, au));
         }
         bytes memory onDOut = _cpOpening(tok, X_AUD, ref, 1, 41, ITransferDisclosure.OpeningKind.AUDITOR,
             _cut(t.payload, 176 + ver.g1EncodedBytes(), ver.g1EncodedBytes()));
-        assertFalse(_vta(tok, ref, 1, 41, ITransferDisclosure.OpeningKind.AUDITOR, onDOut, ""), "not over D_out");
-        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 3, "");
+        assertFalse(_vta(tok, ref, 1, 41, ITransferDisclosure.OpeningKind.AUDITOR, onDOut), "not over D_out");
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 3);
         uint256 p = ver.g1EncodedBytes();
         assertEq(_cut(ct, 3 * p, p), _recPt(rec, 3, 4), "transferCiphertext ends with D_aud_j");
     }
@@ -568,22 +584,22 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     /// @dev Gas on-chain của `verifyTransferAmount` gọi từ một contract (`Escrow3P.measure`), token/disclosure
     ///      làm nguội trước mỗi lần đo (như một giao dịch mới: account và slot bundle lạnh).
-    function _measure(Escrow3P esc, bytes32 ref, uint256 j, uint256 k, bytes memory o, bytes memory bundles)
+    function _measure(Escrow3P esc, bytes32 ref, uint256 j, uint256 k, bytes memory o)
         internal returns (uint256)
     {
         vm.cool(address(tok));
         vm.cool(address(dis));
         vm.cool(address(ver));
-        return esc.measure(IZetherToken(address(tok)), ref, j, 1000, ITransferDisclosure.OpeningKind(k), o, bundles);
+        return esc.measure(IZetherToken(address(tok)), ref, j, 1000, ITransferDisclosure.OpeningKind(k), o);
     }
 
-    function _gasKinds(string memory tag, bytes32 ref, uint256 j, bytes[4] memory o, bytes memory bundles) internal {
+    function _gasKinds(string memory tag, bytes32 ref, uint256 j, bytes[4] memory o) internal {
         Escrow3P esc = new Escrow3P();
         string[4] memory names = ["SENDER_S", "RECEIVER_X", "AUDITOR", "SENDER_CP"];
         for (uint256 k; k < 4; ++k) {
             console2.log(string.concat(
                 bls ? "bls12-381" : "bn254", " disclose ", tag, " ", names[k], " gas ",
-                vm.toString(_measure(esc, ref, j, k, o[k], bundles)), " bundles ", vm.toString(bundles.length)
+                vm.toString(_measure(esc, ref, j, k, o[k]))
             ));
         }
     }
@@ -596,14 +612,13 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         vs[j] = 1000;
         Tx memory t = _proveMulti(tok, alice, _to(m), vs, 1_000_000, _none(), mode);
         bytes32 ref = _send(tok, mode, t, _none());
-        bytes memory bundles = mode == ZetherTypes.TransferMode.HASH ? _bundlesOf(t.payload) : bytes("");
         bytes[4] memory o = [
             abi.encode(t.s),
             _cp(rs[j].x, ref, j, 1000, ITransferDisclosure.OpeningKind.RECEIVER_X, t.payload),
             _cp(X_AUD, ref, j, 1000, ITransferDisclosure.OpeningKind.AUDITOR, t.payload),
             _cp(t.s, ref, j, 1000, ITransferDisclosure.OpeningKind.SENDER_CP, t.payload)
         ];
-        _gasKinds(string.concat("M=", vm.toString(m), " ", _modeName(mode)), ref, j, o, bundles);
+        _gasKinds(string.concat("M=", vm.toString(m), " ", _modeName(mode)), ref, j, o);
     }
 
     function test_gasDiscloseM1Bundle() public { _gasDisclose(1, ZetherTypes.TransferMode.BUNDLE); }
@@ -622,7 +637,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
             _cpOpening(tok, X_AUD, ref, 0, 1000, ITransferDisclosure.OpeningKind.AUDITOR, dOut),
             _cpOpening(tok, t.s, ref, 0, 1000, ITransferDisclosure.OpeningKind.SENDER_CP, rs[0].y)
         ];
-        _gasKinds("Single", ref, 0, o, "");
+        _gasKinds("Single", ref, 0, o);
     }
 }
 
@@ -635,8 +650,7 @@ contract Escrow3P {
         external returns (bool)
     {
         bool ok = token.disclosure().verifyTransferAmount(
-            address(token), ref, j, amount, ITransferDisclosure.OpeningKind.SENDER_CP, opening, ""
-        );
+            address(token), ref, j, amount, ITransferDisclosure.OpeningKind.SENDER_CP, opening);
         require(ok, "not proven");
         released[ref] = amount;
         return true;
@@ -649,12 +663,11 @@ contract Escrow3P {
         uint256 j,
         uint256 amount,
         ITransferDisclosure.OpeningKind kind,
-        bytes calldata opening,
-        bytes calldata bundles
+        bytes calldata opening
     ) external view returns (uint256 used) {
         ITransferDisclosure d = token.disclosure();
         uint256 g0 = gasleft();
-        bool ok = d.verifyTransferAmount(address(token), ref, j, amount, kind, opening, bundles);
+        bool ok = d.verifyTransferAmount(address(token), ref, j, amount, kind, opening);
         used = g0 - gasleft();
         require(ok, "not proven");
     }

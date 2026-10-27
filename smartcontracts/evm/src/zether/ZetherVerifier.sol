@@ -319,7 +319,6 @@ abstract contract ZetherVerifierBase is ZetherCurve {
     // Multi-recipient transfer: the storage mode is part of opTag (spec 2026-10-08-zether-multi-recipient §4).
     bytes32 internal constant OP_MULTI_HASH = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH");
     bytes32 internal constant OP_MULTI_BUNDLE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE");
-    bytes32 internal constant OP_MULTI_NONE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE");
     uint256 internal constant MAX_RECIPIENTS = 16;
     uint256 internal constant NV = 64; // limits D1 (RS-NV64-1)
     uint256 internal constant NB = 64;
@@ -372,7 +371,7 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         uint256 m = uint256(bytes32(statement[at:at + 32]));
         if (m == 0 || m > MAX_RECIPIENTS || statement.length != at + 32 + 4 * p * m) return false;
         bytes32 op = bytes32(statement[0:32]);
-        if (op != OP_MULTI_HASH && op != OP_MULTI_BUNDLE && op != OP_MULTI_NONE) return false;
+        if (op != OP_MULTI_HASH && op != OP_MULTI_BUNDLE) return false;
         if (bytes32(statement[32:64]) != proofSystemIdMulti()) return false;
         // Σ (6 + 5M)P + (4 + 3M)·32 ‖ BP(v_1) … BP(v_M) ‖ BP(b'), mỗi BP 16P + 160
         uint256 bpLen = 16 * p + 160;

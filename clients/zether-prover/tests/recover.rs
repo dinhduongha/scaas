@@ -1,6 +1,6 @@
 //! CTR-ZTH-30 / CTR-ZTH-50: `s`, the amounts and every bundle of a transfer from the sender's key and chain data alone
-//! (`recoverTransfer`): from storage (no logs; the commitment and its memo, or the stored record) or from calldata; a
-//! fresh salt per build; the token's modes in a request (`disclosureMode`, `auditorMode`, CTR-ZTH-38/48/49).
+//! (`recoverTransfer`): from storage (no logs; the stored record `R` and, on commit-reveal, the stored memo; review C0-3)
+//! or from calldata; a fresh salt per build; the token's modes in a request (`disclosureMode`, `auditorMode`, CTR-ZTH-38/48/49).
 
 use serde_json::{json, Value};
 use zether_prover::api::{self, call};
@@ -56,15 +56,11 @@ fn multi(curve: &str) -> Value {
     })
 }
 
-/// What `transferEntry(entryRef)` returns after a commit-reveal transfer: `keccak256(R) ‖ memo`.
-fn entry(t: &Value) -> Value {
-    hx(&[keccak256(&hexb(&t["bundles"])).to_vec(), hexb(&t["memo"])].concat())
-}
-
-/// The storage-only request: the counter, the entry, the registry's keys (`keyOf`) and the token's auditor key.
-fn from_storage(curve: &str, entry: &Value, uid: &str) -> Value {
+/// The storage-only request: the counter, `transferEntry(entryRef)` (= `R`, a SSTORE2 read on commit-reveal),
+/// `transferMemo(entryRef)` and the token's auditor key.
+fn from_storage(curve: &str, t: &Value, uid: &str) -> Value {
     json!({"curve": curve, "key": key(0), "chainId": 31337, "chainUid": uid, "token": TOKEN, "sendCounter": 4,
-        "entry": entry, "keys": [y(curve, 3), y(curve, 1), y(curve, 2), y(curve, 5)], "yAud": y(curve, 9)})
+        "entry": t["bundles"], "memo": t["memo"], "yAud": y(curve, 9)})
 }
 
 #[test]
@@ -72,7 +68,7 @@ fn recover_from_storage_alone() {
     for curve in CURVES {
         let t = ok("proveTransferMulti", &multi(curve));
         assert_eq!(t["mode"], json!("compact"));
-        let r = ok("recoverTransfer", &from_storage(curve, &entry(&t), UID));
+        let r = ok("recoverTransfer", &from_storage(curve, &t, UID));
         assert_eq!(r["s"], t["witness"]["s"], "{curve}: s");
         assert_eq!(r["salt"], t["salt"]);
         assert_eq!(r["bundles"], t["bundles"], "{curve}: R, every leg");
@@ -83,81 +79,38 @@ fn recover_from_storage_alone() {
         assert_eq!(r["auditorIncluded"], json!(true));
         assert_eq!(r["senderS"].as_str().unwrap().len(), 2 + 64);
         assert_eq!(r["senderCp"].as_array().unwrap().len(), 3);
-        // a tampered memo, another chainUid, a missing key: refused
-        let mut bad = hexb(&entry(&t));
-        bad[32 + 20] ^= 1;
-        assert!(!err("recoverTransfer", &from_storage(curve, &hx(&bad), UID)).is_empty(), "tampered memo");
-        assert!(!err("recoverTransfer", &from_storage(curve, &entry(&t), &format!("0x{}", "25".repeat(32)))).is_empty());
-        let mut c = hexb(&entry(&t));
-        c[3] ^= 1;
-        assert!(err("recoverTransfer", &from_storage(curve, &hx(&c), UID)).contains("rebuilt"), "tampered commitment");
+        // the indexer's commitment is the hash of the stored R
+        assert_eq!(r["commitment"], hx(&keccak256(&hexb(&t["bundles"]))));
+        // a tampered memo, another chainUid, a tampered record: refused
+        let mut bad = from_storage(curve, &t, UID);
+        let mut m = hexb(&t["memo"]);
+        m[20] ^= 1;
+        bad["memo"] = hx(&m);
+        assert!(!err("recoverTransfer", &bad).is_empty(), "tampered memo");
+        assert!(!err("recoverTransfer", &from_storage(curve, &t, &format!("0x{}", "25".repeat(32)))).is_empty());
+        let mut bad = from_storage(curve, &t, UID);
+        let mut r = hexb(&t["bundles"]);
+        r[16 + 5] ^= 1;
+        bad["entry"] = hx(&r);
+        assert!(!err("recoverTransfer", &bad).is_empty(), "tampered record");
     }
-}
-
-/// The key-lookup source for a storage-only recovery: the registry's `keyOf(toUA)`, here a map of the registered keys
-/// (accounts 1–5), counting the calls.
-fn registry(curve: &str) -> std::collections::HashMap<[u8; 32], Vec<u8>> {
-    (1..=5).map(|a| (hexb(&ua(curve, a)).try_into().unwrap(), hexb(&y(curve, a)))).collect()
 }
 
 fn ua(curve: &str, a: u32) -> Value {
     ok("keygen", &json!({"curve": curve, "key": key(a)}))["UA"].clone()
 }
 
-fn recover_with(curve: &str, q: &Value, key_of: &mut dyn FnMut(&[u8; 32]) -> Option<Vec<u8>>) -> Result<Value, String> {
-    let mut rng = rand_core::OsRng;
-    match curve {
-        #[cfg(feature = "bn254")]
-        "bn254" => api::recover_transfer_with::<Bn254, _>(q, key_of, &mut rng),
-        _ => api::recover_transfer_with::<Bls12381, _>(q, key_of, &mut rng),
-    }
-}
-
-/// Review T1 I2: from the seed and contract reads only. `openMemo` on `transferEntry(entryRef)` names the recipients,
-/// their keys come from `keyOf` (no `keys` in the request), the auditor key from `auditorKey()`; with part of the keys
-/// given, only the rest is fetched; a missing key names every missing UA; a lookup that answers another UA's key or
-/// garbage is refused (fail closed).
+/// `openMemo` on the stored memo names the recipients and the auditor flag; the record already carries every `Y_tj`, so
+/// `recoverTransfer` needs no key lookup (review C0-3).
 #[test]
-fn recover_with_keys_from_the_registry() {
+fn open_memo_names_the_recipients() {
     for curve in CURVES {
         let t = ok("proveTransferMulti", &multi(curve));
-        let mut q = from_storage(curve, &entry(&t), UID);
-        q["keys"] = Value::Null;
-        let m = ok("openMemo", &q);
+        let m = ok("openMemo", &from_storage(curve, &t, UID));
         assert_eq!(m["salt"], t["salt"]);
         assert_eq!(m["auditorIncluded"], json!(true));
-        assert_eq!(m["needKeys"], json!([ua(curve, 1), ua(curve, 2), ua(curve, 3)]), "{curve}: the UAs to look up");
+        assert_eq!(m["needKeys"], json!([ua(curve, 1), ua(curve, 2), ua(curve, 3)]), "{curve}: the recipients");
         assert_eq!(m["legs"][0]["amount"], json!("1200"));
-        let reg = registry(curve);
-        let mut calls = 0;
-        let r = recover_with(curve, &q, &mut |u| {
-            calls += 1;
-            reg.get(u).cloned()
-        })
-        .unwrap();
-        assert_eq!((r["bundles"].clone(), r["s"].clone(), calls), (t["bundles"].clone(), t["witness"]["s"].clone(), 3));
-        // part of the keys given: only the others are fetched
-        q["keys"] = json!([y(curve, 2)]);
-        let mut calls = 0;
-        let r = recover_with(curve, &q, &mut |u| {
-            calls += 1;
-            reg.get(u).cloned()
-        })
-        .unwrap();
-        assert_eq!((r["bundles"].clone(), calls), (t["bundles"].clone(), 2));
-        // without a lookup: every missing UA named
-        let e = err("recoverTransfer", &q);
-        assert!(e.contains(ua(curve, 1).as_str().unwrap()) && e.contains(ua(curve, 3).as_str().unwrap()), "{e}");
-        assert!(!e.contains(ua(curve, 2).as_str().unwrap()));
-        // a lookup answering another account's key, or garbage: refused
-        q["keys"] = Value::Null;
-        assert!(recover_with(curve, &q, &mut |_| Some(hexb(&y(curve, 4)))).unwrap_err().contains("no key for"));
-        assert!(recover_with(curve, &q, &mut |_| Some(vec![1, 2, 3])).unwrap_err().contains("no key for"));
-        // a tampered memo opens to other UAs: no key, or a rebuilt record that misses the commitment
-        let mut bad = hexb(&entry(&t));
-        bad[32 + 20] ^= 1;
-        q["entry"] = hx(&bad);
-        assert!(recover_with(curve, &q, &mut |u| reg.get(u).cloned()).is_err(), "tampered memo");
     }
 }
 
@@ -190,7 +143,7 @@ fn recover_an_opt_out() {
     let mut req = multi(BN);
     req["yAud"] = Value::Null;
     let t = ok("proveTransferMulti", &req);
-    let mut q = from_storage(BN, &entry(&t), UID);
+    let mut q = from_storage(BN, &t, UID);
     q["yAud"] = Value::Null;
     let r = ok("recoverTransfer", &q);
     assert_eq!(r["auditorIncluded"], json!(false));
@@ -260,10 +213,10 @@ fn modes_in_the_request() {
     let t = ok("proveTransferMulti", &c);
     assert_eq!(t["mode"], json!("compact"));
     assert_eq!(sel(&t), "5dc7af97", "mtxConfidentialTransfer: commit-reveal on a COMPACT token");
-    for m in ["bundle", "none"] {
-        c["mode"] = json!(m);
-        assert!(err("proveTransferMulti", &c).contains("TransferEntryDisabled"));
-    }
+    c["mode"] = json!("bundle");
+    assert!(err("proveTransferMulti", &c).contains("TransferEntryDisabled"));
+    c["mode"] = json!("none");
+    assert!(err("proveTransferMulti", &c).contains("compact"), "the NONE form is retired (review C0-3)");
     let mut one = c.clone();
     (one["yTo"], one["amount"]) = (req["recipients"][0]["yTo"].clone(), json!(1));
     assert!(err("proveTransfer", &one).contains("TransferEntryDisabled"), "no single format on COMPACT");
@@ -279,14 +232,14 @@ fn modes_in_the_request() {
 
 /// Review T1 I1, final review I1: over the EIP-7825 cap the refusal names the cap, the measured gas limit at this `M`,
 /// the most recipients the form takes and the cheaper forms that fit (here BLS12-381 commit-reveal with the auditor at
-/// M = 8, direct: at most 7; three cheaper forms fit at M = 8).
+/// M = 8, direct: at most 7; one cheaper form fits at M = 8).
 #[test]
 fn gas_cap_message() {
     let mut req = multi("bls12381");
     req["recipients"] = json!((1..=8).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
     let e = err("proveTransferMulti", &req);
-    for part in ["EIP-7825", "16777216", "M = 8", "16924647", "at most 7 recipients", "bls12381 compact with the auditor, direct",
-        "a cheaper form: compact without the auditor (~16563056)", "none without the auditor (~16205229)"] {
+    for part in ["EIP-7825", "16777216", "M = 8", "16941647", "at most 7 recipients", "bls12381 compact with the auditor, direct",
+        "a cheaper form: compact without the auditor (~16580056)"] {
         assert!(e.contains(part), "{part}: {e}");
     }
     #[cfg(feature = "bn254")]
@@ -296,6 +249,6 @@ fn gas_cap_message() {
     bn["recipients"] = json!((1..=9).map(|a| json!({"yTo": y(BN, a), "amount": 1})).collect::<Vec<_>>());
     let e = err("proveTransferMulti", &bn);
     assert!(e.contains("bn254 bundle with the auditor, direct, M = 9") && e.contains("at most 8"), "{e}");
-    assert!(e.contains("compact without the auditor (~16364440), none with the auditor (~16275709)"), "{e}");
+    assert!(e.contains("compact without the auditor (~16381440)"), "{e}");
     }
 }

@@ -40,7 +40,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     function _sel(ZetherTypes.TransferMode mode) internal pure returns (bytes4) {
         if (mode == ZetherTypes.TransferMode.HASH) return ZetherLayer.mtxConfidentialTransferCompact.selector;
         if (mode == ZetherTypes.TransferMode.BUNDLE) return ZetherLayer.mtxConfidentialTransfer.selector;
-        return ZetherLayer.mtxConfidentialTransferNoBundle.selector;
+        revert("no such form");
     }
 
     /// @dev `alice → rs[0..m)`, one leg of 1000 (decoys 0), inner fee to carol (every account's first credit: the dear
@@ -84,15 +84,14 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         }
     }
 
-    /// @dev The prover's largest `M` (zether.rs `gas_limits`), direct then relayed, per cell: compact, bundle, none, each
+    /// @dev The prover's largest `M` (zether.rs `gas_limits`), direct then relayed, per cell: compact, bundle, each
     ///      auditor on then out.
-    function _edges() internal pure virtual returns (uint8[12] memory);
+    function _edges() internal pure virtual returns (uint8[8] memory);
 
     function _edge(uint256 cell) internal {
-        ZetherTypes.TransferMode mode = [ZetherTypes.TransferMode.HASH, ZetherTypes.TransferMode.BUNDLE,
-            ZetherTypes.TransferMode.NONE][cell / 2];
+        ZetherTypes.TransferMode mode = [ZetherTypes.TransferMode.HASH, ZetherTypes.TransferMode.BUNDLE][cell / 2];
         audOut = cell % 2 == 1;
-        uint8[12] memory e = _edges();
+        uint8[8] memory e = _edges();
         assertTrue(_ok(_build(e[2 * cell], mode, false), EDGE_LIMIT, false), "direct edge at EDGE_LIMIT");
         assertTrue(_ok(_build(e[2 * cell + 1], mode, true), EDGE_LIMIT, true), "relayed edge at EDGE_LIMIT");
     }
@@ -101,8 +100,6 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     function test_edge_compactOut() public { _edge(1); }
     function test_edge_bundleOn() public { _edge(2); }
     function test_edge_bundleOut() public { _edge(3); }
-    function test_edge_noneOn() public { _edge(4); }
-    function test_edge_noneOut() public { _edge(5); }
 
     function _measure(ZetherTypes.TransferMode mode) internal {
         vm.skip(!vm.envOr("ZETHER_GAS_PROBE", false));
@@ -111,7 +108,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             bool relayed = k >= 2;
             string memory head = string.concat(
                 "GASLIMIT ", bls ? "bls12381 " : "bn254 ", relayed ? "relayed " : "direct ",
-                mode == ZetherTypes.TransferMode.HASH ? "compact" : mode == ZetherTypes.TransferMode.BUNDLE ? "bundle" : "none",
+                mode == ZetherTypes.TransferMode.HASH ? "compact" : "bundle",
                 audOut ? " out" : " on"
             );
             for (uint256 m = 1; m <= rs.length; ++m) {
@@ -159,12 +156,11 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
 
     function test_measure_compact() public { _measure(ZetherTypes.TransferMode.HASH); }
     function test_measure_bundle() public { _measure(ZetherTypes.TransferMode.BUNDLE); }
-    function test_measure_none() public { _measure(ZetherTypes.TransferMode.NONE); }
 }
 
 /// forge-config: default.isolate = true
 contract ZetherGasLimitBls12381Test is ZetherGasLimitSuite {
-    function _edges() internal pure override returns (uint8[12] memory) {
-        return [7, 7, 7, 7, 6, 6, 6, 6, 7, 7, 7, 7];
+    function _edges() internal pure override returns (uint8[8] memory) {
+        return [7, 7, 7, 7, 6, 6, 6, 6];
     }
 }

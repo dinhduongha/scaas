@@ -705,7 +705,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   token row has `kind = pqz`. Job kind `pqz_call` is for **direct open calls** only: `{chain, contract, selector ∈
   {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying, so neither is a node
   job; `mtxRollOver` is also an allowlisted envelope op (a relayed `metatx` job, outer fee may be 0, owner 2026-10-20); with the multi-recipient transfer, P6-ANON, `mtxConfidentialTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
-  `mtxConfidentialTransferSingle*` (op 1) joins the set, each with its `Compact` variant; `NoBundle` is retired on PQZ). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
+  `mtxConfidentialTransferSingle*` (op 1) joins the set, each with its `Compact` variant; `NoBundle` is retired on PQZ and on Zether (review C0-3)). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
   **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 64_000_000` on the SCaaS testnet (Amsterdam,
   2026-10-22: the cap is on regular + state gas; op 1 needs ≈ 41.7–43.4 M with ≈ 32.8 M of EIP-8037 state gas, Task 7b,
   +20 % ≈ 52 M; 16,000,000 before Amsterdam; the default 3,000,000 already rejects classical Zether transfers at 3.36 M;

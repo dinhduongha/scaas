@@ -394,7 +394,7 @@ fn multi_valid_and_effects<C: ZCurve>() {
     for (vs, aud, mode) in [
         (vec![250_000u64], true, TransferMode::Hash),
         (vec![0, 7, 0, 100], false, TransferMode::Bundle),
-        (vec![1, 2, 3, 4, 5, 6, 7], true, TransferMode::NoBundle), // M = 8 with the auditor: over the gas cap on BLS12-381
+        (vec![1, 2, 3, 4, 5, 6, 7], true, TransferMode::Hash), // M = 7 with the auditor: the edge on BLS12-381
     ] {
         let (st, p, w) = multi(&f, header(300), mode, aud, &vs);
         verify_transfer_multi(&f.gens, &st, &p).unwrap();
@@ -465,12 +465,12 @@ fn multi_decoy_fee_bls12_381() {
     assert!(bad.validate().is_err(), "fee without beneficiary not M · decoyFee");
     assert!(prove(Header { beneficiary: [0; 32], ..header(300) }, 4, &rs).is_err());
     assert!(prove(header(300), u64::MAX / 2, &rs).is_err(), "txFee + M · d >= 2^64");
-    // the decoy payout's gas: bls12-381 none with the auditor, direct, fits M = 8 without a decoy fee, 7 with one;
+    // the decoy payout's gas: bls12-381 commit-reveal without the auditor, direct, fits M = 8 without a decoy fee, 7 with one;
     // a leg costs 116,698 under Amsterdam (F185 ZetherDecoyFee.test_gas_decoyFeePerLeg; 28,663 on Osaka)
     assert!(DECOY_LEG_GAS >= 116_698, "the measured Amsterdam leg payout");
-    assert_eq!(build_gas::<C>(TransferMode::NoBundle, true, false, 8, true), transfer_gas::<C>(TransferMode::NoBundle, true, false, 8) + 8 * DECOY_LEG_GAS);
+    assert_eq!(build_gas::<C>(TransferMode::Hash, false, false, 8, true), transfer_gas::<C>(TransferMode::Hash, false, false, 8) + 8 * DECOY_LEG_GAS);
     let rs8: Vec<(G<C>, u64)> = (0..8).map(|i| (key::<C>(10 + i).y, 1)).collect();
-    let none = |d| prove_transfer_multi(&f.gens, &f.from, header(0), d, TransferMode::NoBundle, &rs8, f.aud.y, f.acc, BAL, &mut rng()).map(|_| ());
+    let none = |d| prove_transfer_multi(&f.gens, &f.from, header(0), d, TransferMode::Hash, &rs8, G::<C>::zero(), f.acc, BAL, &mut rng()).map(|_| ());
     assert!(none(0).is_ok());
     match none(1) {
         Err(ZError::GasCap { m: 8, max_m: 7, .. }) => {}
@@ -580,15 +580,15 @@ fn single_has_no_memo_hash() {
 /// Review T1 I1, final review I1: the most recipients per (stored form, auditor in / out) under the EIP-7825 cap less
 /// the 1 % margin, from the measured transaction gas limits (zether.md §19), direct and relayed (a build with an
 /// envelope binding takes the relayed column): the edge builds, one more is refused with the estimate. Columns:
-/// compact, bundle, none; each (auditor in, out).
-fn gas_table_edges<C: ZCurve>(relayed: bool, want: [[usize; 2]; 3]) {
+/// compact, bundle; each (auditor in, out).
+fn gas_table_edges<C: ZCurve>(relayed: bool, want: [[usize; 2]; 2]) {
     let f = fx::<C>();
     let ya = f.aud.y;
     let mut h = header(0);
     if relayed {
         h.binding = Binding::Relayed([0x33; 32]);
     }
-    for (mode, row) in [TransferMode::Hash, TransferMode::Bundle, TransferMode::NoBundle].into_iter().zip(want) {
+    for (mode, row) in [TransferMode::Hash, TransferMode::Bundle].into_iter().zip(want) {
         for (aud, max) in [(true, row[0]), (false, row[1])] {
             let what = format!("{} {mode:?} auditor {aud} relayed {relayed}", C::NAME);
             assert_eq!(max_recipients::<C>(mode, aud, relayed), max, "{what}");
@@ -612,14 +612,14 @@ fn gas_table_edges<C: ZCurve>(relayed: bool, want: [[usize; 2]; 3]) {
 #[cfg(feature = "bn254")]
 #[test]
 fn gas_table_edges_bn254() {
-    gas_table_edges::<Bn254>(false, [[8, 9], [8, 8], [9, 9]]);
-    gas_table_edges::<Bn254>(true, [[8, 8], [7, 8], [8, 9]]);
+    gas_table_edges::<Bn254>(false, [[8, 9], [8, 8]]);
+    gas_table_edges::<Bn254>(true, [[8, 8], [7, 8]]);
 }
 
 #[test]
 fn gas_table_edges_bls12_381() {
-    gas_table_edges::<Bls12381>(false, [[7, 8], [6, 7], [8, 8]]);
-    gas_table_edges::<Bls12381>(true, [[7, 7], [6, 6], [7, 7]]);
+    gas_table_edges::<Bls12381>(false, [[7, 8], [6, 7]]);
+    gas_table_edges::<Bls12381>(true, [[7, 7], [6, 6]]);
 }
 
 /// The relayed column is the dearer one: at `M` = 9 a bn254 compact transfer without the auditor fits direct, not

@@ -204,7 +204,7 @@ contract PqzPoolTest is PqzFixture {
         bytes memory st = tok.transferSingleStatement(pl, env);
         assertEq(bytes32(_cut(st, 544, 32)), _relayed(env, ZetherTypes.TransferMode.BUNDLE), "mode folded in");
         _mockOp(1, 0);
-        _accept(_withBinding(st, _relayed(env, ZetherTypes.TransferMode.NONE))); // a NoBundle-style proof
+        _accept(_withBinding(st, _relayed(env, ZetherTypes.TransferMode.HASH))); // another mode's proof
         _accept(_withBinding(st, env)); // a proof of the pre-D15 binding
         bytes memory sg = _sign(m);
         vm.expectRevert(IPqzToken.ProofRejected.selector);

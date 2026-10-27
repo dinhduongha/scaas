@@ -31,7 +31,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function _vta(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening)
         internal view returns (bool)
     {
-        return _vta(tok, ref, 0, amount, kind, opening, "");
+        return _vta(tok, ref, 0, amount, kind, opening);
     }
 
     // ------------------------------------------------------------------ life cycle and conservation
@@ -395,7 +395,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function _cpOpening(uint256 x, bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind)
         internal view returns (bytes memory)
     {
-        (bytes memory ct, bytes memory yt) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct, bytes memory yt) = dis.transferCiphertext(address(tok), ref, 0);
         bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP ? yt : _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
         return _cpOpening(tok, x, ref, 0, amount, kind, base);
     }
@@ -413,7 +413,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// @dev The pre-C0-4 verifier's two equations: `[z]G = A1 + [e]Y_t` and `[z]D = A2 + [e](C − [a]G)`.
     function _oldAccepts(bytes32 ref, uint256 a, uint256 e, bytes memory opening) internal view returns (bool) {
         (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(opening, (bytes, bytes, uint256));
-        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0);
         uint256 p = ver.g1EncodedBytes();
         bytes memory cm = ver.g1Sub(_cut(ct, 0, p), ver.g1MulBase(a));
         return keccak256(ver.g1MulBase(z)) == keccak256(ver.g1Add(a1, ver.g1Mul(bob.y, e)))
@@ -491,7 +491,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         bytes memory zBig = abi.encode(a1, a2, ver.groupOrder());
         vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
         _vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, zBig);
-        (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 0);
         assertEq(yTo, bob.y);
         assertEq(ct.length, 4 * ver.g1EncodedBytes(), "C_out D_out C_aud D_aud (= D_out on the single format)");
         assertEq(address(tok.disclosure()), address(dis), "canonical disclosure from the token");
@@ -503,7 +503,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
         bytes32 ref = _direct(tok, t, _none());
-        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0);
         bytes memory dOut = _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
         uint256 r = ver.groupOrder();
         uint256 k = 0x5151;
@@ -605,7 +605,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         _fund(tok, alice, 500);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         bytes32 ref = _direct(tok, _proveTransfer(tok, alice, bob, 321, 500, _none(), 0), _none());
-        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0);
         uint256 p = ver.g1EncodedBytes();
         assertEq(_decrypt(_cut(ct, 2 * p, p), _cut(ct, p, p), X_AUD, 400), 321, "auditor reads C_aud");
         IZetherToken.AccountState memory s = tok.accountState(alice.ua);

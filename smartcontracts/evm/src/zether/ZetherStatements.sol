@@ -15,8 +15,8 @@ import {ZetherLib} from "./ZetherLib.sol";
 ///         (`ZTX_V1_RELAYED`, `IZetherToken.envelopeBinding`).
 contract ZetherStatements {
     /// @notice The multi-recipient statement by its stored form `mode`: BUNDLE (`mtxConfidentialTransfer` on a `BUNDLE` token), HASH
-    ///         (`mtxConfidentialTransferCompact`, and `mtxConfidentialTransfer` on a `COMPACT` token; the payload ends with the memo), NONE
-    ///         (`mtxConfidentialTransferNoBundle`); `TransferEntryDisabled` for a form other than HASH on a `COMPACT` token, the
+    ///         (`mtxConfidentialTransferCompact`, and `mtxConfidentialTransfer` on a `COMPACT` token; the payload ends with the memo).
+    ///         `TransferEntryDisabled` for a form other than HASH on a `COMPACT` token, the
     ///         auditor errors by `auditorMode`.
     function transferStatement(
         address token,

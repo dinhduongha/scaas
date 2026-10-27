@@ -9,6 +9,7 @@ import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherSafety} from "./ZetherSafety.sol";
+import {SSTORE2} from "../common/SSTORE2.sol";
 
 /// @title The confidential layer of the `*_ZETHER` kinds (CTR-ZTH-44, CTR-TOK-24), in the ERC-7201 namespace
 ///        `scaas.zether`: statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries.
@@ -47,10 +48,10 @@ library ZetherLib {
         bytes32 psid;
         uint256 p;
         mapping(ZetherTypes.UA => Account) acct;
-        /// @dev The record `R = salt ‖ B_1 ‖ … ‖ B_M` (BUNDLE, the single format); NONE writes nothing.
+        /// @dev The record `R = salt ‖ B_1 ‖ … ‖ B_M` (BUNDLE, the single format), inline in state.
         mapping(bytes32 => bytes) entries;
-        /// @dev Commit-reveal (HASH): `keccak256(R)` in one slot (CTR-ZTH-38).
-        mapping(bytes32 => bytes32) entryHashes;
+        /// @dev Commit-reveal (HASH): the SSTORE2 pointer of `R` (CTR-ZTH-38, review C0-3: the ciphertext stays in state).
+        mapping(bytes32 => address) entryPtrs;
         /// @dev Next to every commitment: the sender memo (CTR-ZTH-50), as given.
         mapping(bytes32 => bytes) memos;
         /// @dev The least per-leg `decoyFee` of a multi-recipient transfer (owner 2026-10-20), immutable.
@@ -139,7 +140,6 @@ library ZetherLib {
     bytes32 private constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     bytes32 private constant OP_MULTI_HASH = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH");
     bytes32 private constant OP_MULTI_BUNDLE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE");
-    bytes32 private constant OP_MULTI_NONE = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE");
     bytes32 private constant TAG_ENTRY = keccak256("SCAAS-ZETHER-ENTRY-V1");
     bytes32 private constant TAG_ROLLOVER = keccak256("ZETHER_ROLLOVER_V1");
     bytes32 private constant TAG_SET_MODE = keccak256("ZETHER_SET_ROLLOVER_MODE_V1");
@@ -289,7 +289,7 @@ library ZetherLib {
         _creditLegs(s, pp.to, payload, p);
         _payFee(s, pp);
         entryRef = _sent(s, c, pp);
-        if (mode != ZetherTypes.TransferMode.NONE) _storeRecord(s, p, entryRef, payload, pp, mode);
+        _storeRecord(s, p, entryRef, payload, pp, mode);
         ZetherTypes.UA[] memory to = pp.to;
         bytes32[] memory rec;
         assembly ("memory-safe") { rec := to } // `UA` is `bytes32`: the same memory array
@@ -596,9 +596,7 @@ library ZetherLib {
         ZetherTypes.TransferMode mode
     ) private view returns (bytes memory) {
         uint256 p = c.p;
-        bytes32 op = mode == ZetherTypes.TransferMode.HASH
-            ? OP_MULTI_HASH
-            : mode == ZetherTypes.TransferMode.BUNDLE ? OP_MULTI_BUNDLE : OP_MULTI_NONE;
+        bytes32 op = mode == ZetherTypes.TransferMode.HASH ? OP_MULTI_HASH : OP_MULTI_BUNDLE;
         bytes memory ya = _auditorPoint(c, _audOff(payload, p, pp.to.length), pp.to.length);
         _noAuditorParty(ya, pp.from, pp.to);
         bytes memory head = bytes.concat(
@@ -727,8 +725,9 @@ library ZetherLib {
         emit IConfidentialToken.RolledOver(ZetherTypes.UA.unwrap(ua), a.accSeq, 0, 0);
     }
 
-    /// @dev BUNDLE: the record `R` stored; HASH (commit-reveal): `keccak256(R)` in one slot, the sender memo next to it,
-    ///      `R` in `TransferBundles` (CTR-ZTH-38, CTR-ZTH-50).
+    /// @dev BUNDLE: the record `R` inline in state; HASH (commit-reveal): `R` by SSTORE2 (the slot holds the pointer), the
+    ///      sender memo next to it, `R` also in `TransferBundles` (CTR-ZTH-38, CTR-ZTH-50, review C0-3). Every mode keeps
+    ///      `R` in state.
     function _storeRecord(
         ZetherStorage storage s,
         uint256 p,
@@ -742,7 +741,7 @@ library ZetherLib {
         if (mode == ZetherTypes.TransferMode.BUNDLE) {
             s.entries[entryRef] = r;
         } else {
-            s.entryHashes[entryRef] = keccak256(r);
+            s.entryPtrs[entryRef] = SSTORE2.write(r);
             s.memos[entryRef] = payload[legsEnd:];
             emit IZetherToken.TransferBundles(entryRef, r);
         }

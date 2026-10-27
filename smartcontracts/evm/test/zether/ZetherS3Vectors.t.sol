@@ -112,7 +112,7 @@ contract ZetherS3VectorsTest is Test {
         assertEq(uint256(bytes32(_head(j.readBytes(".statement"), 288))), j.readUint(".request.fee") + 3 * d);
         string memory k = vm.readFile(string.concat(DIR, "transfer_multi_noaud_bls12381.json"));
         (op,) = abi.decode(_head(k.readBytes(".statement"), 0), (bytes32, bytes32));
-        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE"));
+        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE"));
     }
 
     /// Header statement của S3 đúng bố cục zether.md §7 (512 byte, `chainUid` là word 3) với các trường của `request`.
@@ -223,7 +223,7 @@ contract ZetherS3VectorsTest is Test {
     function _disclose(string memory j, string memory c, address tok, uint256 idx) internal view returns (bool) {
         return disc.verifyTransferAmount(tok, j.readBytes32(string.concat(c, ".entryRef")), idx,
             j.readUint(string.concat(c, ".amount")), ITransferDisclosure.OpeningKind(j.readUint(string.concat(c, ".kind"))),
-            j.readBytes(string.concat(c, ".opening")), "");
+            j.readBytes(string.concat(c, ".opening")));
     }
 
     function test_s3DisclosureBls12381() public { assertEq(_checkDisclosure("disclosure_bls12381.json", 0), 8); }
@@ -241,7 +241,7 @@ contract ZetherS3VectorsTest is Test {
         uint256 p = bls.g1EncodedBytes();
         t.set(bls, bytes32(0), "", new bytes(16 + 4 * p)); // Y_t = C_out = D_out = C_aud = O
         assertFalse(disc.verifyTransferAmount(address(t), "ref", 0, 0, ITransferDisclosure.OpeningKind.RECEIVER_X,
-            abi.encode(new bytes(p), new bytes(p), uint256(0)), ""));
+            abi.encode(new bytes(p), new bytes(p), uint256(0))));
     }
 
     /// Review C0-1 / C0-9: the `…/v2` vectors (the pre-fix prover, `s3/v2/`) are refused by the `…/v3` verifiers: another
@@ -264,12 +264,12 @@ contract ZetherS3VectorsTest is Test {
         assertEq(_checkDisclosure("disclosure_bls12381.json", keccak256("chain B")), 2);
     }
 
-    /// Review T2 m4: a foreign token's entry shorter than the salt is not a record: `BundlesMismatch`, not a panic.
+    /// Review T2 m4: a foreign token's entry shorter than the salt is not a record: `RecordMalformed`, not a panic.
     function test_shortEntryIsNotARecord() public {
         S3Token t = new S3Token();
         t.set(bls, bytes32(0), "", hex"0102");
-        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, bytes32("ref")));
-        disc.verifyTransferAmount(address(t), "ref", 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(1), "");
+        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.RecordMalformed.selector, bytes32("ref")));
+        disc.verifyTransferAmount(address(t), "ref", 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(1));
     }
 
     function test_s3SchnorrMatches() public view {

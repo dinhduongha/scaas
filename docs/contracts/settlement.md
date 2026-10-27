@@ -241,7 +241,7 @@ Confidential tokens are meta-tx tokens: the target is a `ZetherLayer` on `MetaTo
 point an allowlisted self-call of `mtxExecute` with `ABSOLUTE` fee class ([CTR-ZTH-08](zether.md#CTR-ZTH-08),
 [CTR-ZTH-34](zether.md#CTR-ZTH-34)). Kinds of settlement: **shield** from the public balance (`mtxShield`,
 [CTR-ZTH-35](zether.md#CTR-ZTH-35)), **transfer** to one or several recipients with decoys and one proof
-(`mtxConfidentialTransfer`, `...Single`, `...Compact`, `...NoBundle`, [CTR-ZTH-37](zether.md#CTR-ZTH-37),
+(`mtxConfidentialTransfer`, `...Single`, `...Compact`, [CTR-ZTH-37](zether.md#CTR-ZTH-37),
 [CTR-ZTH-38](zether.md#CTR-ZTH-38)), **unshield** (`mtxUnshield`) and **roll-over** of pending credits
 ([CTR-ZTH-45](zether.md#CTR-ZTH-45)). The proof carries an envelope binding, so a proof lifted out of its envelope
 fails ([CTR-ZTH-06](zether.md#CTR-ZTH-06)). PQZ mirrors the names with `pqz` and relays the same way

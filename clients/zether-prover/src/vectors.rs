@@ -208,8 +208,8 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     files.push((format!("disclosure_{}.json", C::NAME), json!({"curve": C::NAME, "cases": cases})));
     files.push((format!("transfer_multi_{}.json", C::NAME), mv));
 
-    // multi-recipient, M = 1, auditor off, no fee, NoBundle.
-    let req = with(json!({"recipients": [{"yTo": hx(&to.encoded_y()), "amount": 1}], "mode": "none"}));
+    // multi-recipient, M = 1, auditor off, no fee, BUNDLE.
+    let req = with(json!({"recipients": [{"yTo": hx(&to.encoded_y()), "amount": 1}], "mode": "bundle"}));
     let mut mv = prove_transfer_multi_json::<C, _>(&gens, &req, &mut rng).unwrap();
     mv["expect"] = json!(true);
     mv["request"] = req;

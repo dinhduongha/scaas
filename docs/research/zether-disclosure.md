@@ -70,6 +70,8 @@ debit encrypt the same `v_j` with the same `s` (`ZetherVerifier.sol:230-235`, `:
 | commit-reveal (default on a COMPACT token) | `zetherTransferCompact`; `zetherTransfer` on a COMPACT token | `keccak256(R)` ‖ sender memo | `TransferBundles` event, calldata |
 | NONE | `zetherTransferNoBundle` (BUNDLE tokens) | nothing | calldata only |
 
+Superseded by owner ruling 2026-10-27 (review C0-3, `contracts/zether.md` CTR-ZTH-38): commit-reveal stores `R` by SSTORE2 (not `keccak256(R)`), the NONE row is retired, and every entry keeps `R` in state.
+
 Who holds which secret, and which opening it yields:
 
 ```mermaid
