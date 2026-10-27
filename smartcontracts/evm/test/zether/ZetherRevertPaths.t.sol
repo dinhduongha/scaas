@@ -138,14 +138,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_transferToSelfRejected() public {
         Tx memory t = _aliceTx();
-        for (uint256 i; i < 128; ++i) t.payload[208 + i] = t.payload[80 + i]; // Y_to := Y_from
+        for (uint256 i; i < 128; ++i) t.payload[240 + i] = t.payload[112 + i]; // Y_to := Y_from
         _call(t.payload, t.proof, _none(), abi.encodeWithSelector(IZetherToken.SelfTransfer.selector));
     }
 
     function test_transferToUnregisteredRejected() public {
         Tx memory t = _aliceTx();
         bytes memory gy = ZetherKeys.pub(0x6057, true);
-        for (uint256 i; i < 128; ++i) t.payload[208 + i] = gy[i];
+        for (uint256 i; i < 128; ++i) t.payload[240 + i] = gy[i];
         _call(t.payload, t.proof, _none(),
             abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(gy)));
     }

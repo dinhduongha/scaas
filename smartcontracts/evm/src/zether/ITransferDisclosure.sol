@@ -23,9 +23,9 @@ pragma solidity ^0.8.20;
 ///     D_transfer = g^s
 ///
 /// nên mở nó là chứng minh số tiền, và nó ràng buộc TUYỆT ĐỐI vào đúng giao dịch đó.
-/// Chi phí lúc chuyển: token lưu bản ghi để mở on-chain — `R = salt ‖ B_1 ‖ … ‖ B_M` đầy đủ (định dạng một người nhận,
-/// mode BUNDLE, 4 điểm mỗi leg), một slot hash cộng memo người gửi (commit-reveal, CTR-ZTH-50), hoặc không gì (mode
-/// NONE: chỉ off-chain), CTR-ZTH-14/38.
+/// Chi phí lúc chuyển: token lưu bản ghi để mở on-chain — `R = salt ‖ B_1 ‖ … ‖ B_M` đầy đủ (định dạng một người nhận:
+/// 4 điểm; mode BUNDLE: 5 điểm mỗi leg, `D_aud_j` từ review C0-1), một slot hash cộng memo người gửi (commit-reveal,
+/// CTR-ZTH-50), hoặc không gì (mode NONE: chỉ off-chain), CTR-ZTH-14/38.
 interface ITransferDisclosure {
     /// Ba đường mở, ba chủ thể khác nhau. Giữ cả ba — mỗi cái giải một tình huống
     /// tranh chấp mà hai cái kia không giải được.
@@ -38,7 +38,8 @@ interface ITransferDisclosure {
         /// Quan trọng vì nó cho người nhận chứng minh mà KHÔNG CẦN người gửi hợp tác —
         /// tình huống tranh chấp thực tế thường đúng là vậy.
         RECEIVER_X,
-        /// Auditor được chỉ định mở `C_aud` (biến thể shared-`s`). Sai khi `C_aud = O` (người gửi bỏ auditor, Z12).
+        /// Auditor được chỉ định mở `C_aud`: DLEQ trên `D_aud_j = [t_j]G` của leg `j` (nhiều người nhận, `t_j` riêng mỗi leg,
+        /// review C0-1), trên `D_out` ở định dạng một người nhận. Sai khi `C_aud = O` (người gửi bỏ auditor, Z12).
         AUDITOR,
         /// Người GỬI mở MỘT leg mà không giao `s`: Chaum-Pedersen `log_G D_out == log_{Y_t}(C − [v]G)` (Z10).
         /// `s` mở mọi leg của transfer (Z3); opening này chỉ mở leg `index`.

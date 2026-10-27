@@ -158,12 +158,13 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, 0);
         bytes memory st = stm.transferStatementSingle(address(tok), t.payload, carol.ua, 0);
-        bytes memory head = new bytes(480);
-        for (uint256 i; i < 480; ++i) head[i] = st[i];
+        bytes memory head = new bytes(512);
+        for (uint256 i; i < 512; ++i) head[i] = st[i];
         bytes memory expected = bytes.concat(
             abi.encode(keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"), ver.proofSystemId(), block.chainid, ZUID, address(tok),
                 keccak256("ZTX_V1_DIRECT"), bytes32(0)),
-            abi.encode(uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0), uint256(uint128(salt)), bytes32(0))
+            abi.encode(uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0), uint256(uint128(salt)), bytes32(0)),
+            abi.encode(vub) // word 15: validUntilBlock (review C0-9)
         );
         assertEq(head, expected);
         assertEq(tok.chainUid(), ZUID);
@@ -177,7 +178,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(bytes32(_cut(st, 96, 32)), ZUID);
         assertEq(_cut(st, 416, 64), new bytes(64), "no salt, no memo on an unshield");
         bytes memory tampered = bytes.concat(t.payload);
-        tampered[70] ^= 0x01; // the salt
+        tampered[102] ^= 0x01; // the salt
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxConfidentialTransferSingle(tampered, t.proof, "", ZetherTypes.UA.unwrap(carol.ua), "");
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, t.payload.length - 1));
@@ -439,7 +440,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         _vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, zBig);
         (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 0, "");
         assertEq(yTo, bob.y);
-        assertEq(ct.length, 3 * ver.g1EncodedBytes());
+        assertEq(ct.length, 4 * ver.g1EncodedBytes(), "C_out D_out C_aud D_aud (= D_out on the single format)");
         assertEq(address(tok.disclosure()), address(dis), "canonical disclosure from the token");
     }
 

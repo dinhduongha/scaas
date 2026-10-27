@@ -64,6 +64,8 @@ abstract contract ZetherFixture is Test {
     ///      `minDecoyFee` of the tokens it creates.
     uint256 internal decoyFee;
     uint256 internal minDecoy;
+    /// @dev The `validUntilBlock` every payload the fixture builds carries (review C0-9, `TransferExpired`).
+    uint256 internal vub = type(uint64).max;
     uint8 internal aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
     /// @dev Public units the fixture created per token (`mint` or wrap): `totalSupply + totalShielded·SCALE` stays equal.
     mapping(address => uint256) internal minted;
@@ -212,9 +214,12 @@ abstract contract ZetherFixture is Test {
     function _payload(ZetherLayer t, User memory from, User memory to, uint256 v, uint256 s, IZetherToken.AccountState memory st)
         internal view returns (bytes memory)
     {
-        return bytes.concat(
-            abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), salt, from.y, to.y, _cts(t, from.y, to.y, v, s)
-        );
+        return bytes.concat(_head(st), salt, from.y, to.y, _cts(t, from.y, to.y, v, s));
+    }
+
+    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock)`: how every payload starts (zether.md §10).
+    function _head(IZetherToken.AccountState memory st) internal view returns (bytes memory) {
+        return abi.encode(uint256(st.accSeq), uint256(st.sendCounter), vub);
     }
 
     function _cts(ZetherLayer t, bytes memory yf, bytes memory yt, uint256 v, uint256 s) internal view returns (bytes memory) {
@@ -271,19 +276,27 @@ abstract contract ZetherFixture is Test {
 
     /// @dev `bAfterFee` = the balance less the inner fee; `b' = bAfterFee − Σv`.
     function _multiWitness(uint256 x, uint256 s, uint256[] memory vs, uint256 bAfterFee)
-        internal pure returns (ZetherProver.MultiWitness memory w)
+        internal view returns (ZetherProver.MultiWitness memory w)
     {
         uint256[] memory gv = new uint256[](vs.length);
+        uint256[] memory t = new uint256[](vs.length);
         uint256 bPrime = bAfterFee;
         for (uint256 j; j < vs.length; ++j) {
             gv[j] = 0x1234 + 7 * j + vs[j];
+            t[j] = _tAud(s, j);
             bPrime -= vs[j];
         }
-        w = ZetherProver.MultiWitness(x, s, vs, bPrime, gv, 0x5678 + bPrime, keccak256(abi.encode(s)));
+        w = ZetherProver.MultiWitness(x, s, vs, t, bPrime, gv, 0x5678 + bPrime, keccak256(abi.encode(s)));
     }
 
-    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖
-    ///      (Y_tj ‖ C_out_j ‖ C_aud_j)_j`; `_proveMulti` appends the memo on commit-reveal.
+    /// @dev The test sender's auditor randomness of leg `j` (review C0-1): independent of `s` and of the other legs (the
+    ///      real prover derives it from the seed, `derive_t`; the contract never sees how).
+    function _tAud(uint256 s, uint256 j) internal view returns (uint256) {
+        return uint256(keccak256(abi.encode("aud-t", s, j))) % ver.groupOrder();
+    }
+
+    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖
+    ///      C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_j`; `_proveMulti` appends the memo on commit-reveal.
     function _multiPayload(
         ZetherLayer t,
         User memory from,
@@ -296,15 +309,13 @@ abstract contract ZetherFixture is Test {
         bytes memory legs;
         uint256 total;
         for (uint256 j; j < to.length; ++j) {
-            (bytes memory cOut,,, bytes memory cAud) = prover.ciphertexts(ver, from.y, to[j].y, aud, vs[j], s);
-            legs = bytes.concat(legs, to[j].y, cOut, cAud);
+            (bytes memory cOut,,,) = prover.ciphertexts(ver, from.y, to[j].y, aud, vs[j], s);
+            (bytes memory cAud, bytes memory dAud) = prover.audCopy(ver, aud, vs[j], _tAud(s, j));
+            legs = bytes.concat(legs, to[j].y, cOut, cAud, dAud);
             total += vs[j];
         }
         (,bytes memory dOut, bytes memory cDeb,) = prover.ciphertexts(ver, from.y, from.y, aud, total, s);
-        payload = bytes.concat(
-            abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), salt, abi.encode(to.length, decoyFee), from.y, dOut, cDeb,
-            legs
-        );
+        payload = bytes.concat(_head(st), salt, abi.encode(to.length, decoyFee), from.y, dOut, cDeb, legs);
     }
 
     /// @dev Payload and proof of an unshield of `amount` to `recipient` from the acc balance `b`.
@@ -332,7 +343,7 @@ abstract contract ZetherFixture is Test {
 
     function _unshieldPayload(ZetherLayer t, User memory from) internal view returns (bytes memory) {
         IZetherToken.AccountState memory st = t.accountState(from.ua);
-        return bytes.concat(abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), from.y);
+        return bytes.concat(_head(st), from.y);
     }
 
     /// @dev The calldata of the Zether-layer op `sel` on `tok` for an envelope with binding `b`: shield 3 to bob, else
@@ -393,8 +404,9 @@ abstract contract ZetherFixture is Test {
         return dis.verifyTransferAmount(address(t), ref, j, amount, kind, opening, bundles);
     }
 
-    /// @dev Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` with key `x` on base `base` (`D_out` for
-    ///      RECEIVER_X/AUDITOR, `Y_tj` for SENDER_CP), leg `j` of `ref`; the challenge carries `chainUid` (CTR-ZTH-36).
+    /// @dev Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` with key `x` on base `base` (`D_out` for RECEIVER_X and
+    ///      the single format's AUDITOR, `D_aud_j` for a multi leg's AUDITOR, `Y_tj` for SENDER_CP), leg `j` of `ref`; the
+    ///      challenge carries `chainUid` (CTR-ZTH-36).
     function _cpOpening(
         ZetherLayer t,
         uint256 x,

@@ -204,7 +204,7 @@ contract ZetherUA5cTest is ZetherFixture {
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
         tok.mtxUnshield("", "", "", bytes32(0), "", 1, _pad(MetaTxLib.UA_POOL));
         vm.expectRevert(IZetherToken.ZeroRecipient.selector);
-        tok.mtxUnshield(new bytes(64 + 128), "", "", bytes32(0), "", 1, bytes32(0));
+        tok.mtxUnshield(new bytes(96 + 128), "", "", bytes32(0), "", 1, bytes32(0));
     }
 
     // ------------------------------------------------------------------ D20: the shared signature on Zether

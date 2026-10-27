@@ -31,7 +31,7 @@ contract ZetherProver {
         bytes32 seed;
     }
 
-    uint256 constant HEADER = 480; // zether.md §7: chainUid is word 3, salt word 13, memoHash word 14
+    uint256 constant HEADER = 512; // zether.md §7: chainUid is word 3, salt word 13, memoHash word 14, validUntilBlock word 15
 
     function _env(IZetherVerifier v, bytes32 seed) internal view returns (Env memory e) {
         e.v = v;
@@ -57,6 +57,16 @@ contract ZetherProver {
         dOut = v.g1MulBase(s);
         cDeb = _m2(v, g, amount, yf, s);
         cAud = _isZero(ya) ? ya : _m2(v, g, amount, ya, s);
+    }
+
+    /// @notice The auditor copy of a multi-recipient leg under its own randomness `t` (review C0-1, owner ruling 2026-10-27
+    ///         (ii)): `C_aud = [v]G + [t]Y_a`, `D_aud = [t]G`; `O, O` when `Y_a = O`.
+    function audCopy(IZetherVerifier v, bytes memory ya, uint256 amount, uint256 t)
+        external view returns (bytes memory cAud, bytes memory dAud)
+    {
+        if (_isZero(ya)) return (ya, ya);
+        cAud = _m2(v, v.g1MulBase(1), amount, ya, t);
+        dAud = v.g1MulBase(t);
     }
 
     function _m2(IZetherVerifier v, bytes memory a, uint256 sa, bytes memory b, uint256 sb)
@@ -132,26 +142,20 @@ contract ZetherProver {
         uint256 x;
         uint256 s;
         uint256[] v;
+        uint256[] t; // the auditor randomness t_j per leg (ignored when the auditor is off)
         uint256 bPrime;
         uint256[] gammaV;
         uint256 gammaB;
         bytes32 seed;
     }
 
-    /// @notice Σ (E1–E8, E3/E6/E7 theo từng người nhận) + BP(v_j) cho từng người + BP(b') trên một transcript.
+    /// @notice Σ (E1–E8, E3/E6/E6′/E7 theo từng người nhận) + BP(v_j) cho từng người + BP(b') trên một transcript.
     function proveTransferMulti(IZetherVerifier v, bytes calldata statement, MultiWitness calldata w)
         external view returns (bytes memory)
     {
         Env memory e = _env(v, w.seed);
         uint256 m = w.v.length;
-        uint256[] memory k = new uint256[](4 + 2 * m); // k_x k_s k_b k_gb (k_vj k_gvj)_j
-        for (uint256 i; i < k.length; ++i) k[i] = _rand(e, "multi.k", i);
-        bytes memory commits = _multiCommits(e, statement, w, k);
-        bytes32 st = T.absorb(T.init(), "statement", statement);
-        st = T.absorb(st, "sigma.commit", commits);
-        uint256 c;
-        (st, c) = T.challenge(st, "sigma.c", e.r);
-        bytes memory out = bytes.concat(commits, _multiResponses(e.r, c, k, w));
+        (bytes memory out, bytes32 st) = _multiSigma(e, statement, w);
         for (uint256 j; j < m; ++j) {
             e.rid = 100 + j;
             bytes memory bp;
@@ -164,26 +168,44 @@ contract ZetherProver {
         return bytes.concat(out, bpB);
     }
 
-    function _multiResponses(uint256 r, uint256 c, uint256[] memory k, MultiWitness calldata w)
+    /// @dev The Σ part (commitments ‖ responses) and the transcript after `sigma.c`.
+    function _multiSigma(Env memory e, bytes calldata statement, MultiWitness calldata w)
+        internal view returns (bytes memory, bytes32 st)
+    {
+        uint256[] memory k = new uint256[](4 + 3 * w.v.length); // k_x k_s k_b k_gb (k_vj k_gvj k_tj)_j
+        for (uint256 i; i < k.length; ++i) k[i] = _rand(e, "multi.k", i);
+        bytes memory commits = _multiCommits(e, statement, w, k);
+        st = T.absorb(T.absorb(T.init(), "statement", statement), "sigma.commit", commits);
+        uint256 c;
+        (st, c) = T.challenge(st, "sigma.c", e.r);
+        commits = bytes.concat(commits, _multiResponses(e, c, k, w, statement));
+        return (commits, st);
+    }
+
+    /// @dev `z_x z_s z_b z_gb (z_vj z_gvj z_tj)_j`; `z_tj = 0` when the auditor is off.
+    function _multiResponses(Env memory e, uint256 c, uint256[] memory k, MultiWitness calldata w, bytes calldata statement)
         internal pure returns (bytes memory out)
     {
+        uint256 r = e.r;
+        bool aud = !_isZero(_sp(e, statement, 1));
         out = abi.encodePacked(
             addmod(k[0], mulmod(c, w.x, r), r), addmod(k[1], mulmod(c, w.s, r), r),
             addmod(k[2], mulmod(c, w.bPrime, r), r), addmod(k[3], mulmod(c, w.gammaB, r), r)
         );
         for (uint256 j; j < w.v.length; ++j) {
             out = bytes.concat(out, abi.encodePacked(
-                addmod(k[4 + 2 * j], mulmod(c, w.v[j], r), r), addmod(k[5 + 2 * j], mulmod(c, w.gammaV[j], r), r)
+                addmod(k[4 + 3 * j], mulmod(c, w.v[j], r), r), addmod(k[5 + 3 * j], mulmod(c, w.gammaV[j], r), r),
+                aud ? addmod(k[6 + 3 * j], mulmod(c, w.t[j], r), r) : 0
             ));
         }
     }
 
-    /// @dev Statement: Y_f Y_a C_acc D_acc D_out C_deb be32(M) (Y_tj C_out_j C_aud_j)_j.
+    /// @dev Statement: Y_f Y_a C_acc D_acc D_out C_deb be32(M) (Y_tj C_out_j C_aud_j D_aud_j)_j.
     function _multiCommits(Env memory e, bytes memory s, MultiWitness calldata w, uint256[] memory k)
         internal view returns (bytes memory commits)
     {
         uint256 kvSum;
-        for (uint256 j; j < w.v.length; ++j) kvSum = addmod(kvSum, k[4 + 2 * j], e.r);
+        for (uint256 j; j < w.v.length; ++j) kvSum = addmod(kvSum, k[4 + 3 * j], e.r);
         commits = _multiHead(e, s, w.bPrime, w.gammaB, k, kvSum);
         for (uint256 j; j < w.v.length; ++j) {
             commits = bytes.concat(commits, _multiLeg(e, s, j, w.v[j], w.gammaV[j], k));
@@ -210,25 +232,30 @@ contract ZetherProver {
         );
     }
 
-    /// @dev V_vj A_out_j A_aud_j A_Vvj.
+    /// @dev V_vj A_out_j A_aud_j A_Daud_j A_Vvj (k_vj = k[4 + 3j], k_gvj = k[5 + 3j], k_tj = k[6 + 3j]).
     function _multiLeg(Env memory e, bytes memory s, uint256 j, uint256 v, uint256 gammaV, uint256[] memory k)
         internal view returns (bytes memory leg)
     {
         bytes memory hb = _slice(e.gens, 0, e.p);
         leg = bytes.concat(
             _m2(e.v, e.g, v, hb, gammaV),                                // V_vj
-            _m2(e.v, e.g, k[4 + 2 * j], _lp(e, s, j), k[1])              // A_out_j
+            _m2(e.v, e.g, k[4 + 3 * j], _lp(e, s, j), k[1])              // A_out_j
         );
-        bytes memory ya = _sp(e, s, 1);
         leg = bytes.concat(
             leg,
-            _isZero(ya) ? new bytes(e.p) : _m2(e.v, e.g, k[4 + 2 * j], ya, k[1]), // A_aud_j
-            _m2(e.v, e.g, k[4 + 2 * j], hb, k[5 + 2 * j])                         // A_Vvj
+            _audCommits(e, _sp(e, s, 1), k[4 + 3 * j], k[6 + 3 * j]),   // A_aud_j A_Daud_j
+            _m2(e.v, e.g, k[4 + 3 * j], hb, k[5 + 3 * j])                // A_Vvj
         );
     }
 
+    /// @dev `A_aud_j = [k_vj]G + [k_tj]Y_a ‖ A_Daud_j = [k_tj]G`; `O ‖ O` when the auditor is off.
+    function _audCommits(Env memory e, bytes memory ya, uint256 kv, uint256 kt) internal view returns (bytes memory) {
+        if (_isZero(ya)) return new bytes(2 * e.p);
+        return bytes.concat(_m2(e.v, e.g, kv, ya, kt), e.v.g1MulBase(kt));
+    }
+
     function _lp(Env memory e, bytes memory s, uint256 j) internal pure returns (bytes memory) {
-        return _slice(s, HEADER + 6 * e.p + 32 + 3 * j * e.p, e.p);
+        return _slice(s, HEADER + 6 * e.p + 32 + 4 * j * e.p, e.p);
     }
 
     struct BurnWitness {

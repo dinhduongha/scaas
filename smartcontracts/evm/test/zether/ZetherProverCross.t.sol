@@ -64,7 +64,8 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     {
         IZetherToken.AccountState memory st = t.accountState(alice.ua);
         string memory r = string.concat(
-            _base(t), ',"sendCounter":', vm.toString(st.sendCounter), ',"accSeq":', vm.toString(st.accSeq), ',"acc":{',
+            _base(t), ',"sendCounter":', vm.toString(st.sendCounter), ',"accSeq":', vm.toString(st.accSeq), ",",
+            _q("validUntilBlock", vm.toString(vub)), ',"acc":{',
             _q("C", vm.toString(st.accC)), ",", _q("D", vm.toString(st.accD)), '},"balance":', vm.toString(B), ',"fee":',
             vm.toString(FEE), ",", _q("beneficiary", vm.toString(ZetherTypes.UA.unwrap(carol.ua)))
         );

@@ -56,6 +56,13 @@ interface IZetherToken is IUALedger, IConfidentialToken {
     error AuditorRequired();
     /// @notice `NONE` auditor: a transfer carries an auditor leg (some `C_aud_j ≠ O`).
     error AuditorForbidden();
+    /// @notice With the auditor on (statement `Y_a` = the token key), the auditor key is the sender (`Y_f`) or a recipient
+    ///         (`Y_t`, any `Y_tj`): refused on every transfer form, direct, relayed and in the statement views (review C0-1;
+    ///         the Zether twin of PQZ F-4).
+    error AuditorKeyAsParty();
+    /// @notice A transfer or unshield statement past its `validUntilBlock` (`block.number > validUntilBlock`; payload word
+    ///         2, header word 15), the rule of the PQZ header (review C0-9).
+    error TransferExpired(uint256 validUntilBlock);
     /// @notice Commit-reveal: the memo's clear salt is not the payload's (storage-only recovery needs it, CTR-ZTH-50).
     error MemoSaltMismatch();
     /// @notice A `COMPACT` token refuses `mtxConfidentialTransferNoBundle` and `mtxConfidentialTransferSingle` (CTR-ZTH-48).
@@ -111,7 +118,9 @@ interface IZetherToken is IUALedger, IConfidentialToken {
     // ------------------------------------------------------------------ state
 
     /// @notice Raw record of `entryRef` for `disclosure()`: `R = salt ‖ B_1 ‖ … ‖ B_M` (BUNDLE, the single format),
-    ///         `keccak256(R) ‖ memo` (commit-reveal, CTR-ZTH-50), empty (NONE, unknown). `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j`.
+    ///         `keccak256(R) ‖ memo` (commit-reveal, CTR-ZTH-50), empty (NONE, unknown). Multi-recipient
+    ///         `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (review C0-1); the single format `B = Y_t ‖ C_out ‖ D_out ‖
+    ///         C_aud` (`16 + 4P` bytes).
     function transferEntry(bytes32 entryRef) external view returns (bytes memory);
     /// @notice Σ of every `acc` and `pending` exponent (shielded units); `totalSupply()` counts public units only.
     function totalShielded() external view returns (uint256);

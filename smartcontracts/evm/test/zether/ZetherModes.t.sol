@@ -81,7 +81,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         if (a == OPTIONAL) {
             audOut = true;
             (bytes32 ref, Tx memory t) = _multi(ZetherTypes.TransferMode.HASH, ZetherLayer.mtxConfidentialTransferCompact.selector, 5);
-            _openAll(ref, t.s, 5, _rebuild(_two(), _vs(5), t.s), false);
+            _openAll(ref, t.s, 5, _rebuild(_two(), _vs(5), t.s), 0);
             audOut = false;
             return;
         }
@@ -108,7 +108,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         (bytes32 ref, Tx memory t) = _multi(ZetherTypes.TransferMode.BUNDLE, ZetherLayer.mtxConfidentialTransfer.selector, 11);
         bytes memory r = _rebuild(_two(), _vs(11), t.s);
         assertEq(tok.transferEntry(ref), r, "mtxConfidentialTransfer on BUNDLE: R, the salt first");
-        _openAll(ref, t.s, 11, "", audIn);
+        _openAll(ref, t.s, 11, "", audIn ? 1 : 0);
         _hashForm(audIn, ZetherLayer.mtxConfidentialTransferCompact.selector);
         (ref, t) = _multi(ZetherTypes.TransferMode.NONE, ZetherLayer.mtxConfidentialTransferNoBundle.selector, 13);
         assertEq(tok.transferEntry(ref).length, 0, "NONE: nothing stored");
@@ -118,8 +118,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
         t = _proveTransfer(tok, alice, bob, 14, bal, _none(), 0);
         ref = _direct(tok, t, _none());
         bal -= 14;
-        assertEq(tok.transferEntry(ref), _rebuild(_one(), _vs1(14), t.s), "single: R with its one leg");
-        _openAll(ref, t.s, 14, "", audIn);
+        assertEq(tok.transferEntry(ref), _rebuildSingle(t.s), "single: R with its one leg (4 points)");
+        _openAll(ref, t.s, 14, "", audIn ? 2 : 0);
     }
 
     /// @dev `COMPACT`: `mtxConfidentialTransfer` and `mtxConfidentialTransferCompact` both commit; the no-bundle entry, the single format
@@ -152,7 +152,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         bytes memory r = _eventBundles(ref);
         assertEq(_rebuild(_two(), _vs(12), t.s), r, "the sender rebuilds R from s and the values");
         assertEq(tok.transferEntry(ref), abi.encodePacked(keccak256(r), _memo(2)), "keccak256(R) then the memo");
-        _openAll(ref, t.s, 12, r, audIn);
+        _openAll(ref, t.s, 12, r, audIn ? 1 : 0);
         r[20] = bytes1(uint8(r[20]) ^ 1);
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, ref));
         _vta(tok, ref, 0, 12, S, abi.encode(t.s), r);
@@ -173,7 +173,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxConfidentialTransferCompact(memo1, t.proof, "", bytes32(0), "");
         bytes memory salt1 = bytes.concat(t.payload);
-        salt1[70] ^= 0x01;
+        salt1[102] ^= 0x01;
         // review T2 m2: the memo's clear salt must be the payload's, before the proof (and in the statement view)
         vm.expectRevert(IZetherToken.MemoSaltMismatch.selector);
         tok.mtxConfidentialTransferCompact(salt1, t.proof, "", bytes32(0), "");
@@ -203,7 +203,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         _fund(tok, alice, 500);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         bytes memory pl = bytes.concat(_multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua)), _memo(2));
-        for (uint256 i; i < p; ++i) pl[144 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
+        for (uint256 i; i < p; ++i) pl[176 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
         tok.mtxConfidentialTransferCompact(pl, "", "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
@@ -215,7 +215,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         audForce = true;
         pl = _multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua));
         audForce = false;
-        for (uint256 i; i < p; ++i) pl[144 + 5 * p + i] = 0;
+        for (uint256 i; i < p; ++i) pl[176 + 5 * p + i] = 0;
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         tok.mtxConfidentialTransfer(pl, "", "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
@@ -287,19 +287,9 @@ abstract contract ZetherModesSuite is ZetherFixture {
         (to[0], to[1]) = (bob, carol);
     }
 
-    function _one() internal view returns (User[] memory to) {
-        to = new User[](1);
-        to[0] = bob;
-    }
-
     /// @dev Bob gets `v`, carol is a decoy.
     function _vs(uint256 v) internal pure returns (uint256[] memory vs) {
         vs = new uint256[](2);
-        vs[0] = v;
-    }
-
-    function _vs1(uint256 v) internal pure returns (uint256[] memory vs) {
-        vs = new uint256[](1);
         vs[0] = v;
     }
 
@@ -312,16 +302,24 @@ abstract contract ZetherModesSuite is ZetherFixture {
         bal -= v;
     }
 
-    /// @dev What a sender rebuilds off chain from the salt, `s`, the values, the recipients' keys and the token's auditor
-    ///      key: `R = salt ‖ B_1 ‖ … ‖ B_M`, `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (the client's `recoverTransfer`
-    ///      does it from the memo and the registry's `keyOf`).
+    /// @dev What a sender rebuilds off chain from the salt, `s`, the auditor randomness `t_j`, the values, the
+    ///      recipients' keys and the token's auditor key: `R = salt ‖ B_1 ‖ … ‖ B_M`,
+    ///      `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (review C0-1; the client's `recoverTransfer` does it from the
+    ///      memo and the registry's `keyOf`).
     function _rebuild(User[] memory to, uint256[] memory vs, uint256 s) internal view returns (bytes memory b) {
         bytes memory aud = _aud(tok);
         b = abi.encodePacked(salt);
         for (uint256 j; j < to.length; ++j) {
-            (bytes memory cOut, bytes memory dOut,, bytes memory cAud) = prover.ciphertexts(ver, alice.y, to[j].y, aud, vs[j], s);
-            b = bytes.concat(b, to[j].y, cOut, dOut, cAud);
+            (bytes memory cOut, bytes memory dOut,,) = prover.ciphertexts(ver, alice.y, to[j].y, aud, vs[j], s);
+            (bytes memory cAud, bytes memory dAud) = prover.audCopy(ver, aud, vs[j], _tAud(s, j));
+            b = bytes.concat(b, to[j].y, cOut, dOut, cAud, dAud);
         }
+    }
+
+    /// @dev The single format's record `salt ‖ Y_t ‖ C_out ‖ D_out ‖ C_aud` (its auditor copy under `s`) of bob's 14.
+    function _rebuildSingle(uint256 s) internal view returns (bytes memory) {
+        (bytes memory cOut, bytes memory dOut,, bytes memory cAud) = prover.ciphertexts(ver, alice.y, bob.y, _aud(tok), 14, s);
+        return bytes.concat(abi.encodePacked(salt), bob.y, cOut, dOut, cAud);
     }
 
     function _eventBundles(bytes32 ref) internal returns (bytes memory) {
@@ -334,14 +332,19 @@ abstract contract ZetherModesSuite is ZetherFixture {
         revert("no TransferBundles");
     }
 
-    /// @dev The four openings of bob's leg (index 0); AUDITOR opens only with the auditor in.
-    function _openAll(bytes32 ref, uint256 s, uint256 v, bytes memory bundles, bool audIn) internal view {
+    /// @dev The four openings of bob's leg (index 0); AUDITOR opens only with the auditor in (`aud` 1: a multi-recipient
+    ///      transfer, over `D_aud_0 = [t_0]G`; 2: the single format, over `D_out`; 0: left out).
+    function _openAll(bytes32 ref, uint256 s, uint256 v, bytes memory bundles, uint8 aud) internal view {
+        _openAud(ref, v, bundles, aud != 0, ver.g1MulBase(aud == 2 ? s : _tAud(s, 0)));
         bytes memory dOut = ver.g1MulBase(s);
         assertTrue(_vta(tok, ref, 0, v, S, abi.encode(s), bundles), "SENDER_S");
         assertFalse(_vta(tok, ref, 0, v + 1, S, abi.encode(s), bundles), "SENDER_S wrong amount");
         assertTrue(_vta(tok, ref, 0, v, RX, _cpOpening(tok, bob.x, ref, 0, v, RX, dOut), bundles), "RECEIVER_X");
-        assertEq(_vta(tok, ref, 0, v, AUD, _cpOpening(tok, X_AUD, ref, 0, v, AUD, dOut), bundles), audIn, "AUDITOR");
         assertTrue(_vta(tok, ref, 0, v, CP, _cpOpening(tok, s, ref, 0, v, CP, bob.y), bundles), "SENDER_CP");
+    }
+
+    function _openAud(bytes32 ref, uint256 v, bytes memory bundles, bool audIn, bytes memory dAud) internal view {
+        assertEq(_vta(tok, ref, 0, v, AUD, _cpOpening(tok, X_AUD, ref, 0, v, AUD, dAud), bundles), audIn, "AUDITOR");
     }
 }
 
