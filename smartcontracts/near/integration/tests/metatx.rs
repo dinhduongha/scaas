@@ -297,7 +297,7 @@ async fn near_valid_until_is_seconds() {
     let mut op = t.vop(OP_PAY, &h, &bob, 10, [1; 32], [1; 32], 0);
     op.valid_until = now - 1;
     t.refused(&t.relayer, "mtx_pay", &op, &erin.sign(&op, ORIGIN), &[], "expired").await;
-    op.valid_until = now + 1;
+    op.valid_until = now + 60; // a ms or ns reading of block time would still refuse it
     let (c, out) = t.exec(&t.relayer, "mtx_pay", &op, &erin.sign(&op, ORIGIN), &[]).await;
     let at_s = t.w.view_block().await.unwrap().timestamp() / 1_000_000_000;
     assert_eq!(c.error, None);
@@ -443,7 +443,7 @@ async fn pay_meta_size_bound_measured() {
     t.fund(&h, 1_000).await;
     let salt = [0x42; 32];
     let (mut lo, mut hi) = (4_192usize, 16_384usize); // long_body_4096 settles (pay_meta_emits_meta_then_settled)
-    let mut last = String::new();
+    let (mut last, mut settled, mut failed_lane) = (String::new(), 0u128, [0; 32]);
     while hi - lo > 1 {
         let mid = (lo + hi) / 2;
         let meta = vec![0x5a; mid];
@@ -451,14 +451,17 @@ async fn pay_meta_size_bound_measured() {
         let (c, out) = t.exec(&t.relayer, "mtx_pay_meta", &op, &erin.sign(&op, ORIGIN), &meta_params(&salt, &meta)).await;
         assert_eq!(c.error, None);
         if out.is_success() {
-            lo = mid;
+            (lo, settled) = (mid, settled + 1);
         } else {
-            last = format!("{:?}", out.failures());
-            hi = mid;
+            (last, hi, failed_lane) = (format!("{:?}", out.failures()), mid, op.lane);
         }
     }
+    // a failed pay-meta leaves its lane unused and moves nothing (its logs stay in the failed outcome: NET-NEAR-07)
+    assert_eq!(t.lane_nonce(&h, failed_lane).await, 0);
+    assert_eq!((t.balance(&h).await, t.balance(&bob).await), (1_000 - settled, settled));
     println!("largest meta that settles: {lo} B; {} B fails: {last}", lo + 1);
     assert!(last.contains("exceeds the limit 16384"), "{last}");
+    assert!(last.contains("payment_meta"), "a failed receipt keeps its logs (NET-NEAR-07): {last}");
     assert_eq!(lo, MAX_META_SETTLED);
 }
 

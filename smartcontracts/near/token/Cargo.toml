@@ -11,3 +11,7 @@ crate-type = ["cdylib", "rlib"]
 near-sdk = { workspace = true }
 near-contract-standards = { workspace = true }
 scaas-near-common = { path = "../common" }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
+near-crypto = "0.38.0"  # ed25519 test signer (already in the lock)

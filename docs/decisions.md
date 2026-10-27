@@ -5501,12 +5501,22 @@ splits Task 4's `pay_receiver_storage`) accumulate in `storage_due`; `charge_sto
 storage_byte_cost` and refunds the excess; `storage_needed` is exact (a first UA → new-UA pay: 334 B). (4) **Events**
 (`"scaas"`): `payment_meta { pay_ref, meta }` (pay-meta only), then `meta_transaction_executed { from, relayer =
 predecessor, lane, nonce, digest }`, the NEP-141 / `ua_transfer` events, then `payment_settled { from, to, amount,
-pay_ref }` when `pay_ref ≠ 0`; bytes as `0x` ‖ hex. (5) **`settle_pay(op, from, payee)`** is the shared pay body
-(lane, payee registration, move, events) with no authorisation of its own: the relay-fee wrappers and the router
-release (Tasks 9–10) authorise with the marker as relayer and pass the open-mode payee (ruling R2). (6) **No contract
-cap on `meta`** (metatx-split §6.2): measured on near-sandbox, 7,540 B settles and 7,541 B exceeds NEAR's 16,384 B log
-limit (the hex `payment_meta` log; the call fails whole, nothing moves); the node's `max_pay_meta_bytes` (2,048 B) is
-far below. Status: BUILT (near-algorand Task 6). Controller call 2026-10-28, owner may override.
+pay_ref }` when `pay_ref ≠ 0`; bytes as `0x` ‖ hex. **A failed NEAR receipt keeps its logs** (a reverted
+`mtx_pay`'s `payment_settled` still appears in the failed outcome; verified on near-sandbox), so indexers (the node,
+Task 16) book `"scaas"` events only from receipts whose outcome is `SuccessValue` / `SuccessReceiptId`, and join
+`payment_meta` to `payment_settled` by `pay_ref`, never by log position. (5) **`settle_pay(op, from, payee)`** is the
+shared pay body (lane, payee registration, move, events) with no authorisation of its own; it is reached only after
+`value_plan` (plain entries) or **`routed_plan(caller, marker, open_payee, op, auth, ref)`** (Tasks 9–10, their only
+authorisation): op 0, `pay_ref = ref`, `lane = payLane(ref)`, nonce 0, `signed` with the marker as relayer, the payee
+= `open_payee` (the submitting relayer) when `op.to` is the marker else `op.to` (ruling R2), then the same
+`pay_checks` as the plain entries — `payee ≠ token`, amount, the **value policy (R8)**, the lane, the balance — so a
+wallet-key signature under `POLICY_PASSKEY_FOR_VALUE` never pays a routed fee either (fix 1). (6) **No contract cap on
+`meta`** (metatx-split §6.2): measured on near-sandbox, 7,540 B settles and 7,541 B exceeds NEAR's 16,384 B log limit
+(the hex `payment_meta` log; the call fails whole, nothing moves); the `*_check` view does not predict that limit (a
+view emits no logs), so the node's `max_pay_meta_bytes` (2,048 B) is the operative cap. `payment_meta` is best-effort
+for a third-party relayer: the same signed op settles through plain `mtx_pay` (one digest, CTR-MTX-26), without
+`payment_meta`; the node always submits `mtx_pay_meta` when it holds `(salt, meta)`. Status: BUILT (near-algorand Task
+6, fix 1). Controller call 2026-10-28, owner may override.
 **Why.** One rule with the built families for plain pay and pay-meta; one storage charge per call keeps the refund
 correct when a call opens a UA, a lane and a receiver at once (Task 5 concern 2); a shared pay body keeps Tasks 9–10
 from re-implementing settlement.

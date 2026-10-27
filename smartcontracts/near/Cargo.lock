@@ -3338,6 +3338,7 @@ name = "scaas-near-token"
 version = "0.1.0"
 dependencies = [
  "near-contract-standards",
+ "near-crypto",
  "near-sdk",
  "scaas-near-common",
 ]
