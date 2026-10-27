@@ -33,11 +33,11 @@ review target `64549aa4`, read-only; removable).
 
 **Open / owner:**
 1. ~~Push `main`~~ done 2026-10-27 (`6ac02dc5..3fd2e384`).
-2. **Gas run** for the Zether prover's per-M `gas_limits` (audited legs ≈ 50 k gas per leg optimistic; needs the owner
-   to stop other heavy sessions) and Task 9 calibration (timing).
-3. ~40 deferred minors (README "Fix round"); `docs_check facts check` reports 9 pre-existing misses in `history/` (on main
-   before this work; CI's facts gate would fail).
-4. The node is running; stop it or leave it (`docker compose stop blockchain-node` in `/home/dockers/mba-chain-nethermind`).
+2. ~~Gas run for the Zether prover~~ done 2026-10-27 (merge `gas-zether`); Task 9 calibration (timing) still needs the
+   owner's go.
+3. ~40 deferred minors (README "Fix round"). ~~facts check misses~~ fixed (merge `docs-facts`). Dependabot: #42–#45
+   `fast-uri` fixed (`885c91f4`), #36 closed, #19 / 20 / 21 left open (owner 2026-10-22).
+4. The node keeps running (owner 2026-10-27: leave it).
 
 **Next (TODO §00):** Task 9 calibration (owner's go) → metatx split + `mtxPayMeta` → `MtxRelayFee` (re-check PQZH n2048
 `uaExecute` headroom 1.3–2.8 KB and n2560's `ROLL_MAX` margin 15,281 gas with it) → UA-8 → fs3 Task 12 → 6 → 13 → 14,

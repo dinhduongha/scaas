@@ -62,10 +62,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      no refill), agy C0–C6, Claude UltraCode workflow C0–C6, Fable C0 + consolidation
      (`pqz-core/research/code-review-2026-10-26/README.md`: 1 P0, 2 P1, 5 P2, 57 P3); owner rulings 2026-10-27 (C0-1 (ii),
      C0-2 (2), C0-3 (1), C0-6 (3)); fix round plan `docs/superpowers/plans/2026-10-27-contracts-review-fixes.md`, merged
-     `e2e7a01e` (9 tasks, each reviewed; final review Yes with fixes; gates green at four sets + clients). Open from it: the
-     Zether prover's per-M `gas_limits` re-measurement (needs the owner's go for a gas run), ~40 deferred minors (README
-     "Fix round" and `scratchpad/review2-fix-ledger-2026-10-27.md`), `docs_check facts check` 9 pre-existing misses in
-     `history/` (also on main before). Part 3 (pqz-prover + node relay) after P6h / P6i.
+     `e2e7a01e` (9 tasks, each reviewed; final review Yes with fixes; gates green at four sets + clients). Done after it
+     (owner 2026-10-27): the Zether prover's per-M gas table re-measured (merge `gas-zether`; BLS12-381 max M compact 8 / 8,
+     BUNDLE 7 with the auditor, 8 without; state gas in zether.md §19), `docs_check facts check` 0 misses (merge
+     `docs-facts`), Dependabot #42–#45 fixed. Open: ~40 deferred minors (README "Fix round",
+     `scratchpad/review2-fix-ledger-2026-10-27.md`). Part 3 (pqz-prover + node relay) after P6h / P6i.
   4. [ ] **Task 9 calibration** (timing: needs the owner's go) → final prices replace the provisional rows.
   5. [ ] (re-check with it: PQZH `n2048-kmax1024` debits keep only 1.3–2.8 KB on `uaExecute`; `n2560-kmax16384`'s `ROLL_MAX`
      64 keeps 15,281 gas — any envelope growth re-opens both) the metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → `MtxRelayFee` (CTR-MTX-27), with or
