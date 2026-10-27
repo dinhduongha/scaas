@@ -13,11 +13,11 @@ import {SSTORE2} from "../common/SSTORE2.sol";
 
 /// @title The confidential layer of the `*_ZETHER` kinds (CTR-ZTH-44, CTR-TOK-24), in the ERC-7201 namespace
 ///        `scaas.zether`: statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries.
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** External library: the token keeps the ERC-20 side (it burns the
-///         public units a shield takes and mints or pays out what an unshield gives) and the entry points
+/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** External library: the token keeps the ERC-20 side (it moves the
+///         public units a shield takes into `SHIELD_POOL` and pays out of it what an unshield gives; D19) and the entry points
 ///         (`ZetherLayer`); the logic runs here by `DELEGATECALL`, so `address(this)` is the token. One implementation
-///         for every curve: points are `bytes`, the group operations and the proofs go through the verifier chosen at
-///         creation. The statement builders are `internal` so that `ZetherStatements` builds the very same bytes from
+///         for every curve: points are `bytes`, the group operations and the proofs go through the release's verifier
+///         immutables. The statement builders are `internal` so that `ZetherStatements` builds the very same bytes from
 ///         the token's views (CTR-ZTH-46). Byte layout: `docs/contracts/zether.md` §7, §11, §12.
 library ZetherLib {
     /// @dev `acc`/`pending` as `bytes` points (`O` when never written); the counters of zether.md §6.
@@ -143,6 +143,8 @@ library ZetherLib {
     bytes32 private constant TAG_ENTRY = keccak256("SCAAS-ZETHER-ENTRY-V1");
     bytes32 private constant TAG_ROLLOVER = keccak256("ZETHER_ROLLOVER_V1");
     bytes32 private constant TAG_SET_MODE = keccak256("ZETHER_SET_ROLLOVER_MODE_V1");
+    /// @dev The statement format's maximum, not a gas bound: under EIP-7825's 2^24 regular gas only `M` ≤ 6–8 (by form)
+    ///      executes (zether.md §19); the chain refuses the rest and the prover takes 6–8 by form.
     uint256 private constant MAX_RECIPIENTS = 16;
     /// @dev Every payload starts `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock)` (`P_HEAD`). Where the points
     ///      start: the single payload after `… ‖ salt(16)`, the multi-recipient one after `… ‖ salt(16) ‖ be32(M) ‖

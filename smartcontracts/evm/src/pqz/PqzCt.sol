@@ -33,8 +33,10 @@ library PqzCt {
     uint256 internal constant PKP = PK / 32 * GROUP;
     uint256 internal constant VP = V / 32 * GROUP;
     uint256 internal constant CTP = PKP + VP;
-    /// @notice The slots of a materialised `acc`: `⌈CTP / 32⌉`, each `not(stream word)` (never 0 for a reduced `acc`:
-    ///         every 32-byte window of the stream holds a whole `B`-bit field, and `2^B − 1 ≥ q`).
+    /// @notice The slots of a materialised `acc`: `⌈CTP / 32⌉`, each `not(stream word)`, so never 0:
+    ///         a full window holds at least one whole `B`-bit field (`2^B − 1 ≥ q`, so the stream word is not all ones),
+    ///         and the last slot's slack (`CTP mod 32` bytes, 4 at `n2560-kmax16384`, less than one field) is stored as
+    ///         ones (`not` of the zero padding), which keeps that slot non-zero too.
     uint256 internal constant ACC_WORDS = PQZ_ACC_WORDS;
 
     uint256 private constant M64 = 0xffffffffffffffff;

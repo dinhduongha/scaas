@@ -27,8 +27,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         implementation immutable (CTR-ZTH-20 / CTR-PQZ-10), so the proof system is an attribute of the release; the
 ///         auditor UA and the two modes are fixed at creation. Every entry point is `nonReentrant`; the shared entry
 ///         points are `IConfidentialToken`'s (plan 5h D20), allowlisted on both relaying paths (fee class `ABSOLUTE`)
-///         and never batched (CTR-PQZ-21); the rollover and `mtxPrepareAcc` are not (CTR-ZTH-34). A holder is a signing
-///         UA: `auth` is that UA's own signature over the statement digest, and its PQZ key is a record attribute
+///         and never batched (CTR-PQZ-21); the rollover and `mtxPrepareAcc` are allowlisted too, never batched (Task R,
+///         owner 2026-10-20). A holder is a signing UA: `auth` is that UA's own signature over the statement digest, and its PQZ key is a record attribute
 ///         (UA-6 U7); a UA without the key is refused as sender, leg, beneficiary, shield target and auditor. The shared
 ///         `beneficiary` must be the payload's (`BeneficiaryMismatch`).
 abstract contract PqzLayer is MetaTokenBase, IPqzToken {

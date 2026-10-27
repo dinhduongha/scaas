@@ -169,7 +169,9 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
     ///         proof as the combined verifier did and returns the new state): `V` the committed point, `proof` the
     ///         `16P + 160` bytes `A S T1 T2 (L_j R_j)_j τ_x μ t̂ a b`. Stateless, a view: the transfer and burn verifiers
     ///         of this curve call it by `STATICCALL` (CTR-ZTH-20 split; a pure function of its inputs, so whoever calls
-    ///         it learns nothing it could not compute).
+    ///         it learns nothing it could not compute). Precondition: `V` is not absorbed here; `st` must already bind
+    ///         `V` (the sole caller, `_range`, passes points `_ctx` absorbed as `"sigma.commit"`), else a standalone
+    ///         use is a weak-Fiat-Shamir forgery target.
     function verifyRange(bytes32 st, bytes calldata V, bytes calldata proof) external view returns (bool, bytes32) {
         BP memory b;
         b.p = _pointBytes();
