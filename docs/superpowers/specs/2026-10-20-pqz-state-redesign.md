@@ -311,11 +311,15 @@ in state, no calldata can go stale, so W-E's base (`baseHash`, `baseRolled`, `ba
 has nothing left to protect and is removed; its "rolled moves backwards" behaviour survives only as the un-roll of
 §5.2, which keeps order and loses nothing. The one race left is a rollover past `p` by more than `INLINE_MAX`
 (`InlineTooFar`, re-prove), which needs credits newer than the proof. **`ROLL_AGE = 24` blocks** [superseded: 5, owner ruling] (2 min at 5 s; today's
-honest-keeper `KEEPER_AGE` made a contract rule) closes it: entries `≥ p` are younger than the proof, so within
-`ROLL_AGE` blocks of proving no rollover can reach them and `rolled ≤ p` at submission. After `ROLL_AGE` the debit still
+honest-keeper `KEEPER_AGE` made a contract rule) narrows it: entries `≥ p` are younger than the proof, so within
+`ROLL_AGE` blocks of their creation no rollover can reach them and `rolled ≤ p` at submission. After `ROLL_AGE` the debit still
 settles while `rolled − p ≤ INLINE_MAX`. Cost: the block number rides in the credit's slot (free) and one comparison
-per rolled entry. A griefer can no longer force a re-prove of a debit submitted in time (today: by rolling > 16 own
-credits past `p`). The two W-E race tests stay as regressions ("a rollover between prove and submit still settles").
+per rolled entry. **It does not close the race (review C0-6, owner ruling 2026-10-27: accepted).** `ROLL_AGE` counts from each entry's own
+creation block, not from the proof, so an in-flight debit is killed by `INLINE_MAX + 1 = 17` entries (11 for PQZH op 7) appended above `p`
+and rolled after `ROLL_AGE`: the rollover raises `floor` to `p + 1` and the debit reverts `PendingRange` before any state change. Anyone can
+do it (`mtxShield(victim, 1)` once per block, then two `mtxRollOver`); the attacker pays 17 units to the victim per attempt; a sustained flood
+blocks any prover slower than about 22 blocks. It is liveness only, nothing is lost; the wallet re-proves on `PendingRange`. The earlier claim
+that a griefer cannot force a re-prove, and that a client with a short queue never meets the race, was wrong. The two W-E race tests stay as regressions ("a rollover between prove and submit still settles").
 
 ### 5.7 B: credits never refused, ordered rollovers, privacy, and the credit fee
 

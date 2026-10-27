@@ -51,8 +51,8 @@ terminator.
 
 <a id="scope"></a>
 <a id="CTR-ZTH-01"></a>**CTR-ZTH-01** — **Full classical Zether** (owner): the `*_ZETHER` kinds clone through the factory,
-verifiers for bn254 **and** BLS12-381 (the curve is a deploy-time parameter of each token: the creator chooses the
-verifier at `initialize`, there is no setter and no system-wide curve; the prover is generic over the curve), ElGamal
+verifiers for bn254 **and** BLS12-381 (the curve is a deploy-time parameter of each token: the verifiers are release
+immutables of the factory since 5g-Z2, so the release fixes the curve; there is no setter and no system-wide curve; the prover is generic over the curve), ElGamal
 `acc/pending` balances, two `mtxRollOver` modes (`PUBLIC` default, `OWNER_ONLY` opt-in per account, with an on-chain
 `accSeq`), shield/transfer/unshield, Bulletproofs with exactly two range statements, envelope binding to the meta-tx, public
 fee scalars, the `ITransferDisclosure` selective-disclosure interface (open the transfer ciphertext; three openings —
@@ -119,8 +119,8 @@ computes with `addmod`, which never wraps.
 
 Integer invariant: the sum of all `acc`/`pending` exponents of a token
 `= totalShielded ≤ maxDecryptableShielded ≤ 2^54` — `mtxShield` adds exactly `amount` with the cap checked; a transfer moves
-exactly `v` to the receiver's `pending` and `fee` to the beneficiary's `pending`, and leaves the sender exactly `b'`;
-rollOver adds two numbers `≤ totalShielded`; burn removes exactly `amount`. No homomorphic addition (`pending += v`,
+exactly `v` to the receiver's `pending`, takes `fee` out of `totalShielded` (paid in public units from `SHIELD_POOL` to the beneficiary's UA-ledger balance, plan 5h D19: nothing goes to a beneficiary `pending`) and leaves the sender exactly `b'`;
+rollOver adds two numbers `≤ totalShielded`; burn removes exactly `amount + fee` (`fee` as in a transfer). The multi-recipient bound is [CTR-ZTH-37](#CTR-ZTH-37). No homomorphic addition (`pending += v`,
 `+= fee`, `acc += pending`) reaches `r`, because every term and every sum is `≤ 2^54`. Because `b' = b − fee − v ≥ 0` is proven `< 2^64` at the same time, `v ≤ b ≤ 2^54`. Consequences: (a) every real
 balance is `≤ 2^54 < 2^64`, so `b'` is always provable (completeness); (b) `v` never exceeds `2^54` in practice although
 the proof allows up to `2^64`; (c) every balance is decryptable by BSGS up to `2^54`.
@@ -154,7 +154,7 @@ strong Fiat-Shamir). NUMS generators are computed in the verifier constructor an
 | Precompiles | `0x0b` G1ADD, `0x0c` G1MSM (subgroup check), `0x10` MAP_FP_TO_G1 |
 | Security | ~117–126 bit |
 | Chains | Prague (EIP-2537) |
-| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3")` (`v3`, review C0-1 / C0-9, owner ruling 2026-10-27: the 512-byte header with `validUntilBlock`, per-leg auditor randomness on the multi-recipient format; `v2`: the 480-byte header, P3b, refused since; label: controller ruling, pending the owner); the multi-recipient id is `keccak256(label ‖ "/multi")` |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3")` (`v3`, review C0-1 / C0-9, owner ruling 2026-10-27: the 512-byte header with `validUntilBlock`, per-leg auditor randomness on the multi-recipient format; `v2`: the 480-byte header, P3b, refused since; the `…/v3` label is part of the owner ruling 2026-10-27 on C0-1 (ii), which names the `proofSystemIdMulti` bump); the multi-recipient id is `keccak256(label ‖ "/multi")` |
 
 <details><summary>Legacy bn254 (alt_bn128; <code>smartcontracts/evm/legacy/ua6/</code>, UA-6 U10)</summary>
 
@@ -177,7 +177,7 @@ Classical Zether runs on BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)). BLS12-381 b
 it is more expensive than the legacy bn254 line; an earlier "45–60 % cheaper" claim is wrong).
 
 **The canonical encoding is unique.** Coordinates must be `< p` (the precompiles refuse otherwise); BLS points must have
-all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = keccak256(encodedY)` relies on that.
+all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = keccak256(TAG_ZETHER_BLS12381 ‖ encodedY)` relies on that.
 
 **Point checks.**
 
@@ -244,7 +244,7 @@ recomputes it. Vector: `transcript.json`.
 
 ## 6. ElGamal state and lifecycle
 
-Key: `x ∈ [1, r)`, `Y = [x]G`, `UA = keccak256(encodedY)` (the built identifier; the Universal Account form is
+Key: `x ∈ [1, r)`, `Y = [x]G`, `UA = keccak256(TAG_ZETHER_BLS12381 ‖ encodedY)` with `TAG_ZETHER_BLS12381 = keccak256("scaas.ua.zether-bls12381.v1")` (`ZetherTypes.toUA`, [CTR-UA-22](accounts.md#CTR-UA-22); the Universal Account form is
 [CTR-UA-16](accounts.md#CTR-UA-16)). Lifted ElGamal: `(C, D) = ([b]G + [ρ]Y, [ρ]G)` (with `r` for the randomness: `(C, D) = ([b]G + [r]Y, [r]G)`);
 homomorphic add/sub on ciphertexts. Decryption: `[b]G = C − [x]D`, then the configurable client BSGS ([CTR-ZTH-19](#CTR-ZTH-19)). The wallet keeps
 the balance in a **device cache** and checks it with `[b]G == C − [x]D` instead of decrypting again; when the cache is
@@ -313,7 +313,7 @@ sendCounter_f++
 [CTR-ZTH-45](#CTR-ZTH-45), signed through the base, [CTR-MTX-21](metatx.md#CTR-MTX-21)):
 
 - `PUBLIC` (default; retail, loyalty, low-risk): anyone may call `mtxRollOver(UA)` / `mtxRollOverBatch(UA[])` without a
-  signature. `mtxRollOverBatch` skips `OWNER_ONLY` and unregistered items.
+  signature. `mtxRollOverBatch` skips `OWNER_ONLY` items only (an unregistered one is a silent no-op).
 - `OWNER_ONLY` (treasury, B2B high value): `mtxRollOver` reverts `RollOverOwnerOnly`; only `mtxRollOverSigned(UA,
   expectedPendingSeq, validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `lastRolledPendingSeq <
   expectedPendingSeq ≤ pendingSeq`, signed by the account's own key (Schnorr by `x` through `requireAuthorized`, purpose `zether-owner`, [registry](#registry)) over
@@ -365,13 +365,13 @@ point. Header (common to every op, `chainUid` at offset 96, [CTR-ZTH-36](#CTR-ZT
 | 96 | 32 | `chainUid` (the token's `chainUid()`, [CTR-ZTH-36](#CTR-ZTH-36)) |
 | 128 | 32 | token address (12 zero bytes ‖ 20 bytes) |
 | 160 | 32 | `bindingTag` — `keccak256("ZTX_V1_DIRECT")` or `keccak256("ZTX_V1_RELAYED")` |
-| 192 | 32 | `envelopeBinding` — 0 if DIRECT; [envelope binding](#envelope-binding) if RELAYED |
+| 192 | 32 | `envelopeBinding` (header word 6) — DIRECT: 0, except a direct `mtxUnshieldUnwrap`, where it is `unwrapBinding(u, minOut)` (`keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))`, [CTR-ZTH-34](#CTR-ZTH-34)); RELAYED: the [envelope binding](#envelope-binding) (the UA envelope's under `uaExecute`, [CTR-ZTH-51](#CTR-ZTH-51)) |
 | 224 | 32 | `sendCounter` |
 | 256 | 32 | `accSeq` |
 | 288 | 32 | `fee` (inner fee, shielded units) |
 | 320 | 32 | `beneficiary` (UA receiving the fee; 0 if none) |
 | 352 | 32 | `amount` (burn; transfer = 0) |
-| 384 | 32 | `recipient` (burn: 12 zero bytes ‖ address; transfer = 0) |
+| 384 | 32 | `recipient` (header word 12; burn: 12 zero bytes ‖ address, or a derived SIGNING UA id, [CTR-ZTH-51](#CTR-ZTH-51); transfer = 0) |
 | 416 | 32 | `salt` — 16 zero bytes ‖ the build salt of [CTR-ZTH-30](#CTR-ZTH-30) (burn = 0; offsets 416/448: controller ruling, pending the owner) |
 | 448 | 32 | `memoHash` — `keccak256(memo)` on commit-reveal ([CTR-ZTH-50](#CTR-ZTH-50)), else 0 |
 | 480 | 32 | `validUntilBlock` — the payload's word 2, every op ([expiry](#valid-until)) |
@@ -717,7 +717,7 @@ envelopeBinding = keccak256(abi.encode(
 `MetaTransaction` has no `to`/`value` ([CTR-MTX-15](metatx.md#CTR-MTX-15)), so the binding carries none; the
 binding and statement vectors are regenerated with those of [CTR-ZTH-36](#CTR-ZTH-36) (built, P3).
 
-It is part of the statement (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0. The base computes it
+It is part of the statement (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0 (a direct `mtxUnshieldUnwrap`: `unwrapBinding(u, minOut)`, [CTR-ZTH-34](#CTR-ZTH-34)). The base computes it
 in step 5 of `mtxExecute` (its `_envelopeBinding` hook, which the token implements) and passes it to the self-call
 through the transient ticket ([CTR-ZTH-34](#CTR-ZTH-34)); a function reads it only while `msg.sender == address(this)` and the ticket is live, else
 it proves with binding 0. Consequences:
@@ -745,14 +745,14 @@ before it computes the mesh `intent_id`. The four roll-over functions are on bot
 `NONE` (owner 2026-10-20: every `mtx*` write is relayable): `mtxRollOver(bytes32,uint256)`, `mtxRollOverBatch(bytes32[])`,
 `mtxRollOverSigned` and `mtxSetRollOverMode`. They do exactly what the direct call does (the first two need no
 signature; the signed pair keep checking their owner signature inside, so a relayer only pays the gas). BUILT, commit `b5e61c96`.
-**Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the four transfers, `mtxShield`,
+**Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the three transfers (`…NoBundle` is retired), `mtxShield`,
 `mtxUnshield`, and on `UNDERLYING_ZETHER` `mtxWrapShield` and `mtxUnshieldUnwrap` beside `UnderlyingToken`'s
-wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `mtxUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
+wrap and unwrap entries (without `unwrap(uint256,address)`); `mtxWrapShield` is on the `mtxExecute` allowlist only (a UA wrap-shields in two signed steps, `uaWrap` then `uaExecute(mtxShield)`) and with the native coin as the leg it is not relayable at all: the leg is paid from `msg.value`, which a relayer cannot supply (the one exception to "every `mtx*` is relayable", owner ruling 2026-10-27, C0-18: the holder wraps directly, then relays `mtxShield`; [CTR-MTX-19](metatx.md#CTR-MTX-19)). A direct `mtxUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
 with `keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))` as its binding word, so a copied proof can
 neither change the leg, drop `minOut` nor become a `mtxUnshield` (controller rulings, pending the owner). Relayed, the
 envelope binding covers every envelope field except `data`, so `u` and `minOut` are protected only by the envelope
-signer's signature: the envelope signer (on `mtxExecute`, the address `m.from` the holder chose; these proof-carrying ops are not on the UA allowlist until UA-5c) can re-route a proof to another leg with `minOut` 0, or into public
-units through `mtxUnshield`; the relayer cannot (amount and recipient stay bound). Binding `u` and `minOut` when relayed
+signer's signature: the envelope signer (on `mtxExecute`, the address `m.from` the holder chose; on `uaExecute` the signing UA `m.from` the holder chose, since these proof-carrying ops are on the UA allowlist, UA-5c (a) BUILT, [CTR-ZTH-51](#CTR-ZTH-51)) can re-route a proof to another leg with `minOut` 0, or into public
+units through `mtxUnshield`; the relayer cannot (amount and recipient stay bound), and the signer is the holder's own choice, so there is no new attacker. Binding `u` and `minOut` when relayed
 is an open question (controller ruling, pending the owner).
 
 <a id="direct-transfer"></a>
@@ -836,7 +836,7 @@ and the device balance cache of [CTR-ZTH-19](#CTR-ZTH-19) (there is no `DECRYPT_
 
 A Zether account is a Universal Account of the kind `zether-bls12381` (0x0141) in the UA registry
 ([accounts.md](accounts.md#zether-kinds), CTR-UA-16; `smartcontracts/evm/src/ua/UARegistry.sol`): the Zether key is the
-UA, `UA = keccak256(TAG(kind) ‖ Y)` (`ZetherTypes.toUA`), and the record carries no authority. The token derives the UA
+UA, `UA = keccak256(TAG_ZETHER_BLS12381 ‖ Y)` (`ZetherTypes.toUA`, [CTR-UA-22](accounts.md#CTR-UA-22)), and the record carries no authority. The token derives the UA
 from `Y` in the payload and counts it registered when `registry.kindOf(UA)` is the Zether kind. The Zether-era
 `UniversalAccountRegistry` (eight `AuthScheme`s, `links`/`link_eth`, a PoP bound to `msg.sender`) is backed up, not
 built, in `smartcontracts/evm/legacy/ua3/` ([legacy registry](accounts.md#legacy-registry)); the bn254 Zether line
@@ -892,7 +892,7 @@ verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 
 `register(encodedY, scheme, authData, popSignature, linkEVM)`: `|encodedY| ∈ {64, 128}` selects the curve; the point is
 valid, `≠ O`, in the subgroup (`y = g^x` in G1; `encodedY` is bn254 64 bytes `x‖y`, BLS12-381 128 bytes in the
-EIP-2537 encoding); `UA = keccak256(encodedY)` does not exist yet (`AccountAlreadyRegistered`). Challenge
+EIP-2537 encoding); `UA = keccak256(TAG_ZETHER_BLS12381 ‖ encodedY)` does not exist yet (`AccountAlreadyRegistered`). Challenge
 `c = keccak256(abi.encodePacked(registry, encodedY, msg.sender))` (target: plus `chainUid`, [CTR-ZTH-36](#CTR-ZTH-36));
 because `c` binds `msg.sender`, `register` **cannot be relayed by a third party** and, as built, binds no chain id
 (`UniversalAccountRegistry.sol:95-96`; acceptable only because the registry is dev-only): the subject calls from its own EOA or smart account (a relayer, if any, pays gas at that
@@ -1303,7 +1303,7 @@ Limits (shielded units; for a 6-decimal stablecoin kept to 2 decimals, `shieldSc
 | Withdrawal (`mtxUnshield`) | `0 < amount ≤ maxDecryptableShielded` | ≤ the supply |
 | Confidential fee | `confidentialFee < 2^n_v` **and** `< maxDecryptableShielded` (else `BadInit`, `ZetherLib.init`) | < 2^64 and < `maxDecryptableShielded` |
 | Amount provable by disclosure | `amount < 2^n_v` | < 2^64 |
-| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) ⇒ a chain with Zether sets ≥ 4.5 M, up to 2^24 to relay large `M` ([§19](#gas)) |
+| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) ⇒ a chain with Zether sets ≥ 4.5 M; the cap is on the total gas limit (regular + state, `min(max_gas_per_tx, block limit, 2^32 − 1)` under Amsterdam), so a large `M` needs it above 2^24 (edge transfers 21.4–34.3 M in total, [§19](#gas)) |
 
 | Client limit (defaults) | Value |
 |---|---|
@@ -1499,7 +1499,7 @@ BUNDLE token (the `NONE` form, `mtxConfidentialTransferNoBundle`, is retired: re
   longer depend on logs or calldata).
 - **Leaving the auditor out** (OPTIONAL only) saves E6 per leg (bn254 ≈ 27–28 k, BLS12-381 ≈ 41–45 k) and, where the
   record is stored, the zero `C_aud` words: single −68 k / −122 k, BUNDLE M = 8 −405 k / −1.0 M (bn254 / BLS12-381).
-- **EIP-7825 cap (16,777,216 on a transaction's gas limit, intrinsic + calldata included):** the cells above are gas used; a transaction needs a higher limit. The clone runs clone → implementation → `ZetherLib` → verifier, and frames that hold back 1/64 of their gas (EIP-150) put the gas needed ≈ 3 % above the gas used (cold); `mtxExecute` adds the envelope and two more such frames (≈ 6 %). Measured (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`): each call its own transaction (forge `isolate`: cold accounts and slots, 21,000 + calldata with the EIP-7623 floor), binary search on the gas limit, inner fee paid, every account's first credit. The prover keeps these limits per `M` (`gas_limits`), takes the relayed column when the request carries an `envelopeBinding`, and refuses a build over the cap less a 1 % margin (167,772), naming the cheaper forms that fit (controller ruling, pending the owner); `test_edge_*` sends every largest `M` at a limit of exactly 2^24. Largest `M`, and the minimum gas limit at that `M` and at `M + 1`, direct / relayed:
+- **EIP-7825 under Amsterdam (EIP-8037, EIP-7976; review C3-3):** 2^24 = 16,777,216 caps a transaction's REGULAR gas (intrinsic, calldata floor, execution); state gas (new slots 97,920 each, code 1,530 per byte) comes on top, so the gas LIMIT is larger and comes from `eth_estimateGas`. The largest admitted cells need 21.4 M to 34.3 M in total (BLS12-381, `ZetherGasLimit` `test_edge_*` settle at a 36 M limit). The per-`M` columns below were measured on Osaka (one gas dimension) before the audited `…/v3` legs; read them as the bound on a transfer's REGULAR gas (the safe side: a cell one past an edge may fit under Amsterdam and is still refused); a re-measurement with a regular / state split is a gas run on the owner's go. The cells above are gas used; a transaction needs a higher limit. The clone runs clone → implementation → `ZetherLib` → verifier, and frames that hold back 1/64 of their gas (EIP-150) put the gas needed ≈ 3 % above the gas used (cold); `mtxExecute` adds the envelope and two more such frames (≈ 6 %). Measured (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`): each call its own transaction (forge `isolate`: cold accounts and slots, 21,000 + calldata with the calldata floor: EIP-7623, EIP-7976 under Amsterdam), binary search on the gas limit, inner fee paid, every account's first credit. The prover keeps these limits per `M` (`gas_limits`), takes the relayed column when the request carries an `envelopeBinding`, and refuses a build over the cap less a 1 % margin (167,772), naming the cheaper forms that fit (controller ruling, pending the owner); `test_edge_*` sends every largest `M` at a limit of 36 M (the regular cap 2^24 is the EVM's, inside it). Largest `M`, and the minimum gas limit at that `M` and at `M + 1`, direct / relayed:
 
 | Curve | Form | Aud. | max `M` | limit at max | limit at max + 1 |
 |---|---|---|---|---|---|
@@ -1571,7 +1571,7 @@ measurement with `R` passed in).
 | (the combined `ZetherVerifierBn254` / `ZetherVerifierBls12381` before 5g-Z1) | 15,955 / 16,312 |
 
 
-**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:429-430`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) and, to relay larger `M`, raises it to the relayed limit of that `M` in the table above (at most 2^24). Registering a Zether token on a chain whose cap is below that warns (SPECIFIED, [NODE-STO-10](../node/store.md#NODE-STO-10)). The node pads the estimate by 20 % and clamps it: it sends `min(g + g/5, 2^24)` (EIP-7825; built in P5, `guard::gas_limit`).
+**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:429-430`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) and, to relay larger `M`, raises it to the total gas limit of that `M` (the table above bounds the regular part at 2^24; state gas comes on top, up to 34.3 M at the edge cells). Registering a Zether token on a chain whose cap is below that warns (SPECIFIED, [NODE-STO-10](../node/store.md#NODE-STO-10)). The node pads the estimate by 20 % and clamps it: it sends `min(g + g/5, cap)` with `cap` = `guard::total_cap` = `min(max_gas_per_tx, block gas limit, 2^32 − 1)` under Amsterdam (EIP-8037: 2^24 caps only the regular gas, the rest is the state-gas reservoir), and `min(…, 2^24)` before it (`guard::gas_limit`).
 
 The 2.5 M per-transfer kill criterion of the original plan is exceeded by the bn254 transfer (3.33 M direct after
 `n_v = 64`; 2.75 M before) — accepted by the owner for v1 in exchange for one transaction per payment of any size. This

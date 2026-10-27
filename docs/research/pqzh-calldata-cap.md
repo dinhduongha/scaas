@@ -112,7 +112,11 @@ test `PqzStatePinGasTest.test_gasTable_pqzh_ua`, table script `runs/2026-10-26-t
 only if it fits on the costlier one. The `mldsa65` fee UA's envelope (a 3,309-byte ML-DSA-65 signature instead of
 ECDSA's 65) adds **3,360 B** of calldata to every debit, so +215,040 gas under the floor (the e2e on the SCaaS testnet,
 `runs/2026-10-26-t8d2b-e2e-7622.txt` section 5, shows 73,348 − 70,020 = 3,328 B for a pair of op 1 calls whose proofs
-differ by 40 B: ≈ 3,368 B of envelope, the payloads not identical). Every debit is floor-bound on both paths, so the verdicts above stay; at `n2048-kmax1024`:
+differ by 40 B: ≈ 3,368 B of envelope, the payloads not identical). Every debit is floor-bound on both paths, so the verdicts above stay.
+
+**Accepted fee-UA kinds on `uaExecute` (C0-2 option (2), "a stated fee-UA list"; `runs/2026-10-27-review2-t2-holder-gas-<set>.txt`).** The fee UA's signature is part of the envelope, so its size is calldata under the floor. At PQZH `n2048-kmax1024`, burn 1 with an `mldsa65` holder: an `mldsa65` fee UA (precompile) fits (the table below), an `fndsa512` fee UA fits (16,429,976, a 666-byte signature), an `slhdsa128s` fee UA does **not** (16,890,776, over 2^24 by 113,560; a 7,856-byte signature). So `slhdsa128s` is the one excluded fee-UA kind, on `uaExecute` at PQZH `n2048-kmax1024`; via `mtxExecute` there is no fee UA (an ECDSA envelope). At the PQZL sets every fee-UA kind fits (op 7 M = 8 with the auditor and an `fndsa512` fee UA: 14.5–15.4 M).
+
+At `n2048-kmax1024`, with an `mldsa65` fee UA:
 
 | PQZH form at `n2048-kmax1024` | calldata B `mtxExecute` / `uaExecute` | regular gas `mtxExecute` / `uaExecute` | headroom to 2^24 `mtxExecute` / `uaExecute` |
 |---|---|---|---|

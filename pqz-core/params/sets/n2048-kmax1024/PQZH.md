@@ -51,7 +51,7 @@ the M = 4 bound and input: `pqz-core/research/code-review-2026-10-25/r01a-limits
 Measured through the token (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2048-kmax1024.txt`, both relay paths in
 `…-t8d2b-fix-gas-n2048-kmax1024.txt`; the regular gas equals the floor: every debit is floor-bound). The `uaExecute`
 envelope carries a 3,309-byte ML-DSA-65 signature: 3,360 B more calldata than `mtxExecute`, so the fitting debits keep
-only 0.09–0.18 M there; any envelope growth must re-check this set. Every built form fits one 2^24 transaction under Amsterdam's floor, the debits only
+only 0.09–0.18 M there; any envelope growth must re-check this set. **Accepted fee-UA kinds on `uaExecute`:** an `mldsa65` (precompile) or `fndsa512` fee UA fits every built form (burn 1 with an `fndsa512` fee UA: 16,429,976); an `slhdsa128s` fee UA does not (burn 1: 16,890,776 regular gas, over 2^24; `runs/2026-10-27-review2-t2-holder-gas-n2048-kmax1024.txt`). It is the one excluded fee-UA kind. Every built form fits one 2^24 transaction under Amsterdam's floor, the debits only
 just, **except op 7 M = 4 with the auditor** (G = 2 since the R0 review fix) and any debit that carries the `acc` hint;
 under EIP-7623 alone (no EIP-7976) all would fit (`docs/research/pqzh-calldata-cap.md`). A direct call to the
 precompile (input as calldata) fits for R_REG / R_DS / R_DR only.

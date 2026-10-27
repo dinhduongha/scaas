@@ -71,7 +71,7 @@ module-lattice assumptions:
 | State | points in storage | every ciphertext in contract state (one SSTORE2 op blob per debit, one slot per pending entry, a materialised `acc`), an unbounded ordered pending queue; public amounts (`mtxShield`) as TRIVIAL queue entries, value held in `SHIELD_POOL`; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
 | Chains | dev allowlist 31337/1337 | allowlist 31337/1337/**7622** **and** a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
 
-**Cost.** Ciphertext 16,512 B, public key 16,384 B, transfer proof 42,762 B in PQZL and ≈ 231 KB in PQZH (the
+**Cost.** Ciphertext 16,512 B, public key 16,384 B at `n2048-kmax1024` (18,432 / 20,480 / 22,528 B at the other sets), transfer proof 42,762 B in PQZL and ≈ 231 KB in PQZH (the
 frozen vectors, [sizes](#44-sizes)). A PQZL transfer is ≈ 77 KB of
 calldata and ≈ **2.8 M gas** while the p99 verify time stays under ≈ 11 ms (the EIP-7623 calldata floor binds,
 [gas](#gas)), rising to ≈ 7.5 M at the former 50 ms kill threshold (the limit is 60 ms since 2026-10-14; gas is
@@ -496,7 +496,7 @@ Sizes per parameter set (the contracts' set is the generated `PqzSet.sol`, [§8.
 ### 4.5 Shared randomness against malicious recipients
 
 <a id="shared-randomness"></a>
-<a id="CTR-PQZ-04"></a>**CTR-PQZ-04** — **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's `u` is shared by the receiver's credit, the sender's new balance and the auditor copy; only `v` differs per recipient. This saves two 16 KB `u` per transfer (mKEM). Revealing `r` would reveal the sender's new balance, so disclosure never reveals `r` ([CTR-PQZ-14](#CTR-PQZ-14)). The **auditor** is as classical ([CTR-ZTH-09](zether.md#CTR-ZTH-09)): one immutable registered PQZ UA per token, set at `initialize` (or none, by `auditorMode`, [CTR-PQZ-24](#CTR-PQZ-24)); it reads exactly the per-transfer `v_a`, never anyone's balance. The security of shared `r` against **malicious** recipients is an explicit assumption, not KKPP's honest-key theorem: MLWE with at most 16 adversarially chosen integer linear hints on the **joint** secret `(r, e1)` per recipient key, 32 when receiver and auditor collude. For the multi-recipient transfer `R_TXM` (op 7) the bound is **≤ 32·s hints per
+<a id="CTR-PQZ-04"></a>**CTR-PQZ-04** — **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's `u` is shared by the receiver's credit, the sender's new balance and the auditor copy; only `v` differs per recipient. This saves two 16 KB `u` per transfer (mKEM). Revealing `r` would reveal the sender's new balance, so disclosure never reveals `r` ([CTR-PQZ-14](#CTR-PQZ-14)). The **auditor** is as classical ([CTR-ZTH-09](zether.md#CTR-ZTH-09)): one immutable registered PQZ UA per token, set at `initialize` (or none, by `auditorMode`, [CTR-PQZ-24](#CTR-PQZ-24)); it reads exactly the per-transfer `v_a`; it reads no balance directly (no `acc` or `pending` ciphertext is encrypted to it), but under `FULL` (and `OPTIONAL` until the first opt-out) it rebuilds every balance by bookkeeping the `v_a` it reads ([CTR-PQZ-24](#CTR-PQZ-24), [CTR-ZTH-49](zether.md#CTR-ZTH-49)). The security of shared `r` against **malicious** recipients is an explicit assumption, not KKPP's honest-key theorem: MLWE with at most 16 adversarially chosen integer linear hints on the **joint** secret `(r, e1)` per recipient key, 32 when receiver and auditor collude. For the multi-recipient transfer `R_TXM` (op 7) the bound is **≤ 32·s hints per
 `(r_g, e1_g)` with the auditor** (groups of `s = s_aud` legs, each leg's auditor copy at its own 16-coefficient window
 `w = j mod s` of `pk_aᵀ r_g`) and **16·4 = 64 without it** (groups of 4): `s_aud` = 2 / 3 / 4 / 4 at `n2048-kmax1024` /
 `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` (owner 2026-10-25, R0 review fix R0-1). At `n2048-kmax1024`
@@ -668,7 +668,7 @@ needs the m-of-n.
 
 Signing UAs that may carry a key: `mldsa65` `0x0131` (default), `mldsa44` `0x0130`, `fndsa512` `0x0132` once enabled, or a
 PQ-dominant `msig` `0x0120`, e.g. hybrid `{mldsa65 w1, p256 w1}` threshold 2, or treasury `{mldsa65 ×3, w1 each}`
-threshold 2. The UA `msig` rules apply (members registered, sorted, one level, `count ≤ 16`). The UA keeps MuSig2 and FROST
+threshold 2 (on the ML-DSA precompile cap only: at the Solidity cap, `DeployBase`'s 5.95 M, the C0-5 bound refuses it as a holder, [CTR-PQZ-11](#CTR-PQZ-11)). The UA `msig` rules apply (members registered, sorted, one level, `count ≤ 16`). The UA keeps MuSig2 and FROST
 as **separate kinds** (`musig2-*` `0x0110`/`0x0112`, `frost-*` `0x0111`/`0x0113`); they are classical aggregate Schnorr,
 so they are no holders and count as non-PQ weight inside an `msig`.
 
@@ -719,7 +719,7 @@ All ciphertext bytes an account needs are in contract state; logs and calldata a
 | `cleared` | uint64 | debit, rollover | pending slots `< cleared` are deleted (`cleared ≤ floor ≤ rolled ≤ pendingCount`) |
 | `pending[i]` | one slot: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` | credit, shield; deleted below `rolled − INLINE_MAX` | where the credit's `u` and `v_j` sit inside the op blob (byte offsets) and the block it was made in; **TRIVIAL entry** (a shield): `blob = 0`, `vOff = 0`, the amount in the low 64 bits of the blob field |
 | `acc` | `accBlob(160)`, the offsets of `u_0` and `v_f` in it, `accUnits` (uint32), `flags` | debit (→ a reference to the debit's blob, `accUnits = 1`), rollover (→ materialised) | the account's encrypted balance; flags `1` MATERIALISED, `2` / `4` the two prepared halves of `accWords` |
-| `accWords[ACC_WORDS]` | `⌈CTP / 32⌉` slots (339 / 417 / 504 / 598 per set, [stored form](#stored-form)) | `mtxPrepareAcc` (placeholder), rollover (the sum) | the materialised `acc`, packed: each slot `not(stream word)`, so no slot is ever 0 (every 32-byte window holds a whole `PACK_BITS`-bit field and `2^PACK_BITS − 1 ≥ q`); overwritten in place |
+| `accWords[ACC_WORDS]` | `⌈CTP / 32⌉` slots (339 / 417 / 504 / 598 per set, [stored form](#stored-form)) | `mtxPrepareAcc` (placeholder), rollover (the sum) | the materialised `acc`, packed: each slot `not(stream word)`, so no slot is ever 0 (a full window holds at least one whole `PACK_BITS`-bit field and `2^PACK_BITS − 1 ≥ q`; the last slot's slack, `CTP mod 32` bytes, is less than one field at `n2560-kmax16384` and is stored as ones, `not` of the zero padding); overwritten in place |
 | `accHash` | bytes32 | rollover | `keccak256` of the materialised `acc`'s packed stream (`CTP` bytes); the check of the optional calldata hint (that stream), meaningful only while `flags & 1` |
 | `sendCounter` | uint64 | debit (+1) | in the statement; replay protection; [CTR-PQZ-19](#CTR-PQZ-19) |
 | `entryPtr[entryRef]`, `memos[entryRef]` | address, bytes | transfer | the **op blob** of the transfer (both storage modes) and, on commit-reveal, the sender memo ([CTR-PQZ-23](#CTR-PQZ-23)) |
@@ -802,7 +802,7 @@ plan 5h part A.) The account can debit, roll over, decrypt and disclose from sta
 strand funds. Layout: one SSTORE2 op blob per debit (stored packed at `PACK_BITS`, [stored form](#stored-form): an op 1 blob with
 the auditor is 11,052 / 13,572 / 16,348 / 19,380 B at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` /
 `n2816-kmax65536`; under EIP-8037 a whole op 1 with the auditor costs 17.58 / 21.44 / 25.69 / 30.33 M of state gas, an op 7 M = 8 with the
-auditor 70.45 / 65.66 / 54.02 / 63.44 M, measured in plan 5h Task 8d part 2b, [§9.3](#93-gas-model); the test chains allow 64 KiB of code, so mainnet 22776 must keep
+auditor 70.45 / 65.66 / 54.02 / 63.44 M, measured in plan 5h Task 8d part 2b, [§9.3](#93-gas-model) (a 60 M block holds an op 7 M = 8 only at `n2560-kmax16384` with the auditor: the client rule is `M ≤ 4` where the block gas limit is 60 M, review C0-10, controller proposal, owner may override; no cutoff in code); the test chains allow 64 KiB of code, so mainnet 22776 must keep
 `maxCodeSize ≥ 64 KiB` or split op 7 blobs per group); one slot per pending entry; `acc` a reference to the last debit's
 blob until a rollover materialises it in `ACC_WORDS` packed slots ([stored form](#stored-form); 516 unpacked words before
 plan 5h Task 8d part 2). A debit **reads** `acc` and its inline window from state (`EXTCODECOPY` ≈ 4 k gas per 16 KB; a
@@ -1160,7 +1160,7 @@ against the block (both halves of `n2816-kmax65536` ≈ 59 M, so one half per tr
 **`mtxPrepareAcc(bytes32 ua, uint256 half)`** (PQZ only; permissionless, idempotent, `half ∈ {0, 1}`, else `BadPayload(half)`;
 the account must be a registered PQZ holder, else `AccountNotRegistered`): writes a non-zero placeholder into one half of the
 `ACC_WORDS` `acc` slots (`⌈ACC_WORDS / 2⌉`, then the rest), so the first rollover rewrites instead of creating them (which no
-useful batch could share). Gas per set: the table above. Keepers (or the owner) run it once per `(UA, token)`; it is not an allowlisted envelope op.
+useful batch could share). Gas per set: the table above. Keepers (or the owner) run it once per `(UA, token)`; it is an allowlisted envelope op on both paths (Task R, like `mtxRollOver`), never batched.
 
 <a id="rollover"></a>
 <a id="CTR-PQZ-08"></a>**CTR-PQZ-08** — **Public rollover, strict order, race-free debits without a base.** (Built in plan 5h part A.)
@@ -1172,14 +1172,12 @@ backwards" behaviour survives only as the **un-roll**: a debit with `p < rolled`
 `[p, rolled)` (credits and TRIVIAL entries) are pending again — their slots still exist, since rollovers delete only below
 `rolled − INLINE_MAX` — and are rolled again later; nothing is lost or skipped, the price is re-rolling at most `INLINE_MAX`
 entries. The one race left needs entries newer than the proof: **`ROLL_AGE = 5` blocks** (owner 2026-10-20, was 24 in the
-first design; ≈ 25 s at 5 s blocks), enforced per rolled entry, means entries `≥ p` made after the proof cannot be rolled for
+first design; ≈ 25 s at 5 s blocks), enforced per rolled entry from the entry's own creation block (not from the proof), means entries `≥ p` made after the proof cannot be rolled for
 `ROLL_AGE` blocks, so within that time `rolled ≤ p` at submission; after it the debit still settles while `rolled − p ≤
-INLINE_MAX = 16`. **Residuals (bounded harm, no loss):** (a) more than `INLINE_MAX` rolled entries past `p` (`InlineTooFar`, or
-`PendingRange` since every rollover keeps `floor ≥ rolled − INLINE_MAX`): the client re-proves at a new `p`; this needs more
-than `INLINE_MAX` *old* entries above `p`, which happens when the client's `p` was capped by the inline window (more than 16
-entries above `rolled` when it proved), so a client with a short queue never meets it; (b) a debit whose window holds an
+INLINE_MAX = 16`. **Residuals (bounded harm, no loss; review C0-6, owner ruling 2026-10-27: accepted):** (a) more than `INLINE_MAX` rolled entries past `p` (`InlineTooFar`, or
+`PendingRange` since every rollover keeps `floor ≥ rolled − INLINE_MAX`): the client re-proves at a new `p`. A bystander can force this on an in-flight debit: append `INLINE_MAX + 1 = 17` entries above `p` (11 for PQZH op 7), one `mtxShield(victim, 1)` per block (about 74 k gas each, the unit goes to the victim), wait `ROLL_AGE`, and roll them with two `mtxRollOver`; the rollover raises `floor` to `p + 1` and the debit reverts `PendingRange` before any state change. `ROLL_AGE` protects only the first blocks after an entry is made; it does not protect a proof that takes longer to build and land. The attacker pays 17 units to the victim per attempt; a sustained flood blocks any prover slower than about 22 blocks. It is liveness only: nothing is lost, and the wallet re-proves at the new `p` on `PendingRange`. Busy accounts with prompt keepers meet the same case with no attacker. A client with a short queue is **not** immune; (b) a debit whose window holds an
 entry of its own block can be made to revert by a merge before it ([§7.3](#73-shield)). A griefer can no longer force a
-re-prove of a debit submitted within `ROLL_AGE` blocks. Clients prove at `p = pendingCount` (or the largest `p` the window allows)
+re-prove of a debit submitted within `ROLL_AGE` blocks of the entries it adds; a debit still in flight after that can be killed by (a). Clients prove at `p = pendingCount` (or the largest `p` the window allows)
 and retry once on `InlineTooFar` or `ProofRejected`; the W-E race tests are regressions ("a rollover between prove and
 submit still settles", `PqzStateTest`). No `OWNER_ONLY` mode, no `accSeq`.
 
@@ -1208,7 +1206,7 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 448 | `auditorOn` (0/1) |
 | 480 | `shieldIn` ([CTR-PQZ-06](#CTR-PQZ-06); named `plainUsed` before plan 5h, same word, same relation) |
 | 512 | `chainUid` (the token's copy of `registry.chainUid()`, [CTR-PQZ-01](#CTR-PQZ-01)) |
-| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)): for a direct call 0 (burn, refresh), the mode binding (transfer, [CTR-PQZ-25](#CTR-PQZ-25)) or `unwrapBinding(leg, minOut)` (`mtxUnshieldUnwrap`); else the v1 or v3 binding of the envelope that carries the op |
+| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)), per op and path. **Transfer** (op 1, op 7): `keccak256(abi.encode(b, mode))` with `b` = `TAG_DIRECT_MODE` direct, the envelope's v1 or v3 binding relayed (`_bindMode`, [CTR-PQZ-25](#CTR-PQZ-25)). **Burn / refresh** (`mtxUnshield`): 0 direct, the raw envelope binding relayed (`prepareBurn` never folds the mode). **`mtxUnshieldUnwrap`**: `unwrapBinding(leg, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(leg, minOut)))` relayed. A prover that uses the raw envelope binding for a relayed transfer gets `ProofRejected` |
 | 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0, their randomness is fresh CSPRNG output) |
 | 608 | `memoHash` (`keccak256(memo)` on commit-reveal, else 0) |
 
@@ -1235,7 +1233,7 @@ entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint
 earlier `recipientsHash, legs`, both derivable from it),
 `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)`, `Unshielded(bytes32 indexed ua, uint256 amount,
 bytes32 indexed recipient, address blob)` (burn or refresh, `amount = 0`; the as-built PQZ event of plan 5h Task 3 had an `address`
-recipient, widened with the UA recipient in Task 3b), `PqzRegistered(…)`. `PqzPlainCredit` is gone with `plainPending`.
+recipient, widened with the UA recipient in Task 3b). There is no `PqzRegistered` event: the PQZ key is in `UARegistered(…, pqzKey)` of the registry ([accounts.md](accounts.md#CTR-UA-17)). `PqzPlainCredit` is gone with `plainPending`.
 `Shielded.from` is `_msgSender()`; for a UA signer (`uaExecute`) it is `UA_POOL`, not the UA (the UA is in the same transaction's
 `UAMetaTransactionExecuted` and in the `UATransfer(ua, SHIELD_POOL, …)` of the pool move). `mtxUnshieldUnwrap` takes the leg as the calldata struct
 `Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)`, pays through `UnderlyingLib.payOutTo` (native id: `quoteUnwrap` + `payOut`;
@@ -1370,7 +1368,7 @@ from its own public balance, its nonce, and for `mtxShield` the public amount it
 
 **PQ-complete
 path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
-`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxWrapShield` / `mtxUnshieldUnwrap` on `UNDERLYING_PQZ`), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
+`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `UNDERLYING_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `uaWrap`, then relays `uaExecute(mtxShield)`, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
 classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
 ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
 existing meta-tx path. An address-path envelope signer is ECDSA/1271, hence the UA path. A broken envelope key can
@@ -1402,19 +1400,19 @@ which pays the underlying straight to `recipient`, so no envelope `unwrap` op is
 | Selector | Effect | Statement binding |
 |---|---|---|
 | `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)` | [transfer](#transfer) | `envelopeBinding` = this envelope's, folded with the mode ([CTR-PQZ-25](#CTR-PQZ-25)) |
-| `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)` (burn and refresh) | burn and refresh | as above |
+| `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)` (burn and refresh) | burn and refresh | `envelopeBinding` = this envelope's, raw: not folded with the mode (`prepareBurn` never calls `_bindMode`) |
 | `mtxShield(bytes32,uint256)` | shield, source = the signer's public balance | none: no statement; the envelope signature covers `(ua, amount)` |
-| `UNDERLYING_PQZ`: `mtxWrapShield(address,uint256,bytes32)`, `mtxUnshieldUnwrap` | wrap-shield, unshield-unwrap | the unwrap folds `(leg, minOut)` into the binding |
+| `UNDERLYING_PQZ`: `mtxWrapShield(address,uint256,bytes32)`, `mtxUnshieldUnwrap` | wrap-shield, unshield-unwrap | wrap-shield: none (no statement); the unwrap folds `(leg, minOut)` into the binding. `mtxWrapShield` is on the `mtxExecute` allowlist only, not the UA one; with the native coin as the leg it cannot be relayed at all (see below) |
 
-`mtxRollOver(bytes32,uint256)` and `mtxPrepareAcc(bytes32,uint256)` are allowlisted on both paths (Task R, owner 2026-10-20: every `mtx*` write is relayable; `ABSOLUTE`, the outer fee may be 0; static 68-byte shape; unbatched like the other PQZ ops). Neither needs an authority: the relayed call does what the direct call does, and the signer's only role is to pay the outer fee. BUILT, commit `b5e61c96`.
+`mtxRollOver(bytes32,uint256)` and `mtxPrepareAcc(bytes32,uint256)` are allowlisted on both paths (Task R, owner 2026-10-20: every `mtx*` write is relayable; `ABSOLUTE`, the outer fee may be 0; static 68-byte shape; unbatched like the other PQZ ops). **One exception** (C0-18, owner ruling 2026-10-27): `mtxWrapShield` with the native coin as the leg is not relayable, because the leg is paid from `msg.value` and a relayer cannot supply the signer's native coin; the holder wraps directly, then relays `mtxShield` (an ERC-20 leg is relayable on `mtxExecute`). Neither `mtxRollOver` nor `mtxPrepareAcc` needs an authority: the relayed call does what the direct call does, and the signer's only role is to pay the outer fee. BUILT, commit `b5e61c96`.
 
 Any other selector ⇒ `MtxSelectorNotAllowed`. `supportedModes()` returns `0xF3` on both paths: flag bits
 `MODE_RESTRICT_RELAYER` (`0x01`) and `MODE_RESTRICT_FEE_RECIPIENT` (`0x02`) apply to every op; fee nibble `NONE`
 (`0x00`) and `FIXED` (`0x20`) apply to every op, `FIXED` absolute (no 1 % cap, the amount is hidden —
 [CTR-ZTH-07](zether.md#CTR-ZTH-07)); `PERCENT` (`0x10`) applies to `MetaTransfer`s only and reverts
 `MtxFeeClass`/`PercentFeeForbiddenOnConfidential` on the PQZ selectors. The PQZ functions run their cheap checks
-(shape, the signer's public balance `≥ amount·shieldScale` for `mtxShield`) before any SSTORE2 read, statement build or
-precompile call; then the op's own checks in transfer/burn order, the statement with `envelopeBinding`,
+(shape; the signer's public balance `≥ amount·shieldScale` for `mtxShield`; the payload's `shieldIn·shieldScale` pulled into `SHIELD_POOL` for a debit, review C2-5) before any SSTORE2 read, statement build or
+precompile call. There is **no outer-fee pre-check** (C2-5, controller proposal, owner may override): `mtxUnshield` may pay its outer fee from its own output, so the fee is taken after verify; only the `shieldIn` pull is early. Then the op's own checks in transfer/burn order, the statement with `envelopeBinding`,
 `requireAuthorized` (the PQ `auth`) and the `PQZ` verify; the pool movements last (the amount the library debited, paid by
 the token), then the escrow check. Anything failing ⇒ the whole transaction reverts: no fee, nonce unspent; the relayer loses its gas (free on
 SCaaS testnet) and protects itself by simulating on a follower.
@@ -1756,7 +1754,7 @@ and 215,936 with the auditor; `PqzSet.multiLen`, pqz-stmt `multi_len`). Built `M
 set, length = the `(M, auditorOn)` length (the words pick the shape: `(1, on)` and `(2, off)` are both 83,072 B),
 `fee`, `amount`, salt, `amount` = 0, coefficients.
 
-**`R_REG`** (16,480 B): `opTag` 0, `proofSystemId` 32, `message` 64 (hashed; §7.2 step 6 fixes its value), `pk` 96.
+**`R_REG`** (16,480 B at `n2048-kmax1024`; 18,528 / 20,576 / 22,624 B at the other sets, §4.4): `opTag` 0, `proofSystemId` 32, `message` 64 (hashed; §7.2 step 6 fixes its value), `pk` 96.
 
 **Disclosure** (`R_DS`, `R_DR`; 33,184 B; §7.9): `opTag` 0, `proofSystemId` 32, `chainId` 64, `chainUid` 96, `token`
 128, `registry` 160, `entryRef` 192 (hashed), `amount` 224 (`< 2^64`, read by both relations), `kind` 256 =
@@ -2035,11 +2033,11 @@ calldata-floor regimes in `docs/research/pqzh-calldata-cap.md` (research, non-no
 The "no hint / packed hint" and "auditor / none" cells give two regular-gas figures (state gas as the row above it).
 State gas of the burn / refresh rows: 17.06 / 16.96, 20.89 / 20.79, 25.11 / 25.01, 29.73 / 29.63 M; disclosures have none.
 **Findings for the owner** (no rule changed here): (1) every built PQZL form fits 2^24 at every set (asserted by the
-test) **with an ML-DSA-65 (precompile) or ECDSA envelope and a single-key holder**: an `msig` holder admitted at the C0-5 bound is guaranteed burn / refresh only (its authorization is part of every debit), and an `fndsa512` / `slhdsa128s` fee UA is a client choice: measured (`runs/2026-10-27-review2-t2-holder-gas-<set>.txt`, valid verify 2.3 M / 0.79 M [estimate]) burn and op 7 M = 8 with the auditor fit with an `fndsa512` fee UA at every set (op 7 M = 8: 14.5–15.4 M; the review's estimate of +4.4 M is not reproduced, the verifier cap is 2.5 M), but not with an `slhdsa128s` fee UA at PQZH `n2048-kmax1024`; **client rule: no `fndsa512` fee signer for op 7 M = 8** (the finding's precision; it keeps the 1.3 M of headroom a cap-priced verify needs); (2) **op 7 M = 8 with the auditor carries more state gas than a 60 M mainnet-like block holds** at
+test) **with an ML-DSA-65 (precompile) or ECDSA envelope and a single-key holder**: an `msig` holder admitted at the C0-5 bound is guaranteed burn / refresh only (its authorization is part of every debit), and an `fndsa512` / `slhdsa128s` fee UA is a client choice: measured (`runs/2026-10-27-review2-t2-holder-gas-<set>.txt`, valid verify 2.3 M / 0.79 M [estimate]) burn and op 7 M = 8 with the auditor fit with an `fndsa512` fee UA at every set (op 7 M = 8: 14.5–15.4 M; the review's estimate of +4.4 M is not reproduced, the verifier cap is 2.5 M), but not with an `slhdsa128s` fee UA at PQZH `n2048-kmax1024` (burn 1: 16,890,776 regular gas, over 2^24). **Accepted fee-UA kinds on `uaExecute` (C0-2 option (2), "a stated fee-UA list")**: at PQZH `n2048-kmax1024` an `mldsa65` (precompile) or `fndsa512` fee UA fits every built form and an `slhdsa128s` fee UA is the one excluded kind; at every PQZL set, and on the `mtxExecute` path (an ECDSA envelope has no fee UA), every enabled fee-UA kind fits. There is no client rule against an `fndsa512` fee signer for op 7 M = 8: the measurement (14.5–15.4 M, the verifier cap is 2.5 M) does not support one; (2) **op 7 M = 8 with the auditor carries more state gas than a 60 M mainnet-like block holds** at
 `n2048-kmax1024`, `n2304-kmax4096` and `n2816-kmax65536` (and without the auditor at `n2816-kmax65536`): under EIP-8037
 a block's gas used is max(Σ regular, Σ state), so such a transaction needs a block limit ≥ its state gas (the SCaaS
 testnet's limit is 200 M; a 60 M block does not hold it) (spec 2026-10-20 §12 item 3 left "the total against a 60 M
-block" to this measurement); (3) PQZH debits fit one transaction only at `n2048-kmax1024` (not op 7 M = 4 with the
+block" to this measurement). **Client rule (C0-10, controller proposal, owner may override): `M ≤ 4` where the chain's block gas limit is 60 M**; the dependence on the block limit is accepted and there is no cutoff in code (a cutoff would hard-code one chain's block limit); (3) PQZH debits fit one transaction only at `n2048-kmax1024` (not op 7 M = 4 with the
 auditor, not with the hint), on both relay paths: 0.30–0.39 M of headroom on `mtxExecute`, 0.09–0.18 M (1,361–2,769 B)
 on `uaExecute`, so any envelope growth must re-check it; (4) the register row's `R_REG` verification (the precompile row
 + the verifier's 0.11–0.69 M) is 3.62–5.03 M, above the 3,000,000 PQZ verify cap the e2e (`script/pqz/e2e.py`) used
@@ -2183,7 +2181,7 @@ byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
 | `mtxRollOver` of 16 credits | 3.43 M (measured, 5h) | from state, no calldata (the pre-5h estimate was ≈ 8.9 M calldata-bound); see the 5h table above |
 | `mtxShield` | 0.05–0.09 M (measured, 5h) | proof-free: public units to `SHIELD_POOL`, a TRIVIAL pending entry, `totalShielded`; see the 5h table above |
 | `mtxUnshield` / `refresh` | ≈ 2.6 M | one recipient, no auditor, ≈ 258 k tokens |
-| `register` | ≈ 4.7–5.2 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M + `R_REG` verify + standard calldata ≈ 0.59 M + the signer's PoP verify ≈ 0.01 M (above its ≈ 1.46 M floor); one transaction with the signer's registration, no second record slot, and the `UARegistered` log carries a 20-byte pointer, not 16 KB; +≈ 27 k for the `0x0142` list append; UA-6 re-measures it (`runs/<date>-ua6-gas.txt`) |
+| `register` | ≈ 4.7–5.2 M once | SSTORE2 of the per-set `pk` (16–22 KB; 16 KB ≈ 3.3 M) + `R_REG` verify + standard calldata ≈ 0.59 M + the signer's PoP verify ≈ 0.01 M (above its ≈ 1.46 M floor); one transaction with the signer's registration, no second record slot, and the `UARegistered` log carries a 20-byte pointer, not 16 KB; +≈ 27 k for the `0x0142` list append; UA-6 re-measures it (`runs/<date>-ua6-gas.txt`) |
 | Classical reference (measured) | 3.33 M / 3.41 M transfer, 0.115 M rollover | [zether.md](zether.md#gas-measured) |
 
 **Note (2026-10-14).** Every "50 ms" figure in this section (and the "+16 inline at 50 ms" requirement) is at the
@@ -2414,7 +2412,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
 | T6 | Decryption-noise leakage (IND-CPA^D style) | noise never leaves `pqz_dec`; disclosure is ZK ([CTR-PQZ-14](#CTR-PQZ-14)); no "decrypt and publish" API |
 | T7 | Credit and shield flood: filling a victim's queue | credits and shields are **never refused** (plan 5h, [CTR-PQZ-06](#CTR-PQZ-06)), so a flood no longer locks an account; it costs the victim delay and rollover work. Measured cost of the work (plan 5h Task 8d part 2b, [§7.6](#76-rollover)): at `n2304-kmax4096` a rollover is ≈ 5.69 M + 79.5 k per entry (`ROLL_MAX = 80` ≈ 12.05 M direct, 12.11 M relayed through `mtxExecute`, 12.27 M through `uaExecute`; a TRIVIAL entry costs less), 10,000 queued decoys = 125 rollovers, run by keepers, the owner or a relayer; recovery of a full `acc` is one refresh (6.84 M regular as a relayed transaction, of which the precompile 4.85 M at its provisional row, and 20.79 M of EIP-8037 state gas, [§9.3](#93-gas-model)). The flooder pays per entry: a proven transfer (op 1, auditor: 9.17 M regular with the precompile 7.05 M and the proof's calldata, 21.44 M state, §9.3), a decoy leg `decoyFee` to the victim (`d ≥ minDecoyFee`, paid to every leg), a shield one TRIVIAL slot per account and block (a merge within the block ≈ 52 k, an append ≈ 74 k; at one per 5 s block ≈ 17,280 entries a day ≈ 0.16 G gas of rollover work). Shields are free for the sender (owner 2026-10-20, gas only), so on the SCaaS testnet, where gas is free, permissioned submitters and node rate limits remain the real control; rollover is public |
-| T8 | Rollover grief against in-flight proofs | proofs: impossible by construction (the same `T`, [CTR-PQZ-08](#CTR-PQZ-08)); calldata: none left, since `acc` and the inline window are read from state and a stale optional hint is ignored; **`ROLL_AGE = 5` blocks** keeps entries made after the proof from being rolled past `p`, so a debit submitted within five blocks of its proof never sees `rolled > p`, and after that it settles while `rolled − p ≤ INLINE_MAX` (the un-roll keeps order and loses nothing). Residuals, bounded harm and no loss: more than `INLINE_MAX` *old* entries above a capped `p` (re-prove at a new `p`), and a debit whose window holds an entry of its own block, revertible by a same-block merge ([§7.3](#73-shield)); clients prove at `p = pendingCount` and retry once on `InlineTooFar` or `ProofRejected` |
+| T8 | Rollover grief against in-flight proofs | proofs: impossible by construction (the same `T`, [CTR-PQZ-08](#CTR-PQZ-08)); calldata: none left, since `acc` and the inline window are read from state and a stale optional hint is ignored; **`ROLL_AGE = 5` blocks** keeps entries made after the proof from being rolled past `p`, so entries made after the proof cannot be rolled past `p` for five blocks, and after that the debit settles while `rolled − p ≤ INLINE_MAX` (the un-roll keeps order and loses nothing). Residuals, bounded harm and no loss: more than `INLINE_MAX` entries above `p` rolled before the debit lands (re-prove at a new `p` on `PendingRange`; review C0-6, owner ruling 2026-10-27: an attacker's 17-entry flood plus two rollovers kills an in-flight debit at a cost of 17 units to the victim per attempt, liveness only, [CTR-PQZ-08](#CTR-PQZ-08) (a)), and a debit whose window holds an entry of its own block, revertible by a same-block merge ([§7.3](#73-shield)); clients prove at `p = pendingCount` and retry once on `InlineTooFar` or `ProofRejected` |
 | T9 | Replay / proof transplant | `sendCounter`, `chainId`, `chainUid`, `token`, `registry`, `validUntilBlock`, UAs, fee, beneficiary and `envelopeBinding` in the statement; envelope 2D nonce and `validUntil`; strong FS |
 | T10 | Fiat–Shamir for multi-round LNP22 (round-by-round grinding; QROM) | `op` and statement absorbed first; every challenge round ≥ 128-bit sound on its own, listed in `estimator.txt`; QROM soundness an assumption, stated; tracked for the audit. PQZH (Ligero): 128-bit classical in the ROM, QROM assumed likewise; a quantum Grover attack on the Fiat–Shamir grinding halves the query term (gate B review 2026-10-17, pqzh-ligero.md §5.1 and §12) |
 | T11 | Side channels in the prover (timing of sampling, rejection, Gaussian masks; WASM JIT gives no constant-time guarantee) | constant-time CBD; masking sampler **rewritten** integer-only and constant-time (CDT full-table scan or uniform masks) — upstream uses `double` and MPFR on secret-dependent values; rejection test in constant-time fixed point, since rejected attempts would otherwise leak `⟨z, v⟩` through timing; no secret-indexed tables (software AES bitsliced) |
@@ -2433,7 +2431,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T21 | Malicious recipient keys extract hints on a multi transfer's shared `(r_g, e1_g)` (16 per leg and auditor window) | `s_aud` legs per group with the auditor (2 / 3 / 4 / 4 per set), 4 without: ≤ 32·s_aud / 64 hints; every auditor copy at its own window, the auditor never a party (F-4); β ≥ 450 at every set but `n2048-kmax1024` (DDGR20 451.9, dual_hybrid − offset ≈ 444: the owner-accepted exception to CTR-PQZ-03's 450); fresh randomness per operation ([CTR-PQZ-04](#CTR-PQZ-04), [CTR-PQZ-26](#CTR-PQZ-26)) |
 | T22 | Decoy flood: listing victims as decoys (`M − 1` victims per transfer) | each unit is a proven leg; the cap on `acc` keeps the noise budget and is never a refusal (head-of-line delay only); **`decoyFee`**: the sender pays `d ≥ minDecoyFee` to every leg, the victim included, so a flood pays its victims for the rollover work; T7's permissioned submitters and rate limits; wallet load spreading (P6h) |
 | T23 | Burying real credits behind junk (ordered roll-over) | strict order is deliberate (it hides which ring members were decoys); a real credit behind `x` decoys is spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 80` at `n2304-kmax4096`: 10,000 decoys = 125 rollovers, ≈ 12.1–12.3 M gas each relayed), or at once in the owner's own debit with `p` within `INLINE_MAX` of `rolled`; the owner can always spend `acc` with `p = rolled`; keepers roll decoy credits (P6i); the decoy fee compensates the work |
-| T24 | Decoy selection and intersection (inactive or fixed decoys, repeated payments with varying decoys, the real recipient's next activity, colluding decoys) | wallet policy (P6h): recently active candidates from the registry's per-kind list ([accounts CTR-UA-29](accounts.md#CTR-UA-29)), stable sets per payee and week, load spreading; anonymity set ≤ `M` minus colluders |
+| T24 | Decoy selection and intersection (inactive or fixed decoys, repeated payments with varying decoys, the real recipient's next activity, colluding decoys) | wallet policy (P6h): recently active candidates from the registry's per-kind list ([accounts CTR-UA-29](accounts.md#CTR-UA-29)), stable sets per payee and week, load spreading; anonymity set ≤ `M` minus colluders. The activity filter adds gas-level cost only (pending entries and rollovers are cheap and permissionless; a sybil picked once is credited by the honest op 7 for free), so the real sybil bound is the one-time PQ registration |
 | T25 | Op confusion (op 1 vs op 7, sizes, groupings, auditor on / off) | distinct `opTag`, the length bound to `(id, M, A)`, `M` and `recipientsHash` in the statement; negative vectors |
 | T26 | A disclosure reveals that its leg was a decoy (amount 0), narrowing the other recipients' set | by consent of the discloser, as classical |
 
@@ -2547,7 +2545,7 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   op's `opTag`, and with a `proofSystemId` the precompile does not implement ⇒ 0; register and disclosure statements
   without the 64-byte prefix ⇒ 0; a disclosure proof replayed against another registry ⇒ 0;
 - rollover race: a debit proven at `p`, then `mtxRollOver` of 3 / 16 / 17 credits (aged by `ROLL_AGE`), then the debit ⇒ ok / ok /
-  `InlineTooFar` only when the 17 entries were older than the proof; then decrypt both accounts and check conservation;
+  `PendingRange` for 17 (the rollover raised `floor` past `p`: the flood case of CTR-PQZ-08 (a), accepted, the wallet re-proves), `InlineTooFar` only for a window of more than `INLINE_MAX` entries at proof time; then decrypt both accounts and check conservation;
 - registry: PoP for another chain/registry/UA; same `pk` twice, on an `msig` and an ML-DSA UA (`UAKeyInUse`); a PQZ key on
   an EOA, a classical single key, `slhdsa128s`, a classical-dominant `msig` or a Zether UA (`UAPqzHolder`); ML-DSA
   signature with empty instead of kind-tag context; **key binding**: the PQZ key stripped or swapped by a front-runner,

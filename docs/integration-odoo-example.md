@@ -75,8 +75,8 @@ Odoo 19).
   `UNIQUE(entry_ref_hex)`), `batch_hex` = `keccak256("scaas.pay.lane" ‖ entry_ref)`, `payer_address` (locked at `start`,
   so `(payer, batch)` is fixed), `issued_valid_until` (`submit` requires `valid_until` equal), `expiry_datetime`,
   `request_state ∈ {open, partial, final, expired}`, `needs_attention`, `res_model`/`res_id`, `metatx_ids`, `event_ids`.
-  `_payment_gate()` counts an event only when `contract_address == token_id.address` and
-  `to_address == receiving_address` (and `value_base` from the event); `int(amount_settled_base) >= int(amount_base)` ⇒
+  `_payment_gate()` counts an event only when `contract_address == token_id.address`,
+  `from_address == payer_address` and `to_address == receiving_address` (and `value_base` from the event); `int(amount_settled_base) >= int(amount_base)` ⇒
   `request_state='final'` + `_on_paid()`; more than due ⇒ `needs_attention = True`. An ingest batch still commits when
   a business hook fails (savepoint + log): a closed period or credit hold never blocks the cursor.
 - `blockchain.chain.event`: `UNIQUE(chain_id, tx_hash, log_index)`; `event_name ∈ {MetaTransactionExecuted,
@@ -171,7 +171,7 @@ sequenceDiagram
 5. Push model: an Odoo cron sends `POST /v1/jobs`.
 6. The node simulates, journals and sends; the chain emits `PaymentSettled`.
 7. Job states (signed, broadcast, mined) come back by `relay_report` / `GET /v1/jobs`.
-8. Events come back by `chain_event_ingest` / `GET /v1/events` (finalized range). The request is final when Σ `PaymentSettled(token, to, entryRef)` ≥ amount → `payment.transaction._set_done()` → `account_payment` posts and reconciles.
+8. Events come back by `chain_event_ingest` / `GET /v1/events` (finalized range). The request is final when Σ `PaymentSettled(token, from == payer, to, entryRef)` ≥ amount → `payment.transaction._set_done()` → `account_payment` posts and reconciles.
 9. Poll status: `dms_portal_chain_payment_status(reference)`.
 10. → `{tx_state, request_state, job_state, tx_hash}`.
 

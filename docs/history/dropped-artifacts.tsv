@@ -1142,3 +1142,6 @@ transferCiphertext(entryRef)	obsolete	plan 5h D11 / D13 (2026-10-20): the PQZ di
 CiphertextOffState(bundleHash)	obsolete	plan 5h D11 / D13 (2026-10-20): the PQZ disclosure reads R from the op blob in state, the opening is the proof alone, no transferCiphertext view or entry hash map on PQZ; contracts/pq-zero-knowledge.md#CTR-PQZ-14, #CTR-PQZ-23
 entry[entryRef]	obsolete	plan 5h D11 / D13 (2026-10-20): the PQZ disclosure reads R from the op blob in state, the opening is the proof alone, no transferCiphertext view or entry hash map on PQZ; contracts/pq-zero-knowledge.md#CTR-PQZ-14, #CTR-PQZ-23
 keccak256(bundle) == entry[entryRef]	obsolete	plan 5h D11 / D13 (2026-10-20): the PQZ disclosure reads R from the op blob in state, the opening is the proof alone, no transferCiphertext view or entry hash map on PQZ; contracts/pq-zero-knowledge.md#CTR-PQZ-14, #CTR-PQZ-23
+PqzRegistered(…)	obsolete	review C2-8 (2026-10-27): no such event was ever declared; the PQZ key is in the registry's UARegistered(…, pqzKey); contracts/accounts.md#CTR-UA-17
+(payer, payee, amount, entryRef)	renamed	review C5-10 (2026-10-27): one reconciliation key (token, payer, payee, entryRef); contracts/metatx.md#CTR-MTX-10
+(chain, contract, to, entryRef)	renamed	review C5-10 (2026-10-27): the booking key adds the payer, (chain, contract, from, to, entryRef); integration.md

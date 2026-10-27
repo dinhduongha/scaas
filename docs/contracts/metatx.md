@@ -10,11 +10,11 @@ an allowlisted function) and, on tokens, the typed `MetaTransfer` (transfer or p
 same model natively ([networks/README.md](../networks/README.md)).
 
 Status: the target layer of this file (two bases, two structs, the generic self-call `mtxExecute`, the typed
-`mtxExecuteTransfer`, the selector allowlist, fee classes, `mtx` names, salted domains) is **SPECIFIED**; receiver-pays
-**BUILT** (`mtxPayReceiverFee`, P1b/P1c; its UA twin `uaPayReceiverFee` BUILT, UA-5a). What runs today is two built
-lines, v1 and v2, with a hand-written op dispatch (`smartcontracts/evm/src/metatx/`, **BUILT**); the differences are
-listed under [Transitional (BUILT)](#transitional-built) at the end. Nothing is deployed, so the target replaces the
-built lines in place: no version coexistence, no migration.
+`mtxExecuteTransfer`, the selector allowlist, fee classes, `mtx` names, salted domains) is **BUILT**
+(`smartcontracts/evm/src/metatx/`), receiver-pays too (`mtxPayReceiverFee`, P1b/P1c; its UA twin `uaPayReceiverFee`, UA-5a). The v1
+line with its hand-written op dispatch left the build in P5 (`legacy/p5/`); how the tree was built is under
+[Transitional (BUILT)](#transitional-built) at the end. Nothing is deployed outside test chains, so there is no version
+coexistence and no migration.
 
 **Contents**
 
@@ -327,6 +327,10 @@ a meta-tx entry point (`mtxExecute`, `mtxBatch`, `mtxTransfer`, the named builde
 allowlisted self-call whose outer fee may be 0 (`NONE` or `FIXED` 0). So the confidential tokens list their roll-overs
 (Zether: `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`; PQZ: `mtxRollOver`, `mtxPrepareAcc`), whatever
 the function's own authority is (none, or an owner signature checked inside). BUILT for the confidential tokens, commit `b5e61c96`.
+**One exception (review C0-18, owner ruling 2026-10-27):** `mtxWrapShield` with the native coin as the leg is not relayable. It is
+`payable` and takes the leg from `msg.value`, and a relayer cannot supply the signer's native coin (the self-call carries no value). The holder
+wraps directly, then relays `mtxShield`; an ERC-20 leg is relayable. A value-carrying relay path (payable
+envelope, `msg.value` bound to the authorization, relayer reimbursed) was the other option and is not built.
 
 | Implementation | Self-call selector | Fee class |
 |---|---|---|
@@ -416,10 +420,12 @@ mtxNonce(from, batch)`; execution increments it. Both structs share the one map.
 | Agent × purpose | `batch = uint256(keccak256(agentId ‖ purpose))` (e.g. procurement settlement, logistics milestones, payout distribution, treasury rebalance), sequential nonce inside | **SPECIFIED** (client convention) |
 | Non-EVM | `(subject, lane: bytes32) → nonce: u64` in the subject's account object/wallet/PDA | **BUILT** |
 
-`cancelNonce(batch)` increments `mtxNonce[sender][batch]` and invalidates every pending intent on that lane,
-including ones circulating on the mesh, without a dummy transfer; it emits `MetaNonceCancelled(from, batch,
+`cancelNonce(batch)` increments `mtxNonce[sender][batch]` by one and so invalidates the one intent signed for the
+current nonce, including a copy circulating on the mesh, without a dummy transfer. It is not a lane reset: with
+intents E5 and E6 signed ahead, one cancel kills E5 and makes E6 executable at once, so k pending intents need k
+cancels (every intent is signed and bounded by its `validUntil`). It emits `MetaNonceCancelled(from, batch,
 newNonce)`. It is a direct call **or** a signed self-call through `mtxExecute` on another lane (so a subject without
-gas can cancel). First use of a lane costs ≈ +17 k gas (a new storage slot). An anti-lock test is mandatory per family:
+gas can cancel). First use of a lane costs ≈ +17 k gas on the pre-Amsterdam figures (a new storage slot); under Amsterdam (EIP-8038 write prices, EIP-8037 state gas) it is ≈ +98 k (§8). An anti-lock test is mandatory per family:
 X stuck on contract 1 never blocks Y on contract 2 ([networks/README.md](../networks/README.md#head-of-line)). Trade
 orders have their own **order lane** (`minNonce`, [CTR-DEX-15](dex.md#CTR-DEX-15)); clients label the two.
 
@@ -428,7 +434,7 @@ orders have their own **order lane** (`minNonce`, [CTR-DEX-15](dex.md#CTR-DEX-15
 payment request is `keccak256("scaas.pay.lane" ‖ entryRef)` with nonce 0. A random value is unlinkable by
 construction (better than a salted hash of business data) and needs no salt management; a fixed lane per request
 lets the client build typed data without reading the chain and makes each request payable at most once (under
-[CTR-MTX-04](#CTR-MTX-04)). Accepted cost: the first use of the lane costs +17 k gas (measured in `MetaTxGas`).
+[CTR-MTX-04](#CTR-MTX-04)). Accepted cost: the first use of the lane costs +17 k gas on the pre-Amsterdam figures (`MetaTxGas`) and ≈ +98 k under Amsterdam (`MetaTxGasV2`: 178,157 against 80,249 for a warm lane, §8), and `mtxPay`, which always opens a fresh lane, ≈ 182 k in all (181,810).
 Tokens also derive the lane on chain ([CTR-MTX-10](#CTR-MTX-10)).
 
 ```text
@@ -475,13 +481,13 @@ signature must recover `payer_address` (EOA); a contract wallet (ERC-1271) is ac
 node's simulation; (3) the node recomputes the digest and simulates before broadcast.
 
 **Chain → client** (on each
-finalized range): (1) filter `PaymentSettled` by `contract == request.token` **and** `to == request.receiving_address`
+finalized range): (1) filter `PaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and** `to == request.receiving_address`
 **and** `entry_ref == request.entryRef`; (2) `amount_settled = Σ amount` of matching events; `amount_settled ≥
 amount_base` ⇒ request final; more than due ⇒ final + needs attention (refund manually); less ⇒ partial; (3)
 cross-check `MetaTransactionExecuted(digest)` to mark the job final; (4) drift checks: an unmatched inbound
 `Transfer` to a watched wallet ⇒ a drift record; hourly `balances` vs the ledger balance of the token's journal. A
-third party paying 1 unit with someone else's `entryRef` cannot complete a request (the sum must reach the amount);
-an overpayment by a stranger is just money received. The full client procedure is in
+third party paying 1 unit with someone else's `entryRef` is not counted at all (`from` is not the request's payer), so it can neither complete a request nor push it into "needs attention";
+it is just money received (review C5-10: one rule, the key `(token, payer, payee, entryRef)`, in every document). The full client procedure is in
 [integration.md](../integration.md#payment-references).
 
 ## 7. Pay-once horizon
@@ -505,7 +511,7 @@ Solana `PRUNE_DELAY_S`; Sui `prune` after `valid_until + LANE_HORIZON_S`). Issue
 <a id="gas"></a>Measured gas of the **built v1 path** (Foundry `MetaTxGas.t.sol`, `evm_version = prague`, execution
 gas; full-transaction `gasUsed` from receipts after deploying the same contracts on the private Nethermind reference
 chain, Nethermind 1.39.0, Fusaka + BPO2; 2026-08-31). Transfer and payment keep this path's work in the target
-pipeline; the table is re-measured when the base changes:
+pipeline; the table is re-measured when the base changes. **These rows predate Amsterdam** (review C5-9); the Amsterdam rows follow the table:
 
 | Scenario | Execution gas | Full tx gas |
 |---|---|---|
@@ -528,6 +534,8 @@ fee-0 sponsored path is the cheapest configuration. Method notes: one scenario p
 state carries over inside one test), and accounts are created and funded in `setUp`; a gas measurement that changes
 with execution order measures the access list, not the code.
 
+**Amsterdam (Foundry 1.8.5 `isolate`, each call its own transaction: intrinsic gas, the EIP-7976 calldata floor, EIP-8038 write prices and EIP-8037 state gas for a new slot; the bounds in `test/v2/MetaTxGasV2.t.sol`, `AMS_*`).** Total gas per transaction, in the table's order: warm lane, `MODE_OPEN`, no fee 80,249 (A); new lane 178,157 (B); warm `FIXED` fee 95,950 (C); warm `PERCENT` fee 95,889 (D); warm `FIXED` + restricted relayer and fee recipient 95,993 (E); warm lane, recipient that never held the token 178,157 (F); ERC-1271, new lane 174,814 (G); the pay op on a fresh lane 181,810 (P). The first write of a lane therefore costs ≈ 98 k (178,157 − 80,249), not +17 k to +32 k (the same step prices the first credit of a new recipient, F). No contract reads these numbers.
+
 ## 9. FeePolicy
 
 <a id="CTR-MTX-13"></a>**CTR-MTX-13** — Public fee modes are `NONE`, `PERCENT` and `FIXED`, chosen by the signer per
@@ -541,7 +549,7 @@ intent through `mode`; the percent unit is ppm (1e6), because per mille cannot e
   only where `_chargeFee` is overridden — every token; any other contract accepts `NONE` only
   ([CTR-MTX-22](#CTR-MTX-22)). Calls
   that move no amount of this token pay an absolute, uncapped `FIXED` fee or none ([CTR-MTX-20](#CTR-MTX-20)).
-- `feeRecipient` is the signer's choice in every mode — usually the value a relayer publishes — and `address(0)`
+- `feeRecipient` is the signer's choice only with `MODE_RESTRICT_FEE_RECIPIENT` — usually the value a relayer publishes. Without it the field is not signed and the submitter picks it (§3, submitter normalization); `address(0)`
   means "pay `msg.sender`". `validateRecipient`: non-NONE needs a non-zero resolved recipient (`FeeRecipientRequired`).
 - `requireConfidentialSafe`: `PERCENT` on any confidential op ⇒ `PercentFeeForbiddenOnConfidential` (a percentage
   fee would reveal the hidden amount). Confidential outer fees are `NONE` or `FIXED`, and `FIXED` there is **not**
@@ -569,7 +577,7 @@ payment, [CTR-MTX-23](#CTR-MTX-23)) and for `payWithFee`, `feeAmount != 0 && res
 `FeeRecipientIsPayee` at step 3, whether the recipient was bound by the signer or defaulted to `msg.sender` (a payee
 self-relaying with a fee is refused). "Payee" = `t.to`. A `MetaTransaction` (self-call) has no payee, so the check does
 not apply.
-The fee mode, amount and recipient stay the signer's choice; the 1 % cap and "percent of the sender's amount, charged
+The fee mode and amount stay the signer's choice, and so does the recipient where the signer binds it (`MODE_RESTRICT_FEE_RECIPIENT`, §3); the 1 % cap and "percent of the sender's amount, charged
 on top" are unchanged. The check costs ~100 gas. `PaymentSettled` keeps its fee amount and recipient because payment
 is the typed path, not a self-call.
 
@@ -642,7 +650,7 @@ saving assumed a fast path with its own short typehash and does not apply.
 uint256(keccak256("scaas.pay.lane" ‖ payId))`, `nonce = 0`, so `mtxPay` pays a given `(payer, payId)` at most once
 **through `mtxPay`**. The same `entryRef` can still appear in a `PaymentSettled` from `payWithFee`, from a `MetaTransfer`
 on another lane, or after `cancelNonce` on a later nonce: reconcilers match
-`(payer, payee, amount, entryRef)`, book the first `PaymentSettled` for an `entryRef` and treat a later one as a
+`(token, payer, payee, entryRef)` (the key of the chain → client rule above: amounts of that key add up), book the first `PaymentSettled` for it and treat a later one as a
 reconciliation exception, never as a second payment. A client that wants a different lane for a payment uses
 `mtxExecuteTransfer` with `entryRef` set ([CTR-MTX-23](#CTR-MTX-23)).
 
@@ -689,7 +697,7 @@ items whose `relayer` is bound (`MODE_RESTRICT_RELAYER`) to the submitting lane,
 50 items or 3 s; unwrap items are never batched.
 
 Rules: `ms.length == sigs.length` (`MtxBatchLengthMismatch`), `≥ 1`
-(`MtxBatchEmpty`), no explicit cap (the block gas limit is the cap); items run in order through the pipeline, each
+(`MtxBatchEmpty`), no explicit cap (the binding limit is EIP-7825's 2^24 regular gas per transaction plus the EIP-7976 calldata floor, not the block gas limit; [NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11) bounds a node batch further); items run in order through the pipeline, each
 with a fresh ticket; `msg.sender` is the relayer for every item (restricted-relayer intents keep working); any item
 reverting reverts the batch, so all-or-nothing holds per item and per batch; items may mix selectors and payers but
 never structs, contracts or chains (it is a function of one contract). Different structs signed in the token's domain
@@ -782,7 +790,7 @@ their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwra
 | Sponsored (company relayer) | Subject signs with `MODE_FEE_NONE` + `MODE_RESTRICT_RELAYER` = company lane | Company (OPEX) | **BUILT** (portal default, [INT-ERP-06](../integration.md#INT-ERP-06)) |
 | Fee in token | `MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient` (absolute for `ABSOLUTE` selectors) | Relayer, reimbursed in token | **BUILT** |
 | **Payee self-relay / direct settlement** | Payer signs offline (`fee = 0`, relayer unbound or bound to the payee); hands the signature to the payee by QR, NFC, message or file; the payee's wallet submits it, paying gas itself; `PaymentSettled` identical. The signature is an expiring electronic cheque (`validUntil`) | Payee | **BUILT** at contract level (any `msg.sender` may submit an unbound intent); QR (EIP-681-style) tooling and a user `cancelNonce` screen **PLANNED** |
-| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built; the UA twin `uaPayReceiverFee` **SPECIFIED** (UA-5a) |
+| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built; the UA twin `uaPayReceiverFee` **BUILT** (UA-5a) |
 | Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)); on-chain `SponsorshipPool` **PLANNED** later |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
 | **Token fee for a fee-less call** | The payer signs a token payment bound to one call on another contract (a PqChat record, a `UARegistry` write); `MtxRelayFee` runs the call, then the payment, atomically ([CTR-MTX-27](#CTR-MTX-27)) | Relayer, paid in token by the payer | **SPECIFIED** |
@@ -883,8 +891,8 @@ reference commits to the call, and that the payment is consumed only together wi
 | Hedera | the EVM contract |
 
 **Cost [estimate; measured in the plan].** On top of the call: the token's payment path (`mtxPay` 53,868 measured),
-the payer's signature check, the pay lane's first-use slot (+17 k), the open-mode forward (≈ +10–30 k), and two events.
-With an ECDSA payer that is ≈ +80–100 k gas; with a PQ payer, one more PQ verification.
+the payer's signature check, the pay lane's first-use slot (+17 k pre-Amsterdam, ≈ +98 k under Amsterdam, and `mtxPay` measures 181,810 in all on Amsterdam), the open-mode forward (≈ +10–30 k), and two events.
+With an ECDSA payer that is ≈ +80–100 k gas on the pre-Amsterdam figures and ≈ +200–230 k on Amsterdam (the old estimate is about 2 × low: review C5-9); with a PQ payer, one more PQ verification.
 
 **Conformance:**
 - a payment bound to another target, other call bytes or another chain is refused;
@@ -1031,7 +1039,7 @@ payee does not fit one transaction. Not in `uaBatchTransfer` (as the address pat
 | Threat | Defence |
 |---|---|
 | A client prices its own payment (sends a small amount) | `value` is built from the business document server-side; the client only returns a signature |
-| A third party pays 1 unit with someone else's `entryRef` | the settled sum must reach the amount; a stranger's overpayment is only money received |
+| A third party pays 1 unit with someone else's `entryRef` | not counted: the match requires `from == request.payer_address`; a stranger's payment is only money received |
 | Paying twice | one pay lane with nonce 0 per request ([CTR-MTX-03](#CTR-MTX-03)) |
 | A relayer front-runs and changes the recipient | every field of both structs is in the digest (`MetaTransfer.to`/`value`/`entryRef`, `MetaTransaction.data`); `MODE_RESTRICT_RELAYER` |
 | Replay across chains or tokens | domain `chainId` + `salt = chain_uid` + `verifyingContract` ([CTR-GEN-05](README.md#CTR-GEN-05)) |

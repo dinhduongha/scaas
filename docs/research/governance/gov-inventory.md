@@ -89,7 +89,7 @@ Source column:
 | Property / power | Src | Who | Delay | Bounds | Lock / renounce | Ref |
 |---|---|---|---|---|---|---|
 | Legs (`underlying`, order) | INIT | — | — | 1–8, no duplicate, ERC-20 with readable decimals or native (`address(0)`, 18 or 8 decimals on Hedera); Hedera associates | **never added or removed** | Z2:metatx/UnderlyingLib.sol:80-127 |
-| Rate `num/den` per leg | INIT; POST with bit 3 | `rateAdmin` role (a contract): `proposeRate` → `executeRate` (the rate admin only); `cancelRate` | **timelock `rateDelay`**, then a 7-day execution window (`RATE_WINDOW`) | one pending change at a time; `|Δ| ≤ maxRateStepBps` against the current rate; `num, den ∈ [1, 2^96)`; `executeRate` needs collateral `≥ totalSupply (+ totalShielded·shieldScale)`; a decrease is refused if any leg has wrap disabled | `disableFeature(RATE_ADJUSTABLE)` (owner, if unlocked) fixes the rates and drops the pending change; or revoke the rate admin and renounce the owner | Z2:…UnderlyingLib.sol:308-369; UnderlyingToken.sol:157-173; UnderlyingZetherToken.sol:99-107; UnderlyingPqzToken.sol:101-108; spec:token-wrappers.md#CTR-TOK-06 |
+| Rate `num/den` per leg | INIT; POST with bit 3 | `rateAdmin` role (a contract): `proposeRate` → `executeRate` (the rate admin only); `cancelRate` | **timelock `rateDelay`**, then a 7-day execution window (`RATE_WINDOW`) | one pending change at a time; `|Δ| ≤ maxRateStepBps` against the current rate; `num, den ∈ [1, 2^96)`; `executeRate` needs collateral `≥ totalSupply()` (the pool counts in `totalSupply()` since plan 5h D19); a decrease is refused if any leg has wrap disabled | `disableFeature(RATE_ADJUSTABLE)` (owner, if unlocked) fixes the rates and drops the pending change; or revoke the rate admin and renounce the owner | Z2:…UnderlyingLib.sol:308-369; UnderlyingToken.sol:157-173; UnderlyingZetherToken.sol:99-107; UnderlyingPqzToken.sol:101-108; spec:token-wrappers.md#CTR-TOK-06 |
 | `rateDelay` | INIT | — | — | 2–30 days with bit 3, else 0 | never changes | Z2:…UnderlyingLib.sol:91-98; IFactoryToken.sol:49-53 |
 | `maxRateStepBps` | INIT | — | — | 1–1000 bps (≤ 10% per change) with bit 3, else 0 | never changes | same |
 | `RATE_WINDOW = 7 days` | IMPL | — | — | constant | — | Z2:…UnderlyingLib.sol:68-69 |
@@ -125,7 +125,7 @@ Source column:
 | Precompile and proof system | INIT (read from the verifier) but pinned by IMPL constants | — | — | exactly `PQZ = 0x5caA…0F01`, PQZL or PQZH id, self-test passes now | — | Z2:pqz/PqzLib.sol:164-168; pqz/PqzSafety.sol:9-15,55-58 |
 | Chain gate (31337, 1337, 7622) | IMPL constant | — | — | checked in `init` | code change | Z2:pqz/PqzSafety.sol:22-28; PqzLib.sol:149 |
 | `shieldScale`, `maxShielded` | INIT | — | — | `maxShielded ≤ 2^62` (**Zether: 2^54**) | never change | Z2:pqz/PqzLib.sol:126,151-154 |
-| `confidentialFee`, `multiLegFee` (per listed leg, op 7) | INIT | — | — | `confidentialFee + 8·multiLegFee < 2^64` and `< maxShielded` | never change | Z2:…PqzLib.sol:152-153,175,350 |
+| `confidentialFee`, `minDecoyFee` (per listed leg, op 7; was `multiLegFee`) | INIT | — | — | `confidentialFee + 8 · minDecoyFee < 2^64` and `< maxShielded` | never change | Z2:…PqzLib.sol:152-153,175,350 |
 | Auditor (`auditorUA`: a registered 32-byte UA) | INIT | — | — | must be registered at init | no rotation | Z2:…PqzLib.sol:154,162-163,176 |
 | `auditorMode`, `disclosureMode` | INIT | — | — | as Zether | never change | Z2:…PqzLib.sol:157-161,170-171 |
 | Rollover | — | **anyone** (no per-account mode, unlike Zether) | — | 1–16 credits | — | Z2:…PqzLib.sol:580-581 |

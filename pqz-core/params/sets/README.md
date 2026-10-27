@@ -240,7 +240,7 @@ every row below would pass it; the SCaaS testnet activates EIP-7976 and every ru
 (`docs/research/pqzh-calldata-cap.md`, research). The other relay path, `uaExecute` with an `mldsa65` fee UA (review
 fix round of 2026-10-26, `runs/2026-10-26-t8d2b-fix-gas-<set>.txt`, systems `pqzl-ua` / `pqzh-ua`), adds 3,360 B of
 calldata to every `mtx*` row and no state gas: +0.137–0.138 M regular on the PQZL rows (all still fit 2^24), +215,040
-(the floor) on the PQZH debits; the verdicts below hold on both paths.
+(the floor) on the PQZH debits; the verdicts below hold on both paths. **Accepted fee-UA kinds on `uaExecute`** (C0-2 option (2); `runs/2026-10-27-review2-t2-holder-gas-<set>.txt`): at PQZH `n2048-kmax1024` an `mldsa65` (precompile) or `fndsa512` fee UA fits every built form, an `slhdsa128s` fee UA does not (burn 1: 16,890,776 regular gas, over 2^24); at the PQZL sets every fee-UA kind fits.
 
 | Relation — call path | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
 |---|---|---|---|---|
