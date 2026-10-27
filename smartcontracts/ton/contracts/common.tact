@@ -372,6 +372,16 @@ fun metaPayId(salt: Int, meta: Cell): Int {
         .storeUint(keccak256(meta.beginParse()), 256).asSlice());
 }
 
+/// A pay-meta `meta` must be a plain snake: at most one ref per cell. `keccak256(Slice)` follows only the first ref of
+/// each cell, so a second ref would ride into `PaymentMeta` unsigned (T15 follow-up). Else `E_PARAMS`.
+fun requireSnake(meta: Cell) {
+    let s = meta.beginParse();
+    while (s.refs() == 1) {
+        s = s.preloadRef().beginParse();
+    }
+    throwUnless(E_PARAMS, s.refs() == 0);
+}
+
 /// `keccak256("scaas.pay.lane" ‖ p)`: the lane of a payment id (CTR-MTX-23).
 fun payLane(p: Int): Int {
     return keccak256(beginCell().storeSlice("scaas.pay.lane".asSlice()).storeUint(p, 256).asSlice());

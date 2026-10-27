@@ -242,6 +242,7 @@ contract ScaasJettonWallet(
                 let meta = p.loadRef();
                 p.endParse();
                 throwUnless(E_PARAMS, m.payRef == metaPayId(salt, meta) && m.lane == payLane(m.payRef) && m.nonce == 0);
+                requireSnake(meta);
                 emit(PaymentMeta { master: self.master, payId: m.payRef, meta }.toCell());
             }
             self.sendOut(m.to, m.amount, 0, msg.responseDestination, msg.forwardTon, payTag(m.payRef), SendRemainingBalance);

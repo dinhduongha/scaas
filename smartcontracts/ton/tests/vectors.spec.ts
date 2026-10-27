@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ScaasJettonWallet, storeMetaTransactionExecuted, storePaymentMeta, storePaymentSettled, storeSignedOp } from '../build/jetton/jetton_ScaasJettonWallet';
 import { ScaasJettonMaster } from '../build/jetton/jetton_ScaasJettonMaster';
+import { ScaasRelayFee, storeRelayCall, storeRelayRefund } from '../build/relayfee/relayfee_ScaasRelayFee';
 import { setup } from './fixture';
 import { domainCell, metaOpCell, METAOP_SCHEMA, payMetaParams, SCHEMA_CRC, signDataCell, snakeCell, stateInitCell, tonConnectAuth, tradeParamsCell } from './helpers';
 
@@ -67,6 +68,24 @@ async function build() {
     const pmParams = payMetaParams(BigInt(pmRow.salt), pmMeta);
     const pm = beginCell().store(storePaymentMeta({ $$type: 'PaymentMeta', master: master.address, payId: BigInt(pmRow.payId), meta: pmMeta })).endCell();
     const code = walletInit.init!.code;
+    // Relay fee (CTR-MTX-27): ref of a call with refs two levels down, the escrow key, and the router's message bodies.
+    const { bc, admin, newToken, mint, walletOf } = await setup();
+    const laneToken = await newToken('L');
+    await mint(laneToken, admin.address, 1n);
+    const laneWallet = await walletOf(laneToken, admin.address);
+    const router = bc.openContract(await ScaasRelayFee.fromInit());
+    await router.send((await bc.treasury('deployer')).getSender(), { value: toNano('1') }, null);
+    const rfTarget = Address.parse('0:' + '44'.repeat(32));
+    const rfCall = beginCell().storeUint(0x5b0a1d01, 32).storeRef(beginCell().storeRef(beginCell().storeUint(1, 8).endCell()).endCell())
+        .storeRef(beginCell().storeUint(2, 8).endCell()).endCell();
+    const rfSalt = BigInt('0x' + '5a'.repeat(32));
+    const rfRef = await router.getGetRelayRef(rfTarget, rfCall, rfSalt);
+    const u = (x: bigint) => '0x' + x.toString(16).padStart(64, '0');
+    const rfOp = metaOpCell({ ...fields, to: router.address, relayer: router.address, payRef: rfRef, lane: await laneWallet.getGetPayLane(rfRef), amount: 25n });
+    const rfAuth = tonConnectAuth(payerKp, payer.address, ts, domain, rfOp);
+    const relayCall = beginCell().store(storeRelayCall({ $$type: 'RelayCall', target: rfTarget, call: rfCall, salt: rfSalt, payWallet: payerWallet,
+        payOp: rfOp, payAuth: rfAuth, payStateInit: stateInitCell(payer.init), master: master.address, deadline: 1_800_000_600n })).endCell();
+    const relayRefund = beginCell().store(storeRelayRefund({ $$type: 'RelayRefund', from: payer.address, ref: rfRef })).endCell();
     return {
         schema: METAOP_SCHEMA, schema_crc32: SCHEMA_CRC,
         metaop: {
@@ -88,6 +107,11 @@ async function build() {
         events: { mte_boc: hex(mte), ps_boc: hex(ps), pm_boc: hex(pm) },
         pay_meta: { name: pmRow.name, salt: pmRow.salt, meta: pmRow.meta, pay_id: pmRow.payId, pay_lane: pmRow.payLane,
                     meta_boc: hex(pmMeta), params_boc: hex(pmParams), params_hash: h(pmParams) },
+        relay_fee: {
+            router: raw(router.address), target: raw(rfTarget), call_boc: hex(rfCall), salt: u(rfSalt), ref: u(rfRef), from: raw(payer.address),
+            escrow_key: h(beginCell().storeAddress(payer.address).storeUint(rfRef, 256).endCell()),
+            pay_op_boc: hex(rfOp), relay_call_boc: hex(relayCall), relay_call_hash: h(relayCall), relay_refund_boc: hex(relayRefund),
+        },
     };
 }
 
