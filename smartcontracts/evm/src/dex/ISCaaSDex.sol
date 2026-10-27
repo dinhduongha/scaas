@@ -116,6 +116,8 @@ interface ISCaaSDex {
     error UAReceiveNotLedger(address token);
     error DuplicateOrder(bytes32 orderHash);
     error MarketNotListed(address tokenA, address tokenB);
+    /// @notice `setMarket` with equal or zero tokens (C6-9).
+    error BadMarket(address base, address quote);
     /// @notice An outside leg or a DEX-side cancel whose signature does not verify (ECDSA, or ERC-1271 under its cap);
     ///         the argument is the digest that was checked.
     error BadSignature(bytes32 digest);
@@ -126,6 +128,7 @@ interface ISCaaSDex {
     error SelfOrder(bytes32 orderHash);
     error OrderExpired(bytes32 orderHash);
     error NonceInvalidated(bytes32 orderHash);
+    error NonceAboveCap(bytes32 orderHash);
     error BadFlags(bytes32 orderHash);
     error ZeroAmount(bytes32 orderHash);
     error BadMinFill(bytes32 orderHash);

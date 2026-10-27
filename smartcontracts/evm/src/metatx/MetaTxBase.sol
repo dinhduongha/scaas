@@ -206,19 +206,20 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     }
 
     /// @dev Step 5: store the ticket (and the envelope binding, when the contract has one), call self, clear the ticket;
-    ///      a failed call reverts with its own revert data. The binding is read only under a live ticket, and every
-    ///      self-call of a contract that has one writes it first, so it needs no clearing. `subject` is the signer as
+    ///      a failed call reverts with its own revert data. The binding is read only under a live ticket; it is written
+    ///      on every self-call (0 included) and cleared on exit (C5-5). `subject` is the signer as
     ///      an id: a native address padded, or a derived UA (the UA ledger, CTR-UA-26), which the body sees as
     ///      `_msgSender() == UA_POOL` and `_ticketSubject() == subject`.
     function _selfCall(bytes32 subject, bytes memory data, bytes32 binding) internal returns (bytes memory ret) {
         _tstore(_SENDER, uint256(subject));
         _tstore(_TICKET, 1);
-        if (binding != bytes32(0)) _tstore(_BINDING, uint256(binding));
+        _tstore(_BINDING, uint256(binding)); // C5-5: unconditional, so an item with binding 0 never reads the last one
         bool ok;
         (ok, ret) = address(this).call(data);
         bool guarded = _tload(_TICKET) == 2;    // the target was `nonReentrant` and consumed the ticket
         _tstore(_TICKET, 0);
         _tstore(_SENDER, 0);
+        _tstore(_BINDING, 0);
         if (!ok) assembly ("memory-safe") { revert(add(ret, 0x20), mload(ret)) }
         if (!guarded) revert Reentrancy();      // fail closed: an allowlisted function must be `nonReentrant`
     }
@@ -265,9 +266,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @notice The envelope binding a proof inside the self-call carries (CTR-ZTH-34): every envelope field except
     ///         `data`. 0 (none) by default; a confidential token returns its own (Zether, and PQZ with its own tag).
-    ///         Step 5 writes it only when non-zero, which is safe only while an override is never 0 or always 0: one
-    ///         that returns 0 for some envelopes would let that `mtxBatch` item read the previous item's binding, so
-    ///         such an override needs step 5 to write the slot unconditionally.
+    ///         Step 5 writes the slot on every self-call and clears it on exit, so 0 for some envelopes is safe.
     function _envelopeBinding(MetaTxLib.MetaTransaction memory) internal view virtual returns (bytes32) {
         return bytes32(0);
     }

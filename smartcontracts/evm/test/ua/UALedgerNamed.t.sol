@@ -141,6 +141,20 @@ contract UALedgerNamedTest is UALedgerBase {
         wrp.uaUnwrap(uaP, address(und), 10, POOL, 0, 1, 0, m.validUntil, RR, RELAYER, a);
     }
 
+    /// C5-4: `SHIELD_POOL` is no unwrap recipient either (the plain unwrap would pay the underlying to a keyless address).
+    function test_C5_4_shieldPoolRecipientRefused() public {
+        _wrapFor(alice, 1_000);
+        vm.prank(alice);
+        wrp.transferToUA(uaP, 1_000);
+        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 10,
+            MetaTxLib.SHIELD_POOL, 0);
+        MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
+        bytes memory a = _authM(address(wrp), m);
+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, MetaTxLib.SHIELD_POOL));
+        vm.prank(RELAYER);
+        wrp.uaExecute(m, a);
+    }
+
     function test_uaTransfer_modeShape() public {
         vm.expectRevert(abi.encodeWithSelector(MetaTokenBase.MtxModeShape.selector, RR | RF));
         tok.uaTransfer(uaP, uaB, 1, 1, 0, block.timestamp + 1, RR | RF, RELAYER, "");

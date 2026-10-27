@@ -67,6 +67,7 @@ interface ITradeToken {
     error WrongRelayer(bytes32 orderHash, address submitter);
     error OrderExpired(bytes32 orderHash);
     error NonceInvalidated(bytes32 orderHash);
+    error NonceAboveCap(bytes32 orderHash);
     error BadFlags(bytes32 orderHash);
     error ZeroAmount(bytes32 orderHash);
     error BadMinFill(bytes32 orderHash);

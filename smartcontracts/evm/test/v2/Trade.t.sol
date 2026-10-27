@@ -251,6 +251,15 @@ contract TradeTest is V2Fixture {
         _trade(o, _fill(600, 1200, 0));
     }
 
+    /// C6-5: an order whose nonce no lane invalidation can reach (>= 2^128) is refused at the precheck.
+    function test_C6_5_nonceAbove2pow128Refused() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.nonce = 2 ** 128;
+        _expect(ITradeToken.NonceAboveCap.selector, o, _fill(600, 1200, 0));
+        o.nonce = 2 ** 128 - 1;
+        _trade(o, _fill(600, 1200, 0));
+    }
+
     // ------------------------------------------------------------------ never gasless
 
     function test_tradeEntriesAreNotAllowlisted() public {

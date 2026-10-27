@@ -147,6 +147,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     /// @notice Lists or delists the pair and records each token's kind from the factory (never from a leg).
     function setMarket(address base, address quote, bool listed) external {
         DexStorage storage s = _onlyAdmin();
+        if (base == quote || base == address(0) || quote == address(0)) revert BadMarket(base, quote); // C6-9
         bytes32 k = _pair(base, quote);
         if (s.listed[k] != listed) {
             s.listed[k] = listed;

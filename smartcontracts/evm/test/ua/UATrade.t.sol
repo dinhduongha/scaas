@@ -265,6 +265,13 @@ contract UATradeTest is UALedgerBase {
         tok.uaTrade(o, "", _f(600, 1200, 0));
     }
 
+    /// C5-2: the native id 0 is not a signer on the UA path (its fee move would be a mint).
+    function test_C5_2_nativeIdZeroRefused() public {
+        ITradeToken.UATradeOrder memory o = _o(bytes32(0), 1000, 2000);
+        vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, bytes32(0)));
+        tok.uaTrade(o, "", _f(600, 1200, 0));
+    }
+
     function test_ledgerOff_everyUATradeFunction() public {
         NoUnderlyingToken off = NoUnderlyingToken(Clones.clone(address(
             new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));

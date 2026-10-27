@@ -6,6 +6,28 @@ import {MtxRegistryMock} from "../helpers/MtxRegistryMock.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
+/// C5-5 probe: the envelope binding is 7 for nonce 0 and 0 otherwise; `record()` stores what the self-call sees.
+contract BindingProbe is MtxRegistryMock {
+    bytes32[] public seen;
+
+    constructor(bytes32 uid) MtxRegistryMock("SCaaS BindingProbe", uid) {}
+
+    function record() external nonReentrant {
+        seen.push(_ticketBinding());
+    }
+
+    function seenLength() external view returns (uint256) { return seen.length; }
+
+    function _envelopeBinding(MetaTxLib.MetaTransaction memory m) internal pure override returns (bytes32) {
+        return m.nonce == 0 ? bytes32(uint256(7)) : bytes32(0);
+    }
+
+    function _mtxRule(bytes4 sel) internal view override returns (MtxRule memory) {
+        if (sel == this.record.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 4);
+        return super._mtxRule(sel);
+    }
+}
+
 /// CTR-MTX-11: `mtxBatch` is atomic, runs items in order, a fresh ticket per item.
 contract MetaTxBaseBatchTest is MtxFixture {
     function _batch(MetaTxLib.MetaTransaction[] memory ms, bytes[] memory sigs) internal {
@@ -30,6 +52,24 @@ contract MetaTxBaseBatchTest is MtxFixture {
         assertEq(reg.count(alice), 2);
         assertEq(reg.mtxNonce(alice, 1), 2);
         assertEq(reg.mtxNonce(bob, 1), 1);
+    }
+
+    /// C5-5: an item with a zero binding must not read the previous item's.
+    function test_C5_5_bindingClearedAfterSelfCall() public {
+        BindingProbe p = new BindingProbe(UID);
+        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](2);
+        bytes[] memory sigs = new bytes[](2);
+        ms[0] = _m(alice, abi.encodeCall(BindingProbe.record, ()), 1, 0);
+        ms[1] = _m(alice, abi.encodeCall(BindingProbe.record, ()), 1, 1);
+        for (uint256 i; i < 2; ++i) {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, p.mtxDigest(ms[i]));
+            sigs[i] = abi.encodePacked(r, s, v);
+        }
+        vm.prank(relayer);
+        p.mtxBatch(ms, sigs);
+        assertEq(p.seenLength(), 2);
+        assertEq(p.seen(0), bytes32(uint256(7)));
+        assertEq(p.seen(1), bytes32(0), "the second item has no binding");
     }
 
     function test_batch_isAllOrNothing() public {
