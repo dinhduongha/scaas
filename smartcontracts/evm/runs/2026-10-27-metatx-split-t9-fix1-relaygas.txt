@@ -1,0 +1,8 @@
+# T9 fix 1 relay gas at 333c96b6 + fix-1 tree (Amsterdam, isolate)
+[PASS] test_relayGas_ecdsaAndMldsa65() (gas: 2630720)
+  bare call (mtxExecute, bump) gas: regular / state / total 63205 195840 259045
+  relay, ECDSA payer, open mode gas: regular / state / total 172481 391680 564161
+  relay, ECDSA payer, bound payee gas: regular / state / total 155923 391680 547603
+  uaRelay, mldsa65 payer, open mode gas: regular / state / total 310168 391680 701848
+  overhead over the bare call (regular): ECDSA open / ECDSA bound / mldsa65 open 109276 92718 246963
+  bare call state gas 195840

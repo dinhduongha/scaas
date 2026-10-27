@@ -40,12 +40,15 @@ contract MtxRelayExecutor {
 contract MtxRelayFee is ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
-    /// @notice `payer` is the payer's id (an address padded on `relay`); `payee` the address paid: `msg.sender` in open
-    ///         mode, else `t.to` — 0 when a `uaRelay` pays a derived UA id (read the token's `UAPaymentSettled`).
-    event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, address payee,
+    /// @notice `payer` and `payee` are ids: an address zero-padded, or a derived UA id (`uaRelay`). `payee` is the one
+    ///         paid: `pad(msg.sender)` in open mode, else `t.to` (padded on `relay`).
+    event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee,
                        uint256 amount);
 
     error RelayFeeShape();
+    /// @notice The target has no code at relay time (a counterfactual address not yet deployed, an EOA, a precompile):
+    ///         a call to it would succeed and the payer would pay for nothing (CTR-MTX-13).
+    error RelayTargetNoCode(address target);
 
     address public immutable EXECUTOR;
 
@@ -59,12 +62,11 @@ contract MtxRelayFee is ReentrancyGuardTransient {
                    bytes calldata sig) external nonReentrant
     {
         bytes32 ref = relayRef(target, callData);
-        _shape(ref, t.entryRef, t.batch, t.nonce, t.mode, t.relayer, t.fee);
+        bytes32 to = MetaTxLib.pad(t.to);
+        _shape(ref, target, t.entryRef, to, t.batch, t.nonce, t.mode, t.relayer, t.fee);
         MtxRelayExecutor(EXECUTOR).exec(target, callData);
         IERC20MetaTx(token).mtxExecuteTransfer(t, sig);
-        address payee = t.to;
-        if (payee == address(this)) payee = _forward(token, t.value);
-        emit RelayFeePaid(ref, target, token, MetaTxLib.pad(t.from), payee, t.value);
+        emit RelayFeePaid(ref, target, token, MetaTxLib.pad(t.from), _payee(token, to, t.value), t.value);
     }
 
     /// @notice `relay` for a UA payer (`uaExecuteTransfer`); open mode is `t.to == pad(router)`.
@@ -72,13 +74,10 @@ contract MtxRelayFee is ReentrancyGuardTransient {
                      bytes calldata auth) external nonReentrant
     {
         bytes32 ref = relayRef(target, callData);
-        _shape(ref, t.entryRef, t.batch, t.nonce, t.mode, t.relayer, t.fee);
+        _shape(ref, target, t.entryRef, t.to, t.batch, t.nonce, t.mode, t.relayer, t.fee);
         MtxRelayExecutor(EXECUTOR).exec(target, callData);
         IUALedger(token).uaExecuteTransfer(t, auth);
-        address payee;
-        if (t.to == MetaTxLib.pad(address(this))) payee = _forward(token, t.value);
-        else if (uint256(t.to) >> 160 == 0) payee = address(uint160(uint256(t.to)));
-        emit RelayFeePaid(ref, target, token, t.from, payee, t.value);
+        emit RelayFeePaid(ref, target, token, t.from, _payee(token, t.to, t.value), t.value);
     }
 
     /// @notice The payment reference of one call: the chain, the target and the exact call bytes.
@@ -87,18 +86,23 @@ contract MtxRelayFee is ReentrancyGuardTransient {
     }
 
     /// @dev CTR-MTX-27 step 2: `entryRef == ref`, lane `payLane(ref)` (CTR-MTX-10, `MetaTokenBase.payLane`), nonce 0,
-    ///      relayer bound to this router, fee mode `NONE` and fee 0 (the payment's `value` is the fee).
-    function _shape(bytes32 ref, bytes32 entryRef, uint256 batch, uint256 nonce, uint32 mode, address relayer,
-                    uint256 fee) private view
+    ///      relayer bound to this router, fee mode `NONE` and fee 0 (the payment's `value` is the fee), the payee not the
+    ///      executor (`to` as an id); and the target has code (conformance item 9).
+    function _shape(bytes32 ref, address target, bytes32 entryRef, bytes32 to, uint256 batch, uint256 nonce, uint32 mode,
+                    address relayer, uint256 fee) private view
     {
         if (entryRef != ref || batch != uint256(keccak256(abi.encodePacked("scaas.pay.lane", ref))) || nonce != 0
             || mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || relayer != address(this)
-            || mode & MetaTxLib.MODE_FEE_MASK != MetaTxLib.MODE_FEE_NONE || fee != 0) revert RelayFeeShape();
+            || mode & MetaTxLib.MODE_FEE_MASK != MetaTxLib.MODE_FEE_NONE || fee != 0
+            || to == MetaTxLib.pad(EXECUTOR)) revert RelayFeeShape();
+        if (target.code.length == 0) revert RelayTargetNoCode(target);
     }
 
-    /// @dev Open mode: the payment just landed here; it goes on to whoever submitted the relay.
-    function _forward(address token, uint256 value) private returns (address) {
+    /// @dev Step 5. Open mode (`to == pad(router)`): the payment just landed here and goes on to whoever submitted the
+    ///      relay; else the payee `to` was paid directly.
+    function _payee(address token, bytes32 to, uint256 value) private returns (bytes32) {
+        if (to != MetaTxLib.pad(address(this))) return to;
         IERC20(token).safeTransfer(msg.sender, value);
-        return msg.sender;
+        return MetaTxLib.pad(msg.sender);
     }
 }

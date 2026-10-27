@@ -477,12 +477,16 @@ CTR-MTX-27's normative text is the spec; this section fixes only the build.
 - **No token change and no library change.** The router calls the token's existing `mtxExecuteTransfer` /
   `uaExecuteTransfer`; under the split those run `preTransfer` like any other typed call. So the router does not
   depend on the split's internals and may be built in parallel once the split's ABI is fixed.
-- **Steps:** exactly CTR-MTX-27's six. `ref` and `payLane(ref)` computed by the router (pure). `nonReentrant` by a
+- **Steps:** exactly CTR-MTX-27's six. `ref` and `payLane(ref)` computed by the router (pure). Step 2 also refuses
+  `t.to == EXECUTOR` (`RelayFeeShape`) and a target without code (`RelayTargetNoCode(target)`; T9 fix 1, controller
+  call 2026-10-27). `nonReentrant` by a
   transient slot (no stored state). Open mode (`t.to == address(this)`; UA: `t.to == pad(address(this))`) forwards
   `t.value` with `IERC20(token).transfer(msg.sender, t.value)`.
 - **Public balances only:** the router only ever calls the typed transfer paths, which move public (and UA-ledger)
   balances; on a PQZ or Zether token that is the public side.
-- **Forge conformance:** CTR-MTX-27's list (eight items), plus: the executor refuses every caller but the router;
+- **Event:** `RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer,
+  bytes32 payee, uint256 amount)`, `payee` an id like `payer` (T9 fix 1, controller call 2026-10-27).
+- **Forge conformance:** CTR-MTX-27's list (nine items), plus: the executor refuses every caller but the router;
   the router holds no balance after a `relay` in open mode; a target that is a SCaaS token entry with its own
   envelope works when that envelope leaves the relayer open or binds it to the executor.
 - **Gas** (CTR-MTX-27's estimate: ≈ +200–230k on Amsterdam with an ECDSA payer): measured in the plan, ECDSA and
@@ -509,7 +513,11 @@ the call, and the payment is consumed only together with the call. What each fam
   a refusal, as on EVM. Per family below.
 - **Open mode is the client default** (the submitting lane is paid); a bound payee where the family's shape allows
   it. **No PQ signatures off EVM** (§1 non-goals). **No budget mode** (owner 2026-10-26).
-- Event `RelayFeePaid(ref, target, token, payer, payee, amount)` in the family's event form.
+- Event `RelayFeePaid(ref, target, token, payer, payee, amount)` in the family's event form, `payer` and `payee` as
+  the family's 32-byte ids (the EVM `bytes32` form, controller call 2026-10-27).
+- **The target exists** at relay time (CTR-MTX-27's ninth item): the router refuses a target that is not deployed code,
+  an executable program or an instantiated contract, so a counterfactual target cannot burn the payment. Each row's
+  router checks it in the family's terms.
 
 | Family | Router (from the family's current code) | Executor / re-entry | Tests |
 |---|---|---|---|

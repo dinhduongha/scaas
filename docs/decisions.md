@@ -1813,6 +1813,7 @@ style: a new outbound call and bytecode in each token); one combined PQ signatur
 **Cost if wrong.** If the router called targets itself, a `callData` could execute another router-bound payment
 through a token, with no call behind it.
 **Source.** `research/mtx-relay-fees.md` §3, §5 (owner answers 2026-10-26; "Có, viết spec luôn đi").
+Change (2026-10-27, controller call 2026-10-27, owner may override; status: current; commit: metatx-split T9 fix 1): (1) the router refuses a target without code, `RelayTargetNoCode(target)`: a counterfactual target (a `SmartKeyAccountFactory` prediction, a CREATE2 clone) relayed before its deploy would succeed as an empty call, pay the fee and burn the lane (against CTR-MTX-13); CTR-MTX-27 gets a ninth conformance item for every family: the target must exist as code / an executable program / an instantiated contract at relay time. (2) `RelayFeePaid.payee` is `bytes32` (a padded address, or the UA id of a derived payee), like `payer`; the other families' events follow this form. (3) The router refuses `t.to == EXECUTOR` (UA: `pad(EXECUTOR)`), and clients never pay or approve the executor. Cost if wrong: a target deployed in the same transaction before the relay is still accepted; a relay cannot pre-pay a target's deploy. Source add: `superpowers/specs/2026-10-27-metatx-split-design.md` §7.1, §7.2.
 
 ### CTR-MTX-80 — No named mtxPay; accepted gas cost
 - old: R2(cost) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-MTX-09, CTR-MTX-10, CTR-MTX-11

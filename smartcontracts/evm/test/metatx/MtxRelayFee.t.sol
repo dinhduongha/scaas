@@ -235,7 +235,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.expectEmit(address(tok));
         emit IERC20Payment.PaymentSettled(alice, address(router), FEE, 0, address(router), ref); // fee 0: feeTo = the relayer
         vm.expectEmit(address(router));
-        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), REL, FEE);
+        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(REL), FEE);
         vm.prank(REL);
         router.relay(address(target), cd, address(tok), t, s);
         assertEq(target.count(bob), 1, "the call ran");
@@ -251,7 +251,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         MetaTxLib.MetaTransfer memory t = _pay(PAYEE, ref, FEE);
         bytes memory s = _sig(t);
         vm.expectEmit(address(router));
-        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), PAYEE, FEE);
+        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), MetaTxLib.pad(alice), MetaTxLib.pad(PAYEE), FEE);
         vm.prank(REL);
         router.relay(address(target), cd, address(tok), t, s);
         assertEq(tok.balanceOf(PAYEE), FEE);
@@ -260,7 +260,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
     }
 
     /// (7) a UA payer works through `uaRelay`: an `mldsa65` UA (open mode: its ledger to the relayer's public balance;
-    ///     a bound native payee; a bound derived payee, whose event `payee` is 0) and a native id (ECDSA).
+    ///     a bound native payee; a bound derived payee, the event `payee` its id) and a native id (ECDSA).
     function test_uaRelay_mldsa65Payer() public {
         bytes memory cd = _call(0, address(0));
         bytes32 ref = _ref(address(target), cd);
@@ -268,7 +268,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.expectEmit(address(tok));
         emit IUALedger.UAPaymentSettled(ml, u.to, FEE, 0, address(router), ref);
         vm.expectEmit(address(router));
-        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), ml, REL, FEE);
+        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), ml, MetaTxLib.pad(REL), FEE);
         vm.prank(REL);
         router.uaRelay(address(target), cd, address(tok), u, _mlAuth());
         assertEq(tok.balanceOfUA(ml), 1_000 - FEE);
@@ -279,7 +279,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         ref = _ref(address(target), cd);
         u = _upay(ml, MetaTxLib.pad(PAYEE), ref, FEE);
         vm.expectEmit(address(router));
-        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), ml, PAYEE, FEE);
+        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), ml, MetaTxLib.pad(PAYEE), FEE);
         vm.prank(REL);
         router.uaRelay(address(target), cd, address(tok), u, _mlAuth());
         assertEq(tok.balanceOf(PAYEE), FEE);
@@ -289,7 +289,7 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         ref = _ref(address(target), cd);
         u = _upay(ml, ml2, ref, FEE);
         vm.expectEmit(address(router));
-        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), ml, address(0), FEE);
+        emit MtxRelayFee.RelayFeePaid(ref, address(target), address(tok), ml, ml2, FEE);
         vm.prank(REL);
         router.uaRelay(address(target), cd, address(tok), u, _mlAuth());
         assertEq(tok.balanceOfUA(ml2), FEE);
@@ -368,6 +368,68 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         vm.expectRevert(MtxRelayFee.RelayFeeShape.selector);
         vm.prank(REL);
         router.uaRelay(address(target), cd, address(tok), u, "");
+        assertEq(target.count(bob), 0);
+    }
+
+    /// Conformance item 9 (controller call 2026-10-27): the target must have code at relay time. A counterfactual
+    /// target (CREATE2, not yet deployed) is refused, so the payment cannot be spent on an empty call; after the deploy
+    /// the same `t, sig` settles. An EOA and a precompile are refused too.
+    function test_relay_targetNoCode_counterfactual() public {
+        bytes32 salt = keccak256("t9.counterfactual");
+        address pred = vm.computeCreate2Address(salt, keccak256(abi.encodePacked(type(MtxRegistryMock).creationCode,
+            abi.encode("SCaaS TestRegistry", PQZ_UID))), address(this));
+        assertEq(pred.code.length, 0);
+        bytes memory cd = abi.encodeCall(MtxRegistryMock.whoAmI, ());
+        MetaTxLib.MetaTransfer memory t = _pay(address(router), _ref(pred, cd), FEE);
+        bytes memory s = _sig(t);
+        vm.prank(REL);
+        vm.expectRevert(abi.encodeWithSelector(MtxRelayFee.RelayTargetNoCode.selector, pred));
+        router.relay(pred, cd, address(tok), t, s);
+        assertEq(tok.mtxNonce(alice, t.batch), 0, "the lane is not burnt");
+        assertEq(address(new MtxRegistryMock{salt: salt}("SCaaS TestRegistry", PQZ_UID)), pred);
+        vm.prank(REL);
+        router.relay(pred, cd, address(tok), t, s);
+        assertEq(tok.balanceOf(REL), FEE);
+        address[2] memory empty = [address(0xE0A), address(1)]; // an EOA, the ecrecover precompile
+        for (uint256 i; i < 2; ++i) {
+            t = _pay(address(router), _ref(empty[i], cd), FEE);
+            vm.prank(REL);
+            vm.expectRevert(abi.encodeWithSelector(MtxRelayFee.RelayTargetNoCode.selector, empty[i]));
+            router.relay(empty[i], cd, address(tok), t, "");
+        }
+    }
+
+    /// Never pay the executor (controller call 2026-10-27): `t.to == executor` (UA: `pad(executor)`) is refused.
+    function test_relay_payeeExecutorRefused() public {
+        bytes memory cd = _call(0, address(0));
+        bytes32 ref = _ref(address(target), cd);
+        _shape(_pay(exec, ref, FEE), cd);
+        MetaTxLib.UAMetaTransfer memory u = _upay(ml, MetaTxLib.pad(exec), ref, FEE);
+        vm.expectRevert(MtxRelayFee.RelayFeeShape.selector);
+        vm.prank(REL);
+        router.uaRelay(address(target), cd, address(tok), u, "");
+    }
+
+    /// A payment that fails after a successful target call rolls the call back (a wrong signature: the counter stays
+    /// 0); the same `t, sig` against a second real token fails (another domain) and moves nothing there.
+    function test_relay_paymentFailureRollsBackCall() public {
+        bytes memory cd = _call(0, address(0));
+        MetaTxLib.MetaTransfer memory t = _pay(address(router), _ref(address(target), cd), FEE);
+        bytes memory bad = _ecdsa(BOB_PK, tok.mtxTransferDigest(t));
+        vm.prank(REL);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        router.relay(address(target), cd, address(tok), t, bad);
+        assertEq(target.count(bob), 0, "the call rolled back");
+        assertEq(tok.mtxNonce(alice, t.batch), 0);
+
+        NoUnderlyingToken tok2 = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1,
+            plainEnv(address(this), address(0), PQZ_UID, address(reg), false), ""))));
+        tok2.initialize(address(this), 1, abi.encode(noneInit("Other", "OTH", 6, 1_000_000, alice, address(this))));
+        bytes memory s = _sig(t);
+        vm.prank(REL);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        router.relay(address(target), cd, address(tok2), t, s);
+        assertEq(tok2.balanceOf(alice), 1_000_000);
         assertEq(target.count(bob), 0);
     }
 

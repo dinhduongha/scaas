@@ -840,9 +840,10 @@ function relay(address target, bytes calldata callData, address token,
 function uaRelay(address target, bytes calldata callData, address token,
                  MetaTxLib.UAMetaTransfer calldata t, bytes calldata auth) external;     // nonReentrant
 function relayRef(address target, bytes calldata callData) external view returns (bytes32);
-event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, address payee,
+event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee,
                    uint256 amount);
 error RelayFeeShape();
+error RelayTargetNoCode(address target);
 ```
 
 Steps (`relay`; `uaRelay` is the same with the UA struct and `uaExecuteTransfer`):
@@ -850,7 +851,13 @@ Steps (`relay`; `uaRelay` is the same with the UA struct and `uaExecuteTransfer`
 2. Shape, else `RelayFeeShape`:
    - `t.entryRef == ref`, `t.batch == payLane(ref)` (CTR-MTX-10's formula), `t.nonce == 0`;
    - `MODE_RESTRICT_RELAYER` set and `t.relayer == address(this)`;
-   - fee mode `NONE`, `t.fee == 0` (the payment's `value` is the fee).
+   - fee mode `NONE`, `t.fee == 0` (the payment's `value` is the fee);
+   - `t.to` is not the executor (`to != EXECUTOR`; UA: `to != pad(EXECUTOR)`; controller call 2026-10-27, owner may
+     override).
+
+   Then `target` must have code, else `RelayTargetNoCode(target)` (controller call 2026-10-27, owner may override): a
+   call to an address without code (a counterfactual target not yet deployed, an EOA, a precompile) succeeds, so the
+   payer would pay for an operation that did not happen (CTR-MTX-13).
 3. The executor calls `target` with `callData` (no value). A failure reverts the whole transaction with the inner
    revert data.
 4. `token.mtxExecuteTransfer(t, sig)` (UA: `uaExecuteTransfer(t, auth)`). The token checks the payer's signature and
@@ -859,7 +866,9 @@ Steps (`relay`; `uaRelay` is the same with the UA struct and `uaExecuteTransfer`
 5. **Open mode** (`t.to == address(this)`, the client default, owner 2026-10-26): the router transfers `t.value` to
    `msg.sender`, so any relayer may take the job. **Bound payee** (any other `t.to`: one relayer, a service treasury,
    a session creator): the payment goes straight there, and the router forwards nothing.
-6. Emit `RelayFeePaid`.
+6. Emit `RelayFeePaid`: `payer` and `payee` are ids (an address zero-padded, or the UA id), `payee` the one paid
+   (`pad(msg.sender)` in open mode, else `t.to`; controller call 2026-10-27, owner may override: `bytes32` like `payer`,
+   so a derived UA payee is named).
 
 Why it holds:
 - **Bound.** The payer's signature covers `ref`, that is the chain, the target and the exact call bytes (the call's own
@@ -892,7 +901,9 @@ yet signed may be added later without changing these steps.
 - build the call with its own signature, then `ref = relayRef(target, callData)`;
 - build `t = {from: payer, to: router (open) or the payee, value: fee, entryRef: ref, batch: payLane(ref), nonce: 0,
   validUntil, mode: RESTRICT_RELAYER, relayer: router}`;
-- show both intents (the call and its fee) in one prompt.
+- show both intents (the call and its fee) in one prompt;
+- never pay or approve the executor: it holds nothing and anyone can make it call anything (the router refuses
+  `t.to == EXECUTOR`; an approval to it would be spendable by any relay).
 
 **Nodes:** a relayer node quotes `(token, amount, validUntil)`, simulates the whole `relay`, and submits only if the
 fee covers the gas at its price. In open mode a mempool copy is an ordinary race for the fee.
@@ -919,7 +930,10 @@ With an ECDSA payer that is ≈ +80–100 k gas on the pre-Amsterdam figures and
 - a second `relay` with the same `ref` fails (pay lane);
 - open mode pays `msg.sender`, and a bound payee is paid directly;
 - a UA payer works through `uaRelay`;
-- re-entry into the router is refused.
+- re-entry into the router is refused;
+- the target must exist as code / an executable program / an instantiated contract at relay time, on every family: a
+  relay to a target that does not exist yet (a counterfactual address) is refused and leaves the payment unspent
+  (controller call 2026-10-27, owner may override).
 
 ## <a id="receiver-pays"></a>13. Receiver-pays
 
