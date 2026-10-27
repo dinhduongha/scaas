@@ -310,6 +310,36 @@ contract PqzStateTest is PqzSlots {
         assertEq(a.accUnits, 1);
     }
 
+    /// Review C0-6, accepted (owner ruling 2026-10-27; pq-zero-knowledge.md CTR-PQZ-08 (a)): `ROLL_AGE` counts from each
+    /// entry's own block, not from the proof. A debit proven at `p`, then `INLINE_MAX + 1 = 17` shields of 1 unit by a
+    /// bystander in distinct blocks and two rollovers: `floor` rises past `p`, the debit reverts `PendingRange`, no state
+    /// changes, and the victim gained exactly the 17 units. The wallet re-proves at the new `p`.
+    function test_rollFlood_killsAnInFlightDebit_pendingRange() public {
+        _fund(tok, alice, 1);
+        vm.roll(block.number + 1);
+        bytes memory pl = _pl(1, alice, bob, 50, false); // proven at p = pendingCount = 1
+        uint256 n = PqzCore.INLINE_MAX + 1;
+        uint256 shieldedBefore = tok.totalShielded();
+        for (uint256 i; i < n; ++i) {
+            _fund(tok, alice, 1);
+            vm.roll(block.number + 1);
+        }
+        assertEq(tok.totalShielded(), shieldedBefore + n, "the victim gained 17 units");
+        _roll(tok, alice, 9);
+        _roll(tok, alice, 9); // two rollovers: rolled = 18, floor = 18 - INLINE_MAX = 2 > p
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
+        assertEq(a.rolled, n + 1);
+        assertEq(a.floor, n + 1 - PqzCore.INLINE_MAX);
+        bytes32 before = keccak256(abi.encode(a, tok.pqzAcc(alice), tok.totalShielded()));
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.PendingRange.selector, 1, a.floor, a.pendingCount));
+        _send(pl, "");
+        assertEq(keccak256(abi.encode(tok.pqzAccount(alice), tok.pqzAcc(alice), tok.totalShielded())), before, "no state change");
+        // the wallet re-proves at the new p and the debit settles
+        bytes memory pl2 = _pl(a.pendingCount, alice, bob, 51, false);
+        _send(pl2, "");
+        _mirrorDebit(alice, bob, pl2);
+    }
+
     /// `p < rolled` at proving (an un-roll); anyone rolls further before the submit; the un-rolled entries roll again.
     function test_rollRace_unrollThenRollover() public {
         for (uint256 i; i < 3; ++i) _transfer(tok, carol, alice, bytes32(0), 10 + i, false);
