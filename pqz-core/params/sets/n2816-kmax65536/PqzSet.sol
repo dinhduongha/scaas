@@ -27,7 +27,7 @@ library PqzSet {
     /// entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)
     uint256 internal constant ROLL_MAX = 32;
     /// the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute (set.toml debit_min_gas; the UA registry's PQZ holder bound)
-    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_351_418;
+    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_358_343;
     /// pk / u bytes (k polys x 64 be8)
     uint256 internal constant PK = 22_528;
     /// v bytes (16 be8)

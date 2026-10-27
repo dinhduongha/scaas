@@ -87,8 +87,8 @@ abstract contract DeployBase is Script {
     ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24): the transaction needs
     ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit. Runtime sizes are `size-baseline.json`'s
     ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`).
-    ///         `NoUnderlyingToken` 38,598 B = 75.8 M, `UnderlyingZetherToken` 60,625 B = 109.5 M,
-    ///         `UnderlyingPqzToken` 61,519 B = 110.9 M (the figures move with the baseline).
+    ///         `NoUnderlyingToken` 38,195 B = 75.2 M, `UnderlyingZetherToken` 60,282 B = 109.0 M,
+    ///         `UnderlyingPqzToken` 61,137 B = 110.3 M (the figures move with the baseline).
     uint256 internal constant STATE_GAS_PER_BYTE = 1530;
     uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
     uint256 internal constant EIP170_LIMIT = 24_576;

@@ -53,15 +53,17 @@ contract MetaTxGasV2Test is Test {
     // Metatx split T3 (2026-10-27): the typed path DELEGATECALLs `MtxPipelineLib.preTransfer` (a cold account, the ABI of
     // `Ctx` + `UAMetaTransfer` + signature, the returned `Out`): A 80,249 -> 87,899, B 178,157 -> 185,807, C 95,950 ->
     // 103,702, D 95,889 -> 103,629, E 95,993 -> 103,695, F 178,157 -> 185,819, G 174,814 -> 182,404, P 181,810 -> 189,459
-    // (+7.6k to +7.8k). Task 8 re-measures with the final token bytecode.
-    uint256 constant AMS_A = 87_899;
-    uint256 constant AMS_B = 185_807;
-    uint256 constant AMS_C = 103_702;
-    uint256 constant AMS_D = 103_629;
-    uint256 constant AMS_E = 103_695;
-    uint256 constant AMS_F = 185_819;
-    uint256 constant AMS_G = 182_404;
-    uint256 constant AMS_P = 189_459;
+    // (+7.6k to +7.8k).
+    // Metatx split T8 (2026-10-27) re-measured on the final token bytecode (split + PayMeta): A 87,936, B 185,844, C 103,751,
+    // D 103,666, E 103,744, F 185,868, G 182,453, P 189,496 (runs/2026-10-27-metatx-split-overhead-final.txt).
+    uint256 constant AMS_A = 87_936;
+    uint256 constant AMS_B = 185_844;
+    uint256 constant AMS_C = 103_751;
+    uint256 constant AMS_D = 103_666;
+    uint256 constant AMS_E = 103_744;
+    uint256 constant AMS_F = 185_868;
+    uint256 constant AMS_G = 182_453;
+    uint256 constant AMS_P = 189_496;
     address signer;
     address relayer = address(0xBEEF);
     address recipient = address(0xCAFE);

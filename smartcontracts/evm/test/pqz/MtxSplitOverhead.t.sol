@@ -29,6 +29,8 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         logOnly = vm.envOr("MTX_OV_PRESPLIT", uint256(0)) == 1;
         if (!logOnly) pre = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/metatx-overhead-presplit.json"));
+        // the pre-split figures exist for n2304-kmax4096 and n2048-kmax1024 only (T5 measured those two)
+        if (!logOnly) vm.skip(!vm.keyExistsJson(pre, string.concat(".", PqzSet.NAME)));
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee2 = reg.register(UAKinds.FNDSA512, fpk, new bytes(666), "", "");

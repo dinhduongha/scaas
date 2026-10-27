@@ -2140,6 +2140,8 @@ contract MetaTxParityTest is ParityIO {
     /// Write (`PARITY_WRITE=1`) or replay the whole case set and the allowlist rows.
     function test_parity() public {
         bool write = vm.envOr("PARITY_WRITE", false);
+        // the fixture is the committed set's (its `set` field); the other sets' cases differ, so the replay is skipped there
+        vm.skip(!write && keccak256(bytes(PqzSet.NAME)) != keccak256("n2304-kmax4096"));
         if (write) {
             vm.writeFile(FILE, "");
             vm.writeLine(FILE, "[");
