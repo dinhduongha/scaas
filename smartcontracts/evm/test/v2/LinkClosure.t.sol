@@ -133,7 +133,9 @@ contract LinkClosureTest is Test {
         uint256 end = c.length;
         // cut the CBOR metadata first (its length is the last two bytes): its hash bytes can hold 0xfe / 0xff (T8: the
         // `PqzStateLib` hash did after the `debit_min_gas` re-pin, which put a false SELFDESTRUCT before the last 0xfe)
-        end -= 2 + ((uint256(uint8(c[end - 2])) << 8) | uint8(c[end - 1]));
+        uint256 mlen = (uint256(uint8(c[end - 2])) << 8) | uint8(c[end - 1]);
+        require(end >= mlen + 2 && uint8(c[end - 2 - mlen]) >= 0xa1 && uint8(c[end - 2 - mlen]) <= 0xa3, "no CBOR metadata trailer");
+        end -= 2 + mlen;
         // cut at the last 0xfe: assumes solc ends the runtime code with INVALID, then its data and the CBOR metadata
         while (end > 0 && c[end - 1] != 0xfe) --end;
         for (uint256 i; i < end; ++i) {

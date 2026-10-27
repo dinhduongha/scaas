@@ -1,0 +1,56 @@
+== at-set.sh: n2560-kmax16384 (n2560-kmax16384), forge test --match-test test_pack_scanRoll -vv
+No files changed, compilation skipped
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 1 test for test/research/PqzPackGas.t.sol:PqzPackGasTest
+[PASS] test_pack_scanRoll() (gas: 87012423)
+Logs:
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 16
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 185856
+    full tx regular / state / total 8271280 195840 8467120
+  scan row: entries / regular / state 16 8271280 195840
+    fits 0.75 * 2^24
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 579 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56604 185856
+    full tx regular / state / total 8429632 195840 8625472
+  scan row uaExecute: entries / regular / state 16 8429632 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 32
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 371712
+    full tx regular / state / total 9653696 195840 9849536
+  scan row: entries / regular / state 32 9653696 195840
+    fits 0.75 * 2^24
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 579 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56604 371712
+    full tx regular / state / total 9812048 195840 10007888
+  scan row uaExecute: entries / regular / state 32 9812048 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 48
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 557568
+    full tx regular / state / total 11036112 195840 11231952
+  scan row: entries / regular / state 48 11036112 195840
+    fits 0.75 * 2^24
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 579 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56604 557568
+    full tx regular / state / total 11194464 195840 11390304
+  scan row uaExecute: entries / regular / state 48 11194464 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 64
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 743424
+    full tx regular / state / total 12418528 195840 12614368
+  scan row: entries / regular / state 64 12418528 195840
+    fits 0.75 * 2^24
+    uaExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 3972 579 269208
+    calldata gas 4 / 16 / refund (not subtracted) 56604 743424
+    full tx regular / state / total 12576880 195840 12772720
+  scan row uaExecute: entries / regular / state 64 12576880 195840
+    fits 0.75 * 2^24
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 676.14ms (163.98ms CPU time)
+
+Ran 1 test suite in 677.86ms (676.14ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

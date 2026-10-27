@@ -2140,8 +2140,8 @@ contract MetaTxParityTest is ParityIO {
     /// Write (`PARITY_WRITE=1`) or replay the whole case set and the allowlist rows.
     function test_parity() public {
         bool write = vm.envOr("PARITY_WRITE", false);
-        // the fixture is the committed set's (its `set` field); the other sets' cases differ, so the replay is skipped there
-        vm.skip(!write && keccak256(bytes(PqzSet.NAME)) != keccak256("n2304-kmax4096"));
+        // the fixture belongs to one set (its closing `set` field); the other sets' cases differ, so the replay is skipped there
+        if (!write) vm.skip(!_fixtureIsForThisSet());
         if (write) {
             vm.writeFile(FILE, "");
             vm.writeLine(FILE, "[");
@@ -2213,6 +2213,18 @@ contract MetaTxParityTest is ParityIO {
             console2.log(string.concat("  now:     ", line));
             revert("parity: SETUP CHANGED (token addresses / domain separators), not a behaviour difference; see the log");
         }
+    }
+
+    /// The fixture's closing object names its set: `"set":"<NAME>"` occurs in the file.
+    function _fixtureIsForThisSet() internal view returns (bool) {
+        bytes memory h = bytes(vm.readFile(FILE));
+        bytes memory n = bytes(string.concat('"set":"', PqzSet.NAME, '"'));
+        for (uint256 i = h.length; i >= n.length; --i) {
+            uint256 j;
+            while (j < n.length && h[i - n.length + j] == n[j]) ++j;
+            if (j == n.length) return true;
+        }
+        return false;
     }
 
     function _open() internal {
