@@ -1,0 +1,15 @@
+# zether-cross at commit 1ee28337
+    Finished `release` profile [optimized] target(s) in 0.03s
+No files changed, compilation skipped
+
+Ran 6 tests for test/zether/ZetherProverCross.t.sol:ZetherProverCrossBls12381Test
+[PASS] test_bundleFull_compact() (gas: 20537544)
+[PASS] test_bundleNone_auditorOff() (gas: 19924604)
+[PASS] test_bundleOptional_decoyFee() (gas: 24101729)
+[PASS] test_bundleOptional_default() (gas: 23427030)
+[PASS] test_compactOptional_relayed_optOut() (gas: 20731379)
+[PASS] test_single_bundleFull() (gas: 12263742)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 868.01ms (3.83s CPU time)
+
+Ran 1 test suite in 868.61ms (868.01ms CPU time): 6 tests passed, 0 failed, 0 skipped (6 total tests)
+rc=0
