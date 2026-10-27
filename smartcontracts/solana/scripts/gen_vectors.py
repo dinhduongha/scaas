@@ -86,6 +86,24 @@ DAVE_AD, DAVE_CDJ, DAVE_SIG = webauthn(DAVE_SK, F.digest(DAVE_PAYLOAD))
 OPEN_CHALLENGE = hashlib.sha256(b'scaas.open.v1' + F.key32(PROGRAM) + DAVE).digest()
 OPEN_AD, OPEN_CDJ, OPEN_SIG = webauthn(DAVE_SK, OPEN_CHALLENGE)
 
+def relay_fee_vectors():
+    """CTR-MTX-27 `ref` của `relay_fee` (spec §7.2, hàng Solana): `call = target ‖ u8 n ‖ (pubkey ‖ is_signer ‖
+    is_writable)×n ‖ data`, `ref = keccak256("scaas.relayfee" ‖ network ‖ target ‖ keccak256(call) ‖ salt)` với
+    `salt = args.extra` (payer ký trong MetaOp), `lane = keccak256("scaas.pay.lane" ‖ ref)`. Chỉ hashlib + Keccak."""
+    from Crypto.Hash import keccak
+
+    def k(b):
+        return keccak.new(digest_bits=256, data=b).digest()
+    network = seed('scaas.solana.test-genesis')
+    target, record = seed('relay_target'), seed('relay_target.record')
+    data, salt = b'\x00hello', bytes([9]) * 32
+    call = target + bytes([1]) + record + bytes([0, 1]) + data
+    ref = k(b'scaas.relayfee' + network + target + k(call) + salt)
+    return [('RELAY_TARGET', target.hex()), ('RELAY_RECORD', record.hex()), ('RELAY_DATA', data.hex()),
+            ('RELAY_SALT', salt.hex()), ('RELAY_CALL', call.hex()), ('RELAY_REF', ref.hex()),
+            ('RELAY_LANE', k(b'scaas.pay.lane' + ref).hex())]
+
+
 VECTORS = [
     ('PROGRAM', PROGRAM), ('NETWORK', NETWORK),
     ('ALICE', b58(ALICE)), ('BOB', b58(BOB)), ('DELEGATE', b58(DELEGATE)), ('LANE', b58(LANE)),
@@ -104,7 +122,7 @@ VECTORS = [
     ('DAVE_AUTH_DATA', DAVE_AD.hex()), ('DAVE_CDJ', DAVE_CDJ.decode()), ('DAVE_SIG', DAVE_SIG.hex()),
     ('DAVE_BLOB', F.passkey_blob(0, DAVE_SIG, DAVE_AD, DAVE_CDJ).hex()),
     ('OPEN_AUTH_DATA', OPEN_AD.hex()), ('OPEN_CDJ', OPEN_CDJ.decode()), ('OPEN_SIG', OPEN_SIG.hex()),
-]
+] + relay_fee_vectors()
 
 
 def render():

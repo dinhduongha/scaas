@@ -50,6 +50,21 @@ pub mod scaas {
         account::relay_pay(ctx, owner, args, auth)
     }
 
+    pub fn relay_pay_meta(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, salt: [u8; 32], meta: Vec<u8>, auth: Auth) -> Result<()> {
+        account::relay_pay_meta(ctx, owner, args, salt, meta, auth)
+    }
+
+    pub fn relay_fee<'info>(
+        ctx: Context<'info, RelayFee<'info>>,
+        owner: [u8; 32],
+        args: PayArgs,
+        target_data: Vec<u8>,
+        target_accounts: u8,
+        auth: Auth,
+    ) -> Result<()> {
+        account::relay_fee(ctx, owner, args, target_data, target_accounts, auth)
+    }
+
     pub fn manage_signed(ctx: Context<ManageSigned>, op: KeyOp, auth: Auth) -> Result<()> {
         account::manage_signed(ctx, op, auth)
     }
@@ -141,6 +156,26 @@ pub struct PaymentSettled {
     pub to: Pubkey,
     pub amount: u64,
     pub pay_ref: [u8; 32],
+}
+
+/// CTR-MTX-26: the payment id and the published `meta` (never parsed), before `PaymentSettled`.
+#[event]
+pub struct PaymentMeta {
+    pub contract: Pubkey,
+    pub pay_id: [u8; 32],
+    pub meta: Vec<u8>,
+}
+
+/// CTR-MTX-27: `relay_ref` = the payment's `pay_ref`; `payer` = the payer's owner key, `payee` = the wallet paid (the
+/// lane in open mode), both the 32-byte keys.
+#[event]
+pub struct RelayFeePaid {
+    pub contract: Pubkey,
+    pub relay_ref: [u8; 32],
+    pub target: Pubkey,
+    pub payer: Pubkey,
+    pub payee: Pubkey,
+    pub amount: u64,
 }
 
 #[event]
@@ -259,4 +294,10 @@ pub enum ScaasError {
     WrongMint,
     #[msg("recipient is a token account or mint, not a wallet")]
     TokenAccountRecipient,
+    #[msg("pay-meta: pay_ref, lane or nonce do not match metaPayId(salt, meta)")]
+    PayMetaShape,
+    #[msg("relay-fee: the payment is not bound to this call through the router")]
+    RelayFeeShape,
+    #[msg("relay-fee: the target is not an executable program")]
+    RelayTargetNoCode,
 }

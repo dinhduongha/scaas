@@ -1,12 +1,14 @@
 //! Config, SmartKeyAccount, `relay_pay`, quản trị khoá (KeyOp), khôi phục, `prune` (spec §3, §5.1).
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
+use anchor_lang::solana_program::program::invoke;
 use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::auth::{self, Auth, MetaOp, KEYOP_LABEL, METAOP_LABEL, OP_PAY};
 use crate::state::*;
 use crate::util;
-use crate::{ScaasError, MetaTransactionExecuted, PaymentSettled};
+use crate::{MetaTransactionExecuted, PaymentMeta, PaymentSettled, RelayFeePaid, ScaasError};
 
 pub const INSTRUCTIONS_ID: Pubkey = solana_instructions_sysvar::ID;
 
@@ -119,10 +121,11 @@ pub struct PayArgs {
 }
 
 impl PayArgs {
-    pub fn check_common(&self, lane: &Pubkey) -> Result<()> {
+    /// `relayer`: the one key the op may name besides 0 (the submitting lane; `relay_fee`: the router marker).
+    pub fn check_common(&self, relayer: &Pubkey) -> Result<()> {
         util::check_deadline(self.valid_until)?;
         require!(self.amount > 0, ScaasError::ZeroAmount);
-        require!(self.relayer == [0; 32] || self.relayer == lane.to_bytes(), ScaasError::WrongRelayer);
+        require!(self.relayer == [0; 32] || self.relayer == relayer.to_bytes(), ScaasError::WrongRelayer);
         Ok(())
     }
 
@@ -162,8 +165,8 @@ pub struct RelayPay<'info> {
     /// Any token account the Account PDA owns for this mint (ATA or not — L7).
     #[account(mut, token::mint = mint, token::authority = subject, token::token_program = token_program)]
     pub source: InterfaceAccount<'info, TokenAccount>,
-    /// CHECK: the receiving wallet `to`; only its ATA is touched.
-    #[account(address = Pubkey::new_from_array(args.to) @ ScaasError::WrongRecipient)]
+    /// CHECK: the receiving wallet: `args.to`, or the lane in `relay_fee`'s open mode (checked in `settle`); only its
+    /// ATA is touched.
     pub recipient: UncheckedAccount<'info>,
     /// CHECK: ATA(recipient, mint, token_program); the ATA program checks the derivation in `create_idempotent`.
     #[account(mut)]
@@ -177,9 +180,18 @@ pub struct RelayPay<'info> {
     pub instructions: UncheckedAccount<'info>,
 }
 
-pub fn relay_pay(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, auth: Auth) -> Result<()> {
+pub fn relay_pay(mut ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, auth: Auth) -> Result<()> {
+    let (lane, to) = (ctx.accounts.lane.key(), Pubkey::new_from_array(args.to));
+    settle(&mut ctx, owner, &args, &auth, &lane, &to, None)
+}
+
+/// `relay_pay`'s body, shared by `relay_pay`, `relay_pay_meta` and `relay_fee`. `relayer`: the key the op may name
+/// besides 0 (the lane; `relay_fee`: the marker); `to`: the wallet paid (`args.to`; `relay_fee` open mode: the lane);
+/// `meta`: the pay-meta's published `meta` (`PaymentMeta` before `PaymentSettled`).
+fn settle(ctx: &mut Context<RelayPay>, owner: [u8; 32], args: &PayArgs, auth: &Auth, relayer: &Pubkey, to: &Pubkey, meta: Option<&[u8]>) -> Result<()> {
     let a = &ctx.accounts;
-    args.check_common(&a.lane.key())?;
+    args.check_common(relayer)?;
+    require_keys_eq!(a.recipient.key(), *to, ScaasError::WrongRecipient);
     util::check_recipient(&a.recipient)?;
     let info = a.subject.to_account_info();
     let subject = if info.data_is_empty() {
@@ -195,7 +207,7 @@ pub fn relay_pay(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, auth: A
     subject.check_policy()?;
     let op = args.metaop(a.config.network, a.subject.key(), a.mint.key(), OP_PAY, owner);
     let digest = op.digest();
-    auth::verify(&a.instructions, &auth, &subject.keys, &subject.origins, METAOP_LABEL, &digest, None)?;
+    auth::verify(&a.instructions, auth, &subject.keys, &subject.origins, METAOP_LABEL, &digest, None)?;
     util::check_mint(&a.mint.to_account_info(), args.amount)?;
 
     let lp = &mut ctx.accounts.lane_pda;
@@ -230,7 +242,94 @@ pub fn relay_pay(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, auth: A
     let (mint, account) = (a.mint.key(), a.subject.key());
     let from = Pubkey::new_from_array(owner);
     emit_cpi!(MetaTransactionExecuted { contract: mint, account, from, digest, lane: args.lane, nonce: args.nonce });
-    emit_cpi!(PaymentSettled { contract: mint, from, to: Pubkey::new_from_array(args.to), amount: args.amount, pay_ref: args.pay_ref });
+    if let Some(meta) = meta {
+        emit_cpi!(PaymentMeta { contract: mint, pay_id: args.pay_ref, meta: meta.to_vec() });
+    }
+    emit_cpi!(PaymentSettled { contract: mint, from, to: *to, amount: args.amount, pay_ref: args.pay_ref });
+    Ok(())
+}
+
+// ------------------------------------------------------------------ CTR-MTX-26 / -27 (spec §6.2, §7.2)
+
+fn keccak(parts: &[&[u8]]) -> [u8; 32] {
+    solana_keccak_hasher::hashv(parts).to_bytes()
+}
+
+/// CTR-MTX-26: `payId = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`.
+pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.meta", salt, &keccak(&[meta])])
+}
+
+/// `payLane(p) = keccak256("scaas.pay.lane" ‖ p)`, the 32-byte lane id.
+pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.lane", p])
+}
+
+/// CTR-MTX-27 call bytes: `target ‖ u8 n ‖ (pubkey ‖ is_signer ‖ is_writable)×n ‖ data` (`n ≤ 255`: `target_accounts`).
+pub fn relay_call(target: &Pubkey, accounts: &[AccountMeta], data: &[u8]) -> Vec<u8> {
+    let mut c = Vec::with_capacity(33 + 34 * accounts.len() + data.len());
+    c.extend_from_slice(target.as_ref());
+    c.push(accounts.len() as u8);
+    for a in accounts {
+        c.extend_from_slice(a.pubkey.as_ref());
+        c.extend_from_slice(&[a.is_signer as u8, a.is_writable as u8]);
+    }
+    c.extend_from_slice(data);
+    c
+}
+
+/// `ref = keccak256("scaas.relayfee" ‖ network ‖ target ‖ keccak256(call) ‖ salt)`; `salt` = `args.extra`, signed by
+/// the payer in the `MetaOp` (a target's own authorisation lives outside its instruction data, e.g. in a precompile
+/// instruction, so the call bytes alone do not make an intent unique).
+pub fn relay_ref(network: &[u8; 32], target: &Pubkey, call: &[u8], salt: &[u8; 32]) -> [u8; 32] {
+    keccak(&[b"scaas.relayfee", network, target.as_ref(), &keccak(&[call]), salt])
+}
+
+/// The router marker: PDA `[b"relayfee"]`. No transaction can sign for it, so `relay_pay`'s `relayer == lane` refuses
+/// a payment bound to it; the program never signs with it and never pays it.
+pub fn relay_fee_marker() -> Pubkey {
+    Pubkey::find_program_address(&[b"relayfee"], &crate::ID).0
+}
+
+/// CTR-MTX-26: the same accounts and signed `MetaOp` as `relay_pay`; `pay_ref == metaPayId(salt, meta)`,
+/// `lane == payLane(pay_ref)`, `nonce == 0`, so a `(payer, payId)` pays at most once (the payer's lane PDA).
+pub fn relay_pay_meta(mut ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, salt: [u8; 32], meta: Vec<u8>, auth: Auth) -> Result<()> {
+    let id = meta_pay_id(&salt, &meta);
+    require!(args.pay_ref == id && args.lane == pay_lane(&id) && args.nonce == 0, ScaasError::PayMetaShape);
+    let (lane, to) = (ctx.accounts.lane.key(), Pubkey::new_from_array(args.to));
+    settle(&mut ctx, owner, &args, &auth, &lane, &to, Some(&meta))
+}
+
+/// `relay_pay`'s accounts; `remaining_accounts` = target program, then its `target_accounts` accounts.
+#[derive(Accounts)]
+pub struct RelayFee<'info> {
+    pub pay: RelayPay<'info>,
+}
+
+/// CTR-MTX-27: shape (`pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == marker`, the target is not
+/// `scaas` and is executable), the call (CPI with the accounts' own flags, no PDA signs), then `relay_pay`'s body
+/// with the marker as relayer; open mode (`args.to == marker`) pays the lane signer. Any failure reverts both.
+pub fn relay_fee<'info>(ctx: Context<'info, RelayFee<'info>>, owner: [u8; 32], args: PayArgs, target_data: Vec<u8>, target_accounts: u8, auth: Auth) -> Result<()> {
+    let (target, accts) = ctx.remaining_accounts.split_first().ok_or(ScaasError::RelayFeeShape)?;
+    require!(accts.len() == target_accounts as usize && *target.key != crate::ID, ScaasError::RelayFeeShape);
+    let metas: Vec<AccountMeta> =
+        accts.iter().map(|a| AccountMeta { pubkey: *a.key, is_signer: a.is_signer, is_writable: a.is_writable }).collect();
+    let r = relay_ref(&ctx.accounts.pay.config.network, target.key, &relay_call(target.key, &metas, &target_data), &args.extra);
+    let marker = relay_fee_marker();
+    require!(
+        args.pay_ref == r && args.lane == pay_lane(&r) && args.nonce == 0 && args.relayer == marker.to_bytes(),
+        ScaasError::RelayFeeShape
+    );
+    require!(target.executable, ScaasError::RelayTargetNoCode);
+    invoke(&Instruction { program_id: *target.key, accounts: metas, data: target_data }, ctx.remaining_accounts)?;
+
+    let lane = ctx.accounts.pay.lane.key();
+    let payee = if args.to == marker.to_bytes() { lane } else { Pubkey::new_from_array(args.to) };
+    let target = *target.key;
+    let mut ctx = Context::new(ctx.program_id, &mut ctx.accounts.pay, ctx.remaining_accounts, ctx.bumps.pay);
+    settle(&mut ctx, owner, &args, &auth, &marker, &payee, None)?;
+    let (contract, payer) = (ctx.accounts.mint.key(), Pubkey::new_from_array(owner));
+    emit_cpi!(RelayFeePaid { contract, relay_ref: r, target, payer, payee, amount: args.amount });
     Ok(())
 }
 
