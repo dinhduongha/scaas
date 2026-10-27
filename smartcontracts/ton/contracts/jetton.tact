@@ -259,6 +259,7 @@ contract ScaasJettonWallet(
             self.sendOut(m.to, m.amount, 0, msg.responseDestination, msg.forwardTon,
                          beginCell().storeBit(true).storeRef(leg).asSlice(), SendRemainingBalance);
         } else if (m.op == OP_REVOKE) {
+            relayAck(ctx.sender, m.digest);
             if (next == m.nonce) {
                 // The order never left this wallet and now never will: spending its nonce is the whole cancel.
                 self.excessTo(msg.responseDestination);
@@ -279,6 +280,7 @@ contract ScaasJettonWallet(
                 rec.endParse();
                 self.passkey = msg.params;
             }
+            relayAck(ctx.sender, m.digest);
             self.excessTo(msg.responseDestination);
         } else {
             throw(E_OP);

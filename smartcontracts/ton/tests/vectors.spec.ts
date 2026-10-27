@@ -83,7 +83,8 @@ async function build() {
     const u = (x: bigint) => '0x' + x.toString(16).padStart(64, '0');
     const rfOp = metaOpCell({ ...fields, to: router.address, relayer: router.address, payRef: rfRef, lane: await laneWallet.getGetPayLane(rfRef), amount: 25n });
     const rfAuth = tonConnectAuth(payerKp, payer.address, ts, domain, rfOp);
-    const relayCall = beginCell().store(storeRelayCall({ $$type: 'RelayCall', target: rfTarget, call: rfCall, salt: rfSalt, payWallet: payerWallet,
+    const rfInit = { $$type: 'StateInit' as const, code: beginCell().storeUint(0xc0de, 16).endCell(), data: beginCell().storeUint(0xda7a, 16).endCell() };
+    const relayCall = beginCell().store(storeRelayCall({ $$type: 'RelayCall', target: rfTarget, targetInit: rfInit, call: rfCall, salt: rfSalt, payWallet: payerWallet,
         payOp: rfOp, payAuth: rfAuth, payStateInit: stateInitCell(payer.init), master: master.address, deadline: 1_800_000_600n })).endCell();
     const relayRefund = beginCell().store(storeRelayRefund({ $$type: 'RelayRefund', from: payer.address, ref: rfRef })).endCell();
     return {

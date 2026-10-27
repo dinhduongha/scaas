@@ -110,6 +110,13 @@ message(0x9b1c0d04) PaymentMeta {
     meta: Cell;
 }
 
+/// CTR-MTX-27 (TON): a served fee-less entry (wallet `set_key` / `revoke`, Mandate owner `revoke`) acknowledges its
+/// successful handling to the sender of the call, last thing before its excess. A failed action phase sends no message
+/// at all, so the ack proves compute and action ran; `digest` is the MetaOp the entry executed.
+message(0x5b0a1d35) RelayAck {
+    digest: Int as uint256;
+}
+
 // ------------------------------------------------------------------ constants
 
 const METAOP_DOMAIN: Int = 0x73636161732e6d6574616f702e7631; // "scaas.metaop.v1" (120 bits)
@@ -385,6 +392,16 @@ fun requireSnake(meta: Cell) {
 /// `keccak256("scaas.pay.lane" ‖ p)`: the lane of a payment id (CTR-MTX-23).
 fun payLane(p: Int): Int {
     return keccak256(beginCell().storeSlice("scaas.pay.lane".asSlice()).storeUint(p, 256).asSlice());
+}
+
+// ------------------------------------------------------------------ CTR-MTX-27 ack
+
+/// Gas the relay-fee executor spends on a `RelayAck` (measured ≈ 4.5 k in @ton/sandbox 0.45.0; ×2).
+const ACK_GAS: Int = 9000;
+
+/// The ack carries the TON for its receiver's gas at the chain's current price; its forward fee is paid apart.
+fun relayAck(to: Address, digest: Int) {
+    message(MessageParameters { to, value: getComputeFee(ACK_GAS, false), mode: SendPayFwdFeesSeparately, bounce: false, body: RelayAck { digest }.toCell() });
 }
 
 // ------------------------------------------------------------------ jetton helpers

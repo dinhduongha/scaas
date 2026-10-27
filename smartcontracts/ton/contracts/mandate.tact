@@ -99,6 +99,7 @@ contract Mandate(
             self.st.revoked = true;
             nativeReserve(max(myBalance() - ctx.value, MIN_STORAGE), ReserveAtMost);
             emit(MetaTransactionExecuted { master: self.master, from: self.owner, digest: m.digest }.toCell());
+            relayAck(ctx.sender, m.digest);
             message(MessageParameters { to: msg.responseDestination, value: 0, mode: SendRemainingBalance | SendIgnoreErrors, bounce: false, body: JettonExcesses { queryId: 0 }.toCell() });
             return;
         }
