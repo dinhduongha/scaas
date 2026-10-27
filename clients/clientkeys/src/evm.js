@@ -517,6 +517,7 @@ export function checkTradeOrder(td, { account, chainId, chainUid, order, sellTok
   const none = ua ? ZERO_ID : ZERO_ADDRESS;
   const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: none, flags: 0, batch: '0', ...order,
     from: account, nonce: uint(got.nonce, 'the nonce'), validUntil: (order || {}).validUntil ?? got.validUntil };
+  if (o.nonce >= 2n ** 128n) refuse('the order nonce is at or above 2^128; the chain refuses it');
   if (wrappers.some((w) => same(w, o.dex))) {
     if (outside || !same(o.receiveToken, o.dex) || uint(o.minFill, 'minFill') !== uint(o.amount, 'the amount')) {
       refuse('a wrap by signature mints from this wrapper, all or nothing');

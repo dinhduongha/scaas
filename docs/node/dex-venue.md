@@ -191,7 +191,7 @@ the DEX depends on its honesty — clients therefore keep `relayer` = the venue 
 
 ## <a id="intake"></a>5. Intake
 
-Spam controls at the door: body ≤ 64 KiB; amounts `0 < amount < 2^128`; `validUntil ∈ (now + 5 s, now + 30 days]`; a
+Spam controls at the door: body ≤ 64 KiB; amounts `0 < amount < 2^128`; `nonce < 2^128` (the chain refuses a larger one, `NonceAboveCap`, review C6-5); `validUntil ∈ (now + 5 s, now + 30 days]`; a
 per-market minimum (`min_base_amount`: an ask compares `amount`, a bid `receiveAmount`); at most
 `MAX_OPEN_PER_MAKER = 50` open orders per maker per chain; a whole-book cap `MAX_RESTING = 10 000`; a duplicate hash ⇒
 refused; the order open on chain (`pulled`, `minNonce`), its signature valid; the committed-balance rule above.
@@ -250,7 +250,7 @@ a dependency for no need at the volumes served.
 
 <a id="watcher"></a><a id="NODE-DEX-04"></a>**NODE-DEX-04** — **The DEX watcher has its own cursor.** One task per
 chain with the same finality helpers as the indexer (`finality::{safe_head, next_range, quorum_ok}`) and a **separate
-cursor** (`dex_cursor`) reads the DEX's `LegSettled`, `MatchFailed` (an empty reason reported `out_of_gas`), `OrderCancelled`,
+cursor** (`dex_cursor`) reads, **by emitter** (review C6-3: a log from any other address, a listed outside token included, is dropped, never acted on): leg and failure events from the DEX only, cancel and invalidation from the DEX (outside tokens' orders) or a SCaaS token (only the orders it sells), `UANoncesInvalidated(pad(addr), batch, minNonce)` (review C6-7; it drops the dead shape-0 orders of that lane from the in-memory book; the client store is not sent it) from a SCaaS token; the DEX's `LegSettled`, `MatchFailed` (an empty reason reported `out_of_gas`), `OrderCancelled`,
 `NoncesInvalidated` and the market tokens' `OrderCancelled`, `NoncesInvalidated` (BUILT, P5; `UALegSettled`, a shape-1
 leg's `LegSettled` with ids, read the same way, BUILT with UA-5b ([CTR-DEX-26](../contracts/dex.md#CTR-DEX-26)); the
 venue itself sends shape-0 legs until its UA order intake (UA F5); `ExchangeLegSettled` with P7,

@@ -52,6 +52,12 @@ sol! {
     #[derive(Debug, PartialEq, Eq)]
     struct ExchangeLeg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 sellFill; uint256 receiveFill; }
 
+    /// `ISCaaSDex.ExchangePlan` / `Interaction` (CTR-DEX-20): the exchange path's argument shapes.
+    #[derive(Debug, PartialEq, Eq)]
+    struct ExchangePlan { bytes32 ref; ExchangeLeg[] legs; address[] extraTokens; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct Interaction { address target; bytes data; }
+
     /// An outside-token order (CTR-DEX-18): the `TradeOrder` signed in the DEX's domain with its sell token.
     #[derive(Debug, PartialEq, Eq)]
     struct DexOrder { address sellToken; TradeOrder order; }
@@ -67,6 +73,8 @@ sol! {
     #[derive(Debug)]
     interface ISCaaSDex {
         function mtxSettle(Settlement[] s) external returns (bool[] ok);
+        function mtxExchange(ExchangePlan p, Interaction[] interactions) external;
+        function mtxExchangeVia(ExchangePlan p, address executor, bytes data) external;
         function settleOne(Settlement s, address submitter) external;
         function mtxCancelOrders(DexOrder[] orders, bytes[] sigs) external;
         function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
@@ -126,6 +134,8 @@ sol! {
         function mtxCancelOrder(TradeOrder o, bytes sig) external;
         function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
         function mtxWrap(address underlying, TradeOrder o, bytes sig) external;
+        /// `ITradeToken.UANoncesInvalidated`: `uaInvalidateNonces`; `from` is the id (a native address zero-padded).
+        event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
         function allowance(address owner, address spender) external view returns (uint256);
         function tradeOrderDigest(TradeOrder o) external view returns (bytes32);
         function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);

@@ -468,7 +468,7 @@ fn multi_decoy_fee_bls12_381() {
     // the decoy payout's gas: bls12-381 commit-reveal without the auditor, direct, fits M = 8 without a decoy fee, 7 with one;
     // a leg costs 116,698 under Amsterdam (F185 ZetherDecoyFee.test_gas_decoyFeePerLeg; 28,663 on Osaka)
     assert!(DECOY_LEG_GAS >= 116_698, "the measured Amsterdam leg payout");
-    assert_eq!(build_gas::<C>(TransferMode::Hash, false, false, 8, true), transfer_gas::<C>(TransferMode::Hash, false, false, 8) + 8 * DECOY_LEG_GAS);
+    assert_eq!(build_gas::<C>(TransferMode::Hash, false, false, 8, true, 0), transfer_gas::<C>(TransferMode::Hash, false, false, 8) + 8 * DECOY_LEG_GAS);
     let rs8: Vec<(G<C>, u64)> = (0..8).map(|i| (key::<C>(10 + i).y, 1)).collect();
     let none = |d| prove_transfer_multi(&f.gens, &f.from, header(0), d, TransferMode::Hash, &rs8, G::<C>::zero(), f.acc, BAL, &mut rng()).map(|_| ());
     assert!(none(0).is_ok());
@@ -860,4 +860,24 @@ fn v2_vectors_refused() {
     let mut b = st.encode();
     b[32..64].copy_from_slice(&keccak256(b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v2"));
     assert!(TransferStatement::<Bls12381>::decode(&b).is_err(), "v2 label");
+}
+
+/// C3-2: a `uaExecute` relay adds `_uaAuthorize` (the signer kind's verify cap) to the `mtxExecute` figures. BLS
+/// compact with the auditor at M = 7 is 15.63 M relayed and builds; under an `fndsa512` UA it is 18.1 M and is refused.
+#[test]
+fn ua_execute_adds_the_signer_kinds_verify_cap() {
+    assert_eq!((ua_signer_gas("fndsa512"), ua_signer_gas("mldsa65"), ua_signer_gas("nope")), (Some(2_500_000), Some(5_950_000), None));
+    type C = Bls12381;
+    let f = fx::<C>();
+    let rs = (0..7).map(|i| (key::<C>(10 + i).y, 1)).collect::<Vec<_>>();
+    let h = Header { binding: Binding::Relayed([0x33; 32]), ..header(0) };
+    let go = |gas| prove_transfer_multi_ua(&f.gens, &f.from, h.clone(), 0, TransferMode::Hash, &rs, f.aud.y, f.acc, BAL, gas, &mut rng()).map(|_| ());
+    assert!(go(0).is_ok(), "mtxExecute relay");
+    match go(2_500_000) {
+        Err(ZError::GasCap { m, gas, .. }) => assert_eq!((m, gas), (7, build_gas::<C>(TransferMode::Hash, true, true, 7, false, 2_500_000))),
+        other => panic!("not refused: {other:?}"),
+    }
+    // a direct build has no UA envelope: the signer's gas is not added
+    let d = Header { binding: Binding::Direct, ..h };
+    assert!(prove_transfer_multi_ua(&f.gens, &f.from, d, 0, TransferMode::Hash, &rs, f.aud.y, f.acc, BAL, 2_500_000, &mut rng()).is_ok());
 }

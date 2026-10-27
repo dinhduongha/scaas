@@ -817,18 +817,34 @@ pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: boo
 /// The total is counted against the regular cap, so the check errs on the safe side.
 pub const DECOY_LEG_GAS: u64 = 120_000;
 
-/// [`transfer_gas`] plus [`DECOY_LEG_GAS`] per leg when the build pays a `decoyFee`.
-pub fn build_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> u64 {
-    transfer_gas::<C>(mode, auditor, relayed, m) + if decoy { m as u64 * DECOY_LEG_GAS } else { 0 }
+/// C3-2: what `uaExecute`'s `_uaAuthorize` adds to the `mtxExecute` figures of [`gas_limits`] for a UA signer of this
+/// kind: the kind's gen-1 `verifyCap` (accounts.md, measured P6a / P6c: `fndsa512` 2.3 M measured, cap 2.5 M; `mldsa65`
+/// 5.80 M measured, cap 5.95 M on the cached expanded key). ESTIMATES from those caps, not re-measured with the audited
+/// `…/v3` legs (a gas run on the owner's go); a chain with a precompile verifies for far less (`mldsa65` ≈ 236 k), so
+/// the cap is the safe side. Other kinds (ed25519 ≈ 0.2 M, secp256k1, p256) are small against the 1 % margin: pass 0.
+pub fn ua_signer_gas(kind: &str) -> Option<u64> {
+    match kind {
+        "fndsa512" => Some(2_500_000),
+        "mldsa65" => Some(5_950_000),
+        _ => None,
+    }
+}
+
+/// [`transfer_gas`] plus [`DECOY_LEG_GAS`] per leg when the build pays a `decoyFee`, plus `signer_gas` (a `uaExecute`
+/// relay's [`ua_signer_gas`]; a direct build has no UA envelope, so it adds nothing there).
+pub fn build_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool, signer_gas: u64) -> u64 {
+    transfer_gas::<C>(mode, auditor, relayed, m)
+        + if decoy { m as u64 * DECOY_LEG_GAS } else { 0 }
+        + if relayed { signer_gas } else { 0 }
 }
 
 /// Refuse a build over the cap, naming the estimate, the most recipients this form takes and the cheaper forms that
 /// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle`
 /// need a `BUNDLE` token). `relayed`: the build carries an envelope binding, so the relayed column applies; `decoy`:
 /// it pays a `decoyFee` ([`build_gas`]).
-fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> Result<(), ZError> {
-    let fits = |f, a, n| build_gas::<C>(f, a, relayed, n, decoy) <= TX_GAS_CAP - GAS_MARGIN;
-    let gas = build_gas::<C>(mode, auditor, relayed, m, decoy);
+fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool, signer_gas: u64) -> Result<(), ZError> {
+    let fits = |f, a, n| build_gas::<C>(f, a, relayed, n, decoy, signer_gas) <= TX_GAS_CAP - GAS_MARGIN;
+    let gas = build_gas::<C>(mode, auditor, relayed, m, decoy, signer_gas);
     if gas <= TX_GAS_CAP - GAS_MARGIN {
         return Ok(());
     }
@@ -838,7 +854,7 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
         .flat_map(|f| [(f, true), (f, false)])
         .filter(|&(f, a)| (a <= auditor) && (f, a) != (mode, auditor))
         .filter_map(|(f, a)| {
-            let g = build_gas::<C>(f, a, relayed, m, decoy);
+            let g = build_gas::<C>(f, a, relayed, m, decoy, signer_gas);
             fits(f, a, m).then(|| format!("{} {} (~{g})", f.name(), aud(a)))
         })
         .collect::<Vec<_>>()
@@ -1296,6 +1312,25 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     balance: u64,
     rng: &mut R,
 ) -> Result<(MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>), ZError> {
+    prove_transfer_multi_ua(gens, key, header, decoy_fee, mode, recipients, y_aud, acc, balance, 0, rng)
+}
+
+/// [`prove_transfer_multi`] for a relay through `uaExecute`: `signer_gas` ([`ua_signer_gas`]) is added to the gas-cap
+/// check of a relayed build.
+#[allow(clippy::too_many_arguments)]
+pub fn prove_transfer_multi_ua<C: ZCurve, R: RngCore + CryptoRng>(
+    gens: &Gens<C>,
+    key: &ZetherKey<C>,
+    header: Header,
+    decoy_fee: u64,
+    mode: TransferMode,
+    recipients: &[(G<C>, u64)],
+    y_aud: G<C>,
+    acc: Ciphertext<C>,
+    balance: u64,
+    signer_gas: u64,
+    rng: &mut R,
+) -> Result<(MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>), ZError> {
     let mut header = header;
     let g = generator::<C>();
     if acc.c - acc.d * key.x != g * Fr::<C>::from(balance) {
@@ -1318,7 +1353,7 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
         .ok_or(ZError::BadStatement("insufficient balance"))? as u64;
     let relayed = matches!(header.binding, Binding::Relayed(_));
     let aud = !y_aud.is_zero();
-    check_gas::<C>(mode, aud, relayed, recipients.len(), decoy_fee != 0)?;
+    check_gas::<C>(mode, aud, relayed, recipients.len(), decoy_fee != 0, signer_gas)?;
     let (salt, s, t) = draw_salt::<C, R>(&key.x, &header, &key.ua(), if aud { recipients.len() } else { 0 }, rng);
     let t = if aud { t } else { vec![Fr::<C>::zero(); recipients.len()] };
     header.salt = salt;

@@ -756,6 +756,76 @@ impl Venue {
         res.map_err(|e| anyhow!("{e}"))
     }
 
+    /// C6-3: the encoded events of `logs` whose emitter may say them. Leg and failure events come from the DEX only;
+    /// cancel and invalidation from the DEX or a SCaaS token (the DEX holds outside tokens' orders, a SCaaS token its
+    /// own: `apply_events` checks which); `UANoncesInvalidated` from a SCaaS token only (the DEX never emits it). A
+    /// listed outside token is not a source of any of them.
+    fn accepted(&self, logs: &[alloy::rpc::types::Log]) -> Vec<Value> {
+        logs.iter()
+            .filter(|l| {
+                let (a, Some(t)) = (l.address(), l.topic0()) else { return false };
+                let token = self.kind(a) == KIND_SCAAS;
+                if *t == IToken::UANoncesInvalidated::SIGNATURE_HASH {
+                    token
+                } else if *t == ISCaaSDex::OrderCancelled::SIGNATURE_HASH || *t == ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH {
+                    a == self.dex || token
+                } else {
+                    a == self.dex
+                }
+            })
+            .filter_map(encode_event)
+            .collect()
+    }
+
+    /// Apply accepted events to the in-memory book.
+    fn apply_events(&self, book: &mut Book, events: &[Value]) {
+        for e in events {
+            let addr_of = |k: &str| e[k].as_str().unwrap_or_default().parse::<Address>();
+            match e["event"].as_str() {
+                // a planned fill is final on chain: no longer pending (review T3 I1)
+                Some("LegSettled" | "UALegSettled") => {
+                    if let (Ok(h), Ok(sold)) = (e["order_hash"].as_str().unwrap_or_default().parse::<B256>(),
+                                                 crate::metatx::uint(e["sold"].as_str().unwrap_or_default())) {
+                        book.settled(h, sold);
+                    }
+                }
+                Some("OrderCancelled") => {
+                    // C6-3: the DEX cancels outside tokens' orders, a SCaaS token only the orders it sells
+                    let c = addr_of("contract").unwrap_or_default();
+                    if let Ok(h) = e["order_hash"].as_str().unwrap_or_default().parse::<B256>() {
+                        if book.get(h).is_some_and(|r| if c == self.dex { self.kind(r.sell) == KIND_OUTSIDE } else { r.sell == c }) {
+                            book.remove(h);
+                        }
+                    }
+                }
+                Some("UANoncesInvalidated") => {
+                    // C6-7: a shape-0 order's `from` is the id's low 20 bytes when the id is a zero-padded address
+                    let id = e["from"].as_str().unwrap_or_default().parse::<B256>().unwrap_or_default();
+                    if let (Ok(c), true, Ok(batch), Ok(min)) = (
+                        addr_of("contract"),
+                        id[..12].iter().all(|b| *b == 0),
+                        crate::metatx::uint(e["batch"].as_str().unwrap_or_default()),
+                        crate::metatx::uint(e["min_nonce"].as_str().unwrap_or_default()),
+                    ) {
+                        book.drop_below(Address::from_slice(&id[12..]), batch, min, &|s| s == c);
+                    }
+                }
+                Some("NoncesInvalidated") => {
+                    if let (Ok(c), Ok(from), Ok(batch), Ok(min)) = (
+                        addr_of("contract"),
+                        addr_of("from"),
+                        crate::metatx::uint(e["batch"].as_str().unwrap_or_default()),
+                        crate::metatx::uint(e["min_nonce"].as_str().unwrap_or_default()),
+                    ) {
+                        let dex_lane = c == self.dex;
+                        book.drop_below(from, batch, min, &|s| if dex_lane { self.kind(s) == KIND_OUTSIDE } else { s == c });
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// One watcher round: the DEX's and the market tokens' logs in the final range ⇒ `dex_fill_ingest` ⇒ orders
     /// closed on chain leave the book. `true` = progressed.
     pub async fn watch_once(&self) -> Result<bool> {
@@ -784,48 +854,22 @@ impl Venue {
             ISCaaSDex::MatchFailed::SIGNATURE_HASH,
             ISCaaSDex::OrderCancelled::SIGNATURE_HASH,
             ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH,
+            IToken::UANoncesInvalidated::SIGNATURE_HASH,
         ]);
         let logs = self.chain.primary().get_logs(&f).await?;
-        let events: Vec<Value> = logs.iter().filter_map(encode_event).collect();
+        let events = self.accepted(&logs);
         let _: Value = idx
             .call(
                 "blockchain.dex.trade",
                 "dex_fill_ingest",
                 json!({"evm_chain_number": self.chain.number, "from_block": from, "to_block": to,
-                       "to_block_hash": format!("{hash:#x}"), "events": events}),
+                       "to_block_hash": format!("{hash:#x}"),
+                       // the client store knows the five original events; `UANoncesInvalidated` is the book's only
+                       "events": events.iter().filter(|e| e["event"] != "UANoncesInvalidated").collect::<Vec<_>>()}),
             )
             .await?;
         // The client closed the orders; the book in memory follows (review D13).
-        let mut book = self.book.lock().await;
-        for e in &events {
-            let addr_of = |k: &str| e[k].as_str().unwrap_or_default().parse::<Address>();
-            match e["event"].as_str() {
-                // a planned fill is final on chain: no longer pending (review T3 I1)
-                Some("LegSettled" | "UALegSettled") => {
-                    if let (Ok(h), Ok(sold)) = (e["order_hash"].as_str().unwrap_or_default().parse::<B256>(),
-                                                 crate::metatx::uint(e["sold"].as_str().unwrap_or_default())) {
-                        book.settled(h, sold);
-                    }
-                }
-                Some("OrderCancelled") => {
-                    if let Ok(h) = e["order_hash"].as_str().unwrap_or_default().parse::<B256>() {
-                        book.remove(h);
-                    }
-                }
-                Some("NoncesInvalidated") => {
-                    if let (Ok(c), Ok(from), Ok(batch), Ok(min)) = (
-                        addr_of("contract"),
-                        addr_of("from"),
-                        crate::metatx::uint(e["batch"].as_str().unwrap_or_default()),
-                        crate::metatx::uint(e["min_nonce"].as_str().unwrap_or_default()),
-                    ) {
-                        let dex_lane = c == self.dex;
-                        book.drop_below(from, batch, min, &|s| if dex_lane { self.kind(s) == KIND_OUTSIDE } else { s == c });
-                    }
-                }
-                _ => {}
-            }
-        }
+        self.apply_events(&mut *self.book.lock().await, &events);
         Ok(true)
     }
 
@@ -1094,6 +1138,13 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         let e = log.log_decode::<ISCaaSDex::NoncesInvalidated>().ok()?.inner.data;
         v["event"] = json!("NoncesInvalidated");
         v["from"] = json!(a(e.from));
+        v["batch"] = json!(e.batch.to_string());
+        v["min_nonce"] = json!(e.minNonce.to_string());
+    } else if topic0 == IToken::UANoncesInvalidated::SIGNATURE_HASH {
+        // C6-7: `uaInvalidateNonces`; `from` is an id, a native address zero-padded
+        let e = log.log_decode::<IToken::UANoncesInvalidated>().ok()?.inner.data;
+        v["event"] = json!("UANoncesInvalidated");
+        v["from"] = json!(format!("{:#x}", e.from));
         v["batch"] = json!(e.batch.to_string());
         v["min_nonce"] = json!(e.minNonce.to_string());
     } else {
@@ -1434,6 +1485,54 @@ mod tests {
         rows.iter().any(|r| r.order_hash == format!("{:#x}", oh(o)))
     }
 
+    fn log_at(addr: Address, data: LogData) -> Log {
+        let mut l = log_of(data);
+        l.inner.address = addr;
+        l
+    }
+
+    /// C6-3: the watcher takes leg events only from the DEX, and cancel / invalidation only from the DEX or a SCaaS
+    /// token (a token only for the orders it sells); a hostile listed outside token's forged logs change nothing.
+    #[tokio::test]
+    async fn the_watcher_checks_who_emitted_the_log() {
+        let evil = Address::repeat_byte(0xee);
+        let maker = PrivateKeySigner::random();
+        let ask = order(maker.address(), QUOTE, 10, 20, 1);
+        let h = oh(&ask);
+        let (v, _) = venue(World::default(), vec![(ask.clone(), sig_of(&maker, h))]).await;
+        let v = Venue { kinds: [(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS), (evil, KIND_OUTSIDE)].into_iter().collect(), ..v };
+        let leg = |sold: u64| ISCaaSDex::LegSettled { r#ref: B256::ZERO, orderHash: h, from: maker.address(),
+            destination: maker.address(), sold: U256::from(sold), received: U256::ZERO, dexFee: U256::ZERO,
+            refund: U256::ZERO, relayerShare: U256::ZERO, treasuryShare: U256::ZERO }.encode_log_data();
+        let cancel = ISCaaSDex::OrderCancelled { orderHash: h, from: maker.address() }.encode_log_data();
+        let inv = ISCaaSDex::NoncesInvalidated { from: maker.address(), batch: U256::from(1), minNonce: U256::from(9) }.encode_log_data();
+        let ua = IToken::UANoncesInvalidated { from: maker.address().into_word(), batch: U256::from(1), minNonce: U256::from(9) }.encode_log_data();
+        // forged: an outside token (listed, in `kinds`) and a stranger
+        for who in [evil, Address::repeat_byte(0xdd)] {
+            for d in [leg(1), cancel.clone(), inv.clone(), ua.clone()] {
+                assert!(v.accepted(&[log_at(who, d)]).is_empty(), "{who}");
+            }
+        }
+        // a SCaaS token is no source of a leg event; the DEX is no source of a UA invalidation
+        assert!(v.accepted(&[log_at(BASE, leg(1))]).is_empty());
+        assert!(v.accepted(&[log_at(DEX, ua.clone())]).is_empty());
+        for (who, d) in [(DEX, leg(1)), (DEX, cancel.clone()), (DEX, inv.clone()), (BASE, cancel.clone()), (BASE, inv.clone()), (BASE, ua.clone())] {
+            assert_eq!(v.accepted(&[log_at(who, d)]).len(), 1);
+        }
+        // the order sells BASE: only BASE (its token) cancels it; QUOTE (another SCaaS token) cannot, nor can the DEX
+        // (it holds outside tokens' orders only)
+        let mut book = v.book.lock().await;
+        for who in [QUOTE, DEX] {
+            v.apply_events(&mut book, &v.accepted(&[log_at(who, cancel.clone())]));
+            assert!(book.get(h).is_some(), "{who} does not sell it");
+        }
+        // C6-7: UANoncesInvalidated(pad(maker)) from its token drops the dead shape-0 order, nothing else
+        v.apply_events(&mut book, &v.accepted(&[log_at(QUOTE, ua.clone())]));
+        assert!(book.get(h).is_some(), "QUOTE does not sell it");
+        v.apply_events(&mut book, &v.accepted(&[log_at(BASE, ua)]));
+        assert!(book.get(h).is_none(), "BASE sells it");
+    }
+
     /// Review T3 C1: an ERC-1271 maker at the best price whose wallet answers anything but exactly the 32-byte magic
     /// word fails its leg; the venue's check is `SigCheck`'s, so it is found unhealthy and dropped, and the taker fills
     /// at the next maker. The taker is an EIP-7702 delegated EOA: its key signs, it is never asked ERC-1271.
@@ -1600,7 +1699,7 @@ mod tests {
         let ev = ISCaaSDex::LegSettled { r#ref: B256::repeat_byte(1), orderHash: oh(&ask), from: maker.address(),
             destination: maker.address(), sold: U256::from(60), received: U256::from(120), dexFee: U256::ZERO,
             refund: U256::ZERO, relayerShare: U256::ZERO, treasuryShare: U256::ZERO };
-        world.lock().unwrap().logs.push(serde_json::to_value(log_of(ev.encode_log_data())).unwrap());
+        world.lock().unwrap().logs.push(serde_json::to_value(log_at(DEX, ev.encode_log_data())).unwrap());
         let (idx, _) = crate::adapter::tests::fake_odoo(crate::adapter::tests::Fake { tokens: json!([]), ..Default::default() }).await;
         let v = Venue { indexer: Some(idx), ..v };
         assert!(v.watch_once().await.unwrap());

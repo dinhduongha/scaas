@@ -245,7 +245,7 @@ amount` (closed forever, even through another relayer that holds the signed orde
 already-closed order is a no-op, not an error); `mtxInvalidateNonces` raises `minNonce[from][batch]`, strictly
 increasing and capped at `2^128` (emit `NoncesInvalidated(from, batch, minNonce)`), so one mistaken signature cannot
 lock an address out forever. An order with `nonce ≥ 2^128` is refused at the pre-check (`NonceAboveCap(orderHash)`, review C6-5): no
-lane floor could ever reach it, only a per-order cancel would. A signer with orders on several tokens cancels per token; the off-chain book drops them
+lane floor could ever reach it, only a per-order cancel would. The venue's intake and `clientkeys` `checkTradeOrder` refuse it the same way. A signer with orders on several tokens cancels per token; the off-chain book drops them
 at once. For outside-token orders the DEX keeps the same state and entry points ([CTR-DEX-18](#CTR-DEX-18)).
 
 ## 4. The DEX's side: `mtxSettle`

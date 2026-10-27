@@ -533,6 +533,9 @@ impl Book {
         if o.amount.is_zero() || o.receiveAmount.is_zero() || o.amount >= cap || o.receiveAmount >= cap {
             bail!("amounts must be in (0, 2^128)");
         }
+        if o.nonce >= cap {
+            bail!("nonce must be below 2^128 (no lane floor can reach a larger one)");
+        }
         if o.validUntil <= U256::from(now + MIN_TTL_SECS) || o.validUntil > U256::from(now + MAX_TTL_SECS) {
             bail!("validUntil must be within ({MIN_TTL_SECS} s, {MAX_TTL_SECS} s] from now");
         }
@@ -1141,6 +1144,8 @@ mod tests {
         assert!(bad(&|x| x.validUntil = U256::from(NOW + 2)), "too short");
         assert!(bad(&|x| x.validUntil = U256::from(NOW + MAX_TTL_SECS + 1)), "too long");
         assert!(bad(&|x| x.amount = U256::from(1u8) << 128), "2^128");
+        assert!(bad(&|x| x.nonce = U256::from(1u8) << 128), "C6-5: the chain refuses nonce >= 2^128");
+        assert!(!bad(&|x| x.nonce = (U256::from(1u8) << 128) - U256::from(1u8)), "2^128 - 1 is the largest nonce");
         assert!(bad(&|x| x.flags = FLAG_ESCROW | FLAG_IOC), "Path B not served");
         assert!(bad(&|x| x.flags = 8), "unknown flag");
         assert!(bad(&|x| x.minFill = U256::from(2)), "minFill above amount");
