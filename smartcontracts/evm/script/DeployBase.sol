@@ -15,6 +15,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 import {UARegistry} from "../src/ua/UARegistry.sol";
+import {MtxRelayFee, MtxRelayExecutor} from "../src/metatx/MtxRelayFee.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
 import {WebAuthnP256Verifier} from "../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {P256Verifier} from "../src/ua/verifiers/P256Verifier.sol";
@@ -165,7 +166,7 @@ abstract contract DeployBase is Script {
     ///         libraries with their code hashes), then the `NONE` release (on that registry: the UA ledger, CTR-UA-18)
     ///         and the `SCaaSDex` release, each version 1; otherwise the registrar publishes and deploys them later from
     ///         the same init code. Writes `token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`,
-    ///         `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
+    ///         `mtx_relay_fee`, `mtx_relay_executor`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER` also the Zether stack (`_deployZether`,
     ///         dev chains only). NONE and `UNDERLYING` both exceed EIP-170 (the UA ledger): deploy with
     ///         `--code-size-limit 65536` (deploy.sh); `UNDERLYING` is still not deployed here (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
@@ -174,6 +175,7 @@ abstract contract DeployBase is Script {
         if (deployZether) require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
         f = new OpenFactory{salt: salt}(registrar, uid, noticePeriod);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
+        _deployRelayFee();
         _gate(address(f));
         vm.serializeAddress("deploy", "token_factory", address(f));
         if (register) {
@@ -198,6 +200,17 @@ abstract contract DeployBase is Script {
         }
         if (deployZether) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
+    }
+
+    /// @notice `MtxRelayFee` (CTR-MTX-27) by CREATE2, the same address on every chain (no constructor argument, no
+    ///         `chainUid()`: it is stateless); its executor is its CREATE at nonce 1. JSON `mtx_relay_fee`,
+    ///         `mtx_relay_executor`.
+    function _deployRelayFee() internal {
+        MtxRelayFee rf = new MtxRelayFee{salt: salt}();
+        address ex = rf.EXECUTOR();
+        require(ex.code.length != 0 && MtxRelayExecutor(ex).ROUTER() == address(rf), "MtxRelayFee executor");
+        vm.serializeAddress("deploy", "mtx_relay_fee", address(rf));
+        vm.serializeAddress("deploy", "mtx_relay_executor", ex);
     }
 
     /// @notice A release environment of this chain's factory `f` (plan 5g-Z2), each library's current code hash.

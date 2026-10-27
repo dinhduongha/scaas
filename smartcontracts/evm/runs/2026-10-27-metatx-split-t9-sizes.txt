@@ -1,0 +1,5 @@
+# T9 sizes at 004890a2 + T9 tree
+size gate: 0 error(s), 45 contracts
+rc=0
+MtxRelayExecutor {'runtime_size': 554, 'init_size': 602, 'runtime_margin': 64982, 'init_margin': 130470}
+MtxRelayFee {'runtime_size': 2797, 'init_size': 3515, 'runtime_margin': 62739, 'init_margin': 127557}
