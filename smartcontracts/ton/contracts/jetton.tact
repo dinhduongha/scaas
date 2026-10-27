@@ -234,6 +234,16 @@ contract ScaasJettonWallet(
         if (m.op == OP_PAY) {
             throwUnless(E_VALUE, msg.forwardTon >= m.extra);
             throwUnless(E_BALANCE, m.amount > 0);
+            if (msg.params != null) {
+                // CTR-MTX-26 pay-meta: `params = salt:uint256 ^meta`; the signed payRef commits to (salt, meta), and
+                // lane payLane(payRef) at nonce 0 pays a (payer, payId) at most once (this wallet is the payer's).
+                let p = msg.params!!.beginParse();
+                let salt = p.loadUint(256);
+                let meta = p.loadRef();
+                p.endParse();
+                throwUnless(E_PARAMS, m.payRef == metaPayId(salt, meta) && m.lane == payLane(m.payRef) && m.nonce == 0);
+                emit(PaymentMeta { master: self.master, payId: m.payRef, meta }.toCell());
+            }
             self.sendOut(m.to, m.amount, 0, msg.responseDestination, msg.forwardTon, payTag(m.payRef), SendRemainingBalance);
         } else if (m.op == OP_TRADE) {
             throwUnless(E_PARAMS, msg.params != null && msg.params!!.hash() == m.extra);
@@ -366,5 +376,13 @@ contract ScaasJettonWallet(
 
     get fun get_passkey(): Cell? {
         return self.passkey;
+    }
+
+    get fun get_meta_pay_id(salt: Int, meta: Cell): Int {
+        return metaPayId(salt, meta);
+    }
+
+    get fun get_pay_lane(p: Int): Int {
+        return payLane(p);
     }
 }

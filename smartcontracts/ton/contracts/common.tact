@@ -102,6 +102,14 @@ message(0x9b1c0d03) TradeSettled {
     b: Int as uint256;
 }
 
+/// CTR-MTX-26: emitted by the payer's wallet before its transfer, so it precedes the payee wallet's
+/// `PaymentSettled` in logical time. `meta` is the snake chain exactly as the relayer sent it (never parsed).
+message(0x9b1c0d04) PaymentMeta {
+    master: Address;
+    payId: Int as uint256;
+    meta: Cell;
+}
+
 // ------------------------------------------------------------------ constants
 
 const METAOP_DOMAIN: Int = 0x73636161732e6d6574616f702e7631; // "scaas.metaop.v1" (120 bits)
@@ -353,6 +361,20 @@ fun checkPasskey(a: Slice, record: Cell, digest: Int) {
     let signed = beginCell().storeSlice(authData).storeUint(cdjHash, 256).asSlice();
     let sig = beginCell().storeUint(r, 256).storeUint(sv, 256).asSlice();
     throwUnless(E_SIG, p256CheckDataSignature(signed, sig, pub));
+}
+
+// ------------------------------------------------------------------ CTR-MTX-26 (payment metadata)
+
+/// `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, `meta` = the bytes of the snake chain (each cell's
+/// data along its first ref; Tact's `keccak256(Slice)`), byte for byte the EVM `metaPayId`.
+fun metaPayId(salt: Int, meta: Cell): Int {
+    return keccak256(beginCell().storeSlice("scaas.pay.meta".asSlice()).storeUint(salt, 256)
+        .storeUint(keccak256(meta.beginParse()), 256).asSlice());
+}
+
+/// `keccak256("scaas.pay.lane" ‖ p)`: the lane of a payment id (CTR-MTX-23).
+fun payLane(p: Int): Int {
+    return keccak256(beginCell().storeSlice("scaas.pay.lane".asSlice()).storeUint(p, 256).asSlice());
 }
 
 // ------------------------------------------------------------------ jetton helpers

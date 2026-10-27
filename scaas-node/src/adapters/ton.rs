@@ -539,8 +539,13 @@ pub fn jetton_wallet_address(owner: &Addr, master: &Addr, code_hash: &[u8; 32], 
 /// TEP-81 wire form used by TON Connect, as a `storeStringTail` snake (127 bytes per cell).
 pub fn domain_cell(domain: &str) -> Result<Arc<Cell>> {
     let wire: Vec<u8> = domain.split('.').rev().flat_map(|l| l.bytes().chain(std::iter::once(0))).collect();
+    snake(&wire)
+}
+
+/// Bytes as a snake: 127 bytes per cell along the first ref (`storeStringTail`'s chunking); empty = one empty cell.
+pub fn snake(bytes: &[u8]) -> Result<Arc<Cell>> {
     let mut cell: Option<Arc<Cell>> = None;
-    let chunks: Vec<&[u8]> = if wire.is_empty() { vec![&[]] } else { wire.chunks(127).collect() };
+    let chunks: Vec<&[u8]> = if bytes.is_empty() { vec![&[]] } else { bytes.chunks(127).collect() };
     for chunk in chunks.iter().rev() {
         let mut b = Builder::new().bytes(chunk);
         if let Some(c) = cell {
@@ -659,6 +664,66 @@ pub fn auth_cell(auth: &Auth) -> Result<Arc<Cell>> {
                 .reference(sc.end()?)
                 .end()
         }
+    }
+}
+
+// ---------------------------------------------------------------------- CTR-MTX-26 (spec §6.2, §9)
+
+/// `max_pay_meta_bytes` (spec §9): the node's cap on a pay-meta `meta`. On TON it is far below what a lane can carry
+/// (measured, `jetton.spec.ts` › meta size limit: 38,100 B = 300 snake cells settle in @ton/sandbox 0.45.0; config
+/// param 43 bounds the external message at 65,535 B and depth 512).
+// TODO(T17): becomes the `max_pay_meta_bytes` config key (default 2,048) for every family, with the indexer
+// decoding of `PaymentMeta` (opcode `EV_META`, joined to `PaymentSettled` by `pay_ref`).
+pub const MAX_PAY_META_BYTES: usize = 2048;
+pub const EV_META: u128 = 0x9b1c0d04;
+
+fn keccak(parts: &[&[u8]]) -> [u8; 32] {
+    alloy::primitives::keccak256(parts.concat()).0
+}
+
+/// `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))` (common.tact `metaPayId`).
+pub fn meta_pay_id(salt: &[u8], meta: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.meta", salt, &keccak(&[meta])])
+}
+
+/// `keccak256("scaas.pay.lane" ‖ p)` (common.tact `payLane`).
+pub fn pay_lane(p: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.lane", p])
+}
+
+fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
+    let s = v.as_str().ok_or_else(|| anyhow!("op.{what} missing"))?;
+    Ok(alloy::hex::decode(s.trim().trim_start_matches("0x"))?)
+}
+
+/// The `SignedOp.params` a pay op carries, checked before any getter (fail closed). `op.kind`: none = the plain pay
+/// (`params = null`: on `OP_PAY` a `params` cell means pay-meta, so a plain pay never carries `extra.params`);
+/// `"pay_meta"` (`op.salt` 32 bytes hex, `op.meta` hex within the cap) = `params = salt:uint256 ^meta` (`meta` as
+/// snake bytes), with `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0` on an `OP_PAY`;
+/// any other kind is refused (a typo must not burn the `(payer, payId)` lane as a plain pay). `Ok(None)`: the op's
+/// own `extra.params` (trade, set_key) as before.
+pub fn pay_params(m: &MetaOp, o: &Value) -> Result<Option<Arc<Cell>>> {
+    match o["kind"].as_str() {
+        None if m.op == 1 && o["extra"]["params"].is_string() => {
+            bail!("a plain pay carries no params (a pay-meta is op.kind = \"pay_meta\")")
+        }
+        None => Ok(None),
+        Some("pay_meta") => {
+            if m.op != 1 {
+                bail!("pay-meta: the MetaOp is op {}, not pay", m.op);
+            }
+            let (salt, meta) = (hex_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
+            let salt: [u8; 32] = salt.try_into().map_err(|_| anyhow!("op.salt is 32 bytes"))?;
+            if meta.len() > MAX_PAY_META_BYTES {
+                bail!("meta is {} B, above the {MAX_PAY_META_BYTES} B cap", meta.len());
+            }
+            let id = meta_pay_id(&salt, &meta);
+            if m.pay_ref != id || m.lane != pay_lane(&id) || m.nonce != 0 {
+                bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0");
+            }
+            Ok(Some(Builder::new().bytes(&salt).reference(snake(&meta)?).end()?))
+        }
+        Some(k) => bail!("unknown op.kind {k:?} (pay_meta, or none for a plain pay)"),
     }
 }
 
@@ -1093,6 +1158,7 @@ impl ChainAdapter for TonAdapter {
         if m.relayer.is_some_and(|r| r != me) {
             return Err(SimError::Revert("payload is bound to another relayer".into()));
         }
+        let pay_meta = pay_params(&m, op).map_err(revert)?;
         let extra = op.get("extra").cloned().unwrap_or(Value::Null);
         let mut forward = 0u128;
         let body = if s("op_kind") == "mandate_pay" {
@@ -1126,9 +1192,10 @@ impl ChainAdapter for TonAdapter {
                 Auth::TonConnect { state_init, .. } => state_init.clone(),
                 Auth::Passkey { .. } => None,
             };
-            let params = match extra.get("params").and_then(Value::as_str) {
-                Some(p) => Some(boc_parse(&alloy::hex::decode(p.trim_start_matches("0x")).map_err(|e| revert(e.into()))?).map_err(revert)?),
-                None => None,
+            let params = match (pay_meta, extra.get("params").and_then(Value::as_str)) {
+                (Some(p), _) => Some(p),
+                (None, Some(p)) => Some(boc_parse(&alloy::hex::decode(p.trim_start_matches("0x")).map_err(|e| revert(e.into()))?).map_err(revert)?),
+                (None, None) => None,
             };
             let match_with = match extra.get("match_with").and_then(Value::as_str) {
                 Some(h) => b32(h).map_err(revert)?,
@@ -1657,6 +1724,112 @@ mod tests {
         assert!(matches!(r, TxStatus::Reverted { .. }), "{r:?}");
     }
 
+    // ---------------------------------------------------------------- CTR-MTX-26 (spec §6.2, §9)
+
+    fn hexv(v: &Value) -> Vec<u8> {
+        alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap()
+    }
+
+    /// A signed `OP_PAY` of `from` (the W5R1 of key `[1; 32]`) with these refs, as the job JSON the node receives.
+    fn pay_job(pay_ref: [u8; 32], lane: [u8; 32], nonce: u64, op_code: u128, more: Value) -> (Job, MetaOp) {
+        let key = LocalSigner::new(Curve::Ed25519, &[1; 32]).unwrap();
+        let w5 = W5::new(key.public_key().try_into().unwrap(), -239).unwrap();
+        let (from, contract) = (w5.address().unwrap(), Addr { wc: 0, hash: [0xc0; 32] });
+        let op = Builder::new()
+            .bytes(b"scaas.metaop.v1").int(-239, 32).uint(op_code, 8).uint(10, 128).uint(nonce as u128, 64)
+            .uint((crate::submit::now() + 600) as u128, 64).addr(Some(&contract))
+            .reference(Builder::new().addr(Some(&from)).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
+            .reference(Builder::new().bytes(&pay_ref).bytes(&lane).bytes(&[0; 32]).end().unwrap())
+            .end()
+            .unwrap();
+        let ts = 1_800_000_000u64;
+        let sig = key.sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap()).unwrap();
+        let signature = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts, "domain": "pay.example",
+                               "state_init": b64encode(&boc_serialize(&w5.state_init().unwrap()))});
+        let mut o = json!({"contract": contract.raw(), "op_kind": "pay", "payload": alloy::hex::encode(boc_serialize(&op)),
+                           "signature": signature.to_string(), "digest": hex0x(&op.hash())});
+        o.as_object_mut().unwrap().extend(more.as_object().unwrap().clone());
+        (serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": o})).unwrap(), parse_metaop(&op).unwrap())
+    }
+
+    /// `SignedOp.params` of a built body (tail ref: `params:Maybe ^Cell`).
+    fn built_params(b: &Built) -> Option<Arc<Cell>> {
+        let body = boc_parse(&b.body).unwrap();
+        let mut t = body.refs()[2].parser();
+        t.bit().unwrap().then(|| t.reference().unwrap())
+    }
+
+    /// Rule 1 (every row of the shared vectors in Rust) and the pay-meta job: `params = salt:uint256 ^meta` byte for byte
+    /// the cell `vectors.spec.ts` built with @ton/core (`/pay_meta/params_boc`), checked before any getter.
+    #[tokio::test]
+    async fn ton_pay_meta_job_builds_params() {
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        assert_eq!(rows.len(), 6);
+        for r in &rows {
+            let id = meta_pay_id(&hexv(&r["salt"]), &hexv(&r["meta"]));
+            assert_eq!((id.to_vec(), pay_lane(&id).to_vec()), (hexv(&r["payId"]), hexv(&r["payLane"])), "{}", r["name"]);
+        }
+        let v = vectors();
+        let pm = &v["pay_meta"];
+        let (salt, meta) = (hexv(&pm["salt"]), hexv(&pm["meta"]));
+        assert_eq!(snake(&meta).unwrap().hash(), cell(&v, "/pay_meta/meta_boc").hash(), "snake chunking = @ton/core's");
+        let id: [u8; 32] = hexv(&pm["pay_id"]).try_into().unwrap();
+        assert_eq!(hex0x(&pay_lane(&id)), s(&v, "/pay_meta/pay_lane"));
+        let more = json!({"kind": "pay_meta", "salt": pm["salt"], "meta": pm["meta"]});
+
+        let url = fake_api(Fake { getters: HashMap::from([("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0))]), ..Default::default() }).await;
+        let a = adapter(&url);
+        let (job, _) = pay_job(id, pay_lane(&id), 0, 1, more.clone());
+        let b = a.build(&job, 0).await.unwrap();
+        assert_eq!(hex0x(&built_params(&b).unwrap().hash()), s(&v, "/pay_meta/params_hash"));
+        assert_eq!(alloy::hex::encode(boc_serialize(&built_params(&b).unwrap())), s(&v, "/pay_meta/params_boc"));
+        // the plain pay still sends params = null
+        let (plain, _) = pay_job(id, pay_lane(&id), 0, 1, json!({}));
+        assert!(built_params(&a.build(&plain, 0).await.unwrap()).is_none());
+        // the `PaymentMeta` event is not one the indexer decodes yet (T17), and never an error
+        assert_eq!(decode_event(&cell(&v, "/events/pm_boc")).unwrap(), None);
+
+        // fail closed before any getter: an adapter whose API is unreachable still refuses each with its reason
+        let dead = adapter("http://127.0.0.1:9");
+        let refused = |job: Job| {
+            let dead = &dead;
+            async move {
+                match dead.build(&job, 0).await {
+                    Err(SimError::Revert(e)) => e,
+                    other => panic!("{other:?}"),
+                }
+            }
+        };
+        let with = |k: &str, val: Value| {
+            let mut m = more.clone();
+            m[k] = val;
+            m
+        };
+        let tail = format!("{}00", pm["meta"].as_str().unwrap());
+        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, with("meta", json!(tail))).0).await.contains("metaPayId"), "meta does not hash to pay_ref");
+        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, with("salt", json!("0x01"))).0).await.contains("32 bytes"));
+        assert!(refused(pay_job(id, [9; 32], 0, 1, more.clone()).0).await.contains("payLane"), "lane");
+        assert!(refused(pay_job(id, pay_lane(&id), 1, 1, more.clone()).0).await.contains("payLane"), "nonce");
+        assert!(refused(pay_job(id, pay_lane(&id), 0, 2, more.clone()).0).await.contains("not pay"), "a trade op");
+        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, json!({"kind": "pay_meta", "meta": pm["meta"]})).0).await.contains("op.salt missing"));
+        // the cap: a meta that hashes right but is one byte above it
+        let big = vec![0x61u8; MAX_PAY_META_BYTES + 1];
+        let big_id = meta_pay_id(&salt, &big);
+        let e = refused(pay_job(big_id, pay_lane(&big_id), 0, 1, with("meta", json!(alloy::hex::encode(&big)))).0).await;
+        assert!(e.contains("2048 B cap"), "{e}");
+        let at_cap = vec![0x61u8; MAX_PAY_META_BYTES];
+        let cap_id = meta_pay_id(&salt, &at_cap);
+        let (job, m) = pay_job(cap_id, pay_lane(&cap_id), 0, 1, with("meta", json!(alloy::hex::encode(&at_cap))));
+        assert_eq!(pay_params(&m, job.op.as_ref().unwrap()).unwrap().unwrap().refs()[0].hash(), snake(&at_cap).unwrap().hash());
+        // unknown kinds and a plain pay with params are refused, never sent as a plain pay
+        for k in ["pay-meta", "pay", "", "relay_fee"] {
+            let e = refused(pay_job(id, pay_lane(&id), 0, 1, with("kind", json!(k))).0).await;
+            assert!(e.contains("unknown op.kind"), "{k}: {e}");
+        }
+        let e = refused(pay_job(id, pay_lane(&id), 0, 1, json!({"extra": {"params": s(&v, "/pay_meta/params_boc")}})).0).await;
+        assert!(e.contains("plain pay carries no params"), "{e}");
+    }
+
     mod prop {
         use super::*;
         use proptest::prelude::*;
@@ -1679,6 +1852,24 @@ mod tests {
                 let back = boc_parse(&boc_serialize(&c)).unwrap();
                 prop_assert_eq!(back.hash(), c.hash());
                 prop_assert_eq!(back.bit_len(), bits.len());
+            }
+
+            /// The pay-meta job on untrusted input (rule 4): no panic, whatever the JSON.
+            #[test]
+            fn pay_meta_job_never_panics(kind in 0usize..4, salt in "\\PC{0,80}", meta in proptest::collection::vec(any::<u8>(), 0..300),
+                                         hexy in any::<bool>(), op_code in 0u8..6, nonce in 0u64..2) {
+                let v = vectors();
+                let mut m = parse_metaop(&cell(&v, "/metaop/boc")).unwrap();
+                m.op = op_code;
+                m.nonce = nonce;
+                let salt_v = if hexy { json!(alloy::hex::encode(salt.as_bytes())) } else { json!(salt) };
+                let kind_v = [json!("pay_meta"), json!("other"), Value::Null, json!(7)][kind].clone();
+                let o = json!({"kind": kind_v, "salt": salt_v, "meta": alloy::hex::encode(&meta), "extra": {"params": salt}});
+                let _ = pay_params(&m, &o);
+                let id = meta_pay_id(salt.as_bytes(), &meta);
+                m.pay_ref = id;
+                m.lane = pay_lane(&id);
+                let _ = pay_params(&m, &o);
             }
 
             #[test]

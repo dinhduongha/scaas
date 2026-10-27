@@ -6,11 +6,16 @@ import { keyPairFromSeed, sign } from '@ton/crypto';
 import { WalletContractV5R1 } from '@ton/ton';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { ScaasJettonWallet, storeMetaTransactionExecuted, storePaymentSettled, storeSignedOp } from '../build/jetton/jetton_ScaasJettonWallet';
+import { ScaasJettonWallet, storeMetaTransactionExecuted, storePaymentMeta, storePaymentSettled, storeSignedOp } from '../build/jetton/jetton_ScaasJettonWallet';
 import { ScaasJettonMaster } from '../build/jetton/jetton_ScaasJettonMaster';
-import { domainCell, metaOpCell, METAOP_SCHEMA, SCHEMA_CRC, signDataCell, stateInitCell, tonConnectAuth, tradeParamsCell } from './helpers';
+import { setup } from './fixture';
+import { domainCell, metaOpCell, METAOP_SCHEMA, payMetaParams, SCHEMA_CRC, signDataCell, snakeCell, stateInitCell, tonConnectAuth, tradeParamsCell } from './helpers';
 
 const FILE = join(__dirname, '..', 'vectors', 'ton-vectors.json');
+// CTR-MTX-26 shared vectors (`[{name, schema, salt, meta, payId, payLane}]`, hex), read by every family.
+const PAYMETA: { name: string; salt: string; meta: string; payId: string; payLane: string }[] =
+    JSON.parse(readFileSync(join(__dirname, '..', '..', 'vectors', 'metatx', 'paymeta.json'), 'utf8'));
+const bytes = (h: string) => Buffer.from(h.slice(2), 'hex');
 const hex = (c: Cell) => c.toBoc({ idx: false, crc32: false }).toString('hex');
 const h = (c: Cell) => '0x' + c.hash().toString('hex');
 const raw = (a: Address) => a.toRawString();
@@ -56,6 +61,11 @@ async function build() {
 
     const mte = beginCell().store(storeMetaTransactionExecuted({ $$type: 'MetaTransactionExecuted', master: master.address, from: payer.address, digest: BigInt(h(op)) })).endCell();
     const ps = beginCell().store(storePaymentSettled({ $$type: 'PaymentSettled', from: payer.address, to: payee, amount: 1_234_567n, payRef: fields.payRef })).endCell();
+    // Pay-meta (CTR-MTX-26): the `params` cell and the `PaymentMeta` event of the first shared vector.
+    const pmRow = PAYMETA[0];
+    const pmMeta = snakeCell(bytes(pmRow.meta));
+    const pmParams = payMetaParams(BigInt(pmRow.salt), pmMeta);
+    const pm = beginCell().store(storePaymentMeta({ $$type: 'PaymentMeta', master: master.address, payId: BigInt(pmRow.payId), meta: pmMeta })).endCell();
     const code = walletInit.init!.code;
     return {
         schema: METAOP_SCHEMA, schema_crc32: SCHEMA_CRC,
@@ -75,7 +85,9 @@ async function build() {
             code_boc: hex(lane.init.code), data_hash: h(lane.init.data), seqno, valid_until: validUntil, value: toNano('0.15').toString(),
             relaxed_hash: h(relaxed), body_hash: h(w5body), ext_boc: hex(ext), ext_hash: h(ext), norm_hash: h(norm),
         },
-        events: { mte_boc: hex(mte), ps_boc: hex(ps) },
+        events: { mte_boc: hex(mte), ps_boc: hex(ps), pm_boc: hex(pm) },
+        pay_meta: { name: pmRow.name, salt: pmRow.salt, meta: pmRow.meta, pay_id: pmRow.payId, pay_lane: pmRow.payLane,
+                    meta_boc: hex(pmMeta), params_boc: hex(pmParams), params_hash: h(pmParams) },
     };
 }
 
@@ -87,5 +99,30 @@ describe('cross-implementation vectors', () => {
             writeFileSync(FILE, JSON.stringify(v, null, 2) + '\n');
         }
         expect(v).toEqual(JSON.parse(readFileSync(FILE, 'utf8')));
+    });
+});
+
+describe('paymeta vectors match', () => {
+    // Rule 1: every row's payId / payLane from the wallet's own metaPayId / payLane (Tact keccak256 over the snake
+    // chain), the 4,192-byte `long_body_4096` included; the chunking of the snake does not change the hash.
+    it('metaPayId and payLane of every paymeta.json row', async () => {
+        const { admin, newToken, walletOf } = await setup();
+        const w = await walletOf(await newToken('A'), admin.address);
+        expect(PAYMETA.map((r) => r.name)).toEqual(['note_utf8', 'structured_reference', 'bound_call', 'encrypted_illustrative', 'empty_body', 'long_body_4096']);
+        for (const r of PAYMETA) {
+            const meta = bytes(r.meta);
+            const id = await w.getGetMetaPayId(BigInt(r.salt), snakeCell(meta));
+            expect('0x' + id.toString(16).padStart(64, '0')).toBe(r.payId);
+            expect('0x' + (await w.getGetPayLane(id)).toString(16).padStart(64, '0')).toBe(r.payLane);
+            // 32 bytes per cell instead of 127: same bytes, same id
+            let c: Cell | null = null;
+            for (let i = Math.floor(Math.max(meta.length - 1, 0) / 32) * 32; i >= 0; i -= 32) {
+                const b = beginCell().storeBuffer(meta.subarray(i, i + 32));
+                if (c) b.storeRef(c);
+                c = b.endCell();
+            }
+            expect(await w.getGetMetaPayId(BigInt(r.salt), c!)).toBe(id);
+        }
+        expect(bytes(PAYMETA[5].meta).length).toBe(4192);
     });
 });

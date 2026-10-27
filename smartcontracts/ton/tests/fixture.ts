@@ -1,7 +1,7 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { Address, beginCell, Cell, toNano } from '@ton/core';
 import { ScaasJettonMaster } from '../build/jetton/jetton_ScaasJettonMaster';
-import { ScaasJettonWallet, loadMetaTransactionExecuted, loadPaymentSettled } from '../build/jetton/jetton_ScaasJettonWallet';
+import { ScaasJettonWallet, loadMetaTransactionExecuted, loadPaymentMeta, loadPaymentSettled } from '../build/jetton/jetton_ScaasJettonWallet';
 import { metaOpCell, MetaOpFields, OP, randomU256, subject, tonConnectAuth } from './helpers';
 
 export const DOMAIN = 'pay.scaas.example';
@@ -68,6 +68,7 @@ export function events(txs: { outMessages: { values(): any[] } }[]) {
             const op = s.preloadUint(32);
             if (op === 0x9b1c0d01) out.push({ name: 'MetaTransactionExecuted', src: m.info.src, ...loadMetaTransactionExecuted(m.body.beginParse()) });
             if (op === 0x9b1c0d02) out.push({ name: 'PaymentSettled', src: m.info.src, ...loadPaymentSettled(m.body.beginParse()) });
+            if (op === 0x9b1c0d04) out.push({ name: 'PaymentMeta', src: m.info.src, ...loadPaymentMeta(m.body.beginParse()) });
         }
     }
     return out;
