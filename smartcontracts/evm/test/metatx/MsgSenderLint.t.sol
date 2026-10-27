@@ -59,8 +59,10 @@ contract MsgSenderLintTest is Test {
             "MetaTxBase: guard, event, _msgSender x2, fee default, ticket binding (CTR-ZTH-34), _ticketSubject");
         assertEq(_count("src/metatx/MtxPipelineLib.sol", "msg.sender", false), 4,
             "MtxPipelineLib: relayer binding x2, fee default x2 (preCall, _checkTransfer)");
-        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 8,
-            "ERC20MetaTx: event relayer x3, fee default x3 (MetaTransfer, UAMetaTransaction, UAMetaTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25)");
+        // metatx split T4: the fee defaults left with `_checkTransfer` / `_checkUATransfer` / `_callFee` (now in
+        // MtxPipelineLib); the event of `_execute` came down from MetaTxBase in T3.
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 6,
+            "ERC20MetaTx: event relayer x4 (_execute, _executeTransfer, _uaExecute, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25)");
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
         assertEq(_count("src/metatx/NoUnderlyingToken.sol", "msg.sender", false), 0, "NoUnderlyingToken");
         assertEq(_count("src/metatx/UnderlyingToken.sol", "msg.sender", false), 4, "UnderlyingToken: mtxWrap and uaWrap submitter x2 (CTR-TOK-20)");

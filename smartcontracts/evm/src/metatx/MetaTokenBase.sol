@@ -9,7 +9,7 @@ import {ITokenAdmin} from "./ITokenAdmin.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
-import {HederaLib} from "../hedera/HederaLib.sol";
+import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
@@ -23,7 +23,7 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         (CTR-MTX-05/06). Features, owner and roles (CTR-TOK-22) live in `AdminLib`, init and provenance in the
 ///         ERC-7201 namespace `scaas.token`. Pay (`mtxPay`, `payWithFee`, `mtxPayReceiverFee`) works only with
 ///         `PAYABLE`; a `MetaTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
-///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `HederaLib`.
+///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, ITokenAdmin {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
@@ -320,7 +320,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         if (feeRecipient == address(this)) revert TransferToSelf();
         _notPool(feeRecipient); // C5-3
         bytes32 d = _executeTransfer(t, payerSig);
-        _requireValidSignature(t.to, receiverFeeDigest(d, fee, feeRecipient, rfValidUntil), payeeSig);
+        MtxPipelineLib.requireSignature(
+            _mtxCtx(), t.to, receiverFeeDigest(d, fee, feeRecipient, rfValidUntil), payeeSig);
         _transfer(t.to, feeRecipient, fee);
         emit ReceiverFeePaid(d, t.to, feeRecipient, fee);
         return true;
@@ -347,7 +348,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         if (feeRecipient == address(this)) revert TransferToSelf();
         if (feeRecipient == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
         bytes32 d = _uaExecuteTransfer(t, payerAuth);
-        _uaAuthorize(t.to, UAKinds.PURPOSE_RECEIVER_FEE, receiverFeeDigest(d, fee, feeRecipient, rfValidUntil), payeeAuth);
+        MtxPipelineLib.authorize(_mtxCtx(), t.to, UAKinds.PURPOSE_RECEIVER_FEE,
+            receiverFeeDigest(d, fee, feeRecipient, rfValidUntil), payeeAuth);
         _uaMove(t.to, to, fee);
         emit UAReceiverFeePaid(d, t.to, feeRecipient, fee);
         return true;
@@ -395,21 +397,5 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         _uaMove(payer, to, amount);
         emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
         return true;
-    }
-
-    /// @dev Hedera (CTR-TOK-23): a 64-byte signature from an account without code is HIP-632; all else is EVM.
-    function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
-        if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
-        super._requireValidSignature(from, digest, sig);
-    }
-
-    function _requireNativeUASignature(address from, bytes32 digest, bytes calldata sig) internal view override {
-        if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
-        super._requireNativeUASignature(from, digest, sig);
-    }
-
-    function _erc1271Gas(address from) internal view override returns (uint256) {
-        bytes32 h = _SMART_KEY_CLONE_CODEHASH;
-        return h != bytes32(0) && from.codehash == h ? 400_000 : 50_000;
     }
 }

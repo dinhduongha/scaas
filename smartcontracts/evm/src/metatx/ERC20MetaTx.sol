@@ -8,7 +8,6 @@ import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
-import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
@@ -18,13 +17,15 @@ import {UAKinds} from "../ua/UAKinds.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
 /// @title The token base of every SCaaS token (CTR-MTX-07): ERC-20 on `MetaTxBase`.
-/// @notice Adds to the generic base: the fee in this token (`_chargeFee` by fee class, CTR-MTX-20), the typed
+/// @notice Adds to the generic base: the fee in this token (amount by fee class checked in `MtxPipelineLib.preCall`
+///         before the self-call, moved after it, CTR-MTX-20, owner 2026-10-27), the typed
 ///         `MetaTransfer` path (`mtxExecuteTransfer`, `mtxBatchTransfer`, CTR-MTX-23/24) on the same lanes, the
 ///         allowance rule (CTR-TOK-01) and "no tokens at the token's own address" (CTR-MTX-18). Domain
 ///         `("SCaaS MetaToken", "1", chainId, clone, chain_uid)` for every kind (CTR-MTX-02). The sell side of a
 ///         `TradeOrder` (CTR-DEX-15) through `TradeLib`. The UA ledger (CTR-UA-18/19/26): `bytes32` balances of derived
-///         UAs, shown as the holder `UA_POOL`, and the `ua*` pipelines on the same lanes; signatures of derived UAs
-///         are checked by the UA registry (`requireAuthorized`), never here.
+///         UAs, shown as the holder `UA_POOL`, and the `ua*` pipelines on the same lanes. Every signature (the
+///         relayed paths, trade, cancel, invalidate, receiver-fee) is checked in `MtxPipelineLib` (`requireSignature`
+///         / `authorize`; a derived UA by the registry's `requireAuthorized`), never here (owner 2026-10-27).
 abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, IUALedger {
     using MetaTxLib for MetaTxLib.MetaTransfer;
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
@@ -151,7 +152,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         bytes32 h = tradeOrderDigest(o);
         UATradeOrder memory c = TradeLib.core(o);
         TradeLib.precheck(c, f, h, msg.sender, address(this));
-        if (TradeLib.$().pulled[h] == 0) _requireValidSignature(o.from, h, sig);
+        if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.requireSignature(_mtxCtx(), o.from, h, sig);
         _transfer(o.from, o.dex, TradeLib.record(c, f, h, false));
     }
 
@@ -162,32 +163,33 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         bytes32 h = uaTradeOrderDigest(o);
         UATradeOrder memory c = o;
         TradeLib.precheck(c, f, h, msg.sender, address(this));
-        if (TradeLib.$().pulled[h] == 0) _uaAuthorize(o.from, UAKinds.PURPOSE_TRADE, h, auth);
+        if (TradeLib.$().pulled[h] == 0) MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, h, auth);
         _uaMove(o.from, TradeLib.pad(o.dex), TradeLib.record(c, f, h, true));
     }
 
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one.
     function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant {
         bytes32 h = tradeOrderDigest(o);
-        _requireValidSignature(o.from, cancelOrderDigest(h), sig);
+        MtxPipelineLib.requireSignature(_mtxCtx(), o.from, cancelOrderDigest(h), sig);
         TradeLib.cancel(h, o.amount, TradeLib.pad(o.from), false);
     }
 
     function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external nonReentrant {
         _uaOn();
         bytes32 h = uaTradeOrderDigest(o);
-        _uaAuthorize(o.from, UAKinds.PURPOSE_TRADE, cancelOrderDigest(h), auth);
+        MtxPipelineLib.authorize(_mtxCtx(), o.from, UAKinds.PURPOSE_TRADE, cancelOrderDigest(h), auth);
         TradeLib.cancel(h, o.amount, o.from, true);
     }
 
     function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
-        _requireValidSignature(from, invalidateNoncesDigest(from, batch, newMin), sig);
+        MtxPipelineLib.requireSignature(_mtxCtx(), from, invalidateNoncesDigest(from, batch, newMin), sig);
         TradeLib.invalidate(TradeLib.pad(from), batch, newMin, false);
     }
 
     function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external nonReentrant {
         _uaOn();
-        _uaAuthorize(from, UAKinds.PURPOSE_TRADE, uaInvalidateNoncesDigest(from, batch, newMin), auth);
+        MtxPipelineLib.authorize(
+            _mtxCtx(), from, UAKinds.PURPOSE_TRADE, uaInvalidateNoncesDigest(from, batch, newMin), auth);
         TradeLib.invalidate(from, batch, newMin, true);
     }
 
@@ -230,26 +232,6 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
             t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient);
     }
 
-    /// @dev Step 3: payee, fee on `value` (capped, CTR-MTX-13), the payee check (CTR-MTX-08), balance. Superseded by
-    ///      `MtxPipelineLib._checkTransfer` (metatx split T3), no longer called; Task 4 moves it to legacy/metatx-v1/.
-    function _checkTransfer(MetaTxLib.MetaTransfer memory t) private view returns (uint256 fee, address feeTo) {
-        if (t.to == address(0)) revert PayToZero();
-        if (t.to == address(this)) revert TransferToSelf();
-        _notPool(t.to); // C5-3
-        FeeMode fm = MetaTxLib.feeModeOf(t.mode);
-        feeTo = t.feeRecipient == address(0) ? msg.sender : t.feeRecipient;
-        fee = FeePolicy.compute(fm, t.value, t.fee);
-        FeePolicy.validateRecipient(fm, feeTo);
-        if (fee != 0) {
-            if (feeTo == t.to) revert FeeRecipientIsPayee();
-            if (feeTo == address(this)) revert TransferToSelf();
-            _notPool(feeTo);
-        }
-        uint256 need = t.value + fee;
-        uint256 have = balanceOf(t.from);
-        if (have < need) revert MetaTxInsufficientForFee(need, have);
-    }
-
     // ------------------------------------------------------------------ the generic pipeline on MtxPipelineLib
 
     /// @notice The token's immutables for `MtxPipelineLib` (metatx split R2): the only place that builds a `Ctx`.
@@ -283,34 +265,6 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
             f.basis = basis;
         }
         if (ua) f.uaAllowed = _uaAllowed(f.sel);
-    }
-
-    // ------------------------------------------------------------------ fee of a self-call (CTR-MTX-20)
-    // Superseded by `MtxPipelineLib._callFee`, now before the call (§3.8, owner 2026-10-27): `_chargeFee` / `_callFee`
-    // are no longer reached on a token (its `_execute` overrides the base's); Task 4 moves them to `legacy/metatx-v1/`.
-
-    /// @notice After the call: `ABSOLUTE` + `FIXED` = the signed amount, uncapped (step 3 refused `ABSOLUTE` +
-    ///         `PERCENT`); anything else = `FeePolicy.compute` on the basis (≤ 1 %), so a `PERCENT` fee is never
-    ///         taken as a raw amount whatever class the rule reports here. A failing transfer reverts the call.
-    function _chargeFee(address from, uint256 basis, MetaTxLib.MetaTransaction memory m)
-        internal override returns (uint256 fee)
-    {
-        address feeTo;
-        (fee, feeTo) = _callFee(m.data, basis, m.mode, m.fee, _feeRecipientOf(m));
-        if (fee != 0) _transfer(from, feeTo, fee);
-    }
-
-    /// @dev The fee of a self-call (both paths), after the call; a `UA_POOL` recipient would credit the pool's slot.
-    function _callFee(bytes memory data, uint256 basis, uint32 mode, uint256 signed, address feeTo)
-        private view returns (uint256 fee, address)
-    {
-        FeeMode fm = MetaTxLib.feeModeOf(mode);
-        if (fm == FeeMode.NONE) return (0, feeTo);
-        bool absoluteFixed = fm == FeeMode.FIXED && _mtxRule(bytes4(data)).feeClass == FEE_CLASS_ABSOLUTE;
-        fee = absoluteFixed ? signed : FeePolicy.compute(fm, basis, signed);
-        FeePolicy.validateRecipient(fm, feeTo);
-        if (fee != 0 && feeTo == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
-        return (fee, feeTo);
     }
 
     // ------------------------------------------------------------------ allowance (CTR-TOK-01)
@@ -456,26 +410,6 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return o.digest;
     }
 
-    /// @dev Step 3 of the typed path: receiver, fee on `value` (capped), the payee check on the padded recipient,
-    ///      balance. Superseded by `MtxPipelineLib._checkTransfer` (metatx split T3), no longer called; Task 4 moves
-    ///      it to legacy/metatx-v1/.
-    function _checkUATransfer(MetaTxLib.UAMetaTransfer memory t) private view returns (uint256 fee, address feeTo) {
-        _checkTo(t.to);
-        FeeMode fm = MetaTxLib.feeModeOf(t.mode);
-        feeTo = t.feeRecipient == address(0) ? msg.sender : t.feeRecipient;
-        fee = FeePolicy.compute(fm, t.value, t.fee);
-        FeePolicy.validateRecipient(fm, feeTo);
-        if (fee != 0) {
-            if (MetaTxLib.pad(feeTo) == t.to) revert FeeRecipientIsPayee();
-            if (feeTo == address(this)) revert TransferToSelf();
-            if (feeTo == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
-            if (feeTo == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
-        }
-        uint256 need = t.value + fee;
-        uint256 have = balanceOfUA(t.from);
-        if (have < need) revert MetaTxInsufficientForFee(need, have);
-    }
-
     /// @dev The receiver of every `…ToUA` function (CTR-UA-28): the ledger on and a registered SIGNING derived id; a
     ///      native id belongs to the address twin (`UANotRegistered`).
     function _requireDerivedReceiver(bytes32 to) internal view {
@@ -504,26 +438,6 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         uint16 kind = IUARegistry(_REGISTRY).kindOf(to);
         if (kind == 0) revert UANotRegistered(to);
         if (!UAKinds.isSigning(kind)) revert UAKindNotAccepted(to, kind);
-    }
-
-    /// @dev Step 2: a native id is checked here over the digest itself (CTR-UA-24: no code ⇒ ECDSA; an EIP-7702
-    ///      designator ⇒ ECDSA, else ERC-1271 through the delegate; other code ⇒ ERC-1271; Hedera's HIP-632 as on the
-    ///      address path), whatever the purpose; a derived one by the registry under `purpose` (`metatx`, or
-    ///      `receiver-fee` for a payee's `ReceiverFee`).
-    function _uaAuthorize(bytes32 from, bytes32 purpose, bytes32 digest, bytes calldata auth) internal view {
-        if (!UAKinds.inNativeSpace(from)) {
-            return IUARegistry(_REGISTRY).requireAuthorized(from, purpose, digest, auth);
-        }
-        address a = address(uint160(uint256(from)));
-        if (a == address(0)) revert UANotRegistered(from); // C5-2: id 0 pays no fee (it would mint)
-        if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
-        if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
-        _requireNativeUASignature(a, digest, auth);
-    }
-
-    /// @notice The native signature of the UA path; `MetaTokenBase` adds the Hedera HIP-632 branch.
-    function _requireNativeUASignature(address from, bytes32 digest, bytes calldata sig) internal view virtual {
-        if (!SigCheck.isValid7702(from, digest, sig, _erc1271Gas(from))) revert MetaTxBadSignature();
     }
 
     /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NONE` adds
@@ -573,10 +487,6 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
 
     function _ua() private pure returns (UALedgerStorage storage $) {
         assembly ("memory-safe") { $.slot := _UA_STORAGE }
-    }
-
-    function _isContract(address a) internal view returns (bool) {
-        return SigCheck.isContract(a);
     }
 
     function _msgSender() internal view virtual override(Context, MetaTxBase) returns (address) {

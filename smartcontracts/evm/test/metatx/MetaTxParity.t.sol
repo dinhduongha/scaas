@@ -740,7 +740,7 @@ abstract contract ParityCases is ParityIO {
         vm.prank(k.relayer);
         MetaTokenBase(k.t).mtxExecute(m, sg);
         _pMx(k, "mtxExecute", "err_replay", "", IMetaTx.mtxExecute.selector, m, sg, k.relayer);
-        // the fee rule (step 6 today, after the call)
+        // the fee rule (amount checked in step 3, before the call, §3.8; moved in step 6)
         _pXf(k, "err_feeExceedsCap_percent", _pMt(k, _pAmt(k, 100_000), 0, P_RR | P_PCT, 20_000, address(0)));
         _pXf(k, "err_feeExceedsCap_fixed", _pMt(k, _pAmt(k, 100_000), 0, P_RR | P_FIX, 1_001, address(0)));
         _pXf(k, "err_feeRecipientUaPool", _pMt(k, _pCancel(7), 0, P_RR | P_RF | P_FIX, 5, P_UAP));
@@ -812,7 +812,7 @@ abstract contract ParityCases is ParityIO {
         h = _pH("mtxBatch", "addr", "err_itemSelectorNotAllowed");
         _pRec(k, h, k.relayer, abi.encodeCall(IMetaTx.mtxBatch, (ms, sg)),
             _pD2("mtxDigest0", MetaTokenBase(k.t).mtxDigest(ms[0]), "mtxDigest1", MetaTokenBase(k.t).mtxDigest(ms[1])), _pL2(l0, l1));
-        // the second item breaks its fee rule after its call (today: after; the whole batch reverts either way)
+        // the second item breaks its fee rule (refused before its call, §3.8; the whole batch reverts either way)
         l0 = _pLn(k);
         l1 = _pLn(k);
         ms[0] = _pMt(k, _pCancel(7), l0, P_RR, 0, address(0));
@@ -900,7 +900,7 @@ abstract contract ParityCases is ParityIO {
         vm.prank(k.relayer);
         MetaTokenBase(k.t).uaExecute(m, au);
         _pUx(k, "err_replay", "", m, au, k.relayer);
-        // the fee rule (after the call today)
+        // the fee rule (amount checked before the call, §3.8; moved after it)
         _pUf(k, "err_feeExceedsCap_percent", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_PCT, 20_000, address(0)));
         _pUf(k, "err_feeExceedsCap_fixed", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_FIX, 1_001, address(0)));
         _pUf(k, "err_feeRecipientUaPool", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_RF | P_PCT, 1_000, P_UAP));
@@ -945,7 +945,7 @@ abstract contract ParityCases is ParityIO {
         au[0] = _pAuM(k, ms[0]);
         au[1] = _pAuM(k, ms[1]);
         _pUbRec(k, "err_itemUnknownOp", ms, au, l0, l1);
-        // an item whose fee rule breaks after its call
+        // an item whose fee rule breaks (refused before its call, §3.8)
         l0 = _pLn(k);
         l1 = _pLn(k);
         ms[0] = _pUm(k, s, _pAmt(k, 1_000), l0, P_RR, 0, address(0));

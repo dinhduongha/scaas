@@ -71,7 +71,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return CHAIN_UID;
     }
 
-    /// @notice `0x03`: flags only, fee mode `NONE`. A token (which overrides `_chargeFee`) returns `0xF3`.
+    /// @notice `0x03`: flags only, fee mode `NONE`. A token (which charges the fee, `ERC20MetaTx`) returns `0xF3`.
     function supportedModes() public view virtual returns (uint32) {
         return MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT;
     }
@@ -222,8 +222,9 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         if (!_batchable(sel)) revert MtxNotBatchable(sel);
     }
 
-    /// @notice Step 6, after the call. Default: no balance to charge => every mode but `NONE` reverts (CTR-MTX-22).
-    ///         A token overrides it to charge `fee` in this token (P1b, `ERC20MetaTx`).
+    /// @notice Step 6 of this base's `_execute`, after the call: no balance to charge => every mode but `NONE` reverts
+    ///         (CTR-MTX-22). A token never reaches it: its `_execute` override takes the fee amount from
+    ///         `MtxPipelineLib.preCall`, before the call (owner 2026-10-27), and moves it after.
     function _chargeFee(address, uint256, MetaTxLib.MetaTransaction memory m) internal virtual returns (uint256) {
         if (MetaTxLib.feeModeOf(m.mode) != FeeMode.NONE) revert MetaTxUnknownMode(m.mode);
         return 0;
@@ -234,7 +235,8 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         if (!SigCheck.isValid(from, digest, sig, _erc1271Gas(from))) revert MetaTxBadSignature();
     }
 
-    /// @notice 50 000 for every contract wallet; `SmartKeyAccount` clones get 400 000 where an override knows them.
+    /// @notice 50 000 for every contract wallet. The tokens' rule (400 000 for a `SmartKeyAccount` clone) is
+    ///         `MtxPipelineLib._erc1271Gas`.
     function _erc1271Gas(address) internal view virtual returns (uint256) {
         return SigCheck.ERC1271_GAS;
     }

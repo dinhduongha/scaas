@@ -221,7 +221,7 @@ contract HederaV2Test is Test {
     }
 
     /// HIP-632 payee on the UA path: a native Hedera account co-signs the `ReceiverFee` (64-byte ed25519) of an EVM payer's
-    /// `UAMetaTransfer` through `_requireNativeUASignature`.
+    /// `UAMetaTransfer` through `MtxPipelineLib.authorize(PURPOSE_RECEIVER_FEE)` (its HIP-632 branch).
     function test_uaPayReceiverFee_hip632Payee() public {
         _ledgerOn();
         vm.prank(alice);
