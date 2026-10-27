@@ -67,10 +67,18 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 10] = [
 /// The token entries a `metatx` job may name (job-api.md, order and wrap entries).
 pub const ENTRIES: [[u8; 4]; 3] = [SEL_MTX_CANCEL_ORDER, SEL_MTX_INVALIDATE_NONCES, SEL_MTX_WRAP];
 
-/// 21 000 intrinsic (pre-Amsterdam; EIP-2780 makes it 15,000, so the floor only grows the margin) + the 400 k `SmartKeyAccount` ERC-1271 cap the contract must still hold at the call (×64/63)
-/// + `SigCheck`'s 5 000 margin (P1b note c): a contract signer's meta-tx never gets less. Entries get no floor (P5
-///   review m6, closed): a starved `SigCheck` reverts `SigCheckGasStarved`, so their estimate already covers the call.
-pub const ERC1271_FLOOR: u64 = 21_000 + 400_000 * 64 / 63 + 5_000;
+/// 21 000 intrinsic (pre-Amsterdam; EIP-2780 makes it 15,000, so the floor only grows the margin) + the 400 k
+/// `SmartKeyAccount` ERC-1271 cap the call must still hold, now two frames below the token entry (token → `MtxPipelineLib`
+/// → wallet: ×64/63 twice, with `SigCheck`'s 5 000 margin between them, spec §9) + [`ERC1271_PREFIX`]: a contract
+/// signer's meta-tx never gets less (P1b note c). Calldata gas comes from the simulation's estimate (+20 %) as before.
+/// Entries get no floor (P5 review m6, closed): a starved `SigCheck` reverts `SigCheckGasStarved`, so their estimate
+/// already covers the call.
+pub const ERC1271_FLOOR: u64 = 21_000 + (400_000 * 64 / 63 + 5_000) * 64 / 63 + ERC1271_PREFIX;
+/// The execution gas outside the two 63/64 frames (token entry and library prefix up to the ERC-1271 STATICCALL):
+/// forge's minimum relayer call gas of a `SmartKeyAccount`-signed `mtxExecute`, 446,904
+/// (`smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`, `test_minGas_smartKeyAccountMtxExecute`, Task 8),
+/// minus `(400,000 · 64/63 + 5,000) · 64/63` = 417,878. The floor is then 21,000 + 446,904 = 467,904.
+pub const ERC1271_PREFIX: u64 = 446_904 - (400_000 * 64 / 63 + 5_000) * 64 / 63;
 
 /// EIP-7825 under Amsterdam (EIP-8037): the cap on a transaction's REGULAR gas (intrinsic, calldata floor and
 /// execution). State gas (new slots 97,920, code 1,530 per byte) comes on top, so the gas LIMIT may exceed it.
@@ -478,9 +486,22 @@ mod tests {
         assert!(self_call_ok(&odd, &data([1, 2, 3, 4], 1), 0).is_err(), "unknown fee class");
     }
 
+    /// Spec §9 / R8: the floor covers forge's measured minimum relayer call gas of a `SmartKeyAccount`-signed
+    /// `mtxExecute` (the ERC-1271 call two frames below the token) plus the intrinsic 21,000, and is the formula.
+    #[test]
+    fn erc1271_floor_covers_forge_minimum() {
+        let log = std::fs::read_to_string(format!(
+            "{}/../smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let tag = "min gas, SmartKeyAccount-signed mtxExecute (relayer's call gas):";
+        let measured: u64 = log.lines().find_map(|l| l.trim().strip_prefix(tag)).unwrap().trim().parse().unwrap();
+        assert_eq!(measured, 446_904, "Task 8's figure");
+        assert!(ERC1271_FLOOR >= 21_000 + measured, "{ERC1271_FLOOR} < 21,000 + {measured}");
+        assert_eq!(ERC1271_FLOOR, 21_000 + (400_000 * 64 / 63 + 5_000) * 64 / 63 + ERC1271_PREFIX);
+    }
+
     #[test]
     fn gas_floor_and_settle_sizing() {
-        assert_eq!(ERC1271_FLOOR, 432_349);
+        assert_eq!(ERC1271_FLOOR, 467_904);
         let ams = |limit| BlockGas { limit, amsterdam: true };
         let cap = total_cap(u64::MAX, ams(200_000_000));
         assert_eq!(gas_limit(100_000, false, cap), 120_000);
