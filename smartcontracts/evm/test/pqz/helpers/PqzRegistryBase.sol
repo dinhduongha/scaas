@@ -8,9 +8,13 @@ import {UAMldsaVerifier} from "../../../src/ua/MlDsa.sol";
 import {UAPqzVerifier} from "../../../src/pqz/UAPqzVerifier.sol";
 import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 
-/// @notice `slhdsa128s` (0x0133) stand-in: burns what a valid pure-Solidity SLH-DSA verify costs (0.79 M, accounts.md
-///         CTR-UA-23, measured P6a) and accepts: a fee UA of that kind in the relay gas rows (review2 T2, C0-2).
+/// @notice `slhdsa128s` (0x0133, 0.79 M) / `fndsa512` (0x0132, 2.3 M) stand-in: burns what a valid pure-Solidity verify
+///         costs (accounts.md CTR-UA-23, measured P6a) and accepts: a fee UA of that kind in the relay gas rows (review2 T2).
 contract SlhStandIn {
+    uint256 internal immutable B;
+
+    constructor(uint256 b) { B = b; }
+
     function verify(bytes calldata, bytes32, bytes calldata) external view returns (bool) {
         _burn();
         return true;
@@ -23,7 +27,7 @@ contract SlhStandIn {
 
     function _burn() private view {
         uint256 g0 = gasleft();
-        while (g0 - gasleft() < 790_000) {}
+        while (g0 - gasleft() < B) {}
     }
 }
 
@@ -78,10 +82,11 @@ abstract contract PqzRegistryBase is PqzMock {
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
         mlv = new UAMldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
         pqv = _newPqzVerifier(PQZL_ID);
-        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](3);
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](4);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
-        k[2] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhStandIn()), 1_400_000); // DeployBase's cap
+        k[2] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhStandIn(790_000)), 1_400_000); // DeployBase's cap
+        k[3] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new SlhStandIn(2_300_000)), 2_500_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
     }
 

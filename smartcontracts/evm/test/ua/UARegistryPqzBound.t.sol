@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {SigCheck} from "../../src/common/SigCheck.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 
@@ -92,14 +93,20 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         _holder(r, d, ua, keys, ks);
     }
 
+    /// 2-of-2 worst case at cap `c`, the gen-2 forwarding hold (w / 63 + margin) and the cheapest debit.
+    function _bound(uint256 c) internal pure returns (uint256) {
+        uint256 w = 2 * (c + 35_000) + (c - 400_000) / 63;
+        return w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS;
+    }
+
     /// The exact boundary: 2-of-2 `mldsa65` with cap `C` (worst case `2 (C + 35 k) + (C - 400 k) / 63`); the largest
-    /// `C` with worst case + `PQZ_DEBIT_MIN_GAS` <= 2^24 registers, `C + 1` does not.
+    /// `C` with worst case (+ the gen-2 hold) + `PQZ_DEBIT_MIN_GAS` <= 2^24 registers, `C + 1` does not.
     function test_register_msigHolderBoundary() public {
         uint256 lo = 400_000;
         uint256 hi = 8_000_000;
         while (hi - lo > 1) {
             uint256 mid = (lo + hi) / 2;
-            if (2 * (mid + 35_000) + (mid - 400_000) / 63 + PqzSet.PQZ_DEBIT_MIN_GAS <= LIM) lo = mid;
+            if (_bound(mid) <= LIM) lo = mid;
             else hi = mid;
         }
         UARegistry r = _regs(address(0x5CA7003), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);

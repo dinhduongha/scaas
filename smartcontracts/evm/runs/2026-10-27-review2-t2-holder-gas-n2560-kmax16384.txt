@@ -8,7 +8,11 @@
     | pqz 4850491 | exec 1307270 | regular 7303987 (model 7304125) | state 25307730 | fits 2^24 yes
   GAS n2560-kmax16384 pqzl-ua | burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute | calldata 82564 (zero 12356) | std 1172752 | floor 5299096
     | pqz 4850491 | exec 1919464 | regular 7957569 (model 7957707) | state 25111890 | fits 2^24 yes
-  GAS n2560-kmax16384 pqzh | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 332420 (zero 17012) | std 5114576 | floor 21289880
+  GAS n2560-kmax16384 pqzl-ua | burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 75364 (zero 12332) | std 1057840 | floor 4838296
+    | pqz 4850491 | exec 3422429 | regular 9345622 (model 9345760) | state 25111890 | fits 2^24 yes
+  GAS n2560-kmax16384 pqzl-ua | op 7 M = 8, auditor, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 121412 (zero 20931) | std 1691420 | floor 7785368
+    | pqz 8062058 | exec 4722127 | regular 14490467 (model 14490605) | state 54022770 | fits 2^24 yes
+  GAS n2560-kmax16384 pqzh | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 332420 (zero 17014) | std 5114552 | floor 21289880
     | pqz 4893290 | exec 3178369 | regular 21289880 (model 21289880) | state 25307730 | fits 2^24 NO
   GAS n2560-kmax16384 pqzh-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 335780 (zero 17116) | std 5167088 | floor 21504920
     | pqz 4893290 | exec 3265806 | regular 21504920 (model 21504920) | state 25307730 | fits 2^24 NO
@@ -18,4 +22,6 @@
     | pqz 4893290 | exec 3391753 | regular 21732248 (model 21732248) | state 25307730 | fits 2^24 NO
   GAS n2560-kmax16384 pqzh-ua | burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute | calldata 336452 (zero 13338) | std 5223176 | floor 21547928
     | pqz 4893290 | exec 3958018 | regular 21547928 (model 21547928) | state 25111890 | fits 2^24 NO
-Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.94s (1.44s CPU time)
+  GAS n2560-kmax16384 pqzh-ua | burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 329252 (zero 13314) | std 5108264 | floor 21087128
+    | pqz 4893290 | exec 5454009 | regular 21087128 (model 21087128) | state 25111890 | fits 2^24 NO
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.64s (2.14s CPU time)

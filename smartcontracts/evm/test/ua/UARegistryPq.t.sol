@@ -336,7 +336,7 @@ contract UARegistryPqTest is UARegistryBase {
     /// T-GAS: at the largest `mldsa65` cap the structure bound admits for the treasury (5,921,000) the `msig` itself
     /// registers (step 4) but not as a PQZ holder (review2 C0-5): 2 x 5.921 M + the cheapest PQZL debit is over 2^24.
     /// The vector's treasury PoP binds a PQZ key, so its signing sets are not run here with the real verifiers
-    /// (`test_T_GAS_pqHybrid` does for the hybrid; `UAGas.t.sol` `test_T_GAS_msigPqHold` for the treasury's bound).
+    /// (`test_T_GAS_pqHybrid` does for the hybrid; `UARegistryPq.t.sol:382` `test_T_GAS_msigPqHold` for the treasury's bound).
     function test_T_GAS_pqTreasury() public {
         string memory pj = _pj();
         UARegistry.KindConfig[] memory c = _realPq();

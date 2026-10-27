@@ -653,7 +653,7 @@ members whose kind is not 0x0130–0x0133 (`slhdsa128s` counts as PQ weight in a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
-(register step 4's bound: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + the caller's hold) plus
+(register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit).
 `PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
 (burn 1) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 6,820,062 at
@@ -2035,7 +2035,7 @@ calldata-floor regimes in `docs/research/pqzh-calldata-cap.md` (research, non-no
 The "no hint / packed hint" and "auditor / none" cells give two regular-gas figures (state gas as the row above it).
 State gas of the burn / refresh rows: 17.06 / 16.96, 20.89 / 20.79, 25.11 / 25.01, 29.73 / 29.63 M; disclosures have none.
 **Findings for the owner** (no rule changed here): (1) every built PQZL form fits 2^24 at every set (asserted by the
-test); (2) **op 7 M = 8 with the auditor carries more state gas than a 60 M mainnet-like block holds** at
+test) **with an ML-DSA-65 (precompile) or ECDSA envelope and a single-key holder**: an `msig` holder admitted at the C0-5 bound is guaranteed burn / refresh only (its authorization is part of every debit), and an `fndsa512` / `slhdsa128s` fee UA is a client choice: measured (`runs/2026-10-27-review2-t2-holder-gas-<set>.txt`, valid verify 2.3 M / 0.79 M [estimate]) burn and op 7 M = 8 with the auditor fit with an `fndsa512` fee UA at every set (op 7 M = 8: 14.5–15.4 M; the review's estimate of +4.4 M is not reproduced, the verifier cap is 2.5 M), but not with an `slhdsa128s` fee UA at PQZH `n2048-kmax1024`; **client rule: no `fndsa512` fee signer for op 7 M = 8** (the finding's precision; it keeps the 1.3 M of headroom a cap-priced verify needs); (2) **op 7 M = 8 with the auditor carries more state gas than a 60 M mainnet-like block holds** at
 `n2048-kmax1024`, `n2304-kmax4096` and `n2816-kmax65536` (and without the auditor at `n2816-kmax65536`): under EIP-8037
 a block's gas used is max(Σ regular, Σ state), so such a transaction needs a block limit ≥ its state gas (the SCaaS
 testnet's limit is 200 M; a 60 M block does not hold it) (spec 2026-10-20 §12 item 3 left "the total against a 60 M

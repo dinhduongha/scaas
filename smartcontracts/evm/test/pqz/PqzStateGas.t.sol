@@ -713,6 +713,11 @@ contract PqzStatePinGasTest is PqzSlots {
         slhFee = reg.register(UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), new bytes(7_856), "", "");
         NoUnderlyingPqzToken(address(tok)).mintToUA(slhFee, 1000);
         minted += 1000;
+        bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
+        fpk[0] = 0x09;
+        fnFee = reg.register(UAKinds.FNDSA512, fpk, new bytes(666), "", "");
+        NoUnderlyingPqzToken(address(tok)).mintToUA(fnFee, 1000);
+        minted += 1000;
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         _holderSys("pqzl", false);
         if (PqzSet.HAS_PQZH) _holderSys("pqzh", PqzSet.PQZH_VALUE);
@@ -721,6 +726,7 @@ contract PqzStatePinGasTest is PqzSlots {
     bytes32[2] internal hm; // the 2-of-2 / 3-of-3 holders
     bytes[2] internal ha; // their debit auths
     bytes32 internal slhFee;
+    bytes32 internal fnFee;
 
     function _holderSys(string memory sys, bool verdicts) internal {
         bytes memory pf = _pf(sys, "BURN");
@@ -740,6 +746,20 @@ contract PqzStatePinGasTest is PqzSlots {
         uint256 gs = _row(sys, "BURN", "burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute", address(tok),
             _burnP(1, address(0xD00D), pf), true);
         if (verdicts) assertGt(gs, TX_CAP, "PQZH n2048: an slhdsa128s fee UA is over uaExecute");
+        // C0-11 (b): an `fndsa512` fee UA (valid verify 2.3 M [estimate], cap 2.5 M, 666 B signature) on uaExecute: burn 1
+        // and, at PQZL (PQZH has no M = 8 form), the form the finding names, op 7 M = 8 with the auditor
+        feeUA = fnFee;
+        feeSigLen = 666;
+        uint256 fb = _row(sys, "BURN", "burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute", address(tok),
+            _burnP(1, address(0xD00D), pf), true);
+        if (verdicts) assertLe(fb, TX_CAP, "PQZH n2048: burn with an fndsa512 fee UA fits uaExecute");
+        if (keccak256(bytes(sys)) == keccak256("pqzl")) {
+            uint256 f8 = _row(sys, "M8-on", "op 7 M = 8, auditor, mldsa65 holder, fndsa512 fee UA, uaExecute", address(tok),
+                _op7a(8, true, _pf(sys, "M8-on")), true);
+            // measured: fits at every set even with the verify at its 2.5 M cap (+ 0.2 M); the review's "about 4.4 M" is not
+            // reproduced (the fndsa512 verifier cap bounds the verify at 2.5 M)
+            assertLe(f8 + 200_000, TX_CAP, "op 7 M = 8 + fndsa512 fee UA");
+        }
         feeSigLen = ML65_SIG;
         feeUA = _feeMl;
     }

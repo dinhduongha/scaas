@@ -386,7 +386,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// Step 5 (UA-6 U3): the PQZ key attribute. Returns its keyHash `h` (group `pqz-mlwe`), 0 without a key.
     /// `UAKindDisabled(0x0142)` where this generation has no PQZ key verifier; `UAPqzHolder` for a kind (or an `msig`
-    /// that is not PQ-eligible, or whose worst-case authorization + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds 2^24) that may not hold one; `UAKeyInUse` for a key another UA holds (any kind, either
+    /// that is not PQ-eligible, or whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds 2^24) that may not hold one; `UAKeyInUse` for a key another UA holds (any kind, either
     /// generation); `UAPoP` unless `pqzPop` is empty exactly when `pqzKey` is.
     function _pqzAttr(uint16 kind, bytes memory d, bytes32 ua, bytes calldata pqzKey, uint256 pqzPopLength)
         private
@@ -404,7 +404,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
         // authorization plus the set's cheapest PQZL debit (its full relayed transaction, fee signer included) must fit
         // one transaction at the EIP-7825 cap 2^24, else every credit to it could be locked. Not the chain's own limit.
-        if (kind == UAKinds.MSIG && _membersWorst(d) + PqzSet.PQZ_DEBIT_MIN_GAS > TX_GAS_CAP) revert UAPqzHolder(ua);
+        if (kind == UAKinds.MSIG) {
+            // a gen-2 registry in front forwards the whole authorization to this one (`_viaPredecessor`) and holds 1/63 of
+            // it again plus the margin: counted here, since the holder is registered in the only generation with 0x0142
+            uint256 w = _membersWorst(d);
+            if (w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS > TX_GAS_CAP) revert UAPqzHolder(ua);
+        }
         h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqzKey);
         bytes32 owner = keyOwner(h);
         if (owner != 0) revert UAKeyInUse(h, owner);
