@@ -241,6 +241,7 @@ class Ecdsa:
         v = R[1] & 1
         if s > c.n // 2:
             s, v = c.n - s, v ^ 1
+        assert s <= c.n // 2
         self.verify(z, r, s)
         assert recover(c, z, r, s, v) == self.key
         return r.to_bytes(32, 'big') + s.to_bytes(32, 'big'), v

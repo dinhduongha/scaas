@@ -17,7 +17,8 @@ run() {
     ton)     (cd "$SC/ton" && { [ -d node_modules ] || npm ci; } && npm test) ;;
     # LiteSVM loads target/deploy/scaas.so, so the SBF build comes first.
     solana)  "$SC/scripts/build.sh" solana && (cd "$SC/solana" && cargo test) ;;
-    near)    "$SC/scripts/build.sh" near && (cd "$SC/near" && cargo test -j2 -- --nocapture --test-threads=1) ;;  # figures in the log; one sandbox at a time
+    near)    "$SC/near/scripts/check_no_authority.sh" && "$SC/scripts/build.sh" near \
+               && (cd "$SC/near" && cargo test -j2 -- --nocapture --test-threads=1) ;;  # figures in the log; one sandbox at a time
     *) echo "unknown family '$1' (one of: $FAMILIES all)" >&2; exit 2 ;;
   esac
 }

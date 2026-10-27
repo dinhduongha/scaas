@@ -1,9 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["common", "spike-p256", "integration"]
+members = ["common", "token", "test-receiver", "spike-p256", "integration"]
 
 [workspace.dependencies]
 near-sdk = "5.30.0"
+near-contract-standards = "5.30.0"
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa"] }
 
 # Gas on NEAR is charged per wasm op and per loaded contract byte. Task 1 measured the spike (73 KB at "z": 29.0 Tgas per
