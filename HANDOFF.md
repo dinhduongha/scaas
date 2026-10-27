@@ -1,6 +1,6 @@
 ## Session 2026-10-26 / 27 (8d part 2b merged, pqz-core docs, contracts review part 2 + its fix round merged) — resume here
 
-**State:** `main` `e2e7a01e` (local, **not pushed**; last push `d14fe16f`). Merged today: `pqz-8d2b` (`6fd75c83`) and
+**State:** `main` pushed up to `3fd2e384` (owner 2026-10-27, "push đi"). Merged today: `pqz-8d2b` (`6fd75c83`) and
 `review2-fix` (`e2e7a01e`). The SCaaS testnet node (7622, `2.2.0-pqz5`) was started by hand for the contracts e2e and is
 **running** (no restart policy). Worktrees: `pqz-8d2b`, `review2-fix` (merged; removable), `review-2026-10-26` (detached
 review target `64549aa4`, read-only; removable).
@@ -32,7 +32,7 @@ review target `64549aa4`, read-only; removable).
   `scratchpad/review2-fix-ledger-2026-10-27.md` (`Ruling:` lines).
 
 **Open / owner:**
-1. **Push `main`** (owner's go; several merges since `d14fe16f`).
+1. ~~Push `main`~~ done 2026-10-27 (`6ac02dc5..3fd2e384`).
 2. **Gas run** for the Zether prover's per-M `gas_limits` (audited legs ≈ 50 k gas per leg optimistic; needs the owner
    to stop other heavy sessions) and Task 9 calibration (timing).
 3. ~40 deferred minors (README "Fix round"); `docs_check facts check` reports 9 pre-existing misses in `history/` (on main
