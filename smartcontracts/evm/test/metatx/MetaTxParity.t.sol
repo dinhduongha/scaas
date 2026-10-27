@@ -30,7 +30,9 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
+import {Catalogue, pqzEnv, plainEnv} from "../helpers/Catalogue.sol";
+import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 // =====================================================================================================================
 // The parity fixture of the metatx split (spec 2026-10-27-metatx-split-design.md R1, plan Task 1).
@@ -42,7 +44,8 @@ import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 // does the same for the allowlists (`mtxSelectors()` and the UA verdict per selector).
 //
 // WRITE:  PARITY_WRITE=1 forge test --match-path test/metatx/MetaTxParity.t.sol   (writes test/vectors/metatx-parity.json)
-// REPLAY: forge test --match-path test/metatx/MetaTxParity.t.sol                   (compares; any field differing fails)
+// REPLAY: forge test --match-path test/metatx/MetaTxParity.t.sol                   (compares every field except gas)
+// GAS:    PARITY_GAS=1 forge test --match-path test/metatx/MetaTxParity.t.sol       (also compares gas: pre-split code only)
 //
 // DETERMINISM. Time, block number and chain id are fixed; the keys are fixed; every token is a CREATE clone made by a
 // rig (the test plays the factory), so its address (and so every digest and every event emitter) does not depend on the
@@ -80,6 +83,8 @@ struct RuleRow {
     bool inList; // listed by `mtxSelectors()`
     uint8 feeClass;
     uint8 amountArg;
+    bytes4 mtxRev; // the probe's revert selector through `mtxExecute` (0 = it did not revert)
+    bytes4 uaRev; // the same through `uaExecute`
     bool mtxAllowed; // the probe through `mtxExecute` was not refused as `MtxSelectorNotAllowed`
     bool uaAllowed; // the probe through `uaExecute` was not refused as `MetaTxUnknownOp` (`_uaAllowed(sel)`)
 }
@@ -119,12 +124,33 @@ contract ParityDex {
     receive() external payable {}
 }
 
+/// An ERC-1271 wallet (or the delegate of an EIP-7702 account): mode 0 accepts the ECDSA signature of `owner`, 1 reverts,
+/// 2 answers a wrong magic value.
+contract Mock1271 {
+    address internal immutable OWNER;
+    uint8 internal immutable MODE;
+
+    constructor(address owner_, uint8 mode_) {
+        (OWNER, MODE) = (owner_, mode_);
+    }
+
+    function isValidSignature(bytes32 h, bytes calldata sig) external view returns (bytes4) {
+        if (MODE == 1) revert("wallet");
+        if (MODE == 2) return 0xffffffff;
+        (address r, ECDSA.RecoverError e,) = ECDSA.tryRecover(h, sig);
+        return e == ECDSA.RecoverError.NoError && r == OWNER ? bytes4(0x1626ba7e) : bytes4(0xffffffff);
+    }
+}
+
 /// The file: the JSON of a case / a rule row, and the field-by-field comparison with the line read back.
 abstract contract ParityIO is Test {
     string internal constant FILE = "./test/vectors/metatx-parity.json";
 
     /// Mismatches counted by this contract's comparisons.
     uint256 internal fails;
+    /// The case list itself changed (a case added, removed or renamed): the lines are out of step, so the field
+    /// comparison stops at the first such case.
+    bool internal drifted;
 
     // ------------------------------------------------------------------ the JSON
 
@@ -141,7 +167,8 @@ abstract contract ParityIO is Test {
     function _jsonRule(RuleRow memory r) internal pure returns (string memory) {
         return string.concat('{"rule":1,"kind":"', r.kind, '","sel":"', vm.toString(abi.encodePacked(r.sel)), '","inList":', r.inList ? "true" : "false",
             ',"feeClass":', vm.toString(uint256(r.feeClass)), ',"amountArg":', vm.toString(uint256(r.amountArg)),
-            ',"mtxAllowed":', r.mtxAllowed ? "true" : "false", ',"uaAllowed":', r.uaAllowed ? "true" : "false", "}");
+            ',"mtxRev":"', vm.toString(abi.encodePacked(r.mtxRev)), '","uaRev":"', vm.toString(abi.encodePacked(r.uaRev)),
+            '","mtxAllowed":', r.mtxAllowed ? "true" : "false", ',"uaAllowed":', r.uaAllowed ? "true" : "false", "}");
     }
 
     function _hexMap(string[] memory n, bytes32[] memory v) internal pure returns (string memory o) {
@@ -179,11 +206,13 @@ abstract contract ParityIO is Test {
     }
 
     function _cmpCase(string memory line, Rec memory r, uint256 i) internal {
+        if (drifted) return;
         string memory id = string.concat(r.kind, "/", r.entry, "/", r.path, "/", r.name);
         string memory fid = string.concat(vm.parseJsonString(line, ".kind"), "/", vm.parseJsonString(line, ".entry"), "/",
             vm.parseJsonString(line, ".path"), "/", vm.parseJsonString(line, ".case"));
         if (keccak256(bytes(id)) != keccak256(bytes(fid))) {
-            _bad(string.concat("#", vm.toString(i)), "identity", fid, id);
+            drifted = true;
+            _bad(string.concat("#", vm.toString(i)), "CASE LIST DRIFT (the fixture has another case here: a case was added, removed or renamed, not a behaviour change; regenerate with PARITY_WRITE=1 once reviewed)", fid, id);
             return;
         }
         _eq(id, "expect", vm.parseJsonString(line, ".expect"), r.expect);
@@ -194,7 +223,9 @@ abstract contract ParityIO is Test {
         _cmpMap(line, ".digests", id, "digests", r.dK, _hexOf(r.dV));
         _cmpMap(line, ".nonces", id, "nonces", r.nK, _decOf(r.nV));
         _cmpMap(line, ".balances", id, "balances", r.bK, _decOf(r.bV));
-        _eq(id, "gas", vm.parseJsonString(line, ".gas"), vm.toString(r.gas));
+        // gas is compared only with PARITY_GAS=1: after the split it moves by design (spec §5), the run that checks it
+        // is the one on the pre-split code and the Task 5 budget tests
+        if (vm.envOr("PARITY_GAS", false)) _eq(id, "gas", vm.parseJsonString(line, ".gas"), vm.toString(r.gas));
     }
 
     function _cmpEvents(string memory line, Rec memory r, string memory id) internal {
@@ -237,6 +268,7 @@ abstract contract ParityIO is Test {
     }
 
     function _cmpRule(string memory line, RuleRow memory r, uint256 i) internal {
+        if (drifted) return;
         string memory id = string.concat(r.kind, "/", vm.toString(abi.encodePacked(r.sel)));
         string memory fid = string.concat(vm.parseJsonString(line, ".kind"), "/", vm.parseJsonString(line, ".sel"));
         if (keccak256(bytes(id)) != keccak256(bytes(fid))) {
@@ -246,6 +278,8 @@ abstract contract ParityIO is Test {
         if (vm.parseJsonBool(line, ".inList") != r.inList) _bad(id, "inList", vm.toString(vm.parseJsonBool(line, ".inList")), vm.toString(r.inList));
         _eq(id, "feeClass", vm.toString(vm.parseJsonUint(line, ".feeClass")), vm.toString(uint256(r.feeClass)));
         _eq(id, "amountArg", vm.toString(vm.parseJsonUint(line, ".amountArg")), vm.toString(uint256(r.amountArg)));
+        _eq(id, "mtxRev", vm.parseJsonString(line, ".mtxRev"), vm.toString(abi.encodePacked(r.mtxRev)));
+        _eq(id, "uaRev", vm.parseJsonString(line, ".uaRev"), vm.toString(abi.encodePacked(r.uaRev)));
         if (vm.parseJsonBool(line, ".mtxAllowed") != r.mtxAllowed) _bad(id, "mtxAllowed", vm.toString(vm.parseJsonBool(line, ".mtxAllowed")), vm.toString(r.mtxAllowed));
         if (vm.parseJsonBool(line, ".uaAllowed") != r.uaAllowed) _bad(id, "uaAllowed", vm.toString(vm.parseJsonBool(line, ".uaAllowed")), vm.toString(r.uaAllowed));
     }
@@ -259,6 +293,8 @@ interface IRig {
     function selectors() external view returns (bytes4[] memory);
     function emitted() external view returns (uint256);
     function failures() external view returns (uint256);
+    function isDrifted() external view returns (bool);
+    function setup() external view returns (string[] memory, address[] memory, bytes32[] memory);
 }
 
 abstract contract ParityCases is ParityIO {
@@ -283,17 +319,21 @@ abstract contract ParityCases is ParityIO {
 
     /// The number of steps of a token's run: each step is one top-level call, so each stays under the per-transaction
     /// gas cap (EIP-7825) however heavy the rig's kind-specific cases are.
-    uint256 internal constant P_STEPS = 9;
+    uint256 internal constant P_STEPS = 10;
 
     function steps() external pure returns (uint256) {
         return P_STEPS;
     }
 
-    /// Step `step` of token `i`: the generic matrix in eight parts, then the rig kind-specific cases. Every step has
+    /// Step `step` of token `i`: the generic matrix in eight parts, the rig kind-specific cases, the contract signers. Every step has
     /// its own range of lanes.
     function run(uint256 i, uint256 step) external {
         Tk memory k = tks[i];
         k.lane = 1000 + step * 1000;
+        if (k.style == 2) {
+            if (step == 0) _pLedgerOff(k);
+            return;
+        }
         if (step == 0) _pMtxExecute(k);
         else if (step == 1) {
             _pMtxExecuteMisc(k);
@@ -305,6 +345,7 @@ abstract contract ParityCases is ParityIO {
         else if (step == 6) _pReceiverPays(k);
         else if (step == 7) _pTrade(k);
         else if (step == 8) _pExtras(k);
+        else if (step == 9) _pSigners(k);
     }
 
     function ruleTable(bytes4[] calldata probe) external returns (RuleRow[] memory) {
@@ -320,6 +361,22 @@ abstract contract ParityCases is ParityIO {
 
     function failures() external view returns (uint256) {
         return fails;
+    }
+
+    function isDrifted() external view returns (bool) {
+        return drifted;
+    }
+
+    /// Each token's kind, address and domain hash (the setup the cases are written against).
+    function setup() external view returns (string[] memory kinds, address[] memory toks, bytes32[] memory doms) {
+        kinds = new string[](tks.length);
+        toks = new address[](tks.length);
+        doms = new bytes32[](tks.length);
+        for (uint256 i; i < tks.length; ++i) {
+            (kinds[i], toks[i]) = (tks[i].kind, tks[i].t);
+            (, string memory n, string memory v, uint256 cid, address vc, bytes32 salt,) = MetaTokenBase(tks[i].t).eip712Domain();
+            doms[i] = keccak256(abi.encode(keccak256(bytes(n)), keccak256(bytes(v)), cid, vc, salt));
+        }
     }
 
     /// One case: written to the file in write mode, else compared with the next line of it.
@@ -349,6 +406,15 @@ abstract contract ParityCases is ParityIO {
 
     /// `auth` of a derived SIGNING UA `from` (never a native id) under `purpose` over `digest`.
     function _pDerivedAuth(Tk memory k, bytes32 purpose, bytes32 digest) internal view virtual returns (bytes memory);
+
+    /// A WELL-FORMED `auth` of the derived UA that its verifier rejects (so a real auth-failure selector is pinned).
+    function _pBadDerived(Tk memory k, bytes32 purpose, bytes32 digest) internal view virtual returns (bytes memory);
+
+    /// A wrong `auth` for the signer id `from` (a native id: the payee's key; the derived UA: `_pBadDerived`).
+    function _pBadAuth(Tk memory k, bytes32 from, bytes32 purpose, bytes32 digest) internal view returns (bytes memory) {
+        if (from == k.uaD && from != 0) return _pBadDerived(k, purpose, digest);
+        return _pEcdsa(k.payeePk, digest);
+    }
 
     function _pEcdsa(uint256 pk, bytes32 h) internal pure returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
@@ -506,7 +572,7 @@ abstract contract ParityCases is ParityIO {
     // ------------------------------------------------------------------ builders
 
     function _pAmt(Tk memory k, uint256 amount) internal view returns (bytes memory) {
-        if (k.style == 0) return abi.encodeCall(NoUnderlyingToken.burn, (amount));
+        if (k.style != 1) return abi.encodeCall(NoUnderlyingToken.burn, (amount));
         return abi.encodeWithSignature("unwrap(uint256,address,uint256)", amount, k.payee, uint256(0));
     }
 
@@ -671,6 +737,8 @@ abstract contract ParityCases is ParityIO {
     }
 
     function _pMtxExecuteMisc(Tk memory k) internal {
+        _pTwoFault(k);
+        _pBothFailMore(k);
         MetaTxLib.MetaTransaction memory m = _pMt(k, _pCancel(7), 0, P_RR, 0, address(0));
         _pMx(k, "executeMetaTransaction", "ok_cancelNonce", "", IMetaTx.executeMetaTransaction.selector, m, _pSgM(k, m), k.relayer);
         m = _pMt(k, _pCancel(7), 0, P_RR | P_FIX, 4, address(0));
@@ -767,11 +835,11 @@ abstract contract ParityCases is ParityIO {
             _pU(k, "ok_derived_percentFee", _pUm(k, k.uaD, _pAmt(k, 10_000), 0, P_RR | P_PCT, 1_000, address(0)));
             _pU(k, "ok_derived_fixedFee", _pUm(k, k.uaD, _pAmt(k, 10_000), 0, P_RR | P_RF | P_FIX, 10, k.feeTo));
             m = _pUm(k, k.uaD, _pAmt(k, 10_000), 0, P_RR, 0, address(0));
-            _pUx(k, "err_derived_badAuth", "", m, _pEcdsa(k.payeePk, MetaTokenBase(k.t).uaDigest(m)), k.relayer);
+            _pUx(k, "err_derived_badAuth", "", m, _pBadAuth(k, k.uaD, UAKinds.PURPOSE_METATX, MetaTokenBase(k.t).uaDigest(m)), k.relayer);
             _pU(k, "err_derived_feeUnpayable", _pUm(k, k.uaD, _pAmt(k, MetaTokenBase(k.t).balanceOfUA(k.uaD)), 0, P_RR | P_PCT, 1_000, address(0)));
             _pU(k, "err_derived_callReverts", _pUm(k, k.uaD, _pAmt(k, P_BIG), 0, P_RR, 0, address(0)));
             m = _pUm(k, k.uaD, _pAmt(k, P_BIG), 0, P_RR | P_PCT, 20_000, address(0));
-            _pUx(k, "bothFail_feeExceedsCap_callReverts", "fee-error-first", m, _pAuM(k, m), k.relayer);
+            _pUx(k, "bothFail_derived_feeExceedsCap_callReverts", "fee-error-first", m, _pAuM(k, m), k.relayer);
         }
         // step 1
         m = _pUm(k, s, _pAmt(k, 1_000), 0, P_RR, 0, address(0));
@@ -883,7 +951,7 @@ abstract contract ParityCases is ParityIO {
 
     function _pUcOne(Tk memory k, string memory name, bytes32 ua, uint256 lane, uint256 vu, bool bad) internal {
         bytes32 dg = MetaTokenBase(k.t).uaCancelDigest(ua, lane, vu);
-        bytes memory au = bad ? _pEcdsa(k.payeePk, dg) : _pAuth(k, ua, UAKinds.PURPOSE_METATX_CANCEL, dg);
+        bytes memory au = bad ? _pBadAuth(k, ua, UAKinds.PURPOSE_METATX_CANCEL, dg) : _pAuth(k, ua, UAKinds.PURPOSE_METATX_CANCEL, dg);
         _pRec(k, _pH("uaCancelNonce", "ua", name), k.relayer, abi.encodeCall(IUALedger.uaCancelNonce, (ua, lane, vu, au)),
             _pD("uaCancelDigest", dg), _pL(lane));
     }
@@ -1104,7 +1172,7 @@ abstract contract ParityCases is ParityIO {
         _pUt2(k, "ok_derivedToNative_percentFee", _pUt(k, k.uaD, p, 10_000, 0, 0, P_RR | P_RF | P_PCT, 1_000, k.feeTo));
         _pUt2(k, "ok_derivedToDerived_self", _pUt(k, k.uaD, k.uaD, 1_000, 0, 0, P_RR, 0, address(0)));
         MetaTxLib.UAMetaTransfer memory t = _pUt(k, k.uaD, p, 1_000, 0, 0, P_RR, 0, address(0));
-        _pUtS(k, "err_derived_badAuth", t, _pEcdsa(k.payeePk, MetaTokenBase(k.t).uaTransferDigest(t)), k.relayer);
+        _pUtS(k, "err_derived_badAuth", t, _pBadAuth(k, k.uaD, UAKinds.PURPOSE_METATX, MetaTokenBase(k.t).uaTransferDigest(t)), k.relayer);
         _pUt2(k, "err_derived_insufficient", _pUt(k, k.uaD, p, P_BIG, 0, 0, P_RR, 0, address(0)));
     }
 
@@ -1117,6 +1185,7 @@ abstract contract ParityCases is ParityIO {
         t.validUntil = P_T0 - 1;
         _pUt2(k, "err_expired", t);
         _pUt2(k, "err_unknownMode_flagBit", _pUt(k, s, p, 1_000, 0, 0, 0x04, 0, address(0)));
+        _pUt2(k, "err_unknownMode_feeNibble", _pUt(k, s, p, 1_000, 0, 0, 0x30, 0, address(0)));
         t = _pUt(k, s, p, 1_000, 0, 0, P_RR, 0, address(0));
         t.nonce = 3;
         _pUt2(k, "err_badNonce", t);
@@ -1172,6 +1241,10 @@ abstract contract ParityCases is ParityIO {
         bytes memory au = _pAuT(k, t);
         _pNamedUa(k, "uaPay", "ok", MetaTokenBase.uaPay.selector, w, au, t);
         _pNamedUa(k, "uaPay", "err_replay", MetaTokenBase.uaPay.selector, w, au, t);
+        id = keccak256("metatx-parity.ua-pay-2");
+        t = _pUt(k, s, p, 3_000, id, MetaTokenBase(k.t).payLane(id), P_RR, 0, address(0));
+        w[3] = uint256(id);
+        _pNamedUa(k, "uaPay", "err_badAuth", MetaTokenBase.uaPay.selector, w, _pEcdsa(k.payeePk, MetaTokenBase(k.t).uaTransferDigest(t)), t);
     }
 
     function _pNamedUa(Tk memory k, string memory entry, string memory name, bytes4 sel, uint256[] memory w, bytes memory au,
@@ -1322,13 +1395,19 @@ abstract contract ParityCases is ParityIO {
         id = keccak256("metatx-parity.ua-rf-3");
         x = _pUt(k, k.uaD, MetaTxLib.pad(k.payee), 10_000, id, t.payLane(id), P_RR, 0, address(0));
         _pRfU(k, "ok_derivedPayer_nativePayee", x, _pRfa(100, k.feeTo));
+        id = keccak256("metatx-parity.ua-rf-4");
+        x = _pUt(k, MetaTxLib.pad(k.signer), k.uaD, 10_000, id, t.payLane(id), P_RR, 0, address(0));
+        Rfa memory a = _pRfa(100, k.feeTo);
+        a.badPayee = true;
+        _pRfU(k, "err_derivedPayeeBadAuth", x, a);
     }
 
     function _pRfU(Tk memory k, string memory name, MetaTxLib.UAMetaTransfer memory x, Rfa memory a) internal {
         MetaTokenBase t = MetaTokenBase(k.t);
         bytes32 d = t.uaTransferDigest(x);
         bytes32 rfd = t.receiverFeeDigest(d, a.fee, a.fr, a.vu);
-        bytes memory ys = a.badPayee ? _pEcdsa(k.pk, rfd) : _pAuth(k, x.to, UAKinds.PURPOSE_RECEIVER_FEE, rfd);
+        bytes memory ys = !a.badPayee ? _pAuth(k, x.to, UAKinds.PURPOSE_RECEIVER_FEE, rfd)
+            : (x.to == k.uaD && k.uaD != 0 ? _pBadDerived(k, UAKinds.PURPOSE_RECEIVER_FEE, rfd) : _pEcdsa(k.pk, rfd));
         _pRec(k, _pH("uaPayReceiverFee", "ua", name), k.relayer,
             abi.encodeCall(MetaTokenBase.uaPayReceiverFee, (x, _pAuth(k, x.from, UAKinds.PURPOSE_METATX, d), a.fee, a.fr, a.vu, ys)),
             _pD2("uaTransferDigest", d, "receiverFeeDigest", rfd), _pL(x.batch));
@@ -1495,7 +1574,7 @@ abstract contract ParityCases is ParityIO {
         au = _pUAuth(k, who, o);
         _pUtr(k, string.concat("err_notDex_", tag), o, au, k.relayer);
         _pUtr(k, string.concat("err_badAuth_", tag), o,
-            _pEcdsa(k.payeePk, MetaTokenBase(k.t).uaTradeOrderDigest(o)), k.dex);
+            _pBadAuth(k, who, UAKinds.PURPOSE_TRADE, MetaTokenBase(k.t).uaTradeOrderDigest(o)), k.dex);
         _pTradeUaCancel(k, who, tag, o);
         uint256 lane = _pLn(k);
         bytes32 dg = MetaTokenBase(k.t).uaInvalidateNoncesDigest(who, lane, 5);
@@ -1506,6 +1585,14 @@ abstract contract ParityCases is ParityIO {
             abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 5, ia)), _pD("uaInvalidateNoncesDigest", dg), _pL(lane));
         o = _pUOrder(k, who, lane);
         _pUtr(k, string.concat("err_nonceInvalidated_", tag), o, _pUAuth(k, who, o), k.dex);
+        _pTradeUaInvBad(k, who, tag, lane);
+    }
+
+    function _pTradeUaInvBad(Tk memory k, bytes32 who, string memory tag, uint256 lane) internal {
+        bytes32 dg = MetaTokenBase(k.t).uaInvalidateNoncesDigest(who, lane, 9);
+        _pRec(k, _pH("uaInvalidateNonces", "ua", string.concat("err_badAuth_", tag)), k.relayer,
+            abi.encodeCall(ITradeToken.uaInvalidateNonces, (who, lane, 9, _pBadAuth(k, who, UAKinds.PURPOSE_TRADE, dg))),
+            _pD("uaInvalidateNoncesDigest", dg), _pL(lane));
     }
 
     function _pTradeUaCancel(Tk memory k, bytes32 who, string memory tag, ITradeToken.UATradeOrder memory o) internal {
@@ -1516,7 +1603,187 @@ abstract contract ParityCases is ParityIO {
         _pUTradeRec(k, "uaCancelOrder", string.concat("ok_alreadyClosedNoop_", tag), o,
             abi.encodeCall(ITradeToken.uaCancelOrder, (o, ca)), k.relayer);
         _pUTradeRec(k, "uaCancelOrder", string.concat("err_badAuth_", tag), o,
-            abi.encodeCall(ITradeToken.uaCancelOrder, (o, _pEcdsa(k.payeePk, cd))), k.relayer);
+            abi.encodeCall(ITradeToken.uaCancelOrder, (o, _pBadAuth(k, who, UAKinds.PURPOSE_TRADE, cd))), k.relayer);
+    }
+
+    // =================================================================================================================
+    // two faults at once: the order of the checks (CTR-MTX-17: 1 envelope, 2 signature, 3 shape, 4 nonce use)
+    // =================================================================================================================
+
+    function _pTwoFault(Tk memory k) internal {
+        MetaTxLib.MetaTransaction memory m = _pMt(k, _pCancel(7), 0, P_RR, 0, address(0));
+        m.validUntil = P_T0 - 1;
+        _pMx(k, "mtxExecute", "twoFault_expired_badSignature", "", IMetaTx.mtxExecute.selector, m, _pBadSg(k, m), k.relayer);
+        m = _pMt(k, _pCancel(7), 0, P_RR, 0, address(0));
+        m.validUntil = P_T0 - 1;
+        _pMx(k, "mtxExecute", "twoFault_unauthorizedRelayer_expired", "", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.payee);
+        m = _pMt(k, _pCancel(7), 0, 0x04, 0, address(0));
+        m.validUntil = P_T0 - 1;
+        _pX(k, "twoFault_expired_unknownMode", m);
+        m = _pMt(k, _pCancel(7), 0, 0x04, 0, address(0));
+        m.nonce = 3;
+        _pX(k, "twoFault_unknownMode_badNonce", m);
+        m = _pMt(k, _pCancel(7), 0, P_RR, 0, address(0));
+        m.nonce = 3;
+        _pMx(k, "mtxExecute", "twoFault_badNonce_badSignature", "", IMetaTx.mtxExecute.selector, m, _pBadSg(k, m), k.relayer);
+        m = _pMt(k, hex"deadbeef", 0, P_RR, 0, address(0));
+        _pMx(k, "mtxExecute", "twoFault_selectorNotAllowed_badSignature", "", IMetaTx.mtxExecute.selector, m, _pBadSg(k, m), k.relayer);
+        m = _pMt(k, _pCancel(7), 0, P_RR | P_PCT, 100, address(0));
+        m.nonce = 1;
+        _pX(k, "twoFault_feeClass_replay", m);
+        _pTwoFaultUa(k);
+    }
+
+    function _pBadSg(Tk memory k, MetaTxLib.MetaTransaction memory m) internal view returns (bytes memory) {
+        return _pEcdsa(k.payeePk, MetaTokenBase(k.t).mtxDigest(m));
+    }
+
+    function _pTwoFaultUa(Tk memory k) internal {
+        bytes32 s = MetaTxLib.pad(k.signer);
+        MetaTxLib.UAMetaTransaction memory m = _pUm(k, s, _pAmt(k, 1_000), 0, P_RR, 0, address(0));
+        m.validUntil = P_T0 - 1;
+        _pUx(k, "twoFault_expired_badAuth", "", m, _pBadAuth(k, s, UAKinds.PURPOSE_METATX, MetaTokenBase(k.t).uaDigest(m)), k.relayer);
+        m = _pUm(k, s, _pAmt(k, 1_000), 0, P_RR, 0, address(0));
+        m.nonce = 3;
+        _pUx(k, "twoFault_badNonce_badAuth", "", m, _pBadAuth(k, s, UAKinds.PURPOSE_METATX, MetaTokenBase(k.t).uaDigest(m)), k.relayer);
+        m = _pUm(k, s, _pCancel(7), 0, P_RR, 0, address(0));
+        _pUx(k, "twoFault_unknownOp_badAuth", "", m, _pBadAuth(k, s, UAKinds.PURPOSE_METATX, MetaTokenBase(k.t).uaDigest(m)), k.relayer);
+        m = _pUm(k, s, abi.encodePacked(_pAmt(k, 1), bytes1(0x01)), 0, P_RR, 0, address(0));
+        m.nonce = 1;
+        _pU(k, "twoFault_dataShape_replay", m);
+        m = _pUm(k, s, _pCancel(7), 0, P_RR, 0, address(0));
+        m.nonce = 1;
+        _pU(k, "twoFault_unknownOp_replay", m);
+        if (k.uaD != 0) {
+            m = _pUm(k, k.uaD, _pAmt(k, 1_000), 0, P_RR, 0, address(0));
+            m.validUntil = P_T0 - 1;
+            _pUx(k, "twoFault_derived_expired_badAuth", "", m, _pBadAuth(k, k.uaD, UAKinds.PURPOSE_METATX, MetaTokenBase(k.t).uaDigest(m)), k.relayer);
+        }
+    }
+
+    /// §3.8 on the remaining entries: `mtxExecuteWithFee`, an `mtxBatch` item and a `uaBatch` item break the fee rule AND revert.
+    function _pBothFailMore(Tk memory k) internal {
+        MetaTxLib.MetaTransaction memory m = _pMt(k, _pAmt(k, P_BIG), 0, P_RR | P_PCT, 20_000, address(0));
+        _pMx(k, "mtxExecuteWithFee", "bothFail_feeExceedsCap_callReverts", "fee-error-first", MetaTokenBase.mtxExecuteWithFee.selector, m, _pSgM(k, m), k.relayer);
+        MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](2);
+        bytes[] memory sg = new bytes[](2);
+        ms[0] = _pMt(k, _pCancel(7), 0, P_RR, 0, address(0));
+        ms[1] = m;
+        ms[1].batch = k.lane++;
+        sg[0] = _pSgM(k, ms[0]);
+        sg[1] = _pSgM(k, ms[1]);
+        H memory h = H("mtxBatch", "addr", "bothFail_item_feeExceedsCap_callReverts", "fee-error-first");
+        _pRec(k, h, k.relayer, abi.encodeCall(IMetaTx.mtxBatch, (ms, sg)),
+            _pD2("mtxDigest0", MetaTokenBase(k.t).mtxDigest(ms[0]), "mtxDigest1", MetaTokenBase(k.t).mtxDigest(ms[1])), _pL2(ms[0].batch, ms[1].batch));
+        _pBothFailUaBatch(k);
+    }
+
+    function _pBothFailUaBatch(Tk memory k) internal {
+        bytes32 s = MetaTxLib.pad(k.signer);
+        MetaTxLib.UAMetaTransaction[] memory us = new MetaTxLib.UAMetaTransaction[](2);
+        bytes[] memory au = new bytes[](2);
+        us[0] = _pUm(k, s, _pAmt(k, 1_000), 0, P_RR, 0, address(0));
+        us[1] = _pUm(k, s, _pAmt(k, P_BIG), 0, P_RR | P_PCT, 20_000, address(0));
+        au[0] = _pAuM(k, us[0]);
+        au[1] = _pAuM(k, us[1]);
+        _pRec(k, H("uaBatch", "ua", "bothFail_item_feeExceedsCap_callReverts", "fee-error-first"), k.relayer,
+            abi.encodeCall(IUALedger.uaBatch, (us, au)),
+            _pD2("uaDigest0", MetaTokenBase(k.t).uaDigest(us[0]), "uaDigest1", MetaTokenBase(k.t).uaDigest(us[1])), _pL2(us[0].batch, us[1].batch));
+    }
+
+    // =================================================================================================================
+    // a token with no UA registry: every ua* entry refuses with UALedgerOff, the address path is unaffected
+    // =================================================================================================================
+
+    function _pLedgerOff(Tk memory k) internal {
+        bytes32 s = MetaTxLib.pad(k.signer);
+        bytes32 p = MetaTxLib.pad(k.payee);
+        _pX(k, "ok_cancelNonce", _pMt(k, _pCancel(7), 0, P_RR, 0, address(0)));
+        _pU(k, "err_ledgerOff_uaExecute", _pUm(k, s, _pAmt(k, 1_000), 0, P_RR, 0, address(0)));
+        _pUt2(k, "err_ledgerOff_uaExecuteTransfer", _pUt(k, s, p, 1_000, 0, 0, P_RR, 0, address(0)));
+        MetaTxLib.UAMetaTransaction[] memory us = new MetaTxLib.UAMetaTransaction[](1);
+        bytes[] memory au = new bytes[](1);
+        us[0] = _pUm(k, s, _pAmt(k, 1_000), 0, P_RR, 0, address(0));
+        au[0] = _pAuM(k, us[0]);
+        _pRec(k, _pH("uaBatch", "ua", "err_ledgerOff"), k.relayer, abi.encodeCall(IUALedger.uaBatch, (us, au)),
+            _pD("uaDigest0", MetaTokenBase(k.t).uaDigest(us[0])), _pL(us[0].batch));
+        MetaTxLib.UAMetaTransfer[] memory ts = new MetaTxLib.UAMetaTransfer[](1);
+        ts[0] = _pUt(k, s, p, 1_000, 0, 0, P_RR, 0, address(0));
+        au[0] = _pAuT(k, ts[0]);
+        _pRec(k, _pH("uaBatchTransfer", "ua", "err_ledgerOff"), k.relayer, abi.encodeCall(IUALedger.uaBatchTransfer, (ts, au)),
+            _pD("uaTransferDigest0", MetaTokenBase(k.t).uaTransferDigest(ts[0])), _pL(ts[0].batch));
+        _pRec(k, _pH("transferToUA", "ua", "err_ledgerOff"), k.signer, abi.encodeCall(IUALedger.transferToUA, (bytes32(uint256(1) << 200), 100)),
+            _pD("none", 0), _pL(0));
+        ITradeToken.UATradeOrder memory o = _pUOrder(k, s, 0);
+        _pUtr(k, "err_ledgerOff_uaTrade", o, _pUAuth(k, s, o), k.dex);
+        _pUcOne(k, "err_ledgerOff_uaCancelNonce", s, k.lane++, P_VU, false);
+    }
+
+    // =================================================================================================================
+    // contract signers (the signature code the split moves): an ERC-1271 wallet on the address path and the UA native
+    // path, an EIP-7702 account (code = 0xef0100 || delegate) on both
+    // =================================================================================================================
+
+    uint256 internal constant P_OWNER = 0xD3D3; // the key a Mock1271 wallet / delegate accepts
+    uint256 internal constant P_E7702 = 0x7702; // the EOA that carries the delegation designator
+
+    function _pAs(Tk memory k, address who, uint256 pk) internal pure returns (Tk memory w) {
+        w = Tk(k.kind, k.t, pk, who, k.payeePk, k.payee, k.feeTo, k.relayer, bytes32(0), k.style, k.und, k.dex, k.lane, 0);
+    }
+
+    function _pFundSigner(Tk memory k, address to) internal {
+        vm.prank(k.signer);
+        IERC20(k.t).transfer(to, 100_000);
+    }
+
+    function _pSigners(Tk memory k) internal {
+        // ERC-1271 wallet (owner key P_OWNER), funded
+        Tk memory w = _pAs(k, address(new Mock1271(vm.addr(P_OWNER), 0)), P_OWNER);
+        _pFundSigner(k, w.signer);
+        _pSignerCases(w, "w1271", true);
+        // wallets that revert / answer a wrong magic value (the signature is the owner's)
+        Tk memory r = _pAs(k, address(new Mock1271(vm.addr(P_OWNER), 1)), P_OWNER);
+        MetaTxLib.MetaTransaction memory m = _pMt(r, _pCancel(7), 0, P_RR, 0, address(0));
+        _pX(r, "err_w1271reverts", m);
+        Tk memory g = _pAs(k, address(new Mock1271(vm.addr(P_OWNER), 2)), P_OWNER);
+        m = _pMt(g, _pCancel(7), 0, P_RR, 0, address(0));
+        _pX(g, "err_w1271wrongMagic", m);
+        MetaTxLib.UAMetaTransaction memory u = _pUm(r, MetaTxLib.pad(r.signer), _pAmt(r, 1_000), 0, P_RR, 0, address(0));
+        _pU(r, "err_w1271reverts", u);
+        // EIP-7702: the EOA's code is the designator of a delegate that accepts P_OWNER
+        address e = vm.addr(P_E7702);
+        vm.etch(e, abi.encodePacked(hex"ef0100", address(new Mock1271(vm.addr(P_OWNER), 0))));
+        Tk memory d = _pAs(k, e, P_E7702);
+        _pFundSigner(k, e);
+        _pSignerCases(d, "e7702", false);
+        // signed by the delegate's owner instead of the account's key: accepted through ERC-1271 of the delegate
+        m = _pMt(d, _pCancel(7), 0, P_RR, 0, address(0));
+        // (the address path's `SigCheck.isValid` does not follow the designator: refused; the UA path's does)
+        _pMx(d, "mtxExecute", "err_e7702_viaDelegate_addrPathRefuses", "", IMetaTx.mtxExecute.selector, m, _pEcdsa(P_OWNER, MetaTokenBase(d.t).mtxDigest(m)), d.relayer);
+        u = _pUm(d, MetaTxLib.pad(e), _pAmt(d, 1_000), 0, P_RR, 0, address(0));
+        _pUx(d, "ok_e7702_viaDelegate", "", u, _pEcdsa(P_OWNER, MetaTokenBase(d.t).uaDigest(u)), d.relayer);
+    }
+
+    /// `mtxExecute`, `uaExecute`, a typed transfer and a trade for the contract signer `w`: valid and wrong signature.
+    function _pSignerCases(Tk memory w, string memory tag, bool trade) internal {
+        MetaTxLib.MetaTransaction memory m = _pMt(w, _pCancel(7), 0, P_RR, 0, address(0));
+        _pX(w, string.concat("ok_", tag), m);
+        m = _pMt(w, _pCancel(7), 0, P_RR, 0, address(0));
+        _pMx(w, "mtxExecute", string.concat("err_", tag, "_badSignature"), "", IMetaTx.mtxExecute.selector, m, _pBadSg(w, m), w.relayer);
+        MetaTxLib.MetaTransfer memory t = _pTr(w, w.payee, 1_000, 0, 0, P_RR, 0, address(0));
+        _pXt(w, string.concat("ok_", tag), t);
+        t = _pTr(w, w.payee, 1_000, 0, 0, P_RR, 0, address(0));
+        _pXtS(w, string.concat("err_", tag, "_badSignature"), t, _pEcdsa(w.payeePk, MetaTokenBase(w.t).mtxTransferDigest(t)), w.relayer);
+        bytes32 id = MetaTxLib.pad(w.signer);
+        MetaTxLib.UAMetaTransaction memory u = _pUm(w, id, _pAmt(w, 1_000), 0, P_RR, 0, address(0));
+        _pU(w, string.concat("ok_", tag), u);
+        u = _pUm(w, id, _pAmt(w, 1_000), 0, P_RR, 0, address(0));
+        _pUx(w, string.concat("err_", tag, "_badAuth"), "", u, _pEcdsa(w.payeePk, MetaTokenBase(w.t).uaDigest(u)), w.relayer);
+        if (!trade) return;
+        ITradeToken.TradeOrder memory o = _pOrder(w, 0);
+        _pMtr(w, string.concat("ok_", tag), o, _pTSign(w, o), 5_000, 4_000, w.dex);
+        o = _pOrder(w, 0);
+        _pMtr(w, string.concat("err_", tag, "_badSignature"), o, _pEcdsa(w.payeePk, MetaTokenBase(w.t).tradeOrderDigest(o)), 5_000, 4_000, w.dex);
     }
 
     // =================================================================================================================
@@ -1525,10 +1792,14 @@ abstract contract ParityCases is ParityIO {
 
     /// Per token of the rig × `probe` selector: listed or not, the probe through `mtxExecute` and through `uaExecute`.
     function _pRules(bytes4[] memory probe) internal returns (RuleRow[] memory rows) {
-        rows = new RuleRow[](tks.length * probe.length);
+        uint256 nt;
+        for (uint256 q; q < tks.length; ++q) if (tks[q].style != 2) ++nt;
+        rows = new RuleRow[](nt * probe.length);
+        uint256 w;
         for (uint256 q; q < tks.length; ++q) {
             Tk memory k = tks[q];
-            k.lane = 9000;
+            if (k.style == 2) continue; // the ledger-off token has its own cases
+            k.lane = 900_000; // above every run step: a fresh lane, so the probe never meets a used nonce
             (bytes4[] memory ls, uint8[] memory fc, uint8[] memory aa) = MetaTokenBase(k.t).mtxSelectors();
             for (uint256 i; i < probe.length; ++i) {
                 RuleRow memory r;
@@ -1537,23 +1808,29 @@ abstract contract ParityCases is ParityIO {
                     if (ls[j] == probe[i]) (r.inList, r.feeClass, r.amountArg) = (true, fc[j], aa[j]);
                 }
                 uint256 snap = vm.snapshotState();
-                (r.mtxAllowed, r.uaAllowed) = _pProbe(k, probe[i]);
+                (r.mtxRev, r.uaRev) = _pProbe(k, probe[i]);
+                r.mtxAllowed = r.mtxRev != IMetaTx.MtxSelectorNotAllowed.selector;
+                r.uaAllowed = r.uaRev != IUALedger.MetaTxUnknownOp.selector;
                 vm.revertToState(snap);
-                rows[q * probe.length + i] = r;
+                rows[w++] = r;
             }
         }
     }
 
-    /// The probes carry only the 4-byte selector, so they fail on shape: only the allowlist verdict is read.
-    function _pProbe(Tk memory k, bytes4 sel) internal returns (bool mtxOk, bool uaOk) {
+    /// The probes carry only the 4-byte selector, so they fail on shape: the revert selector says whether the allowlist
+    /// refused them. The signature / auth is built BEFORE the prank (building it calls a view of the token, which would
+    /// consume the prank and turn every probe into `MetaTxUnauthorizedRelayer`).
+    function _pProbe(Tk memory k, bytes4 sel) internal returns (bytes4 mtxRev, bytes4 uaRev) {
         MetaTxLib.MetaTransaction memory m = _pMt(k, abi.encodePacked(sel), 0, P_RR, 0, address(0));
+        bytes memory cd = abi.encodeCall(IMetaTx.mtxExecute, (m, _pSgM(k, m)));
         vm.prank(k.relayer);
-        (bool ok, bytes memory out) = k.t.call(abi.encodeCall(IMetaTx.mtxExecute, (m, _pSgM(k, m))));
-        mtxOk = ok || bytes4(out) != IMetaTx.MtxSelectorNotAllowed.selector;
+        (bool ok, bytes memory out) = k.t.call(cd);
+        mtxRev = ok ? bytes4(0) : bytes4(out);
         MetaTxLib.UAMetaTransaction memory u = _pUm(k, MetaTxLib.pad(k.signer), abi.encodePacked(sel), 0, P_RR, 0, address(0));
+        cd = abi.encodeCall(IUALedger.uaExecute, (u, _pAuM(k, u)));
         vm.prank(k.relayer);
-        (ok, out) = k.t.call(abi.encodeCall(IUALedger.uaExecute, (u, _pAuM(k, u))));
-        uaOk = ok || bytes4(out) != IUALedger.MetaTxUnknownOp.selector;
+        (ok, out) = k.t.call(cd);
+        uaRev = ok ? bytes4(0) : bytes4(out);
     }
 }
 
@@ -1578,11 +1855,22 @@ contract PlainRig is UALedgerBase, ParityCases {
         vm.prank(alice);
         wrp.transferToUA(uaP, 2_000_000);
         tks.push(Tk("UNDERLYING", address(wrp), ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, uaP, 1, address(und), dex, 0, 0));
+        // NONE with no UA registry (the ledger off)
+        address off = Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), "")));
+        NoUnderlyingToken(off).initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 10_000_000, alice, address(this))));
+        tks.push(Tk("NONE_LEDGEROFF", off, ALICE_PK, alice, BOB_PK, bob, FEE_TO, RELAYER, 0, 2, address(0), dex, 0, 0));
     }
 
     function _pDerivedAuth(Tk memory k, bytes32 purpose, bytes32 digest) internal view override returns (bytes memory) {
         uint16 kind = lreg.kindOf(k.uaD);
         return _auth(lreg, kind, _key(kind), purpose, digest);
+    }
+
+    /// The stand-in verifier accepts `keccak256(abi.encode(key, message))`: sign another message.
+    function _pBadDerived(Tk memory k, bytes32 purpose, bytes32 digest) internal view override returns (bytes memory) {
+        uint16 kind = lreg.kindOf(k.uaD);
+        bytes memory key = _key(kind);
+        return abi.encode(key, _sig(key, bytes32(uint256(lreg.uaMessage(kind, purpose, digest)) ^ 1)));
     }
 }
 
@@ -1632,6 +1920,11 @@ contract PqzRig is PqzFixture, ParityCases {
 
     function _pDerivedAuth(Tk memory, bytes32, bytes32) internal view override returns (bytes memory) {
         return _mlAuth();
+    }
+
+    /// A signature of the wrong length: the `mldsa65` verifier rejects it.
+    function _pBadDerived(Tk memory, bytes32, bytes32) internal view override returns (bytes memory) {
+        return abi.encode(bytes(""), new bytes(ML65_SIG - 1));
     }
 
     function _pExtras(Tk memory k) internal override {
@@ -1752,6 +2045,11 @@ contract ZetherRig is ZetherFixture, ParityCases {
         return abi.encode(bytes(""), ZetherKeys.schnorr(bob.x, reg.uaMessage(_zkind(), purpose, digest), bls));
     }
 
+    /// A Schnorr signature by another Zether key.
+    function _pBadDerived(Tk memory, bytes32 purpose, bytes32 digest) internal view override returns (bytes memory) {
+        return abi.encode(bytes(""), ZetherKeys.schnorr(alice.x, reg.uaMessage(_zkind(), purpose, digest), bls));
+    }
+
     function _pExtras(Tk memory k) internal override {
         ZetherLayer t = ZetherLayer(k.t);
         bytes32 bUa = ZetherTypes.UA.unwrap(bob.ua);
@@ -1823,6 +2121,7 @@ contract MetaTxParityTest is ParityIO {
         } else {
             _open();
         }
+        _setup(write);
         // the cases: each rig writes / compares its own lines as it produces them
         for (uint256 r; r < rigs.length; ++r) {
             for (uint256 i; i < rigs[r].count(); ++i) {
@@ -1833,6 +2132,7 @@ contract MetaTxParityTest is ParityIO {
         for (uint256 r; r < rigs.length; ++r) {
             nc += rigs[r].emitted();
             fails += rigs[r].failures();
+            if (rigs[r].isDrifted()) drifted = true;
         }
         RuleRow[] memory ru = _rules();
         _finish(write, nc, ru);
@@ -1861,6 +2161,33 @@ contract MetaTxParityTest is ParityIO {
 
     // ------------------------------------------------------------------ the rule rows and the closing lines
 
+    /// The first line: each token's address and domain hash. A difference here is a changed SETUP (the fixture or the
+    /// token construction), not a behaviour difference, and every digest would follow it: stop at once.
+    function _setup(bool write) internal {
+        string memory line = '{"setup":1,"tokens":[';
+        string memory first;
+        for (uint256 r; r < rigs.length; ++r) {
+            (string[] memory ks, address[] memory ts, bytes32[] memory ds) = rigs[r].setup();
+            for (uint256 i; i < ks.length; ++i) {
+                string memory e = string.concat('{"kind":"', ks[i], '","token":"', vm.toString(ts[i]), '","domain":"', vm.toString(ds[i]), '"}');
+                line = string.concat(line, bytes(first).length == 0 ? "" : ",", e);
+                first = "x";
+            }
+        }
+        line = string.concat(line, "]},");
+        if (write) {
+            vm.writeLine(FILE, line);
+            return;
+        }
+        string memory was = vm.readLine(FILE);
+        if (keccak256(bytes(_strip(bytes(was)))) != keccak256(bytes(_strip(bytes(line))))) {
+            console2.log("PARITY SETUP CHANGED (token addresses or domain separators), not a behaviour difference:");
+            console2.log(string.concat("  fixture: ", was));
+            console2.log(string.concat("  now:     ", line));
+            revert("parity: SETUP CHANGED (token addresses / domain separators), not a behaviour difference; see the log");
+        }
+    }
+
     function _open() internal {
         vm.closeFile(FILE);
         vm.readLine(FILE); // "["
@@ -1879,6 +2206,17 @@ contract MetaTxParityTest is ParityIO {
         for (uint256 r; r < rigs.length; ++r) {
             for (uint256 i; i < parts[r].length; ++i) out[n++] = parts[r][i];
         }
+        // self-check of the probe: it must SEE refusals (some unlisted selector refused by `mtxExecute`, some selector refused by
+        // `uaExecute`), else the table pins nothing. A selector that `_mtxRule` allows but `mtxSelectors()` does not list is
+        // data, recorded as such (`inList=false, mtxAllowed=true`)
+        uint256 refusedUa;
+        uint256 refusedMtx;
+        for (uint256 i; i < n; ++i) {
+            if (!out[i].inList && !out[i].mtxAllowed) ++refusedMtx;
+            if (!out[i].uaAllowed) ++refusedUa;
+        }
+        require(refusedUa != 0, "parity probe: uaExecute refused no selector");
+        require(refusedMtx != 0, "parity probe: mtxExecute refused no unlisted selector");
     }
 
     /// Write: the rule lines and the closing object. Replay: compare them (the case lines are already compared).

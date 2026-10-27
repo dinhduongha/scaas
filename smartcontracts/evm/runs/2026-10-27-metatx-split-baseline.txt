@@ -1,26 +1,32 @@
-=== metatx-split T1 baseline on the pre-split code (head 93128e3d), forge forge Version: 1.8.5 ===
-=== 1. write: PARITY_WRITE=1 ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
+=== metatx-split T1 (+ fix 1) baseline on the pre-split code (head c9ec6fb0), forge forge Version: 1.8.5 ===
+=== 1. write (twice, byte-identical files): PARITY_WRITE=1 ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
 No files changed, compilation skipped
-
 Ran 2 tests for test/metatx/MetaTxParity.t.sol:MetaTxParityTest
-[PASS] test_parity() (gas: 666304547)
+[PASS] test_parity() (gas: 759050803)
 Logs:
-  parity fixture written: cases / rule rows 1574 198
-
+  parity fixture written: cases / rule rows 1822 198
 [PASS] test_ruleTableParity() (gas: 3597)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 2.46s (2.31s CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 2.66s (2.51s CPU time)
+Ran 1 test suite in 2.66s (2.66s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 2.67s (2.52s CPU time)
 
-Ran 1 test suite in 2.46s (2.46s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
-=== 2. replay on the same code: ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
+Ran 1 test suite in 2.67s (2.67s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+second write: files byte-identical (cmp)
+=== 2. replay (gas not compared): ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
 No files changed, compilation skipped
-
 Ran 2 tests for test/metatx/MetaTxParity.t.sol:MetaTxParityTest
-[PASS] test_parity() (gas: 836617370)
-[PASS] test_ruleTableParity() (gas: 43400798)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.22s (3.40s CPU time)
-
-Ran 1 test suite in 3.23s (3.22s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
-=== 3. gas baseline: ../../scripts/capped forge test --match-path test/v2/MetaTxGasV2.t.sol -vv ===
+[PASS] test_parity() (gas: 950370720)
+[PASS] test_ruleTableParity() (gas: 62866057)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.50s (3.75s CPU time)
+Ran 1 test suite in 3.50s (3.50s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+=== 3. self-check with gas compared (PARITY_GAS=1, pre-split code only): PARITY_GAS=1 ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
+No files changed, compilation skipped
+Ran 2 tests for test/metatx/MetaTxParity.t.sol:MetaTxParityTest
+[PASS] test_parity() (gas: 956930724)
+[PASS] test_ruleTableParity() (gas: 62866057)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.50s (3.75s CPU time)
+Ran 1 test suite in 3.50s (3.50s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+=== 4. gas baseline: ../../scripts/capped forge test --match-path test/v2/MetaTxGasV2.t.sol -vv ===
 No files changed, compilation skipped
 
 Ran 16 tests for test/v2/MetaTxGasV2.t.sol:MetaTxGasV2Test
@@ -103,6 +109,6 @@ Logs:
 Logs:
   wrap 1:1 (fixed rate) 112714
 
-Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 8.19ms (12.21ms CPU time)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 7.19ms (10.06ms CPU time)
 
-Ran 1 test suite in 13.55ms (8.19ms CPU time): 16 tests passed, 0 failed, 0 skipped (16 total tests)
+Ran 1 test suite in 12.42ms (7.19ms CPU time): 16 tests passed, 0 failed, 0 skipped (16 total tests)
