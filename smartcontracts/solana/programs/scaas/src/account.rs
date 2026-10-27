@@ -148,20 +148,22 @@ impl PayArgs {
     }
 }
 
+/// No `#[instruction]`: the PDAs that depend on the arguments (`subject`, `lane_pda`) are derived and checked in
+/// `settle`, so this struct nests beside another entry's accounts in the `relay_fee_<entry>` wrappers (whose
+/// instruction data starts with the inner entry's arguments).
 #[event_cpi]
 #[derive(Accounts)]
-#[instruction(owner: [u8; 32], args: PayArgs)]
 pub struct RelayPay<'info> {
     #[account(mut)]
     pub lane: Signer<'info>,
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
-    /// CHECK: SmartKeyAccount PDA; opened lazily on the first pay (writable only then), else read in the handler.
-    #[account(seeds = [b"acct", owner.as_ref()], bump)]
+    /// CHECK: SmartKeyAccount PDA `[b"acct", owner]` (checked in `settle`); opened lazily on the first pay (writable
+    /// only then), else read in `settle`.
     pub subject: UncheckedAccount<'info>,
-    #[account(init_if_needed, payer = lane, space = 8 + LanePda::INIT_SPACE,
-              seeds = [b"lane", subject.key().as_ref(), args.lane.as_ref()], bump)]
-    pub lane_pda: Account<'info, LanePda>,
+    /// CHECK: lane PDA `[b"lane", subject, args.lane]` (checked, created if needed, read and written in `settle`).
+    #[account(mut)]
+    pub lane_pda: UncheckedAccount<'info>,
     /// Any token account the Account PDA owns for this mint (ATA or not — L7).
     #[account(mut, token::mint = mint, token::authority = subject, token::token_program = token_program)]
     pub source: InterfaceAccount<'info, TokenAccount>,
@@ -193,11 +195,13 @@ fn settle(ctx: &mut Context<RelayPay>, owner: [u8; 32], args: &PayArgs, auth: &A
     args.check_common(relayer)?;
     require_keys_eq!(a.recipient.key(), *to, ScaasError::WrongRecipient);
     util::check_recipient(&a.recipient)?;
+    let (subject_key, subject_bump) = Pubkey::find_program_address(&[b"acct", &owner], &crate::ID);
+    require_keys_eq!(a.subject.key(), subject_key, ScaasError::BadAccounts);
     let info = a.subject.to_account_info();
     let subject = if info.data_is_empty() {
         // Mở lười: khoá duy nhất là chính `owner`, nên chỉ chữ ký của nó (khoá 0) mở được.
         require!(auth.key_index == 0, ScaasError::UnknownKey);
-        let s = new_subject(owner, ctx.bumps.subject, AuthKey::ed25519(owner), vec![]);
+        let s = new_subject(owner, subject_bump, AuthKey::ed25519(owner), vec![]);
         create_subject(&a.lane, &info, &a.system_program, &s)?;
         s
     } else {
@@ -210,15 +214,22 @@ fn settle(ctx: &mut Context<RelayPay>, owner: [u8; 32], args: &PayArgs, auth: &A
     auth::verify(&a.instructions, auth, &subject.keys, &subject.origins, METAOP_LABEL, &digest, None)?;
     util::check_mint(&a.mint.to_account_info(), args.amount)?;
 
-    let lp = &mut ctx.accounts.lane_pda;
+    let lp_info = a.lane_pda.to_account_info();
+    let (lp_key, lp_bump) = Pubkey::find_program_address(&[b"lane", subject_key.as_ref(), &args.lane], &crate::ID);
+    require_keys_eq!(lp_info.key(), lp_key, ScaasError::BadAccounts);
+    let mut lp = if lp_info.data_is_empty() {
+        let seeds: &[&[u8]] = &[b"lane", subject_key.as_ref(), &args.lane, &[lp_bump]];
+        util::create_pda(&a.lane, &lp_info, &a.system_program, seeds, 8 + LanePda::INIT_SPACE)?;
+        LanePda { next: 0, valid_until: 0, rent_payer: a.lane.key() }
+    } else {
+        require_keys_eq!(*lp_info.owner, crate::ID, ScaasError::BadOwner);
+        LanePda::try_deserialize(&mut &lp_info.try_borrow_data()?[..])?
+    };
     require!(lp.next == args.nonce, ScaasError::BadNonce);
     lp.next = lp.next.checked_add(1).ok_or(ScaasError::Overflow)?;
     lp.valid_until = lp.valid_until.max(args.valid_until.min(i64::MAX as u64) as i64);
-    if lp.rent_payer == Pubkey::default() {
-        lp.rent_payer = ctx.accounts.lane.key();
-    }
+    lp.try_serialize(&mut &mut lp_info.try_borrow_mut_data()?[..])?;
 
-    let a = &ctx.accounts;
     util::ata_idempotent(
         &a.associated_token_program,
         &a.lane,
@@ -228,7 +239,7 @@ fn settle(ctx: &mut Context<RelayPay>, owner: [u8; 32], args: &PayArgs, auth: &A
         &a.system_program,
         &a.token_program,
     )?;
-    let bump = [ctx.bumps.subject];
+    let bump = [subject_bump];
     util::transfer(
         &a.token_program,
         &a.source.to_account_info(),
@@ -326,14 +337,32 @@ pub fn relay_fee<'info>(ctx: Context<'info, RelayFee<'info>>, owner: [u8; 32], a
     require!(target.executable, ScaasError::RelayTargetNoCode);
     invoke(&Instruction { program_id: *target.key, accounts: metas, data: target_data }, ctx.remaining_accounts)?;
 
-    let lane = ctx.accounts.pay.lane.key();
-    let payee = if args.to == marker.to_bytes() { lane } else { Pubkey::new_from_array(args.to) };
     let target = *target.key;
-    let mut ctx = Context::new(ctx.program_id, &mut ctx.accounts.pay, ctx.remaining_accounts, ctx.bumps.pay);
-    settle(&mut ctx, owner, &args, &auth, &marker, &payee, None)?;
+    pay_routed(Context::new(ctx.program_id, &mut ctx.accounts.pay, ctx.remaining_accounts, ctx.bumps.pay), owner, &args, &auth, r, target)
+}
+
+/// The router's payment, after the call: `relay_pay`'s body with the marker as relayer; open mode
+/// (`args.to == marker`) pays the lane; then `RelayFeePaid`.
+pub fn pay_routed(mut ctx: Context<RelayPay>, owner: [u8; 32], args: &PayArgs, auth: &Auth, r: [u8; 32], target: Pubkey) -> Result<()> {
+    let marker = relay_fee_marker();
+    let lane = ctx.accounts.lane.key();
+    let payee = if args.to == marker.to_bytes() { lane } else { Pubkey::new_from_array(args.to) };
+    settle(&mut ctx, owner, args, auth, &marker, &payee, None)?;
     let (contract, payer) = (ctx.accounts.mint.key(), Pubkey::new_from_array(owner));
     emit_cpi!(RelayFeePaid { contract, relay_ref: r, target, payer, payee, amount: args.amount });
     Ok(())
+}
+
+/// Shape of a static wrapper's payment (`relay_fee_<entry>`, owner 2026-10-27, as Sui / Aptos): `ref` over the inner
+/// entry's call as if sent alone — `call = scaas ‖ u8 n ‖ (pubkey ‖ is_signer ‖ is_writable)×n ‖ data` with its declared
+/// accounts and `data = discriminator ‖ Borsh(arguments)` (its `auth` included) — and the salt `args.extra`.
+pub fn wrapper_ref(network: &[u8; 32], accounts: &[AccountMeta], data: &[u8], args: &PayArgs) -> Result<[u8; 32]> {
+    let r = relay_ref(network, &crate::ID, &relay_call(&crate::ID, accounts, data), &args.extra);
+    require!(
+        args.pay_ref == r && args.lane == pay_lane(&r) && args.nonce == 0 && args.relayer == relay_fee_marker().to_bytes(),
+        ScaasError::RelayFeeShape
+    );
+    Ok(r)
 }
 
 // ------------------------------------------------------------------ KeyOp
@@ -464,7 +493,9 @@ pub fn manage_signed(ctx: Context<ManageSigned>, op: KeyOp, auth: Auth) -> Resul
     }
     s.check_usable()?;
     let len = s.space();
-    util::grow(&subject_info, &ctx.accounts.lane, &ctx.accounts.system_program, len)
+    util::grow(&subject_info, &ctx.accounts.lane, &ctx.accounts.system_program, len)?;
+    // Persist now (Anchor would at exit): a `relay_fee_manage_signed` payment reads this Account next.
+    ctx.accounts.subject.exit(&crate::ID)
 }
 
 // ------------------------------------------------------------------ recovery (guardian, tx native)

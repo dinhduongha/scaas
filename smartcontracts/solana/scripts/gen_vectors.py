@@ -99,9 +99,30 @@ def relay_fee_vectors():
     data, salt = b'\x00hello', bytes([9]) * 32
     call = target + bytes([1]) + record + bytes([0, 1]) + data
     ref = k(b'scaas.relayfee' + network + target + k(call) + salt)
-    return [('RELAY_TARGET', target.hex()), ('RELAY_RECORD', record.hex()), ('RELAY_DATA', data.hex()),
-            ('RELAY_SALT', salt.hex()), ('RELAY_CALL', call.hex()), ('RELAY_REF', ref.hex()),
-            ('RELAY_LANE', k(b'scaas.pay.lane' + ref).hex())]
+    out = [('RELAY_TARGET', target.hex()), ('RELAY_RECORD', record.hex()), ('RELAY_DATA', data.hex()),
+           ('RELAY_SALT', salt.hex()), ('RELAY_CALL', call.hex()), ('RELAY_REF', ref.hex()),
+           ('RELAY_LANE', k(b'scaas.pay.lane' + ref).hex())]
+    # Static wrapper `relay_fee_invalidate_nonces_signed` (owner 2026-10-27): `call` = the inner entry as if sent
+    # alone, target = scaas, its declared accounts (lane signer+writable, config, market, subject, min_nonce writable,
+    # instructions sysvar, system), data = discriminator ‖ u64 min_nonce ‖ Auth (raw, key 0, precompile 2, entry 0).
+    alphabet = b'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+    def b58d(s):
+        n = 0
+        for c in s.encode():
+            n = n * 58 + alphabet.index(c)
+        return n.to_bytes(32, 'big')
+    program = b58d(PROGRAM)
+    metas = [(seed('wrap.lane'), 1, 1), (seed('wrap.config'), 0, 0), (seed('wrap.market'), 0, 0),
+             (seed('wrap.subject'), 0, 0), (seed('wrap.min_nonce'), 0, 1),
+             (b58d('Sysvar1nstructions1111111111111111111111111'), 0, 0), (bytes(32), 0, 0)]
+    wdata = (hashlib.sha256(b'global:invalidate_nonces_signed').digest()[:8] + (5).to_bytes(8, 'little')
+             + bytes([0, 0, 2, 0]) + (0).to_bytes(4, 'little'))
+    wcall = program + bytes([len(metas)]) + b''.join(key + bytes([s, w]) for key, s, w in metas) + wdata
+    wsalt = bytes([0x0a]) * 32
+    wref = k(b'scaas.relayfee' + network + program + k(wcall) + wsalt)
+    return out + [('WRAP_CALL', wcall.hex()), ('WRAP_SALT', wsalt.hex()), ('WRAP_REF', wref.hex()),
+                  ('WRAP_LANE', k(b'scaas.pay.lane' + wref).hex())]
 
 
 VECTORS = [

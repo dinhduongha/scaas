@@ -12,12 +12,14 @@ pub mod dex;
 pub mod mandate;
 pub mod state;
 pub mod util;
+pub mod wrappers;
 
 pub use account::*;
 pub use auth::Auth;
 pub use dex::*;
 pub use mandate::*;
 pub use state::AuthKey;
+pub use wrappers::*;
 
 /// Program id của test/localnet (LiteSVM, e2e, vector). KHOÁ CỦA NÓ ĐÃ CÔNG KHAI (từng nằm trong repo — review M3): ai cũng
 /// deploy được vào id này trên cluster công khai ⇒ CHỈ dùng cho localnet. Bản deploy thật build với
@@ -63,6 +65,78 @@ pub mod scaas {
         auth: Auth,
     ) -> Result<()> {
         account::relay_fee(ctx, owner, args, target_data, target_accounts, auth)
+    }
+
+    // CTR-MTX-27 static wrappers (owner 2026-10-27): the entry's arguments, then the payment.
+
+    pub fn relay_fee_manage_signed<'info>(
+        ctx: Context<'info, RelayFeeManageSigned<'info>>,
+        op: KeyOp,
+        auth: Auth,
+        owner: [u8; 32],
+        args: PayArgs,
+        pay_auth: Auth,
+    ) -> Result<()> {
+        wrappers::relay_fee_manage_signed(ctx, op, auth, owner, args, pay_auth)
+    }
+
+    pub fn relay_fee_mandate_open<'info>(
+        ctx: Context<'info, RelayFeeMandateOpen<'info>>,
+        init: MandateInit,
+        auth: Auth,
+        owner: [u8; 32],
+        args: PayArgs,
+        pay_auth: Auth,
+    ) -> Result<()> {
+        wrappers::relay_fee_mandate_open(ctx, init, auth, owner, args, pay_auth)
+    }
+
+    pub fn relay_fee_mandate_revoke_signed<'info>(
+        ctx: Context<'info, RelayFeeMandateRevoke<'info>>,
+        valid_until: u64,
+        auth: Auth,
+        owner: [u8; 32],
+        args: PayArgs,
+        pay_auth: Auth,
+    ) -> Result<()> {
+        wrappers::relay_fee_mandate_revoke_signed(ctx, valid_until, auth, owner, args, pay_auth)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn relay_fee_mandate_close_signed<'info>(
+        ctx: Context<'info, RelayFeeMandateClose<'info>>,
+        nonce: u64,
+        valid_until: u64,
+        auth: Auth,
+        owner: [u8; 32],
+        args: PayArgs,
+        pay_auth: Auth,
+    ) -> Result<()> {
+        wrappers::relay_fee_mandate_close_signed(ctx, nonce, valid_until, auth, owner, args, pay_auth)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn relay_fee_cancel_signed<'info>(
+        ctx: Context<'info, RelayFeeCancelSigned<'info>>,
+        order: Order,
+        order_hash: [u8; 32],
+        auth: Auth,
+        owner: [u8; 32],
+        args: PayArgs,
+        pay_auth: Auth,
+    ) -> Result<()> {
+        wrappers::relay_fee_cancel_signed(ctx, order, order_hash, auth, owner, args, pay_auth)
+    }
+
+    pub fn relay_fee_invalidate_nonces_signed<'info>(
+        ctx: Context<'info, RelayFeeInvalidateNonces<'info>>,
+        min_nonce: u64,
+        auth: Auth,
+        owner: [u8; 32],
+        args: PayArgs,
+        pay_auth: Auth,
+    ) -> Result<()> {
+        wrappers::relay_fee_invalidate_nonces_signed(ctx, min_nonce, auth, owner, args, pay_auth)
     }
 
     pub fn manage_signed(ctx: Context<ManageSigned>, op: KeyOp, auth: Auth) -> Result<()> {
