@@ -15,6 +15,7 @@ import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {DexPuller} from "./DexPuller.sol";
+import {TokenCall} from "./TokenCall.sol";
 
 /// @title `SCaaSDex` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21, -23): an EIP-1167 clone made by
 ///        `OpenFactory.createDex`.
@@ -599,7 +600,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     /// @dev A failed transfer never reverts with the token's own revert data (W-O): a token, or a hook it calls, must
     ///      not be able to forge the starvation errors `mtxSettle` re-raises. See `_tokenFailed`.
     function _send(address token, address to, uint256 amount) private {
-        if (amount != 0 && !IERC20(token).trySafeTransfer(to, amount)) _tokenFailed(token);
+        if (amount != 0 && !TokenCall.ok(token, abi.encodeCall(IERC20.transfer, (to, amount)))) _tokenFailed(token);
     }
 
     /// @dev A failed token call: no return data (it ran out of gas, or the token has no code) reverts empty, which
@@ -619,7 +620,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         assembly ("memory-safe") {
             mstore(0, 0x70a08231) // balanceOf(address)
             mstore(0x20, address())
-            let s := staticcall(gas(), token, 0x1c, 0x24, 0, 0x20) // before returndatasize (Yul: args right to left)
+            let g := gas()
+            if gt(g, 500000) { g := 500000 } // C6-1: TokenCall.TOKEN_GAS
+            let s := staticcall(g, token, 0x1c, 0x24, 0, 0x20) // before returndatasize (Yul: args right to left)
             ok := and(s, gt(returndatasize(), 0x1f))
             b := mload(0)
         }

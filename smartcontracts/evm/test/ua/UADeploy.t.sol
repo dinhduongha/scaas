@@ -104,4 +104,28 @@ contract UADeployTest is Test {
         bool[5] memory on = _kinds(reg, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
         assertTrue(!on[0] && !on[1] && !on[2] && !on[3] && !on[4], "none of these");
     }
+
+    /// C5-1 (NET-EVM-06): a release deploys only where the chain's block gas limit covers its state gas (1,530 per byte
+    /// of runtime, size-baseline.json) plus the 2^24 regular-gas cap; the deploy refuses before sending otherwise.
+    function test_C5_1_releaseNeedsABlockGasLimit() public {
+        DeployHarness h = new DeployHarness();
+        string memory base = vm.readFile("./size-baseline.json");
+        uint256 plain = vm.parseJsonUint(base, ".NoUnderlyingToken") * 1530 + 16_777_216;
+        uint256 conf = vm.parseJsonUint(base, ".UnderlyingPqzToken") * 1530 + 16_777_216;
+        assertEq(h.gasNeed("NoUnderlyingToken"), plain);
+        assertEq(h.gasNeed("UnderlyingPqzToken"), conf);
+        assertLt(plain, 80_000_000, "plain kinds: about 75 M");
+        assertGt(conf, 100_000_000, "confidential kinds: about 110 M");
+        assertLt(conf, 120_000_000);
+        // a contract under the EIP-170 limit is not in the baseline: priced at 24,576 B
+        assertEq(h.gasNeed("SCaaSDex"), uint256(24_576) * 1530 + 16_777_216);
+        // an Ethereum-like 60 M block cannot hold any confidential release
+        vm.expectRevert(bytes(string.concat("block gas limit 60000000 < ", vm.toString(conf),
+            " needed to deploy the UnderlyingPqzToken release (NET-EVM-06)")));
+        h.checkGas("UnderlyingPqzToken", 60_000_000);
+        h.checkGas("UnderlyingPqzToken", conf);
+        // the gate reads the chain's block gas limit
+        if (block.gaslimit < conf) vm.expectRevert();
+        h.requireGas("UnderlyingPqzToken");
+    }
 }

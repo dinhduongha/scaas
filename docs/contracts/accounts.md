@@ -719,7 +719,7 @@ from, bytes32 indexed to, uint256 amount, uint256 feeAmount, address feeRecipien
 `uaCancelNonce` emits `UANonceCancelled(bytes32 indexed ua, uint256 indexed batch, uint256 newNonce)`. A selector off
 the UA allowlist (today: the two `unwrap`s with `minOut` and `unwrapToUA` on the wrapper kinds, `burn` on `NONE` and
 `NONE_ZETHER`) reverts `MetaTxUnknownOp(selector)` after
-the signature check; a fee recipient `UA_POOL` reverts `UAPoolNotPayable`; a UA-ledger move to a native receiver or fee recipient equal to the token's own address reverts `TransferToSelf` ([CTR-MTX-18](metatx.md#CTR-MTX-18)). Errors: `UALedgerOff`,
+the signature check; a fee recipient `UA_POOL` reverts `UAPoolNotPayable`; a signer that is the native id `0` reverts `UANotRegistered(0)` before the signature check (review C5-2: its fee move would mint); a UA-ledger move to a native receiver or fee recipient equal to the token's own address reverts `TransferToSelf` ([CTR-MTX-18](metatx.md#CTR-MTX-18)). Errors: `UALedgerOff`,
 `UARegistryChainUid`, `UAPoolNotPayable`, `UANotRegistered`, `UAKindNotAccepted(ua, kind)` (a Zether or other non-SIGNING
 receiver; kind 0 only from `uaCancelNonce` given a native id; a native `to` of a `…ToUA` function is `UANotRegistered(to)`,
 [CTR-UA-28](#CTR-UA-28)), `UAInsufficientBalance`, `UACancelUsed`, `MetaTxUnknownOp` (`IUALedger`). Code size: the
@@ -1607,7 +1607,7 @@ wallets remain the only place a server signs, explicitly delegated and limited.
 Verifier checks, in order: `authenticatorData` ≥ 37 bytes; `rpIdHash` (its first 32 bytes) equals the stored one
 (`SHA-256(rpId)`); flags UP **and** UV; `clientDataJSON` matches exactly
 `{"type":"webauthn.get","challenge":"<b64url(digest)>","origin":"<origin>"` followed by `}` (end), or by
-`,"crossOrigin":false` and then `}` (end) or `,`; the origin equals a stored origin **exactly** (stored per key as
+`,"crossOrigin":false` and then `}` (end) or `,` (more members; the string must still end in `}`, review C1-2); the origin equals a stored origin **exactly** (stored per key as
 `keccak(origin)` on EVM; no prefix match); `s ≤ n/2` (low-s; WebAuthn returns DER and authenticators do not enforce
 low-s, so clients convert DER to `(r, s)` and normalize `s := n − s` when `s > n/2`, still valid); then P-256 over
 `sha256(authenticatorData ‖ sha256(clientDataJSON))`.

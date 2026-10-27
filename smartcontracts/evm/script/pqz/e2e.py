@@ -210,6 +210,20 @@ ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w")])
 ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[])"
 
 
+# ------------------------------------------------------------------ release deploy gate (C5-1, NET-EVM-06)
+
+def require_release_gas(name):
+    """A release is one CREATE2 whose code deposit is EIP-8037 state gas, 1,530 per byte of runtime (size-baseline.json;
+    a contract under the EIP-170 limit is priced at 24,576 B), on top of the regular gas that EIP-7825 caps at 2^24.
+    Refuses before sending when the chain's actual block gas limit cannot hold it (as DeployBase._requireReleaseGas)."""
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "size-baseline.json")) as f:
+        runtime = json.load(f).get(name, 24_576)
+    need = runtime * 1530 + (1 << 24)
+    limit = int(rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16)
+    if limit < need:
+        raise SystemExit(f"block gas limit {limit:,} < {need:,} needed to deploy the {name} release (NET-EVM-06)")
+
+
 # ------------------------------------------------------------------ transactions
 
 class Sender:
@@ -529,6 +543,7 @@ def run(kd, kr, ke):
     # envVersion, env, implArgs)
     fac = D.deploy("OpenFactory", encs(["w"] * 3, [sd.addr, uid, 0]))
     for kind, name in ((0, "NoUnderlyingToken"), (4, "NoUnderlyingPqzToken"), (5, "UnderlyingPqzToken")):
+        require_release_gas(name)
         code, libs = D.linked(name)
         hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
         env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes]

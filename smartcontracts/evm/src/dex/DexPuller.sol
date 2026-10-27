@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {TokenCall} from "./TokenCall.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title `DexPuller` (CTR-DEX-22): the only holder of user allowances for outside tokens. Deployed by its DEX's
@@ -24,7 +25,7 @@ contract DexPuller {
         if (msg.sender != dex) revert NotDex(msg.sender);
         // the token's own revert data never reaches the DEX (W-O: it could forge a starvation error); no data (out of
         // gas) stays empty, the node's `out_of_gas` (as `SCaaSDex._tokenFailed`)
-        if (!IERC20(token).trySafeTransferFrom(from, dex, amount)) {
+        if (!TokenCall.ok(token, abi.encodeCall(IERC20.transferFrom, (from, dex, amount)))) {
             assembly ("memory-safe") {
                 if iszero(returndatasize()) { revert(0, 0) }
             }

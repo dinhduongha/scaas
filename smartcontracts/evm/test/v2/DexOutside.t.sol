@@ -490,6 +490,26 @@ contract DexOutsideTest is Test {
         }
     }
 
+    /// C6-1: an outside token that burns every gas it is given (pull, payout or balance read) costs one settlement at
+    /// most the DEX's per-call cap, so a later settlement in the same call (here first in order, 3 M of gas) still
+    /// settles instead of being starved by the 63/64 the burner took.
+    function test_C6_1_gasBurningTokenCannotStarveTheNextSettlement() public {
+        ForgeStarvedERC20 fg = new ForgeStarvedERC20();
+        _list(fg);
+        _fund(fg, dave);
+        fg.setStarve(true);
+        for (uint8 m = 1; m <= 3; ++m) {
+            fg.set(m, "", address(dex));
+            uint256 n = 10 * m;
+            DexLegs.Settlement[] memory ss = _two(
+                _settlement(_dave(address(fg), n, 2000), n), _settlement(_dave(address(usdc), n, 2000), n + 100));
+            vm.prank(relayer);
+            bool[] memory ok = dex.mtxSettle{gas: 3_000_000}(DexLegs.wire(ss));
+            assertFalse(ok[0]);
+            assertTrue(ok[1], "the next settlement still had its gas");
+        }
+    }
+
     // ------------------------------------------------------------------ ERC-1271 (CTR-DEX-08)
 
     /// The DEX exposes the `SmartKeyAccount` implementation it was built with, as the tokens do (the deploy compares).

@@ -175,7 +175,7 @@ wrap(uint256 amount) returns (uint256 minted)                  // sender = _msgS
 
 unwrap(uint256 wrapped, address recipient) returns (uint256 out)                    // minOut = 0; direct calls only
 unwrap(uint256 wrapped, address recipient, uint256 minOut) returns (uint256 out)
-    require recipient ∉ {0, address(this)}                     // UnwrapRecipientInvalid
+    require recipient ∉ {0, address(this), UA_POOL, SHIELD_POOL}  // UnwrapRecipientInvalid (SHIELD_POOL: review C5-4)
     out    = mulDiv(wrapped, den, num)                         // floor
     require out > 0                                            // UnwrapTooSmall
     require out ≥ minOut                                       // UnwrapBelowMin(out, minOut)

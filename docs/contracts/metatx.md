@@ -269,7 +269,7 @@ prefix:
 | 2 | Signature over the digest (`_hashTypedDataV4(hashStruct(m))`) through the virtual `_requireValidSignature`: EOA ⇒ `ECDSA.tryRecover` (65 bytes, low-s); contract ⇒ ERC-1271 `isValidSignature` staticcall (50 000 gas; 400 000 for `SmartKeyAccount` clones, which verify P-256 in Solidity when no precompile, [CTR-ACC-05](accounts.md#CTR-ACC-05)) | `MetaTxBadSignature` |
 | 3 | Shape: `data.length ≥ 4`; `bytes4(data)` allowlisted; `data.length` equals the selector's static ABI length where it has one; the fee mode is allowed by the selector's fee class ([CTR-MTX-20](#CTR-MTX-20)) and by `supportedModes()` | `MtxSelectorNotAllowed(bytes4)`, `MtxDataShape(bytes4)`, `MtxFeeClass(bytes4, uint32 mode)`, `MetaTxUnknownMode` |
 | 4 | Write `mtxNonce = expected + 1` | — |
-| 5 | Execute: store the ticket (`sender = from`, `ticket = 1`, `binding = envelopeBinding(m)`), `address(this).call(data)`, clear the ticket and sender (the binding is read only under a live ticket and needs no clearing); a failed call reverts **with its revert data** | inner errors, bubbled raw |
+| 5 | Execute: store the ticket (`sender = from`, `ticket = 1`, `binding = envelopeBinding(m)`), `address(this).call(data)`, clear the ticket, sender and binding (the binding is written on every self-call, 0 included, and cleared on exit, so a `mtxBatch` item never reads the previous item's; review C5-5); a failed call reverts **with its revert data** | inner errors, bubbled raw |
 | 6 | Fee through `_chargeFee`, **after** the call: a token transfers it from `from` in this token; any other contract has already refused every mode but `NONE`; a failing fee transfer reverts everything | ERC-20 errors |
 | 7 | Emit `MetaTransactionExecuted(from, relayer, batch, nonce, digest, feeRecipient, fee)` (the selector is in the transaction input) | — |
 
@@ -385,7 +385,7 @@ shape — and returns `bool`. Steps, all or nothing and cheap first as [CTR-MTX-
 |---|---|---|
 | 1 | as [CTR-MTX-17](#CTR-MTX-17) step 1 on `t` (`from ≠ address(this)` always) | as there |
 | 2 | signature over the `MetaTransfer` digest, as step 2 there | `MetaTxBadSignature` |
-| 3 | `to ≠ 0`; fee on `value` (`FeePolicy.compute`, `validateRecipient`, the payee check of [CTR-MTX-08](#CTR-MTX-08) with payee = `t.to`; `to`, fee recipient ≠ the token); balance ≥ value + fee | `PayToZero`, `TransferToSelf`, `FeeExceedsCap`, `FeeRecipientRequired`, `FeeRecipientIsPayee`, `MetaTxInsufficientForFee` |
+| 3 | `to ≠ 0`, `to` and a non-zero fee's recipient ∉ {`UA_POOL`, `SHIELD_POOL`} (before the nonce, as the UA twin; review C5-3); fee on `value` (`FeePolicy.compute`, `validateRecipient`, the payee check of [CTR-MTX-08](#CTR-MTX-08) with payee = `t.to`; `to`, fee recipient ≠ the token); balance ≥ value + fee | `PayToZero`, `TransferToSelf`, `UAPoolNotPayable`, `ShieldPoolNotPayable`, `FeeExceedsCap`, `FeeRecipientRequired`, `FeeRecipientIsPayee`, `MetaTxInsufficientForFee` |
 | 4 | write `mtxNonce = expected + 1` | — |
 | 5 | transfer the fee, then the value (cannot fail after step 3); `entryRef ≠ 0` ⇒ `PaymentSettled(from, to, value, feeAmount, feeRecipient, entryRef)` | — |
 | 6 | `MetaTransactionExecuted(from, relayer, batch, nonce, digest, feeRecipient, fee)` | — |
@@ -912,7 +912,7 @@ types), so payer wallets still show one transaction type. Cost: payees sign one 
 <a id="CTR-MTX-06"></a>**CTR-MTX-06** — **Shape and availability.** The payer shape is a `MetaTransfer` with `entryRef ≠
 0` and fee mode `NONE` (one fee per intent), `MODE_RESTRICT_RELAYER` set, `batch = payLane(entryRef)`, `nonce = 0` (as
 `mtxPay`, so "once per `(payer, entryRef)`" holds); `fee` is an absolute amount, `0 < fee ≤ t.value`; the co-signed
-`feeRecipient` is non-zero (the named-fee convention) and `≠ t.to` (the payee check). The payer's `feeRecipient`
+`feeRecipient` is non-zero (the named-fee convention), `≠ t.to` (the payee check) and neither `UA_POOL` nor `SHIELD_POOL` (refused first, before the payer's payment runs; review C5-3). The payer's `feeRecipient`
 field is **not** checked (`canon` zeroes it, and the submitter may rewrite it, [NODE-LANE-10](../node/submit-lanes.md#NODE-LANE-10)).
 No 1 % cap: the payee signs the exact amount it gives up and can never lose more than it receives in this call.
 Events: `PaymentSettled(…, N, entryRef)` unchanged (gross), plus `ReceiverFeePaid(paymentDigest, payee, feeRecipient,

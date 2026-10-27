@@ -244,7 +244,8 @@ settle until its expiry because the on-chain cancel job expired. On the token: `
 amount` (closed forever, even through another relayer that holds the signed order; emit `OrderCancelled(h, from)`; an
 already-closed order is a no-op, not an error); `mtxInvalidateNonces` raises `minNonce[from][batch]`, strictly
 increasing and capped at `2^128` (emit `NoncesInvalidated(from, batch, minNonce)`), so one mistaken signature cannot
-lock an address out forever. A signer with orders on several tokens cancels per token; the off-chain book drops them
+lock an address out forever. An order with `nonce ≥ 2^128` is refused at the pre-check (`NonceAboveCap(orderHash)`, review C6-5): no
+lane floor could ever reach it, only a per-order cancel would. A signer with orders on several tokens cancels per token; the off-chain book drops them
 at once. For outside-token orders the DEX keeps the same state and entry points ([CTR-DEX-18](#CTR-DEX-18)).
 
 ## 4. The DEX's side: `mtxSettle`
@@ -295,6 +296,17 @@ shows the forged settlement only `MatchFailed`). A gas threshold on the DEX fram
 can come back with most of the gas (a 5.95 M `mldsa65` hold refused early), so no threshold separates it from a forged
 one under the 16.78 M transaction cap. Before it: [`SCaaSDexV1`](#transitional-built).
 
+**Gas cap on outside-token calls (review C6-1; controller proposal, owner may override).** A listed hook token, or an
+upgradeable or hostile one, can burn every gas it is given, and 63/64 of the settlement's gas is then gone before a later
+capped verify (a `SmartKeyAccount` 400 k check, an `mldsa65` UA leg up to 5.95 M) runs. So every call the DEX or its
+puller makes into any token (`balanceOf`, `transferFrom`, `transfer`; `TokenCall`) is
+forwarded at most `TOKEN_GAS = 500,000` gas (a transfer into a fresh account is about 130 k, a hook token needs room
+above that); running out inside it is an ordinary failed call with empty return data, so the settlement is `MatchFailed`
+with an empty reason (the node's `out_of_gas`) and the next settlement keeps its gas. A submitter budgets the worst case,
+at most `500,000` per outside-token call of the settlement, on top of what the verifies need. A per-settlement gas
+field (`Settlement.gas`, held as `gas · 64/63 + margin`) was not built: it changes the `Settlement` ABI the node and
+clientkeys encode; the cap needs no wire change.
+
 | Leg | Pulled into the DEX | Bounds checked by |
 |---|---|---|
 | SCaaS token, Path A, any role | exactly `sellFill` | the signer's token, against the fill figures the DEX passes (amount, effective minimum, price, `fee`) |
@@ -310,7 +322,7 @@ two transfers per leg instead of one. In Path A the signer relies on the named D
 that pays (it adds nothing against a DEX bug), and per-party balance deltas misfire when addresses are shared (two
 makers with one `destination`, a relayer or treasury that is also a `destination`). A token that credits less than it
 was told to move is caught by conservation plus listing only **exact-transfer** tokens: SCaaS tokens are exact by
-construction; fee-on-transfer, rebasing and hook (ERC-777) outside tokens are not listed, and if one slips through the
+construction; fee-on-transfer and rebasing outside tokens are not listed (a hook (ERC-777) token may be: its calls are gas-capped, see above), and if one slips through the
 DEX's own balance moves and conservation reverts the settlement. `SCaaSDex` keeps its book semantics (price-time
 priority, limit + IOC/FOK, partial fills above the effective minimum); the execution price is each maker's signed
 price, rounded in the maker's favour, and the node only emits matches that pass the same checks as the contract.
@@ -416,7 +428,7 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 <a id="admin"></a>
 <a id="CTR-DEX-03"></a>**CTR-DEX-03** — `admin` is set once at creation ([CTR-DEX-24](#CTR-DEX-24)) and has no setter; in production a Safe/multisig
 (changing signers happens inside the Safe). The admin can do exactly four things: list or delist a market
-(`setMarket(base, quote, listed)`, which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
+(`setMarket(base, quote, listed)`, `base ≠ quote`, neither 0, else `BadMarket(base, quote)` (review C6-9), which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
 `MarketSet(base, quote, listed)`), set the fee split (`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0,
 DEX}` unless the share is 100 %; emit `FeeSplitSet(relayerSharePpm, treasury)`), list or delist an exchange target or
 executor (`setExchangeTarget(target, listed)`; emit `ExchangeTargetSet`), and switch the DEX-wide listed-only mode

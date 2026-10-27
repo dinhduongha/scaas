@@ -4199,6 +4199,12 @@ R36-R49 reserved for the third design batch, never used.
 **Cost if wrong.** Gas bounds pinned for another schedule would pass in CI and fail on the chain.
 **Source.** Owner 2026-10-21 (Task F185, "Đồng ý").
 
+**Addendum (review C5-1, 2026-10-27; controller proposal, owner may override).** A release needs a block gas limit of
+`runtime × 1,530 + 2^24` (EIP-8037 state gas for the code deposit plus the EIP-7825 regular-gas cap): about 75.8 M for
+`NONE`, about 110.9 M for `UNDERLYING_PQZ` (table in [networks/evm.md](networks/evm.md#NET-EVM-06)), from
+`size-baseline.json`. The deploy scripts read the chain's `block.gaslimit` and refuse a release deployment below the
+kind's need. No code-size work (owner: not before Glamsterdam).
+
 Under "Clients — signers":
 
 ### NET-EVM-80 — First chain Gnosis, then Celo

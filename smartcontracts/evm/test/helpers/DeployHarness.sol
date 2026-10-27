@@ -31,6 +31,12 @@ contract DeployHarness is DeployBase {
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
+    function gasNeed(string calldata name) external view returns (uint256) { return _releaseGasNeed(name); }
+
+    function checkGas(string calldata name, uint256 limit) external view { _checkReleaseGas(name, limit); }
+
+    function requireGas(string calldata name) external view { _requireReleaseGas(name); }
+
     function noticeFor(uint256 chainId, uint256 notice) external pure returns (uint64) {
         return _checkedNotice(chainId, notice);
     }
