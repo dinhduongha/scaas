@@ -254,6 +254,9 @@ key_op('remove_origin', 'remove_origin', dave, ua(UA_DAVE), string(APP_ORIGIN), 
        note='mtx_remove_origin(op, auth, origin)')
 key_op('set_guardian', 'set_guardian', erin, ua(UA_ERIN), opt(holder(near(ALICE))), 2,
        note='mtx_set_guardian(op, auth, guardian Some(Near(alice))); alice signs with its SCaaS key')
+key_op('set_policy', 'set_guardian', erin, ua(UA_ERIN), bytes([6, 1]), 3,
+       note='mtx_set_policy(op, auth, policy u8): the set_policy key-op action under op code 10, signed params '
+            '[KEYOP_SET_POLICY 6, policy] (POLICY_PASSKEY_FOR_VALUE = 1, NET-ALL-23 item 3); a wallet key may sign')
 key_op('set_guardian_msig', 'set_guardian', MSIG, ua(MSIG.ua), opt(None), 0,
        note='msig UA: the near-account member alice.test.near counts only as the predecessor; erin signs')
 
@@ -266,7 +269,7 @@ def key_op_vectors():
 key_op('start_recovery', 'start_recovery', alice, near(ALICE), FRANK_KEY + opt(None), 0, to=ua(UA_ERIN),
        note='mtx_start_recovery(op, auth, key, origin): from = the guardian, to = the subject; finish_recovery(subject) '
             'after 172,800 s')
-key_op('cancel_recovery', 'cancel_recovery', erin, ua(UA_ERIN), b'', 3, note='mtx_cancel_recovery(op, auth): no params')
+key_op('cancel_recovery', 'cancel_recovery', erin, ua(UA_ERIN), b'', 4, note='mtx_cancel_recovery(op, auth): no params')
 
 
 def recovery_vectors():
@@ -313,11 +316,11 @@ MEASURED_STORAGE_BYTES = {
                      '16 B, record overhead 40 B (token ACCOUNT_STORAGE_BYTES; the fixed min == max of every holder)'),
     'uaBalance': (89, 'UA ledger record: key b"u" ‖ id 33 B, value u128 16 B, record overhead 40 B '
                       '(token UA_STORAGE_BYTES)'),
-    'subjectEd25519Ua': (130, 'subject account of a UA with one ed25519 key, no origin / guardian / recovery: key '
-                              'b"a" ‖ Borsh(Holder::Ua) 34 B, value Borsh(Subject) 56 B (keys 4 + 38, origins 4, '
-                              'guardian 1, recovery 1, key_nonce 8), record overhead 40 B; any subject record = 41 + '
-                              'Borsh(holder) + Borsh(subject) (token SUBJECT_RECORD_OVERHEAD, measured in `new`); '
-                              'a second ed25519 key +38 B (168 B, test ua_opened_lazily_relayer_pays_storage)'),
+    'subjectEd25519Ua': (131, 'subject account of a UA with one ed25519 key, no origin / guardian / recovery: key '
+                              'b"a" ‖ Borsh(Holder::Ua) 34 B, value Borsh(Subject) 57 B (keys 4 + 38, origins 4, '
+                              'guardian 1, recovery 1, key_nonce 8, policy 1), record overhead 40 B; any subject '
+                              'record = 41 + Borsh(holder) + Borsh(subject) (token SUBJECT_RECORD_OVERHEAD, measured in '
+                              '`new`); a second ed25519 key +38 B (169 B, test ua_opened_lazily_relayer_pays_storage)'),
 }
 SANDBOX_BYTE_COST = 10**19                          # near-sandbox protocol config storage_amount_per_byte (yocto)
 

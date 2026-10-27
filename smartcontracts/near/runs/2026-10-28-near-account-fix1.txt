@@ -1,0 +1,306 @@
+# smartcontracts/scripts/test.sh near (Task 5 fix 1: set_policy) at commit 87083646 + the fix 1 tree
+== test near
+check_no_authority: clean (3 paths)
+== build near
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.15s
+
+Modification timestamps of:
+
+• Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                  Size: 84.1 KB (84056 bytes)
+     - SHA-256 checksum hex : 1432e429804a4f90be8d6a02803b3b4b5e827784c3fabdc7cfdddeef6a62f0cb
+     - SHA-256 checksum bs58: 2MrARTPQhjWjgnb5GwykqQeeaexbeTsZNA1gb6JHRJSW
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.11s
+
+Modification timestamps of:
+
+• Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                  Size: 84.6 KB (84631 bytes)
+     - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
+     - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │    Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+ │     Finished `release` profile [optimized] target(s) in 3.46s
+
+Modification timestamps of:
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 474ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                  Size: 320.1 KB (320127 bytes)
+     - SHA-256 checksum hex : 9f822c5527d399f46ab8cfd45d16227b686129d9846be277fc7a499c96a56aac
+     - SHA-256 checksum bs58: Bjex5zSswM1WaYo25XPDWAEKez2qRzwnv4xqydkqMnLB
+    Finished cargo near build in 4s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.46s
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_common-335f21f109829737)
+
+running 1 test
+test holder::tests::borsh_and_display_match_the_vectors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/vectors.rs (target/debug/deps/vectors-ff83db571f5de39b)
+
+running 4 tests
+test metaop_vectors_match ... ok
+test native_id_forms ... ok
+test nep413_vectors_match ... ok
+test ua_of_matches_kinds_json_valid_rows ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+
+     Running tests/account.rs (target/debug/deps/account-94ef48b1242c1030)
+
+running 11 tests
+test access_key_signature_never_accepted ... mtx_set_guardian by f04ac429fc959dd4fa39088acb45692354d6505e24d18856a525ed10fcd7899f: 1.828 Tgas, ok false
+mtx_set_guardian by dev-20261027214508-85159928194708.test.near: 1.827 Tgas, ok false
+mtx_set_guardian by f04ac429fc959dd4fa39088acb45692354d6505e24d18856a525ed10fcd7899f: 1.879 Tgas, ok false
+ok
+test cancel_recovery_by_key ... mtx_set_guardian by dev-20261027214512-41086737129871.test.near: 2.420 Tgas, ok true
+mtx_start_recovery by dev-20261027214512-41086737129871.test.near: 2.230 Tgas, ok false
+mtx_start_recovery by dev-20261027214512-41086737129871.test.near: 2.642 Tgas, ok true
+mtx_cancel_recovery by dev-20261027214512-41086737129871.test.near: 2.376 Tgas, ok true
+finish_recovery by dev-20261027214513-22951696859200.test.near: 1.722 Tgas, ok false
+mtx_cancel_recovery by dev-20261027214512-41086737129871.test.near: 2.087 Tgas, ok false
+ok
+test ed25519_secp256k1_passkey_each_accepted ... mtx_set_guardian by dev-20261027214516-90458254505537.test.near: 2.424 Tgas, ok true
+ed25519 UA opened by mtx_set_guardian: record 179 B, storage_needed 1790000000000000000000
+mtx_set_guardian by dev-20261027214516-90458254505537.test.near: 2.369 Tgas, ok true
+mtx_set_guardian by dev-20261027214516-90458254505537.test.near: 2.452 Tgas, ok true
+secp256k1 UA opened by mtx_set_guardian: record 211 B, storage_needed 2110000000000000000000
+mtx_set_guardian by dev-20261027214516-90458254505537.test.near: 2.400 Tgas, ok true
+mtx_set_guardian by dev-20261027214516-90458254505537.test.near: 22.180 Tgas, ok true
+passkey UA opened by mtx_set_guardian: record 269 B, storage_needed 2690000000000000000000
+mtx_set_guardian by dev-20261027214516-90458254505537.test.near: 22.118 Tgas, ok true
+ok
+test msig_native_member_only_as_predecessor ... mtx_set_guardian by dev-20261027214522-52162689668010.test.near: 2.212 Tgas, ok false
+mtx_set_guardian by dev-20261027214522-52162689668010.test.near: 2.229 Tgas, ok false
+mtx_set_guardian by dev-20261027214523-16341516402877.test.near: 2.483 Tgas, ok true
+msig UA (near-account + ed25519) opened: storage_needed 1750000000000000000000
+mtx_set_guardian by dev-20261027214522-52162689668010.test.near: 2.150 Tgas, ok false
+mtx_set_guardian by dev-20261027214523-16341516402877.test.near: 2.431 Tgas, ok true
+ok
+test ninth_key_refused ... add_key_native by dev-20261027214530-70346133451761.test.near: 2.700 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.725 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.730 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.736 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.740 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.745 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.750 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.755 Tgas, ok true
+add_key_native by dev-20261027214530-70346133451761.test.near: 2.228 Tgas, ok false
+mtx_add_key by dev-20261027214529-73679111842181.test.near: 2.147 Tgas, ok false
+Near holder record, 8 ed25519 keys: 412 B
+mtx_set_guardian by dev-20261027214529-73679111842181.test.near: 2.400 Tgas, ok true
+ok
+test origin_and_rp_checked ... mtx_set_guardian by dev-20261027214539-77401585795248.test.near: 22.167 Tgas, ok true
+mtx_set_guardian by dev-20261027214539-77401585795248.test.near: 1.852 Tgas, ok false
+mtx_add_origin by dev-20261027214539-77401585795248.test.near: 22.120 Tgas, ok true
+mtx_set_guardian by dev-20261027214539-77401585795248.test.near: 22.122 Tgas, ok true
+mtx_set_guardian by dev-20261027214539-77401585795248.test.near: 1.833 Tgas, ok false
+mtx_set_guardian by dev-20261027214539-77401585795248.test.near: 1.894 Tgas, ok false
+mtx_remove_origin by dev-20261027214539-77401585795248.test.near: 22.121 Tgas, ok true
+mtx_remove_origin by dev-20261027214539-77401585795248.test.near: 21.833 Tgas, ok false
+ok
+test recovery_after_delay_only ... mtx_set_guardian by dev-20261027214544-89197723557609.test.near: 2.420 Tgas, ok true
+mtx_start_recovery by dev-20261027214544-89197723557609.test.near: 2.230 Tgas, ok false
+mtx_start_recovery by dev-20261027214544-89197723557609.test.near: 2.642 Tgas, ok true
+finish_recovery by dev-20261027214545-47240691172454.test.near: 1.728 Tgas, ok false
+finish_recovery by dev-20261027214545-47240691172454.test.near: 2.011 Tgas, ok true
+mtx_set_guardian by dev-20261027214544-89197723557609.test.near: 1.815 Tgas, ok false
+mtx_set_guardian by dev-20261027214544-89197723557609.test.near: 2.370 Tgas, ok true
+ok
+test secp256k1_high_s_refused ... mtx_set_guardian by dev-20261027214549-20305336631354.test.near: 2.171 Tgas, ok false
+mtx_set_guardian by dev-20261027214549-20305336631354.test.near: 2.441 Tgas, ok true
+ok
+test set_policy_by_key_op ... mtx_set_policy by dev-20261027214554-32438957088673.test.near: 2.414 Tgas, ok true
+mtx_set_guardian by dev-20261027214554-32438957088673.test.near: 2.373 Tgas, ok true
+mtx_set_policy by dev-20261027214554-32438957088673.test.near: 2.090 Tgas, ok false
+mtx_set_policy by dev-20261027214554-32438957088673.test.near: 1.702 Tgas, ok false
+mtx_set_policy by dev-20261027214554-32438957088673.test.near: 2.371 Tgas, ok true
+ok
+test ua_opened_lazily_relayer_pays_storage ... ed25519 UA opened by mtx_add_key, 2 keys: 169 B record = 1690000000000000000000 yocto
+mtx_add_key by dev-20261027214600-82867747308134.test.near: 2.739 Tgas, ok false
+mtx_add_key by dev-20261027214600-82867747308134.test.near: 3.149 Tgas, ok true
+mtx_add_key by dev-20261027214600-82867747308134.test.near: 2.537 Tgas, ok false
+mtx_remove_key by dev-20261027214600-82867747308134.test.near: 2.371 Tgas, ok true
+ok
+test wrong_network_or_contract_refused ... mtx_set_guardian by dev-20261027214607-25033869872696.test.near: 1.707 Tgas, ok false
+mtx_set_guardian by dev-20261027214607-25033869872696.test.near: 1.704 Tgas, ok false
+mtx_set_guardian by dev-20261027214607-25033869872696.test.near: 1.706 Tgas, ok false
+mtx_set_guardian by dev-20261027214607-25033869872696.test.near: 1.715 Tgas, ok false
+mtx_set_guardian by dev-20261027214607-25033869872696.test.near: 1.702 Tgas, ok false
+mtx_set_guardian by dev-20261027214607-25033869872696.test.near: 1.692 Tgas, ok false
+mtx_set_guardian by dev-20261027214607-25033869872696.test.near: 2.422 Tgas, ok true
+ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 64.14s
+
+     Running tests/p256_spike.rs (target/debug/deps/p256_spike-7b8ac62e93a6eb78)
+
+running 2 tests
+test p256_two_passkey_relay_fee_fits_300_tgas ... wasm 84056 B
+success true
+total_gas_burnt 42271257293573 gas = 42.271 Tgas (limit 300 Tgas)
+receipt 0 (function call) burnt 41952181346755 gas
+tx -> receipt conversion burnt 319075946818 gas
+verify a (vector): 19990664296563 gas = 19.991 Tgas
+verify b (generated): 20005492005195 gas = 20.005 Tgas
+ok
+test webauthn_vector_accepted ... wasm 84056 B
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.08s
+
+     Running tests/token.rs (target/debug/deps/token-c7f9bc9147ffacdc)
+
+running 10 tests
+test check_no_authority_finds_forbidden_api ... ok
+test ft_transfer_call_resolves_as_nep141 ... storage_deposit by dev-20261027214615-43711688100038.test.near: 1953195624850 = 1.953 Tgas, ok true
+mint by dev-20261027214614-91050775405387.test.near: 2064043749620 = 2.064 Tgas, ok true
+ft_transfer_call by dev-20261027214615-43711688100038.test.near: 6610961805884 = 6.611 Tgas, ok true
+ft_transfer_call by dev-20261027214615-43711688100038.test.near: 1749817530388 = 1.750 Tgas, ok false
+ft_transfer_call by dev-20261027214615-43711688100038.test.near: 6483334719671 = 6.483 Tgas, ok true
+ok
+test ft_transfer_registered_needs_one_yocto ... storage_deposit by dev-20261027214621-64939264886982.test.near: 1953195624850 = 1.953 Tgas, ok true
+mint by dev-20261027214620-51194343833212.test.near: 2064007548356 = 2.064 Tgas, ok true
+storage_deposit by dev-20261027214621-64939264886982.test.near: 1957755624850 = 1.958 Tgas, ok true
+ft_transfer by dev-20261027214621-64939264886982.test.near: 1735478123605 = 1.735 Tgas, ok false
+ft_transfer by dev-20261027214621-64939264886982.test.near: 2181843248605 = 2.182 Tgas, ok false
+ft_transfer by dev-20261027214621-64939264886982.test.near: 2272476397872 = 2.272 Tgas, ok true
+ok
+test ft_transfer_unregistered_auto_registers ... storage_deposit by dev-20261027214626-83225032727837.test.near: 1953195624850 = 1.953 Tgas, ok true
+mint by dev-20261027214625-49176632332707.test.near: 2064043749620 = 2.064 Tgas, ok true
+ft_transfer by dev-20261027214626-83225032727837.test.near: 2279003240512 = 2.279 Tgas, ok false
+ft_transfer by dev-20261027214626-83225032727837.test.near: 3028783729038 = 3.029 Tgas, ok true
+auto-register: alice spent 1731424422903800000000 yocto (min 1250000000000000000000 + fees)
+ok
+test mint_admin_only ... storage_deposit by dev-20261027214630-86897051548698.test.near: 1953195624850 = 1.953 Tgas, ok true
+mint by dev-20261027214630-86897051548698.test.near: 2108685177715 = 2.109 Tgas, ok false
+mint by dev-20261027214629-73374633272019.test.near: 2063470978742 = 2.063 Tgas, ok true
+ok
+test storage_bounds_min_equals_max_equals_measured ... storage_deposit by dev-20261027214634-69677085093538.test.near: 1958266329349 = 1.958 Tgas, ok true
+storage_deposit by dev-20261027214634-69677085093538.test.near: 1957755624850 = 1.958 Tgas, ok true
+mint by dev-20261027214633-56009240120439.test.near: 2068603749620 = 2.069 Tgas, ok true
+transfer_to_ua by dev-20261027214634-69677085093538.test.near: 3158474106804 = 3.158 Tgas, ok true
+storage_byte_cost 10000000000000000000 yocto/byte (protocol config)
+record account (NEP-145 registration, 64-char id): 125 B, deposit 1250000000000000000000 yocto
+record ua_balance (UA ledger entry): 89 B, deposit 890000000000000000000 yocto
+ok
+test storage_unregister_registered_panics_force_included ... storage_deposit by dev-20261027214638-34042597715084.test.near: 1953195624850 = 1.953 Tgas, ok true
+mint by dev-20261027214637-71485045761577.test.near: 2062986242756 = 2.063 Tgas, ok true
+storage_unregister by dev-20261027214638-34042597715084.test.near: 2178918686341 = 2.179 Tgas, ok false
+storage_unregister by dev-20261027214638-34042597715084.test.near: 2180259245896 = 2.180 Tgas, ok false
+storage_unregister by dev-20261027214638-34042597715084.test.near: 2180195808085 = 2.180 Tgas, ok false
+storage_unregister by dev-20261027214639-38243940318337.test.near: 1810887773287 = 1.811 Tgas, ok true
+ok
+test storage_withdraw_positive_panics ... storage_deposit by dev-20261027214644-87831593532433.test.near: 1953195624850 = 1.953 Tgas, ok true
+storage_withdraw by dev-20261027214644-87831593532433.test.near: 2177717244703 = 2.178 Tgas, ok false
+storage_withdraw by dev-20261027214644-87831593532433.test.near: 1812515443894 = 1.813 Tgas, ok true
+ok
+test token_refuses_transfer_to_self ... storage_deposit by dev-20261027214648-74286576065634.test.near: 1953195624850 = 1.953 Tgas, ok true
+mint by dev-20261027214647-20100048447439.test.near: 2064043749620 = 2.064 Tgas, ok true
+ft_transfer by dev-20261027214648-74286576065634.test.near: 2118187162462 = 2.118 Tgas, ok false
+ft_transfer by dev-20261027214648-74286576065634.test.near: 2118187162462 = 2.118 Tgas, ok false
+ft_transfer_call by dev-20261027214648-74286576065634.test.near: 2132184783109 = 2.132 Tgas, ok false
+ft_transfer_call by dev-20261027214648-74286576065634.test.near: 2132184783109 = 2.132 Tgas, ok false
+mint by dev-20261027214647-20100048447439.test.near: 2129943545476 = 2.130 Tgas, ok false
+ok
+test transfer_to_ua_credits_ua_ledger ... storage_deposit by dev-20261027214654-99623170145048.test.near: 1953195624850 = 1.953 Tgas, ok true
+mint by dev-20261027214653-52251831502760.test.near: 2064043749620 = 2.064 Tgas, ok true
+transfer_to_ua by dev-20261027214654-99623170145048.test.near: 2188369721647 = 2.188 Tgas, ok false
+transfer_to_ua by dev-20261027214654-99623170145048.test.near: 3150212421117 = 3.150 Tgas, ok true
+transfer_to_ua new record: alice spent 1383567292111700000000 yocto (UA record 890000000000000000000 + fees)
+transfer_to_ua by dev-20261027214654-99623170145048.test.near: 1735034782411 = 1.735 Tgas, ok false
+transfer_to_ua by dev-20261027214654-99623170145048.test.near: 2181399907411 = 2.181 Tgas, ok false
+transfer_to_ua by dev-20261027214654-99623170145048.test.near: 2535573227905 = 2.536 Tgas, ok true
+ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 44.75s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_spike_p256-36c86ba7437a8ac4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_test_receiver-7a629df9825137bc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_token-2b9ae70fd0eeaf5b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_common
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_spike_p256
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_token
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0

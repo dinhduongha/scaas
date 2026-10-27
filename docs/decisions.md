@@ -5401,7 +5401,7 @@ storage call; the entry signatures stay, only the deposit check changes.
 **Rule.** Each NEAR token keeps one subject record per `Holder` (prefix `a`): `keys` (≤ 8 `KeyRecord { kind u16,
 key_data }` = the key's UA kind and canonical key data: ed25519 `0x0102` 32 B, secp256k1 `0x0108` 64 B,
 webauthn-p256 `0x0100` `x ‖ y ‖ rpIdHash` 96 B, msig `0x0120`), `origins` (≤ 8, ≤ 128 B each), `guardian`
-(`Option<Holder>`), `recovery` (`key`, `origin`, `ready_at`) and `key_nonce`. Signatures are checked against these
+(`Option<Holder>`), `recovery` (`key`, `origin`, `ready_at`), `key_nonce` and `policy` (u8). Signatures are checked against these
 records only (spec §3.3, R7): ed25519 by `env::ed25519_verify` over the NEP-413 hash, secp256k1 by `env::ecrecover`
 over the op digest (malleability flag set, recovery id 0 / 1), P-256 by `webauthn::verify` with challenge = the op
 digest — never a NEAR access key, and not the `ua_msg` tagging of accounts.md CTR-UA-12 (spec §3.5 and the Task 3
@@ -5413,7 +5413,7 @@ vectors fix the family form). A `Ua` id opens lazily on its first signed op when
 `Holder` signing with its own records) signs `mtx_start_recovery`; anyone calls `finish_recovery(subject)` after
 `RECOVERY_DELAY_S` = 172,800 s, which replaces every key and bumps the key nonce; a current key cancels. Storage: the
 record's growth × `env::storage_byte_cost()` from the attached deposit, the excess refunded; a record = 41 B +
-Borsh(holder) + Borsh(subject), measured in `new` (one ed25519 UA key: 130 B). `*_check(caller, op, auth, params…)`
+Borsh(holder) + Borsh(subject), measured in `new` (one ed25519 UA key: 131 B with the `policy` byte, NET-NEAR-05). `*_check(caller, op, auth, params…)`
 takes the predecessor explicitly (a view has none). Status: BUILT (near-algorand Task 5). Controller call 2026-10-28,
 owner may override.
 **Why.** Reading keys from another contract is asynchronous (spec §3.1), and access keys are unreadable and rotatable
@@ -5441,6 +5441,37 @@ transaction's 300 Tgas without assuming a chain's own higher limit (spec §3.5).
 **Cost if wrong.** A larger cap needs cheaper P-256 or a smaller per-member mix; the constant and the Task 9 test
 change.
 **Source.** near-algorand Task 5 report; `smartcontracts/near/runs/2026-10-28-p256-spike.txt`; spec §3.3, §3.5.
+
+<a id="NET-NEAR-05"></a>
+### NET-NEAR-05 — NEAR POLICY_PASSKEY_FOR_VALUE set by a set_policy key-op action
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-05 · superseded-by: —
+
+**Rule.** The subject record carries `policy: u8`; bit `POLICY_PASSKEY_FOR_VALUE` = 1 (NET-ALL-23 item 3). It is set
+or cleared by the key-op action `set_policy`, entry `mtx_set_policy(op, auth, policy)` (+ `mtx_set_policy_check`): no
+new op code — op code 10 (`OP_SET_GUARDIAN`, the account-settings key op), signed parameters `[KEYOP_SET_POLICY = 6,
+policy]` (action byte ‖ policy byte, bound by `extra = sha256(…)`, as Solana's `SET_POLICY` key op), the signer's key
+nonce consumed. Any current key may sign it, a wallet key included; unknown bits are refused. Enforcement on value ops
+(pay, trade, mandate setup) is Task 6 (ruling R8); key ops stay open to wallet keys. Status: BUILT (near-algorand
+Task 5 fix 1). Controller call 2026-10-28, owner may override.
+**Why.** NET-ALL-23 sets the bit "by a key operation" (Solana `SmartKeyAccount.policy`, Sui `Keys.policy`); the op
+codes 0–15 are fixed for both families. The action byte cannot collide with a `set_guardian` preimage (Borsh
+`Option<Holder>` is 1 byte or ≥ 34 bytes), and each entry checks its own preimage.
+**Cost if wrong.** A dedicated op code: a vector regeneration and one entry's op check.
+**Source.** near-algorand Task 5 report (fix 1); docs/networks/README.md NET-ALL-23.
+
+<a id="NET-NEAR-06"></a>
+### NET-NEAR-06 — NEAR key records: lengths checked, no on-curve or small-order check (accepted)
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-06 · superseded-by: —
+
+**Rule.** A `KeyRecord` added by `mtx_add_key`, `add_key_native` or recovery is checked for its kind's length (msig:
+the full key-data grammar) and a non-native-space UA id, not for ed25519 small order / canonical `y` nor for P-256 /
+secp256k1 points on the curve (the EVM registry's key-validation rule). Accepted: a bad key never verifies, and only
+the subject's own already-authorised key op (or its guardian's recovery) can add one, so only that subject is
+affected; a lazily opened UA needs a valid signature by its key. Status: BUILT (near-algorand Task 5). Controller
+call 2026-10-28, owner may override.
+**Why.** The curve checks cost wasm gas on every add and protect nobody but the adder.
+**Cost if wrong.** Add the checks in `KeyRecord::validate` (P-256 through the `p256` crate already linked).
+**Source.** near-algorand Task 5 report, concern 3.
 
 ## 36. Clients — signers and clientkeys
 

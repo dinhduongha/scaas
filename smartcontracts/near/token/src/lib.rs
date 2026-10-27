@@ -17,7 +17,8 @@ mod account;
 mod ft;
 mod storage;
 pub use account::{
-    record_bytes, Check, Recovery, Subject, MAX_KEYS, MAX_ORIGINS, RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
+    record_bytes, Check, Recovery, Subject, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
+    RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
 };
 pub use storage::{ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
 

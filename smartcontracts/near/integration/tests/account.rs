@@ -12,7 +12,7 @@ use scaas_near_common::metaop::*;
 use scaas_near_common::ua::{self, KeyRecord, KIND_ED25519, KIND_MSIG, KIND_NEAR_ACCOUNT};
 use scaas_near_common::webauthn::b64url;
 use scaas_near_common::{Auth, Holder};
-use scaas_near_token::{record_bytes, Check, Subject, RECOVERY_DELAY_S};
+use scaas_near_token::{record_bytes, Check, Subject, KEYOP_SET_POLICY, POLICY_PASSKEY_FOR_VALUE, RECOVERY_DELAY_S};
 use sha2::{Digest, Sha256};
 
 const TOKEN_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_token/scaas_near_token.wasm");
@@ -231,8 +231,8 @@ async fn ua_opened_lazily_relayer_pays_storage() {
     let want = Subject { keys: vec![erin.key(), k2.clone()], key_nonce: 1, ..Default::default() };
     let bytes = record_bytes(&h, &want);
     // near-vectors.json storage.records.subjectEd25519Ua (one key) and +38 B per ed25519 key
-    assert_eq!(record_bytes(&h, &Subject { keys: vec![erin.key()], ..Default::default() }), 130);
-    assert_eq!(bytes, 168);
+    assert_eq!(record_bytes(&h, &Subject { keys: vec![erin.key()], ..Default::default() }), 131);
+    assert_eq!(bytes, 169);
     let cost = t.byte_cost().await;
     println!("ed25519 UA opened by mtx_add_key, 2 keys: {bytes} B record = {} yocto", bytes as u128 * cost);
     assert_eq!(c, Check { error: None, storage_needed: (bytes as u128 * cost).into() });
@@ -500,4 +500,31 @@ async fn wrong_network_or_contract_refused() {
     let mut op = base;
     op.relayer = Some(t.relayer.id().as_str().parse().unwrap());
     t.ok(&t.relayer, "mtx_set_guardian", &op, &erin.sign(&op, ORIGIN), &p).await;
+}
+
+#[tokio::test]
+async fn set_policy_by_key_op() {
+    let t = setup().await;
+    let erin = Signer::ed("erin"); // a wallet-kind key (not a passkey)
+    let h = erin.ua();
+    let set = |nonce, p: u8| {
+        let params = b(&p);
+        (t.op(OP_SET_GUARDIAN, &h, &h, nonce, &[KEYOP_SET_POLICY, p]), params)
+    };
+    let (op, p) = set(0, POLICY_PASSKEY_FOR_VALUE);
+    let c = t.ok(&t.relayer, "mtx_set_policy", &op, &erin.sign(&op, ORIGIN), &p).await;
+    let got = t.subject(&h).await.unwrap();
+    assert_eq!((got.policy, got.key_nonce), (POLICY_PASSKEY_FOR_VALUE, 1));
+    assert_eq!(c.storage_needed.0, record_bytes(&h, &got) as u128 * t.byte_cost().await);
+    // with the bit set a wallet key still authorises key ops (enforcement on value ops: Task 6)
+    t.set_guardian(&t.relayer, &erin, &h, 1, Some(t.near(&t.bob))).await;
+    // unknown bits refused; the policy bound by extra: a set_guardian op does not set it
+    let (op, p) = set(2, 2);
+    t.refused(&t.relayer, "mtx_set_policy", &op, &erin.sign(&op, ORIGIN), &p, "unknown policy bit").await;
+    let (mut op, p) = set(2, 0);
+    op.extra = sha(&b(&None::<Holder>));
+    t.refused(&t.relayer, "mtx_set_policy", &op, &erin.sign(&op, ORIGIN), &p, "extra is not sha256").await;
+    let (op, p) = set(2, 0);
+    t.ok(&t.relayer, "mtx_set_policy", &op, &erin.sign(&op, ORIGIN), &p).await;
+    assert_eq!(t.subject(&h).await.unwrap().policy, 0);
 }

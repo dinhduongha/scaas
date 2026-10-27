@@ -18,6 +18,11 @@ pub const MAX_KEYS: usize = 8;
 pub const MAX_ORIGINS: usize = 8;
 pub const MAX_ORIGIN_LEN: usize = 128;
 pub const RECOVERY_DELAY_S: u64 = 172_800;
+/// NET-ALL-23 item 3: value ops need a passkey signature (enforced by the value entries, Task 6). Set by the
+/// `set_policy` key-op action: op code `OP_SET_GUARDIAN` (the account-settings op, no new code), signed parameters
+/// `[KEYOP_SET_POLICY, policy]` (action byte ‖ policy byte, as Solana's `SET_POLICY` key op).
+pub const POLICY_PASSKEY_FOR_VALUE: u8 = 1;
+pub const KEYOP_SET_POLICY: u8 = 6;
 /// Bytes of one subject record = this + Borsh(Holder) + Borsh(Subject): key prefix `a` (1) + NEAR's per-record
 /// overhead (40). `new` measures one record against it.
 pub const SUBJECT_RECORD_OVERHEAD: u64 = 41;
@@ -40,6 +45,8 @@ pub struct Subject {
     pub guardian: Option<Holder>,
     pub recovery: Option<Recovery>,
     pub key_nonce: u64,
+    /// Policy bits (`POLICY_PASSKEY_FOR_VALUE`).
+    pub policy: u8,
 }
 
 /// `*_check` result (NEAR has no write simulation): the entry's error, or the deposit it needs (yoctoNEAR).
@@ -104,6 +111,7 @@ pub(crate) enum Action {
     AddOrigin(String),
     RemoveOrigin(String),
     SetGuardian(Option<Holder>),
+    SetPolicy(u8),
     StartRecovery(KeyRecord, Option<String>),
     CancelRecovery,
 }
@@ -116,6 +124,7 @@ impl Action {
             Action::AddOrigin(o) => (OP_ADD_ORIGIN, borsh::to_vec(o)),
             Action::RemoveOrigin(o) => (OP_REMOVE_ORIGIN, borsh::to_vec(o)),
             Action::SetGuardian(g) => (OP_SET_GUARDIAN, borsh::to_vec(g)),
+            Action::SetPolicy(p) => (OP_SET_GUARDIAN, Ok(vec![KEYOP_SET_POLICY, *p])),
             Action::StartRecovery(k, o) => (OP_START_RECOVERY, borsh::to_vec(&(k, o))),
             Action::CancelRecovery => (OP_CANCEL_RECOVERY, Ok(vec![])),
         };
@@ -129,6 +138,7 @@ impl Action {
             Action::AddOrigin(..) => "add_origin",
             Action::RemoveOrigin(..) => "remove_origin",
             Action::SetGuardian(..) => "set_guardian",
+            Action::SetPolicy(..) => "set_policy",
             Action::StartRecovery(..) => "start_recovery",
             Action::CancelRecovery => "cancel_recovery",
         }
@@ -254,6 +264,12 @@ impl Token {
                 s.guardian = g.clone();
                 s.recovery = None;
             }
+            Action::SetPolicy(p) => {
+                if p & !POLICY_PASSKEY_FOR_VALUE != 0 {
+                    return Err("unknown policy bit");
+                }
+                s.policy = *p;
+            }
             Action::CancelRecovery => {
                 s.recovery.take().ok_or("no recovery pending")?;
             }
@@ -343,6 +359,19 @@ impl Token {
         #[serializer(borsh)] guardian: Option<Holder>,
     ) {
         self.key_op(&op, &auth, Action::SetGuardian(guardian));
+        self.charge_storage();
+    }
+
+    /// `set_policy` key-op action (op code `OP_SET_GUARDIAN`, `extra = sha256([KEYOP_SET_POLICY, policy])`); any
+    /// current key may sign it, a wallet key included.
+    #[payable]
+    pub fn mtx_set_policy(
+        &mut self,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+        #[serializer(borsh)] policy: u8,
+    ) {
+        self.key_op(&op, &auth, Action::SetPolicy(policy));
         self.charge_storage();
     }
 
@@ -454,6 +483,17 @@ impl Token {
         #[serializer(borsh)] guardian: Option<Holder>,
     ) -> Check {
         self.check(&caller, &op, &auth, Action::SetGuardian(guardian))
+    }
+
+    #[result_serializer(borsh)]
+    pub fn mtx_set_policy_check(
+        &self,
+        #[serializer(borsh)] caller: AccountId,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+        #[serializer(borsh)] policy: u8,
+    ) -> Check {
+        self.check(&caller, &op, &auth, Action::SetPolicy(policy))
     }
 
     #[result_serializer(borsh)]
