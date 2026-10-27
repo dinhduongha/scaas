@@ -1,3 +1,41 @@
+## Session 2026-10-27 / 28 (metatx split T1–T19, CI fixed, NEAR + Algorand spec + plan + T1–T6) — resume here
+
+**State (owner paused 2026-10-28 to shut down):** nothing running; both worktrees clean.
+- `main` = `1e28f850`, **ahead of origin by 2** (NEAR + Algorand spec `387583e9`, plan `1e28f850`; not pushed). CI on
+  `main` green since `a01357a9` (forge pin v1.8.5 `e5e3a46d`, e2e anvil amsterdam `123e947f`, fixed remappings
+  `a01357a9` — OZ's nested lib/ had leaked into solc metadata and moved every CREATE2 address / KAT).
+- Branch **`metatx-split`** (worktree `.claude/worktrees/metatx-split`) at `a3a02a1c`: **Tasks 1–19 complete**, each
+  task-reviewed clean. Not merged, not pushed (merge blocker cleared: `ERC1271_FLOOR` raised in T17). Ledger:
+  `.superpowers/sdd/2026-10-27-metatx-split/progress.md` (every ruling, deferred item, "Final-review item").
+- Branch **`near-algorand`** (worktree `.claude/worktrees/near-algorand`) at `25f98847`, rebased onto `metatx-split`
+  `a3a02a1c` (backup `backup/near-algorand-pre-rebase`): **Tasks 1–6 complete** (P-256 gate PASS 42.27 / 300 Tgas, UA
+  kinds 0x0017 / 0x0018, vector generators, NEAR token, accounts / UA, metatx). Ledger:
+  `.superpowers/sdd/2026-10-28-near-algorand/progress.md` (pre-flight rulings R1–R12).
+
+**Next (in order, subagent-driven as before):**
+1. `metatx-split` **Task 20** (resumable gate runner + full branch gate; affected steps only, no full pqz-core gate) —
+   was stopped before writing anything; re-dispatch from `task-20-brief.md`.
+2. `metatx-split` **final whole-branch review** (opus) → ONE fix wave (folds the ledger's "Final-review item" lines and
+   the T19 minors) → scoped re-review → **owner rulings list** → finishing (merge + push only on the owner's go).
+3. `near-algorand` **Task 7** (NEAR mandate) — stopped before writing anything; re-dispatch from `task-7-brief.md`;
+   then Tasks 8–22 (owner 2026-10-28: run automatically, no plan review; merge / push need the owner's go). Rebase onto
+   `metatx-split` again after its final fix wave.
+
+**Owner rulings already given (2026-10-27 / 28):** Solana CTR-MTX-27 = static `relay_fee_<entry>` wrappers; NEAR +
+Algorand right after T16 in parallel, same feature set, storage / MBR paid by the relayer, standard-compatible where
+possible, "choose the best option yourself" for the rest, plan without review.
+
+**Controller calls to put on the owner rulings list (owner may override):** relay-fee router refuses code-less targets
+(EVM) / non-executable / unknown targets everywhere; `RelayFeePaid.payee` is bytes32; Soroban pay-ref set keyed
+`(from, pay_ref)` + payer-signed salt; Solana router never forwards signer privileges, wrapper `ref` lane-agnostic;
+Cosmos router refuses `Relay` while it has an admin; TON releases the fee only on a `RelayAck` from known SCaaS code
+(no arbitrary TON targets), fees from config params; ua-rs / ua-qt stay hash + vector libraries (clientkeys builds);
+EVM node UA path (uaPayMeta / uaRelay) deferred to TODO; NEAR `mtx_pay` takes any lane (NET-NEAR-07); NEAR recovery per
+CTR-ACC-03 (adds a key, guardian finishes) — Solana's replace-all recovery flagged for the final review.
+
+**Outside this repo:** the `dms_blockchain_bridge` portal bundle needs a rebuild (new clientkeys exports); the 7622
+testnet `UARegistry` needs a redeploy at the next reset (near-algorand T2 kinds).
+
 ## Session 2026-10-26 / 27 (8d part 2b merged, pqz-core docs, contracts review part 2 + its fix round merged) — resume here
 
 **State:** `main` pushed up to `3fd2e384` (owner 2026-10-27, "push đi"). Merged today: `pqz-8d2b` (`6fd75c83`) and
