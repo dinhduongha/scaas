@@ -1,0 +1,555 @@
+# Metatx split (variant A), with `mtxPayMeta` / `uaPayMeta` and `MtxRelayFee` — design
+
+**Status:** spec. Nothing is built. Written 2026-10-27 on branch `metatx-split` (from `main` `0c191232`). The owner
+skipped the question round ("viết spec luôn", 2026-10-27), so this spec is written from the code on `main`, the
+2026-10-21 spike and the owner's recorded rulings. Every choice marked **controller call** is the controller's; the
+owner may override it. The open questions in §13 are the only ones whose answer would change what gets built.
+
+**Work item.** TODO §00 "Now" item 5: the metatx split together with `mtxPayMeta` / `uaPayMeta`
+([CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26)), then `MtxRelayFee`
+([CTR-MTX-27](../../contracts/metatx.md#CTR-MTX-27)), with or before UA-7. After it: UA-8, fs3 Task 12 → 6 → 13 → 14,
+UA-7, governance code.
+
+## 0. Owner rulings this spec rests on (not reopened)
+
+| Date | Ruling | Where recorded |
+|---|---|---|
+| 2026-10-20 | The meta-tx code is split anyway ("kiểu gì cũng phải tách"), because governance code is coming to every factory-made contract; governance goes to a library or module. | TODO "Metatx split" |
+| 2026-10-21 | **Variant A:** a DELEGATECALL library; the token keeps every entry point. The library gets only the envelope's data hash (`keccak256(data)`), the selector and the fee-basis word, never `data` itself (else a ≈ 340 KB op 7 pays ≈ +1 M gas). The self-call stays in the token. | TODO, HANDOFF 2026-10-21 |
+| 2026-10-21 | Timing: after 5h part B (done), before fs3 Tasks 12 / 6 / 13 and before governance code. Purpose: room for governance code in the shared base; the binding kind is `UnderlyingPqzToken`. | TODO, HANDOFF |
+| 2026-10-11, 2026-10-21 | Code size: no micro-optimisation. The ceiling is 64 KiB (65,536 B). The size gate's ratchet baseline records sizes ([CTR-TOK-24](../../contracts/token-wrappers.md#CTR-TOK-24)). | `size-baseline.json` comment |
+| 2026-10-20 | `MtxRule` stays as is (`feeClass = 0` = not relayable; `ABSOLUTE` / `AMOUNT` = the fee basis). | TODO `MtxRule` item, CTR-MTX-20 |
+| 2026-10-26 | CTR-MTX-26 as recorded: every token tier and every non-EVM family. | decisions.md CTR-MTX-26 |
+| 2026-10-26 | CTR-MTX-27 as recorded: a stateless router in `src/metatx/`, deployed by `DeployBase` through CREATE2, open to every relayer, public balances only, every token tier, non-EVM too (GRAM by escrow), PQ payers sign twice (option (a)), no budget mode. | decisions.md CTR-MTX-27 |
+| 2026-10-20 | Every state-changing `mtx*` is relayable; the outer fee may be 0. The native-coin `mtxWrapShield` is the one recorded exception (review C0-18, 2026-10-27). | CTR-MTX-19 Change lines |
+| 2026-10-21 | Never assume gas price 0 or a chain's own block limit: EIP-7825 (2^24 regular gas per transaction), EIP-7976 (calldata floor), EIP-8037 (state gas). | NET-EVM-06 |
+| 2026-10-25 | One rule for every chain kind. | memory, decisions |
+| 2026-10-21 | Ciphertexts stay in contract state. | CTR-PQZ-07 |
+| 2026-10-27 | `ROLL_MAX` is bounded on **both** relay paths: the largest multiple of 16 whose relayed full rollover stays ≤ 0.75 · 2^24 regular gas through `mtxExecute` and `uaExecute`. Today 96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`. | decisions.md CTR-PQZ-07 Change 2026-10-27 |
+| 2026-10-27 | PQZH option (A): on chain only the forms that fit one 2^24 transaction on both relay paths; at `n2048-kmax1024` single-key holders only, `slhdsa128s` the one excluded fee-UA kind on `uaExecute`. | decisions.md CTR-PQZ-11 Change lines |
+| standing | Decisions recorded in full; parameter sets named `n2048-kmax1024` style; library code hashes pinned in the release; no SELFDESTRUCT in any library; agents stop at the branch (merge / push only on the owner's go). | memory |
+
+## 1. Intent
+
+**Why.** Every token kind carries the whole meta-tx pipeline in its own bytecode: envelope checks, the EIP-712
+digest, signature and UA-registry authorization, the allowlist check, nonce lanes, fee amounts, for four signed
+structs. Governance code (the governance matrix, TODO) will go into the shared base and so into every kind.
+`UnderlyingPqzToken` is 61,519 B today (`size-baseline.json`), 4,017 B under the 65,536 B ceiling. The split moves
+the pipeline's checks into one library that every kind links, so the shared base has room again.
+
+**Goals.**
+1. One external library, `MtxPipelineLib`, holds the checks of every signed path of every token kind: steps 1–4 of
+   CTR-MTX-17 and the fee amount, on the address path and the UA path, for `MetaTransaction` and `MetaTransfer`, and the
+   signature checks of the trade and receiver-fee paths.
+2. Same behaviour: the same selectors, ABI, events, storage, digests and outcomes as today, with one recorded
+   exception (§3.8).
+3. `mtxPayMeta` / `uaPayMeta` on every `MetaTokenBase` kind (CTR-MTX-26), built on the split.
+4. `MtxRelayFee` and its executor (CTR-MTX-27), deployed by `DeployBase`.
+5. The node and the clients changed where these need it (§9).
+6. Every thin gas margin re-measured with the final bytecode, and every constant that follows from it re-pinned (§5).
+
+**Non-goals.**
+- Moving entry points, ABI decoding, balance moves, events, `nonReentrant` or the self-call out of the token (that is
+  variant B, not chosen).
+- A second PQZ meta-tx library (the spike's "A2"): the rule tables, `_isPqzOp`, `_batchable` and `mtxSelectors` stay
+  in the kinds (§3.6).
+- Changing `MtxRule`, any typehash, any domain, any selector, the transient slots or the storage layout.
+- Code-size work beyond the split itself.
+- The wallets (`SmartKeyAccount`, `MandateWallet`, `HederaMandateWallet`) and `SCaaSDex` linking the library (§3.7).
+- The non-EVM shapes of CTR-MTX-26 / -27 (own later items, §8).
+- Governance code itself.
+
+**Anti-goals** (the plan must show each does not happen):
+- A relayed path whose gas grows with the size of `data` because of the split: `data` is never passed to, copied for
+  or ABI-encoded for the library (§5.2 states the one bounded residual).
+- A second copy of any rule: one source for each check, compiled into the library for the tokens and inlined into
+  `MetaTxBase` for the wallets.
+- A library with state of its own, immutables, a constructor argument, SELFDESTRUCT, or a DELEGATECALL / CALLCODE to
+  any address that its own code does not name.
+- A direct (non-signed) path that touches the library: `transfer`, `transferToUA`, `wrap`, `mint`, `payWithFee`, the
+  PQZ / Zether direct ops keep today's gas (± dispatch).
+- An unpinned library in a release: every library in a release's link closure is in `Env.libs`.
+
+## 2. Today (code on `main` `0c191232`)
+
+- `MetaTxBase` (`src/metatx/MetaTxBase.sol`): the generic pipeline `_execute` (steps 1–7), `_checkEnvelope`,
+  `_checkCall`, `_useNonce`, `_selfCall`, the transient slots (`_GUARD`, `_SENDER`, `_TICKET`, `_BINDING`), the nonce
+  map (ERC-7201 `scaas.metatx`), the hooks `_mtxRule`, `_batchable`, `_chargeFee`, `_requireValidSignature`,
+  `_erc1271Gas`, `_selfSender`, `_envelopeBinding`. Inherited by every token and by `SmartKeyAccount` and
+  `MandateWallet`.
+- `ERC20MetaTx`: the fee in this token (`_chargeFee`, `_callFee`), the typed path (`_executeTransfer`,
+  `_checkTransfer`), the trade side (`mtxTrade`, `uaTrade`, `mtxCancelOrder`, `uaCancelOrder`, `mtxInvalidateNonces`,
+  `uaInvalidateNonces`), the UA ledger and the UA pipelines (`_uaExecute`, `_uaExecuteTransfer`, `_checkUATransfer`,
+  `_uaAuthorize`, `_requireNativeUASignature`, `_checkTo`, `uaCancelNonce`).
+- `MetaTokenBase`: the named builders (`mtxTransfer*`, `mtxExecuteWithFee`, `mtxPay`, `uaTransfer*`, `uaPay`,
+  `uaUnwrap`), receiver-pays (`mtxPayReceiverFee`, `uaPayReceiverFee`), `payWithFee*`, the Hedera branch of
+  `_requireValidSignature` / `_requireNativeUASignature` (`HederaLib`), `_erc1271Gas` (400,000 for a `SmartKeyAccount`
+  clone, else 50,000), the immutables `FACTORY`, `SMART_KEY_ACCOUNT_IMPL`, `_SMART_KEY_CLONE_CODEHASH`, `IS_HEDERA`.
+- The kinds override `_mtxRule`, `mtxSelectors`, `_uaAllowed`; the PQZ and Zether kinds also `_domainName`,
+  `_envelopeBinding`, `_uaEnvelopeBinding`, `_batchable`.
+- Linked libraries today: `AdminLib`, `HederaLib`, `TradeLib` (every kind), `UnderlyingLib` (underlying kinds),
+  `ZetherLib`, `PqzStateLib` / `PqzTransferLib` / `PqzBurnLib` / `PqzViewLib`. `OpenFactory._deploy` checks each
+  `Env.libs[i].codehash` against `Env.libCodeHashes[i]` before the release's CREATE2.
+- Sizes (runtime, baseline): `NoUnderlyingToken` 38,598; `UnderlyingToken` 48,524; `NoUnderlyingZetherToken` 48,605;
+  `NoUnderlyingPqzToken` 49,336; `UnderlyingZetherToken` 60,625; `UnderlyingPqzToken` 61,519.
+- The spike (branch `metatx-lib`, report `scratchpad/metatx-lib-report.md`) predates 5h part B, UA-6's final round and
+  the 2026-10-27 review fix round. Its library ran the self-call and took `data`. It lacks today's pool checks
+  (`_notPool`, C5-3), the id-0 refusal (C5-2), the unconditional binding write (C5-5) and `_pullShieldIn` (C2-5). Its
+  numbers are estimates for this design, not facts about it.
+
+## 3. The library boundary
+
+### 3.1 What moves, what stays
+
+| Moves into `MtxPipelineLib` (external functions, run by DELEGATECALL in the token's context) | Stays in the token |
+|---|---|
+| Step 1, the envelope: relayer binding, expiry, mode bits, nonce equality, `from == address(this)` refused (`SelfSender`) | Every entry point, its ABI decoding and its named-builder code |
+| Step 2: the EIP-712 struct hash of all four structs (from the data hash) and the digest over the domain separator the token passes | `keccak256(data)` (over the token's memory copy, as today) |
+| Step 2: the signature rule of the address path (`SigCheck.isValid`, the ERC-1271 cap by clone code hash, the HIP-632 branch through `HederaLib`) | The rule lookup: `_mtxRule(sel)` and `_uaAllowed(sel)` (virtual, per kind; `MtxRule` unchanged) |
+| Step 2: the UA authorization rule (`_uaAuthorize`: the registry's `requireAuthorized` for a derived id; for a native id the 0 / pool refusals, then `SigCheck.isValid7702` or HIP-632) | The fee-basis word read from `data` (`amountArg`), the selector and `data.length` |
+| Step 3: shape, allowlist verdict, fee class against mode, `supportedModes`; the UA path's `MetaTxUnknownOp` | `_envelopeBinding` / `_uaEnvelopeBinding` (virtual; envelope fields only) |
+| Step 3 of the typed paths: payee and fee-recipient checks, the pool refusals, the receiver check (`_checkTo`, `kindOf` on the registry), fee amount, balance against `have` | `_requireBatchable` (virtual `_batchable`) |
+| Step 4: the nonce write (the same ERC-7201 slot) | Step 5: the ticket, the self-call, the binding slot (`_selfCall`) and `nonReentrant` |
+| The fee amount and fee recipient of a self-call (`_callFee`), now in step 3 (§3.8) | Step 6: the fee move (`_transfer` / `_uaMove`) and the typed paths' value move |
+| The signature checks of `mtxTrade`, `uaTrade`, `mtxCancelOrder`, `uaCancelOrder`, `mtxInvalidateNonces`, `uaInvalidateNonces`, `mtxPayReceiverFee` (payee), `uaPayReceiverFee` (payee) — **controller call** (§13 Q3) | Step 7: every event; the UA ledger; `_poolMove`; `uaCancelNonce` (its direct `requireAuthorized`, the cancel-used set, `_bumpNonce`); `cancelNonce` |
+| The digest of the four digest views (`mtxDigest`, `uaDigest`, `mtxTransferDigest`, `uaTransferDigest`) | Every immutable: read by the token and passed in a `Ctx` |
+
+The library holds **no immutables and no storage of its own**. Everything that differs per kind, release or chain
+comes in `Ctx` from the token's own immutables. So one library serves every kind and every chain (controller call).
+
+### 3.2 Call interface
+
+File `src/metatx/MtxPipelineLib.sol` (name: controller call). Errors are the existing ones (`IMetaTx`,
+`IERC20MetaTx`, `IUALedger`, `FeePolicy`, `MetaTxLib`, `SigCheck`, `HederaLib`).
+
+```solidity
+library MtxPipelineLib {
+    /// The token's immutables, built once per call by `ERC20MetaTx._mtxCtx()` (the only place that builds it).
+    struct Ctx {
+        bytes32 domainSeparator;   // _domainSeparatorV4() of this clone (kind's domain name, chainid, clone, chain_uid)
+        address registry;          // _REGISTRY (0 = UA ledger off)
+        bytes32 skaCloneCodehash;  // _SMART_KEY_CLONE_CODEHASH (0 = none): ERC-1271 cap 400,000 for such a signer, else 50,000
+        bool hedera;               // IS_HEDERA
+    }
+
+    /// Every signed field of a MetaTransaction / UAMetaTransaction except `data`; `from` as an id (an address
+    /// zero-padded, MetaTxLib.pad). abi.encode of a padded id equals abi.encode of the address, so one struct hash
+    /// serves both typehashes.
+    struct Envelope {
+        bytes32 from; bytes32 dataHash; uint256 batch; uint256 nonce; uint256 validUntil;
+        uint32 mode; address relayer; uint256 fee; address feeRecipient;
+    }
+
+    /// What the token read from `data` and its own hooks. The rule as three scalars (MtxRule unchanged in MetaTxBase).
+    struct CallFacts {
+        bytes4 sel; uint256 len;                        // bytes4(data), data.length
+        uint8 feeClass; uint8 amountArg; uint32 staticLen;  // _mtxRule(sel)
+        uint256 basis;                                  // word amountArg of the arguments if present, else 0
+        bool uaAllowed;                                 // _uaAllowed(sel); read on the UA path only
+    }
+
+    struct Out { bytes32 digest; uint256 fee; address feeTo; }
+
+    /// CTR-MTX-17 steps 1-4 and the fee amount, address path (ua = false) or UA path (ua = true).
+    function preCall(Ctx calldata c, Envelope calldata e, CallFacts calldata f, bool ua, bytes calldata auth)
+        external returns (Out memory);
+
+    /// CTR-MTX-23 steps 1-4 of the typed path. `t` in the UAMetaTransfer layout (ids); the address path passes padded
+    /// ids. `have` = balanceOf(from) (address path) or balanceOfUA(from) (UA path), read by the token before the call.
+    function preTransfer(Ctx calldata c, MetaTxLib.UAMetaTransfer calldata t, bool ua, uint256 have,
+        bytes calldata auth) external returns (Out memory);
+
+    /// The address path's signature rule (step 2 of every address-path signed struct, trade, receiver-fee payee).
+    function requireSignature(Ctx calldata c, address from, bytes32 digest, bytes calldata sig) external view;
+
+    /// The UA rule under `purpose` (metatx, trade, receiver-fee).
+    function authorize(Ctx calldata c, bytes32 from, bytes32 purpose, bytes32 digest, bytes calldata auth)
+        external view;
+
+    /// The digest views. typehash: METATX / UAMETATX.
+    function callDigest(bytes32 domainSeparator, bytes32 typehash, Envelope calldata e) external pure returns (bytes32);
+    function transferDigest(bytes32 domainSeparator, bool ua, MetaTxLib.UAMetaTransfer calldata t)
+        external pure returns (bytes32);
+}
+```
+
+Rules of the interface:
+- `external` with `calldata` parameters, so the library frame does not copy its arguments.
+- The token passes fixed-size words plus the signature or `auth`. It never passes `data`.
+- `preCall` and `preTransfer` write only the nonce slot `nonce[from][batch]` of `scaas.metatx`. The slot constant and
+  the storage struct are defined once, in `MtxPipelineLib`; `MetaTxBase._mtxStorage()` uses that definition.
+- The check bodies are `internal` functions of `MtxPipelineLib` (`_checkEnvelope`, `_structHash`, `_checkCall`,
+  `_callFee`, `_checkTransfer`, `_checkTo`, `_useNonce`). The external functions compose them for the tokens.
+  `MetaTxBase` calls the same internal functions directly (inlined, no link), so the wallets keep their own
+  composition with their virtual hooks (§3.7). One source per rule.
+- Order inside `preCall` (address path): envelope (with `SelfSender`), digest, `requireSignature`, `_checkCall`
+  (`supportedModes` = `MODE_KNOWN_MASK`, the tokens' value), nonce write, fee amount. UA path: ledger on
+  (`UALedgerOff`), envelope, digest, `authorize(PURPOSE_METATX)`, `MetaTxUnknownOp` if `len < 4 || !uaAllowed`,
+  `_checkCall`, nonce write, fee amount (with `UAPoolNotPayable` for a `UA_POOL` recipient). Today's order, plus the
+  fee amount (§3.8).
+- Order inside `preTransfer`: today's `_executeTransfer` / `_uaExecuteTransfer` steps 1–4 exactly, with `have` in
+  place of the balance read.
+
+### 3.3 A relayed call under the split
+
+```mermaid
+sequenceDiagram
+    participant R as Relayer
+    participant T as Token (clone)
+    participant L as MtxPipelineLib (DELEGATECALL)
+    participant G as UARegistry / signer wallet
+    R->>T: mtxExecute(m, sig) / uaExecute(m, auth)
+    T->>T: nonReentrant; m in memory; dataHash = keccak256(m.data)
+    T->>T: sel, len, _mtxRule(sel), basis word, _uaAllowed(sel); Ctx from immutables
+    T->>L: preCall(ctx, envelope, facts, ua, sig)
+    L->>L: 1 envelope, 2 digest
+    L->>G: 2 ERC-1271 / requireAuthorized (STATICCALL; HIP-632 through HederaLib)
+    L->>L: 3 shape, fee class, modes, fee amount; 4 nonce + 1
+    L-->>T: (digest, fee, feeTo)
+    T->>T: 5 ticket, binding = _envelopeBinding(m), self-call(data)
+    T->>T: 6 fee move (_transfer / _uaMove)
+    T-->>R: 7 MetaTransactionExecuted / UAMetaTransactionExecuted
+```
+
+### 3.4 Each path
+
+- **`mtxExecute`, `executeMetaTransaction`, `mtxExecuteWithFee`, `mtxBatch`:** `ERC20MetaTx` overrides `_execute`
+  (made `internal virtual` in `MetaTxBase`): build the envelope and the facts, `preCall`, `_selfCall`, the fee move,
+  the event. `mtxBatch` calls `_requireBatchable` first (token), then `_execute` per item; the library is cold only on
+  the first item.
+- **`uaExecute`, `uaBatch`, `uaUnwrap`:** `_uaExecute` does the same with `ua = true`. `uaUnwrap` still builds its
+  memory struct (small `data`).
+- **Typed paths** (`mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, the new
+  `mtxPayMeta`; UA twins `uaExecuteTransfer`, `uaBatchTransfer`, `uaTransfer`, `uaTransferWithFee`, `uaPay`,
+  `uaPayMeta`): `_executeTransfer` / `_uaExecuteTransfer` read `have`, call `preTransfer`, then move fee and value
+  and emit, as today. The address path pads `from` and `to` into the UA layout.
+- **Receiver-pays:** `mtxPayReceiverFee` / `uaPayReceiverFee` keep their shape checks in the token, run the typed
+  pipeline, then the payee check through `requireSignature` / `authorize(PURPOSE_RECEIVER_FEE)` (the library is warm).
+- **Trade side:** `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` call `requireSignature`; `uaTrade`,
+  `uaCancelOrder`, `uaInvalidateNonces` call `authorize(PURPOSE_TRADE)`. `TradeLib` is unchanged. In a DEX settlement
+  that fills several tokens, every token links the same library address, so the library is cold once per transaction.
+- **Views:** the four digest views compute `keccak256(data)` and call `callDigest` / `transferDigest`.
+  `tradeOrderDigest` and the other trade digests stay in the token (`TradeLib` hashing).
+- **Direct paths never touch the library:** `transfer`, `transferFrom`, `approve`, `transferToUA`, `payWithFee`,
+  `payWithFeeToUA`, `mint*`, `burn`, `wrap*`, `unwrap*`, the admin entries, the PQZ / Zether direct ops. Their
+  receiver check `_checkTo` is the library's internal function, inlined in the token (the same source as the copy
+  inside `preTransfer`).
+
+### 3.5 Each token kind
+
+All six kinds (`NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`, `NONE_PQZ`, `UNDERLYING_PQZ`) use the
+library through `ERC20MetaTx` / `MetaTokenBase`, in the same way. What differs per kind enters as data:
+
+| Input | Source |
+|---|---|
+| Domain separator | `_domainSeparatorV4()`: "SCaaS MetaToken", "SCaaS ZetherToken" or "SCaaS PqzToken" (CTR-MTX-02) |
+| Rule, UA verdict | the kind's `_mtxRule`, `_uaAllowed` |
+| Binding | the kind's `_envelopeBinding`, `_uaEnvelopeBinding` (0 on the plain kinds) |
+| Batchable | the kind's `_batchable` |
+| Registry, Hedera, SmartKeyAccount clone hash | the release's `Env`, through the immutables |
+
+`UNDERLYING*` kinds: `mtxWrap` / `uaWrap` run the underlying token's `mtxTrade` / `uaTrade`, which checks the
+signature through its own (the same) library. Hedera: `IS_HEDERA` implementations take the HIP-632 branch inside the
+library; the HIP-632 call runs in the token's context, as today.
+
+### 3.6 The PQZ and Zether layers' relayed paths
+
+A confidential op relayed through `mtxExecute` or `uaExecute` is an ordinary self-call. The token computes the
+envelope binding from the envelope fields only (`TAG_ENVELOPE`, `TAG_UA_ENVELOPE`, the Zether tags), before the
+self-call, as today. Inside the self-call nothing changes: `_ticketBinding()`, `_ticketSubject()`, the PQZ libraries'
+own statement authorization (`requireAuthorized` over the statement digest in `PqzCore`), the nonces of the
+confidential layer (`sendCounter`), txFee / decoyFee, `_pullShieldIn`, the Zether proof checks and
+`mtxRollOverSigned`'s own signature. `_isPqzOp`, `_pqzRule`, the Zether op list and `mtxSelectors` stay in the kinds.
+Ops stay never-batchable (CTR-PQZ-21). The spike's second library (A2, a hand copy of three rule layers) is not built
+(controller call): it saved 2.6 KB at +4.8k gas cold per relayed call and carried the copy risk.
+
+### 3.7 Contracts that do not link the library
+
+- `SmartKeyAccount`, `MandateWallet`, `HederaMandateWallet` keep `MetaTxBase`'s own `_execute` with their overrides
+  (`_requireValidSignature`, `_selfSender`, `_mtxRule`). `MetaTxBase` now calls the library's internal functions, so
+  their bytecode changes but not their behaviour. They gain nothing from a library (they fit the default limits) and
+  `SmartKeyAccount` is not an `OpenFactory` release, so it has no `Env.libs` pin (controller call).
+- `SCaaSDex` is not on the base; unchanged.
+- UA-5c (c) (the UA path moving down into `MetaTxBase`, CTR-MTX-22 Change 2026-10-13, SPECIFIED) is not built. This
+  work keeps the UA path in `ERC20MetaTx`. The library's `ua` flag and internal functions are what that later move
+  reuses.
+
+### 3.8 The one behaviour change: the fee amount is checked before the call
+
+Today the fee amount of a self-call (`_callFee`: `FeeExceedsCap`, `FeeRecipientRequired`, `UAPoolNotPayable`) is
+computed after the self-call. It depends only on the envelope and the basis word, which are known before the call.
+`preCall` computes it in step 3; the move still happens in step 6. Effect: an envelope that breaks both its fee rule
+and its call now reverts with the fee error, before the call, instead of the call's error. Every outcome stays the
+same (the whole transaction reverts either way), and the typed paths already work this way. This saves a second
+library call per relayed call (≈ +1k gas warm [estimate]). **Controller call** (§13 Q2). CTR-MTX-17's table changes:
+step 3 lists the fee checks, step 6 is "fee move".
+
+## 4. Release, factory, deployment
+
+- **One deployment per library version per chain**, shared by every release that links it. Its address is linked
+  into each implementation's bytecode; a new library version means new releases, and old releases keep the old one
+  (no SELFDESTRUCT, so it never disappears).
+- **`Env.libs` pin the link closure.** Every kind's env lists `MtxPipelineLib` with its code hash, and keeps listing
+  `HederaLib`, which becomes a library of `MtxPipelineLib` (the token may no longer link it directly). Rule: a
+  release's `Env.libs` equals the transitive link closure of its implementation (direct and library-of-library).
+- **`DeployBase`:** add `address(MtxPipelineLib)` to the `libs` arrays of the `NONE` env and of the Zether envs
+  (`_deployTokenFactory`, `_deployZether`). Forge links and deploys it as it does today's linked libraries.
+  `Deploy.s.sol` and `script/hedera/DeployHedera.s.sol` go through `DeployBase`, so they follow.
+- **`script/pqz/e2e.py`:** `Deployer.linked()` collects only the token artifact's direct `linkReferences`. Change it
+  to the transitive closure (each library's own `linkReferences`, deployed first), so the PQZ envs pin `HederaLib`
+  and `MtxPipelineLib`. `D.lib()` already deploys a library with its own links.
+- **`test/v2/Factory.t.sol`** and any fixture that builds an `Env` by hand: add the library.
+- **The deploy gate ([NET-EVM-06](../../networks/evm.md#NET-EVM-06)):** `_requireReleaseGas` and e2e.py's
+  `require_release_gas` read `size-baseline.json` at run time, so the kinds' needs drop with the ratchet. Update the
+  per-kind table in `networks/evm.md`, the NET-EVM-06 addendum figures in `decisions.md` and the `DeployBase` comment
+  figures with the measured sizes. Add rows for `MtxPipelineLib` and `MtxRelayFee` for information. No separate gate
+  for the library (controller call): it is smaller than every implementation that links it, so the implementation's
+  gate is the binding one.
+- **`MtxRelayFee`:** `DeployBase` deploys `new MtxRelayFee{salt: salt}()` through the deterministic CREATE2 deployer;
+  JSON key `mtx_relay_fee` (and `mtx_relay_executor`). It answers no `chainUid()`, so instead of the `chainUid()`
+  gate the script checks that the router's `EXECUTOR()` has code and names the router back. Its address is the same
+  on every chain only for the same bytecode and salt: any source or compiler change moves it (note for the
+  deployment record).
+
+## 5. Gas and size budget
+
+### 5.1 Estimates (the plan measures every one)
+
+| Item | Spike (2026-10-21, other code) | This design [estimate] |
+|---|---|---|
+| Token runtime saving | A: −3,763 B (`NONE`), −4,147 B (`UNDERLYING_PQZ`) | −3.5 to −5 KB per kind (the self-call stays; trade and receiver-fee signatures and the digest views move) |
+| Library runtime | 11,577 B | 10–12 KB |
+| `mtxPayMeta` + `uaPayMeta` | — | +0.8 to +1.2 KB per kind |
+| `UnderlyingPqzToken` after this item | — | ≈ 57–59 KB (headroom ≈ 6.5–8.5 KB) |
+| Relayed call, cold | A: +7.1k to +9.4k | +3k to +6k (2,600 cold account at the Amsterdam price, ABI of ≈ 25 words plus the signature, return) |
+| Relayed call, warm (2nd in a transaction) | A: +5.9k | +1k to +2.5k |
+| Relayed op 1 (≈ 21 KB `data`) | A: +19.8k to +21.3k | as a small call, + ≤ 0.5k (§5.2) |
+| Relayed ≈ 340 KB op 7 | A: ≈ +1.0 M (computed) | as a small call, + ≤ 8k (§5.2) |
+| Direct calls | −67 (shorter dispatch) | unchanged ± dispatch |
+| Library deploy, per chain and version | +1.49 to +1.56 M regular (computed) | regular as the spike; EIP-8037 state ≈ 1,530 × runtime ≈ 15–18 M |
+
+### 5.2 The data-size residual and its bound
+
+`data` never reaches the library. One small term remains. The token already holds `m` (with `data`) in memory, so
+the library call's argument block (≈ 25 words plus the signature or `auth`) is written above it, and memory expansion
+is priced at `3 + w/256` gas per word at `w` words in use. At 340 KB that is ≈ 44 gas per word: ≈ 1.1k gas for an
+ECDSA envelope, ≈ 5.7k with an ML-DSA-65 fee UA (3,309 B `auth`) [estimate]. It is quadratic memory pricing of a
+fixed-size block, not a per-byte copy. The cheaper-looking alternative (keep `m` in calldata and call the library
+before the memory copy) adds a second copy of `data` (3 gas per word, ≈ +32k at 340 KB), so it is not taken.
+
+**Acceptance bound (controller call):** for every accepted fee-UA kind on each relay path, the split's overhead at
+the largest built envelope minus its overhead at the smallest envelope is ≤ 8,000 gas. The plan measures it at
+`n2048-kmax1024` (PQZH debits, the largest envelopes) and `n2304-kmax4096` (PQZL op 7 M = 8 with the auditor).
+
+### 5.3 What the plan must re-measure (with the final token bytecode: after the split and `mtxPayMeta`)
+
+Forge gas is deterministic; these are correctness runs under `scripts/capped`, not timing runs (Task 9 timing stays
+the owner's go). Every row on both relay paths where the path exists.
+
+1. **The overhead table:** every signed entry point, cold and warm, against the Part 0 fixture (§10, R1).
+   `test/v2/MetaTxGasV2.t.sol` rows re-pinned.
+2. **`ROLL_MAX` at all four sets** (`test/research/PqzPackGas.t.sol` scan, `PqzStatePinGasTest` in
+   `test/pqz/PqzStateGas.t.sol`, `script/pqz/at-set.sh <set>`). The binding one is `n2560-kmax16384`: 64 keeps only
+   15,281 gas on `uaExecute` (12,567,631 of 12,582,912). The estimated overhead (≈ 4–7k with the ML-DSA-65 fee UA and
+   a 68-byte `data`) leaves ≈ 8–11k [estimate], so 64 probably holds.
+   **If it does not:** the owner's rule of 2026-10-27 decides the value, no new ruling is needed: the largest
+   multiple of 16 that fits both paths, so `n2560-kmax16384` goes to **48**. Record it: `set.toml` `roll_max = 48`
+   with the measured figures in its comment, `gen_set.py --all`, the generated `PqzSet.sol` of that set,
+   `n2560-kmax16384/SET.md`, the margins line in `contracts/pq-zero-knowledge.md`, `PqzStatePinGasTest`'s
+   expectations, and a decisions.md Change line under CTR-PQZ-07 ("follows the owner rule of 2026-10-27; measured
+   …"), with the run log in `smartcontracts/evm/runs/`. Report it to the owner in the work item's report. The other
+   three sets keep large margins (721,953 / 314,639 / 1,344,117) and are re-asserted, not expected to move.
+3. **PQZH `n2048-kmax1024` debits on `uaExecute`:** headroom today 1,361–2,769 B (87–177k gas). Re-run the PQZH rows
+   and `test_gasTable_holderRows` (`mldsa65` and `fndsa512` fee UAs fit, `slhdsa128s` excluded; `fndsa512` burn 1 is
+   16,429,976 today). Expected: −5k to −12k [estimate], so still fits. If a built form stops fitting, it leaves the
+   on-chain list of option (A) by that ruling's own rule ("exactly the forms that fit"); record and report.
+4. **`debit_min_gas`** (`PqzSet.PQZ_DEBIT_MIN_GAS`, the cheapest PQZL debit on `uaExecute`, read by `UARegistry`'s
+   PQZ holder bound, C0-5): 6,820,062 / 6,991,487 / 7,161,789 / 7,351,418 today. The split raises the real figure, so
+   the constant must be re-measured and re-pinned at all four sets (`set.toml`, `gen_set.py`). It is compiled into
+   `UARegistry`, so the registry's bytecode changes: the SCaaS testnet takes a new registry at its next reset (fs3
+   Task 13, together with UA-8's registry redeploy). `UARegistryPqzBound.t.sol` re-pinned.
+5. **`mtxPrepareAcc` halves** (2.32–3.90 M on `uaExecute` today): re-assert under 0.75 · 2^24.
+6. **The Zether prover's relayed rows** (`clients/zether-prover/src/zether.rs` `gas_limits`, measured through
+   `mtxExecute`; `ZetherGasLimit.t.sol` with `ZETHER_GAS_PROBE=1`, `test_edge_*`, `gas_table_edges`): re-measure the
+   relayed rows; the 1 % margin (167,772) absorbs the overhead, so the edges should not move; re-pin if a row moves.
+7. **The node's ERC-1271 floor** (§9).
+8. **The size table:** `forge build --sizes` → `scripts/size_gate.py`; ratchet `size-baseline.json` with a comment
+   entry; the NET-EVM-06 table (§4).
+
+## 6. CTR-MTX-26 on the split: `mtxPayMeta` / `uaPayMeta`
+
+Where it lives: in `MetaTokenBase` (all six kinds). Nothing in the library: the library sees an ordinary
+`UAMetaTransfer`.
+
+```solidity
+// IMetaTokenV2 (controller call: not IERC20Payment or IUALedger, whose ERC-165 ids the token reports)
+event PaymentMeta(bytes32 indexed payId, bytes meta);
+function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (bytes32);
+    // keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)))
+function mtxPayMeta(address from, address to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
+    uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
+function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
+    uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth) external returns (bool);
+```
+
+Body, both: `nonReentrant`; `AdminLib.requireFeature(PAYABLE)`; `payId = metaPayId(salt, meta)`;
+`emit PaymentMeta(payId, meta)`; then exactly `mtxPay` / `uaPay` with that `payId` (the same struct, lane
+`payLane(payId)`, nonce 0, digest, signature). `meta` is hashed and logged, never parsed, never passed to the
+library. No length cap in the contract (the payer pays for it); the node may cap it by policy (§9). The off-chain
+variant is plain `mtxPay` / `uaPay` and needs no code.
+
+Builder note: `mtxPayMeta` has 13 argument stack slots and `via_ir` is off, so a straightforward body will hit
+"stack too deep". The ABI is fixed by CTR-MTX-26; restructure the body instead (for example share one private
+helper with `mtxPay` that takes the struct, or read the static head from `msg.data`). Do not switch `via_ir` (it
+changes every bytecode and every gas pin).
+
+Vectors: `smartcontracts/vectors/metatx/paymeta.json` (path: controller call): `(salt, meta, payId, payLane(payId))`
+for each schema 1–4 and edge cases (empty body, long body), read by a forge test and by `clientkeys`.
+
+## 7. CTR-MTX-27 on the split: `MtxRelayFee`
+
+CTR-MTX-27's normative text is the spec; this section fixes only the build.
+
+- **Files:** `src/metatx/MtxRelayFee.sol` with two contracts: `MtxRelayFee` (the router) and `MtxRelayExecutor`
+  (created by the router's constructor with CREATE; `ROUTER` immutable; `exec(target, callData)` callable only by
+  the router; `target.call(callData)` with no value; a failure bubbles the inner revert data). The router exposes
+  `EXECUTOR()`.
+- **No token change and no library change.** The router calls the token's existing `mtxExecuteTransfer` /
+  `uaExecuteTransfer`; under the split those run `preTransfer` like any other typed call. So the router does not
+  depend on the split's internals and may be built in parallel once the split's ABI is fixed.
+- **Steps:** exactly CTR-MTX-27's six. `ref` and `payLane(ref)` computed by the router (pure). `nonReentrant` by a
+  transient slot (no stored state). Open mode (`t.to == address(this)`; UA: `t.to == pad(address(this))`) forwards
+  `t.value` with `IERC20(token).transfer(msg.sender, t.value)`.
+- **Public balances only:** the router only ever calls the typed transfer paths, which move public (and UA-ledger)
+  balances; on a PQZ or Zether token that is the public side.
+- **Forge conformance:** CTR-MTX-27's list (eight items), plus: the executor refuses every caller but the router;
+  the router holds no balance after a `relay` in open mode; a target that is a SCaaS token entry with its own
+  envelope works when that envelope leaves the relayer open or binds it to the executor.
+- **Gas** (CTR-MTX-27's estimate: ≈ +200–230k on Amsterdam with an ECDSA payer): measured in the plan, ECDSA and
+  `mldsa65` payers.
+
+## 8. Scope and staging
+
+**This work item (EVM, Hedera included because Hedera runs the EVM contracts):**
+
+| Part | Content | Gate |
+|---|---|---|
+| 0 | On `main`, before any change: the parity fixture and gas baseline (R1) | forge |
+| 1 | The split: `MtxPipelineLib`, `MetaTxBase` / `ERC20MetaTx` / `MetaTokenBase`, `DeployBase`, e2e.py, fixtures, tests R2–R8 | forge at the committed set, sizes, `docs_check` |
+| 2 | `mtxPayMeta` / `uaPayMeta`, the vectors | forge, sizes |
+| 3 | Re-measure §5.3 with the final bytecode; re-pin `debit_min_gas`, `ROLL_MAX` if the rule says so, the prover rows, the node floor | forge at all four sets (`at-set.sh`), `gen_set.py --all --check`, sizes, zether-prover cargo |
+| 4 | `MtxRelayFee` + executor, `DeployBase`, conformance | forge |
+| 5 | Node and clients (§9) | `scaas-node` tests, `clientkeys` tests |
+| 6 | Docs and decisions (§11), review, fix round | `docs_check` |
+
+Each part ends on the branch; merge and push only on the owner's go. The superseded pipeline code (`_checkCall`,
+`_callFee`, `_checkTransfer`, `_checkUATransfer`, `_uaAuthorize`, the Hedera overrides as they are today) goes to
+`smartcontracts/evm/legacy/metatx-v1/` as a backup, not deleted.
+
+**Non-EVM (controller call, §13 Q1):** one later item per family — Soroban, Solana, Cosmos, Sui, Aptos, GRAM — each
+carrying both CTR-MTX-26 (the pay relay with `(salt, meta)`, the same `payId` derivation, an event) and CTR-MTX-27
+(the family's router shape; GRAM by escrow). Recorded in TODO "Recorded, not scheduled", after this item. Why: no
+non-EVM family has the split's size problem or shares its code; each has its own toolchain, tests and review;
+bundling six toolchains into this item would block the governance path on them. What they reuse is fixed here: the
+`payId` derivation and its vectors (§6), and the `ref` rule (each family defines its own byte encoding of chain and
+target).
+
+## 9. Node and clients
+
+**For the split:**
+- `scaas-node`: selectors, the allowlist views, `supportedModes`, events and digests are unchanged, so `guard.rs`'s
+  allowlist check, `metatx.rs` and the indexer need no change. Gas comes from simulation (+20 %, capped), so it
+  follows. One constant changes: `guard::ERC1271_FLOOR` (432,349 = 21,000 + 400,000 · 64/63 + 5,000) assumes the
+  ERC-1271 call is one frame below the token; it is now two (token → library → wallet). New floor:
+  `21,000 + (400,000 · 64/63 + 5,000) · 64/63 +` the measured prefix ≈ 440–450k [estimate], pinned by a node test
+  against forge's measured minimum gas for a `SmartKeyAccount`-signed `mtxExecute`.
+- `clients/zether-prover`: re-measured relayed rows if they move (§5.3 item 6). `uaSigner` / `ua_signer_gas`
+  unchanged: the signer's verify cost is the same, and the library overhead is inside the relayed rows that
+  `uaExecute` builds on.
+- `clients/clientkeys` and the `ua-*` clients: no change (ABI and digests unchanged); their envelope vectors re-run.
+
+**For CTR-MTX-26:**
+- `clientkeys`: `metaPayId(salt, meta)`; build `mtxPayMeta` / `uaPayMeta` (and the off-chain variant); decode and
+  show `meta` next to the typed data; refuse to sign when `entryRef != metaPayId(salt, meta)`; the shared vectors.
+- `scaas-node`: a pay job may carry `(salt, meta)`. The node checks `t.entryRef == metaPayId(salt, meta)`,
+  `t.batch == payLane(t.entryRef)`, `t.nonce == 0` before simulating, and submits `mtxPayMeta` / `uaPayMeta` (on-chain
+  meta) or `mtxExecuteTransfer` (off-chain meta). Policy cap on `meta` length (config `max_pay_meta_bytes`, default
+  2,048: controller call). The indexer decodes `PaymentMeta` and joins it to `PaymentSettled` / `UAPaymentSettled` by
+  `entry_ref`.
+- Connectors (the ERP side, integration docs): show and verify the meta; a later client item.
+
+**For CTR-MTX-27:**
+- `scaas-node`: a call-table row for `MtxRelayFee.relay` / `uaRelay` with a new rule: the target is the chain's
+  `mtx_relay_fee` address; `token` is a registered token; the inner `target` is bound to this chain (`chainUid()`).
+  Quote `(token, amount, validUntil)`; simulate the whole `relay`; submit only if the fee covers the gas at the
+  node's price (no price or limit assumed). New NODE-LANE rules next to the simulation step. The lane's own token
+  balance is safe: the inner call's `msg.sender` is the executor.
+- Clients (`clients/ua-rs`, `ua-qt`, the JS wallet): build the call with its own signature, `ref = relayRef(target,
+  callData)`, the payment (open mode by default), one prompt with both intents. If the inner call is itself an mtx
+  envelope with `MODE_RESTRICT_RELAYER`, its relayer must be the executor's address (or left open).
+
+## 10. Risks and how each is tested
+
+| # | Risk | Test |
+|---|---|---|
+| R1 | Behaviour drift between today's pipeline and the split | **Parity fixture** (controller call): in Part 0, on `main`, a forge test runs a fixed case set on every kind (clones) — every signed entry point × address / UA path × success and each error, incl. batches, receiver-pays, trade, PQZ / Zether relayed ops at the committed set — and writes outcome, return data, revert data, events, nonces, balances (`SHIELD_POOL`, `UA_POOL` included) and gas to `test/vectors/metatx-parity.json`. After the split the same test replays and compares. The only allowed difference is §3.8, listed case by case in the fixture. |
+| R2 | The context the library gets differs from the token's immutables (the spike's "module immutables" risk) | `_mtxCtx()` is the only builder. Per kind, on a clone: every `Ctx` field equals the token's own view (`eip712Domain()` → separator, `registry()`, the clone hash of `SMART_KEY_ACCOUNT_IMPL`, `IS_HEDERA`); `callDigest` / `transferDigest` equal `mtxDigest` / `uaDigest` / `mtxTransferDigest` / `uaTransferDigest` and the existing off-chain envelope vectors (clientkeys, zether-prover). |
+| R3 | A rule table copied out of the kinds (the spike's A2 risk) | Not possible by design: the token passes the looked-up rule per call. The existing `test_allowlistPinned*` tests and R1's per-selector cases cover every selector of every kind. |
+| R4 | ABI artifacts: errors raised only inside the library vanish from the token ABI (e.g. `SigCheckGasStarved`, `ModeFeeInvalid`, `FeeRecipientRequired`, `HtsQueryFailed`) | Extend `test_libraryErrorsAreInTheTokenAbi` (`test/v2/Underlying.t.sol`) to `MtxPipelineLib` × every kind's artifact; declare a missing error on a token interface. Function and event selectors unchanged: R1. |
+| R5 | A library in the release's link closure is not pinned | A forge test reads each kind's artifact `linkReferences` recursively and asserts the `Env.libs` built by `DeployBase` (and the PQZ envs of e2e.py, through a small Python self-test) equal the closure. |
+| R6 | SELFDESTRUCT, CALLCODE or a DELEGATECALL to a non-named address in a linked library; a direct CALL that writes the library's own storage | An opcode walk (PUSH data skipped) over the runtime code of every library in every closure: no `SELFDESTRUCT`, no `CALLCODE`; `DELEGATECALL` only in `MtxPipelineLib` toward `HederaLib`. A direct CALL of `preCall` / `preTransfer` reverts (solc's library call guard). |
+| R7 | The library writes more storage than the nonce | `vm.record` / `vm.accesses` around a relayed call of each path: written slots equal R1's recorded set. |
+| R8 | The extra frame starves the ERC-1271 or UA-registry call (63/64 rule) | Minimum working gas for a `SmartKeyAccount`-signed `mtxExecute` and an `mldsa65` `uaExecute`; the SigCheck starvation check still fires against a relayer that under-funds (the CTR-DEX-08 tests on the token path); the node floor test (§9). |
+| R9 | The data-size residual is larger than estimated | §5.2 bound, measured. |
+| R10 | Thin margins and the constants that follow | §5.3 items 2–7, asserted at the four sets. |
+| R11 | Stack too deep in `mtxPayMeta` / `uaPayMeta` | Builds with `via_ir` off; the R1-style cases for both. |
+| R12 | Hedera: the HIP-632 branch now runs one frame deeper | The `IS_HEDERA` fixtures' tests pass unchanged; the HIP-632 system call still sees the token as caller. |
+| R13 | The wallets' pipeline drifts from the tokens' | Both compose the same internal functions; the wallets' own suites (`SmartKeyAccount.t.sol`, `MandateWallet.t.sol`) unchanged and passing; R1 covers the tokens. |
+| R14 | The router: a `callData` that executes another router-bound payment, a fake token, re-entry | CTR-MTX-27's conformance list (§7). |
+| R15 | Storage layout drift | `test/v2/Layout.t.sol` unchanged and passing (the library declares no state variables). |
+
+## 11. Docs and records to update (Part 6)
+
+- `decisions.md`: CTR-MTX-07 Change (the tree plus `MtxPipelineLib`, variant A, owner 2026-10-20 / 2026-10-21, the
+  boundary of §3.1, status and commits); CTR-MTX-17 Change (§3.8, controller call); CTR-MTX-26 and CTR-MTX-27 Change
+  lines (EVM built, non-EVM queued per family); NET-EVM-06 addendum figures; CTR-PQZ-07 Change if `ROLL_MAX` moves;
+  the `debit_min_gas` re-pin under the C0-5 Change's heading (CTR-PQZ-14).
+- `contracts/metatx.md`: CTR-MTX-07 and §1 (the library), CTR-MTX-17 table, §8 gas, §11 interfaces (PayMeta, the
+  router), CTR-MTX-26 / -27 status.
+- `networks/evm.md` NET-EVM-06 table; `contracts/pq-zero-knowledge.md` §9.3 margins; `contracts/zether.md` §19 if a
+  row moves; the sets README / `SET.md` files that quote `debit_min_gas` or `ROLL_MAX`; the node docs (job API, submit
+  lanes) for the pay-meta job and the relay-fee row; `clients/signers-clientkeys.md`.
+- `TODO.md`: this item done; six non-EVM items; the stale text in the P6 wallet-prover item that says "neither
+  `mtxRollOver` nor `mtxPrepareAcc` is relayable" (it contradicts the 2026-10-20 ruling and the code) corrected.
+  `HANDOFF.md` at the end.
+
+## 12. Left to the builder
+
+- Exact internal function names and the split of `MetaTxBase` into wrappers over `MtxPipelineLib`'s internals;
+  making `_execute` virtual; deleting the token-side overrides that moved (`_chargeFee`, `_requireNativeUASignature`,
+  `_erc1271Gas`, the Hedera branch of `_requireValidSignature`).
+- Reading the basis word in the token (the existing assembly), and the facts struct for a `data` shorter than 4 bytes
+  (pass `bytes4(data)` zero-padded and the real length; the library refuses).
+- Struct packing of `Envelope` / `CallFacts` (ABI words either way), and whether `Out` returns as a struct or a tuple.
+- The parity fixture's format and case list (R1), the opcode walker (R6), the closure test (R5).
+- The PayMeta body restructuring (§6), the vectors file.
+- The router's code within CTR-MTX-27, its deployment record keys.
+- The node and client code of §9 within the stated rules.
+- Every number marked [estimate] is replaced by a measured one with its run log in `smartcontracts/evm/runs/`.
+
+## 13. Open questions for the owner (most important first)
+
+Each has a controller proposal; the work proceeds on the proposal unless the owner says otherwise.
+
+1. **Non-EVM staging.** Proposal: EVM (with Hedera) in this item; Soroban, Solana, Cosmos, Sui, Aptos and GRAM each as
+   their own later item carrying both CTR-MTX-26 and CTR-MTX-27 (§8).
+2. **Fee amount before the call.** Proposal: compute and check the fee amount of a self-call in step 3 (one library
+   call; the fee error wins when both the fee and the call fail, §3.8). Alternative: keep it after the call, with a
+   second library call (exact error order, ≈ +1k gas warm per relayed call).
+3. **Trade and receiver-fee signatures through the library.** Proposal: yes (one copy of the signature rule; fewer
+   token bytes; +2,600 gas cold once per transaction on those paths, a DEX settlement included). Alternative: keep
+   `SigCheck` and the Hedera branch compiled into the token for them.
+4. **Gate for the `set.toml` re-pins** (`debit_min_gas` at four sets, maybe `roll_max` at `n2560-kmax16384`).
+   Proposal: only the affected steps (`gen_set.py --all --check`, forge at each set, sizes, `docs_check`), because
+   both keys are read only by the contracts and no core or proof parameter changes. The owner's 2026-10-25 rule names
+   `set.toml` changes as full-gate triggers, so this needs the owner's yes; otherwise four full gates run.
