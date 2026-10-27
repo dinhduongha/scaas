@@ -15,6 +15,7 @@ import {TradeLib} from "../trade/TradeLib.sol";
 import {IUALedger} from "./IUALedger.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
 /// @title The token base of every SCaaS token (CTR-MTX-07): ERC-20 on `MetaTxBase`.
 /// @notice Adds to the generic base: the fee in this token (`_chargeFee` by fee class, CTR-MTX-20), the typed
@@ -31,6 +32,13 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
 
     /// @notice The UA registry of this chain (an implementation immutable; 0 = the UA ledger is off).
     address internal immutable _REGISTRY;
+    /// @notice The EIP-1167 clone code hash of the chain's `SmartKeyAccount` implementation (0 = none): such a signer
+    ///         gets 400k gas for ERC-1271, every other contract wallet 50k.
+    bytes32 internal immutable _SMART_KEY_CLONE_CODEHASH;
+
+    /// @notice Set on implementations deployed for Hedera (CTR-TOK-23): 64-byte signatures from accounts without code
+    ///         take the HIP-632 path.
+    bool public immutable IS_HEDERA;
 
     /// @custom:storage-location erc7201:scaas.ua.ledger
     struct UALedgerStorage {
@@ -41,8 +49,13 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     // keccak256(abi.encode(uint256(keccak256("scaas.ua.ledger")) - 1)) & ~bytes32(uint256(0xff))
     bytes32 private constant _UA_STORAGE = 0x9e2def943e5a7ec3982e5d00524104579a6b98ce8b31343ac0092718cc04e900;
 
-    constructor(bytes32 chainUid_, address registry_) ERC20("", "") MetaTxBase(_domainName(), chainUid_) {
+    constructor(bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
+        ERC20("", "") MetaTxBase(_domainName(), chainUid_)
+    {
         _REGISTRY = registry_;
+        _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
+            hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
+        IS_HEDERA = hedera_;
     }
 
     /// @notice The EIP-712 domain name (CTR-MTX-02): `"SCaaS MetaToken"`; a confidential kind overrides it.
@@ -57,8 +70,14 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return MetaTxLib.MODE_KNOWN_MASK;
     }
 
+    function mtxDigest(MetaTxLib.MetaTransaction calldata m)
+        external view override(IMetaTx, MetaTxBase) returns (bytes32)
+    {
+        return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.METATX_TYPEHASH, _envelopeOf(m));
+    }
+
     function mtxTransferDigest(MetaTxLib.MetaTransfer calldata t) external view returns (bytes32) {
-        return _hashTypedDataV4(t.hashStruct());
+        return MtxPipelineLib.transferDigest(_domainSeparatorV4(), false, _padded(t));
     }
 
     function registry() public view returns (address) {
@@ -76,11 +95,11 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     }
 
     function uaDigest(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32) {
-        return _hashTypedDataV4(m.hashStruct());
+        return MtxPipelineLib.callDigest(_domainSeparatorV4(), MetaTxLib.UAMETATX_TYPEHASH, _uaEnvelopeOf(m));
     }
 
     function uaTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32) {
-        return _hashTypedDataV4(t.hashStruct());
+        return MtxPipelineLib.transferDigest(_domainSeparatorV4(), true, t);
     }
 
     /// @notice The `metatx-cancel` digest (accounts.md §1.5): `CANCEL_TAG` is the purpose tag itself.
@@ -192,23 +211,27 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return true;
     }
 
-    /// @dev Every typed entry (struct, batch, the named builders, receiver-pays) goes through here. Everything is
-    ///      checked before the nonce and the transfers, which cannot fail afterwards. Returns the digest.
-    function _executeTransfer(MetaTxLib.MetaTransfer memory t, bytes calldata signature)
-        internal returns (bytes32 digest)
-    {
-        _checkEnvelope(MetaTxLib.pad(t.from), t.batch, t.nonce, t.validUntil, t.mode, t.relayer); // 1
-        digest = _hashTypedDataV4(t.hashStruct());                                              // 2
-        _requireValidSignature(t.from, digest, signature);
-        (uint256 fee, address feeTo) = _checkTransfer(t);                                       // 3
-        _useNonce(MetaTxLib.pad(t.from), t.batch);                                              // 4
-        if (fee != 0) _transfer(t.from, feeTo, fee);                                            // 5
+    /// @dev Every typed entry (struct, batch, the named builders, receiver-pays) goes through here: steps 1-4 in
+    ///      `MtxPipelineLib.preTransfer` (ids padded, `have` read here), so everything is checked before the nonce and
+    ///      the transfers, which cannot fail afterwards. Returns the digest.
+    function _executeTransfer(MetaTxLib.MetaTransfer memory t, bytes calldata signature) internal returns (bytes32) {
+        MtxPipelineLib.Out memory o =
+            MtxPipelineLib.preTransfer(_mtxCtx(), _padded(t), false, balanceOf(t.from), signature); // 1-4
+        if (o.fee != 0) _transfer(t.from, o.feeTo, o.fee);                                         // 5
         _transfer(t.from, t.to, t.value);
-        if (t.entryRef != 0) emit PaymentSettled(t.from, t.to, t.value, fee, feeTo, t.entryRef);
-        emit MetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, digest, feeTo, fee); // 6
+        if (t.entryRef != 0) emit PaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
+        emit MetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, o.digest, o.feeTo, o.fee); // 6
+        return o.digest;
     }
 
-    /// @dev Step 3: payee, fee on `value` (capped, CTR-MTX-13), the payee check (CTR-MTX-08), balance.
+    /// @dev A `MetaTransfer` in the `UAMetaTransfer` layout: `from` and `to` padded (the same struct hash, CTR-UA-26).
+    function _padded(MetaTxLib.MetaTransfer memory t) internal pure returns (MetaTxLib.UAMetaTransfer memory) {
+        return MetaTxLib.UAMetaTransfer(MetaTxLib.pad(t.from), MetaTxLib.pad(t.to), t.value, t.entryRef, t.batch,
+            t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient);
+    }
+
+    /// @dev Step 3: payee, fee on `value` (capped, CTR-MTX-13), the payee check (CTR-MTX-08), balance. Superseded by
+    ///      `MtxPipelineLib._checkTransfer` (metatx split T3), no longer called; Task 4 moves it to legacy/metatx-v1/.
     function _checkTransfer(MetaTxLib.MetaTransfer memory t) private view returns (uint256 fee, address feeTo) {
         if (t.to == address(0)) revert PayToZero();
         if (t.to == address(this)) revert TransferToSelf();
@@ -227,7 +250,44 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         if (have < need) revert MetaTxInsufficientForFee(need, have);
     }
 
+    // ------------------------------------------------------------------ the generic pipeline on MtxPipelineLib
+
+    /// @notice The token's immutables for `MtxPipelineLib` (metatx split R2): the only place that builds a `Ctx`.
+    function _mtxCtx() internal view returns (MtxPipelineLib.Ctx memory) {
+        return MtxPipelineLib.Ctx(_domainSeparatorV4(), _REGISTRY, _SMART_KEY_CLONE_CODEHASH, IS_HEDERA);
+    }
+
+    /// @dev CTR-MTX-17 on the library: 1-4 and the fee amount in `preCall` (the fee is checked before the call, owner
+    ///      2026-10-27), 5 the self-call, 6 the fee move, 7 the event. `data` stays here: the library gets its hash.
+    function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
+        internal override returns (bytes memory ret)
+    {
+        MtxPipelineLib.Out memory o =
+            MtxPipelineLib.preCall(_mtxCtx(), _envelopeOf(m), _callFacts(m.data, false), false, signature); // 1-4
+        ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m));                                 // 5
+        if (o.fee != 0) _transfer(m.from, o.feeTo, o.fee);                                                    // 6
+        emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee);         // 7
+    }
+
+    /// @dev What the library needs of `data` and of this kind's hooks: selector (zero-padded when shorter than 4),
+    ///      length, the rule, the basis word when present (else 0) and, on the UA path, the UA verdict.
+    function _callFacts(bytes memory data, bool ua) internal view returns (MtxPipelineLib.CallFacts memory f) {
+        f.sel = bytes4(data);
+        f.len = data.length;
+        MtxRule memory r = _mtxRule(f.sel);
+        (f.feeClass, f.amountArg, f.staticLen) = (r.feeClass, r.amountArg, r.staticLen);
+        uint256 basisEnd = 36 + 32 * uint256(r.amountArg);
+        if (r.feeClass == FEE_CLASS_AMOUNT && data.length >= basisEnd) {
+            uint256 basis;
+            assembly ("memory-safe") { basis := mload(add(data, basisEnd)) }
+            f.basis = basis;
+        }
+        if (ua) f.uaAllowed = _uaAllowed(f.sel);
+    }
+
     // ------------------------------------------------------------------ fee of a self-call (CTR-MTX-20)
+    // Superseded by `MtxPipelineLib._callFee`, now before the call (§3.8, owner 2026-10-27): `_chargeFee` / `_callFee`
+    // are no longer reached on a token (its `_execute` overrides the base's); Task 4 moves them to `legacy/metatx-v1/`.
 
     /// @notice After the call: `ABSOLUTE` + `FIXED` = the signed amount, uncapped (step 3 refused `ABSOLUTE` +
     ///         `PERCENT`); anything else = `FeePolicy.compute` on the basis (≤ 1 %), so a `PERCENT` fee is never
@@ -357,23 +417,24 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         emit UANonceCancelled(ua, batch, _bumpNonce(ua, batch));
     }
 
-    /// @dev The generic UA pipeline (CTR-MTX-17 on a `bytes32` signer): 1 envelope, 2 authorization, 3 the UA allowlist
-    ///      (`MetaTxUnknownOp`) then the address path's shape and fee class, 4 nonce, 5 self-call under the id, 6 fee
-    ///      from the signer's ledger after the call, 7 event.
+    /// @dev The generic UA pipeline (CTR-MTX-17 on a `bytes32` signer) on the library: `preCall(ua = true)` runs the
+    ///      ledger check, 1 envelope, 2 authorization, 3 the UA allowlist (`MetaTxUnknownOp`), the address path's shape
+    ///      and fee class and the fee amount, 4 nonce; then 5 self-call under the id, 6 fee from the signer's ledger,
+    ///      7 event.
     function _uaExecute(MetaTxLib.UAMetaTransaction memory m, bytes calldata auth) internal returns (bytes memory ret) {
-        _uaOn();
-        _checkEnvelope(m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer);                    // 1
-        bytes32 digest = _hashTypedDataV4(m.hashStruct());                                             // 2
-        _uaAuthorize(m.from, UAKinds.PURPOSE_METATX, digest, auth);
-        bytes4 sel = bytes4(m.data);                                                                   // 3
-        if (m.data.length < 4 || !_uaAllowed(sel)) revert MetaTxUnknownOp(sel);
-        uint256 basis = _checkCall(m.data, m.mode);
-        _useNonce(m.from, m.batch);                                                                    // 4
-        ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m));                                        // 5
-        (uint256 fee, address feeTo) =                                                                 // 6
-            _callFee(m.data, basis, m.mode, m.fee, m.feeRecipient == address(0) ? msg.sender : m.feeRecipient);
-        if (fee != 0) _uaMove(m.from, MetaTxLib.pad(feeTo), fee);
-        emit UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, feeTo, fee);      // 7
+        MtxPipelineLib.Out memory o =
+            MtxPipelineLib.preCall(_mtxCtx(), _uaEnvelopeOf(m), _callFacts(m.data, true), true, auth); // 1-4
+        ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m));                                         // 5
+        if (o.fee != 0) _uaMove(m.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 6
+        emit UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, o.digest, o.feeTo, o.fee); // 7
+    }
+
+    /// @dev The envelope of `m` for the library: `data` as its hash (over this memory copy).
+    function _uaEnvelopeOf(MetaTxLib.UAMetaTransaction memory m)
+        internal pure returns (MtxPipelineLib.Envelope memory)
+    {
+        return MtxPipelineLib.Envelope(m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, m.relayer,
+            m.fee, m.feeRecipient);
     }
 
     /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4,
@@ -384,24 +445,20 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return bytes32(0);
     }
 
-    /// @dev The typed UA pipeline (CTR-MTX-23 on ids): everything is checked before the nonce and the moves.
-    function _uaExecuteTransfer(MetaTxLib.UAMetaTransfer memory t, bytes calldata auth)
-        internal returns (bytes32 digest)
-    {
-        _uaOn();
-        _checkEnvelope(t.from, t.batch, t.nonce, t.validUntil, t.mode, t.relayer);                    // 1
-        digest = _hashTypedDataV4(t.hashStruct());                                                     // 2
-        _uaAuthorize(t.from, UAKinds.PURPOSE_METATX, digest, auth);
-        (uint256 fee, address feeTo) = _checkUATransfer(t);                                           // 3
-        _useNonce(t.from, t.batch);                                                                    // 4
-        if (fee != 0) _uaMove(t.from, MetaTxLib.pad(feeTo), fee);                                     // 5
+    /// @dev The typed UA pipeline (CTR-MTX-23 on ids): steps 1-4 in `MtxPipelineLib.preTransfer` (`have` read here),
+    ///      everything checked before the nonce and the moves.
+    function _uaExecuteTransfer(MetaTxLib.UAMetaTransfer memory t, bytes calldata auth) internal returns (bytes32) {
+        MtxPipelineLib.Out memory o = MtxPipelineLib.preTransfer(_mtxCtx(), t, true, balanceOfUA(t.from), auth); // 1-4
+        if (o.fee != 0) _uaMove(t.from, MetaTxLib.pad(o.feeTo), o.fee);                                // 5
         _uaMove(t.from, t.to, t.value);
-        if (t.entryRef != 0) emit UAPaymentSettled(t.from, t.to, t.value, fee, feeTo, t.entryRef);
-        emit UAMetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, digest, feeTo, fee);      // 6
+        if (t.entryRef != 0) emit UAPaymentSettled(t.from, t.to, t.value, o.fee, o.feeTo, t.entryRef);
+        emit UAMetaTransactionExecuted(t.from, msg.sender, t.batch, t.nonce, o.digest, o.feeTo, o.fee); // 6
+        return o.digest;
     }
 
     /// @dev Step 3 of the typed path: receiver, fee on `value` (capped), the payee check on the padded recipient,
-    ///      balance.
+    ///      balance. Superseded by `MtxPipelineLib._checkTransfer` (metatx split T3), no longer called; Task 4 moves
+    ///      it to legacy/metatx-v1/.
     function _checkUATransfer(MetaTxLib.UAMetaTransfer memory t) private view returns (uint256 fee, address feeTo) {
         _checkTo(t.to);
         FeeMode fm = MetaTxLib.feeModeOf(t.mode);

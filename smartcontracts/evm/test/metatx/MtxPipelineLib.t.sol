@@ -346,19 +346,41 @@ contract MtxPipelineLibTest is Test {
         MetaTxLib.UAMetaTransfer memory t = _xfer(UA, MetaTxLib.pad(bob));
         bytes memory tauth = _tauth(t);
 
-        (bool ok,) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preCall.selector, c, e, f, false, sig));
+        // solc's library guard: a plain CALL of a state-changing external function reverts with no data
+        (bool ok, bytes memory ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preCall.selector, c, e, f, false, sig));
         assertFalse(ok);
-        (ok,) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preTransfer.selector, c, t, true, 101, tauth));
+        assertEq(ret.length, 0, "preCall: the guard's empty revert");
+        (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.preTransfer.selector, c, t, true, 101, tauth));
         assertFalse(ok);
+        assertEq(ret.length, 0, "preTransfer: the guard's empty revert");
 
         // the same arguments pass by DELEGATECALL, so the guard is what refused them
         h.preCall(c, e, f, false, sig);
         h.preTransfer(c, t, true, 101, tauth);
 
-        bytes memory ret;
         (ok, ret) = lib.call(abi.encodeWithSelector(MtxPipelineLib.callDigest.selector, DS, MetaTxLib.METATX_TYPEHASH, e));
         assertTrue(ok);
         assertEq(abi.decode(ret, (bytes32)), h.callDigest(DS, MetaTxLib.METATX_TYPEHASH, e));
+    }
+
+    /// The address path takes `from` as a native id only: a derived id whose low 160 bits are a signer's address is not
+    ///      that signer (no truncation), on `preCall` and `preTransfer`, even with that signer's valid signature.
+    function test_addressPath_refusesDerivedFrom() public {
+        bytes32 forged = bytes32(uint256(uint160(alice)) | (uint256(1) << 200));
+        assertFalse(UAKinds.inNativeSpace(forged));
+        MtxPipelineLib.Envelope memory e = _env(forged);
+        bytes memory sig = _signCall(e);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        h.preCall(_ctx(), e, _facts(), false, sig);
+        MetaTxLib.UAMetaTransfer memory t = _xfer(forged, MetaTxLib.pad(bob));
+        bytes memory tsig = _sig(ALICE_PK, h.transferDigest(DS, false, t));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        h.preTransfer(_ctx(), t, false, 101, tsig);
+        // the same signer, padded: both pass
+        e.from = MetaTxLib.pad(alice);
+        h.preCall(_ctx(), e, _facts(), false, _signCall(e));
+        t.from = MetaTxLib.pad(alice);
+        h.preTransfer(_ctx(), t, false, 101, _sig(ALICE_PK, h.transferDigest(DS, false, t)));
     }
 
     /// R2: `callDigest` / `transferDigest` equal `MetaTxLib` hashing of the same struct, for both typehashes each.

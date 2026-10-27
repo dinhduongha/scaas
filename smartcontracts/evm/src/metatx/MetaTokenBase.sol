@@ -38,11 +38,6 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @notice SmartKeyAccount implementation of this chain (0 = none). Only its EIP-1167 clones get 400k gas for
     ///         ERC-1271; every other contract wallet 50k.
     address public immutable SMART_KEY_ACCOUNT_IMPL;
-    bytes32 private immutable _SMART_KEY_CLONE_CODEHASH;
-
-    /// @notice Set on implementations deployed for Hedera (CTR-TOK-23): 64-byte signatures from accounts without code
-    ///         take the HIP-632 path.
-    bool public immutable IS_HEDERA;
 
     error NotFactory();
     error AlreadyInitialized();
@@ -54,14 +49,11 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///      deployment environment (plan 5g-Z2, `OpenFactory.deployImplementation` appends it): the factory, `chain_uid`,
     ///      the chain's UA registry (0 = no UA ledger), the `SmartKeyAccount` implementation, Hedera.
     constructor(Env memory env)
-        ERC20MetaTx(env.chainUid, env.registry)
+        ERC20MetaTx(env.chainUid, env.registry, env.smartKeyAccountImpl, env.hedera)
     {
         FACTORY = env.factory;
         _SELF = address(this);
         SMART_KEY_ACCOUNT_IMPL = env.smartKeyAccountImpl;
-        _SMART_KEY_CLONE_CODEHASH = env.smartKeyAccountImpl == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
-            hex"363d3d373d3d3d363d73", env.smartKeyAccountImpl, hex"5af43d82803e903d91602b57fd5bf3"));
-        IS_HEDERA = env.hedera;
         AdminLib.$().initialized = true;
     }
 

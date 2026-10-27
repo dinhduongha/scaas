@@ -12,6 +12,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {FeePolicy} from "../../src/common/FeePolicy.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
@@ -52,8 +53,13 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 // bytecode of the implementation: it stays the same after the split. The cases run in one fixed order and each uses its
 // own nonce lane. The file is one JSON object per line (a valid JSON array of cases), read back line by line.
 //
-// §3.8 (the one allowed difference after the split): a case whose envelope breaks BOTH its fee rule and its call carries
-// `"expect":"fee-error-first"`; after the split its revert is the fee error (Task 3 fills the new expectation).
+// §3.8 (the one allowed difference after the split, owner 2026-10-27): the fee amount of a self-call is checked before
+// the call. A case whose envelope breaks its fee rule carries `"expect":"fee-error-first"`. Its row holds the post-split
+// outcome (Task 3): when the call fails too ("bothFail_*"), the revert is now the fee error instead of the call's; when the
+// call alone would pass, the revert is the same fee error, but the self-call no longer runs, so the logs it emitted inside
+// the reverted transaction (which `vm.recordLogs` keeps, a receipt never shows) are gone from `events`. Every other field
+// of those rows is the pre-split one (`gas` included: the pre-split baseline). The replay checks that every marked row
+// reverts with a fee error.
 // =====================================================================================================================
 
 /// One recorded case.
@@ -216,6 +222,13 @@ abstract contract ParityIO is Test {
             return;
         }
         _eq(id, "expect", vm.parseJsonString(line, ".expect"), r.expect);
+        if (keccak256(bytes(r.expect)) == keccak256("fee-error-first")) {
+            bytes4 s = r.rev.length >= 4 ? bytes4(r.rev) : bytes4(0);
+            if (r.ok || (s != FeePolicy.FeeExceedsCap.selector && s != FeePolicy.FeeRecipientRequired.selector
+                    && s != IUALedger.UAPoolNotPayable.selector)) {
+                _bad(id, "expect", "fee-error-first: a fee error", vm.toString(r.rev));
+            }
+        }
         if (vm.parseJsonBool(line, ".ok") != r.ok) _bad(id, "ok", vm.toString(vm.parseJsonBool(line, ".ok")), vm.toString(r.ok));
         _eq(id, "ret", vm.parseJsonString(line, ".ret"), vm.toString(r.ret));
         _eq(id, "revert", vm.parseJsonString(line, ".revert"), vm.toString(r.rev));
@@ -651,6 +664,15 @@ abstract contract ParityCases is ParityIO {
         _pUx(k, name, "", m, _pAuM(k, m), k.relayer);
     }
 
+    /// `_pX` / `_pU` of a case whose fee rule breaks (§3.8, `"fee-error-first"`).
+    function _pXf(Tk memory k, string memory name, MetaTxLib.MetaTransaction memory m) internal {
+        _pMx(k, "mtxExecute", name, "fee-error-first", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.relayer);
+    }
+
+    function _pUf(Tk memory k, string memory name, MetaTxLib.UAMetaTransaction memory m) internal {
+        _pUx(k, name, "fee-error-first", m, _pAuM(k, m), k.relayer);
+    }
+
     function _pXt(Tk memory k, string memory name, MetaTxLib.MetaTransfer memory t) internal {
         _pXtS(k, name, t, _pSgT(k, t), k.relayer);
     }
@@ -719,9 +741,9 @@ abstract contract ParityCases is ParityIO {
         MetaTokenBase(k.t).mtxExecute(m, sg);
         _pMx(k, "mtxExecute", "err_replay", "", IMetaTx.mtxExecute.selector, m, sg, k.relayer);
         // the fee rule (step 6 today, after the call)
-        _pX(k, "err_feeExceedsCap_percent", _pMt(k, _pAmt(k, 100_000), 0, P_RR | P_PCT, 20_000, address(0)));
-        _pX(k, "err_feeExceedsCap_fixed", _pMt(k, _pAmt(k, 100_000), 0, P_RR | P_FIX, 1_001, address(0)));
-        _pX(k, "err_feeRecipientUaPool", _pMt(k, _pCancel(7), 0, P_RR | P_RF | P_FIX, 5, P_UAP));
+        _pXf(k, "err_feeExceedsCap_percent", _pMt(k, _pAmt(k, 100_000), 0, P_RR | P_PCT, 20_000, address(0)));
+        _pXf(k, "err_feeExceedsCap_fixed", _pMt(k, _pAmt(k, 100_000), 0, P_RR | P_FIX, 1_001, address(0)));
+        _pXf(k, "err_feeRecipientUaPool", _pMt(k, _pCancel(7), 0, P_RR | P_RF | P_FIX, 5, P_UAP));
         _pX(k, "err_feeUnpayable_absoluteClass", _pMt(k, _pCancel(7), 0, P_RR | P_FIX, type(uint128).max, address(0)));
         _pX(k, "err_feeUnpayable_amountCall", _pMt(k, _pAmt(k, MetaTokenBase(k.t).balanceOf(k.signer)), 0, P_RR | P_PCT, 1_000, address(0)));
         // the call itself reverts
@@ -732,8 +754,9 @@ abstract contract ParityCases is ParityIO {
         _pMx(k, "mtxExecute", "bothFail_feeExceedsCap_callReverts", "fee-error-first", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.relayer);
         m = _pMt(k, _pAmt(k, P_BIG), 0, P_RR | P_RF | P_PCT, 1_000, P_UAP);
         _pMx(k, "mtxExecute", "bothFail_feeRecipientUaPool_callReverts", "fee-error-first", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.relayer);
+        // not a fee fault (1,001 is under 1 % of P_BIG): only the call fails, unmarked (T3; the name is the fixture's)
         m = _pMt(k, _pAmt(k, P_BIG), 0, P_RR | P_FIX, 1_001, address(0));
-        _pMx(k, "mtxExecute", "bothFail_feeExceedsCapFixed_callReverts", "fee-error-first", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.relayer);
+        _pMx(k, "mtxExecute", "bothFail_feeExceedsCapFixed_callReverts", "", IMetaTx.mtxExecute.selector, m, _pSgM(k, m), k.relayer);
     }
 
     function _pMtxExecuteMisc(Tk memory k) internal {
@@ -796,7 +819,7 @@ abstract contract ParityCases is ParityIO {
         ms[1] = _pMt(k, _pAmt(k, 1_000), l1, P_RR | P_PCT, 20_000, address(0));
         sg[0] = _pSgM(k, ms[0]);
         sg[1] = _pSgM(k, ms[1]);
-        h = _pH("mtxBatch", "addr", "err_itemFeeExceedsCap");
+        h = H("mtxBatch", "addr", "err_itemFeeExceedsCap", "fee-error-first");
         _pRec(k, h, k.relayer, abi.encodeCall(IMetaTx.mtxBatch, (ms, sg)),
             _pD2("mtxDigest0", MetaTokenBase(k.t).mtxDigest(ms[0]), "mtxDigest1", MetaTokenBase(k.t).mtxDigest(ms[1])), _pL2(l0, l1));
         // shape
@@ -878,19 +901,20 @@ abstract contract ParityCases is ParityIO {
         MetaTokenBase(k.t).uaExecute(m, au);
         _pUx(k, "err_replay", "", m, au, k.relayer);
         // the fee rule (after the call today)
-        _pU(k, "err_feeExceedsCap_percent", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_PCT, 20_000, address(0)));
-        _pU(k, "err_feeExceedsCap_fixed", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_FIX, 1_001, address(0)));
-        _pU(k, "err_feeRecipientUaPool", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_RF | P_PCT, 1_000, P_UAP));
+        _pUf(k, "err_feeExceedsCap_percent", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_PCT, 20_000, address(0)));
+        _pUf(k, "err_feeExceedsCap_fixed", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_FIX, 1_001, address(0)));
+        _pUf(k, "err_feeRecipientUaPool", _pUm(k, s, _pAmt(k, 100_000), 0, P_RR | P_RF | P_PCT, 1_000, P_UAP));
         _pU(k, "err_feeUnpayable", _pUm(k, s, _pAmt(k, MetaTokenBase(k.t).balanceOf(k.signer)), 0, P_RR | P_PCT, 1_000, address(0)));
-        _pU(k, "err_feeHugeFixed", _pUm(k, s, _pAmt(k, 1), 0, P_RR | P_FIX, type(uint128).max, address(0)));
+        _pUf(k, "err_feeHugeFixed", _pUm(k, s, _pAmt(k, 1), 0, P_RR | P_FIX, type(uint128).max, address(0)));
         _pU(k, "err_callReverts", _pUm(k, s, _pAmt(k, P_BIG), 0, P_RR, 0, address(0)));
         // both fail
         m = _pUm(k, s, _pAmt(k, P_BIG), 0, P_RR | P_PCT, 20_000, address(0));
         _pUx(k, "bothFail_feeExceedsCap_callReverts", "fee-error-first", m, _pAuM(k, m), k.relayer);
         m = _pUm(k, s, _pAmt(k, P_BIG), 0, P_RR | P_RF | P_PCT, 1_000, P_UAP);
         _pUx(k, "bothFail_feeRecipientUaPool_callReverts", "fee-error-first", m, _pAuM(k, m), k.relayer);
+        // not a fee fault (1,001 is under 1 % of P_BIG): only the call fails, unmarked (T3; the name is the fixture's)
         m = _pUm(k, s, _pAmt(k, P_BIG), 0, P_RR | P_FIX, 1_001, address(0));
-        _pUx(k, "bothFail_feeExceedsCapFixed_callReverts", "fee-error-first", m, _pAuM(k, m), k.relayer);
+        _pUx(k, "bothFail_feeExceedsCapFixed_callReverts", "", m, _pAuM(k, m), k.relayer);
         _pUaUnwrap(k);
     }
 
@@ -928,7 +952,8 @@ abstract contract ParityCases is ParityIO {
         ms[1] = _pUm(k, s, _pAmt(k, 1_000), l1, P_RR | P_PCT, 20_000, address(0));
         au[0] = _pAuM(k, ms[0]);
         au[1] = _pAuM(k, ms[1]);
-        _pUbRec(k, "err_itemFeeExceedsCap", ms, au, l0, l1);
+        _pRec(k, H("uaBatch", "ua", "err_itemFeeExceedsCap", "fee-error-first"), k.relayer, abi.encodeCall(IUALedger.uaBatch, (ms, au)),
+            _pD2("uaDigest0", MetaTokenBase(k.t).uaDigest(ms[0]), "uaDigest1", MetaTokenBase(k.t).uaDigest(ms[1])), _pL2(l0, l1));
         _pUaCancel(k);
         H memory h = _pH("uaBatch", "ua", "err_empty");
         _pRec(k, h, k.relayer, abi.encodeCall(IUALedger.uaBatch, (new MetaTxLib.UAMetaTransaction[](0), new bytes[](0))), _pD("none", 0), _pL(0));

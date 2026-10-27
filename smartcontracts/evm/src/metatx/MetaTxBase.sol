@@ -63,7 +63,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return _nonce(MetaTxLib.pad(from), batch);
     }
 
-    function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
+    function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view virtual returns (bytes32) {
         return _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m)));
     }
 

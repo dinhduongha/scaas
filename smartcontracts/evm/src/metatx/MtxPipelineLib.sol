@@ -78,7 +78,7 @@ library MtxPipelineLib {
             _authorize(c, e.from, UAKinds.PURPOSE_METATX, o.digest, auth);
             if (f.len < 4 || !f.uaAllowed) revert IUALedger.MetaTxUnknownOp(f.sel);
         } else {
-            _requireSignature(c, address(uint160(uint256(e.from))), o.digest, auth);
+            _requireSignature(c, _native(e.from), o.digest, auth);
         }
         _checkCall(f.sel, f.len, f.feeClass, f.amountArg, f.staticLen, e.mode, MetaTxLib.MODE_KNOWN_MASK);
         _useNonce(e.from, e.batch);
@@ -96,7 +96,7 @@ library MtxPipelineLib {
         if (_checkEnvelope(m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer)) revert IMetaTx.SelfSender();
         o.digest = MessageHashUtils.toTypedDataHash(c.domainSeparator, _structHash(ua, m));
         if (ua) _authorize(c, m.from, UAKinds.PURPOSE_METATX, o.digest, auth);
-        else _requireSignature(c, address(uint160(uint256(m.from))), o.digest, auth);
+        else _requireSignature(c, _native(m.from), o.digest, auth);
         (o.fee, o.feeTo) = _checkTransfer(c.registry, m, have);
         _useNonce(m.from, m.batch);
     }
@@ -263,6 +263,12 @@ library MtxPipelineLib {
         if (a == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable();
         if (c.hedera && auth.length == 64 && !SigCheck.isContract(a)) return HederaLib.requireValid(a, digest, auth);
         if (!SigCheck.isValid7702(a, digest, auth, _erc1271Gas(c, a))) revert IMetaTx.MetaTxBadSignature();
+    }
+
+    /// @dev The address path's signer: a native id (upper 96 bits zero), never truncated from a derived one.
+    function _native(bytes32 id) private pure returns (address) {
+        if (!UAKinds.inNativeSpace(id)) revert IMetaTx.MetaTxBadSignature();
+        return address(uint160(uint256(id)));
     }
 
     function _erc1271Gas(Ctx calldata c, address from) private view returns (uint256) {
