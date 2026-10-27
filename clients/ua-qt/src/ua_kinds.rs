@@ -57,6 +57,14 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "memberDigest"]
         fn member_digest(self: Pin<&mut Self>, structure_ua: &QString, ua_msg: &QString) -> QString;
         #[qinvokable] #[cxx_name = "canonicalId"] fn canonical_id(self: Pin<&mut Self>, text: &QString) -> QString;
+        /// CTR-MTX-26: `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`; `salt` 32 bytes.
+        #[qinvokable] #[cxx_name = "metaPayId"] fn meta_pay_id(self: Pin<&mut Self>, salt: &QString, meta: &QString) -> QString;
+        /// CTR-MTX-03: `keccak256("scaas.pay.lane" ‖ p)` as 32 bytes hex (the on-chain `uint256`).
+        #[qinvokable] #[cxx_name = "payLane"] fn pay_lane(self: Pin<&mut Self>, p: &QString) -> QString;
+        /// CTR-MTX-27 (EVM): `keccak256("scaas.relayfee" ‖ uint256 chainId ‖ target ‖ keccak256(callData))`; `chain_id`
+        /// is a JS number (exact up to 2^53), `target` 20 bytes.
+        #[qinvokable] #[cxx_name = "relayRef"]
+        fn relay_ref(self: Pin<&mut Self>, chain_id: f64, target: &QString, call_data: &QString) -> QString;
         /// `members` is a JSON array of `[kind, "0x<id32>", weight]`.
         #[qinvokable] #[cxx_name = "encodeMsig"]
         fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString;
@@ -229,6 +237,15 @@ impl qobject::UaKinds {
     }
     pub fn member_digest(self: Pin<&mut Self>, structure_ua: &QString, ua_msg: &QString) -> QString {
         self.hex(|| Ok(ua::member_digest(&fixed(structure_ua)?, &fixed(ua_msg)?).to_vec()))
+    }
+    pub fn meta_pay_id(self: Pin<&mut Self>, salt: &QString, meta: &QString) -> QString {
+        self.hex(|| Ok(ua::meta_pay_id(&fixed(salt)?, &bytes(meta)?).to_vec()))
+    }
+    pub fn pay_lane(self: Pin<&mut Self>, p: &QString) -> QString {
+        self.hex(|| Ok(ua::pay_lane(&fixed(p)?).to_vec()))
+    }
+    pub fn relay_ref(self: Pin<&mut Self>, chain_id: f64, target: &QString, call_data: &QString) -> QString {
+        self.hex(|| Ok(ua::relay_ref(id(chain_id)?, &fixed(target)?, &bytes(call_data)?).to_vec()))
     }
     pub fn canonical_id(self: Pin<&mut Self>, text: &QString) -> QString {
         QString::from(&self.run(|| from_ua(ua::canonical_id(&s(text)))))

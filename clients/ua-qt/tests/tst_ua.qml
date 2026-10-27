@@ -192,6 +192,35 @@ TestCase {
         compare(UaKinds.lastError, "")
     }
 
+    // metatx split T18: CTR-MTX-26 metaPayId / payLane and CTR-MTX-27 relayRef (EVM) against the forge-written vectors
+    property var pm: vectors.load("../metatx/paymeta.json")
+    property var rr: vectors.load("../metatx/relayref.json")
+
+    function test_meta_pay_id_vectors() {
+        compare(pm.length, 6)
+        for (const r of pm) {
+            compare(UaKinds.metaPayId(r.salt, r.meta), r.payId, r.name)
+            compare(UaKinds.payLane(r.payId), r.payLane, r.name)
+            compare(UaKinds.lastError, "")
+        }
+        compare(UaKinds.metaPayId("0x1234", "0x"), "")
+        compare(UaKinds.lastError, "UAArgument")
+        compare(UaKinds.payLane("0xzz"), "")
+        compare(UaKinds.lastError, "UAArgument")
+    }
+
+    function test_relay_ref_matches_vector() {
+        compare(rr.length, 3)
+        for (const r of rr) {
+            compare(UaKinds.relayRef(r.chainId, r.target, r.callData), r.ref, r.name)
+            compare(UaKinds.payLane(r.ref), r.payLane, r.name)
+        }
+        compare(UaKinds.relayRef(7622, "0x" + "11".repeat(32), "0x"), "")
+        compare(UaKinds.lastError, "UAArgument")
+        compare(UaKinds.relayRef(-1, rr[0].target, "0x"), "")
+        compare(UaKinds.lastError, "UAArgument")
+    }
+
     function test_encode_msig() {
         const id = "0x" + "11".repeat(32)
         compare(UaKinds.encodeMsig(2, JSON.stringify([[256, id, 1], [257, id, 1]])),

@@ -417,6 +417,178 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   return { digest, paymentDigest, payer: p.from, fee, feeRecipient };
 }
 
+// ------------------------------------------------------------------ CTR-MTX-26: the payment id commits to its metadata
+
+const asBytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
+const at = (b, i) => BigInt(hex(b.subarray(32 * i, 32 * i + 32)));
+
+/** `metaPayId(salt, meta) = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))` (CTR-MTX-26; on chain `metaPayId`). */
+export function metaPayId(salt, meta) {
+  return hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.meta'), bytes32(salt), keccak_256(asBytes(meta)))));
+}
+
+/** The envelope `meta = abi.encode(uint16 schema, bytes body)`. */
+export function encodeMeta(schema, body) {
+  if (!Number.isInteger(schema) || schema < 0 || schema > 0xffff) throw new Error('schema is a uint16');
+  return abiEncode(['uint16', 'bytes'], [schema, asBytes(body)]);
+}
+
+/** The `bytes` whose head word is word `i` of `b`, read strictly (re-encoding checks canonical form). */
+function dynAt(b, i) {
+  const off = at(b, i);
+  if (off + 32n > BigInt(b.length)) refuse('the metadata is malformed');
+  const n = at(b.subarray(Number(off)), 0);
+  if (off + 32n + n > BigInt(b.length)) refuse('the metadata is malformed');
+  return b.subarray(Number(off) + 32, Number(off) + 32 + Number(n));
+}
+
+function utf8(b) {
+  try { return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(b); } catch { return refuse('the note is not UTF-8'); }
+}
+
+/** Decodes a `meta` for the review screen (CTR-MTX-26 bodies): 1 note (`{note}`), 2 structured reference
+ *  (`{creditorRef, invoiceNo, dueDate}`), 3 bound call (`{chainId, target, callHash}`), 4 encrypted (`{encrypted: n
+ *  bytes}`, not decrypted here). Only the canonical ABI form is accepted; an unknown schema is refused. */
+export function decodeMeta(meta) {
+  const m = asBytes(meta);
+  if (m.length < 96) refuse('the metadata is malformed');
+  const schema = at(m, 0);
+  if (schema > 0xffffn) refuse('the metadata is malformed');
+  const body = dynAt(m, 1);
+  if (hex(encodeMeta(Number(schema), body)) !== hex(m)) refuse('the metadata is not in canonical form');
+  let shown;
+  if (schema === 1n) shown = { note: utf8(body) };
+  else if (schema === 2n) {
+    if (body.length < 96) refuse('the metadata is malformed');
+    const [creditor, invoice, dueDate] = [dynAt(body, 0), dynAt(body, 1), at(body, 2)];
+    if (dueDate >= 1n << 64n || hex(abiEncode(['bytes', 'bytes', 'uint64'], [creditor, invoice, dueDate])) !== hex(body)) {
+      refuse('the metadata is not in canonical form');
+    }
+    shown = { creditorRef: utf8(creditor), invoiceNo: utf8(invoice), dueDate };
+  } else if (schema === 3n) {
+    if (body.length !== 96) refuse('the metadata is malformed');
+    shown = { chainId: at(body, 0), target: hex(body.subarray(32, 64)), callHash: hex(body.subarray(64, 96)) };
+  } else if (schema === 4n) shown = { encrypted: body.length };
+  else refuse('unknown metadata schema');
+  return { schema: Number(schema), body, shown };
+}
+
+/** `(salt, meta)` → payId, lane, decoded meta; refuses when the request's `entryRef` is not `metaPayId(salt, meta)`. */
+function payMetaParts({ salt, meta, entryRef }) {
+  const s = hex(bytes32(salt));
+  const m = asBytes(meta);
+  const { schema, shown } = decodeMeta(m);
+  const payId = metaPayId(s, m);
+  if (entryRef != null && !same(entryRef, payId)) refuse('the payment id does not commit to its metadata');
+  return { salt: s, meta: m, payId, lane: payLane(payId), schema, shown };
+}
+
+const PAY_TAIL = ['uint256', 'uint32', 'address', 'uint256', 'address', 'bytes'];
+
+function buildPayMeta(ua, { name, token, chainId, chainUid, from, to, amount, salt, meta, entryRef, validUntil, mode = 0,
+  relayer = ZERO_ADDRESS, fee = 0, feeRecipient = ZERO_ADDRESS, onChain = true }) {
+  const p = payMetaParts({ salt, meta, entryRef });
+  const build = ua ? uaMetaTransferTypedData : metaTransferTypedData;
+  const typedData = build({ name, contract: token, chainId, chainUid, message: { from, to, value: amount, entryRef: p.payId,
+    batch: p.lane, nonce: 0, validUntil, mode, relayer, fee, feeRecipient } });
+  const t = typedData.message;
+  const id = ua ? 'bytes32' : 'address';
+  const tail = (sig) => [t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient, sig];
+  const calldata = (sig) => (onChain
+    ? abiCall(`${ua ? 'uaPayMeta' : 'mtxPayMeta'}(${id},${id},uint256,bytes32,bytes,${PAY_TAIL.join(',')})`,
+      [id, id, 'uint256', 'bytes32', 'bytes', ...PAY_TAIL], [t.from, t.to, t.value, p.salt, p.meta, ...tail(sig)])
+    : abiCall(`${ua ? 'uaPay' : 'mtxPay'}(${id},${id},uint256,bytes32,${PAY_TAIL.join(',')})`,
+      [id, id, 'uint256', 'bytes32', ...PAY_TAIL], [t.from, t.to, t.value, p.payId, ...tail(sig)]));
+  return { typedData, digest: digestOf(typedData), payId: p.payId, lane: p.lane, salt: p.salt, meta: hex(p.meta),
+    schema: p.schema, shown: p.shown, calldata };
+}
+
+/** A pay-meta payment the client builds (CTR-MTX-26): the `MetaTransfer` of `mtxPay` with `entryRef = metaPayId(salt,
+ *  meta)`, lane `payLane(entryRef)`, nonce 0. `entryRef` (optional, the request's) must equal it, else refused.
+ *  `amount` in base units. `calldata(signature)` is `mtxPayMeta(…)` (meta published), or with `onChain: false` the
+ *  off-chain variant `mtxPay(…, payId, …)` (the same digest; the payee keeps `(salt, meta)`). Returns {typedData, digest,
+ *  payId, lane, salt, meta, schema, shown, calldata}. */
+export const buildMtxPayMeta = (opts) => buildPayMeta(false, opts);
+
+/** `buildMtxPayMeta` on the UA path: a `UAMetaTransfer` between 32-byte ids; `uaPayMeta(…)` / `uaPay(…)`. */
+export const buildUaPayMeta = (opts) => buildPayMeta(true, opts);
+
+/** `checkPayment` for a pay-meta request: the server's `MetaTransfer` must carry `entryRef = metaPayId(salt, meta)` of
+ *  the `(salt, meta)` the client holds (else refused), then every `checkPayment` check with that `entryRef`. Returns
+ *  `checkPayment`'s result plus {payId, salt, meta, schema, shown} for the review screen. */
+export function checkPayMeta(td, { salt, meta, entryRef, ...opts }) {
+  const p = payMetaParts({ salt, meta, entryRef });
+  if (!same(((td && td.message) || {}).entryRef, p.payId)) refuse('the payment id does not commit to its metadata');
+  return { ...checkPayment(td, { ...opts, entryRef: p.payId }), payId: p.payId, salt: p.salt, meta: hex(p.meta),
+    schema: p.schema, shown: p.shown };
+}
+
+// ------------------------------------------------------------------ CTR-MTX-27: a token fee for a fee-less call
+
+/** `relayRef(target, callData) = keccak256("scaas.relayfee" ‖ uint256 chainid ‖ target ‖ keccak256(callData))` on chain
+ *  `chainId` (EVM, `MtxRelayFee.relayRef`; other families use their own `ref` forms). */
+export function relayRef(chainId, target, callData) {
+  const t = fromHex(target);
+  if (t.length !== 20) refuse('the target is not an address');
+  return hex(keccak_256(concatBytes(utf8ToBytes('scaas.relayfee'), word(chainId), t, keccak_256(asBytes(callData)))));
+}
+
+const MTX_TUPLE = '(address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)';
+/** `mtxExecute(m, signature)` calldata of a signed `MetaTransaction` typed data (the call a relay-fee payment pays for). */
+export function mtxExecuteCalldata(td, signature) {
+  const m = td.message;
+  const tuple = abiEncode(['address', 'bytes', 'uint256', 'uint256', 'uint256', 'uint32', 'address', 'uint256', 'address'],
+    [m.from, m.data, m.batch, m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient]);
+  return concatBytes(fromHex(sel(`mtxExecute(${MTX_TUPLE},bytes)`)), word(64), word(64 + tuple.length), tuple,
+    abiEncode(['bytes'], [asBytes(signature)]).subarray(32));
+}
+
+const TRANSFER_TUPLE = (id) => `(${id},${id},uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)`;
+
+/** A relay-fee job (CTR-MTX-27) on `router` (`MtxRelayFee`, executor `executor`): `inner` (optional) is the call's own
+ *  `MetaTransaction` typed data on `target`; a relayer it binds (`MODE_RESTRICT_RELAYER`) is set to the executor (left
+ *  open otherwise; bound to anything else: refused). Open mode by default (`payee` unset: the payment goes to the router,
+ *  which pays whoever submits); `payee` binds it (never the executor). `ua`: the payer `from` and `payee` are 32-byte ids.
+ *  Returns {call (the inner typed data to sign first, or null), prompt {call, payment}: both intents for one review,
+ *  payment(callData) → {ref, lane, typedData, digest, calldata(sig)}}: `callData` is the call with its own signature
+ *  (`mtxExecuteCalldata`); the payment is `{from, to, value: amount, entryRef: ref, batch: payLane(ref), nonce: 0,
+ *  validUntil, mode: RESTRICT_RELAYER, relayer: router, fee: 0}`, `calldata` is `relay(…)` / `uaRelay(…)`. */
+export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainUid, router, executor, target, inner, from,
+  amount, payee, validUntil, ua = false }) {
+  if (same(target, executor) || same(target, router)) refuse('a relay never targets the router or its executor');
+  const idOf = (a) => (ua ? padId(a) : a);
+  const open = payee == null;
+  const to = open ? idOf(router) : payee;
+  if (same(to, idOf(executor)) || same(to, executor)) refuse('never pay the executor');
+  let call = null;
+  let bound = 0n;
+  if (inner) {
+    const m = inner.message || {};
+    if (!same((inner.domain || {}).verifyingContract, target)) refuse('the call is not on the target');
+    bound = BigInt(m.mode ?? 0) & 1n;
+    if (bound && !same(m.relayer, ZERO_ADDRESS) && !same(m.relayer, executor)) refuse('the call is bound to another relayer');
+    call = { ...inner, message: { ...m, relayer: bound ? executor : m.relayer } };
+  }
+  const prompt = {
+    call: call ? { target, data: call.message.data, from: call.message.from, relayer: bound ? executor : null }
+      : { target },
+    payment: { token, amount: BigInt(amount), payee: open ? null : to, open },
+  };
+  const payment = (callData) => {
+    const ref = relayRef(chainId, target, callData);
+    const lane = payLane(ref);
+    const typedData = (ua ? uaMetaTransferTypedData : metaTransferTypedData)({ name, contract: token, chainId, chainUid,
+      message: { from, to, value: amount, entryRef: ref, batch: lane, nonce: 0, validUntil, mode: 1, relayer: router, fee: 0 } });
+    const t = typedData.message;
+    const tuple = [t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient];
+    const T = TRANSFER_TUPLE(ua ? 'bytes32' : 'address');
+    const calldata = (sig) => abiCall(`${ua ? 'uaRelay' : 'relay'}(address,bytes,address,${T},bytes)`,
+      ['address', 'bytes', 'address', T, 'bytes'], [target, asBytes(callData), token, tuple, asBytes(sig)]);
+    return { ref, lane, typedData, digest: digestOf(typedData), calldata };
+  };
+  return { call, prompt, payment };
+}
+
 /** A self-call `MetaTransaction` (CTR-MTX-17) that is exactly the call the client built, `call = {contract, data}`:
  *  `verifyingContract` and `data` equal; `data` decoded against the contract's published allowlist `[{selector, name,
  *  feeClass, amountArg}]` (`mtxSelectors()`, pinned per implementation version, CLI-SGN-34); an unknown selector, a

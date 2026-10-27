@@ -134,6 +134,42 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         assertTrue(router.relayRef(address(target), cd) != r, "the chain id is in ref");
     }
 
+    /// `../vectors/metatx/relayref.json` (`[{name, chainId, target, callData, callHash, ref, payLane}]`): written with
+    /// `RELAYREF_WRITE=1`, else checked against the router and the token; `clientkeys`, `ua-rs` and `ua-qt` read it
+    /// (metatx split T18). `cancel_nonce_7` is the call `paymeta.json`'s `bound_call` (schema 3) commits to.
+    function test_relayRefVectors() public {
+        string memory file = "../vectors/metatx/relayref.json";
+        if (vm.envOr("RELAYREF_WRITE", false)) {
+            bytes memory long = new bytes(300);
+            for (uint256 i; i < 300; ++i) long[i] = bytes1(uint8(uint256(keccak256(abi.encode("relayref", i / 32))) >> (8 * (i % 32))));
+            string memory j = string.concat("[\n", _refRow("cancel_nonce_7", 7622, address(0xC0FFEE),
+                abi.encodeCall(IMetaTx.cancelNonce, (7))), ",\n");
+            j = string.concat(j, _refRow("empty_call", 22776, address(0x5CAA5), ""), ",\n");
+            vm.writeFile(file, string.concat(j, _refRow("long_call_anvil", 31337, address(0xBEEFCAFE), long), "\n]\n"));
+        }
+        string memory f = vm.readFile(file);
+        uint256 rows;
+        while (vm.keyExistsJson(f, string.concat("[", vm.toString(rows), "]"))) ++rows;
+        assertEq(rows, 3, "rows");
+        for (uint256 i; i < rows; ++i) {
+            string memory p = string.concat("[", vm.toString(i), "]");
+            vm.chainId(vm.parseJsonUint(f, string.concat(p, ".chainId")));
+            bytes memory cd = vm.parseJsonBytes(f, string.concat(p, ".callData"));
+            bytes32 r = vm.parseJsonBytes32(f, string.concat(p, ".ref"));
+            assertEq(keccak256(cd), vm.parseJsonBytes32(f, string.concat(p, ".callHash")), "callHash");
+            assertEq(router.relayRef(vm.parseJsonAddress(f, string.concat(p, ".target")), cd), r, "ref");
+            assertEq(bytes32(tok.payLane(r)), vm.parseJsonBytes32(f, string.concat(p, ".payLane")), "payLane");
+        }
+    }
+
+    function _refRow(string memory name, uint256 chainId, address t, bytes memory cd) internal returns (string memory) {
+        vm.chainId(chainId);
+        bytes32 r = router.relayRef(t, cd);
+        string memory head = string.concat('  {"name":"', name, '","chainId":', vm.toString(chainId), ',"target":"',
+            vm.toString(t), '","callData":"', vm.toString(cd), '","callHash":"', vm.toString(keccak256(cd)));
+        return string.concat(head, '","ref":"', vm.toString(r), '","payLane":"', vm.toString(bytes32(tok.payLane(r))), '"}');
+    }
+
     // ------------------------------------------------------------------ CTR-MTX-27 conformance
 
     /// (1) a payment bound to another target, other call bytes or another chain is refused.

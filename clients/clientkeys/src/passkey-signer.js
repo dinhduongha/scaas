@@ -4,5 +4,6 @@ export {
   hashTypedData, passkeySubjectKey, secpSubjectKey, accountSignature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
   checkCall, checkTradeOrder, checkCancel, payLane, metaTransferTypedData, tradeOrderTypedData, orderCancelTypedData,
   uaMetaTxTypedData, uaMetaTransferTypedData, padId,
+  metaPayId, decodeMeta, checkPayMeta, buildMtxPayMeta, buildUaPayMeta, relayRef, mtxExecuteCalldata, buildRelayFee,
 } from './evm.js';
 export { b64url, fromB64url, hex, fromHex } from './bytes.js';
