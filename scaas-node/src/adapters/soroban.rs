@@ -16,7 +16,7 @@ use stellar_xdr::{
     AccountId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
     FeeBumpTransactionInnerTx, HashIdPreimage, HostFunction, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntryData,
     LedgerKey, LedgerKeyAccount, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
-    ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, SequenceNumber, Signature, SignatureHint,
+    ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
     SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanCredentials,
     SorobanTransactionData, TimeBounds, TimePoint, Transaction, TransactionEnvelope, TransactionExt,
     TransactionV1Envelope, Uint256, WriteXdr,
@@ -311,7 +311,17 @@ impl ChainAdapter for SorobanAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let op = job.op.clone().ok_or_else(|| SimError::Revert("job without op".into()))?;
         let valid_until = op["valid_until"].as_u64().ok_or_else(|| SimError::Revert("op.valid_until missing".into()))?;
-        let (call, auth) = host_call(&self.network_id, &op).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let (call, auth) = match op["kind"].as_str() {
+            Some("pay_meta") => pay_meta_job(&self.network_id, &op).map_err(rv)?,
+            Some("relay_fee") => {
+                let pk = lane_pk(self.signer(lane).map_err(rv)?).map_err(rv)?;
+                let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
+                let (c, a, _) = relay_fee_job(&self.network_id, &op, &lane_addr).map_err(rv)?;
+                (c, a)
+            }
+            _ => host_call(&self.network_id, &op).map_err(rv)?,
+        };
         let tx = self.tx(lane, 0, valid_until, call, auth).map_err(|e| SimError::Revert(format!("{e:#}")))?;
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: Default::default() });
         let b64 = env.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
@@ -463,6 +473,114 @@ fn events_params(filter: &Value, from: u64, to: u64, cursor: Option<&str>) -> Va
     }
 }
 
+/// `max_pay_meta_bytes` (spec §9): the node's cap on a pay-meta `meta`.
+const MAX_PAY_META_BYTES: usize = 2048;
+
+/// CTR-MTX-26: `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, the token's `meta_pay_id`.
+pub fn meta_pay_id(salt: &[u8], meta: &[u8]) -> [u8; 32] {
+    let mut b = b"scaas.pay.meta".to_vec();
+    b.extend_from_slice(salt);
+    b.extend_from_slice(alloy::primitives::keccak256(meta).as_slice());
+    alloy::primitives::keccak256(b).0
+}
+
+/// CTR-MTX-27 `ref` (the router's `relay_ref`): `keccak256("scaas.relayfee" ‖ network id ‖ xdr(target) ‖
+/// keccak256(xdr((func, args))))`.
+pub fn relay_ref(network: &[u8; 32], target: &ScAddress, func: &str, args: &[ScVal]) -> [u8; 32] {
+    let pair = vec![
+        ScVal::Symbol(ScSymbol(func.try_into().expect("function name"))),
+        ScVal::Vec(Some(ScVec(args.to_vec().try_into().expect("args")))),
+    ];
+    let call = ScVal::Vec(Some(ScVec(pair.try_into().expect("pair"))));
+    let mut b = b"scaas.relayfee".to_vec();
+    b.extend_from_slice(network);
+    b.extend_from_slice(&ScVal::Address(target.clone()).to_xdr(Limits::none()).expect("xdr"));
+    b.extend_from_slice(alloy::primitives::keccak256(call.to_xdr(Limits::none()).expect("xdr")).as_slice());
+    alloy::primitives::keccak256(b).0
+}
+
+fn bytes_arg(v: &ScVal) -> Option<&[u8]> {
+    match v {
+        ScVal::Bytes(b) => Some(b.as_slice()),
+        _ => None,
+    }
+}
+
+fn op_bytes(op: &Value, k: &str) -> Result<Vec<u8>> {
+    unhex(op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"))?.trim_start_matches("0x"))
+}
+
+/// Pay-meta job: the signed invocation is the token's `pay_meta`; `op.salt` / `op.meta` must be the signed
+/// arguments (the auth entry covers them), `op.pay_ref` (when given) the commitment, `meta` within the cap.
+pub fn pay_meta_job(network: &[u8; 32], op: &Value) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
+    let (call, auth) = host_call(network, op)?;
+    if call.function_name.0.as_slice() != b"pay_meta" || call.args.len() != 6 {
+        bail!("pay-meta job must call pay_meta(from, to, amount, salt, meta, valid_until)");
+    }
+    let (salt, meta) = (op_bytes(op, "salt")?, op_bytes(op, "meta")?);
+    if meta.len() > MAX_PAY_META_BYTES {
+        bail!("meta is {} B, above the {MAX_PAY_META_BYTES} B cap", meta.len());
+    }
+    if bytes_arg(&call.args[3]) != Some(&salt[..]) || bytes_arg(&call.args[4]) != Some(&meta[..]) {
+        bail!("op.salt / op.meta differ from the signed pay_meta arguments");
+    }
+    if !op["pay_ref"].is_null() && op_bytes(op, "pay_ref")? != meta_pay_id(&salt, &meta) {
+        bail!("pay_ref != metaPayId(salt, meta)");
+    }
+    Ok((call, auth))
+}
+
+/// Relay-fee job: `extra.call` is the router's `relay(payer, target, func, args, token, to, amount, valid_until,
+/// relayer)`; the payer's signed root is the same call with the seven `require_auth_for_args` arguments and the
+/// token's `pay` (carrying `ref`) as sub-invocation. Checks `ref` against the call bytes, the relayer against this
+/// lane (`relayer` is the transaction source) and the signed tree against the executed call.
+pub fn relay_fee_job(network: &[u8; 32], op: &Value, lane: &ScAddress) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>, [u8; 32])> {
+    let (call, auth) = host_call(network, op)?;
+    if op["extra"]["call"].is_null() {
+        bail!("relay-fee job needs extra.call (the router call)");
+    }
+    let SorobanCredentials::Address(cred) = &auth[0].credentials else { bail!("payer entry has no address credentials") };
+    let SorobanAuthorizedFunction::ContractFn(root) = &auth[0].root_invocation.function else { bail!("signed root is not a contract call") };
+    if call.function_name.0.as_slice() != b"relay" || call.args.len() != 9 || root.function_name.0.as_slice() != b"relay" {
+        bail!("relay-fee job must call relay(payer, target, func, args, token, to, amount, valid_until, relayer)");
+    }
+    if root.contract_address != call.contract_address || root.args.as_slice() != &call.args[1..8] {
+        bail!("the signed root is not this relay call");
+    }
+    if call.args[0] != ScVal::Address(cred.address.clone()) {
+        bail!("payer argument is not the signer");
+    }
+    if call.args[8] != ScVal::Address(lane.clone()) {
+        bail!("relayer argument is not this lane");
+    }
+    let (ScVal::Address(target), ScVal::Symbol(func), ScVal::Vec(Some(inner))) = (&call.args[1], &call.args[2], &call.args[3]) else {
+        bail!("relay target / func / args malformed");
+    };
+    let rf = relay_ref(network, target, &func.0.to_utf8_string_lossy(), inner.as_slice());
+    if op_bytes(op, "ref")? != rf {
+        bail!("op.ref != relay_ref(target, func, args)");
+    }
+    // The signed tree must contain exactly the payment that commits to `ref`.
+    let ScVal::Address(token) = &call.args[4] else { bail!("token argument malformed") };
+    let pays = auth[0].root_invocation.sub_invocations.iter().filter(|s| match &s.function {
+        SorobanAuthorizedFunction::ContractFn(f) => {
+            f.contract_address == *token
+                && f.function_name.0.as_slice() == b"pay"
+                && f.args.len() == 5
+                && f.args[0] == call.args[0]
+                && f.args[1] == call.args[5]
+                && f.args[2] == call.args[6]
+                && bytes_arg(&f.args[3]) == Some(&rf[..])
+                && f.args[4] == call.args[7]
+        }
+        _ => false,
+    });
+    if pays.count() != 1 {
+        bail!("the payer's signature does not carry token.pay(payer, to, amount, ref, valid_until)");
+    }
+    Ok((call, auth, rf))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -524,6 +642,142 @@ mod tests {
         let ev = json!({"ledger": 7, "contractId": CONTRACT, "txHash": "ab".repeat(32), "id": "1-2",
                         "topic": [sym("transfer"), addr(FROM)], "value": b32.to_xdr_base64(Limits::none()).unwrap()});
         assert!(decode_event(&ev).is_none(), "SEP-41 transfer events are not ours");
+    }
+
+    // ------------------------------------------------------------ metatx-split T10 (CTR-MTX-26 / 27)
+
+    use stellar_xdr::{
+        HashIdPreimageSorobanAuthorization, Hash, Int128Parts, SorobanAuthorizedInvocation,
+    };
+
+    const WALLET: &str = "CAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGGJH";
+    const OWNER: &str = FROM;
+    /// `smartcontracts/soroban/contracts/relay-fee/src/test.rs::VEC_REF` (network id 0x07 x 32).
+    const VEC_REF: &str = "1fbf24f83d5c9aa7018ee18b9b29e29a110909eb48a671afc8e086cc8e99efb2";
+    const NET7: [u8; 32] = [7; 32];
+
+    fn addr(s: &str) -> ScVal {
+        ScVal::Address(ScAddress::from_str(s).unwrap())
+    }
+    fn sym(s: &str) -> ScVal {
+        ScVal::Symbol(ScSymbol(s.try_into().unwrap()))
+    }
+    fn byt(b: &[u8]) -> ScVal {
+        ScVal::Bytes(b.to_vec().try_into().unwrap())
+    }
+    fn vecv(v: Vec<ScVal>) -> ScVal {
+        ScVal::Vec(Some(ScVec(v.try_into().unwrap())))
+    }
+    fn i128v(x: u64) -> ScVal {
+        ScVal::I128(Int128Parts { hi: 0, lo: x })
+    }
+    fn inv(contract: &str, f: &str, args: Vec<ScVal>, subs: Vec<SorobanAuthorizedInvocation>) -> SorobanAuthorizedInvocation {
+        SorobanAuthorizedInvocation {
+            function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
+                contract_address: ScAddress::from_str(contract).unwrap(),
+                function_name: ScSymbol(f.try_into().unwrap()),
+                args: args.try_into().unwrap(),
+            }),
+            sub_invocations: subs.try_into().unwrap(),
+        }
+    }
+    fn payload(net: [u8; 32], root: SorobanAuthorizedInvocation) -> String {
+        let p = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
+            network_id: Hash(net),
+            nonce: 42,
+            signature_expiration_ledger: 1000,
+            invocation: root,
+        });
+        hex(&p.to_xdr(Limits::none()).unwrap())
+    }
+    fn sig() -> String {
+        "ab".repeat(64)
+    }
+    fn meta_row() -> Value {
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        rows[0].clone()
+    }
+    fn strip(s: &Value) -> Vec<u8> {
+        unhex(s.as_str().unwrap().trim_start_matches("0x")).unwrap()
+    }
+    fn pay_meta_op(salt: &[u8], meta: &[u8], op_salt: &[u8], op_meta: &[u8]) -> Value {
+        let args = vec![addr(FROM), addr(WALLET), i128v(40), byt(salt), byt(meta), ScVal::U64(1_800_000_300)];
+        json!({"payload": payload(NET7, inv(CONTRACT, "pay_meta", args, vec![])), "from": FROM, "signature": sig(),
+               "contract": CONTRACT, "valid_until": 1_800_000_300u64,
+               "salt": format!("0x{}", hex(op_salt)), "meta": format!("0x{}", hex(op_meta)), "extra": {}})
+    }
+
+    #[test]
+    fn soroban_pay_meta_job_builds_pay_meta() {
+        let r = meta_row();
+        let (salt, meta, id) = (strip(&r["salt"]), strip(&r["meta"]), strip(&r["payId"]));
+        // The shared vector: payId = keccak256("scaas.pay.meta" || salt || keccak256(meta)).
+        assert_eq!(meta_pay_id(&salt, &meta).to_vec(), id);
+        let mut op = pay_meta_op(&salt, &meta, &salt, &meta);
+        let (call, auth) = pay_meta_job(&NET7, &op).unwrap();
+        assert_eq!((call.function_name.0.as_slice(), call.args.len(), auth.len()), (&b"pay_meta"[..], 6, 1));
+        // pay_ref given by the job must equal the commitment.
+        op["pay_ref"] = json!(format!("0x{}", hex(&id)));
+        assert!(pay_meta_job(&NET7, &op).is_ok());
+        op["pay_ref"] = json!(format!("0x{}", "00".repeat(32)));
+        assert!(pay_meta_job(&NET7, &op).is_err(), "pay_ref != metaPayId");
+        // The unsigned salt / meta must be the signed ones (the auth entry covers them).
+        assert!(pay_meta_job(&NET7, &pay_meta_op(&salt, &meta, &[1; 32], &meta)).is_err());
+        assert!(pay_meta_job(&NET7, &pay_meta_op(&salt, &meta, &salt, b"other")).is_err());
+        // Wrong function, over the cap.
+        let mut plain = pay_meta_op(&salt, &meta, &salt, &meta);
+        plain["payload"] = json!(payload(NET7, inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&id), ScVal::U64(1)], vec![])));
+        assert!(pay_meta_job(&NET7, &plain).is_err());
+        let big = vec![7u8; MAX_PAY_META_BYTES + 1];
+        assert!(pay_meta_job(&NET7, &pay_meta_op(&salt, &big, &salt, &big)).is_err());
+        assert!(pay_meta_job(&network_id(NETWORK), &op).is_err(), "foreign network");
+    }
+
+    fn relay_job(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8]) -> Value {
+        let token = CONTRACT;
+        let args = vec![addr(token), addr(OWNER)];
+        let to = addr(WALLET); // any contract as the (bound) payee
+        let signed = vec![addr(WALLET), sym("revoke"), vecv(args.clone()), addr(token), to.clone(), i128v(7), ScVal::U64(1_800_000_300)];
+        let pay = inv(token, "pay", vec![addr(OWNER), to.clone(), i128v(7), byt(token_pay_ref), ScVal::U64(1_800_000_300)], vec![]);
+        let root = inv(WALLET2, "relay", signed.clone(), vec![pay]);
+        let mut full = vec![addr(OWNER)];
+        let mut sg = signed;
+        sg[0] = addr(target_in_call);
+        full.extend(sg);
+        full.push(addr(relayer));
+        let call = InvokeContractArgs {
+            contract_address: ScAddress::from_str(WALLET2).unwrap(),
+            function_name: ScSymbol("relay".try_into().unwrap()),
+            args: full.try_into().unwrap(),
+        };
+        json!({"kind": "relay_fee", "payload": payload(NET7, root), "from": OWNER, "signature": sig(), "contract": WALLET2,
+               "valid_until": 1_800_000_300u64, "ref": format!("0x{}", hex(op_ref)),
+               "extra": {"call": hex(&call.to_xdr(Limits::none()).unwrap())}})
+    }
+    const WALLET2: &str = "CBCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEJ5HZ"; // the router
+    const LANE: &str = "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6";
+
+    #[test]
+    fn soroban_relay_fee_job_checks_ref() {
+        let args = vec![addr(CONTRACT), addr(OWNER)];
+        let rf = relay_ref(&NET7, &ScAddress::from_str(WALLET).unwrap(), "revoke", &args);
+        assert_eq!(hex(&rf), VEC_REF, "same ref as the contract's test");
+        let lane = ScAddress::from_str(LANE).unwrap();
+        let ok = relay_job(&rf, LANE, WALLET, &rf);
+        let (call, auth, got) = relay_fee_job(&NET7, &ok, &lane).unwrap();
+        assert_eq!((call.function_name.0.as_slice(), call.args.len(), auth.len(), got), (&b"relay"[..], 9, 1, rf));
+        // The payment's ref is not the call's ref.
+        assert!(relay_fee_job(&NET7, &relay_job(&[9; 32], LANE, WALLET, &rf), &lane).is_err());
+        // The job's declared ref is not the call's.
+        assert!(relay_fee_job(&NET7, &relay_job(&rf, LANE, WALLET, &[9; 32]), &lane).is_err());
+        // The relayer argument is not this lane (the router marker).
+        assert!(relay_fee_job(&NET7, &relay_job(&rf, FROM, WALLET, &rf), &lane).is_err());
+        // The executed call differs from the signed one.
+        assert!(relay_fee_job(&NET7, &relay_job(&rf, LANE, CONTRACT, &rf), &lane).is_err());
+        // No explicit call: refused.
+        let mut bare = ok.clone();
+        bare["extra"] = json!({});
+        assert!(relay_fee_job(&NET7, &bare, &lane).is_err());
     }
 
     proptest! {
