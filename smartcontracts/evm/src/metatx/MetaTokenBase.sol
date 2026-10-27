@@ -326,6 +326,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         if (fee == 0 || fee > t.value) revert ReceiverFeeAmount(fee, t.value);
         if (feeRecipient == t.to) revert FeeRecipientIsPayee();
         if (feeRecipient == address(this)) revert TransferToSelf();
+        _notPool(feeRecipient); // C5-3
         bytes32 d = _executeTransfer(t, payerSig);
         _requireValidSignature(t.to, receiverFeeDigest(d, fee, feeRecipient, rfValidUntil), payeeSig);
         _transfer(t.to, feeRecipient, fee);

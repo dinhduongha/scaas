@@ -472,8 +472,9 @@ contract PqzNoneTest is PqzFixture {
         factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "mainnet");
     }
 
-    /// UA-6 (RF6): a registered `mldsa65` UA without a PQZ key is no PQZ account: as sender, leg, beneficiary,
-    /// shield target and auditor alike (`AccountNotRegistered`).
+    /// UA-6 (RF6): a registered `mldsa65` UA without a PQZ key is no PQZ account: as sender, leg,
+    /// shield target and auditor alike (`AccountNotRegistered`); not as the fee beneficiary, which needs only a registered
+    /// UA (C0-7, owner 2026-10-27: `PqzGuards.t.sol` test_beneficiary_anyRegisteredUA).
     function test_keylessUAIsNoPqzAccount() public {
         bytes32 k = _mldsaUA(20);
         bytes memory out = _out(60, true);
@@ -481,9 +482,6 @@ contract PqzNoneTest is PqzFixture {
         _credits(alice, 1);
         bytes memory pl = _payload(1, 0, alice, k, bytes32(0), out, "");
         vm.expectRevert(err); // recipient leg
-        tok.mtxConfidentialTransferSingle(pl, hex"01", _mlAuth(), _benT(pl), "");
-        pl = _payload(1, 0, alice, bob, k, out, "");
-        vm.expectRevert(err); // beneficiary
         tok.mtxConfidentialTransferSingle(pl, hex"01", _mlAuth(), _benT(pl), "");
         pl = _payload(1, 0, k, bob, bytes32(0), out, "");
         vm.expectRevert(err); // sender
@@ -523,7 +521,7 @@ contract PqzNoneTest is PqzFixture {
         bytes memory st = tok.transferSingleStatement(pl, 0);
         assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.BUNDLE));
         bytes memory stN = tok.transferSingleStatement(pl, 0);
-        bytes32 nb = _direct(ZetherTypes.TransferMode.NONE);
+        bytes32 nb = _direct(ZetherTypes.TransferMode.HASH);
         assembly ("memory-safe") { mstore(add(stN, 576), nb) } // word 544: another mode's binding
         bytes memory proof = hex"b0b0";
         _mockOp(1, 0); // the precompile accepts exactly the other mode's statement

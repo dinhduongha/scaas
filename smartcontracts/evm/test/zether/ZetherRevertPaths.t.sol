@@ -138,14 +138,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_transferToSelfRejected() public {
         Tx memory t = _aliceTx();
-        for (uint256 i; i < 128; ++i) t.payload[208 + i] = t.payload[80 + i]; // Y_to := Y_from
+        for (uint256 i; i < 128; ++i) t.payload[240 + i] = t.payload[112 + i]; // Y_to := Y_from
         _call(t.payload, t.proof, _none(), abi.encodeWithSelector(IZetherToken.SelfTransfer.selector));
     }
 
     function test_transferToUnregisteredRejected() public {
         Tx memory t = _aliceTx();
         bytes memory gy = ZetherKeys.pub(0x6057, true);
-        for (uint256 i; i < 128; ++i) t.payload[208 + i] = gy[i];
+        for (uint256 i; i < 128; ++i) t.payload[240 + i] = gy[i];
         _call(t.payload, t.proof, _none(),
             abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(gy)));
     }
@@ -175,11 +175,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_everyEntryPointNonReentrant() public {
         vm.etch(address(noneImpl), address(new GuardHarness(_zenv())).code);
         ZetherTypes.UA n = _none();
-        bytes[10] memory calls = [
+        bytes[9] memory calls = [
             abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 1)),
             abi.encodeCall(ZetherLayer.mtxConfidentialTransfer, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
             abi.encodeCall(ZetherLayer.mtxConfidentialTransferCompact, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
-            abi.encodeCall(ZetherLayer.mtxConfidentialTransferNoBundle, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
             abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
             abi.encodeCall(ZetherLayer.mtxUnshield, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""), 1, bytes32(uint256(uint160(address(0xD)))))),
             abi.encodeCall(ZetherLayer.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1)),
@@ -458,9 +457,9 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_unknownEntryReverts() public {
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
-        _vta(tok, bytes32("nope"), 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(uint256(1)), "");
+        _vta(tok, bytes32("nope"), 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(uint256(1)));
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
-        dis.transferCiphertext(address(tok), bytes32("nope"), 0, "");
+        dis.transferCiphertext(address(tok), bytes32("nope"), 0);
     }
 
     function test_curveLibBadLength() public {

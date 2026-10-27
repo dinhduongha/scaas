@@ -1,0 +1,27 @@
+  GAS n2048-kmax1024 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 66852 (zero 14458) | std 896136 | floor 4293528
+    | pqz 4848625 | exec 967248 | regular 6726871 (model 6727009) | state 17253810 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzl-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 70212 (zero 14561) | std 948660 | floor 4508568
+    | pqz 4848625 | exec 1051606 | regular 6863753 (model 6863891) | state 17253810 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 70404 (zero 17969) | std 910836 | floor 4520856
+    | pqz 4848625 | exec 1067966 | regular 6842289 (model 6842427) | state 17253810 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzl-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 73764 (zero 18073) | std 963348 | floor 4735896
+    | pqz 4848625 | exec 1152365 | regular 6979200 (model 6979338) | state 17253810 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzl-ua | burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute | calldata 70884 (zero 10787) | std 1004700 | floor 4551576
+    | pqz 4848625 | exec 1747491 | regular 7615678 (model 7615816) | state 17057970 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzl-ua | burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 63684 (zero 10763) | std 889788 | floor 4090776
+    | pqz 4848625 | exec 3250776 | regular 9004051 (model 9004189) | state 17057970 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzl-ua | op 7 M = 8, auditor, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 158404 (zero 30262) | std 2171320 | floor 10152856
+    | pqz 8061302 | exec 5171552 | regular 15419036 (model 15419174) | state 70448850 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzh | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 259652 (zero 15168) | std 3972416 | floor 16632728
+    | pqz 4885700 | exec 2261522 | regular 16632728 (model 16632728) | state 17253810 | fits 2^24 yes
+  GAS n2048-kmax1024 pqzh-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 263012 (zero 15271) | std 4024940 | floor 16847768
+    | pqz 4885700 | exec 2348115 | regular 16847768 (model 16847768) | state 17253810 | fits 2^24 NO
+  GAS n2048-kmax1024 pqzh | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 263204 (zero 18678) | std 3987128 | floor 16860056
+    | pqz 4885700 | exec 2380526 | regular 16860056 (model 16860056) | state 17253810 | fits 2^24 NO
+  GAS n2048-kmax1024 pqzh-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 266564 (zero 18782) | std 4039640 | floor 17075096
+    | pqz 4885700 | exec 2467160 | regular 17075096 (model 17075096) | state 17253810 | fits 2^24 NO
+  GAS n2048-kmax1024 pqzh-ua | burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute | calldata 263684 (zero 11493) | std 4081028 | floor 16890776
+    | pqz 4885700 | exec 3027407 | regular 16890776 (model 16890776) | state 17057970 | fits 2^24 NO
+  GAS n2048-kmax1024 pqzh-ua | burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 256484 (zero 11469) | std 3966116 | floor 16429976
+    | pqz 4885700 | exec 4525397 | regular 16429976 (model 16429976) | state 17057970 | fits 2^24 yes
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 2.03s (1.61s CPU time)

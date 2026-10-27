@@ -240,7 +240,7 @@ every row below would pass it; the SCaaS testnet activates EIP-7976 and every ru
 (`docs/research/pqzh-calldata-cap.md`, research). The other relay path, `uaExecute` with an `mldsa65` fee UA (review
 fix round of 2026-10-26, `runs/2026-10-26-t8d2b-fix-gas-<set>.txt`, systems `pqzl-ua` / `pqzh-ua`), adds 3,360 B of
 calldata to every `mtx*` row and no state gas: +0.137–0.138 M regular on the PQZL rows (all still fit 2^24), +215,040
-(the floor) on the PQZH debits; the verdicts below hold on both paths.
+(the floor) on the PQZH debits; the verdicts below hold on both paths. **Accepted fee-UA kinds on `uaExecute`** (C0-2 option (2); `runs/2026-10-27-review2-t2-holder-gas-<set>.txt`): at PQZH `n2048-kmax1024` an `mldsa65` (precompile) or `fndsa512` fee UA fits every built form, an `slhdsa128s` fee UA does not (burn 1: 16,890,776 regular gas, over 2^24); at the PQZL sets every fee-UA kind fits.
 
 | Relation — call path | `n2048-kmax1024` | `n2304-kmax4096` | `n2560-kmax16384` | `n2816-kmax65536` |
 |---|---|---|---|---|
@@ -351,7 +351,7 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 
 | File | What | Made by |
 |---|---|---|
-| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, `s_aud`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input` and `roll_max` (sets with pqz-stmt), `[pqzl_c]` (the C backend's arena and wasm32 leg limit), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with PQZH), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
+| `set.toml` | the set's only input: n, `K_MAX`, q, `pqz_delta`, `kmlwe_min`, `s_aud`, description, approval, `core_only` / `pqzh` / `frozen`, `max_input`, `roll_max`, `debit_min_gas` (-> `PqzSet.PQZ_DEBIT_MIN_GAS`) and `pqzh_value` (sets with pqz-stmt; `pqzh_value` -> `PqzSet.PQZH_VALUE`, true only at n2048-kmax1024), `[pqzl_c]` (the C backend's arena and wasm32 leg limit), the `proofSystemId` labels `pqzl_id` (every set) / `pqzh_id` (sets with PQZH), `[pqzh_preset]` (description, radices, n, k, t, `max_proof`; sets with PQZH) | by hand |
 | `pqz_set.h`, `rust/set.rs` | n, k, q, log2 q, Δ, `K_MAX`, digit / carry / noise widths, norm bounds, NTT roots, Barrett constants, the specialised verifier's CRT prime count, the `proofSystemId`s (keccak256 of the labels) | [`gen_set.py`](gen_set.py) (`--check` in the gate) |
 | `set.json` | every derived constant the Python tools read (`pqz_kat.py`, `e_s0_set.py`, `ligero_params.py`, the tests' `core_only`; the limits and the PQZH preset) | `gen_set.py` |
 | `pqzh_set.rs` | a set with PQZH: q − 1's factors, generator, F_q^4 non-residue, radices, the Ligero preset (n, k, t) | `gen_set.py` |

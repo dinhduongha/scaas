@@ -31,7 +31,8 @@ interface IZetherToken is IUALedger, IConfidentialToken {
         ZetherTypes.RollOverMode mode;
     }
 
-    /// @notice Commit-reveal (HASH): the record `R = salt ‖ B_1 ‖ … ‖ B_M`, whose hash `entryRef` stores.
+    /// @notice Commit-reveal (HASH): the record `R = salt ‖ B_1 ‖ … ‖ B_M` (also kept in state by SSTORE2, `transferEntry`;
+    ///         for off-chain indexers, who see `keccak256(R)` as the commitment).
     event TransferBundles(bytes32 indexed entryRef, bytes bundles);
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
 
@@ -56,9 +57,16 @@ interface IZetherToken is IUALedger, IConfidentialToken {
     error AuditorRequired();
     /// @notice `NONE` auditor: a transfer carries an auditor leg (some `C_aud_j ≠ O`).
     error AuditorForbidden();
+    /// @notice With the auditor on (statement `Y_a` = the token key), the auditor key is the sender (`Y_f`) or a recipient
+    ///         (`Y_t`, any `Y_tj`): refused on every transfer form, direct, relayed and in the statement views (review C0-1;
+    ///         the Zether twin of PQZ F-4).
+    error AuditorKeyAsParty();
+    /// @notice A transfer or unshield statement past its `validUntilBlock` (`block.number > validUntilBlock`; payload word
+    ///         2, header word 15), the rule of the PQZ header (review C0-9).
+    error TransferExpired(uint256 validUntilBlock);
     /// @notice Commit-reveal: the memo's clear salt is not the payload's (storage-only recovery needs it, CTR-ZTH-50).
     error MemoSaltMismatch();
-    /// @notice A `COMPACT` token refuses `mtxConfidentialTransferNoBundle` and `mtxConfidentialTransferSingle` (CTR-ZTH-48).
+    /// @notice A `COMPACT` token refuses `mtxConfidentialTransferSingle` (CTR-ZTH-48).
     error TransferEntryDisabled(uint8 disclosureMode);
     /// @notice `ConfidentialConfig.disclosureMode` is neither BUNDLE nor COMPACT (CTR-ZTH-48).
     error BadDisclosureMode(uint8 mode);
@@ -93,8 +101,8 @@ interface IZetherToken is IUALedger, IConfidentialToken {
     function auditorKey() external view returns (bytes memory);
     /// @notice `NONE`, `FULL` (every transfer includes the auditor) or `OPTIONAL` (the sender's choice per transfer).
     function auditorMode() external view returns (ZetherTypes.AuditorMode);
-    /// @notice `BUNDLE` (`mtxConfidentialTransfer` stores the record; `…Compact`, `…NoBundle` save gas) or `COMPACT`
-    ///         (`mtxConfidentialTransfer` and `…Compact` are commit-reveal; no-bundle and single refused).
+    /// @notice `BUNDLE` (`mtxConfidentialTransfer` stores the record inline; `…Compact` stores it by SSTORE2) or `COMPACT`
+    ///         (`mtxConfidentialTransfer` and `…Compact` are commit-reveal; single refused). Both keep `R` in state.
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode);
     /// @notice The canonical `ZetherDisclosure` (stateless, shared), an implementation immutable (CTR-ZTH-43).
     function disclosure() external view returns (ITransferDisclosure);
@@ -110,9 +118,13 @@ interface IZetherToken is IUALedger, IConfidentialToken {
 
     // ------------------------------------------------------------------ state
 
-    /// @notice Raw record of `entryRef` for `disclosure()`: `R = salt ‖ B_1 ‖ … ‖ B_M` (BUNDLE, the single format),
-    ///         `keccak256(R) ‖ memo` (commit-reveal, CTR-ZTH-50), empty (NONE, unknown). `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j`.
-    function transferEntry(bytes32 entryRef) external view returns (bytes memory);
+    /// @notice Record of `entryRef` for `disclosure()`, always read from state (review C0-3): `R = salt ‖ B_1 ‖ … ‖ B_M`
+    ///         (BUNDLE and the single format inline, commit-reveal by SSTORE2), empty for an unknown ref. Multi-recipient
+    ///         `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (review C0-1); the single format `B = Y_t ‖ C_out ‖ D_out ‖
+    ///         C_aud` (`16 + 4P` bytes).
+    function transferEntry(bytes32 entryRef) external view returns (bytes memory R);
+    /// @notice The sender memo of a commit-reveal entry (`49 + 40·M` bytes, CTR-ZTH-50), empty otherwise.
+    function transferMemo(bytes32 entryRef) external view returns (bytes memory);
     /// @notice Σ of every `acc` and `pending` exponent (shielded units); `totalSupply()` counts public units only.
     function totalShielded() external view returns (uint256);
     function registered(ZetherTypes.UA account) external view returns (bool);
@@ -137,13 +149,4 @@ interface IZetherToken is IUALedger, IConfidentialToken {
         uint64 validUntilBlock,
         bytes calldata sig
     ) external;
-    /// @notice Multi-recipient, stores nothing (NONE, disclosure off chain from calldata); `TransferEntryDisabled` on a
-    ///         `COMPACT` token.
-    function mtxConfidentialTransferNoBundle(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata auth,
-        bytes32 beneficiary,
-        bytes calldata accHint
-    ) external returns (bytes32 entryRef);
 }

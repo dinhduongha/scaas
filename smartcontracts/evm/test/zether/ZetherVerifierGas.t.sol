@@ -18,6 +18,7 @@ contract ZetherVerifierGasTest is Test {
     uint256 constant XA = 0xA0D17;
     uint256 constant RHO = 0x5EED;
     uint256 constant S = 0x5;
+    uint256 constant T0 = 0x7A0;
     uint256 constant B = 1_000_000;
     uint256 constant FEE = 5;
 
@@ -33,8 +34,8 @@ contract ZetherVerifierGasTest is Test {
         return bytes.concat(
             abi.encode(op, psid, block.chainid, keccak256("gas chain"), address(0x70CE), keccak256("ZTX_V1_DIRECT")),
             abi.encode(bytes32(0), uint256(7), uint256(3), FEE, bytes32(uint256(0xBE))),
-            abi.encode(amount, recipient, op == OP_B ? bytes32(0) : bytes32(uint256(0x5A17)), bytes32(0))
-        );
+            abi.encode(amount, recipient, op == OP_B ? bytes32(0) : bytes32(uint256(0x5A17)), bytes32(0), uint256(1000))
+        ); // word 15: validUntilBlock (review C0-9)
     }
 
     function _acc() internal view returns (bytes memory c, bytes memory d) {
@@ -62,7 +63,7 @@ contract ZetherVerifierGasTest is Test {
         return bytes.concat(cOut, dOut, cDeb, cAud);
     }
 
-    /// @dev Legs `(Y_tj, C_out_j, C_aud_j)` of values `100 + j`, and `Σv`.
+    /// @dev Legs `(Y_tj, C_out_j, C_aud_j, D_aud_j)` of values `100 + j`, and `Σv`.
     function _legs(uint256 m, uint256[] memory vs) internal view returns (bytes memory legs, uint256 total) {
         for (uint256 j; j < m; ++j) {
             vs[j] = 100 + j;
@@ -71,12 +72,12 @@ contract ZetherVerifierGasTest is Test {
         }
     }
 
-    /// @dev `Y_tj ‖ C_out_j ‖ C_aud_j`.
+    /// @dev `Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j`, the auditor copy under `t_j = T0 + j` (review C0-1).
     function _leg(uint256 j, uint256 amt) internal view returns (bytes memory) {
         bytes memory yt = v.g1MulBase(0xD00 + j);
-        (bytes memory cOut,,, bytes memory cAud) =
-            prover.ciphertexts(v, v.g1MulBase(XF), yt, v.g1MulBase(XA), amt, S);
-        return bytes.concat(yt, cOut, cAud);
+        (bytes memory cOut,,,) = prover.ciphertexts(v, v.g1MulBase(XF), yt, v.g1MulBase(XA), amt, S);
+        (bytes memory cAud, bytes memory dAud) = prover.audCopy(v, v.g1MulBase(XA), amt, T0 + j);
+        return bytes.concat(yt, cOut, cAud, dAud);
     }
 
     /// @dev `Y_f Y_a C_acc D_acc D_out C_deb` of a multi-recipient statement debiting `total`.
@@ -90,8 +91,9 @@ contract ZetherVerifierGasTest is Test {
 
     function _witness(uint256[] memory vs, uint256 total) internal pure returns (ZetherProver.MultiWitness memory w) {
         uint256[] memory gv = new uint256[](vs.length);
-        for (uint256 j; j < vs.length; ++j) gv[j] = 0x1234 + 7 * j;
-        w = ZetherProver.MultiWitness(XF, S, vs, B - FEE - total, gv, 0x5678, keccak256("m"));
+        uint256[] memory t = new uint256[](vs.length);
+        for (uint256 j; j < vs.length; ++j) (gv[j], t[j]) = (0x1234 + 7 * j, T0 + j);
+        w = ZetherProver.MultiWitness(XF, S, vs, t, B - FEE - total, gv, 0x5678, keccak256("m"));
     }
 
     function _multi(uint256 m) internal view returns (bytes memory st, bytes memory pr) {

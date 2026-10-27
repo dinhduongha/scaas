@@ -175,7 +175,7 @@ wrap(uint256 amount) returns (uint256 minted)                  // sender = _msgS
 
 unwrap(uint256 wrapped, address recipient) returns (uint256 out)                    // minOut = 0; direct calls only
 unwrap(uint256 wrapped, address recipient, uint256 minOut) returns (uint256 out)
-    require recipient ∉ {0, address(this)}                     // UnwrapRecipientInvalid
+    require recipient ∉ {0, address(this), UA_POOL, SHIELD_POOL}  // UnwrapRecipientInvalid (SHIELD_POOL: review C5-4)
     out    = mulDiv(wrapped, den, num)                         // floor
     require out > 0                                            // UnwrapTooSmall
     require out ≥ minOut                                       // UnwrapBelowMin(out, minOut)
@@ -738,7 +738,7 @@ struct TokenConfig {
     uint256 initialSupply; address initialHolder;   // NONE* only; initialHolder is ignored when initialSupply == 0
     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
-    ConfidentialConfig conf;                   // auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL}, multiLegFee (PQZ only) — confidential kinds only (modes: CTR-ZTH-48/49, built in P3b; the token refuses a key that does not match auditorMode); no verifier field since plan 5g-Z2: the verifiers are the release's env deps, CTR-ZTH-20
+    ConfidentialConfig conf;                   // auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL}, minDecoyFee (both confidential layers; the least per-leg `decoyFee`, renamed from `multiLegFee`, owner 2026-10-20) — confidential kinds only (modes: CTR-ZTH-48/49, built in P3b; the token refuses a key that does not match auditorMode); no verifier field since plan 5g-Z2: the verifiers are the release's env deps, CTR-ZTH-20
 }
 struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
 ```

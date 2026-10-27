@@ -93,6 +93,7 @@ contract PqzStatePinGasTest is PqzSlots {
     uint256 internal nextBlob = 0x5EED0000;
     uint256 internal constant RKEY = 0xA11CE; // the envelope signer
     address internal constant RELAYER = address(0x7E1A7E); // a fresh relayer: the fee credit is a zero → non-zero write
+    uint256 internal feeSigLen = ML65_SIG; // the fee UA's signature bytes (an `slhdsa128s` fee UA: 7,856)
     bytes32 internal feeUA; // the `uaExecute` envelopes' signer: an `mldsa65` UA paying the outer fee from its ledger
 
     function setUp() public {
@@ -282,7 +283,7 @@ contract PqzStatePinGasTest is PqzSlots {
             u.validUntil = block.timestamp + 1 hours;
             u.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
             u.fee = fee;
-            return abi.encodeCall(tok.uaExecute, (u, abi.encode(bytes(""), _proof(ML65_SIG))));
+            return abi.encodeCall(tok.uaExecute, (u, abi.encode(bytes(""), _proof(feeSigLen))));
         }
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(RKEY);
@@ -676,6 +677,95 @@ contract PqzStatePinGasTest is PqzSlots {
         _discRow(sys, 2, discRef7, 5, "op 7 M = 8 entry leg 5");
     }
 
+    // ------------------------------------------------------------------ holder / fee-UA rows (review2 T2, C0-2 / C0-5)
+
+    /// An n-of-n `mldsa65` `msig` PQZ holder (weights 1; the registry's PQZL rule admits it) and its debit auth.
+    function _msigHolder(uint8 n, uint8 seed0) internal returns (bytes32 ua, bytes memory auth) {
+        bytes32[] memory ids = new bytes32[](n);
+        for (uint8 i; i < n; ++i) ids[i] = _mldsaUA(seed0 + i);
+        for (uint256 i = 1; i < n; ++i) for (uint256 j = i; j > 0 && ids[j - 1] > ids[j]; --j) (ids[j - 1], ids[j]) = (ids[j], ids[j - 1]);
+        bytes memory d = abi.encodePacked(uint16(n), uint16(n));
+        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](n);
+        for (uint16 i; i < n; ++i) {
+            d = abi.encodePacked(d, UAKinds.MLDSA65, ids[i], uint16(1));
+            s[i] = UARegistry.MemberSig(i, "", new bytes(ML65_SIG));
+        }
+        ua = reg.uaOf(UAKinds.MSIG, d);
+        bytes memory pqz = _pk(seed0 + 50);
+        bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
+        reg.register(UAKinds.MSIG, d, abi.encode(s), pqz, hex"aa"); // m-of-n PoP: filler signatures, ML65 mocked
+        auth = abi.encode(d, abi.encode(s));
+        assertEq(reg.keyOwner(h), ua);
+    }
+
+    function _burnH(bytes32 from, bytes memory auth, bytes memory proof) internal view returns (bytes memory) {
+        bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), from, alice), _blob(5, PqzCt.CT));
+        return abi.encodeCall(tok.mtxUnshield, (pl, proof, auth, _benM(pl), "", 1, bytes32(uint256(uint160(0xD00D)))));
+    }
+
+    /// The cheapest debit (burn 1) of a 2-of-2 / 3-of-3 `mldsa65` `msig` holder on both relay paths, and of the
+    /// `mldsa65` holder `carol` with an `slhdsa128s` fee UA (`uaExecute`; `mtxExecute`'s signer is an address). At
+    /// n2048-kmax1024 PQZH (the one PQZH value-token set) the verdicts of README row C0-2: 2-of-2 fits `mtxExecute` only,
+    /// 3-of-3 neither path, the `slhdsa128s` fee UA is over `uaExecute`. PQZL fits every row at every set.
+    function test_gasTable_holderRows() public {
+        (hm[0], ha[0]) = _msigHolder(2, 150);
+        (hm[1], ha[1]) = _msigHolder(3, 160);
+        slhFee = reg.register(UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), new bytes(7_856), "", "");
+        NoUnderlyingPqzToken(address(tok)).mintToUA(slhFee, 1000);
+        minted += 1000;
+        bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
+        fpk[0] = 0x09;
+        fnFee = reg.register(UAKinds.FNDSA512, fpk, new bytes(666), "", "");
+        NoUnderlyingPqzToken(address(tok)).mintToUA(fnFee, 1000);
+        minted += 1000;
+        gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
+        _holderSys("pqzl", false);
+        if (PqzSet.HAS_PQZH) _holderSys("pqzh", PqzSet.PQZH_VALUE);
+    }
+
+    bytes32[2] internal hm; // the 2-of-2 / 3-of-3 holders
+    bytes[2] internal ha; // their debit auths
+    bytes32 internal slhFee;
+    bytes32 internal fnFee;
+
+    function _holderSys(string memory sys, bool verdicts) internal {
+        bytes memory pf = _pf(sys, "BURN");
+        for (uint256 h; h < 2; ++h) {
+            for (uint256 k; k < 2; ++k) {
+                viaUA = k == 1;
+                uint256 g = _row(sys, "BURN", string.concat("burn 1, ", h == 0 ? "2-of-2" : "3-of-3", " mldsa65 msig holder, ",
+                    k == 1 ? "uaExecute" : "mtxExecute"), address(tok), _burnH(hm[h], ha[h], pf), true);
+                // 2-of-2 fits mtxExecute only; 3-of-3 neither path
+                if (verdicts) assertEq(g <= TX_CAP, h == 0 && k == 0, "PQZH n2048 holder verdict");
+            }
+        }
+        viaUA = true;
+        _feeMl = feeUA;
+        feeUA = slhFee;
+        feeSigLen = 7_856;
+        uint256 gs = _row(sys, "BURN", "burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute", address(tok),
+            _burnP(1, address(0xD00D), pf), true);
+        if (verdicts) assertGt(gs, TX_CAP, "PQZH n2048: an slhdsa128s fee UA is over uaExecute");
+        // C0-11 (b): an `fndsa512` fee UA (valid verify 2.3 M [estimate], cap 2.5 M, 666 B signature) on uaExecute: burn 1
+        // and, at PQZL (PQZH has no M = 8 form), the form the finding names, op 7 M = 8 with the auditor
+        feeUA = fnFee;
+        feeSigLen = 666;
+        uint256 fb = _row(sys, "BURN", "burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute", address(tok),
+            _burnP(1, address(0xD00D), pf), true);
+        if (verdicts) assertLe(fb, TX_CAP, "PQZH n2048: burn with an fndsa512 fee UA fits uaExecute");
+        if (keccak256(bytes(sys)) == keccak256("pqzl")) {
+            uint256 f8 = _row(sys, "M8-on", "op 7 M = 8, auditor, mldsa65 holder, fndsa512 fee UA, uaExecute", address(tok),
+                _op7a(8, true, _pf(sys, "M8-on")), true);
+            // measured: fits at every set even with the verify at its 2.5 M cap (+ 0.2 M); the review's "about 4.4 M" is not
+            // reproduced (the fndsa512 verifier cap bounds the verify at 2.5 M)
+            assertLe(f8 + 200_000, TX_CAP, "op 7 M = 8 + fndsa512 fee UA");
+        }
+        feeSigLen = ML65_SIG;
+        feeUA = _feeMl;
+    }
+
+    bytes32 internal _feeMl;
+
     function _discRow(string memory sys, uint8 kd, bytes32 ref, uint256 leg, string memory entry) internal {
         string memory kn = kd == 0 ? "SENDER" : kd == 1 ? "RECEIVER" : "AUDITOR";
         string memory key = string.concat("DISCLOSE-", kn);
@@ -694,7 +784,7 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _row(string memory sys, string memory key, string memory what, address to, bytes memory data, bool relay)
-        internal
+        internal returns (uint256)
     {
         string memory k = string.concat(".", sys, "['", key, "']");
         uint256 row = vm.parseJsonUint(gj, string.concat(k, ".row"));
@@ -713,6 +803,7 @@ contract PqzStatePinGasTest is PqzSlots {
         // the meter's frame pays the EIP-8037 state gas out of its gas too (forge's reservoir is not visible to `gasleft`)
         uint256 off = pqzGas + 2_900 + st;
         _rowLog(sys, what, data, pqzGas, inner > off ? inner - off : 0, reg, st);
+        return reg;
     }
 
     function _rowLog(string memory sys, string memory what, bytes memory data, uint256 pqzGas, uint256 exec, uint256 reg,

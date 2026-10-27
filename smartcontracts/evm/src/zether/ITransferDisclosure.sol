@@ -23,9 +23,9 @@ pragma solidity ^0.8.20;
 ///     D_transfer = g^s
 ///
 /// nên mở nó là chứng minh số tiền, và nó ràng buộc TUYỆT ĐỐI vào đúng giao dịch đó.
-/// Chi phí lúc chuyển: token lưu bản ghi để mở on-chain — `R = salt ‖ B_1 ‖ … ‖ B_M` đầy đủ (định dạng một người nhận,
-/// mode BUNDLE, 4 điểm mỗi leg), một slot hash cộng memo người gửi (commit-reveal, CTR-ZTH-50), hoặc không gì (mode
-/// NONE: chỉ off-chain), CTR-ZTH-14/38.
+/// Chi phí lúc chuyển: token lưu bản ghi để mở on-chain — `R = salt ‖ B_1 ‖ … ‖ B_M` đầy đủ (định dạng một người nhận:
+/// 4 điểm; mode BUNDLE: 5 điểm mỗi leg, `D_aud_j` từ review C0-1), hoặc `R` bằng SSTORE2 cộng memo người gửi (commit-reveal,
+/// CTR-ZTH-50). Mọi mode đều giữ `R` trong state (review C0-3; mode NONE đã bị bỏ), CTR-ZTH-14/38.
 interface ITransferDisclosure {
     /// Ba đường mở, ba chủ thể khác nhau. Giữ cả ba — mỗi cái giải một tình huống
     /// tranh chấp mà hai cái kia không giải được.
@@ -38,7 +38,8 @@ interface ITransferDisclosure {
         /// Quan trọng vì nó cho người nhận chứng minh mà KHÔNG CẦN người gửi hợp tác —
         /// tình huống tranh chấp thực tế thường đúng là vậy.
         RECEIVER_X,
-        /// Auditor được chỉ định mở `C_aud` (biến thể shared-`s`). Sai khi `C_aud = O` (người gửi bỏ auditor, Z12).
+        /// Auditor được chỉ định mở `C_aud`: DLEQ trên `D_aud_j = [t_j]G` của leg `j` (nhiều người nhận, `t_j` riêng mỗi leg,
+        /// review C0-1), trên `D_out` ở định dạng một người nhận. Sai khi `C_aud = O` (người gửi bỏ auditor, Z12).
         AUDITOR,
         /// Người GỬI mở MỘT leg mà không giao `s`: Chaum-Pedersen `log_G D_out == log_{Y_t}(C − [v]G)` (Z10).
         /// `s` mở mọi leg của transfer (Z3); opening này chỉ mở leg `index`.
@@ -47,8 +48,8 @@ interface ITransferDisclosure {
 
     error UnknownEntry(bytes32 entryRef);
     error OpeningMalformed();
-    /// @notice Mode HASH: `bundles` không khớp hash đã lưu.
-    error BundlesMismatch(bytes32 entryRef);
+    /// @notice Bản ghi token trả không phải định dạng `R` (độ dài không phải `16 + 4P` hay `16 + 5P·M`).
+    error RecordMalformed(bytes32 entryRef);
     error BadRecipientIndex(uint256 index);
 
     /// @notice Kiểm một lời khai số tiền. **View — gọi FREE qua `eth_call`**, hoặc on-chain từ contract bất kỳ.
@@ -60,9 +61,7 @@ interface ITransferDisclosure {
     /// @param amount   số tiền được tuyên bố, đơn vị che giấu
     /// @param kind     đường mở nào
     /// @param opening  `s` cho SENDER_S; `abi.encode(A1, A2, z)` (Chaum-Pedersen) cho RECEIVER_X, AUDITOR, SENDER_CP
-    /// @param bundles  commit-reveal: `R = salt ‖ B_1 ‖ … ‖ B_M` (từ event `TransferBundles`, calldata, hoặc người gửi
-    ///                 dựng lại từ memo), khớp hash đã lưu;
-    ///                 bỏ qua khi bundle nằm trong storage. Mode NONE: không có gì để kiểm (`UnknownEntry`).
+    ///        Bản ghi `R` luôn đọc từ state của token (`transferEntry`), không nhận từ người gọi.
     ///
     /// @dev Phần lớn nhu cầu — kiểm toán, đối soát ERP, trả lời cơ quan thuế — chỉ
     ///      cần hàm này: miễn phí, không giới hạn số lần, KHÔNG để lại vết on-chain.
@@ -74,15 +73,14 @@ interface ITransferDisclosure {
         uint256 index,
         uint256 amount,
         OpeningKind kind,
-        bytes calldata opening,
-        bytes calldata bundles
+        bytes calldata opening
     ) external view returns (bool);
 
     /// @notice Ciphertext gốc của một giao dịch, để bên thứ ba verify ĐỘC LẬP.
     /// @dev Toà án không nên phải tin `verifyTransferAmount` của chính contract bị
     ///      tranh chấp. Hàm này xuất dữ liệu thô để một verifier ngoài chuỗi
     ///      (CLI độc lập, mã nguồn mở) kiểm lại từ đầu.
-    function transferCiphertext(address token, bytes32 entryRef, uint256 index, bytes calldata bundles)
+    function transferCiphertext(address token, bytes32 entryRef, uint256 index)
         external
         view
         returns (bytes memory encodedCiphertext, bytes memory encodedYTo);

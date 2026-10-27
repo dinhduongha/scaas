@@ -136,7 +136,8 @@ fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
 
 /// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `mtxUnshieldUnwrap`, burns only), or direct.
 /// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement. The memo word
-/// is the prove functions' (0 on a burn).
+/// is the prove functions' (0 on a burn). `validUntilBlock` (required): the last block the token accepts the proof in
+/// (review C0-9, `TransferExpired`).
 fn header(v: &Value, amount: u64, recipient: [u8; 32], burn: bool) -> R<Header> {
     let has = |k: &str| v.get(k).is_some_and(|x| !x.is_null());
     let binding = match (has("envelopeBinding"), has("unwrapBinding")) {
@@ -159,6 +160,7 @@ fn header(v: &Value, amount: u64, recipient: [u8; 32], burn: bool) -> R<Header> 
         recipient,
         salt: [0; 16],
         memo_hash: [0; 32],
+        valid_until_block: num(v, "validUntilBlock")?,
     })
 }
 
@@ -205,13 +207,12 @@ fn y_aud<C: ZCurve>(v: &Value) -> R<G<C>> {
 }
 
 /// The entry of a stored form (CTR-ZTH-38): `mtxConfidentialTransfer` is the token's default (BUNDLE, or commit-reveal
-/// on a COMPACT token), `mtxConfidentialTransferCompact` commit-reveal on every token, `…NoBundle` NONE.
+/// on a COMPACT token), `mtxConfidentialTransferCompact` commit-reveal on every token, (NONE and `…NoBundle` retired, review C0-3).
 fn transfer_multi_sig(mode: TransferMode, compact: bool) -> &'static str {
     match mode {
         TransferMode::Bundle => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
         TransferMode::Hash if compact => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
         TransferMode::Hash => "mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)",
-        TransferMode::NoBundle => "mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)",
     }
 }
 
@@ -254,11 +255,10 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 
 /// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0); `fee` the txFee (`confidentialFee` with a
 /// `beneficiary`), `decoyFee` the per-leg fee the token pays to every leg (default 0; `minDecoyFee`, the token's, checked
-/// when given): the statement's fee is `fee + M · decoyFee` (owner 2026-10-20); `mode`, the stored form: `bundle` | `compact` |
-/// `none`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
+/// when given): the statement's fee is `fee + M · decoyFee` (owner 2026-10-20); `mode`, the stored form: `bundle` | `compact`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
 /// form it takes), so the calldata calls `mtxConfidentialTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
-/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34).
+/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"` | `"mldsa44"` | `"slhdsa128s"` | `"ed25519"` | `"p256"` | `"webauthn-p256"`, caps from accounts.md; or a numeric `uaSignerGas` for any other kind such as an msig; review2 C3-2) so the gas check counts `_uaAuthorize`.
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
     let h = header(v, 0, [0; 32], false)?;
@@ -266,7 +266,7 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     let mode = match v.get("mode").filter(|x| !x.is_null()) {
         None if compact => TransferMode::Hash,
         None => TransferMode::Bundle,
-        Some(m) => m.as_str().and_then(TransferMode::from_name).ok_or("`mode` must be \"bundle\", \"compact\" or \"none\"")?,
+        Some(m) => m.as_str().and_then(TransferMode::from_name).ok_or("`mode` must be \"bundle\" or \"compact\"")?,
     };
     if compact && mode != TransferMode::Hash {
         return Err("a COMPACT token takes commit-reveal only (TransferEntryDisabled)".into());
@@ -282,8 +282,23 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     if d < opt_num(v, "minDecoyFee")? {
         return Err("`decoyFee` below the token's `minDecoyFee` (DecoyFeeOutOfRange)".into());
     }
-    let (st, p, w) = zether::prove_transfer_multi(
-        gens, &k, h.clone(), d, mode, &recipients, y_aud, ct::<C>(v, "acc")?, num(v, "balance")?, rng,
+    // C3-2: a relayed build names the signer kind of the envelope it is relayed through (`ecdsa`: `mtxExecute`, adds 0;
+    // `fndsa512` / `mldsa65`: `uaExecute`, `_uaAuthorize` adds the kind's verify cap), so the gas check never uses the
+    // `mtxExecute` figures for a UA relay. Direct builds take none.
+    let kind = v.get("uaSigner").filter(|x| !x.is_null());
+    let custom = v.get("uaSignerGas").filter(|x| !x.is_null());
+    let signer_gas = match (kind.or(custom), matches!(h.binding, Binding::Relayed(_))) {
+        (None, false) => 0,
+        (None, true) => return Err("a relayed build needs `uaSigner` (\"ecdsa\" = mtxExecute; uaExecute: \"fndsa512\", \"mldsa65\", \"mldsa44\", \"slhdsa128s\", \"ed25519\", \"p256\", \"webauthn-p256\") or a numeric `uaSignerGas` (e.g. an msig)".into()),
+        (Some(_), false) => return Err("`uaSigner` needs an `envelopeBinding`".into()),
+        (Some(_), true) => match (kind, custom) {
+            (Some(_), Some(_)) => return Err("give `uaSigner` or `uaSignerGas`, not both".into()),
+            (Some(k), None) => k.as_str().and_then(zether::ua_signer_gas).ok_or("`uaSigner` must be a known kind (use `uaSignerGas` for any other)")?,
+            (None, _) => opt_num(v, "uaSignerGas")?,
+        },
+    };
+    let (st, p, w) = zether::prove_transfer_multi_ua(
+        gens, &k, h.clone(), d, mode, &recipients, y_aud, ct::<C>(v, "acc")?, num(v, "balance")?, signer_gas, rng,
     )
     .map_err(e)?;
     let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload(w.decoy_fee, &w.memo));
@@ -301,7 +316,8 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b), "bPrime": sc::<C>(&w.b_prime),
-            "v": w.v.iter().map(sc::<C>).collect::<Vec<_>>(), "gammaV": w.gamma_v.iter().map(sc::<C>).collect::<Vec<_>>(),
+            "v": w.v.iter().map(sc::<C>).collect::<Vec<_>>(), "t": w.t.iter().map(sc::<C>).collect::<Vec<_>>(),
+            "gammaV": w.gamma_v.iter().map(sc::<C>).collect::<Vec<_>>(),
             "gammaB": sc::<C>(&w.gamma_b)});
     }
     Ok(out)
@@ -345,24 +361,36 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
     Ok(out)
 }
 
+/// A recovery source: the counter, `R` when the source carries it, the memo when it has one, and
+/// whether it is the single format (`B = Y_t ‖ C_out ‖ D_out ‖ C_aud`, 4 points) or the multi-recipient one (`B_j = Y_tj ‖
+/// C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j`, 5 points, review C0-1).
+struct Source {
+    send_counter: u64,
+    rec: Vec<u8>,
+    memo: Option<Vec<u8>>,
+    single: bool,
+}
+
 /// The source of a recovery: `payload` (the transfer's calldata argument, any entry) or `entry` =
-/// `transferEntry(entryRef)` with `sendCounter`: the record `R` (BUNDLE, single) or `keccak256(R) ‖ memo` (commit-reveal).
-/// Returns the counter, `R` when the source carries it, the memo and the commitment when it has them.
-fn recovery_source<C: ZCurve>(v: &Value) -> R<(u64, Option<Vec<u8>>, Option<Vec<u8>>, Option<[u8; 32]>)> {
+/// `transferEntry(entryRef)` with `sendCounter`: the record `R` (single: `16 + 4P` bytes exactly, multi `16 + 5P·M`; every
+/// form keeps `R` in state, review C0-3) and, for a commit-reveal entry, `memo` = `transferMemo(entryRef)` (`49 + 40·M`).
+fn recovery_source<C: ZCurve>(v: &Value) -> R<Source> {
+    let p = point_len::<C>();
     if v.get("payload").is_some_and(|x| !x.is_null()) {
         let b = bytes(v, "payload")?;
         let (rec, memo) = payload_record::<C>(&b)?;
-        return Ok((abi::word_u64(&b, 32).ok_or("payload: sendCounter")?, Some(rec), memo, None));
+        let single = b.len() == 112 + 6 * p;
+        let send_counter = abi::word_u64(&b, 32).ok_or("payload: sendCounter")?;
+        return Ok(Source { send_counter, rec, memo, single });
     }
     let e = bytes(v, "entry")?;
-    let p = point_len::<C>();
-    if e.len() > 16 && (e.len() - 16) % (4 * p) == 0 {
-        Ok((num(v, "sendCounter")?, Some(e), None, None))
-    } else if e.len() >= 32 + zether::memo_len(1) {
-        Ok((num(v, "sendCounter")?, None, Some(e[32..].to_vec()), Some(e[..32].try_into().unwrap())))
-    } else {
-        Err("`entry`: neither a record nor a commitment with its memo (an unknown or no-bundle entry)".into())
+    let send_counter = num(v, "sendCounter")?;
+    let single = e.len() == 16 + 4 * p;
+    if !single && !(e.len() > 16 && (e.len() - 16) % (5 * p) == 0) {
+        return Err("`entry`: not a record R (an unknown entry)".into());
     }
+    let memo = if v.get("memo").is_some_and(|x| !x.is_null()) { Some(bytes(v, "memo")?) } else { None };
+    Ok(Source { send_counter, rec: e, memo, single })
 }
 
 /// What `s`, the memo key and the openings need: `chainId`, `chainUid`, `token` and the counter.
@@ -380,64 +408,51 @@ fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
         recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
+        valid_until_block: 0,
     })
 }
 
 /// Step 1 of a storage-only recovery (CTR-ZTH-50): open the memo of a commit-reveal entry (`entry` =
-/// `transferEntry(entryRef)`, `sendCounter`, `chainId`, `chainUid`, `token`). Returns the `salt`, `auditorIncluded`
-/// (the flag), the legs (`toUA`, `amount`) and `needKeys`, the UAs to look up with `registry.keyOf(toUA)` (and
-/// `auditorKey()` when the flag is set) before `recoverTransfer`. Unverified: a wrong key or a tampered memo gives
-/// garbage here, which `recoverTransfer` then refuses against the commitment.
+/// `transferEntry(entryRef)`, `memo` = `transferMemo(entryRef)`, `sendCounter`, `chainId`, `chainUid`, `token`). Returns the `salt`, `auditorIncluded`
+/// (the flag) and the legs (`toUA`, `amount`). `recoverTransfer` takes no keys (the entry blob holds `R`). Unverified: a wrong key or a tampered memo gives
+/// garbage here, which `recoverTransfer` then refuses against the stored record.
 pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
     let k = key::<C>(v)?;
-    let (send_counter, _, memo, _) = recovery_source::<C>(v)?;
+    let Source { send_counter, memo, .. } = recovery_source::<C>(v)?;
     let memo = memo.ok_or("`entry`/`payload` carries no memo (not commit-reveal): `recoverTransfer` needs no keys")?;
     let h = recovery_header(v, send_counter)?;
     let (salt, aud, legs) = zether::open_memo::<C>(&k.x, &h, &k.ua(), &memo).map_err(e)?;
     Ok(json!({
         "salt": hx(&salt), "auditorIncluded": aud,
         "legs": legs.iter().map(|l| json!({"toUA": hx(&l.to_ua), "amount": l.amount.to_string()})).collect::<Vec<_>>(),
-        "needKeys": legs.iter().map(|l| hx(&l.to_ua)).collect::<Vec<_>>(),
     }))
 }
 
 /// Recovery of one of the sender's transfers from its key and chain data only (CTR-ZTH-30, CTR-ZTH-50; disclosure
-/// review G1/R7): no amount, recipient or log remembered. `keys` (optional) are the recipients' `encodedY`; see
-/// [`recover_transfer_with`]. A storage-only commit-reveal recovery is `openMemo`, then `registry.keyOf(toUA)` for each
-/// of its `needKeys`, then this call with those `keys`.
-pub fn recover_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(v: &Value, rng: &mut Rn) -> R<Value> {
-    recover_transfer_with::<C, Rn>(v, &mut |_| None, rng)
-}
-
-/// [`recover_transfer_json`] with a key-lookup source, `key_of(toUA)` = the registry's `keyOf(toUA)` (`encodedY`; `None`
-/// or empty: not registered), asked for each recipient of a memo that `keys` does not cover. The source is either
+/// review G1/R7): no amount, recipient or log remembered. The source is either
 /// - `entry` = `transferEntry(entryRef)` with `sendCounter` (the sender walks `0 … sendCounter(fromUA) − 1`): the record
-///   `R` (BUNDLE, single) or `keccak256(R) ‖ memo` (commit-reveal). A memo gives the amounts and the recipient UAs, their
-///   keys (`keys`, else `key_of`) and, when its flag says so, `yAud` (`auditorKey()`) rebuild `R`, which must hash to
-///   the commitment;
-/// - `payload`, the transfer's calldata argument (any entry, the no-bundle one included): it carries every `Y_tj`, so no
-///   key is needed; its memo, if any, gives the amounts.
+///   `R`, in state for every form (review C0-3), and, on a commit-reveal entry, `memo` = `transferMemo(entryRef)`: the
+///   memo gives the amounts and the recipient UAs, which must be `R`'s `Y_tj` (`yAud` = `auditorKey()` when its flag
+///   says so); the sender's rebuilt `R` must equal the stored one;
+/// - `payload`, the transfer's calldata argument (any entry): it carries every `Y_tj`; its memo, if any, gives the amounts.
 ///
 /// Without a memo the amounts come by BSGS on `C_out_j − [s]Y_tj` (`tableBits`, `boundBits` as `decrypt`). Returns `s`,
-/// `salt`, `entryRef`, the legs (`toUA`, `yTo`, `amount`), `bundles` (= `R`, the argument of a disclosure on a
-/// commitment), `commitment` (`keccak256(R)`), `auditorIncluded`, and the sender's openings `senderS` (every leg) and
-/// `senderCp[j]` (leg `j`). Needs `chainId`, `chainUid`, `token`.
-pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
-    v: &Value,
-    key_of: &mut dyn FnMut(&[u8; 32]) -> Option<Vec<u8>>,
-    rng: &mut Rn,
-) -> R<Value> {
+/// `salt`, `entryRef`, the legs (`toUA`, `yTo`, `amount`), `bundles` (= `R`), `commitment` (`keccak256(R)`, the hash the
+/// events give an indexer), `auditorIncluded`, and the sender's openings `senderS` (every leg) and `senderCp[j]` (leg
+/// `j`). Needs `chainId`, `chainUid`, `token`.
+pub fn recover_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
     let p = point_len::<C>();
-    let (send_counter, rec, memo, commitment) = recovery_source::<C>(v)?;
+    let Source { send_counter, rec, memo, single } = recovery_source::<C>(v)?;
     let h = recovery_header(v, send_counter)?;
-    let salt: [u8; 16] = rec.as_ref().or(memo.as_ref()).ok_or("no record")?[..16].try_into().unwrap();
+    let salt: [u8; 16] = rec[..16].try_into().unwrap();
     let s = zether::derive_s::<C>(&k.x, &h, &k.ua(), &salt);
     let g = generator::<C>();
     let d_out = g * s;
-    let ys = |r: &[u8]| (16..r.len()).step_by(4 * p).map(|o| decode_point::<C>(&r[o..o + p]).map_err(e)).collect::<R<Vec<_>>>();
+    let stride = if single { 4 * p } else { 5 * p };
+    let ys = |r: &[u8]| (16..r.len()).step_by(stride).map(|o| decode_point::<C>(&r[o..o + p]).map_err(e)).collect::<R<Vec<_>>>();
     let (legs, aud): (Vec<(G<C>, u64)>, bool) = match (&rec, &memo) {
-        (Some(r), Some(m)) => {
+        (r, Some(m)) => {
             // calldata, commit-reveal: the keys from the payload, the amounts from the memo
             let (_, aud, ml) = zether::open_memo::<C>(&k.x, &h, &k.ua(), m).map_err(e)?;
             let ys = ys(r)?;
@@ -446,33 +461,7 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
             }
             (ys.into_iter().zip(ml.iter().map(|l| l.amount)).collect(), aud)
         }
-        (None, Some(m)) => {
-            let (_, aud, ml) = zether::open_memo::<C>(&k.x, &h, &k.ua(), m).map_err(e)?;
-            let mut given = std::collections::HashMap::new();
-            let keys = match v.get("keys").filter(|x| !x.is_null()) {
-                None => &[][..],
-                Some(x) => x.as_array().ok_or("`keys` must be an array")?.as_slice(),
-            };
-            for y in keys {
-                let s = y.as_str().ok_or("`keys` must be hex strings")?;
-                let pt = decode_point::<C>(&hex::decode(s.strip_prefix("0x").unwrap_or(s)).map_err(e)?).map_err(e)?;
-                given.insert(ua_of::<C>(&pt), pt);
-            }
-            let mut missing = Vec::new();
-            let mut legs = Vec::new();
-            for l in &ml {
-                let fetched = || key_of(&l.to_ua).and_then(|b| decode_point::<C>(&b).ok()).filter(|y| ua_of::<C>(y) == l.to_ua);
-                match given.get(&l.to_ua).copied().or_else(fetched) {
-                    Some(y) => legs.push((y, l.amount)),
-                    None => missing.push(hx(&l.to_ua)),
-                }
-            }
-            if !missing.is_empty() {
-                return Err(format!("`keys`: no key for {} (`openMemo` lists them; `registry.keyOf(toUA)` returns each)", missing.join(", ")));
-            }
-            (legs, aud)
-        }
-        (Some(r), None) => {
+        (r, None) => {
             let bsgs = BsgsParams::for_target();
             let bp = BsgsParams::new(opt_bits(v, "tableBits", bsgs.table_bits)?, opt_bits(v, "boundBits", bsgs.bound_bits)?)
                 .map_err(e)?;
@@ -482,7 +471,7 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
             let pt = |o: usize| decode_point::<C>(&r[o..o + p]).map_err(e);
             let mut legs = Vec::new();
             let mut aud = false;
-            for o in (16..r.len()).step_by(4 * p) {
+            for o in (16..r.len()).step_by(stride) {
                 let (y, c_out, d, c_aud) = (pt(o)?, pt(o + p)?, pt(o + 2 * p)?, pt(o + 3 * p)?);
                 if d != d_out {
                     return Err("D_out != [s]G: not this key's transfer (or another chainUid / token)".into());
@@ -493,22 +482,33 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
             }
             (legs, aud)
         }
-        (None, None) => return Err("no record".into()),
     };
     let y_a = if aud { point::<C>(v, "yAud")? } else { G::<C>::zero() };
-    let c_aud = |a: u64| if y_a.is_zero() { G::<C>::zero() } else { g * Fr::<C>::from(a) + y_a * s };
+    // The auditor copy `(C_aud, D_aud)` of leg `j`: under `s` on the single format (`D_aud = D_out`, not in its record),
+    // under its own `t_j` on a multi-recipient leg (review C0-1); `O` when the auditor is off.
+    let aud_ct = |j: usize, a: u64| {
+        let t = if single { s } else { zether::derive_t::<C>(&k.x, &h, &k.ua(), &salt, j) };
+        if y_a.is_zero() {
+            (G::<C>::zero(), if single { d_out } else { G::<C>::zero() })
+        } else {
+            (g * Fr::<C>::from(a) + y_a * t, g * t)
+        }
+    };
     let mut bundles = salt.to_vec();
-    for (y, a) in &legs {
-        for pt in [*y, g * Fr::<C>::from(*a) + *y * s, d_out, c_aud(*a)] {
-            bundles.extend(encode_point::<C>(&pt));
+    for (j, (y, a)) in legs.iter().enumerate() {
+        let (c_aud, d_aud) = aud_ct(j, *a);
+        let b = [*y, g * Fr::<C>::from(*a) + *y * s, d_out, c_aud, d_aud];
+        for pt in &b[..if single { 4 } else { 5 }] {
+            bundles.extend(encode_point::<C>(pt));
         }
     }
-    if rec.as_ref().is_some_and(|r| *r != bundles) || commitment.is_some_and(|c| c != keccak256(&bundles)) {
+    if rec != bundles {
         return Err("the rebuilt record misses the chain's (another key, chainUid, token or counter, a tampered memo, or a wrong `yAud`/`keys`)".into());
     }
     let entry_ref = schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), send_counter);
     let mut cps = Vec::new();
     for (j, (y, a)) in legs.iter().enumerate() {
+        let (c_aud, d_aud) = aud_ct(j, *a);
         let entry = schnorr::Entry {
             chain_id: h.chain_id,
             chain_uid: h.chain_uid,
@@ -519,7 +519,8 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
             c_out: g * Fr::<C>::from(*a) + *y * s,
             d_out,
             y_a,
-            c_aud: c_aud(*a),
+            c_aud,
+            d_aud,
         };
         cps.push(hx(&schnorr::open_sender_cp(&entry, *a, &s, rng).map_err(e)?));
     }
@@ -534,26 +535,28 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
     }))
 }
 
-/// `R = salt ‖ B_1 ‖ … ‖ B_M` as a transfer payload carries it, and its memo (commit-reveal) if any.
+/// `R = salt ‖ B_1 ‖ … ‖ B_M` as a transfer payload carries it, and its memo (commit-reveal) if any. Every payload starts
+/// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16)`.
 fn payload_record<C: ZCurve>(b: &[u8]) -> R<(Vec<u8>, Option<Vec<u8>>)> {
     let p = point_len::<C>();
-    let salt = b.get(64..80).ok_or("payload: too short")?;
+    let salt = b.get(96..112).ok_or("payload: too short")?;
     let cut = |o: usize| &b[o..o + p];
     let mut r = salt.to_vec();
-    if b.len() == 80 + 6 * p {
-        for o in [80 + p, 80 + 2 * p, 80 + 3 * p, 80 + 5 * p] {
+    if b.len() == 112 + 6 * p {
+        for o in [112 + p, 112 + 2 * p, 112 + 3 * p, 112 + 5 * p] {
             r.extend_from_slice(cut(o));
         }
         return Ok((r, None));
     }
-    let m = abi::word_u64(b, 80).ok_or("payload: M")? as usize;
-    let end = 144 + 3 * p * (1 + m); // … ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ legs
+    let m = abi::word_u64(b, 112).ok_or("payload: M")? as usize;
+    // … ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_j
+    let end = 176 + 3 * p + 4 * p * m;
     if m == 0 || m > zether::MAX_RECIPIENTS || (b.len() != end && b.len() != end + zether::memo_len(m)) {
         return Err("payload: neither format".into());
     }
     for j in 0..m {
-        let o = 144 + 3 * p * (j + 1);
-        for at in [o, o + p, 144 + p, o + 2 * p] {
+        let o = 176 + 3 * p + 4 * p * j;
+        for at in [o, o + p, 176 + p, o + 2 * p, o + 3 * p] {
             r.extend_from_slice(cut(at));
         }
     }

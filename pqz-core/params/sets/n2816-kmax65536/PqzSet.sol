@@ -26,6 +26,8 @@ library PqzSet {
     uint256 internal constant S_AUD = 4;
     /// entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)
     uint256 internal constant ROLL_MAX = 32;
+    /// the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute (set.toml debit_min_gas; the UA registry's PQZ holder bound)
+    uint256 internal constant PQZ_DEBIT_MIN_GAS = 7_351_418;
     /// pk / u bytes (k polys x 64 be8)
     uint256 internal constant PK = 22_528;
     /// v bytes (16 be8)
@@ -50,6 +52,8 @@ library PqzSet {
     bytes32 internal constant PQZL_ID = 0xa801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9;
     /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): false: PQZH_ID is the zero word, never accepted
     bool internal constant HAS_PQZH = false;
+    /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies
+    bool internal constant PQZH_VALUE = false;
     /// PQZH's proofSystemId: none at this set
     bytes32 internal constant PQZH_ID = 0x0000000000000000000000000000000000000000000000000000000000000000;
     /// keccak256 of the zero ciphertext Trivial(0) packed at PACK_BITS (19,116 zero bytes: a new account's `acc`, P46)

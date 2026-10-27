@@ -12,6 +12,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
+import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
 
 /// @notice The whole life of a `NONE_ZETHER` token (a factory clone, the real verifier, real proofs from the test
 ///         prover), on BLS12-381 (the only classical Zether curve since UA-6): shield from the public balance, transfer,
@@ -30,7 +31,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function _vta(bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind, bytes memory opening)
         internal view returns (bool)
     {
-        return _vta(tok, ref, 0, amount, kind, opening, "");
+        return _vta(tok, ref, 0, amount, kind, opening);
     }
 
     // ------------------------------------------------------------------ life cycle and conservation
@@ -158,12 +159,13 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, 0);
         bytes memory st = stm.transferStatementSingle(address(tok), t.payload, carol.ua, 0);
-        bytes memory head = new bytes(480);
-        for (uint256 i; i < 480; ++i) head[i] = st[i];
+        bytes memory head = new bytes(512);
+        for (uint256 i; i < 512; ++i) head[i] = st[i];
         bytes memory expected = bytes.concat(
             abi.encode(keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"), ver.proofSystemId(), block.chainid, ZUID, address(tok),
                 keccak256("ZTX_V1_DIRECT"), bytes32(0)),
-            abi.encode(uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0), uint256(uint128(salt)), bytes32(0))
+            abi.encode(uint256(0), uint256(1), FEE, carol.ua, uint256(0), address(0), uint256(uint128(salt)), bytes32(0)),
+            abi.encode(vub) // word 15: validUntilBlock (review C0-9)
         );
         assertEq(head, expected);
         assertEq(tok.chainUid(), ZUID);
@@ -177,7 +179,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(bytes32(_cut(st, 96, 32)), ZUID);
         assertEq(_cut(st, 416, 64), new bytes(64), "no salt, no memo on an unshield");
         bytes memory tampered = bytes.concat(t.payload);
-        tampered[70] ^= 0x01; // the salt
+        tampered[102] ^= 0x01; // the salt
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         tok.mtxConfidentialTransferSingle(tampered, t.proof, "", ZetherTypes.UA.unwrap(carol.ua), "");
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, t.payload.length - 1));
@@ -393,7 +395,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function _cpOpening(uint256 x, bytes32 ref, uint256 amount, ITransferDisclosure.OpeningKind kind)
         internal view returns (bytes memory)
     {
-        (bytes memory ct, bytes memory yt) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct, bytes memory yt) = dis.transferCiphertext(address(tok), ref, 0);
         bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP ? yt : _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
         return _cpOpening(tok, x, ref, 0, amount, kind, base);
     }
@@ -401,6 +403,58 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function _cut(bytes memory a, uint256 off, uint256 len) internal pure returns (bytes memory out) {
         out = new bytes(len);
         for (uint256 i; i < len; ++i) out[i] = a[off + i];
+    }
+
+    function _modInv(uint256 a, uint256 r) internal view returns (uint256 out) {
+        (, bytes memory o) = address(5).staticcall(abi.encode(uint256(32), uint256(32), uint256(32), a, r - 2, r));
+        out = abi.decode(o, (uint256));
+    }
+
+    /// @dev The pre-C0-4 verifier's two equations: `[z]G = A1 + [e]Y_t` and `[z]D = A2 + [e](C − [a]G)`.
+    function _oldAccepts(bytes32 ref, uint256 a, uint256 e, bytes memory opening) internal view returns (bool) {
+        (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(opening, (bytes, bytes, uint256));
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0);
+        uint256 p = ver.g1EncodedBytes();
+        bytes memory cm = ver.g1Sub(_cut(ct, 0, p), ver.g1MulBase(a));
+        return keccak256(ver.g1MulBase(z)) == keccak256(ver.g1Add(a1, ver.g1Mul(bob.y, e)))
+            && keccak256(ver.g1Mul(_cut(ct, p, p), z)) == keccak256(ver.g1Add(a2, ver.g1Mul(cm, e)));
+    }
+
+    /// @dev Review C0-4. The OLD challenge `H(pre ‖ A1 ‖ A2)` carried no statement point and `entryRef` is known before the
+    ///      transfer, so a sender with the key holder picks `k1, k2`, computes `e`, then `s = k1⁻¹(k2 + e(v − a))` and sends an
+    ///      honest transfer of `v`; `z = k1 + e·x_t` opens the false amount `a`. The new challenge absorbs `G ‖ K ‖ B ‖ M`,
+    ///      which depend on `s`, so the forged opening is refused (and the honest one is accepted).
+    function test_disclosure_lateS_noFalseOpening() public {
+        _fund(tok, alice, 500);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        bytes32 ref = _ref(tok, alice, tok.accountState(alice.ua).sendCounter);
+        (uint256 eOld, uint256 s) = _lateS(ref, 100, 5);
+        forceS = s;
+        assertEq(_direct(tok, _proveTransfer(tok, alice, bob, 100, 500, _none(), 0), _none()), ref, "predicted entryRef");
+        bytes memory forged = _forged(eOld);
+        assertTrue(_oldAccepts(ref, 5, eOld, forged), "the OLD verifier opens the false amount 5");
+        assertFalse(_vta(ref, 5, ITransferDisclosure.OpeningKind.RECEIVER_X, forged), "no false opening");
+        assertTrue(_vta(ref, 100, ITransferDisclosure.OpeningKind.RECEIVER_X,
+            _cpOpening(bob.x, ref, 100, ITransferDisclosure.OpeningKind.RECEIVER_X)), "honest opening of v");
+    }
+
+    uint256 constant K1 = 0x1111;
+    uint256 constant K2 = 0x2222;
+
+    /// @dev The old `e` for `A1 = [K1]G, A2 = [K2]G` and amount `a`, and `s = K1⁻¹(K2 + e(v − a))`.
+    function _lateS(bytes32 ref, uint256 v, uint256 a) internal view returns (uint256 e, uint256 s) {
+        uint256 r = ver.groupOrder();
+        e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(
+            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, tok.chainUid(), address(tok)),
+            abi.encodePacked(ref, uint256(0), a, uint8(ITransferDisclosure.OpeningKind.RECEIVER_X)),
+            ver.g1MulBase(K1), ver.g1MulBase(K2)
+        )), r);
+        s = mulmod(_modInv(K1, r), addmod(K2, mulmod(e, addmod(v, r - a, r), r), r), r);
+    }
+
+    function _forged(uint256 e) internal view returns (bytes memory) {
+        uint256 r = ver.groupOrder();
+        return abi.encode(ver.g1MulBase(K1), ver.g1MulBase(K2), addmod(K1, mulmod(e, bob.x, r), r));
     }
 
     function test_disclosureFourOpenings() public {
@@ -437,9 +491,9 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         bytes memory zBig = abi.encode(a1, a2, ver.groupOrder());
         vm.expectRevert(ITransferDisclosure.OpeningMalformed.selector);
         _vta(ref, 123, ITransferDisclosure.OpeningKind.RECEIVER_X, zBig);
-        (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct, bytes memory yTo) = dis.transferCiphertext(address(tok), ref, 0);
         assertEq(yTo, bob.y);
-        assertEq(ct.length, 3 * ver.g1EncodedBytes());
+        assertEq(ct.length, 4 * ver.g1EncodedBytes(), "C_out D_out C_aud D_aud (= D_out on the single format)");
         assertEq(address(tok.disclosure()), address(dis), "canonical disclosure from the token");
     }
 
@@ -449,15 +503,17 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
         bytes32 ref = _direct(tok, t, _none());
-        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0);
         bytes memory dOut = _cut(ct, ver.g1EncodedBytes(), ver.g1EncodedBytes());
         uint256 r = ver.groupOrder();
         uint256 k = 0x5151;
         bytes memory a1 = ver.g1MulBase(k);
         bytes memory a2 = ver.g1Mul(dOut, k);
+        // the full new preimage (G ‖ K ‖ B ‖ M) minus chainUid: chainUid is the only difference from the honest one
         uint256 e = uint256(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, address(tok)),
-            abi.encodePacked(ref, uint256(0), uint256(123), uint8(1), a1, a2)
+            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, address(tok)),
+            abi.encodePacked(ref, uint256(0), uint256(123), uint8(1)),
+            ver.g1MulBase(1), bob.y, dOut, _cut(ct, 0, ver.g1EncodedBytes()), a1, a2
         )));
         e = _h2s(e, r);
         bytes memory noUid = abi.encode(a1, a2, addmod(k, mulmod(e, bob.x, r), r));
@@ -549,7 +605,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         _fund(tok, alice, 500);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         bytes32 ref = _direct(tok, _proveTransfer(tok, alice, bob, 321, 500, _none(), 0), _none());
-        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
+        (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0);
         uint256 p = ver.g1EncodedBytes();
         assertEq(_decrypt(_cut(ct, 2 * p, p), _cut(ct, p, p), X_AUD, 400), 321, "auditor reads C_aud");
         IZetherToken.AccountState memory s = tok.accountState(alice.ua);

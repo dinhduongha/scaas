@@ -118,6 +118,16 @@ contract ZetherUA5cTest is ZetherFixture {
         tok.uaExecute(u, au); // where it belongs
     }
 
+    /// Review C0-3: the retired `mtxConfidentialTransferNoBundle` selector is refused inside a UA envelope too.
+    function test_uaExecute_retiredNoBundleSelector_refused() public {
+        bytes4 old = bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)"));
+        MetaTxLib.UAMetaTransaction memory u = _uam(bob, abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
+        bytes memory au = _uaAuth(bob, u);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature("MetaTxUnknownOp(bytes4)", old)); // the UA path's own unknown-op error
+        tok.uaExecute(u, au);
+    }
+
     /// A proof bound to an address envelope fails inside a UA envelope with the same data.
     function test_addressEnvelopeProof_liftedToTheUAEnvelope_fails() public {
         MetaTxLib.MetaTransaction memory m = _mt("");
@@ -204,16 +214,16 @@ contract ZetherUA5cTest is ZetherFixture {
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
         tok.mtxUnshield("", "", "", bytes32(0), "", 1, _pad(MetaTxLib.UA_POOL));
         vm.expectRevert(IZetherToken.ZeroRecipient.selector);
-        tok.mtxUnshield(new bytes(64 + 128), "", "", bytes32(0), "", 1, bytes32(0));
+        tok.mtxUnshield(new bytes(96 + 128), "", "", bytes32(0), "", 1, bytes32(0));
     }
 
     // ------------------------------------------------------------------ D20: the shared signature on Zether
 
     /// `auth` and `accHint` are PQZ's arguments: non-empty on Zether ⇒ named errors, before anything else.
     function test_authAndAccHint_mustBeEmpty() public {
-        bytes4[4] memory sels = [ZetherLayer.mtxConfidentialTransfer.selector, ZetherLayer.mtxConfidentialTransferCompact.selector,
-            ZetherLayer.mtxConfidentialTransferNoBundle.selector, ZetherLayer.mtxConfidentialTransferSingle.selector];
-        for (uint256 i; i < 4; ++i) {
+        bytes4[3] memory sels = [ZetherLayer.mtxConfidentialTransfer.selector, ZetherLayer.mtxConfidentialTransferCompact.selector,
+            ZetherLayer.mtxConfidentialTransferSingle.selector];
+        for (uint256 i; i < 3; ++i) {
             (bool ok, bytes memory r) = address(tok).call(abi.encodeWithSelector(sels[i], bytes(""), bytes(""), hex"01", bytes32(0), bytes("")));
             assertFalse(ok);
             assertEq(r, abi.encodeWithSelector(IZetherToken.AuthNotEmpty.selector));

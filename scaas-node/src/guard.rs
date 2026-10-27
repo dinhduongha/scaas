@@ -58,8 +58,8 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 10] = [
     ([0x1d, 0xef, 0xeb, 0x10], "MandateWallet.mtxPayUnderMandate", Rule::SelfAuth),
     ([0xb5, 0x34, 0xf2, 0x74], "MandateWallet.mtxRevoke", Rule::SelfAuth),
     (SEL_MTX_SETTLE, "SCaaSDex.mtxSettle", Rule::Dex),
-    ([0x1e, 0x69, 0xbc, 0xde], "SCaaSDex.mtxExchange", Rule::Dex),
-    ([0xb2, 0x1f, 0xe8, 0xbc], "SCaaSDex.mtxExchangeVia", Rule::Dex),
+    (<crate::abi::ISCaaSDex::mtxExchangeCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxExchange", Rule::Dex),
+    (<crate::abi::ISCaaSDex::mtxExchangeViaCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxExchangeVia", Rule::Dex),
     ([0x2d, 0xe6, 0x21, 0xd2], "SCaaSDex.mtxCancelOrders", Rule::Dex),
     (SEL_MTX_INVALIDATE_NONCES, "SCaaSDex.mtxInvalidateNonces", Rule::Dex),
 ];
@@ -390,6 +390,13 @@ mod tests {
         assert_eq!(kat("dex_order_kat.json", "settle_calldata")[..4], SEL_MTX_SETTLE);
         assert_eq!(kat("dex_order_kat.json", "cancel_orders_calldata")[..4], CALL_TABLE[8].0);
         assert_eq!(kat("dex_order_kat.json", "invalidate_calldata")[..4], SEL_MTX_INVALIDATE_NONCES);
+        // C6-2: the contract-generated exchange calldata (`DexKat.t.sol`, encoding only) selects the rows and round-trips
+        // through the node's own bindings, so a contract signature change that `abi.rs` does not follow fails here
+        let (ex, via) = (kat("dex_order_kat.json", "exchange_calldata"), kat("dex_order_kat.json", "exchange_via_calldata"));
+        assert_eq!(ex[..4], CALL_TABLE[6].0);
+        assert_eq!(via[..4], CALL_TABLE[7].0);
+        assert_eq!(crate::abi::ISCaaSDex::mtxExchangeCall::abi_decode(&ex).unwrap().abi_encode(), ex);
+        assert_eq!(crate::abi::ISCaaSDex::mtxExchangeViaCall::abi_decode(&via).unwrap().abi_encode(), via);
         assert_eq!(kat("trade_kat.json", "cancel_calldata")[..4], SEL_MTX_CANCEL_ORDER);
         assert_eq!(crate::abi::ISCaaSDex::mtxSettleCall::SELECTOR, SEL_MTX_SETTLE);
         assert_eq!(IToken::mtxWrapCall::SELECTOR, SEL_MTX_WRAP);
@@ -399,10 +406,12 @@ mod tests {
         assert_eq!(CALL_TABLE[2].0, sig("mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)"));
         assert_eq!(CALL_TABLE[3].0, sig("mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)"));
         assert_eq!(CALL_TABLE[4].0, sig("mtxRevoke(address,uint64,uint256,bytes)"));
-        let order = "(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256)";
-        let plan = format!("(bytes32,(address,{order},bytes,uint256,uint256)[],address[])");
+        // C6-2: the tagged `ExchangeLeg` (sellToken, shape, order bytes, sig, sellFill, receiveFill)
+        let plan = "(bytes32,(address,uint8,bytes,bytes,uint256,uint256)[],address[])";
         assert_eq!(CALL_TABLE[6].0, sig(&format!("mtxExchange({plan},(address,bytes)[])")));
         assert_eq!(CALL_TABLE[7].0, sig(&format!("mtxExchangeVia({plan},address,bytes)")));
+        assert_eq!(CALL_TABLE[6].0, crate::abi::ISCaaSDex::mtxExchangeCall::SELECTOR);
+        assert_eq!(CALL_TABLE[7].0, crate::abi::ISCaaSDex::mtxExchangeViaCall::SELECTOR);
         // no token transfer, approval or meta-tx entry is a row: those reach a token only as `metatx` jobs
         for s in ["transfer(address,uint256)", "approve(address,uint256)", "transferFrom(address,address,uint256)"] {
             assert!(row(sig(s)).is_none(), "{s}");

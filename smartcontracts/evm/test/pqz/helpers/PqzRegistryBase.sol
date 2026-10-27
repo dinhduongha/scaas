@@ -8,6 +8,29 @@ import {UAMldsaVerifier} from "../../../src/ua/MlDsa.sol";
 import {UAPqzVerifier} from "../../../src/pqz/UAPqzVerifier.sol";
 import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 
+/// @notice `slhdsa128s` (0x0133, 0.79 M) / `fndsa512` (0x0132, 2.3 M) stand-in: burns what a valid pure-Solidity verify
+///         costs (accounts.md CTR-UA-23, measured P6a) and accepts: a fee UA of that kind in the relay gas rows (review2 T2).
+contract SlhStandIn {
+    uint256 internal immutable B;
+
+    constructor(uint256 b) { B = b; }
+
+    function verify(bytes calldata, bytes32, bytes calldata) external view returns (bool) {
+        _burn();
+        return true;
+    }
+
+    function verifyPop(bytes calldata, bytes32, bytes calldata) external view returns (bool) {
+        _burn();
+        return true;
+    }
+
+    function _burn() private view {
+        uint256 g0 = gasleft();
+        while (g0 - gasleft() < B) {}
+    }
+}
+
 bytes32 constant PQZ_UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464; // chain 7622's genesis
 // the build's set's ids (plan 5h Task 8d; PQZH_ID is the zero word at a set without PQZH)
 bytes32 constant PQZL_ID = PqzSet.PQZL_ID;
@@ -59,9 +82,11 @@ abstract contract PqzRegistryBase is PqzMock {
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
         mlv = new UAMldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
         pqv = _newPqzVerifier(PQZL_ID);
-        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](4);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
+        k[2] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new SlhStandIn(790_000)), 1_400_000); // DeployBase's cap
+        k[3] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new SlhStandIn(2_300_000)), 2_500_000);
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
     }
 

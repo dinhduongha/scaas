@@ -51,8 +51,8 @@ terminator.
 
 <a id="scope"></a>
 <a id="CTR-ZTH-01"></a>**CTR-ZTH-01** — **Full classical Zether** (owner): the `*_ZETHER` kinds clone through the factory,
-verifiers for bn254 **and** BLS12-381 (the curve is a deploy-time parameter of each token: the creator chooses the
-verifier at `initialize`, there is no setter and no system-wide curve; the prover is generic over the curve), ElGamal
+verifiers for bn254 **and** BLS12-381 (the curve is a deploy-time parameter of each token: the verifiers are release
+immutables of the factory since 5g-Z2, so the release fixes the curve; there is no setter and no system-wide curve; the prover is generic over the curve), ElGamal
 `acc/pending` balances, two `mtxRollOver` modes (`PUBLIC` default, `OWNER_ONLY` opt-in per account, with an on-chain
 `accSeq`), shield/transfer/unshield, Bulletproofs with exactly two range statements, envelope binding to the meta-tx, public
 fee scalars, the `ITransferDisclosure` selective-disclosure interface (open the transfer ciphertext; three openings —
@@ -119,8 +119,8 @@ computes with `addmod`, which never wraps.
 
 Integer invariant: the sum of all `acc`/`pending` exponents of a token
 `= totalShielded ≤ maxDecryptableShielded ≤ 2^54` — `mtxShield` adds exactly `amount` with the cap checked; a transfer moves
-exactly `v` to the receiver's `pending` and `fee` to the beneficiary's `pending`, and leaves the sender exactly `b'`;
-rollOver adds two numbers `≤ totalShielded`; burn removes exactly `amount`. No homomorphic addition (`pending += v`,
+exactly `v` to the receiver's `pending`, takes `fee` out of `totalShielded` (paid in public units from `SHIELD_POOL` to the beneficiary's UA-ledger balance, plan 5h D19: nothing goes to a beneficiary `pending`) and leaves the sender exactly `b'`;
+rollOver adds two numbers `≤ totalShielded`; burn removes exactly `amount + fee` (`fee` as in a transfer). The multi-recipient bound is [CTR-ZTH-37](#CTR-ZTH-37). No homomorphic addition (`pending += v`,
 `+= fee`, `acc += pending`) reaches `r`, because every term and every sum is `≤ 2^54`. Because `b' = b − fee − v ≥ 0` is proven `< 2^64` at the same time, `v ≤ b ≤ 2^54`. Consequences: (a) every real
 balance is `≤ 2^54 < 2^64`, so `b'` is always provable (completeness); (b) `v` never exceeds `2^54` in practice although
 the proof allows up to `2^64`; (c) every balance is decryptable by BSGS up to `2^54`.
@@ -154,7 +154,7 @@ strong Fiat-Shamir). NUMS generators are computed in the verifier constructor an
 | Precompiles | `0x0b` G1ADD, `0x0c` G1MSM (subgroup check), `0x10` MAP_FP_TO_G1 |
 | Security | ~117–126 bit |
 | Chains | Prague (EIP-2537) |
-| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2")` (`v2`: the 480-byte header, P3b; label: controller ruling, pending the owner) |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3")` (`v3`, review C0-1 owner ruling 2026-10-27 (per-leg auditor randomness) and C0-9 controller proposal 2026-10-27, owner may override (`validUntilBlock`): the 512-byte header with `validUntilBlock`, per-leg auditor randomness on the multi-recipient format; `v2`: the 480-byte header, P3b, refused since; the `…/v3` label is part of the owner ruling 2026-10-27 on C0-1 (ii), which names the `proofSystemIdMulti` bump); the multi-recipient id is `keccak256(label ‖ "/multi")` |
 
 <details><summary>Legacy bn254 (alt_bn128; <code>smartcontracts/evm/legacy/ua6/</code>, UA-6 U10)</summary>
 
@@ -169,7 +169,7 @@ strong Fiat-Shamir). NUMS generators are computed in the verifier constructor an
 | Precompiles | `0x06` add, `0x07` mul (MSM = a mul+add loop) |
 | Security | ~100 bit |
 | Chains | any EVM since Byzantium |
-| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v2")` |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v2")` (the backed-up Solidity verifier; the Rust prover's legacy `bn254` feature, default off, follows the shared `…/v3` code) |
 
 </details>
 
@@ -177,7 +177,7 @@ Classical Zether runs on BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)). BLS12-381 b
 it is more expensive than the legacy bn254 line; an earlier "45–60 % cheaper" claim is wrong).
 
 **The canonical encoding is unique.** Coordinates must be `< p` (the precompiles refuse otherwise); BLS points must have
-all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = keccak256(encodedY)` relies on that.
+all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = keccak256(TAG_ZETHER_BLS12381 ‖ encodedY)` relies on that.
 
 **Point checks.**
 
@@ -244,7 +244,7 @@ recomputes it. Vector: `transcript.json`.
 
 ## 6. ElGamal state and lifecycle
 
-Key: `x ∈ [1, r)`, `Y = [x]G`, `UA = keccak256(encodedY)` (the built identifier; the Universal Account form is
+Key: `x ∈ [1, r)`, `Y = [x]G`, `UA = keccak256(TAG_ZETHER_BLS12381 ‖ encodedY)` with `TAG_ZETHER_BLS12381 = keccak256("scaas.ua.zether-bls12381.v1")` (`ZetherTypes.toUA`, [CTR-UA-22](accounts.md#CTR-UA-22); the Universal Account form is
 [CTR-UA-16](accounts.md#CTR-UA-16)). Lifted ElGamal: `(C, D) = ([b]G + [ρ]Y, [ρ]G)` (with `r` for the randomness: `(C, D) = ([b]G + [r]Y, [r]G)`);
 homomorphic add/sub on ciphertexts. Decryption: `[b]G = C − [x]D`, then the configurable client BSGS ([CTR-ZTH-19](#CTR-ZTH-19)). The wallet keeps
 the balance in a **device cache** and checks it with `[b]G == C − [x]D` instead of decrypting again; when the cache is
@@ -313,7 +313,7 @@ sendCounter_f++
 [CTR-ZTH-45](#CTR-ZTH-45), signed through the base, [CTR-MTX-21](metatx.md#CTR-MTX-21)):
 
 - `PUBLIC` (default; retail, loyalty, low-risk): anyone may call `mtxRollOver(UA)` / `mtxRollOverBatch(UA[])` without a
-  signature. `mtxRollOverBatch` skips `OWNER_ONLY` and unregistered items.
+  signature. `mtxRollOverBatch` skips `OWNER_ONLY` items only (an unregistered one is a silent no-op).
 - `OWNER_ONLY` (treasury, B2B high value): `mtxRollOver` reverts `RollOverOwnerOnly`; only `mtxRollOverSigned(UA,
   expectedPendingSeq, validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `lastRolledPendingSeq <
   expectedPendingSeq ≤ pendingSeq`, signed by the account's own key (Schnorr by `x` through `requireAuthorized`, purpose `zether-owner`, [registry](#registry)) over
@@ -355,7 +355,7 @@ protocol change that needs its own cryptographic review; epochs are not the fall
 ## <a id="statement-byte-layout"></a>7. Statement (byte layout)
 
 The token **builds** the statement from storage + payload; the prover builds exactly the same. `P` = the bytes of one
-point. Header (common to every op, `chainUid` at offset 96, [CTR-ZTH-36](#CTR-ZTH-36); the verifier reads `fee` at 288 and `amount` at 352). **480 bytes** (built in P3b; P3: 416) with `salt` and `memoHash`, under the `…/v2` `proofSystemId`; both transfer payloads carry `salt(16)` right after `be32(provedSendCounter)`, and a commit-reveal payload appends `memo` after the legs:
+point. Header (common to every op, `chainUid` at offset 96, [CTR-ZTH-36](#CTR-ZTH-36); the verifier reads `fee` at 288 and `amount` at 352). **512 bytes** under the `…/v3` `proofSystemId` (review C0-9, controller proposal 2026-10-27, owner may override: + `validUntilBlock`; P3b: 480 with `salt` and `memoHash`, `…/v2`; P3: 416); every payload starts `be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ be32(validUntilBlock)`, both transfer payloads carry `salt(16)` right after it, and a commit-reveal payload appends `memo` after the legs:
 
 | Offset | Len | Field |
 |---|---|---|
@@ -365,15 +365,25 @@ point. Header (common to every op, `chainUid` at offset 96, [CTR-ZTH-36](#CTR-ZT
 | 96 | 32 | `chainUid` (the token's `chainUid()`, [CTR-ZTH-36](#CTR-ZTH-36)) |
 | 128 | 32 | token address (12 zero bytes ‖ 20 bytes) |
 | 160 | 32 | `bindingTag` — `keccak256("ZTX_V1_DIRECT")` or `keccak256("ZTX_V1_RELAYED")` |
-| 192 | 32 | `envelopeBinding` — 0 if DIRECT; [envelope binding](#envelope-binding) if RELAYED |
+| 192 | 32 | `envelopeBinding` (header word 6) — DIRECT: 0, except a direct `mtxUnshieldUnwrap`, where it is `unwrapBinding(u, minOut)` (`keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))`, [CTR-ZTH-34](#CTR-ZTH-34)); RELAYED: the [envelope binding](#envelope-binding) (the UA envelope's under `uaExecute`, [CTR-ZTH-51](#CTR-ZTH-51)) |
 | 224 | 32 | `sendCounter` |
 | 256 | 32 | `accSeq` |
 | 288 | 32 | `fee` (inner fee, shielded units) |
 | 320 | 32 | `beneficiary` (UA receiving the fee; 0 if none) |
 | 352 | 32 | `amount` (burn; transfer = 0) |
-| 384 | 32 | `recipient` (burn: 12 zero bytes ‖ address; transfer = 0) |
+| 384 | 32 | `recipient` (header word 12; burn: 12 zero bytes ‖ address, or a derived SIGNING UA id, [CTR-ZTH-51](#CTR-ZTH-51); transfer = 0) |
 | 416 | 32 | `salt` — 16 zero bytes ‖ the build salt of [CTR-ZTH-30](#CTR-ZTH-30) (burn = 0; offsets 416/448: controller ruling, pending the owner) |
 | 448 | 32 | `memoHash` — `keccak256(memo)` on commit-reveal ([CTR-ZTH-50](#CTR-ZTH-50)), else 0 |
+| 480 | 32 | `validUntilBlock` — the payload's word 2, every op ([expiry](#valid-until)) |
+
+<a id="valid-until"></a>**Expiry (part of [CTR-ZTH-03](#CTR-ZTH-03)): every Zether debit carries `validUntilBlock`; the token refuses it once
+`block.number > validUntilBlock` (`TransferExpired(uint256 validUntilBlock)`)** (review C0-9, controller proposal (1) under
+the owner's C0-1 ruling of 2026-10-27, the same `…/v3` bump: the PQZ header's rule). Single and multi-recipient transfers and the unshield (every
+debit statement, as PQZ binds it on every path), direct and relayed, and the statement views (`ZetherStatements`), checked
+in the cheap pre-checks before the verifier. The word is the payload's word 2 and the statement header's word 15, so the
+proof binds it: a relayer can neither extend nor drop it. Before it a direct-path proof that became public (mempool, a
+reverted transaction's calldata) stayed valid until `accSeq` / `sendCounter` moved, and anyone could submit it later.
+Wallets set it a short horizon ahead (the PQZ client's value); `type(uint64).max` restores the old bearer behaviour.
 
 <a id="CTR-ZTH-36"></a>**CTR-ZTH-36** — **Every chain-bound Zether digest carries `chainUid` beside `chainid`** (owner):
 the statement header (above), the envelope binding ([CTR-ZTH-06](#CTR-ZTH-06)), the disclosure challenge
@@ -392,7 +402,8 @@ the prover (which also mixes `chainUid` into its `s`); the vectors are regenerat
 Points:
 
 - **transfer:** `Y_f ‖ Y_t ‖ Y_a ‖ C_acc ‖ D_acc ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud` (9P). `Y_a` = the token's auditor key,
-  `O` when off; when off `C_aud` **must** be `O`.
+  `O` when off; when off `C_aud` **must** be `O`; when on, neither `Y_f` nor `Y_t` is `Y_a` (`AuditorKeyAsParty()`, review
+  C0-1, the Zether twin of PQZ F-4).
 - **burn:** `Y_f ‖ C_acc ‖ D_acc` (3P).
 
 The transfer layout above is the single-recipient format (`mtxConfidentialTransferSingle`); the multi-recipient statement is
@@ -530,8 +541,8 @@ burn     = V_b ‖ A_y ‖ A_bal ‖ A_Vb ‖ z_x ‖ z_b ‖ z_gb ‖ BP(64)
 Payload (calldata for the token, from which the statement takes its points):
 
 ```
-transfer payload = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud   (80 + 6P)
-burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f                                       (64 + P)
+transfer payload = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud   (112 + 6P)
+burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ be32(validUntilBlock) ‖ Y_f                                       (96 + P)
 ```
 
 ## 11. Multi-recipient transfer
@@ -542,22 +553,35 @@ multi-recipient transfer** (owner; the post-quantum form is PQZ op 7 `R_TXM`,
 [pq-zero-knowledge CTR-PQZ-25 / CTR-PQZ-26](pq-zero-knowledge.md#CTR-PQZ-25)). The sender may add randomly chosen decoy recipients that receive an encryption of 0
 and so hide the real one; sender anonymity (a ring) is not wanted and the sender stays public. **One shared `s`** serves
 every recipient: handing `s` to a checker opens every leg of that transfer, decoys included (accepted; the per-leg
-opening without `s` is [`SENDER_CP`](#CTR-ZTH-40)). The multi-recipient transfer has three entries by storage, `mtxConfidentialTransfer` (the mode's default), `mtxConfidentialTransferCompact`, `mtxConfidentialTransferNoBundle` ([CTR-ZTH-38](#CTR-ZTH-38)); the single-recipient format above is kept unchanged (same payload, statement, proof, proof system id and full-bundle storage) under the name `mtxConfidentialTransferSingle`. The statement header is the common header of [Statement](#statement-byte-layout) (with `chainUid`).
+opening without `s` is [`SENDER_CP`](#CTR-ZTH-40)). **Every auditor copy has its own randomness `t_j`** (review C0-1,
+P0; owner ruling 2026-10-27 option (ii), `…/v3`): with one `s` for the auditor copies too, `C_aud_j − C_aud_k = [v_j −
+v_k]G` was public — decoys had byte-identical `C_aud`, the real leg was the odd one out, its amount a 64-bit discrete
+log, and one known amount gave `[s]Y_a` and so every `[v_j]G` (receiver anonymity and amount confidentiality lost,
+`AUDITOR` opened more than one leg). Option (i), public per-leg coefficients `h_j` under the one `s`, is broken the same
+way (`h_k·C_aud_j − h_j·C_aud_k = [h_k·v_j − h_j·v_k]G`; every single-`s` scheme with public per-leg coefficients
+leaks) and was not taken. `C_out_j` (distinct keys) and `C_deb` are unaffected. With the auditor on, neither the
+sender nor a recipient is the auditor key (`Y_f ≠ Y_a`, every `Y_tj ≠ Y_a`, else `AuditorKeyAsParty()`, before the
+verifier and in the statement views; both formats). The multi-recipient transfer has two entries by storage, `mtxConfidentialTransfer` (the mode's default) and `mtxConfidentialTransferCompact` ([CTR-ZTH-38](#CTR-ZTH-38); the third, `…NoBundle`, is retired: review C0-3, owner ruling 2026-10-27); the single-recipient format above is kept unchanged (same payload, statement, proof, proof system id and full-record storage) under the name `mtxConfidentialTransferSingle`. The statement header is the common header of [Statement](#statement-byte-layout) (with `chainUid`).
 
-**Relation and proof.** Witness: `x, s, v_1..v_M, b' = b − Σv_j − fee, γ_vj, γ_b`. Ciphertexts (shared `s`, shared
-`D_out = [s]G`):
+**Relation and proof.** Witness: `x, s, v_1..v_M, t_1..t_M, b' = b − Σv_j − fee, γ_vj, γ_b` (`t_j` only with the
+auditor on). Ciphertexts (shared `s`, shared `D_out = [s]G`; the auditor copy of leg `j` under its own `t_j`,
+[CTR-ZTH-30](#CTR-ZTH-30)):
 
 ```text
-C_out_j = [v_j]G + [s]Y_tj        C_aud_j = [v_j]G + [s]Y_a  (O when the auditor is off)
+C_out_j = [v_j]G + [s]Y_tj        C_aud_j = [v_j]G + [t_j]Y_a    D_aud_j = [t_j]G   (both O when the auditor is off)
 C_deb   = [V]G + [s]Y_f   with V = Σ v_j            V_vj = [v_j]G + [γ_vj]Hb      V_b = [b']G + [γ_b]Hb
 ```
 
-Σ commitments (hedged nonces as in the single format): `A_y = [k_x]G`, `A_D = [k_s]G`, `A_deb = [Σk_vj]G + [k_s]Y_f`,
-`A_bal = [k_b]G + [k_x](D_acc − D_out)`, `A_Vb = [k_b]G + [k_gb]Hb`; per `j`: `A_out_j = [k_vj]G + [k_s]Y_tj`,
-`A_aud_j = [k_vj]G + [k_s]Y_a`, `A_Vvj = [k_vj]G + [k_gvj]Hb`. Responses `z_x, z_s, z_b, z_gb`, per `j`: `z_vj, z_gvj`.
+The auditor decrypts leg `j` as `C_aud_j − [x_a]D_aud_j = [v_j]G`. Σ commitments (hedged nonces as in the single
+format): `A_y = [k_x]G`, `A_D = [k_s]G`, `A_deb = [Σk_vj]G + [k_s]Y_f`, `A_bal = [k_b]G + [k_x](D_acc − D_out)`,
+`A_Vb = [k_b]G + [k_gb]Hb`; per `j`: `A_out_j = [k_vj]G + [k_s]Y_tj`, `A_aud_j = [k_vj]G + [k_tj]Y_a`,
+`A_Daud_j = [k_tj]G`, `A_Vvj = [k_vj]G + [k_gvj]Hb`. Responses `z_x, z_s, z_b, z_gb`, per `j`: `z_vj, z_gvj, z_tj`.
+Auditor off: `A_aud_j = A_Daud_j = O` and `z_tj = 0` (the verifier requires all three, so no proof byte is free).
+Auditor on: every `D_aud_j ≠ O` and no two legs share `C_aud` or `D_aud` (a reused `t_j` would publish `[v_j − v_k]G`
+again), refused by the verifier (`ProofRejected`), not only never built.
 Transcript: `T.absorb("statement", statement)`; `T.absorb("sigma.commit", V_b ‖ A_y ‖ A_D ‖ A_deb ‖ A_bal ‖ A_Vb ‖
-(V_vj ‖ A_out_j ‖ A_aud_j ‖ A_Vvj)_{j=1..M})`; `c = T.challenge("sigma.c")`; then the range proofs in the order
-`v_1 … v_M, b'` with the existing per-proof transcript use.
+(V_vj ‖ A_out_j ‖ A_aud_j ‖ A_Daud_j ‖ A_Vvj)_{j=1..M})`; `c = T.challenge("sigma.c")`; then the range proofs in the
+order `v_1 … v_M, b'` with the existing per-proof transcript use.
 
 ```text
 E1    [z_x]G − [c]Y_f − A_y
@@ -565,7 +589,8 @@ E2    [z_s]G − [c]D_out − A_D
 E3_j  [z_vj]G + [z_s]Y_tj − [c]C_out_j − A_out_j
 E4    [Σ z_vj]G + [z_s]Y_f − [c]C_deb − A_deb
 E5    [z_b + c·fee]G + [z_x]D_acc − [z_x]D_out − [c]C_acc + [c]C_deb − A_bal
-E6_j  [z_vj]G + [z_s]Y_a − [c]C_aud_j − A_aud_j            (auditor on for this transfer; off ⇒ every C_aud_j, A_aud_j = O)
+E6_j  [z_vj]G + [z_tj]Y_a − [c]C_aud_j − A_aud_j           (auditor on for this transfer, D_aud_j ≠ O;
+E6′_j [z_tj]G − [c]D_aud_j − A_Daud_j                       off ⇒ every C_aud_j, D_aud_j, A_aud_j, A_Daud_j = O, z_tj = 0)
 E7_j  [z_vj]G + [z_gvj]Hb − [c]V_vj − A_Vvj
 E8    [z_b]G + [z_gb]Hb − [c]V_b − A_Vb
 ```
@@ -577,16 +602,18 @@ aggregation). Soundness as [CTR-ZTH-18](#CTR-ZTH-18): the only sum of proven val
 **Encoding.**
 
 ```text
-payload   = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M} [‖ memo]
-statement = header(opTag) ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M}
-opTag     = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/" ‖ mode)     mode ∈ {"HASH", "BUNDLE", "NONE"}
-proof     = sigma commitments ‖ sigma responses ‖ BP(v_1) … BP(v_M) ‖ BP(b')
+payload   = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_{j=1..M} [‖ memo]   (176 + 3P + 4P·M [+ 17 + 40·M])
+statement = header(opTag) ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_{j=1..M}   (512 + 6P + 32 + 4P·M)
+opTag     = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/" ‖ mode)     mode ∈ {"HASH", "BUNDLE"}   ("NONE" retired, review C0-3)
+proof     = V_b ‖ A_y ‖ A_D ‖ A_deb ‖ A_bal ‖ A_Vb ‖ (V_vj ‖ A_out_j ‖ A_aud_j ‖ A_Daud_j ‖ A_Vvj)_j ‖ z_x ‖ z_s ‖ z_b ‖ z_gb ‖
+            (z_vj ‖ z_gvj ‖ z_tj)_j ‖ BP(v_1) … BP(v_M) ‖ BP(b')   ((6 + 5M)P + (4 + 3M)·32 + (M + 1)(16P + 160))
 ```
 
 The mode is in `opTag`, so a relayer cannot switch the mode of a signed proof. `1 ≤ M ≤ MAX_RECIPIENTS = 16`
 (`BadRecipientCount`); recipients pairwise distinct, none equal to the sender, all registered (`DuplicateRecipient`,
 `SelfTransfer`, `AccountNotRegistered`). The multi-recipient format has its own proof system id, so a single-recipient proof never
-matches it. Relaying through the meta-transaction envelope is the generic self-call ([CTR-ZTH-34](#CTR-ZTH-34)).
+matches it; `…/v2` statements and proofs (the shared-`s` auditor copies, the 480-byte header) are refused: the id is
+`keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3/multi")`. Relaying through the meta-transaction envelope is the generic self-call ([CTR-ZTH-34](#CTR-ZTH-34)).
 
 **Decoy fee** (owner 2026-10-20; built in the 5h final fix wave). The payload's `decoyFee` word `d` is the sender's
 per-leg fee: `minDecoyFee() ≤ d < 2^64`, else `DecoyFeeOutOfRange(d, minDecoyFee)`; the statement's public `fee` word is
@@ -603,19 +630,18 @@ A non-zero `d` adds ≈ 28.7 k gas per leg (the prover's `DECOY_LEG_GAS` = 32 k 
 (above); `sendCounter_f++` once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
 
 <a id="storage-modes"></a>
-<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferNoBundle`, all `(bytes payload, bytes proof, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 8 recipients by form, auditor and direct or relayed (BLS12-381, measured after UA-6: [§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ConfidentialTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:
+<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Two transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b; `…NoBundle` retired by owner ruling 2026-10-27, C0-3). `mtxConfidentialTransfer` and `mtxConfidentialTransferCompact`, both `(bytes payload, bytes proof, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (BLS12-381 640 B per leg; `D_aud_j` since `…/v3`, review C0-1); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. The single format keeps `B = Y_t ‖ C_out ‖ D_out ‖ C_aud` (its one auditor copy is under `s`, `D_aud = D_out`), so `R` is `16 + 4P` bytes exactly there and `16 + 5P·M` on the multi-recipient format, (the memo, `17 + 40·M`, is a separate value). **Every entry keeps `R` in contract state** (the ciphertext rule, owner ruling 2026-10-21; Zether brought in line by owner ruling 2026-10-27, C0-3): BUNDLE stores `R` inline (`entries[entryRef]`, a `bytes` value); commit-reveal stores `R` by SSTORE2 (the data contract holds `0x00 ‖ R`; `entryPtrs[entryRef]` holds its address, one slot) next to the sender memo (`memos[entryRef]`) and still emits `TransferBundles(entryRef, R)`, so an indexer that keeps `keccak256(R)` as the commitment stays consistent (the stored bytes hash to it). `transferEntry(entryRef)` returns `R` for every form and `transferMemo(entryRef)` the memo; on-chain disclosure reads `R` from state and takes no `bundles` argument. No `proofSystemId` change: the mode is in `opTag` and the statement is unchanged. The `NONE` mode (nothing stored; disclosure from calldata only) and `OP_MULTI_NONE` are gone; a call to the old selector hits the token's unknown-selector path and reverts. A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 8 recipients by form, auditor and direct or relayed (BLS12-381, measured after UA-6: [§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ConfidentialTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names how it is stored:
 
 | Entry | BUNDLE token ([CTR-ZTH-48](#CTR-ZTH-48)): stored per transfer | COMPACT token: stored per transfer |
 |---|---|---|
-| `mtxConfidentialTransfer` | `R` = every bundle `B_1 ‖ … ‖ B_M` (bn254 256 B per leg) — **default**; on-chain disclosure with nothing supplied | the commitment `keccak256(R)`, `R = salt ‖ B_1 ‖ … ‖ B_M` (32 B) + the sender memo (17 + 40·M B, [CTR-ZTH-50](#CTR-ZTH-50)) — **default** |
-| `mtxConfidentialTransferCompact` | commitment + sender memo, as on COMPACT (cheaper) | same as `mtxConfidentialTransfer` |
-| `mtxConfidentialTransferNoBundle` | nothing (cheapest; disclosure off chain from calldata) | reverts `TransferEntryDisabled` (owner, 2026-10-11: every transfer stays openable) |
+| `mtxConfidentialTransfer` | `R` inline (`bytes`; bn254 256 B per leg) — **default**; on-chain disclosure with nothing supplied | `R = salt ‖ B_1 ‖ … ‖ B_M` by SSTORE2 (one pointer slot) + the sender memo (17 + 40·M B, [CTR-ZTH-50](#CTR-ZTH-50)) — **default** |
+| `mtxConfidentialTransferCompact` | `R` by SSTORE2 + sender memo, as on COMPACT (cheaper in regular gas: [§19](#gas-multi)) | same as `mtxConfidentialTransfer` |
 | `mtxConfidentialTransferSingle` | stores `R` with its one leg (`j = 0`), event `ConfidentialTransfer` | reverts `TransferEntryDisabled` (controller ruling, pending the owner) |
 
-Every entry also updates `acc_f`, `pending_tj` and `sendCounter`; the commitment entries put the full bundles in `TransferBundles(entryRef, bundles)` and calldata. The prover and client default to `mtxConfidentialTransfer`; a caller on a BUNDLE token may pick commit-reveal or no-bundle to save gas. `s` of one transfer opens only that transfer ([CTR-ZTH-30](#CTR-ZTH-30)). Off-chain checking needs no storage. Who can open what under each storage: [who can open what](#who-opens); costs: [gas](#gas). The P3 entry `zetherTransferBundle` is gone (`mtxConfidentialTransfer` was HASH there).
+Every entry also updates `acc_f`, `pending_tj` and `sendCounter`; the commit-reveal entry also puts `R` in `TransferBundles(entryRef, bundles)` and calldata. The prover and client default to `mtxConfidentialTransfer`; a caller on a BUNDLE token may pick commit-reveal (a smaller regular-gas cost, [§19](#gas-multi)). `s` of one transfer opens only that transfer ([CTR-ZTH-30](#CTR-ZTH-30)). Off-chain checking needs no storage. Who can open what under each storage: [who can open what](#who-opens); costs: [gas](#gas). The P3 entry `zetherTransferBundle` is gone (`mtxConfidentialTransfer` was HASH there).
 
 <a id="disclosure-mode"></a>
-<a id="CTR-ZTH-48"></a>**CTR-ZTH-48** — **`disclosureMode ∈ {BUNDLE, COMPACT}` is chosen at `initialize` and immutable** (owner, 2026-10-11; built in P3b). It is `ConfidentialConfig.disclosureMode` through `OpenFactory` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)), readable as `disclosureMode()`; an unknown value reverts `BadDisclosureMode`. BUNDLE: every entry of [CTR-ZTH-38](#CTR-ZTH-38) is open and `mtxConfidentialTransfer` stores the full record. COMPACT: commit-reveal only (`mtxConfidentialTransfer` = `mtxConfidentialTransferCompact`); `mtxConfidentialTransferNoBundle` and `mtxConfidentialTransferSingle` revert `TransferEntryDisabled(disclosureMode)`. One implementation per kind serves both modes: COMPACT is a subset of BUNDLE, the modes are config flags and the kinds stay `NONE_ZETHER` / `UNDERLYING_ZETHER` ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)); separate implementations were rejected and are revisited only if EIP-170 forces smaller bytecode.
+<a id="CTR-ZTH-48"></a>**CTR-ZTH-48** — **`disclosureMode ∈ {BUNDLE, COMPACT}` is chosen at `initialize` and immutable** (owner, 2026-10-11; built in P3b). It is `ConfidentialConfig.disclosureMode` through `OpenFactory` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)), readable as `disclosureMode()`; an unknown value reverts `BadDisclosureMode`. BUNDLE: every entry of [CTR-ZTH-38](#CTR-ZTH-38) is open and `mtxConfidentialTransfer` stores the full record inline. COMPACT: commit-reveal only (`mtxConfidentialTransfer` = `mtxConfidentialTransferCompact`, `R` by SSTORE2); `mtxConfidentialTransferSingle` reverts `TransferEntryDisabled(disclosureMode)`. Both modes keep `R` in state (review C0-3, owner ruling 2026-10-27); there is no third (`NONE`) mode, and any `disclosureMode` above COMPACT, the retired NONE value included, reverts `BadDisclosureMode` at `init`. One implementation per kind serves both modes: COMPACT is a subset of BUNDLE, the modes are config flags and the kinds stay `NONE_ZETHER` / `UNDERLYING_ZETHER` ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)); separate implementations were rejected and are revisited only if EIP-170 forces smaller bytecode.
 
 <a id="auditor-mode"></a>
 <a id="CTR-ZTH-49"></a>**CTR-ZTH-49** — **`auditorMode ∈ {NONE, FULL, OPTIONAL}` is chosen at `initialize` and immutable** (owner, 2026-10-11; built in P3b), `ConfidentialConfig.auditorMode` beside `auditorKey` ([CTR-ZTH-09](#CTR-ZTH-09)), readable as `auditorMode()`. The rule binds every transfer, single and multi-recipient:
@@ -632,7 +658,7 @@ The factory and `initialize` refuse FULL or OPTIONAL without a key, NONE with a 
 <a id="CTR-ZTH-42"></a>**CTR-ZTH-42** — **Under `auditorMode = OPTIONAL` the sender may leave the auditor out of a transfer**, in both formats (owner; mode: [CTR-ZTH-49](#CTR-ZTH-49); built in P3b). Either every `C_aud_j ≠ O` (statement `Y_a` = the token key) or every `C_aud_j = O` (statement `Y_a = O`, E6 skipped); a mix reverts (`AuditorLegsMixed`). `Y_a` is in the statement and the transcript, so a proof made for one choice never verifies under the other. The single format follows the same rule with its one `C_aud`. Owner-accepted consequence: on such a transfer the auditor reads nothing, and the opt-out is publicly visible (`C_aud = O`). NONE forces every `C_aud_j = O`, FULL every `C_aud_j ≠ O`.
 
 <a id="sender-memo"></a>
-<a id="CTR-ZTH-50"></a>**CTR-ZTH-50** — **Commit-reveal stores a sender memo, so the sender opens its transfer from its seed and contract storage alone** (owner, 2026-10-11; built in P3b; both disclosure modes; no logs, nothing remembered). Next to the 32-byte commitment:
+<a id="CTR-ZTH-50"></a>**CTR-ZTH-50** — **Commit-reveal stores a sender memo, so the sender opens its transfer from its seed and contract storage alone** (owner, 2026-10-11; built in P3b; both disclosure modes; no logs, nothing remembered). Next to `R` (kept in state by SSTORE2, review C0-3):
 
 ```text
 key  = HKDF-SHA256(seed_zether, info = "ZTX/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)   (32 B)
@@ -640,16 +666,16 @@ ks   = HKDF-Expand-SHA256(key, info = "ZTX/memo/ks/v1", L = 1 + 40·M)
 memo = salt ‖ ((flags ‖ (be8(v_j) ‖ toUA_j)_{j=1..M}) XOR ks)      flags: u8, bit0 = auditor included   (17 + 40·M B)
 ```
 
-No MAC: a wrong decryption rebuilds bundles that fail the commitment. The memo travels in `payload`; `memoHash = keccak256(memo)` is in the statement header ([Statement](#statement-byte-layout)), so the proof covers it and a relayer can neither alter nor drop it; the token checks `|memo| = 17 + 40·M` and that the memo's clear salt is the payload's (`MemoSaltMismatch`: with a stale salt the transfer would not open from storage; controller ruling). The keystream label `"ZTX/memo/ks/v1"` and the `flags` byte are a controller ruling, pending the owner. Only what cannot be recomputed is stored (the sender's choices: amounts, decoys at 0, recipients); `s`, the memo key and `Y_a` are recomputed. The `flags` byte records the auditor choice, so recovery needs no guessing (it matters under OPTIONAL). Size at `M = 1`: 32 + 57 B (the commitment slot, the memo's length slot and two data slots) against ≈ 9 slots for a full bn254 record (gas: [§19](#gas)). The recipients' keys come from the registry's `keyOf(toUA)` (stored at registration: SSTORE2 of `Y` in the UA registry since UA-3, [§19](#gas); controller ruling, pending the owner). The prover runs the flow below in two steps: `openMemo` returns the salt, the flag, the amounts and `needKeys` (the recipient UAs), then `recoverTransfer` takes their keys (`keys`, or a `keyOf` lookup in the library, `recover_transfer_with`); a stored record `R` or the calldata (it carries every `Y_tj`, the memo the amounts) needs no key. The receiver and the auditor do not know `s` and still read `R` from `TransferBundles` / calldata: commit-reveal guarantees recovery from storage for the sender only; theirs depends on log availability (an archive of `TransferBundles` is an open item). Recovery:
+No MAC: a wrong decryption rebuilds a record that differs from the stored `R`. The memo travels in `payload`; `memoHash = keccak256(memo)` is in the statement header ([Statement](#statement-byte-layout)), so the proof covers it and a relayer can neither alter nor drop it; the token checks `|memo| = 17 + 40·M` and that the memo's clear salt is the payload's (`MemoSaltMismatch`: with a stale salt the transfer would not open from storage; controller ruling). The keystream label `"ZTX/memo/ks/v1"` and the `flags` byte are a controller ruling, pending the owner. Only what cannot be recomputed is stored (the sender's choices: amounts, decoys at 0, recipients); `s`, every `t_j` ([CTR-ZTH-30](#CTR-ZTH-30)), the memo key and `Y_a` are recomputed. The `flags` byte records the auditor choice, so recovery needs no guessing (it matters under OPTIONAL). The memo is read with `transferMemo(entryRef)` (a separate view; `transferEntry` returns `R`). Size at `M = 1`: the memo's length slot and two data slots (57 B) beside `R`'s data contract of 657 B (BLS12-381; gas: [§19](#gas)). The recipients' keys come from the registry's `keyOf(toUA)` (stored at registration: SSTORE2 of `Y` in the UA registry since UA-3, [§19](#gas); controller ruling, pending the owner). The prover runs the flow below: `openMemo` (`entry` = `transferEntry`, `memo` = `transferMemo`) returns the salt, the flag, the amounts and the recipient UAs, and `recoverTransfer` takes the same two values: `R` carries every `Y_tj`, so no registry key lookup is needed (the old two-step `keys` / `keyOf` flow and the commitment-only entry are gone), and the sender's rebuilt `R` must equal the stored one. The receiver and the auditor read `R` from state too (`transferEntry`, disclosure with `RECEIVER_X` / `AUDITOR`), with no dependence on logs or calldata (review C0-3). Recovery:
 
 ```mermaid
 flowchart LR
     N["sendCounter(fromUA) on chain"] --> E["entryRef(n), n < sendCounter"]
-    E --> T["transferEntry(entryRef):<br/>commitment ‖ memo"]
+    E --> T["transferEntry(entryRef) = R,<br/>transferMemo(entryRef) = memo"]
     T --> K["salt (memo, clear) + seed_zether:<br/>s and the memo key"]
     K --> D["decrypt memo: (v_j, toUA_j)"]
-    D --> B["rebuild B_j: Y_tj from the registry,<br/>D_out = [s]G, C_out_j, C_aud_j"]
-    B --> H{"keccak256(salt ‖ B_1 ‖ … ‖ B_M)<br/>= commitment?"}
+    D --> B["rebuild B_j: Y_tj from R,<br/>D_out = [s]G, C_out_j, C_aud_j, D_aud_j = [t_j]G"]
+    B --> H{"salt ‖ B_1 ‖ … ‖ B_M<br/>= the stored R?"}
     H -->|yes| O["SENDER_S / SENDER_CP openings"]
 ```
 
@@ -691,7 +717,7 @@ envelopeBinding = keccak256(abi.encode(
 `MetaTransaction` has no `to`/`value` ([CTR-MTX-15](metatx.md#CTR-MTX-15)), so the binding carries none; the
 binding and statement vectors are regenerated with those of [CTR-ZTH-36](#CTR-ZTH-36) (built, P3).
 
-It is part of the statement (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0. The base computes it
+It is part of the statement (`ZTX_V1_RELAYED`); direct calls use `ZTX_V1_DIRECT` with binding 0 (a direct `mtxUnshieldUnwrap`: `unwrapBinding(u, minOut)`, [CTR-ZTH-34](#CTR-ZTH-34)). The base computes it
 in step 5 of `mtxExecute` (its `_envelopeBinding` hook, which the token implements) and passes it to the self-call
 through the transient ticket ([CTR-ZTH-34](#CTR-ZTH-34)); a function reads it only while `msg.sender == address(this)` and the ticket is live, else
 it proves with binding 0. Consequences:
@@ -719,14 +745,14 @@ before it computes the mesh `intent_id`. The four roll-over functions are on bot
 `NONE` (owner 2026-10-20: every `mtx*` write is relayable): `mtxRollOver(bytes32,uint256)`, `mtxRollOverBatch(bytes32[])`,
 `mtxRollOverSigned` and `mtxSetRollOverMode`. They do exactly what the direct call does (the first two need no
 signature; the signed pair keep checking their owner signature inside, so a relayer only pays the gas). BUILT, commit `b5e61c96`.
-**Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the four transfers, `mtxShield`,
+**Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the three transfers (`…NoBundle` is retired), `mtxShield`,
 `mtxUnshield`, and on `UNDERLYING_ZETHER` `mtxWrapShield` and `mtxUnshieldUnwrap` beside `UnderlyingToken`'s
-wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `mtxUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
+wrap and unwrap entries (without `unwrap(uint256,address)`); `mtxWrapShield` is on the `mtxExecute` allowlist only (a UA wrap-shields in two signed steps, `uaWrap` then `uaExecute(mtxShield)`) and with the native coin as the leg it is not relayable at all: the leg is paid from `msg.value`, which a relayer cannot supply (the one exception to "every `mtx*` is relayable", C0-18, controller proposal 2026-10-27, owner may override: the holder wraps directly, then relays `mtxShield`; [CTR-MTX-19](metatx.md#CTR-MTX-19)). A direct `mtxUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
 with `keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))` as its binding word, so a copied proof can
 neither change the leg, drop `minOut` nor become a `mtxUnshield` (controller rulings, pending the owner). Relayed, the
 envelope binding covers every envelope field except `data`, so `u` and `minOut` are protected only by the envelope
-signer's signature: the envelope signer (on `mtxExecute`, the address `m.from` the holder chose; these proof-carrying ops are not on the UA allowlist until UA-5c) can re-route a proof to another leg with `minOut` 0, or into public
-units through `mtxUnshield`; the relayer cannot (amount and recipient stay bound). Binding `u` and `minOut` when relayed
+signer's signature: the envelope signer (on `mtxExecute`, the address `m.from` the holder chose; on `uaExecute` the signing UA `m.from` the holder chose, since these proof-carrying ops are on the UA allowlist, UA-5c (a) BUILT, [CTR-ZTH-51](#CTR-ZTH-51)) can re-route a proof to another leg with `minOut` 0, or into public
+units through `mtxUnshield`; the relayer cannot (amount and recipient stay bound), and the signer is the holder's own choice, so there is no new attacker. Binding `u` and `minOut` when relayed
 is an open question (controller ruling, pending the owner).
 
 <a id="direct-transfer"></a>
@@ -810,7 +836,7 @@ and the device balance cache of [CTR-ZTH-19](#CTR-ZTH-19) (there is no `DECRYPT_
 
 A Zether account is a Universal Account of the kind `zether-bls12381` (0x0141) in the UA registry
 ([accounts.md](accounts.md#zether-kinds), CTR-UA-16; `smartcontracts/evm/src/ua/UARegistry.sol`): the Zether key is the
-UA, `UA = keccak256(TAG(kind) ‖ Y)` (`ZetherTypes.toUA`), and the record carries no authority. The token derives the UA
+UA, `UA = keccak256(TAG_ZETHER_BLS12381 ‖ Y)` (`ZetherTypes.toUA`, [CTR-UA-22](accounts.md#CTR-UA-22)), and the record carries no authority. The token derives the UA
 from `Y` in the payload and counts it registered when `registry.kindOf(UA)` is the Zether kind. The Zether-era
 `UniversalAccountRegistry` (eight `AuthScheme`s, `links`/`link_eth`, a PoP bound to `msg.sender`) is backed up, not
 built, in `smartcontracts/evm/legacy/ua3/` ([legacy registry](accounts.md#legacy-registry)); the bn254 Zether line
@@ -866,7 +892,7 @@ verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 
 `register(encodedY, scheme, authData, popSignature, linkEVM)`: `|encodedY| ∈ {64, 128}` selects the curve; the point is
 valid, `≠ O`, in the subgroup (`y = g^x` in G1; `encodedY` is bn254 64 bytes `x‖y`, BLS12-381 128 bytes in the
-EIP-2537 encoding); `UA = keccak256(encodedY)` does not exist yet (`AccountAlreadyRegistered`). Challenge
+EIP-2537 encoding); `UA = keccak256(TAG_ZETHER_BLS12381 ‖ encodedY)` does not exist yet (`AccountAlreadyRegistered`). Challenge
 `c = keccak256(abi.encodePacked(registry, encodedY, msg.sender))` (target: plus `chainUid`, [CTR-ZTH-36](#CTR-ZTH-36));
 because `c` binds `msg.sender`, `register` **cannot be relayed by a third party** and, as built, binds no chain id
 (`UniversalAccountRegistry.sol:95-96`; acceptable only because the registry is dev-only): the subject calls from its own EOA or smart account (a relayer, if any, pays gas at that
@@ -914,7 +940,7 @@ The built interface is quoted in [accounts.md](accounts.md#legacy-registry).
 ## <a id="disclosure"></a>14. Disclosure
 
 <a id="disclosure"></a>
-<a id="CTR-ZTH-43"></a>**CTR-ZTH-43** — **Disclosure lives in a separate stateless `ZetherDisclosure`** (owner): no state, no admin, no upgrade, one instance for every Zether token on every curve. `verifyTransferAmount` and `transferCiphertext` are there; the token exposes the raw record `transferEntry(entryRef)` (as [CTR-ZTH-38](#CTR-ZTH-38): `R` for the bundle and single entries, `keccak256(R) ‖ memo` for commit-reveal, empty for no-bundle or an unknown ref; built: no salt, no memo) and the implementation-immutable `disclosure()` (set in the constructor, shared by every clone), so a third party finds the canonical contract from the token. `ZetherDisclosure` reads `transferEntry(entryRef)`, `verifier()` and `auditorKey()` from the token: `token.disclosure().verifyTransferAmount(token, entryRef, j, amount, kind, opening, bundles)` serves both formats (a single entry has `j = 0`; `bundles` is ignored when the record is stored, checked against the hash in HASH mode, `UnknownEntry` in NONE mode). `transferCiphertext(token, entryRef, j, bundles)` exports the raw leg for an independent verifier. The caller picks the token it trusts (a fake "token" can answer anything); the challenge binds the token address, not the disclosure contract's.
+<a id="CTR-ZTH-43"></a>**CTR-ZTH-43** — **Disclosure lives in a separate stateless `ZetherDisclosure`** (owner): no state, no admin, no upgrade, one instance for every Zether token on every curve. `verifyTransferAmount` and `transferCiphertext` are there; the token exposes the raw record `transferEntry(entryRef)` (as [CTR-ZTH-38](#CTR-ZTH-38): `R` for every entry, read from state, inline or by SSTORE2 for commit-reveal; empty only for an unknown ref; review C0-3) and the implementation-immutable `disclosure()` (set in the constructor, shared by every clone), so a third party finds the canonical contract from the token. `ZetherDisclosure` reads `transferEntry(entryRef)`, `verifier()` and `auditorKey()` from the token: `token.disclosure().verifyTransferAmount(token, entryRef, j, amount, kind, opening)` serves both formats (a single entry has `j = 0`; there is no `bundles` argument: the record always comes from the token's state; an unknown ref is `UnknownEntry`, an entry that is not a record length `RecordMalformed`). `transferCiphertext(token, entryRef, j)` exports the raw leg for an independent verifier. The caller picks the token it trusts (a fake "token" can answer anything); the challenge binds the token address, not the disclosure contract's.
 
 A verifier checks an opening like this:
 
@@ -925,7 +951,7 @@ sequenceDiagram
     participant T as Zether token
     V->>T: disclosure()
     T-->>V: ZetherDisclosure address
-    V->>D: verifyTransferAmount(token, entryRef, j, amount, kind, opening, bundles)
+    V->>D: verifyTransferAmount(token, entryRef, j, amount, kind, opening)
     D->>T: transferEntry(entryRef), verifier(), auditorKey()
     T-->>D: record, verifier, auditor key
     D-->>V: true or false (a free view)
@@ -939,27 +965,39 @@ sequenceDiagram
 |---|---|---|---|---|---|
 | `SENDER_S` (0) | sender | `s` | `abi.encode(uint256 s)` | `[s]G == D_out`, `M_j == [s]Y_tj` | every leg of the transfer |
 | `RECEIVER_X` (1) | recipient `j` | `x_tj` | `abi.encode(bytes A1, bytes A2, uint256 z)` | DLEQ `log_G Y_tj == log_{D_out} M_j` | leg `j` |
-| `AUDITOR` (2) | auditor | `x_a` | `(A1, A2, z)` | DLEQ `log_G Y_a == log_{D_out}(C_aud_j − [v]G)`; false when `C_aud_j = O` | leg `j` |
+| `AUDITOR` (2) | auditor | `x_a` | `(A1, A2, z)` | DLEQ `log_G Y_a == log_{D_aud_j}(C_aud_j − [v]G)` (`K = Y_a`, `B = D_aud_j`, `M = C_aud_j`; the single format's `D_aud = D_out`); false when `C_aud_j = O` | leg `j` |
 | `SENDER_CP` (3) | sender | `s` | `(A1, A2, z)` | DLEQ `log_G D_out == log_{Y_tj} M_j` | leg `j` |
 
 DLEQ `log_G K == log_B N` (`ZetherDisclosure._chaumPedersen`) checks `[z]G − A1 − [e]K == O` and `[z]B − A2 − [e]N == O` over the pairs above. `SENDER_CP` lets the sender prove one leg without handing over `s`, which would open every leg, decoys included.
 
 ```
-e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ chainUid ‖ token(20) ‖ entryRef ‖ be32(j)
-                           ‖ be32(amount) ‖ u8(kind) ‖ A1 ‖ A2))
+e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V2" ‖ be32(chainid) ‖ chainUid ‖ token(20) ‖ entryRef ‖ be32(j)
+                           ‖ be32(amount) ‖ u8(kind) ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2))
 ```
 
-`j` is in the challenge for every kind (single format: `j = 0`); the disclosure vectors changed with it. The nonce `k` is hedged (`H(secret ‖ statement ‖ rng)`): a repeated `k` over two openings reveals the secret. The prover's `verify_opening` mirrors `ZetherDisclosure` (`open_sender_cp` builds `SENDER_CP`); `chainUid` built in P3.
+**Strong Fiat–Shamir** (review C0-4; the tag is `…-V2` since the transcript changed). `G`, `K`, `B`, `M` are the statement points of the kind (table above: `K = Y_tj`, `B = D_out`,
+`M = C_out_j` for `RECEIVER_X`; `K = Y_a`, `B = D_aud_j` (single format `D_out`), `M = C_aud_j` for `AUDITOR`; `K = D_out`,
+`B = Y_tj`, `M = C_out_j` for `SENDER_CP`), each in the token's own G1 encoding (EIP-2537 on BLS12-381), `G` the generator in
+that encoding. Before this, `e` carried none of them and `entryRef` is known before the transfer exists, so a sender who knew
+`e` before choosing `s` could set `s = k1⁻¹(k2 + e(v − a))`, send an honest transfer of `v` and, with the key holder
+(`z = k1 + e·x`), open the false amount `a`. Now `e` depends on `s` through `D_out` / `C_out_j`, which the sender fixes
+first. `SENDER_S` has no challenge and is unaffected. Not a `proofSystemId` change (the disclosure is a view); every
+Chaum–Pedersen opening changed, so the disclosure vectors were regenerated, and the old ones are kept only as refusal
+fixtures (`test/vectors/zether/s3/weak-fs/`).
+
+`j` is in the challenge for every kind (single format: `j = 0`); the disclosure vectors changed with it. Since `…/v3`
+(review C0-1) a multi-recipient leg's auditor copy is under its own `t_j`, so an `AUDITOR` opening of leg `j` uses
+`D_aud_j` as its base and opens that leg alone (with the shared `s` one opening gave `[s]Y_a` and so every leg);
+`transferCiphertext` returns `C_out ‖ D_out ‖ C_aud ‖ D_aud`. The challenge also absorbs the statement points (review C0-4, above). The nonce `k` is hedged (`H(secret ‖ statement ‖ rng)`): a repeated `k` over two openings reveals the secret. The prover's `verify_opening` mirrors `ZetherDisclosure` (`open_sender_cp` builds `SENDER_CP`); `chainUid` built in P3.
 
 Additional checks: `amount < 2^n_v = 2^64` (otherwise `amount + r` would also "pass", because `[amount]G` depends only on `amount mod r`; `2^64 < r`, so each `[amount]G` has exactly one valid `amount`), `z < r`, `e ≠ 0`; `A1`, `A2` go into the same MSM (subgroup check on BLS12-381). The auditor reads exactly the per-transfer `C_aud_j` and never anyone's `acc`/`pending` (encrypted under the owners' keys). Disclosure is irrevocable once an opening is handed over (the sender's `s` opens only this transfer, [CTR-ZTH-30](#CTR-ZTH-30)).
 
-<a id="who-opens"></a>**Who can open what, per storage** (built in P3b; [CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-49](#CTR-ZTH-49), [CTR-ZTH-50](#CTR-ZTH-50)). The auditor column assumes FULL, or OPTIONAL and a transfer that included it; under NONE, or after an opt-out, the auditor opens nothing.
+<a id="who-opens"></a>**Who can open what, per storage** (built in P3b; [CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-49](#CTR-ZTH-49), [CTR-ZTH-50](#CTR-ZTH-50)). The auditor column assumes FULL, or OPTIONAL and a transfer that included it; under auditor mode NONE, or after an opt-out, the auditor opens nothing. Every storage keeps `R` in state (review C0-3): no opening depends on logs or calldata; the `…NoBundle` row is retired.
 
 | Storage | Sender (`s`, every leg; or `SENDER_CP`, one leg) | Receiver `j` (`RECEIVER_X`, its leg) | Auditor (`AUDITOR`, every leg) |
 |---|---|---|---|
 | Full record (`mtxConfidentialTransfer` on BUNDLE, single format) | always, from seed + storage (salt in `R`); on chain with nothing supplied | always, from storage with `x_tj` | always, from storage with `x_a` |
-| Commit-reveal | always, from seed + storage (memo, [CTR-ZTH-50](#CTR-ZTH-50)); on chain with the rebuilt `R` | needs `R` from `TransferBundles` or calldata (log availability) | needs `R` from `TransferBundles` or calldata |
-| No-bundle | needs the calldata (salt and legs); off chain only | needs the calldata; off chain only | needs the calldata; off chain only |
+| Commit-reveal | always, from seed + storage (memo, [CTR-ZTH-50](#CTR-ZTH-50)); on chain with nothing supplied | always, from storage with `x_tj` (`R` by SSTORE2) | always, from storage with `x_a` |
 
 <a id="disclosure-bundle"></a>
 <a id="CTR-ZTH-14"></a>**CTR-ZTH-14** — **The disclosure bundle is stored per transfer** (owner) so that `transferCiphertext` can return it; what is stored for the multi-recipient entry points depends on the mode ([CTR-ZTH-38](#CTR-ZTH-38)), the single format stores the full bundle: **bn254 256 B** (≈ 9 slots, ≈ +200 k gas), **BLS12-381 512 B** (4 points × 128 B, ≈ 17 slots, ≈ +375 k gas — estimate); `be32(amount)` already has room for 64 bits. Unsupported underlyings (fee-on-transfer, rebasing) are the `UnderlyingLib` rule ([CTR-TOK-11](token-wrappers.md#CTR-TOK-11)). The built NatSpec of `ITransferDisclosure.sol:24` ("no extra gas at transfer") is corrected in P3, where HASH stores its hash in one `bytes32` slot as CTR-ZTH-38 says (built: a 32-byte `bytes`, two slots).
@@ -972,6 +1010,15 @@ Additional checks: `amount < 2^n_v = 2^64` (otherwise `amount + r` would also "p
 
 <a id="sender-randomness"></a>
 <a id="CTR-ZTH-30"></a>**CTR-ZTH-30** — **The sender randomness `s` is derived from the seed and a published salt, not stored** (owner; salt form 2026-10-11, built in P3b): `s = OKM mod r`, `OKM = HKDF-SHA256(seed_zether, info = "ZTX/s/v2" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt, L = 64)`, where `salt` = 16 fresh random bytes per build, published with the transfer (statement header and payload, hence in the event, the stored record `R`, the commitment and the no-bundle calldata) and not checked by the contract (beyond the memo's copy, [CTR-ZTH-50](#CTR-ZTH-50)); the prover re-draws on `s = 0` (`OKM mod r` and the re-draw: controller ruling, pending the owner). The sender rebuilds `s` from its seed and the published salt, and opens the transfer from storage alone through the memo ([CTR-ZTH-50](#CTR-ZTH-50)). Why the salt: the counter-only form (`"ZTX/s/v1" ‖ chainId ‖ tokenAddress ‖ fromUA ‖ sendCounter`) reuses `s` on a retry at the same counter, and `C_aud₁ − C_aud₂ = [v₁ − v₂]G` leaks the amount difference (failed-transaction calldata is public); mixing the amounts into `s` made the sender remember amounts. (An earlier rule "the client must store every `s`" is superseded.) `seed_zether` is the account's confidential key `x` (the IKM is `be32(x)`, 32 bytes big-endian, and HKDF-Extract runs without a salt, i.e. 32 zero bytes, here and for the memo key of [CTR-ZTH-50](#CTR-ZTH-50); controller ruling, pending the owner); `clients/zether-prover/src/zether.rs` `derive_s`.
+
+**The auditor randomness `t_j` of an audited multi-recipient leg** (review C0-1, owner ruling 2026-10-27 option (ii),
+`…/v3`; built in review2 T3): `t_j = OKM mod r`, `OKM = HKDF-SHA256(seed_zether, info = "SCAAS-ZETHER-AUD-T-V1" ‖
+chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt ‖ be32(j), L = 64)`, `j` the 0-based leg index, the IKM and
+Extract as for `s` (`derive_t`). Its own tag and `j` make every `t_j` independent of `s` and of the other legs; the
+sender re-derives it from its seed and the published salt like `s` (the storage-only recovery of
+[CTR-ZTH-50](#CTR-ZTH-50) rebuilds `C_aud_j = [v_j]G + [t_j]Y_a`, `D_aud_j = [t_j]G`). The prover re-draws the salt if
+any `t_j` is 0 (the verifier refuses `D_aud_j = O` with the auditor on). The contract never sees how `t_j` was chosen.
+The single format keeps its one auditor copy under `s` (one leg, no cross-leg difference).
 
 <a id="independent-verifier"></a>
 <a id="CTR-ZTH-29"></a>**CTR-ZTH-29** — **An independent, open-source disclosure verifier CLI** (owner, PLANNED): any third party (an auditor, a dispute resolver) verifies an opening against chain data without trusting SCaaS. The chain of evidence holds in both directions: the sender cannot open falsely (the ciphertext binds `v` and `s`), and the receiver cannot deny the amount (its own key opens it). The CLI takes `(entryRef, v, s)`, reads an archive node or a signed chain export, and prints PASS/FAIL with every intermediate value, deterministically (two examiners get the same result); the client exports a standalone evidence file `(entryRef, v, s, chainId, tokenAddress)` that the CLI checks without the app.
@@ -1018,7 +1065,6 @@ confidential transfers are `mtxConfidentialTransfer…` (wallets may label them 
 | `mtxShield(bytes32 toUA, uint256 amount)` | both | `amount·shieldScale` public units signer → `SHIELD_POOL`; Zether: `pending[toUA] += [amount]G`, `Y` resolved from the registry by UA id; PQZ: a TRIVIAL queue entry ([CTR-PQZ-06](pq-zero-knowledge.md#CTR-PQZ-06)) |
 | `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)` | `UNDERLYING_*` | `UnderlyingLib` pulls `amountIn` of the leg and mints the public-equivalent `minted` **to `SHIELD_POOL`**; `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled`; then as `mtxShield` |
 | `mtxConfidentialTransfer`, `…Compact`, `…Single` | both | the multi-recipient / single transfers of [CTR-ZTH-37](#CTR-ZTH-37)/[CTR-ZTH-38](#CTR-ZTH-38) and [CTR-PQZ-25](pq-zero-knowledge.md#CTR-PQZ-25) |
-| `mtxConfidentialTransferNoBundle` | Zether only | storage mode NONE (retired on PQZ) |
 | `mtxConfidentialTransferSingleCompact` | PQZ only | op 1 in commit-reveal form |
 | `mtxUnshield(…, uint256 amount, bytes32 recipient)` | both | the unshield proof; `amount·shieldScale` from `SHIELD_POOL` to `recipient`; PQZ `amount = 0, recipient = 0` is a refresh; one function for native and UA recipients ([CTR-ZTH-51](#CTR-ZTH-51)) |
 | `mtxUnshieldUnwrap(…)` | `UNDERLYING_*` | the same proof; `amount·shieldScale` burnt **from the pool**, then the leg pays `u` that value rounded down, bounded by `minOut`, nothing minted; the holder loses less than one raw underlying unit to the rounding (a public `unwrap` burns only `⌈out·q⌉`), so a client picks `amount` with `previewUnwrap(u, amount·shieldScale).burned == amount·shieldScale` |
@@ -1257,7 +1303,7 @@ Limits (shielded units; for a 6-decimal stablecoin kept to 2 decimals, `shieldSc
 | Withdrawal (`mtxUnshield`) | `0 < amount ≤ maxDecryptableShielded` | ≤ the supply |
 | Confidential fee | `confidentialFee < 2^n_v` **and** `< maxDecryptableShielded` (else `BadInit`, `ZetherLib.init`) | < 2^64 and < `maxDecryptableShielded` |
 | Amount provable by disclosure | `amount < 2^n_v` | < 2^64 |
-| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) ⇒ a chain with Zether sets ≥ 4.5 M, up to 2^24 to relay large `M` ([§19](#gas)) |
+| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) ⇒ a chain with Zether sets ≥ 4.5 M; the cap is on the total gas limit (regular + state, `min(max_gas_per_tx, block limit, 2^32 − 1)` under Amsterdam), so a large `M` needs it above 2^24 (edge transfers 21.4–34.3 M in total, [§19](#gas)) |
 
 | Client limit (defaults) | Value |
 |---|---|
@@ -1397,7 +1443,7 @@ first credit), inner fee to a beneficiary, one real recipient and `M − 1` deco
 `ZetherProver.sol`). **on** = auditor on; **out** = the same auditor-on token, the sender leaves the auditor out
 ([CTR-ZTH-42](#CTR-ZTH-42): every `C_aud = O`, statement `Y_a = O`). Calldata = the ABI-encoded call in bytes (same for
 on and out). Compact = `mtxConfidentialTransferCompact` (and `mtxConfidentialTransfer` on a COMPACT token), BUNDLE = `mtxConfidentialTransfer` on a
-BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
+BUNDLE token (the `NONE` form, `mtxConfidentialTransferNoBundle`, is retired: review C0-3, its rows are dropped).
 
 | Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
 |---|---|---|---|---|---|---|---|
@@ -1407,8 +1453,6 @@ BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
 | BLS12-381 | Compact | out | 3,632,840 | 5,355,647 | 8,760,589 | 15,609,732 | same |
 | BLS12-381 | BUNDLE | on | 3,976,535 | 6,046,855 | 10,191,643 | **18,499,048** | 6,948 / 10,116 / 16,452 / 29,124 |
 | BLS12-381 | BUNDLE | out | 3,856,696 | 5,806,166 | 9,708,732 | **17,529,613** | same |
-| BLS12-381 | NONE | on | 3,573,934 | 5,287,899 | 8,719,833 | 15,600,108 | as BUNDLE |
-| BLS12-381 | NONE | out | 3,533,695 | 5,206,410 | 8,555,322 | 15,267,471 | as BUNDLE |
 
 <details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
 
@@ -1420,19 +1464,42 @@ BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
 | bn254 | Compact | out | 3,212,449 | 4,754,406 | 7,804,810 | 13,972,187 | same |
 | bn254 | BUNDLE | on | 3,368,038 | 5,068,803 | 8,481,710 | 15,353,653 | 3,940 / 5,636 / 9,028 / 15,812 |
 | bn254 | BUNDLE | out | 3,301,051 | 4,954,040 | 8,270,846 | 14,948,398 | same |
-| bn254 | NONE | on | 3,142,904 | 4,664,842 | 7,720,023 | 13,875,749 | as BUNDLE |
-| bn254 | NONE | out | 3,115,717 | 4,609,779 | 7,608,659 | 13,649,593 | as BUNDLE |
 
 </details>
 
-- **Per extra recipient** (slope M = 1 → 8, auditor on): bn254 Compact ≈ 1.57 M, BUNDLE ≈ 1.71 M, NONE ≈ 1.53 M;
-  BLS12-381 Compact ≈ 1.84 M, BUNDLE ≈ 2.16 M, NONE ≈ 1.80 M — against ≈ 3.35 M / 3.97 M for another separate transfer.
+- **Per extra recipient** (slope M = 1 → 8, auditor on): bn254 Compact ≈ 1.57 M, BUNDLE ≈ 1.71 M (NONE ≈ 1.53 M, retired);
+  BLS12-381 Compact ≈ 1.84 M, BUNDLE ≈ 2.16 M (NONE ≈ 1.80 M, retired) — against ≈ 3.35 M / 3.97 M for another separate transfer.
 - **What P3b added** (against P3): the commit-reveal memo +72 k at M = 1, +274 k at M = 8 (either curve: storage); the
-  salt in a stored `R` +26 k (one slot); the 480-byte header and the salt in calldata ≈ +3 k (NONE).
+  salt in a stored `R` +26 k (one slot); the 480-byte header and the salt in calldata ≈ +3 k.
 - **The auditor scan:** the multi cells carry ≈ 1 k per leg for the `C_aud` scan that picks `Y_a` ([CTR-ZTH-42](#CTR-ZTH-42)).
+- **What `…/v3` added** (review C0-1 / C0-9, review2 T3; Amsterdam, state gas included, `runs/2026-10-27-review2-t3-zether-gas.txt`;
+  the table above is the older Osaka measurement): `validUntilBlock` +32 B calldata, ≈ +2 k per transfer; per audited leg
+  `D_aud_j` (+128 B calldata and statement), `A_Daud_j`, `z_tj`, E6′_j and the pairwise-distinct check: ≈ +50 k (HASH;
+  commit-reveal stored only a hash then), ≈ +490 k on BUNDLE (`D_aud_j` stored in `R`: four more new slots); M = 8 verify 13.20 M → 13.57 M; the single
+  format and the burn unchanged but for the header word. The BUNDLE-with-auditor edge cell (M = 6) now needs 33.1 M /
+  34.3 M total gas (direct / relayed), `ZetherGasLimit`'s edge limit is 36 M; the prover's per-`M` table predates it (the
+  edges still settle).
+- **What review C0-3 added** (owner ruling 2026-10-27; `…NoBundle` retired; Amsterdam, isolated, `vm.lastCallGas()` for the
+  regular / state split, `runs/2026-10-27-review2-t5-zether-gas.txt`): commit-reveal stores `R` by SSTORE2 (the slot holds the
+  pointer) instead of `keccak256(R)`, a CREATE of `0x00 ‖ R` per transfer. BLS12-381, auditor on, one real leg:
+
+  | Commit-reveal | M = 1 | M = 2 | M = 4 | M = 8 |
+  |---|---|---|---|---|
+  | regular gas, before → after | 3,656,090 → 3,668,996 | 5,382,571 → 5,395,856 | 8,818,450 → 8,832,157 | 15,730,710 → 15,746,779 |
+  | state gas (EIP-8037), before → after | 2,056,320 → 3,245,130 | 3,329,280 → 5,497,290 | 5,679,360 → 9,805,770 | 10,477,440 → 18,520,650 |
+  | total, before → after | 5,720,996 → 6,922,712 | 8,722,344 → 10,903,639 | 14,513,638 → 18,653,755 | 26,241,223 → 34,300,502 |
+
+  The record adds ≈ 13–16 k REGULAR gas (the CREATE; the prover's table adds `HASH_RECORD_GAS` = 17,000 to every
+  commit-reveal row) and ≈ 1.19 M (M = 1) to 8.04 M (M = 8) STATE gas (≈ 1,560–1,810 per stored byte of `R`, the new data contract included): state gas is not
+  counted against the 2^24 cap, but a sender's gas limit must cover it (`ZetherGasLimit` `test_edge_*` still settle at
+  the 36 M edge limit: commit-reveal M = 7, BUNDLE M = 6, auditor on or out, direct and relayed). Auditor out, M = 1 / 8:
+  regular 3,573,473 → 3,586,271 / 15,034,712 → 15,050,840, state 2,056,320 → 3,245,130 / 10,477,440 → 18,520,650. BUNDLE
+  is unchanged (its `bytes` was already state). Commit-reveal is still the cheaper form in regular gas, and now the dearer
+  one only by its memo in state gas at small `M`; the cost buys the ciphertext rule (the receiver and the auditor no
+  longer depend on logs or calldata).
 - **Leaving the auditor out** (OPTIONAL only) saves E6 per leg (bn254 ≈ 27–28 k, BLS12-381 ≈ 41–45 k) and, where the
   record is stored, the zero `C_aud` words: single −68 k / −122 k, BUNDLE M = 8 −405 k / −1.0 M (bn254 / BLS12-381).
-- **EIP-7825 cap (16,777,216 on a transaction's gas limit, intrinsic + calldata included):** the cells above are gas used; a transaction needs a higher limit. The clone runs clone → implementation → `ZetherLib` → verifier, and frames that hold back 1/64 of their gas (EIP-150) put the gas needed ≈ 3 % above the gas used (cold); `mtxExecute` adds the envelope and two more such frames (≈ 6 %). Measured (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`): each call its own transaction (forge `isolate`: cold accounts and slots, 21,000 + calldata with the EIP-7623 floor), binary search on the gas limit, inner fee paid, every account's first credit. The prover keeps these limits per `M` (`gas_limits`), takes the relayed column when the request carries an `envelopeBinding`, and refuses a build over the cap less a 1 % margin (167,772), naming the cheaper forms that fit (controller ruling, pending the owner); `test_edge_*` sends every largest `M` at a limit of exactly 2^24. Largest `M`, and the minimum gas limit at that `M` and at `M + 1`, direct / relayed:
+- **EIP-7825 under Amsterdam (EIP-8037, EIP-7976; review C3-3):** 2^24 = 16,777,216 caps a transaction's REGULAR gas (intrinsic, calldata floor, execution); state gas (new slots 97,920 each, code 1,530 per byte) comes on top, so the gas LIMIT is larger and comes from `eth_estimateGas`. The largest admitted cells need 21.4 M to 34.3 M in total (BLS12-381, `ZetherGasLimit` `test_edge_*` settle at a 36 M limit). The per-`M` columns below were measured on Osaka (one gas dimension) before the audited `…/v3` legs; read them as the bound on a transfer's REGULAR gas (the safe side: a cell one past an edge may fit under Amsterdam and is still refused); a re-measurement with a regular / state split is a gas run on the owner's go. The cells above are gas used; a transaction needs a higher limit. The clone runs clone → implementation → `ZetherLib` → verifier, and frames that hold back 1/64 of their gas (EIP-150) put the gas needed ≈ 3 % above the gas used (cold); `mtxExecute` adds the envelope and two more such frames (≈ 6 %). Measured (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`): each call its own transaction (forge `isolate`: cold accounts and slots, 21,000 + calldata with the calldata floor: EIP-7623, EIP-7976 under Amsterdam), binary search on the gas limit, inner fee paid, every account's first credit. The prover keeps these limits per `M` (`gas_limits`), takes the relayed column when the request carries an `envelopeBinding`, and refuses a build over the cap less a 1 % margin (167,772), naming the cheaper forms that fit (controller ruling, pending the owner); `test_edge_*` sends every largest `M` at a limit of 36 M (the regular cap 2^24 is the EVM's, inside it). Largest `M`, and the minimum gas limit at that `M` and at `M + 1`, direct / relayed:
 
 | Curve | Form | Aud. | max `M` | limit at max | limit at max + 1 |
 |---|---|---|---|---|---|
@@ -1440,8 +1507,6 @@ BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
 | BLS12-381 | Compact | out | 8 / 7 | 16,563,056 / 15,290,789 | 18,365,576 / 17,153,058 |
 | BLS12-381 | BUNDLE | on | 6 / 6 | 15,188,797 / 15,728,743 | 17,372,899 / 17,985,178 |
 | BLS12-381 | BUNDLE | out | 7 / 6 | 16,482,217 / 14,941,807 | 18,539,733 / 17,066,376 |
-| BLS12-381 | NONE | on | 8 / 7 | 16,566,909 / 15,278,242 | 18,384,918 / 17,156,247 |
-| BLS12-381 | NONE | out | 8 / 7 | 16,205,229 / 14,953,144 | 17,977,092 / 16,783,617 |
 
 <details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
 
@@ -1451,8 +1516,6 @@ BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
 | bn254 | Compact | out | 9 / 8 | 16,364,440 / 15,262,054 | 18,012,699 / 16,936,814 |
 | bn254 | BUNDLE | on | 8 / 7 | 16,175,389 / 14,874,606 | 17,986,008 / 16,739,892 |
 | bn254 | BUNDLE | out | 8 / 8 | 15,744,842 / 16,295,902 | 17,503,407 / 18,111,911 |
-| bn254 | NONE | on | 9 / 8 | 16,275,709 / 15,166,166 | 17,905,215 / 16,844,747 |
-| bn254 | NONE | out | 9 / 9 | 15,998,568 / 16,559,080 | 17,595,998 / 18,208,894 |
 
 </details>
 
@@ -1460,13 +1523,15 @@ BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
 - **Prover** (release `zether-cli proveTransferMulti`, one process per call; median of 3 on the SCaaS testnet host, AMD
   Ryzen 5 7235HS): bn254 single 74 ms, M = 1/2/4/8 = 75 / 114 / 181 / 322 ms; BLS12-381 single 162 ms, M = 1/2/4/8 =
   159 / 231 / 361 / 660 ms.
+- **`uaExecute` relay (review C3-2):** the relayed column is the `mtxExecute` one; `_uaAuthorize` adds the UA signer kind's verify cap on top (`fndsa512` 2.5 M, `mldsa65` 5.95 M on a chain without the precompile; [accounts.md](accounts.md)). ESTIMATES from those caps, not measured with the audited `…/v3` legs (a gas run on the owner's go). The prover **requires** `uaSigner` on every relayed `proveTransferMulti` (`"ecdsa"` = the `mtxExecute` envelope, adds 0; `"fndsa512"` | `"mldsa65"` | `"mldsa44"` | `"slhdsa128s"` | `"ed25519"` | `"p256"` | `"webauthn-p256"` = `uaExecute` with that kind's gen-1 cap from [accounts.md](accounts.md) verify-cap table, lines 1440-1455: 2.5 M / 5.95 M / 4.25 M / 1.4 M / 0.21 M / 0.4 M / 0.4 M, estimates), or a numeric `uaSignerGas` for any other kind (an `msig`: Σ of its members' caps) and refuses a relayed build without it; it counts the kind's cap: BLS12-381 compact with the auditor at M = 7 is 15.6 M relayed and about 18.1 M through an `fndsa512` UA, so it is refused. A chain with a precompile verifies for far less: the cap is a documented over-estimate there (no per-chain logic). CTR-ZTH-38 / §19 cover the `mtxExecute` path only.
 
 **(b) Disclosure** (`ZetherDisclosure.verifyTransferAmount`, `test_gasDisclose*`): an on-chain call from a contract
 (`Escrow3P.measure`: `token.disclosure()`, then `gasleft()` around the call), every opening true, on the real leg
 `j = M − 1`. Token, `ZetherDisclosure` and verifier cooled with `vm.cool` before each call (cold accounts and slots as
 in a new transaction; the token account itself is warm, the caller just read `disclosure()`). Compact: `R` is passed in
 calldata — its size in the last column, its transaction calldata cost (≤ 16 gas/B) not included — and the token's
-`transferEntry` returns the commitment with the memo (P3b).
+`transferEntry` returns `R` from state (review C0-3: no `R` in calldata any more; the Compact rows below are the older Osaka
+measurement with `R` passed in).
 
 | Curve | Entry | `SENDER_S` | `RECEIVER_X` | `AUDITOR` | `SENDER_CP` | Bundles in calldata |
 |---|---|---|---|---|---|---|
@@ -1475,6 +1540,8 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 | BLS12-381 | BUNDLE M = 8 | 364,737 | 396,223 | 409,486 | 396,272 | — |
 | BLS12-381 | Compact M = 1 | 88,553 | 119,974 | 133,222 | 120,023 | 528 B |
 | BLS12-381 | Compact M = 8 | 110,959 | 142,422 | 155,677 | 142,471 | 4,112 B |
+| BLS12-381 | Compact M = 1, `R` from state (review C0-3; Amsterdam) | 89,337 | 124,692 | 137,922 | 124,741 | — |
+| BLS12-381 | Compact M = 8, `R` from state (review C0-3; Amsterdam) | 94,529 | 130,010 | 143,258 | 130,059 | — |
 
 <details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
 
@@ -1489,8 +1556,8 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 </details>
 
 - `SENDER_CP` costs as `RECEIVER_X` (+49 gas: the bases swap); `AUDITOR` adds the cold `auditorKey()` read (≈ 9 k /
-  13 k). A stored entry is read whole: BUNDLE M = 8 pays ≈ 65 / 129 cold slots for 2 / 4 KiB, which is why commit-reveal
-  (the commitment, the memo + calldata) is the cheaper on-chain check at large `M`. Off chain (`eth_call`) every kind is free.
+  13 k). A stored entry is read whole: BUNDLE M = 8 pays ≈ 65 / 129 cold slots for 2 / 4 KiB, which was why commit-reveal
+  (the commitment, the memo + calldata) was the cheaper on-chain check at large `M`; now `R` is one SSTORE2 data contract read with EXTCODECOPY (M = 8: 94.5 k against BUNDLE's 438.8 k). Off chain (`eth_call`) every kind is free.
 
 **Sizes** (`forge build --sizes`, runtime bytes, optimizer 200 runs; EIP-170 limit 24,576 B):
 
@@ -1504,7 +1571,7 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 | (the combined `ZetherVerifierBn254` / `ZetherVerifierBls12381` before 5g-Z1) | 15,955 / 16,312 |
 
 
-**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:429-430`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) and, to relay larger `M`, raises it to the relayed limit of that `M` in the table above (at most 2^24). Registering a Zether token on a chain whose cap is below that warns (SPECIFIED, [NODE-STO-10](../node/store.md#NODE-STO-10)). The node pads the estimate by 20 % and clamps it: it sends `min(g + g/5, 2^24)` (EIP-7825; built in P5, `guard::gas_limit`).
+**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:429-430`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) and, to relay larger `M`, raises it to the total gas limit of that `M` (the table above bounds the regular part at 2^24; state gas comes on top, up to 34.3 M at the edge cells). Registering a Zether token on a chain whose cap is below that warns (SPECIFIED, [NODE-STO-10](../node/store.md#NODE-STO-10)). The node pads the estimate by 20 % and clamps it: it sends `min(g + g/5, cap)` with `cap` = `guard::total_cap` = `min(max_gas_per_tx, block gas limit, 2^32 − 1)` under Amsterdam (EIP-8037: 2^24 caps only the regular gas, the rest is the state-gas reservoir), and `min(…, 2^24)` before it (`guard::gas_limit`).
 
 The 2.5 M per-transfer kill criterion of the original plan is exceeded by the bn254 transfer (3.33 M direct after
 `n_v = 64`; 2.75 M before) — accepted by the owner for v1 in exchange for one transaction per payment of any size. This
@@ -1529,8 +1596,13 @@ Exported by the prover (`clients/zether-prover/vectors/`, copied into `smartcont
   {"x","v","s","b","bPrime","gammaV","gammaB"}, "expect": true }` — the statement as above with any chainId/token (the
   verifier reads them only through the transcript).
 - `burn_{bn254,bls12381}.json`: as above, witness `{"x","b","amount","bPrime","gammaB"}`.
+- `transfer_multi_{curve}.json`: as `transfer`, plus `"mode"`, `"bundles"`, `"memo"`, witness `"v"`, `"t"` (the auditor
+  randomness per leg, review C0-1), `"gammaV"` lists.
 - `schnorr_{curve}.json` (cross-checked with the contracts' own), `disclosure_{curve}.json`:
-  `{ "entryRef","chainId","token","amount","kind","Yt","Cout","Dout","Ya","Caud","opening" }`.
+  `{ "entryRef","chainId","token","amount","kind","Yt","Cout","Dout","Ya","Caud","Daud","opening" }` (`Daud` = `D_aud_j`;
+  the single format's is `D_out`).
+- `v2/`: the last `…/v2` transfer, multi-recipient and burn vectors, kept so that the `…/v3` verifiers' refusal of them is
+  tested (`ZetherS3Vectors.test_v2ProofRefused`, the prover's `v2_vectors_refused`).
 
 The contracts check: a correct vector ⇒ `verifyTransfer/verifyBurn == true`; flipping any bit of proof/statement ⇒
 `false` or revert. Since `n_v = 64` the transfer/disclosure vectors carry a balance of `2^44 + 10^6` and an amount of
@@ -1558,7 +1630,7 @@ interface IZetherToken is IERC20MetaTx {  // target; built (P3): standalone, the
                                uint256 fee, uint64 sendCounter, address blob);               // single format; blob = 0 on Zether
     event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee,
                                     uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);  // mode = TransferMode
-    event TransferBundles(bytes32 indexed entryRef, bytes bundles);                          // commit-reveal (HASH)
+    event TransferBundles(bytes32 indexed entryRef, bytes bundles);                          // commit-reveal (HASH): R also kept in state by SSTORE2
     event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);   // shared name; recipient a native id or a UA; blob = 0 on Zether
     event RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash);   // shared name; Zether: rolled = accSeq
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
@@ -1569,7 +1641,8 @@ interface IZetherToken is IERC20MetaTx {  // target; built (P3): standalone, the
     function auditorKey() external view returns (bytes memory);
     function disclosureMode() external view returns (uint8); function auditorMode() external view returns (uint8);   // CTR-ZTH-48/49 (enums, ABI uint8)
     function disclosure() external view returns (ITransferDisclosure);   // implementation immutable (CTR-ZTH-43)
-    function transferEntry(bytes32 entryRef) external view returns (bytes memory);   // raw record: R | keccak256(R) ‖ memo | empty
+    function transferEntry(bytes32 entryRef) external view returns (bytes memory R);   // R from state (inline or SSTORE2), empty if unknown
+    function transferMemo(bytes32 entryRef) external view returns (bytes memory);       // commit-reveal sender memo (CTR-ZTH-50)
     function totalShielded() external view returns (uint256);
     function registered(ZetherTypes.UA account) external view returns (bool);
     function accountState(ZetherTypes.UA account) external view returns (AccountState memory);
@@ -1581,13 +1654,11 @@ interface IZetherToken is IERC20MetaTx {  // target; built (P3): standalone, the
     function mtxSetRollOverMode(ZetherTypes.UA account, ZetherTypes.RollOverMode mode, uint64 validUntilBlock, bytes calldata sig) external;
 
     function mtxShield(bytes32 toUA, uint256 amount) external;   // moves amount·shieldScale public units to SHIELD_POOL (CTR-ZTH-35)
-    // multi-recipient (CTR-ZTH-37/38); enum TransferMode { HASH, BUNDLE, NONE }
+    // multi-recipient (CTR-ZTH-37/38); enum TransferMode { HASH, BUNDLE }
     function mtxConfidentialTransfer(bytes calldata payload, bytes calldata proof,
                                   ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);          // BUNDLE token: R; COMPACT: commit-reveal
     function mtxConfidentialTransferCompact(bytes calldata payload, bytes calldata proof,
                                         ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);    // commit-reveal
-    function mtxConfidentialTransferNoBundle(bytes calldata payload, bytes calldata proof,
-                                          ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);  // NONE; BUNDLE tokens only
     function mtxConfidentialTransferSingle(bytes calldata payload, bytes calldata proof,
                                         ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);    // one recipient
     function mtxUnshield(bytes calldata payload, bytes calldata proof,
@@ -1618,11 +1689,11 @@ interface ITransferDisclosure {          // implemented by the stateless ZetherD
     enum OpeningKind { SENDER_S, RECEIVER_X, AUDITOR, SENDER_CP }
     error UnknownEntry(bytes32 entryRef);
     error OpeningMalformed();
-    error BundlesMismatch(bytes32 entryRef);
+    error RecordMalformed(bytes32 entryRef);     // the token's entry is not a record length (16 + 4P or 16 + 5P·M)
     error BadRecipientIndex(uint256 index);
     function verifyTransferAmount(address token, bytes32 entryRef, uint256 index, uint256 amount, OpeningKind kind,
-                                  bytes calldata opening, bytes calldata bundles) external view returns (bool);
-    function transferCiphertext(address token, bytes32 entryRef, uint256 index, bytes calldata bundles)
+                                  bytes calldata opening) external view returns (bool);
+    function transferCiphertext(address token, bytes32 entryRef, uint256 index)
         external view returns (bytes memory encodedCiphertext, bytes memory encodedYTo);
 }
 ```

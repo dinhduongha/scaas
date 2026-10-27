@@ -247,11 +247,12 @@ model (fixed address, changed only by a chain upgrade).
   - init code + appended `Env` (≈ 1 KB) ≈ 62.7 KB: over 49,152 on any chain without EIP-7954, under 131,072 on the SCaaS testnet;
     the transaction is under the 128 KB pool limit. The factory route adds no new limit compared with a direct
     `0x4e59` deployment: the same EIP-3860 check applies to the factory's `CREATE2`. [estimate]
-  - gas: code deposit 200 × 60,105 ≈ 12.02 M, `CREATE2` 32,000 + 8 gas per init word ≈ 16 k, calldata ≈ 0.8 M (16 /
-    4 gas per non-zero / zero byte, ≈ 75 % non-zero assumed), memory and copy ≈ 30 k, intrinsic 21 k: **≈ 12.9 M**
-    plus the constructor, under the 16,777,216 cap with ≈ 3.8 M to spare. EIP-8037 (also scheduled for Glamsterdam,
-    [Last Call](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-8037.md)) reprices code deposit per state
-    byte; its constant was "not yet final", so this margin must be re-measured after Glamsterdam. [estimate]
+  - gas, **corrected 2026-10-27 (review C5-1)**: the old figure (code deposit 200 × 60,105 ≈ 12.0 M, ≈ 12.9 M in all,
+    "3.8 M to spare under 2^24") is the pre-Amsterdam schedule. Under EIP-8037 (Amsterdam, NET-EVM-06) the code deposit is
+    state gas at 1,530 per byte, 61,519 B = 94.1 M for `UnderlyingPqzToken`, on top of about 4.1 M regular gas (measured,
+    `PqzUnderlying.t.sol`), and the transaction's gas may not exceed the block gas limit: a release needs
+    `runtime × 1,530 + 2^24`, about 75.8 M (`NoUnderlyingToken`) to 110.9 M (`UnderlyingPqzToken`), see
+    [NET-EVM-06](../networks/evm.md#NET-EVM-06). [measured]
   - every `Env` entry kept as an `immutable` is inlined as a 32-byte `PUSH32` at each place the code reads it, so
     `UnderlyingPqzToken` (5,431 B under 65,536) has room for at most ≈ 170 such references [inference].
 

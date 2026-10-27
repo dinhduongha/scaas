@@ -1,0 +1,80 @@
+# review2 T5: Zether commit-reveal stores R by SSTORE2 (owner ruling 2026-10-27, C0-3); BLS12-381, Amsterdam, isolated
+# cmd: forge test --match-path test/zether/ZetherMulti.t.sol --match-test 'test_gas(Out)?M[0-9](Hash|Bundle)' -vv
+== BEFORE (head 87042b84: HASH stores keccak256(R), R only in the event)
+  bls12-381 mtxConfidentialTransfer M=1 BUNDLE gas 7693935 calldata 7428 regular 3866482 state 3818880
+  bls12-381 mtxConfidentialTransfer M=1 HASH gas 5720996 calldata 7492 regular 3656090 state 2056320
+  bls12-381 mtxConfidentialTransfer M=2 BUNDLE gas 12671296 calldata 10884 regular 5806482 state 6854400
+  bls12-381 mtxConfidentialTransfer M=2 HASH gas 8722344 calldata 10980 regular 5382571 state 3329280
+  bls12-381 mtxConfidentialTransfer M=4 BUNDLE gas 22634297 calldata 17796 regular 9693326 state 12925440
+  bls12-381 mtxConfidentialTransfer M=4 HASH gas 14513638 calldata 17988 regular 8818450 state 5679360
+  bls12-381 mtxConfidentialTransfer M=8 BUNDLE gas 42593685 calldata 31620 regular 17494103 state 25067520
+  bls12-381 mtxConfidentialTransfer M=8 HASH gas 26241223 calldata 31972 regular 15730710 state 10477440
+  bls12-381 mtxConfidentialTransfer M=1 BUNDLE auditor-out gas 6747944 calldata 7428 regular 3703841 state 3035520
+  bls12-381 mtxConfidentialTransfer M=1 HASH auditor-out gas 5638389 calldata 7492 regular 3573473 state 2056320
+  bls12-381 mtxConfidentialTransfer M=2 BUNDLE auditor-out gas 10777984 calldata 10884 regular 5479875 state 5287680
+  bls12-381 mtxConfidentialTransfer M=2 HASH auditor-out gas 8555823 calldata 10980 regular 5216036 state 3329280
+  bls12-381 mtxConfidentialTransfer M=4 BUNDLE auditor-out gas 18842350 calldata 17796 regular 9034795 state 9792000
+  bls12-381 mtxConfidentialTransfer M=4 HASH auditor-out gas 14175310 calldata 17988 regular 8480099 state 5679360
+  bls12-381 mtxConfidentialTransfer M=8 BUNDLE auditor-out gas 34990670 calldata 31620 regular 16157925 state 18800640
+  bls12-381 mtxConfidentialTransfer M=8 HASH auditor-out gas 25545268 calldata 31972 regular 15034712 state 10477440
+== AFTER (HASH stores R by SSTORE2)
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+  bls12-381 mtxConfidentialTransfer M=1 BUNDLE gas 7693862 calldata 7428 regular 3866468 state 3818880
+  bls12-381 mtxConfidentialTransfer M=1 HASH gas 6922712 calldata 7492 regular 3668996 state 3245130
+  bls12-381 mtxConfidentialTransfer M=2 BUNDLE gas 12671175 calldata 10884 regular 5806420 state 6854400
+  bls12-381 mtxConfidentialTransfer M=2 HASH gas 10903639 calldata 10980 regular 5395856 state 5497290
+  bls12-381 mtxConfidentialTransfer M=4 BUNDLE gas 22633828 calldata 17796 regular 9692916 state 12925440
+  bls12-381 mtxConfidentialTransfer M=4 HASH gas 18653755 calldata 17988 regular 8832157 state 9805770
+  bls12-381 mtxConfidentialTransfer M=8 BUNDLE gas 42593348 calldata 31620 regular 17493825 state 25067520
+  bls12-381 mtxConfidentialTransfer M=8 HASH gas 34300502 calldata 31972 regular 15746779 state 18520650
+  bls12-381 mtxConfidentialTransfer M=1 BUNDLE auditor-out gas 6747763 calldata 7428 regular 3703719 state 3035520
+  bls12-381 mtxConfidentialTransfer M=1 HASH auditor-out gas 6839997 calldata 7492 regular 3586271 state 3245130
+  bls12-381 mtxConfidentialTransfer M=2 BUNDLE auditor-out gas 10777767 calldata 10884 regular 5479717 state 5287680
+  bls12-381 mtxConfidentialTransfer M=2 HASH auditor-out gas 10736914 calldata 10980 regular 5229117 state 5497290
+  bls12-381 mtxConfidentialTransfer M=4 BUNDLE auditor-out gas 18842277 calldata 17796 regular 9034781 state 9792000
+  bls12-381 mtxConfidentialTransfer M=4 HASH auditor-out gas 18315163 calldata 17988 regular 8493542 state 9805770
+  bls12-381 mtxConfidentialTransfer M=8 BUNDLE auditor-out gas 34990381 calldata 31620 regular 16157695 state 18800640
+  bls12-381 mtxConfidentialTransfer M=8 HASH auditor-out gas 33604606 calldata 31972 regular 15050840 state 18520650
+== disclosure after (R read from state, no bundles argument): cmd --match-test test_gasDisclose
+  bls12-381 disclose M=1 BUNDLE SENDER_S gas 133442
+  bls12-381 disclose M=1 BUNDLE RECEIVER_X gas 168797
+  bls12-381 disclose M=1 BUNDLE AUDITOR gas 182027
+  bls12-381 disclose M=1 BUNDLE SENDER_CP gas 168846
+  bls12-381 disclose M=1 HASH SENDER_S gas 89337
+  bls12-381 disclose M=1 HASH RECEIVER_X gas 124692
+  bls12-381 disclose M=1 HASH AUDITOR gas 137922
+  bls12-381 disclose M=1 HASH SENDER_CP gas 124741
+  bls12-381 disclose M=8 BUNDLE SENDER_S gas 438794
+  bls12-381 disclose M=8 BUNDLE RECEIVER_X gas 474275
+  bls12-381 disclose M=8 BUNDLE AUDITOR gas 487523
+  bls12-381 disclose M=8 BUNDLE SENDER_CP gas 474324
+  bls12-381 disclose M=8 HASH SENDER_S gas 94529
+  bls12-381 disclose M=8 HASH RECEIVER_X gas 130010
+  bls12-381 disclose M=8 HASH AUDITOR gas 143258
+  bls12-381 disclose M=8 HASH SENDER_CP gas 130059
+  bls12-381 disclose Single SENDER_S gas 123921
+  bls12-381 disclose Single RECEIVER_X gas 159270
+  bls12-381 disclose Single AUDITOR gas 172499
+  bls12-381 disclose Single SENDER_CP gas 159319
+== ZetherGasLimit test_measure_compact (ZETHER_GAS_PROBE=1, total limit incl. state gas)
+16 matches in 1 files:
+
+/.../scratchpad/measure-compact.txt:6:GASLIMIT bls12381 direct compact on M=1 limit=6932938
+/.../scratchpad/measure-compact.txt:7:GASLIMIT bls12381 direct compact on M=2 limit=10928212
+/.../scratchpad/measure-compact.txt:8:GASLIMIT bls12381 direct compact on M=3 limit=14813845
+/.../scratchpad/measure-compact.txt:9:GASLIMIT bls12381 direct compact on M=4 limit=18749545
+/.../scratchpad/measure-compact.txt:10:GASLIMIT bls12381 direct compact out M=1 limit=6853971
+/.../scratchpad/measure-compact.txt:11:GASLIMIT bls12381 direct compact out M=2 limit=10768981
+/.../scratchpad/measure-compact.txt:12:GASLIMIT bls12381 direct compact out M=3 limit=14573124
+/.../scratchpad/measure-compact.txt:13:GASLIMIT bls12381 direct compact out M=4 limit=18420974
+/.../scratchpad/measure-compact.txt:14:GASLIMIT bls12381 relayed compact on M=1 limit=7288087
+/.../scratchpad/measure-compact.txt:15:GASLIMIT bls12381 relayed compact on M=2 limit=11414529
+/.../scratchpad/measure-compact.txt:16:GASLIMIT bls12381 relayed compact on M=3 limit=15428058
+/.../scratchpad/measure-compact.txt:17:GASLIMIT bls12381 relayed compact on M=4 limit=19493702
+/.../scratchpad/measure-compact.txt:18:GASLIMIT bls12381 relayed compact out M=1 limit=7206594
+/.../scratchpad/measure-compact.txt:19:GASLIMIT bls12381 relayed compact out M=2 limit=11250204
+/.../scratchpad/measure-compact.txt:20:GASLIMIT bls12381 relayed compact out M=3 limit=15179635
+/.../scratchpad/measure-compact.txt:21:GASLIMIT bls12381 relayed compact out M=4 limit=19154616

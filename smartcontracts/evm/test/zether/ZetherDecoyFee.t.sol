@@ -36,7 +36,7 @@ contract ZetherDecoyFeeTest is ZetherFixture {
 
     function _withD(bytes memory pl, uint256 d) internal pure returns (bytes memory out) {
         out = bytes.concat(pl);
-        assembly ("memory-safe") { mstore(add(out, 144), d) } // payload bytes 112..144
+        assembly ("memory-safe") { mstore(add(out, 176), d) } // payload bytes 144..176
     }
 
     function _fee(bytes memory statement) internal pure returns (uint256 f) {

@@ -144,9 +144,9 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
         public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](20);
-        c = new uint8[](20);
-        a = new uint8[](20);
+        s = new bytes4[](19);
+        c = new uint8[](19);
+        a = new uint8[](19);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
         (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
@@ -156,17 +156,16 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
         (s[6], c[6]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
         (s[8], c[8]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (this.mtxConfidentialTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
-        (s[10], c[10]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[11], c[11]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[12], c[12]) = (this.mtxWrapShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[13], c[13]) = (this.mtxUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
-        (s[14], c[14]) = (SEL_WRAP_TO_UA, FEE_CLASS_ABSOLUTE);
-        (s[15], c[15], a[15]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
-        (s[16], c[16]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[17], c[17]) = (this.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
-        (s[18], c[18]) = (this.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
-        (s[19], c[19]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[10], c[10]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[11], c[11]) = (this.mtxWrapShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[12], c[12]) = (this.mtxUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
+        (s[13], c[13]) = (SEL_WRAP_TO_UA, FEE_CLASS_ABSOLUTE);
+        (s[14], c[14], a[14]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
+        (s[15], c[15]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[16], c[16]) = (this.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
+        (s[17], c[17]) = (this.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
+        (s[18], c[18]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {

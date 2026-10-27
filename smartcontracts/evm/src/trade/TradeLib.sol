@@ -88,6 +88,7 @@ library TradeLib {
         if (o.from == pad(token) || o.dex == token) revert ITradeToken.SelfOrder(h);
         if (o.relayer != address(0) && o.relayer != f.submitter) revert ITradeToken.WrongRelayer(h, f.submitter);
         if (block.timestamp > o.validUntil) revert ITradeToken.OrderExpired(h);
+        if (o.nonce >= MAX_MIN_NONCE) revert ITradeToken.NonceAboveCap(h); // C6-5: no lane floor can reach it
         if (o.nonce < $().minNonce[o.from][o.batch]) revert ITradeToken.NonceInvalidated(h);
         if (o.flags & ~(IOC | ESCROW | LISTED_POOLS) != 0 || (o.flags & ESCROW != 0 && o.flags & IOC == 0)) {
             revert ITradeToken.BadFlags(h);

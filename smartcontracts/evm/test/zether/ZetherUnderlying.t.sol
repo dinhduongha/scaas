@@ -344,17 +344,17 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertEq(address(w.disclosure()), address(dis));
         assertEq(w.auditorKey(), ZetherKeys.pub(X_AUD, bls));
         assertEq(w.transferEntry(ref).length, 16 + 4 * 128, "the single format stores R = salt, then B");
-        (bytes memory ct,) = dis.transferCiphertext(address(w), ref, 0, "");
+        (bytes memory ct,) = dis.transferCiphertext(address(w), ref, 0);
         bytes memory dOut = new bytes(128);
         for (uint256 i; i < 128; ++i) dOut[i] = ct[128 + i];
-        assertTrue(_vta(tok, ref, 0, 21, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s), ""));
+        assertTrue(_vta(tok, ref, 0, 21, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
         assertTrue(_vta(tok, ref, 0, 21, ITransferDisclosure.OpeningKind.RECEIVER_X,
-            _cpOpening(tok, bob.x, ref, 0, 21, ITransferDisclosure.OpeningKind.RECEIVER_X, dOut), ""));
+            _cpOpening(tok, bob.x, ref, 0, 21, ITransferDisclosure.OpeningKind.RECEIVER_X, dOut)));
         assertTrue(_vta(tok, ref, 0, 21, ITransferDisclosure.OpeningKind.AUDITOR,
-            _cpOpening(tok, X_AUD, ref, 0, 21, ITransferDisclosure.OpeningKind.AUDITOR, dOut), ""));
+            _cpOpening(tok, X_AUD, ref, 0, 21, ITransferDisclosure.OpeningKind.AUDITOR, dOut)));
         assertTrue(_vta(tok, ref, 0, 21, ITransferDisclosure.OpeningKind.SENDER_CP,
-            _cpOpening(tok, t.s, ref, 0, 21, ITransferDisclosure.OpeningKind.SENDER_CP, bob.y), ""));
-        assertFalse(_vta(tok, ref, 0, 22, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s), ""));
+            _cpOpening(tok, t.s, ref, 0, 21, ITransferDisclosure.OpeningKind.SENDER_CP, bob.y)));
+        assertFalse(_vta(tok, ref, 0, 22, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
     }
 
     // ------------------------------------------------------------------ reserve invariant (CTR-ZTH-44)
@@ -531,30 +531,29 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     function test_allowlistPinned_underlyingZether() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
-        assertEq(s.length, 20);
-        assertEq(s[12], UnderlyingZetherToken.mtxWrapShield.selector);
-        assertEq(s[13], UnderlyingZetherToken.mtxUnshieldUnwrap.selector);
-        assertEq(s[14], UnderlyingToken.wrapToUA.selector);
-        assertEq(s[15], UnderlyingToken.unwrapToUA.selector);
-        assertEq(c[14], 1, "wrapToUA ABSOLUTE");
-        assertEq(a[14], 0);
-        assertEq(c[15], 2, "unwrapToUA AMOUNT(1)");
-        assertEq(a[15], 1);
+        assertEq(s.length, 19);
+        assertEq(s[11], UnderlyingZetherToken.mtxWrapShield.selector);
+        assertEq(s[12], UnderlyingZetherToken.mtxUnshieldUnwrap.selector);
+        assertEq(s[13], UnderlyingToken.wrapToUA.selector);
+        assertEq(s[14], UnderlyingToken.unwrapToUA.selector);
+        assertEq(c[13], 1, "wrapToUA ABSOLUTE");
+        assertEq(a[13], 0);
+        assertEq(c[14], 2, "unwrapToUA AMOUNT(1)");
+        assertEq(a[14], 1);
         assertEq(s[6], ZetherLayer.mtxShield.selector);
         assertEq(s[7], ZetherLayer.mtxConfidentialTransfer.selector);
         assertEq(s[8], ZetherLayer.mtxConfidentialTransferCompact.selector);
-        assertEq(s[9], ZetherLayer.mtxConfidentialTransferNoBundle.selector);
-        assertEq(s[10], ZetherLayer.mtxConfidentialTransferSingle.selector);
-        assertEq(s[11], ZetherLayer.mtxUnshield.selector);
-        assertEq(s[16], ZetherLayer.mtxRollOver.selector);
-        assertEq(s[17], ZetherLayer.mtxRollOverBatch.selector);
-        assertEq(s[18], ZetherLayer.mtxRollOverSigned.selector);
-        assertEq(s[19], ZetherLayer.mtxSetRollOverMode.selector);
-        for (uint256 i = 16; i < 20; ++i) {
+        assertEq(s[9], ZetherLayer.mtxConfidentialTransferSingle.selector);
+        assertEq(s[10], ZetherLayer.mtxUnshield.selector);
+        assertEq(s[15], ZetherLayer.mtxRollOver.selector);
+        assertEq(s[16], ZetherLayer.mtxRollOverBatch.selector);
+        assertEq(s[17], ZetherLayer.mtxRollOverSigned.selector);
+        assertEq(s[18], ZetherLayer.mtxSetRollOverMode.selector);
+        for (uint256 i = 15; i < 19; ++i) {
             assertEq(c[i], 1, "roll-overs ABSOLUTE");
             assertEq(a[i], 0);
         }
-        for (uint256 i = 6; i < 14; ++i) {
+        for (uint256 i = 6; i < 13; ++i) {
             assertEq(c[i], 1, "ABSOLUTE");
             assertEq(a[i], 0);
         }
@@ -639,7 +638,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         vm.prank(payer);
         usd.approve(address(w), type(uint256).max);
         (bytes4[] memory s,,) = w.mtxSelectors();
-        assertEq(s.length, 20);
+        assertEq(s.length, 19);
         signer = _signingUA();
         uint256 bal = 70;
         for (uint256 i; i < s.length; ++i) {
@@ -656,9 +655,9 @@ contract ZetherUnderlyingTest is ZetherFixture {
             if (w.accountState(alice.ua).sendCounter != sc) bal -= 10;
         }
         assertEq(w.balanceOfUA(signer), SCALE, "wrapToUA");
-        assertEq(bal, 10, "four transfers, an unshield, an unshield-unwrap");
-        assertTrue(_holds(tok, alice, 10, true));
-        assertTrue(_holds(tok, bob, 3 + 4 * 10 + 1, false), "shield; transfers; wrap-shield");
+        assertEq(bal, 20, "three transfers, an unshield, an unshield-unwrap");
+        assertTrue(_holds(tok, alice, 20, true));
+        assertTrue(_holds(tok, bob, 3 + 3 * 10 + 1, false), "shield; transfers; wrap-shield");
         assertEq(w.mtxNonce(payer, 55), 1, "cancelNonce");
         assertEq(w.balanceOf(payer), (100 + 10 - 5 - 3) * SCALE, "wrap; unwrap; shield");
         assertEq(usd.balanceOf(payer), (100 - 10 + 5 - 1 - 1 - 1) * SCALE, "wrap; unwrap; wrap-shield; addReserve; wrapToUA");

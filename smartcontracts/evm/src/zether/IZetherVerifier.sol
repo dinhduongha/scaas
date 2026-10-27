@@ -80,5 +80,7 @@ interface IZetherInnerProductVerifier is IZetherVerifierCommon {
     function generatorStore() external view returns (address);
 
     /// @notice One range proof (`n = 64`) of `V` on the running transcript `st`; returns the verdict and the new state.
+    /// @dev Precondition: `V` is not absorbed here; `st` must already bind `V` (the caller absorbs it, as `_ctx` does
+    ///      as `"sigma.commit"`). With an unbound `st` the proof is a weak-Fiat-Shamir forgery target.
     function verifyRange(bytes32 st, bytes calldata V, bytes calldata proof) external view returns (bool, bytes32);
 }

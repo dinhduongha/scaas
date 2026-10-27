@@ -124,6 +124,26 @@ contract DexKatTest is Test {
         vm.serializeString(k, "invalidate_calldata", vm.toString(invData));
     }
 
+    /// `mtxExchange` / `mtxExchangeVia` calldata for one fixed plan (review C6-2): the two settlement orders as tagged
+    /// `ExchangeLeg`s (shape 0), one extra token, one interaction. ENCODING ONLY (not executed here: the exchange paths
+    /// run in the exchange tests); the node pins its call table and its ABI structs against these bytes.
+    function _exchange(string memory k, ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t, bytes32 hm)
+        internal
+    {
+        ISCaaSDex.ExchangePlan memory p;
+        p.ref = keccak256("scaas.kat.exchange");
+        p.legs = new ISCaaSDex.ExchangeLeg[](2);
+        p.legs[0] = ISCaaSDex.ExchangeLeg(address(usdc), 0, abi.encode(m), _sign(DAVE_PK, hm), 1000e6, 500e6);
+        p.legs[1] = ISCaaSDex.ExchangeLeg(address(a), 0, abi.encode(t), _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6, 1000e6);
+        p.extraTokens = new address[](1);
+        p.extraTokens[0] = address(0xE7A);
+        ISCaaSDex.Interaction[] memory xs = new ISCaaSDex.Interaction[](1);
+        xs[0] = ISCaaSDex.Interaction(address(0xA11), hex"deadbeef");
+        vm.serializeString(k, "exchange_calldata", vm.toString(abi.encodeCall(ISCaaSDex.mtxExchange, (p, xs))));
+        vm.serializeString(k, "exchange_via_calldata",
+            vm.toString(abi.encodeCall(ISCaaSDex.mtxExchangeVia, (p, address(0xE7EC), hex"c0ffee"))));
+    }
+
     function test_dexKat() public {
         (ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t) = _orders();
         bytes32 domainSep = _domainSep();
@@ -149,13 +169,14 @@ contract DexKatTest is Test {
         vm.serializeString(k, "taker_order_hash", vm.toString(a.tradeOrderDigest(t)));
         _settle(k, m, t, hm);
         _cancels(k, m, hm, domainSep);
+        _exchange(k, m, t, hm);
         string memory out = vm.serializeString(k, "relayer", vm.toString(RELAYER));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT);
 
         string memory onDisk = vm.readFile(OUT);
         string[] memory keys = vm.parseJsonKeys(out, "$");
         assertEq(vm.parseJsonKeys(onDisk, "$").length, keys.length);
-        assertEq(keys.length, 17);
+        assertEq(keys.length, 19);
         for (uint256 i; i < keys.length; ++i) {
             assertEq(
                 vm.parseJsonString(onDisk, string.concat(".", keys[i])),

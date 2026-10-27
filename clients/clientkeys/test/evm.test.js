@@ -440,6 +440,10 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
   checkTradeOrder(server(wrap), { ...want, order: wrap });
   const escrow = { ...mine, flags: 3 };
   checkTradeOrder(server(escrow), { ...want, order: escrow });
+  // C6-5: the chain refuses a nonce >= 2^128 (no lane floor can reach it)
+  const big = server({ nonce: String(2n ** 128n) });
+  assert.throws(() => checkTradeOrder(big, want), /nonce/);
+  checkTradeOrder(server({ nonce: String(2n ** 128n - 1n) }), want);
   // a hostile server changes one field of the order the client built: refused (hostile probe cases included)
   const NOT = /this is not the trade order you asked for/;
   const changed = [

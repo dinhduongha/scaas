@@ -1,0 +1,34 @@
+# docs at commit 444767c9
+test_docs_check: ok
+  note: accepted budget contracts/accounts.md: 1753 lines > 1.3 x 1100
+  note: accepted budget contracts/dex.md: 653 lines > 1.3 x 400
+  note: accepted budget contracts/metatx.md: 1107 lines > 1.3 x 650
+  note: accepted budget contracts/pq-zero-knowledge.md: 2606 lines > 1.3 x 950
+  note: accepted budget contracts/zether.md: 1699 lines > 1.3 x 700
+  note: accepted budget decisions.md: 6837 lines > 1.3 x 3000
+  note: accepted budget networks/README.md: 635 lines > 1.3 x 400
+  note: accepted budget networks/aptos.md: 701 lines > 1.3 x 500
+  note: accepted budget networks/cosmos.md: 332 lines > 1.3 x 220
+  note: accepted budget networks/evm.md: 266 lines > 1.3 x 200
+  note: accepted budget networks/hedera.md: 379 lines > 1.3 x 250
+  note: accepted budget networks/solana.md: 875 lines > 1.3 x 550
+  note: accepted budget networks/soroban.md: 324 lines > 1.3 x 230
+  note: accepted budget networks/sui.md: 450 lines > 1.3 x 300
+  note: accepted budget networks/ton.md: 401 lines > 1.3 x 280
+  note: accepted budget node/README.md: 388 lines > 1.3 x 250
+  warn: budget clients/signers-clientkeys.md: 849 lines > 1.3 x 650
+  warn: budget contracts/token-wrappers.md: 1018 lines > 1.3 x 650
+  warn: budget node/ops.md: 749 lines > 1.3 x 550
+check: 0 error(s), 3 warning(s), 16 note(s)
+  pending:    387 target file not written yet
+  MISS: history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:26 [§A A. Quy tắc approve: chỉ hợp đồng được làm spender] key 7622 not in contracts/token-wrappers.md
+  MISS: history/specs/2026-10-06-universal-account-design.md:448 [§4.2 4.2 Kind table] key 0x0140 not in contracts/accounts.md
+  MISS: history/HANDOFF-blockchain.md:11 [§1 1. Bước của owner / vận hành (không làm trong code)] key 7622 not in node/runbooks.md
+  MISS: history/SCaaS-2026-10-07.md:332 [§3.1 3.1 Components] key 16.2 not in architecture.md
+  MISS: history/SCaaS-2026-10-07.md:975 [§6.4 6.4 Gas circuit breakers (R55, BUILT)] key 16000000 not in node/submit-lanes.md
+  MISS: history/SCaaS-2026-10-07.md:2261 [§14.1 14.1 `IOpenFactory` — BUILT (`src/common/IOpenFactory.sol`, `src/facto] key createZetherToken not in contracts/token-wrappers.md
+  MISS: history/SCaaS-2026-10-07.md:2261 [§14.1 14.1 `IOpenFactory` — BUILT (`src/common/IOpenFactory.sol`, `src/facto] key registerImplementation not in contracts/token-wrappers.md
+  MISS: history/SCaaS-2026-10-07.md:2261 [§14.1 14.1 `IOpenFactory` — BUILT (`src/common/IOpenFactory.sol`, `src/facto] key zetherEnabled not in contracts/token-wrappers.md
+  MISS: history/SCaaS-2026-10-07.md:2313 [§14.1 14.1 `IOpenFactory` — BUILT (`src/common/IOpenFactory.sol`, `src/facto] key registerImplementation not in contracts/token-wrappers.md
+facts check: 8852 facts, 9 miss(es), 387 pending
+rc=0

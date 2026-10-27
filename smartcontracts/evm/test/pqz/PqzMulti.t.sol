@@ -416,7 +416,7 @@ contract PqzMultiTest is PqzFixture {
 
     /// A PQZH token: M = 8 is not built; at most 10 inline credits on op 7 (16 on op 1).
     function test_multi_pqzh() public {
-        if (!PqzSet.HAS_PQZH) return; // no PQZH at this set (refused: UAPqzVerifierTest.test_noPqzhRefused)
+        if (!PqzSet.PQZH_VALUE) return; // no PQZH value token at this set (init refuses it: PqzGuards test_init_pqzhRefusedWithoutValueSets)
         // a PQZH release: its verifier is the env's, an immutable (CTR-ZTH-20)
         pqv = _newPqzVerifier(PQZH_ID);
         factory = new OpenFactory(registrar, PQZ_UID, 0);

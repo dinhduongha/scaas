@@ -64,7 +64,8 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     {
         IZetherToken.AccountState memory st = t.accountState(alice.ua);
         string memory r = string.concat(
-            _base(t), ',"sendCounter":', vm.toString(st.sendCounter), ',"accSeq":', vm.toString(st.accSeq), ',"acc":{',
+            _base(t), ',"sendCounter":', vm.toString(st.sendCounter), ',"accSeq":', vm.toString(st.accSeq), ",",
+            _q("validUntilBlock", vm.toString(vub)), ',"acc":{',
             _q("C", vm.toString(st.accC)), ",", _q("D", vm.toString(st.accD)), '},"balance":', vm.toString(B), ',"fee":',
             vm.toString(FEE), ",", _q("beneficiary", vm.toString(ZetherTypes.UA.unwrap(carol.ua)))
         );
@@ -84,7 +85,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         bytes32 h = keccak256(bytes(m));
         if (h == keccak256("compact")) return ZetherTypes.TransferMode.HASH;
         if (h == keccak256("bundle")) return ZetherTypes.TransferMode.BUNDLE;
-        return ZetherTypes.TransferMode.NONE;
+        revert("unknown form");
     }
 
     /// @dev Multi-recipient, direct: statement bytes, settlement, stored form, recovery.
@@ -105,28 +106,26 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         for (uint256 j; j < 3; ++j) assertEq(t.balanceOfUA(ZetherTypes.UA.unwrap(rs[j].ua)), dFee * SCALE, "decoyFee per leg");
         bytes memory e = t.transferEntry(ref);
         bytes memory r = out.readBytes(".bundles");
-        if (tm == ZetherTypes.TransferMode.NONE) return assertEq(e.length, 0, "nothing stored");
-        if (tm == ZetherTypes.TransferMode.BUNDLE) assertEq(e, r, "stored R");
-        else assertEq(e, bytes.concat(keccak256(r), out.readBytes(".memo")), "commitment and memo");
-        string memory rec = _recover(t, e, tm);
+        assertEq(e, r, "stored R (inline or SSTORE2: always from state)");
+        if (tm == ZetherTypes.TransferMode.HASH) assertEq(t.transferMemo(ref), out.readBytes(".memo"), "the sender memo");
+        string memory rec = _recover(t, ref, e, tm);
         assertEq(rec.readBytes(".bundles"), r, "recovered R");
         assertEq(rec.readBytes32(".s"), out.readBytes32(".witness.s"), "recovered s");
     }
 
-    /// @dev From storage only: the record, or openMemo → `registry.keyOf(needKeys[j])` → recoverTransfer.
-    function _recover(ZetherLayer t, bytes memory e, ZetherTypes.TransferMode tm) internal returns (string memory) {
+    /// @dev From storage only: the record `R` (`transferEntry`) and, for commit-reveal, the memo (`transferMemo`):
+    ///      openMemo (the auditor flag) → recoverTransfer.
+    function _recover(ZetherLayer t, bytes32 ref, bytes memory e, ZetherTypes.TransferMode tm) internal returns (string memory) {
         string memory q = string.concat(_base(t), ',"sendCounter":0,"tableBits":18,"boundBits":24,', _q("entry", vm.toString(e)));
         string memory ya = t.auditorKey().length == 0 ? "null" : string.concat('"', vm.toString(t.auditorKey()), '"');
         if (tm == ZetherTypes.TransferMode.BUNDLE) return _cli("recoverTransfer", string.concat(q, ',"yAud":', ya, "}"));
+        q = string.concat(q, ",", _q("memo", vm.toString(t.transferMemo(ref))));
         string memory memo = _cli("openMemo", string.concat(q, "}"));
-        bytes32[] memory need = memo.readBytes32Array(".needKeys");
-        string memory keys;
-        for (uint256 j; j < need.length; ++j) {
-            assertEq(need[j], ZetherTypes.UA.unwrap(rs[j].ua), "needKeys");
-            keys = string.concat(keys, j == 0 ? '"' : ',"', vm.toString(reg.keyOf(need[j])), '"');
+        for (uint256 j; j < 3; ++j) {
+            assertEq(memo.readBytes32(string.concat(".legs[", vm.toString(j), "].toUA")), ZetherTypes.UA.unwrap(rs[j].ua), "legs.toUA");
         }
         if (!memo.readBool(".auditorIncluded")) ya = "null";
-        return _cli("recoverTransfer", string.concat(q, ',"keys":[', keys, '],"yAud":', ya, "}"));
+        return _cli("recoverTransfer", string.concat(q, ',"yAud":', ya, "}"));
     }
 
     function test_bundleOptional_default() public {
@@ -140,8 +139,8 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         _multi(_token(0, 2, true, "b-dec"), "bundle", "optional", true, ',"decoyFee":3,"minDecoyFee":2');
     }
 
-    function test_bundleNone_noBundle() public {
-        _multi(_token(0, 0, false, "b-none"), "bundle", "none", false, ',"mode":"none"');
+    function test_bundleNone_auditorOff() public {
+        _multi(_token(0, 0, false, "b-none"), "bundle", "none", false, "");
     }
 
     function test_bundleFull_compact() public {
@@ -159,7 +158,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         });
         bytes32 binding = t.envelopeBinding(mt);
         string memory out = _cli("proveTransferMulti", _req(t, "compact", "optional", false,
-            string.concat(",", _q("envelopeBinding", vm.toString(binding)), _recipients())));
+            string.concat(",", _q("envelopeBinding", vm.toString(binding)), ',"uaSigner":"ecdsa"', _recipients())));
         assertEq(stm.transferStatement(address(t), out.readBytes(".payload"), carol.ua, ZetherTypes.TransferMode.HASH, binding),
             out.readBytes(".statement"), "relayed statement bytes");
         mt.data = out.readBytes(".directCalldata");
@@ -182,7 +181,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         assertEq(ref, out.readBytes32(".entryRef"));
         assertEq(t.transferEntry(ref), out.readBytes(".record"), "single record");
         assertTrue(_holds(t, rs[0], 1200, false));
-        assertEq(_recover(t, t.transferEntry(ref), ZetherTypes.TransferMode.BUNDLE).readBytes32(".s"),
+        assertEq(_recover(t, ref, t.transferEntry(ref), ZetherTypes.TransferMode.BUNDLE).readBytes32(".s"),
             out.readBytes32(".witness.s"));
     }
 }

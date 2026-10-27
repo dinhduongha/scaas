@@ -6,6 +6,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
@@ -63,6 +64,18 @@ contract ReceiverPaysTest is Test {
         vm.prank(relayer);
         vm.expectRevert(err);
         t.mtxPayReceiverFee(x, ps, fee, to, rfUntil, rs);
+    }
+
+    /// C5-3: a pool fee recipient is refused before the payer's payment runs (the payee signature is not even read).
+    function test_C5_3_poolFeeRecipientRefusedFirst() public {
+        MetaTxLib.MetaTransfer memory x = _pay(payee, 100e6);
+        bytes memory ps = _sig(PAYER_PK, t.mtxTransferDigest(x));
+        vm.prank(relayer);
+        vm.expectRevert(IUALedger.UAPoolNotPayable.selector);
+        t.mtxPayReceiverFee(x, ps, 3e6, MetaTxLib.UA_POOL, block.timestamp + 60, hex"00");
+        vm.prank(relayer);
+        vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
+        t.mtxPayReceiverFee(x, ps, 3e6, MetaTxLib.SHIELD_POOL, block.timestamp + 60, hex"00");
     }
 
     function test_payeePaysTheFee_eventsAndBalances() public {

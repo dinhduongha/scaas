@@ -184,8 +184,32 @@ which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles 
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
 from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
 EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
-state gas) exceeds 2^24, up to ~109 M for the largest implementation deploy, so the testnet block gas limit must ramp to
+state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`UNDERLYING_PQZ`, 110.9 M, table below), so the testnet block gas limit must ramp to
 its 200 M target (genesis `0x1000000`).
+
+**Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
+Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the
+code deposit is state gas at 1,530 per byte of runtime, EIP-7825 caps only the regular gas at 2^24 = 16,777,216, and the
+transaction's gas may not exceed the block gas limit, so a release needs `runtime × 1,530 + 16,777,216` of block gas limit
+(the 2^24 term is the regular-gas bound, not the measured figure: `UnderlyingPqzToken` measures about 4.1 M regular). Runtime
+sizes are `smartcontracts/evm/size-baseline.json`'s:
+
+| Kind (contract) | Runtime | State gas | Needs |
+|---|---|---|---|
+| `NONE` (`NoUnderlyingToken`) | 38,598 B | 59.1 M | **75.8 M** |
+| `UNDERLYING` (`UnderlyingToken`) | 48,524 B | 74.2 M | 91.0 M |
+| `NONE_ZETHER` (`NoUnderlyingZetherToken`) | 48,605 B | 74.4 M | 91.1 M |
+| `NONE_PQZ` (`NoUnderlyingPqzToken`) | 49,336 B | 75.5 M | 92.3 M |
+| `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) | 60,625 B | 92.8 M | 109.5 M |
+| `UNDERLYING_PQZ` (`UnderlyingPqzToken`) | 61,519 B | 94.1 M | **110.9 M** |
+
+So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
+most 54.4 M. A chain with an Ethereum-like 60 M block holds none of the confidential kinds and only the smallest plain
+one; it needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
+value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before each `deployImplementation` /
+`deployDexImplementation`) and `script/pqz/e2e.py` read `block.gaslimit` (`eth_getBlockByNumber`) and refuse before
+sending when it is below the kind's need; the sizes come from the baseline file at run time, so the figures follow the
+ratchet. The deploy tests assert regular + state gas against the same budget next to the 2^24 check.
 
 Runbook notes: (1) read the genesis hash from every configured RPC and stop if they differ; (2) on a private chain,
 confirm the genesis carries its unique `extraData` nonce before deploying; (3) deploy the CREATE2 deployer once per

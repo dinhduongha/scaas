@@ -233,7 +233,8 @@ library UnderlyingLib {
     function quoteUnwrap(uint256 i, uint256 wrapped, address recipient, uint256 minOut)
         public view returns (uint256 out, uint256 burned)
     {
-        if (recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL) {
+        if (recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL
+            || recipient == MetaTxLib.SHIELD_POOL) { // C5-4
             revert IUnderlyingToken.UnwrapRecipientInvalid(recipient);
         }
         return _quote(i, wrapped, minOut);

@@ -212,6 +212,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function _checkTransfer(MetaTxLib.MetaTransfer memory t) private view returns (uint256 fee, address feeTo) {
         if (t.to == address(0)) revert PayToZero();
         if (t.to == address(this)) revert TransferToSelf();
+        _notPool(t.to); // C5-3
         FeeMode fm = MetaTxLib.feeModeOf(t.mode);
         feeTo = t.feeRecipient == address(0) ? msg.sender : t.feeRecipient;
         fee = FeePolicy.compute(fm, t.value, t.fee);
@@ -219,6 +220,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         if (fee != 0) {
             if (feeTo == t.to) revert FeeRecipientIsPayee();
             if (feeTo == address(this)) revert TransferToSelf();
+            _notPool(feeTo);
         }
         uint256 need = t.value + fee;
         uint256 have = balanceOf(t.from);
@@ -271,6 +273,12 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     }
 
     // ------------------------------------------------------------------ internals
+
+    /// @dev The two pools are never a payee or a fee recipient (checked early so step 3 owns the refusal, C5-3).
+    function _notPool(address a) internal pure {
+        if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
+    }
 
     /// @dev Tokens parked at the token's own address are what a spoofed self-call would spend (CTR-MTX-18). `UA_POOL`'s
     ///      slot is Σ of the UA balances and only `_uaMove` writes it (CTR-UA-18): no native move, mint or burn reaches
@@ -450,6 +458,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
             return IUARegistry(_REGISTRY).requireAuthorized(from, purpose, digest, auth);
         }
         address a = address(uint160(uint256(from)));
+        if (a == address(0)) revert UANotRegistered(from); // C5-2: id 0 pays no fee (it would mint)
         if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
         if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
         _requireNativeUASignature(a, digest, auth);

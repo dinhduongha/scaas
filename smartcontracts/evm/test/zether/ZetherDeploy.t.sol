@@ -193,6 +193,10 @@ contract ZetherDeployTest is Test {
             emit log_named_uint("deploy tx regular gas", txGas);
             emit log_named_uint("deploy tx state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
             assertLt(txGas * 105 * 105 / 10_000, TX_GAS_CAP, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
+            // C5-1: regular + state gas against the budget of the deploy gate (NET-EVM-06): runtime x 1,530 + 2^24
+            assertLe(txGas + uint256(int256(vg.gasStateUsed)),
+                vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".UnderlyingZetherToken") * 1530 + TX_GAS_CAP,
+                "regular + state gas fits the deploy gate's budget");
         }
     }
 }

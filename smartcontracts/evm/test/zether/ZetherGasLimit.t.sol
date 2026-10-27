@@ -12,17 +12,20 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 ///         isolated (inline `isolate`): forge executes it as its own transaction, accounts and slots cold, charging the
 ///         calldata and applying the calldata floor (EIP-7623; EIP-7976 under Amsterdam); the call's gas is the limit less
 ///         the 21,000 base.
-///         - `test_edge_*`: the most recipients the prover admits per (form, auditor) settles at a limit of 2^25 (`EDGE_LIMIT`; exactly
-///           2^24 before Amsterdam), direct and through `mtxExecute` (clone → implementation → `ZetherLib` → verifier, 63/64 per frame).
+///         - `test_edge_*`: the most recipients the prover admits per (form, auditor) settles at a limit of 36 M (`EDGE_LIMIT`;
+///           2^25 before review2 T3, exactly 2^24 before Amsterdam), direct and through `mtxExecute` (clone → implementation →
+///           `ZetherLib` → verifier, 63/64 per frame).
 ///         - `test_measure_*`: the smallest limit per `M` by binary search, the prover's table. Opt-in, past forge's
 ///           2^30 test gas: `ZETHER_GAS_PROBE=1 forge test --gas-limit 9000000000000000000 --match-test test_measure -vv`.
 abstract contract ZetherGasLimitSuite is ZetherFixture {
     uint256 internal constant CAP = 1 << 24;
     uint256 internal constant MARGIN = CAP / 100;
     /// @dev F185: under Amsterdam EIP-7825's 2^24 caps a transaction's REGULAR gas and EIP-8037 state gas (the new
-    ///      accounts' slots: every recipient's first credit) comes on top. The edge cells need 21.4 M to 31.2 M in total
-    ///      (BLS12-381, measured), so the edge limit is 2^25 (was 2^24 = CAP, state gas included).
-    uint256 internal constant EDGE_LIMIT = 2 * CAP;
+    ///      accounts' slots: every recipient's first credit) comes on top. The edge cells need 21.4 M to 34.3 M in total
+    ///      (BLS12-381, measured; review2 T3: the BUNDLE record stores `D_aud_j` too, the bundle-with-auditor cells need
+    ///      33.1 M direct / 34.3 M relayed at M = 6, were ≤ 31.2 M), so the edge limit is 36 M (was 2^25; 2^24 = CAP before
+    ///      Amsterdam, state gas included). The regular cap 2^24 is the EVM's, inside that limit.
+    uint256 internal constant EDGE_LIMIT = 36_000_000;
     uint256 internal constant PAYER_PK = 0x9A7E5;
     User[12] internal rs;
 
@@ -37,7 +40,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     function _sel(ZetherTypes.TransferMode mode) internal pure returns (bytes4) {
         if (mode == ZetherTypes.TransferMode.HASH) return ZetherLayer.mtxConfidentialTransferCompact.selector;
         if (mode == ZetherTypes.TransferMode.BUNDLE) return ZetherLayer.mtxConfidentialTransfer.selector;
-        return ZetherLayer.mtxConfidentialTransferNoBundle.selector;
+        revert("no such form");
     }
 
     /// @dev `alice → rs[0..m)`, one leg of 1000 (decoys 0), inner fee to carol (every account's first credit: the dear
@@ -81,25 +84,22 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         }
     }
 
-    /// @dev The prover's largest `M` (zether.rs `gas_limits`), direct then relayed, per cell: compact, bundle, none, each
+    /// @dev The prover's largest `M` (zether.rs `gas_limits`), direct then relayed, per cell: compact, bundle, each
     ///      auditor on then out.
-    function _edges() internal pure virtual returns (uint8[12] memory);
+    function _edges() internal pure virtual returns (uint8[8] memory);
 
     function _edge(uint256 cell) internal {
-        ZetherTypes.TransferMode mode = [ZetherTypes.TransferMode.HASH, ZetherTypes.TransferMode.BUNDLE,
-            ZetherTypes.TransferMode.NONE][cell / 2];
+        ZetherTypes.TransferMode mode = [ZetherTypes.TransferMode.HASH, ZetherTypes.TransferMode.BUNDLE][cell / 2];
         audOut = cell % 2 == 1;
-        uint8[12] memory e = _edges();
-        assertTrue(_ok(_build(e[2 * cell], mode, false), EDGE_LIMIT, false), "direct edge at 2^25");
-        assertTrue(_ok(_build(e[2 * cell + 1], mode, true), EDGE_LIMIT, true), "relayed edge at 2^25");
+        uint8[8] memory e = _edges();
+        assertTrue(_ok(_build(e[2 * cell], mode, false), EDGE_LIMIT, false), "direct edge at EDGE_LIMIT");
+        assertTrue(_ok(_build(e[2 * cell + 1], mode, true), EDGE_LIMIT, true), "relayed edge at EDGE_LIMIT");
     }
 
     function test_edge_compactOn() public { _edge(0); }
     function test_edge_compactOut() public { _edge(1); }
     function test_edge_bundleOn() public { _edge(2); }
     function test_edge_bundleOut() public { _edge(3); }
-    function test_edge_noneOn() public { _edge(4); }
-    function test_edge_noneOut() public { _edge(5); }
 
     function _measure(ZetherTypes.TransferMode mode) internal {
         vm.skip(!vm.envOr("ZETHER_GAS_PROBE", false));
@@ -108,7 +108,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             bool relayed = k >= 2;
             string memory head = string.concat(
                 "GASLIMIT ", bls ? "bls12381 " : "bn254 ", relayed ? "relayed " : "direct ",
-                mode == ZetherTypes.TransferMode.HASH ? "compact" : mode == ZetherTypes.TransferMode.BUNDLE ? "bundle" : "none",
+                mode == ZetherTypes.TransferMode.HASH ? "compact" : "bundle",
                 audOut ? " out" : " on"
             );
             for (uint256 m = 1; m <= rs.length; ++m) {
@@ -156,12 +156,11 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
 
     function test_measure_compact() public { _measure(ZetherTypes.TransferMode.HASH); }
     function test_measure_bundle() public { _measure(ZetherTypes.TransferMode.BUNDLE); }
-    function test_measure_none() public { _measure(ZetherTypes.TransferMode.NONE); }
 }
 
 /// forge-config: default.isolate = true
 contract ZetherGasLimitBls12381Test is ZetherGasLimitSuite {
-    function _edges() internal pure override returns (uint8[12] memory) {
-        return [7, 7, 7, 7, 6, 6, 6, 6, 7, 7, 7, 7];
+    function _edges() internal pure override returns (uint8[8] memory) {
+        return [7, 7, 7, 7, 6, 6, 6, 6];
     }
 }

@@ -5,6 +5,7 @@ import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.so
 import {MtxFixture} from "../helpers/MtxFixture.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 import {ERC20MetaTxHarness} from "./helpers/ERC20MetaTxHarness.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
@@ -140,7 +141,20 @@ contract ERC20MetaTxTest is MtxFixture {
         assertEq(t.mtxNonce(alice, 1), 0); // nothing consumed
     }
 
-    function test_feeToTheTokenRefused_typedPath() public {
+    /// C5-3: the pools are refused at step 3 (before the balance check and the nonce), like the UA twin.
+function test_C5_3_poolsRefusedAtStep3_typedPath() public {
+        _xferRevert(_t(MetaTxLib.UA_POOL, 2_000e6, 0, 1, 0, 0, address(0)),
+            abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector));
+        _xferRevert(_t(MetaTxLib.SHIELD_POOL, 2_000e6, 0, 1, 0, 0, address(0)),
+            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
+        _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.UA_POOL),
+            abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector));
+        _xferRevert(_t(shop, 1_000e6, 0, 1, FIX | RF, 1, MetaTxLib.SHIELD_POOL),
+            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
+        assertEq(t.mtxNonce(alice, 1), 0);
+    }
+
+function test_feeToTheTokenRefused_typedPath() public {
         _xferRevert(_t(shop, 100e6, 0, 1, FIX | RF, 1e5, address(t)),
             abi.encodeWithSelector(IERC20MetaTx.TransferToSelf.selector));
         assertEq(t.mtxNonce(alice, 1), 0);

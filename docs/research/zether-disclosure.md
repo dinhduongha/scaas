@@ -68,7 +68,9 @@ debit encrypt the same `v_j` with the same `s` (`ZetherVerifier.sol:230-235`, `:
 | single | `zetherTransferSingle` (`transferConfidentialSingle`; BUNDLE tokens) | full `R = salt ‖ B_0` | calldata |
 | BUNDLE (default on a BUNDLE token) | `zetherTransfer` | full `R = salt ‖ B_1 ‖ … ‖ B_M` | calldata |
 | commit-reveal (default on a COMPACT token) | `zetherTransferCompact`; `zetherTransfer` on a COMPACT token | `keccak256(R)` ‖ sender memo | `TransferBundles` event, calldata |
-| NONE | `zetherTransferNoBundle` (BUNDLE tokens) | nothing | calldata only |
+| ~~NONE~~ | ~~`zetherTransferNoBundle`~~ (retired 2026-10-27, C0-3) | — | — |
+
+Superseded by owner ruling 2026-10-27 (review C0-3, `contracts/zether.md` CTR-ZTH-38): commit-reveal stores `R` by SSTORE2 (not `keccak256(R)`), the NONE row is retired, and every entry keeps `R` in state.
 
 Who holds which secret, and which opening it yields:
 
@@ -146,7 +148,7 @@ Conditions that change nothing, or change a cell only through K:
 | `RECEIVER_X` | `x_tj` | DLEQ `log_G Y_tj == log_{D_out}(C_out_j − [amount]G)` | No | leg `j` only | yes |
 | `AUDITOR` | `x_a` | DLEQ on `(Y_a, D_out, C_aud_j − [amount]G)`; false when the token has no auditor or `C_aud_j = O` | No; and E6 ties `C_aud_j` to the same `v_j` as `C_out_j` | leg `j` only | yes |
 
-The DLEQ challenge hashes `chainid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2` (`ZetherDisclosure.sol:62`),
+Since review C0-4 the preimage is `"SCAAS-ZETHER-DISCLOSE-V2" ‖ chainid ‖ chainUid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2`; before it, the line below (V1, no statement points). The DLEQ challenge hashed `chainid ‖ token ‖ entryRef ‖ j ‖ amount ‖ kind ‖ A1 ‖ A2` (`ZetherDisclosure.sol:62`),
 so a proof does not move to another leg, kind, amount, token or chain id. Tests cover leg, kind and amount
 (`ZetherMulti.t.sol:294-327`); token and chain are not tested (§9.2). Selective disclosure works per leg with
 `SENDER_CP`, `RECEIVER_X` and `AUDITOR`. Only `SENDER_S` opens more than asked (CTR-ZTH-37 accepts this).

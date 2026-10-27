@@ -262,6 +262,12 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, "}x")));
     }
 
+    /// C1-2: after `,"crossOrigin":false,` the clientDataJSON must still end in `}`.
+    function test_C1_2_unterminatedTailRefused() public view {
+        assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":false,"x":1')));
+        assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":false,')));
+    }
+
     function test_other_passkey_and_unknown_index_are_refused() public view {
         assertFalse(_valid(acct, D, _pk(0, PASSKEY2, D)));
         assertFalse(_valid(acct, D, _pk(5, PASSKEY, D)));

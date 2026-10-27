@@ -223,7 +223,7 @@ library PqzCore {
         if (o.from == o.to) revert IPqzToken.SelfTransfer();
         _noAuditorParty(o, o.from);
         _noAuditorParty(o, o.to);
-        o.keyT = _keyPtr(e.registry, o.to);
+        o.keyT = _creditKey(e.registry, o.to);
         if (o.auditorOn == 1) o.keyA = _keyPtr(e.registry, $().auditorUA);
     }
 
@@ -443,7 +443,7 @@ library PqzCore {
             for (uint256 k; k < j; ++k) {
                 if (bytes32(payload[M_OUT + 32 * k:M_OUT + 32 * k + 32]) == ua) revert IPqzToken.DuplicateRecipient(ua);
             }
-            o.keys[j] = _keyPtr(e.registry, ua);
+            o.keys[j] = _creditKey(e.registry, ua);
         }
         if (o.auditorOn == 1) o.keyA = _keyPtr(e.registry, s.auditorUA);
     }
@@ -679,11 +679,16 @@ library PqzCore {
 
     /// @notice The precompile's verdict on a buffer with its proof already in place (views; disclosure).
     function verdict(address pqz, bytes memory buf) internal view returns (bool ok) {
+        bool failed;
         assembly ("memory-safe") {
             mstore(0, 0)
             let r := staticcall(gas(), pqz, add(buf, 32), mload(buf), 0, 0x20)
-            ok := and(and(r, eq(returndatasize(), 0x20)), eq(mload(0), 1))
+            failed := or(iszero(r), iszero(eq(returndatasize(), 0x20)))
+            ok := eq(mload(0), 1)
         }
+        // C2-6: the precompile answers 0 for a rejected proof or a malformed input; a failed call (out of gas, no
+        // schedule, input over MAX_INPUT) is no verdict: whoever sets the gas must not choose the answer.
+        if (failed) revert UAKinds.UAVerifyGas();
     }
 
     // ------------------------------------------------------------------ statement views (by DELEGATECALL)
@@ -727,7 +732,8 @@ library PqzCore {
         o.chainUid = e.chainUid;
         o.keyF = _keyPtr(e.registry, o.from);
         if (o.ben != 0) {
-            if (!_registered(e.registry, o.ben)) revert IPqzToken.AccountNotRegistered(o.ben);
+            // C0-7 (owner option (1)): any registered UA-ledger receiver; the fee is a public credit, no PQZ key needed
+            if (IUARegistry(e.registry).kindOf(o.ben) == 0) revert IPqzToken.AccountNotRegistered(o.ben);
             o.fee = s.confidentialFee;
         }
         o.sendCounter = s.acct[o.from].sendCounter;
@@ -852,10 +858,18 @@ library PqzCore {
         return keccak256(abi.encode(TAG_ENTRY, block.chainid, chainUid, address(this), from, uint256(counter)));
     }
 
-    /// @dev A UA holding a PQZ key (UA-6 U7: `recordOf(ua).pqzKey ≠ 0`).
-    function _registered(address registry, bytes32 ua) internal view returns (bool) {
-        (, address ptr) = IUARegistry(registry).recordOf(ua);
-        return ptr != address(0);
+    /// @dev The key of a holder that gets a pending entry (shield, op 1 and op 7 legs): `_keyPtr`, and on a PQZH value
+    ///      token a single-key `mldsa44` / `mldsa65` / `fndsa512` UA only (owner 2026-10-27, C0-2: the calldata of a
+    ///      debit by any other holder, an `msig` quorum, may not fit one transaction). The fee beneficiary is exempt (a
+    ///      public credit).
+    function _creditKey(address registry, bytes32 ua) internal view returns (address ptr) {
+        ptr = _keyPtr(registry, ua);
+        if ($().psid == PqzSet.PQZH_ID) {
+            uint16 k = IUARegistry(registry).kindOf(ua);
+            if (k != UAKinds.MLDSA44 && k != UAKinds.MLDSA65 && k != UAKinds.FNDSA512) {
+                revert IPqzToken.PqzhHolderKind(ua, k);
+            }
+        }
     }
 
     /// @dev The PQZ key pointer of a holder (`AccountNotRegistered` otherwise, or for a key of another length).

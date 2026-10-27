@@ -138,7 +138,14 @@
 - [ ] **Step 1:** Edit; `python3 -I scripts/docs_check.py check` 0 errors.
 - [ ] **Step 2:** Commit.
 
-### Task 9: Gates
+### Task 9: Gates (one step per log, resumable — owner 2026-10-27)
 
-- [ ] **Step 1:** `at-set.sh <set> test` at all four sets (logs `smartcontracts/evm/runs/2026-10-27-review2-forge-<set>.txt`), size gate (`…-sizes.txt`), `cargo test` in `clients/zether-prover` and `scaas-node`, `gen_set.py --all --check`, `docs_check`.
-- [ ] **Step 2:** Report in the review README "Fix round" section (per finding: done / commit / test), commit.
+**Files:**
+- Create: `smartcontracts/evm/runs/2026-10-27-review2-gates.sh` — runs the steps below in order; each step writes `smartcontracts/evm/runs/2026-10-27-review2-<step>.txt` whose first line is `# <step> at commit <sha>` and last line `rc=<n>`; a step whose log exists with `rc=0` at the current commit (`git rev-parse --short HEAD`, tree clean) is skipped; `GATES_FRESH=1` re-runs all; `--only <step>` runs one. Steps never edit tracked files (`at-set.sh` restores `PqzSet.sol` itself).
+
+**Steps (names = log names):**
+`forge-n2048-kmax1024`, `forge-n2304-kmax4096`, `forge-n2560-kmax16384`, `forge-n2816-kmax65536` (each `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test`), `sizes` (size gate at the committed set), `gen-set` (`gen_set.py --all --check`), `docs` (`docs_check`), `cargo-zether-prover` (`cargo test -j2` in `clients/zether-prover`), `zether-cross` (builds `zether-cli`, runs `ZetherProverCross.t.sol` with `--ffi` and `ZETHER_CLI`; fails on any skip), `wasm-zether-prover` (rebuild the git-ignored `pkg/` and run `smoke/smoke.cjs`), `cargo-scaas-node` (`cargo test -j2` in `scaas-node`), `clientkeys` (the `clients/clientkeys` test suite: it reads the regenerated DEX KAT).
+
+- [ ] **Step 1:** Write the script; run `--only docs` twice — the second run prints `skip docs (rc=0 at <sha>)`.
+- [ ] **Step 2:** Run the script (resume by running it again after any stop).
+- [ ] **Step 3:** Commit the script and the logs; add a "Fix round" section to the review README (per finding: done / commit / test, the gate logs), commit.

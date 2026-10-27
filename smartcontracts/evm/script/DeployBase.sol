@@ -81,6 +81,36 @@ abstract contract DeployBase is Script {
     uint64 internal constant CAP_FNDSA512 = 2_500_000;
     uint64 internal constant CAP_SLHDSA128S = 1_400_000;
 
+    /// @notice C5-1, NET-EVM-06. A release is one CREATE2 of the whole implementation in the registrar's transaction.
+    ///         Under EIP-8037 the code deposit is state gas, `STATE_GAS_PER_BYTE` per byte of runtime, on top of the
+    ///         regular gas, which EIP-7825 caps at `TX_REGULAR_GAS_CAP` (2^24): the transaction needs
+    ///         `runtime x 1,530 + 2^24` and may not exceed the block gas limit. Runtime sizes are `size-baseline.json`'s
+    ///         (the contracts over the EIP-170 limit; any other is priced at `EIP170_LIMIT`).
+    ///         `NoUnderlyingToken` 38,598 B = 75.8 M, `UnderlyingZetherToken` 60,625 B = 109.5 M,
+    ///         `UnderlyingPqzToken` 61,519 B = 110.9 M (the figures move with the baseline).
+    uint256 internal constant STATE_GAS_PER_BYTE = 1530;
+    uint256 internal constant TX_REGULAR_GAS_CAP = 1 << 24;
+    uint256 internal constant EIP170_LIMIT = 24_576;
+
+    /// @notice The block gas limit the release of contract `name` needs.
+    function _releaseGasNeed(string memory name) internal view returns (uint256) {
+        string memory key = string.concat(".", name);
+        string memory base = vm.readFile("./size-baseline.json");
+        uint256 runtime = vm.keyExistsJson(base, key) ? vm.parseJsonUint(base, key) : EIP170_LIMIT;
+        return runtime * STATE_GAS_PER_BYTE + TX_REGULAR_GAS_CAP;
+    }
+
+    function _checkReleaseGas(string memory name, uint256 limit) internal view {
+        uint256 need = _releaseGasNeed(name);
+        if (limit < need) {
+            revert(string.concat("block gas limit ", vm.toString(limit), " < ", vm.toString(need),
+                " needed to deploy the ", name, " release (NET-EVM-06)"));
+        }
+    }
+
+    /// @notice Refuses before anything is sent when the chain's actual `block.gaslimit` cannot hold the release.
+    function _requireReleaseGas(string memory name) internal view { _checkReleaseGas(name, block.gaslimit); }
+
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
@@ -150,6 +180,7 @@ abstract contract DeployBase is Script {
             (libs[0], libs[1], libs[2]) = (address(AdminLib), address(HederaLib), address(TradeLib));
             f.publishEnv(IOpenFactory.TokenKind.NONE, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
+            _requireReleaseGas("NoUnderlyingToken");
             address none = f.deployImplementation(IOpenFactory.TokenKind.NONE, 1, 1, type(NoUnderlyingToken).creationCode, "");
             _gate(none);
             vm.serializeAddress("deploy", "implementation_none", none);
@@ -157,6 +188,7 @@ abstract contract DeployBase is Script {
             address[] memory dexLibs = new address[](1);
             dexLibs[0] = address(TradeLib);
             f.publishDexEnv(1, _env(f, address(0), smartKeyAccountImpl, isHedera, new address[](0), dexLibs));
+            _requireReleaseGas("SCaaSDex");
             address dexImpl = f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, "");
             _gate(dexImpl);
             vm.serializeAddress("deploy", "dex_implementation", dexImpl);
@@ -279,6 +311,8 @@ abstract contract DeployBase is Script {
             IFactoryToken.Env memory e = _env(f, reg, smartKeyAccountImpl, false, deps, libs);
             f.publishEnv(IOpenFactory.TokenKind.NONE_ZETHER, 1, e);
             f.publishEnv(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, e);
+            _requireReleaseGas("NoUnderlyingZetherToken");
+            _requireReleaseGas("UnderlyingZetherToken");
             address none = f.deployImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, 1,
                 type(NoUnderlyingZetherToken).creationCode, "");
             address und = f.deployImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, 1,

@@ -57,7 +57,8 @@ contract UAPqzVerifier is IUAPopVerifier {
         return verifyPop(keyData, message, sig);
     }
 
-    /// @notice An allowed chain and the precompile's self-test now (`OpenFactory`'s PQZ gate, P6g plan D2).
+    /// @notice An allowed chain and the precompile's self-test now (a view for off-chain callers; the on-chain gate is `PqzStateLib.init`: `requireAllowedChain`,
+    ///         `requirePqz`; `OpenFactory.setKindEnabled` has no chain gate since 5g-Z2, P6g plan D2).
     function isSupportedOnThisChain() external view returns (bool) {
         return PqzSafety.isAllowedChain() && PqzSafety.selfTest(PRECOMPILE);
     }

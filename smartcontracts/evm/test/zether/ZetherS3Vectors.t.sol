@@ -72,15 +72,15 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 k = 1; k <= 7; ++k) {
             assertFalse(_ok(v, st, _flip(pr, (pr.length * k) / 8 - 1), op), "tampered proof accepted");
         }
-        // chainId, chainUid, binding, sendCounter, accSeq, fee
-        uint256[6] memory fields = [uint256(95), 127, 223, 255, 287, 319];
-        for (uint256 k; k < 6; ++k) {
+        // chainId, chainUid, binding, sendCounter, accSeq, fee, validUntilBlock (review C0-9)
+        uint256[7] memory fields = [uint256(95), 127, 223, 255, 287, 319, 511];
+        for (uint256 k; k < 7; ++k) {
             assertFalse(_ok(v, _flip(st, fields[k]), pr, op), "tampered statement accepted");
         }
         if (op == Op.MULTI) {
             // every leg point of the statement is bound; so is the mode (opTag)
             for (uint256 k = 1; k <= 5; ++k) {
-                assertFalse(_ok(v, _flip(st, st.length - (st.length - 448) * k / 6), pr, op), "tampered leg accepted");
+                assertFalse(_ok(v, _flip(st, st.length - (st.length - 512) * k / 6), pr, op), "tampered leg accepted");
             }
             assertFalse(_ok(v, _flip(st, 31), pr, op), "mode switch accepted");
         }
@@ -99,19 +99,23 @@ contract ZetherS3VectorsTest is Test {
         (bytes32 op, bytes32 psid) = abi.decode(_head(j.readBytes(".statement"), 0), (bytes32, bytes32));
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH"));
         assertEq(psid, bls.proofSystemIdMulti());
-        assertEq(bls.proofSystemIdMulti(), keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2/multi"));
+        assertEq(bls.proofSystemIdMulti(), keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3/multi"));
+        assertEq(bls.proofSystemId(), keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"));
         // the payload's decoyFee word (owner 2026-10-20) and the statement fee txFee + M · decoyFee (word 9)
         bytes memory pl = j.readBytes(".payload");
         uint256 d = j.readUint(".request.decoyFee");
-        assertEq(uint256(bytes32(_head(pl, 112))), d);
-        assertEq(uint256(bytes32(_head(pl, 80))), 3);
+        assertEq(uint256(bytes32(_head(pl, 144))), d);
+        assertEq(uint256(bytes32(_head(pl, 112))), 3);
+        // validUntilBlock: payload word 2, statement word 15 (review C0-9)
+        assertEq(uint256(bytes32(_head(pl, 64))), j.readUint(".request.validUntilBlock"));
+        assertEq(uint256(bytes32(_head(j.readBytes(".statement"), 480))), j.readUint(".request.validUntilBlock"));
         assertEq(uint256(bytes32(_head(j.readBytes(".statement"), 288))), j.readUint(".request.fee") + 3 * d);
         string memory k = vm.readFile(string.concat(DIR, "transfer_multi_noaud_bls12381.json"));
         (op,) = abi.decode(_head(k.readBytes(".statement"), 0), (bytes32, bytes32));
-        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE"));
+        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE"));
     }
 
-    /// Header statement của S3 đúng bố cục zether.md §7 (448 byte, `chainUid` là word 3) với các trường của `request`.
+    /// Header statement của S3 đúng bố cục zether.md §7 (512 byte, `chainUid` là word 3) với các trường của `request`.
     function test_s3StatementHeaderMatchesRequest() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
         bytes memory st = j.readBytes(".statement");
@@ -139,7 +143,7 @@ contract ZetherS3VectorsTest is Test {
         _checkMemo(vm.readFile(string.concat(DIR, "transfer_multi_bls12381.json")), "");
         // entryRef (CTR-ZTH-36) = keccak(tag, chainId, chainUid, token, fromUA, sendCounter), fromUA tagged (CTR-UA-16)
         bytes memory yf = new bytes(128);
-        for (uint256 i; i < 128; ++i) yf[i] = st[480 + i];
+        for (uint256 i; i < 128; ++i) yf[i] = st[512 + i];
         bytes32 fromUA = keccak256(abi.encodePacked(keccak256("scaas.ua.zether-bls12381.v1"), yf));
         assertEq(
             keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), j.readUint(".request.chainId"),
@@ -148,7 +152,7 @@ contract ZetherS3VectorsTest is Test {
         );
     }
 
-    /// Header word 13 is the salt (16 zero bytes ‖ salt), the payload's bytes 64..80 too (CTR-ZTH-30); word 14 is
+    /// Header word 13 is the salt (16 zero bytes ‖ salt), the payload's bytes 96..112 too (CTR-ZTH-30); word 14 is
     /// `keccak256(memo)` on commit-reveal, the payload then ending with the memo of `17 + 40·M` bytes, else 0
     /// (CTR-ZTH-50).
     function _checkMemo(string memory j, bytes memory st) internal view {
@@ -156,7 +160,7 @@ contract ZetherS3VectorsTest is Test {
         bytes memory pl = j.readBytes(".payload");
         bytes16 salt = bytes16(j.readBytes(".salt"));
         assertEq(bytes32(_head(st, 416)), bytes32(uint256(uint128(salt))), "salt, word 13");
-        assertEq(bytes16(_head(pl, 64)), salt, "salt after sendCounter");
+        assertEq(bytes16(_head(pl, 96)), salt, "salt after validUntilBlock");
         bytes memory memo = vm.keyExistsJson(j, ".memo") ? j.readBytes(".memo") : bytes("");
         assertEq(bytes32(_head(st, 448)), memo.length == 0 ? bytes32(0) : keccak256(memo), "memoHash, word 14");
         if (memo.length == 0) return;
@@ -201,8 +205,11 @@ contract ZetherS3VectorsTest is Test {
             uint256 idx = j.readUint(string.concat(c, ".index"));
             address tok = j.readAddress(string.concat(c, ".token"));
             vm.etch(tok, impl.code);
+            // the multi-recipient record layout `Y_t ‖ C_out ‖ D_out ‖ C_aud ‖ D_aud` (review C0-1; the single case's
+            // `D_aud` is its `D_out`)
             bytes memory leg = bytes.concat(j.readBytes(string.concat(c, ".Yt")), j.readBytes(string.concat(c, ".Cout")),
-                j.readBytes(string.concat(c, ".Dout")), j.readBytes(string.concat(c, ".Caud")));
+                j.readBytes(string.concat(c, ".Dout")), j.readBytes(string.concat(c, ".Caud")),
+                j.readBytes(string.concat(c, ".Daud")));
             S3Token(tok).set(v, uid == 0 ? j.readBytes32(string.concat(c, ".chainUid")) : uid,
                 j.readBytes(string.concat(c, ".Ya")), bytes.concat(new bytes(16 + idx * leg.length), leg, leg)); // R = salt ‖ …
             vm.chainId(j.readUint(string.concat(c, ".chainId")));
@@ -216,10 +223,40 @@ contract ZetherS3VectorsTest is Test {
     function _disclose(string memory j, string memory c, address tok, uint256 idx) internal view returns (bool) {
         return disc.verifyTransferAmount(tok, j.readBytes32(string.concat(c, ".entryRef")), idx,
             j.readUint(string.concat(c, ".amount")), ITransferDisclosure.OpeningKind(j.readUint(string.concat(c, ".kind"))),
-            j.readBytes(string.concat(c, ".opening")), "");
+            j.readBytes(string.concat(c, ".opening")));
     }
 
     function test_s3DisclosureBls12381() public { assertEq(_checkDisclosure("disclosure_bls12381.json", 0), 8); }
+
+    /// Review C0-4: the openings of the weak challenge (`weak-fs/`, no statement points in `e`) are refused; only the two
+    /// SENDER_S openings (no challenge) still pass.
+    function test_weakFiatShamirOpeningsRefused() public {
+        assertEq(_checkDisclosure("weak-fs/disclosure_bls12381.json", 0), 2);
+    }
+
+    /// A record whose key point `K` is `O` (and `M = O`, amount 0) satisfies both equations with `A1 = A2 = O, z = 0`:
+    /// refused, as the prover's `verify_opening` does.
+    function test_keyPointIdentityRefused() public {
+        S3Token t = new S3Token();
+        uint256 p = bls.g1EncodedBytes();
+        t.set(bls, bytes32(0), "", new bytes(16 + 4 * p)); // Y_t = C_out = D_out = C_aud = O
+        assertFalse(disc.verifyTransferAmount(address(t), "ref", 0, 0, ITransferDisclosure.OpeningKind.RECEIVER_X,
+            abi.encode(new bytes(p), new bytes(p), uint256(0))));
+    }
+
+    /// Review C0-1 / C0-9: the `…/v2` vectors (the pre-fix prover, `s3/v2/`) are refused by the `…/v3` verifiers: another
+    /// `proofSystemId`, another header (512 bytes) and another leg layout.
+    function test_v2ProofRefused() public view {
+        string[3] memory files = ["transfer_bls12381.json", "transfer_multi_bls12381.json", "burn_bls12381.json"];
+        Op[3] memory ops = [Op.TRANSFER, Op.MULTI, Op.BURN];
+        for (uint256 k; k < 3; ++k) {
+            string memory j = vm.readFile(string.concat(DIR, "v2/", files[k]));
+            bytes memory st = j.readBytes(".statement");
+            assertEq(bytes32(_head(st, 32)), keccak256(k == 1 ? bytes("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2/multi")
+                : bytes("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2")), "a v2 statement");
+            assertFalse(_ok(bls, st, j.readBytes(".proof"), ops[k]), "v2 proof accepted");
+        }
+    }
 
     /// Chain B (same chainid, another chainUid, a re-created chain): every Chaum-Pedersen opening (kinds 1-3) fails.
     /// The two SENDER_S openings still pass by design: no challenge, bound through `entryRef` and the chain-specific `s`.
@@ -227,12 +264,12 @@ contract ZetherS3VectorsTest is Test {
         assertEq(_checkDisclosure("disclosure_bls12381.json", keccak256("chain B")), 2);
     }
 
-    /// Review T2 m4: a foreign token's entry shorter than the salt is not a record: `BundlesMismatch`, not a panic.
+    /// Review T2 m4: a foreign token's entry shorter than the salt is not a record: `RecordMalformed`, not a panic.
     function test_shortEntryIsNotARecord() public {
         S3Token t = new S3Token();
         t.set(bls, bytes32(0), "", hex"0102");
-        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.BundlesMismatch.selector, bytes32("ref")));
-        disc.verifyTransferAmount(address(t), "ref", 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(1), "");
+        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.RecordMalformed.selector, bytes32("ref")));
+        disc.verifyTransferAmount(address(t), "ref", 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(1));
     }
 
     function test_s3SchnorrMatches() public view {

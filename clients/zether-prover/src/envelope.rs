@@ -119,7 +119,7 @@ pub fn selector(sig: &str) -> [u8; 4] {
     keccak256(sig.as_bytes())[..4].try_into().unwrap()
 }
 
-/// Calldata of a confidential transfer (`mtxConfidentialTransfer`, `…Compact`, `…NoBundle`, `…Single`, all
+/// Calldata of a confidential transfer (`mtxConfidentialTransfer`, `…Compact`, `…Single`, all
 /// `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint)`, the shared `IConfidentialToken`
 /// signature; Zether: `auth` and `accHint` empty, the proof alone authorizes the spend, UA-6): the direct call and,
 /// unchanged, the envelope's `data`.

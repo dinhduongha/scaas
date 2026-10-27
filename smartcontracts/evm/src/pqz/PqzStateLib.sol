@@ -10,7 +10,7 @@ import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
 import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
-import {PQZ_ACC_WORDS} from "./PqzSet.sol";
+import {PqzSet, PQZ_ACC_WORDS} from "./PqzSet.sol";
 
 /// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
@@ -36,12 +36,17 @@ library PqzStateLib {
             revert IPqzToken.BadAuditorMode(c.auditorMode);
         }
         bytes32 a = aud.length == 32 ? bytes32(aud) : bytes32(0);
-        if (a != 0 && !PqzCore._registered(registry, a)) revert IPqzToken.AccountNotRegistered(a);
+        // C2-3 / C2-4: an auditor is required whenever the mode is not NONE, and its key must be usable (`_keyPtr`;
+        // the zero id is never registered)
+        if (aud.length == 32) PqzCore._keyPtr(registry, a);
         PqzCore.PqzStorage storage s = PqzCore.$();
         UAPqzVerifier v = UAPqzVerifier(verifier);
         s.pqz = v.PRECOMPILE();
         s.psid = v.PROOF_SYSTEM_ID();
         PqzSafety.requirePqz(s.pqz, s.psid); // the token's verdicts come from `s.pqz`, never from the verifier (W-B)
+        // C2-1 (owner 2026-10-27, C0-2): a PQZH value token only where its debits fit one transaction; registration
+        // and disclosure through `UAPqzVerifier` stay at every set that has PQZH
+        if (s.psid == PqzSet.PQZH_ID && !PqzSet.PQZH_VALUE) revert IPqzToken.PqzhValueUnsupported();
         s.verifier = verifier;
         s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
         s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
@@ -58,7 +63,7 @@ library PqzStateLib {
     ///         a leg's underlying (`mtxWrapShield`) into `SHIELD_POOL` (D19).
     function shield(bytes32 ua, uint256 amount, address from, address registry) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
-        if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
+        PqzCore._creditKey(registry, ua); // C2-4: the key is checked as every debit does; C0-2: a PQZH holder's kind
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IPqzToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
@@ -114,7 +119,7 @@ library PqzStateLib {
         PqzCore.Account storage a = PqzCore.$().acct[ua];
         uint8 bit = uint8(2 << half);
         if (a.flags & bit != 0) return;
-        if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
+        PqzCore._keyPtr(registry, ua); // C2-4
         uint256[PQZ_ACC_WORDS] storage w = a.accWords;
         uint256 hw = PqzCore.HALF_WORDS;
         uint256 cnt = half == 0 ? hw : PqzCt.ACC_WORDS - hw;

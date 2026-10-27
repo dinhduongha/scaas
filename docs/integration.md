@@ -343,7 +343,7 @@ Per-namespace filtering at serve time: only contracts in the namespace token sub
 | Ranges | Reject a gap (`from_block > indexed + 1`) ⇒ halt events; straddle (`from_block ≤ indexed < to_block`) ⇒ drop events at or below `indexed`; dedup events by `(chain_key, tx_hash, log_index)` |
 | Unknown contract | Event for a contract that is not a client token ⇒ drop and count, never fail the page |
 | Finality | A job is **final** when a `MetaTransactionExecuted` with its digest arrives in a range (by any relayer: `landed_elsewhere = relayer ∉ our signers`). A range is served only after ≥ `quorum` independent RPC endpoints returned the same event set ([NODE-IDX-01](node/indexer-feeds.md#NODE-IDX-01)); a chain with `quorum = 1` is single-provider trust — confirm the chain's quorum with the node operator (gauge `scaas_finality_quorum{chain}`) before booking material amounts on it |
-| Business booking | Only from `PaymentSettled` (or the family equivalent) in a range, matched on `(chain, contract, to, entryRef)`; isolate business hooks (savepoint) so a failing hook never blocks the cursor |
+| Business booking | Only from `PaymentSettled` (or the family equivalent) in a range, matched on `(chain, contract, from, to, entryRef)` for a request the client issued (payer locked at `start`); isolate business hooks (savepoint) so a failing hook never blocks the cursor |
 | Consumed | `consumed` keeps the business request pending; it becomes final via the event, or dead if no event arrives by `valid_until + grace + 1 h` (superseded) |
 | Latency | Poll with `wait = 0` every minute, and every ~10 s while pushed jobs are live (≤ 25 s long-poll available for clients that can hold a connection) |
 
@@ -364,7 +364,7 @@ sequenceDiagram
     N->>N: finality gate and RPC quorum
     E->>N: GET /v1/events?cursor=
     N-->>E: finalized range
-    E->>E: final on MetaTransactionExecuted(digest), book on PaymentSettled (chain, contract, to, entryRef)
+    E->>E: final on MetaTransactionExecuted(digest), book on PaymentSettled (chain, contract, from, to, entryRef)
 ```
 
 **Consumption and `landed_elsewhere`.** A job whose subject nonce was used by another digest or relayer is `consumed`
@@ -428,16 +428,15 @@ nonce    = 0
 3. The node recomputes the digest and simulates before broadcast.
 
 **Chain → client (on each finalized range):**
-1. Filter `PaymentSettled` by `contract == request.token` **and** `to == request.receiving_address` **and**
-   `entry_ref == request.entryRef`.
+1. Filter `PaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and**
+   `to == request.receiving_address` **and** `entry_ref == request.entryRef`.
 2. `amount_settled = Σ amount` of matching events; `amount_settled ≥ amount_base` ⇒ request final; more than due ⇒
    final + needs attention (refund manually); less ⇒ partial.
 3. Cross-check `MetaTransactionExecuted(digest)` to mark the outbox job final.
 4. Drift checks: unmatched inbound `Transfer` to a watched wallet ⇒ drift A record; hourly `balances` vs ledger balance
    of the token's bank journal ⇒ drift C ([accounting](#accounting)).
 
-A third party paying 1 unit with someone else's `entryRef` cannot complete a request (sum must reach the amount); an
-overpayment by a stranger is just money received. Reconciliation matches on (chain, token contract, receiving address,
+A third party paying 1 unit with someone else's `entryRef` is not counted (`from` is not the request's payer), so it can neither complete a request nor push it into needs attention; it is just money received. Reconciliation matches on (chain, token contract, payer, receiving address,
 `entryRef`) — never on the amount alone.
 
 <a id="payment-terms"></a><a id="INT-ERP-06"></a>**INT-ERP-06** — **Self-service payment terms use fee `NONE` and

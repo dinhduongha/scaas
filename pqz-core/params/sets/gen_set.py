@@ -475,6 +475,14 @@ def roll_max(name):
     return r
 
 
+def debit_min_gas(name):
+    """set.toml debit_min_gas: the cheapest built PQZL debit form's full relayed regular gas on the costlier relay path
+    (review2 T2, C0-5); the UA registry bounds a PQZ holder's worst-case authorization + this by 2^24 (EIP-7825)."""
+    g = load(name)["debit_min_gas"]
+    assert 0 < g < 2**24, f"{name}: debit_min_gas {g} is not in (0, 2^24)"
+    return g
+
+
 def sol_text(name):
     t, b, cs = consts(name)
     c = {k: v for k, v, s, d in cs if s is None}
@@ -488,6 +496,7 @@ def sol_text(name):
             ("PACK_BITS", pack, "stored-blob packing width ceil(log2 q) (P46 ruling, owner 2026-10-21; built in plan 5h Task 8d part 2)"),
             ("S_AUD", c["S_AUD"], "legs per randomness group of an audited op 7 (R0-1; groups of 4 without the auditor)"),
             ("ROLL_MAX", roll_max(name), "entries per rollover: the largest multiple of 16 whose relayed rollover stays under 0.75 * 2^24 on both relay paths, mtxExecute and uaExecute (set.toml roll_max)"),
+            ("PQZ_DEBIT_MIN_GAS", debit_min_gas(name), "the cheapest built PQZL debit form (burn 1), full relayed regular gas on the costlier relay path, uaExecute (set.toml debit_min_gas; the UA registry's PQZ holder bound)"),
             ("PK", ln["pk"], "pk / u bytes (k polys x 64 be8)"), ("V", ln["v"], "v bytes (16 be8)"),
             ("CT", ln["ct"], "ciphertext u || v bytes"),
             ("STMT_TRANSFER", ln["stmt"]["TRANSFER"], "op 1 statement, auditor on"),
@@ -511,6 +520,10 @@ def sol_text(name):
     has = "pqzh" in i
     out.append(f"    /// PQZH (Ligero) built at this set (set.toml pqzh; pqz-stmt HAS_PQZH): {'true' if has else 'false: PQZH_ID is the zero word, never accepted'}\n"
                f"    bool internal constant HAS_PQZH = {'true' if has else 'false'};")
+    val = bool(t.get("pqzh_value", False))
+    assert not val or has, f"{name}: pqzh_value without pqzh"
+    out.append("    /// PQZH value tokens (set.toml pqzh_value; owner 2026-10-27, C0-2): `init` refuses PQZH_ID unless true; the holder-kind rule applies\n"
+               f"    bool internal constant PQZH_VALUE = {'true' if val else 'false'};")
     lab, h = i["pqzh"] if has else ("none at this set", bytes(32))
     out.append(f"    /// PQZH's proofSystemId: {'keccak256(\"' + lab + '\")' if has else lab}\n    bytes32 internal constant PQZH_ID = 0x{h.hex()};")
     ctp = ln["ct"] // 32 * pack // 2

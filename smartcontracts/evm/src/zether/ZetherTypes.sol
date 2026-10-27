@@ -23,16 +23,15 @@ library ZetherTypes {
 
     /// Nơi giữ bundle tiết lộ của một transfer nhiều người nhận (nằm trong opTag, relayer không đổi được).
     enum TransferMode {
-        HASH,   // commit-reveal (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` trên token COMPACT): keccak256(R) một slot +
-                // memo người gửi, R = salt ‖ B_1 ‖ … ‖ B_M phát trong event
-        BUNDLE, // `mtxConfidentialTransfer` trên token BUNDLE: lưu R
-        NONE    // `mtxConfidentialTransferNoBundle`: không lưu, tiết lộ off-chain từ calldata
+        HASH,   // commit-reveal (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` trên token COMPACT): R (SSTORE2) +
+                // memo người gửi, R = salt ‖ B_1 ‖ … ‖ B_M lưu bằng SSTORE2 (con trỏ trong slot) và phát trong event
+        BUNDLE  // `mtxConfidentialTransfer` trên token BUNDLE: lưu R inline
     }
 
     /// Cách lưu bundle của token, cố định từ `initialize` (CTR-ZTH-38).
     enum DisclosureMode {
-        BUNDLE, // mặc định: `mtxConfidentialTransfer` lưu R, `…Compact` / `…NoBundle` tiết kiệm gas; single lưu R
-        COMPACT // mọi transfer là commit-reveal (`mtxConfidentialTransfer` = `…Compact`); `…NoBundle` và single bị từ chối
+        BUNDLE, // mặc định: `mtxConfidentialTransfer` lưu R, `…Compact` commit-reveal; single lưu R
+        COMPACT // mọi transfer là commit-reveal (`mtxConfidentialTransfer` = `…Compact`); single bị từ chối
     }
 
     /// Auditor của token, cố định từ `initialize` (CTR-ZTH-09, CTR-ZTH-42).

@@ -139,7 +139,8 @@ pub fn entry_ref(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], from_ua:
 }
 
 /// Stored transfer record the opening is checked against: leg `index` of `entry_ref`
-/// (`B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud`; a single-recipient transfer has `index = 0`).
+/// (`B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud ‖ D_aud`; a single-recipient transfer has `index = 0`, `B = Y_t ‖ C_out ‖ D_out ‖
+/// C_aud` and `D_aud = D_out`, its auditor copy being under `s`).
 pub struct Entry<C: ZCurve> {
     pub chain_id: u64,
     pub chain_uid: [u8; 32],
@@ -151,6 +152,8 @@ pub struct Entry<C: ZCurve> {
     pub d_out: G<C>,
     pub y_a: G<C>,
     pub c_aud: G<C>,
+    /// The auditor copy's `D` (`[t_j]G` on a multi-recipient leg, review C0-1; `D_out` on the single format).
+    pub d_aud: G<C>,
 }
 
 /// `SENDER_S`: `abi.encode(uint256 s)`.
@@ -158,9 +161,9 @@ pub fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
     encode_scalar::<C>(s).to_vec()
 }
 
-/// Challenge preimage up to (not including) `A1 ‖ A2`; also the opening nonce's public input.
+/// Challenge preimage up to the statement points; also the opening nonce's public input.
 fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8> {
-    let mut b = b"SCAAS-ZETHER-DISCLOSE-V1".to_vec();
+    let mut b = b"SCAAS-ZETHER-DISCLOSE-V2".to_vec();
     b.extend(abi::u256(e.chain_id));
     b.extend_from_slice(&e.chain_uid);
     b.extend_from_slice(&e.token);
@@ -171,8 +174,14 @@ fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8>
     b
 }
 
+/// `e = hashToScalar(keccak256(pre ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2))` (review C0-4): the statement points are absorbed, in
+/// the contract's G1 encoding, so `e` cannot be known before `s` is chosen.
 fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u8], a2: &[u8]) -> Fr<C> {
+    let (k, m, bb) = kmb(e, kind);
     let mut b = cp_prefix(e, amount, kind);
+    for p in [generator::<C>(), k, bb, m] {
+        b.extend(encode_point::<C>(&p));
+    }
     b.extend_from_slice(a1);
     b.extend_from_slice(a2);
     hash_to_scalar::<C>(&keccak256(&b))
@@ -181,7 +190,7 @@ fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u
 /// `(K, M, B)` of the Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` for `kind`.
 fn kmb<C: ZCurve>(e: &Entry<C>, kind: OpeningKind) -> (G<C>, G<C>, G<C>) {
     match kind {
-        OpeningKind::Auditor => (e.y_a, e.c_aud, e.d_out),
+        OpeningKind::Auditor => (e.y_a, e.c_aud, e.d_aud),
         OpeningKind::SenderCp => (e.d_out, e.c_out, e.y_t),
         _ => (e.y_t, e.c_out, e.d_out),
     }
@@ -207,8 +216,8 @@ fn cp_open<C: ZCurve, R: RngCore + CryptoRng>(
     abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))])
 }
 
-/// `RECEIVER_X` / `AUDITOR`: Chaum-Pedersen `log_G(K) == log_{D_out}(M − [amount]G)`,
-/// `abi.encode(bytes A1, bytes A2, uint256 z)`.
+/// `RECEIVER_X` / `AUDITOR`: Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` (`B = D_out`, or `D_aud` for the
+/// auditor), `abi.encode(bytes A1, bytes A2, uint256 z)`.
 pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     e: &Entry<C>,
     amount: u64,
@@ -216,14 +225,14 @@ pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     key: &ZetherKey<C>,
     rng: &mut R,
 ) -> Result<Vec<u8>, ZError> {
-    let (k_pt, m, _) = kmb(e, kind);
+    let (k_pt, m, b) = kmb(e, kind);
     if !crate::zether::value_in_range(amount) {
         return Err(ZError::OutOfRange);
     }
     if matches!(kind, OpeningKind::SenderS | OpeningKind::SenderCp) || key.y != k_pt {
         return Err(ZError::BadStatement("opening key does not match the entry"));
     }
-    if m - generator::<C>() * Fr::<C>::from(amount) != e.d_out * key.x {
+    if m - generator::<C>() * Fr::<C>::from(amount) != b * key.x {
         return Err(ZError::BadStatement("amount does not open this ciphertext"));
     }
     Ok(cp_open(e, amount, kind, &key.x, rng))
@@ -348,6 +357,32 @@ mod tests {
         let s1 = sign(&k1, &keccak256(b"a"), &mut rng);
         let s2 = sign(&k1, &keccak256(b"b"), &mut rng);
         assert_ne!(s1[..point_len::<C>()], s2[..point_len::<C>()]);
+    }
+
+    /// Review C0-4: every statement point is in the challenge; moving any one of them moves `e`.
+    #[test]
+    fn cp_challenge_binds_statement_points() {
+        type C = Bls12381;
+        let g = generator::<C>();
+        let p = |n: u64| g * Fr::<C>::from(n);
+        let mk = |pts: [G<C>; 6]| Entry::<C> {
+            chain_id: 1, chain_uid: [2; 32], token: [3; 20], entry_ref: [4; 32], index: 0,
+            y_t: pts[0], c_out: pts[1], d_out: pts[2], y_a: pts[3], c_aud: pts[4], d_aud: pts[5],
+        };
+        let pts: [G<C>; 6] = [p(5), p(6), p(7), p(8), p(9), p(10)];
+        let e0 = mk(pts);
+        let (a1, a2) = (encode_point::<C>(&p(11)), encode_point::<C>(&p(12)));
+        for kind in [OpeningKind::ReceiverX, OpeningKind::Auditor, OpeningKind::SenderCp] {
+            let base = cp_challenge(&e0, 1, kind, &a1, &a2);
+            let (k, m, b) = kmb(&e0, kind);
+            let mut seen = vec![base];
+            for (n, src) in [k, m, b].into_iter().enumerate() {
+                // replace the one point that plays K, M or B for this kind by another
+                let c = cp_challenge(&mk(pts.map(|q| if q == src { p(99) } else { q })), 1, kind, &a1, &a2);
+                assert!(!seen.contains(&c), "{kind:?}: statement point {n} is not bound");
+                seen.push(c);
+            }
+        }
     }
 
     #[cfg(feature = "bn254")]

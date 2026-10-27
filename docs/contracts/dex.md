@@ -244,7 +244,8 @@ settle until its expiry because the on-chain cancel job expired. On the token: `
 amount` (closed forever, even through another relayer that holds the signed order; emit `OrderCancelled(h, from)`; an
 already-closed order is a no-op, not an error); `mtxInvalidateNonces` raises `minNonce[from][batch]`, strictly
 increasing and capped at `2^128` (emit `NoncesInvalidated(from, batch, minNonce)`), so one mistaken signature cannot
-lock an address out forever. A signer with orders on several tokens cancels per token; the off-chain book drops them
+lock an address out forever. An order with `nonce ≥ 2^128` is refused at the pre-check (`NonceAboveCap(orderHash)`, review C6-5): no
+lane floor could ever reach it, only a per-order cancel would. The venue's intake and `clientkeys` `checkTradeOrder` refuse it the same way. A signer with orders on several tokens cancels per token; the off-chain book drops them
 at once. For outside-token orders the DEX keeps the same state and entry points ([CTR-DEX-18](#CTR-DEX-18)).
 
 ## 4. The DEX's side: `mtxSettle`
@@ -283,7 +284,7 @@ domain) builds this: each settlement in a `settleOne` self-call, outside legs pe
 `SelfTrade`, `DuplicateOrder`, `NoMakers`, `FillMismatch`, `NothingSettled`; a maker receives `ceil(fill · receiveAmount
 / amount)`; `MatchFailed` keeps the first 256 bytes of the revert data, `SigCheckGasStarved` reverts the whole call. A listed
 outside token, or a party's contract `destination` through a hook token, cannot forge it (or `UAVerifyGas`): every call
-the DEX makes into a token (the puller's `trySafeTransferFrom`, every payout by `trySafeTransfer`, every balance read)
+the DEX makes into a token (the puller's `transferFrom`, every payout `transfer`, every balance read; the first two by `TokenCall.ok`, gas-capped at `TOKEN_GAS` = 500,000, review C6-1)
 drops that token's revert data and reverts `SafeERC20FailedOperation(token)`, so only the DEX, a SCaaS token or the
 registry can raise the two errors. This covers SCaaS tokens' payouts and balance reads too, so a regulated payout's
 `Frozen` / `NotEligible` / `TokenPaused` also reads `SafeERC20FailedOperation(token)` in `MatchFailed` (the venue's
@@ -294,6 +295,17 @@ earlier ruling that hook tokens are never listed, and a test with a forging toke
 shows the forged settlement only `MatchFailed`). A gas threshold on the DEX frame was not used: a real `UAVerifyGas`
 can come back with most of the gas (a 5.95 M `mldsa65` hold refused early), so no threshold separates it from a forged
 one under the 16.78 M transaction cap. Before it: [`SCaaSDexV1`](#transitional-built).
+
+**Gas cap on outside-token calls (review C6-1; controller proposal, owner may override).** A listed hook token, or an
+upgradeable or hostile one, can burn every gas it is given, and 63/64 of the settlement's gas is then gone before a later
+capped verify (a `SmartKeyAccount` 400 k check, an `mldsa65` UA leg up to 5.95 M) runs. So every call the DEX or its
+puller makes into any token (`balanceOf`, `transferFrom`, `transfer`; `TokenCall`) is
+forwarded at most `TOKEN_GAS = 500,000` gas (a transfer into a fresh account is about 130 k, a hook token needs room
+above that); running out inside it is an ordinary failed call with empty return data, so the settlement is `MatchFailed`
+with an empty reason (the node's `out_of_gas`) and the next settlement keeps its gas. A submitter budgets the worst case,
+at most `500,000` per outside-token call of the settlement, on top of what the verifies need. A per-settlement gas
+field (`Settlement.gas`, held as `gas · 64/63 + margin`) was not built: it changes the `Settlement` ABI the node and
+clientkeys encode; the cap needs no wire change.
 
 | Leg | Pulled into the DEX | Bounds checked by |
 |---|---|---|
@@ -310,7 +322,7 @@ two transfers per leg instead of one. In Path A the signer relies on the named D
 that pays (it adds nothing against a DEX bug), and per-party balance deltas misfire when addresses are shared (two
 makers with one `destination`, a relayer or treasury that is also a `destination`). A token that credits less than it
 was told to move is caught by conservation plus listing only **exact-transfer** tokens: SCaaS tokens are exact by
-construction; fee-on-transfer, rebasing and hook (ERC-777) outside tokens are not listed, and if one slips through the
+construction; fee-on-transfer and rebasing outside tokens are not listed (a hook (ERC-777) token may be: its calls are gas-capped, see above), and if one slips through the
 DEX's own balance moves and conservation reverts the settlement. `SCaaSDex` keeps its book semantics (price-time
 priority, limit + IOC/FOK, partial fills above the effective minimum); the execution price is each maker's signed
 price, rounded in the maker's favour, and the node only emits matches that pass the same checks as the contract.
@@ -416,13 +428,13 @@ their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Apto
 <a id="admin"></a>
 <a id="CTR-DEX-03"></a>**CTR-DEX-03** — `admin` is set once at creation ([CTR-DEX-24](#CTR-DEX-24)) and has no setter; in production a Safe/multisig
 (changing signers happens inside the Safe). The admin can do exactly four things: list or delist a market
-(`setMarket(base, quote, listed)`, which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
+(`setMarket(base, quote, listed)`, `base ≠ quote`, neither 0, else `BadMarket(base, quote)` (review C6-9), which also records each token's kind, [CTR-DEX-18](#CTR-DEX-18); emit
 `MarketSet(base, quote, listed)`), set the fee split (`setFeeSplit(relayerSharePpm, treasury)`, `treasury ∉ {0,
 DEX}` unless the share is 100 %; emit `FeeSplitSet(relayerSharePpm, treasury)`), list or delist an exchange target or
 executor (`setExchangeTarget(target, listed)`; emit `ExchangeTargetSet`), and switch the DEX-wide listed-only mode
 (`setListedOnly(on)`, default off; emit `ListedOnlySet`) ([CTR-DEX-23](#CTR-DEX-23)). It changes who receives fees and in
 what proportion, **never the amount**: the amount comes only from the signed `fee`. No access to funds, no upgrade, no
-sweep, no global pause (delisting a market stops that pair). No timelock: there is nothing to wait for — no signed
+sweep, no global pause (delisting a market stops that pair on `mtxSettle`; the exchange path checks only that each token is known, [CTR-DEX-20](#CTR-DEX-20), so an exchange-only pair keeps working: review C6-6). No timelock: there is nothing to wait for — no signed
 order can be charged more than it signed.
 
 <a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, initArgs, salt)` makes an `SCaaSDex` clone; `admin` is written once by
@@ -466,7 +478,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 | Flags | `IOC` allowed; **`ESCROW` refused** (`BadFlags`) — the fill is already pulled exactly into the DEX |
 | Pull | `DexPuller.pull(token, from, sellFill)` = `safeTransferFrom(from, DEX, sellFill)` under the party's allowance to the **puller**, never to the DEX ([CTR-DEX-22](#CTR-DEX-22)); an EOA may approve a contract on a token SCaaS does not control |
 | Cancel | `mtxCancelOrders(DexOrder[] orders, bytes[] sigs)` (`CancelOrder(bytes32 orderHash)` in the DEX domain; closed or bad-signature items skipped, no revert of the batch) and `mtxInvalidateNonces(from, batch, newMin, sig)` (`InvalidateNonces(address from,uint256 batch,uint256 minNonce)` in the DEX domain) |
-| Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)) |
+| Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)); on the exchange path none for a **receive-only** outside token with a transfer fee (the DEX measures its own balance, the fee comes out of the recipient's side, so a signer is paid below its signed floor and conservation balances; loss bounded by the token's fee; the `mtxSettle` path pulls both tokens and is safe): list only exact-transfer tokens, delist on a fee (review C6-4; a recipient-balance check was not built) |
 | Parties | native only: a UA holds no outside token ([CTR-UA-27](accounts.md#CTR-UA-27)); a shape-1 leg in an outside token reverts `UALegNotLedger` ([CTR-DEX-26](#CTR-DEX-26)) |
 | Transitional (BUILT, P2b-2) | on the DEX: `dexOrderDigest(sellToken, o)`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`, `minNonce`, `puller()`; `TradeLib`'s checks on the DEX's own `scaas.trade` state, the leg's token as the sell token (`SelfOrder` if `from` is it); `BadSignature(digest)`, `LengthMismatch`; payouts by `SafeERC20`; no `checkOrder`: the [section 10](#10-intake-reads-and-invariants) reads are the intake (controller ruling, pending the owner); limitation: no HIP-632 branch on DEX signatures, so a Hedera ED25519 account cannot sign a `DexOrder` or a DEX cancel |
 
@@ -516,7 +528,7 @@ selling T)`; `< 0` ⇒ `InsufficientOutput(T)`; otherwise leg `i` receiving `T` 
 must end at its snapshot plus the refunds still to pay, else `ConservationBroken` — a leftover is a route bug, not
 something to assign. The surplus carries no DEX fee; with (b) everything the executor sends is distributed the same
 way. What the contract cannot see is a swap whose recipient was set outside the DEX: that part is the submitter's
-policy ([NODE-DEX-18](../node/dex-venue.md#NODE-DEX-18)), measurable through `ExchangeLegSettled`.
+policy ([NODE-DEX-18](../node/dex-venue.md#NODE-DEX-18)), measurable through `ExchangeLegSettled`. Nor can it see a **receive-only** outside token with a transfer fee: the DEX measures its own balance, the fee comes out of the recipient's side, a signer is paid below its signed floor and conservation still balances (review C6-4; loss bounded by the token's fee). There is no backstop for it: list exact-transfer tokens only and delist a token that shows a fee. A sell token is checked at the pull (`ConservationBroken`).
 
 <a id="puller"></a>
 <a id="CTR-DEX-22"></a>**CTR-DEX-22** — **`DexPuller`: the DEX holds no user allowance.** An immutable contract deployed

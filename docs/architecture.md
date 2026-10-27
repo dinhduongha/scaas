@@ -785,13 +785,13 @@ sequenceDiagram
     SND->>SND: SENDER_CP opening of leg j (A1, A2, z)
     SND->>CHK: token, entryRef, j, amount, opening
     alt off chain
-        CHK->>TOK: bundles from the TransferBundles event or calldata
+        CHK->>TOK: R from transferEntry(entryRef) (stored in state)
         CHK->>CHK: zether-prover verify_opening on leg j
     else through ZetherDisclosure
         CHK->>TOK: disclosure()
-        CHK->>DSC: verifyTransferAmount(token, entryRef, j, amount, SENDER_CP, opening, bundles)
+        CHK->>DSC: verifyTransferAmount(token, entryRef, j, amount, SENDER_CP, opening)
         DSC->>TOK: transferEntry(entryRef), verifier(), auditorKey()
-        DSC->>DSC: bundles match the stored hash, DLEQ on leg j
+        DSC->>DSC: DLEQ on leg j (R read from the stored blob)
         DSC-->>CHK: true or false (a view)
     end
     CHK->>CHK: record the result in its own books

@@ -78,7 +78,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     let acc_j = json!({"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))});
     let base = json!({
         "curve": C::NAME, "key": key_json(0, USE_CONF), "chainId": CHAIN, "chainUid": CHAIN_UID, "token": TOKEN,
-        "sendCounter": 3, "accSeq": 5, "acc": acc_j, "balance": BAL, "includeWitness": true,
+        "sendCounter": 3, "accSeq": 5, "validUntilBlock": 1_000_000, "acc": acc_j, "balance": BAL, "includeWitness": true,
     });
     let with = |extra: Value| {
         let mut v = base.clone();
@@ -118,6 +118,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
         d_out: st.d_out,
         y_a: st.y_a,
         c_aud: st.c_aud,
+        d_aud: st.d_out, // the single format: the auditor copy is under `s`
     };
     let amount = AMOUNT;
     let openings = [
@@ -195,6 +196,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
         d_out: st.d_out,
         y_a: st.y_a,
         c_aud: leg.c_aud,
+        d_aud: leg.d_aud, // its own `t_j` (review C0-1)
     };
     let openings = [
         (OpeningKind::SenderS, open_sender::<C>(&s)),
@@ -206,8 +208,8 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     files.push((format!("disclosure_{}.json", C::NAME), json!({"curve": C::NAME, "cases": cases})));
     files.push((format!("transfer_multi_{}.json", C::NAME), mv));
 
-    // multi-recipient, M = 1, auditor off, no fee, NoBundle.
-    let req = with(json!({"recipients": [{"yTo": hx(&to.encoded_y()), "amount": 1}], "mode": "none"}));
+    // multi-recipient, M = 1, auditor off, no fee, BUNDLE.
+    let req = with(json!({"recipients": [{"yTo": hx(&to.encoded_y()), "amount": 1}], "mode": "bundle"}));
     let mut mv = prove_transfer_multi_json::<C, _>(&gens, &req, &mut rng).unwrap();
     mv["expect"] = json!(true);
     mv["request"] = req;
@@ -224,7 +226,8 @@ fn disclosure_cases<C: ZCurve>(e: &Entry<C>, amount: u64, openings: &[(OpeningKi
                 "amount": amount,
                 "kind": *kind as u8, "Yt": hx(&encode_point::<C>(&e.y_t)), "Cout": hx(&encode_point::<C>(&e.c_out)),
                 "Dout": hx(&encode_point::<C>(&e.d_out)), "Ya": hx(&encode_point::<C>(&e.y_a)),
-                "Caud": hx(&encode_point::<C>(&e.c_aud)), "opening": hx(opening), "expect": true,
+                "Caud": hx(&encode_point::<C>(&e.c_aud)), "Daud": hx(&encode_point::<C>(&e.d_aud)), "opening": hx(opening),
+                "expect": true,
             })
         })
         .collect()

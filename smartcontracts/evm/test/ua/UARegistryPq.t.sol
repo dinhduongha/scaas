@@ -333,17 +333,20 @@ contract UARegistryPqTest is UARegistryBase {
         r.register(UAKinds.MSIG, tk, "", "", "");
     }
 
-    /// T-GAS: at the largest `mldsa65` cap the bound admits for the treasury (5,921,000), it registers, and both of
-    /// its signing sets authorize within `verifyBudget` with the real verifiers on the cached keys.
+    /// T-GAS: at the largest `mldsa65` cap the structure bound admits for the treasury (5,921,000) the `msig` itself
+    /// registers (step 4) but not as a PQZ holder (review2 C0-5): 2 x 5.921 M + the cheapest PQZL debit is over 2^24.
+    /// The vector's treasury PoP binds a PQZ key, so its signing sets are not run here with the real verifiers
+    /// (`test_T_GAS_pqHybrid` does for the hybrid; `UARegistryPq.t.sol:382` `test_T_GAS_msigPqHold` for the treasury's bound).
     function test_T_GAS_pqTreasury() public {
         string memory pj = _pj();
         UARegistry.KindConfig[] memory c = _realPq();
         c[2].cap = 5_921_000;
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPqz(c));
         _members(r, pj);
-        bytes32 tua = _registerMsig(r, pj, ".msig.treasury");
+        bytes32 tua = r.uaOf(UAKinds.MSIG, vm.parseJsonBytes(pj, ".msig.treasury.keyData"));
         assertEq(tua, vm.parseJsonBytes32(pj, ".msig.treasury.ua"));
-        _sets(r, pj, ".msig.treasury", tua, 2);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, tua));
+        _registerMsig(r, pj, ".msig.treasury");
     }
 
     /// UA-6 U5: a PQ-eligible `msig` registers with its m-of-n PoP (members 0 and 1, weight 1 each, t = 2): the

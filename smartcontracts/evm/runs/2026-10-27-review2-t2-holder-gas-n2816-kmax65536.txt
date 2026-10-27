@@ -1,0 +1,15 @@
+  GAS n2816-kmax65536 pqzl | burn 1, 2-of-2 mldsa65 msig holder, mtxExecute | calldata 85092 (zero 16843) | std 1159356 | floor 5460888
+    | pqz 4851487 | exec 1205305 | regular 7231010 (model 7231148) | state 29922210 | fits 2^24 yes
+  GAS n2816-kmax65536 pqzl-ua | burn 1, 2-of-2 mldsa65 msig holder, uaExecute | calldata 88452 (zero 16946) | std 1211880 | floor 5675928
+    | pqz 4851487 | exec 1289875 | regular 7368104 (model 7368242) | state 29922210 | fits 2^24 yes
+  GAS n2816-kmax65536 pqzl | burn 1, 3-of-3 mldsa65 msig holder, mtxExecute | calldata 88644 (zero 20356) | std 1174032 | floor 5688216
+    | pqz 4851487 | exec 1307753 | regular 7348134 (model 7348272) | state 29922210 | fits 2^24 yes
+  GAS n2816-kmax65536 pqzl-ua | burn 1, 3-of-3 mldsa65 msig holder, uaExecute | calldata 92004 (zero 20459) | std 1226556 | floor 5903256
+    | pqz 4851487 | exec 1392364 | regular 7485269 (model 7485407) | state 29922210 | fits 2^24 yes
+  GAS n2816-kmax65536 pqzl-ua | burn 1, mldsa65 holder, slhdsa128s fee UA, uaExecute | calldata 89124 (zero 13170) | std 1267944 | floor 5718936
+    | pqz 4851487 | exec 2012998 | regular 8147291 (model 8147429) | state 29726370 | fits 2^24 yes
+  GAS n2816-kmax65536 pqzl-ua | burn 1, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 81924 (zero 13146) | std 1153032 | floor 5258136
+    | pqz 4851487 | exec 3515783 | regular 9535164 (model 9535302) | state 29726370 | fits 2^24 yes
+  GAS n2816-kmax65536 pqzl-ua | op 7 M = 8, auditor, mldsa65 holder, fndsa512 fee UA, uaExecute | calldata 131972 (zero 22515) | std 1841372 | floor 8461208
+    | pqz 8065160 | exec 4956087 | regular 14877481 (model 14877619) | state 63435330 | fits 2^24 yes
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.20s (771.70ms CPU time)

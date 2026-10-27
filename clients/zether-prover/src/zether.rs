@@ -23,7 +23,7 @@ use crate::ZError;
 /// soundness comes from `MAX_TOTAL_SHIELDED` instead (zether-design ruling RS-NV64-1).
 pub const N_V: usize = 64;
 pub const N_B: usize = 64;
-pub const HEADER_LEN: usize = 480;
+pub const HEADER_LEN: usize = 512;
 /// `MAX_TOTAL_SHIELDED` (§1): ceiling of `maxDecryptableShielded`.
 pub const MAX_TOTAL_SHIELDED: u64 = 1 << 54;
 
@@ -52,8 +52,9 @@ pub enum Binding {
     Unwrap([u8; 32]),
 }
 
-/// The 480-byte statement header (zether.md §7): `chainUid` is word 3 (CTR-ZTH-36), the build salt word 13
-/// (`16 zero bytes ‖ salt`, CTR-ZTH-30), `memoHash` word 14 (`keccak256(memo)` on commit-reveal, CTR-ZTH-50; else 0).
+/// The 512-byte statement header (zether.md §7, `…/v3`): `chainUid` is word 3 (CTR-ZTH-36), the build salt word 13
+/// (`16 zero bytes ‖ salt`, CTR-ZTH-30), `memoHash` word 14 (`keccak256(memo)` on commit-reveal, CTR-ZTH-50; else 0),
+/// `validUntilBlock` word 15 (review C0-9: the token refuses the statement once `block.number > validUntilBlock`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Header {
     pub chain_id: u64,
@@ -74,6 +75,8 @@ pub struct Header {
     pub salt: [u8; 16],
     /// Commit-reveal only (else 0): `keccak256` of the sender memo the payload ends with ([`seal_memo`]).
     pub memo_hash: [u8; 32],
+    /// The last block the token accepts the proof in (`TransferExpired`), every transfer and burn (review C0-9).
+    pub valid_until_block: u64,
 }
 
 fn salt_word(salt: &[u8; 16]) -> [u8; 32] {
@@ -119,7 +122,7 @@ impl Header {
             Binding::Relayed(b) => (keccak256(b"ZTX_V1_RELAYED"), b),
             Binding::Unwrap(b) => (keccak256(b"ZTX_V1_DIRECT"), b),
         };
-        let words: [[u8; 32]; 15] = [
+        let words: [[u8; 32]; 16] = [
             op_tag,
             psid,
             be32_u64(self.chain_id),
@@ -135,6 +138,7 @@ impl Header {
             self.recipient,
             salt_word(&self.salt),
             self.memo_hash,
+            be32_u64(self.valid_until_block),
         ];
         words.concat()
     }
@@ -178,6 +182,7 @@ impl Header {
             recipient: w(12).try_into().unwrap(),
             salt: w(13)[16..].try_into().unwrap(),
             memo_hash: w(14).try_into().unwrap(),
+            valid_until_block: u64_of(w(15))?,
         })
     }
 
@@ -288,10 +293,10 @@ impl<C: ZCurve> TransferStatement<C> {
         Ok(st)
     }
 
-    /// `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud` (§9).
+    /// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud`
+    /// (§9).
     pub fn payload(&self) -> Vec<u8> {
-        let mut b = be32_u64(self.header.acc_seq).to_vec();
-        b.extend(be32_u64(self.header.send_counter));
+        let mut b = payload_head(&self.header);
         b.extend_from_slice(&self.header.salt);
         b.extend(cat::<C>(&[&self.y_f, &self.y_t, &self.c_out, &self.d_out, &self.c_deb, &self.c_aud]));
         b
@@ -330,8 +335,22 @@ impl<C: ZCurve> TransferStatement<C> {
         if !self.auditor_on() && !self.c_aud.is_zero() {
             return Err(ZError::BadStatement("auditor off but C_aud != O"));
         }
-        Ok(())
+        no_auditor_party(self.y_a, &[self.y_f, self.y_t])
     }
+}
+
+/// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock)`: how every payload starts (§9).
+fn payload_head(h: &Header) -> Vec<u8> {
+    [be32_u64(h.acc_seq), be32_u64(h.send_counter), be32_u64(h.valid_until_block)].concat()
+}
+
+/// With the auditor on, the auditor key is neither the sender nor a recipient (`AuditorKeyAsParty`, review C0-1 note;
+/// the Zether twin of PQZ F-4): `C_out_j` or `C_deb` under `Y_a` would sit next to the auditor copies.
+fn no_auditor_party<C: ZCurve>(y_a: G<C>, parties: &[G<C>]) -> Result<(), ZError> {
+    if !y_a.is_zero() && parties.contains(&y_a) {
+        return Err(ZError::BadStatement("AuditorKeyAsParty: the auditor key is the sender or a recipient"));
+    }
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -555,14 +574,36 @@ pub fn derive_s<C: ZCurve>(x: &Fr<C>, h: &Header, from_ua: &[u8; 32], salt: &[u8
     s
 }
 
-/// A fresh salt whose `s` is not 0 (CTR-ZTH-30: re-drawn on 0), and that `s`.
-fn draw_salt<C: ZCurve, R: RngCore>(x: &Fr<C>, h: &Header, from_ua: &[u8; 32], rng: &mut R) -> ([u8; 16], Fr<C>) {
+/// The auditor randomness `t_j` of leg `j` of an audited multi-recipient transfer (review C0-1, owner ruling
+/// 2026-10-27 option (ii)): `OKM mod r`, `OKM = HKDF-SHA256(seed_zether, "SCAAS-ZETHER-AUD-T-V1" ‖ chainUid ‖ token ‖
+/// fromUA ‖ be32(sendCounter) ‖ salt ‖ be32(j), L = 64)`, `j` 0-based. Its own tag and `j` make every `t_j` independent of
+/// `s` and of each other, so the auditor copies `C_aud_j = [v_j]G + [t_j]Y_a` share no mask; the sender re-derives every
+/// `t_j` from its key and chain data like `s` (wallet recovery).
+pub fn derive_t<C: ZCurve>(x: &Fr<C>, h: &Header, from_ua: &[u8; 32], salt: &[u8; 16], j: usize) -> Fr<C> {
+    let mut info = sender_info(b"SCAAS-ZETHER-AUD-T-V1", h, from_ua, salt);
+    info.extend(be32_u64(j as u64));
+    let mut okm = [0u8; 64];
+    sender_hkdf::<C>(x, &info, &mut okm);
+    let t = Fr::<C>::from_be_bytes_mod_order(&okm);
+    okm.zeroize();
+    t
+}
+
+/// A fresh salt whose `s` and first `n_t` auditor randomness `t_j` are not 0 (CTR-ZTH-30: re-drawn on 0), and those.
+fn draw_salt<C: ZCurve, R: RngCore>(
+    x: &Fr<C>,
+    h: &Header,
+    from_ua: &[u8; 32],
+    n_t: usize,
+    rng: &mut R,
+) -> ([u8; 16], Fr<C>, Vec<Fr<C>>) {
     loop {
         let mut salt = [0u8; 16];
         rng.fill_bytes(&mut salt);
         let s = derive_s::<C>(x, h, from_ua, &salt);
-        if !s.is_zero() {
-            return (salt, s);
+        let t: Vec<Fr<C>> = (0..n_t).map(|j| derive_t::<C>(x, h, from_ua, &salt, j)).collect();
+        if !s.is_zero() && t.iter().all(|t| !t.is_zero()) {
+            return (salt, s, t);
         }
     }
 }
@@ -662,7 +703,7 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
     let b_prime = (balance as u128)
         .checked_sub(v as u128 + header.fee as u128)
         .ok_or(ZError::BadStatement("insufficient balance"))? as u64;
-    let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
+    let (salt, s, _) = draw_salt::<C, R>(&key.x, &header, &key.ua(), 0, rng);
     (header.salt, header.memo_hash) = (salt, [0; 32]); // the single format has no memo
     let (vf, sf) = (Fr::<C>::from(v), s);
     let st = TransferStatement {
@@ -700,7 +741,9 @@ pub const MAX_RECIPIENTS: usize = 16;
 /// EIP-7825: 2^24. Under Amsterdam (EIP-8037, every chain after its Glamsterdam fork, owner 2026-10-21) it caps a
 /// transaction's REGULAR gas (intrinsic, calldata floor, execution); state gas (new slots 97,920 each) comes on top, so
 /// the transaction's gas LIMIT is larger and comes from `eth_estimateGas`, never from this table: the largest admitted
-/// cells need 21.4 M to 31.2 M in total (BLS12-381, F185 `ZetherGasLimit` `test_edge_*` at a 2^25 limit, branch pqz-16k).
+/// cells need 21.4 M to 34.3 M in total (BLS12-381, `ZetherGasLimit` `test_edge_*`: F185 at a 2^25 limit, branch pqz-16k;
+/// review2 T3 at 36 M, the `…/v3` BUNDLE record with `D_aud_j`: bundle with the auditor at M = 6, 33.1 M direct, 34.3 M
+/// relayed).
 pub const TX_GAS_CAP: u64 = 16_777_216;
 /// Headroom the prover keeps under [`TX_GAS_CAP`]: 1 % (167,772 gas) for bytecode, calldata and state drift; the
 /// measured limits are already the dear case (cold accounts, every account's first credit).
@@ -715,7 +758,9 @@ pub const GAS_MARGIN: u64 = TX_GAS_CAP / 100;
 /// F185 re-ran every edge cell (the largest `M` of each form, direct and relayed) under Amsterdam and each settles,
 /// so its regular gas is within 2^24 (`ZetherGasLimit` `test_edge_*`); the per-`M` regular gas has not been re-measured
 /// (needs `vm.lastCallGas()` in `test_measure_*`, a gas run on the owner's go): an Amsterdam cell one past an edge may
-/// fit and is still refused, the safe side.
+/// fit and is still refused, the safe side. `…/v3` (review C0-1) adds per audited leg one `D_aud_j` (calldata, statement,
+/// the BUNDLE record), one commitment, one scalar and one 3-point MSM: the audited rows below predate it (the edges still
+/// settle, review2 T3; the per-`M` rows want that re-measurement).
 fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'static [u64] {
     use TransferMode::*;
     match (bls, mode, auditor, relayed) {
@@ -727,10 +772,6 @@ fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'
         (false, Bundle, true, true) => &[3_766_809, 5_608_032, 7_453_356, 9_302_535, 11_155_836, 13_013_253, 14_874_606, 16_739_892],
         (false, Bundle, false, false) => &[3_538_940, 5_271_739, 7_008_161, 8_748_026, 10_491_746, 12_239_058, 13_990_088, 15_744_842, 17_503_407],
         (false, Bundle, false, true) => &[3_693_950, 5_482_779, 7_275_523, 9_071_916, 10_872_083, 12_676_303, 14_484_274, 16_295_902, 18_111_911],
-        (false, NoBundle, true, false) => &[3_377_330, 4_976_325, 6_579_193, 8_185_824, 9_796_159, 11_410_630, 13_028_468, 14_650_074, 16_275_709, 17_905_215],
-        (false, NoBundle, true, true) => &[3_527_161, 5_177_930, 6_832_869, 8_491_412, 10_154_291, 11_820_917, 13_491_606, 15_166_166, 16_844_747],
-        (false, NoBundle, false, false) => &[3_347_734, 4_916_520, 6_488_845, 8_064_756, 9_644_318, 11_227_464, 12_814_331, 14_404_524, 15_998_568, 17_595_998],
-        (false, NoBundle, false, true) => &[3_496_667, 5_116_235, 6_739_562, 8_366_775, 9_997_617, 11_632_490, 13_270_836, 14_913_003, 16_559_080, 18_208_894],
         (true, Hash, true, false) => &[3_972_477, 5_835_602, 7_677_109, 9_519_630, 11_362_946, 13_210_159, 15_076_920, 16_924_647],
         (true, Hash, true, true) => &[4_143_205, 6_067_704, 7_969_869, 9_873_697, 11_778_279, 13_686_874, 15_615_982, 17_525_754],
         (true, Hash, false, false) => &[3_928_577, 5_746_969, 7_543_429, 9_340_702, 11_138_674, 12_940_423, 14_761_256, 16_563_056, 18_365_576],
@@ -739,10 +780,6 @@ fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'
         (true, Bundle, true, true) => &[4_465_468, 6_715_522, 8_966_956, 11_219_857, 13_473_501, 15_728_743, 17_985_178],
         (true, Bundle, false, false) => &[4_158_866, 6_210_524, 8_263_263, 10_316_704, 12_370_838, 14_426_048, 16_482_217, 18_539_733],
         (true, Bundle, false, true) => &[4_335_571, 6_454_705, 8_574_830, 10_696_141, 12_818_465, 14_941_807, 17_066_376],
-        (true, NoBundle, true, false) => &[3_869_343, 5_680_401, 7_492_382, 9_305_373, 11_119_214, 12_934_328, 14_749_898, 16_566_909, 18_384_918],
-        (true, NoBundle, true, true) => &[4_036_885, 5_907_367, 7_779_320, 9_652_139, 11_526_236, 13_401_748, 15_278_242, 17_156_247],
-        (true, NoBundle, false, false) => &[3_825_587, 5_591_647, 7_358_701, 9_126_444, 10_894_856, 12_664_148, 14_434_412, 16_205_229, 17_977_092],
-        (true, NoBundle, false, true) => &[3_991_705, 5_816_041, 7_641_413, 9_467_908, 11_295_234, 13_123_778, 14_953_144, 16_783_617],
     }
 }
 
@@ -751,12 +788,19 @@ fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'
 pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize) -> u64 {
     let t = gas_limits(C::NAME == "bls12381", mode, auditor, relayed);
     let n = t.len();
-    if m <= n {
+    let row = if m <= n {
         t[m - 1]
     } else {
         t[n - 1] + (t[n - 1] - t[n - 2]) * (m - n) as u64
-    }
+    };
+    row + if mode == TransferMode::Hash { HASH_RECORD_GAS } else { 0 }
 }
+
+/// What commit-reveal's SSTORE2 write of `R` adds to a transfer's REGULAR gas (review C0-3): 12,900 at M = 1 to 16,100 at
+/// M = 8 measured (`ZetherMulti.test_gasM*Hash`, `vm.lastCallGas()`, BLS12-381, Amsterdam, isolated); the rows of
+/// [`gas_limits`] predate it. The bulk of its cost is EIP-8037 STATE gas (+1.19 M at M = 1, +8.04 M at M = 8), which the
+/// 2^24 cap does not count and a sender's gas limit must cover on top.
+pub const HASH_RECORD_GAS: u64 = 17_000;
 
 /// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`mtxConfidentialTransfer*` builds above it
 /// are refused, [`ZError::GasCap`]).
@@ -773,18 +817,40 @@ pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: boo
 /// The total is counted against the regular cap, so the check errs on the safe side.
 pub const DECOY_LEG_GAS: u64 = 120_000;
 
-/// [`transfer_gas`] plus [`DECOY_LEG_GAS`] per leg when the build pays a `decoyFee`.
-pub fn build_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> u64 {
-    transfer_gas::<C>(mode, auditor, relayed, m) + if decoy { m as u64 * DECOY_LEG_GAS } else { 0 }
+/// C3-2: what `uaExecute`'s `_uaAuthorize` adds to the `mtxExecute` figures of [`gas_limits`] for a UA signer of this
+/// kind: the kind's gen-1 `verifyCap` (accounts.md, measured P6a / P6c: `fndsa512` 2.3 M measured, cap 2.5 M; `mldsa65`
+/// 5.80 M measured, cap 5.95 M on the cached expanded key). ESTIMATES from those caps, not re-measured with the audited
+/// `…/v3` legs (a gas run on the owner's go); a chain with a precompile verifies for far less (`mldsa65` ≈ 236 k), so
+/// the cap is the safe side (a documented over-estimate there, no per-chain logic). Any other kind (e.g. an `msig`: the sum of its members' caps) passes its own number as `uaSignerGas` (api).
+pub fn ua_signer_gas(kind: &str) -> Option<u64> {
+    match kind {
+        "ecdsa" => Some(0), // the `mtxExecute` envelope: the figures of `gas_limits` already hold it
+        "fndsa512" => Some(2_500_000),
+        "mldsa65" => Some(5_950_000),
+        // accounts.md verify-cap table (gen-1 caps, no precompile), same estimate label:
+        "mldsa44" => Some(4_250_000),
+        "slhdsa128s" => Some(1_400_000),
+        "ed25519" => Some(210_000),
+        "p256" | "webauthn-p256" => Some(400_000),
+        _ => None,
+    }
+}
+
+/// [`transfer_gas`] plus [`DECOY_LEG_GAS`] per leg when the build pays a `decoyFee`, plus `signer_gas` (a `uaExecute`
+/// relay's [`ua_signer_gas`]; a direct build has no UA envelope, so it adds nothing there).
+pub fn build_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool, signer_gas: u64) -> u64 {
+    transfer_gas::<C>(mode, auditor, relayed, m)
+        + if decoy { m as u64 * DECOY_LEG_GAS } else { 0 }
+        + if relayed { signer_gas } else { 0 }
 }
 
 /// Refuse a build over the cap, naming the estimate, the most recipients this form takes and the cheaper forms that
-/// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle` and `none`
+/// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle`
 /// need a `BUNDLE` token). `relayed`: the build carries an envelope binding, so the relayed column applies; `decoy`:
 /// it pays a `decoyFee` ([`build_gas`]).
-fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> Result<(), ZError> {
-    let fits = |f, a, n| build_gas::<C>(f, a, relayed, n, decoy) <= TX_GAS_CAP - GAS_MARGIN;
-    let gas = build_gas::<C>(mode, auditor, relayed, m, decoy);
+fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool, signer_gas: u64) -> Result<(), ZError> {
+    let fits = |f, a, n| build_gas::<C>(f, a, relayed, n, decoy, signer_gas) <= TX_GAS_CAP - GAS_MARGIN;
+    let gas = build_gas::<C>(mode, auditor, relayed, m, decoy, signer_gas);
     if gas <= TX_GAS_CAP - GAS_MARGIN {
         return Ok(());
     }
@@ -794,7 +860,7 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
         .flat_map(|f| [(f, true), (f, false)])
         .filter(|&(f, a)| (a <= auditor) && (f, a) != (mode, auditor))
         .filter_map(|(f, a)| {
-            let g = build_gas::<C>(f, a, relayed, m, decoy);
+            let g = build_gas::<C>(f, a, relayed, m, decoy, signer_gas);
             fits(f, a, m).then(|| format!("{} {} (~{g})", f.name(), aud(a)))
         })
         .collect::<Vec<_>>()
@@ -813,32 +879,31 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
 /// Where the token keeps the disclosure bundles; part of `opTag`, so a relayer cannot switch it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
-    /// Commit-reveal: `keccak256(R)` and the sender memo stored, `R` in an event
-    /// (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` on a `COMPACT` token, its only form). JSON `compact`.
+    /// Commit-reveal: `R` stored by SSTORE2 (a pointer in the slot) with the sender memo next to it, `R` also in an
+    /// event (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` on a `COMPACT` token, its only form). JSON
+    /// `compact`.
     Hash,
-    /// `B_1 ‖ … ‖ B_M` stored (`mtxConfidentialTransfer` on a `BUNDLE` token, the default).
+    /// `R = salt ‖ B_1 ‖ … ‖ B_M` stored inline (`mtxConfidentialTransfer` on a `BUNDLE` token, the default).
     Bundle,
-    /// Nothing stored; disclosure off chain from calldata.
-    NoBundle,
+    // No "nothing stored" form: review C0-3 (owner 2026-10-27) retired `NONE` and `mtxConfidentialTransferNoBundle`;
+    // the ciphertext stays in contract state.
 }
 
 impl TransferMode {
-    pub const ALL: [Self; 3] = [Self::Hash, Self::Bundle, Self::NoBundle];
+    pub const ALL: [Self; 2] = [Self::Hash, Self::Bundle];
 
     pub fn op_tag(self) -> [u8; 32] {
         keccak256(match self {
             Self::Hash => b"SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH".as_slice(),
             Self::Bundle => b"SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE",
-            Self::NoBundle => b"SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE",
         })
     }
 
-    /// The JSON name (the entries: `mtxConfidentialTransfer` the token's default, `…Compact`, `…NoBundle`).
+    /// The JSON name (the entries: `mtxConfidentialTransfer` the token's default, `…Compact`).
     pub fn name(self) -> &'static str {
         match self {
             Self::Hash => "compact",
             Self::Bundle => "bundle",
-            Self::NoBundle => "none",
         }
     }
 
@@ -851,15 +916,18 @@ impl TransferMode {
     }
 }
 
-/// One recipient: `Y_t`, `C_out = [v]G + [s]Y_t`, `C_aud = [v]G + [s]Y_a` (O when the auditor is off).
+/// One recipient: `Y_t`, `C_out = [v]G + [s]Y_t`, and the auditor copy under its own randomness `t` (review C0-1, owner
+/// ruling 2026-10-27 (ii)): `C_aud = [v]G + [t]Y_a`, `D_aud = [t]G` (both `O` when the auditor is off).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Leg<C: ZCurve> {
     pub y_t: G<C>,
     pub c_out: G<C>,
     pub c_aud: G<C>,
+    pub d_aud: G<C>,
 }
 
-/// Shared `s` and `D_out = [s]G` for every leg; one debit `C_deb = [Σv]G + [s]Y_f`.
+/// Shared `s` and `D_out = [s]G` for every recipient leg; one debit `C_deb = [Σv]G + [s]Y_f`; each auditor copy its own
+/// `t_j`.
 #[derive(Clone, PartialEq, Eq)]
 pub struct MultiTransferStatement<C: ZCurve> {
     pub header: Header,
@@ -874,10 +942,10 @@ pub struct MultiTransferStatement<C: ZCurve> {
 
 impl<C: ZCurve> MultiTransferStatement<C> {
     fn leg_bytes(&self) -> Vec<u8> {
-        self.legs.iter().flat_map(|l| cat::<C>(&[&l.y_t, &l.c_out, &l.c_aud])).collect()
+        self.legs.iter().flat_map(|l| cat::<C>(&[&l.y_t, &l.c_out, &l.c_aud, &l.d_aud])).collect()
     }
 
-    /// `header ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`.
+    /// `header ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_j`.
     pub fn encode(&self) -> Vec<u8> {
         let mut b = self.header.encode_with(self.mode.op_tag(), proof_system_id_multi::<C>());
         b.extend(cat::<C>(&[&self.y_f, &self.y_a, &self.acc.c, &self.acc.d, &self.d_out, &self.c_deb]));
@@ -895,7 +963,7 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         }
         let mode = TransferMode::from_tag(&b[..32]).ok_or(ZError::BadStatement("opTag"))?;
         let m = u64_of(&b[at_m..at_m + 32])? as usize;
-        if m == 0 || m > MAX_RECIPIENTS || b.len() != at_m + 32 + 3 * p * m {
+        if m == 0 || m > MAX_RECIPIENTS || b.len() != at_m + 32 + 4 * p * m {
             return Err(ZError::BadStatement("multi transfer statement length"));
         }
         let header = Header::decode_with(b, mode.op_tag(), proof_system_id_multi::<C>())?;
@@ -905,17 +973,16 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         let (d_out, c_deb) = (r.point()?, r.point()?);
         r.take(32)?;
         let legs = (0..m)
-            .map(|_| Ok(Leg { y_t: r.point()?, c_out: r.point()?, c_aud: r.point()? }))
+            .map(|_| Ok(Leg { y_t: r.point()?, c_out: r.point()?, c_aud: r.point()?, d_aud: r.point()? }))
             .collect::<Result<_, ZError>>()?;
         Ok(Self { header, mode, y_f, y_a, acc, d_out, c_deb, legs })
     }
 
-    /// `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖
-    /// (Y_tj ‖ C_out_j ‖ C_aud_j)_j`, then `memo` (the witness's: commit-reveal only, empty otherwise). `decoy_fee` is the
-    /// witness's too: the payload carries it, the statement binds it through `fee = txFee + M · decoyFee`.
+    /// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖
+    /// C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_j`, then `memo` (the witness's: commit-reveal only, empty otherwise).
+    /// `decoy_fee` is the witness's too: the payload carries it, the statement binds it through `fee = txFee + M · decoyFee`.
     pub fn payload(&self, decoy_fee: u64, memo: &[u8]) -> Vec<u8> {
-        let mut b = be32_u64(self.header.acc_seq).to_vec();
-        b.extend(be32_u64(self.header.send_counter));
+        let mut b = payload_head(&self.header);
         b.extend_from_slice(&self.header.salt);
         b.extend(be32_u64(self.legs.len() as u64));
         b.extend(be32_u64(decoy_fee));
@@ -925,10 +992,11 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         b
     }
 
-    /// The record `R = salt ‖ B_1 ‖ … ‖ B_M`, `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` — what the token stores or hashes.
+    /// The record `R = salt ‖ B_1 ‖ … ‖ B_M`, `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` — what the token stores or
+    /// hashes.
     pub fn bundles(&self) -> Vec<u8> {
         let mut b = self.header.salt.to_vec();
-        b.extend(self.legs.iter().flat_map(|l| cat::<C>(&[&l.y_t, &l.c_out, &self.d_out, &l.c_aud])));
+        b.extend(self.legs.iter().flat_map(|l| cat::<C>(&[&l.y_t, &l.c_out, &self.d_out, &l.c_aud, &l.d_aud])));
         b
     }
 
@@ -965,11 +1033,20 @@ impl<C: ZCurve> MultiTransferStatement<C> {
             if self.legs[..j].iter().any(|o| o.y_t == l.y_t) {
                 return Err(ZError::BadStatement("duplicate recipient"));
             }
-            if !self.auditor_on() && !l.c_aud.is_zero() {
-                return Err(ZError::BadStatement("auditor off but C_aud != O"));
+            if !self.auditor_on() && !(l.c_aud.is_zero() && l.d_aud.is_zero()) {
+                return Err(ZError::BadStatement("auditor off but C_aud or D_aud != O"));
+            }
+            if self.auditor_on() && l.d_aud.is_zero() {
+                return Err(ZError::BadStatement("auditor on but D_aud = O"));
+            }
+            // a reused t_j would make C_aud_j − C_aud_k = [v_j − v_k]G public (review C0-1)
+            if self.auditor_on() && self.legs[..j].iter().any(|o| o.c_aud == l.c_aud || o.d_aud == l.d_aud) {
+                return Err(ZError::BadStatement("two legs share C_aud or D_aud"));
             }
         }
-        Ok(())
+        let mut parties = vec![self.y_f];
+        parties.extend(self.legs.iter().map(|l| l.y_t));
+        no_auditor_party(self.y_a, &parties)
     }
 }
 
@@ -978,6 +1055,8 @@ pub struct MultiTransferWitness<C: ZCurve> {
     pub x: Fr<C>,
     pub s: Fr<C>,
     pub v: Vec<Fr<C>>,
+    /// The auditor randomness `t_j` per leg ([`derive_t`]); 0 when the auditor is off.
+    pub t: Vec<Fr<C>>,
     pub b: Fr<C>,
     pub b_prime: Fr<C>,
     pub gamma_v: Vec<Fr<C>>,
@@ -993,19 +1072,22 @@ impl<C: ZCurve> Drop for MultiTransferWitness<C> {
         for f in [&mut self.x, &mut self.s, &mut self.b, &mut self.b_prime, &mut self.gamma_b] {
             f.zeroize();
         }
-        self.v.iter_mut().chain(self.gamma_v.iter_mut()).for_each(|f| f.zeroize());
+        self.v.iter_mut().chain(self.t.iter_mut()).chain(self.gamma_v.iter_mut()).for_each(|f| f.zeroize());
     }
 }
 
-/// Per recipient: `V_vj`, `A_out_j`, `A_aud_j`, `A_Vvj`, `z_vj`, `z_gvj` and the range proof of `v_j`.
+/// Per recipient: `V_vj`, `A_out_j`, `A_aud_j`, `A_Daud_j`, `A_Vvj`, `z_vj`, `z_gvj`, `z_tj` and the range proof of `v_j`
+/// (`A_aud_j = A_Daud_j = O`, `z_tj = 0` when the auditor is off).
 #[derive(Clone, PartialEq, Eq)]
 pub struct LegProof<C: ZCurve> {
     pub v_v: G<C>,
     pub a_out: G<C>,
     pub a_aud: G<C>,
+    pub a_daud: G<C>,
     pub a_vv: G<C>,
     pub z_v: Fr<C>,
     pub z_gv: Fr<C>,
+    pub z_t: Fr<C>,
     pub bp_v: RangeProof<C>,
 }
 
@@ -1026,21 +1108,22 @@ pub struct MultiTransferProof<C: ZCurve> {
 }
 
 impl<C: ZCurve> MultiTransferProof<C> {
-    /// `V_b ‖ A_y ‖ A_D ‖ A_deb ‖ A_bal ‖ A_Vb ‖ (V_vj ‖ A_out_j ‖ A_aud_j ‖ A_Vvj)_j` — what `sigma.commit` absorbs.
+    /// `V_b ‖ A_y ‖ A_D ‖ A_deb ‖ A_bal ‖ A_Vb ‖ (V_vj ‖ A_out_j ‖ A_aud_j ‖ A_Daud_j ‖ A_Vvj)_j` — what `sigma.commit`
+    /// absorbs.
     fn commit_bytes(&self) -> Vec<u8> {
         let mut b = cat::<C>(&[&self.v_b, &self.a_y, &self.a_d, &self.a_deb, &self.a_bal, &self.a_vb]);
         for l in &self.legs {
-            b.extend(cat::<C>(&[&l.v_v, &l.a_out, &l.a_aud, &l.a_vv]));
+            b.extend(cat::<C>(&[&l.v_v, &l.a_out, &l.a_aud, &l.a_daud, &l.a_vv]));
         }
         b
     }
 
-    /// commitments ‖ `z_x z_s z_b z_gb (z_vj z_gvj)_j` ‖ `BP(v_1) … BP(v_M)` ‖ `BP(b')`.
+    /// commitments ‖ `z_x z_s z_b z_gb (z_vj z_gvj z_tj)_j` ‖ `BP(v_1) … BP(v_M)` ‖ `BP(b')`.
     pub fn encode(&self) -> Vec<u8> {
         let mut b = self.commit_bytes();
         b.extend(cat_s::<C>(&[&self.z_x, &self.z_s, &self.z_b, &self.z_gb]));
         for l in &self.legs {
-            b.extend(cat_s::<C>(&[&l.z_v, &l.z_gv]));
+            b.extend(cat_s::<C>(&[&l.z_v, &l.z_gv, &l.z_t]));
         }
         for l in &self.legs {
             b.extend(l.bp_v.encode());
@@ -1049,9 +1132,9 @@ impl<C: ZCurve> MultiTransferProof<C> {
         b
     }
 
-    /// `(6 + 4M)P + (4 + 2M)·32 + (M + 1)·(16P + 160)`; `M = 1` is the single transfer's `42P + 512`.
+    /// `(6 + 5M)P + (4 + 3M)·32 + (M + 1)·(16P + 160)`.
     pub fn wire_len(m: usize) -> usize {
-        (6 + 4 * m) * point_len::<C>() + (4 + 2 * m) * 32 + (m + 1) * RangeProof::<C>::wire_len(N_V)
+        (6 + 5 * m) * point_len::<C>() + (4 + 3 * m) * 32 + (m + 1) * RangeProof::<C>::wire_len(N_V)
     }
 
     pub fn decode(b: &[u8], m: usize) -> Result<Self, ZError> {
@@ -1062,10 +1145,10 @@ impl<C: ZCurve> MultiTransferProof<C> {
         let (v_b, a_y, a_d, a_deb, a_bal, a_vb) =
             (r.point()?, r.point()?, r.point()?, r.point()?, r.point()?, r.point()?);
         let pts = (0..m)
-            .map(|_| Ok([r.point()?, r.point()?, r.point()?, r.point()?]))
+            .map(|_| Ok([r.point()?, r.point()?, r.point()?, r.point()?, r.point()?]))
             .collect::<Result<Vec<_>, ZError>>()?;
         let (z_x, z_s, z_b, z_gb) = (r.scalar()?, r.scalar()?, r.scalar()?, r.scalar()?);
-        let zs = (0..m).map(|_| Ok((r.scalar()?, r.scalar()?))).collect::<Result<Vec<_>, ZError>>()?;
+        let zs = (0..m).map(|_| Ok((r.scalar()?, r.scalar()?, r.scalar()?))).collect::<Result<Vec<_>, ZError>>()?;
         let bps = (0..m).map(|_| r.range_proof(N_V)).collect::<Result<Vec<_>, ZError>>()?;
         let bp_b = r.range_proof(N_B)?;
         r.done()?;
@@ -1073,13 +1156,23 @@ impl<C: ZCurve> MultiTransferProof<C> {
             .into_iter()
             .zip(zs)
             .zip(bps)
-            .map(|(([v_v, a_out, a_aud, a_vv], (z_v, z_gv)), bp_v)| LegProof { v_v, a_out, a_aud, a_vv, z_v, z_gv, bp_v })
+            .map(|(([v_v, a_out, a_aud, a_daud, a_vv], (z_v, z_gv, z_t)), bp_v)| LegProof {
+                v_v,
+                a_out,
+                a_aud,
+                a_daud,
+                a_vv,
+                z_v,
+                z_gv,
+                z_t,
+                bp_v,
+            })
             .collect();
         Ok(Self { v_b, a_y, a_d, a_deb, a_bal, a_vb, z_x, z_s, z_b, z_gb, legs, bp_b })
     }
 }
 
-/// Σ (E1–E8 with E3_j/E6_j/E7_j per recipient) + one Bulletproof per `v_j` + one for `b'`, one
+/// Σ (E1–E8 with E3_j/E6_j/E6′_j/E7_j per recipient) + one Bulletproof per `v_j` + one for `b'`, one
 /// transcript. No consistency checks, as [`prove_transfer_core`].
 #[doc(hidden)]
 pub fn prove_transfer_multi_core<C: ZCurve, R: RngCore + CryptoRng>(
@@ -1090,11 +1183,13 @@ pub fn prove_transfer_multi_core<C: ZCurve, R: RngCore + CryptoRng>(
 ) -> Result<MultiTransferProof<C>, ZError> {
     let (g, hb) = (gens.g, gens.h);
     let stmt = st.encode();
+    let aud = st.auditor_on();
     let mut secrets = vec![&w.x, &w.s, &w.b_prime, &w.gamma_b];
-    secrets.extend(w.v.iter().chain(&w.gamma_v));
+    secrets.extend(w.v.iter().chain(&w.t).chain(&w.gamma_v));
     let mut n = Nonces::new(&witness_bytes::<C>(&secrets, &stmt), rng);
     let (k_x, k_s, k_b, k_gb) = (n.next::<C>(), n.next::<C>(), n.next::<C>(), n.next::<C>());
-    let k: Vec<(Fr<C>, Fr<C>)> = st.legs.iter().map(|_| (n.next::<C>(), n.next::<C>())).collect(); // (k_vj, k_gvj)
+    // (k_vj, k_gvj, k_tj)
+    let k: Vec<(Fr<C>, Fr<C>, Fr<C>)> = st.legs.iter().map(|_| (n.next::<C>(), n.next::<C>(), n.next::<C>())).collect();
     let k_v_sum: Fr<C> = k.iter().map(|x| x.0).sum();
     let head = [
         g * w.b_prime + hb * w.gamma_b,              // V_b
@@ -1104,17 +1199,19 @@ pub fn prove_transfer_multi_core<C: ZCurve, R: RngCore + CryptoRng>(
         g * k_b + (st.acc.d - st.d_out) * k_x,       // A_bal
         g * k_b + hb * k_gb,                         // A_Vb
     ];
-    let leg_pts: Vec<[G<C>; 4]> = st
+    let o = G::<C>::zero();
+    let leg_pts: Vec<[G<C>; 5]> = st
         .legs
         .iter()
         .zip(&k)
         .enumerate()
-        .map(|(j, (l, &(k_v, k_gv)))| {
+        .map(|(j, (l, &(k_v, k_gv, k_t)))| {
             [
-                g * w.v[j] + hb * w.gamma_v[j],                                              // V_vj
-                g * k_v + l.y_t * k_s,                                                       // A_out_j
-                if st.auditor_on() { g * k_v + st.y_a * k_s } else { G::<C>::zero() },      // A_aud_j
-                g * k_v + hb * k_gv,                                                         // A_Vvj
+                g * w.v[j] + hb * w.gamma_v[j],               // V_vj
+                g * k_v + l.y_t * k_s,                        // A_out_j
+                if aud { g * k_v + st.y_a * k_t } else { o }, // A_aud_j
+                if aud { g * k_t } else { o },                // A_Daud_j
+                g * k_v + hb * k_gv,                          // A_Vvj
             ]
         })
         .collect();
@@ -1127,9 +1224,20 @@ pub fn prove_transfer_multi_core<C: ZCurve, R: RngCore + CryptoRng>(
     tr.absorb("sigma.commit", &commits);
     let c = nz_challenge::<C>(&mut tr, "sigma.c")?;
     let mut legs = Vec::with_capacity(leg_pts.len());
-    for (j, [v_v, a_out, a_aud, a_vv]) in leg_pts.into_iter().enumerate() {
+    for (j, [v_v, a_out, a_aud, a_daud, a_vv]) in leg_pts.into_iter().enumerate() {
         let bp_v = bp::prove_unchecked(&mut tr, gens, N_V, &w.v[j], &w.gamma_v[j], &mut n)?;
-        legs.push(LegProof { v_v, a_out, a_aud, a_vv, z_v: k[j].0 + c * w.v[j], z_gv: k[j].1 + c * w.gamma_v[j], bp_v });
+        let (k_v, k_gv, k_t) = k[j];
+        legs.push(LegProof {
+            v_v,
+            a_out,
+            a_aud,
+            a_daud,
+            a_vv,
+            z_v: k_v + c * w.v[j],
+            z_gv: k_gv + c * w.gamma_v[j],
+            z_t: if aud { k_t + c * w.t[j] } else { Fr::<C>::zero() },
+            bp_v,
+        });
     }
     let bp_b = bp::prove_unchecked(&mut tr, gens, N_B, &w.b_prime, &w.gamma_b, &mut n)?;
     let [v_b, a_y, a_d, a_deb, a_bal, a_vb] = head;
@@ -1172,9 +1280,10 @@ pub fn verify_transfer_multi<C: ZCurve>(
     for (l, lp) in st.legs.iter().zip(&p.legs) {
         is_zero_msm::<C>(&[g, l.y_t, l.c_out, lp.a_out], &[lp.z_v, p.z_s, -c, -one], "E3")?;
         if st.auditor_on() {
-            is_zero_msm::<C>(&[g, st.y_a, l.c_aud, lp.a_aud], &[lp.z_v, p.z_s, -c, -one], "E6")?;
-        } else if !lp.a_aud.is_zero() {
-            return Err(ZError::Verify("auditor off but A_aud != O"));
+            is_zero_msm::<C>(&[g, st.y_a, l.c_aud, lp.a_aud], &[lp.z_v, lp.z_t, -c, -one], "E6")?;
+            is_zero_msm::<C>(&[g, l.d_aud, lp.a_daud], &[lp.z_t, -c, -one], "E6'")?;
+        } else if !(lp.a_aud.is_zero() && lp.a_daud.is_zero() && lp.z_t.is_zero()) {
+            return Err(ZError::Verify("auditor off but A_aud, A_Daud or z_t != 0"));
         }
         is_zero_msm::<C>(&[g, hb, lp.v_v, lp.a_vv], &[lp.z_v, lp.z_gv, -c, -one], "E7")?;
     }
@@ -1209,6 +1318,25 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     balance: u64,
     rng: &mut R,
 ) -> Result<(MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>), ZError> {
+    prove_transfer_multi_ua(gens, key, header, decoy_fee, mode, recipients, y_aud, acc, balance, 0, rng)
+}
+
+/// [`prove_transfer_multi`] for a relay through `uaExecute`: `signer_gas` ([`ua_signer_gas`]) is added to the gas-cap
+/// check of a relayed build.
+#[allow(clippy::too_many_arguments)]
+pub fn prove_transfer_multi_ua<C: ZCurve, R: RngCore + CryptoRng>(
+    gens: &Gens<C>,
+    key: &ZetherKey<C>,
+    header: Header,
+    decoy_fee: u64,
+    mode: TransferMode,
+    recipients: &[(G<C>, u64)],
+    y_aud: G<C>,
+    acc: Ciphertext<C>,
+    balance: u64,
+    signer_gas: u64,
+    rng: &mut R,
+) -> Result<(MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>), ZError> {
     let mut header = header;
     let g = generator::<C>();
     if acc.c - acc.d * key.x != g * Fr::<C>::from(balance) {
@@ -1230,23 +1358,28 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
         .checked_sub(total + header.fee as u128)
         .ok_or(ZError::BadStatement("insufficient balance"))? as u64;
     let relayed = matches!(header.binding, Binding::Relayed(_));
-    check_gas::<C>(mode, !y_aud.is_zero(), relayed, recipients.len(), decoy_fee != 0)?;
-    let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
+    let aud = !y_aud.is_zero();
+    check_gas::<C>(mode, aud, relayed, recipients.len(), decoy_fee != 0, signer_gas)?;
+    let (salt, s, t) = draw_salt::<C, R>(&key.x, &header, &key.ua(), if aud { recipients.len() } else { 0 }, rng);
+    let t = if aud { t } else { vec![Fr::<C>::zero(); recipients.len()] };
     header.salt = salt;
     let memo = if mode == TransferMode::Hash {
-        seal_memo::<C>(&key.x, &header, &key.ua(), &salt, !y_aud.is_zero(), recipients)
+        seal_memo::<C>(&key.x, &header, &key.ua(), &salt, aud, recipients)
     } else {
         Vec::new()
     };
     header.memo_hash = if memo.is_empty() { [0; 32] } else { keccak256(&memo) };
     let vs: Vec<Fr<C>> = recipients.iter().map(|(_, v)| Fr::<C>::from(*v)).collect();
+    let o = G::<C>::zero();
     let legs = recipients
         .iter()
         .zip(&vs)
-        .map(|((y, _), v)| Leg {
+        .zip(&t)
+        .map(|(((y, _), v), t)| Leg {
             y_t: *y,
             c_out: g * *v + *y * s,
-            c_aud: if y_aud.is_zero() { G::<C>::zero() } else { g * *v + y_aud * s },
+            c_aud: if aud { g * *v + y_aud * *t } else { o },
+            d_aud: if aud { g * *t } else { o },
         })
         .collect();
     let st = MultiTransferStatement {
@@ -1266,6 +1399,7 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
         s,
         gamma_v: vs.iter().map(|_| n.next::<C>()).collect(),
         v: vs,
+        t,
         b: Fr::<C>::from(balance),
         b_prime: Fr::<C>::from(b_prime),
         gamma_b: n.next::<C>(),
@@ -1303,10 +1437,9 @@ impl<C: ZCurve> BurnStatement<C> {
         Ok(Self { header, y_f: r.point()?, acc: Ciphertext { c: r.point()?, d: r.point()? } })
     }
 
-    /// `be32(accSeq) ‖ be32(sendCounter) ‖ Y_f` (§9).
+    /// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ Y_f` (§9).
     pub fn payload(&self) -> Vec<u8> {
-        let mut b = be32_u64(self.header.acc_seq).to_vec();
-        b.extend(be32_u64(self.header.send_counter));
+        let mut b = payload_head(&self.header);
         b.extend(encode_point::<C>(&self.y_f));
         b
     }

@@ -235,6 +235,18 @@ contract DexTest is Test {
         _expectOne(_book(), abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(a), address(b)));
     }
 
+    /// C6-9: a pair needs two distinct non-zero tokens.
+    function test_C6_9_setMarketGuards() public {
+        vm.startPrank(admin);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(a), address(a)));
+        dex.setMarket(address(a), address(a), true);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(0), address(b)));
+        dex.setMarket(address(0), address(b), true);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(a), address(0)));
+        dex.setMarket(address(a), address(0), false);
+        vm.stopPrank();
+    }
+
     // ------------------------------------------------------------------ what only the DEX enforces
 
     function test_legSettled_receivedIsNetOfTheFee_everyField() public {

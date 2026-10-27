@@ -141,5 +141,9 @@ contract PqzUnderlyingTest is PqzFixture {
         assertGt(init, 49_152, "over EIP-3860: 64 KiB chains only");
         assertLe(init, 131_072);
         assertLt(txGas * 105 * 105 / 10_000, 1 << 24, "regular gas fits EIP-7825 with --gas-estimate-multiplier 105");
+        // C5-1: regular + state gas against the block gas limit NET-EVM-06 / the deploy gate require for this release
+        uint256 need = vm.parseJsonUint(vm.readFile("./size-baseline.json"), ".UnderlyingPqzToken") * 1530 + (1 << 24);
+        emit log_named_uint("UnderlyingPqzToken release block gas limit needed (NET-EVM-06)", need);
+        assertLe(txGas + uint256(int256(vg.gasStateUsed)), need, "regular + state gas fits the deploy gate's budget");
     }
 }

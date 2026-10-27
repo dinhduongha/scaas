@@ -27,8 +27,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 ///         implementation immutable (CTR-ZTH-20 / CTR-PQZ-10), so the proof system is an attribute of the release; the
 ///         auditor UA and the two modes are fixed at creation. Every entry point is `nonReentrant`; the shared entry
 ///         points are `IConfidentialToken`'s (plan 5h D20), allowlisted on both relaying paths (fee class `ABSOLUTE`)
-///         and never batched (CTR-PQZ-21); the rollover and `mtxPrepareAcc` are not (CTR-ZTH-34). A holder is a signing
-///         UA: `auth` is that UA's own signature over the statement digest, and its PQZ key is a record attribute
+///         and never batched (CTR-PQZ-21); the rollover and `mtxPrepareAcc` are allowlisted too, never batched (Task R,
+///         owner 2026-10-20). A holder is a signing UA: `auth` is that UA's own signature over the statement digest, and its PQZ key is a record attribute
 ///         (UA-6 U7); a UA without the key is refused as sender, leg, beneficiary, shield target and auditor. The shared
 ///         `beneficiary` must be the payload's (`BeneficiaryMismatch`).
 abstract contract PqzLayer is MetaTokenBase, IPqzToken {
@@ -61,7 +61,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function totalShielded() external view returns (uint256) { return PqzCore.$().totalShielded; }
 
     /// @notice The account (D13): counters, the `acc` reference, `accUnits`, flags, `sendCounter`, `accHash`.
-    function pqzAccount(bytes32 ua) external view returns (AccountState memory) {
+    function pqzAccount(bytes32 ua) external view override returns (AccountState memory) {
         PqzCore.Account storage a = PqzCore.$().acct[ua];
         return AccountState(a.pendingCount, a.rolled, a.floor, a.cleared, a.accBlob, a.accUnits, a.flags,
             a.sendCounter, a.accHash);
@@ -69,23 +69,23 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @notice Pending slot `i` (plan 5h D2): `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)`, `vOff = 0` a TRIVIAL
     ///         entry with its amount in the low 64 bits of the blob field; 0 once deleted.
-    function pqzPending(bytes32 ua, uint64 i) external view returns (uint256) {
+    function pqzPending(bytes32 ua, uint64 i) external view override returns (uint256) {
         return PqzCore.$().acct[ua].pending[i];
     }
 
     /// @notice The `acc` ciphertext from state (restore from state, D13).
-    function pqzAcc(bytes32 ua) external view returns (bytes memory) {
+    function pqzAcc(bytes32 ua) external view override returns (bytes memory) {
         return PqzStateLib.accOf(ua);
     }
 
     /// @notice Entry `i` as a ciphertext from state (a TRIVIAL entry: `Trivial(digits(amount))`; D13).
-    function pqzPendingCt(bytes32 ua, uint64 i) external view returns (bytes memory) {
+    function pqzPendingCt(bytes32 ua, uint64 i) external view override returns (bytes memory) {
         return PqzStateLib.pendingCt(ua, i);
     }
 
     /// @notice The op blob of a transfer as stored, `R ‖ v_f` packed at `PACK_BITS` (P46; `v_f` the trailing
     ///         `PqzCt.VP` bytes; D1, D13; both storage modes), empty if unknown.
-    function pqzEntryBlob(bytes32 entryRef) external view returns (bytes memory) {
+    function pqzEntryBlob(bytes32 entryRef) external view override returns (bytes memory) {
         address p = PqzCore.$().entryPtr[entryRef];
         return p == address(0) ? bytes("") : SSTORE2.read(p);
     }
@@ -136,12 +136,17 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @notice CTR-PQZ-14 / -26: the precompile's verdict on `proof` for `amount` in leg `leg` of `entryRef` (`R` from
     ///         the op blob, D11). A view; no attestation. An empty proof, an unknown entry, no leg `leg`, `kind > 2`
-    ///         and `amount ≥ 2^64` are false.
+    ///         and `amount ≥ 2^64` are false; a precompile call that fails (out of gas) reverts (C2-6).
     function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, bytes calldata proof)
         external view returns (bool)
     {
         if (proof.length == 0) return false;
-        try this.disclosureStatement(entryRef, leg, amount, kind) {} catch { return false; }
+        // C2-6: only the statement's shape errors (custom errors) read false; an empty revert (out of gas in the
+        // sub-call) is propagated, and a failed precompile call reverts in `verdict`
+        try this.disclosureStatement(entryRef, leg, amount, kind) {} catch (bytes memory err) {
+            if (err.length == 0) assembly ("memory-safe") { revert(0, 0) }
+            return false;
+        }
         return PqzViewLib.verifyAmountOf(entryRef, leg, amount, kind, proof, _envOf(0));
     }
 
@@ -203,6 +208,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _transfer(PqzCore.Env memory e, bool multi, bytes calldata payload, bytes calldata proof,
         bytes calldata auth, bytes calldata accHint) private returns (bytes32 r)
     {
+        _pullShieldIn(payload);
         PqzCore.Paid memory f;
         if (multi) (r, f) = PqzTransferLib.transferMulti(e, payload, accHint, proof, auth);
         else (r, f) = PqzTransferLib.transfer(e, payload, accHint, proof, auth);
@@ -227,6 +233,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _burn(PqzCore.Env memory e, bytes calldata payload, bytes calldata proof, bytes calldata auth,
         bytes calldata accHint) internal
     {
+        _pullShieldIn(payload);
         _pay(PqzBurnLib.unshield(e, payload, accHint, proof, auth), payload);
     }
 
@@ -280,11 +287,24 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         if (units != 0) _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), to, units * PqzCore.$().shieldScale);
     }
 
+    /// @dev C2-5 (owner 2026-10-27, controller proposal): the payload's `shieldIn` (word 64) goes into the pool before
+    ///      the authorization and the precompile, so a signer who front-ran its own op with a public transfer costs the
+    ///      relayer a cheap revert, not a 9–13 M gas one. The cap is the library's own check (`AmountOutOfRange`), made
+    ///      here first so an absurd word never overflows the scaling; a payload too short for the word is left to the
+    ///      library (`BadPayload`). No outer-fee pre-check (`mtxUnshield` may pay its fee from its own output).
+    function _pullShieldIn(bytes calldata payload) internal {
+        if (payload.length < 96) return;
+        uint256 units = uint256(bytes32(payload[64:96]));
+        PqzCore.PqzStorage storage s = PqzCore.$();
+        uint256 room = s.maxShielded - s.totalShielded;
+        if (units > room) revert AmountOutOfRange(units, room);
+        _toPool(units);
+    }
+
     /// @dev After a debit the library settled: exactly what it moved through `totalShielded` (`f`, D19): `shieldIn`
-    ///      into the pool first, then txFee (`fee − legs · decoyFee`) to the beneficiary and op 7's `decoyFee` to EVERY
+    ///      was pulled first (`_pullShieldIn`), then txFee (`fee − legs · decoyFee`) to the beneficiary and op 7's `decoyFee` to EVERY
     ///      leg (the real recipient too; owner 2026-10-20). Only the leg UAs are read from the (checked) payload.
     function _pay(PqzCore.Paid memory f, bytes calldata payload) internal {
-        _toPool(f.shieldIn);
         _fromPool(f.ben, f.fee - f.legs * f.decoyFee);
         if (f.decoyFee != 0) {
             for (uint256 j; j < f.legs; ++j) {

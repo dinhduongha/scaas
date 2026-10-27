@@ -56,7 +56,14 @@ contract BlsKatTest is Test {
     }
 
     /// Thông điệp khác ⇒ H(m) khác ⇒ pairing ra 0. Không revert — trả về false.
-    function test_wrongMessageFails() public onlyWithEip2537 {
+    /// C1-3: the library refuses the identity for the signature and for the key (the pairing would be 1 = 1).
+function test_C1_3_identityRefused() public onlyWithEip2537 {
+assertFalse(Bls12381.verifyMinSig(HM, new bytes(256), new bytes(128)));
+assertFalse(Bls12381.verifyMinSig(HM, PK, new bytes(128)));
+assertFalse(Bls12381.verifyMinSig(HM, new bytes(256), SIG));
+}
+
+function test_wrongMessageFails() public onlyWithEip2537 {
         bytes memory other = HashToCurve.hashToG1("bamboo2", DST);
         assertFalse(Bls12381.verifyMinSig(other, PK, SIG));
     }

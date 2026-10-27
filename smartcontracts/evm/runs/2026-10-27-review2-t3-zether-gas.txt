@@ -1,0 +1,59 @@
+# review2 T3 (Zether …/v3, review C0-1 / C0-9): gas before (HEAD bd7fe719) | after, BLS12-381, Amsterdam, forge 1.8.5
+# forge test --match-path 'test/zether/{ZetherVerifierGas,ZetherMulti}.t.sol' --match-test test_gas -vv (gasleft() around the call, state gas included; not isolated)
+# row | before | after | delta [| calldata before -> after]
+bls12-381 burn verify | 1,455,587 | 1,455,508 | -79
+bls12-381 multi M=8 verify | 13,196,895 | 13,571,892 | +374,997
+bls12-381 transfer verify | 3,006,528 | 3,007,095 | +567
+bls12-381 disclose M=1 BUNDLE SENDER_S | 123,809 | 133,920 | +10,111
+bls12-381 disclose M=1 BUNDLE RECEIVER_X | 157,733 | 167,895 | +10,162
+bls12-381 disclose M=1 BUNDLE AUDITOR | 170,959 | 181,122 | +10,163
+bls12-381 disclose M=1 BUNDLE SENDER_CP | 157,782 | 167,944 | +10,162
+bls12-381 disclose M=1 HASH SENDER_S | 91,831 | 93,313 | +1,482
+bls12-381 disclose M=1 HASH RECEIVER_X | 125,752 | 127,286 | +1,534
+bls12-381 disclose M=1 HASH AUDITOR | 138,978 | 140,512 | +1,534
+bls12-381 disclose M=1 HASH SENDER_CP | 125,801 | 127,335 | +1,534
+bls12-381 disclose M=8 BUNDLE SENDER_S | 368,015 | 439,272 | +71,257
+bls12-381 disclose M=8 BUNDLE RECEIVER_X | 402,001 | 473,325 | +71,324
+bls12-381 disclose M=8 BUNDLE AUDITOR | 415,242 | 486,570 | +71,328
+bls12-381 disclose M=8 BUNDLE SENDER_CP | 402,050 | 473,374 | +71,324
+bls12-381 disclose M=8 HASH SENDER_S | 114,237 | 116,362 | +2,125
+bls12-381 disclose M=8 HASH RECEIVER_X | 148,200 | 150,384 | +2,184
+bls12-381 disclose M=8 HASH AUDITOR | 161,433 | 163,621 | +2,188
+bls12-381 disclose M=8 HASH SENDER_CP | 148,249 | 150,433 | +2,184
+bls12-381 disclose Single SENDER_S | 123,809 | 124,399 | +590
+bls12-381 disclose Single RECEIVER_X | 157,733 | 158,371 | +638
+bls12-381 disclose Single AUDITOR | 170,959 | 171,597 | +638
+bls12-381 disclose Single SENDER_CP | 157,782 | 158,420 | +638
+bls12-381 mtxConfidentialTransfer M=1 BUNDLE | 7,203,607 | 7,693,935 | +490,328 | calldata 7108 -> 7428 (+320)
+bls12-381 mtxConfidentialTransfer M=1 HASH | 5,670,016 | 5,720,996 | +50,980 | calldata 7172 -> 7492 (+320)
+bls12-381 mtxConfidentialTransfer M=1 NONE | 5,218,298 | 5,268,115 | +49,817 | calldata 7108 -> 7428 (+320)
+bls12-381 mtxConfidentialTransfer M=2 BUNDLE | 11,692,022 | 12,671,296 | +979,274 | calldata 10276 -> 10884 (+608)
+bls12-381 mtxConfidentialTransfer M=2 HASH | 8,621,981 | 8,722,344 | +100,363 | calldata 10372 -> 10980 (+608)
+bls12-381 mtxConfidentialTransfer M=2 NONE | 7,943,722 | 8,041,933 | +98,211 | calldata 10276 -> 10884 (+608)
+bls12-381 mtxConfidentialTransfer M=4 BUNDLE | 20,673,230 | 22,634,297 | +1,961,067 | calldata 16612 -> 17796 (+1184)
+bls12-381 mtxConfidentialTransfer M=4 HASH | 14,310,052 | 14,513,638 | +203,586 | calldata 16804 -> 17988 (+1184)
+bls12-381 mtxConfidentialTransfer M=4 NONE | 13,398,744 | 13,597,584 | +198,840 | calldata 16612 -> 17796 (+1184)
+bls12-381 mtxConfidentialTransfer M=8 BUNDLE | 38,652,850 | 42,593,685 | +3,940,835 | calldata 29284 -> 31620 (+2336)
+bls12-381 mtxConfidentialTransfer M=8 HASH | 25,814,620 | 26,241,223 | +426,603 | calldata 29636 -> 31972 (+2336)
+bls12-381 mtxConfidentialTransfer M=8 NONE | 24,324,422 | 24,740,403 | +415,981 | calldata 29284 -> 31620 (+2336)
+bls12-381 mtxConfidentialTransfer M=1 BUNDLE auditor-out | 6,729,265 | 6,747,944 | +18,679 | calldata 7108 -> 7428 (+320)
+bls12-381 mtxConfidentialTransfer M=1 HASH auditor-out | 5,627,474 | 5,638,389 | +10,915 | calldata 7172 -> 7492 (+320)
+bls12-381 mtxConfidentialTransfer M=1 NONE auditor-out | 5,175,756 | 5,185,448 | +9,692 | calldata 7108 -> 7428 (+320)
+bls12-381 mtxConfidentialTransfer M=2 BUNDLE auditor-out | 10,742,626 | 10,777,984 | +35,358 | calldata 10276 -> 10884 (+608)
+bls12-381 mtxConfidentialTransfer M=2 HASH auditor-out | 8,535,861 | 8,555,823 | +19,962 | calldata 10372 -> 10980 (+608)
+bls12-381 mtxConfidentialTransfer M=2 NONE auditor-out | 7,857,626 | 7,875,329 | +17,703 | calldata 10276 -> 10884 (+608)
+bls12-381 mtxConfidentialTransfer M=4 BUNDLE auditor-out | 18,772,844 | 18,842,350 | +69,506 | calldata 16612 -> 17796 (+1184)
+bls12-381 mtxConfidentialTransfer M=4 HASH auditor-out | 14,136,362 | 14,175,310 | +38,948 | calldata 16804 -> 17988 (+1184)
+bls12-381 mtxConfidentialTransfer M=4 NONE auditor-out | 13,224,886 | 13,259,365 | +34,479 | calldata 16612 -> 17796 (+1184)
+bls12-381 mtxConfidentialTransfer M=8 BUNDLE auditor-out | 34,848,451 | 34,990,670 | +142,219 | calldata 29284 -> 31620 (+2336)
+bls12-381 mtxConfidentialTransfer M=8 HASH auditor-out | 25,463,748 | 25,545,268 | +81,520 | calldata 29636 -> 31972 (+2336)
+bls12-381 mtxConfidentialTransfer M=8 NONE auditor-out | 23,973,378 | 24,044,437 | +71,059 | calldata 29284 -> 31620 (+2336)
+bls12-381 mtxConfidentialTransferSingle auditor-out | 6,711,593 | 6,713,664 | +2,071 | calldata 7044 -> 7076 (+32)
+bls12-381 mtxConfidentialTransferSingle | 7,186,786 | 7,189,547 | +2,761 | calldata 7044 -> 7076 (+32)
+
+# ZetherGasLimit edge cells (the prover's largest M per form), smallest total tx gas limit (regular + state), binary search to 1,000 gas, after:
+# compact on M=7: 23,422,087 direct / 24,328,657 relayed; compact out M=7: 22,834,211 / 23,721,876
+# bundle on M=6: 33,052,260 / 34,261,321; bundle out M=6: 27,205,915 / 28,228,621
+# none on M=7: 22,002,364 / 22,863,020; none out M=7: 21,414,489 / 22,256,239
+# (F185 before: 21.4 M to 31.2 M; the edge limit of ZetherGasLimit is now 36 M)
+# sizes (runtime B, HEAD -> after): ZetherTransferVerifierBls12381 11,535 -> 12,375; ZetherDisclosure 5,091 -> 5,278; ZetherStatements 9,190 -> 9,443; ZetherLib 18,126 -> 18,312; tokens unchanged; size gate 0 errors (no baseline entry touched)
