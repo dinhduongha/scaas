@@ -121,8 +121,9 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         if (tm == ZetherTypes.TransferMode.BUNDLE) return _cli("recoverTransfer", string.concat(q, ',"yAud":', ya, "}"));
         q = string.concat(q, ",", _q("memo", vm.toString(t.transferMemo(ref))));
         string memory memo = _cli("openMemo", string.concat(q, "}"));
-        bytes32[] memory need = memo.readBytes32Array(".legs[*].toUA");
-        for (uint256 j; j < need.length; ++j) assertEq(need[j], ZetherTypes.UA.unwrap(rs[j].ua), "legs.toUA");
+        for (uint256 j; j < 3; ++j) {
+            assertEq(memo.readBytes32(string.concat(".legs[", vm.toString(j), "].toUA")), ZetherTypes.UA.unwrap(rs[j].ua), "legs.toUA");
+        }
         if (!memo.readBool(".auditorIncluded")) ya = "null";
         return _cli("recoverTransfer", string.concat(q, ',"yAud":', ya, "}"));
     }
@@ -157,7 +158,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         });
         bytes32 binding = t.envelopeBinding(mt);
         string memory out = _cli("proveTransferMulti", _req(t, "compact", "optional", false,
-            string.concat(",", _q("envelopeBinding", vm.toString(binding)), _recipients())));
+            string.concat(",", _q("envelopeBinding", vm.toString(binding)), ',"uaSigner":"ecdsa"', _recipients())));
         assertEq(stm.transferStatement(address(t), out.readBytes(".payload"), carol.ua, ZetherTypes.TransferMode.HASH, binding),
             out.readBytes(".statement"), "relayed statement bytes");
         mt.data = out.readBytes(".directCalldata");

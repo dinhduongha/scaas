@@ -374,4 +374,4 @@ Branch `review2-fix` from `649f3397`. Per finding: done / commit / test. Detail 
 Gate logs (`smartcontracts/evm/runs/2026-10-27-review2-<step>.txt`, runner `2026-10-27-review2-gates.sh`, resumable per step), all `rc=0` at `b3c845c6`:
 `forge-n2048-kmax1024` (1402 passed), `forge-n2304-kmax4096` (1401), `forge-n2560-kmax16384` (1401), `forge-n2816-kmax65536` (1396),
 `sizes` (0 errors), `gen-set`, `docs` (0 errors; the fact ledger's 9 misses in `history/` already exist on main and are only logged),
-`cargo-zether-prover`, `wasm-zether-prover` (9 smoke checks), `cargo-scaas-node`, `clientkeys` (109 tests).
+`cargo-zether-prover`, `zether-cross` (CLI vs contract, 6 tests, fails on any skip), `wasm-zether-prover` (9 smoke checks), `cargo-scaas-node`, `clientkeys` (109 tests).
