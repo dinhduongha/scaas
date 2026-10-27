@@ -47,7 +47,7 @@ fn delegate_pays_within_caps_and_period_resets() {
     t.w.pay_under_mandate(&t.token.address, &t.payee, &100, &r(e, 1), &(NOW + 60));
     assert_eq!(e.auths()[0].0, t.delegate, "the delegate authorises, not the owner");
     assert_eq!(t.token.balance(&t.payee), 100);
-    assert!(t.token.ref_used(&r(e, 1)));
+    assert!(t.token.ref_used(&t.w.address, &r(e, 1)));
     let err = |res: Result<Result<(), _>, Result<soroban_sdk::Error, _>>| res.err().unwrap().unwrap();
     assert_eq!(err(t.w.try_pay_under_mandate(&t.token.address, &t.payee, &101, &r(e, 2), &(NOW + 60))), Error::OverPaymentCap.into());
     assert_eq!(err(t.w.try_pay_under_mandate(&t.token.address, &t.payee, &60, &r(e, 2), &(NOW + 60))), Error::OverPeriodCap.into());

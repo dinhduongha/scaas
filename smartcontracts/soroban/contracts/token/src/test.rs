@@ -87,14 +87,14 @@ fn pay_moves_funds_once_per_ref_and_respects_expiry() {
     let r = BytesN::from_array(&env, &[1; 32]);
     t.pay(&a, &b, &40, &r, &(NOW + 10));
     assert_eq!((t.balance(&a), t.balance(&b)), (60, 40));
-    assert!(t.ref_used(&r));
+    assert!(t.ref_used(&a, &r));
     assert_eq!(t.try_pay(&a, &b, &1, &r, &(NOW + 10)).err().unwrap().unwrap(), Error::RefUsed.into());
     let r2 = BytesN::from_array(&env, &[2; 32]);
     assert_eq!(t.try_pay(&a, &b, &1, &r2, &(NOW - 1)).err().unwrap().unwrap(), Error::Expired.into());
     assert_eq!(t.try_pay(&a, &b, &1000, &r2, &(NOW + 10)).err().unwrap().unwrap(), Error::InsufficientBalance.into());
     assert_eq!(t.try_pay(&a, &b, &-1, &r2, &(NOW + 10)).err().unwrap().unwrap(), Error::NegativeAmount.into());
     // A failed pay leaves the ref unused.
-    assert!(!t.ref_used(&r2));
+    assert!(!t.ref_used(&a, &r2));
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn pay_meta_settles_and_emits_meta_first() {
     t.pay_meta(&a, &b, &40, &salt, &meta, &(NOW + 10));
     let (auths, all) = (env.auths(), env.events().all()); // each later client call resets both
     assert_eq!((t.balance(&a), t.balance(&b)), (60, 40));
-    assert!(t.ref_used(&pay_id));
+    assert!(t.ref_used(&a, &pay_id));
     assert_eq!(auths[0].0, a);
     // The auth entry covers pay_meta's own arguments, `meta` included.
     let want: soroban_sdk::Vec<Val> = (a.clone(), b.clone(), 40i128, salt.clone(), meta.clone(), NOW + 10).into_val(&env);
@@ -222,7 +222,7 @@ fn soroban_pay_meta_mismatch_and_replay() {
     t.pay_meta(&a, &b, &10, &salt, &meta, &(NOW + 10));
     // Same (salt, meta) again: RefUsed.
     assert_eq!(t.try_pay_meta(&a, &b, &10, &salt, &meta, &(NOW + 10)).err().unwrap().unwrap(), Error::RefUsed.into());
-    // A plain pay with the committed id is refused as well (one PayRef set).
+    // A plain pay with the committed id is refused as well (one PayRef set per payer).
     assert_eq!(t.try_pay(&a, &b, &10, &pay_id, &(NOW + 10)).err().unwrap().unwrap(), Error::RefUsed.into());
     // The id is derived, so altered meta can never settle under the committed id: it pays under its own.
     let (salt2, meta2, id2, _) = row(&env, &rows[1]);
@@ -231,7 +231,7 @@ fn soroban_pay_meta_mismatch_and_replay() {
     tampered.push_back(1);
     assert_ne!(t.meta_pay_id(&salt, &tampered), pay_id);
     t.pay_meta(&a, &b, &10, &salt2, &meta2, &(NOW + 10));
-    assert!(t.ref_used(&id2));
+    assert!(t.ref_used(&a, &id2));
     // A plain pay first, then pay_meta of the same id: RefUsed.
     let (salt3, meta3, id3, _) = row(&env, &rows[2]);
     t.pay(&a, &b, &10, &id3, &(NOW + 10));
@@ -239,4 +239,23 @@ fn soroban_pay_meta_mismatch_and_replay() {
     // Expired.
     let (salt4, meta4, _, _) = row(&env, &rows[3]);
     assert_eq!(t.try_pay_meta(&a, &b, &10, &salt4, &meta4, &(NOW - 1)).err().unwrap().unwrap(), Error::Expired.into());
+}
+
+/// controller call 2026-10-27: the PayRef set is per payer, so nobody can pre-burn another payer's ref / payId.
+#[test]
+fn pay_ref_is_per_payer_nobody_can_pre_burn_it() {
+    let (env, t, _) = setup();
+    let (victim, attacker, b) = (Address::generate(&env), Address::generate(&env), Address::generate(&env));
+    t.mint(&victim, &100);
+    let (salt, meta, pay_id, _) = row(&env, &paymeta_rows()[0]);
+    // The attacker burns the victim's payId and a plain ref under the attacker's own name.
+    t.pay_meta(&attacker, &attacker, &0, &salt, &meta, &(NOW + 10));
+    let plain = BytesN::from_array(&env, &[5; 32]);
+    t.pay(&attacker, &attacker, &0, &plain, &(NOW + 10));
+    assert!(t.ref_used(&attacker, &pay_id) && !t.ref_used(&victim, &pay_id));
+    t.pay_meta(&victim, &b, &10, &salt, &meta, &(NOW + 10));
+    t.pay(&victim, &b, &10, &plain, &(NOW + 10));
+    assert_eq!((t.balance(&victim), t.balance(&b)), (80, 20));
+    // The same payer is still once-only.
+    assert_eq!(t.try_pay(&victim, &b, &1, &plain, &(NOW + 10)).err().unwrap().unwrap(), Error::RefUsed.into());
 }

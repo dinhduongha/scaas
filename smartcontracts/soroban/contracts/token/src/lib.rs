@@ -36,7 +36,7 @@ enum Key {
     Symbol,
     Balance(Address),
     Allowance(Address, Address),
-    PayRef(BytesN<32>),
+    PayRef(Address, BytesN<32>),
 }
 
 #[contracttype]
@@ -219,7 +219,7 @@ impl Token {
     }
 
     /// CTR-MTX-26: như `pay` với `pay_ref = meta_pay_id(salt, meta)`. Auth entry phủ cả `salt` và `meta`.
-    /// Không có lane trên Soroban: bộ `PayRef` của `settle_pay` đảm bảo mỗi `(token, pay_ref)` một lần.
+    /// Không có lane trên Soroban: bộ `PayRef` của `settle_pay` đảm bảo mỗi `(token, from, pay_ref)` một lần (như lane theo payer trên EVM: người khác không đốt được ref của payer).
     pub fn pay_meta(env: Env, from: Address, to: Address, amount: i128, salt: BytesN<32>, meta: Bytes, valid_until: u64) {
         from.require_auth();
         let pay_ref = meta_pay_id(&env, &salt, &meta);
@@ -235,9 +235,9 @@ impl Token {
         meta_pay_id(&env, &salt, &meta)
     }
 
-    /// `pay_ref` đã dùng chưa (Odoo/relayer đọc trước khi phát lại).
-    pub fn ref_used(env: Env, pay_ref: BytesN<32>) -> bool {
-        env.storage().persistent().has(&Key::PayRef(pay_ref))
+    /// `(from, pay_ref)` đã dùng chưa (Odoo/relayer đọc trước khi phát lại).
+    pub fn ref_used(env: Env, from: Address, pay_ref: BytesN<32>) -> bool {
+        env.storage().persistent().has(&Key::PayRef(from, pay_ref))
     }
 
     // ------------------------------------------------------------------ SEP-41
@@ -312,7 +312,7 @@ impl Token {
         if env.ledger().timestamp() > valid_until {
             panic_with_error!(env, Error::Expired);
         }
-        let k = Key::PayRef(pay_ref.clone());
+        let k = Key::PayRef(from.clone(), pay_ref.clone());
         let s = env.storage().persistent();
         if s.has(&k) {
             panic_with_error!(env, Error::RefUsed);
