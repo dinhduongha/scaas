@@ -3,7 +3,9 @@
 **Status:** spec. Nothing is built. Written 2026-10-27 on branch `metatx-split` (from `main` `0c191232`). The owner
 skipped the question round ("viết spec luôn", 2026-10-27), so this spec is written from the code on `main`, the
 2026-10-21 spike and the owner's recorded rulings. Every choice marked **controller call** is the controller's; the
-owner may override it. The open questions in §13 are the only ones whose answer would change what gets built.
+owner may override it. The owner answered the four questions of §13 the same day (§0, rows "2026-10-27 owner
+answer"): this item covers **every family**, the fee amount is checked before the self-call, the trade and
+receiver-fee signatures go through the library, and the `set.toml` re-pins run only the affected gate steps.
 
 **Work item.** TODO §00 "Now" item 5: the metatx split together with `mtxPayMeta` / `uaPayMeta`
 ([CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26)), then `MtxRelayFee`
@@ -28,6 +30,11 @@ UA-7, governance code.
 | 2026-10-27 | `ROLL_MAX` is bounded on **both** relay paths: the largest multiple of 16 whose relayed full rollover stays ≤ 0.75 · 2^24 regular gas through `mtxExecute` and `uaExecute`. Today 96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`. | decisions.md CTR-PQZ-07 Change 2026-10-27 |
 | 2026-10-27 | PQZH option (A): on chain only the forms that fit one 2^24 transaction on both relay paths; at `n2048-kmax1024` single-key holders only, `slhdsa128s` the one excluded fee-UA kind on `uaExecute`. | decisions.md CTR-PQZ-11 Change lines |
 | standing | Decisions recorded in full; parameter sets named `n2048-kmax1024` style; library code hashes pinned in the release; no SELFDESTRUCT in any library; agents stop at the branch (merge / push only on the owner's go). | memory |
+| 2026-10-27 owner answer (§13 Q1) | **All families in this one work item** ("Tất cả một lượt"), against the controller's proposal of EVM + Hedera first: CTR-MTX-26 (`mtxPayMeta` / `uaPayMeta` and each family's pay-meta entry) and CTR-MTX-27 (`MtxRelayFee` and each family's router) on EVM, Hedera, Soroban, Solana, Cosmos, Sui, Aptos and GRAM (TON), each in the form that family's existing token / meta-tx code takes (§6.2, §7.2). Status: accepted, this spec. | this spec §8, §13 |
+| 2026-10-27 owner answer (§13 Q2) | The fee amount of a self-call is computed and checked **before** the self-call, in one library call; when both the fee rule and the call fail, the fee error wins (§3.8). Controller proposal accepted. | this spec §3.8 |
+| 2026-10-27 owner answer (§13 Q3) | The signature checks of the trade and receiver-fee paths go **through the library** (`requireSignature` / `authorize`), one copy of the signature rule (§3.1, §3.4). Controller proposal accepted. | this spec §3.1 |
+| 2026-10-27 owner answer (§13 Q4) | The `set.toml` re-pins of this item (`debit_min_gas` at all four sets, `roll_max` at `n2560-kmax16384` if the 2026-10-27 rule moves it) run **only the affected gate steps**: `gen_set.py --all --check`, forge at each of the four sets (`at-set.sh`), the size gate, `docs_check`. No full pqz-core gate, because neither key is read by a core or changes a proof parameter. Controller proposal accepted; it is an exception to the 2026-10-25 "`set.toml` change = full gate" rule for these two keys in this item. | this spec §5.3, §8 |
+| 2026-10-27 | NEAR and Algorand (PLANNED in `docs/networks/README.md`, no code yet) are built right **after** this item, as their own family bring-up item (family spec → plan → build), and carry CTR-MTX-26 and CTR-MTX-27 from the start, with the semantics this item fixes (§8). Not in this item's plan. | this spec §8 |
 
 ## 1. Intent
 
@@ -43,10 +50,12 @@ the pipeline's checks into one library that every kind links, so the shared base
    signature checks of the trade and receiver-fee paths.
 2. Same behaviour: the same selectors, ABI, events, storage, digests and outcomes as today, with one recorded
    exception (§3.8).
-3. `mtxPayMeta` / `uaPayMeta` on every `MetaTokenBase` kind (CTR-MTX-26), built on the split.
-4. `MtxRelayFee` and its executor (CTR-MTX-27), deployed by `DeployBase`.
-5. The node and the clients changed where these need it (§9).
+3. `mtxPayMeta` / `uaPayMeta` on every `MetaTokenBase` kind (CTR-MTX-26), built on the split; the pay-meta entry of
+   every non-EVM family (§6.2).
+4. `MtxRelayFee` and its executor (CTR-MTX-27), deployed by `DeployBase`; the router of every non-EVM family (§7.2).
+5. The node and the clients changed where these need it (§9), every family adapter included.
 6. Every thin gas margin re-measured with the final bytecode, and every constant that follows from it re-pinned (§5).
+7. The four known code / doc gaps closed (§11.1).
 
 **Non-goals.**
 - Moving entry points, ABI decoding, balance moves, events, `nonReentrant` or the self-call out of the token (that is
@@ -56,7 +65,10 @@ the pipeline's checks into one library that every kind links, so the shared base
 - Changing `MtxRule`, any typehash, any domain, any selector, the transient slots or the storage layout.
 - Code-size work beyond the split itself.
 - The wallets (`SmartKeyAccount`, `MandateWallet`, `HederaMandateWallet`) and `SCaaSDex` linking the library (§3.7).
-- The non-EVM shapes of CTR-MTX-26 / -27 (own later items, §8).
+- A split of any non-EVM family's code: no non-EVM family has the size problem; only CTR-MTX-26 / -27 go there.
+- NEAR and Algorand (their own bring-up item right after this one, §8).
+- PQ signers off EVM: no non-EVM family has a UA registry or a PQ key today, so CTR-MTX-27's "PQ payers sign twice"
+  (option (a)) is an EVM rule only; off EVM the payer signs its family's classical op once and the target its own.
 - Governance code itself.
 
 **Anti-goals** (the plan must show each does not happen):
@@ -111,7 +123,7 @@ the pipeline's checks into one library that every kind links, so the shared base
 | Step 3 of the typed paths: payee and fee-recipient checks, the pool refusals, the receiver check (`_checkTo`, `kindOf` on the registry), fee amount, balance against `have` | `_requireBatchable` (virtual `_batchable`) |
 | Step 4: the nonce write (the same ERC-7201 slot) | Step 5: the ticket, the self-call, the binding slot (`_selfCall`) and `nonReentrant` |
 | The fee amount and fee recipient of a self-call (`_callFee`), now in step 3 (§3.8) | Step 6: the fee move (`_transfer` / `_uaMove`) and the typed paths' value move |
-| The signature checks of `mtxTrade`, `uaTrade`, `mtxCancelOrder`, `uaCancelOrder`, `mtxInvalidateNonces`, `uaInvalidateNonces`, `mtxPayReceiverFee` (payee), `uaPayReceiverFee` (payee) — **controller call** (§13 Q3) | Step 7: every event; the UA ledger; `_poolMove`; `uaCancelNonce` (its direct `requireAuthorized`, the cancel-used set, `_bumpNonce`); `cancelNonce` |
+| The signature checks of `mtxTrade`, `uaTrade`, `mtxCancelOrder`, `uaCancelOrder`, `mtxInvalidateNonces`, `uaInvalidateNonces`, `mtxPayReceiverFee` (payee), `uaPayReceiverFee` (payee) — **owner 2026-10-27** (§13 Q3) | Step 7: every event; the UA ledger; `_poolMove`; `uaCancelNonce` (its direct `requireAuthorized`, the cancel-used set, `_bumpNonce`); `cancelNonce` |
 | The digest of the four digest views (`mtxDigest`, `uaDigest`, `mtxTransferDigest`, `uaTransferDigest`) | Every immutable: read by the token and passed in a `Ctx` |
 
 The library holds **no immutables and no storage of its own**. Everything that differs per kind, release or chain
@@ -281,7 +293,8 @@ computed after the self-call. It depends only on the envelope and the basis word
 `preCall` computes it in step 3; the move still happens in step 6. Effect: an envelope that breaks both its fee rule
 and its call now reverts with the fee error, before the call, instead of the call's error. Every outcome stays the
 same (the whole transaction reverts either way), and the typed paths already work this way. This saves a second
-library call per relayed call (≈ +1k gas warm [estimate]). **Controller call** (§13 Q2). CTR-MTX-17's table changes:
+library call per relayed call (≈ +1k gas warm [estimate]). **Owner 2026-10-27** (§13 Q2, the controller's proposal
+accepted). CTR-MTX-17's table changes:
 step 3 lists the fee checks, step 6 is "fee move".
 
 ## 4. Release, factory, deployment
@@ -344,7 +357,9 @@ the largest built envelope minus its overhead at the smallest envelope is ≤ 8,
 ### 5.3 What the plan must re-measure (with the final token bytecode: after the split and `mtxPayMeta`)
 
 Forge gas is deterministic; these are correctness runs under `scripts/capped`, not timing runs (Task 9 timing stays
-the owner's go). Every row on both relay paths where the path exists.
+the owner's go). Every row on both relay paths where the path exists. Gate for the `set.toml` re-pins: only the
+affected steps (owner 2026-10-27, §0): `gen_set.py --all --check`, forge at the four sets, the size gate,
+`docs_check`; no full pqz-core gate.
 
 1. **The overhead table:** every signed entry point, cold and warm, against the Part 0 fixture (§10, R1).
    `test/v2/MetaTxGasV2.t.sol` rows re-pinned.
@@ -378,6 +393,8 @@ the owner's go). Every row on both relay paths where the path exists.
 
 ## 6. CTR-MTX-26 on the split: `mtxPayMeta` / `uaPayMeta`
 
+### 6.1 EVM (Hedera included)
+
 Where it lives: in `MetaTokenBase` (all six kinds). Nothing in the library: the library sees an ordinary
 `UAMetaTransfer`.
 
@@ -404,11 +421,54 @@ helper with `mtxPay` that takes the struct, or read the static head from `msg.da
 changes every bytecode and every gas pin).
 
 Vectors: `smartcontracts/vectors/metatx/paymeta.json` (path: controller call): `(salt, meta, payId, payLane(payId))`
-for each schema 1–4 and edge cases (empty body, long body), read by a forge test and by `clientkeys`.
+for each schema 1–4 and edge cases (empty body, long body), read by a forge test, by `clientkeys` and by every
+family's tests (§6.2).
+
+### 6.2 The other families: one pay-meta entry each
+
+Every family gets one pay-meta entry next to its existing signed pay. The rule is the same everywhere (EVM's
+semantics, mirrored):
+
+- **Derivation, byte for byte the EVM one:** `payId = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`,
+  `payLane(p) = keccak256("scaas.pay.lane" ‖ p)` as a 32-byte lane id (every family's lanes are 32-byte ids). Each
+  family hashes with its native Keccak-256: Soroban `env.crypto().keccak256`, Solana the keccak syscall
+  (`solana-keccak-hasher`, already in `Cargo.lock`), Cosmos the RustCrypto `sha3` crate (a new workspace dependency,
+  the sibling of the `sha2` already used: `cosmwasm-std` has no Keccak; controller call), Sui `sui::hash::keccak256`,
+  Aptos `aptos_std::aptos_hash::keccak256`, TON Tact's `keccak256(Slice)` (stdlib of compiler 1.6.13; it hashes the
+  whole snake chain). Every family's tests read the shared vectors `smartcontracts/vectors/metatx/paymeta.json`
+  through its own vector path (§6.1, R16).
+- **Same signed op as the family's plain pay** (`OP_PAY` / `"pay"`), plus `(salt, meta)` as unsigned arguments; the
+  entry requires `pay_ref == metaPayId(salt, meta)`. Where the family has lanes, it also requires
+  `lane == payLane(pay_ref)` and `nonce == 0` (where the entry's arguments are not the signed bytes themselves, it
+  derives them on chain, as `mtxPay` does), so a pay-meta pays a `(payer, payId)` at most once, as `mtxPayMeta`.
+  Soroban has no lanes: its `pay` already keeps a per-token `PayRef` set (once per `pay_ref`).
+- **Event** `PaymentMeta(pay_id, meta)` before the family's `PaymentSettled` (TON: in the payer wallet's transaction,
+  so it precedes the receiver wallet's `PaymentSettled` in logical time). The contract never parses `meta`.
+- **Publication is the submitter's choice, as on EVM.** `mtxPay` and `mtxPayMeta` share one digest, so whoever
+  holds `(salt, meta)` and the payer's signature can publish `meta` through the pay-meta entry. The off-chain variant
+  stays private only while the payee keeps `(salt, meta)` to itself. The same holds on every family (Soroban
+  excepted, where the auth entry covers `pay_meta`'s own arguments). Recorded, not a question: it follows from
+  CTR-MTX-26's "no new struct".
+- **Size:** no contract cap; bounded by each chain's transaction size (Solana 1,232 B per transaction, so a short
+  `meta`) and the node's `max_pay_meta_bytes` (§9).
+
+| Family | Entry (from the family's current code) | Where | Tests |
+|---|---|---|---|
+| Soroban | `pay_meta(env, from, to, amount, salt: BytesN<32>, meta: Bytes, valid_until)` on the token: `from.require_auth()` (the auth entry covers these arguments, `meta` included), `pay_ref = metaPayId`, then `pay`'s body through one private `settle_pay(env, from, to, amount, pay_ref, valid_until)` shared with `pay` (the `PayRef` once-check, expiry, move, events); `MetaTransactionExecuted.digest = op_digest("pay_meta", args)`; new event `PaymentMeta { #[topic] pay_id, meta }`. | `soroban/contracts/token/src/lib.rs` | `soroban/contracts/token/src/test.rs`; `cd smartcontracts/soroban && cargo test` |
+| Solana | instruction `relay_pay_meta(ctx: Context<RelayPay>, owner: [u8; 32], args: PayArgs, salt: [u8; 32], meta: Vec<u8>, auth: Auth)`: the same accounts as `relay_pay`; requires `args.pay_ref == metaPayId(salt, meta)`, `args.lane == payLane(args.pay_ref)`, `args.nonce == 0`, then `relay_pay`'s body (one shared function); `emit_cpi!(PaymentMeta { contract: mint, pay_id, meta })` before `PaymentSettled`. | `solana/programs/scaas/src/account.rs`, `lib.rs` | `solana/programs/scaas/tests/pay.rs`, `tests/vectors.rs`; `smartcontracts/scripts/test.sh solana` |
+| Cosmos | `ExecuteMsg::RelayPayMeta { payload: Binary, auth: Auth, salt: HexBinary, meta: Binary }` on the token: `verify`, `op.op == "pay"`, `pay_ref == metaPayId`, `lane == payLane(pay_ref)`, `nonce == 0`, then `relay`'s pay arm; event `payment_meta` (`pay_id`, `meta` as hex) added before `payment_settled`. | `cosmos/token/src/lib.rs`, `cosmos/metaop/src/lib.rs` (the two hash helpers) | `cosmos/tests/tests/flows.rs`, `tests/vector.txt`; `cd smartcontracts/cosmos && cargo test` |
+| Sui | `public fun relay_pay_meta<T>(account: &mut Account<T>, to: address, amount: u128, salt: vector<u8>, meta: vector<u8>, valid_until: u64, relayer: address, extra: vector<u8>, a: Auth, clock: &Clock, ctx: &mut TxContext)`: `pay_ref = metaPayId`, `lane = payLane(pay_ref)`, `nonce = 0` derived on chain, then `relay_pay`'s body (one `public(package)` function); event `PaymentMeta { contract, pay_id, meta }` before `PaymentSettled`. | `move/sui/sources/meta.move` | `move/sui/tests/meta_tests.move`, `tests/vectors.move` (`scripts/gen_vectors.py`); `sui move test --path smartcontracts/move/sui` |
+| Aptos | `package entry fun relay_pay_meta(lane: &signer, owner, asset, to, amount, salt, meta, valid_until, relayer, extra, public_key, sig, envelope)` and the view `pay_meta_check(…)` (the twin of `pay_check`), lane and nonce derived on chain, through `pay_checked`; event `PaymentMeta` before `PaymentSettled`. | `move/aptos/sources/meta.move`, `scripts/check_entry_visibility.sh` (the new entry listed) | `move/aptos/tests/meta_tests.move`, `tests/vectors.move`; `smartcontracts/scripts/test.sh aptos` |
+| TON (GRAM) | `SignedOp` with `OP_PAY` and `params` = `salt:uint256 ^meta` (`meta` as snake bytes); the payer's jetton wallet, when `params != null` on `OP_PAY`: `payRef == metaPayId(salt, meta)`, `lane == payLane(payRef)`, `nonce == 0`, then emits `PaymentMeta { master, payId, meta: ^Cell }` (new external-out message, opcode `0x9b1c0d04`) and pays as today. `params = null` keeps today's `OP_PAY`. | `ton/contracts/common.tact`, `jetton.tact` | `ton/tests/jetton.spec.ts`, `tests/vectors.spec.ts`, `vectors/ton-vectors.json`; `cd smartcontracts/ton && npm test` |
+
+The mandate payments of each family (`pay_under_mandate`, `mandate_pay`, `MandatePay`) are not a payer's pay relay
+and get no pay-meta entry, as the EVM wallets (§3.7).
 
 ## 7. CTR-MTX-27 on the split: `MtxRelayFee`
 
 CTR-MTX-27's normative text is the spec; this section fixes only the build.
+
+### 7.1 EVM (Hedera included)
 
 - **Files:** `src/metatx/MtxRelayFee.sol` with two contracts: `MtxRelayFee` (the router) and `MtxRelayExecutor`
   (created by the router's constructor with CREATE; `ROUTER` immutable; `exec(target, callData)` callable only by
@@ -428,31 +488,74 @@ CTR-MTX-27's normative text is the spec; this section fixes only the build.
 - **Gas** (CTR-MTX-27's estimate: ≈ +200–230k on Amsterdam with an ECDSA payer): measured in the plan, ECDSA and
   `mldsa65` payers.
 
+### 7.2 The other families: one router each
+
+The rule of CTR-MTX-27 holds on every family (the research note's §5 item 6): the payment's reference commits to
+the call, and the payment is consumed only together with the call. What each family builds:
+
+- **`ref`** `= keccak256("scaas.relayfee" ‖ chain ‖ target ‖ keccak256(call))`, with `chain` the network id the
+  family's `MetaOp` domain already carries (Soroban the 32-byte network id, Solana `Config.network`, Cosmos the
+  chain id's bytes, Sui / Aptos the root's `network` bytes, TON the global id as `int32`), `target` the family's
+  address bytes, `call` the exact bytes the router has executed (the target's own signature included). Per-family
+  vectors in each suite.
+- **The payment** is the family's plain signed pay with `pay_ref = ref` and, where the family has lanes,
+  `lane = payLane(ref)`, `nonce = 0`; no fee field exists off EVM, so the pay's `amount` is the fee.
+- **The router marker.** Every family's pay already checks `relayer == 0 || relayer == the submitting lane`. The
+  payment names as relayer an address that no transaction can sign for (a PDA, a derived object address, a contract
+  address), so only the router's own code path can spend it. Where the family's auth is invocation-scoped (Soroban)
+  the auth entry's root is the router call itself.
+- **The executor.** Where a router-sent call reaches a target as the router (`msg.sender`-like), a call that is a
+  token's relay of another router-bound payment would see its bound relayer; there the family needs an executor or
+  a refusal, as on EVM. Per family below.
+- **Open mode is the client default** (the submitting lane is paid); a bound payee where the family's shape allows
+  it. **No PQ signatures off EVM** (§1 non-goals). **No budget mode** (owner 2026-10-26).
+- Event `RelayFeePaid(ref, target, token, payer, payee, amount)` in the family's event form.
+
+| Family | Router (from the family's current code) | Executor / re-entry | Tests |
+|---|---|---|---|
+| Soroban | New contract `contracts/relay-fee`: `relay(env, payer: Address, target: Address, func: Symbol, args: Vec<Val>, token: Address, to: Address, amount: i128, valid_until: u64, relayer: Address)`. `payer.require_auth_for_args((target, func, args, token, to, amount, valid_until))` (the auth entry's root is this router call, with the token's `pay` as its sub-invocation, so the payment authorises nothing else); `relayer.require_auth()` (the transaction's source, implicit); `ref` over `xdr(func, args)`; `env.invoke_contract(target, func, args)`; `token.pay(payer, to', amount, ref, valid_until)` with `to' = relayer` in open mode (`to == router`), else `to`. Stateless. | None needed: Soroban refuses contract re-entry, and another payment's auth entry is rooted at its own router call. | `contracts/relay-fee/src/test.rs` (target: the mandate's signed revoke, a fee-less entry); `cd smartcontracts/soroban && cargo test` |
+| Solana | New instruction `relay_fee(ctx, owner: [u8; 32], args: PayArgs, target_data: Vec<u8>, target_accounts: u8, auth: Auth)` in the `scaas` program (no second program). `remaining_accounts[0]` = target program, `[1..=n]` its accounts with their flags; `call = target program ‖ for each account (pubkey ‖ is_signer ‖ is_writable) ‖ data`. Marker: the PDA `[b"relayfee"]` of `scaas` (`relay_pay`'s `relayer == lane` check already refuses it, a PDA never signs a transaction). `invoke` the target, then `relay_pay`'s body with the relayer checked against the marker; open mode (`args.to == marker`) pays the lane signer's ATA directly. The precompile check reads the instructions sysvar as today (the signature instruction is top-level). | Target program `== scaas` refused (`RelayFeeShape`); indirect re-entry (scaas → X → scaas) is refused by the runtime. | new `programs/scaas/tests/relay_fee.rs` with a test-only target program next to `cpi_wrapper`; `smartcontracts/scripts/test.sh solana` |
+| Cosmos | New contracts `cosmos/relayfee` (router) and `cosmos/relayexec` (executor). Router `Relay { target, msg: Binary, token, payload: Binary, auth: Auth }`: parse the `MetaOp` (`scaas_metaop`), shape (`op == "pay"`, `pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == router`), then messages in order: executor `Exec { target, msg }`, token `Relay { payload, auth }`, and in open mode (`op.to == router`) token `Transfer { recipient: info.sender, amount }`; CosmWasm runs them depth-first and reverts all on any failure. The router instantiates its executor (`Instantiate2`, fixed salt, code id in its `InstantiateMsg`), its one stored item. | `relayexec` accepts `Exec` only from its router and forwards with no funds: the target sees the executor, never the router (the EVM reason applies: the token's `Relay` checks `relayer == info.sender`). | `cosmos/tests/tests/flows.rs` (cw-multi-test); `cd smartcontracts/cosmos && cargo test` |
+| Sui | New module `scaas::relayfee`. Move has no dynamic call, so the router wraps each fee-less signed entry of the `scaas` package by name (today `meta::manage`, `mandate::revoke_with_sig`, `dex::cancel`, `dex::invalidate_nonces`): one `public fun relay_<entry>` per target that calls it and then `meta::pay_routed` (new, `public(package)`), `call = bcs` of the target's name and every argument (signature included). Marker: the address of the shared `RelayFee` object (no transaction sender can be an object). Open mode pays `ctx.sender()`. A new target = a new wrapper and a package upgrade. | None needed: no dynamic dispatch; `pay_routed` is package-only and called only by `relayfee`. | `move/sui/tests/relayfee_tests.move`; `sui move test --path smartcontracts/move/sui` |
+| Aptos | New module `scaas::relayfee`, the same static shape: one `package entry fun relay_<entry>` per fee-less signed entry (today `meta::manage_signed`, `mandate::open`, `mandate::revoke_signed`, `dex::cancel_signed`, `dex::invalidate_nonces_signed`), then `meta::pay_routed` (`package`). Marker `object::create_object_address(&@scaas, b"scaas.relayfee")`. Open mode pays `signer::address_of(lane)`. `check_entry_visibility.sh` lists the new entries. | As Sui. | `move/aptos/tests/relayfee_tests.move`; `smartcontracts/scripts/test.sh aptos` |
+| TON (GRAM) | **Escrow** (no cross-contract atomicity, owner 2026-10-26): new contract `relayfee.tact`. (1) The relayer sends `RelayCall { target, call: ^Cell, payWallet, payOp: ^Cell, payAuth: ^Cell, payStateInit: ^Cell?, master, deadline }`; the router computes `ref` (`call` hashed by its cell hash), checks the pay `MetaOp` (`payRef == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == router`, `to == router`), stores `pending[ref]` and sends the payer's wallet the `SignedOp` (bounceable, `responseDestination = router`). (2) Its own jetton wallet's `JettonNotification` (sender checked against `walletAddress(router, master)`, the SCaaS jetton code; payload `pay_tag ref`, amount equal) marks it funded and sends `call` to `target` (bounceable). (3) Release: the target's `JettonExcesses` to the router (`call`'s `responseDestination` = router, a client rule covered by `ref`) pays the escrow to the relayer; refund to the payer on the call's bounce, or by anyone's `RelayRefund { ref }` after `deadline` (the DEX's `Refund` pattern, NET-TON-03). Open mode only (the payer's `to` is the router; a bound payee would need it in the signed op: controller call, later). One pending call per target at a time (the excess carries `queryId = 0`, so the router matches by sender). | The router sends the call itself, but a jetton `SignedOp` checks `relayer == sender`, and the router's marker is only ever named by router-bound payments, which `RelayCall` refuses as a `call` (`call` must not be a `SignedOp` naming the router as relayer). | new `ton/tests/relayfee.spec.ts` (sandbox); `cd smartcontracts/ton && npm test` |
+
+What the TON escrow does not give (recorded, controller call): a target that runs but sends no excess (its
+`SendIgnoreErrors` reply failing) is refunded after `deadline`, so the payer is not charged and the relayer loses
+its gas; never the reverse.
+
 ## 8. Scope and staging
 
-**This work item (EVM, Hedera included because Hedera runs the EVM contracts):**
+**This work item: every family** (owner 2026-10-27, §0): EVM (Hedera included, because Hedera runs the EVM
+contracts), Soroban, Solana, Cosmos, Sui, Aptos and GRAM (TON). EVM comes first because the other families mirror
+its semantics (§6.2, §7.2): the `payId` derivation, its vectors and the `ref` rule are fixed by the EVM parts and only
+then copied.
 
 | Part | Content | Gate |
 |---|---|---|
 | 0 | On `main`, before any change: the parity fixture and gas baseline (R1) | forge |
-| 1 | The split: `MtxPipelineLib`, `MetaTxBase` / `ERC20MetaTx` / `MetaTokenBase`, `DeployBase`, e2e.py, fixtures, tests R2–R8 | forge at the committed set, sizes, `docs_check` |
-| 2 | `mtxPayMeta` / `uaPayMeta`, the vectors | forge, sizes |
-| 3 | Re-measure §5.3 with the final bytecode; re-pin `debit_min_gas`, `ROLL_MAX` if the rule says so, the prover rows, the node floor | forge at all four sets (`at-set.sh`), `gen_set.py --all --check`, sizes, zether-prover cargo |
+| 1 | The split: `MtxPipelineLib`, `MetaTxBase` / `ERC20MetaTx` / `MetaTokenBase`, `DeployBase`, e2e.py (link closure, §11.1), fixtures, tests R2–R8 | forge at the committed set, sizes, `docs_check` |
+| 2 | `mtxPayMeta` / `uaPayMeta`, the shared vectors | forge, sizes |
+| 3 | Re-measure §5.3 with the final bytecode; re-pin `debit_min_gas` (and so `UARegistry`), `ROLL_MAX` if the rule says so, the prover rows, the node floor | the affected steps only (owner 2026-10-27): forge at all four sets (`at-set.sh`), `gen_set.py --all --check`, sizes, zether-prover cargo |
 | 4 | `MtxRelayFee` + executor, `DeployBase`, conformance | forge |
-| 5 | Node and clients (§9) | `scaas-node` tests, `clientkeys` tests |
-| 6 | Docs and decisions (§11), review, fix round | `docs_check` |
+| 5 | Soroban, Solana, Cosmos, Sui, Aptos, TON: each family's pay-meta entry (§6.2), router (§7.2) and node adapter, one part per family, in that order (the Rust-hosted families first, then Move, then the TON escrow, the largest) | that family's suite (`smartcontracts/scripts/test.sh <family>`) and `scaas-node` adapter tests |
+| 6 | Node and clients for EVM (§9) | `scaas-node` tests, `clientkeys` tests |
+| 7 | Docs and decisions (§11), the four gaps (§11.1), review, fix round, the closing gates of every family | `docs_check`, the resumable gate runner |
 
 Each part ends on the branch; merge and push only on the owner's go. The superseded pipeline code (`_checkCall`,
 `_callFee`, `_checkTransfer`, `_checkUATransfer`, `_uaAuthorize`, the Hedera overrides as they are today) goes to
-`smartcontracts/evm/legacy/metatx-v1/` as a backup, not deleted.
+`smartcontracts/evm/legacy/metatx-v1/` as a backup, not deleted. No non-EVM code is superseded (only added).
 
-**Non-EVM (controller call, §13 Q1):** one later item per family — Soroban, Solana, Cosmos, Sui, Aptos, GRAM — each
-carrying both CTR-MTX-26 (the pay relay with `(salt, meta)`, the same `payId` derivation, an event) and CTR-MTX-27
-(the family's router shape; GRAM by escrow). Recorded in TODO "Recorded, not scheduled", after this item. Why: no
-non-EVM family has the split's size problem or shares its code; each has its own toolchain, tests and review;
-bundling six toolchains into this item would block the governance path on them. What they reuse is fixed here: the
-`payId` derivation and its vectors (§6), and the `ref` rule (each family defines its own byte encoding of chain and
-target).
+**NEAR and Algorand** (owner 2026-10-27): PLANNED in `docs/networks/README.md`, no code yet. They are built right
+after this item, as their own family bring-up item (family spec → plan → build), and they carry CTR-MTX-26
+(`mtxPayMeta` / `uaPayMeta`) and CTR-MTX-27 (`MtxRelayFee`) from the start, with the semantics this item fixes for
+EVM and the other families.
+
+What that bring-up must decide for CTR-MTX-26 / -27 (no design here): **NEAR** — the token form (NEP-141 with a
+SCaaS signed-op path), who stakes storage for the once-per-`payId` record and for the router's state, and the
+router's shape over NEAR's asynchronous cross-contract calls (a promise chain with a callback, or an escrow as on
+TON). **Algorand** — the token form (ASA or ARC-200), where the once-per-`payId` record lives (boxes, and who funds
+their minimum balance), and the router's shape (an atomic transaction group or an inner-transaction app call).
 
 ## 9. Node and clients
 
@@ -488,6 +591,18 @@ target).
   callData)`, the payment (open mode by default), one prompt with both intents. If the inner call is itself an mtx
   envelope with `MODE_RESTRICT_RELAYER`, its relayer must be the executor's address (or left open).
 
+**For the other families** (`scaas-node/src/adapters/<family>.rs`, the `signed_op` jobs):
+- A pay job of every family may carry `(salt, meta)`. The adapter checks `pay_ref == metaPayId(salt, meta)` and, where
+  the family has lanes, `lane == payLane(pay_ref)`, `nonce == 0`, then builds the family's pay-meta call (§6.2)
+  instead of its plain pay; the same `max_pay_meta_bytes` cap. Each family's indexer decodes `PaymentMeta` and joins
+  it by `pay_ref`.
+- A relay-fee job builds the family's router call (§7.2) with the target call the client sent; the adapter checks
+  `ref` against the call bytes and the router marker as relayer before simulating, and submits only when the fee
+  covers the gas at the node's price. TON: the adapter tracks the escrow (`pending` → funded → released / refunded)
+  and sends `RelayRefund` after `deadline` when nothing came back.
+- `clients/clientkeys` builds and signs EVM envelopes only today (`src/evm.js`); a non-EVM subject signs its op in
+  its own family wallet, so the non-EVM side of `clientkeys` is the shared vectors only.
+
 ## 10. Risks and how each is tested
 
 | # | Risk | Test |
@@ -507,21 +622,44 @@ target).
 | R13 | The wallets' pipeline drifts from the tokens' | Both compose the same internal functions; the wallets' own suites (`SmartKeyAccount.t.sol`, `MandateWallet.t.sol`) unchanged and passing; R1 covers the tokens. |
 | R14 | The router: a `callData` that executes another router-bound payment, a fake token, re-entry | CTR-MTX-27's conformance list (§7). |
 | R15 | Storage layout drift | `test/v2/Layout.t.sol` unchanged and passing (the library declares no state variables). |
+| R16 | A family hashes `payId`, `payLane` or `ref` differently from EVM | Every family's suite reads `paymeta.json` (and its own `ref` vectors, generated by the EVM-side generator for the EVM rows and by the family's generator for its own encoding) and asserts byte equality. |
+| R17 | A non-EVM payment bound to the router is spent outside it | Per family: the plain pay entry refuses an op whose relayer is the router marker (Solana PDA, Sui object, Aptos object address, Cosmos router, TON router); Soroban: the payment's auth entry, rooted at the router call, does not satisfy a direct `pay`. |
+| R18 | Cosmos / TON: the target sees the router as its relayer | Cosmos: `relayexec` is the sender the target sees; a `callData` that is a token `Relay` of another router-bound payment fails. TON: `RelayCall` refuses a `call` that is a `SignedOp` naming the router. |
+| R19 | TON escrow: funds stuck or paid twice | Sandbox cases: release on excess; refund on the call's bounce; refund by `RelayRefund` after `deadline`, refused before; a second `RelayCall` to a target with a pending call refused; the payment's own bounce clears `pending`; release and refund are mutually exclusive. |
 
-## 11. Docs and records to update (Part 6)
+## 11. Docs and records to update (Part 7)
 
 - `decisions.md`: CTR-MTX-07 Change (the tree plus `MtxPipelineLib`, variant A, owner 2026-10-20 / 2026-10-21, the
-  boundary of §3.1, status and commits); CTR-MTX-17 Change (§3.8, controller call); CTR-MTX-26 and CTR-MTX-27 Change
-  lines (EVM built, non-EVM queued per family); NET-EVM-06 addendum figures; CTR-PQZ-07 Change if `ROLL_MAX` moves;
-  the `debit_min_gas` re-pin under the C0-5 Change's heading (CTR-PQZ-14).
+  boundary of §3.1, status and commits); CTR-MTX-17 Change (§3.8, owner 2026-10-27); CTR-MTX-26 and CTR-MTX-27 Change
+  lines (built on every family, with the per-family shape of §6.2 / §7.2 and the owner answer of 2026-10-27);
+  NET-EVM-06 addendum figures; CTR-PQZ-07 Change if `ROLL_MAX` moves; the `debit_min_gas` re-pin under the C0-5
+  Change's heading (CTR-PQZ-14), with the affected-steps gate (owner 2026-10-27).
 - `contracts/metatx.md`: CTR-MTX-07 and §1 (the library), CTR-MTX-17 table, §8 gas, §11 interfaces (PayMeta, the
-  router), CTR-MTX-26 / -27 status.
-- `networks/evm.md` NET-EVM-06 table; `contracts/pq-zero-knowledge.md` §9.3 margins; `contracts/zether.md` §19 if a
-  row moves; the sets README / `SET.md` files that quote `debit_min_gas` or `ROLL_MAX`; the node docs (job API, submit
-  lanes) for the pay-meta job and the relay-fee row; `clients/signers-clientkeys.md`.
-- `TODO.md`: this item done; six non-EVM items; the stale text in the P6 wallet-prover item that says "neither
-  `mtxRollOver` nor `mtxPrepareAcc` is relayable" (it contradicts the 2026-10-20 ruling and the code) corrected.
-  `HANDOFF.md` at the end.
+  router), §12 per-family equivalents, CTR-MTX-26 / -27 status.
+- `networks/evm.md` NET-EVM-06 table; `networks/{soroban,solana,cosmos,sui,aptos,ton}.md`: the pay-meta entry and
+  the router of each; `networks/README.md`: NEAR / Algorand carry CTR-MTX-26 / -27 from their bring-up;
+  `contracts/pq-zero-knowledge.md` §9.3 margins; `contracts/zether.md` §19 if a row moves; the sets README /
+  `SET.md` files that quote `debit_min_gas` or `ROLL_MAX`; the node docs (job API, submit lanes) for the pay-meta job
+  and the relay-fee row of every family; `clients/signers-clientkeys.md`.
+- `TODO.md`: this item done; the NEAR / Algorand bring-up item next (§8); the stale line of §11.1 (1). `HANDOFF.md` at
+  the end.
+
+### 11.1 The four known gaps this item closes
+
+1. **TODO's wrong line.** `TODO.md` (the P6 wallet-prover step 5b) says "neither `mtxRollOver` nor `mtxPrepareAcc` is
+   relayable". It contradicts the 2026-10-20 ruling (every state-changing `mtx*` relayable) and the code (both are in
+   the PQZ rule tables; `mtxPrepareAcc` halves are re-measured on `uaExecute`, §5.3 item 5). Corrected to "both are
+   relayable (CTR-MTX-19); the prover may also call `mtxPrepareAcc` directly".
+2. **`e2e.py` link closure.** `script/pqz/e2e.py` `Deployer.linked()` reads only the token artifact's direct
+   `linkReferences`, so after the split the PQZ envs would pin `MtxPipelineLib` but not `HederaLib` (a library of the
+   library). Fixed to the transitive closure, libraries deployed leaf first, with a Python self-test (R5).
+3. **`UARegistry` re-pin of `PQZ_DEBIT_MIN_GAS`.** `UARegistry.sol` compiles `PqzSet.PQZ_DEBIT_MIN_GAS` into its PQZ
+   holder bound (`w + w/63 + GAS_MARGIN + PQZ_DEBIT_MIN_GAS > TX_GAS_CAP`, C0-5). The re-measured constant (§5.3
+   item 4) changes the registry's bytecode at every set: `UARegistryPqzBound.t.sol` re-pinned, and the SCaaS testnet
+   takes the new registry at its next reset (fs3 Task 13, with UA-8's registry redeploy).
+4. **The node's `ERC1271_FLOOR`.** `scaas-node/src/guard.rs` pins `ERC1271_FLOOR = 21,000 + 400,000 · 64/63 + 5,000`
+   (432,349, asserted in `guard.rs` and used by two `submit.rs` tests): one frame too few after the split (§9). Re-pinned
+   from forge's measured minimum.
 
 ## 12. Left to the builder
 
@@ -534,22 +672,22 @@ target).
 - The parity fixture's format and case list (R1), the opcode walker (R6), the closure test (R5).
 - The PayMeta body restructuring (§6), the vectors file.
 - The router's code within CTR-MTX-27, its deployment record keys.
+- Per family (§6.2, §7.2): the private helper names, the event field order, the exact byte encoding of `call` within
+  the stated rule, the test target of each router suite.
 - The node and client code of §9 within the stated rules.
 - Every number marked [estimate] is replaced by a measured one with its run log in `smartcontracts/evm/runs/`.
 
-## 13. Open questions for the owner (most important first)
+## 13. Owner questions (answered 2026-10-27)
 
-Each has a controller proposal; the work proceeds on the proposal unless the owner says otherwise.
+All four were answered on 2026-10-27 (§0); none is open.
 
-1. **Non-EVM staging.** Proposal: EVM (with Hedera) in this item; Soroban, Solana, Cosmos, Sui, Aptos and GRAM each as
-   their own later item carrying both CTR-MTX-26 and CTR-MTX-27 (§8).
-2. **Fee amount before the call.** Proposal: compute and check the fee amount of a self-call in step 3 (one library
-   call; the fee error wins when both the fee and the call fail, §3.8). Alternative: keep it after the call, with a
-   second library call (exact error order, ≈ +1k gas warm per relayed call).
-3. **Trade and receiver-fee signatures through the library.** Proposal: yes (one copy of the signature rule; fewer
-   token bytes; +2,600 gas cold once per transaction on those paths, a DEX settlement included). Alternative: keep
-   `SigCheck` and the Hedera branch compiled into the token for them.
-4. **Gate for the `set.toml` re-pins** (`debit_min_gas` at four sets, maybe `roll_max` at `n2560-kmax16384`).
-   Proposal: only the affected steps (`gen_set.py --all --check`, forge at each set, sizes, `docs_check`), because
-   both keys are read only by the contracts and no core or proof parameter changes. The owner's 2026-10-25 rule names
-   `set.toml` changes as full-gate triggers, so this needs the owner's yes; otherwise four full gates run.
+1. **Non-EVM staging.** Controller proposal: EVM (with Hedera) here, each other family later. **Owner: all families in
+   this one item** ("Tất cả một lượt"); §8, §6.2, §7.2. NEAR and Algorand follow as their own bring-up item.
+2. **Fee amount before the call.** **Owner: accepted** — one library call, the fee error wins when both fail (§3.8).
+3. **Trade and receiver-fee signatures through the library.** **Owner: accepted** (§3.1, §3.4).
+4. **Gate for the `set.toml` re-pins.** **Owner: accepted** — only the affected steps (`gen_set.py --all --check`,
+   forge at the four sets, sizes, `docs_check`), no full pqz-core gate (§5.3).
+
+No new question blocks the build. The per-family choices of §6.2 / §7.2 that a reader might want to revisit are
+controller calls, recorded where they are made: the Cosmos `sha3` dependency, the Move routers' static target list,
+TON's open-mode-only escrow with one pending call per target.
