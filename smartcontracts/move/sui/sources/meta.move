@@ -12,7 +12,7 @@ use sui::clock::Clock;
 use sui::coin::{Self, Coin};
 use sui::derived_object;
 use sui::event;
-use sui::hash::blake2b256;
+use sui::hash::{blake2b256, keccak256};
 use sui::table::{Self, Table};
 use sui::transfer::Receiving;
 
@@ -20,6 +20,10 @@ const DOMAIN: vector<u8> = b"scaas.metaop.v1";
 const OPEN_DOMAIN: vector<u8> = b"scaas.open.v1";
 const KEYOP_DOMAIN: vector<u8> = b"scaas.keyop.v1";
 const OP_PAY: u8 = 0;
+/// CTR-MTX-26 (spec §6.2): `payId = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`,
+/// `payLane(p) = keccak256("scaas.pay.lane" ‖ p)` — byte for byte the EVM derivation.
+const PAY_META_DOMAIN: vector<u8> = b"scaas.pay.meta";
+const PAY_LANE_DOMAIN: vector<u8> = b"scaas.pay.lane";
 const U64_MAX: u128 = 0xffffffffffffffff;
 /// Vòng đời khoá (round-3 §C "Vòng đời khoá", §C.3): thao tác `manage` ký bởi một khoá hiện có.
 const ADD_KEY: u8 = 0;
@@ -158,6 +162,13 @@ public struct MetaTransactionExecuted has copy, drop {
     nonce: u64,
 }
 
+/// CTR-MTX-26: emitted by `relay_pay_meta` right before its `PaymentSettled`. The contract never parses `meta`.
+public struct PaymentMeta has copy, drop {
+    contract: ID,
+    pay_id: vector<u8>,
+    meta: vector<u8>,
+}
+
 public struct PaymentSettled has copy, drop {
     contract: ID,
     from: address,
@@ -281,15 +292,98 @@ public fun relay_pay<T>(
         pay_ref, lane, nonce, valid_until, relayer, extra,
     );
     let digest = check(&op, clock, ctx);
-    assert!(verify_by(account, &digest, &a), EBadSignature);
+    settle(account, &op, digest, &a, to, option::none(), ctx);
+}
+
+/// CTR-MTX-26 (spec §6.2): `relay_pay` with `pay_ref = metaPayId(salt, meta)`, `lane = payLane(pay_ref)`,
+/// `nonce = 0` derived on chain ⇒ the same signed `MetaOp` as a plain pay of that `pay_ref`, and a
+/// `(payer, payId)` pays at most once (the payer's own lane table). `PaymentMeta` before `PaymentSettled`.
+public fun relay_pay_meta<T>(
+    account: &mut Account<T>,
+    to: address,
+    amount: u128,
+    salt: vector<u8>,
+    meta: vector<u8>,
+    valid_until: u64,
+    relayer: address,
+    extra: vector<u8>,
+    a: Auth,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let pay_ref = meta_pay_id(salt, meta);
+    let op = new_op(
+        account.network, object::id_address(account), OP_PAY, account.owner, to, amount,
+        pay_ref, pay_lane(pay_ref), 0, valid_until, relayer, extra,
+    );
+    let digest = check(&op, clock, ctx);
+    settle(account, &op, digest, &a, to, option::some(meta), ctx);
+}
+
+/// CTR-MTX-27 (spec §7.2): the router's payment, called only by `scaas::relayfee` right after the wrapped
+/// entry. `pay_ref` is the ref the router computed from the call; lane `payLane(pay_ref)`, nonce 0 and
+/// relayer = `marker` (the shared `RelayFee` object) are fixed here, so the payer's signature verifies only for
+/// a payment signed for exactly this call through the router. Open mode (`to == marker`) pays the submitter;
+/// the marker itself is never paid. Returns the payee.
+public(package) fun pay_routed<T>(
+    account: &mut Account<T>,
+    marker: address,
+    to: address,
+    amount: u128,
+    pay_ref: vector<u8>,
+    valid_until: u64,
+    extra: vector<u8>,
+    a: Auth,
+    clock: &Clock,
+    ctx: &mut TxContext,
+): address {
+    let op = new_op(
+        account.network, object::id_address(account), OP_PAY, account.owner, to, amount,
+        pay_ref, pay_lane(pay_ref), 0, valid_until, marker, extra,
+    );
+    let digest = check_fields(&op, clock);
+    let payee = if (to == marker) ctx.sender() else to;
+    settle(account, &op, digest, &a, payee, option::none(), ctx);
+    payee
+}
+
+/// `relay_pay`'s body (relayer already checked): signature, lane nonce, move to `payee`, events.
+fun settle<T>(
+    account: &mut Account<T>,
+    op: &MetaOp,
+    digest: vector<u8>,
+    a: &Auth,
+    payee: address,
+    meta: Option<vector<u8>>,
+    ctx: &mut TxContext,
+) {
+    assert!(verify_by(account, &digest, a), EBadSignature);
+    let (lane, nonce) = (op.lane, op.nonce);
     let next = if (account.lanes.contains(lane)) account.lanes.remove(lane) else 0;
     assert!(next == nonce, EBadNonce);
     account.lanes.add(lane, nonce + 1);
-    let amt = amount_u64(amount);
+    let amt = amount_u64(op.amount);
     assert!(account.balance.value() >= amt, EInsufficient);
-    transfer::public_transfer(coin::take(&mut account.balance, amt, ctx), to);
+    transfer::public_transfer(coin::take(&mut account.balance, amt, ctx), payee);
     emit_executed(account.registry, object::id(account), account.owner, digest, lane, nonce);
-    emit_settled(account.registry, account.owner, to, amt, pay_ref);
+    meta.do!(|m| event::emit(PaymentMeta { contract: account.registry, pay_id: op.pay_ref, meta: m }));
+    emit_settled(account.registry, account.owner, payee, amt, op.pay_ref);
+}
+
+/// CTR-MTX-26 `metaPayId(salt, meta)`; `salt` is 32 bytes.
+public fun meta_pay_id(salt: vector<u8>, meta: vector<u8>): vector<u8> {
+    assert!(salt.length() == 32, EBadField);
+    let mut b = PAY_META_DOMAIN;
+    b.append(salt);
+    b.append(keccak256(&meta));
+    keccak256(&b)
+}
+
+/// `payLane(p)`: the 32-byte lane of a pay-meta / router payment.
+public fun pay_lane(p: vector<u8>): vector<u8> {
+    let mut b = PAY_LANE_DOMAIN;
+    b.append(p);
+    keccak256(&b)
 }
 
 // ------------------------------------------------------------------ package (mandate, dex)
@@ -313,9 +407,15 @@ public(package) fun new_op(
 
 /// Hạn, relayer, độ dài trường ⇒ digest personal-message của op.
 public(package) fun check(op: &MetaOp, clock: &Clock, ctx: &TxContext): vector<u8> {
+    let digest = check_fields(op, clock);
+    assert!(op.relayer == @0x0 || op.relayer == ctx.sender(), EWrongRelayer);
+    digest
+}
+
+/// Độ dài trường, hạn ⇒ digest (relayer do bên gọi kiểm: `check`, hoặc `pay_routed` cố định = marker).
+fun check_fields(op: &MetaOp, clock: &Clock): vector<u8> {
     assert!(op.pay_ref.length() == 32 && op.lane.length() == 32 && op.extra.length() == 32, EBadField);
     assert!(clock.timestamp_ms() / 1000 <= op.valid_until, EExpired);
-    assert!(op.relayer == @0x0 || op.relayer == ctx.sender(), EWrongRelayer);
     op_digest(op)
 }
 
@@ -473,6 +573,8 @@ public fun registry_id<T>(a: &Account<T>): ID { a.registry }
 
 public fun network<T>(r: &Registry<T>): vector<u8> { r.network }
 
+public fun account_network<T>(a: &Account<T>): vector<u8> { a.network }
+
 public fun root_network(r: &Root): vector<u8> { r.network }
 
 public fun key_count<T>(a: &Account<T>): u64 { a.keys.length() }
@@ -487,3 +589,13 @@ public fun lane_nonce<T>(a: &Account<T>, lane: vector<u8>): u64 {
 
 #[test_only]
 public fun init_for_testing(ctx: &mut TxContext) { init(ctx) }
+
+#[test_only]
+public fun payment_meta_for_testing(contract: ID, pay_id: vector<u8>, meta: vector<u8>): PaymentMeta {
+    PaymentMeta { contract, pay_id, meta }
+}
+
+#[test_only]
+public fun payment_settled_for_testing(contract: ID, from: address, to: address, amount: u64, pay_ref: vector<u8>): PaymentSettled {
+    PaymentSettled { contract, from, to, amount, pay_ref }
+}

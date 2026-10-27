@@ -369,3 +369,104 @@ fun coins_sent_to_the_account_id_are_not_stuck() {
     assert!(fx::held<EUR>(&mut sc, v::alice()) == 7);
     sc.end();
 }
+
+// ------------------------------------------------------------------ CTR-MTX-26 pay-meta (spec §6.2)
+
+/// `relay_pay_meta` with the parameters `gen_vectors.py` signed (`pm_a_note`: Alice pays 0xbeef 100, valid 1000 s).
+fun pay_meta(sc: &mut Scenario, owner: address, amount: u128, salt: vector<u8>, meta: vector<u8>, relayer: address, a: Auth) {
+    let mut acct = fx::acct<SUI>(sc, owner);
+    let clock = fx::clock_at(sc, 0);
+    meta::relay_pay_meta(&mut acct, BEEF, amount, salt, meta, 1000, relayer, ref(0), a, &clock, sc.ctx());
+    clock.destroy_for_testing();
+    ts::return_shared(acct);
+    let s = sc.ctx().sender();
+    sc.next_tx(s);
+}
+
+/// Rule 1: every row of `smartcontracts/vectors/metatx/paymeta.json` (`long_body_4096` included, as a hash only).
+#[test]
+fun pay_meta_vectors_match() {
+    let rows = v::pm_rows();
+    assert!(rows.length() == 6);
+    rows.do_ref!(|r| {
+        assert!(meta::meta_pay_id(r[0], r[1]) == r[2]);
+        assert!(meta::pay_lane(r[2]) == r[3]);
+    });
+}
+
+#[test, expected_failure(abort_code = meta::EBadField)]
+fun pay_meta_salt_is_32_bytes() {
+    meta::meta_pay_id(vector[1], vector[]);
+}
+
+#[test]
+fun pay_meta_emits_meta_then_settled() {
+    let mut sc = funded();
+    let mut acct = fx::acct<SUI>(&mut sc, v::alice());
+    let clock = fx::clock_at(&mut sc, 0);
+    meta::relay_pay_meta(&mut acct, BEEF, 100, v::pm_note_salt(), v::pm_note_meta(), 1000, @0x0, ref(0), v::pm_a_note(), &clock, sc.ctx());
+    let reg = meta::registry_id(&acct);
+    // MetaTransactionExecuted, PaymentMeta, PaymentSettled — in that order in `settle`.
+    assert!(sui::event::num_events() == 3);
+    assert!(sui::event::events_by_type<meta::PaymentMeta>() == vector[meta::payment_meta_for_testing(reg, v::pm_note_id(), v::pm_note_meta())]);
+    assert!(sui::event::events_by_type<meta::PaymentSettled>()
+        == vector[meta::payment_settled_for_testing(reg, v::alice(), BEEF, 100, v::pm_note_id())]);
+    assert!(meta::lane_nonce(&acct, meta::pay_lane(v::pm_note_id())) == 1);
+    clock.destroy_for_testing();
+    ts::return_shared(acct);
+    sc.next_tx(@0x7e1);
+    assert!(fx::held<SUI>(&mut sc, BEEF) == 100);
+    sc.end();
+}
+
+/// The same signed `MetaOp` settles as a plain `relay_pay` of `pay_ref = payId` (off-chain meta), and only once.
+#[test, expected_failure(abort_code = meta::EBadNonce)]
+fun pay_meta_and_plain_pay_share_one_lane() {
+    let mut sc = funded();
+    let lane = meta::pay_lane(v::pm_note_id());
+    let mut acct = fx::acct<SUI>(&mut sc, v::alice());
+    let clock = fx::clock_at(&mut sc, 0);
+    meta::relay_pay(&mut acct, BEEF, 100, v::pm_note_id(), lane, 0, 1000, @0x0, ref(0), v::pm_a_note(), &clock, sc.ctx());
+    clock.destroy_for_testing();
+    ts::return_shared(acct);
+    sc.next_tx(@0x7e1);
+    pay_meta(&mut sc, v::alice(), 100, v::pm_note_salt(), v::pm_note_meta(), @0x0, v::pm_a_note());
+    sc.end();
+}
+
+/// Review focus 4: a `(salt, meta)` that does not hash to the signed `pay_ref` is refused.
+#[test, expected_failure(abort_code = meta::EBadSignature)]
+fun sui_pay_meta_mismatch_and_replay() {
+    let mut sc = funded();
+    let mut meta = v::pm_note_meta();
+    meta.push_back(0);
+    pay_meta(&mut sc, v::alice(), 100, v::pm_note_salt(), meta, @0x0, v::pm_a_note());
+    sc.end();
+}
+
+#[test, expected_failure(abort_code = meta::EBadSignature)]
+fun sui_pay_meta_mismatch_salt() {
+    let mut sc = funded();
+    pay_meta(&mut sc, v::alice(), 100, ref(0), v::pm_note_meta(), @0x0, v::pm_a_note());
+    sc.end();
+}
+
+/// Review focus 4: a second pay-meta of the same `(payer, payId)` is refused.
+#[test, expected_failure(abort_code = meta::EBadNonce)]
+fun sui_pay_meta_replay() {
+    let mut sc = funded();
+    pay_meta(&mut sc, v::alice(), 100, v::pm_note_salt(), v::pm_note_meta(), @0x0, v::pm_a_note());
+    pay_meta(&mut sc, v::alice(), 100, v::pm_note_salt(), v::pm_note_meta(), @0x0, v::pm_a_note());
+    sc.end();
+}
+
+/// Rule 6: the once-set is per payer — Bob paying first with Alice's payId does not block Alice.
+#[test]
+fun pay_meta_once_set_is_per_payer() {
+    let mut sc = funded();
+    pay_meta(&mut sc, v::bob(), 1, v::pm_note_salt(), v::pm_note_meta(), @0x0, v::pm_b_note());
+    pay_meta(&mut sc, v::alice(), 100, v::pm_note_salt(), v::pm_note_meta(), @0x0, v::pm_a_note());
+    sc.next_tx(@0x7e1);
+    assert!(fx::held<SUI>(&mut sc, BEEF) == 101);
+    sc.end();
+}

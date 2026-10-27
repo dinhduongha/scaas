@@ -65,6 +65,9 @@ impl<'a> Reader<'a> {
         let n = self.uleb()?;
         Ok(self.take(n)?.to_vec())
     }
+    fn u32(&mut self) -> Result<u32> {
+        Ok(u32::from_le_bytes(self.take(4)?.try_into()?))
+    }
     fn u64(&mut self) -> Result<u64> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into()?))
     }
@@ -246,66 +249,61 @@ pub struct ObjRef {
     pub digest: [u8; 32],
 }
 
-/// `TransactionData::V1(ProgrammableTransaction[auth::new, meta::relay_pay<T>])`, expiration None.
-#[allow(clippy::too_many_arguments)]
-pub fn pay_tx(package: &Addr, op: &MetaOp, auth: &Auth, account_isv: u64, coin_tag: &[u8], sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Vec<u8> {
-    let pure = |bcs: &[u8]| {
-        let mut o = vec![0u8];
-        vec(&mut o, bcs);
-        o
-    };
-    let pure_vec = |b: &[u8]| {
-        let mut inner = Vec::new();
-        vec(&mut inner, b);
-        pure(&inner)
-    };
-    let shared = |id: &Addr, isv: u64, mutable: bool| {
-        let mut o = vec![1u8, 1u8];
-        o.extend_from_slice(id);
-        o.extend_from_slice(&isv.to_le_bytes());
-        o.push(mutable as u8);
-        o
-    };
+fn pure(bcs: &[u8]) -> Vec<u8> {
+    let mut o = vec![0u8];
+    vec(&mut o, bcs);
+    o
+}
+
+fn pure_vec(b: &[u8]) -> Vec<u8> {
+    let mut inner = Vec::new();
+    vec(&mut inner, b);
+    pure(&inner)
+}
+
+fn shared(id: &Addr, isv: u64, mutable: bool) -> Vec<u8> {
+    let mut o = vec![1u8, 1u8];
+    o.extend_from_slice(id);
+    o.extend_from_slice(&isv.to_le_bytes());
+    o.push(mutable as u8);
+    o
+}
+
+fn clock_input() -> Vec<u8> {
     let mut clock = [0u8; 32];
     clock[31] = 6;
-    let inputs = [
-        pure_vec(&auth.sig),                                // 0
-        pure_vec(&auth.authenticator_data),                 // 1
-        pure_vec(&auth.client_data_json),                   // 2
-        shared(&op.contract, account_isv, true),            // 3 account
-        pure(&op.to),                                       // 4
-        pure(&op.amount.to_le_bytes()),                     // 5
-        pure_vec(&op.pay_ref),                              // 6
-        pure_vec(&op.lane),                                 // 7
-        pure(&op.nonce.to_le_bytes()),                      // 8
-        pure(&op.valid_until.to_le_bytes()),                // 9
-        pure(&op.relayer),                                  // 10
-        pure_vec(&op.extra),                                // 11
-        shared(&clock, CLOCK_VERSION, false),               // 12
-    ];
-    let input = |i: u16| [1u8, i as u8, (i >> 8) as u8];
-    let call = |module: &str, function: &str, tags: &[&[u8]], args: &[[u8; 3]]| {
-        let mut o = vec![0u8];
-        o.extend_from_slice(package);
-        vec(&mut o, module.as_bytes());
-        vec(&mut o, function.as_bytes());
-        uleb(&mut o, tags.len());
-        tags.iter().for_each(|t| o.extend_from_slice(t));
-        uleb(&mut o, args.len());
-        args.iter().for_each(|a| o.extend_from_slice(a));
-        o
-    };
-    let auth_new = call("auth", "new", &[], &[input(0), input(1), input(2)]);
-    let result0 = [2u8, 0, 0];
-    let relay = call("meta", "relay_pay", &[coin_tag], &[
-        input(3), input(4), input(5), input(6), input(7), input(8), input(9), input(10), input(11), result0, input(12),
-    ]);
+    shared(&clock, CLOCK_VERSION, false)
+}
+
+/// `Argument::Input(i)`.
+fn input(i: u16) -> [u8; 3] {
+    [1u8, i as u8, (i >> 8) as u8]
+}
+
+/// `Argument::Result(i)`.
+fn result(i: u16) -> [u8; 3] {
+    [2u8, i as u8, (i >> 8) as u8]
+}
+
+fn move_call(package: &Addr, module: &str, function: &str, tags: &[&[u8]], args: &[[u8; 3]]) -> Vec<u8> {
+    let mut o = vec![0u8];
+    o.extend_from_slice(package);
+    vec(&mut o, module.as_bytes());
+    vec(&mut o, function.as_bytes());
+    uleb(&mut o, tags.len());
+    tags.iter().for_each(|t| o.extend_from_slice(t));
+    uleb(&mut o, args.len());
+    args.iter().for_each(|a| o.extend_from_slice(a));
+    o
+}
+
+/// `TransactionData::V1(ProgrammableTransaction{inputs, commands})`, sender = gas owner, expiration None.
+fn tx_data(inputs: &[Vec<u8>], commands: &[Vec<u8>], sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Vec<u8> {
     let mut o = vec![0u8, 0u8]; // TransactionData::V1, TransactionKind::ProgrammableTransaction
     uleb(&mut o, inputs.len());
     inputs.iter().for_each(|i| o.extend_from_slice(i));
-    uleb(&mut o, 2);
-    o.extend_from_slice(&auth_new);
-    o.extend_from_slice(&relay);
+    uleb(&mut o, commands.len());
+    commands.iter().for_each(|c| o.extend_from_slice(c));
     o.extend_from_slice(sender);
     uleb(&mut o, 1); // gas payment
     o.extend_from_slice(&gas.id);
@@ -316,6 +314,431 @@ pub fn pay_tx(package: &Addr, op: &MetaOp, auth: &Auth, account_isv: u64, coin_t
     o.extend_from_slice(&budget.to_le_bytes());
     o.push(0); // TransactionExpiration::None
     o
+}
+
+fn auth_inputs(sig: &[u8], ad: &[u8], cd: &[u8]) -> [Vec<u8>; 3] {
+    [pure_vec(sig), pure_vec(ad), pure_vec(cd)]
+}
+
+/// `TransactionData::V1(ProgrammableTransaction[auth::new, meta::relay_pay<T>])`, expiration None.
+#[allow(clippy::too_many_arguments)]
+pub fn pay_tx(package: &Addr, op: &MetaOp, auth: &Auth, account_isv: u64, coin_tag: &[u8], sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Vec<u8> {
+    let mut inputs = auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec(); // 0..2
+    inputs.extend([
+        shared(&op.contract, account_isv, true), // 3 account
+        pure(&op.to),                            // 4
+        pure(&op.amount.to_le_bytes()),          // 5
+        pure_vec(&op.pay_ref),                   // 6
+        pure_vec(&op.lane),                      // 7
+        pure(&op.nonce.to_le_bytes()),           // 8
+        pure(&op.valid_until.to_le_bytes()),     // 9
+        pure(&op.relayer),                       // 10
+        pure_vec(&op.extra),                     // 11
+        clock_input(),                           // 12
+    ]);
+    let auth_new = move_call(package, "auth", "new", &[], &[input(0), input(1), input(2)]);
+    let relay = move_call(package, "meta", "relay_pay", &[coin_tag], &[
+        input(3), input(4), input(5), input(6), input(7), input(8), input(9), input(10), input(11), result(0), input(12),
+    ]);
+    tx_data(&inputs, &[auth_new, relay], sender, gas, price, budget)
+}
+
+/// CTR-MTX-26: `[auth::new, meta::relay_pay_meta<T>(account, to, amount, salt, meta, valid_until, relayer, extra, auth,
+/// clock)]`; `pay_ref`, `lane`, `nonce` are derived on chain.
+#[allow(clippy::too_many_arguments)]
+pub fn pay_meta_tx(package: &Addr, op: &MetaOp, auth: &Auth, salt: &[u8], meta: &[u8], account_isv: u64, coin_tag: &[u8], sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Vec<u8> {
+    let mut inputs = auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec(); // 0..2
+    inputs.extend([
+        shared(&op.contract, account_isv, true), // 3 account
+        pure(&op.to),                            // 4
+        pure(&op.amount.to_le_bytes()),          // 5
+        pure_vec(salt),                          // 6
+        pure_vec(meta),                          // 7
+        pure(&op.valid_until.to_le_bytes()),     // 8
+        pure(&op.relayer),                       // 9
+        pure_vec(&op.extra),                     // 10
+        clock_input(),                           // 11
+    ]);
+    let auth_new = move_call(package, "auth", "new", &[], &[input(0), input(1), input(2)]);
+    let relay = move_call(package, "meta", "relay_pay_meta", &[coin_tag], &[
+        input(3), input(4), input(5), input(6), input(7), input(8), input(9), input(10), result(0), input(11),
+    ]);
+    tx_data(&inputs, &[auth_new, relay], sender, gas, price, budget)
+}
+
+// ------------------------------------------------------------------ CTR-MTX-26 / -27 (spec §6.2, §7.2)
+
+/// `max_pay_meta_bytes` (spec §9): the node's cap on a pay-meta `meta`.
+// TODO(T17): becomes the `max_pay_meta_bytes` config key (default 2,048) for every family, with the indexer
+// decoding of `PaymentMeta` / `RelayFeePaid`.
+const MAX_PAY_META_BYTES: usize = 2048;
+const ORDER_DOMAIN: &[u8] = b"scaas.order.v1";
+
+fn keccak(parts: &[&[u8]]) -> [u8; 32] {
+    alloy::primitives::keccak256(parts.concat()).0
+}
+
+/// CTR-MTX-26: `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))` (`meta::meta_pay_id`).
+pub fn meta_pay_id(salt: &[u8], meta: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.meta", salt, &keccak(&[meta])])
+}
+
+/// `keccak256("scaas.pay.lane" ‖ p)` (`meta::pay_lane`).
+pub fn pay_lane(p: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.lane", p])
+}
+
+/// `derived_object::derive_address(registry, owner)`: the id of `Account<T>` of `owner` under `Registry<T>`.
+pub fn derive_account(registry: &Addr, owner: &Addr) -> Addr {
+    let mut b = vec![0xf0u8];
+    b.extend_from_slice(registry);
+    b.extend_from_slice(&32u64.to_le_bytes());
+    b.extend_from_slice(owner);
+    // TypeTag of `0x2::derived_object::DerivedObjectKey<address>`
+    b.push(7);
+    b.extend_from_slice(&parse_addr("0x2").expect("0x2"));
+    vec(&mut b, b"derived_object");
+    vec(&mut b, b"DerivedObjectKey");
+    b.extend_from_slice(&[1, 4]);
+    blake2b256(&b)
+}
+
+/// `scaas::dex::Order` (BCS, the bytes the maker signed; `domain` = `scaas.order.v1`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Order {
+    pub network: Vec<u8>,
+    pub market: Addr,
+    pub maker: Addr,
+    pub taker: Addr,
+    pub sell_type: Vec<u8>,
+    pub buy_type: Vec<u8>,
+    pub sell_amount: u64,
+    pub buy_amount: u64,
+    pub nonce: u128,
+    pub expiry: u64,
+    pub max_fee_ppm: u32,
+    pub flags: u8,
+    pub relayer: Addr,
+}
+
+impl Order {
+    fn read(r: &mut Reader) -> Result<Self> {
+        if r.vec()? != ORDER_DOMAIN {
+            bail!("not a scaas.order.v1 order");
+        }
+        Ok(Self {
+            network: r.vec()?,
+            market: r.addr()?,
+            maker: r.addr()?,
+            taker: r.addr()?,
+            sell_type: r.vec()?,
+            buy_type: r.vec()?,
+            sell_amount: r.u64()?,
+            buy_amount: r.u64()?,
+            nonce: r.u128()?,
+            expiry: r.u64()?,
+            max_fee_ppm: r.u32()?,
+            flags: r.u8()?,
+            relayer: r.addr()?,
+        })
+    }
+
+    /// `dex::new_order`'s 13 pure arguments (the domain is set on chain).
+    fn inputs(&self) -> Vec<Vec<u8>> {
+        vec![
+            pure_vec(&self.network), pure(&self.market), pure(&self.maker), pure(&self.taker), pure_vec(&self.sell_type),
+            pure_vec(&self.buy_type), pure(&self.sell_amount.to_le_bytes()), pure(&self.buy_amount.to_le_bytes()),
+            pure(&self.nonce.to_le_bytes()), pure(&self.expiry.to_le_bytes()), pure(&self.max_fee_ppm.to_le_bytes()),
+            pure(&[self.flags]), pure(&self.relayer),
+        ]
+    }
+
+    fn write(&self, o: &mut Vec<u8>) {
+        vec(o, ORDER_DOMAIN);
+        vec(o, &self.network);
+        o.extend_from_slice(&self.market);
+        o.extend_from_slice(&self.maker);
+        o.extend_from_slice(&self.taker);
+        vec(o, &self.sell_type);
+        vec(o, &self.buy_type);
+        o.extend_from_slice(&self.sell_amount.to_le_bytes());
+        o.extend_from_slice(&self.buy_amount.to_le_bytes());
+        o.extend_from_slice(&self.nonce.to_le_bytes());
+        o.extend_from_slice(&self.expiry.to_le_bytes());
+        o.extend_from_slice(&self.max_fee_ppm.to_le_bytes());
+        o.push(self.flags);
+        o.extend_from_slice(&self.relayer);
+    }
+}
+
+/// A fee-less signed entry of `scaas` that `scaas::relayfee` wraps (`relay_<entry>`), with its arguments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Wrapped {
+    Manage { account: Addr, action: u8, scheme: u8, public_key: Vec<u8>, rp_id_hash: Vec<u8>, origin: Vec<u8>, guardian: Addr, valid_until: u64 },
+    RevokeWithSig { mandate: Addr, valid_until: u64 },
+    Cancel { market: Addr, account: Addr, order: Order },
+    InvalidateNonces { market: Addr, account: Addr, min_nonce: u128 },
+}
+
+/// The wrapped call: `call = bcs(name) ‖ bcs(each argument)`, the entry's `Auth` last (sig, authenticator_data,
+/// client_data_json) — the bytes `relayfee` hashes into `ref`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayCall {
+    pub entry: Wrapped,
+    pub auth: [Vec<u8>; 3],
+}
+
+impl RelayCall {
+    /// Exactly one wrapped entry's call, canonical BCS (re-encoding gives the same bytes), nothing after it.
+    pub fn decode(b: &[u8]) -> Result<Self> {
+        let mut r = Reader::new(b);
+        let entry = match r.vec()?.as_slice() {
+            b"meta::manage" => Wrapped::Manage {
+                account: r.addr()?,
+                action: r.u8()?,
+                scheme: r.u8()?,
+                public_key: r.vec()?,
+                rp_id_hash: r.vec()?,
+                origin: r.vec()?,
+                guardian: r.addr()?,
+                valid_until: r.u64()?,
+            },
+            b"mandate::revoke_with_sig" => Wrapped::RevokeWithSig { mandate: r.addr()?, valid_until: r.u64()? },
+            b"dex::cancel" => Wrapped::Cancel { market: r.addr()?, account: r.addr()?, order: Order::read(&mut r)? },
+            b"dex::invalidate_nonces" => Wrapped::InvalidateNonces { market: r.addr()?, account: r.addr()?, min_nonce: r.u128()? },
+            _ => bail!("not a call of a wrapped entry (meta::manage, mandate::revoke_with_sig, dex::cancel, dex::invalidate_nonces)"),
+        };
+        let auth = [r.vec()?, r.vec()?, r.vec()?];
+        r.done()?;
+        let c = Self { entry, auth };
+        if c.encode() != b {
+            bail!("call bytes are not canonical BCS");
+        }
+        Ok(c)
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut o = Vec::new();
+        match &self.entry {
+            Wrapped::Manage { account, action, scheme, public_key, rp_id_hash, origin, guardian, valid_until } => {
+                vec(&mut o, b"meta::manage");
+                o.extend_from_slice(account);
+                o.extend_from_slice(&[*action, *scheme]);
+                vec(&mut o, public_key);
+                vec(&mut o, rp_id_hash);
+                vec(&mut o, origin);
+                o.extend_from_slice(guardian);
+                o.extend_from_slice(&valid_until.to_le_bytes());
+            }
+            Wrapped::RevokeWithSig { mandate, valid_until } => {
+                vec(&mut o, b"mandate::revoke_with_sig");
+                o.extend_from_slice(mandate);
+                o.extend_from_slice(&valid_until.to_le_bytes());
+            }
+            Wrapped::Cancel { market, account, order } => {
+                vec(&mut o, b"dex::cancel");
+                o.extend_from_slice(market);
+                o.extend_from_slice(account);
+                order.write(&mut o);
+            }
+            Wrapped::InvalidateNonces { market, account, min_nonce } => {
+                vec(&mut o, b"dex::invalidate_nonces");
+                o.extend_from_slice(market);
+                o.extend_from_slice(account);
+                o.extend_from_slice(&min_nonce.to_le_bytes());
+            }
+        }
+        self.auth.iter().for_each(|a| vec(&mut o, a));
+        o
+    }
+
+    /// The shared object the entry acts on besides the paying account (the mandate or the market).
+    pub fn object(&self) -> Option<Addr> {
+        match &self.entry {
+            Wrapped::Manage { .. } => None,
+            Wrapped::RevokeWithSig { mandate, .. } => Some(*mandate),
+            Wrapped::Cancel { market, .. } | Wrapped::InvalidateNonces { market, .. } => Some(*market),
+        }
+    }
+
+    /// The account the entry names, which is also the paying account (`None`: revoke, paid from any account).
+    pub fn account(&self) -> Option<Addr> {
+        match &self.entry {
+            Wrapped::Manage { account, .. } | Wrapped::Cancel { account, .. } | Wrapped::InvalidateNonces { account, .. } => Some(*account),
+            Wrapped::RevokeWithSig { .. } => None,
+        }
+    }
+}
+
+/// `relayfee::relay_ref`: `keccak256("scaas.relayfee" ‖ network ‖ package ‖ keccak256(call) ‖ salt)`, `package` the
+/// original package id, `salt` the payment's `extra`.
+pub fn relay_ref(network: &[u8], package: &Addr, call: &[u8], salt: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.relayfee", network, package, &keccak(&[call]), salt])
+}
+
+/// The wrapper's shared objects: the `RelayFee` router (read only) and the mandate / market the call acts on.
+pub struct FeeObjects {
+    pub router: (Addr, u64),
+    pub object: Option<(Addr, u64)>,
+    /// `T` of `Mandate<T>` (revoke only).
+    pub mandate_tag: Option<Vec<u8>>,
+}
+
+/// CTR-MTX-27: `[auth::new (payment), auth::new (call), (dex::new_order), relayfee::relay_<entry>]`. Inputs 0..2 the
+/// payer's `Auth`, 3..5 the call's, 6 the router, 7 the paying account, 8 `to`, 9 `amount`, 10 `valid_until`, 11 `extra`,
+/// 12 the clock, then the entry's own.
+#[allow(clippy::too_many_arguments)]
+pub fn fee_tx(package: &Addr, op: &MetaOp, auth: &Auth, call: &RelayCall, account_isv: u64, coin_tag: &[u8], objs: &FeeObjects, sender: &Addr, gas: &ObjRef, price: u64, budget: u64) -> Result<Vec<u8>> {
+    let mut inputs = auth_inputs(&auth.sig, &auth.authenticator_data, &auth.client_data_json).to_vec();
+    inputs.extend(auth_inputs(&call.auth[0], &call.auth[1], &call.auth[2]));
+    inputs.extend([
+        shared(&objs.router.0, objs.router.1, false),
+        shared(&op.contract, account_isv, true),
+        pure(&op.to),
+        pure(&op.amount.to_le_bytes()),
+        pure(&op.valid_until.to_le_bytes()),
+        pure_vec(&op.extra),
+        clock_input(),
+    ]);
+    let mut commands = vec![
+        move_call(package, "auth", "new", &[], &[input(0), input(1), input(2)]),
+        move_call(package, "auth", "new", &[], &[input(3), input(4), input(5)]),
+    ];
+    let pay = [input(8), input(9), input(10), input(11), result(0), input(12)];
+    let object = || objs.object.ok_or_else(|| anyhow!("the call's shared object is missing"));
+    let (function, tags, mut args): (&str, Vec<&[u8]>, Vec<[u8; 3]>) = match &call.entry {
+        Wrapped::Manage { action, scheme, public_key, rp_id_hash, origin, guardian, valid_until, .. } => {
+            inputs.extend([
+                pure(&[*action]), pure(&[*scheme]), pure_vec(public_key), pure_vec(rp_id_hash), pure_vec(origin), pure(guardian),
+                pure(&valid_until.to_le_bytes()),
+            ]);
+            ("relay_manage", vec![coin_tag], [6, 7, 13, 14, 15, 16, 17, 18, 19].map(input).to_vec())
+        }
+        Wrapped::RevokeWithSig { valid_until, .. } => {
+            let (id, isv) = object()?;
+            inputs.extend([shared(&id, isv, true), pure(&valid_until.to_le_bytes())]);
+            let tag = objs.mandate_tag.as_deref().ok_or_else(|| anyhow!("the mandate's coin type is missing"))?;
+            ("relay_revoke_with_sig", vec![tag, coin_tag], vec![input(6), input(13), input(14), result(1), input(7)])
+        }
+        Wrapped::Cancel { order, .. } => {
+            let (id, isv) = object()?;
+            inputs.push(shared(&id, isv, true));
+            inputs.extend(order.inputs()); // 14..26
+            commands.push(move_call(package, "dex", "new_order", &[], &(14..27).map(input).collect::<Vec<_>>()));
+            ("relay_cancel", vec![coin_tag], vec![input(6), input(13), input(7), result(2)])
+        }
+        Wrapped::InvalidateNonces { min_nonce, .. } => {
+            let (id, isv) = object()?;
+            inputs.extend([shared(&id, isv, true), pure(&min_nonce.to_le_bytes())]);
+            ("relay_invalidate_nonces", vec![coin_tag], vec![input(6), input(13), input(7), input(14)])
+        }
+    };
+    if !matches!(call.entry, Wrapped::RevokeWithSig { .. }) {
+        args.push(result(1)); // the call's Auth (revoke: already placed before the paying account)
+    }
+    args.extend(pay);
+    commands.push(move_call(package, "relayfee", function, &tags, &args));
+    Ok(tx_data(&inputs, &commands, sender, gas, price, budget))
+}
+
+/// What the node accepts as a relay-fee job (controller call 2026-10-27, owner may override): the configured router
+/// (the `RelayFee` object, the payment's relayer), a registered token, and a fee of at least `min_amount`.
+#[derive(Debug, Clone, Default)]
+pub struct RelayFeePolicy {
+    pub router: Option<Addr>,
+    pub tokens: Vec<Addr>,
+    pub min_amount: u128,
+}
+
+impl RelayFeePolicy {
+    /// `params.relay_fee = { router = "<RelayFee object id>", min_amount = N }` (default 1) and the chain's `tokens`
+    /// (`Registry<T>` ids). A `router` that is set but is not a Sui address, or a `min_amount` that is not a
+    /// non-negative integer, is a startup error, never a silently disabled router.
+    pub fn from_cfg(cfg: &ChainCfg) -> Result<Self> {
+        let t = cfg.params.get("relay_fee");
+        let router = match t.and_then(|t| t.get("router")) {
+            None => None,
+            Some(v) => Some(parse_addr(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a 0x… string"))?)
+                .context("params.relay_fee.router")?),
+        };
+        let min_amount = match t.and_then(|t| t.get("min_amount")) {
+            None => 1,
+            Some(v) => v
+                .as_integer()
+                .and_then(|n| u128::try_from(n).ok())
+                .ok_or_else(|| anyhow!("params.relay_fee.min_amount must be a non-negative integer"))?,
+        };
+        Ok(Self { router, tokens: cfg.tokens.iter().filter_map(|t| parse_addr(&t.address).ok()).collect(), min_amount })
+    }
+}
+
+/// The entry a job runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Entry {
+    Pay,
+    PayMeta { salt: Vec<u8>, meta: Vec<u8> },
+    Fee { call: Box<RelayCall>, router: Addr },
+}
+
+fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
+    let s = v.as_str().ok_or_else(|| anyhow!("op.{what} missing"))?;
+    Ok(alloy::hex::decode(s.trim().trim_start_matches("0x"))?)
+}
+
+/// The entry of a job, checked before simulation (fail closed). `op.kind`: `"pay_meta"` (`op.salt`, `op.meta` hex:
+/// `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0`, `meta` within the cap) or
+/// `"relay_fee"` (`op.extra.call` hex = the wrapped call's bytes, `op.extra.registry` = the payment's `Registry<T>`,
+/// optional `op.ref`): the policy (router, registered token whose account is the payer's, minimum fee), the call
+/// names the paying account where the wrapper uses one account for both, and the payment commits to exactly this
+/// call: `pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == router`. Anything else is `relay_pay`.
+pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
+    match o["kind"].as_str() {
+        Some("pay_meta") => {
+            let (salt, meta) = (hex_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
+            if salt.len() != 32 {
+                bail!("op.salt is 32 bytes");
+            }
+            if meta.len() > MAX_PAY_META_BYTES {
+                bail!("meta is {} B, above the {MAX_PAY_META_BYTES} B cap", meta.len());
+            }
+            let id = meta_pay_id(&salt, &meta);
+            if op.pay_ref != id || op.lane != pay_lane(&id) || op.nonce != 0 {
+                bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0");
+            }
+            Ok(Entry::PayMeta { salt, meta })
+        }
+        Some("relay_fee") => {
+            let Some(router) = policy.router else { bail!("relay-fee jobs need params.relay_fee.router") };
+            if op.relayer != router {
+                bail!("the payment's relayer {} is not the configured params.relay_fee.router", addr_hex(&op.relayer));
+            }
+            let x = &o["extra"];
+            let registry = parse_addr(x["registry"].as_str().ok_or_else(|| anyhow!("op.extra.registry missing"))?)?;
+            if !policy.tokens.contains(&registry) {
+                bail!("token {} is not registered on this chain", addr_hex(&registry));
+            }
+            if derive_account(&registry, &op.from) != op.contract {
+                bail!("the paying account is not the payer's account of token {}", addr_hex(&registry));
+            }
+            if op.amount < policy.min_amount {
+                bail!("fee {} is below relay_fee.min_amount {}", op.amount, policy.min_amount);
+            }
+            let bytes = hex_field(&x["call"], "extra.call")?;
+            let call = RelayCall::decode(&bytes)?;
+            if call.account().is_some_and(|a| a != op.contract) {
+                bail!("the wrapped call's account is not the paying account");
+            }
+            let r = relay_ref(&op.network, package, &bytes, &op.extra);
+            if op.pay_ref != r || op.lane != pay_lane(&r) || op.nonce != 0 {
+                bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0)");
+            }
+            if !o["ref"].is_null() && hex_field(&o["ref"], "ref")? != r {
+                bail!("op.ref != relay_ref(call, salt)");
+            }
+            Ok(Entry::Fee { call: Box::new(call), router })
+        }
+        _ => Ok(Entry::Pay),
+    }
 }
 
 /// Digest giao dịch Sui (id hiển thị dạng base58).
@@ -430,6 +853,7 @@ pub struct SuiAdapter {
     quorum: usize,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
+    relay_fee: RelayFeePolicy,
     /// Thư mục journal lane (review M3): tx đã ký cuối của mỗi lane, sống qua khởi động lại.
     journal: std::path::PathBuf,
 }
@@ -449,6 +873,9 @@ struct Work {
     op: MetaOp,
     auth: Auth,
     coin_tag: Vec<u8>,
+    entry: Entry,
+    /// `T` of `Mandate<T>` (`relay_revoke_with_sig` only).
+    mandate_tag: Option<Vec<u8>>,
 }
 
 fn param_str<'a>(cfg: &'a ChainCfg, k: &str) -> Option<&'a str> {
@@ -483,6 +910,7 @@ impl SuiAdapter {
             quorum: cfg.finality.quorum.max(1),
             lanes,
             signers: own,
+            relay_fee: RelayFeePolicy::from_cfg(cfg)?,
             journal: journal.into(),
         })
     }
@@ -559,12 +987,21 @@ impl SuiAdapter {
         if op.op != OP_PAY {
             bail!("only pay ops are relayed on Sui");
         }
+        // TODO(T17): the indexer's decoding of `PaymentMeta` / `RelayFeePaid` (`normalize`) and `max_pay_meta_bytes`.
         if parse_addr(o["contract"].as_str().unwrap_or_default())? != op.contract {
             bail!("payload contract differs from the job contract");
         }
         let auth = parse_signature(o["signature"].as_str().unwrap_or_default())?;
         let coin_tag = type_tag(o["extra"]["coin_type"].as_str().ok_or_else(|| anyhow!("extra.coin_type missing"))?)?;
-        Ok(Work { op, auth, coin_tag })
+        // the router's id is in `ref` as the original package (type_package), its module is called on `package`
+        let entry = entry(&self.type_package, &self.relay_fee, &op, o)?;
+        let mandate_tag = match &entry {
+            Entry::Fee { call, .. } if matches!(call.entry, Wrapped::RevokeWithSig { .. }) => Some(type_tag(
+                o["extra"]["mandate_coin_type"].as_str().ok_or_else(|| anyhow!("extra.mandate_coin_type missing"))?,
+            )?),
+            _ => None,
+        };
+        Ok(Work { op, auth, coin_tag, entry, mandate_tag })
     }
 
     /// `initial_shared_version` của account; `Ok(None)` = không tồn tại / không phải shared.
@@ -671,8 +1108,37 @@ impl ChainAdapter for SuiAdapter {
                 return Err(transport(e));
             }
         };
+        let objs = match &w.entry {
+            Entry::Fee { call, router } => {
+                let version = |id: Addr| async move {
+                    self.shared_version(&id)
+                        .await
+                        .map_err(transport)?
+                        .ok_or_else(|| SimError::Revert(format!("shared object {} does not exist", addr_hex(&id))))
+                        .map(|v| (id, v))
+                };
+                let object = match call.object() {
+                    Some(id) => Some(version(id).await?),
+                    None => None,
+                };
+                Some(FeeObjects { router: version(*router).await?, object, mandate_tag: w.mandate_tag.clone() })
+            }
+            _ => None,
+        };
+        let make = |budget: u64| -> std::result::Result<Vec<u8>, SimError> {
+            Ok(match (&w.entry, &objs) {
+                (Entry::PayMeta { salt, meta }, _) => {
+                    pay_meta_tx(&self.package, &w.op, &w.auth, salt, meta, isv, &w.coin_tag, &sender, &gas, price, budget)
+                }
+                (Entry::Fee { call, .. }, Some(objs)) => {
+                    fee_tx(&self.package, &w.op, &w.auth, call, isv, &w.coin_tag, objs, &sender, &gas, price, budget)
+                        .map_err(|e| SimError::Revert(format!("{e:#}")))?
+                }
+                _ => pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget),
+            })
+        };
         let cap = self.budget_cap.min(balance);
-        let tx = pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, cap);
+        let tx = make(cap)?;
         let dry = self.rpc("sui_dryRunTransactionBlock", json!([B64.encode(&tx)])).await.map_err(transport)?;
         let st = &dry["effects"]["status"];
         if st["status"].as_str() != Some("success") {
@@ -681,7 +1147,7 @@ impl ChainAdapter for SuiAdapter {
         let cost = |k: &str| dry["effects"]["gasUsed"][k].as_str().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
         let used = cost("computationCost") + cost("storageCost");
         let budget = (used + used / 5).max(price * 1000).min(cap);
-        let tx = pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget);
+        let tx = make(budget)?;
         let meta = json!({"budget": budget, "gas": addr_hex(&gas.id), "gas_version": gas.version});
         Ok(Built { job_id: job.id, body: tx, valid_until: w.op.valid_until, meta })
     }
@@ -1058,6 +1524,199 @@ mod tests {
         assert!(SuiAdapter::new(&cfg, &k).err().unwrap().to_string().contains("lane_journal"));
     }
 
+    // ---------------------------------------------------------------- CTR-MTX-26 / -27 (spec §6.2, §7.2)
+
+    /// The Move suite's vectors (`smartcontracts/move/sui/tests/vectors.move`, `gen_vectors.py`): the first `x"…"` or
+    /// `@0x…` of `public fun <name>()`. Only ed25519 (deterministic) signatures are read.
+    fn mv(name: &str) -> Vec<u8> {
+        let src = include_str!("../../../smartcontracts/move/sui/tests/vectors.move");
+        let line = src.lines().find(|l| l.starts_with(&format!("public fun {name}()"))).unwrap_or_else(|| panic!("{name}"));
+        let body = &line[line.find('{').unwrap()..];
+        if let Some(i) = body.find("x\"") {
+            let h = &body[i + 2..];
+            return alloy::hex::decode(&h[..h.find('"').unwrap()]).unwrap();
+        }
+        let a = &body[body.find('@').unwrap() + 1..];
+        parse_addr(a.split_whitespace().next().unwrap()).unwrap().to_vec()
+    }
+
+    fn a32(name: &str) -> Addr {
+        mv(name).try_into().unwrap()
+    }
+
+    const REG_SUI: &str = "0x7c9575082976f063e7bfa16aa86ca20e1675b50efa7d5a64d1fa66ce127f5fdf";
+
+    fn alice_auth(sig: &str) -> Auth {
+        Auth { flag: 0, sig: mv(sig), public_key: mv("alice_pk"), authenticator_data: vec![], client_data_json: vec![] }
+    }
+
+    /// Alice's op as `gen_vectors.py` signed it; the signature must verify over this exact payload.
+    fn alice_op(sig: &str, to: Addr, amount: u128, pay_ref: [u8; 32], valid_until: u64, relayer: Addr, extra: [u8; 32]) -> (MetaOp, Auth) {
+        let op = MetaOp {
+            network: b"localnet".to_vec(), contract: a32("a_sui_account"), op: OP_PAY, from: a32("alice"), to, amount,
+            pay_ref: pay_ref.to_vec(), lane: pay_lane(&pay_ref).to_vec(), nonce: 0, valid_until, relayer, extra: extra.to_vec(),
+        };
+        let auth = alice_auth(sig);
+        let vk = ed25519_dalek::VerifyingKey::from_bytes(&auth.public_key.clone().try_into().unwrap()).unwrap();
+        vk.verify_strict(&personal_digest(&op.encode()), &ed25519_dalek::Signature::from_slice(&auth.sig).unwrap()).unwrap();
+        (op, auth)
+    }
+
+    fn gas() -> ObjRef {
+        ObjRef { id: [0xaa; 32], version: 7, digest: [7u8; 32] }
+    }
+
+    /// Rule 1 (every row of the shared vectors), the derived account id, and the pay-meta PTB. The PTB decodes with
+    /// `sui keytool decode-or-verify-tx --tx-bytes` (Sui 1.81): 12 inputs (3 pure Auth, account shared mutable isv 3,
+    /// to, amount, salt, meta, valid_until, relayer, extra, Clock), `0x0::auth::new(Input 0..2)`,
+    /// `0x0::meta::relay_pay_meta<0x2::sui::SUI>(Input 3..10, Result 0, Input 11)`.
+    #[test]
+    fn sui_pay_meta_job_builds_ptb() {
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        let h = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
+        assert_eq!(rows.len(), 6);
+        for r in &rows {
+            let id = meta_pay_id(&h(&r["salt"]), &h(&r["meta"]));
+            assert_eq!((id.to_vec(), pay_lane(&id).to_vec()), (h(&r["payId"]), h(&r["payLane"])), "{}", r["name"]);
+        }
+        assert_eq!(derive_account(&parse_addr(REG_SUI).unwrap(), &a32("alice")), a32("a_sui_account"));
+        let (salt, meta) = (mv("pm_note_salt"), mv("pm_note_meta"));
+        let id: [u8; 32] = mv("pm_note_id").try_into().unwrap();
+        let (op, auth) = alice_op("pm_a_note", parse_addr("0xbeef").unwrap(), 100, id, 1000, [0; 32], [0; 32]);
+        let job = json!({"kind": "pay_meta", "salt": alloy::hex::encode(&salt), "meta": alloy::hex::encode(&meta)});
+        let pkg = parse_addr("0x0").unwrap();
+        let pol = RelayFeePolicy::default();
+        assert_eq!(entry(&pkg, &pol, &op, &job).unwrap(), Entry::PayMeta { salt: salt.clone(), meta: meta.clone() });
+        let tx = pay_meta_tx(&pkg, &op, &auth, &salt, &meta, 3, &type_tag("0x2::sui::SUI").unwrap(), &[0x1e; 32], &gas(), 1000, 2_000_000);
+        assert_eq!(addr_hex(&tx_digest(&tx)), "0x5b8b16ae6d289904d4621dccd0a95068989981cc752a27e0197e6881826bc4fa", "{}", B64.encode(&tx));
+        // fail closed before the dry-run
+        let bad = |o: &MetaOp, j: &Value| entry(&pkg, &pol, o, j).is_err();
+        let mut j = job.clone();
+        j["meta"] = json!(format!("{}00", job["meta"].as_str().unwrap()));
+        assert!(bad(&op, &j), "meta does not hash to pay_ref");
+        j["meta"] = job["meta"].clone();
+        j["salt"] = json!(alloy::hex::encode([0u8; 32]));
+        assert!(bad(&op, &j), "salt does not hash to pay_ref");
+        j["salt"] = json!(alloy::hex::encode(&salt[..31]));
+        assert!(bad(&op, &j), "salt is 32 bytes");
+        assert!(bad(&op, &json!({"kind": "pay_meta", "meta": job["meta"]})), "no salt");
+        assert!(bad(&MetaOp { nonce: 1, ..op.clone() }, &job), "nonce 1");
+        assert!(bad(&MetaOp { lane: vec![1; 32], ..op.clone() }, &job), "another lane");
+        let big = vec![0u8; MAX_PAY_META_BYTES + 1];
+        let id = meta_pay_id(&[1; 32], &big);
+        let o = MetaOp { pay_ref: id.to_vec(), lane: pay_lane(&id).to_vec(), ..op.clone() };
+        assert!(bad(&o, &json!({"kind": "pay_meta", "salt": alloy::hex::encode([1; 32]), "meta": alloy::hex::encode(&big)})), "over the cap");
+    }
+
+    fn fee_policy() -> RelayFeePolicy {
+        RelayFeePolicy { router: Some(a32("relay_fee_marker")), tokens: vec![parse_addr(REG_SUI).unwrap()], min_amount: 5 }
+    }
+
+    /// Alice's open-mode payment for `relay_manage` (`rf_manage_pay`: 10 SUI, valid until 2000 s, salt 0x51…).
+    fn manage_job() -> (MetaOp, Auth, Value) {
+        let marker = a32("relay_fee_marker");
+        let (op, auth) = alice_op("rf_manage_pay", marker, 10, a32("rf_manage_ref"), 2000, marker, [0x51; 32]);
+        let job = json!({"kind": "relay_fee", "ref": alloy::hex::encode(mv("rf_manage_ref")),
+                         "extra": {"coin_type": "0x2::sui::SUI", "registry": REG_SUI, "call": alloy::hex::encode(mv("rf_manage_call"))}});
+        (op, auth, job)
+    }
+
+    /// The wrapped calls' `ref` (the bytes the Move wrappers rebuild on chain; `relay_ref_vectors` there), the policy
+    /// (rule 8), the binding, and the PTB of each wrapper. The manage PTB decodes with `sui keytool
+    /// decode-or-verify-tx`: 20 inputs, `auth::new` ×2, `0x0::relayfee::relay_manage<0x2::sui::SUI>(Input 6, 7, 13..19,
+    /// Result 1, Input 8..11, Result 0, Input 12)`.
+    #[test]
+    fn sui_relay_fee_job_checks_ref() {
+        let pkg = parse_addr("0x0").unwrap();
+        for (name, salt) in [("manage", 0x51u8), ("revoke", 0x52), ("cancel", 0x53), ("nonces", 0x54)] {
+            let call = mv(&format!("rf_{name}_call"));
+            assert_eq!(relay_ref(b"localnet", &pkg, &call, &[salt; 32]).to_vec(), mv(&format!("rf_{name}_ref")), "{name}");
+            assert_eq!(RelayCall::decode(&call).unwrap().encode(), call, "{name}");
+        }
+        let (op, auth, job) = manage_job();
+        let pol = fee_policy();
+        let Entry::Fee { call, router } = entry(&pkg, &pol, &op, &job).unwrap() else { panic!("not a fee entry") };
+        assert_eq!(router, a32("relay_fee_marker"));
+        assert!(matches!(call.entry, Wrapped::Manage { action: 4, valid_until: 1000, .. }));
+        let objs = FeeObjects { router: (router, 2), object: None, mandate_tag: None };
+        let tx = fee_tx(&pkg, &op, &auth, &call, 3, &type_tag("0x2::sui::SUI").unwrap(), &objs, &[0x1e; 32], &gas(), 1000, 2_000_000).unwrap();
+        assert_eq!(addr_hex(&tx_digest(&tx)), "0x706178c47a4f92e4d319d4d7e4f5b9f7e5b736270fb36bc862a4ce979f4385ff", "{}", B64.encode(&tx));
+
+        let err = |o: &MetaOp, j: &Value, p: &RelayFeePolicy| format!("{:#}", entry(&pkg, p, o, j).unwrap_err());
+        // policy (rule 8): router configured and named as relayer, registered token of the payer, minimum fee
+        assert!(err(&op, &job, &RelayFeePolicy { router: None, ..pol.clone() }).contains("params.relay_fee.router"));
+        assert!(err(&op, &job, &RelayFeePolicy { router: Some([9; 32]), ..pol.clone() }).contains("router"));
+        assert!(err(&op, &job, &RelayFeePolicy { tokens: vec![], ..pol.clone() }).contains("registered"));
+        assert!(err(&op, &job, &RelayFeePolicy { min_amount: 11, ..pol.clone() }).contains("min_amount"));
+        let mut j = job.clone();
+        j["extra"]["registry"] = json!("0x168544589e67ec4f3a15a388d1a4ed44eca52abd8ff1c04a1057d2d4f53e3960");
+        assert!(err(&op, &j, &RelayFeePolicy { tokens: vec![parse_addr(j["extra"]["registry"].as_str().unwrap()).unwrap()], ..pol.clone() })
+            .contains("not the payer's account"));
+        // binding: other call bytes, another salt, a lane / nonce off the ref, a wrong `ref`, a plain-relayer payment
+        let mut c = mv("rf_manage_call");
+        let n = c.len();
+        c[n - 70] ^= 1; // a byte of valid_until / the Auth
+        j = job.clone();
+        j["extra"]["call"] = json!(alloy::hex::encode(&c));
+        assert!(entry(&pkg, &pol, &op, &j).is_err(), "another call");
+        assert!(err(&MetaOp { extra: vec![0x52; 32], ..op.clone() }, &job, &pol).contains("not bound"));
+        assert!(err(&MetaOp { nonce: 1, ..op.clone() }, &job, &pol).contains("not bound"));
+        assert!(err(&MetaOp { lane: vec![1; 32], ..op.clone() }, &job, &pol).contains("not bound"));
+        assert!(err(&MetaOp { relayer: [0; 32], ..op.clone() }, &job, &pol).contains("router"));
+        j = job.clone();
+        j["ref"] = json!(alloy::hex::encode([1u8; 32]));
+        assert!(err(&op, &j, &pol).contains("op.ref"));
+        assert!(err(&op, &json!({"kind": "relay_fee", "extra": {"registry": REG_SUI}}), &pol).contains("extra.call"));
+        // the call must name the paying account where the wrapper uses one account for both
+        let mut other = RelayCall::decode(&mv("rf_nonces_call")).unwrap();
+        if let Wrapped::InvalidateNonces { account, .. } = &mut other.entry {
+            *account = [3; 32];
+        }
+        let r = relay_ref(b"localnet", &pkg, &other.encode(), &op.extra);
+        let o = MetaOp { pay_ref: r.to_vec(), lane: pay_lane(&r).to_vec(), ..op.clone() };
+        j = job.clone();
+        j["extra"]["call"] = json!(alloy::hex::encode(other.encode()));
+        j["ref"] = Value::Null;
+        assert!(err(&o, &j, &pol).contains("paying account"));
+        // canonical bytes only: trailing data, an unknown entry
+        let mut c = mv("rf_manage_call");
+        c.push(0);
+        assert!(RelayCall::decode(&c).is_err(), "trailing");
+        let mut c = vec![];
+        vec(&mut c, b"meta::relay_pay");
+        assert!(RelayCall::decode(&c).is_err(), "not wrapped");
+
+        // every wrapper builds (revoke needs the mandate's coin type, cancel / nonces the market)
+        for (name, object) in [("revoke", Some(([5; 32], 4))), ("cancel", Some(([6; 32], 4))), ("nonces", Some(([6; 32], 4)))] {
+            let call = RelayCall::decode(&mv(&format!("rf_{name}_call"))).unwrap();
+            let tag = type_tag("0x2::sui::SUI").unwrap();
+            let objs = FeeObjects { router: (router, 2), object, mandate_tag: Some(tag.clone()) };
+            assert!(fee_tx(&pkg, &op, &auth, &call, 3, &tag, &objs, &[0x1e; 32], &gas(), 1000, 2_000_000).is_ok(), "{name}");
+            let objs = FeeObjects { router: (router, 2), object: None, mandate_tag: None };
+            assert!(fee_tx(&pkg, &op, &auth, &call, 3, &tag, &objs, &[0x1e; 32], &gas(), 1000, 2_000_000).is_err(), "{name}");
+        }
+    }
+
+    /// A configured but unparsable `params.relay_fee.router` / `min_amount` fails at startup.
+    #[test]
+    fn relay_fee_config_must_parse() {
+        let cfg = |t: &str| -> ChainCfg {
+            toml::from_str(&format!("family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"http://r\"]\nlanes = [0]\n\
+                                     finality = {{ mode = \"instant\" }}\nparams = {{ package = \"0xb\", lane_journal = \"/tmp\"{t} }}"))
+            .unwrap()
+        };
+        let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
+        for (t, what) in [(", relay_fee = { router = \"0xzz\" }", "router"), (", relay_fee = { router = 7 }", "router"),
+                          (", relay_fee = { router = \"0x5\", min_amount = \"9\" }", "min_amount"),
+                          (", relay_fee = { router = \"0x5\", min_amount = -1 }", "min_amount")] {
+            let e = SuiAdapter::new(&cfg(t), &k).err().unwrap();
+            assert!(format!("{e:#}").contains(what), "{t}: {e:#}");
+        }
+        let a = SuiAdapter::new(&cfg(", relay_fee = { router = \"0x5\", min_amount = 9 }"), &k).unwrap();
+        assert_eq!((a.relay_fee.router, a.relay_fee.min_amount), (Some(parse_addr("0x5").unwrap()), 9));
+        assert_eq!(SuiAdapter::new(&cfg(""), &k).unwrap().relay_fee.router, None, "no relay_fee: relay-fee jobs refused");
+    }
+
     fn arb_op() -> impl Strategy<Value = MetaOp> {
         (
             proptest::collection::vec(any::<u8>(), 0..300),
@@ -1084,6 +1743,23 @@ mod tests {
         fn decoders_never_panic(b in proptest::collection::vec(any::<u8>(), 0..400)) {
             let _ = MetaOp::decode(&b);
             let _ = parse_signature(&B64.encode(&b));
+        }
+
+        /// The new jobs on untrusted input (rule 8): no panic, whatever the bytes / JSON.
+        #[test]
+        fn relay_fee_and_pay_meta_jobs_never_panic(b in proptest::collection::vec(any::<u8>(), 0..400), op in arb_op(),
+                                                   kind in 0usize..3, s in "\\PC{0,80}") {
+            let _ = RelayCall::decode(&b);
+            let hexb = alloy::hex::encode(&b);
+            let kinds = ["pay_meta", "relay_fee", "other"];
+            let job = json!({"kind": kinds[kind], "salt": hexb, "meta": s, "ref": hexb,
+                             "extra": {"registry": s, "call": hexb, "coin_type": s}});
+            let pol = RelayFeePolicy { router: Some(op.relayer), tokens: vec![op.contract], min_amount: 0 };
+            let _ = entry(&op.contract, &pol, &op, &job);
+            let mut c = vec![];
+            vec(&mut c, b"dex::cancel");
+            c.extend_from_slice(&b);
+            let _ = RelayCall::decode(&c);
         }
 
         #[test]
