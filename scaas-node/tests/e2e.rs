@@ -461,6 +461,9 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     // T17 (CTR-MTX-27) on the real router: a fee-less `cancelNonce(77)` of the payer, its fee of 10 in open mode; the
     // node relays `relay` (call-table row MtxRelayFee.relay), the fee reaches the lane, the indexer joins RelayFeePaid
     let router: Address = dep["mtx_relay_fee"].as_str().expect("mtx_relay_fee in the deploy JSON").parse().unwrap();
+    let out = p.call(TransactionRequest::default().to(router).input(scaas_node::abi::IMtxRelayFee::EXECUTORCall {}.abi_encode().into()))
+        .await.unwrap();
+    assert_eq!(Address::abi_decode(&out).unwrap(), router.create(1), "the executor the node derives (never paid)");
     let inner = call(alloy::hex::decode(format!("cfdd7aea{:064x}", 77)).unwrap(), 8);
     let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
     let r = scaas_node::metatx::relay_ref(chain_id, token, &call_data);
@@ -499,6 +502,27 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("fee settled");
     assert_eq!((fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
         (Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
+
+    // T17 fix 1 (spec §9, R8): a SmartKeyAccount-signed mtxExecute sent with exactly the node's ERC-1271 floor for its
+    // calldata settles (the ERC-1271 call two frames below the token keeps its 400 k cap)
+    let owner = small_key(0x5ca);
+    let factory: Address = dep["smart_key_account_factory"].as_str().unwrap().parse().unwrap();
+    let first = SubjectKey { kind: 2, x: owner.address().into_word(), y: B256::ZERO, rpIdHash: B256::ZERO, originHash: B256::ZERO };
+    let acct = create(&rpc, &relayer, factory, deployCall { firstKey: first, guardian: Address::repeat_byte(0x6a) }.abi_encode()).await;
+    let m = Mtx::Call(scaas_node::abi::MetaTransaction { from: acct, data: alloy::hex::decode(format!("cfdd7aea{:064x}", 9)).unwrap().into(),
+        batch: U256::from(3), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO,
+        feeRecipient: Address::ZERO });
+    let ecdsa = owner.sign_hash_sync(&m.digest(&d)).unwrap().as_bytes().to_vec();
+    let sig = (U256::ZERO, Vec::<B256>::new(), alloy::primitives::Bytes::from(ecdsa)).abi_encode_params();
+    let data = m.calldata(sig.into());
+    let floor = scaas_node::guard::erc1271_floor(data.len());
+    let w = ProviderBuilder::new().wallet(EthereumWallet::from(relayer.clone())).connect_http(rpc.parse().unwrap());
+    let rc = w.send_transaction(TransactionRequest::default().to(token).input(data.into()).gas_limit(floor)).await.unwrap()
+        .get_receipt().await.unwrap();
+    assert!(rc.status(), "settles at the floor {floor} (used {})", rc.gas_used);
+    let lane3 = IToken::mtxNonceCall { from: acct, batch: U256::from(3) }.abi_encode();
+    let out = p.call(TransactionRequest::default().to(token).input(lane3.into())).await.unwrap();
+    assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64), "the account's lane moved");
 }
 
 fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {
@@ -555,6 +579,8 @@ alloy::sol! {
     function approve(address spender, uint256 value) external returns (bool);
     function mint(address to, uint256 value) external;
     function puller() external view returns (address);
+    struct SubjectKey { uint8 kind; bytes32 x; bytes32 y; bytes32 rpIdHash; bytes32 originHash; }
+    function deploy(SubjectKey firstKey, address guardian) external returns (address account);
 }
 
 /// `eth_call` then send: the return value of a state-changing call (the DEX address from `createDex`).

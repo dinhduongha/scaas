@@ -1124,7 +1124,8 @@ mod tests {
         // a contract signer's meta-tx gets the ERC-1271 floor
         let (st, _, _, rpc) = run(Evm { mtx_nonce: Some(0), contract_signer: true, ..Default::default() }, vec![job(7)], None).await;
         assert_eq!(st, "broadcast");
-        assert_eq!(rpc.lock().unwrap().gas[0], guard::ERC1271_FLOOR);
+        let len = rpc.lock().unwrap().sent[0].2.len();
+        assert_eq!(rpc.lock().unwrap().gas[0], guard::erc1271_floor(len));
     }
 
     /// The token's order entries as `metatx` jobs (job-api.md): byte-identical with the forge KAT's relayed calldata.
@@ -1310,7 +1311,8 @@ mod tests {
         let (_, rpc) = outcomes(Evm { code_only: Some(TOKEN), ..ok() }, vec![job(7)], |_| {}).await;
         assert_eq!(rpc.lock().unwrap().gas, vec![0x30000 * 6 / 5], "an EOA signer on a contract token");
         let (_, rpc) = outcomes(Evm { code_only: Some(Address::repeat_byte(0xab)), ..ok() }, vec![job(7)], |_| {}).await;
-        assert_eq!(rpc.lock().unwrap().gas, vec![guard::ERC1271_FLOOR]);
+        let len = rpc.lock().unwrap().sent[0].2.len();
+        assert_eq!(rpc.lock().unwrap().gas, vec![guard::erc1271_floor(len)]);
     }
 
     /// The Amsterdam gas model (EIP-7825 + EIP-8037): regular gas ≤ 2^24, the gas limit (regular + state) bounded by

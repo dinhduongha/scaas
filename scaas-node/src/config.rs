@@ -488,6 +488,23 @@ fn any() -> String {
 }
 
 impl Config {
+    /// The directory of the sqlite store (`sqlite:///var/lib/scaas/node.db` ⇒ `/var/lib/scaas`): where the node keeps its
+    /// other small state files (the TON `PaymentMeta` wait, T17 fix 1).
+    pub fn store_dir(&self) -> std::path::PathBuf {
+        let path = self.store.url.strip_prefix("sqlite://").or_else(|| self.store.url.strip_prefix("sqlite:")).unwrap_or("");
+        let path = path.split('?').next().unwrap_or("");
+        std::path::Path::new(path).parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new(".")).to_path_buf()
+    }
+
+    /// The config an adapter is built from: the TON `params.meta_journal` defaults to a file under `store_dir`.
+    pub fn adapter_cfg(&self, c: &ChainCfg) -> ChainCfg {
+        let mut c = c.clone();
+        if c.family == "ton" && !c.params.contains_key("meta_journal") {
+            let f = self.store_dir().join(format!("ton-meta-{}.json", c.chain_key().replace([':', '/'], "_")));
+            c.params.insert("meta_journal".into(), f.to_string_lossy().into_owned().into());
+        }
+        c
+    }
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
         let cfg: Config = toml::from_str(&raw).context("parse config")?;
@@ -830,6 +847,19 @@ impl ChainCfg {
             Some(toml::Value::Table(t)) => Some(t),
             Some(v) => bail!("params.relay_fee must be a table, not {v}"),
         };
+        // T17 fix 1: a misspelt key (`min_ammount`) or another family's price key is an error, never ignored
+        for k in t.into_iter().flat_map(|t| t.keys()) {
+            let ok = match k.as_str() {
+                "router" | "min_amount" | "relay_bound_payee" => true,
+                "min_ton_value" => self.family == "ton",
+                "min_lamports_value" => self.family == "solana",
+                _ => false,
+            };
+            if !ok {
+                bail!("params.relay_fee.{k} is not a key of the {} family (router, min_amount, relay_bound_payee{})", self.family,
+                    match self.family.as_str() { "ton" => ", min_ton_value", "solana" => ", min_lamports_value", _ => "" });
+            }
+        }
         let get = |k: &str| t.and_then(|t| t.get(k));
         let router = match get("router") {
             None => None,
@@ -915,9 +945,28 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(p, RelayParams { router: Some("0x7f".into()), min_amount: 0, relay_bound_payee: true, max_pay_meta_bytes: 4096 });
         for bad in ["max_pay_meta_bytes = -1", r#"max_pay_meta_bytes = "2048""#, "relay_fee = 7", "relay_fee = { router = 7 }",
                     "relay_fee = { min_amount = -1 }", r#"relay_fee = { min_amount = "9" }"#, "relay_fee = { min_amount = 1.5 }",
-                    r#"relay_fee = { relay_bound_payee = "yes" }"#] {
+                    r#"relay_fee = { relay_bound_payee = "yes" }"#, "relay_fee = { min_ammount = 5 }",
+                    "relay_fee = { min_ton_value = {} }", "relay_fee = { min_lamports_value = {} }"] {
             assert!(with(bad).is_err(), "{bad}");
         }
+        let e = format!("{:#}", with("relay_fee = { min_ammount = 5 }").unwrap_err());
+        assert!(e.contains("params.relay_fee.min_ammount"), "{e}");
+        let fam = |family: &str, k: &str| ChainCfg { family: family.into(),
+            params: toml::from_str(&format!("relay_fee = {{ {k} = {{}} }}")).unwrap(), ..Default::default() }.relay_params();
+        assert!(fam("ton", "min_ton_value").is_ok() && fam("solana", "min_lamports_value").is_ok(), "each on its own family");
+        assert!(fam("solana", "min_ton_value").is_err() && fam("ton", "min_lamports_value").is_err(), "never on another");
+    }
+
+    #[test]
+    fn the_ton_meta_journal_lives_in_the_store_dir() {
+        let mut c: Config = toml::from_str(OK).unwrap();
+        assert_eq!(c.store_dir(), std::path::PathBuf::from("/var/lib/scaas"));
+        let ton = ChainCfg { family: "ton".into(), network: Some("-239".into()), ..Default::default() };
+        let a = c.adapter_cfg(&ton);
+        assert_eq!(a.params["meta_journal"].as_str(), Some("/var/lib/scaas/ton-meta-ton_-239.json"));
+        assert!(!c.adapter_cfg(&c.chains[0].clone()).params.contains_key("meta_journal"), "TON only");
+        c.store.url = "sqlite:node.db".into();
+        assert_eq!(c.store_dir(), std::path::PathBuf::from("."));
     }
 
     #[test]

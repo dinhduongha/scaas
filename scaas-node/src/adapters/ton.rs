@@ -1208,8 +1208,9 @@ pub struct TonAdapter {
     relay_fee: RelayFeePolicy,
     /// escrow key ⇒ when this node last sent its `RelayRefund` (one in flight per escrow).
     refunds: RwLock<HashMap<[u8; 32], u64>>,
-    /// `PaymentMeta`s waiting for their `PaymentSettled` (`ton_tx_events`).
+    /// `PaymentMeta`s waiting for their `PaymentSettled` (`ton_tx_events`), persisted in `meta_journal`.
     metas: std::sync::Mutex<MetaWait>,
+    meta_journal: Option<std::path::PathBuf>,
 }
 
 fn param_str(cfg: &ChainCfg, k: &str) -> Option<String> {
@@ -1240,6 +1241,8 @@ impl TonAdapter {
         }
         let signers = signers.iter().map(clone_signer).collect::<Result<Vec<_>>>()?;
         let key = param_str(cfg, "api_key_env").and_then(|e| std::env::var(e).ok());
+        // the node sets it under its store directory (`main`); unset (tests, the example) = in memory only
+        let meta_journal = param_str(cfg, "meta_journal").map(std::path::PathBuf::from);
         Ok(Self {
             key: cfg.chain_key(),
             lanes,
@@ -1252,7 +1255,8 @@ impl TonAdapter {
             codes: RwLock::new(HashMap::new()),
             relay_fee: RelayFeePolicy::from_cfg(cfg).with_context(|| format!("chain {}", cfg.chain_key()))?,
             refunds: RwLock::new(HashMap::new()),
-            metas: Default::default(),
+            metas: std::sync::Mutex::new(match &meta_journal { Some(f) => load_meta_wait(f)?, None => MetaWait::new() }),
+            meta_journal,
         })
     }
 
@@ -1484,35 +1488,73 @@ pub fn meta_payer(evs: &[(usize, Addr, TonEvent)], emitter: &Addr, master: &Addr
 }
 
 /// `(master, payer, payId)` ⇒ `(meta, mc seqno)`: a `PaymentMeta` waits for its `PaymentSettled`, emitted by the payee's
-/// wallet in a later transaction, maybe a later range. ponytail: in memory, bounded by `META_WAIT_BLOCKS`; a restart
-/// (or a payee bounce: then it is never paid) drops the entry and the payment reaches Odoo without its `meta`.
+/// wallet in a later transaction, maybe a later range. It is looked up, never taken, so a range that fails after the
+/// join and is retried joins again (the triple happens once on chain: a second join is the same meta); it leaves by
+/// expiry (`META_WAIT_BLOCKS`, also the end of a payment that never settled: a payee bounce) or, past `META_WAIT_MAX`,
+/// oldest first (logged). Persisted (`params.meta_journal`, `save_meta_wait`) so a restart keeps it.
 pub type MetaWait = HashMap<(Addr, Addr, [u8; 32]), (Vec<u8>, u64)>;
+/// One authenticated event of a transaction: `(log index, master, event, the meta its payment joined)`.
+pub type JoinedEvent = (usize, Addr, TonEvent, Option<Vec<u8>>);
 const META_WAIT_BLOCKS: u64 = 10_000;
+const META_WAIT_MAX: usize = 4_096;
 
 /// One transaction's normalized events (TON's join, T17 G): `Executed` and `Paid` as before; a `PaymentMeta` (payer
 /// from the same transaction's `Executed`) waits in `wait`, and the `Paid` of the same `(master, from, pay_ref)` takes
 /// its `meta`. Never by `pay_ref` alone; a `PaymentMeta` is never sent as a row (without its payment it proves nothing).
+/// The flag: `wait` changed (persist it).
 pub fn ton_tx_events(evs: Vec<(usize, Addr, TonEvent)>, masters: &[(Addr, Option<WalletCode>)], wait: &mut MetaWait, seqno: u64)
-    -> Vec<(usize, Addr, TonEvent, Option<Vec<u8>>)>
+    -> (Vec<JoinedEvent>, bool)
 {
+    let n = wait.len();
     wait.retain(|_, (_, at)| at.saturating_add(META_WAIT_BLOCKS) >= seqno);
+    let mut changed = wait.len() != n;
     for (_, emitter, ev) in &evs {
         if let TonEvent::Meta { master, pay_id, meta } = ev {
             if let Some(from) = meta_payer(&evs, emitter, master, masters) {
-                wait.insert((*master, from, *pay_id), (meta.clone(), seqno));
+                changed |= wait.insert((*master, from, *pay_id), (meta.clone(), seqno)).as_ref() != Some(&(meta.clone(), seqno));
             }
         }
+    }
+    while wait.len() > META_WAIT_MAX {
+        let Some(k) = wait.iter().min_by_key(|(_, (_, at))| *at).map(|(k, _)| *k) else { break };
+        wait.remove(&k);
+        tracing::warn!(master = %k.0.raw(), from = %k.1.raw(), "PaymentMeta wait full: the oldest entry is dropped (its payment reaches the client without meta)");
     }
     let mut out = Vec::new();
     for (i, emitter, ev) in &evs {
         let Some((master, ev)) = authenticate(emitter, ev, masters) else { continue };
         let meta = match &ev {
-            TonEvent::Paid { from, pay_ref, .. } => wait.remove(&(master, *from, *pay_ref)).map(|(m, _)| m),
+            TonEvent::Paid { from, pay_ref, .. } => wait.get(&(master, *from, *pay_ref)).map(|(m, _)| m.clone()),
             _ => None,
         };
         out.push((*i, master, ev, meta));
     }
-    out
+    (out, changed)
+}
+
+/// The persisted `MetaWait` (a missing file is an empty wait): `[{master, from, pay_id, meta, seqno}]`, hex / raw addresses.
+pub fn load_meta_wait(path: &std::path::Path) -> Result<MetaWait> {
+    let raw = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(MetaWait::new()),
+        Err(e) => return Err(e).with_context(|| format!("meta journal {}", path.display())),
+    };
+    let rows: Vec<Value> = serde_json::from_slice(&raw).with_context(|| format!("meta journal {}", path.display()))?;
+    rows.iter().map(|r| {
+        let s = |k: &str| r[k].as_str().ok_or_else(|| anyhow!("meta journal: {k} missing"));
+        let pay_id: [u8; 32] = alloy::hex::decode(s("pay_id")?.trim_start_matches("0x"))?.try_into().map_err(|_| anyhow!("pay_id is 32 bytes"))?;
+        let seqno = r["seqno"].as_u64().ok_or_else(|| anyhow!("meta journal: seqno missing"))?;
+        Ok(((Addr::parse(s("master")?)?, Addr::parse(s("from")?)?, pay_id), (alloy::hex::decode(s("meta")?.trim_start_matches("0x"))?, seqno)))
+    }).collect()
+}
+
+/// Writes `wait` to `path` atomically (a temporary file, then a rename).
+pub fn save_meta_wait(path: &std::path::Path, wait: &MetaWait) -> Result<()> {
+    let rows: Vec<Value> = wait.iter().map(|((master, from, pay_id), (meta, seqno))| json!({"master": master.raw(),
+        "from": from.raw(), "pay_id": hex0x(pay_id), "meta": hex0x(meta), "seqno": seqno})).collect();
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, serde_json::to_vec(&rows)?).with_context(|| format!("meta journal {}", tmp.display()))?;
+    std::fs::rename(&tmp, path).with_context(|| format!("meta journal {}", path.display()))
 }
 
 /// The forward TON floor a pay op signed (`MetaOp.extra`, review H2).
@@ -1736,7 +1778,11 @@ impl ChainAdapter for TonAdapter {
                     let tx_hash = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
                     let evs = {
                         let mut wait = self.metas.lock().map_err(|_| anyhow!("meta wait poisoned"))?;
-                        ton_tx_events(evs, &masters, &mut wait, seqno)
+                        let (evs, changed) = ton_tx_events(evs, &masters, &mut wait, seqno);
+                        if let (true, Some(f)) = (changed, &self.meta_journal) {
+                            save_meta_wait(f, &wait)?; // a failed write fails the range, which is read again
+                        }
+                        evs
                     };
                     for (log_index, master, ev, meta) in evs {
                         if block_hash.is_none() {
@@ -1970,18 +2016,37 @@ mod tests {
         let pm = |m: Vec<u8>| TonEvent::Meta { master, pay_id: pid, meta: m };
         let mut wait = MetaWait::new();
         let forger = Addr { wc: 0, hash: [9; 32] };
-        let forged = ton_tx_events(vec![(0, forger, exe.clone()), (1, forger, pm(vec![0xff]))], &masters, &mut wait, 10);
-        assert!(forged.is_empty() && wait.is_empty(), "a meta from a wallet that is not the payer's");
-        let a = ton_tx_events(vec![(0, wallet, exe.clone()), (1, wallet, pm(vec![0xab]))], &masters, &mut wait, 10);
+        let (forged, changed) = ton_tx_events(vec![(0, forger, exe.clone()), (1, forger, pm(vec![0xff]))], &masters, &mut wait, 10);
+        assert!(forged.is_empty() && wait.is_empty() && !changed, "a meta from a wallet that is not the payer's");
+        let (a, changed) = ton_tx_events(vec![(0, wallet, exe.clone()), (1, wallet, pm(vec![0xab]))], &masters, &mut wait, 10);
         assert_eq!(a.iter().map(|e| matches!(e.2, TonEvent::Executed { .. })).collect::<Vec<_>>(), [true], "never a row");
+        assert!(changed, "persist");
         let paid = |from: Addr, amount| TonEvent::Paid { from, to: payee, amount, pay_ref: pid };
-        let b = ton_tx_events(vec![(0, payee_wallet, paid(Addr { wc: 0, hash: [0x77; 32] }, 0)), (1, payee_wallet, paid(payer, 100))],
-                              &masters, &mut wait, 11);
+        let payment = || vec![(0, payee_wallet, paid(Addr { wc: 0, hash: [0x77; 32] }, 0)), (1, payee_wallet, paid(payer, 100))];
+        let (b, _) = ton_tx_events(payment(), &masters, &mut wait, 11);
         assert_eq!((b[0].3.clone(), b[1].3.clone()), (None, Some(vec![0xab])), "joined by (master, from, pay_ref)");
-        assert!(wait.is_empty(), "taken once");
-        ton_tx_events(vec![(0, wallet, exe), (1, wallet, pm(vec![0xab]))], &masters, &mut wait, 10);
-        ton_tx_events(vec![], &masters, &mut wait, 10 + META_WAIT_BLOCKS + 1);
-        assert!(wait.is_empty(), "a payment that never settled (payee bounce) stops waiting");
+        // fix 1: a range that failed after the join is read again: the payment still carries its meta
+        let (again, changed) = ton_tx_events(payment(), &masters, &mut wait, 11);
+        assert_eq!((again[1].3.clone(), changed), (Some(vec![0xab]), false), "looked up, never taken");
+        // fix 1: a restart reloads the wait from the journal
+        let f = std::env::temp_dir().join(format!("ton-meta-{}.json", std::process::id()));
+        save_meta_wait(&f, &wait).unwrap();
+        let mut reloaded = load_meta_wait(&f).unwrap();
+        assert_eq!(reloaded, wait);
+        let (after, _) = ton_tx_events(payment(), &masters, &mut reloaded, 12);
+        assert_eq!(after[1].3, Some(vec![0xab]), "after a restart");
+        let _ = std::fs::remove_file(&f);
+        assert!(load_meta_wait(&f).unwrap().is_empty(), "no journal yet: an empty wait");
+        let (_, changed) = ton_tx_events(vec![], &masters, &mut wait, 10 + META_WAIT_BLOCKS + 1);
+        assert!(wait.is_empty() && changed, "a payment that never settled (payee bounce) stops waiting");
+        // the cap: the oldest entry leaves first
+        let id = |k: u64| { let mut b = [0u8; 32]; b[24..].copy_from_slice(&k.to_be_bytes()); b };
+        for k in 0..META_WAIT_MAX as u64 + 1 {
+            wait.insert((master, payer, id(k)), (vec![], 20_000 + k));
+        }
+        ton_tx_events(vec![], &masters, &mut wait, 20_000);
+        assert_eq!(wait.len(), META_WAIT_MAX);
+        assert!(!wait.contains_key(&(master, payer, id(0))), "oldest evicted");
     }
 
     #[test]

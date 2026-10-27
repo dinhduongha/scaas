@@ -332,8 +332,9 @@ mod tests {
         let settled = |from: Address, to: Address, amount: u64, entry_ref: B256| IToken::PaymentSettled { from, to,
             amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
         let meta = IToken::PaymentMeta { payId: p, meta: vec![0xab, 0xcd].into() }.encode_log_data();
-        let fee = |token: Address, amount: u64| IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token, payer: alice.into_word(),
-            payee: Address::repeat_byte(0x1a).into_word(), amount: U256::from(amount) }.encode_log_data();
+        let fee_by = |token: Address, payer: Address, amount: u64| IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token,
+            payer: payer.into_word(), payee: Address::repeat_byte(0x1a).into_word(), amount: U256::from(amount) }.encode_log_data();
+        let fee = |token: Address, amount: u64| fee_by(token, alice, amount);
         let logs = vec![
             // tx 1: a 0-amount spoof with the same id before the meta, then the meta and its payment
             log_at(token, 1, 0, settled(mallory, shop, 0, p)),
@@ -352,10 +353,15 @@ mod tests {
             // tx 7: a RelayFeePaid from a contract that is not the router
             log_at(token, 7, 0, settled(alice, router, 5, r)),
             log_at(fake, 7, 1, fee(token, 5)),
+            // tx 8 / 9: the registered token's payment in the same tx, the router's event naming another token / payer
+            log_at(token, 8, 0, settled(alice, router, 5, r)),
+            log_at(router, 8, 1, fee_by(fake, alice, 5)),
+            log_at(token, 9, 0, settled(alice, router, 5, r)),
+            log_at(router, 9, 1, fee_by(token, mallory, 5)),
         ];
         let out = pay_events(&logs, Some(router));
         let names: Vec<&str> = out.iter().map(|v| v["event"].as_str().unwrap()).collect();
-        assert_eq!(names, ["PaymentSettled"; 6], "PaymentMeta / RelayFeePaid never reach Odoo as rows");
+        assert_eq!(names, ["PaymentSettled"; 8], "PaymentMeta / RelayFeePaid never reach Odoo as rows");
         let with_meta: Vec<(&str, u64)> = out.iter().filter(|v| !v["meta"].is_null())
             .map(|v| (v["tx_hash"].as_str().unwrap(), v["log_index"].as_u64().unwrap())).collect();
         assert_eq!(with_meta, [(format!("{:#x}", B256::repeat_byte(1)).as_str(), 2)], "only the payment right after its meta");

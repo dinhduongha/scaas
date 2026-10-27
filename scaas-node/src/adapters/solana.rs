@@ -498,7 +498,10 @@ impl RelayFeePolicy {
                 min_lamports_value.insert(mint, n);
             }
         }
-        Ok(Self { router, tokens: cfg.tokens.iter().filter_map(|t| key(&t.address).ok()).collect(), params, min_lamports_value })
+        let tokens = cfg.tokens.iter()
+            .map(|t| key(&t.address).with_context(|| format!("tokens: {} is not a Solana mint", t.address)))
+            .collect::<Result<_>>()?;
+        Ok(Self { router, tokens, params, min_lamports_value })
     }
 }
 
@@ -1000,7 +1003,13 @@ impl SolanaAdapter {
             signers: own,
             sent: Mutex::new(HashMap::new()),
             domain_checked: tokio::sync::OnceCell::new(),
-            relay_fee: RelayFeePolicy::from_cfg(cfg)?,
+            relay_fee: {
+                let p = RelayFeePolicy::from_cfg(cfg)?;
+                if p.router.is_some_and(|r| r != program) {
+                    bail!("solana: params.relay_fee.router must be the scaas program id {} (the program is the router)", b58(&program));
+                }
+                p
+            },
         })
     }
 
@@ -1592,6 +1601,13 @@ mod tests {
         }
         assert_eq!(RelayFeePolicy::from_cfg(&cfg(Some(PROGRAM.into()))).unwrap().router, Some(key(PROGRAM).unwrap()));
         assert_eq!(RelayFeePolicy::from_cfg(&cfg(None)).unwrap().router, None, "no relay_fee: relay-fee jobs refused");
+        // T17 fix 1: a router that parses but is not the program, a malformed mint: startup errors
+        let e = SolanaAdapter::new(&cfg(Some(b58(&[3; 32]).into())), &[lane0()]).err().expect("another router accepted");
+        assert!(format!("{e:#}").contains("must be the scaas program id"), "{e:#}");
+        assert!(SolanaAdapter::new(&cfg(Some(PROGRAM.into())), &[lane0()]).is_ok());
+        let mut bad = cfg(None);
+        bad.tokens = vec![crate::config::TokenCfg { address: "not-a-mint-0OIl".into(), decimals: 6 }];
+        assert!(format!("{:#}", SolanaAdapter::new(&bad, &[lane0()]).err().expect("bad mint accepted")).contains("tokens"));
     }
 
     /// T17 (fee covers cost): a relay fee that is the node's pays the rent of a first-use lane PDA at the node's floor
@@ -1620,7 +1636,7 @@ mod tests {
             t.insert("min_lamports_value".into(), price);
             let mut params = toml::Table::new();
             params.insert("relay_fee".into(), toml::Value::Table(t));
-            ChainCfg { params, ..Default::default() }
+            ChainCfg { family: "solana".into(), params, ..Default::default() }
         };
         let mint = b58(&op.asset);
         let ok = RelayFeePolicy::from_cfg(&cfg(toml::Value::Table(toml::Table::from_iter([(mint.clone(), 9.into())])))).unwrap();

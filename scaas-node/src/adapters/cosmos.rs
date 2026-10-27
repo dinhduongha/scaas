@@ -564,7 +564,7 @@ impl CosmosAdapter {
         Ok((an, seq))
     }
 
-    /// The router's executor (one smart query, then cached); `None` without a router.
+    /// The router's executor (one smart query at `start_check`, then cached); `None` without a router.
     async fn executor(&self) -> Result<Option<&str>> {
         let Some(router) = &self.relay_fee.router else { return Ok(None) };
         let e = self.executor.get_or_try_init(|| async {
@@ -590,6 +590,13 @@ impl ChainAdapter for CosmosAdapter {
         &self.key
     }
 
+    /// T17 fix 1: with a relay-fee router, its `relayexec` is read here, once (a router that does not answer stops the
+    /// lanes at start, loudly, instead of failing every job).
+    async fn start_check(&self) -> Result<()> {
+        self.executor().await.context("params.relay_fee.router: the router's executor")?;
+        Ok(())
+    }
+
     fn lanes(&self) -> &[Lane] {
         &self.lanes
     }
@@ -613,7 +620,11 @@ impl ChainAdapter for CosmosAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let op = job.op.as_ref().ok_or_else(|| SimError::Revert("job has no op".into()))?;
         let sender = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
-        let executor = self.executor().await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        // resolved at start (`start_check`: the lane takes no job until it is); never a per-job read
+        let executor = match &self.relay_fee.router {
+            None => None,
+            Some(_) => Some(self.executor.get().map(String::as_str).ok_or_else(|| SimError::Transport("relay-fee router executor not resolved".into()))?),
+        };
         let (contract, msg, valid_until) = job_msg(op, &self.chain_id, &self.relay_fee, &sender, executor)
             .map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let (_, seq) = self.account(lane).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
@@ -1111,6 +1122,26 @@ mod tests {
             assert!(jm(&plain(&to), &policy()).unwrap_err().to_string().contains("refused"), "{to}");
         }
         assert!(job_msg(&plain(&router()), CHAIN, &RelayFeePolicy::default(), &lane_c(), None).is_ok(), "no router configured");
+    }
+
+    /// T17 fix 1: the router's executor is resolved once at start; a router that does not answer fails the start, not
+    /// every job; no router, nothing to read.
+    #[tokio::test]
+    async fn cosmos_executor_is_resolved_at_start() {
+        let exec = exec_c();
+        let app = axum::Router::new().route("/cosmwasm/wasm/v1/contract/{c}/smart/{q}",
+            axum::routing::get(move || { let e = exec.clone(); async move { axum::Json(json!({"data": e})) } }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rest = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+        let cfg = |rest: &str, rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = \"{rest}\", prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
+        let rf = format!(", relay_fee = {{ router = \"{}\" }}", router());
+        let a = CosmosAdapter::new(&cfg(&rest, &rf), k()).unwrap();
+        a.start_check().await.unwrap();
+        assert_eq!(a.executor.get(), Some(&exec_c()));
+        assert!(CosmosAdapter::new(&cfg("http://127.0.0.1:9", &rf), k()).unwrap().start_check().await.is_err(), "a silent router stops the start");
+        CosmosAdapter::new(&cfg("http://127.0.0.1:9", ""), k()).unwrap().start_check().await.unwrap();
     }
 
     /// Rule 8: `params.relay_fee.router` set but unparsable is a startup error, never a silently disabled router.

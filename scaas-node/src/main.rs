@@ -174,7 +174,7 @@ async fn main() -> Result<()> {
         // G2 (§8.4): MỘT tập digest in-flight mỗi chain, chung cho mọi lane.
         let digests = submit::InflightSet::default();
         if cc.uses_adapter() {
-            let adapter = adapters::build(cc, &signers)?;
+            let adapter = adapters::build(&cfg.adapter_cfg(cc), &signers)?;
             if cfg.modules.submit {
                 let relay = legacy(&cfg, true)?;
                 for lane in 0..signers.len() {

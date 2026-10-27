@@ -72,18 +72,20 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 11] = [
 /// The token entries a `metatx` job may name (job-api.md, order and wrap entries).
 pub const ENTRIES: [[u8; 4]; 3] = [SEL_MTX_CANCEL_ORDER, SEL_MTX_INVALIDATE_NONCES, SEL_MTX_WRAP];
 
-/// 21 000 intrinsic (pre-Amsterdam; EIP-2780 makes it 15,000, so the floor only grows the margin) + the 400 k
-/// `SmartKeyAccount` ERC-1271 cap the call must still hold, now two frames below the token entry (token → `MtxPipelineLib`
-/// → wallet: ×64/63 twice, with `SigCheck`'s 5 000 margin between them, spec §9) + [`ERC1271_PREFIX`]: a contract
-/// signer's meta-tx never gets less (P1b note c). Calldata gas comes from the simulation's estimate (+20 %) as before.
-/// Entries get no floor (P5 review m6, closed): a starved `SigCheck` reverts `SigCheckGasStarved`, so their estimate
-/// already covers the call.
-pub const ERC1271_FLOOR: u64 = 21_000 + (400_000 * 64 / 63 + 5_000) * 64 / 63 + ERC1271_PREFIX;
-/// The execution gas outside the two 63/64 frames (token entry and library prefix up to the ERC-1271 STATICCALL):
-/// forge's minimum relayer call gas of a `SmartKeyAccount`-signed `mtxExecute`, 446,904
-/// (`smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`, `test_minGas_smartKeyAccountMtxExecute`, Task 8),
-/// minus `(400,000 · 64/63 + 5,000) · 64/63` = 417,878. The floor is then 21,000 + 446,904 = 467,904.
-pub const ERC1271_PREFIX: u64 = 446_904 - (400_000 * 64 / 63 + 5_000) * 64 / 63;
+/// Forge's minimum relayer CALL gas of a `SmartKeyAccount`-signed `mtxExecute` after the split (the ERC-1271 call two
+/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,904
+/// (`smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`, `test_minGas_smartKeyAccountMtxExecute`, Task 8).
+/// It is execution gas only (`call{gas: g}`): no intrinsic, no calldata.
+pub const ERC1271_CALL_GAS: u64 = 446_904;
+
+/// The gas floor of a contract signer's meta-tx whose calldata is `len` bytes (P1b note c; T17 fix 1): 21,000
+/// intrinsic (pre-Amsterdam; EIP-2780 lowers it, which only grows the margin) + 64 gas per calldata byte (the EIP-7976
+/// floor rate, the dearest calldata price, as `calldata_floor`) + `ERC1271_CALL_GAS` + 10 % of it (a larger proof or
+/// key set grows the prefix). Entries get no floor (P5 review m6, closed): a starved `SigCheck` reverts
+/// `SigCheckGasStarved`, so their estimate already covers the call.
+pub fn erc1271_floor(len: usize) -> u64 {
+    21_000 + 64 * len as u64 + ERC1271_CALL_GAS + ERC1271_CALL_GAS / 10
+}
 
 /// EIP-7825 under Amsterdam (EIP-8037): the cap on a transaction's REGULAR gas (intrinsic, calldata floor and
 /// execution). State gas (new slots 97,920, code 1,530 per byte) comes on top, so the gas LIMIT may exceed it.
@@ -218,12 +220,11 @@ pub fn self_call_ok(t: &Table, data: &[u8], mode: u32) -> Result<(), String> {
     Ok(())
 }
 
-/// The gas limit of a simulated estimate (regular + state): +20 %, at least the ERC-1271 floor for a contract signer,
+/// The gas limit of a simulated estimate (regular + state): +20 %, at least `floor` (`erc1271_floor` for a contract signer),
 /// at most `cap` ([`total_cap`]). Above 2^24 is fine under Amsterdam: the chain gives execution at most 2^24 of it and
 /// the rest is the state-gas reservoir (EIP-8037).
-pub fn gas_limit(estimate: u64, contract_signer: bool, cap: u64) -> u64 {
-    let g = estimate.saturating_add(estimate / 5);
-    (if contract_signer { g.max(ERC1271_FLOOR) } else { g }).min(cap)
+pub fn gas_limit(estimate: u64, floor: u64, cap: u64) -> u64 {
+    estimate.saturating_add(estimate / 5).max(floor).min(cap)
 }
 
 /// `mtxSettle` returned `ok` for every settlement it was given.
@@ -435,7 +436,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
             Some(m) => chain.has_code(m.from).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
             None => false,
         };
-        gas_limit(est, contract_signer, max)
+        gas_limit(est, if contract_signer { erc1271_floor(w.data.len()) } else { 0 }, max)
     };
     if g >= block.limit {
         // review L1 (controller 2026-10-22): accepted, but the transaction fills a whole block's gas reservation
@@ -449,7 +450,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
 /// `SigCheckGasStarved` is forgeable by a hook-token destination); a transport error is transient, never a size. At the
 /// cap the refusal names the settlements still failing (review P5 m4: a state failure looks the same as too little gas).
 pub async fn settle_gas(chain: &Chain, to: Address, data: &Bytes, estimate: u64, max: u64) -> Result<u64, SimError> {
-    let mut g = gas_limit(estimate, false, max);
+    let mut g = gas_limit(estimate, 0, max);
     loop {
         let ret = chain.call_with_gas(to, data.clone(), g).await?;
         if settled_all(&ret) {
@@ -572,35 +573,41 @@ mod tests {
         assert!(self_call_ok(&odd, &data([1, 2, 3, 4], 1), 0).is_err(), "unknown fee class");
     }
 
-    /// Spec §9 / R8: the floor covers forge's measured minimum relayer call gas of a `SmartKeyAccount`-signed
-    /// `mtxExecute` (the ERC-1271 call two frames below the token) plus the intrinsic 21,000, and is the formula.
+    /// Spec §9 / R8 (T17 fix 1): the floor covers forge's measured minimum relayer call gas of a `SmartKeyAccount`-signed
+    /// `mtxExecute` (two frames above the ERC-1271 call), the intrinsic 21,000, the job's calldata at 64 gas a byte and
+    /// a 10 % margin.
     #[test]
     fn erc1271_floor_covers_forge_minimum() {
         let log = std::fs::read_to_string(format!(
             "{}/../smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
         let tag = "min gas, SmartKeyAccount-signed mtxExecute (relayer's call gas):";
         let measured: u64 = log.lines().find_map(|l| l.trim().strip_prefix(tag)).unwrap().trim().parse().unwrap();
-        assert_eq!(measured, 446_904, "Task 8's figure");
-        assert!(ERC1271_FLOOR >= 21_000 + measured, "{ERC1271_FLOOR} < 21,000 + {measured}");
-        assert_eq!(ERC1271_FLOOR, 21_000 + (400_000 * 64 / 63 + 5_000) * 64 / 63 + ERC1271_PREFIX);
+        assert_eq!(measured, ERC1271_CALL_GAS, "Task 8's figure");
+        const { assert!(ERC1271_CALL_GAS >= (400_000 * 64 / 63 + 5_000) * 64 / 63, "two frames above the 400 k cap") };
+        for len in [0usize, 708, 4_000] {
+            let f = erc1271_floor(len);
+            assert!(f >= 21_000 + 64 * len as u64 + measured + measured / 10, "{len}: {f}");
+        }
+        assert_eq!(erc1271_floor(0), 512_594);
+        assert_eq!(erc1271_floor(708), 512_594 + 45_312);
     }
 
     #[test]
     fn gas_floor_and_settle_sizing() {
-        assert_eq!(ERC1271_FLOOR, 467_904);
+        let fl = erc1271_floor(100);
         let ams = |limit| BlockGas { limit, amsterdam: true };
         let cap = total_cap(u64::MAX, ams(200_000_000));
-        assert_eq!(gas_limit(100_000, false, cap), 120_000);
-        assert_eq!(gas_limit(100_000, true, cap), ERC1271_FLOOR);
-        assert_eq!(gas_limit(1_000_000, true, cap), 1_200_000);
-        assert_eq!(gas_limit(MAX_TX_GAS, false, cap), MAX_TX_GAS + MAX_TX_GAS / 5, "Amsterdam: a limit past 2^24 is kept");
-        assert_eq!(gas_limit(190_000_000, false, cap), 200_000_000, "the padded estimate is clamped to the cap");
-        assert_eq!(gas_limit(u64::MAX, true, total_cap(u64::MAX, ams(u64::MAX))), MAX_TX_TOTAL_GAS, "EIP-8037: 2^32 - 1");
+        assert_eq!(gas_limit(100_000, 0, cap), 120_000);
+        assert_eq!(gas_limit(100_000, fl, cap), fl);
+        assert_eq!(gas_limit(1_000_000, fl, cap), 1_200_000);
+        assert_eq!(gas_limit(MAX_TX_GAS, 0, cap), MAX_TX_GAS + MAX_TX_GAS / 5, "Amsterdam: a limit past 2^24 is kept");
+        assert_eq!(gas_limit(190_000_000, 0, cap), 200_000_000, "the padded estimate is clamped to the cap");
+        assert_eq!(gas_limit(u64::MAX, fl, total_cap(u64::MAX, ams(u64::MAX))), MAX_TX_TOTAL_GAS, "EIP-8037: 2^32 - 1");
         assert_eq!(total_cap(50_000_000, ams(30_000_000)), 30_000_000, "the block gas limit binds");
         assert_eq!(total_cap(50_000_000, ams(200_000_000)), 50_000_000, "max_gas_per_tx binds");
         let osaka = BlockGas { limit: 200_000_000, amsterdam: false };
         assert_eq!(total_cap(50_000_000, osaka), MAX_TX_GAS, "before Amsterdam the whole limit stays under 2^24");
-        assert_eq!(gas_limit(MAX_TX_GAS, false, total_cap(u64::MAX, osaka)), MAX_TX_GAS);
+        assert_eq!(gas_limit(MAX_TX_GAS, 0, total_cap(u64::MAX, osaka)), MAX_TX_GAS);
         assert_eq!(calldata_floor(220_415), 14_121_560, "measured on the SCaaS testnet");
         assert!(calldata_floor(261_909) <= MAX_TX_GAS && calldata_floor(261_910) > MAX_TX_GAS, "261,909 B per transaction");
         assert_eq!(next_gas(1_000, 3_000), Some(1_500));

@@ -570,7 +570,10 @@ impl RelayFeePolicy {
                 _ => bail!("params.relay_fee.router {r:?} is not a Soroban contract address (C…)"),
             },
         };
-        Ok(Self { router, tokens: cfg.tokens.iter().filter_map(|t| ScAddress::from_str(&t.address).ok()).collect(), params })
+        let tokens = cfg.tokens.iter()
+            .map(|t| ScAddress::from_str(&t.address).map_err(|e| anyhow!("tokens: {} is not a Soroban address: {e}", t.address)))
+            .collect::<Result<_>>()?;
+        Ok(Self { router, tokens, params })
     }
 }
 
@@ -947,6 +950,9 @@ mod tests {
         let mut c = cfg(WALLET2.into());
         c.params["relay_fee"].as_table_mut().unwrap().insert("min_amount".into(), (-1).into());
         assert!(RelayFeePolicy::from_cfg(&c).is_err(), "a negative min_amount is an error, never the default");
+        let mut c = cfg(WALLET2.into());
+        c.tokens = vec![crate::config::TokenCfg { address: "CNOTANADDRESS".into(), decimals: 7 }];
+        assert!(format!("{:#}", RelayFeePolicy::from_cfg(&c).err().expect("bad token accepted")).contains("tokens"), "T17 fix 1");
     }
 
     #[test]

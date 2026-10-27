@@ -227,6 +227,10 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   `src/metatx/`, `DeployBase` CREATE2; forge conformance list of CTR-MTX-27; gas; node quote + simulation; clients
   (ref, open-mode payment, one prompt); then the non-EVM shapes (GRAM escrow). The relay-fee router
     research: `docs/research/mtx-relay-fees.md` §3, owner answers §5.
+- [ ] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; a new feature, not T17):
+  `scaas-node` relays no `ua_metatx` job today, so `uaPayMeta`, `MtxRelayFee.uaRelay` and the `UAPaymentSettled` join
+  (`indexer::join_pay_events`, a UA payer's `RelayFeePaid` id) are not served; build the `ua_metatx` kind
+  (job-api.md, SPECIFIED) with them.
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
   P/Invoke) for the SCaaS testnet / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof
