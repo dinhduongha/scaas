@@ -680,9 +680,21 @@ payId = metaPayId(salt, meta) = keccak256(abi.encodePacked("scaas.pay.meta", sal
   its own channel and checks the commitment; nothing is published.
 - **Every tier** (owner 2026-10-26): every `MetaTokenBase` kind, and every non-EVM family's pay relay with the same
   derivation (owner: non-EVM must work too).
-- The contract does not parse `meta`. The schemas are a client convention: 1 UTF-8 note; 2 structured reference
-  (creditor reference, invoice number, due date); 3 an on-chain call the payment is bound to, `(chainid, target,
-  callHash)`; 4 any of these encrypted to the payee (a KEM wrap to the payee's `UARegistry` KEM key ‖ AES-256-GCM).
+- The contract does not parse `meta`. The body encodings are fixed and family-neutral, one rule for every chain kind
+  (controller call 2026-10-27, owner may override; [decision](../decisions.md#ctr-mtx-26--payment-metadata-by-commitment-mtxpaymeta--uapaymeta)),
+  always inside the envelope `meta = abi.encode(uint16 schema, bytes body)`:
+  - 1, note: the raw UTF-8 bytes;
+  - 2, structured reference: `abi.encode(string creditorRef, string invoiceNo, uint64 dueDate)`, `dueDate` in Unix
+    seconds;
+  - 3, a bound on-chain call: `abi.encode(uint256 chainId, bytes32 target, bytes32 callHash)`; `target` is 32 bytes
+    (an EVM address left-padded with zeros, another family's native 32-byte id), `callHash = keccak256(callData)`
+    (the same call hash as [CTR-MTX-27](#CTR-MTX-27)'s `ref`);
+  - 4, any of these encrypted to the payee (a KEM wrap to the payee's `UARegistry` KEM key ‖ AES-256-GCM); the
+    inner layout is not defined yet (a later client item).
+- **Vectors:** `smartcontracts/vectors/metatx/paymeta.json` (`[{name, schema, salt, meta, payId, payLane}]`, hex), read
+  by the EVM forge test, `clientkeys` and every family's tests. The hashes do not depend on how a body is encoded (only
+  on the `meta` bytes); the schema 4 bodies are illustrative filler. `long_body_4096` (4,192 B of `meta`) is a hash
+  vector only: above the node's 2,048 B cap and Solana's transaction size, never submitted on chain.
 - **Privacy:** a `meta` emitted in clear is public forever, so [CTR-MTX-03](#CTR-MTX-03)'s warning about business
   identifiers applies to it. `payId` stays unlinkable (the salt is random). Private metadata uses schema 4 or the
   off-chain path.

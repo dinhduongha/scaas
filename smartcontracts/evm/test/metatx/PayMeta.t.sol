@@ -197,6 +197,10 @@ contract PayMetaTest is Test {
         vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
         MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, salt, meta, vu, MODE, REL, FEE, FEE_TO, bad);
         bytes memory sig = _ecdsa(MetaTokenBase(t).mtxTransferDigest(_tr(t, _payId(salt, meta))));
+        // the valid signature with another salt: another payId
+        vm.prank(REL);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        MetaTokenBase(t).mtxPayMeta(signer, PAYEE, AMOUNT, ~salt, meta, vu, MODE, REL, FEE, FEE_TO, sig);
         _payMeta(t, salt, meta, vu, sig);
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
@@ -217,6 +221,10 @@ contract PayMetaTest is Test {
         MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, salt, meta, vu, MODE, REL,
             FEE, FEE_TO, bad);
         bytes memory auth = _ecdsa(MetaTokenBase(t).uaTransferDigest(_ut(t, _payId(salt, meta))));
+        vm.prank(REL);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        MetaTokenBase(t).uaPayMeta(MetaTxLib.pad(signer), MetaTxLib.pad(PAYEE), AMOUNT, ~salt, meta, vu, MODE, REL,
+            FEE, FEE_TO, auth);
         _uaPayMeta(t, salt, meta, vu, auth);
         vm.prank(REL);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MetaTxBadNonce.selector, 1, 0));
@@ -243,10 +251,9 @@ contract PayMetaTest is Test {
 
     // ------------------------------------------------------------------ the shared vectors
 
-    /// `(name, schema, salt, meta, payId, payLane)`; `meta = abi.encode(uint16 schema, bytes body)`. The body
-    /// encodings are the client convention of CTR-MTX-26 (the contract never parses them): 1 UTF-8 text; 2
-    /// `abi.encode(string creditorRef, string invoiceNo, uint64 dueDate)`; 3 `abi.encode(uint256 chainid, address
-    /// target, bytes32 callHash)`; 4 an opaque ciphertext (KEM wrap ‖ AES-256-GCM; here fixed filler bytes).
+    /// `(name, schema, salt, meta, payId, payLane)`; `meta = abi.encode(uint16 schema, bytes body)`, the body in the
+    /// encoding of its schema as docs/contracts/metatx.md CTR-MTX-26 fixes it (the contract never parses it). The
+    /// schema 4 bodies are illustrative filler; `long_body_4096` is a hash vector only, never submitted on chain.
     function _rows() internal pure returns (string[] memory names, uint16[] memory schemas, bytes[] memory bodies) {
         names = new string[](6);
         schemas = new uint16[](6);
@@ -255,8 +262,9 @@ contract PayMetaTest is Test {
         (names[1], schemas[1], bodies[1]) =
             ("structured_reference", 2, abi.encode("RF18539007547034", "INV-2026-0042", uint64(1_830_297_600)));
         (names[2], schemas[2], bodies[2]) =
-            ("bound_call", 3, abi.encode(uint256(7622), address(0xC0FFEE), keccak256("record(bytes32)")));
-        (names[3], schemas[3], bodies[3]) = ("encrypted", 4, _filler(96, 0x04));
+            ("bound_call", 3, abi.encode(uint256(7622), bytes32(uint256(uint160(address(0xC0FFEE)))),
+                keccak256(abi.encodeCall(IMetaTx.cancelNonce, (7)))));
+        (names[3], schemas[3], bodies[3]) = ("encrypted_illustrative", 4, _filler(96, 0x04));
         (names[4], schemas[4], bodies[4]) = ("empty_body", 1, bytes(""));
         (names[5], schemas[5], bodies[5]) = ("long_body_4096", 4, _filler(4096, 0x45));
     }

@@ -1795,6 +1795,7 @@ struct with a `meta` field (native wallet display) was rejected: a second struct
 **Cost if wrong.** Wallets show only the opaque `entryRef`, so a connector that skips the commitment check shows the
 user metadata the signature does not bind.
 **Source.** `research/mtx-relay-fees.md` §2, §5 (owner answers 2026-10-26: "OK, vậy phần mtxPayMeta như vậy đi").
+Change (2026-10-27, controller call, owner may override; status: current; commit: metatx-split T7 fix 1): the `meta` body encodings are fixed and family-neutral (one rule for every chain kind) inside `meta = abi.encode(uint16 schema, bytes body)`: schema 1 the raw UTF-8 bytes; schema 2 `abi.encode(string creditorRef, string invoiceNo, uint64 dueDate)`, `dueDate` in Unix seconds; schema 3 `abi.encode(uint256 chainId, bytes32 target, bytes32 callHash)`, `target` as 32 bytes (an EVM address left-padded with zeros, other families their native 32-byte id), `callHash = keccak256(callData)` (research §3); schema 4's inner layout (KEM wrap ‖ AES-256-GCM) stays undefined, a later client item. The shared vectors `smartcontracts/vectors/metatx/paymeta.json` follow them; `long_body_4096` is a hash vector only. Source add: `superpowers/specs/2026-10-27-metatx-split-design.md` §6.1.
 
 ### CTR-MTX-27 — MtxRelayFee: token fee for a fee-less call
 - old: — · status: current · owner: yes · date: 2026-10-26 · normative: contracts/metatx.md#CTR-MTX-27 · superseded-by: —
