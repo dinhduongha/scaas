@@ -224,10 +224,11 @@ contract ScaasJettonWallet(
 
         self.rotateLanes();
         let next = self.laneNext(m.lane);
-        // A revoke may name an order that already left this wallet (its nonce is spent): it takes the next
-        // nonce, so each revoke runs once (review L11).
+        // A revoke may name an order that already left this wallet (its nonce is spent): it takes the next nonce.
+        // Both forms leave the lane at nonce + 2 (NET-TON-18): the first form also spends the second form's slot, so a
+        // resend of the same signed revoke is refused (E_NONCE) and never sends a cancel (review L11; T16 fix 2).
         throwUnless(E_NONCE, next == m.nonce || (m.op == OP_REVOKE && next == m.nonce + 1));
-        self.setLane(m.lane, next + 1);
+        self.setLane(m.lane, m.op == OP_REVOKE ? m.nonce + 2 : next + 1);
 
         nativeReserve(max(myBalance() - ctx.value, self.storageReserve()), ReserveAtMost);
         emit(MetaTransactionExecuted { master: self.master, from: self.owner, digest: m.digest }.toCell());

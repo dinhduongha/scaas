@@ -85,6 +85,32 @@ describe('ScaasJettonWallet meta-tx (R30, R67)', () => {
         expect(await balanceOf(token, alice.address)).toBe(980n);
     });
 
+    it('a signed revoke runs once in either form: a resend is refused and sends no cancel (NET-TON-18, T16 fix 2)', async () => {
+        const { bc, relayer, network, newToken, mint, walletOf, balanceOf } = await setup();
+        const token = await newToken('A');
+        const alice = await subject(1);
+        const dex = await bc.treasury('dex');
+        await mint(token, alice.address, 100n);
+        const aw = await walletOf(token, alice.address);
+        const dw = (await walletOf(token, dex.address)).address;
+        for (const sent of [false, true]) {
+            const lane = randomU256();
+            if (sent) {
+                const order = signedPay(alice, { contract: aw.address, to: dex.address, amount: 1n, network, lane }, { responseDestination: relayer.address });
+                expect((await aw.send(relayer.getSender(), { value: toNano('0.2') }, order.body)).transactions).toHaveTransaction({ to: aw.address, success: true });
+            }
+            const rv = signedPay(alice, { contract: aw.address, to: dex.address, amount: 0n, network, op: OP.revoke, lane, extra: 7n }, { forwardTon: toNano('0.1'), responseDestination: relayer.address });
+            const r1 = await aw.send(relayer.getSender(), { value: toNano('0.3') }, rv.body);
+            expect(r1.transactions).toHaveTransaction({ to: aw.address, success: true });
+            expect(await aw.getGetLaneNonce(lane)).toBe(2n);
+            const r2 = await aw.send(relayer.getSender(), { value: toNano('0.3') }, rv.body);
+            expect(r2.transactions).toHaveTransaction({ to: aw.address, success: false, exitCode: E.nonce });
+            expect(r2.transactions).not.toHaveTransaction({ from: aw.address, to: dw });
+            expect(await aw.getGetLaneNonce(lane)).toBe(2n);
+        }
+        expect(await balanceOf(token, alice.address)).toBe(99n);
+    });
+
     it('same lane, increasing nonces; nonce gap refused', async () => {
         const { relayer, network, newToken, mint, walletOf } = await setup();
         const token = await newToken('A');

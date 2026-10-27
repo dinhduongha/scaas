@@ -40,6 +40,7 @@ message(0x5b0a1d33) RelayExec {
     ref: Int as uint256;
     target: Address;
     call: Cell;
+    relayer: Address;      // who gets the executor's TON that arrives after the outcome (a revoke-cancel's late excess)
     callMin: Int as coins; // the least TON the call carries (callFloor, or the served entry's own floor if higher)
     keep: Int as coins; // what the executor keeps after the call and the probe (its gas, the report, the settlement)
 }
@@ -66,10 +67,12 @@ message(0x9b1c0d05) RelayFeePaid {
     amount: Int as coins;
 }
 
-/// The escrow went back to the payer (`amount` 0: the payment never arrived, nothing was escrowed).
+/// The escrow went back to the payer (`amount` 0: the payment never arrived, nothing was escrowed). `relayer` = the
+/// relayer of that escrow, so a node only counts the outcome of its own relay (T16 fix 2).
 message(0x9b1c0d06) RelayFeeRefunded {
     ref: Int as uint256;
     payer: Address;
+    relayer: Address;
     amount: Int as coins;
 }
 
@@ -176,15 +179,19 @@ fun execStart(call: Cell, callMin: Int, keep: Int): Int {
 }
 
 /// The call's TON: `callFloor`, or more where the served entry's own floor is higher (the wallet's `SignedOp` wants
-/// `MIN_SIGNED_OP_TON`, the Mandate's `2 · MANDATE_GAS`).
-fun callMinOf(init: StateInit): Int {
+/// `MIN_SIGNED_OP_TON` plus the call's `forwardTon`, which a revoke's cancel carries on; the Mandate's `2 · MANDATE_GAS`).
+fun callMinOf(init: StateInit, call: Cell): Int {
     let h = init.code.hash();
-    let own = h == walletCodeHash() ? MIN_SIGNED_OP_TON : (h == mandateCodeHash() ? 2 * MANDATE_GAS : 0);
+    let own = h == mandateCodeHash() ? 2 * MANDATE_GAS : 0;
+    let s = call.beginParse();
+    if (h == walletCodeHash() && s.bits() >= 32 && s.preloadUint(32) == 0x5b0a1d01) { // else refused by servedCall
+        own = MIN_SIGNED_OP_TON + SignedOp.fromCell(call).forwardTon;
+    }
     return max(callFloor(), own);
 }
 
 fun executorInit(router: Address, from: Address, salt: Int): StateInit {
-    return initOf RelayExecutor(router, from, salt, 0, null, 0, 0, false, false);
+    return initOf RelayExecutor(router, from, salt, 0, null, 0, 0, false, false, null);
 }
 
 fun walletCodeHash(): Int {
@@ -207,8 +214,8 @@ struct Budget {
 /// the body the relayer is about to send).
 fun relayBudget(msg: RelayCall, extra: Int): Budget {
     let e = executorInit(myAddress(), msg.target, 0);
-    let deploy = fwdOf(RelayExec { ref: 0, target: msg.target, call: msg.call, callMin: 0, keep: 0 }.toCell()) + fwdOf(e.code) + fwdOf(e.data);
-    let forward = max(extra, deploy + gasFee(ROUTER_NOTE_GAS) + execStart(msg.call, callMinOf(msg.targetInit), execKeep()));
+    let deploy = fwdOf(RelayExec { ref: 0, target: msg.target, call: msg.call, relayer: msg.target, callMin: 0, keep: 0 }.toCell()) + fwdOf(e.code) + fwdOf(e.data);
+    let forward = max(extra, deploy + gasFee(ROUTER_NOTE_GAS) + execStart(msg.call, callMinOf(msg.targetInit, msg.call), execKeep()));
     let pay = SignedOp {
         op: msg.payOp, auth: msg.payAuth, params: null, stateInit: msg.payStateInit, responseDestination: msg.target,
         forwardTon: forward, matchWith: 0,
@@ -245,7 +252,7 @@ contract ScaasRelayFee {
         throwUnless(E_VALUE, ctx.value >= b.value);
         self.escrows.set(key, Escrow {
             from: m.from, ref, target: msg.target, call: msg.call, salt: msg.salt, master: msg.master,
-            relayer: ctx.sender, amount: m.amount, deadline: msg.deadline, stage: STAGE_PAYING, callMin: callMinOf(msg.targetInit),
+            relayer: ctx.sender, amount: m.amount, deadline: msg.deadline, stage: STAGE_PAYING, callMin: callMinOf(msg.targetInit, msg.call),
         });
         self.busy.set(msg.payWallet, key);
         // Keep this escrow's rent; everything else of the relay's TON goes on with the payment.
@@ -297,7 +304,7 @@ contract ScaasRelayFee {
                     value: 0,
                     mode: SendRemainingValue,
                     bounce: false,
-                    body: RelayExec { ref: x.ref, target: x.target, call: x.call, callMin: x.callMin, keep: execKeep() }.toCell(),
+                    body: RelayExec { ref: x.ref, target: x.target, call: x.call, relayer: x.relayer, callMin: x.callMin, keep: execKeep() }.toCell(),
                 });
                 return;
             }
@@ -331,7 +338,7 @@ contract ScaasRelayFee {
         if (e != null && e!!.stage == STAGE_PAYING) {
             self.escrows.del(k!!);
             self.keepOwn();
-            emit(RelayFeeRefunded { ref: e!!.ref, payer: e!!.from, amount: 0 }.toCell());
+            emit(RelayFeeRefunded { ref: e!!.ref, payer: e!!.from, relayer: e!!.relayer, amount: 0 }.toCell());
             message(MessageParameters { to: e!!.relayer, value: 0, mode: SendRemainingBalance | SendIgnoreErrors, bounce: false, body: JettonExcesses { queryId: 0 }.toCell() });
         }
     }
@@ -362,7 +369,7 @@ contract ScaasRelayFee {
                 self.busy.del(w);
             }
             self.keepOwn();
-            emit(RelayFeeRefunded { ref: x.ref, payer: x.from, amount: 0 }.toCell());
+            emit(RelayFeeRefunded { ref: x.ref, payer: x.from, relayer: x.relayer, amount: 0 }.toCell());
             message(MessageParameters { to: sender(), value: 0, mode: SendRemainingBalance | SendIgnoreErrors, bounce: false, body: JettonExcesses { queryId: 0 }.toCell() });
             return;
         }
@@ -377,7 +384,9 @@ contract ScaasRelayFee {
         let x = e;
         x.stage = release ? STAGE_RELEASE_OWED : STAGE_REFUND_OWED;
         self.settled += 1;
-        self.settling.set(self.settled, x);
+        let kept = x;
+        kept.call = emptyCell(); // a restore needs no call: the ring holds only what a re-sent settlement uses (rent)
+        self.settling.set(self.settled, kept);
         if (self.settled > SETTLE_RING) {
             self.settling.del(self.settled - SETTLE_RING);
         }
@@ -385,7 +394,7 @@ contract ScaasRelayFee {
             emit(RelayFeePaid { ref: x.ref, target: x.target, token: x.master, payer: x.from, payee: x.relayer, amount: x.amount }.toCell());
             self.transfer(walletAddress(myAddress(), x.master), x.relayer, x.amount, response, self.settled);
         } else {
-            emit(RelayFeeRefunded { ref: x.ref, payer: x.from, amount: x.amount }.toCell());
+            emit(RelayFeeRefunded { ref: x.ref, payer: x.from, relayer: x.relayer, amount: x.amount }.toCell());
             self.transfer(walletAddress(myAddress(), x.master), x.from, x.amount, response, self.settled);
         }
     }
@@ -474,6 +483,7 @@ contract RelayExecutor(
     digest: Int as uint256,
     acked: Bool,
     done: Bool,
+    relayer: Address?,
 ) {
     receive(msg: RelayExec) {
         throwUnless(E_SENDER, sender() == self.router);
@@ -484,6 +494,7 @@ contract RelayExecutor(
         }
         self.ref = msg.ref;
         self.target = msg.target;
+        self.relayer = msg.relayer;
         self.probe = curLt();
         self.digest = msg.call.beginParse().preloadRef().hash(); // the MetaOp the served entry acknowledges
         if (context().value < execStart(msg.call, msg.callMin, msg.keep)) {
@@ -503,15 +514,20 @@ contract RelayExecutor(
         }
     }
 
-    /// The call's excess TON (its responseDestination is this executor) rides back with the report.
-    receive(msg: JettonExcesses) {}
+    /// The call's excess TON (its responseDestination is this executor) rides back with the report; one that arrives
+    /// after the report (a revoke's cancel excess, back along the DEX path) goes on to the relayer.
+    receive(msg: JettonExcesses) {
+        self.flush();
+    }
 
     /// Every reply of the call's transaction has arrived: released iff it acknowledged.
     bounced(msg: bounced<RelayProbe>) {
         if (!self.done && self.target != null && sender() == self.target!! && msg.queryId == self.probe) {
             self.done = true;
             self.report(self.ref, self.acked, SendRemainingBalance);
+            return;
         }
+        self.flush();
     }
 
     /// Any other bounce from the target is the call's: it failed.
@@ -519,6 +535,15 @@ contract RelayExecutor(
         if (!self.done && self.target != null && sender() == self.target!!) {
             self.done = true;
             self.report(self.ref, false, SendRemainingBalance);
+            return;
+        }
+        self.flush();
+    }
+
+    /// After the report the executor holds nothing: late TON goes to the relayer.
+    fun flush() {
+        if (self.done && self.relayer != null) {
+            message(MessageParameters { to: self.relayer!!, value: 0, mode: SendRemainingBalance | SendIgnoreErrors, bounce: false, body: JettonExcesses { queryId: 0 }.toCell() });
         }
     }
 

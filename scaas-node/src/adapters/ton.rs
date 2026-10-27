@@ -806,17 +806,22 @@ impl RelayCall {
     }
 }
 
-/// `Some(true)` = `RelayFeePaid { ref, target, token, ^[payer, payee, amount] }`, `Some(false)` = `RelayFeeRefunded { ref,
-/// payer, amount }`, of this `(payer, r)`; anything else `None`.
-pub fn settled_event(c: &Arc<Cell>, payer: &Addr, r: &[u8; 32]) -> Option<bool> {
+/// The outcome of OUR relay of `(payer, r)` in one router event: `Some(true)` = `RelayFeePaid { ref, target, token,
+/// ^[payer, payee, amount] }` with `payee == lane`, `Some(false)` = `RelayFeeRefunded { ref, payer, relayer, amount }`
+/// with `relayer == lane` (amount 0: our payment never arrived). Another relayer's events are not ours (a copied
+/// `RelayCall` after a release refunds its own relayer with amount 0), anything else `None`.
+pub fn settled_event(c: &Arc<Cell>, lane: &Addr, payer: &Addr, r: &[u8; 32]) -> Option<bool> {
     let mut p = c.parser();
     let op = p.uint(32).ok()?;
     if p.b256().ok()? != *r {
         return None;
     }
     match op {
-        EV_RELAY_FEE_PAID => (c.refs().first()?.parser().addr().ok()?.as_ref() == Some(payer)).then_some(true),
-        EV_RELAY_FEE_REFUNDED => (p.addr().ok()?.as_ref() == Some(payer)).then_some(false),
+        EV_RELAY_FEE_PAID => {
+            let mut q = c.refs().first()?.parser();
+            (q.addr().ok()?.as_ref() == Some(payer) && q.addr().ok()?.as_ref() == Some(lane)).then_some(true)
+        }
+        EV_RELAY_FEE_REFUNDED => (p.addr().ok()?.as_ref() == Some(payer) && p.addr().ok()?.as_ref() == Some(lane)).then_some(false),
         _ => None,
     }
 }
@@ -1367,30 +1372,39 @@ impl TonAdapter {
             }
             return Ok(TxStatus::Pending);
         }
-        Ok(match self.escrow_outcome(&router, &m.from, &m.pay_ref).await? {
+        let lane = Addr::parse(lane_tx.get("account").and_then(Value::as_str).unwrap_or_default())?;
+        Ok(match self.escrow_outcome(&router, &lane, &m.from, &m.pay_ref).await? {
             Some((true, height, tx_hash)) => TxStatus::Mined { height, tx_hash: Some(tx_hash) },
             Some((false, _, _)) => TxStatus::Reverted { reason: "relay fee refunded: the call failed, bounced or timed out (the payer was not charged)".into() },
             None => TxStatus::Pending,
         })
     }
 
-    /// The router transaction that settled `(payer, r)`: `(released, mc height, tx hash)` from its `RelayFeePaid` /
-    /// `RelayFeeRefunded`. ponytail: the router's last 128 transactions; a busier router needs the indexer's view (T17).
-    async fn escrow_outcome(&self, router: &Addr, payer: &Addr, r: &[u8; 32]) -> Result<Option<(bool, u64, String)>> {
+    /// The router transaction that settled our relay of `(payer, r)`: `(released, mc height, tx hash)` from its
+    /// `RelayFeePaid` / `RelayFeeRefunded` naming our lane. A release wins over a refund (a `(payer, ref)` is paid at most
+    /// once: a refund of ours next to it is an earlier attempt whose payment never arrived). ponytail: the router's last
+    /// 128 transactions; a busier router needs the indexer's view (T17).
+    async fn escrow_outcome(&self, router: &Addr, lane: &Addr, payer: &Addr, r: &[u8; 32]) -> Result<Option<(bool, u64, String)>> {
         let v = self.api.get("transactions", &[("account", router.raw()), ("limit", "128".into()), ("sort", "desc".into())]).await?;
+        let mut found: Option<(bool, u64, String)> = None;
         for tx in v.get("transactions").and_then(Value::as_array).into_iter().flatten() {
             if compute_ok(tx).is_err() {
                 continue;
             }
             let msgs = tx.get("out_msgs").and_then(Value::as_array).cloned().unwrap_or_default();
             for c in msgs.iter().filter(|m| m.get("destination").is_none_or(Value::is_null)).filter_map(out_body) {
-                if let Some(released) = settled_event(&c, payer, r) {
-                    let h = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
-                    return Ok(Some((released, tx.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default(), h)));
+                if let Some(released) = settled_event(&c, lane, payer, r) {
+                    if released || found.is_none() {
+                        let h = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
+                        found = Some((released, tx.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default(), h));
+                    }
+                    if released {
+                        return Ok(found);
+                    }
                 }
             }
         }
-        Ok(None)
+        Ok(found)
     }
 
     /// `RelayRefund { from, ref }` from the lane that sent the relay (the lane runner holds it until the job ends).
@@ -2414,13 +2428,34 @@ mod tests {
         assert!(e.contains("tokens: wasm1nope"), "{e}");
     }
 
-    fn paid_event(r: &[u8; 32], payer: &Addr) -> Arc<Cell> {
+    fn paid_event(r: &[u8; 32], payer: &Addr, payee: &Addr) -> Arc<Cell> {
         Builder::new().uint(EV_RELAY_FEE_PAID, 32).bytes(r).addr(Some(&target())).addr(Some(&MASTER))
-            .reference(Builder::new().addr(Some(payer)).addr(Some(&ROUTER)).coins(25).end().unwrap()).end().unwrap()
+            .reference(Builder::new().addr(Some(payer)).addr(Some(payee)).coins(25).end().unwrap()).end().unwrap()
     }
 
-    fn refunded_event(r: &[u8; 32], payer: &Addr) -> Arc<Cell> {
-        Builder::new().uint(EV_RELAY_FEE_REFUNDED, 32).bytes(r).addr(Some(payer)).coins(25).end().unwrap()
+    fn refunded_event(r: &[u8; 32], payer: &Addr, relayer: &Addr, amount: u128) -> Arc<Cell> {
+        Builder::new().uint(EV_RELAY_FEE_REFUNDED, 32).bytes(r).addr(Some(payer)).addr(Some(relayer)).coins(amount).end().unwrap()
+    }
+
+    /// The router's event layouts, byte for byte the Tact contract's (@ton/core vectors).
+    #[test]
+    fn ton_relay_fee_event_vectors() {
+        let v = vectors();
+        let rf = &v["relay_fee"];
+        let a = |k: &str| Addr::parse(rf[k].as_str().unwrap()).unwrap();
+        let r: [u8; 32] = hexv(&rf["ref"]).try_into().unwrap();
+        let paid = cell(&v, "/relay_fee/paid_boc");
+        let refunded = cell(&v, "/relay_fee/refunded_boc");
+        assert_eq!(paid.hash(), paid_event_at(&r, &a("target"), &a("token"), &a("from"), &a("relayer")).hash());
+        assert_eq!(settled_event(&paid, &a("relayer"), &a("from"), &r), Some(true));
+        assert_eq!(settled_event(&refunded, &a("relayer"), &a("from"), &r), Some(false));
+        assert_eq!(settled_event(&paid, &a("from"), &a("from"), &r), None, "another payee");
+        assert_eq!(settled_event(&refunded, &a("from"), &a("from"), &r), None, "another relayer");
+    }
+
+    fn paid_event_at(r: &[u8; 32], target: &Addr, token: &Addr, payer: &Addr, payee: &Addr) -> Arc<Cell> {
+        Builder::new().uint(EV_RELAY_FEE_PAID, 32).bytes(r).addr(Some(target)).addr(Some(token))
+            .reference(Builder::new().addr(Some(payer)).addr(Some(payee)).coins(25).end().unwrap()).end().unwrap()
     }
 
     /// §9: the relay-fee job builds the router's `RelayCall` (deadline inside RELAY_TIMEOUT, the TON the router prices
@@ -2474,18 +2509,21 @@ mod tests {
         shared.lock().unwrap().by_msg.insert(at(&h1), router_tx(ok.clone()));
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "escrow open (funded, the call is out)");
         assert!(shared.lock().unwrap().posted.is_empty(), "no refund before the deadline");
-        // closed, but no event of this (payer, ref) seen yet (another payer's, another ref's): still pending
+        // closed, but no event of OUR relay of this (payer, ref) seen yet: another payer's, another ref's, another
+        // relayer's release, a griefer's copied RelayCall refunded with amount 0 to itself: still pending
         shared.lock().unwrap().getters.insert("get_escrow_state".into(), num(0));
         let ev = |c: &Arc<Cell>, h: u8, seq: u64| json!({"hash": b64encode(&[h; 32]), "description": ok, "mc_block_seqno": seq,
             "out_msgs": [{"destination": null, "message_content": {"body": b64encode(&boc_serialize(c))}}]});
-        shared.lock().unwrap().by_account = vec![ev(&paid_event(&r, &MASTER), 0x0d, 9), ev(&refunded_event(&[9; 32], &m.from), 0x0e, 8)];
-        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "never refunded by absence");
-        // refunded, positively
-        shared.lock().unwrap().by_account.push(ev(&refunded_event(&r, &m.from), 0x0f, 7));
+        let griefer = Addr { wc: 0, hash: [0x6e; 32] };
+        shared.lock().unwrap().by_account = vec![ev(&refunded_event(&r, &m.from, &griefer, 0), 0x0a, 11), ev(&paid_event(&r, &MASTER, &me), 0x0d, 10),
+            ev(&refunded_event(&[9; 32], &m.from, &me, 25), 0x0e, 9), ev(&paid_event(&r, &m.from, &griefer), 0x0b, 8)];
+        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "never refunded by absence, never another relayer's outcome");
+        // ours refunded, positively
+        shared.lock().unwrap().by_account.push(ev(&refunded_event(&r, &m.from, &me, 25), 0x0f, 7));
         let refunded = a.tx_status(&id).await.unwrap();
         assert!(matches!(&refunded, TxStatus::Reverted { reason } if reason.contains("refunded")), "{refunded:?}");
-        // released, positively
-        shared.lock().unwrap().by_account = vec![ev(&paid_event(&r, &m.from), 0x0c, 7)];
+        // ours released: a release wins over a refund of ours (an earlier attempt), whatever the order
+        shared.lock().unwrap().by_account = vec![ev(&refunded_event(&r, &m.from, &me, 0), 0x0f, 8), ev(&paid_event(&r, &m.from, &me), 0x0c, 7)];
         assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Mined { height: 7, tx_hash: Some(hex0x(&[0x0c; 32])) });
         // a relay-fee job is never "consumed" by its spent pay lane (a refunded escrow spends it too)
         assert_eq!(a.op_consumed(&job_of(&o)).await.unwrap(), None);

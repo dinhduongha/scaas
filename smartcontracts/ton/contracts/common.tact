@@ -111,7 +111,8 @@ message(0x9b1c0d04) PaymentMeta {
 }
 
 /// CTR-MTX-27 (TON): a served fee-less entry (wallet `set_key` / `revoke`, Mandate owner `revoke`) acknowledges its
-/// successful handling to the sender of the call, last thing before its excess. A failed action phase sends no message
+/// successful handling to the sender of the call, just before its own outgoing message (the excess, or a revoke's
+/// cancel transfer to the DEX, whose excess comes back later along the DEX path). A failed action phase sends no message
 /// at all, so the ack proves compute and action ran; `digest` is the MetaOp the entry executed.
 message(0x5b0a1d35) RelayAck {
     digest: Int as uint256;

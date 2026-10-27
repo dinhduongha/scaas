@@ -297,7 +297,7 @@ to the DEX (≥ `CANCEL_TON`) — on the same jetton path as the order leg, so t
 the lane at `nonce + 2` (the first form consumes the second form's slot too), and the node's `build` follows the same
 rule. Why: as built the wallet accepts `next == nonce` or `nonce + 1` (`jetton.tact:229`) and the first form sets
 `next + 1`, so a resend of the **same** signature runs again in the second form, consuming `nonce + 1` and sending a
-`CancelTag`. SPECIFIED. Test: resending the same revoke ⇒ `E_NONCE`, no second `CancelTag`.
+`CancelTag`. BUILT (metatx-split T16 fix 2: `setLane(lane, nonce + 2)` for every revoke). Test: `jetton.spec.ts` › a signed revoke runs once in either form (resend ⇒ `E_NONCE`, no second `CancelTag`), `relayfee.spec.ts` › a revoke replayed after it ran is refused.
 
 ## <a id="dex"></a>7. DEX
 

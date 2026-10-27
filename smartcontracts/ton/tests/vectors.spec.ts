@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ScaasJettonWallet, storeMetaTransactionExecuted, storePaymentMeta, storePaymentSettled, storeSignedOp } from '../build/jetton/jetton_ScaasJettonWallet';
 import { ScaasJettonMaster } from '../build/jetton/jetton_ScaasJettonMaster';
-import { ScaasRelayFee, storeRelayCall, storeRelayRefund } from '../build/relayfee/relayfee_ScaasRelayFee';
+import { ScaasRelayFee, storeRelayCall, storeRelayFeePaid, storeRelayFeeRefunded, storeRelayRefund } from '../build/relayfee/relayfee_ScaasRelayFee';
 import { setup } from './fixture';
 import { domainCell, metaOpCell, METAOP_SCHEMA, payMetaParams, SCHEMA_CRC, signDataCell, snakeCell, stateInitCell, tonConnectAuth, tradeParamsCell } from './helpers';
 
@@ -87,6 +87,9 @@ async function build() {
     const relayCall = beginCell().store(storeRelayCall({ $$type: 'RelayCall', target: rfTarget, targetInit: rfInit, call: rfCall, salt: rfSalt, payWallet: payerWallet,
         payOp: rfOp, payAuth: rfAuth, payStateInit: stateInitCell(payer.init), master: master.address, deadline: 1_800_000_600n })).endCell();
     const relayRefund = beginCell().store(storeRelayRefund({ $$type: 'RelayRefund', from: payer.address, ref: rfRef })).endCell();
+    const rfRelayer = lane.address;
+    const rfPaid = beginCell().store(storeRelayFeePaid({ $$type: 'RelayFeePaid', ref: rfRef, target: rfTarget, token: master.address, payer: payer.address, payee: rfRelayer, amount: 25n })).endCell();
+    const rfRefunded = beginCell().store(storeRelayFeeRefunded({ $$type: 'RelayFeeRefunded', ref: rfRef, payer: payer.address, relayer: rfRelayer, amount: 25n })).endCell();
     return {
         schema: METAOP_SCHEMA, schema_crc32: SCHEMA_CRC,
         metaop: {
@@ -112,6 +115,7 @@ async function build() {
             router: raw(router.address), target: raw(rfTarget), call_boc: hex(rfCall), salt: u(rfSalt), ref: u(rfRef), from: raw(payer.address),
             escrow_key: h(beginCell().storeAddress(payer.address).storeUint(rfRef, 256).endCell()),
             pay_op_boc: hex(rfOp), relay_call_boc: hex(relayCall), relay_call_hash: h(relayCall), relay_refund_boc: hex(relayRefund),
+            token: raw(master.address), relayer: raw(rfRelayer), paid_boc: hex(rfPaid), refunded_boc: hex(rfRefunded),
         },
     };
 }

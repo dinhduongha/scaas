@@ -42,11 +42,12 @@ async function ctx() {
 
     /// A served fee-less entry: `s`'s signed op (`set_key` clearing the passkey, or `revoke`) on its own wallet `w`,
     /// relayer open, its excess to `response` (the executor). `signer` signs (another key = a call the wallet refuses).
-    function signedCall(s: Subject, w: Address, response: Address, o: { signer?: Subject; op?: number; relayer?: Address | null } = {}) {
+    function signedCall(s: Subject, w: Address, response: Address,
+                        o: { signer?: Subject; op?: number; relayer?: Address | null; lane?: bigint; to?: Address; extra?: bigint; forwardTon?: bigint } = {}) {
         const op = metaOpCell({ network: f.network, op: o.op ?? OP.set_key, amount: 0n, nonce: 0n, validUntil: 1_800_000_600, contract: w,
-            from: s.address, to: s.address, relayer: o.relayer ?? null, payRef: 0n, lane: randomU256(), extra: 0n });
+            from: s.address, to: o.to ?? s.address, relayer: o.relayer ?? null, payRef: 0n, lane: o.lane ?? randomU256(), extra: o.extra ?? 0n });
         const auth = tonConnectAuth((o.signer ?? s).kp, s.address, 1_800_000_000, DOMAIN, op);
-        return beginCell().store(storeSignedOp({ $$type: 'SignedOp', op, auth, params: null, stateInit: s.stateInit, responseDestination: response, forwardTon: 0n, matchWith: 0n })).endCell();
+        return beginCell().store(storeSignedOp({ $$type: 'SignedOp', op, auth, params: null, stateInit: s.stateInit, responseDestination: response, forwardTon: o.forwardTon ?? 0n, matchWith: 0n })).endCell();
     }
 
     /// The payer's router-bound payment for (target, call, salt) and the RelayCall the relayer sends.
@@ -155,6 +156,57 @@ describe('relay-fee escrow router (CTR-MTX-27, TON)', () => {
         expect(await c.balanceOf(c.token, c.alice.address)).toBe(1000n - FEE);
     });
 
+    it("a revoke of an order already sent: its forward TON is in the call's floor, its late cancel excess goes to the relayer", async () => {
+        const c = await ctx();
+        const lane = randomU256();
+        // carol's order (lane, nonce 0) left her wallet: the revoke takes the cancel form (next == nonce + 1)
+        const order = signedPay(c.carol, { contract: c.cw.address, to: c.mallory.address, amount: 1n, network: c.network, lane, nonce: 0n }, { responseDestination: c.admin.address });
+        await c.cw.send(c.admin.getSender(), { value: toNano('0.2') }, order.body);
+        const salt = randomU256();
+        const exec = await c.router.getGetExecutor(c.alice.address, salt);
+        const call = c.signedCall(c.carol, c.cw.address, exec, { op: OP.revoke, lane, to: c.mallory.address, extra: 7n, forwardTon: toNano('0.1') });
+        const { body } = await c.relayCall(c.alice, await c.walletInit(c.carol.address), call, salt);
+        const r = await c.send(body);
+        expect(r.transactions).toHaveTransaction({ from: exec, to: c.cw.address, success: true }); // not under-funded
+        expect(c.paid(r.transactions)).toHaveLength(1);
+        expect(await c.cw.getGetLaneNonce(lane)).toBe(2n);
+        // the cancel's excess reached the executor after its report and went on to the relayer
+        expect(r.transactions).toHaveTransaction({ from: exec, to: c.relayer.address, op: 0xd53276db });
+        expect((await c.bc.getContract(exec)).balance < toNano('0.001')).toBe(true);
+    });
+
+    it("a revoke replayed after it ran is refused: the escrow is refunded, no second cancel (T16 fix 2)", async () => {
+        const c = await ctx();
+        const lane = randomU256();
+        const salt = randomU256();
+        const exec = await c.router.getGetExecutor(c.alice.address, salt);
+        const call = c.signedCall(c.carol, c.cw.address, exec, { op: OP.revoke, lane, to: c.mallory.address, extra: 7n, forwardTon: toNano('0.1') });
+        // mallory submits carol's signed revoke first (the order never left: first form, the lane goes to nonce + 2)
+        const first = await c.bc.sendMessage(internal({ from: c.mallory.address, to: c.cw.address, value: toNano('0.3'), body: call }));
+        expect(first.transactions).toHaveTransaction({ to: c.cw.address, success: true });
+        expect(await c.cw.getGetLaneNonce(lane)).toBe(2n);
+        const { body } = await c.relayCall(c.alice, await c.walletInit(c.carol.address), call, salt);
+        const r = await c.send(body);
+        expect(r.transactions).toHaveTransaction({ from: exec, to: c.cw.address, success: false, exitCode: 706 });
+        expect(r.transactions).not.toHaveTransaction({ from: c.cw.address, to: await c.walletOf(c.token, c.mallory.address).then((w) => w.address) });
+        expect(c.paid(r.transactions)).toHaveLength(0);
+        expect(await c.balanceOf(c.token, c.alice.address)).toBe(1000n);
+        expect(await c.cw.getGetLaneNonce(lane)).toBe(2n);
+    });
+
+    it("a copied RelayCall after the release names its own relayer in the refund event (node attribution)", async () => {
+        const c = await ctx();
+        const salt = randomU256();
+        const exec = await c.router.getGetExecutor(c.alice.address, salt);
+        const { ref, body } = await c.relayCall(c.alice, await c.walletInit(c.carol.address), c.signedCall(c.carol, c.cw.address, exec), salt);
+        expect(c.paid(await c.send(body).then((r) => r.transactions)).map((e) => e.payee.toString())).toEqual([c.relayer.address.toString()]);
+        const griefer = await c.bc.treasury('griefer');
+        const r2 = await c.send(body, griefer);
+        expect(c.refunded(r2.transactions).map((e) => [e.ref, e.payer.toString(), e.relayer.toString(), e.amount]))
+            .toEqual([[ref, c.alice.address.toString(), griefer.address.toString(), 0n]]);
+        expect(await c.relayerBalance()).toBe(FEE);
+    });
+
     it('refund on call bounce: payer refunded, nothing to the relayer', async () => {
         const c = await ctx();
         const salt = randomU256();
@@ -169,7 +221,7 @@ describe('relay-fee escrow router (CTR-MTX-27, TON)', () => {
         expect(await c.relayerBalance()).toBe(0n);
         expect(await c.routerBalance()).toBe(0n);
         expect(c.paid(r.transactions)).toHaveLength(0);
-        expect(c.refunded(r.transactions).map((e) => [e.ref, e.payer.toString(), e.amount])).toEqual([[ref, c.alice.address.toString(), FEE]]);
+        expect(c.refunded(r.transactions).map((e) => [e.ref, e.payer.toString(), e.relayer.toString(), e.amount])).toEqual([[ref, c.alice.address.toString(), c.relayer.address.toString(), FEE]]);
         expect(await c.router.getGetPending(c.alice.address, ref)).toBeNull();
         expect(r.transactions).toHaveTransaction({ to: c.relayer.address, op: 0xd53276db }); // the relayer's TON comes back
         console.log('relay-fee refund', JSON.stringify({ txs: r.transactions.length, fees: r.transactions.reduce((s, t) => s + t.totalFees.coins, 0n).toString() }));
@@ -201,12 +253,12 @@ describe('relay-fee escrow router (CTR-MTX-27, TON)', () => {
         // the executor alone (started as by the router): ActFail acks, then fails its action phase unless the call starts with 1
         const run = async (failing: boolean, delta = 0n) => {
             const salt = randomU256();
-            const init = (await RelayExecutor.fromInit(c.router.address, c.alice.address, salt, 0n, null, 0n, 0n, false, false)).init!;
+            const init = (await RelayExecutor.fromInit(c.router.address, c.alice.address, salt, 0n, null, 0n, 0n, false, false, null)).init!;
             const exec = addrOf(si(init));
             const call = beginCell().storeUint(failing ? 2 : 1, 32).storeRef(beginCell().storeUint(salt, 256).endCell()).endCell();
             const callMin = await c.router.getGetCallFloor();
             const start = await c.router.getGetExecStart(call, callMin); // the least TON it starts with, at the router's keep
-            const body = beginCell().store(storeRelayExec({ $$type: 'RelayExec', ref: 7n, target: target.address, call, callMin, keep: await c.router.getGetExecKeep() })).endCell();
+            const body = beginCell().store(storeRelayExec({ $$type: 'RelayExec', ref: 7n, target: target.address, call, relayer: c.relayer.address, callMin, keep: await c.router.getGetExecKeep() })).endCell();
             const r = await c.bc.sendMessage(internal({ from: c.router.address, to: exec, value: start + delta, bounce: false, stateInit: init, body }));
             const out = r.transactions.flatMap((t) => t.outMessages.values()).find((m) => m.info.type === 'internal' && m.info.src.equals(exec) && opOf(m.body) === OPS.outcome);
             return { r, exec, outcome: out && loadRelayOutcome(out.body.beginParse()) };
