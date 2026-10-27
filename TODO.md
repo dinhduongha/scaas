@@ -105,7 +105,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   a 200 M block load rehearsal, `.dockerignore` for the default (no `FFI_REV`) image build, README note that the
   testnet's PQZL v2 id is the forgeable one, an `eth_estimateGas` row in the probe; main's FFI library `ee2f7096…` is
   not the reviewed `16dd99ce…` (review the v4 library before building the image).
-- [ ] **Dependabot alerts 19 / 20 / 21 / 36 — owner 2026-10-22: leave open (option 2), no dismiss.** All dev / test-only:
+- [ ] **Dependabot alerts 19 / 20 / 21 — owner 2026-10-22: leave open (option 2), no dismiss.** (2026-10-27: #36 `sprintf-js` closed on its own; #42–#45 `fast-uri` < 3.1.9 in `smartcontracts/ton`, dev-only via `ajv`, fixed by the lockfile bump `885c91f4`, TON tests 28/28.) All dev / test-only:
   Solana `ed25519-dalek` 1.0.1, `curve25519-dalek` 3.2.0, `rand` 0.7.3 via `litesvm` 0.17 (dev-dependency) →
   `agave-precompiles` 4.3.0 — `cargo update` once litesvm / Agave move to `ed25519-dalek` 2; TON `sprintf-js` 1.0.3 via
   jest → babel-plugin-istanbul → `js-yaml` 3 → `argparse` 1 (no patched version) — goes when jest drops `js-yaml` 3.
