@@ -349,3 +349,29 @@ Merged from the seven units' "Not covered" sections and the controller's own gap
 - Unmeasured and needed before any public chain enables PQ msigs: an at-budget PQ msig with c ≥ 8 large signatures
   (C4-2) and the provisional `MSIG_MEMBER_GAS` and PQ caps.
 - Codex on C3–C6 (credits), as stated above.
+
+## Fix round (review2-fix, 2026-10-27)
+
+Branch `review2-fix` from `649f3397`. Per finding: done / commit / test. Detail per task: the SDD reports under
+`.superpowers/sdd/2026-10-27-contracts-review-fixes/`. Commits are on the branch, not merged.
+
+| Finding | Status | Commit | Test |
+|---|---|---|---|
+| C2-1, C0-2, C2-3, C2-4, C2-5, C2-6, C2-7, C0-7 (PQZ token guards, PQZH value only at n2048-kmax1024) | done | `1d5f24eb` | `test/pqz/PqzGuards.t.sol` (12 tests) |
+| C0-5, C4-2, C0-11 (UA registry PQZ msig holder bound; fee-UA rows, gen-2 forwarding hold) | done | `3485a756`, `bd7fe719` | `UARegistryPqzBound.t.sol` (`test_register_msigHolder*`), `PqzStateGas.t.sol` (`test_gasTable_holderRows`, `test_T_GAS_*`) |
+| C0-1 (ii) (per-leg auditor randomness t_j, label `v3`), C0-9 (validUntilBlock), AuditorKeyAsParty | done | `4f4c5eec`, `15b9f451`, `e57c020f` | `test_multiAudited_auditorDecryptsEachLeg`, `test_multiAudited_decoysDistinct`, `test_v2ProofRefused`, `test_directTransferExpired`, `test_auditorKeyAsParty`, `ZetherProverCross.t.sol` |
+| C0-4 (disclosure strong Fiat-Shamir, tag V2, K = O refused) | done | `1d2e052a`, `87042b84` | `test_weakFiatShamirOpeningsRefused`, `test_disclosureChallengeCarriesChainUid`, `test_keyPointIdentityRefused` |
+| C0-3 (Zether records in state, NONE retired) | done | `41b798d9` | `test_noBundleRetired`, `test_init_noneModeRefused`, `test_hashRecordMatchesR`, `test_disclosure_readsRecordFromState` |
+| C0-13, C0-19, C1-2, C1-3 (hardening) | done | `ec2eb0f3` | `test_C0_13_shortSinglePayloadIsBadPayload`, `test_C0_19_invPrecompileFailureNamed`, `test_C1_2_unterminatedTailRefused`, `test_C1_3_identityRefused` |
+| C5-2..C5-5, C6-5, C6-9 (metatx / trade / dex hardening) | done | `4623478d` | `MetaTx*.t.sol`, `Dex*.t.sol`, `SmartKeyAccount.t.sol` |
+| C6-1 (gas-capped outside-token calls), C5-1 (release gas gate) | done | `49769894` | `DexOutside.t.sol`, `test_C5_1_releaseNeedsABlockGasLimit`; DEX KAT regenerated |
+| C6-2, C6-3, C6-7, C6-5 (node), C3-2 (prover uaSigner) | done | `1b26e5ff`, `64e6c1fb` | `scaas-node` tests, `clients/clientkeys` DexKat, zether-prover tests |
+| C0-6 (accept), C0-10, C0-18, C2-5 docs, fee-UA list, Change lines | done | `0fda3a56`, `e63bac6f` | docs_check |
+| C0-8, C1-1, C2-8, C2-9, C3-7, C3-9, C5-7 (NatSpec) | done | `3d856d68`, `0e559832` | pin-reading suites unchanged |
+| C0-6 flood regression | done | `40e0ae29` | `test_rollFlood_killsAnInFlightDebit_pendingRange` |
+| C5-9, prover per-M `gas_limits` re-measurement | deferred (needs the owner's go for gas runs) | `e63bac6f` (decisions) | none |
+
+Gate logs (`smartcontracts/evm/runs/2026-10-27-review2-<step>.txt`, runner `2026-10-27-review2-gates.sh`, resumable per step), all `rc=0` at `b3c845c6`:
+`forge-n2048-kmax1024` (1402 passed), `forge-n2304-kmax4096` (1401), `forge-n2560-kmax16384` (1401), `forge-n2816-kmax65536` (1396),
+`sizes` (0 errors), `gen-set`, `docs` (0 errors; the fact ledger's 9 misses in `history/` already exist on main and are only logged),
+`cargo-zether-prover`, `wasm-zether-prover` (9 smoke checks), `cargo-scaas-node`, `clientkeys` (109 tests).
