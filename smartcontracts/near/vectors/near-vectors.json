@@ -1032,8 +1032,44 @@
      "nep413Hash": "0x88c64270b6bccc3a6ab9d75cad5104340e9db8f929ae2b948aaaf148fc2232a0",
      "sig": "0x581bf6f00019d2a93bfe39d126ec90a89803b66d60bd4bf9f992d9316dfd1941ef203ddfca4edec43ccaf5aeace3033403f46fb9465e0847870d9c3523122e0f"
     },
-    "note": "mtx_start_recovery(op, auth, key, origin): from = the guardian, to = the subject; finish_recovery(subject) after 172,800 s",
+    "note": "mtx_start_recovery(op, auth, key, origin): from = the guardian, to = the subject; the guardian's mtx_finish_recovery after 172,800 s adds the key (CTR-ACC-03)",
     "params": "0x0201200000008022ff990a9a0cea83c7e8df2d8c2ceee79d7c1ab968f348b76c88ccdb60be0100"
+   },
+   {
+    "name": "finish_recovery",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 11,
+     "from": {
+      "Near": "alice.test.near"
+     },
+     "to": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "relayer": null,
+     "amount": "0",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "nonce": 1,
+     "valid_until": 4102444800,
+     "extra": "0xca358758f6d27e6cf45272937977a748fd88391db679ceda7dc7bf1f005ee879"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e6561720b000f000000616c6963652e746573742e6e6561720102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000005786f400000000ca358758f6d27e6cf45272937977a748fd88391db679ceda7dc7bf1f005ee879",
+    "digest": "0xd71a8c82feedb1c4d16935cb0239a2943d5c4daa0f31367dab7799cfd398765f",
+    "text": "scaas.metaop.v1:d71a8c82feedb1c4d16935cb0239a2943d5c4daa0f31367dab7799cfd398765f",
+    "auth": {
+     "kind": "ed25519",
+     "key": "0xd5bf4a3fcce717b0388bcc2749ebc148ad9969b23f45ee1b605fd58778576ac4",
+     "message": "scaas.metaop.v1:d71a8c82feedb1c4d16935cb0239a2943d5c4daa0f31367dab7799cfd398765f",
+     "nonce": "0xd71a8c82feedb1c4d16935cb0239a2943d5c4daa0f31367dab7799cfd398765f",
+     "recipient": "token.test.near",
+     "nep413Payload": "0x5000000073636161732e6d6574616f702e76313a64373161386338326665656462316334643136393335636230323339613239343364356334646161306633313336376461623737393963666433393837363566d71a8c82feedb1c4d16935cb0239a2943d5c4daa0f31367dab7799cfd398765f0f000000746f6b656e2e746573742e6e65617200",
+     "nep413Hash": "0x97a99c5955cf5bb983e1df872983639b92f5612dd0f0e6482442140637a0ad5e",
+     "sig": "0x042a4c3ec1694a7edcd8582e5951f75f95dd80f7463d9a188847cbaf0b556ff5a6bdf63e088443609f202d323d1cd75c6b2b6df99ad51d24f6deb0881e2b5b0c"
+    },
+    "note": "mtx_finish_recovery(op, auth): the finish_recovery key-op action under op code 11, signed params [KEYOP_FINISH_RECOVERY 7], from = the guardian, to = the subject; adds the recovery key, removes none",
+    "params": "0x07"
    },
    {
     "name": "cancel_recovery",

@@ -17,7 +17,7 @@ mod account;
 mod ft;
 mod storage;
 pub use account::{
-    record_bytes, Check, Recovery, Subject, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
+    record_bytes, Check, Recovery, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
     RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
 };
 pub use storage::{ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
@@ -42,7 +42,7 @@ pub struct Token {
 pub enum Event {
     #[event_version("1.0.0")]
     UaTransfer { from: String, to: String, amount: U128 },
-    /// A subject account's keys changed (`action`: the key op, `finish_recovery` or `add_key_native`).
+    /// A subject account's keys changed (`action`: the key op or `add_key_native`).
     #[event_version("1.0.0")]
     KeyOp { subject: String, action: String },
 }

@@ -97,12 +97,12 @@ fn leaf(auth: &Auth, digest: &[u8; 32], recipient: &AccountId, origins: Option<&
             let rp: [u8; 32] = ad.get(..32).ok_or("passkey authenticatorData")?.try_into().unwrap();
             let own = match origins {
                 Some(_) => None,
-                None => Some(webauthn::origin(cd).ok_or("passkey clientDataJSON origin")?),
+                None => Some(webauthn::origin(cd, digest).ok_or("passkey clientDataJSON (type, challenge or origin)")?),
             };
             let list = origins.unwrap_or_else(|| std::slice::from_ref(own.as_ref().unwrap()));
             webauthn::verify(key, digest, ad, cd, sig, &rp, list).map_err(|e| match e {
                 AuthError::ClientData => "passkey clientDataJSON (type, challenge or origin)",
-                AuthError::AuthenticatorData => "passkey authenticatorData (rpIdHash or UP flag)",
+                AuthError::AuthenticatorData => "passkey authenticatorData (rpIdHash or UP / UV flags)",
                 AuthError::HighS => "passkey signature high s",
                 AuthError::BadKey => "passkey key",
                 AuthError::BadSignature => "passkey signature",

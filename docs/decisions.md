@@ -5403,15 +5403,19 @@ key_data }` = the key's UA kind and canonical key data: ed25519 `0x0102` 32 B, s
 webauthn-p256 `0x0100` `x ‖ y ‖ rpIdHash` 96 B, msig `0x0120`), `origins` (≤ 8, ≤ 128 B each), `guardian`
 (`Option<Holder>`), `recovery` (`key`, `origin`, `ready_at`), `key_nonce` and `policy` (u8). Signatures are checked against these
 records only (spec §3.3, R7): ed25519 by `env::ed25519_verify` over the NEP-413 hash, secp256k1 by `env::ecrecover`
-over the op digest (malleability flag set, recovery id 0 / 1), P-256 by `webauthn::verify` with challenge = the op
-digest — never a NEAR access key, and not the `ua_msg` tagging of accounts.md CTR-UA-12 (spec §3.5 and the Task 3
+over the op digest (malleability flag set, `v` = the recovery id 0 / 1: clients subtract 27 from a wallet's 27 /
+28), P-256 by `webauthn::verify` per NET-ALL-04 (UP and UV, the bounded clientDataJSON grammar — `crossOrigin: true`
+and `topOrigin` refused — exact origin; challenge = the op digest; a lazy open takes the grammar's origin) — never a NEAR access key, and not the `ua_msg` tagging of accounts.md CTR-UA-12 (spec §3.5 and the Task 3
 vectors fix the family form). A `Ua` id opens lazily on its first signed op when the signing key derives it
 (`UA(kind, keyData)`, kinds.json; top 96 bits non-zero), a passkey record starting with the assertion's own origin; a
 `Near` holder adds keys by `add_key_native(key, origin)` (predecessor) or a signed op of a current key. Key ops
 (codes 6–12) carry `amount` 0, `pay_ref` / `lane` zero, `nonce` = the signer's `key_nonce` (consumed: no replay),
 `to` = `from` (start_recovery: the subject), `extra = sha256(Borsh(entry parameters))`. Recovery: the guardian (a
-`Holder` signing with its own records) signs `mtx_start_recovery`; anyone calls `finish_recovery(subject)` after
-`RECOVERY_DELAY_S` = 172,800 s, which replaces every key and bumps the key nonce; a current key cancels. Storage: the
+`Holder` signing with its own records) signs `mtx_start_recovery` and, after `RECOVERY_DELAY_S` = 172,800 s,
+`mtx_finish_recovery` (the `finish_recovery` action under op code 11, signed params `[KEYOP_FINISH_RECOVERY = 7]`),
+which **adds** the recovery key and removes none (CTR-ACC-03, finish by the guardian as Aptos) and bumps the key
+nonce; any current key cancels during the delay, and `mtx_set_guardian` cancels a pending recovery (fix 2: was a
+permissionless finish replacing every key). Storage: the
 record's growth × `env::storage_byte_cost()` from the attached deposit, the excess refunded; a record = 41 B +
 Borsh(holder) + Borsh(subject), measured in `new` (one ed25519 UA key: 131 B with the `policy` byte, NET-NEAR-05). `*_check(caller, op, auth, params…)`
 takes the predecessor explicitly (a view has none). Status: BUILT (near-algorand Task 5). Controller call 2026-10-28,
@@ -5454,8 +5458,9 @@ nonce consumed. Any current key may sign it, a wallet key included; unknown bits
 (pay, trade, mandate setup) is Task 6 (ruling R8); key ops stay open to wallet keys. Status: BUILT (near-algorand
 Task 5 fix 1). Controller call 2026-10-28, owner may override.
 **Why.** NET-ALL-23 sets the bit "by a key operation" (Solana `SmartKeyAccount.policy`, Sui `Keys.policy`); the op
-codes 0–15 are fixed for both families. The action byte cannot collide with a `set_guardian` preimage (Borsh
-`Option<Holder>` is 1 byte or ≥ 34 bytes), and each entry checks its own preimage.
+codes 0–15 are fixed for both families. The preimages cannot collide: Borsh `Option<Holder>` (set_guardian) starts
+with 0 or 1, set_policy params start with 6; each entry checks its own preimage. The readable-text renderer (Task 21)
+must read the params to tell set_policy from set_guardian under op 10.
 **Cost if wrong.** A dedicated op code: a vector regeneration and one entry's op check.
 **Source.** near-algorand Task 5 report (fix 1); docs/networks/README.md NET-ALL-23.
 

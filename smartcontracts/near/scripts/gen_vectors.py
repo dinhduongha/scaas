@@ -267,8 +267,11 @@ def key_op_vectors():
 
 
 key_op('start_recovery', 'start_recovery', alice, near(ALICE), FRANK_KEY + opt(None), 0, to=ua(UA_ERIN),
-       note='mtx_start_recovery(op, auth, key, origin): from = the guardian, to = the subject; finish_recovery(subject) '
-            'after 172,800 s')
+       note='mtx_start_recovery(op, auth, key, origin): from = the guardian, to = the subject; the guardian\'s '
+            'mtx_finish_recovery after 172,800 s adds the key (CTR-ACC-03)')
+key_op('finish_recovery', 'start_recovery', alice, near(ALICE), bytes([7]), 1, to=ua(UA_ERIN),
+       note='mtx_finish_recovery(op, auth): the finish_recovery key-op action under op code 11, signed params '
+            '[KEYOP_FINISH_RECOVERY 7], from = the guardian, to = the subject; adds the recovery key, removes none')
 key_op('cancel_recovery', 'cancel_recovery', erin, ua(UA_ERIN), b'', 4, note='mtx_cancel_recovery(op, auth): no params')
 
 

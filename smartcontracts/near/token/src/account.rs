@@ -4,7 +4,7 @@
 //! current key. Signatures are checked against these records only, never against a NEAR access key.
 //!
 //! Key ops (codes 6–12): `amount` 0, `pay_ref` / `lane` zero, `nonce` = the signer's key nonce (consumed),
-//! `to` = `from` (start_recovery: the subject recovered), `extra = sha256(Borsh(entry parameters))`. Storage: every
+//! `to` = `from` (start / finish recovery: the subject recovered), `extra = sha256(Borsh(entry parameters))`. Storage: every
 //! byte a record grows by is paid from the attached deposit, the excess refunded (§2 row 15); a record never shrinks
 //! its payer's deposit back (records are permanent).
 use crate::{Holder, Token, TokenExt};
@@ -23,6 +23,9 @@ pub const RECOVERY_DELAY_S: u64 = 172_800;
 /// `[KEYOP_SET_POLICY, policy]` (action byte ‖ policy byte, as Solana's `SET_POLICY` key op).
 pub const POLICY_PASSKEY_FOR_VALUE: u8 = 1;
 pub const KEYOP_SET_POLICY: u8 = 6;
+/// `finish_recovery` key-op action: op code `OP_START_RECOVERY`, signed parameters `[KEYOP_FINISH_RECOVERY]` (one
+/// byte; start_recovery's Borsh `(KeyRecord, Option<String>)` is ≥ 7 bytes).
+pub const KEYOP_FINISH_RECOVERY: u8 = 7;
 /// Bytes of one subject record = this + Borsh(Holder) + Borsh(Subject): key prefix `a` (1) + NEAR's per-record
 /// overhead (40). `new` measures one record against it.
 pub const SUBJECT_RECORD_OVERHEAD: u64 = 41;
@@ -113,6 +116,7 @@ pub(crate) enum Action {
     SetGuardian(Option<Holder>),
     SetPolicy(u8),
     StartRecovery(KeyRecord, Option<String>),
+    FinishRecovery,
     CancelRecovery,
 }
 
@@ -126,6 +130,7 @@ impl Action {
             Action::SetGuardian(g) => (OP_SET_GUARDIAN, borsh::to_vec(g)),
             Action::SetPolicy(p) => (OP_SET_GUARDIAN, Ok(vec![KEYOP_SET_POLICY, *p])),
             Action::StartRecovery(k, o) => (OP_START_RECOVERY, borsh::to_vec(&(k, o))),
+            Action::FinishRecovery => (OP_START_RECOVERY, Ok(vec![KEYOP_FINISH_RECOVERY])),
             Action::CancelRecovery => (OP_CANCEL_RECOVERY, Ok(vec![])),
         };
         (code, params.expect("borsh"))
@@ -140,6 +145,7 @@ impl Action {
             Action::SetGuardian(..) => "set_guardian",
             Action::SetPolicy(..) => "set_policy",
             Action::StartRecovery(..) => "start_recovery",
+            Action::FinishRecovery => "finish_recovery",
             Action::CancelRecovery => "cancel_recovery",
         }
     }
@@ -229,7 +235,9 @@ impl Token {
         }
         s.key_nonce += 1;
         let signer = |s| Write { holder: op.from.clone(), subject: s, old };
-        if let Action::StartRecovery(k, origin) = act {
+        // CTR-ACC-03 (Aptos model): the guardian (`op.from`) starts, and after the delay finishes, a recovery of
+        // `op.to`; finishing ADDS the key and removes none; a current key cancels meanwhile.
+        if matches!(act, Action::StartRecovery(..) | Action::FinishRecovery) {
             if op.to == op.from {
                 return Err("a subject is not its own guardian");
             }
@@ -237,10 +245,20 @@ impl Token {
             if t.guardian.as_ref() != Some(&op.from) {
                 return Err("not the subject's guardian");
             }
-            let mut after = Subject { keys: vec![], ..t.clone() };
-            after.add_key(k, origin)?;
-            after.check_usable()?;
-            t.recovery = Some(Recovery { key: k.clone(), origin: origin.clone(), ready_at: now_s() + RECOVERY_DELAY_S });
+            if let Action::StartRecovery(k, origin) = act {
+                let mut after = t.clone();
+                after.add_key(k, origin)?;
+                after.check_usable()?;
+                t.recovery = Some(Recovery { key: k.clone(), origin: origin.clone(), ready_at: now_s() + RECOVERY_DELAY_S });
+            } else {
+                let r = t.recovery.take().ok_or("no recovery pending")?;
+                if now_s() < r.ready_at {
+                    return Err("recovery delay (172,800 s) not over");
+                }
+                t.add_key(&r.key, &r.origin)?;
+                t.check_usable()?;
+                t.key_nonce += 1; // as Aptos: lifecycle ops signed before the recovery are void
+            }
             return Ok(vec![signer(s), Write { holder: op.to.clone(), subject: t, old: told }]);
         }
         if op.to != op.from {
@@ -273,7 +291,7 @@ impl Token {
             Action::CancelRecovery => {
                 s.recovery.take().ok_or("no recovery pending")?;
             }
-            Action::StartRecovery(..) => unreachable!(),
+            Action::StartRecovery(..) | Action::FinishRecovery => unreachable!(),
         }
         s.check_usable()?;
         Ok(vec![signer(s)])
@@ -375,8 +393,8 @@ impl Token {
         self.charge_storage();
     }
 
-    /// Signed by the guardian (`op.from`), `op.to` = the subject; `key` replaces every key at `finish_recovery` after
-    /// `RECOVERY_DELAY_S`, unless a current key cancels first.
+    /// Signed by the guardian (`op.from`), `op.to` = the subject; `key` is added by `mtx_finish_recovery` after
+    /// `RECOVERY_DELAY_S`, unless a current key cancels (or `mtx_set_guardian` replaces the guardian) first.
     #[payable]
     pub fn mtx_start_recovery(
         &mut self,
@@ -395,21 +413,11 @@ impl Token {
         self.charge_storage();
     }
 
-    /// Anyone, once `ready_at` has passed: the recovery key replaces every key (and its origin is added); the key
-    /// nonce moves on, so key ops signed before are void.
+    /// Signed by the guardian (`op.from`, `op.to` = the subject) once `ready_at` has passed: the recovery key is
+    /// added (CTR-ACC-03: recovery is for a lost key; no key is removed).
     #[payable]
-    pub fn finish_recovery(&mut self, #[serializer(borsh)] subject: Holder) {
-        let (mut s, old) = self.load(&subject).unwrap_or_else(|| env::panic_str("no such subject"));
-        let r = s.recovery.take().unwrap_or_else(|| env::panic_str("no recovery pending"));
-        if now_s() < r.ready_at {
-            env::panic_str("recovery delay (172,800 s) not over");
-        }
-        s.keys = vec![r.key];
-        let res = r.origin.as_deref().map_or(Ok(()), |o| s.add_origin(o)).and_then(|_| s.check_usable());
-        res.unwrap_or_else(|e| env::panic_str(e));
-        s.key_nonce += 1;
-        crate::Event::KeyOp { subject: subject.to_string(), action: "finish_recovery".into() }.emit();
-        self.save(Write { holder: subject, subject: s, old });
+    pub fn mtx_finish_recovery(&mut self, #[serializer(borsh)] op: MetaOp, #[serializer(borsh)] auth: Auth) {
+        self.key_op(&op, &auth, Action::FinishRecovery);
         self.charge_storage();
     }
 
@@ -506,6 +514,16 @@ impl Token {
         #[serializer(borsh)] origin: Option<String>,
     ) -> Check {
         self.check(&caller, &op, &auth, Action::StartRecovery(key, origin))
+    }
+
+    #[result_serializer(borsh)]
+    pub fn mtx_finish_recovery_check(
+        &self,
+        #[serializer(borsh)] caller: AccountId,
+        #[serializer(borsh)] op: MetaOp,
+        #[serializer(borsh)] auth: Auth,
+    ) -> Check {
+        self.check(&caller, &op, &auth, Action::FinishRecovery)
     }
 
     #[result_serializer(borsh)]

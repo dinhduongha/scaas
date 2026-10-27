@@ -12,7 +12,7 @@ use scaas_near_common::metaop::*;
 use scaas_near_common::ua::{self, KeyRecord, KIND_ED25519, KIND_MSIG, KIND_NEAR_ACCOUNT};
 use scaas_near_common::webauthn::b64url;
 use scaas_near_common::{Auth, Holder};
-use scaas_near_token::{record_bytes, Check, Subject, KEYOP_SET_POLICY, POLICY_PASSKEY_FOR_VALUE, RECOVERY_DELAY_S};
+use scaas_near_token::{record_bytes, Check, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, POLICY_PASSKEY_FOR_VALUE, RECOVERY_DELAY_S};
 use sha2::{Digest, Sha256};
 
 const TOKEN_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_token/scaas_near_token.wasm");
@@ -359,7 +359,8 @@ async fn origin_and_rp_checked() {
     t.refused(&t.relayer, "mtx_remove_origin", &rm, &dave.sign(&rm, other), &pr, "a passkey needs an origin").await;
 }
 
-/// `erin` (key nonce 1 after this) with guardian `g` (a UA); `g` starts recovery to `frank` (a stranger cannot).
+/// `erin` (key nonce 1 after this) with guardian `g` (a UA, key nonce 1 after this); `g` starts recovery to
+/// `frank` (a stranger cannot).
 async fn recovery_setup() -> (T, Signer, Signer, Signer) {
     let t = setup().await;
     let (erin, g, frank) = (Signer::ed("erin"), Signer::ed("guardian"), Signer::ed("frank"));
@@ -374,41 +375,64 @@ async fn recovery_setup() -> (T, Signer, Signer, Signer) {
     (t, erin, g, frank)
 }
 
+impl T {
+    /// `mtx_finish_recovery` of `subject` signed by `by` at its key nonce `nonce`: op code 11, `extra` over the signed
+    /// params `[KEYOP_FINISH_RECOVERY]`; the entry itself takes no arguments after `(op, auth)`.
+    fn finish_op(&self, by: &Signer, subject: &Holder, nonce: u64) -> (MetaOp, Auth, Vec<u8>) {
+        let op = self.op(OP_START_RECOVERY, &by.ua(), subject, nonce, &[KEYOP_FINISH_RECOVERY]);
+        let a = by.sign(&op, ORIGIN);
+        (op, a, vec![])
+    }
+}
+
 #[tokio::test]
 async fn recovery_after_delay_only() {
-    let (t, erin, _g, frank) = recovery_setup().await;
+    let (t, erin, g, frank) = recovery_setup().await;
     let h = erin.ua();
     let now = t.now_s().await;
     let mut s = t.subject(&h).await.unwrap();
     let r = s.recovery.clone().unwrap();
     assert_eq!(r.key, frank.key());
     assert!(r.ready_at > now + RECOVERY_DELAY_S - 30 && r.ready_at <= now + RECOVERY_DELAY_S, "ready_at {}", r.ready_at);
-    let out = t.call(&t.bob, "finish_recovery", b(&h), 0).await;
-    assert!(format!("{:?}", out.failures()).contains("recovery delay"), "{:?}", out.failures());
+    let (op, a, p) = t.finish_op(&g, &h, 1);
+    t.refused(&t.relayer, "mtx_finish_recovery", &op, &a, &p, "recovery delay").await;
     // 172,800 s pass (the sandbox clock cannot jump two days): the stored ready_at moves back by the delay
     s.recovery.as_mut().unwrap().ready_at -= RECOVERY_DELAY_S;
     t.w.patch_state(t.token.id(), &[b"a".as_slice(), &b(&h)].concat(), &b(&s)).await.unwrap();
-    let out = t.call(&t.bob, "finish_recovery", b(&h), 0).await;
-    assert!(out.is_success(), "{:?}", out.failures());
+    // only the guardian finishes
+    let (op, a, p) = t.finish_op(&Signer::ed("mallory"), &h, 0);
+    t.refused(&t.relayer, "mtx_finish_recovery", &op, &a, &p, "not the subject's guardian").await;
+    let (op, a, p) = t.finish_op(&g, &h, 1);
+    t.ok(&t.relayer, "mtx_finish_recovery", &op, &a, &p).await;
+    // CTR-ACC-03: the key is added, none removed
     let got = t.subject(&h).await.unwrap();
-    assert_eq!((got.keys, got.recovery, got.key_nonce), (vec![frank.key()], None, 2));
+    assert_eq!((got.keys, got.recovery, got.key_nonce), (vec![erin.key(), frank.key()], None, 2));
     let p = b(&None::<Holder>);
     let op = t.op(OP_SET_GUARDIAN, &h, &h, 2, &p);
-    t.refused(&t.relayer, "mtx_set_guardian", &op, &erin.sign(&op, ORIGIN), &p, "not a key of the subject").await;
+    t.ok(&t.relayer, "mtx_set_guardian", &op, &erin.sign(&op, ORIGIN), &p).await;
+    let op = t.op(OP_SET_GUARDIAN, &h, &h, 3, &p);
     t.ok(&t.relayer, "mtx_set_guardian", &op, &frank.sign(&op, ORIGIN), &p).await;
 }
 
 #[tokio::test]
 async fn cancel_recovery_by_key() {
-    let (t, erin, _g, _frank) = recovery_setup().await;
+    let (t, erin, g, frank) = recovery_setup().await;
     let h = erin.ua();
+    // any current key cancels during the delay
     let op = t.op(OP_CANCEL_RECOVERY, &h, &h, 1, &[]);
     t.ok(&t.relayer, "mtx_cancel_recovery", &op, &erin.sign(&op, ORIGIN), &[]).await;
     assert_eq!(t.subject(&h).await.unwrap().recovery, None);
-    let out = t.call(&t.bob, "finish_recovery", b(&h), 0).await;
-    assert!(format!("{:?}", out.failures()).contains("no recovery pending"), "{:?}", out.failures());
+    let (op, a, p) = t.finish_op(&g, &h, 1);
+    t.refused(&t.relayer, "mtx_finish_recovery", &op, &a, &p, "no recovery pending").await;
     let op = t.op(OP_CANCEL_RECOVERY, &h, &h, 2, &[]);
     t.refused(&t.relayer, "mtx_cancel_recovery", &op, &erin.sign(&op, ORIGIN), &[], "no recovery pending").await;
+    // mtx_set_guardian cancels a pending recovery
+    let pr = b(&(frank.key(), None::<String>));
+    let op = t.op(OP_START_RECOVERY, &g.ua(), &h, 1, &pr);
+    t.ok(&t.relayer, "mtx_start_recovery", &op, &g.sign(&op, ORIGIN), &pr).await;
+    assert!(t.subject(&h).await.unwrap().recovery.is_some());
+    t.set_guardian(&t.relayer, &erin, &h, 2, Some(g.ua())).await;
+    assert_eq!(t.subject(&h).await.unwrap().recovery, None);
 }
 
 #[tokio::test]
@@ -448,6 +472,23 @@ async fn msig_native_member_only_as_predecessor() {
     let only_erin = Auth::Msig { key_data: kd, sigs: vec![(ie, erin.sign(&op, ORIGIN))] };
     t.refused(&t.relayer, "mtx_set_guardian", &op, &only_erin, &p, "msig threshold not met").await;
     t.ok(&t.alice, "mtx_set_guardian", &op, &only_erin, &p).await;
+
+    // a 2-of-2 of two ed25519 members: signatures out of member order or a repeated index are refused
+    let frank = Signer::ed("frank");
+    let Holder::Ua(frank_id) = frank.ua() else { unreachable!() };
+    let mut ids = [erin_id, frank_id];
+    ids.sort();
+    let body: Vec<u8> = ids.iter().flat_map(|i| [&KIND_ED25519.to_be_bytes()[..], i, &[0, 1]].concat()).collect();
+    let kd = [&[0u8, 2, 0, 2][..], &body].concat();
+    let m2 = Holder::Ua(ua::ua_of(KIND_MSIG, &kd));
+    let op = t.op(OP_SET_GUARDIAN, &m2, &m2, 0, &p);
+    let by = |i: usize| if ids[i] == erin_id { erin.sign(&op, ORIGIN) } else { frank.sign(&op, ORIGIN) };
+    let msig = |sigs: Vec<(u8, Auth)>| Auth::Msig { key_data: kd.clone(), sigs };
+    let swapped = msig(vec![(1, by(1)), (0, by(0))]);
+    t.refused(&t.relayer, "mtx_set_guardian", &op, &swapped, &p, "not in member order").await;
+    let twice = msig(vec![(0, by(0)), (0, by(0))]);
+    t.refused(&t.relayer, "mtx_set_guardian", &op, &twice, &p, "not in member order").await;
+    t.ok(&t.relayer, "mtx_set_guardian", &op, &msig(vec![(0, by(0)), (1, by(1))]), &p).await;
 }
 
 #[tokio::test]
@@ -524,6 +565,13 @@ async fn set_policy_by_key_op() {
     let (mut op, p) = set(2, 0);
     op.extra = sha(&b(&None::<Holder>));
     t.refused(&t.relayer, "mtx_set_policy", &op, &erin.sign(&op, ORIGIN), &p, "extra is not sha256").await;
+    // set_policy's signed op fed to mtx_set_guardian: its params are no Option<Holder>, and with guardian params
+    // the extra does not match
+    let (op, _) = set(2, 0);
+    let a = erin.sign(&op, ORIGIN);
+    let out = t.call(&t.relayer, "mtx_set_guardian", [b(&op), b(&a), vec![KEYOP_SET_POLICY, 0]].concat(), 0).await;
+    assert!(out.is_failure());
+    t.refused(&t.relayer, "mtx_set_guardian", &op, &a, &b(&None::<Holder>), "extra is not sha256").await;
     let (op, p) = set(2, 0);
     t.ok(&t.relayer, "mtx_set_policy", &op, &erin.sign(&op, ORIGIN), &p).await;
     assert_eq!(t.subject(&h).await.unwrap().policy, 0);

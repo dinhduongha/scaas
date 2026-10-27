@@ -184,3 +184,51 @@ fn native_id_forms() {
         assert!(r["accountId"].as_str().unwrap().parse::<AccountId>().is_err(), "{r}");
     }
 }
+
+/// NET-ALL-04: UP and UV, the bounded clientDataJSON grammar, exact origin. Each case is validly signed, so only the
+/// rule under test can refuse it.
+#[test]
+fn webauthn_grammar_net_all_04() {
+    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use scaas_near_common::webauthn::{self, b64url, AuthError};
+    let sk = p256::ecdsa::SigningKey::from_bytes(&[9u8; 32].into()).unwrap();
+    let key: [u8; 64] = sk.verifying_key().to_encoded_point(false).as_bytes()[1..].try_into().unwrap();
+    let rp = near_sdk::env::sha256_array(b"pay.scaas.test");
+    let origin = "https://pay.scaas.test";
+    let ch = [7u8; 32];
+    let pre = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}""#, b64url(&ch));
+    let run = |flags: u8, cd: String| {
+        let ad = [&rp[..], &[flags, 0, 0, 0, 1]].concat();
+        let h = near_sdk::env::sha256_array([&ad[..], &near_sdk::env::sha256_array(cd.as_bytes())].concat());
+        let sig: p256::ecdsa::Signature = sk.sign_prehash(&h).unwrap();
+        let sig = sig.normalize_s().unwrap_or(sig).to_bytes().into();
+        webauthn::verify(&key, &ch, &ad, cd.as_bytes(), &sig, &rp, &[origin.to_string()])
+    };
+    // accepted: Level 2 (no crossOrigin), Level 3 (crossOrigin false), members after crossOrigin false
+    for tail in [r#"}"#, r#","crossOrigin":false}"#, r#","crossOrigin":false,"other":"x"}"#] {
+        assert_eq!(run(0x05, format!("{pre}{tail}")), Ok(()), "{tail}");
+    }
+    assert_eq!(run(0x1d, format!("{pre}}}")), Ok(()));
+    // flags: UV unset, UP unset
+    assert_eq!(run(0x01, format!("{pre}}}")), Err(AuthError::AuthenticatorData));
+    assert_eq!(run(0x04, format!("{pre}}}")), Err(AuthError::AuthenticatorData));
+    let ch64 = b64url(&ch);
+    for cd in [
+        format!(r#"{pre},"crossOrigin":true}}"#),
+        format!(r#"{pre},"crossOrigin":false,"topOrigin":"https://evil.test"}}"#),
+        format!(r#"{pre},"topOrigin":"https://evil.test","crossOrigin":false}}"#),
+        format!(r#"{pre},"other":"x","crossOrigin":false}}"#), // a member before crossOrigin
+        format!(r#"{pre},"crossOrigin":false,"crossOrigin":true}}"#),
+        format!(r#"{{"challenge":"{ch64}","type":"webauthn.get","origin":"{origin}"}}"#), // reordered
+        format!(r#"{{"type": "webauthn.get","challenge":"{ch64}","origin":"{origin}"}}"#), // whitespace
+        format!(r#"{{"type":"webauthn.create","challenge":"{ch64}","origin":"{origin}"}}"#),
+        format!(r#"{{"type":"webauthn.get","challenge":"{ch64}","origin":"{origin}.evil"}}"#), // extended origin
+        format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":"{origin}"}}"#, b64url(&[8; 32])),
+        format!(r#"{pre}}} "#),
+    ] {
+        assert_eq!(run(0x05, cd.clone()), Err(AuthError::ClientData), "{cd}");
+        // the lazy-open origin uses the same grammar (only the extended-origin case is grammatical)
+        assert_eq!(webauthn::origin(cd.as_bytes(), &ch).is_some(), cd.contains(".evil"), "{cd}");
+    }
+    assert_eq!(webauthn::origin(format!("{pre}}}").as_bytes(), &ch).as_deref(), Some(origin));
+}

@@ -71,8 +71,11 @@ async fn webauthn_vector_accepted() {
     assert_eq!(check(&c, &x).await, "BadSignature");
     let mut x = v.clone();
     let n = x.client_data_json.len();
-    x.client_data_json[n - 2] ^= 1; // "crossOrigin":fals[e] — fields intact, signature breaks
+    x.client_data_json.splice(n - 1..n - 1, *br#","x":1"#); // a member after crossOrigin: grammar ok, signature breaks
     assert_eq!(check(&c, &x).await, "BadSignature");
+    let mut x = v.clone();
+    x.client_data_json[n - 2] ^= 1; // "crossOrigin":fals[e]: outside the NET-ALL-04 grammar
+    assert_eq!(check(&c, &x).await, "ClientData");
     let mut x = v.clone();
     x.authenticator_data[36] ^= 1; // sign counter
     assert_eq!(check(&c, &x).await, "BadSignature");

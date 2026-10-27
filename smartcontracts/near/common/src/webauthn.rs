@@ -1,12 +1,13 @@
-//! NET-ALL-04 passkey check in wasm (RustCrypto `p256`; NEP-635 `p256_verify` is not used, spec §3.5).
-//! clientDataJSON: `type == "webauthn.get"`, challenge = b64url(challenge), origin ∈ origins;
-//! authenticatorData: rpIdHash, UP flag; signature r ‖ s with s ≤ n/2 over sha256(authenticatorData ‖ sha256(clientDataJSON)).
+//! NET-ALL-04 passkey check in wasm (RustCrypto `p256`; NEP-635 `p256_verify` is not used, spec §3.5), in its order:
+//! authenticatorData ≥ 37 B, rpIdHash, flags UP and UV; clientDataJSON in the bounded grammar (`origin_of`), its
+//! origin exactly one of `origins`; s ≤ n/2; P-256 over sha256(authenticatorData ‖ sha256(clientDataJSON)).
 use near_sdk::env;
 use p256::ecdsa::signature::hazmat::PrehashVerifier;
 use p256::ecdsa::{Signature, VerifyingKey};
 use p256::EncodedPoint;
 
-const FLAG_UP: u8 = 0x01;
+/// UP (0x01) and UV (0x04).
+const FLAGS_UP_UV: u8 = 0x05;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AuthError {
@@ -27,16 +28,13 @@ pub fn verify(
     rp_id_hash: &[u8; 32],
     origins: &[String],
 ) -> Result<(), AuthError> {
-    let cd = client_data_json;
-    if !has_field(cd, b"type", b"webauthn.get")
-        || !has_field(cd, b"challenge", b64url(challenge).as_bytes())
-        || !origins.iter().any(|o| has_field(cd, b"origin", o.as_bytes()))
-    {
-        return Err(AuthError::ClientData);
-    }
-    let ad = authenticator_data;
-    if ad.len() < 37 || &ad[..32] != rp_id_hash || ad[32] & FLAG_UP == 0 {
+    let (ad, cd) = (authenticator_data, client_data_json);
+    if ad.len() < 37 || &ad[..32] != rp_id_hash || ad[32] & FLAGS_UP_UV != FLAGS_UP_UV {
         return Err(AuthError::AuthenticatorData);
+    }
+    let origin = origin_of(cd, challenge).ok_or(AuthError::ClientData)?;
+    if !origins.iter().any(|o| o.as_bytes() == origin) {
+        return Err(AuthError::ClientData);
     }
     let sig = Signature::from_slice(sig).map_err(|_| AuthError::BadSignature)?;
     if sig.normalize_s().is_some() {
@@ -50,25 +48,30 @@ pub fn verify(
     vk.verify_prehash(&env::sha256_array(&msg), &sig).map_err(|_| AuthError::BadSignature)
 }
 
-/// The first `"origin":"…"` value of clientDataJSON (the origin a lazily opened passkey account starts with); `None`
-/// when absent or escaped (an origin never contains `\` or `"`).
-pub fn origin(client_data_json: &[u8]) -> Option<String> {
-    const PAT: &[u8] = b"\"origin\":\"";
-    let at = client_data_json.windows(PAT.len()).position(|w| w == PAT)? + PAT.len();
-    let rest = &client_data_json[at..];
-    let v = &rest[..rest.iter().position(|c| *c == b'"')?];
-    (!v.contains(&b'\\')).then(|| String::from_utf8(v.to_vec()).ok()).flatten()
+/// NET-ALL-04 item 4 (WebAuthn L3 §5.8.1.2 bounded parse): clientDataJSON is exactly
+/// `{"type":"webauthn.get","challenge":"<b64url(challenge)>","origin":"` ‖ origin ‖ `"` followed by `}` (end) or
+/// `,"crossOrigin":false` then `}` (end) or `,`; no whitespace, no member before `crossOrigin`, and neither a
+/// `topOrigin` nor a second `crossOrigin` anywhere after. Returns the origin bytes (never containing `\`).
+pub fn origin_of<'a>(cd: &'a [u8], challenge: &[u8; 32]) -> Option<&'a [u8]> {
+    let prefix = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":""#, b64url(challenge));
+    let rest = cd.strip_prefix(prefix.as_bytes())?;
+    let end = rest.iter().position(|c| *c == b'"')?;
+    let (origin, tail) = (&rest[..end], &rest[end + 1..]);
+    let ok = match tail.strip_prefix(br#","crossOrigin":false"#) {
+        _ if tail == b"}" => true,
+        Some(t) => t == b"}" || (t.starts_with(b",") && !has(t, br#""topOrigin""#) && !has(t, br#""crossOrigin""#)),
+        None => false,
+    };
+    (ok && !origin.is_empty() && !origin.contains(&b'\\')).then_some(origin)
 }
 
-/// `"<field>":"<value>"` present verbatim. The browser JSON-escapes values, so a value cannot forge another pair.
-fn has_field(hay: &[u8], field: &[u8], value: &[u8]) -> bool {
-    let mut pat = Vec::with_capacity(field.len() + value.len() + 5);
-    pat.push(b'"');
-    pat.extend_from_slice(field);
-    pat.extend_from_slice(b"\":\"");
-    pat.extend_from_slice(value);
-    pat.push(b'"');
-    hay.windows(pat.len()).any(|w| w == pat.as_slice())
+/// The origin a lazily opened passkey account starts with: `origin_of` as a string.
+pub fn origin(client_data_json: &[u8], challenge: &[u8; 32]) -> Option<String> {
+    String::from_utf8(origin_of(client_data_json, challenge)?.to_vec()).ok()
+}
+
+fn has(hay: &[u8], pat: &[u8]) -> bool {
+    hay.windows(pat.len()).any(|w| w == pat)
 }
 
 /// Unpadded base64url.
