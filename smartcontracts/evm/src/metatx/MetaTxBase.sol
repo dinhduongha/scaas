@@ -7,6 +7,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeeMode} from "../common/FeePolicy.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
+import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 
 /// @title The generic meta-transaction base of every SCaaS contract (CTR-MTX-22).
 /// @notice The subject signs a `MetaTransaction` (CTR-MTX-15) whose `data` is one call of one of THIS contract's
@@ -17,11 +18,9 @@ import {SigCheck} from "../common/SigCheck.sol";
 ///         `cancelNonce` first). A contract that holds no charged balance accepts fee mode `NONE` only
 ///         (`supportedModes() = 0x03`, CTR-MTX-22).
 abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
-    using MetaTxLib for MetaTxLib.MetaTransaction;
-
     /// @notice Fee classes published by `mtxSelectors()` (CTR-MTX-20). 0 = not allowlisted.
-    uint8 internal constant FEE_CLASS_ABSOLUTE = 1;
-    uint8 internal constant FEE_CLASS_AMOUNT = 2;
+    uint8 internal constant FEE_CLASS_ABSOLUTE = MtxPipelineLib.FEE_CLASS_ABSOLUTE;
+    uint8 internal constant FEE_CLASS_AMOUNT = MtxPipelineLib.FEE_CLASS_AMOUNT;
 
     /// @param feeClass  0 (not allowlisted), FEE_CLASS_ABSOLUTE or FEE_CLASS_AMOUNT
     /// @param amountArg for FEE_CLASS_AMOUNT: index of the uint256 argument that is the fee basis
@@ -38,16 +37,8 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     bytes32 private constant _TICKET = 0xdea51947149e025e6ed748bbba150c788d4bf051fa2851715a58709dbd31a816; // keccak256("scaas.mtx.ticket")
     bytes32 private constant _BINDING = 0x7a352a4ca0b7d094432a2dbe626c3b7c08a75c6b3464420d2516ca3859c7c12e; // keccak256("scaas.mtx.binding")
 
-    /// @custom:storage-location erc7201:scaas.metatx
-    /// @dev One nonce map for every path, keyed by id (CTR-UA-26): a native address zero-padded (`MetaTxLib.pad`), a
-    ///      derived UA as itself. A mapping hashes an `address` key as the padded word, so the slots of native ids are
-    ///      those of the earlier `address`-keyed map.
-    struct MetaTxStorage {
-        mapping(bytes32 from => mapping(uint256 batch => uint256)) nonce;
-    }
-
-    // keccak256(abi.encode(uint256(keccak256("scaas.metatx")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant _STORAGE = 0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00;
+    // The nonce map (ERC-7201 `scaas.metatx`) is `MtxPipelineLib.MetaTxStorage`, defined there only. A mapping hashes
+    // an `address` key as the padded word, so the slots of native ids are those of the earlier `address`-keyed map.
 
     /// @param domainName "SCaaS <Contract>" (CTR-MTX-02); the domain version is always "1".
     /// @param chainUid_  the chain's genesis block hash (CTR-GEN-05)
@@ -73,7 +64,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     }
 
     function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
-        return _hashTypedDataV4(m.hashStruct());
+        return _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m)));
     }
 
     function chainUid() external view returns (bytes32) {
@@ -136,7 +127,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @dev Every entry (generic, alias, batch, later the named builders) goes through here.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
-        internal returns (bytes memory ret)
+        internal virtual returns (bytes memory ret)
     {
         bytes32 digest = _checkIntent(m, signature);            // 1, 2
         uint256 basis = _checkCall(m.data, m.mode);             // 3
@@ -151,7 +142,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         internal view returns (bytes32 digest)
     {
         _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer);
-        digest = _hashTypedDataV4(m.hashStruct());
+        digest = _hashTypedDataV4(MtxPipelineLib._structHash(MetaTxLib.METATX_TYPEHASH, _envelopeOf(m)));
         _requireValidSignature(m.from, digest, signature);
     }
 
@@ -161,48 +152,38 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     function _checkEnvelope(
         bytes32 from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer
     ) internal view {
-        if (mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 && relayer != msg.sender) {
-            revert MetaTxUnauthorizedRelayer(relayer, msg.sender);
-        }
-        if (block.timestamp > validUntil) revert MetaTxExpired(validUntil, block.timestamp);
-        if (mode & ~MetaTxLib.MODE_KNOWN_MASK != 0 || mode & MetaTxLib.MODE_FEE_MASK > MetaTxLib.MODE_FEE_FIXED) {
-            revert MetaTxUnknownMode(mode);
-        }
-        uint256 expected = _nonce(from, batch);
-        if (expected != nonce) revert MetaTxBadNonce(expected, nonce);
-        if (from == MetaTxLib.pad(address(this))) _selfSender();
+        if (MtxPipelineLib._checkEnvelope(from, batch, nonce, validUntil, mode, relayer)) _selfSender();
     }
 
     function _nonce(bytes32 from, uint256 batch) internal view returns (uint256) {
-        return _mtxStorage().nonce[from][batch];
+        return MtxPipelineLib._mtxStorage().nonce[from][batch];
     }
 
     /// @dev Step 4: consume the lane's current nonce (call after `_checkEnvelope` passed).
     function _useNonce(bytes32 from, uint256 batch) internal {
-        unchecked { ++_mtxStorage().nonce[from][batch]; }
+        MtxPipelineLib._useNonce(from, batch);
     }
 
     /// @dev `cancelNonce` and the UA ledger's `uaCancelNonce`: the lane's next nonce, returned.
     function _bumpNonce(bytes32 from, uint256 batch) internal returns (uint256 n) {
-        unchecked { n = ++_mtxStorage().nonce[from][batch]; }
+        unchecked { n = ++MtxPipelineLib._mtxStorage().nonce[from][batch]; }
     }
 
-    /// @dev Step 3: shape, allowlist, fee class, `supportedModes()`. Returns the fee basis.
+    /// @dev Step 3: shape, allowlist, fee class, `supportedModes()` (`MtxPipelineLib._checkCall`). Returns the fee basis.
     function _checkCall(bytes memory data, uint32 mode) internal view returns (uint256 basis) {
         bytes4 sel = bytes4(data);
-        if (data.length < 4) revert MtxDataShape(sel);
         MtxRule memory r = _mtxRule(sel);
-        if (r.feeClass == 0 || r.feeClass > FEE_CLASS_AMOUNT) revert MtxSelectorNotAllowed(sel);
-        uint256 basisEnd = 36 + 32 * uint256(r.amountArg);
-        if ((r.staticLen != 0 && data.length != r.staticLen)
-            || (r.feeClass == FEE_CLASS_AMOUNT && data.length < basisEnd)) revert MtxDataShape(sel);
-        if (r.feeClass == FEE_CLASS_ABSOLUTE && MetaTxLib.feeModeOf(mode) == FeeMode.PERCENT) {
-            revert MtxFeeClass(sel, mode);
-        }
-        if (mode & ~supportedModes() != 0) revert MetaTxUnknownMode(mode);
+        MtxPipelineLib._checkCall(sel, data.length, r.feeClass, r.amountArg, r.staticLen, mode, supportedModes());
         if (r.feeClass == FEE_CLASS_AMOUNT) {
+            uint256 basisEnd = 36 + 32 * uint256(r.amountArg);
             assembly ("memory-safe") { basis := mload(add(data, basisEnd)) }
         }
+    }
+
+    /// @dev The envelope of `m` for `MtxPipelineLib._structHash`: `from` padded, `data` as its hash.
+    function _envelopeOf(MetaTxLib.MetaTransaction memory m) internal pure returns (MtxPipelineLib.Envelope memory) {
+        return MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode,
+            m.relayer, m.fee, m.feeRecipient);
     }
 
     /// @dev Step 5: store the ticket (and the envelope binding, when the contract has one), call self, clear the ticket;
@@ -298,11 +279,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return m.feeRecipient == address(0) ? msg.sender : m.feeRecipient;
     }
 
-    // ------------------------------------------------------------------ storage
-
-    function _mtxStorage() private pure returns (MetaTxStorage storage $) {
-        assembly ("memory-safe") { $.slot := _STORAGE }
-    }
+    // ------------------------------------------------------------------ transient storage
 
     function _tload(bytes32 slot) private view returns (uint256 v) {
         assembly ("memory-safe") { v := tload(slot) }

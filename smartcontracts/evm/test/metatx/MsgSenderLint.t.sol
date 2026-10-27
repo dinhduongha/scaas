@@ -10,7 +10,7 @@ import {Test} from "forge-std/Test.sol";
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
 /// say why.
 contract MsgSenderLintTest is Test {
-    string[13] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
+    string[14] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/MtxPipelineLib.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
         "src/metatx/NoUnderlyingToken.sol", "src/metatx/UnderlyingToken.sol", "src/metatx/UnderlyingLib.sol",
         "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
         "src/zether/ZetherLib.sol", "src/zether/NoUnderlyingZetherToken.sol", "src/zether/UnderlyingZetherToken.sol"];
@@ -54,8 +54,11 @@ contract MsgSenderLintTest is Test {
     }
 
     function test_msgSenderReadsArePinned() public view {
-        assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 9,
-            "MetaTxBase: guard, event, relayer binding x2, _msgSender x2, fee default, ticket binding (CTR-ZTH-34), _ticketSubject");
+        // metatx split T2: the relayer binding x2 moved into MtxPipelineLib._checkEnvelope (inlined into MetaTxBase).
+        assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 7,
+            "MetaTxBase: guard, event, _msgSender x2, fee default, ticket binding (CTR-ZTH-34), _ticketSubject");
+        assertEq(_count("src/metatx/MtxPipelineLib.sol", "msg.sender", false), 4,
+            "MtxPipelineLib: relayer binding x2, fee default x2 (preCall, _checkTransfer)");
         assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 8,
             "ERC20MetaTx: event relayer x3, fee default x3 (MetaTransfer, UAMetaTransaction, UAMetaTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25)");
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
