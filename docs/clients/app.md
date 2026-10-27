@@ -593,8 +593,8 @@ books.** Owner decision (non-EVM DEX books after EVM). The DEX module is generic
 `/v1/gateway` reports `dex`. Why: only the EVM venue has a book.
 
 **Zether.** Register: the worker builds the `zether-*` key data and the tagged PoP (purpose `pop`); the Zether key is the UA (no authority); registration is submitted gaslessly or self-paid (no `msg.sender` binding). Prove, in the worker:
-`zetherCall("proveTransfer", {curve, key: {x}, chainId, token, sendCounter, accSeq, acc, balance, yTo, amount, fee,
-beneficiary})` with `x` from `openConfKey` **inside** the worker; the result is `opData` for the `OP_ZTRANSFER` envelope
+`zetherCall("proveTransfer", {curve, key: {x}, chainId, token, sendCounter, accSeq, validUntilBlock, acc, balance, yTo, amount, fee,
+beneficiary})` (`validUntilBlock`: required since `…/v3`, the last block the token accepts the proof in, [zether expiry](../contracts/zether.md#valid-until)) with `x` from `openConfKey` **inside** the worker; the result is `opData` for the `OP_ZTRANSFER` envelope
 (gateway) or `directCalldata`; the proof alone authorizes the spend. Balance: open the cache, then `checkBalance` against the current `acc`; on a miss run BSGS on the delta; after own
 operations update with `setCachedBalance` / `cacheAfterDebit` / `cacheAfterRollOver`; above the device bound (2^44) show a
 banner ([zether balance](signers-clientkeys.md#zether-balance)). Every Zether screen carries "UNAUDITED — dev chains only".

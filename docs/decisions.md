@@ -2641,6 +2641,8 @@ on a non-dev chain can enable the kind, but every creation reverts). Status: bui
 ### CTR-ZTH-03 — No epochs; verifier takes the full statement; fund from the public balance
 - old: RS2-2 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-03 · superseded-by: —
 
+Change (2026-10-27): review C0-9, controller proposal (1) taken with the owner's C0-1 ruling of 2026-10-27 (the same `…/v3` bump; owner may override) — **every Zether debit statement carries `validUntilBlock`** (header word 15, offset 480; the header is 512 bytes), the payload's word 2 (`be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ …` on the single, multi-recipient and unshield payloads); the token refuses it once `block.number > validUntilBlock` with `TransferExpired(uint256 validUntilBlock)`, before the verifier, direct and relayed, and in the statement views — the PQZ header's rule (zether.md §7 *Expiry*). The proof binds the word, so a published direct-path proof no longer stays a bearer instrument until `accSeq` / `sendCounter` move. Status: **done** (review2 T3, branch `review2-fix`; `proofSystemId` / `proofSystemIdMulti` = `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"[ ‖ "/multi"])`, `…/v2` refused).
+
 **Why.** Proofs take the full statement and there are no epochs, removing epoch-boundary races; the state-change summary now has `fund` burning public units (CTR-ZTH-35). Rejected: the early `IZetherToken` sketch with epoch-based `simulateAccounts`, `getPendingBalance` per epoch and an epoch `rollOver()`.
 **Cost if wrong.** Epochs force retries at boundaries and couple liveness to block timing.
 **Source.** `history/specs/2026-10-03-zether-design.md:586`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-7b, §7.
@@ -2877,6 +2879,8 @@ built on branch `rev2-zether-z2` (review-fix commits listed in `smartcontracts/e
 ### CTR-ZTH-30 — Derive s from seed via PRF
 - old: UD:§13.2 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/zether.md#CTR-ZTH-30 · superseded-by: —
 
+Change (2026-10-27): owner ruling 2026-10-27, C0-1 (ii) — **every auditor copy of an audited multi-recipient leg has its own randomness `t_j`**, derived like `s`: `t_j = HKDF-SHA256(seed_zether, "SCAAS-ZETHER-AUD-T-V1" ‖ chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖ salt ‖ be32(j), L = 64) mod r` (`j` 0-based; prover `derive_t`; the salt is re-drawn if `s` or any `t_j` is 0), so it is independent of `s` and of the other legs and the sender re-derives it for recovery (CTR-ZTH-50). The single format keeps its one copy under `s`. Status: **done** (review2 T3, branch `review2-fix`; `proofSystemId` / `proofSystemIdMulti` = `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"[ ‖ "/multi"])`, `…/v2` refused).
+
 Change (2026-10-11): owner — `s = HKDF-SHA256(seed_zether, "ZTX/s/v2" ‖ chainUid ‖ token ‖ fromUA ‖ sendCounter ‖ salt)` with 16 fresh random bytes per build, published with the transfer and not checked by the contract (built in P3b). The counter-only form reused `s` on a retry (`C_aud₁ − C_aud₂ = [v₁ − v₂]G`, failed-transaction calldata is public); the built amount-mixing form made the sender remember amounts. Source add: owner, 2026-10-11.
 
 **Why.** The sender randomness `s` is derived from the seed by a PRF, so nothing per transfer needs storing. The research sketch was s = HKDF-SHA256(seed_zether, info = "ZTX/s/v1" ‖ chainId ‖ tokenAddress ‖ fromUA ‖ sendCounter) with the `sendCounter` read from the chain, so a wallet restored from its seed alone can still prove every past transfer.
@@ -2936,12 +2940,16 @@ Change (2026-10-08): `m.to`/`m.value` are gone from the struct; a public transfe
 ### CTR-ZTH-37 — One transfer to M recipients, one proof; transferConfidential is the multi-recipient transfer
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-37 · superseded-by: —
 
+Change (2026-10-27): owner ruling 2026-10-27, C0-1 (ii) — review C0-1 (P0): with the one `s` for the auditor copies `C_aud_j − C_aud_k = [v_j − v_k]G` was public (decoys identical, the real leg's amount a 64-bit discrete log). Now `C_aud_j = [v_j]G + [t_j]Y_a`, `D_aud_j = [t_j]G` (both `O` with the auditor off); statement `Y_f Y_a C_acc D_acc D_out C_deb be32(M) (Y_tj C_out_j C_aud_j D_aud_j)_j`; proof `V_b A_y A_D A_deb A_bal A_Vb (V_vj A_out_j A_aud_j A_Daud_j A_Vvj)_j z_x z_s z_b z_gb (z_vj z_gvj z_tj)_j BP…`; E6_j `[z_vj]G + [z_tj]Y_a − [c]C_aud_j − A_aud_j`, new E6′_j `[z_tj]G − [c]D_aud_j − A_Daud_j`; `D_aud_j ≠ O` and no two legs sharing `C_aud` or `D_aud` with the auditor on (the verifier refuses it); off ⇒ `A_aud_j = A_Daud_j = O`, `z_tj = 0`. Option (i) (public per-leg `h_j` under the one `s`) was rejected as broken: `h_k·C_aud_j − h_j·C_aud_k = [h_k v_j − h_j v_k]G`. With the auditor on, `Y_f == Y_a` or any `Y_tj == Y_a` reverts `AuditorKeyAsParty()` (both formats, before the verifier and in the statement views). No interim `M ≥ 2` refusal (controller ruling: the fix landed on the same branch). Status: **done** (review2 T3, branch `review2-fix`; `proofSystemId` / `proofSystemIdMulti` = `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"[ ‖ "/multi"])`, `…/v2` refused).
+
 **Why.** The owner wants a sender to add randomly chosen decoy recipients receiving 0 and hide the real one, with one proof and one shared `s` (handing `s` over opens every leg, decoys included, accepted); the sender stays public. The multi-recipient transfer is `transferConfidential`; the single-recipient format is kept unchanged as `transferConfidentialSingle`.
 **Cost if wrong.** Without it each decoy is a separate transfer at ≈ 3.3 M gas; without the kept single format, existing proofs and vectors break.
 **Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z1-Z3, Z7, Z8), §3, §4.
 
 ### CTR-ZTH-38 — Three transfer entries; the plain name is the mode's default
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-38 · superseded-by: —
+
+Change (2026-10-27): owner ruling 2026-10-27, C0-1 (ii) — the multi-recipient bundle is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j` (5 points, 640 B per leg on BLS12-381; BUNDLE ≈ +486 k gas per audited leg, measured); the single format's record keeps `Y_t ‖ C_out ‖ D_out ‖ C_aud` (`16 + 4P` bytes, never a multi-recipient or commit-reveal length). Status: **done** (review2 T3, branch `review2-fix`; `proofSystemId` / `proofSystemIdMulti` = `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"[ ‖ "/multi"])`, `…/v2` refused).
 
 Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUNDLE token and is commit-reveal on a COMPACT token (CTR-ZTH-48); `zetherTransferCompact` is commit-reveal on both; `zetherTransferNoBundle` is BUNDLE-only; `zetherTransferBundle` goes. Salt and memo travel inside `payload`. Built (P3b; P3's `zetherTransfer` = HASH and `zetherTransferBundle` = BUNDLE are superseded): `zetherTransfer` = BUNDLE on a BUNDLE token, commit-reveal on a COMPACT token; `zetherTransferCompact` = commit-reveal; `zetherTransferNoBundle` = NONE. Source add: owner, 2026-10-11.
 
@@ -2958,6 +2966,8 @@ Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUND
 
 ### CTR-ZTH-40 — SENDER_CP opening; leg index in every disclosure challenge
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-40 · superseded-by: —
+
+Change (2026-10-27): owner ruling 2026-10-27, C0-1 (ii) — the `AUDITOR` opening of a multi-recipient leg `j` is the DLEQ `K = Y_a`, `B = D_aud_j`, `M = C_aud_j − [v]G` and opens that leg alone (the single format: `B = D_out`); `transferCiphertext` returns `C_out ‖ D_out ‖ C_aud ‖ D_aud`. The challenge formula and the `bundles` argument are unchanged here (review C0-4 / C0-3 follow). Status: **done** (review2 T3, branch `review2-fix`; `proofSystemId` / `proofSystemIdMulti` = `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"[ ‖ "/multi"])`, `…/v2` refused).
 
 **Why.** Handing `s` over opens every leg of a multi-recipient transfer, decoys included; a Chaum-Pedersen proof opens leg `j` only. The challenge binds `j` for every kind, so an opening of one leg never verifies for another.
 **Cost if wrong.** A sender proving one payment reveals its decoys, so the decoys stop hiding the real recipient.
