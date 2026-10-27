@@ -669,12 +669,10 @@ pub fn auth_cell(auth: &Auth) -> Result<Arc<Cell>> {
 
 // ---------------------------------------------------------------------- CTR-MTX-26 (spec §6.2, §9)
 
-/// `max_pay_meta_bytes` (spec §9): the node's cap on a pay-meta `meta`. On TON it is far below what a lane can carry
+/// The default `max_pay_meta_bytes` (spec §9, `params.max_pay_meta_bytes`): far below what a lane can carry on TON
 /// (measured, `jetton.spec.ts` › meta size limit: 38,100 B = 300 snake cells settle in @ton/sandbox 0.45.0; config
 /// param 43 bounds the external message at 65,535 B and depth 512).
-// TODO(T17): becomes the `max_pay_meta_bytes` config key (default 2,048) for every family, with the indexer
-// decoding of `PaymentMeta` (opcode `EV_META`, joined to `PaymentSettled` by `pay_ref`).
-pub const MAX_PAY_META_BYTES: usize = 2048;
+pub const MAX_PAY_META_BYTES: usize = crate::config::DEFAULT_MAX_PAY_META_BYTES;
 pub const EV_META: u128 = 0x9b1c0d04;
 
 fn keccak(parts: &[&[u8]]) -> [u8; 32] {
@@ -702,22 +700,21 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 /// snake bytes), with `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0` on an `OP_PAY`;
 /// any other kind is refused (a typo must not burn the `(payer, payId)` lane as a plain pay). `Ok(None)`: the op's
 /// own `extra.params` (trade, set_key) as before.
-pub fn pay_params(m: &MetaOp, o: &Value) -> Result<Option<Arc<Cell>>> {
-    // A present `kind` that is not a string is refused like an unknown one (never a plain pay).
-    match o.get("kind").filter(|k| !k.is_null()).map(|k| k.as_str().ok_or(k)) {
+pub fn pay_params(m: &MetaOp, o: &Value, max_meta: usize) -> Result<Option<Arc<Cell>>> {
+    // the one kind rule (`adapter::op_kind`): a present non-string or unknown kind is refused, never a plain pay
+    match crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)? {
         None if m.op == 1 && o["extra"]["params"].is_string() => {
             bail!("a plain pay carries no params (a pay-meta is op.kind = \"pay_meta\")")
         }
         None => Ok(None),
-        Some(Err(k)) => bail!("unknown op.kind {k} (pay_meta, relay_fee, or none for a plain pay)"),
-        Some(Ok("pay_meta")) => {
+        Some("pay_meta") => {
             if m.op != 1 {
                 bail!("pay-meta: the MetaOp is op {}, not pay", m.op);
             }
             let (salt, meta) = (hex_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
             let salt: [u8; 32] = salt.try_into().map_err(|_| anyhow!("op.salt is 32 bytes"))?;
-            if meta.len() > MAX_PAY_META_BYTES {
-                bail!("meta is {} B, above the {MAX_PAY_META_BYTES} B cap", meta.len());
+            if meta.len() > max_meta {
+                bail!("meta is {} B, above max_pay_meta_bytes {max_meta}", meta.len());
             }
             let id = meta_pay_id(&salt, &meta);
             if m.pay_ref != id || m.lane != pay_lane(&id) || m.nonce != 0 {
@@ -725,7 +722,7 @@ pub fn pay_params(m: &MetaOp, o: &Value) -> Result<Option<Arc<Cell>>> {
             }
             Ok(Some(Builder::new().bytes(&salt).reference(snake(&meta)?).end()?))
         }
-        Some(Ok(k)) => bail!("unknown op.kind {k:?} (pay_meta, relay_fee, or none for a plain pay)"),
+        Some(k) => bail!("op.kind {k:?} is not a pay op's params"),
     }
 }
 
@@ -837,7 +834,7 @@ pub fn relay_refund_body(from: &Addr, r: &[u8; 32]) -> Result<Arc<Cell>> {
 pub struct RelayFeePolicy {
     pub router: Option<Addr>,
     pub tokens: Vec<Addr>,
-    pub min_amount: u128,
+    pub params: crate::config::RelayParams,
     pub min_ton_value: HashMap<Addr, u128>,
 }
 
@@ -853,13 +850,7 @@ impl RelayFeePolicy {
             Some(v) => Some(Addr::parse(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a TON address string"))?)
                 .context("params.relay_fee.router")?),
         };
-        let min_amount = match t.and_then(|t| t.get("min_amount")) {
-            None => 1,
-            Some(v) => v
-                .as_integer()
-                .and_then(|n| u128::try_from(n).ok())
-                .ok_or_else(|| anyhow!("params.relay_fee.min_amount must be a non-negative integer"))?,
-        };
+        let params = cfg.relay_params()?;
         let tokens = cfg
             .tokens
             .iter()
@@ -875,7 +866,7 @@ impl RelayFeePolicy {
                 min_ton_value.insert(master, n);
             }
         }
-        Ok(Self { router, tokens, min_amount, min_ton_value })
+        Ok(Self { router, tokens, params, min_ton_value })
     }
 }
 
@@ -903,9 +894,8 @@ pub fn relay_fee_job(policy: &RelayFeePolicy, global_id: i32, cell: &Arc<Cell>, 
     if m.op != 1 {
         bail!("the relay-fee payment is not a pay op");
     }
-    if m.amount < policy.min_amount {
-        bail!("fee {} is below relay_fee.min_amount {}", m.amount, policy.min_amount);
-    }
+    // always open mode on TON (`to == router`, checked below: the escrow releases to the relaying lane)
+    crate::adapter::relay_fee_ours(true, false, m.amount, &policy.params)?;
     let target = addr("target")?;
     let boc = |k: &str| hex_field(&x[k], &format!("extra.{k}")).and_then(|b| boc_parse(&b)).with_context(|| format!("op.extra.{k}"));
     let (target_code, target_data) = (boc("target_code")?, boc("target_data")?);
@@ -1523,7 +1513,7 @@ impl ChainAdapter for TonAdapter {
         if m.relayer.is_some_and(|r| r != me) {
             return Err(SimError::Revert("payload is bound to another relayer".into()));
         }
-        let pay_meta = pay_params(&m, op).map_err(revert)?;
+        let pay_meta = pay_params(&m, op, self.relay_fee.params.max_pay_meta_bytes).map_err(revert)?;
         if m.op == 1 && self.relay_fee.router == Some(m.to) {
             // CTR-MTX-27: never pay the router outside a relay (a transfer without a notification would stay there).
             return Err(SimError::Revert(format!("a plain pay to the relay-fee router {} is refused", m.to.raw())));
@@ -2184,11 +2174,16 @@ mod tests {
         let big = vec![0x61u8; MAX_PAY_META_BYTES + 1];
         let big_id = meta_pay_id(&salt, &big);
         let e = refused(pay_job(big_id, pay_lane(&big_id), 0, 1, with("meta", json!(alloy::hex::encode(&big)))).0).await;
-        assert!(e.contains("2048 B cap"), "{e}");
+        assert!(e.contains("above max_pay_meta_bytes 2048"), "{e}");
+        let (job, m) = pay_job(big_id, pay_lane(&big_id), 0, 1, with("meta", json!(alloy::hex::encode(&big))));
+        assert!(pay_params(&m, job.op.as_ref().unwrap(), 4096).is_ok(), "params.max_pay_meta_bytes raises it");
+        let mut kindless = with("meta", json!("00"));
+        kindless.as_object_mut().unwrap().remove("kind");
+        assert!(refused(pay_job(id, pay_lane(&id), 0, 1, kindless).0).await.contains("no salt / meta"), "a kind-less pay with meta");
         let at_cap = vec![0x61u8; MAX_PAY_META_BYTES];
         let cap_id = meta_pay_id(&salt, &at_cap);
         let (job, m) = pay_job(cap_id, pay_lane(&cap_id), 0, 1, with("meta", json!(alloy::hex::encode(&at_cap))));
-        assert_eq!(pay_params(&m, job.op.as_ref().unwrap()).unwrap().unwrap().refs()[0].hash(), snake(&at_cap).unwrap().hash());
+        assert_eq!(pay_params(&m, job.op.as_ref().unwrap(), MAX_PAY_META_BYTES).unwrap().unwrap().refs()[0].hash(), snake(&at_cap).unwrap().hash());
         // unknown kinds and a plain pay with params are refused, never sent as a plain pay
         for k in [json!("pay-meta"), json!("pay"), json!(""), json!(7), json!(true), json!({"k": 1}), json!(["pay_meta"])] {
             let e = refused(pay_job(id, pay_lane(&id), 0, 1, with("kind", k.clone())).0).await;
@@ -2205,7 +2200,8 @@ mod tests {
     const ROUTER_RAW: &str = "0:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e";
 
     fn policy() -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(ROUTER), tokens: vec![MASTER], min_amount: 5, min_ton_value: HashMap::from([(MASTER, 100_000_000)]) }
+        RelayFeePolicy { router: Some(ROUTER), tokens: vec![MASTER], params: crate::config::RelayParams { min_amount: 5, ..Default::default() },
+                         min_ton_value: HashMap::from([(MASTER, 100_000_000)]) }
     }
 
     fn relay_params(price: u64) -> toml::Table {
@@ -2415,7 +2411,7 @@ mod tests {
         };
         assert!(adapter("http://127.0.0.1:9").relay_fee.router.is_none(), "no relay_fee: relay-fee jobs refused");
         let ok = adapter_with("http://127.0.0.1:9", relay_params(7), vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }]).unwrap();
-        assert_eq!((ok.relay_fee.router, ok.relay_fee.min_amount, ok.relay_fee.tokens.clone()), (Some(ROUTER), 5, vec![MASTER]));
+        assert_eq!((ok.relay_fee.router, ok.relay_fee.params.min_amount, ok.relay_fee.tokens.clone()), (Some(ROUTER), 5, vec![MASTER]));
         assert_eq!(ok.relay_fee.min_ton_value.get(&MASTER), Some(&7));
         for (t, what) in [(toml::toml! { router = "0:zz" }, "router"), (toml::toml! { router = 7 }, "router"),
                           (toml::toml! { min_amount = "9" }, "min_amount"), (toml::toml! { min_amount = -1 }, "min_amount"),
@@ -2613,11 +2609,11 @@ mod tests {
                 let salt_v = if hexy { json!(alloy::hex::encode(salt.as_bytes())) } else { json!(salt) };
                 let kind_v = [json!("pay_meta"), json!("other"), Value::Null, json!(7)][kind].clone();
                 let o = json!({"kind": kind_v, "salt": salt_v, "meta": alloy::hex::encode(&meta), "extra": {"params": salt}});
-                let _ = pay_params(&m, &o);
+                let _ = pay_params(&m, &o, MAX_PAY_META_BYTES);
                 let id = meta_pay_id(salt.as_bytes(), &meta);
                 m.pay_ref = id;
                 m.lane = pay_lane(&id);
-                let _ = pay_params(&m, &o);
+                let _ = pay_params(&m, &o, MAX_PAY_META_BYTES);
             }
 
             /// Rule 8: the relay-fee job and the RelayCall parser on untrusted input: no panic.
@@ -2635,7 +2631,7 @@ mod tests {
                     if let Some(c) = v["payload"].as_str().and_then(|p| alloy::hex::decode(p).ok()).and_then(|b| boc_parse(&b).ok()) {
                         let _ = relay_fee_job(&policy(), -239, &c, &v);
                     }
-                    let _ = pay_params(&parse_metaop(&c).unwrap(), &v);
+                    let _ = pay_params(&parse_metaop(&c).unwrap(), &v, MAX_PAY_META_BYTES);
                 }
                 if let Ok(c) = boc_parse(&body) {
                     let _ = RelayCall::parse(&c);

@@ -477,6 +477,17 @@ mod tests {
         assert_eq!(states, ["queued"]);
     }
 
+    /// T17: the Hedera lane runs the EVM job rules (`work_from_job` + the guard): one job-kind rule, and a job of
+    /// another kind is dead before any chain read.
+    #[tokio::test]
+    async fn the_hedera_lane_keeps_the_job_kind_rule() {
+        let mut j = job(now() + 300);
+        j["kind"] = json!("signed_op");
+        let (states, s) = step_with(Net { balance: "0x1", ..Default::default() }, j).await;
+        assert_eq!(states, ["dead"]);
+        assert!(last_error(&s).contains("unknown job kind"), "{}", last_error(&s));
+    }
+
     /// Review T4 I2: the Hedera lane path keeps N6 (an invalidation already in force is done, never dead), N2 (a lane
     /// whose RPC block 0 is not the pinned chain_uid never starts) and I1 (only registered tokens).
     #[tokio::test]

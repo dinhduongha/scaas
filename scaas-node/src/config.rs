@@ -809,6 +809,13 @@ pub struct RelayParams {
 
 pub const DEFAULT_MAX_PAY_META_BYTES: usize = 2048;
 
+impl Default for RelayParams {
+    /// The defaults of an unset key set: no router, `min_amount` 1, no bound-payee relays, 2,048 B of meta.
+    fn default() -> Self {
+        Self { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES }
+    }
+}
+
 impl ChainCfg {
     /// [`RelayParams`] from `params`.
     pub fn relay_params(&self) -> Result<RelayParams> {

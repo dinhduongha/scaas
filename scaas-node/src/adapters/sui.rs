@@ -368,10 +368,6 @@ pub fn pay_meta_tx(package: &Addr, op: &MetaOp, auth: &Auth, salt: &[u8], meta: 
 
 // ------------------------------------------------------------------ CTR-MTX-26 / -27 (spec §6.2, §7.2)
 
-/// `max_pay_meta_bytes` (spec §9): the node's cap on a pay-meta `meta`.
-// TODO(T17): becomes the `max_pay_meta_bytes` config key (default 2,048) for every family, with the indexer
-// decoding of `PaymentMeta` / `RelayFeePaid`.
-const MAX_PAY_META_BYTES: usize = 2048;
 const ORDER_DOMAIN: &[u8] = b"scaas.order.v1";
 
 fn keccak(parts: &[&[u8]]) -> [u8; 32] {
@@ -647,7 +643,7 @@ pub fn fee_tx(package: &Addr, op: &MetaOp, auth: &Auth, call: &RelayCall, accoun
 pub struct RelayFeePolicy {
     pub router: Option<Addr>,
     pub tokens: Vec<Addr>,
-    pub min_amount: u128,
+    pub params: crate::config::RelayParams,
 }
 
 impl RelayFeePolicy {
@@ -661,19 +657,12 @@ impl RelayFeePolicy {
             Some(v) => Some(parse_addr(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a 0x… string"))?)
                 .context("params.relay_fee.router")?),
         };
-        let min_amount = match t.and_then(|t| t.get("min_amount")) {
-            None => 1,
-            Some(v) => v
-                .as_integer()
-                .and_then(|n| u128::try_from(n).ok())
-                .ok_or_else(|| anyhow!("params.relay_fee.min_amount must be a non-negative integer"))?,
-        };
         let tokens = cfg
             .tokens
             .iter()
             .map(|t| parse_addr(&t.address).with_context(|| format!("tokens: {} is not a Sui Registry id", t.address)))
             .collect::<Result<_>>()?;
-        Ok(Self { router, tokens, min_amount })
+        Ok(Self { router, tokens, params: cfg.relay_params()? })
     }
 }
 
@@ -699,7 +688,7 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 /// A plain pay or pay-meta to the router marker is refused: the `RelayFee` object has no `receive`, so the coins would
 /// be stranded (CTR-MTX-27: never pay the marker; the router's open mode pays the submitter instead).
 pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
-    let kind = o["kind"].as_str();
+    let kind = crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)?;
     if kind != Some("relay_fee") && policy.router == Some(op.to) {
         bail!("a plain pay to the relay-fee router {} would strand the coins", addr_hex(&op.to));
     }
@@ -709,8 +698,8 @@ pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) ->
             if salt.len() != 32 {
                 bail!("op.salt is 32 bytes");
             }
-            if meta.len() > MAX_PAY_META_BYTES {
-                bail!("meta is {} B, above the {MAX_PAY_META_BYTES} B cap", meta.len());
+            if meta.len() > policy.params.max_pay_meta_bytes {
+                bail!("meta is {} B, above max_pay_meta_bytes {}", meta.len(), policy.params.max_pay_meta_bytes);
             }
             let id = meta_pay_id(&salt, &meta);
             if op.pay_ref != id || op.lane != pay_lane(&id) || op.nonce != 0 {
@@ -731,9 +720,6 @@ pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) ->
             if derive_account(&registry, &op.from) != op.contract {
                 bail!("the paying account is not the payer's account of token {}", addr_hex(&registry));
             }
-            if op.amount < policy.min_amount {
-                bail!("fee {} is below relay_fee.min_amount {}", op.amount, policy.min_amount);
-            }
             let bytes = hex_field(&x["call"], "extra.call")?;
             let call = RelayCall::decode(&bytes)?;
             if call.account().is_some_and(|a| a != op.contract) {
@@ -748,9 +734,15 @@ pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) ->
             }
             Ok(Entry::Fee { call: Box::new(call), router })
         }
-        None => Ok(Entry::Pay),
-        Some(k) => bail!("unknown op.kind {k:?} (pay_meta, relay_fee, or none for a plain pay)"),
+        _ => Ok(Entry::Pay),
     }
+}
+
+/// T17 (one payee rule, `adapter::relay_fee_ours`): a relay fee reaches this lane in open mode (`to` = the router
+/// marker, which pays the submitting lane) or bound to the lane, and then must be at least `min_amount`; a fee bound
+/// to anyone else only with `relay_bound_payee` (sponsored). Checked per lane in `build`.
+pub fn relay_payee(policy: &RelayFeePolicy, op: &MetaOp, lane: &Addr) -> Result<()> {
+    crate::adapter::relay_fee_ours(policy.router == Some(op.to), op.to == *lane, op.amount, &policy.params)
 }
 
 /// Digest giao dịch Sui (id hiển thị dạng base58).
@@ -999,7 +991,6 @@ impl SuiAdapter {
         if op.op != OP_PAY {
             bail!("only pay ops are relayed on Sui");
         }
-        // TODO(T17): the indexer's decoding of `PaymentMeta` / `RelayFeePaid` (`normalize`) and `max_pay_meta_bytes`.
         if parse_addr(o["contract"].as_str().unwrap_or_default())? != op.contract {
             bail!("payload contract differs from the job contract");
         }
@@ -1103,6 +1094,9 @@ impl ChainAdapter for SuiAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let sender = self.lane_addr(lane).map_err(transport)?;
+        if matches!(w.entry, Entry::Fee { .. }) {
+            relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        }
         let skip = self.previous_gas(lane).await.map_err(transport)?;
         let isv = self
             .shared_version(&w.op.contract)
@@ -1616,14 +1610,18 @@ mod tests {
         assert!(bad(&op, &json!({"kind": "pay_meta", "meta": job["meta"]})), "no salt");
         assert!(bad(&MetaOp { nonce: 1, ..op.clone() }, &job), "nonce 1");
         assert!(bad(&MetaOp { lane: vec![1; 32], ..op.clone() }, &job), "another lane");
-        let big = vec![0u8; MAX_PAY_META_BYTES + 1];
+        let big = vec![0u8; 2049];
         let id = meta_pay_id(&[1; 32], &big);
         let o = MetaOp { pay_ref: id.to_vec(), lane: pay_lane(&id).to_vec(), ..op.clone() };
-        assert!(bad(&o, &json!({"kind": "pay_meta", "salt": alloy::hex::encode([1; 32]), "meta": alloy::hex::encode(&big)})), "over the cap");
+        let bj = json!({"kind": "pay_meta", "salt": alloy::hex::encode([1; 32]), "meta": alloy::hex::encode(&big)});
+        assert!(bad(&o, &bj), "over the cap");
+        let wide = RelayFeePolicy { params: crate::config::RelayParams { max_pay_meta_bytes: 4096, ..Default::default() }, ..pol.clone() };
+        assert!(entry(&pkg, &wide, &o, &bj).is_ok(), "params.max_pay_meta_bytes raises it");
     }
 
     fn fee_policy() -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(a32("relay_fee_marker")), tokens: vec![parse_addr(REG_SUI).unwrap()], min_amount: 5 }
+        RelayFeePolicy { router: Some(a32("relay_fee_marker")), tokens: vec![parse_addr(REG_SUI).unwrap()],
+                         params: crate::config::RelayParams { min_amount: 5, ..Default::default() } }
     }
 
     /// Alice's open-mode payment for `relay_manage` (`rf_manage_pay`: 10 SUI, valid until 2000 s, salt 0x51…).
@@ -1661,7 +1659,16 @@ mod tests {
         assert!(err(&op, &job, &RelayFeePolicy { router: None, ..pol.clone() }).contains("params.relay_fee.router"));
         assert!(err(&op, &job, &RelayFeePolicy { router: Some([9; 32]), ..pol.clone() }).contains("router"));
         assert!(err(&op, &job, &RelayFeePolicy { tokens: vec![], ..pol.clone() }).contains("registered"));
-        assert!(err(&op, &job, &RelayFeePolicy { min_amount: 11, ..pol.clone() }).contains("min_amount"));
+        // the payee rule (T17), per lane: open mode at min_amount, a fee bound to the lane, elsewhere only sponsored
+        let lane = [0x1e; 32];
+        relay_payee(&pol, &op, &lane).unwrap();
+        let dear = RelayFeePolicy { params: crate::config::RelayParams { min_amount: 11, ..Default::default() }, ..pol.clone() };
+        assert!(format!("{:#}", relay_payee(&dear, &op, &lane).unwrap_err()).contains("min_amount"));
+        relay_payee(&pol, &MetaOp { to: lane, ..op.clone() }, &lane).unwrap();
+        let elsewhere = MetaOp { to: [0x44; 32], ..op.clone() };
+        assert!(format!("{:#}", relay_payee(&pol, &elsewhere, &lane).unwrap_err()).contains("relay_bound_payee"));
+        let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, min_amount: 1 << 100, ..Default::default() }, ..pol.clone() };
+        relay_payee(&sponsored, &elsewhere, &lane).unwrap();
         let mut j = job.clone();
         j["extra"]["registry"] = json!("0x168544589e67ec4f3a15a388d1a4ed44eca52abd8ff1c04a1057d2d4f53e3960");
         assert!(err(&op, &j, &RelayFeePolicy { tokens: vec![parse_addr(j["extra"]["registry"].as_str().unwrap()).unwrap()], ..pol.clone() })
@@ -1736,10 +1743,11 @@ mod tests {
         let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), relayer: [0; 32], ..op };
         let pkg = parse_addr("0x0").unwrap();
         assert_eq!(entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({})).unwrap(), Entry::Pay);
-        for k in ["pay-meta", "pay", ""] {
+        for k in [json!("pay-meta"), json!("pay"), json!(""), json!(7), json!(true), json!({})] {
             let e = format!("{:#}", entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({"kind": k})).unwrap_err());
             assert!(e.contains("unknown op.kind"), "{k}: {e}");
         }
+        assert!(entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({"salt": "00"})).is_err(), "a kind-less job with salt");
     }
 
     /// Fix 2: a malformed `tokens[].address` is a startup error, not a silently dropped token.
@@ -1773,7 +1781,7 @@ mod tests {
             assert!(format!("{e:#}").contains(what), "{t}: {e:#}");
         }
         let a = SuiAdapter::new(&cfg(", relay_fee = { router = \"0x5\", min_amount = 9 }"), &k).unwrap();
-        assert_eq!((a.relay_fee.router, a.relay_fee.min_amount), (Some(parse_addr("0x5").unwrap()), 9));
+        assert_eq!((a.relay_fee.router, a.relay_fee.params.min_amount), (Some(parse_addr("0x5").unwrap()), 9));
         assert_eq!(SuiAdapter::new(&cfg(""), &k).unwrap().relay_fee.router, None, "no relay_fee: relay-fee jobs refused");
     }
 
@@ -1814,7 +1822,7 @@ mod tests {
             let kinds = ["pay_meta", "relay_fee", "other"];
             let job = json!({"kind": kinds[kind], "salt": hexb, "meta": s, "ref": hexb,
                              "extra": {"registry": s, "call": hexb, "coin_type": s}});
-            let pol = RelayFeePolicy { router: Some(op.relayer), tokens: vec![op.contract], min_amount: 0 };
+            let pol = RelayFeePolicy { router: Some(op.relayer), tokens: vec![op.contract], params: crate::config::RelayParams { min_amount: 0, ..Default::default() } };
             let _ = entry(&op.contract, &pol, &op, &job);
             let mut c = vec![];
             vec(&mut c, b"dex::cancel");
