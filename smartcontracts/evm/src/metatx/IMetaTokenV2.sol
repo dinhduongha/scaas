@@ -14,6 +14,10 @@ interface IMetaTokenV2 is IERC20Payment {
     event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient,
                             uint256 fee);
 
+    /// @notice `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26), before `PaymentSettled` / `UAPaymentSettled`; `meta` is never
+    ///         parsed.
+    event PaymentMeta(bytes32 indexed payId, bytes meta);
+
     error ReceiverFeeShape();
     error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
     error ReceiverFeeAmount(uint256 fee, uint256 value);
@@ -33,6 +37,15 @@ interface IMetaTokenV2 is IERC20Payment {
 
     function mtxPay(
         address from, address to, uint256 amount, bytes32 payId, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
+    ) external returns (bool);
+
+    /// @notice CTR-MTX-26: `keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)))`.
+    function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (bytes32);
+
+    /// @notice `mtxPay` with `payId = metaPayId(salt, meta)` (CTR-MTX-26): the same digest, lane and nonce.
+    function mtxPayMeta(
+        address from, address to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
     ) external returns (bool);
 
@@ -63,6 +76,10 @@ interface IMetaTokenV2 is IERC20Payment {
                                bytes calldata auth) external returns (bool);
     function uaPay(bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
                    address relayer, uint256 fee, address feeRecipient, bytes calldata auth) external returns (bool);
+    /// @notice `uaPay` with `payId = metaPayId(salt, meta)` (CTR-MTX-26).
+    function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
+                       uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth)
+        external returns (bool);
     function uaUnwrap(bytes32 from, address underlying, uint256 wrapped, address recipient, uint256 minOut,
                       uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer,
                       bytes calldata auth) external returns (bytes memory);

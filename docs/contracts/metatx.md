@@ -323,7 +323,7 @@ publishes it through `mtxSelectors() returns (bytes4[] selectors, uint8[] feeCla
 it. Nothing else is reachable through `mtxExecute`.
 
 **General rule (owner 2026-10-20): every state-changing `mtx*` function is relayable, even with no fee.** It is either itself
-a meta-tx entry point (`mtxExecute`, `mtxBatch`, `mtxTransfer`, the named builders that carry their own signature) or an
+a meta-tx entry point (`mtxExecute`, `mtxBatch`, `mtxTransfer`, the named builders that carry their own signature, `mtxPay` / `mtxPayMeta` and their `ua*` twins included: none of these is in `mtxSelectors()`) or an
 allowlisted self-call whose outer fee may be 0 (`NONE` or `FIXED` 0). So the confidential tokens list their roll-overs
 (Zether: `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`; PQZ: `mtxRollOver`, `mtxPrepareAcc`), whatever
 the function's own authority is (none, or an owner signature checked inside). BUILT for the confidential tokens, commit `b5e61c96`.
@@ -592,7 +592,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | Contract | Entry points |
 |---|---|
 | every contract on `MetaTxBase` | `mtxExecute` (+ alias `executeMetaTransaction`), `mtxBatch`; `cancelNonce(uint256 batch)` (direct, or signed through `mtxExecute`); views `mtxNonce`, `mtxDigest`, `mtxSelectors`, `chainUid`, `supportedModes` |
-| tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane` |
+| tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayMeta` ([CTR-MTX-26](#CTR-MTX-26)), `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane`, `metaPayId` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)) |
 | wrappers, `UNDERLYING_ZETHER` (built on `UnderlyingToken`, inherited in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | `mtxRollOverSigned`, `mtxSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
@@ -614,6 +614,7 @@ with the same struct, so one signature works on both paths and one lane is consu
 | `mtxTransferWithFee(from, to, amount, batch, nonce, validUntil, mode, relayer, fee, feeRecipient, sig)` (short: `mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)`) | `MetaTransfer{entryRef: 0}` | fee nibble `PERCENT` or `FIXED`, `MODE_RESTRICT_FEE_RECIPIENT` set, `feeRecipient ≠ 0` (the sender names who is paid) | flat ABI; the payee check applies |
 | `mtxExecuteWithFee(m, sig)` returns `bytes` | `MetaTransaction` `m` as given | fee nibble ≠ `NONE`; recipient bound **or** relayer-default ("relayer or a third party") | a selector that says "this intent pays a fee" |
 | `mtxPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient, sig)` | `MetaTransfer{entryRef: payId, batch: payLane(payId), nonce: 0}` | any valid mode (fee optional) | on-chain lane derivation; `PaymentSettled(…, entryRef = payId)` |
+| `mtxPayMeta(from, to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient, sig)` ([CTR-MTX-26](#CTR-MTX-26)) | as `mtxPay` with `payId = metaPayId(salt, meta)` | as `mtxPay` | `PaymentMeta(payId, meta)` before `PaymentSettled` |
 | `mtxBatch(MetaTransaction[] ms, bytes[] sigs)` | each `ms[i]` as given | as `mtxExecute` per item | atomic; one outer tx for many items |
 | `mtxBatchTransfer(MetaTransfer[] ts, bytes[] sigs)` | each `ts[i]` as given | as `mtxExecuteTransfer` per item | atomic ([CTR-MTX-24](#CTR-MTX-24)) |
 | `payLane(bytes32 payId) view returns (uint256)` | — | — | the lane clients must use for `payId` on this token |
@@ -624,6 +625,7 @@ Exact equivalences (each is a test):
 mtxTransfer(f,t,a,b,n,v,mode,r,s)              ≡ mtxExecuteTransfer({f,t,a,0,b,n,v,mode,r,0,0}, s)
 mtxTransferWithFee(f,t,a,b,n,v,mode,r,x,R,s)   ≡ mtxExecuteTransfer({f,t,a,0,b,n,v,mode,r,x,R}, s)
 mtxPay(f,t,a,p,v,mode,r,x,R,s)                 ≡ mtxExecuteTransfer({f,t,a,p,payLane(p),0,v,mode,r,x,R}, s)
+mtxPayMeta(f,t,a,salt,meta,v,mode,r,x,R,s)     ≡ mtxPay(f,t,a,metaPayId(salt,meta),v,mode,r,x,R,s)   (plus PaymentMeta)
 mtxExecuteWithFee(m,s)                         ≡ mtxExecute(m,s)                         (plus the shape check)
 executeMetaTransaction(m,s)                    ≡ mtxExecute(m,s)                         (returns true)
 ```
@@ -768,10 +770,13 @@ function mtxExecuteWithFee(MetaTxLib.MetaTransaction calldata m, bytes calldata 
 function mtxPay(address from, address to, uint256 amount, bytes32 payId, uint256 validUntil, uint32 mode,
                 address relayer, uint256 fee, address feeRecipient, bytes calldata signature) external returns (bool);
 function payLane(bytes32 payId) external view returns (uint256);
-// CTR-MTX-26, SPECIFIED
+// CTR-MTX-26 (EVM: metatx split T7; `meta` is `bytes memory` in the implementation, the same ABI type)
 event PaymentMeta(bytes32 indexed payId, bytes meta);
 function mtxPayMeta(address from, address to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
                     uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature)
+    external returns (bool);
+function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes calldata meta, uint256 validUntil,
+                   uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth)
     external returns (bool);
 function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (bytes32);
 ```

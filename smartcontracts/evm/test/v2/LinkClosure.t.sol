@@ -108,7 +108,8 @@ contract LinkClosureTest is Test {
 
     /// R6: over every library of every closure, PUSH data skipped, from the start to the last `INVALID` (solc puts its
     /// trailing data and the CBOR metadata after it): no SELFDESTRUCT (0xff), no CALLCODE (0xf2); DELEGATECALL (0xf4)
-    /// only in `MtxPipelineLib` (-> `HederaLib`) and in `UnderlyingLib` (-> `AdminLib`, its own link reference).
+    /// only in `MtxPipelineLib` (exactly 2, -> `HederaLib`) and in `UnderlyingLib` (exactly 1, -> `AdminLib`, its own
+    /// link reference).
     function test_libraryOpcodes() public view {
         for (uint256 n; n < names.length; ++n) {
             string memory name = names[n];
@@ -117,22 +118,20 @@ contract LinkClosureTest is Test {
             assertFalse(destruct, string.concat(name, ": SELFDESTRUCT"));
             assertFalse(callcode, string.concat(name, ": CALLCODE"));
             bytes32 h = keccak256(bytes(name));
-            if (h != keccak256("MtxPipelineLib") && h != keccak256("UnderlyingLib")) {
-                assertEq(delegates, 0, string.concat(name, ": DELEGATECALL"));
-            } else {
-                assertGt(delegates, 0, string.concat(name, ": expected its DELEGATECALL"));
-            }
+            uint256 want = h == keccak256("MtxPipelineLib") ? 2 : h == keccak256("UnderlyingLib") ? 1 : 0;
+            assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }
 
     function _deployedCode(string memory name) internal view returns (bytes memory c) {
-        // the deployed library's own code: its address in this test
+        // the code deployed at the library's address in this test, not the artifact's `deployedBytecode`: the deployed
+        // copy has the library's `address(this)` call-guard immutable filled in, so it is the code that actually runs
         c = _addr(name).code;
-        // the artifact's runtime code carries the `address(this)` guard immutable; the on-chain code is what runs
     }
 
     function _walk(bytes memory c) internal pure returns (uint256 delegates, bool destruct, bool callcode) {
         uint256 end = c.length;
+        // cut at the last 0xfe: assumes solc ends the runtime code with INVALID, then its data and the CBOR metadata
         while (end > 0 && c[end - 1] != 0xfe) --end;
         for (uint256 i; i < end; ++i) {
             uint8 op = uint8(c[i]);

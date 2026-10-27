@@ -21,7 +21,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 /// @title Common root of the v2 tiers on `ERC20MetaTx` (TW2 §3.3, §7; CTR-MTX-07). EIP-1167 clones.
 /// @notice The named functions (CTR-MTX-09) only build the struct of their kind and run its pipeline; receiver-pays
 ///         (CTR-MTX-05/06). Features, owner and roles (CTR-TOK-22) live in `AdminLib`, init and provenance in the
-///         ERC-7201 namespace `scaas.token`. Pay (`mtxPay`, `payWithFee`, `mtxPayReceiverFee`) works only with
+///         ERC-7201 namespace `scaas.token`. Pay (`mtxPay`, `mtxPayMeta`, their `ua*` twins, `payWithFee`,
+///         `mtxPayReceiverFee`) works only with
 ///         `PAYABLE`; a `MetaTransfer` (with or without `entryRef`) is never gated. Hedera is the immutable
 ///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `MtxPipelineLib` (which calls `HederaLib`).
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, ITokenAdmin {
@@ -200,7 +201,44 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
     ) external nonReentrant returns (bool) {
         AdminLib.requireFeature(AdminLib.PAYABLE);
-        MetaTxLib.MetaTransfer memory t;
+        _executeTransfer(_pay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient), signature);
+        return true;
+    }
+
+    /// @notice CTR-MTX-26: the payment id that commits to its metadata `meta = abi.encode(uint16 schema, bytes body)`.
+    function metaPayId(bytes32 salt, bytes memory meta) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked("scaas.pay.meta", salt, keccak256(meta)));
+    }
+
+    /// @notice `mtxPay` with `payId = metaPayId(salt, meta)` (CTR-MTX-26): the same `MetaTransfer`, digest, lane and
+    ///         nonce; `PaymentMeta` before `PaymentSettled`. `meta` is hashed and logged, never parsed.
+    function mtxPayMeta(
+        address from, address to, uint256 amount, bytes32 salt, bytes memory meta, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
+    ) external nonReentrant returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
+        _payMeta(from, to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient, signature);
+        return true;
+    }
+
+    /// @dev `PaymentMeta`, then `mtxPay`'s struct and pipeline. Spec R11 (`via_ir` off): with `bytes calldata meta` the
+    ///      entry has 13 argument slots, one too many for the legacy ABI decoder; `bytes memory` is the same ABI type
+    ///      (`bytes`, same selector) in one slot. The 12 slots, the return and the `nonReentrant` flag leave no room
+    ///      for a local in the entry, so it passes its arguments here in order (each one DUP15) and `payId` lives here.
+    function _payMeta(
+        address from, address to, uint256 amount, bytes32 salt, bytes memory meta, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata signature
+    ) private {
+        bytes32 payId = metaPayId(salt, meta);
+        emit PaymentMeta(payId, meta);
+        _executeTransfer(_pay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient), signature);
+    }
+
+    /// @dev The struct of `mtxPay` and `mtxPayMeta`: `MetaTransfer{entryRef: payId, batch: payLane(payId), nonce: 0}`.
+    function _pay(
+        address from, address to, uint256 amount, bytes32 payId, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient
+    ) private pure returns (MetaTxLib.MetaTransfer memory t) {
         t.from = from;
         t.to = to;
         t.value = amount;
@@ -211,8 +249,6 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.relayer = relayer;
         t.fee = fee;
         t.feeRecipient = feeRecipient;
-        _executeTransfer(t, signature);
-        return true;
     }
 
     // ------------------------------------------------------------------ named UA functions (CTR-UA-26)
@@ -262,7 +298,35 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth
     ) external nonReentrant returns (bool) {
         AdminLib.requireFeature(AdminLib.PAYABLE);
-        MetaTxLib.UAMetaTransfer memory t;
+        _uaExecuteTransfer(_uaPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient), auth);
+        return true;
+    }
+
+    /// @notice `uaPay` with `payId = metaPayId(salt, meta)` (CTR-MTX-26), as `mtxPayMeta`.
+    function uaPayMeta(
+        bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes memory meta, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth
+    ) external nonReentrant returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
+        _uaPayMeta(from, to, amount, salt, meta, validUntil, mode, relayer, fee, feeRecipient, auth);
+        return true;
+    }
+
+    /// @dev `PaymentMeta`, then `uaPay`'s struct and pipeline (the stack as `_payMeta`).
+    function _uaPayMeta(
+        bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes memory meta, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth
+    ) private {
+        bytes32 payId = metaPayId(salt, meta);
+        emit PaymentMeta(payId, meta);
+        _uaExecuteTransfer(_uaPay(from, to, amount, payId, validUntil, mode, relayer, fee, feeRecipient), auth);
+    }
+
+    /// @dev The struct of `uaPay` and `uaPayMeta`: `UAMetaTransfer{entryRef: payId, batch: payLane(payId), nonce: 0}`.
+    function _uaPay(
+        bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient
+    ) private pure returns (MetaTxLib.UAMetaTransfer memory t) {
         t.from = from;
         t.to = to;
         t.value = amount;
@@ -273,8 +337,6 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.relayer = relayer;
         t.fee = fee;
         t.feeRecipient = feeRecipient;
-        _uaExecuteTransfer(t, auth);
-        return true;
     }
 
     /// @notice `uaExecute(UAMetaTransaction{from, unwrap(underlying, wrapped, recipient, minOut), …, fee 0})`: the

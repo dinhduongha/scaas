@@ -415,29 +415,13 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function _requireDerivedReceiver(bytes32 to) internal view {
         _uaOn();
         if (UAKinds.inNativeSpace(to)) revert UANotRegistered(to);
-        _checkTo(to);
+        MtxPipelineLib._checkTo(_REGISTRY, to); // the one receiver rule (internal: inlined, no DELEGATECALL)
     }
 
     /// @dev A mint into a derived UA (CTR-UA-28): a UA-ledger move from 0, `Transfer(0, UA_POOL)` and `UATransfer(0, to)`.
     function _uaMint(bytes32 to, uint256 v) internal {
         _requireDerivedReceiver(to);
         _uaMove(bytes32(0), to, v);
-    }
-
-    /// @dev A receiver: a native id other than 0, the token and `UA_POOL`; or a registered SIGNING UA (the Zether UA
-    ///      included since UA-6, U8).
-    function _checkTo(bytes32 to) private view {
-        if (UAKinds.inNativeSpace(to)) {
-            address a = address(uint160(uint256(to)));
-            if (a == address(0)) revert PayToZero();
-            if (a == address(this)) revert TransferToSelf();
-            if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
-            if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
-            return;
-        }
-        uint16 kind = IUARegistry(_REGISTRY).kindOf(to);
-        if (kind == 0) revert UANotRegistered(to);
-        if (!UAKinds.isSigning(kind)) revert UAKindNotAccepted(to, kind);
     }
 
     /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NONE` adds
