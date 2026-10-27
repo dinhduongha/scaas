@@ -154,7 +154,7 @@ strong Fiat-Shamir). NUMS generators are computed in the verifier constructor an
 | Precompiles | `0x0b` G1ADD, `0x0c` G1MSM (subgroup check), `0x10` MAP_FP_TO_G1 |
 | Security | ~117–126 bit |
 | Chains | Prague (EIP-2537) |
-| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3")` (`v3`, review C0-1 / C0-9, owner ruling 2026-10-27: the 512-byte header with `validUntilBlock`, per-leg auditor randomness on the multi-recipient format; `v2`: the 480-byte header, P3b, refused since; the `…/v3` label is part of the owner ruling 2026-10-27 on C0-1 (ii), which names the `proofSystemIdMulti` bump); the multi-recipient id is `keccak256(label ‖ "/multi")` |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3")` (`v3`, review C0-1 owner ruling 2026-10-27 (per-leg auditor randomness) and C0-9 controller proposal 2026-10-27, owner may override (`validUntilBlock`): the 512-byte header with `validUntilBlock`, per-leg auditor randomness on the multi-recipient format; `v2`: the 480-byte header, P3b, refused since; the `…/v3` label is part of the owner ruling 2026-10-27 on C0-1 (ii), which names the `proofSystemIdMulti` bump); the multi-recipient id is `keccak256(label ‖ "/multi")` |
 
 <details><summary>Legacy bn254 (alt_bn128; <code>smartcontracts/evm/legacy/ua6/</code>, UA-6 U10)</summary>
 
@@ -355,7 +355,7 @@ protocol change that needs its own cryptographic review; epochs are not the fall
 ## <a id="statement-byte-layout"></a>7. Statement (byte layout)
 
 The token **builds** the statement from storage + payload; the prover builds exactly the same. `P` = the bytes of one
-point. Header (common to every op, `chainUid` at offset 96, [CTR-ZTH-36](#CTR-ZTH-36); the verifier reads `fee` at 288 and `amount` at 352). **512 bytes** under the `…/v3` `proofSystemId` (review C0-9, owner ruling 2026-10-27: + `validUntilBlock`; P3b: 480 with `salt` and `memoHash`, `…/v2`; P3: 416); every payload starts `be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ be32(validUntilBlock)`, both transfer payloads carry `salt(16)` right after it, and a commit-reveal payload appends `memo` after the legs:
+point. Header (common to every op, `chainUid` at offset 96, [CTR-ZTH-36](#CTR-ZTH-36); the verifier reads `fee` at 288 and `amount` at 352). **512 bytes** under the `…/v3` `proofSystemId` (review C0-9, controller proposal 2026-10-27, owner may override: + `validUntilBlock`; P3b: 480 with `salt` and `memoHash`, `…/v2`; P3: 416); every payload starts `be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ be32(validUntilBlock)`, both transfer payloads carry `salt(16)` right after it, and a commit-reveal payload appends `memo` after the legs:
 
 | Offset | Len | Field |
 |---|---|---|
