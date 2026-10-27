@@ -109,7 +109,8 @@ fn open_memo_names_the_recipients() {
         let m = ok("openMemo", &from_storage(curve, &t, UID));
         assert_eq!(m["salt"], t["salt"]);
         assert_eq!(m["auditorIncluded"], json!(true));
-        assert_eq!(m["needKeys"], json!([ua(curve, 1), ua(curve, 2), ua(curve, 3)]), "{curve}: the recipients");
+        assert_eq!(m["legs"].as_array().unwrap().iter().map(|l| l["toUA"].clone()).collect::<Vec<_>>(),
+            vec![json!(ua(curve, 1)), json!(ua(curve, 2)), json!(ua(curve, 3))], "{curve}: the recipients");
         assert_eq!(m["legs"][0]["amount"], json!("1200"));
     }
 }
@@ -262,12 +263,32 @@ fn a_relayed_build_names_its_signer_kind() {
     req["recipients"] = json!((1..=7).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
     req["envelopeBinding"] = json!(format!("0x{}", "33".repeat(32)));
     assert!(err("proveTransferMulti", &req).contains("needs `uaSigner`"));
-    req["uaSigner"] = json!("ed25519");
+    req["uaSigner"] = json!("nope");
     assert!(err("proveTransferMulti", &req).contains("must be"));
     req["uaSigner"] = json!("fndsa512");
     assert!(err("proveTransferMulti", &req).contains("EIP-7825"), "over the cap through a UA");
     req["uaSigner"] = json!("ecdsa");
     ok("proveTransferMulti", &req);
+    // the other accounts.md kinds: 15.63 M relayed + the cap builds under 16.78 M for the light kinds (ed25519 0.21 M,
+    // p256 / webauthn-p256 0.4 M), is refused for the heavy ones (slhdsa128s 1.4 M, mldsa44 4.25 M)
+    for k in ["ed25519", "p256", "webauthn-p256"] {
+        req["uaSigner"] = json!(k);
+        ok("proveTransferMulti", &req);
+    }
+    for k in ["slhdsa128s", "mldsa44"] {
+        req["uaSigner"] = json!(k);
+        assert!(err("proveTransferMulti", &req).contains("EIP-7825"), "{k}");
+    }
+    // anything else (an msig) passes its own number
+    req.as_object_mut().unwrap().remove("uaSigner");
+    req["uaSignerGas"] = json!(123_456);
+    ok("proveTransferMulti", &req);
+    req["uaSignerGas"] = json!(2_000_000);
+    assert!(err("proveTransferMulti", &req).contains("EIP-7825"));
+    req["uaSigner"] = json!("ecdsa");
+    assert!(err("proveTransferMulti", &req).contains("not both"));
+    req.as_object_mut().unwrap().remove("uaSignerGas");
+    req["uaSigner"] = json!("ecdsa");
     // a direct build takes none
     let mut d = multi("bls12381");
     d["uaSigner"] = json!("ecdsa");

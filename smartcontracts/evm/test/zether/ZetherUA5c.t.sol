@@ -118,6 +118,16 @@ contract ZetherUA5cTest is ZetherFixture {
         tok.uaExecute(u, au); // where it belongs
     }
 
+    /// Review C0-3: the retired `mtxConfidentialTransferNoBundle` selector is refused inside a UA envelope too.
+    function test_uaExecute_retiredNoBundleSelector_refused() public {
+        bytes4 old = bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)"));
+        MetaTxLib.UAMetaTransaction memory u = _uam(bob, abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")));
+        bytes memory au = _uaAuth(bob, u);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSignature("MetaTxUnknownOp(bytes4)", old)); // the UA path's own unknown-op error
+        tok.uaExecute(u, au);
+    }
+
     /// A proof bound to an address envelope fails inside a UA envelope with the same data.
     function test_addressEnvelopeProof_liftedToTheUAEnvelope_fails() public {
         MetaTxLib.MetaTransaction memory m = _mt("");

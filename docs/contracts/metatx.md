@@ -327,7 +327,7 @@ a meta-tx entry point (`mtxExecute`, `mtxBatch`, `mtxTransfer`, the named builde
 allowlisted self-call whose outer fee may be 0 (`NONE` or `FIXED` 0). So the confidential tokens list their roll-overs
 (Zether: `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`; PQZ: `mtxRollOver`, `mtxPrepareAcc`), whatever
 the function's own authority is (none, or an owner signature checked inside). BUILT for the confidential tokens, commit `b5e61c96`.
-**One exception (review C0-18, owner ruling 2026-10-27):** `mtxWrapShield` with the native coin as the leg is not relayable. It is
+**One exception (review C0-18, controller proposal 2026-10-27, owner may override):** `mtxWrapShield` with the native coin as the leg is not relayable. It is
 `payable` and takes the leg from `msg.value`, and a relayer cannot supply the signer's native coin (the self-call carries no value). The holder
 wraps directly, then relays `mtxShield`; an ERC-20 leg is relayable. A value-carrying relay path (payable
 envelope, `msg.value` bound to the authorization, relayer reimbursed) was the other option and is not built.

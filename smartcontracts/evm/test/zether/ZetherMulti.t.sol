@@ -9,6 +9,8 @@ import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherProver} from "./helpers/ZetherProver.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
 /// @notice Multi-recipient transfers (CTR-ZTH-37/38) on a `NONE_ZETHER` token: effects, refusals, disclosure in the
 ///         three modes and the gas table M ∈ {1, 2, 4, 8} × {HASH, BUNDLE, NONE}, on BLS12-381 (the bn254 suite is in `legacy/ua6/`).
@@ -318,6 +320,17 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         assertEq(ret.length, 0, "the plain fallback revert (no function by that selector)");
         (bytes4[] memory s,,) = tok.mtxSelectors();
         for (uint256 i; i < s.length; ++i) assertTrue(s[i] != old, "off the allow-list");
+        // relayed: the envelope is refused at the allow-list, not forwarded to the fallback
+        uint256 pk = 0x9A7E5;
+        MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
+            from: vm.addr(pk), data: abi.encodeWithSelector(old, bytes(""), bytes(""), bytes(""), bytes32(0), bytes("")),
+            batch: 1, nonce: tok.mtxNonce(vm.addr(pk), 1), validUntil: block.timestamp + 300,
+            mode: MetaTxLib.MODE_RESTRICT_RELAYER | MetaTxLib.MODE_FEE_FIXED, relayer: relayer, fee: 0, feeRecipient: address(0)
+        });
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(pk, tok.mtxDigest(m));
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, old));
+        tok.mtxExecute(m, abi.encodePacked(r, sg, v));
     }
 
     /// @dev A foreign token's entry that is not a record length: `RecordMalformed`.

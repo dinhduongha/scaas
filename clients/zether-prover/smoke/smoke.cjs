@@ -67,7 +67,7 @@ for (const curve of ["bls12381"]) {
   assert.equal(mt.mode, "compact");
   const stored = { ...chain, entry: mt.bundles, memo: mt.memo };
   const memo = call("openMemo", stored);
-  assert.deepEqual([memo.needKeys, memo.legs[0].amount, memo.salt], [[to.UA], "1234", mt.salt]);
+  assert.deepEqual([memo.legs.map((l) => l.toUA), memo.legs[0].amount, memo.salt], [[to.UA], "1234", mt.salt]);
   assert.equal(call("recoverTransfer", stored).bundles, mt.bundles);
   const bad = mt.bundles.slice(0, 40) + (mt.bundles[40] === "0" ? "1" : "0") + mt.bundles.slice(41);
   assert.throws(() => zetherCall("recoverTransfer", JSON.stringify({ ...stored, entry: bad })));

@@ -121,8 +121,8 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         if (tm == ZetherTypes.TransferMode.BUNDLE) return _cli("recoverTransfer", string.concat(q, ',"yAud":', ya, "}"));
         q = string.concat(q, ",", _q("memo", vm.toString(t.transferMemo(ref))));
         string memory memo = _cli("openMemo", string.concat(q, "}"));
-        bytes32[] memory need = memo.readBytes32Array(".needKeys");
-        for (uint256 j; j < need.length; ++j) assertEq(need[j], ZetherTypes.UA.unwrap(rs[j].ua), "needKeys");
+        bytes32[] memory need = memo.readBytes32Array(".legs[*].toUA");
+        for (uint256 j; j < need.length; ++j) assertEq(need[j], ZetherTypes.UA.unwrap(rs[j].ua), "legs.toUA");
         if (!memo.readBool(".auditorIncluded")) ya = "null";
         return _cli("recoverTransfer", string.concat(q, ',"yAud":', ya, "}"));
     }

@@ -258,7 +258,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 /// when given): the statement's fee is `fee + M · decoyFee` (owner 2026-10-20); `mode`, the stored form: `bundle` | `compact`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
 /// form it takes), so the calldata calls `mtxConfidentialTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
-/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"`, review2 C3-2) so the gas check counts `_uaAuthorize`.
+/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"` | `"mldsa44"` | `"slhdsa128s"` | `"ed25519"` | `"p256"` | `"webauthn-p256"`, caps from accounts.md; or a numeric `uaSignerGas` for any other kind such as an msig; review2 C3-2) so the gas check counts `_uaAuthorize`.
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
     let h = header(v, 0, [0; 32], false)?;
@@ -285,11 +285,17 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     // C3-2: a relayed build names the signer kind of the envelope it is relayed through (`ecdsa`: `mtxExecute`, adds 0;
     // `fndsa512` / `mldsa65`: `uaExecute`, `_uaAuthorize` adds the kind's verify cap), so the gas check never uses the
     // `mtxExecute` figures for a UA relay. Direct builds take none.
-    let signer_gas = match (v.get("uaSigner").filter(|x| !x.is_null()), matches!(h.binding, Binding::Relayed(_))) {
+    let kind = v.get("uaSigner").filter(|x| !x.is_null());
+    let custom = v.get("uaSignerGas").filter(|x| !x.is_null());
+    let signer_gas = match (kind.or(custom), matches!(h.binding, Binding::Relayed(_))) {
         (None, false) => 0,
-        (None, true) => return Err("a relayed build needs `uaSigner`: \"ecdsa\" (mtxExecute), \"fndsa512\" or \"mldsa65\" (uaExecute)".into()),
+        (None, true) => return Err("a relayed build needs `uaSigner` (\"ecdsa\" = mtxExecute; uaExecute: \"fndsa512\", \"mldsa65\", \"mldsa44\", \"slhdsa128s\", \"ed25519\", \"p256\", \"webauthn-p256\") or a numeric `uaSignerGas` (e.g. an msig)".into()),
         (Some(_), false) => return Err("`uaSigner` needs an `envelopeBinding`".into()),
-        (Some(k), true) => k.as_str().and_then(zether::ua_signer_gas).ok_or("`uaSigner` must be \"ecdsa\", \"fndsa512\" or \"mldsa65\"")?,
+        (Some(_), true) => match (kind, custom) {
+            (Some(_), Some(_)) => return Err("give `uaSigner` or `uaSignerGas`, not both".into()),
+            (Some(k), None) => k.as_str().and_then(zether::ua_signer_gas).ok_or("`uaSigner` must be a known kind (use `uaSignerGas` for any other)")?,
+            (None, _) => opt_num(v, "uaSignerGas")?,
+        },
     };
     let (st, p, w) = zether::prove_transfer_multi_ua(
         gens, &k, h.clone(), d, mode, &recipients, y_aud, ct::<C>(v, "acc")?, num(v, "balance")?, signer_gas, rng,
@@ -408,8 +414,7 @@ fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
 
 /// Step 1 of a storage-only recovery (CTR-ZTH-50): open the memo of a commit-reveal entry (`entry` =
 /// `transferEntry(entryRef)`, `memo` = `transferMemo(entryRef)`, `sendCounter`, `chainId`, `chainUid`, `token`). Returns the `salt`, `auditorIncluded`
-/// (the flag), the legs (`toUA`, `amount`) and `needKeys`, the UAs to look up with `registry.keyOf(toUA)` (and
-/// `auditorKey()` when the flag is set) before `recoverTransfer`. Unverified: a wrong key or a tampered memo gives
+/// (the flag) and the legs (`toUA`, `amount`). `recoverTransfer` takes no keys (the entry blob holds `R`). Unverified: a wrong key or a tampered memo gives
 /// garbage here, which `recoverTransfer` then refuses against the stored record.
 pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
     let k = key::<C>(v)?;
@@ -420,7 +425,6 @@ pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
     Ok(json!({
         "salt": hx(&salt), "auditorIncluded": aud,
         "legs": legs.iter().map(|l| json!({"toUA": hx(&l.to_ua), "amount": l.amount.to_string()})).collect::<Vec<_>>(),
-        "needKeys": legs.iter().map(|l| hx(&l.to_ua)).collect::<Vec<_>>(),
     }))
 }
 
