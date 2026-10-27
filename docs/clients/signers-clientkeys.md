@@ -301,7 +301,8 @@ another contract than `target`, refused), one `prompt` with both intents (the ca
 payment: token, amount, payee), and `payment(callData)`: the router-bound `MetaTransfer` / `UAMetaTransfer` `{to: router
 (open mode, the default: the submitting relayer is paid) or the payee, value: amount, entryRef: ref, batch: payLane(ref),
 nonce: 0, mode: RESTRICT_RELAYER, relayer: router, fee: 0}` and the `relay` / `uaRelay` calldata. Refused: a payee that is
-the executor, a target that is the router or the executor. Clients build relay payments only for SCaaS targets. Rules for
+the executor, the zero address or the token itself; a target that is the router or the executor; an inner call whose
+domain names another chain (`chainId`, `salt`) or whose `validUntil` is later than the payment's. Clients build relay payments only for SCaaS targets. Rules for
 the family wallets, which build their own router payments (each family's `ref` form is its own: EVM `chainid ‖ target ‖
 keccak(callData)`; Soroban + the payer-signed salt; Solana the accounts with their flags + salt, a wrapper `ref` with the
 router marker in the lane slot; Cosmos `chain id ‖ target ‖ keccak(msg)`; Sui / Aptos the BCS of the entry name and every

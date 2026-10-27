@@ -560,11 +560,17 @@ export function buildRelayFee({ name = 'SCaaS MetaToken', token, chainId, chainU
   const open = payee == null;
   const to = open ? idOf(router) : payee;
   if (same(to, idOf(executor)) || same(to, executor)) refuse('never pay the executor');
+  if (same(to, ZERO_ADDRESS) || same(to, ZERO_ID)) refuse('the payee is the zero address');
+  if (same(to, token) || same(to, padId(token))) refuse('the payee is the token itself');
   let call = null;
   let bound = 0n;
   if (inner) {
     const m = inner.message || {};
-    if (!same((inner.domain || {}).verifyingContract, target)) refuse('the call is not on the target');
+    const d = inner.domain || {};
+    if (!same(d.verifyingContract, target)) refuse('the call is not on the target');
+    const uid = chainUid instanceof Uint8Array ? hex(chainUid) : String(chainUid);
+    if (uint(d.chainId, 'the call\'s chain id') !== BigInt(chainId) || !same(d.salt, uid)) refuse('the call is for another chain');
+    if (uint(m.validUntil, 'the call\'s deadline') > uint(validUntil, 'the deadline')) refuse('the call outlives its payment');
     bound = BigInt(m.mode ?? 0) & 1n;
     if (bound && !same(m.relayer, ZERO_ADDRESS) && !same(m.relayer, executor)) refuse('the call is bound to another relayer');
     call = { ...inner, message: { ...m, relayer: bound ? executor : m.relayer } };

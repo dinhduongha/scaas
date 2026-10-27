@@ -596,9 +596,11 @@ their minimum balance), and the router's shape (an atomic transaction group or a
   Quote `(token, amount, validUntil)`; simulate the whole `relay`; submit only if the fee covers the gas at the
   node's price (no price or limit assumed). New NODE-LANE rules next to the simulation step. The lane's own token
   balance is safe: the inner call's `msg.sender` is the executor.
-- Clients (`clients/ua-rs`, `ua-qt`, the JS wallet): build the call with its own signature, `ref = relayRef(target,
-  callData)`, the payment (open mode by default), one prompt with both intents. If the inner call is itself an mtx
-  envelope with `MODE_RESTRICT_RELAYER`, its relayer must be the executor's address (or left open).
+- Clients: `clientkeys` (the signer) builds the call with its own signature, `ref = relayRef(target, callData)`, the
+  payment (open mode by default), one prompt with both intents. If the inner call is itself an mtx envelope with
+  `MODE_RESTRICT_RELAYER`, its relayer must be the executor's address (or left open). `clients/ua-rs` and `ua-qt`
+  provide the hashes (`meta_pay_id`, `pay_lane`, `relay_ref`) and reproduce the vectors; they build no payment or
+  prompt (T18 fix 1, controller call 2026-10-28, owner may override).
 
 **For the other families** (`scaas-node/src/adapters/<family>.rs`, the `signed_op` jobs):
 - A pay job of every family may carry `(salt, meta)`. The adapter checks `pay_ref == metaPayId(salt, meta)` and, where

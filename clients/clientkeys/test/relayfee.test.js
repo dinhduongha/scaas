@@ -95,3 +95,16 @@ test('buildRelayFee refuses to pay the executor, an inner envelope bound elsewhe
   assert.throws(() => buildRelayFee({ ...base, inner: inner(1, '0x' + '99'.repeat(20)) }), /another relayer/);
   assert.throws(() => buildRelayFee({ ...base, target: TOKEN, inner: inner(1, EXECUTOR) }), /not on the target/);
 });
+
+test('buildRelayFee refuses an inner call on another chain or outliving its payment, a zero or token payee', () => {
+  const ok = inner(1, EXECUTOR);
+  assert.throws(() => buildRelayFee({ ...base, inner: { ...ok, domain: { ...ok.domain, chainId: '1' } } }), /another chain/);
+  assert.throws(() => buildRelayFee({ ...base, inner: { ...ok, domain: { ...ok.domain, salt: '0x' + 'c2'.repeat(32) } } }),
+    /another chain/);
+  assert.throws(() => buildRelayFee({ ...base, validUntil: NOW + 299, inner: ok }), /outlives/);
+  assert.equal(buildRelayFee({ ...base, validUntil: NOW + 300, inner: ok }).call.message.relayer, EXECUTOR);
+  assert.throws(() => buildRelayFee({ ...base, payee: '0x' + '00'.repeat(20) }), /zero address/);
+  assert.throws(() => buildRelayFee({ ...base, from: padId(PAYER), ua: true, payee: '0x' + '00'.repeat(32) }), /zero address/);
+  assert.throws(() => buildRelayFee({ ...base, payee: TOKEN }), /token itself/);
+  assert.throws(() => buildRelayFee({ ...base, from: padId(PAYER), ua: true, payee: padId(TOKEN) }), /token itself/);
+});
