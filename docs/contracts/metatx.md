@@ -920,6 +920,8 @@ reference commits to the call, and that the payment is consumed only together wi
 
 Solana: `scaas`'s own fee-less signed entries are fee-paid through static wrappers `relay_fee_<entry>` (owner 2026-10-27, as Sui / Aptos), which run the entry in-process and then the router payment; the generic `relay_fee` (CPI) serves external programs only (`scaas` as its target is refused). The generic router's CPI forwards the outer transaction's signer privileges, so the target's accounts are never signers (refused on chain, `RelayFeeShape`): the router lends no signature, of the relayer or of anyone else, to the payer's call.
 
+Cosmos: the router (`relayfee`) and its executor (`relayexec`) have no admin, because a migrated router would be the bound relayer of every payment signed to it and could settle one without running the call ([CTR-MTX-13](#CTR-MTX-13)). `Relay` refuses while the router's own `ContractInfo.admin` is set (`relayfee: the router has an admin`), deployments instantiate it with `--no-admin`, and clients check `ContractInfo.admin == None` before they sign `relayer = router` (T12 fix 1, controller call 2026-10-27, owner may override).
+
 **Cost [estimate; measured in the plan].** On top of the call: the token's payment path (`mtxPay` 53,868 measured),
 the payer's signature check, the pay lane's first-use slot (+17 k pre-Amsterdam, ≈ +98 k under Amsterdam, and `mtxPay` measures 181,810 in all on Amsterdam), the open-mode forward (≈ +10–30 k), and two events.
 With an ECDSA payer that is ≈ +80–100 k gas on the pre-Amsterdam figures and ≈ +200–230 k on Amsterdam (the old estimate is about 2 × low: review C5-9); with a PQ payer, one more PQ verification.

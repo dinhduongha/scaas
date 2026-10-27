@@ -237,7 +237,8 @@ pub struct RelayFeePolicy {
 
 impl RelayFeePolicy {
     /// `params.relay_fee = { router = "<bech32 contract>", min_amount = N }` (default 1) and the chain's `tokens`. A
-    /// `router` that is set but is not a 32-byte contract address of this prefix is a config error.
+    /// `router` that is set but is not a 32-byte contract address of this prefix, or a `min_amount` that is not a
+    /// non-negative integer, is a config error.
     pub fn from_cfg(cfg: &ChainCfg, prefix: &str) -> Result<Self> {
         let t = cfg.params.get("relay_fee");
         let router = match t.and_then(|t| t.get("router")) {
@@ -251,11 +252,14 @@ impl RelayFeePolicy {
                 Some(r.to_string())
             }
         };
-        Ok(Self {
-            router,
-            tokens: cfg.tokens.iter().map(|t| t.address.clone()).collect(),
-            min_amount: t.and_then(|t| t.get("min_amount")).and_then(|v| v.as_integer()).map_or(1, |v| v.max(0) as u128),
-        })
+        let min_amount = match t.and_then(|t| t.get("min_amount")) {
+            None => 1,
+            Some(v) => v
+                .as_integer()
+                .and_then(|n| u128::try_from(n).ok())
+                .ok_or_else(|| anyhow!("params.relay_fee.min_amount must be a non-negative integer"))?,
+        };
+        Ok(Self { router, tokens: cfg.tokens.iter().map(|t| t.address.clone()).collect(), min_amount })
     }
 }
 
@@ -1011,6 +1015,13 @@ mod tests {
         for bad in ["\"wasm1notbech32\"", "12", &format!("\"{}\"", bech32("cosmos", &[0x55; 32])), &format!("\"{}\"", bech32("wasm", &[0x55; 20]))] {
             let e = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = {bad} }}")), k()).err().map(|e| format!("{e:#}")).unwrap_or_default();
             assert!(e.contains("params.relay_fee.router"), "{bad}: {e}");
+        }
+        for bad in ["\"5\"", "1.5", "-1"] {
+            let e = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = \"{}\", min_amount = {bad} }}", router())), k())
+                .err()
+                .map(|e| format!("{e:#}"))
+                .unwrap_or_default();
+            assert_eq!(e, "params.relay_fee.min_amount must be a non-negative integer", "{bad}");
         }
     }
 

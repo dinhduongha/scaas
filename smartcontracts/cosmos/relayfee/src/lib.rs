@@ -5,7 +5,8 @@
 //! open mode (`op.to == router`) the token's `Transfer` of the amount to `info.sender`. The target sees the
 //! unprivileged executor (`scaas-relayexec`), never the router, so a `msg` that is a token `Relay` of another
 //! router-bound payment fails (R18). The router's only stored item is its executor's address (plus the re-entry
-//! flag held during a relay).
+//! flag held during a relay). The router and its executor have no admin: `Relay` refuses while the router's own
+//! `ContractInfo.admin` is set, and the executor is instantiated with `admin: None`.
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{
@@ -87,6 +88,11 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     }
     if LOCK.exists(deps.storage) {
         return Err(err("relayfee: re-entry"));
+    }
+    // CTR-MTX-13: an admin could migrate the router (the bound relayer of every payment signed to it) into code
+    // that settles without the call. Deploy with `--no-admin`; a failed query fails closed.
+    if deps.querier.query_wasm_contract_info(env.contract.address.as_str())?.admin.is_some() {
+        return Err(err("relayfee: the router has an admin"));
     }
     let target = deps.api.addr_validate(&target)?;
     let token = deps.api.addr_validate(&token)?;

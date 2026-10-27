@@ -188,9 +188,27 @@ fn anti_lock_withheld_op_never_blocks_others() {
     assert_eq!(balance(&w.app, &t1, &payee), 14);
 }
 
+/// A WebAuthn assertion over `payload` (user presence set), as a passkey wallet produces it.
+fn passkey_auth(sk: &p256::ecdsa::SigningKey, payload: &[u8]) -> Auth {
+    use p256::ecdsa::signature::hazmat::PrehashSigner as _;
+    let mut ad = vec![0xab; 32];
+    ad.extend_from_slice(&[0x05, 0, 0, 0, 1]);
+    let cdj = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":"https://pay.example"}}"#, base64url(&sha256(payload)));
+    let mut msg = ad.clone();
+    msg.extend_from_slice(&sha256(cdj.as_bytes()));
+    let sig: p256::ecdsa::Signature = sk.sign_prehash(&sha256(&msg)).unwrap();
+    let sig = sig.normalize_s().unwrap_or(sig);
+    Auth {
+        scheme: "passkey".into(),
+        pubkey: sk.verifying_key().to_encoded_point(false).as_bytes().to_vec().into(),
+        signature: sig.to_bytes().to_vec().into(),
+        authenticator_data: Some(ad.into()),
+        client_data_json: Some(cdj),
+    }
+}
+
 #[test]
 fn passkey_scheme_pays_from_its_derived_address() {
-    use p256::ecdsa::signature::hazmat::PrehashSigner as _;
     let mut w = world();
     let sk = p256::ecdsa::SigningKey::from_bytes(&[3u8; 32].into()).unwrap();
     let pk = sk.verifying_key().to_encoded_point(false).as_bytes().to_vec();
@@ -202,20 +220,8 @@ fn passkey_scheme_pays_from_its_derived_address() {
         .unwrap();
     let payee = w.app.api().addr_make("payee").to_string();
     let p = to_json_vec(&op(&w.app, &t1, "pay", &from, &payee, 40, 7, 0)).unwrap();
-    let mut ad = vec![0xab; 32];
-    ad.extend_from_slice(&[0x05, 0, 0, 0, 1]);
-    let cdj = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":"https://pay.example"}}"#, base64url(&sha256(&p)));
-    let mut msg = ad.clone();
-    msg.extend_from_slice(&sha256(cdj.as_bytes()));
-    let sig: p256::ecdsa::Signature = sk.sign_prehash(&sha256(&msg)).unwrap();
-    let sig = sig.normalize_s().unwrap_or(sig);
-    let auth = Auth {
-        scheme: "passkey".into(),
-        pubkey: pk.into(),
-        signature: sig.to_bytes().to_vec().into(),
-        authenticator_data: Some(ad.clone().into()),
-        client_data_json: Some(cdj.clone()),
-    };
+    let auth = passkey_auth(&sk, &p);
+    let cdj = auth.client_data_json.clone().unwrap();
     // Khoá nén (cùng điểm) không được dùng: một khoá chỉ có một địa chỉ.
     let mut compressed = auth.clone();
     compressed.pubkey = sk.verifying_key().to_encoded_point(true).as_bytes().to_vec().into();
@@ -763,6 +769,7 @@ fn relayexec_only_router() {
     let r = rf(&mut w);
     let router: Addr = w.app.wrap().query_wasm_smart(&r.exec, &scaas_relayexec::QueryMsg::Router {}).unwrap();
     assert_eq!(router, r.router);
+    assert_eq!(w.app.wrap().query_wasm_contract_info(r.exec.as_str()).unwrap().admin, None, "the executor has no admin");
     let exec = scaas_relayexec::ExecuteMsg::Exec { target: r.probe.to_string(), msg: RECORD.to_vec().into() };
     let relayer = w.relayer.clone();
     assert!(why(w.app.execute_contract(relayer.clone(), r.exec.clone(), &exec, &[])).contains("relayexec: only the router"));
@@ -899,4 +906,85 @@ fn relay_fee_reentry_refused() {
     // The lock does not outlive a relay: the nested payment works on its own afterwards.
     let bob = K1::new(9);
     relay_fee(&mut w, &r, &relayer, &r.probe.clone(), RECORD, &inner, &bob).unwrap();
+}
+
+/// Fix 1 (CTR-MTX-13): a router with an admin could be migrated into code that settles its bound payments without
+/// the call, so `Relay` refuses while the router's own `ContractInfo.admin` is set.
+#[test]
+fn relay_fee_router_with_admin_refused() {
+    let mut w = world();
+    let r = rf(&mut w);
+    let exec_code = w.app.store_code(Box::new(ContractWrapper::new(scaas_relayexec::execute, scaas_relayexec::instantiate, scaas_relayexec::query)));
+    let router_code = w.app.store_code(Box::new(
+        ContractWrapper::new(scaas_relayfee::execute, scaas_relayfee::instantiate, scaas_relayfee::query).with_reply(scaas_relayfee::reply),
+    ));
+    let admin = w.app.api().addr_make("admin");
+    let init = scaas_relayfee::InstantiateMsg { executor_code_id: exec_code };
+    let router = w.app.instantiate_contract(router_code, admin.clone(), &init, &[], "relayfee", Some(admin.to_string())).unwrap();
+    let exec: Addr = w.app.wrap().query_wasm_smart(&router, &scaas_relayfee::QueryMsg::Executor {}).unwrap();
+    let ra = Rf { router, exec, probe: r.probe.clone() };
+    let (a, relayer, t1) = (w.alice.addr(&w.app), w.relayer.clone(), w.t1.clone());
+    let o = fee_op(&w, &ra, &t1, &a, &r.probe, RECORD, ra.router.as_str(), 30);
+    let alice = K1::new(7);
+    assert!(why(relay_fee(&mut w, &ra, &relayer, &r.probe.clone(), RECORD, &o, &alice)).contains("relayfee: the router has an admin"));
+    assert_eq!(seen(&w, &r.probe), None);
+    assert_eq!(balance(&w.app, &t1, a.as_str()), 1_000_000);
+    // The admin-less router of `rf` relays the same kind of payment.
+    let o = fee_op(&w, &r, &t1, &a, &r.probe, RECORD, r.router.as_str(), 30);
+    relay_fee(&mut w, &r, &relayer, &r.probe.clone(), RECORD, &o, &alice).unwrap();
+}
+
+/// Fix 1: the router as its own target (the inner sender would be the executor, an open-mode fee would land there).
+#[test]
+fn relay_fee_target_is_router_refused() {
+    let mut w = world();
+    let r = rf(&mut w);
+    let (a, b, relayer, t1) = (w.alice.addr(&w.app), w.bob.addr(&w.app), w.relayer.clone(), w.t1.clone());
+    let inner = fee_op(&w, &r, &t1, &b, &r.probe, RECORD, r.router.as_str(), 7);
+    let ip = to_json_vec(&inner).unwrap();
+    let nested = scaas_relayfee::ExecuteMsg::Relay {
+        target: r.probe.to_string(),
+        msg: RECORD.to_vec().into(),
+        token: t1.to_string(),
+        payload: ip.clone().into(),
+        auth: w.bob.auth(&ip, b.as_str()),
+    };
+    let call = cosmwasm_std::to_json_vec(&nested).unwrap();
+    let router = r.router.clone();
+    let o = fee_op(&w, &r, &t1, &a, &router, &call, r.router.as_str(), 3);
+    let alice = K1::new(7);
+    assert!(why(relay_fee(&mut w, &r, &relayer, &router, &call, &o, &alice)).contains("relayfee: re-entry"));
+    for who in [a.as_str(), b.as_str()] {
+        assert_eq!(balance(&w.app, &t1, who), 1_000_000);
+    }
+    for who in [relayer.as_str(), r.exec.as_str(), r.router.as_str()] {
+        assert_eq!(balance(&w.app, &t1, who), 0);
+    }
+    assert_eq!(seen(&w, &r.probe), None);
+}
+
+/// CTR-MTX-27 conformance "a UA payer works": a passkey (secp256r1, derived address) payer through the router.
+#[test]
+fn relay_fee_passkey_payer() {
+    let mut w = world();
+    let r = rf(&mut w);
+    let sk = p256::ecdsa::SigningKey::from_bytes(&[5u8; 32].into()).unwrap();
+    let pk = sk.verifying_key().to_encoded_point(false).as_bytes().to_vec();
+    let from = w.app.api().addr_humanize(&CanonicalAddr::from(passkey_account(&pk))).unwrap();
+    let (admin, relayer, t1) = (w.app.api().addr_make("admin"), w.relayer.clone(), w.t1.clone());
+    let mint = scaas_token::ExecuteMsg::Mint { recipient: from.to_string(), amount: Uint128::new(100) };
+    w.app.execute_contract(admin, t1.clone(), &mint, &[]).unwrap();
+    let o = fee_op(&w, &r, &t1, &from, &r.probe, RECORD, r.router.as_str(), 40);
+    let p = to_json_vec(&o).unwrap();
+    let m = scaas_relayfee::ExecuteMsg::Relay {
+        target: r.probe.to_string(),
+        msg: RECORD.to_vec().into(),
+        token: t1.to_string(),
+        payload: p.clone().into(),
+        auth: passkey_auth(&sk, &p),
+    };
+    let res = w.app.execute_contract(relayer.clone(), r.router.clone(), &m, &[]).unwrap();
+    assert_eq!(attr(&res, "wasm-relay_fee_paid", "payer").as_deref(), Some(from.as_str()));
+    assert_eq!((balance(&w.app, &t1, from.as_str()), balance(&w.app, &t1, relayer.as_str())), (60, 40));
+    assert_eq!(seen(&w, &r.probe).as_deref(), Some(r.exec.as_str()));
 }
