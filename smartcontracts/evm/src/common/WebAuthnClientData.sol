@@ -31,7 +31,7 @@ library WebAuthnClientData {
         uint256 after_ = end + 1 + crossFalse.length;
         if (after_ >= n || hashSlice(cd, end + 1, crossFalse.length) != keccak256(crossFalse)) return (false, 0, 0);
         if (cd[after_] == "}") return (after_ + 1 == n, originStart, originLen);
-        return (cd[after_] == ",", originStart, originLen);
+        return (cd[after_] == "," && cd[n - 1] == "}", originStart, originLen); // C1-2: the object must close
     }
 
     /// @dev `keccak256(b[start .. start + len))`; the caller keeps the range inside `b`.

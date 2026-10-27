@@ -198,4 +198,11 @@ contract PqzGuardsTest is PqzFixture {
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, none));
         tok.mtxConfidentialTransferSingle(pl, hex"c0de", _mlAuth(), _benT(pl), "");
     }
+
+    // ------------------------------------------------------------------ C0-13: a short op 1 payload is BadPayload
+
+    function test_C0_13_shortSinglePayloadIsBadPayload() public {
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, uint256(100)));
+        tok.transferSingleStatement(new bytes(100), bytes32(0));
+    }
 }

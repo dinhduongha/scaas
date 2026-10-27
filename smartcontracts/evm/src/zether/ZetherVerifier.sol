@@ -85,6 +85,9 @@ abstract contract ZetherCurve is IZetherVerifierCommon {
         }
     }
 
+    /// @dev C0-19: a failed MODEXP precompile reverts with its address (diagnostics), not with empty data.
+    error PrecompileFailed(uint256 at);
+
     function _inv(uint256 a, uint256 r) internal view returns (uint256 out) {
         bool ok;
         assembly ("memory-safe") {
@@ -99,7 +102,7 @@ abstract contract ZetherCurve is IZetherVerifierCommon {
             ok := and(ok, eq(returndatasize(), 32)) // W-I: no 0x05 ⇒ empty
             out := mload(m)
         }
-        require(ok);
+        if (!ok) revert PrecompileFailed(0x05);
     }
 
     function _word(bytes memory a, uint256 off) internal pure returns (uint256 w) {

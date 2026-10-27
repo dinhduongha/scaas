@@ -5,7 +5,13 @@ import {Test, console2} from "forge-std/Test.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
+import {ZetherCurve, ZetherBls12381Curve} from "../../src/zether/ZetherVerifier.sol";
 import {ZetherProver} from "./helpers/ZetherProver.sol";
+
+contract InvHarness is ZetherBls12381Curve {
+    function _store() internal pure override returns (address) { return address(0); }
+    function inv(uint256 a, uint256 r) external view returns (uint256) { return _inv(a, r); }
+}
 
 /// @notice Verifier đứng một mình: proof đúng qua, mọi thay đổi một bit / một trường / một witness sai
 ///         đều bị từ chối. Statement dựng tay theo zether.md §7 (header 512 byte, `chainUid` là word 3; token và
@@ -308,5 +314,14 @@ contract ZetherVerifierTest is Test {
         bytes memory st = _burnStatement(bls, 1000, 400, 5);
         bytes memory pr = prover.proveBurn(bls, st, ZetherProver.BurnWitness(XT, 595, 0x99, keccak256("b")));
         assertFalse(blsB.verifyBurn(st, pr));
+    }
+
+    /// C0-19: a failing MODEXP precompile reverts with `PrecompileFailed(5)`, not with empty data.
+    function test_C0_19_invPrecompileFailureNamed() public {
+        InvHarness h = new InvHarness();
+        assertEq(h.inv(3, 7), 5, "3 * 5 = 15 = 1 mod 7");
+        vm.mockCallRevert(address(5), bytes(""), bytes(""));
+        vm.expectRevert(abi.encodeWithSelector(ZetherCurve.PrecompileFailed.selector, uint256(5)));
+        h.inv(3, 7);
     }
 }

@@ -26,6 +26,7 @@ library PqzViewLib {
             e.mode = PqzCore.multiHasMemo(payload) ? ZetherTypes.TransferMode.HASH : PqzCore._defaultMode();
             (, buf) = PqzCore.prepareMulti(e, payload, payload[0:0], 0);
         } else if (op == 1) {
+            if (payload.length < PqzCore.T_OUT) revert IPqzToken.BadPayload(payload.length); // C0-13
             uint256 l = payload.length - PqzCore.T_OUT;
             e.mode = l == PqzCore.OUT_ON + PqzCore.MEMO || l == PqzCore.OUT_OFF + PqzCore.MEMO ? ZetherTypes.TransferMode.HASH : PqzCore._defaultMode();
             (, buf) = PqzCore.prepareTransfer(e, payload, payload[0:0], 0);

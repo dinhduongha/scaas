@@ -130,6 +130,7 @@ library Bls12381 {
         if (hashedMsgG1.length != G1_BYTES) revert BadLength(hashedMsgG1.length, G1_BYTES);
         if (pubkeyG2.length != G2_BYTES) revert BadLength(pubkeyG2.length, G2_BYTES);
         if (negG2Generator.length != G2_BYTES) revert BadLength(negG2Generator.length, G2_BYTES);
+        if (_isZero(sigG1) || _isZero(pubkeyG2)) return false; // C1-3: the identity pairs to 1 = 1
         return pairingCheck(bytes.concat(sigG1, negG2Generator, hashedMsgG1, pubkeyG2));
     }
 
@@ -138,5 +139,10 @@ library Bls12381 {
         internal view returns (bool)
     {
         return verifyMinSig(NEG_G2_GENERATOR, hashedMsgG1, pubkeyG2, sigG1);
+    }
+
+    function _isZero(bytes memory b) private pure returns (bool z) {
+        z = true;
+        for (uint256 i; i < b.length; ++i) if (b[i] != 0) return false;
     }
 }
