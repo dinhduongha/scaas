@@ -63,7 +63,7 @@ fn now() -> u64 {
 
 async fn start_anvil(chain_id: u64, port: u16) -> (Anvil, String) {
     let child = Command::new("anvil")
-        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "osaka", "--gas-limit", "16777216", "--code-size-limit", "65536", "--port", &port.to_string(), "--silent"])
+        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "amsterdam", "--gas-limit", "100000000", "--code-size-limit", "65536", "--port", &port.to_string(), "--silent"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -84,7 +84,7 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
     let sc = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm");
     let status = Command::new("forge")
         .current_dir(sc)
-        .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--code-size-limit", "65536", "--sender", DEPLOYER_ADDRESS])
+        .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))
@@ -432,6 +432,73 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let lane99 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(99) }.abi_encode();
     let out = p.call(TransactionRequest::default().to(token).input(lane99.into())).await.unwrap();
     assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64));
+
+    // T17 (CTR-MTX-26) on the real token: a pay-meta job relays `mtxPayMeta`, and the indexer gives the meta to its
+    // PaymentSettled (never a row of its own)
+    let (salt, meta) = (B256::repeat_byte(0x51), alloy::hex::decode("00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000568656c6c6f000000000000000000000000000000000000000000000000000000").unwrap());
+    let pid = scaas_node::metatx::meta_pay_id(&salt, &meta);
+    let pm = payment(payer.address(), shop, 1_000, pid, scaas_node::metatx::pay_lane(&pid), MODE_RESTRICT_RELAYER, relayer.address(), 0, Address::ZERO);
+    let mut j = job(7, token, &pm, "0x", sign(&payer, &d, &pm));
+    (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
+    state.lock().unwrap().jobs.push(j);
+    s.poll_outbox().await;
+    for _ in 0..50 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let reports = state.lock().unwrap().reports.clone();
+    let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
+    assert_eq!(of(7)["chain_state"], "mined", "{}", of(7));
+    while scaas_node::indexer::step(&ichain, &odoo, None).await.unwrap() {}
+    let ingested = state.lock().unwrap().ingested.clone();
+    assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta"), "never a row");
+    let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("pay-meta settled");
+    assert_eq!((paid["amount"].as_str(), paid["meta"].as_str()), (Some("1000"), Some(format!("0x{}", alloy::hex::encode(&meta)).as_str())));
+
+    // T17 (CTR-MTX-27) on the real router: a fee-less `cancelNonce(77)` of the payer, its fee of 10 in open mode; the
+    // node relays `relay` (call-table row MtxRelayFee.relay), the fee reaches the lane, the indexer joins RelayFeePaid
+    let router: Address = dep["mtx_relay_fee"].as_str().expect("mtx_relay_fee in the deploy JSON").parse().unwrap();
+    let inner = call(alloy::hex::decode(format!("cfdd7aea{:064x}", 77)).unwrap(), 8);
+    let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
+    let r = scaas_node::metatx::relay_ref(chain_id, token, &call_data);
+    let Mtx::Transfer(t) = payment(payer.address(), router, 10, r, scaas_node::metatx::pay_lane(&r), MODE_RESTRICT_RELAYER, router, 0, Address::ZERO)
+        else { unreachable!() };
+    let fee_sig = sign(&payer, &d, &Mtx::Transfer(t.clone()));
+    let relay = scaas_node::abi::IMtxRelayFee::relayCall { target: token, callData: call_data, token, t,
+        sig: alloy::hex::decode(&fee_sig[2..]).unwrap().into() }.abi_encode();
+    let mut rcfg = cfg.clone();
+    rcfg.params = toml::toml! { relay_fee = { min_amount = 10 } };
+    rcfg.params["relay_fee"].as_table_mut().unwrap().insert("router".into(), format!("{router:#x}").into());
+    let before = balance(&rpc, token, relayer.address()).await;
+    let mut s3 = Submitter::start(Chain::with_signer(&rcfg, relayer.clone()).unwrap(), odoo.clone(), rcfg.clone(), "e2e-3".into(), Default::default())
+        .await
+        .unwrap();
+    state.lock().unwrap().jobs.push(json!({"id": 9, "kind": "call", "call": {"target": format!("{router:#x}"),
+        "calldata": format!("0x{}", alloy::hex::encode(relay)), "validUntil": (now() + 300).to_string()}}));
+    s3.poll_outbox().await;
+    for _ in 0..50 {
+        s3.track().await;
+        if s3.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let reports = state.lock().unwrap().reports.clone();
+    let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
+    assert_eq!(of(9)["chain_state"], "mined", "{}", of(9));
+    assert_eq!(balance(&rpc, token, relayer.address()).await, before + U256::from(10u64), "the fee reached the lane");
+    let lane77 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(8) }.abi_encode();
+    let out = p.call(TransactionRequest::default().to(token).input(lane77.into())).await.unwrap();
+    assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64), "the inner call ran");
+    while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
+    let ingested = state.lock().unwrap().ingested.clone();
+    assert!(ingested.iter().all(|e| e["event"] != "RelayFeePaid"), "never a row");
+    let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("fee settled");
+    assert_eq!((fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
+        (Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
 }
 
 fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {
