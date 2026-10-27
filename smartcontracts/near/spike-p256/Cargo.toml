@@ -1,0 +1,13 @@
+[package]
+name = "scaas-near-spike-p256"
+version = "0.1.0"
+edition = "2021"
+description = "Task 1 spike: two passkey verifications plus the largest relay_fee wrapper's work vs 300 Tgas"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+scaas-near-common = { path = "../common" }
+

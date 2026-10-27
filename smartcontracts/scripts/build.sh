@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build one on-chain family (or all) with its native tool. Heavy: the caller wraps it in scripts/capped.
-# usage: build.sh <evm|aptos|sui|soroban|cosmos|ton|solana|all>
+# usage: build.sh <evm|aptos|sui|soroban|cosmos|ton|solana|near|all>
 set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FAMILIES="evm aptos sui soroban cosmos ton solana"
+FAMILIES="evm aptos sui soroban cosmos ton solana near"
 build() {
   echo "== build $1"
   case "$1" in
@@ -14,6 +14,8 @@ build() {
     cosmos)  "$SC/cosmos/build-wasm.sh" ;;
     ton)     (cd "$SC/ton" && { [ -d node_modules ] || npm ci; } && npm run build) ;;
     solana)  (export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"; cd "$SC/solana" && cargo build-sbf) ;;
+    near)    for m in "$SC"/near/*/Cargo.toml; do grep -q 'cdylib' "$m" || continue  # contract crates only
+               (cd "$(dirname "$m")" && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi); done ;;
     *) echo "unknown family '$1' (one of: $FAMILIES all)" >&2; exit 2 ;;
   esac
 }

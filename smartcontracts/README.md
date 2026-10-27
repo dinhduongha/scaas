@@ -13,12 +13,13 @@ smartcontracts/
 ├── cosmos/       CosmWasm cargo workspace; build-wasm.sh -> artifacts/
 ├── ton/          Tact + jest (npm); shim/ = sandbox server for the e2e
 ├── solana/       cargo workspace (programs/*), LiteSVM tests; scripts/devnet.sh, scripts/deploy.sh
+├── near/         NEAR cargo workspace (cargo-near wasm -> target/near/<crate>/), near-workspaces sandbox tests
 └── scripts/      build.sh, test.sh, deploy.sh, devnet.sh
 ```
 
 ```bash
 S=smartcontracts/scripts; C=scripts/capped        # from the repo root; heavy commands go under capped
-$C $S/build.sh <evm|aptos|sui|soroban|cosmos|ton|solana|all>
+$C $S/build.sh <evm|aptos|sui|soroban|cosmos|ton|solana|near|all>
 $C $S/test.sh  <family|all>
 $S/deploy.sh <family> <network> [args…]           # see the header of deploy.sh for what <network> means
 $C $S/devnet.sh <aptos|solana> up|down|status     # other families: the e2e starts its own node

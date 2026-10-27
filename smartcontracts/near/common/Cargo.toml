@@ -1,0 +1,8 @@
+[package]
+name = "scaas-near-common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+near-sdk = { workspace = true }
+p256 = { workspace = true }

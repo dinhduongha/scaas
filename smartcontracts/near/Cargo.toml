@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["common", "spike-p256", "integration"]
+
+[workspace.dependencies]
+near-sdk = "5.30.0"
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa"] }
+
+# Gas on NEAR is charged per wasm op and per loaded contract byte. Task 1 measured the spike (73 KB at "z": 29.0 Tgas per
+# P-256 verify, 60.2 Tgas the two-passkey call; 84 KB at 3: 20.0 / 42.3; 3 only on the p256 crates: 22.9 / 48.1),
+# so opt-level 3: per-call gas is paid on every relayed op, the size only once in storage.
+[profile.release]
+codegen-units = 1
+opt-level = 3
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
