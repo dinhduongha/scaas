@@ -1,5 +1,5 @@
 [workspace]
-members = ["metaop", "token", "mandate", "dex", "tests"]
+members = ["metaop", "token", "mandate", "dex", "relayfee", "relayexec", "tests"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -7,6 +7,8 @@ cosmwasm-std = { version = "3.0", features = ["cosmwasm_2_1"] }
 cw-storage-plus = "3.0"
 serde = { version = "1", default-features = false, features = ["derive"] }
 sha2 = "0.10"
+# Keccak-256 for CTR-MTX-26 / -27 (`cosmwasm-std` has none; controller call, spec §6.2).
+sha3 = "0.10"
 ripemd = "0.1"
 scaas-metaop = { path = "metaop" }
 

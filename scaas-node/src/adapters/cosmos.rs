@@ -172,15 +172,12 @@ fn hex_arg(s: &str) -> Result<Vec<u8>> {
     Ok(alloy::hex::decode(s.trim().trim_start_matches("0x"))?)
 }
 
-/// Job `signed_op` ⇒ (contract, msg JSON `{"relay":{payload, auth}}`, valid_until).
-/// `signature`: base64 64 byte (ADR-036) hoặc JSON passkey `{signature, authenticator_data, client_data_json}`.
-pub fn relay_msg(op: &Value) -> Result<(String, Vec<u8>, u64)> {
-    let contract = op["contract"].as_str().ok_or_else(|| anyhow!("op.contract"))?.to_string();
-    let payload = hex_arg(op["payload"].as_str().ok_or_else(|| anyhow!("op.payload"))?)?;
+/// `Auth` JSON of a job. `signature`: base64 64 byte (ADR-036) hoặc JSON passkey `{signature, authenticator_data,
+/// client_data_json}`.
+fn auth_json(op: &Value) -> Result<Value> {
     let sig = op["signature"].as_str().ok_or_else(|| anyhow!("op.signature"))?.trim();
     let pk = B64.encode(hex_arg(op["public_key"].as_str().ok_or_else(|| anyhow!("op.public_key"))?)?);
-    let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until"))?;
-    let auth = if sig.starts_with('{') {
+    Ok(if sig.starts_with('{') {
         let p: Value = serde_json::from_str(sig).context("passkey signature JSON")?;
         let field = |k: &str| p[k].as_str().map(str::to_string).ok_or_else(|| anyhow!("passkey.{k}"));
         json!({"scheme": "passkey", "pubkey": pk, "signature": field("signature")?,
@@ -190,8 +187,159 @@ pub fn relay_msg(op: &Value) -> Result<(String, Vec<u8>, u64)> {
             bail!("adr036 signature is 64 bytes base64");
         }
         json!({"scheme": "adr036", "pubkey": pk, "signature": sig})
+    })
+}
+
+/// Job `signed_op` ⇒ (contract, msg JSON `{"relay":{payload, auth}}`, valid_until).
+pub fn relay_msg(op: &Value) -> Result<(String, Vec<u8>, u64)> {
+    let contract = op["contract"].as_str().ok_or_else(|| anyhow!("op.contract"))?.to_string();
+    let payload = hex_arg(op["payload"].as_str().ok_or_else(|| anyhow!("op.payload"))?)?;
+    let valid_until = op["valid_until"].as_u64().ok_or_else(|| anyhow!("op.valid_until"))?;
+    let msg = json!({"relay": {"payload": B64.encode(&payload), "auth": auth_json(op)?}});
+    Ok((contract, serde_json::to_vec(&msg)?, valid_until))
+}
+
+// ------------------------------------------------------------------ CTR-MTX-26 / -27 (spec §6.2, §7.2)
+
+/// `max_pay_meta_bytes` (spec §9): the node's cap on a pay-meta `meta`.
+// TODO(T17): becomes the `max_pay_meta_bytes` config key (default 2,048) for every family, with the indexer
+// decoding of `payment_meta` / `relay_fee_paid` (joined by `pay_ref`).
+const MAX_PAY_META_BYTES: usize = 2048;
+
+fn keccak(parts: &[&[u8]]) -> [u8; 32] {
+    alloy::primitives::keccak256(parts.concat()).0
+}
+
+/// CTR-MTX-26: `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, the token's `meta_pay_id`.
+pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.meta", salt, &keccak(&[meta])])
+}
+
+/// `keccak256("scaas.pay.lane" ‖ p)`.
+pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.lane", p])
+}
+
+/// CTR-MTX-27 `ref = keccak256("scaas.relayfee" ‖ chain id ‖ target (canonical bytes) ‖ keccak256(msg))`, the
+/// router's `relay_ref`.
+pub fn relay_ref(chain_id: &str, target: &[u8], msg: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.relayfee", chain_id.as_bytes(), target, &keccak(&[msg])])
+}
+
+/// What the node accepts as a relay-fee job (controller call 2026-10-27, owner may override): the configured
+/// router, a registered token, and a fee of at least `min_amount`.
+#[derive(Debug, Clone, Default)]
+pub struct RelayFeePolicy {
+    pub router: Option<String>,
+    pub tokens: Vec<String>,
+    pub min_amount: u128,
+}
+
+impl RelayFeePolicy {
+    /// `params.relay_fee = { router = "<bech32 contract>", min_amount = N }` (default 1) and the chain's `tokens`. A
+    /// `router` that is set but is not a 32-byte contract address of this prefix is a config error.
+    pub fn from_cfg(cfg: &ChainCfg, prefix: &str) -> Result<Self> {
+        let t = cfg.params.get("relay_fee");
+        let router = match t.and_then(|t| t.get("router")) {
+            None => None,
+            Some(v) => {
+                let r = v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a bech32 string"))?;
+                let (hrp, data) = crate::addresses::bech32_decode(r).context("params.relay_fee.router")?;
+                if hrp != prefix || data.len() != 32 || r != r.to_ascii_lowercase() {
+                    bail!("params.relay_fee.router is not a lowercase {prefix}1… contract address");
+                }
+                Some(r.to_string())
+            }
+        };
+        Ok(Self {
+            router,
+            tokens: cfg.tokens.iter().map(|t| t.address.clone()).collect(),
+            min_amount: t.and_then(|t| t.get("min_amount")).and_then(|v| v.as_integer()).map_or(1, |v| v.max(0) as u128),
+        })
+    }
+}
+
+fn payload_of(op: &Value) -> Result<(Vec<u8>, Value)> {
+    let raw = hex_arg(op["payload"].as_str().ok_or_else(|| anyhow!("op.payload"))?)?;
+    let p: Value = serde_json::from_slice(&raw).context("op.payload is not a MetaOp")?;
+    Ok((raw, p))
+}
+
+fn field32(p: &Value, k: &str) -> Result<[u8; 32]> {
+    hex_arg(p[k].as_str().ok_or_else(|| anyhow!("payload.{k}"))?)?.try_into().map_err(|_| anyhow!("payload.{k} is 32 bytes"))
+}
+
+/// The job's message, checked before simulation (fail closed). `op.kind`: `"pay_meta"` (`op.salt`, `op.meta` hex:
+/// `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0`, `meta` within the cap; the token's
+/// `RelayPayMeta`), `"relay_fee"` (`op.contract` = the router, `op.extra.target` bech32, `op.extra.msg` hex, optional
+/// `op.ref`: the policy, and the payment commits to exactly this call; the router's `Relay`); else the plain `Relay`.
+pub fn job_msg(op: &Value, chain_id: &str, policy: &RelayFeePolicy) -> Result<(String, Vec<u8>, u64)> {
+    match op["kind"].as_str() {
+        Some("pay_meta") => pay_meta_msg(op),
+        Some("relay_fee") => relay_fee_msg(op, chain_id, policy),
+        _ => relay_msg(op),
+    }
+}
+
+fn pay_meta_msg(op: &Value) -> Result<(String, Vec<u8>, u64)> {
+    let (contract, _, valid_until) = relay_msg(op)?;
+    let (raw, p) = payload_of(op)?;
+    if p["contract"].as_str() != Some(contract.as_str()) {
+        bail!("op.contract is not the payload's contract");
+    }
+    let salt: [u8; 32] = hex_arg(op["salt"].as_str().ok_or_else(|| anyhow!("op.salt"))?)?
+        .try_into()
+        .map_err(|_| anyhow!("op.salt is 32 bytes"))?;
+    let meta = hex_arg(op["meta"].as_str().ok_or_else(|| anyhow!("op.meta"))?)?;
+    if meta.len() > MAX_PAY_META_BYTES {
+        bail!("meta is {} B, above the {MAX_PAY_META_BYTES} B cap", meta.len());
+    }
+    if p["op"] != "pay" {
+        bail!("pay-meta: op is not pay");
+    }
+    let id = meta_pay_id(&salt, &meta);
+    if field32(&p, "pay_ref")? != id || field32(&p, "lane")? != pay_lane(&id) || p["nonce"].as_u64() != Some(0) {
+        bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0");
+    }
+    let msg = json!({"relay_pay_meta": {"payload": B64.encode(&raw), "auth": auth_json(op)?,
+                                         "salt": alloy::hex::encode(salt), "meta": B64.encode(&meta)}});
+    Ok((contract, serde_json::to_vec(&msg)?, valid_until))
+}
+
+fn relay_fee_msg(op: &Value, chain_id: &str, policy: &RelayFeePolicy) -> Result<(String, Vec<u8>, u64)> {
+    let router = policy.router.as_deref().ok_or_else(|| anyhow!("params.relay_fee.router is not set"))?;
+    let (contract, _, valid_until) = relay_msg(op)?;
+    if contract != router {
+        bail!("op.contract is not params.relay_fee.router");
+    }
+    let (raw, p) = payload_of(op)?;
+    let token = p["contract"].as_str().ok_or_else(|| anyhow!("payload.contract"))?;
+    if !policy.tokens.iter().any(|t| t == token) {
+        bail!("token {token} is not registered on this chain");
+    }
+    if p["op"] != "pay" {
+        bail!("the relay-fee payment is not a pay op");
+    }
+    let amount: u128 = p["amount"].as_str().and_then(|a| a.parse().ok()).ok_or_else(|| anyhow!("payload.amount"))?;
+    if amount < policy.min_amount {
+        bail!("fee {amount} is below relay_fee.min_amount {}", policy.min_amount);
+    }
+    let target = op["extra"]["target"].as_str().ok_or_else(|| anyhow!("op.extra.target"))?;
+    let hrp = router.rsplit_once('1').map(|(h, _)| h);
+    let target_bytes = match crate::addresses::bech32_decode(target) {
+        Ok((h, data)) if Some(h.as_str()) == hrp && target == target.to_ascii_lowercase() => data,
+        _ => bail!("op.extra.target is not a lowercase bech32 address of this chain"),
     };
-    let msg = json!({"relay": {"payload": B64.encode(&payload), "auth": auth}});
+    let call = hex_arg(op["extra"]["msg"].as_str().ok_or_else(|| anyhow!("op.extra.msg"))?)?;
+    let r = relay_ref(chain_id, &target_bytes, &call);
+    if field32(&p, "pay_ref")? != r || field32(&p, "lane")? != pay_lane(&r) || p["nonce"].as_u64() != Some(0) || p["relayer"] != router {
+        bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router)");
+    }
+    if !op["ref"].is_null() && hex_arg(op["ref"].as_str().unwrap_or_default())? != r {
+        bail!("op.ref != relay_ref(chain id, target, msg)");
+    }
+    let msg = json!({"relay": {"target": target, "msg": B64.encode(&call), "token": token,
+                                "payload": B64.encode(&raw), "auth": auth_json(op)?}});
     Ok((contract, serde_json::to_vec(&msg)?, valid_until))
 }
 
@@ -309,6 +457,7 @@ pub struct CosmosAdapter {
     signers: Vec<LocalSigner>,
     http: reqwest::Client,
     account_numbers: Mutex<HashMap<usize, u64>>,
+    relay_fee: RelayFeePolicy,
     /// tx đã gửi ⇒ khối kế tiếp cần quét khi indexer tx không trả lời (review M2).
     /// ponytail: mục của tx chết hết hạn không bị xoá (vài byte mỗi job), dọn theo `valid_until` nếu cần.
     scan_from: Mutex<HashMap<String, u64>>,
@@ -335,6 +484,7 @@ impl CosmosAdapter {
         if !zero_fee && (gas_price.is_nan() || gas_price <= 0.0) {
             bail!("chain {}: params.gas_price must be > 0 (params.zero_fee = true only on a zero-fee devnet)", cfg.chain_key());
         }
+        let relay_fee = RelayFeePolicy::from_cfg(cfg, &prefix)?;
         Ok(Self {
             key: cfg.chain_key(),
             chain_id,
@@ -348,6 +498,7 @@ impl CosmosAdapter {
             signers,
             http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
             account_numbers: Mutex::new(HashMap::new()),
+            relay_fee,
             scan_from: Mutex::new(HashMap::new()),
         })
     }
@@ -410,11 +561,12 @@ impl ChainAdapter for CosmosAdapter {
         &self.lanes
     }
 
-    /// R80: `pay` ⇒ `QueryMsg::Nonce {owner, lane}` (`NONCES[(from, lane)]` của token) so với nonce đã ký.
+    /// R80: `pay` ⇒ `QueryMsg::Nonce {owner, lane}` (`NONCES[(from, lane)]` của token) so với nonce đã ký. Token =
+    /// `payload.contract` (một job relay-fee gửi tới router, không phải token).
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Some(op) = job.op.as_ref().filter(|o| o["op_kind"] == "pay") else { return Ok(None) };
         let payload: Value = serde_json::from_slice(&hex_arg(op["payload"].as_str().unwrap_or_default())?)?;
-        let (Some(nonce), Some(contract)) = (payload["nonce"].as_u64(), op["contract"].as_str()) else { return Ok(None) };
+        let (Some(nonce), Some(contract)) = (payload["nonce"].as_u64(), payload["contract"].as_str()) else { return Ok(None) };
         if payload["op"] != "pay" {
             return Ok(None);
         }
@@ -427,7 +579,8 @@ impl ChainAdapter for CosmosAdapter {
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let op = job.op.as_ref().ok_or_else(|| SimError::Revert("job has no op".into()))?;
-        let (contract, msg, valid_until) = relay_msg(op).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let (contract, msg, valid_until) =
+            job_msg(op, &self.chain_id, &self.relay_fee).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let sender = self.lanes.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?.address.clone();
         let (_, seq) = self.account(lane).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
         let pk = self.pk(lane).map_err(|e| SimError::Transport(e.to_string()))?;
@@ -722,6 +875,145 @@ mod tests {
         assert_eq!(tx_in_block(&block, &results, &id(b"other")), None);
     }
 
+    // ------------------------------------------------------------------ CTR-MTX-26 / -27 jobs
+
+    const CHAIN: &str = "scaas-1";
+
+    fn router() -> String {
+        bech32("wasm", &[0x55; 32])
+    }
+
+    fn token() -> String {
+        bech32("wasm", &[0x66; 32])
+    }
+
+    fn policy() -> RelayFeePolicy {
+        RelayFeePolicy { router: Some(router()), tokens: vec![token()], min_amount: 5 }
+    }
+
+    /// A signed `pay` op as the token parses it (keys sorted, `HexBinary` without `0x`, `Uint128` as a string).
+    fn pay_payload(pay_ref: &[u8; 32], lane: &[u8; 32], nonce: u64, relayer: &str, to: &str, amount: u128) -> Value {
+        json!({"amount": amount.to_string(), "contract": token(), "domain": "scaas.metaop.v1", "extra": "",
+               "from": bech32("wasm", &[0x33; 20]), "lane": alloy::hex::encode(lane), "network": CHAIN, "nonce": nonce,
+               "op": "pay", "pay_ref": alloy::hex::encode(pay_ref), "relayer": relayer, "to": to, "valid_until": 2_000_000_000u64})
+    }
+
+    fn job(kind: &str, contract: &str, payload: &Value) -> Value {
+        json!({"kind": kind, "contract": contract, "payload": alloy::hex::encode(serde_json::to_vec(payload).unwrap()),
+               "signature": B64.encode([7u8; 64]), "public_key": alloy::hex::encode([2u8; 33]), "valid_until": 2_000_000_000u64})
+    }
+
+    fn rows() -> Vec<Value> {
+        serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap()
+    }
+
+    fn unhex32(v: &Value) -> [u8; 32] {
+        hex_arg(v.as_str().unwrap()).unwrap().try_into().unwrap()
+    }
+
+    #[test]
+    fn cosmos_pay_meta_job_builds_msg() {
+        for r in rows() {
+            let id = meta_pay_id(&unhex32(&r["salt"]), &hex_arg(r["meta"].as_str().unwrap()).unwrap());
+            assert_eq!(format!("0x{}", alloy::hex::encode(id)), r["payId"].as_str().unwrap());
+            assert_eq!(format!("0x{}", alloy::hex::encode(pay_lane(&id))), r["payLane"].as_str().unwrap());
+        }
+        let r = &rows()[0];
+        let (salt, meta) = (unhex32(&r["salt"]), hex_arg(r["meta"].as_str().unwrap()).unwrap());
+        let id = meta_pay_id(&salt, &meta);
+        let payee = bech32("wasm", &[0x44; 20]);
+        let mk = |p: &Value, salt: &[u8], meta: &[u8]| {
+            let mut o = job("pay_meta", &token(), p);
+            o["salt"] = json!(alloy::hex::encode(salt));
+            o["meta"] = json!(format!("0x{}", alloy::hex::encode(meta)));
+            o
+        };
+        let good = pay_payload(&id, &pay_lane(&id), 0, "", &payee, 10);
+        let (contract, msg, vu) = job_msg(&mk(&good, &salt, &meta), CHAIN, &policy()).unwrap();
+        assert_eq!((contract, vu), (token(), 2_000_000_000));
+        let m: Value = serde_json::from_slice(&msg).unwrap();
+        let x = &m["relay_pay_meta"];
+        assert_eq!(B64.decode(x["payload"].as_str().unwrap()).unwrap(), serde_json::to_vec(&good).unwrap());
+        assert_eq!(x["salt"].as_str().unwrap(), alloy::hex::encode(salt));
+        assert_eq!(B64.decode(x["meta"].as_str().unwrap()).unwrap(), meta);
+        assert_eq!(x["auth"]["scheme"], "adr036");
+        let err = |o: Value| job_msg(&o, CHAIN, &policy()).unwrap_err().to_string();
+        const SHAPE: &str = "pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0";
+        assert_eq!(err(mk(&good, &[1; 32], &meta)), SHAPE);
+        assert_eq!(err(mk(&good, &salt, b"other")), SHAPE);
+        assert_eq!(err(mk(&pay_payload(&id, &[3; 32], 0, "", &payee, 10), &salt, &meta)), SHAPE);
+        assert_eq!(err(mk(&pay_payload(&id, &pay_lane(&id), 1, "", &payee, 10), &salt, &meta)), SHAPE);
+        assert_eq!(err(mk(&good, &salt[..31], &meta)), "op.salt is 32 bytes");
+        let mut revoke = good.clone();
+        revoke["op"] = json!("revoke");
+        assert_eq!(err(mk(&revoke, &salt, &meta)), "pay-meta: op is not pay");
+        let long = vec![0u8; MAX_PAY_META_BYTES + 1];
+        assert_eq!(err(mk(&good, &salt, &long)), format!("meta is {} B, above the {MAX_PAY_META_BYTES} B cap", long.len()));
+        let mut other = mk(&good, &salt, &meta);
+        other["contract"] = json!(router());
+        assert_eq!(err(other), "op.contract is not the payload's contract");
+    }
+
+    /// The `vector.txt` ref (shared with the contract suite), and every check before simulation (fail closed).
+    #[test]
+    fn cosmos_relay_fee_job_checks_ref() {
+        let vector = include_str!("../../../smartcontracts/cosmos/tests/tests/vector.txt");
+        let line = |k: &str| vector.lines().find_map(|l| l.strip_prefix(&format!("{k}="))).unwrap().to_string();
+        let (target, call) = (line("contract"), line("relay_msg"));
+        let rf: [u8; 32] = relay_ref(&line("relay_chain"), &[0x44; 32], call.as_bytes());
+        assert_eq!(alloy::hex::encode(rf), line("relay_ref"));
+        let mk = |p: &Value, target: &str, call: &[u8]| {
+            let mut o = job("relay_fee", &router(), p);
+            o["extra"] = json!({"target": target, "msg": alloy::hex::encode(call)});
+            o
+        };
+        let good = pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5);
+        let (contract, msg, _) = job_msg(&mk(&good, &target, call.as_bytes()), CHAIN, &policy()).unwrap();
+        assert_eq!(contract, router());
+        let m: Value = serde_json::from_slice(&msg).unwrap();
+        let x = &m["relay"];
+        assert_eq!((x["target"].as_str().unwrap(), x["token"].as_str().unwrap()), (target.as_str(), token().as_str()));
+        assert_eq!(B64.decode(x["msg"].as_str().unwrap()).unwrap(), call.as_bytes());
+        assert_eq!(B64.decode(x["payload"].as_str().unwrap()).unwrap(), serde_json::to_vec(&good).unwrap());
+        let mut with_ref = mk(&good, &target, call.as_bytes());
+        with_ref["ref"] = json!(format!("0x{}", line("relay_ref")));
+        assert!(job_msg(&with_ref, CHAIN, &policy()).is_ok());
+        let err = |o: &Value, p: &RelayFeePolicy| job_msg(o, CHAIN, p).unwrap_err().to_string();
+        let o = mk(&good, &target, call.as_bytes());
+        assert_eq!(err(&o, &RelayFeePolicy { router: None, ..policy() }), "params.relay_fee.router is not set");
+        assert_eq!(err(&o, &RelayFeePolicy { router: Some(token()), ..policy() }), "op.contract is not params.relay_fee.router");
+        assert_eq!(err(&o, &RelayFeePolicy { tokens: vec![], ..policy() }), format!("token {} is not registered on this chain", token()));
+        assert_eq!(err(&o, &RelayFeePolicy { min_amount: 6, ..policy() }), "fee 5 is below relay_fee.min_amount 6");
+        const BOUND: &str = "the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router)";
+        assert_eq!(err(&mk(&good, &target, b"{\"record\":{}}"), &policy()), BOUND);
+        assert_eq!(err(&mk(&good, &bech32("wasm", &[0x45; 32]), call.as_bytes()), &policy()), BOUND);
+        assert_eq!(err(&mk(&pay_payload(&rf, &[1; 32], 0, &router(), &router(), 5), &target, call.as_bytes()), &policy()), BOUND);
+        assert_eq!(err(&mk(&pay_payload(&rf, &pay_lane(&rf), 1, &router(), &router(), 5), &target, call.as_bytes()), &policy()), BOUND);
+        assert_eq!(err(&mk(&pay_payload(&rf, &pay_lane(&rf), 0, "", &router(), 5), &target, call.as_bytes()), &policy()), BOUND);
+        let mut bad_ref = mk(&good, &target, call.as_bytes());
+        bad_ref["ref"] = json!(format!("0x{}", "00".repeat(32)));
+        assert_eq!(err(&bad_ref, &policy()), "op.ref != relay_ref(chain id, target, msg)");
+        assert_eq!(err(&mk(&good, &target.to_uppercase(), call.as_bytes()), &policy()), "op.extra.target is not a lowercase bech32 address of this chain");
+        assert_eq!(err(&mk(&good, &bech32("cosmos", &[0x44; 32]), call.as_bytes()), &policy()), "op.extra.target is not a lowercase bech32 address of this chain");
+        let mut revoke = good.clone();
+        revoke["op"] = json!("revoke");
+        assert_eq!(err(&mk(&revoke, &target, call.as_bytes()), &policy()), "the relay-fee payment is not a pay op");
+    }
+
+    /// Rule 8: `params.relay_fee.router` set but unparsable is a startup error, never a silently disabled router.
+    #[test]
+    fn cosmos_relay_fee_policy_config() {
+        let k = || vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+        let cfg = |rf: &str| chain(&format!("network = \"c-1\"\nparams = {{ rest = \"http://x\", prefix = \"wasm\", gas_price = \"0.025\"{rf} }}"));
+        assert!(CosmosAdapter::new(&cfg(""), k()).unwrap().relay_fee.router.is_none());
+        let ok = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = \"{}\", min_amount = 7 }}", router())), k()).unwrap();
+        assert_eq!((ok.relay_fee.router.clone(), ok.relay_fee.min_amount), (Some(router()), 7));
+        for bad in ["\"wasm1notbech32\"", "12", &format!("\"{}\"", bech32("cosmos", &[0x55; 32])), &format!("\"{}\"", bech32("wasm", &[0x55; 20]))] {
+            let e = CosmosAdapter::new(&cfg(&format!(", relay_fee = {{ router = {bad} }}")), k()).err().map(|e| format!("{e:#}")).unwrap_or_default();
+            assert!(e.contains("params.relay_fee.router"), "{bad}: {e}");
+        }
+    }
+
     proptest! {
         /// Decoder không bao giờ panic trên JSON bất kỳ (phản hồi RPC là đầu vào không tin cậy — R54).
         #[test]
@@ -729,6 +1021,27 @@ mod tests {
             if let Ok(v) = serde_json::from_str::<Value>(&s) {
                 let _ = normalize_tx(&v, &["wasm1tok".into()]);
                 let _ = relay_msg(&v);
+            }
+        }
+
+        /// Rule 8: the new jobs never panic on untrusted input (random fields, and a one-byte mutation of a valid job).
+        #[test]
+        fn cosmos_jobs_never_panic(payload in "\\PC{0,200}", extra in "\\PC{0,120}", salt in "[0-9a-f]{0,70}",
+                                   meta in "[0-9a-fx]{0,80}", kind in 0usize..3, at in 0usize..2000, byte in any::<u8>()) {
+            let kinds = ["pay_meta", "relay_fee", "relay"];
+            let mut o = job(kinds[kind], &router(), &json!(payload));
+            o["salt"] = json!(salt);
+            o["meta"] = json!(meta);
+            o["extra"] = serde_json::from_str(&extra).unwrap_or(json!({"target": extra, "msg": meta}));
+            let _ = job_msg(&o, CHAIN, &policy());
+            let rf = relay_ref(CHAIN, &[0x44; 32], b"{}");
+            let mut good = job("relay_fee", &router(), &pay_payload(&rf, &pay_lane(&rf), 0, &router(), &router(), 5));
+            good["extra"] = json!({"target": bech32("wasm", &[0x44; 32]), "msg": "7b7d"});
+            let mut raw = serde_json::to_vec(&good).unwrap();
+            let i = at % raw.len();
+            raw[i] = byte;
+            if let Ok(v) = serde_json::from_slice::<Value>(&raw) {
+                let _ = job_msg(&v, CHAIN, &policy());
             }
         }
 

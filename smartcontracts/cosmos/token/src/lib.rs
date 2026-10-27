@@ -11,7 +11,7 @@ use cosmwasm_std::{
 use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 
-use scaas_metaop::{err, verify, Auth, Cw20ReceiveMsg, ReceiverExecuteMsg};
+use scaas_metaop::{err, meta_pay_id, pay_lane, verify, Auth, Cw20ReceiveMsg, ReceiverExecuteMsg};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -42,6 +42,9 @@ pub enum ExecuteMsg {
     Pay { to: String, amount: Uint128, pay_ref: HexBinary },
     /// Meta-tx: `payload` = bytes `MetaOp` chủ thể đã ký (op `pay` | `trade` | `revoke`).
     Relay { payload: Binary, auth: Auth },
+    /// CTR-MTX-26: the same signed `pay` op, plus `(salt, meta)` unsigned: `pay_ref == metaPayId(salt, meta)`,
+    /// `lane == payLane(pay_ref)`, `nonce == 0`; emits `payment_meta` before `payment_settled`.
+    RelayPayMeta { payload: Binary, auth: Auth, salt: HexBinary, meta: Binary },
     IncreaseAllowance { spender: String, amount: Uint128 },
     DecreaseAllowance { spender: String, amount: Uint128 },
     TransferFrom { owner: String, recipient: String, amount: Uint128 },
@@ -152,7 +155,8 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
             let ev = settle(deps.storage, &info.sender, &to, amount, &pay_ref)?;
             Ok(Response::new().add_event(ev))
         }
-        ExecuteMsg::Relay { payload, auth } => relay(deps, env, info, &payload, &auth),
+        ExecuteMsg::Relay { payload, auth } => relay(deps, env, info, &payload, &auth, None),
+        ExecuteMsg::RelayPayMeta { payload, auth, salt, meta } => relay(deps, env, info, &payload, &auth, Some((&salt, &meta))),
         ExecuteMsg::IncreaseAllowance { spender, amount } => {
             let sp = deps.api.addr_validate(&spender)?;
             if !is_contract(&deps.as_ref(), &sp) {
@@ -185,9 +189,26 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> S
     }
 }
 
-fn relay(deps: DepsMut, env: Env, info: MessageInfo, payload: &[u8], auth: &Auth) -> StdResult<Response> {
+/// `pay_meta`: `(salt, meta)` of a `RelayPayMeta` (CTR-MTX-26), checked against the signed op before anything moves.
+fn relay(deps: DepsMut, env: Env, info: MessageInfo, payload: &[u8], auth: &Auth, pay_meta: Option<(&[u8], &[u8])>) -> StdResult<Response> {
     let v = verify(deps.api, &env, payload, auth)?;
     let op = &v.op;
+    let mut res = Response::new();
+    if let Some((salt, meta)) = pay_meta {
+        let salt: &[u8; 32] = salt.try_into().map_err(|_| err("pay-meta: salt is 32 bytes"))?;
+        if op.op != "pay" {
+            return Err(err("pay-meta: op is not pay"));
+        }
+        let id = meta_pay_id(salt, meta);
+        if op.pay_ref.as_slice() != id || op.lane.as_slice() != pay_lane(&id) || op.nonce != 0 {
+            return Err(err("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane(pay_ref) / 0"));
+        }
+        res = res.add_event(
+            Event::new("payment_meta")
+                .add_attribute("pay_id", format!("0x{}", HexBinary::from(id).to_hex()))
+                .add_attribute("meta", format!("0x{}", HexBinary::from(meta).to_hex())),
+        );
+    }
     if !op.relayer.is_empty() && op.relayer != info.sender.as_str() {
         return Err(err("metaop: bound to another relayer"));
     }
@@ -197,7 +218,6 @@ fn relay(deps: DepsMut, env: Env, info: MessageInfo, payload: &[u8], auth: &Auth
         return Err(err("metaop: nonce already used or out of order"));
     }
     NONCES.save(deps.storage, key, &(next + 1))?;
-    let mut res = Response::new();
     match op.op.as_str() {
         "pay" => {
             let to = deps.api.addr_validate(&op.to)?;
