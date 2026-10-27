@@ -9,7 +9,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT="${PORT:-18545}"
 RPC="http://127.0.0.1:$PORT"
-anvil --chain-id 31337 --hardfork osaka --gas-limit 16777216 --code-size-limit 65536 --port "$PORT" --silent &
+anvil --chain-id 31337 --hardfork amsterdam --gas-limit 100000000 --code-size-limit 65536 --port "$PORT" --silent &
 ANVIL=$!
 trap 'kill "$ANVIL" 2>/dev/null || true' EXIT
 for _ in $(seq 50); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break; sleep 0.2; done
@@ -40,7 +40,7 @@ cast send "$REG" 'register(uint16,bytes,bytes,bytes,bytes)' 0x0141 "$Y1" "$POP1"
 echo "1/2 Zether UA registered (clientkeys PoP, relayed)"
 # 2. the token side
 cd "$ROOT/smartcontracts/evm"
-ZETHER_Y="$Y1" forge script script/ZetherE2E.s.sol --rpc-url "$RPC" --broadcast --code-size-limit 65536 \
+ZETHER_Y="$Y1" forge script script/ZetherE2E.s.sol --rpc-url "$RPC" --broadcast --disable-code-size-limit \
   --sender "$DEPLOYER" --silent >/dev/null
 echo "2/2 NONE_ZETHER token shielded to the Zether UA (registered by kindOf)"
 echo "e2e-zether: 2/2 passed"

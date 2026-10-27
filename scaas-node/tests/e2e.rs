@@ -63,7 +63,7 @@ fn now() -> u64 {
 
 async fn start_anvil(chain_id: u64, port: u16) -> (Anvil, String) {
     let child = Command::new("anvil")
-        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "osaka", "--gas-limit", "16777216", "--code-size-limit", "65536", "--port", &port.to_string(), "--silent"])
+        .args(["--chain-id", &chain_id.to_string(), "--hardfork", "amsterdam", "--gas-limit", "100000000", "--code-size-limit", "65536", "--port", &port.to_string(), "--silent"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -84,7 +84,7 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
     let sc = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm");
     let status = Command::new("forge")
         .current_dir(sc)
-        .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--code-size-limit", "65536", "--sender", DEPLOYER_ADDRESS])
+        .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))

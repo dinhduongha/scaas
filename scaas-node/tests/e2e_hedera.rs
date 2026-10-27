@@ -62,7 +62,7 @@ fn sc() -> &'static str {
 
 async fn start_anvil() -> (Anvil, String) {
     let child = Command::new("anvil")
-        .args(["--chain-id", &CHAIN_ID.to_string(), "--hardfork", "osaka", "--gas-limit", "16777216", "--code-size-limit", "65536", "--port", &PORT.to_string(), "--silent"])
+        .args(["--chain-id", &CHAIN_ID.to_string(), "--hardfork", "amsterdam", "--gas-limit", "100000000", "--code-size-limit", "65536", "--port", &PORT.to_string(), "--silent"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -80,7 +80,7 @@ async fn start_anvil() -> (Anvil, String) {
 fn deploy(rpc: &str) -> Value {
     let status = Command::new("forge")
         .current_dir(sc())
-        .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--code-size-limit", "65536", "--sender", DEPLOYER_ADDRESS])
+        .args(["script", "script/hedera/DeployHedera.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("FOUNDRY_PROFILE", "private7622")

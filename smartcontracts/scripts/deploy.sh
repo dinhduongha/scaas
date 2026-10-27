@@ -9,7 +9,7 @@
 #                            previous file is put back if the broadcast fails). Every chain gets the UA registry
 #                            (`ua_registry`; its EIP-2537 / bn254-G2 kinds by an eth_call precompile probe, the Zether
 #                            kinds on dev chains only, the PQ kinds on the dev chains and 7622 only: unaudited, P6c).
-#                            Always --code-size-limit 65536: every token implementation
+#                            Always --disable-code-size-limit (forge 1.8.5 also applies EIP-3860 to the script contract itself); every token implementation
 #                            exceeds EIP-170 since the UA ledger (UA-4; owner: wait for Glamsterdam), so the chain needs
 #                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000); a chain at
 #                            24,576 refuses the deploy. Always --gas-estimate-multiplier 105: forge's default x1.30 on
@@ -26,14 +26,14 @@ set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
-  evm)     cd "$SC/evm"; Z=(--code-size-limit 65536)
+  evm)     cd "$SC/evm"; Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
            Z+=(--gas-estimate-multiplier 105) # the BLS inner-product verifier (~14 M) must stay under the 2^24 tx cap
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
            J="deployments/$(cast chain-id --rpc-url "$NET").json"; [ -f "$J" ] && cp "$J" "$J.prev"
            if forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast --slow "${Z[@]}" \
                --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@"; then rm -f "$J.prev"
            else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi ;;
-  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --code-size-limit 65536 \
+  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
   sui)     exec sui client --client.env "$NET" publish "$@" "$SC/move/sui" ;;
