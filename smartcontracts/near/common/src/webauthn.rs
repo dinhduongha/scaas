@@ -50,7 +50,7 @@ pub fn verify(
 
 /// NET-ALL-04 item 4 (WebAuthn L3 §5.8.1.2 bounded parse): clientDataJSON is exactly
 /// `{"type":"webauthn.get","challenge":"<b64url(challenge)>","origin":"` ‖ origin ‖ `"` followed by `}` (end) or
-/// `,"crossOrigin":false` then `}` (end) or `,`; no whitespace, no member before `crossOrigin`, and neither a
+/// `,"crossOrigin":false` then `}` (end) or `,` … `}` (the object must close, as EVM C1-2); no whitespace, no member before `crossOrigin`, and neither a
 /// `topOrigin` nor a second `crossOrigin` anywhere after. Returns the origin bytes (never containing `\`).
 pub fn origin_of<'a>(cd: &'a [u8], challenge: &[u8; 32]) -> Option<&'a [u8]> {
     let prefix = format!(r#"{{"type":"webauthn.get","challenge":"{}","origin":""#, b64url(challenge));
@@ -59,7 +59,7 @@ pub fn origin_of<'a>(cd: &'a [u8], challenge: &[u8; 32]) -> Option<&'a [u8]> {
     let (origin, tail) = (&rest[..end], &rest[end + 1..]);
     let ok = match tail.strip_prefix(br#","crossOrigin":false"#) {
         _ if tail == b"}" => true,
-        Some(t) => t == b"}" || (t.starts_with(b",") && !has(t, br#""topOrigin""#) && !has(t, br#""crossOrigin""#)),
+        Some(t) => t == b"}" || (t.starts_with(b",") && t.ends_with(b"}") && !has(t, br#""topOrigin""#) && !has(t, br#""crossOrigin""#)),
         None => false,
     };
     (ok && !origin.is_empty() && !origin.contains(&b'\\')).then_some(origin)

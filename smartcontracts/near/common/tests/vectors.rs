@@ -219,6 +219,7 @@ fn webauthn_grammar_net_all_04() {
         format!(r#"{pre},"topOrigin":"https://evil.test","crossOrigin":false}}"#),
         format!(r#"{pre},"other":"x","crossOrigin":false}}"#), // a member before crossOrigin
         format!(r#"{pre},"crossOrigin":false,"crossOrigin":true}}"#),
+        format!(r#"{pre},"crossOrigin":false,"#), // unclosed object (EVM WebAuthnClientData C1-2)
         format!(r#"{{"challenge":"{ch64}","type":"webauthn.get","origin":"{origin}"}}"#), // reordered
         format!(r#"{{"type": "webauthn.get","challenge":"{ch64}","origin":"{origin}"}}"#), // whitespace
         format!(r#"{{"type":"webauthn.create","challenge":"{ch64}","origin":"{origin}"}}"#),
