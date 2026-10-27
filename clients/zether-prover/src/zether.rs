@@ -821,9 +821,10 @@ pub const DECOY_LEG_GAS: u64 = 120_000;
 /// kind: the kind's gen-1 `verifyCap` (accounts.md, measured P6a / P6c: `fndsa512` 2.3 M measured, cap 2.5 M; `mldsa65`
 /// 5.80 M measured, cap 5.95 M on the cached expanded key). ESTIMATES from those caps, not re-measured with the audited
 /// `…/v3` legs (a gas run on the owner's go); a chain with a precompile verifies for far less (`mldsa65` ≈ 236 k), so
-/// the cap is the safe side. Other kinds (ed25519 ≈ 0.2 M, secp256k1, p256) are small against the 1 % margin: pass 0.
+/// the cap is the safe side (a documented over-estimate there, no per-chain logic). Other UA kinds are not offered here.
 pub fn ua_signer_gas(kind: &str) -> Option<u64> {
     match kind {
+        "ecdsa" => Some(0), // the `mtxExecute` envelope: the figures of `gas_limits` already hold it
         "fndsa512" => Some(2_500_000),
         "mldsa65" => Some(5_950_000),
         _ => None,

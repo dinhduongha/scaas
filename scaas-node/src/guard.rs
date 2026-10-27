@@ -390,6 +390,13 @@ mod tests {
         assert_eq!(kat("dex_order_kat.json", "settle_calldata")[..4], SEL_MTX_SETTLE);
         assert_eq!(kat("dex_order_kat.json", "cancel_orders_calldata")[..4], CALL_TABLE[8].0);
         assert_eq!(kat("dex_order_kat.json", "invalidate_calldata")[..4], SEL_MTX_INVALIDATE_NONCES);
+        // C6-2: the contract-generated exchange calldata (`DexKat.t.sol`, encoding only) selects the rows and round-trips
+        // through the node's own bindings, so a contract signature change that `abi.rs` does not follow fails here
+        let (ex, via) = (kat("dex_order_kat.json", "exchange_calldata"), kat("dex_order_kat.json", "exchange_via_calldata"));
+        assert_eq!(ex[..4], CALL_TABLE[6].0);
+        assert_eq!(via[..4], CALL_TABLE[7].0);
+        assert_eq!(crate::abi::ISCaaSDex::mtxExchangeCall::abi_decode(&ex).unwrap().abi_encode(), ex);
+        assert_eq!(crate::abi::ISCaaSDex::mtxExchangeViaCall::abi_decode(&via).unwrap().abi_encode(), via);
         assert_eq!(kat("trade_kat.json", "cancel_calldata")[..4], SEL_MTX_CANCEL_ORDER);
         assert_eq!(crate::abi::ISCaaSDex::mtxSettleCall::SELECTOR, SEL_MTX_SETTLE);
         assert_eq!(IToken::mtxWrapCall::SELECTOR, SEL_MTX_WRAP);

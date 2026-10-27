@@ -258,7 +258,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 /// when given): the statement's fee is `fee + M · decoyFee` (owner 2026-10-20); `mode`, the stored form: `bundle` | `compact`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
 /// form it takes), so the calldata calls `mtxConfidentialTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
-/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a `uaExecute` relay adds `uaSigner` (`"fndsa512"` | `"mldsa65"`, review2 C3-2) so the gas check counts `_uaAuthorize`.
+/// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34); a relayed build requires `uaSigner` (`"ecdsa"` | `"fndsa512"` | `"mldsa65"`, review2 C3-2) so the gas check counts `_uaAuthorize`.
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
     let h = header(v, 0, [0; 32], false)?;
@@ -282,11 +282,14 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     if d < opt_num(v, "minDecoyFee")? {
         return Err("`decoyFee` below the token's `minDecoyFee` (DecoyFeeOutOfRange)".into());
     }
-    // C3-2: a relay through `uaExecute` names the UA signer's kind (`uaSigner`); its verify cap joins the gas check
-    let signer_gas = match v.get("uaSigner").filter(|x| !x.is_null()) {
-        None => 0,
-        Some(_) if matches!(h.binding, Binding::Direct) => return Err("`uaSigner` needs an `envelopeBinding`".into()),
-        Some(k) => k.as_str().and_then(zether::ua_signer_gas).ok_or("`uaSigner` must be \"fndsa512\" or \"mldsa65\" (other kinds: omit it)")?,
+    // C3-2: a relayed build names the signer kind of the envelope it is relayed through (`ecdsa`: `mtxExecute`, adds 0;
+    // `fndsa512` / `mldsa65`: `uaExecute`, `_uaAuthorize` adds the kind's verify cap), so the gas check never uses the
+    // `mtxExecute` figures for a UA relay. Direct builds take none.
+    let signer_gas = match (v.get("uaSigner").filter(|x| !x.is_null()), matches!(h.binding, Binding::Relayed(_))) {
+        (None, false) => 0,
+        (None, true) => return Err("a relayed build needs `uaSigner`: \"ecdsa\" (mtxExecute), \"fndsa512\" or \"mldsa65\" (uaExecute)".into()),
+        (Some(_), false) => return Err("`uaSigner` needs an `envelopeBinding`".into()),
+        (Some(k), true) => k.as_str().and_then(zether::ua_signer_gas).ok_or("`uaSigner` must be \"ecdsa\", \"fndsa512\" or \"mldsa65\"")?,
     };
     let (st, p, w) = zether::prove_transfer_multi_ua(
         gens, &k, h.clone(), d, mode, &recipients, y_aud, ct::<C>(v, "acc")?, num(v, "balance")?, signer_gas, rng,

@@ -252,3 +252,24 @@ fn gas_cap_message() {
     assert!(e.contains("compact without the auditor (~16381440)"), "{e}");
     }
 }
+
+/// Review2 C3-2: a relayed build names how it is relayed, so the gas check never takes the `mtxExecute` figures for a
+/// `uaExecute` relay. BLS12-381 compact with the auditor at M = 7 is 15.6 M relayed through `mtxExecute`, 18.1 M through
+/// an `fndsa512` UA.
+#[test]
+fn a_relayed_build_names_its_signer_kind() {
+    let mut req = multi("bls12381");
+    req["recipients"] = json!((1..=7).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
+    req["envelopeBinding"] = json!(format!("0x{}", "33".repeat(32)));
+    assert!(err("proveTransferMulti", &req).contains("needs `uaSigner`"));
+    req["uaSigner"] = json!("ed25519");
+    assert!(err("proveTransferMulti", &req).contains("must be"));
+    req["uaSigner"] = json!("fndsa512");
+    assert!(err("proveTransferMulti", &req).contains("EIP-7825"), "over the cap through a UA");
+    req["uaSigner"] = json!("ecdsa");
+    ok("proveTransferMulti", &req);
+    // a direct build takes none
+    let mut d = multi("bls12381");
+    d["uaSigner"] = json!("ecdsa");
+    assert!(err("proveTransferMulti", &d).contains("needs an `envelopeBinding`"));
+}
