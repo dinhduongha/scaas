@@ -285,6 +285,7 @@ class Deployer:
     def __init__(self, s):
         self.s = s
         self.libs = {}
+        self.closure = {}  # name -> its transitive library addresses, leaf first
         self.addr = {}
 
     def lib(self, name):
@@ -293,16 +294,20 @@ class Deployer:
         return self.libs[name]
 
     def linked(self, name, src=None):
-        """The init code without arguments, the libraries linked in, and their addresses (plan 5g-Z2: a release's env
-        lists them with their code hashes)."""
+        """The init code without arguments, the libraries linked in, and their addresses: the TRANSITIVE link closure,
+        each library's own libraries first (metatx-split §4: a release's env lists every library of the closure with its
+        code hash, and `MtxPipelineLib` links `HederaLib`)."""
         code, links = artifact(name, src)
         libs = []
         for _, ls in links.items():
             for ln, pos in ls.items():
-                a = self.lib(ln)[2:]
-                libs.append("0x" + a)
+                a = self.lib(ln)  # deploys the library's own libraries first (deploy -> linked, recursively)
+                for x in self.closure[ln] + [a]:
+                    if x not in libs:
+                        libs.append(x)
                 for p in pos:
-                    code = code[:2 * p["start"]] + a + code[2 * (p["start"] + p["length"]):]
+                    code = code[:2 * p["start"]] + a[2:] + code[2 * (p["start"] + p["length"]):]
+        self.closure[name] = libs
         return bytes.fromhex(code), libs
 
     def deploy(self, name, args, src=None, label=None):

@@ -7,6 +7,7 @@ import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../src/metatx/AdminLib.sol";
 import {UnderlyingLib} from "../src/metatx/UnderlyingLib.sol";
+import {MtxPipelineLib} from "../src/metatx/MtxPipelineLib.sol";
 import {HederaLib} from "../src/hedera/HederaLib.sol";
 import {TradeLib} from "../src/trade/TradeLib.sol";
 import {ZetherLib} from "../src/zether/ZetherLib.sol";
@@ -176,8 +177,10 @@ abstract contract DeployBase is Script {
         _gate(address(f));
         vm.serializeAddress("deploy", "token_factory", address(f));
         if (register) {
-            address[] memory libs = new address[](3);
-            (libs[0], libs[1], libs[2]) = (address(AdminLib), address(HederaLib), address(TradeLib));
+            // the link closure of NoUnderlyingToken (task 6): MtxPipelineLib, which links HederaLib
+            address[] memory libs = new address[](4);
+            (libs[0], libs[1], libs[2], libs[3]) =
+                (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
             f.publishEnv(IOpenFactory.TokenKind.NONE, 1,
                 _env(f, address(reg), smartKeyAccountImpl, isHedera, new address[](0), libs));
             _requireReleaseGas("NoUnderlyingToken");
@@ -282,6 +285,14 @@ abstract contract DeployBase is Script {
         } catch {}
     }
 
+    /// @notice The link closure of a Zether token (task 6): `UnderlyingLib` only in `UNDERLYING_ZETHER`.
+    function _zetherLibs(bool underlying) internal view returns (address[] memory l) {
+        l = new address[](underlying ? 6 : 5);
+        (l[0], l[1], l[2], l[3], l[4]) =
+            (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib), address(ZetherLib));
+        if (underlying) l[5] = address(UnderlyingLib);
+    }
+
     /// @notice Dev chains only (CTR-ZTH-02; elsewhere the verifiers refuse to deploy): `ZetherStatements`,
     ///         `ZetherDisclosure`, the BLS12-381 inner-product verifier (the generators, ~14 M gas) and the transfer and
     ///         burn verifiers on it (classical Zether is BLS12-381 only, CTR-ZTH-32; the bn254 steps are in
@@ -303,14 +314,12 @@ abstract contract DeployBase is Script {
         vm.serializeAddress("deploy", "zether_verifier_bls12381", tv);
         vm.serializeAddress("deploy", "zether_burn_verifier_bls12381", bv);
         if (register) {
-            address[] memory libs = new address[](5);
-            (libs[0], libs[1], libs[2], libs[3], libs[4]) =
-                (address(AdminLib), address(HederaLib), address(TradeLib), address(UnderlyingLib), address(ZetherLib));
             address[] memory deps = new address[](4);
             (deps[0], deps[1], deps[2], deps[3]) = (tv, bv, address(ip), dis);
-            IFactoryToken.Env memory e = _env(f, reg, smartKeyAccountImpl, false, deps, libs);
-            f.publishEnv(IOpenFactory.TokenKind.NONE_ZETHER, 1, e);
-            f.publishEnv(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, e);
+            f.publishEnv(IOpenFactory.TokenKind.NONE_ZETHER, 1,
+                _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(false)));
+            f.publishEnv(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1,
+                _env(f, reg, smartKeyAccountImpl, false, deps, _zetherLibs(true)));
             _requireReleaseGas("NoUnderlyingZetherToken");
             _requireReleaseGas("UnderlyingZetherToken");
             address none = f.deployImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, 1,

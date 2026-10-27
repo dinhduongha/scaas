@@ -24,7 +24,7 @@ import {
 } from "../../src/zether/ZetherVerifier.sol";
 import {IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
-import {Catalogue} from "../helpers/Catalogue.sol";
+import {Catalogue, pinned} from "../helpers/Catalogue.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
@@ -394,7 +394,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         IOpenFactory.Release memory rel = factory.releaseOf(IOpenFactory.TokenKind.NONE_ZETHER, 1);
         assertEq(rel.implementation, address(noneImpl));
         assertEq(rel.envVersion, 1);
-        assertEq(rel.envHash, keccak256(abi.encode(_zenv())));
+        assertEq(rel.envHash, keccak256(abi.encode(pinned(_zenv(), IOpenFactory.TokenKind.NONE_ZETHER))));
     }
 
     /// Every proof path goes through the release's verifiers (CTR-ZTH-20): a single and a multi-recipient transfer

@@ -61,7 +61,7 @@ contract ZetherDeployTest is Test {
             assertEq(e.deps[1], bv);
             assertEq(e.deps[2], ip);
             assertEq(e.deps[3], _at(h, type(ZetherDisclosure).creationCode));
-            assertEq(e.libs.length, 5);
+            assertEq(e.libs.length, k == 2 ? 5 : 6); // NONE_ZETHER: no UnderlyingLib
             for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash);
         }
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_verifier_", key)), tv);

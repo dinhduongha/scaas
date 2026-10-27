@@ -5,6 +5,12 @@ import {Vm} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {UnderlyingLib} from "../../src/metatx/UnderlyingLib.sol";
+import {MtxPipelineLib} from "../../src/metatx/MtxPipelineLib.sol";
+import {HederaLib} from "../../src/hedera/HederaLib.sol";
+import {TradeLib} from "../../src/trade/TradeLib.sol";
+import {ZetherLib} from "../../src/zether/ZetherLib.sol";
 import {PqzStateLib} from "../../src/pqz/PqzStateLib.sol";
 import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
 import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
@@ -26,19 +32,40 @@ function zetherEnv(address factory, bytes32 uid, address registry, address trans
     (e.deps[0], e.deps[1], e.deps[2], e.deps[3]) = (transfer, burn, innerProduct, disclosure);
 }
 
-/// @notice A `*_PQZ` environment: `deps` = the `UAPqzVerifier`; `libs` = the four PQZ libraries (plan 5h D14) with
-///         their code hashes, which `deployImplementation` checks.
+/// @notice A `*_PQZ` environment: `deps` = the `UAPqzVerifier`; the libraries are the kind's link closure
+///         (`Catalogue.env` pins them, task 6).
 function pqzEnv(address factory, bytes32 uid, address registry, address verifier)
-    view returns (IFactoryToken.Env memory e)
+    pure returns (IFactoryToken.Env memory e)
 {
     e = plainEnv(factory, address(0), uid, registry, false);
     e.deps = new address[](1);
     e.deps[0] = verifier;
-    e.libs = new address[](4);
-    (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) =
-        (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
-    e.libCodeHashes = new bytes32[](4);
-    for (uint256 i; i < 4; ++i) e.libCodeHashes[i] = e.libs[i].codehash;
+}
+
+/// @notice The transitive link closure of `kind`'s implementation (metatx-split §4, R5), each library with its code
+///         hash. Checked against the artifacts' `linkReferences` by `LinkClosure.t.sol`.
+function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+    bool und = kind == IOpenFactory.TokenKind.UNDERLYING || kind == IOpenFactory.TokenKind.UNDERLYING_ZETHER
+        || kind == IOpenFactory.TokenKind.UNDERLYING_PQZ;
+    bool zth = kind == IOpenFactory.TokenKind.NONE_ZETHER || kind == IOpenFactory.TokenKind.UNDERLYING_ZETHER;
+    bool pqz = kind == IOpenFactory.TokenKind.NONE_PQZ || kind == IOpenFactory.TokenKind.UNDERLYING_PQZ;
+    l = new address[](4 + (und ? 1 : 0) + (zth ? 1 : 0) + (pqz ? 4 : 0));
+    (l[0], l[1], l[2], l[3]) = (address(AdminLib), address(HederaLib), address(TradeLib), address(MtxPipelineLib));
+    uint256 n = 4;
+    if (und) l[n++] = address(UnderlyingLib);
+    if (zth) l[n++] = address(ZetherLib);
+    if (pqz) {
+        (l[n], l[n + 1], l[n + 2], l[n + 3]) =
+            (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
+    }
+}
+
+/// @notice `e` with `kind`'s link closure pinned (libraries and their code hashes).
+function pinned(IFactoryToken.Env memory e, IOpenFactory.TokenKind kind) view returns (IFactoryToken.Env memory) {
+    e.libs = closureLibs(kind);
+    e.libCodeHashes = new bytes32[](e.libs.length);
+    for (uint256 i; i < e.libs.length; ++i) e.libCodeHashes[i] = e.libs[i].codehash;
+    return e;
 }
 
 /// @notice The registrar's catalogue calls for tests (plan 5g-Z2): publish an env, deploy a release from init code.
@@ -48,6 +75,7 @@ library Catalogue {
 
     /// @dev `e` as the kind's latest env: reused when equal to the latest, else published as the next version.
     function env(OpenFactory f, IOpenFactory.TokenKind kind, IFactoryToken.Env memory e) internal returns (uint16 v) {
+        if (e.libs.length == 0) e = pinned(e, kind); // an env with no pins gets the kind's link closure
         v = f.latestEnvVersion(kind);
         if (v != 0 && keccak256(abi.encode(f.envOf(kind, v))) == keccak256(abi.encode(e))) return v;
         v += 1;
@@ -74,6 +102,10 @@ library Catalogue {
     /// @dev DEX release `version` from `code` on a DEX env with `ska` (published once per distinct env).
     function dex(OpenFactory f, uint64 version, bytes memory code, address ska) internal returns (address) {
         IFactoryToken.Env memory e = plainEnv(address(f), ska, f.chainUid(), address(0), false);
+        e.libs = new address[](1);
+        e.libs[0] = address(TradeLib);
+        e.libCodeHashes = new bytes32[](1);
+        e.libCodeHashes[0] = address(TradeLib).codehash;
         uint16 v = f.latestDexEnvVersion();
         if (v == 0 || keccak256(abi.encode(f.dexEnvOf(v))) != keccak256(abi.encode(e))) {
             vm.prank(f.registrar());
