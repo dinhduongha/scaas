@@ -1,0 +1,97 @@
+# 2026-10-27 Zether classical gas re-measurement (branch gas-zether from main f72ed295), measured by the controller
+# BLS12-381 only (bn254 has no on-chain verifier since UA-6: its prover rows are legacy, not re-measured). EVM amsterdam, forge isolate.
+# Per cell: one isolated transaction at gas limit 2^24 + 40,000,000. regular = vm.lastCallGas().gasTotalUsed (21,000 + calldata floor
+# + execution; EIP-7825 counts this), state = gasStateUsed (EIP-8037, on top of the cap). Forge gas is deterministic (not a timing run).
+# Probes stop at the first M whose regular gas passes 2^24 - 1 % (16,609,444).
+# cmd: ZETHER_GAS_PROBE=1 scripts/capped forge test --root smartcontracts/evm --gas-limit 9000000000000000000 --match-path test/zether/ZetherGasLimit.t.sol --match-test test_measure -vv
+GAS bls12381 direct bundle on M=1 regular=3866396 state=3818880 ok
+GAS bls12381 direct bundle on M=2 regular=5806396 state=6854400 ok
+GAS bls12381 direct bundle on M=3 regular=7748737 state=9889920 ok
+GAS bls12381 direct bundle on M=4 regular=9693084 state=12925440 ok
+GAS bls12381 direct bundle on M=5 regular=11639701 state=15960960 ok
+GAS bls12381 direct bundle on M=6 regular=13588563 state=18996480 ok
+GAS bls12381 direct bundle on M=7 regular=15539766 state=22032000 ok
+GAS bls12381 direct bundle on M=8 regular=17493789 state=25067520 ok
+GAS bls12381 direct bundle out M=1 regular=3703599 state=3035520 ok
+GAS bls12381 direct bundle out M=2 regular=5479837 state=5287680 ok
+GAS bls12381 direct bundle out M=3 regular=7256826 state=7539840 ok
+GAS bls12381 direct bundle out M=4 regular=9034673 state=9792000 ok
+GAS bls12381 direct bundle out M=5 regular=10813764 state=12044160 ok
+GAS bls12381 direct bundle out M=6 regular=12593845 state=14296320 ok
+GAS bls12381 direct bundle out M=7 regular=14375144 state=16548480 ok
+GAS bls12381 direct bundle out M=8 regular=16157755 state=18800640 ok
+GAS bls12381 direct bundle out M=9 regular=17941923 state=21052800 ok
+GAS bls12381 relayed bundle on M=1 regular=3936711 state=4014720 ok
+GAS bls12381 relayed bundle on M=2 regular=5880167 state=7050240 ok
+GAS bls12381 relayed bundle on M=3 regular=7825701 state=10085760 ok
+GAS bls12381 relayed bundle on M=4 regular=9773852 state=13121280 ok
+GAS bls12381 relayed bundle on M=5 regular=11724153 state=16156800 ok
+GAS bls12381 relayed bundle on M=6 regular=13677358 state=19192320 ok
+GAS bls12381 relayed bundle on M=7 regular=15633050 state=22227840 ok
+GAS bls12381 relayed bundle on M=8 regular=17591776 state=25263360 ok
+GAS bls12381 relayed bundle out M=1 regular=3774010 state=3231360 ok
+GAS bls12381 relayed bundle out M=2 regular=5553524 state=5483520 ok
+GAS bls12381 relayed bundle out M=3 regular=7333778 state=7735680 ok
+GAS bls12381 relayed bundle out M=4 regular=9115525 state=9987840 ok
+GAS bls12381 relayed bundle out M=5 regular=10898552 state=12240000 ok
+GAS bls12381 relayed bundle out M=6 regular=12682676 state=14492160 ok
+GAS bls12381 relayed bundle out M=7 regular=14468428 state=16744320 ok
+GAS bls12381 relayed bundle out M=8 regular=16255778 state=18996480 ok
+GAS bls12381 relayed bundle out M=9 regular=18044925 state=21248640 ok
+GAS bls12381 direct compact on M=1 regular=3668948 state=3245130 ok
+GAS bls12381 direct compact on M=2 regular=5395844 state=5497290 ok
+GAS bls12381 direct compact on M=3 regular=7112613 state=7651530 ok
+GAS bls12381 direct compact on M=4 regular=8832001 state=9805770 ok
+GAS bls12381 direct compact on M=5 regular=10553767 state=11960010 ok
+GAS bls12381 direct compact on M=6 regular=12280288 state=14114250 ok
+GAS bls12381 direct compact on M=7 regular=14017143 state=16366410 ok
+GAS bls12381 direct compact on M=8 regular=15746755 state=18520650 ok
+GAS bls12381 direct compact on M=9 regular=17478898 state=20674890 ok
+GAS bls12381 direct compact out M=1 regular=3586211 state=3245130 ok
+GAS bls12381 direct compact out M=2 regular=5229117 state=5497290 ok
+GAS bls12381 direct compact out M=3 regular=6860942 state=7651530 ok
+GAS bls12381 direct compact out M=4 regular=8493722 state=9805770 ok
+GAS bls12381 direct compact out M=5 regular=10128010 state=11960010 ok
+GAS bls12381 direct compact out M=6 regular=11765713 state=14114250 ok
+GAS bls12381 direct compact out M=7 regular=13412496 state=16366410 ok
+GAS bls12381 direct compact out M=8 regular=15050888 state=18520650 ok
+GAS bls12381 direct compact out M=9 regular=16690653 state=20674890 ok
+GAS bls12381 relayed compact on M=1 regular=3739409 state=3440970 ok
+GAS bls12381 relayed compact on M=2 regular=5469533 state=5693130 ok
+GAS bls12381 relayed compact on M=3 regular=7189978 state=7847370 ok
+GAS bls12381 relayed compact on M=4 regular=8913154 state=10001610 ok
+GAS bls12381 relayed compact on M=5 regular=10638882 state=12155850 ok
+GAS bls12381 relayed compact on M=6 regular=12369693 state=14310090 ok
+GAS bls12381 relayed compact on M=7 regular=14110830 state=16562250 ok
+GAS bls12381 relayed compact on M=8 regular=15845170 state=18716490 ok
+GAS bls12381 relayed compact on M=9 regular=17582157 state=20870730 ok
+GAS bls12381 relayed compact out M=1 regular=3656636 state=3440970 ok
+GAS bls12381 relayed compact out M=2 regular=5302974 state=5693130 ok
+GAS bls12381 relayed compact out M=3 regular=6938139 state=7847370 ok
+GAS bls12381 relayed compact out M=4 regular=8574923 state=10001610 ok
+GAS bls12381 relayed compact out M=5 regular=10213185 state=12155850 ok
+GAS bls12381 relayed compact out M=6 regular=11854974 state=14310090 ok
+GAS bls12381 relayed compact out M=7 regular=13506363 state=16562250 ok
+GAS bls12381 relayed compact out M=8 regular=15149411 state=18716490 ok
+GAS bls12381 relayed compact out M=9 regular=16793840 state=20870730 ok
+GAS bls12381 direct single on M=1 regular=3754104 state=3427200 ok
+GAS bls12381 direct single out M=1 regular=3669928 state=3035520 ok
+GAS bls12381 relayed single on M=1 regular=3824264 state=3623040 ok
+GAS bls12381 relayed single out M=1 regular=3740220 state=3231360 ok
+# edges: largest admitted M per cell, settled at 2^24 + 40 M, regular <= 2^24 - 1 %
+# cmd: scripts/capped forge test --root smartcontracts/evm --match-path test/zether/ZetherGasLimit.t.sol --match-test test_edge -vv
+[PASS] test_edge_bundleOn() (gas: 292314447)
+EDGE cell 2 direct M=7 regular=15539766 state=22032000
+EDGE cell 2 relayed M=7 regular=15633050 state=22227840
+[PASS] test_edge_bundleOut() (gas: 319614994)
+EDGE cell 3 direct M=8 regular=16157755 state=18800640
+EDGE cell 3 relayed M=8 regular=16255778 state=18996480
+[PASS] test_edge_compactOn() (gas: 320759475)
+EDGE cell 0 direct M=8 regular=15746755 state=18520650
+EDGE cell 0 relayed M=8 regular=15845170 state=18716490
+[PASS] test_edge_compactOut() (gas: 316956266)
+EDGE cell 1 direct M=8 regular=15050888 state=18520650
+EDGE cell 1 relayed M=8 regular=15149411 state=18716490
+# tests: forge --match-path 'test/zether/*': 19 suites, 232 passed, 0 failed, 4 skipped (3 probes + cross, ffi off)
+# cross-check (ZETHER_CLI=.../zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol): 6 passed, 0 skipped
+# cargo test -j2 in clients/zether-prover: all ok (default and --features bn254)

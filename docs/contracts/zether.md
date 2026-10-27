@@ -1385,7 +1385,7 @@ depend on the value (identical for `v = 300`, `v = 2^32 + 5`, `v = 2^64 − 1`).
 the first column; `mtxUnshield` is on `NONE_ZETHER` (public mint, no underlying transfer); `mtxWrapShield` and
 `mtxUnshieldUnwrap` are not measured. UA-6 (U9) removed the registry authorization call and the `authSig` calldata
 from every spend and moved the owner ops to `requireAuthorized`; the BLS12-381 figures below are re-measured after it (UA-6 U18, 2026-10-20, `runs/2026-10-20-ua6-gas.txt`; the
-max-`M` rows of the EIP-7825 table moved: the prover's `gas_limits` follow).
+max-`M` rows of the EIP-7825 table were re-measured 2026-10-27, `runs/2026-10-27-zether-gas-v3.txt`).
 
 | Operation (test) | BLS12-381 | Earlier estimate (bn254 unless noted) | Deviation (n_v = 64) |
 |---|---|---|---|
@@ -1454,7 +1454,7 @@ BUNDLE token (the `NONE` form, `mtxConfidentialTransferNoBundle`, is retired: re
 | BLS12-381 | BUNDLE | on | 3,976,535 | 6,046,855 | 10,191,643 | **18,499,048** | 6,948 / 10,116 / 16,452 / 29,124 |
 | BLS12-381 | BUNDLE | out | 3,856,696 | 5,806,166 | 9,708,732 | **17,529,613** | same |
 
-<details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
+<details><summary>Legacy bn254 rows (minimum gas limits as measured on Osaka before UA-6; <code>legacy/ua6/</code>; not re-measured: no bn254 verifier is deployed any more, and the prover keeps them with its <code>HASH_RECORD_GAS</code> stop-gap on compact)</summary>
 
 | Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
 |---|---|---|---|---|---|---|---|
@@ -1489,10 +1489,123 @@ BUNDLE token (the `NONE` form, `mtxConfidentialTransferNoBundle`, is retired: re
   | state gas (EIP-8037), before → after | 2,056,320 → 3,245,130 | 3,329,280 → 5,497,290 | 5,679,360 → 9,805,770 | 10,477,440 → 18,520,650 |
   | total, before → after | 5,720,996 → 6,922,712 | 8,722,344 → 10,903,639 | 14,513,638 → 18,653,755 | 26,241,223 → 34,300,502 |
 
-  The record adds ≈ 13–16 k REGULAR gas (the CREATE; the prover's table adds `HASH_RECORD_GAS` = 17,000 to every
-  commit-reveal row) and ≈ 1.19 M (M = 1) to 8.04 M (M = 8) STATE gas (≈ 1,560–1,810 per stored byte of `R`, the new data contract included): state gas is not
-  counted against the 2^24 cap, but a sender's gas limit must cover it (`ZetherGasLimit` `test_edge_*` still settle at
-  the 36 M edge limit: commit-reveal M = 7, BUNDLE M = 6, auditor on or out, direct and relayed). Auditor out, M = 1 / 8:
+  The record adds ≈ 13–16 k REGULAR gas (the CREATE; the BLS12-381 rows of the prover's table are measured with it,
+  `HASH_RECORD_GAS` = 17,000 rides on the legacy bn254 rows only) and ≈ 1.19 M (M = 1) to 8.04 M (M = 8) STATE gas (≈ 1,560–1,810 per stored byte of `R`, the new data contract included): state gas is not
+  counted against the 2^24 cap, but a sender's gas limit must cover it (`ZetherGasLimit` `test_edge_*` settle every largest `M` at 2^24 + 40 M, §19 above). Auditor out, M = 1 / 8:
+  regular 3,573,473 → 3,586,271 / 15,034,712 → 15,050,840, state 2,056,320 → 3,245,130 / 10,477,440 → 18,520,650. BUNDLE
+  is unchanged (its `bytes` was already state). Commit-reveal is still the cheaper form in regular gas, and now the dearer
+  one only by its memo in state gas at small `M`; the cost buys the ciphertext rule (the receiver and the auditor no
+  longer depend on logs or calldata).
+- **Leaving the auditor out** (OPTIONAL only) saves E6 per leg (bn254 ≈ 27–28 k, BLS12-381 ≈ 41–45 k) and, where the
+  record is stored, the zero `C_aud` words: single −68 k / −122 k, BUNDLE M = 8 −405 k / −1.0 M (bn254 / BLS12-381).
+- **EIP-7825 under Amsterdam (EIP-8037, EIP-7976; review C3-3), re-measured 2026-10-27 on the `…/v3` code (controller; CTR-ZTH-34):** 2^24 = 16,777,216 caps a transaction's REGULAR gas (intrinsic 21,000, the calldata floor, execution); EIP-8037 state gas (new slots 97,920 each, code 1,530 per byte: every recipient's first credit, the SSTORE2 record) comes on top, so the transaction's gas LIMIT is larger and comes from `eth_estimateGas`, never from the prover's table. Measured (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`, run log `smartcontracts/evm/runs/2026-10-27-zether-gas-v3.txt`): each call its own transaction (forge `isolate`: cold accounts and slots, calldata floor EIP-7623 / EIP-7976), inner fee paid, every account's first credit, limit 2^24 + 40 M; `vm.lastCallGas()` reports the regular gas (`gasTotalUsed`) and the state gas (`gasStateUsed`) apart. Forge gas is deterministic. The prover's `gas_limits` hold the REGULAR column (BLS12-381), takes the relayed column when the request carries an `envelopeBinding`, and refuses a build over the cap less a 1 % margin (167,772 gas; 16,609,444), naming the cheaper forms that fit (controller ruling, pending the owner). Forge does not enforce the regular cap on a transaction above it, so `test_edge_*` settles every form's largest `M` (direct and relayed, auditor on and out) at 2^24 + 40 M and asserts its reported regular gas is within the cap less the margin. The 1/64 holdbacks of the clone → implementation → `ZetherLib` → verifier frames (and `mtxExecute`'s two more) fall on the verifier call, which comes early; the binding constraint is the total, so the margin is the only allowance for them. **State gas has no field in the prover API**: wallets take the gas limit from `eth_estimateGas`; the state column below is the figure to expect (it grows ≈ 2.15 M per recipient, 97,920 per slot, and is ≈ 1.2 × the regular gas at M = 8). Largest `M` (direct / relayed), regular gas at that `M` and at `M + 1`, and the state gas at `M`:
+
+| Curve | Form | Aud. | max `M` | regular at max | regular at max + 1 | state at max |
+|---|---|---|---|---|---|---|
+| BLS12-381 | Compact | on | 8 / 8 | 15,746,755 / 15,845,170 | 17,478,898 / 17,582,157 | 18,520,650 / 18,716,490 |
+| BLS12-381 | Compact | out | 8 / 8 | 15,050,888 / 15,149,411 | 16,690,653 / 16,793,840 | 18,520,650 / 18,716,490 |
+| BLS12-381 | BUNDLE | on | 7 / 7 | 15,539,766 / 15,633,050 | 17,493,789 / 17,591,776 | 22,032,000 / 22,227,840 |
+| BLS12-381 | BUNDLE | out | 8 / 8 | 16,157,755 / 16,255,778 | 17,941,923 / 18,044,925 | 18,800,640 / 18,996,480 |
+
+Before (Osaka minimum gas limits, predating `…/v3` and the regular / state split; not comparable gas-for-gas): Compact on 7 / 7, out 8 / 7, BUNDLE on 6 / 6, out 7 / 6. The largest total transaction (regular + state) is BUNDLE with the auditor, M = 7, relayed: 15.6 M + 22.2 M = 37.9 M. Per `M`, regular and state gas:
+
+<details><summary>Per-<code>M</code> regular and state gas, BLS12-381 (2026-10-27)</summary>
+
+**Compact, auditor on** (regular / state gas; `M` past the cap less the margin, 16,609,444, is refused):
+
+| `M` | direct regular | direct state | relayed regular | relayed state |
+|---|---|---|---|---|
+| 1 | 3,668,948 | 3,245,130 | 3,739,409 | 3,440,970 |
+| 2 | 5,395,844 | 5,497,290 | 5,469,533 | 5,693,130 |
+| 3 | 7,112,613 | 7,651,530 | 7,189,978 | 7,847,370 |
+| 4 | 8,832,001 | 9,805,770 | 8,913,154 | 10,001,610 |
+| 5 | 10,553,767 | 11,960,010 | 10,638,882 | 12,155,850 |
+| 6 | 12,280,288 | 14,114,250 | 12,369,693 | 14,310,090 |
+| 7 | 14,017,143 | 16,366,410 | 14,110,830 | 16,562,250 |
+| 8 | 15,746,755 | 18,520,650 | 15,845,170 | 18,716,490 |
+| 9 | 17,478,898 | 20,674,890 | 17,582,157 | 20,870,730 |
+
+**Compact, auditor out** (regular / state gas; `M` past the cap less the margin, 16,609,444, is refused):
+
+| `M` | direct regular | direct state | relayed regular | relayed state |
+|---|---|---|---|---|
+| 1 | 3,586,211 | 3,245,130 | 3,656,636 | 3,440,970 |
+| 2 | 5,229,117 | 5,497,290 | 5,302,974 | 5,693,130 |
+| 3 | 6,860,942 | 7,651,530 | 6,938,139 | 7,847,370 |
+| 4 | 8,493,722 | 9,805,770 | 8,574,923 | 10,001,610 |
+| 5 | 10,128,010 | 11,960,010 | 10,213,185 | 12,155,850 |
+| 6 | 11,765,713 | 14,114,250 | 11,854,974 | 14,310,090 |
+| 7 | 13,412,496 | 16,366,410 | 13,506,363 | 16,562,250 |
+| 8 | 15,050,888 | 18,520,650 | 15,149,411 | 18,716,490 |
+| 9 | 16,690,653 | 20,674,890 | 16,793,840 | 20,870,730 |
+
+**BUNDLE, auditor on** (regular / state gas; `M` past the cap less the margin, 16,609,444, is refused):
+
+| `M` | direct regular | direct state | relayed regular | relayed state |
+|---|---|---|---|---|
+| 1 | 3,866,396 | 3,818,880 | 3,936,711 | 4,014,720 |
+| 2 | 5,806,396 | 6,854,400 | 5,880,167 | 7,050,240 |
+| 3 | 7,748,737 | 9,889,920 | 7,825,701 | 10,085,760 |
+| 4 | 9,693,084 | 12,925,440 | 9,773,852 | 13,121,280 |
+| 5 | 11,639,701 | 15,960,960 | 11,724,153 | 16,156,800 |
+| 6 | 13,588,563 | 18,996,480 | 13,677,358 | 19,192,320 |
+| 7 | 15,539,766 | 22,032,000 | 15,633,050 | 22,227,840 |
+| 8 | 17,493,789 | 25,067,520 | 17,591,776 | 25,263,360 |
+
+**BUNDLE, auditor out** (regular / state gas; `M` past the cap less the margin, 16,609,444, is refused):
+
+| `M` | direct regular | direct state | relayed regular | relayed state |
+|---|---|---|---|---|
+| 1 | 3,703,599 | 3,035,520 | 3,774,010 | 3,231,360 |
+| 2 | 5,479,837 | 5,287,680 | 5,553,524 | 5,483,520 |
+| 3 | 7,256,826 | 7,539,840 | 7,333,778 | 7,735,680 |
+| 4 | 9,034,673 | 9,792,000 | 9,115,525 | 9,987,840 |
+| 5 | 10,813,764 | 12,044,160 | 10,898,552 | 12,240,000 |
+| 6 | 12,593,845 | 14,296,320 | 12,682,676 | 14,492,160 |
+| 7 | 14,375,144 | 16,548,480 | 14,468,428 | 16,744,320 |
+| 8 | 16,157,755 | 18,800,640 | 16,255,778 | 18,996,480 |
+| 9 | 17,941,923 | 21,052,800 | 18,044,925 | 21,248,640 |
+
+</details>
+
+<details><summary>Legacy bn254 rows (minimum gas limits as measured on Osaka before UA-6; <code>legacy/ua6/</code>; not re-measured: no bn254 verifier is deployed any more, and the prover keeps them with its <code>HASH_RECORD_GAS</code> stop-gap on compact)</summary>
+
+| Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
+|---|---|---|---|---|---|---|---|
+| bn254 | `mtxConfidentialTransferSingle` | on | 3,352,792 | — | — | — | 3,908 |
+| bn254 | `mtxConfidentialTransferSingle` | out | 3,284,946 | — | — | — | 3,908 |
+| bn254 | Compact | on | 3,239,635 | 4,809,467 | 7,916,175 | 14,198,340 | 4,004 / 5,732 / 9,220 / 16,164 |
+| bn254 | Compact | out | 3,212,449 | 4,754,406 | 7,804,810 | 13,972,187 | same |
+| bn254 | BUNDLE | on | 3,368,038 | 5,068,803 | 8,481,710 | 15,353,653 | 3,940 / 5,636 / 9,028 / 15,812 |
+| bn254 | BUNDLE | out | 3,301,051 | 4,954,040 | 8,270,846 | 14,948,398 | same |
+
+</details>
+
+- **Per extra recipient** (slope M = 1 → 8, auditor on): bn254 Compact ≈ 1.57 M, BUNDLE ≈ 1.71 M (NONE ≈ 1.53 M, retired);
+  BLS12-381 Compact ≈ 1.84 M, BUNDLE ≈ 2.16 M (NONE ≈ 1.80 M, retired) — against ≈ 3.35 M / 3.97 M for another separate transfer.
+- **What P3b added** (against P3): the commit-reveal memo +72 k at M = 1, +274 k at M = 8 (either curve: storage); the
+  salt in a stored `R` +26 k (one slot); the 480-byte header and the salt in calldata ≈ +3 k.
+- **The auditor scan:** the multi cells carry ≈ 1 k per leg for the `C_aud` scan that picks `Y_a` ([CTR-ZTH-42](#CTR-ZTH-42)).
+- **What `…/v3` added** (review C0-1 / C0-9, review2 T3; Amsterdam, state gas included, `runs/2026-10-27-review2-t3-zether-gas.txt`;
+  the table above is the older Osaka measurement): `validUntilBlock` +32 B calldata, ≈ +2 k per transfer; per audited leg
+  `D_aud_j` (+128 B calldata and statement), `A_Daud_j`, `z_tj`, E6′_j and the pairwise-distinct check: ≈ +50 k (HASH;
+  commit-reveal stored only a hash then), ≈ +490 k on BUNDLE (`D_aud_j` stored in `R`: four more new slots); M = 8 verify 13.20 M → 13.57 M; the single
+  format and the burn unchanged but for the header word. The BUNDLE-with-auditor edge cell (M = 6) now needs 33.1 M /
+  34.3 M total gas (direct / relayed), `ZetherGasLimit`'s edge limit is 36 M; the prover's per-`M` table predates it (the
+  edges still settle).
+- **What review C0-3 added** (owner ruling 2026-10-27; `…NoBundle` retired; Amsterdam, isolated, `vm.lastCallGas()` for the
+  regular / state split, `runs/2026-10-27-review2-t5-zether-gas.txt`): commit-reveal stores `R` by SSTORE2 (the slot holds the
+  pointer) instead of `keccak256(R)`, a CREATE of `0x00 ‖ R` per transfer. BLS12-381, auditor on, one real leg:
+
+  | Commit-reveal | M = 1 | M = 2 | M = 4 | M = 8 |
+  |---|---|---|---|---|
+  | regular gas, before → after | 3,656,090 → 3,668,996 | 5,382,571 → 5,395,856 | 8,818,450 → 8,832,157 | 15,730,710 → 15,746,779 |
+  | state gas (EIP-8037), before → after | 2,056,320 → 3,245,130 | 3,329,280 → 5,497,290 | 5,679,360 → 9,805,770 | 10,477,440 → 18,520,650 |
+  | total, before → after | 5,720,996 → 6,922,712 | 8,722,344 → 10,903,639 | 14,513,638 → 18,653,755 | 26,241,223 → 34,300,502 |
+
+  The record adds ≈ 13–16 k REGULAR gas (the CREATE; the BLS12-381 rows of the prover's table are measured with it,
+  `HASH_RECORD_GAS` = 17,000 rides on the legacy bn254 rows only) and ≈ 1.19 M (M = 1) to 8.04 M (M = 8) STATE gas (≈ 1,560–1,810 per stored byte of `R`, the new data contract included): state gas is not
+  counted against the 2^24 cap, but a sender's gas limit must cover it (`ZetherGasLimit` `test_edge_*` settle every largest `M` at 2^24 + 40 M, §19 above). Auditor out, M = 1 / 8:
   regular 3,573,473 → 3,586,271 / 15,034,712 → 15,050,840, state 2,056,320 → 3,245,130 / 10,477,440 → 18,520,650. BUNDLE
   is unchanged (its `bytes` was already state). Commit-reveal is still the cheaper form in regular gas, and now the dearer
   one only by its memo in state gas at small `M`; the cost buys the ciphertext rule (the receiver and the auditor no
@@ -1508,7 +1621,7 @@ BUNDLE token (the `NONE` form, `mtxConfidentialTransferNoBundle`, is retired: re
 | BLS12-381 | BUNDLE | on | 6 / 6 | 15,188,797 / 15,728,743 | 17,372,899 / 17,985,178 |
 | BLS12-381 | BUNDLE | out | 7 / 6 | 16,482,217 / 14,941,807 | 18,539,733 / 17,066,376 |
 
-<details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
+<details><summary>Legacy bn254 rows (minimum gas limits as measured on Osaka before UA-6; <code>legacy/ua6/</code>; not re-measured: no bn254 verifier is deployed any more, and the prover keeps them with its <code>HASH_RECORD_GAS</code> stop-gap on compact)</summary>
 
 | Curve | Form | Aud. | max `M` | limit at max | limit at max + 1 |
 |---|---|---|---|---|---|
@@ -1543,7 +1656,7 @@ measurement with `R` passed in).
 | BLS12-381 | Compact M = 1, `R` from state (review C0-3; Amsterdam) | 89,337 | 124,692 | 137,922 | 124,741 | — |
 | BLS12-381 | Compact M = 8, `R` from state (review C0-3; Amsterdam) | 94,529 | 130,010 | 143,258 | 130,059 | — |
 
-<details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
+<details><summary>Legacy bn254 rows (minimum gas limits as measured on Osaka before UA-6; <code>legacy/ua6/</code>; not re-measured: no bn254 verifier is deployed any more, and the prover keeps them with its <code>HASH_RECORD_GAS</code> stop-gap on compact)</summary>
 
 | Curve | Entry | `SENDER_S` | `RECEIVER_X` | `AUDITOR` | `SENDER_CP` | Bundles in calldata |
 |---|---|---|---|---|---|---|
