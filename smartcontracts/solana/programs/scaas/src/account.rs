@@ -353,11 +353,22 @@ pub fn pay_routed(mut ctx: Context<RelayPay>, owner: [u8; 32], args: &PayArgs, a
     Ok(())
 }
 
-/// Shape of a static wrapper's payment (`relay_fee_<entry>`, owner 2026-10-27, as Sui / Aptos): `ref` over the inner
-/// entry's call as if sent alone — `call = scaas ‖ u8 n ‖ (pubkey ‖ is_signer ‖ is_writable)×n ‖ data` with its declared
-/// accounts and `data = discriminator ‖ Borsh(arguments)` (its `auth` included) — and the salt `args.extra`.
+/// A static wrapper's `call` (`relay_fee_<entry>`, owner 2026-10-27, as Sui / Aptos): the inner entry's instruction as
+/// if sent alone — `scaas ‖ u8 n ‖ (pubkey ‖ is_signer ‖ is_writable)×n ‖ data`, its declared accounts, `data =
+/// discriminator ‖ Borsh(arguments)` (its `auth` included) — with the router marker in the lane slot (`accounts[0]`,
+/// flags as declared), so the payer signs before any lane is known and any lane may submit (T11 fix 3).
+pub fn wrapper_call(accounts: &[AccountMeta], data: &[u8]) -> Vec<u8> {
+    let mut a = accounts.to_vec();
+    if let Some(lane) = a.first_mut() {
+        lane.pubkey = relay_fee_marker();
+    }
+    relay_call(&crate::ID, &a, data)
+}
+
+/// Shape of a static wrapper's payment: `pay_ref == ref` over `wrapper_call` and the salt `args.extra`,
+/// `lane == payLane(ref)`, `nonce == 0`, relayer = the marker.
 pub fn wrapper_ref(network: &[u8; 32], accounts: &[AccountMeta], data: &[u8], args: &PayArgs) -> Result<[u8; 32]> {
-    let r = relay_ref(network, &crate::ID, &relay_call(&crate::ID, accounts, data), &args.extra);
+    let r = relay_ref(network, &crate::ID, &wrapper_call(accounts, data), &args.extra);
     require!(
         args.pay_ref == r && args.lane == pay_lane(&r) && args.nonce == 0 && args.relayer == relay_fee_marker().to_bytes(),
         ScaasError::RelayFeeShape

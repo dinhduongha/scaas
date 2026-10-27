@@ -112,7 +112,7 @@ fn close(w: &W, signer: &Ed) -> (Inner, Effect) {
         config: w.env.config(),
         subject: acct,
         mandate: w.mandate,
-        rent_payer: w.env.lane.pubkey(),
+        rent_payer: w.env.account::<scaas::state::Mandate>(&w.mandate).unwrap().rent_payer,
         instructions: IXS,
     }
     .to_account_metas(None);
@@ -125,7 +125,11 @@ fn close(w: &W, signer: &Ed) -> (Inner, Effect) {
 }
 
 fn cancel(w: &W, signer: &Ed) -> (Inner, Effect) {
-    let o = order(&w.alice, &w.usd, &market_quote(w), 10, 10, 1);
+    cancel_nonce(w, signer, 1)
+}
+
+fn cancel_nonce(w: &W, signer: &Ed, nonce: u64) -> (Inner, Effect) {
+    let o = order(&w.alice, &w.usd, &market_quote(w), 10, 10, nonce);
     let h = w.env.order_hash(&w.market, &o);
     let fill = pda(&[b"fill", w.market.as_ref(), &h]);
     let metas = scaas::accounts::CancelSigned {
@@ -149,6 +153,10 @@ fn market_quote(w: &W) -> Pubkey {
 }
 
 fn invalidate(w: &W, signer: &Ed) -> (Inner, Effect) {
+    invalidate_n(w, signer, 5)
+}
+
+fn invalidate_n(w: &W, signer: &Ed, n: u64) -> (Inner, Effect) {
     let acct = w.alice.account();
     let mn = pda(&[b"minnonce", w.market.as_ref(), acct.as_ref()]);
     let metas = scaas::accounts::InvalidateNonces {
@@ -161,16 +169,24 @@ fn invalidate(w: &W, signer: &Ed) -> (Inner, Effect) {
         system_program: SYSTEM,
     }
     .to_account_metas(None);
-    let dg = sha(&[A::MINNONCE_LABEL.as_bytes(), &w.env.network, w.market.as_ref(), acct.as_ref(), &5u64.to_le_bytes()]);
+    let dg = sha(&[A::MINNONCE_LABEL.as_bytes(), &w.env.network, w.market.as_ref(), acct.as_ref(), &n.to_le_bytes()]);
     let sig = signer.sign(A::KIND_RAW, A::MINNONCE_LABEL, &dg);
-    let data = scaas::instruction::InvalidateNoncesSigned { min_nonce: 5, auth: inner_auth() }.data();
-    let effect = move |w: &W| w.env.account::<scaas::state::MinNonce>(&mn).is_some_and(|m| m.min_nonce == 5);
+    let data = scaas::instruction::InvalidateNoncesSigned { min_nonce: n, auth: inner_auth() }.data();
+    let effect = move |w: &W| w.env.account::<scaas::state::MinNonce>(&mn).is_some_and(|m| m.min_nonce == n);
     (Inner { name: "invalidate_nonces_signed", data, n: metas.len(), metas, sig }, Box::new(effect))
 }
 
-/// Every wrapper with the inner signer of its entry (Alice, or the delegate for the revoke).
-fn cases() -> Vec<(fn(&W, &Ed) -> (Inner, Effect), bool)> {
-    vec![(manage, false), (mandate_open_call, false), (revoke, true), (close, false), (cancel, false), (invalidate, false)]
+type Mk = fn(&W, &Ed) -> (Inner, Effect);
+
+/// Every wrapper with the inner signer of its entry (Alice, or the delegate for the revoke) and the exact error of a
+/// replay: the entry's own replay guard when it has one (KeyOp / min-nonce `BadNonce`, the mandate PDA already in use
+/// (System `AccountAlreadyInUse` = 0), the closed mandate (`AccountNotInitialized`)), else the pay lane (`BadNonce`)
+/// for the idempotent revoke and cancel.
+fn cases() -> Vec<(Mk, bool, u32)> {
+    let bad_nonce = code(E::BadNonce);
+    let not_init = anchor_lang::error::ErrorCode::AccountNotInitialized as u32;
+    vec![(manage, false, bad_nonce), (mandate_open_call, false, 0), (revoke, true, bad_nonce), (close, false, not_init),
+         (cancel, false, bad_nonce), (invalidate, false, bad_nonce)]
 }
 
 fn marker() -> Pubkey {
@@ -179,7 +195,9 @@ fn marker() -> Pubkey {
 
 /// The payment for `inner` (open mode unless `to` is given), `ref` over the inner call.
 fn pay_args(w: &W, inner: &Inner, amount: u64, to: Option<Pubkey>, salt: [u8; 32]) -> scaas::PayArgs {
-    let call = scaas::relay_call(&scaas::ID, &inner.metas, &inner.data);
+    let mut metas = inner.metas.clone();
+    metas[0].pubkey = marker(); // the lane slot hashes as the marker: any lane may submit
+    let call = scaas::relay_call(&scaas::ID, &metas, &inner.data);
     let r = scaas::relay_ref(&w.env.network, &scaas::ID, &call, &salt);
     let m = marker().to_bytes();
     scaas::PayArgs { to: to.map_or(m, |t| t.to_bytes()), amount, pay_ref: r, lane: scaas::pay_lane(&r), nonce: 0, valid_until: 1000, relayer: m, extra: salt }
@@ -214,7 +232,7 @@ fn payer_balance(w: &W) -> u64 {
 
 #[test]
 fn wrapper_settles_and_pays() {
-    for (mk, delegate_signs) in cases() {
+    for (mk, delegate_signs, replay) in cases() {
         let mut w = world();
         let signer = if delegate_signs { Ed::new("delegate") } else { Ed::new("alice") };
         let (inner, effect) = mk(&w, &signer);
@@ -239,7 +257,7 @@ fn wrapper_settles_and_pays() {
         assert_eq!(&last[16 + 64..16 + 96], scaas::ID.as_ref(), "target = scaas");
         // replay of the same transaction: refused, nothing moves
         let res = send(&mut w, &inner, &Ed::new("alice"), &args, lane);
-        assert!(res.is_err(), "{} replayed", inner.name);
+        assert_eq!(custom(&res), Some(replay), "{} replayed: {:?}", inner.name, res.map(|m| m.logs));
         assert_eq!(w.env.balance(&ata(&lane, &w.usd, &TOKEN)), 7);
     }
 }
@@ -260,7 +278,7 @@ fn wrapper_bound_payee() {
 /// The inner entry fails (another key signed it): no payment, no pay lane.
 #[test]
 fn wrapper_inner_failure_leaves_no_payment() {
-    for (mk, _) in cases() {
+    for (mk, _, _) in cases() {
         let mut w = world();
         let (inner, effect) = mk(&w, &Ed::new("stranger"));
         let lane = w.env.lane.pubkey();
@@ -277,7 +295,7 @@ fn wrapper_inner_failure_leaves_no_payment() {
 /// rolled back.
 #[test]
 fn wrapper_payment_failure_rolls_back_the_call() {
-    for (mk, delegate_signs) in cases() {
+    for (mk, delegate_signs, _) in cases() {
         let mut w = world();
         let signer = if delegate_signs { Ed::new("delegate") } else { Ed::new("alice") };
         let (inner, effect) = mk(&w, &signer);
@@ -335,8 +353,13 @@ fn wrapper_ref_vectors() {
     }
     .to_account_metas(None);
     let data = scaas::instruction::InvalidateNoncesSigned { min_nonce: 5, auth: auth(A::KIND_RAW, 0, 2, 0) }.data();
-    let call = scaas::relay_call(&scaas::ID, &metas, &data);
+    let call = scaas::wrapper_call(&metas, &data);
     assert_eq!(call, hexd(V::WRAP_CALL));
+    // the lane slot is the marker whatever lane is passed (flags as declared)
+    let mut with_marker = metas.clone();
+    with_marker[0].pubkey = marker();
+    assert_eq!(scaas::relay_call(&scaas::ID, &with_marker, &data), call);
+    assert!(metas[0].is_signer && metas[0].is_writable);
     let salt: [u8; 32] = hexd(V::WRAP_SALT).try_into().unwrap();
     let r = scaas::relay_ref(&pk(V::NETWORK).to_bytes(), &scaas::ID, &call, &salt);
     assert_eq!((r.to_vec(), scaas::pay_lane(&r).to_vec()), (hexd(V::WRAP_REF), hexd(V::WRAP_LANE)));
@@ -352,5 +375,46 @@ fn wrapper_ref_vectors() {
     }
     .data();
     let hex: String = sha(&[&d]).iter().map(|x| format!("{x:02x}")).collect();
-    assert_eq!(hex, "faea8705feee1d86cc00e788f905bdeb1e107dc612d3496615c80dffdaa4a033");
+    assert_eq!(hex, "20f4568ccb15c76a7fbdad15b2cf6d2117adfd3a407be9d016f61877af60796a");
+}
+
+/// Fix 3: the wrapper `ref` is lane-agnostic. A payment signed once (open mode) settles when a second lane submits
+/// it, and that lane is paid.
+#[test]
+fn wrapper_any_lane_may_submit() {
+    for (mk, delegate_signs, _) in cases() {
+        let mut w = world();
+        let signer = if delegate_signs { Ed::new("delegate") } else { Ed::new("alice") };
+        let (first, _) = mk(&w, &signer);
+        let args = pay_args(&w, &first, 7, None, [9; 32]);
+        let other = Keypair::new();
+        w.env.svm.airdrop(&other.pubkey(), 10_000_000_000).unwrap();
+        w.env.lane = other;
+        let (inner, effect) = mk(&w, &signer);
+        assert_eq!(pay_args(&w, &inner, 7, None, [9; 32]), args, "{}: same signed payment", inner.name);
+        let lane = w.env.lane.pubkey();
+        ok(send(&mut w, &inner, &Ed::new("alice"), &args, lane));
+        assert!(effect(&w), "{}", inner.name);
+        assert_eq!(w.env.balance(&ata(&w.env.lane.pubkey(), &w.usd, &TOKEN)), 7, "{}", inner.name);
+    }
+}
+
+/// The same entry, another instance than the payment's: a min-nonce payment for 5 sent with 6, a cancel payment for
+/// one order sent with another order (and its own fill) — `RelayFeeShape`.
+#[test]
+fn wrapper_other_instance_refused() {
+    let mut w = world();
+    let alice = Ed::new("alice");
+    let lane = w.env.lane.pubkey();
+    let (five, _) = invalidate_n(&w, &alice, 5);
+    let (six, six_done) = invalidate_n(&w, &alice, 6);
+    let args = pay_args(&w, &five, 7, None, [1; 32]);
+    expect_err(send(&mut w, &six, &alice, &args, lane), E::RelayFeeShape);
+    assert!(!six_done(&w));
+    let (one, _) = cancel_nonce(&w, &alice, 1);
+    let (two, two_done) = cancel_nonce(&w, &alice, 2);
+    let args = pay_args(&w, &one, 7, None, [1; 32]);
+    expect_err(send(&mut w, &two, &alice, &args, lane), E::RelayFeeShape);
+    assert!(!two_done(&w));
+    assert_eq!(payer_balance(&w), FUNDS);
 }

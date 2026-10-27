@@ -103,8 +103,8 @@ def relay_fee_vectors():
            ('RELAY_SALT', salt.hex()), ('RELAY_CALL', call.hex()), ('RELAY_REF', ref.hex()),
            ('RELAY_LANE', k(b'scaas.pay.lane' + ref).hex())]
     # Static wrapper `relay_fee_invalidate_nonces_signed` (owner 2026-10-27): `call` = the inner entry as if sent
-    # alone, target = scaas, its declared accounts (lane signer+writable, config, market, subject, min_nonce writable,
-    # instructions sysvar, system), data = discriminator ‖ u64 min_nonce ‖ Auth (raw, key 0, precompile 2, entry 0).
+    # alone, target = scaas, its declared accounts (lane slot = marker, signer+writable; config, market, subject,
+    # min_nonce writable, instructions sysvar, system), data = discriminator ‖ u64 min_nonce ‖ Auth (raw, key 0, precompile 2, entry 0).
     alphabet = b'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
     def b58d(s):
@@ -113,7 +113,8 @@ def relay_fee_vectors():
             n = n * 58 + alphabet.index(c)
         return n.to_bytes(32, 'big')
     program = b58d(PROGRAM)
-    metas = [(seed('wrap.lane'), 1, 1), (seed('wrap.config'), 0, 0), (seed('wrap.market'), 0, 0),
+    # the lane slot hashes as the router marker, PDA [b"relayfee"] of PROGRAM (pinned in tests/relay_fee.rs)
+    metas = [(b58d('9wtnhXbQazahGQXbNLD5ZAERPfzmvFvC2mYwCRjPvT5t'), 1, 1), (seed('wrap.config'), 0, 0), (seed('wrap.market'), 0, 0),
              (seed('wrap.subject'), 0, 0), (seed('wrap.min_nonce'), 0, 1),
              (b58d('Sysvar1nstructions1111111111111111111111111'), 0, 0), (bytes(32), 0, 0)]
     wdata = (hashlib.sha256(b'global:invalidate_nonces_signed').digest()[:8] + (5).to_bytes(8, 'little')

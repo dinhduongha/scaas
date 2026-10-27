@@ -583,7 +583,9 @@ fn wrapped(program: &Key, network: &Key, lane: &Key, op: &MetaOp, o: &Value) -> 
         bail!("only the lane signs the inner entry");
     }
     let marker = relay_fee_marker(program);
-    let all: Vec<Meta> = accounts.iter().chain(&rest).cloned().collect();
+    // the lane slot hashes as the marker (lane-agnostic ref, T11 fix 3); the transaction carries this lane
+    let mut all: Vec<Meta> = accounts.iter().chain(&rest).cloned().collect();
+    all[0].key = marker;
     let r = relay_ref(network, program, &relay_call(program, &all, &data), &op.extra);
     if op.pay_ref != r || op.lane != pay_lane(&r) || op.nonce != 0 || op.relayer != marker {
         bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = marker)");
@@ -1732,11 +1734,11 @@ mod tests {
 
     // Static wrapper vector (`gen_vectors.py` `relay_fee_vectors`, program `tests/wrappers.rs::wrapper_ref_vectors`):
     // `relay_fee_invalidate_nonces_signed`, accounts sha256("wrap.<name>"), min_nonce 5, salt 0a…, Alice pays 100.
-    const WRAP_CALL: &str = "97dbf6298ebc1d1aba6fe95a3c688f723fbd62ea8fe24fcd18b1de8988fea4c4075421fcfb0116acc6327ccb1a03e80acb59de8e0dc23a91857ffb493c3ac2cf1a0101771dba68087aff89d4f5d15ae879d0fc21bb8be436e410e23088eaad848b04b9000039c966052a231ee909b683aee751e3cd5a60ddb9f0e56167480bb8978592c4e70000611912e7fb9a7a8a5412cd08609e81305463b363388d8e8d527ff784c6ebf014000080eeb8c3aa7062d37e68479374cec72a820f5eaca1d965544940eee9923bab27000106a7d517187bd16635dad40455fdc2c0c124c68f215675a5dbbacb5f0800000000000000000000000000000000000000000000000000000000000000000000000000000055751035c3cffac805000000000000000000020000000000";
-    const WRAP_REF: &str = "8f1fffe61e9b7a2bfd7dbc279dad559bd7b0e445e93a2e7882f9de5c3150d335";
-    const WRAP_LANE: &str = "807d560fabea55637473a58d62124ccb5ad7383eae5f3d87b266710dbc79ccb9";
+    const WRAP_CALL: &str = "97dbf6298ebc1d1aba6fe95a3c688f723fbd62ea8fe24fcd18b1de8988fea4c40784ed6a76e6d2252100d31d426ddf199678c8105bf1e5f885a751abef4a099a2b0101771dba68087aff89d4f5d15ae879d0fc21bb8be436e410e23088eaad848b04b9000039c966052a231ee909b683aee751e3cd5a60ddb9f0e56167480bb8978592c4e70000611912e7fb9a7a8a5412cd08609e81305463b363388d8e8d527ff784c6ebf014000080eeb8c3aa7062d37e68479374cec72a820f5eaca1d965544940eee9923bab27000106a7d517187bd16635dad40455fdc2c0c124c68f215675a5dbbacb5f0800000000000000000000000000000000000000000000000000000000000000000000000000000055751035c3cffac805000000000000000000020000000000";
+    const WRAP_REF: &str = "35eb17bc28f15acabcdd82d3c3e534cd91dd83d074ecf465dd7090429ed6d0d1";
+    const WRAP_LANE: &str = "59b2dc2281812091da43be88047f8a0c389bd1fb41dcdcebf62ce9ca57a106be";
     const WRAP_SALT: &str = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a";
-    const WRAP_IX_SHA: &str = "faea8705feee1d86cc00e788f905bdeb1e107dc612d3496615c80dffdaa4a033";
+    const WRAP_IX_SHA: &str = "20f4568ccb15c76a7fbdad15b2cf6d2117adfd3a407be9d016f61877af60796a";
 
     fn meta_rows() -> Vec<Value> {
         serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap()
@@ -1939,7 +1941,9 @@ mod tests {
         let Entry::Wrapped { accounts, rest, recipient, sig, .. } = &e else { panic!("{e:?}") };
         assert!(rest.is_empty());
         assert_eq!(*recipient, lane, "open mode pays the lane");
-        let call = relay_call(&program, accounts, &hex_field(&job["extra"]["inner_data"], "d").unwrap());
+        let mut hashed = accounts.clone();
+        hashed[0].key = relay_fee_marker(&program); // the lane slot hashes as the marker
+        let call = relay_call(&program, &hashed, &hex_field(&job["extra"]["inner_data"], "d").unwrap());
         assert_eq!(alloy::hex::encode(&call), WRAP_CALL);
         assert_eq!(alloy::hex::encode(relay_ref(&network, &program, &call, &k32(WRAP_SALT))), WRAP_REF);
         assert_eq!(sig.program, k(ED25519_PROGRAM));
@@ -1978,6 +1982,12 @@ mod tests {
         }
         // a lane other than the inner entry's
         assert!(entry(&program, &network, &key(BOB).unwrap(), &pol, &op, &job).is_err());
+        // fix 3: the same signed payment on another lane (the inner entry's lane slot = that lane) builds; open mode
+        // pays that lane
+        let bob = key(BOB).unwrap();
+        let other = set(&|j| j["extra"]["inner_accounts"][0]["pubkey"] = json!(b58(&bob)));
+        let Entry::Wrapped { recipient, .. } = entry(&program, &network, &bob, &pol, &op, &other).unwrap() else { panic!() };
+        assert_eq!(recipient, bob);
         // the policy applies to wrappers too
         assert!(entry(&program, &network, &lane, &RelayFeePolicy { min_amount: 101, ..pol.clone() }, &op, &job).is_err());
     }
