@@ -668,7 +668,12 @@ impl RelayFeePolicy {
                 .and_then(|n| u128::try_from(n).ok())
                 .ok_or_else(|| anyhow!("params.relay_fee.min_amount must be a non-negative integer"))?,
         };
-        Ok(Self { router, tokens: cfg.tokens.iter().filter_map(|t| parse_addr(&t.address).ok()).collect(), min_amount })
+        let tokens = cfg
+            .tokens
+            .iter()
+            .map(|t| parse_addr(&t.address).with_context(|| format!("tokens: {} is not a Sui Registry id", t.address)))
+            .collect::<Result<_>>()?;
+        Ok(Self { router, tokens, min_amount })
     }
 }
 
@@ -691,8 +696,14 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 /// optional `op.ref`): the policy (router, registered token whose account is the payer's, minimum fee), the call
 /// names the paying account where the wrapper uses one account for both, and the payment commits to exactly this
 /// call: `pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == router`. Anything else is `relay_pay`.
+/// A plain pay or pay-meta to the router marker is refused: the `RelayFee` object has no `receive`, so the coins would
+/// be stranded (CTR-MTX-27: never pay the marker; the router's open mode pays the submitter instead).
 pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
-    match o["kind"].as_str() {
+    let kind = o["kind"].as_str();
+    if kind != Some("relay_fee") && policy.router == Some(op.to) {
+        bail!("a plain pay to the relay-fee router {} would strand the coins", addr_hex(&op.to));
+    }
+    match kind {
         Some("pay_meta") => {
             let (salt, meta) = (hex_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
             if salt.len() != 32 {
@@ -1134,7 +1145,9 @@ impl ChainAdapter for SuiAdapter {
                     fee_tx(&self.package, &w.op, &w.auth, call, isv, &w.coin_tag, objs, &sender, &gas, price, budget)
                         .map_err(|e| SimError::Revert(format!("{e:#}")))?
                 }
-                _ => pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget),
+                (Entry::Pay, _) => pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget),
+                // unreachable (`objs` is `Some` for every `Fee`); never fall back to a plain `relay_pay`
+                (Entry::Fee { .. }, None) => return Err(SimError::Revert("relay-fee job without its shared objects".into())),
             })
         };
         let cap = self.budget_cap.min(balance);
@@ -1695,6 +1708,38 @@ mod tests {
             let objs = FeeObjects { router: (router, 2), object: None, mandate_tag: None };
             assert!(fee_tx(&pkg, &op, &auth, &call, 3, &tag, &objs, &[0x1e; 32], &gas(), 1000, 2_000_000).is_err(), "{name}");
         }
+    }
+
+    /// Fix 1: a plain pay / pay-meta whose payee is the router marker is refused before the dry-run (the coins would be
+    /// stranded at the `RelayFee` object); the router's own open-mode payment still passes.
+    #[test]
+    fn plain_pay_to_the_marker_is_refused() {
+        let (op, _, job) = manage_job(); // op.to == the marker (open mode)
+        let pkg = parse_addr("0x0").unwrap();
+        let pol = fee_policy();
+        assert!(matches!(entry(&pkg, &pol, &op, &job), Ok(Entry::Fee { .. })), "router open mode");
+        for j in [json!({}), json!({"kind": "pay_meta", "salt": alloy::hex::encode([0u8; 32]), "meta": ""})] {
+            let e = format!("{:#}", entry(&pkg, &pol, &op, &j).unwrap_err());
+            assert!(e.contains("strand"), "{j}: {e}");
+        }
+        assert_eq!(entry(&pkg, &RelayFeePolicy::default(), &op, &json!({})).unwrap(), Entry::Pay, "no router configured");
+        let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), ..op };
+        assert_eq!(entry(&pkg, &pol, &to_beef, &json!({})).unwrap(), Entry::Pay);
+    }
+
+    /// Fix 2: a malformed `tokens[].address` is a startup error, not a silently dropped token.
+    #[test]
+    fn malformed_token_is_a_startup_error() {
+        let cfg = |addr: &str| -> ChainCfg {
+            toml::from_str(&format!("family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"http://r\"]\nlanes = [0]\n\
+                                     tokens = [{{ address = \"{addr}\", decimals = 9 }}]\nfinality = {{ mode = \"instant\" }}\n\
+                                     params = {{ package = \"0xb\", lane_journal = \"/tmp\" }}"))
+            .unwrap()
+        };
+        let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
+        let e = SuiAdapter::new(&cfg("0xnot-hex"), &k).err().unwrap();
+        assert!(format!("{e:#}").contains("tokens"), "{e:#}");
+        assert_eq!(SuiAdapter::new(&cfg(REG_SUI), &k).unwrap().relay_fee.tokens, vec![parse_addr(REG_SUI).unwrap()]);
     }
 
     /// A configured but unparsable `params.relay_fee.router` / `min_amount` fails at startup.
