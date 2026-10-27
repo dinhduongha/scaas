@@ -344,3 +344,23 @@ with binaryen and checks MVP.
   bn254; a Bulletproofs verifier compiled to wasm runs but costs much gas (point multiplication in pure wasm).
   Technically feasible for the BLS12-381 variant with a matching prover; not built (confidential payments are
   EVM-first).
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** Token `ExecuteMsg::RelayPayMeta { payload, auth, salt, meta }`: verify, `op == "pay"`, `pay_ref == metaPayId`,
+  `lane == payLane(pay_ref)`, `nonce == 0`, then `relay`'s pay arm; event `payment_meta` before `payment_settled`. Lanes are
+  per payer already (`NONCES[(from, lane)]`).
+- **Relay fee.** Contracts `relayfee` (router) and `relayexec` (executor). `Relay { target, msg, token, payload, auth }`:
+  `ref = keccak256("scaas.relayfee" ‖ chain id ‖ target ‖ keccak256(msg))`, no salt (the signature and nonce of a SCaaS
+  fee-less entry live inside `msg`). Messages in order: executor `Exec`, token `Relay`, in open mode token `Transfer` to the
+  sender; any failure reverts all. Entries authorised by `info.sender` (mandate `Revoke` / `Withdraw`, DEX admin) fail through
+  the router, so nothing is paid. Re-entry into the router is refused by a stored flag.
+- **No admin (client check).** The router refuses `Relay` while it has an admin (`relayfee: the router has an admin`): a
+  migrated router is the bound relayer of every payment signed to it and could settle one without the call. Deploy with
+  `--no-admin`; a client checks `ContractInfo.admin == None` of the router before signing `relayer = router`.
+- Event `relay_fee_paid` (`ref, target, token, payer, payee, amount`) is the router's own and exists only on success.
+- **Owed.** Gas of `Relay` and of the executor on a wasmd localnet (cw-multi-test has no gas): measure in the e2e run
+  (TODO.md). Node config `params.relay_fee = { router, min_amount }`.
+- Commits: T12 `9dfcc559`, fix 1 `47c926d6`.

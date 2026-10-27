@@ -413,3 +413,27 @@ GRAM `pay` only.
   roll-over in one transaction), so confidential balances would sit in **one** contract (losing jetton sharding) at
   hundreds of thousands to millions of gas per transfer. Not built; a single-contract BLS12-381 `ZetherTon` would be the
   shape.
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** The plain `OP_PAY` `SignedOp` with `params = salt:uint256 ^meta`. The payer's jetton wallet requires
+  `payRef == metaPayId(salt, meta)`, `lane == payLane(payRef)`, `nonce == 0` and a plain snake `meta` (else `E_PARAMS` 713;
+  malformed `params` is exit 9), then emits `PaymentMeta { master, payId, meta }` (`0x9b1c0d04`) right after
+  `MetaTransactionExecuted`. Measured: 38,100 B settles in the sandbox; the node caps at 2,048 B.
+- **Payee bounce burns the id.** The payer's wallet writes its lane (the once-set) before the payee's wallet runs. If the
+  payee's wallet bounces (for instance a frozen or uninitialised destination), the `PaymentMeta` was emitted without a
+  `PaymentSettled`, and `(payer, payId)` is burnt for good. `PaymentMeta` alone is never proof of payment. A client that
+  sees a bounce signs again with a **new salt** (a new `payId`); the indexer joins on `(from, pay_ref)` and rejects a meta
+  with more than one ref.
+- **Relay fee.** Escrow router `ScaasRelayFee` (`relayfee.tact`) and a one-shot `RelayExecutor`, served targets = the SCaaS
+  jetton wallet and the Mandate; released only on a positive `RelayAck` from the known target (spec §7.2 TON row, T16 fix 1).
+  Open mode only. `RelayCall.deadline` within 3,600 s; anyone can `RelayRefund` after it.
+- **Revoke needs n + 2.** A signed revoke runs at most once and leaves its lane at `nonce + 2` (NET-TON-18, T16 fix 2). A
+  client must not queue an op at `n + 1` behind a revocable order at `n`: after the revoke the wallet's next nonce is `n + 2`,
+  so the `n + 1` op fails with `E_NONCE`. Queue after the revoke at `n + 2`.
+- **Recorded, low.** When another relayer's release races ours, our amount-0 refund path makes the node say "payer not
+  charged" though the other relayer charged the payer. `RelayFeePaid` / `RelayFeeRefunded` stay with the node's `tx_status`
+  scan (a job older than the scan window stays Pending).
+- Commits: T15 `1bba36e0`, T16 `16bac7d0`, fixes `9a62093f`, `f9f27f7d`.

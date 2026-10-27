@@ -68,9 +68,17 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `docs-facts`), Dependabot #42–#45 fixed. Open: ~40 deferred minors (README "Fix round",
      `scratchpad/review2-fix-ledger-2026-10-27.md`). Part 3 (pqz-prover + node relay) after P6h / P6i.
   4. [ ] **Task 9 calibration** (timing: needs the owner's go) → final prices replace the provisional rows.
-  5. [ ] (re-check with it: PQZH `n2048-kmax1024` debits keep only 1.3–2.8 KB on `uaExecute`; `n2560-kmax16384`'s `ROLL_MAX`
-     64 keeps 15,281 gas — any envelope growth re-opens both) the metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → `MtxRelayFee` (CTR-MTX-27), with or
-     before UA-7. Then UA-8 (before fs3 Task 13), fs3 Task 12 → 6 → 13 → 14, UA-7, governance code.
+  5. [x] **The metatx split, `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) and `MtxRelayFee` (CTR-MTX-27) — built on branch
+     `metatx-split` 2026-10-27/28 (Tasks 1-19; head at T19; NOT merged: merge and push need the owner's go; the whole-branch
+     review is open, see "metatx split — final review" below)**: T1 parity fixture `c9ec6fb0`/`2ceda92d`, T2 library `76dc5be2`,
+     T3 token paths `04a2ede6`, T4 trade `b36c9dac`, T5 PQZ/Zether `840f0642`, T6 link closure `c213e24a`, T7 pay-meta
+     `a221b015`/`2623719a`, T8 re-measure `69fce983`/`004890a2`, T9 router `333c96b6`/`3f30ff87`, T10 Soroban `cd5e508c`,
+     T11 Solana `b2986c5b`, T12 Cosmos `9dfcc559`, T13 Sui `8a033b0e`, T14 Aptos `78c67cff`, T15-T16 TON `1bba36e0`/`16bac7d0`,
+     T17 node `9777679f`..`d784f264`, T18 clients `a0ab2e47`, T19 docs. Figures: `docs/contracts/metatx.md` §8
+     (relayed overhead +7.4 k to +7.6 k per call; `n2560-kmax16384` `ROLL_MAX` 64 keeps 6,032 gas, was 15,281: any further
+     token-path growth above ~6 k forces 48). Next: NEAR and Algorand on their own branch from `metatx-split` (owner
+     2026-10-27; spec approved 2026-10-28; its plan is written in the main checkout, executes in parallel,
+     merge/push need the owner's go). Then UA-8 (before fs3 Task 13), fs3 Task 12 → 6 → 13 → 14, UA-7, governance code.
 
   `pqz-core` is a dev-freeze at the current ids; 8d part 2b may reopen it (PQZH calldata).
 - [ ] **Label scheme at the production freeze** (owner 2026-10-25): keep the current labels during development; at
@@ -143,8 +151,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   before P6h and before Codex run 2, so the review sees the final names) → (5b) **`clients/pqz-prover` (P6h)**: the
   wallet PQZ prover — a Rust crate over `pqzl` + `stmt` with wasm bindings, API shaped like `clients/zether-prover`
   (read state, decrypt the balance, build statements, prove, envelope; the wallet view list `pqzAccount`, `pqzAcc`,
-  `pqzPending`, `pqzPendingCt`, `pqzEntryBlob`, `minDecoyFee`; rollover by count, with `mtxPrepareAcc` called directly
-  — neither `mtxRollOver` nor `mtxPrepareAcc` is relayable) → (5c′) **UA-5c (c) + (d)**: the generic UA
+  `pqzPending`, `pqzPendingCt`, `pqzEntryBlob`, `minDecoyFee`; rollover by count; both `mtxRollOver` and `mtxPrepareAcc` are relayable (CTR-MTX-19), and the prover may also call `mtxPrepareAcc` directly) → (5c′) **UA-5c (c) + (d)**: the generic UA
   envelope pipeline in `MetaTxBase` and `MandateWallet` (+ Hedera) with `bytes32` owner / delegate / payees (needed by
   the node's `ua_metatx`) → (5c) **node relay (P6i + the needed part of
   UA F5)**: `ua_metatx` jobs (UA envelopes, `from: bytes32` — after UA-6 every Zether UA and PQ signer writes only
@@ -218,19 +225,40 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
-- [ ] **`mtxPayMeta` / `uaPayMeta` — payment metadata by commitment (owner 2026-10-26; after P6 / PQZ)**: spec
-  [CTR-MTX-26](docs/contracts/metatx.md#CTR-MTX-26) (SPECIFIED), decision CTR-MTX-26. Build on every `MetaTokenBase`
-  tier (`PaymentMeta` event, `metaPayId` view; size gate), then every non-EVM family's pay relay; connectors /
-  `clientkeys` recompute and show the meta, refuse a mismatch; vectors shared by the clients.
-- [ ] **`MtxRelayFee` — token fee for a fee-less mtx call (owner 2026-10-26; after P6 / PQZ, with or before UA-7)**:
-  spec [CTR-MTX-27](docs/contracts/metatx.md#CTR-MTX-27) (SPECIFIED), decision CTR-MTX-27. Router + executor in
-  `src/metatx/`, `DeployBase` CREATE2; forge conformance list of CTR-MTX-27; gas; node quote + simulation; clients
-  (ref, open-mode payment, one prompt); then the non-EVM shapes (GRAM escrow). The relay-fee router
-    research: `docs/research/mtx-relay-fees.md` §3, owner answers §5.
 - [ ] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; a new feature, not T17):
   `scaas-node` relays no `ua_metatx` job today, so `uaPayMeta`, `MtxRelayFee.uaRelay` and the `UAPaymentSettled` join
   (`indexer::join_pay_events`, a UA payer's `RelayFeePaid` id) are not served; build the `ua_metatx` kind
   (job-api.md, SPECIFIED) with them.
+- [ ] **bamboo-dms portal bundle rebuild (metatx split)**: `dms_blockchain_bridge`'s vendored clientkeys bundle lacks the new
+  exports (`metaPayId`, `payLane`, `relayRef`, the pay-meta / relay-fee builders, T18); rebuild it with `npm run build` and copy
+  it (the build writes outside the repo; combine with the stale-bundle item under the P5 leftovers).
+- [ ] **metatx split — e2e still owed on a real node** (no network operations were run in Tasks 1-19): (a) Soroban `relay_fee`
+  simulate + submit on a testnet or the quickstart localnet, proving the explicit `SourceAccount` auth entry (the Rust test
+  environment has no transaction source); (b) Cosmos gas of `Relay` and the executor on a wasmd localnet (cw-multi-test has no
+  gas), then set the node's gas limits from it; (c) Aptos two-passkey `relay_*` against the 9,200 exec-gas ceiling
+  (unmeasured), and the relay-fee job with the payer Account closed; (d) Solana `gen_vectors.py --check` in the checkout that
+  holds the vector generator (`vectors.rs` relay lines were added by hand), and a passkey x passkey wrapper transaction against
+  the 4,096-byte v1 limit; (e) a TON relay-fee run on a testnet (the sandbox config is the only pricing seen so far).
+- [ ] **metatx split — final review** (whole-branch review, before the merge; items the per-task reviews deferred):
+  - 7702 intent: the code refuses an EIP-7702-delegate-only signature on the address path
+    (`err_e7702_viaDelegate_addrPathRefuses`) but accepts it on the UA path (`ok_e7702_viaDelegate`); the parity fixture pins
+    both; check against CTR-MTX-25 / accounts.md and rule.
+  - Node items that T17 pulled forward (verify, they are believed done): bound-payee relay-fee jobs (Cosmos, Solana) refused
+    unless `params.relay_fee.relay_bound_payee = true`; a plain pay to the router / marker / executor refused in every adapter;
+    unknown or non-string `op.kind` refused in every adapter (T17c `3a98e74a`).
+  - HederaLib errors (`HtsQueryFailed`, `AssociateFailed`) are not in the `NoUnderlying*` ABIs (pre-existing, unreachable from the
+    library).
+  - Test nits: the parity probe's write-time guard asserts some, not every, unlisted row refused (`MetaTxParity.t.sol:2212`);
+    `bothFail_feeExceedsCapFixed_callReverts` is not a fee fault and no both-fail row has a FIXED fee over the cap; tests of T3
+    were written after the code; `Factory.t.sol:489` / `HederaV2.t.sol:57` "+13 B" comment is the slack delta (actual +327 B);
+    a size-dependent regression below ~5.6 k passes the absolute 8,000 bound (inherent); `LinkClosure._walk` comment on the
+    metadata cut; per-set fixtures instead of the skips in `MetaTxParity` / `MtxSplitOverhead` (owner may prefer); Soroban
+    `relay-fee/src/test.rs:376,393` bare `is_err()`; Sui same-entry-other-instance Move test; Aptos `vectors.move` P-256 lines
+    churn on regeneration (use RFC 6979 in `gen_vectors`).
+  - `MtxRelayExecutor` copies return data on success (a hostile target can inflate the relayer's memory cost; the node simulates
+    first).
+  - Observation: the Zether prover's relayed gas rows are 8.2-8.7 k below the measured figures (inside `GAS_MARGIN`); re-pin
+    them if exact rows are wanted.
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
   P/Invoke) for the SCaaS testnet / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof

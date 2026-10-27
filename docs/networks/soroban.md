@@ -335,3 +335,25 @@ ledger range: SPECIFIED.
   a Bulletproofs/ElGamal verifier is feasible in principle, but the per-transaction CPU budget (~100 M instructions)
   may not fit a range proof with n = 64 (to be measured); Groth16 over a Zether-like circuit (one pairing check) is the
   more practical candidate. Not built.
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** Token `pay_meta(from, to, amount, salt: BytesN<32>, meta: Bytes, valid_until)`: `from.require_auth()` covers
+  these arguments (`meta` included), `pay_ref = metaPayId(salt, meta)`, then `pay`'s body (`settle_pay`); event
+  `PaymentMeta { pay_id, meta }` before `PaymentSettled`; `MetaTransactionExecuted.digest = op_digest("pay_meta", args)`.
+  The token's `PayRef` set is keyed by `(from, pay_ref)` for `pay` and `pay_meta` (the per-payer lane of EVM), so nobody can
+  pre-burn another payer's id (T10 fix 1, controller call 2026-10-27, owner may override). Read it with
+  `ref_used(from, pay_ref)`.
+- **Relay fee.** Contract `contracts/relay-fee`: `relay(payer, target, func, args, salt, token, to, amount, valid_until, relayer)`.
+  `payer.require_auth_for_args((target, func, args, salt, token, to, amount, valid_until))`; the payer's auth entry is rooted
+  at this router call with the token's `pay` as sub-invocation. `ref = keccak256("scaas.relayfee" ‖ network id ‖ xdr(target) ‖
+  keccak256(xdr((func, args))) ‖ salt)`; the payer-signed `salt` is needed because Soroban's target auth is outside `args`.
+  Open mode (`to == router`): the router receives, then `token.transfer(router, relayer, amount)`. Stateless; no executor
+  (Soroban refuses contract re-entry). Event `RelayFeePaid` topics `ref, target, token`, data `payer, payee, amount`.
+- **Relayer rule.** `relayer.require_auth()` is not satisfied by the transaction source: the node adds an explicit
+  `SourceAccount` auth entry rooted at the `relay` call. Node config `params.relay_fee = { router, min_amount }`.
+- **Owed.** A testnet or localnet simulate-and-submit of a `relay_fee` job to prove the `SourceAccount` path (the Rust test
+  environment has no transaction source). TODO.md, "metatx split — e2e still owed".
+- Commits: pay-meta + router T10 `cd5e508c`, fix 1 `351f67ea`.

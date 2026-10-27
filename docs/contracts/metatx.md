@@ -70,6 +70,18 @@ generic `MetaTxBase` ([CTR-MTX-22](#CTR-MTX-22)): it adds the fee in this token 
 ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) and the `ua*` Universal Account path ([CTR-UA-19](accounts.md#CTR-UA-19),
 [CTR-UA-26](accounts.md#CTR-UA-26)).
 
+**The split (metatx-split, T2-T8, BUILT).** The relayed pipeline's checks sit once in `src/metatx/MtxPipelineLib.sol`, a
+linked library every token calls by DELEGATECALL (`preCall`, `preTransfer`, `requireSignature`, `authorize`, `callDigest`,
+`transferDigest`); `MetaTxBase` calls the same internals inlined, so `SmartKeyAccount`, `MandateWallet` and
+`HederaMandateWallet` link nothing. The library has no state of its own (it writes only the nonce slot `scaas.metatx` of
+the caller), no SELFDESTRUCT or CALLCODE; `test_libraryOpcodes` allows one DELEGATECALL in it (to `HederaLib`, a linked
+library it names) and one in `UnderlyingLib` (to `AdminLib`). Selectors, digests, events and the allowlist are unchanged
+(the parity fixture `test/vectors/metatx-parity.json`, 1,822 cases, replays them). Cost, measured on the final bytecode
+(`smartcontracts/evm/runs/2026-10-27-metatx-split-overhead-final.txt`, baseline `...-baseline.txt`): +7.4 k to +7.6 k
+gas per relayed call (+8.9 k for `unwrap`, 0 for cancel), and about +550 gas per call permanently on the wallets that
+stay on `MetaTxBase` (`_envelopeOf` pads and hashes the envelope). Sizes: `NoUnderlyingToken` 38,195 B ... `UnderlyingPqzToken`
+61,137 B (runtime; headroom 27,341 to 4,399 B under 65,536; `runs/2026-10-27-metatx-split-sizes.txt`).
+
 The tree is `MetaTxBase → ERC20MetaTx → MetaTokenBase`
 ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)): `MetaTxBase` holds the `MetaTransaction`, nonce lanes, signature check
 (`SigCheck`, [CTR-MTX-25](#CTR-MTX-25)), the transient sender and ticket, the selector allowlist and
@@ -535,6 +547,19 @@ state carries over inside one test), and accounts are created and funded in `set
 with execution order measures the access list, not the code.
 
 **Amsterdam (Foundry 1.8.5 `isolate`, each call its own transaction: intrinsic gas, the EIP-7976 calldata floor, EIP-8038 write prices and EIP-8037 state gas for a new slot; the bounds in `test/v2/MetaTxGasV2.t.sol`, `AMS_*`).** Total gas per transaction, in the table's order: warm lane, `MODE_OPEN`, no fee 80,249 (A); new lane 178,157 (B); warm `FIXED` fee 95,950 (C); warm `PERCENT` fee 95,889 (D); warm `FIXED` + restricted relayer and fee recipient 95,993 (E); warm lane, recipient that never held the token 178,157 (F); ERC-1271, new lane 174,814 (G); the pay op on a fresh lane 181,810 (P). The first write of a lane therefore costs ≈ 98 k (178,157 − 80,249), not +17 k to +32 k (the same step prices the first credit of a new recipient, F). No contract reads these numbers.
+
+**After the split (T5, T8; measured 2026-10-27, regular gas per transaction, `MetaTxGasV2`).** Warm batch NONE 80,375 to
+87,936 (+7,561); cold batch 178,259 to 185,844; warm FIXED fee 96,205 to 103,751; `mtxPay` 183,749 to 191,179; `unwrap`
+243,939 to 252,861; cancel 136,853 unchanged. The overhead does not grow with the envelope: for the largest PQZL op 7
+(M=8) and PQZH (M=4) envelopes it is 8.9-11.5 k against 7.9-9.1 k for the smallest, at most 2,405 gas more, against a
+bound of 8,000 (`runs/2026-10-27-metatx-split-overhead.txt`). The cheapest PQZL debit on `uaExecute` rose by about
+6.9 k at every set (`debit_min_gas`: n2048-kmax1024 6,826,921; n2304-kmax4096 6,998,368; n2560-kmax16384 7,168,690;
+n2816-kmax65536 7,358,343). The `n2560-kmax16384` rollover at `ROLL_MAX` 64 is 12,418,528 (`mtxExecute`) and 12,576,880
+(`uaExecute`), 6,032 under 0.75 · 2^24 = 12,582,912: the next token-path change that adds more than about 6 k forces 48
+(`runs/2026-10-27-metatx-split-rollscan-n2560-kmax16384.txt`). Pay-meta adds 37-52 gas to the token paths (PayMeta code).
+A `SmartKeyAccount`-signed `mtxExecute` needs 446,904 relayer call gas at least (`runs/2026-10-27-metatx-split-node-floor.txt`).
+Regeneration of the pre-split overhead JSON (`test/vectors/metatx-overhead-presplit.json`): check out `2ceda92d`, copy
+`test/pqz/MtxSplitOverhead.t.sol` into it, run with `MTX_OV_PRESPLIT=1`, paste the `MEAS` lines into the JSON.
 
 ## 9. FeePolicy
 

@@ -718,3 +718,26 @@ an ed25519 signature, but one transaction still suffices.
   (`m/44'/637'/0'/0'/0'`).
 - signMessage: github.com/aptos-labs/wallet-standard `src/features/aptosSignMessage.ts`; petra.app/docs/signing-a-message.
 - Localnet: aptos.dev/network/nodes/localnet (defaults REST 8080, faucet 8081, ready 8070, stream 50051).
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** `meta::relay_pay_meta` (`package entry`): `pay_ref = meta_pay_id(salt, meta)`, `lane = pay_lane(pay_ref)`,
+  `nonce = 0` derived on chain, then `relay_pay`'s body; the view `pay_meta_check` is the twin of `pay_check`. Once per
+  `(payer, payId)` in `Account.lanes`.
+- **Relay fee.** Module `scaas::relayfee`, one `package entry` per fee-less signed entry (`relay_manage_signed`,
+  `relay_mandate_open`, `relay_revoke_signed`, `relay_cancel_signed`, `relay_invalidate_nonces_signed`), each running the
+  entry then `meta::pay_routed`. `ref = keccak256("scaas.relayfee" ‖ chain_id (1 byte) ‖ @scaas ‖ keccak256(call) ‖ salt)`.
+  Marker = `object::create_object_address(&@scaas, b"scaas.relayfee")`; a plain pay to it is refused on chain by
+  `relay_pay` (`EWRONG_RELAYER`) and by the node. A cancel that changes nothing aborts (`ECALL_REFUSED`).
+- **Client rule: open the Account first.** No view runs the wrapped call and `simulate` hangs on a payment that opens the
+  Account, so the node refuses a relay-fee job while the payer's Account is not open. A client opens the Account (any
+  signed pay or `manage_signed`) before it asks for a relay-fee job.
+- **Chain-id reuse.** `ref` and the `MetaOp` domain carry a 1-byte `chain_id`, not network bytes. A customer chain that reuses
+  an Aptos chain id and publishes the package at the same address shares signatures with that chain; give a customer chain
+  its own id (or its own package address) before it carries payments.
+- **Upgrade authority.** `upgrade_policy = "compatible"` as built (NET-APT-20 says immutable); the code-object owner can
+  upgrade `relayfee` together with `meta`.
+- **Owed.** A two-passkey relay may exceed the 9,200 exec-gas ceiling (unmeasured); measure it on a localnet or testnet
+  (TODO.md). Commits: T14 `78c67cff`, fix 1 `d48c51f9`.

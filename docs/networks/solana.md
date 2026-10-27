@@ -892,3 +892,30 @@ dynamic [32024, 32050)). The local validator enables every feature from epoch 0 
 - Anchor: anchor-lang.com/docs/updates/release-notes/1-0-0; solana.com/docs/programs/anchor-events (`emit_cpi!`);
   solana.com/docs/tools/litesvm.
 - Token-2022: solana.com/docs/tokens/extensions. ZK ElGamal: solana.com/news/post-mortem-june-25-2025.
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** Instruction `relay_pay_meta(owner, args, salt, meta, auth)`: same accounts and signed `MetaOp` as `relay_pay`;
+  requires `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0` (else `PayMetaShape`), then `relay_pay`'s
+  body; events `MetaTransactionExecuted`, `PaymentMeta`, `PaymentSettled`. Transaction size (1,232 B) bounds `meta`.
+- **Once-set is "until prune".** The once-check is the payer's lane PDA `[b"lane", Account, lane]`. A lane PDA may be pruned
+  after `valid_until`, and then the payer can sign and settle the same `payId` / `ref` again (a new payment, as any pruned
+  lane). A payee that needs once-forever must record the `payId` itself.
+- **Relay fee, wrappers (owner 2026-10-27).** One `relay_fee_<entry>` per fee-less signed entry: `manage_signed`, `mandate_open`,
+  `mandate_revoke_signed`, `mandate_close_signed`, `cancel_signed`, `invalidate_nonces_signed`. Each runs the entry in-process
+  (no CPI), then the router payment (`pay_routed`, relayer = the marker PDA `[b"relayfee"]`, open mode pays the lane).
+  `ref = keccak256("scaas.relayfee" ‖ Config.network ‖ scaas ‖ keccak256(call) ‖ args.extra)`; the lane slot of `call` is the
+  marker, so the payer signs before a lane is known and any lane may submit (a payer cannot pin a wrapper payment to one
+  lane except by a bound payee). Not wrapped: `open_passkey`, `settle`, the pay entries.
+- **Idempotent entries.** `cancel_signed` and `mandate_revoke_signed` can be front-run by anyone holding the signed bytes; the
+  wrapper still runs (the entry is idempotent) and the payer pays its signed fee once. That is by design (the payer's
+  intent is met either way).
+- **Generic `relay_fee`** (external programs): `relay_fee(owner, args, target_data, target_accounts, auth)`; refuses the `scaas`
+  program as target (`RelayFeeShape`), any target account flagged signer (the router must lend no authority), and a
+  non-executable target (`RelayTargetNoCode`).
+- **Open.** A passkey × passkey wrapper transaction against the 4,096-byte v1 limit is untested (it fails closed). The first
+  use of a lane costs rent: the node requires `min_lamports_value` to cover it (T17d `399e9e77`). `gen_vectors.py --check`
+  must still be run in the checkout that holds the Solana vector generator (the relay lines of `vectors.rs` were added by hand).
+- Commits: T11 `b2986c5b`, fixes `ed506b30`, `13251fc7`, `97bd66ec`.

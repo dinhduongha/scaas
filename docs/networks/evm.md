@@ -184,7 +184,7 @@ which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles 
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
 from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
 EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
-state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`UNDERLYING_PQZ`, 110.9 M, table below), so the testnet block gas limit must ramp to
+state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`UNDERLYING_PQZ`, 110.3 M, table below), so the testnet block gas limit must ramp to
 its 200 M target (genesis `0x1000000`).
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
@@ -192,16 +192,16 @@ Glamsterdam).** A release is one `CREATE2` of the whole implementation in the re
 code deposit is state gas at 1,530 per byte of runtime, EIP-7825 caps only the regular gas at 2^24 = 16,777,216, and the
 transaction's gas may not exceed the block gas limit, so a release needs `runtime × 1,530 + 16,777,216` of block gas limit
 (the 2^24 term is the regular-gas bound, not the measured figure: `UnderlyingPqzToken` measures about 4.1 M regular). Runtime
-sizes are `smartcontracts/evm/size-baseline.json`'s:
+sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metatx split, `runs/2026-10-27-metatx-split-sizes.txt`; the split took 269-456 B off each kind):
 
 | Kind (contract) | Runtime | State gas | Needs |
 |---|---|---|---|
-| `NONE` (`NoUnderlyingToken`) | 38,598 B | 59.1 M | **75.8 M** |
-| `UNDERLYING` (`UnderlyingToken`) | 48,524 B | 74.2 M | 91.0 M |
-| `NONE_ZETHER` (`NoUnderlyingZetherToken`) | 48,605 B | 74.4 M | 91.1 M |
-| `NONE_PQZ` (`NoUnderlyingPqzToken`) | 49,336 B | 75.5 M | 92.3 M |
-| `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) | 60,625 B | 92.8 M | 109.5 M |
-| `UNDERLYING_PQZ` (`UnderlyingPqzToken`) | 61,519 B | 94.1 M | **110.9 M** |
+| `NONE` (`NoUnderlyingToken`) | 38,195 B | 58.4 M | **75.2 M** |
+| `UNDERLYING` (`UnderlyingToken`) | 48,068 B | 73.5 M | 90.3 M |
+| `NONE_ZETHER` (`NoUnderlyingZetherToken`) | 48,313 B | 73.9 M | 90.7 M |
+| `NONE_PQZ` (`NoUnderlyingPqzToken`) | 49,067 B | 75.1 M | 91.8 M |
+| `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) | 60,282 B | 92.2 M | 109.0 M |
+| `UNDERLYING_PQZ` (`UnderlyingPqzToken`) | 61,137 B | 93.5 M | **110.3 M** |
 
 So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
 most 54.4 M. A chain with an Ethereum-like 60 M block holds none of the confidential kinds and only the smallest plain
@@ -274,3 +274,41 @@ An EOA that delegated its code through EIP-7702 is still a native account: SCaaS
 - Public profiles stay `draft` until their finality gate is measured and an RPC quorum ≥ 2 is configured.
 - The SCaaS testnet has one signer and one RPC provider (the node's quorum is 1); its threat profile is in
   [NET-EVM-04](#NET-EVM-04).
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+Mermaid, the relay-fee flow (`MtxRelayFee.relay`, one transaction, all or nothing):
+
+```mermaid
+sequenceDiagram
+  participant R as Relayer
+  participant F as MtxRelayFee (router)
+  participant X as MtxRelayExecutor
+  participant T as Target
+  participant K as Token
+  R->>F: relay(target, callData, token, t, sig)
+  F->>F: ref = keccak256("scaas.relayfee", chainUid, target, keccak256(callData)); t.entryRef == ref, lane == payLane(ref), nonce 0, relayer == router
+  F->>X: exec(target, callData)
+  X->>T: call (msg.sender = executor, no value)
+  F->>K: mtxExecuteTransfer(t, sig) (payment bound to the router)
+  F->>R: open mode: token.transfer(msg.sender, value)
+  F-->>R: RelayFeePaid(ref, target, token, payer, payee, amount)
+```
+
+- **Pay-meta.** `mtxPayMeta` / `uaPayMeta` on every `MetaTokenBase` kind: `payId = metaPayId(salt, meta)`, `PaymentMeta(payId, meta)`
+  then exactly `mtxPay` / `uaPay` (lane `payLane(payId)`, nonce 0). `meta` is hashed and logged, never parsed. Body encodings
+  (schemas 1-3) and the shared vectors `smartcontracts/vectors/metatx/paymeta.json`: decisions CTR-MTX-26 (T7 fix 1). The
+  contract has no length cap; the node caps by policy (`max_pay_meta_bytes`, 2,048).
+- **Relay fee.** `src/metatx/MtxRelayFee.sol` (router) and its one-shot `MtxRelayExecutor`, deployed by `DeployBase` CREATE2;
+  `relay` (address payer) and `uaRelay` (UA payer). The router refuses `t.to == EXECUTOR` (UA: `pad(EXECUTOR)`), a target with
+  no code (`RelayTargetNoCode`), and re-entry (a transient flag); it holds no balance after a call. `RelayFeePaid.payee` is
+  `bytes32`. Clients: never pay or approve the executor; if the inner call is an mtx envelope with `MODE_RESTRICT_RELAYER`,
+  its relayer is the executor or open.
+- **Split.** The relayed token paths run on `MtxPipelineLib` (DELEGATECALL to a linked library, ABI and digests unchanged).
+  Measured cost, execution gas, `runs/2026-10-27-metatx-split-overhead-final.txt`: +7.4 k to +7.6 k on the warm/cold
+  `MetaTxGasV2` rows (+8.9 k `unwrap`; cancel 0), data-size bound 7.9-9.1 k small and 8.9-11.5 k largest envelope
+  (`runs/2026-10-27-metatx-split-overhead.txt`). Node: `guard::erc1271_floor(len)` for a contract signer.
+- **Owed.** The EVM node serves address payers only: `uaPayMeta`, `MtxRelayFee.uaRelay` and the `UAPaymentSettled` join need
+  the `ua_metatx` job kind (TODO.md, "EVM node: the UA job path").

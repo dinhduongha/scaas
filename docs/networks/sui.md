@@ -466,3 +466,23 @@ vault stores `{family, account, owner, key_index}` next to the phrase (optional)
   (many multi-scalar multiplications) is possible in principle at high Move compute gas; the practical route is
   Groth16 range/ownership proofs (native, cheap) instead of the EVM Σ-protocols + Bulletproofs. Feasible with a
   dedicated Groth16 circuit; not built.
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** `meta::relay_pay_meta<T>(account, to, amount, salt, meta, valid_until, relayer, extra, auth, clock, ctx)`:
+  `pay_ref = meta_pay_id(salt, meta)`, `lane = pay_lane(pay_ref)`, `nonce = 0` derived on chain; `PaymentMeta` between
+  `MetaTransactionExecuted` and `PaymentSettled`; once per `(payer, payId)` in the payer's `Account.lanes`.
+- **Relay fee.** Module `scaas::relayfee`, one static wrapper per fee-less signed entry: `relay_manage`, `relay_revoke_with_sig`,
+  `relay_cancel` (a refused cancel aborts `ECallRefused`: nothing is paid), `relay_invalidate_nonces`. Each runs the entry
+  then `meta::pay_routed` (package-only): `pay_ref = ref`, `lane = pay_lane(ref)`, `nonce = 0`, `relayer = marker` fixed on
+  chain. `ref = keccak256("scaas.relayfee" ‖ network ‖ original package id ‖ keccak256(call) ‖ salt)`, `salt` = the
+  payment's payer-signed `extra`. Marker = the shared `RelayFee` object; plain `relay_pay` / `relay_pay_meta` refuse it
+  (`EWrongRelayer`). Never pay the marker: plain pay to it strands funds, and the node refuses it.
+- **Client rules.** The payer of `relay_manage` / `relay_cancel` / `relay_invalidate_nonces` is the call's own account (Move
+  allows one `&mut` per object per PTB command); a sponsor needs `_from` variants (not built). `RelayFee` exists only if
+  `relayfee` is in the package's first publish (no `init` runs for a module added by an upgrade).
+- **Upgrade authority.** `relayfee` shares the `scaas` package, so the publisher's `UpgradeCap` can change token and router
+  together; NET-SUI-15 (immutable) is still SPECIFIED, the deploy leaves the cap with the publisher.
+- Commits: T13 `8a033b0e`, fix 1 `3c70e5ba`.
