@@ -2,6 +2,7 @@
 src = "src"
 out = "out"
 libs = ["lib"]
+auto_detect_remappings = false # only the remappings below: an installed lib's own lib/ (OZ erc4626-tests, halmos) would enter the metadata and move every CREATE2 address (KATs)
 test = "test"
 solc_version = "0.8.37"
 # Amsterdam (Glamsterdam) for every profile (owner 2026-10-21, NET-EVM-06): every chain that runs these contracts must
@@ -22,6 +23,7 @@ via_ir = false
 remappings = [
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
   "forge-std/=lib/forge-std/src/",
+  "openzeppelin-contracts/=lib/openzeppelin-contracts/",
 ]
 # storageLayout in the artifacts: `test/v2/Layout.t.sol` pins it against `test/v2/layout/*.json` (TW2 §10.1).
 extra_output = ["storageLayout"]
