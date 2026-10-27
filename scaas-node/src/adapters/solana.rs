@@ -454,6 +454,31 @@ pub struct RelayFeePolicy {
     pub router: Option<Key>,
     pub tokens: Vec<Key>,
     pub params: crate::config::RelayParams,
+    /// `params.relay_fee.min_lamports_value = { "<mint>" = lamports per base unit }`: the node's floor price of a fee
+    /// token, so a fee that must also pay a first-use lane PDA's rent is checked against it ([`rent_covered`]).
+    pub min_lamports_value: HashMap<Key, u128>,
+}
+
+/// The space of a `LanePda` (`8 + LanePda::INIT_SPACE`: discriminator, `next`, `valid_until`, `rent_payer`).
+pub const LANE_PDA_SPACE: u64 = 8 + 8 + 8 + 32;
+
+/// T17 (fee covers cost, controller ruling 2026-10-28): a relay-fee payment always runs on a fresh pay lane
+/// (`payLane(ref)`), so its `LanePda` is usually created by this transaction and the lane (fee payer) pays its rent.
+/// When the PDA does not exist yet (`rent` = its rent-exempt minimum) and the fee is the node's (open mode or bound
+/// to the lane), the fee at the node's floor price must cover that rent; a mint without a `min_lamports_value` gets no
+/// such job. A sponsored job (bound elsewhere, `relay_bound_payee`) is the node's own choice.
+/// ponytail: the lane PDA only (the program refunds it to `rent_payer` on prune); a first-use recipient ATA or a
+/// lazily opened Account is not priced, add them here when they matter.
+pub fn rent_covered(policy: &RelayFeePolicy, op: &MetaOp, program: &Key, lane: &Key, rent: Option<u64>) -> Result<()> {
+    let ours = op.to == relay_fee_marker(program) || op.to == *lane;
+    let Some(rent) = rent.filter(|_| ours) else { return Ok(()) };
+    let price = policy.min_lamports_value.get(&op.asset)
+        .ok_or_else(|| anyhow!("params.relay_fee.min_lamports_value has no price for token {}", b58(&op.asset)))?;
+    let value = op.amount.saturating_mul(*price);
+    if value < u128::from(rent) {
+        bail!("fee {} × min_lamports_value {price} = {value} lamports is below the {rent} lamports rent of the new lane PDA", op.amount);
+    }
+    Ok(())
 }
 
 impl RelayFeePolicy {
@@ -463,7 +488,17 @@ impl RelayFeePolicy {
     pub fn from_cfg(cfg: &ChainCfg) -> Result<Self> {
         let params = cfg.relay_params()?;
         let router = params.router.as_deref().map(|r| key(r).context("params.relay_fee.router")).transpose()?;
-        Ok(Self { router, tokens: cfg.tokens.iter().filter_map(|t| key(&t.address).ok()).collect(), params })
+        let mut min_lamports_value = HashMap::new();
+        if let Some(v) = cfg.params.get("relay_fee").and_then(|t| t.get("min_lamports_value")) {
+            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.min_lamports_value must be a table of mint = lamports"))?;
+            for (m, n) in table {
+                let mint = key(m).with_context(|| format!("params.relay_fee.min_lamports_value: {m} is not a mint"))?;
+                let n = n.as_integer().and_then(|n| u128::try_from(n).ok())
+                    .ok_or_else(|| anyhow!("params.relay_fee.min_lamports_value.{m} must be a non-negative integer"))?;
+                min_lamports_value.insert(mint, n);
+            }
+        }
+        Ok(Self { router, tokens: cfg.tokens.iter().filter_map(|t| key(&t.address).ok()).collect(), params, min_lamports_value })
     }
 }
 
@@ -1154,6 +1189,15 @@ impl ChainAdapter for SolanaAdapter {
         let subject_exists = self.account_data(&subject, "confirmed").await.map_err(transport)?.is_some();
         let o = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
         let e = entry(&self.program, &self.network, &lk, &self.relay_fee, &w.op, o).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        if matches!(e, Entry::Fee { .. } | Entry::Wrapped { .. }) {
+            let pda = find_pda(&[b"lane", &subject, &w.op.lane], &self.program).0;
+            let rent = match self.account_data(&pda, "confirmed").await.map_err(transport)? {
+                Some(_) => None,
+                None => Some(self.rpc("getMinimumBalanceForRentExemption", json!([LANE_PDA_SPACE])).await.map_err(transport)?
+                    .as_u64().ok_or_else(|| SimError::Transport("bad rent".into()))?),
+            };
+            rent_covered(&self.relay_fee, &w.op, &self.program, &lk, rent).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        }
         let pay = Pay { program: self.program, lane: lk, op: &w.op, auth: &w.auth, token_program: w.token_program, subject_exists };
         let mut ixs = vec![auth_ix(&w.auth, &w.op.digest())];
         if let Entry::Wrapped { sig, .. } = &e {
@@ -1531,6 +1575,45 @@ mod tests {
         assert_eq!(RelayFeePolicy::from_cfg(&cfg(None)).unwrap().router, None, "no relay_fee: relay-fee jobs refused");
     }
 
+    /// T17 (fee covers cost): a relay fee that is the node's pays the rent of a first-use lane PDA at the node's floor
+    /// price `params.relay_fee.min_lamports_value`; an existing PDA costs nothing; a mint without a price gets no such
+    /// job; a sponsored job is the node's choice; a malformed price is a startup error.
+    #[test]
+    fn solana_relay_fee_covers_first_use_rent() {
+        let (program, lane) = (key(PROGRAM).unwrap(), lane0_key());
+        let (op, _) = fee_op(); // open mode, 100 units
+        let mut pol = fee_policy(&op);
+        assert!(rent_covered(&pol, &op, &program, &lane, None).is_ok(), "the lane PDA exists");
+        let rent = 1_280_640; // rent-exempt minimum of 56 B at the default rent
+        assert!(format!("{:#}", rent_covered(&pol, &op, &program, &lane, Some(rent)).unwrap_err()).contains("no price"));
+        pol.min_lamports_value.insert(op.asset, 12_806);
+        assert!(format!("{:#}", rent_covered(&pol, &op, &program, &lane, Some(rent)).unwrap_err()).contains("below the 1280640 lamports"));
+        pol.min_lamports_value.insert(op.asset, 12_807);
+        assert!(rent_covered(&pol, &op, &program, &lane, Some(rent)).is_ok(), "100 × 12,807 ≥ the rent");
+        let mine = MetaOp { to: lane, ..op.clone() };
+        pol.min_lamports_value.clear();
+        assert!(rent_covered(&pol, &mine, &program, &lane, Some(rent)).is_err(), "bound to the lane: still the node's fee");
+        let elsewhere = MetaOp { to: key(BOB).unwrap(), ..op.clone() };
+        assert!(rent_covered(&pol, &elsewhere, &program, &lane, Some(rent)).is_ok(), "sponsored");
+        let cfg = |price: toml::Value| {
+            let mut t = toml::Table::new();
+            t.insert("router".into(), PROGRAM.into());
+            t.insert("min_lamports_value".into(), price);
+            let mut params = toml::Table::new();
+            params.insert("relay_fee".into(), toml::Value::Table(t));
+            ChainCfg { params, ..Default::default() }
+        };
+        let mint = b58(&op.asset);
+        let ok = RelayFeePolicy::from_cfg(&cfg(toml::Value::Table(toml::Table::from_iter([(mint.clone(), 9.into())])))).unwrap();
+        assert_eq!(ok.min_lamports_value.get(&op.asset), Some(&9));
+        for bad in [toml::Value::from(5), toml::Value::Table(toml::Table::from_iter([("not-a-mint-0OIl".to_string(), 9.into())])),
+                    toml::Value::Table(toml::Table::from_iter([(mint.clone(), (-1).into())])),
+                    toml::Value::Table(toml::Table::from_iter([(mint, "9".into())]))] {
+            assert!(RelayFeePolicy::from_cfg(&cfg(bad.clone())).is_err(), "{bad}");
+        }
+        assert_eq!(LANE_PDA_SPACE, 56);
+    }
+
     #[test]
     fn nonce_account_and_sequence() {
         let lane = key("3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx").unwrap();
@@ -1830,7 +1913,7 @@ mod tests {
     }
 
     fn fee_policy(op: &MetaOp) -> RelayFeePolicy {
-        RelayFeePolicy { router: Some(key(PROGRAM).unwrap()), tokens: vec![op.asset], params: min_amount(100) }
+        RelayFeePolicy { router: Some(key(PROGRAM).unwrap()), tokens: vec![op.asset], params: min_amount(100), ..Default::default() }
     }
 
     /// Alice pays 100 USD for the vector call (`relay_target`, record writable, data `00 "hello"`, salt 09…), open mode.
