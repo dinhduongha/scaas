@@ -158,10 +158,11 @@ the same key is a native account** (owner; the last clause owner 2026-10-17: kin
 chain never refuses a kind because its own accounts use that key type). A native key that registers gets the derived id
 `keccak256(TAG(kind) ‖ key_data)`, which differs from its native id and is the same on every chain: a Phantom ed25519
 key registers `ed25519` (0x0102) on Solana as on EVM, a MetaMask secp256k1 key registers `secp256k1` (0x0108) on EVM as on
-Solana; the native id keeps working without a record (the native kinds 0x0001–0x0016 have no record and are not in the
+Solana; the native id keeps working without a record (the native kinds 0x0001–0x0018 have no record and are not in the
 per-kind list, CTR-UA-29), and the two ids are separate accounts. Native = an EVM EOA and any EVM contract account (ERC-1271), Hedera native accounts,
 Solana ed25519, Stellar/Pi `G…`, Soroban `C…` contract accounts, Aptos native accounts (any native auth key incl.
-MultiKey), Sui native addresses (incl. native multisig, passkey flag 6, zkLogin), Cosmos native accounts. **GRAM is the
+MultiKey), Sui native addresses (incl. native multisig, passkey flag 6, zkLogin), Cosmos native accounts, NEAR accounts (named
+and implicit), Algorand addresses. **GRAM is the
 exception:** a GRAM wallet is a contract, so the native GRAM account is the wallet contract address (registration-free
 like ERC-1271). Every derived kind registers on each chain where it is used. Registration is where PoP and
 one-key-one-purpose are enforced; receiving to an unregistered derived id is refused, so a typo reverts instead of
@@ -330,6 +331,8 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 | `0x0014` | `sui-address` | 32-byte address | Sui | native flags 0/1/2/6, native multisig, zkLogin |
 | `0x0015` | `cosmos-account` | 20- or 32-byte account | Cosmos | ADR-036 secp256k1; native multisig |
 | `0x0016` | `ton-wallet` | 32-byte account id (workchain from chain config) | GRAM | wallet contract (W5R1/V4R2/V3R2), TON Connect |
+| `0x0017` | `near-account` | 32 bytes: an implicit account (64 lower-case hex) is its raw 32 bytes, any other account id (named, ETH-implicit) `sha256(account_id bytes)`; told apart by the account-id string, which travels with the member | NEAR | the member is the call's predecessor (access keys are not readable on chain) |
+| `0x0018` | `algorand-address` | 32-byte address public key | Algorand | `ed25519verify_bare` by the current authority (`AcctAuthAddr` if set, else the address); rekeyed to a LogicSig or multisig: through an account record |
 
 Derived kinds (registered; `d` = key data):
 

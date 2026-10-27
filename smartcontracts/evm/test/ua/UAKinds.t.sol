@@ -40,7 +40,7 @@ contract UAKindsTest is Test {
     function test_kindTable() public view {
         string memory j = _k();
         uint256 n = _count(j, "kinds");
-        assertEq(n, 29);
+        assertEq(n, 31);
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("kinds", i, "kind")));
             bool native = vm.parseJsonBool(j, _at("kinds", i, "native"));
@@ -55,6 +55,24 @@ contract UAKindsTest is Test {
             if (kind == UAKinds.MSIG) assertEq(bytes(UAKinds.groupName(kind)).length, 0);
             else assertEq(UAKinds.groupName(kind), vm.parseJsonString(j, _at("kinds", i, "group")));
         }
+    }
+
+    /// near-algorand T2 (spec §3.3, §4.3, §8): the two native kinds, 32-byte ids, no member kind; 0x0019 unknown.
+    function test_nearAlgorandNatives() public {
+        assertTrue(UAKinds.isNative(0x0017));
+        assertTrue(UAKinds.isNative(0x0018));
+        assertFalse(UAKinds.isNative(0x0019));
+        assertEq(UAKinds.name(0x0017), "near-account");
+        assertEq(UAKinds.name(0x0018), "algorand-address");
+        assertFalse(UAKinds.isMember(0x0017, true));
+        assertFalse(UAKinds.isMember(0x0018, true));
+        assertFalse(UAKinds.isDerived(0x0017));
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, uint16(0x0017)));
+        h.validate(0x0017, new bytes(32), false);
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, uint16(0x0018)));
+        h.validate(0x0018, new bytes(32), false);
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, uint16(0x0019)));
+        h.validate(0x0019, new bytes(32), false);
     }
 
     function test_groupsPurposesConstants() public view {

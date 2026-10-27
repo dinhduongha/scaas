@@ -34,6 +34,8 @@ public static partial class UA
         new(0x0014, "sui-address", true, [32], null),
         new(0x0015, "cosmos-account", true, [20, 32], null),
         new(0x0016, "ton-wallet", true, [32], null),
+        new(0x0017, "near-account", true, [32], null),
+        new(0x0018, "algorand-address", true, [32], null),
         new(0x0100, "webauthn-p256", false, [96], "p256"),
         new(0x0101, "p256", false, [64], "p256"),
         new(0x0102, "ed25519", false, [32], "ed25519"),

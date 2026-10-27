@@ -50,6 +50,8 @@ KINDS = (
     (0x0014, 'sui-address', True, (32,), None),
     (0x0015, 'cosmos-account', True, (20, 32), None),
     (0x0016, 'ton-wallet', True, (32,), None),
+    (0x0017, 'near-account', True, (32,), None),
+    (0x0018, 'algorand-address', True, (32,), None),
     (0x0100, 'webauthn-p256', False, (96,), 'p256'),
     (0x0101, 'p256', False, (64,), 'p256'),
     (0x0102, 'ed25519', False, (32,), 'ed25519'),

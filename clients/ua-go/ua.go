@@ -47,6 +47,8 @@ var Kinds = []Kind{
 	{0x0014, "sui-address", true, []int{32}, ""},
 	{0x0015, "cosmos-account", true, []int{20, 32}, ""},
 	{0x0016, "ton-wallet", true, []int{32}, ""},
+	{0x0017, "near-account", true, []int{32}, ""},
+	{0x0018, "algorand-address", true, []int{32}, ""},
 	{0x0100, "webauthn-p256", false, []int{96}, "p256"},
 	{0x0101, "p256", false, []int{64}, "p256"},
 	{0x0102, "ed25519", false, []int{32}, "ed25519"},

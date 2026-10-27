@@ -83,7 +83,7 @@ library UAKinds {
     //       SIGNING, not MEMBER) -----
 
     function isNative(uint16 kind) internal pure returns (bool) {
-        return (kind >= EVM_EOA && kind <= HEDERA_NATIVE) || (kind >= 0x0010 && kind <= 0x0016);
+        return (kind >= EVM_EOA && kind <= HEDERA_NATIVE) || (kind >= 0x0010 && kind <= 0x0018);
     }
 
     /// `zether-bls12381` only: `zether-bn254` (0x0140) is in `legacy/ua6/` since UA-6 (U10, CTR-ZTH-32).
@@ -121,6 +121,8 @@ library UAKinds {
         if (kind == 0x0014) return "sui-address";
         if (kind == 0x0015) return "cosmos-account";
         if (kind == 0x0016) return "ton-wallet";
+        if (kind == 0x0017) return "near-account";
+        if (kind == 0x0018) return "algorand-address";
         if (kind == 0x0100) return "webauthn-p256";
         if (kind == 0x0101) return "p256";
         if (kind == 0x0102) return "ed25519";

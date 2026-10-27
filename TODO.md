@@ -120,7 +120,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   `nethermind-2.2` review minors: fail-closed drill with a tampered library, e2e burst / fill drills under Amsterdam,
   a 200 M block load rehearsal, `.dockerignore` for the default (no `FFI_REV`) image build, README note that the
   testnet's PQZL v2 id is the forgeable one, an `eth_estimateGas` row in the probe; main's FFI library `ee2f7096…` is
-  not the reviewed `16dd99ce…` (review the v4 library before building the image).
+  not the reviewed `16dd99ce…` (review the v4 library before building the image); the `UARegistry` redeploy for the native UA kinds `0x0017 near-account` /
+  `0x0018 algorand-address` (near-algorand T2: `UAKinds` bytecode changed, spec 2026-10-28-near-algorand-design §8).
 - [ ] **Dependabot alerts 19 / 20 / 21 — owner 2026-10-22: leave open (option 2), no dismiss.** (2026-10-27: #36 `sprintf-js` closed on its own; #42–#45 `fast-uri` < 3.1.9 in `smartcontracts/ton`, dev-only via `ajv`, fixed by the lockfile bump `885c91f4`, TON tests 28/28.) All dev / test-only:
   Solana `ed25519-dalek` 1.0.1, `curve25519-dalek` 3.2.0, `rand` 0.7.3 via `litesvm` 0.17 (dev-dependency) →
   `agave-precompiles` 4.3.0 — `cargo update` once litesvm / Agave move to `ed25519-dalek` 2; TON `sprintf-js` 1.0.3 via
