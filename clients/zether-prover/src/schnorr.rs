@@ -174,8 +174,14 @@ fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8>
     b
 }
 
+/// `e = hashToScalar(keccak256(pre ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2))` (review C0-4): the statement points are absorbed, in
+/// the contract's G1 encoding, so `e` cannot be known before `s` is chosen.
 fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u8], a2: &[u8]) -> Fr<C> {
+    let (k, m, bb) = kmb(e, kind);
     let mut b = cp_prefix(e, amount, kind);
+    for p in [generator::<C>(), k, bb, m] {
+        b.extend(encode_point::<C>(&p));
+    }
     b.extend_from_slice(a1);
     b.extend_from_slice(a2);
     hash_to_scalar::<C>(&keccak256(&b))
@@ -351,6 +357,32 @@ mod tests {
         let s1 = sign(&k1, &keccak256(b"a"), &mut rng);
         let s2 = sign(&k1, &keccak256(b"b"), &mut rng);
         assert_ne!(s1[..point_len::<C>()], s2[..point_len::<C>()]);
+    }
+
+    /// Review C0-4: every statement point is in the challenge; moving any one of them moves `e`.
+    #[test]
+    fn cp_challenge_binds_statement_points() {
+        type C = Bls12381;
+        let g = generator::<C>();
+        let p = |n: u64| g * Fr::<C>::from(n);
+        let mk = |pts: [G<C>; 6]| Entry::<C> {
+            chain_id: 1, chain_uid: [2; 32], token: [3; 20], entry_ref: [4; 32], index: 0,
+            y_t: pts[0], c_out: pts[1], d_out: pts[2], y_a: pts[3], c_aud: pts[4], d_aud: pts[5],
+        };
+        let pts: [G<C>; 6] = [p(5), p(6), p(7), p(8), p(9), p(10)];
+        let e0 = mk(pts);
+        let (a1, a2) = (encode_point::<C>(&p(11)), encode_point::<C>(&p(12)));
+        for kind in [OpeningKind::ReceiverX, OpeningKind::Auditor, OpeningKind::SenderCp] {
+            let base = cp_challenge(&e0, 1, kind, &a1, &a2);
+            let (k, m, b) = kmb(&e0, kind);
+            let mut seen = vec![base];
+            for (n, src) in [k, m, b].into_iter().enumerate() {
+                // replace the one point that plays K, M or B for this kind by another
+                let c = cp_challenge(&mk(pts.map(|q| if q == src { p(99) } else { q })), 1, kind, &a1, &a2);
+                assert!(!seen.contains(&c), "{kind:?}: statement point {n} is not bound");
+                seen.push(c);
+            }
+        }
     }
 
     #[cfg(feature = "bn254")]

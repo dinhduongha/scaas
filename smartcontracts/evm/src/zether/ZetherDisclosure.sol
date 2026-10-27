@@ -76,16 +76,18 @@ contract ZetherDisclosure is ITransferDisclosure {
     }
 
     /// @dev `[z]G − A1 − [e]K == O` và `[z]B − A2 − [e]M + [e·amount]G == O`,
-    ///      `e = H(DISCLOSE_TAG ‖ chainid ‖ chainUid ‖ token ‖ entryRef ‖ index ‖ amount ‖ kind ‖ A1 ‖ A2)` (CTR-ZTH-36).
+    ///      `e = H(DISCLOSE_TAG ‖ chainid ‖ chainUid ‖ token ‖ entryRef ‖ index ‖ amount ‖ kind ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2)`
+    ///      (CTR-ZTH-36, CTR-ZTH-40; the points in the token's G1 encoding).
     function _chaumPedersen(Leg memory l, bytes memory pre, uint256 amount, bytes calldata opening)
         private view returns (bool)
     {
         (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(opening, (bytes, bytes, uint256));
         if (a1.length != l.p || a2.length != l.p || z >= l.r) revert OpeningMalformed();
-        uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(pre, a1, a2)), l.r);
+        bytes memory g = l.v.g1MulBase(1);
+        // strong Fiat-Shamir (review C0-4): the statement points G, K, B, M are absorbed, in the token's own encoding
+        uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(bytes.concat(pre, g, l.k, l.b, l.m), a1, a2)), l.r);
         if (e == 0) return false;
         amount = mulmod(e, amount, l.r); // từ đây: e·amount
-        bytes memory g = l.v.g1MulBase(1);
         if (!_cpEq(l, bytes.concat(g, a1, l.k), z, e, 0)) return false;
         return _cpEq(l, bytes.concat(l.b, a2, l.m, g), z, e, amount);
     }

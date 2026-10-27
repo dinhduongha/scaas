@@ -2967,6 +2967,8 @@ Change (2026-10-11): owner — `zetherTransfer` stores the full record on a BUND
 ### CTR-ZTH-40 — SENDER_CP opening; leg index in every disclosure challenge
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-40 · superseded-by: —
 
+Change (2026-10-27): review C0-4 — strong Fiat–Shamir: `e = hashToScalar(keccak256(pre ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2))`, the statement points in the token's G1 encoding, so a sender cannot choose `s` after `e` (`s = k1⁻¹(k2 + e(v − a))`) and open a false amount with the key holder. Not a `proofSystemId` change; every Chaum–Pedersen opening and the disclosure vectors changed (the old ones are refusal fixtures). Status: **done** (review2 T4, branch `review2-fix`).
+
 Change (2026-10-27): owner ruling 2026-10-27, C0-1 (ii) — the `AUDITOR` opening of a multi-recipient leg `j` is the DLEQ `K = Y_a`, `B = D_aud_j`, `M = C_aud_j − [v]G` and opens that leg alone (the single format: `B = D_out`); `transferCiphertext` returns `C_out ‖ D_out ‖ C_aud ‖ D_aud`. The challenge formula and the `bundles` argument are unchanged here (review C0-4 / C0-3 follow). Status: **done** (review2 T3, branch `review2-fix`; `proofSystemId` / `proofSystemIdMulti` = `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"[ ‖ "/multi"])`, `…/v2` refused).
 
 **Why.** Handing `s` over opens every leg of a multi-recipient transfer, decoys included; a Chaum-Pedersen proof opens leg `j` only. The challenge binds `j` for every kind, so an opening of one leg never verifies for another.

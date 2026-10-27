@@ -228,6 +228,12 @@ contract ZetherS3VectorsTest is Test {
 
     function test_s3DisclosureBls12381() public { assertEq(_checkDisclosure("disclosure_bls12381.json", 0), 8); }
 
+    /// Review C0-4: the openings of the weak challenge (`weak-fs/`, no statement points in `e`) are refused; only the two
+    /// SENDER_S openings (no challenge) still pass.
+    function test_weakFiatShamirOpeningsRefused() public {
+        assertEq(_checkDisclosure("weak-fs/disclosure_bls12381.json", 0), 2);
+    }
+
     /// Review C0-1 / C0-9: the `…/v2` vectors (the pre-fix prover, `s3/v2/`) are refused by the `…/v3` verifiers: another
     /// `proofSystemId`, another header (512 bytes) and another leg layout.
     function test_v2ProofRefused() public view {

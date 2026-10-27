@@ -186,6 +186,9 @@ abstract contract ZetherFixture is Test {
         t.mtxShield(ZetherTypes.UA.unwrap(u.ua), amount);
     }
 
+    /// @dev Non-zero: the `s` of the next `_proveTransfer` (review C0-4: a late `s` against a weak challenge).
+    uint256 internal forceS;
+
     struct Tx {
         bytes payload;
         bytes proof;
@@ -197,7 +200,7 @@ abstract contract ZetherFixture is Test {
         internal view returns (Tx memory r)
     {
         IZetherToken.AccountState memory st = t.accountState(from.ua);
-        r.s = uint256(keccak256(abi.encode(from.x, st.sendCounter, v, address(t)))) % ver.groupOrder();
+        r.s = forceS != 0 ? forceS : uint256(keccak256(abi.encode(from.x, st.sendCounter, v, address(t)))) % ver.groupOrder();
         r.payload = _payload(t, from, to, v, r.s, st);
         ZetherProver.TransferWitness memory w = _witness(from.x, v, r.s, b - v - (ZetherTypes.UA.unwrap(ben) == 0 ? 0 : t.confidentialFee()));
         r.proof = _proveT(stm.transferStatementSingle(address(t), r.payload, ben, binding), w);
@@ -416,15 +419,25 @@ abstract contract ZetherFixture is Test {
         ITransferDisclosure.OpeningKind kind,
         bytes memory base
     ) internal view returns (bytes memory) {
-        uint256 r = ver.groupOrder();
-        uint256 k = uint256(keccak256(abi.encode("cp", x, ref, j, amount, kind))) % r;
+        uint256 k = uint256(keccak256(abi.encode("cp", x, ref, j, amount, kind))) % ver.groupOrder();
         bytes memory a1 = ver.g1MulBase(k);
         bytes memory a2 = ver.g1Mul(base, k);
-        uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, t.chainUid(), address(t)),
-            abi.encodePacked(ref, j, amount, uint8(kind), a1, a2)
-        )), r);
-        return abi.encode(a1, a2, addmod(k, mulmod(e, x, r), r));
+        uint256 e = _cpChallenge(
+            bytes.concat(
+                abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, t.chainUid(), address(t)),
+                abi.encodePacked(ref, j, amount, uint8(kind))
+            ), x, amount, base, a1, a2);
+        return abi.encode(a1, a2, addmod(k, mulmod(e, x, ver.groupOrder()), ver.groupOrder()));
+    }
+
+    /// @dev Strong Fiat-Shamir (review C0-4): `H(pre ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2)`; `K = [x]G` for every kind and, for an
+    ///      honest opening, `M = [amount]G + [x]B`.
+    function _cpChallenge(bytes memory pre, uint256 x, uint256 amount, bytes memory base, bytes memory a1, bytes memory a2)
+        internal view returns (uint256)
+    {
+        pre = bytes.concat(pre, ver.g1MulBase(1), ver.g1MulBase(x), base);
+        pre = bytes.concat(pre, ver.g1Add(ver.g1MulBase(amount), ver.g1Mul(base, x)));
+        return ZetherTranscript.hashToScalar(keccak256(bytes.concat(pre, a1, a2)), ver.groupOrder());
     }
 
     function _none() internal pure returns (ZetherTypes.UA) {

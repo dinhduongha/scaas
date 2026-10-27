@@ -973,14 +973,23 @@ DLEQ `log_G K == log_B N` (`ZetherDisclosure._chaumPedersen`) checks `[z]G − A
 
 ```
 e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ chainUid ‖ token(20) ‖ entryRef ‖ be32(j)
-                           ‖ be32(amount) ‖ u8(kind) ‖ A1 ‖ A2))
+                           ‖ be32(amount) ‖ u8(kind) ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2))
 ```
+
+**Strong Fiat–Shamir** (review C0-4). `G`, `K`, `B`, `M` are the statement points of the kind (table above: `K = Y_tj`, `B = D_out`,
+`M = C_out_j` for `RECEIVER_X`; `K = Y_a`, `B = D_aud_j` (single format `D_out`), `M = C_aud_j` for `AUDITOR`; `K = D_out`,
+`B = Y_tj`, `M = C_out_j` for `SENDER_CP`), each in the token's own G1 encoding (EIP-2537 on BLS12-381), `G` the generator in
+that encoding. Before this, `e` carried none of them and `entryRef` is known before the transfer exists, so a sender who knew
+`e` before choosing `s` could set `s = k1⁻¹(k2 + e(v − a))`, send an honest transfer of `v` and, with the key holder
+(`z = k1 + e·x`), open the false amount `a`. Now `e` depends on `s` through `D_out` / `C_out_j`, which the sender fixes
+first. `SENDER_S` has no challenge and is unaffected. Not a `proofSystemId` change (the disclosure is a view); every
+Chaum–Pedersen opening changed, so the disclosure vectors were regenerated, and the old ones are kept only as refusal
+fixtures (`test/vectors/zether/s3/weak-fs/`).
 
 `j` is in the challenge for every kind (single format: `j = 0`); the disclosure vectors changed with it. Since `…/v3`
 (review C0-1) a multi-recipient leg's auditor copy is under its own `t_j`, so an `AUDITOR` opening of leg `j` uses
 `D_aud_j` as its base and opens that leg alone (with the shared `s` one opening gave `[s]Y_a` and so every leg);
-`transferCiphertext` returns `C_out ‖ D_out ‖ C_aud ‖ D_aud`. The challenge formula is unchanged here (strong
-Fiat–Shamir is review C0-4). The nonce `k` is hedged (`H(secret ‖ statement ‖ rng)`): a repeated `k` over two openings reveals the secret. The prover's `verify_opening` mirrors `ZetherDisclosure` (`open_sender_cp` builds `SENDER_CP`); `chainUid` built in P3.
+`transferCiphertext` returns `C_out ‖ D_out ‖ C_aud ‖ D_aud`. The challenge also absorbs the statement points (review C0-4, above). The nonce `k` is hedged (`H(secret ‖ statement ‖ rng)`): a repeated `k` over two openings reveals the secret. The prover's `verify_opening` mirrors `ZetherDisclosure` (`open_sender_cp` builds `SENDER_CP`); `chainUid` built in P3.
 
 Additional checks: `amount < 2^n_v = 2^64` (otherwise `amount + r` would also "pass", because `[amount]G` depends only on `amount mod r`; `2^64 < r`, so each `[amount]G` has exactly one valid `amount`), `z < r`, `e ≠ 0`; `A1`, `A2` go into the same MSM (subgroup check on BLS12-381). The auditor reads exactly the per-transfer `C_aud_j` and never anyone's `acc`/`pending` (encrypted under the owners' keys). Disclosure is irrevocable once an opening is handed over (the sender's `s` opens only this transfer, [CTR-ZTH-30](#CTR-ZTH-30)).
 
