@@ -1145,3 +1145,8 @@ keccak256(bundle) == entry[entryRef]	obsolete	plan 5h D11 / D13 (2026-10-20): th
 PqzRegistered(…)	obsolete	review C2-8 (2026-10-27): no such event was ever declared; the PQZ key is in the registry's UARegistered(…, pqzKey); contracts/accounts.md#CTR-UA-17
 (payer, payee, amount, entryRef)	renamed	review C5-10 (2026-10-27): one reconciliation key (token, payer, payee, entryRef); contracts/metatx.md#CTR-MTX-10
 (chain, contract, to, entryRef)	renamed	review C5-10 (2026-10-27): the booking key adds the payer, (chain, contract, from, to, entryRef); integration.md
+16.2	revision-label	forge-std tag v1.16.2 (CI pin of the 2026-10-07 inventory) was replaced by commit 88c8a288 with a source checksum, scripts/evm_libs.sh (decisions.md W-N); architecture.md#components
+16000000	obsolete	2026-10-07 gas breaker value for the PQZ chain (16 000 000); superseded by the Amsterdam gas model (SCaaS testnet 64 000 000, NODE-STO-10), node/submit-lanes.md#amsterdam-gas
+createZetherToken	renamed	v1 OpenFactoryV1 entry point (legacy/p5); Zether tokens are created through OpenFactory.createToken(kind NONE_ZETHER or UNDERLYING_ZETHER, version, initArgs, salt), contracts/token-wrappers.md#factory-interface
+registerImplementation	renamed	factory v2 (legacy/p1e) call; the registrar publishes releases with OpenFactory.deployImplementation(kind, version, envVersion, initcode, implArgs), contracts/token-wrappers.md#factory-interface
+zetherEnabled	renamed	factory v2 gate; the per-kind creation gate is OpenFactory.setKindEnabled(kind, on) and kindEnabled(kind), the confidential kinds start off, contracts/token-wrappers.md#factory-interface
