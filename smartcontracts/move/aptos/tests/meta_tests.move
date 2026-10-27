@@ -3,6 +3,7 @@ module scaas::meta_tests {
     use aptos_framework::account;
     use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::coin;
+    use aptos_framework::event;
     use aptos_framework::fungible_asset::Metadata;
     use aptos_framework::object;
     use scaas::fixtures::{Self as fx, bal, set_now};
@@ -571,5 +572,137 @@ module scaas::meta_tests {
         meta::open(v::alice(), v::alice_pk());
         let g = account::create_signer_for_test(@0x9a);
         meta::start_recovery(&g, v::alice(), 0, v::mallory_pk(), vector[], vector[]);
+    }
+
+    // ------------------------------------------------------------------ CTR-MTX-26 pay-meta (spec §6.2)
+
+    const LANE_1A: address = @0x1a;
+
+    // Rule 1: every row of smartcontracts/vectors/metatx/paymeta.json (`long_body_4096` as a hash only).
+    #[test]
+    fun pay_meta_vectors_match() {
+        let rows = v::pm_rows();
+        assert!(rows.length() == 6, 0);
+        rows.for_each(|r| {
+            assert!(meta::meta_pay_id(r[0], r[1]) == r[2], 1);
+            assert!(meta::pay_lane(r[2]) == r[3], 2);
+        });
+    }
+
+    // Same signed op as a plain pay of that payId; lane payLane(payId), nonce 0; `PaymentMeta` + `PaymentSettled`.
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    fun pay_meta_settles_with_its_event(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
+        assert!(bal(e, BEEF) == 100 && meta::lane_nonce(v::alice(), v::pm_note_lane()) == 1, 0);
+        let pm = meta::payment_meta_for_testing(v::eur(), v::pm_note_id(), v::pm_note_meta());
+        assert!(event::was_event_emitted(&pm), 1);
+        let ps = meta::payment_settled_for_testing(v::eur(), v::alice(), BEEF, 100, v::pm_note_id());
+        assert!(event::was_event_emitted(&ps), 2);
+    }
+
+    // `pay_meta_check` (twin of `pay_check`): the digest of the plain pay, no write; then the entry settles.
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    fun pay_meta_check_matches_relay_pay_meta(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        let d = v::pm_a_note_check(LANE_1A, e, v::pm_note_salt(), v::pm_note_meta());
+        assert!(d == v::pm_a_note_digest() && d == v::pm_a_note_plain_check(LANE_1A, e), 0);
+        assert!(!meta::exists_at(v::alice()) && bal(e, BEEF) == 0, 1);
+        v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
+        assert!(bal(e, BEEF) == 100, 2);
+    }
+
+    #[test(f = @aptos_framework, b = @scaas)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
+    fun pay_meta_check_refuses_another_meta(f: signer, b: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        let m = v::pm_note_meta();
+        m.push_back(0);
+        v::pm_a_note_check(LANE_1A, e, v::pm_note_salt(), m);
+    }
+
+    // Review focus 4: `meta` that does not hash to the signed pay_ref (one byte more) ⇒ the digest changes.
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
+    fun aptos_pay_meta_mismatch_and_replay(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        let m = v::pm_note_meta();
+        m.push_back(0);
+        v::pm_a_note(&lane, e, v::pm_note_salt(), m);
+    }
+
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
+    fun aptos_pay_meta_mismatch_salt(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        let s = v::pm_note_salt();
+        s.reverse();
+        v::pm_a_note(&lane, e, s, v::pm_note_meta());
+    }
+
+    // A second pay-meta of the same (payer, payId), and a plain pay of it after a pay-meta: one lane, once.
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 4, location = scaas::meta)]
+    fun aptos_pay_meta_replay(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
+        v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
+    }
+
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 4, location = scaas::meta)]
+    fun aptos_pay_meta_then_plain_pay_refused(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
+        v::pm_a_note_plain(&lane, e);
+    }
+
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 5, location = scaas::meta)]
+    fun pay_meta_salt_is_32_bytes(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        let s = v::pm_note_salt();
+        s.pop_back();
+        v::pm_a_note(&lane, e, s, v::pm_note_meta());
+    }
+
+    // Rule 6: the once-set is the payer's own lane table: Bob's pay of 1 with Alice's payId (his Account) first,
+    // then Alice's pay-meta still settles.
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    fun pay_meta_once_set_is_per_payer(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        fx::mint(e, v::b_account(), 1);
+        v::pm_b_note(&lane, e);
+        assert!(meta::lane_nonce(v::bob(), v::pm_note_lane()) == 1, 0);
+        v::pm_a_note(&lane, e, v::pm_note_salt(), v::pm_note_meta());
+        assert!(bal(e, BEEF) == 101, 1);
+    }
+
+    // Review focus 3: a pay-meta signed with the router marker as relayer never settles through the plain entry.
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x1a)]
+    #[expected_failure(abort_code = 3, location = scaas::meta)]
+    fun aptos_router_bound_pay_meta_refused_direct(f: signer, b: signer, lane: signer) {
+        fx::setup(&f, &b);
+        let e = eur();
+        fx::mint(e, v::a_account(), 1000);
+        v::pm_a_marker(&lane, e, v::pm_note_salt(), v::pm_note_meta());
     }
 }
