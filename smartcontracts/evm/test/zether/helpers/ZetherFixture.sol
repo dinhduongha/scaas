@@ -424,7 +424,7 @@ abstract contract ZetherFixture is Test {
         bytes memory a2 = ver.g1Mul(base, k);
         uint256 e = _cpChallenge(
             bytes.concat(
-                abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, t.chainUid(), address(t)),
+                abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, t.chainUid(), address(t)),
                 abi.encodePacked(ref, j, amount, uint8(kind))
             ), x, amount, base, a1, a2);
         return abi.encode(a1, a2, addmod(k, mulmod(e, x, ver.groupOrder()), ver.groupOrder()));

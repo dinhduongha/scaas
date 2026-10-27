@@ -445,7 +445,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function _lateS(bytes32 ref, uint256 v, uint256 a) internal view returns (uint256 e, uint256 s) {
         uint256 r = ver.groupOrder();
         e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, tok.chainUid(), address(tok)),
+            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, tok.chainUid(), address(tok)),
             abi.encodePacked(ref, uint256(0), a, uint8(ITransferDisclosure.OpeningKind.RECEIVER_X)),
             ver.g1MulBase(K1), ver.g1MulBase(K2)
         )), r);
@@ -509,9 +509,11 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         uint256 k = 0x5151;
         bytes memory a1 = ver.g1MulBase(k);
         bytes memory a2 = ver.g1Mul(dOut, k);
+        // the full new preimage (G ‖ K ‖ B ‖ M) minus chainUid: chainUid is the only difference from the honest one
         uint256 e = uint256(keccak256(bytes.concat(
-            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V1", block.chainid, address(tok)),
-            abi.encodePacked(ref, uint256(0), uint256(123), uint8(1), a1, a2)
+            abi.encodePacked("SCAAS-ZETHER-DISCLOSE-V2", block.chainid, address(tok)),
+            abi.encodePacked(ref, uint256(0), uint256(123), uint8(1)),
+            ver.g1MulBase(1), bob.y, dOut, _cut(ct, 0, ver.g1EncodedBytes()), a1, a2
         )));
         e = _h2s(e, r);
         bytes memory noUid = abi.encode(a1, a2, addmod(k, mulmod(e, bob.x, r), r));

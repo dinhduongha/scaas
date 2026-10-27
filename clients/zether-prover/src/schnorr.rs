@@ -161,9 +161,9 @@ pub fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
     encode_scalar::<C>(s).to_vec()
 }
 
-/// Challenge preimage up to (not including) `A1 ‖ A2`; also the opening nonce's public input.
+/// Challenge preimage up to the statement points; also the opening nonce's public input.
 fn cp_prefix<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind) -> Vec<u8> {
-    let mut b = b"SCAAS-ZETHER-DISCLOSE-V1".to_vec();
+    let mut b = b"SCAAS-ZETHER-DISCLOSE-V2".to_vec();
     b.extend(abi::u256(e.chain_id));
     b.extend_from_slice(&e.chain_uid);
     b.extend_from_slice(&e.token);

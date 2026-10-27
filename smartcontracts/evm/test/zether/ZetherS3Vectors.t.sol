@@ -234,6 +234,16 @@ contract ZetherS3VectorsTest is Test {
         assertEq(_checkDisclosure("weak-fs/disclosure_bls12381.json", 0), 2);
     }
 
+    /// A record whose key point `K` is `O` (and `M = O`, amount 0) satisfies both equations with `A1 = A2 = O, z = 0`:
+    /// refused, as the prover's `verify_opening` does.
+    function test_keyPointIdentityRefused() public {
+        S3Token t = new S3Token();
+        uint256 p = bls.g1EncodedBytes();
+        t.set(bls, bytes32(0), "", new bytes(16 + 4 * p)); // Y_t = C_out = D_out = C_aud = O
+        assertFalse(disc.verifyTransferAmount(address(t), "ref", 0, 0, ITransferDisclosure.OpeningKind.RECEIVER_X,
+            abi.encode(new bytes(p), new bytes(p), uint256(0)), ""));
+    }
+
     /// Review C0-1 / C0-9: the `…/v2` vectors (the pre-fix prover, `s3/v2/`) are refused by the `…/v3` verifiers: another
     /// `proofSystemId`, another header (512 bytes) and another leg layout.
     function test_v2ProofRefused() public view {

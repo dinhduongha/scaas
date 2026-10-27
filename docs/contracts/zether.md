@@ -972,11 +972,11 @@ sequenceDiagram
 DLEQ `log_G K == log_B N` (`ZetherDisclosure._chaumPedersen`) checks `[z]G − A1 − [e]K == O` and `[z]B − A2 − [e]N == O` over the pairs above. `SENDER_CP` lets the sender prove one leg without handing over `s`, which would open every leg, decoys included.
 
 ```
-e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ chainUid ‖ token(20) ‖ entryRef ‖ be32(j)
+e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V2" ‖ be32(chainid) ‖ chainUid ‖ token(20) ‖ entryRef ‖ be32(j)
                            ‖ be32(amount) ‖ u8(kind) ‖ G ‖ K ‖ B ‖ M ‖ A1 ‖ A2))
 ```
 
-**Strong Fiat–Shamir** (review C0-4). `G`, `K`, `B`, `M` are the statement points of the kind (table above: `K = Y_tj`, `B = D_out`,
+**Strong Fiat–Shamir** (review C0-4; the tag is `…-V2` since the transcript changed). `G`, `K`, `B`, `M` are the statement points of the kind (table above: `K = Y_tj`, `B = D_out`,
 `M = C_out_j` for `RECEIVER_X`; `K = Y_a`, `B = D_aud_j` (single format `D_out`), `M = C_aud_j` for `AUDITOR`; `K = D_out`,
 `B = Y_tj`, `M = C_out_j` for `SENDER_CP`), each in the token's own G1 encoding (EIP-2537 on BLS12-381), `G` the generator in
 that encoding. Before this, `e` carried none of them and `entryRef` is known before the transfer exists, so a sender who knew

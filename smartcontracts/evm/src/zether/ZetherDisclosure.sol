@@ -12,7 +12,7 @@ import {ZetherTranscript} from "./ZetherTranscript.sol";
 ///         `auditorKey`, `chainUid`); đường cong do verifier của token quyết. Tách khỏi token (CTR-ZTH-43).
 ///         Challenge ràng địa chỉ TOKEN, không phải contract này: opening không phụ thuộc nơi deploy.
 contract ZetherDisclosure is ITransferDisclosure {
-    bytes private constant DISCLOSE_TAG = "SCAAS-ZETHER-DISCLOSE-V1";
+    bytes private constant DISCLOSE_TAG = "SCAAS-ZETHER-DISCLOSE-V2";
     /// @dev `2^n_v` (n_v = 64, RS-NV64-1): trần của số tiền tiết lộ.
     uint256 private constant VALUE_BOUND = 1 << 64;
 
@@ -83,6 +83,7 @@ contract ZetherDisclosure is ITransferDisclosure {
     {
         (bytes memory a1, bytes memory a2, uint256 z) = abi.decode(opening, (bytes, bytes, uint256));
         if (a1.length != l.p || a2.length != l.p || z >= l.r) revert OpeningMalformed();
+        if (_isO(l.k)) return false; // the key point K = O would make both equations trivial (mirrors the prover)
         bytes memory g = l.v.g1MulBase(1);
         // strong Fiat-Shamir (review C0-4): the statement points G, K, B, M are absorbed, in the token's own encoding
         uint256 e = ZetherTranscript.hashToScalar(keccak256(bytes.concat(bytes.concat(pre, g, l.k, l.b, l.m), a1, a2)), l.r);
