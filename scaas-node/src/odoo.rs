@@ -111,6 +111,14 @@ pub struct Job {
     /// relayed as a plain transfer that drops the payee's fee authorization (review T2 m5).
     #[serde(default)]
     pub receiver_fee: Option<Value>,
+    /// A pay-meta `metatx` job (CTR-MTX-26, `struct = transfer`): `salt` (bytes32) and `meta` (hex) the payment id
+    /// commits to; relayed as `mtxPayMeta`, or as the plain `mtxExecuteTransfer` with `meta_offchain = true`.
+    #[serde(default)]
+    pub salt: Option<String>,
+    #[serde(default)]
+    pub meta: Option<String>,
+    #[serde(default)]
+    pub meta_offchain: Option<bool>,
     /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
     #[serde(default)]
     pub kind: Option<String>,

@@ -125,6 +125,10 @@ sol! {
         function mtxTransferDigest(MetaTransfer t) external view returns (bytes32);
         function mtxExecute(MetaTransaction m, bytes signature) external returns (bytes);
         function mtxExecuteTransfer(MetaTransfer t, bytes signature) external returns (bool);
+        /// CTR-MTX-26 (`IMetaTokenV2`): `mtxPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
+        function mtxPayMeta(address from, address to, uint256 amount, bytes32 salt, bytes meta, uint256 validUntil,
+            uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes signature) external returns (bool);
+        event PaymentMeta(bytes32 indexed payId, bytes meta);
         function mtxSelectors() external view returns (bytes4[] selectors, uint8[] feeClass, uint8[] amountArg);
         function chainUid() external view returns (bytes32);
         function supportedModes() external view returns (uint32);
@@ -185,6 +189,19 @@ sol! {
         error MinNonceAboveCap(uint256 requested);
     }
 
+    /// `MtxRelayFee` (CTR-MTX-27): a token fee to the relayer for a fee-less call. `uaRelay` is not served (the node
+    /// has no UA path on EVM).
+    #[derive(Debug)]
+    interface IMtxRelayFee {
+        function relay(address target, bytes callData, address token, MetaTransfer t, bytes sig) external;
+        function relayRef(address target, bytes callData) external view returns (bytes32);
+        function EXECUTOR() external view returns (address);
+        event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer,
+            bytes32 payee, uint256 amount);
+        error RelayFeeShape();
+        error RelayTargetNoCode(address target);
+    }
+
     /// `MandateWallet` errors (CTR-ACC-06/07): a `call` job's revert reason names them, so the client re-reads
     /// `epoch(token)` and re-signs on `StaleEpoch`.
     #[derive(Debug)]
@@ -212,6 +229,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IMandateWallet::IMandateWalletErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IMtxRelayFee::IMtxRelayFeeErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     format!("revert 0x{}", alloy::hex::encode(data))

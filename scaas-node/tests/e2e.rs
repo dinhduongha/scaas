@@ -566,7 +566,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let (tx, mut rx) = mpsc::channel::<Work>(16);
     let fee_wallet = Address::repeat_byte(0xfa);
     let tokens = Arc::new(RwLock::new(vec![token_a, token_b]));
-    let guard = Arc::new(scaas_node::guard::Guard::new(&cfg, tokens.clone()));
+    let guard = Arc::new(scaas_node::guard::Guard::new(&cfg, tokens.clone()).unwrap());
     let gw = GwChain { chain: shared.clone(), tx, tokens, dex: Some(venue.clone()), breaker: None, fee_recipient: Some(fee_wallet), guard };
     let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18651").await.unwrap();

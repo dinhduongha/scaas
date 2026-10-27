@@ -49,7 +49,7 @@ impl EvmAdapter {
             .collect();
         let mode = if cfg.finality.mode == "tag" { Mode::Tag } else { Mode::Depth(cfg.finality.depth) };
         Ok(Self {
-            guard: Guard::new(cfg, tokens.clone()),
+            guard: Guard::new(cfg, tokens.clone())?,
             key: cfg.chain_key(),
             family: if cfg.family == "hedera" { Family::Hedera } else { Family::Evm },
             chains,

@@ -46,12 +46,16 @@ pub enum Rule {
     SelfAuth,
     /// A DEX on the chain's DEX list (`dex`), bound to this chain.
     Dex,
+    /// `MtxRelayFee.relay` (CTR-MTX-27): the target is the configured router (`params.relay_fee.router`), the payment a
+    /// registered token's router-bound `MetaTransfer` for exactly this call, the inner target bound to this chain
+    /// ([`relay_call_ok`]).
+    RelayFee,
 }
 
 /// The call table as built in P5: the rows whose contracts exist (`cast sig` of the Solidity signatures; pinned
 /// against the KAT calldata). `mtxExecuteAsOwner` is one selector on `SmartKeyAccount` and `MandateWallet`, so it takes
 /// the wallet's rule. Every other selector is refused.
-pub const CALL_TABLE: [([u8; 4], &str, Rule); 10] = [
+pub const CALL_TABLE: [([u8; 4], &str, Rule); 11] = [
     ([0x45, 0x9b, 0x5b, 0x50], "SmartKeyAccountFactory.deploy", Rule::AccountFactory),
     ([0xfd, 0xf2, 0xd3, 0x38], "mtxExecuteAsOwner", Rule::SelfAuth),
     ([0x3a, 0x5b, 0x07, 0x08], "HederaMandateWallet.mtxExecuteAsOwnerRaw", Rule::SelfAuth),
@@ -62,6 +66,7 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 10] = [
     (<crate::abi::ISCaaSDex::mtxExchangeViaCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxExchangeVia", Rule::Dex),
     ([0x2d, 0xe6, 0x21, 0xd2], "SCaaSDex.mtxCancelOrders", Rule::Dex),
     (SEL_MTX_INVALIDATE_NONCES, "SCaaSDex.mtxInvalidateNonces", Rule::Dex),
+    (<crate::abi::IMtxRelayFee::relayCall as alloy::sol_types::SolCall>::SELECTOR, "MtxRelayFee.relay", Rule::RelayFee),
 ];
 
 /// The token entries a `metatx` job may name (job-api.md, order and wrap entries).
@@ -129,7 +134,58 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
             Rule::AccountFactory => f.account_factory,
             Rule::SelfAuth => true,
             Rule::Dex => f.dex,
+            Rule::RelayFee => false, // never by facts: `relay_call_ok`
         }
+}
+
+/// The chain's relay-fee router (CTR-MTX-27) and the node's policy for it (`params.relay_fee`, `RelayParams`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayFee {
+    pub router: Address,
+    /// `MtxRelayExecutor`: the router's first `CREATE` (constructor, nonce 1), so derived, never configured.
+    pub executor: Address,
+    pub params: crate::config::RelayParams,
+}
+
+impl RelayFee {
+    /// `None` without `params.relay_fee.router`; a router that is not an address is a startup error.
+    pub fn from_cfg(cfg: &ChainCfg) -> anyhow::Result<Option<Self>> {
+        let params = cfg.relay_params()?;
+        let Some(r) = params.router.as_deref() else { return Ok(None) };
+        let router = crate::metatx::addr(r).map_err(|e| anyhow::anyhow!("params.relay_fee.router: {e:#}"))?;
+        Ok(Some(Self { router, executor: router.create(1), params }))
+    }
+}
+
+/// NODE-LANE (CTR-MTX-27) intake of a `relay` call before any simulation: the target is the router; the payment is
+/// a registered token's `MetaTransfer` bound to exactly this call (`entryRef = relayRef(target, callData)`, lane
+/// `payLane(ref)`, nonce 0, `RESTRICT_RELAYER` to the router, fee `NONE` and 0, never to the executor — the router's
+/// own shape, refused here before gas is spent); the fee reaches this lane (open mode or bound to it) and is at least
+/// `min_amount`, else the job is refused unless `relay_bound_payee` (a sponsored job). Returns the inner target, which
+/// must be bound to this chain. "The fee covers the gas" is the operator's `min_amount` (no token price feed; no gas
+/// price or limit assumed).
+pub fn relay_call_ok(rf: &RelayFee, chain_id: u64, lane: Address, to: Address, data: &[u8], registered: impl Fn(Address) -> bool)
+    -> Result<Address, String>
+{
+    use alloy::sol_types::SolCall;
+    if to != rf.router {
+        return Err(format!("CALL_TARGET_REFUSED: MtxRelayFee.relay on {to:#x}, not params.relay_fee.router"));
+    }
+    let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(data).map_err(|e| format!("BAD_PAYLOAD: relay: {e}"))?;
+    if !registered(c.token) {
+        return Err(format!("TOKEN_NOT_SERVED: {:#x} is not a registered token of this chain", c.token));
+    }
+    let (t, r) = (&c.t, crate::metatx::relay_ref(chain_id, c.target, &c.callData));
+    let shape = t.entryRef == r && t.batch == crate::metatx::pay_lane(&r) && t.nonce.is_zero()
+        && t.mode & crate::metatx::MODE_RESTRICT_RELAYER != 0 && t.relayer == rf.router
+        && t.mode & MODE_FEE_MASK == 0 && t.fee.is_zero() && t.to != rf.executor;
+    if !shape {
+        return Err("RELAY_FEE_SHAPE: the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router, \
+                    fee NONE, never the executor)".into());
+    }
+    let amount = u128::try_from(t.value).unwrap_or(u128::MAX);
+    crate::adapter::relay_fee_ours(t.to == rf.router, t.to == lane, amount, &rf.params).map_err(|e| format!("RELAY_FEE_REFUSED: {e}"))?;
+    Ok(c.target)
 }
 
 /// A contract's published allowlist: `(selector, fee class, amount argument)` and `supportedModes()`.
@@ -206,6 +262,8 @@ impl From<Refusal> for SimError {
 /// allowlist never change (a contract that is not bound yet is asked again).
 pub struct Guard {
     pub tokens: Arc<RwLock<Vec<Address>>>,
+    relay_fee: Option<RelayFee>,
+    max_pay_meta_bytes: usize,
     token_factory: Option<Address>,
     account_factory: Option<Address>,
     dexes: Vec<Address>,
@@ -214,15 +272,17 @@ pub struct Guard {
 }
 
 impl Guard {
-    pub fn new(cfg: &ChainCfg, tokens: Arc<RwLock<Vec<Address>>>) -> Self {
-        Self {
+    pub fn new(cfg: &ChainCfg, tokens: Arc<RwLock<Vec<Address>>>) -> anyhow::Result<Self> {
+        Ok(Self {
+            relay_fee: RelayFee::from_cfg(cfg)?,
+            max_pay_meta_bytes: cfg.relay_params()?.max_pay_meta_bytes,
             tokens,
             token_factory: cfg.token_factory,
             account_factory: cfg.account_factory,
             dexes: cfg.dex.into_iter().collect(),
             bound: Default::default(),
             tables: Default::default(),
-        }
+        })
     }
 
     /// A token of the chain's registered list (refreshed from the client, review T4 m1); an unreadable list is none.
@@ -236,6 +296,19 @@ impl Guard {
             // review T4 I1: a transfer or payment only on a registered token
             if !matches!(Mtx::from_calldata(&w.data), Some((Mtx::Call(_), _))) && !self.registered(w.to) {
                 return Err(not_served(w.to));
+            }
+            if let Some((Mtx::Transfer(t), _)) = Mtx::from_calldata(&w.data) {
+                // CTR-MTX-27: never pay the router or its executor outside a relay (the coins would sit where any relay
+                // can move them, or nowhere)
+                if self.relay_fee.as_ref().is_some_and(|r| t.to == r.router || t.to == r.executor) {
+                    return Err(Refusal::Policy(format!("PAYEE_REFUSED: a plain pay to the relay-fee router / executor {:#x}", t.to)));
+                }
+            }
+            if let Ok(c) = <IToken::mtxPayMetaCall as alloy::sol_types::SolCall>::abi_decode(&w.data) {
+                if c.meta.len() > self.max_pay_meta_bytes {
+                    return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: meta is {} B, above max_pay_meta_bytes {}",
+                        c.meta.len(), self.max_pay_meta_bytes)));
+                }
             }
             self.require_bound(chain, w.to).await?;
             if let Some((Mtx::Call(m), _)) = Mtx::from_calldata(&w.data) {
@@ -260,6 +333,13 @@ impl Guard {
         let Some((name, rule)) = row(sel) else {
             return Err(Refusal::Policy(format!("CALL_TARGET_REFUSED: 0x{} is not in the call table", alloy::hex::encode(sel))));
         };
+        if rule == Rule::RelayFee {
+            let Some(rf) = &self.relay_fee else {
+                return Err(Refusal::Policy("CALL_TARGET_REFUSED: no params.relay_fee.router on this chain".into()));
+            };
+            let target = relay_call_ok(rf, chain.number, chain.address(), w.to, &w.data, |a| self.registered(a)).map_err(Refusal::Policy)?;
+            return self.require_bound(chain, target).await;
+        }
         let facts = Facts {
             token: self.tokens.read().map(|t| t.contains(&w.to)).unwrap_or(true),
             token_factory: self.token_factory == Some(w.to),
@@ -429,7 +509,8 @@ mod tests {
         // and each row keeps its rule
         let rules: Vec<Rule> = CALL_TABLE.iter().map(|r| r.2).collect();
         assert_eq!(rules, [Rule::AccountFactory, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth,
-            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex]);
+            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee]);
+        assert!(!allowed(Rule::RelayFee, &Facts { bound: true, ..Default::default() }), "never by facts");
     }
 
     /// An entry job carries only an order or wrap entry; anything else is refused before any chain read.
@@ -437,7 +518,7 @@ mod tests {
     async fn an_entry_job_is_only_an_entry() {
         let cfg = ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
         let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
-        let g = Guard::new(&cfg, Default::default());
+        let g = Guard::new(&cfg, Default::default()).unwrap();
         let w = |data: Vec<u8>| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, meta: None, entry: true };
         let transfer = IToken::transferCall { to: Address::repeat_byte(2), value: alloy::primitives::U256::from(1) }.abi_encode();
         assert!(matches!(g.check(&chain, &w(transfer)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
@@ -446,9 +527,9 @@ mod tests {
         let cancel = [&SEL_MTX_CANCEL_ORDER[..], &[0u8; 32]].concat();
         assert!(matches!(g.check(&chain, &w(cancel.clone())).await, Err(Refusal::Policy(r)) if r.starts_with("TOKEN_NOT_SERVED")));
         // on a registered token it passes the selector check and then needs the chain (unreachable: transient)
-        let g = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(1)])));
+        let g = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(1)]))).unwrap();
         assert!(matches!(g.check(&chain, &w(cancel.clone())).await, Err(Refusal::Transport(_))));
-        let g = Guard::new(&ChainCfg { dex: Some(Address::repeat_byte(1)), ..cfg.clone() }, Default::default());
+        let g = Guard::new(&ChainCfg { dex: Some(Address::repeat_byte(1)), ..cfg.clone() }, Default::default()).unwrap();
         assert!(matches!(g.check(&chain, &w(cancel)).await, Err(Refusal::Transport(_))), "or on a listed DEX");
     }
 

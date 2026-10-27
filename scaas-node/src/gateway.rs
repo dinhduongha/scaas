@@ -319,7 +319,7 @@ mod tests {
             dex: None,
             breaker: Some(Arc::new(Mutex::new(k))),
             fee_recipient: None,
-            guard: Arc::new(crate::guard::Guard::new(&cfg, Arc::new(RwLock::new(vec![token])))),
+            guard: Arc::new(crate::guard::Guard::new(&cfg, Arc::new(RwLock::new(vec![token]))).unwrap()),
         };
         let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
         let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": "0x00", "m": {
@@ -355,7 +355,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(1);
         let gw = GwChain { chain: Arc::new(Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap()),
             tx, tokens: tokens.clone(), dex: None, breaker: None, fee_recipient: None,
-            guard: Arc::new(crate::guard::Guard::new(&cfg, tokens)) };
+            guard: Arc::new(crate::guard::Guard::new(&cfg, tokens).unwrap()) };
         let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
         let body = json!({"chain": 7, "token": format!("{token:#x}"), "signature": format!("0x{}", "11".repeat(65)), "m": {
             "from": format!("{:#x}", Address::repeat_byte(1)), "to": format!("{:#x}", Address::repeat_byte(2)), "value": "1",

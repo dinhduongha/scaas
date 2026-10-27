@@ -4,7 +4,7 @@
 //! `(name, version, chainId, contract, salt = chain_uid)`. Canonical zeroing is `MetaTxLib.canon` bit for bit.
 use std::str::FromStr;
 
-use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy::sol_types::{Eip712Domain, SolCall, SolStruct};
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,21 @@ pub const MODE_RESTRICT_RELAYER: u32 = 0x01;
 pub const MODE_RESTRICT_FEE_RECIPIENT: u32 = 0x02;
 pub const MODE_FEE_MASK: u32 = 0xF0;
 pub const MODE_KNOWN_MASK: u32 = 0xF3;
+
+/// CTR-MTX-26: `metaPayId(salt, meta) = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`.
+pub fn meta_pay_id(salt: &B256, meta: &[u8]) -> B256 {
+    keccak256([&b"scaas.pay.meta"[..], salt.as_slice(), keccak256(meta).as_slice()].concat())
+}
+
+/// CTR-MTX-10: `payLane(payId) = uint256(keccak256("scaas.pay.lane" ‖ payId))`.
+pub fn pay_lane(p: &B256) -> U256 {
+    U256::from_be_bytes(keccak256([&b"scaas.pay.lane"[..], p.as_slice()].concat()).0)
+}
+
+/// CTR-MTX-27: `relayRef(target, callData) = keccak256("scaas.relayfee" ‖ uint256 chainid ‖ target ‖ keccak256(callData))`.
+pub fn relay_ref(chain_id: u64, target: Address, call: &[u8]) -> B256 {
+    keccak256([&b"scaas.relayfee"[..], &U256::from(chain_id).to_be_bytes::<32>(), target.as_slice(), keccak256(call).as_slice()].concat())
+}
 
 /// The 9 fields of `MetaTransaction` (camelCase, decimal strings).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -316,10 +331,34 @@ impl Mtx {
         }
     }
 
-    /// Inverse of `calldata`: `(mtx, signature)`, `None` for any other call.
+    /// A pay-meta job (CTR-MTX-26): the signed `MetaTransfer` must be the payment `mtxPayMeta` builds from
+    /// `(salt, meta)` — `entryRef = metaPayId(salt, meta)`, `batch = payLane(entryRef)`, `nonce = 0` — checked before any
+    /// simulation. The relayed calldata is `mtxPayMeta` (on-chain meta) or, for an off-chain meta, the plain
+    /// `mtxExecuteTransfer` of the same struct.
+    pub fn pay_meta_calldata(&self, salt: B256, meta: Bytes, signature: Bytes, on_chain: bool) -> Result<Bytes> {
+        let Self::Transfer(t) = self else { bail!("a pay-meta job is a transfer struct") };
+        let id = meta_pay_id(&salt, &meta);
+        if t.entryRef != id || t.batch != pay_lane(&id) || !t.nonce.is_zero() {
+            bail!("pay-meta: entryRef / batch / nonce are not metaPayId(salt, meta) / payLane(entryRef) / 0");
+        }
+        if !on_chain {
+            return Ok(self.calldata(signature));
+        }
+        Ok(IToken::mtxPayMetaCall { from: t.from, to: t.to, amount: t.value, salt, meta, validUntil: t.validUntil,
+            mode: t.mode, relayer: t.relayer, fee: t.fee, feeRecipient: t.feeRecipient, signature }.abi_encode().into())
+    }
+
+    /// Inverse of `calldata` (and of `pay_meta_calldata`: `mtxPayMeta` is its `MetaTransfer`): `(mtx, signature)`,
+    /// `None` for any other call.
     pub fn from_calldata(data: &[u8]) -> Option<(Self, Bytes)> {
         if let Ok(c) = IToken::mtxExecuteCall::abi_decode(data) {
             return Some((Self::Call(c.m), c.signature));
+        }
+        if let Ok(c) = IToken::mtxPayMetaCall::abi_decode(data) {
+            let id = meta_pay_id(&c.salt, &c.meta);
+            let t = MetaTransfer { from: c.from, to: c.to, value: c.amount, entryRef: id, batch: pay_lane(&id), nonce: U256::ZERO,
+                validUntil: c.validUntil, mode: c.mode, relayer: c.relayer, fee: c.fee, feeRecipient: c.feeRecipient };
+            return Some((Self::Transfer(t), c.signature));
         }
         IToken::mtxExecuteTransferCall::abi_decode(data).ok().map(|c| (Self::Transfer(c.t), c.signature))
     }
