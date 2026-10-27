@@ -1,4 +1,5 @@
-# cargo-zether-prover at commit b3c845c6
+# cargo-zether-prover at commit 444767c9
+   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/review2-fix/clients/zether-prover)
 warning: unused import: `self`
  --> tests/recover.rs:6:26
   |
@@ -14,26 +15,26 @@ warning: unused import: `Bls12381`
   |                                       ^^^^^^^^
 
 warning: `zether-prover` (test "recover") generated 2 warnings (run `cargo fix --test "recover" -p zether-prover` to apply 2 suggestions)
-    Finished `test` profile [optimized + debuginfo] target(s) in 0.09s
+    Finished `test` profile [optimized + debuginfo] target(s) in 11.64s
      Running unittests src/lib.rs (target/debug/deps/zether_prover-37c2c4055440f752)
 
 running 14 tests
 test abi::tests::account_state_roundtrip ... ok
 test abi::tests::matches_solidity_layout ... ok
 test elgamal::tests::knobs ... ok
-test keys::tests::short_seed_rejected ... ok
 test curve::tests::bls_rejects_point_outside_subgroup ... ok
-test curve::tests::rfc9380_bls12_381_g1_vectors ... ok
+test keys::tests::short_seed_rejected ... ok
 test keys::tests::eip2333_published_vectors ... ok
-test schnorr::tests::cp_challenge_binds_statement_points ... ok
+test curve::tests::rfc9380_bls12_381_g1_vectors ... ok
 test transcript::tests::layout_matches_spec_by_hand ... ok
+test schnorr::tests::cp_challenge_binds_statement_points ... ok
 test curve::tests::point_roundtrip_bls ... ok
 test schnorr::tests::schnorr_pop_bls12_381 ... ok
 test elgamal::tests::elgamal_bls12_381 ... ok
 test elgamal::tests::table_save_load_verify ... ok
 test bulletproofs::tests::bulletproofs_bls12_381 ... ok
 
-test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
 
      Running unittests src/bin/zether-cli.rs (target/debug/deps/zether_cli-d36c08a55a2b18b4)
 
@@ -61,8 +62,8 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/r33_keys.rs (target/debug/deps/r33_keys-f7d5c2145f5c3697)
 
 running 7 tests
-test bip39_seed_and_24_word_rule ... ok
 test ua_identity_matches_ua_vectors ... ok
+test bip39_seed_and_24_word_rule ... ok
 test conf_key_pinned_for_abandon_art ... ok
 test ua_pubkey_roundtrip ... ok
 test keys_independent_across_paths_curves_seeds ... ok
@@ -76,7 +77,7 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test big_balance_cache_spend_and_cli_recovery_bls12_381 ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 44.59s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 44.66s
 
      Running tests/recover.rs (target/debug/deps/recover-bc4e83aca7ce59f9)
 
@@ -84,14 +85,14 @@ running 9 tests
 test gas_cap_message ... ok
 test open_memo_names_the_recipients ... ok
 test recover_an_opt_out ... ok
-test recover_from_storage_alone ... ok
 test recover_commit_reveal_calldata_without_keys ... ok
+test recover_from_storage_alone ... ok
 test two_builds_at_one_counter_differ ... ok
-test a_relayed_build_names_its_signer_kind ... ok
 test recover_a_record_and_calldata ... ok
 test modes_in_the_request ... ok
+test a_relayed_build_names_its_signer_kind ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.70s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.55s
 
      Running tests/s2_crosscheck.rs (target/debug/deps/s2_crosscheck-f688f2c6aeb6c77f)
 
@@ -109,7 +110,7 @@ running 2 tests
 test api_roundtrip_mnemonic_keygen_prove_decrypt ... ok
 test committed_vectors_are_current_and_verify ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.41s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.42s
 
      Running tests/zether_proofs.rs (target/debug/deps/zether_proofs-b073c1bff4c5a0aa)
 
@@ -123,8 +124,8 @@ test transfer_prover_refuses_bad_requests ... ok
 test transfer_header_binding_bls12_381 ... ok
 test transfer_large_values_bls12_381 ... ok
 test multi_decoy_fee_bls12_381 ... ok
-test transfer_valid_bls12_381 ... ok
 test multi_tampered_d_aud_rejected ... ok
+test transfer_valid_bls12_381 ... ok
 test multi_valid_bls12_381 ... ok
 test v2_vectors_refused ... ok
 test transfer_sigma_negatives_bls12_381 ... ok
@@ -132,7 +133,7 @@ test ua_execute_adds_the_signer_kinds_verify_cap ... ok
 test multi_negatives_bls12_381 ... ok
 test gas_table_edges_bls12_381 ... ok
 
-test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.62s
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.96s
 
    Doc-tests zether_prover
 

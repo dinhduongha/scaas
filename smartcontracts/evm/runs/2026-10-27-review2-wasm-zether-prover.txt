@@ -1,8 +1,8 @@
-# wasm-zether-prover at commit b3c845c6
+# wasm-zether-prover at commit 444767c9
    Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/review2-fix/clients/zether-prover)
-    Finished `release` profile [optimized] target(s) in 14.04s
+    Finished `release` profile [optimized] target(s) in 14.05s
    Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/review2-fix/clients/zether-prover)
-    Finished `release` profile [optimized] target(s) in 5.93s
-bls12381: proveTransfer 582 ms in wasm
+    Finished `release` profile [optimized] target(s) in 6.01s
+bls12381: proveTransfer 591 ms in wasm
 wasm smoke: 9 checks passed
 rc=0
