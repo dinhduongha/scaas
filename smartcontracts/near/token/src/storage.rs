@@ -9,13 +9,14 @@ use near_sdk::{assert_one_yocto, env, near, require, AccountId, NearToken, Promi
 /// 40 B record overhead. Measured on near-sandbox (`runs/2026-10-28-near-storage.txt`); `new` checks the
 /// standard's own measurement against it.
 pub const ACCOUNT_STORAGE_BYTES: u64 = 125;
-/// One UA ledger record: key `u` ‖ id 33 B + u128 16 B + 40 B overhead. Measured as above.
+/// One UA ledger record: key `u` ‖ id 33 B + u128 16 B + 40 B overhead. Measured as above; `new` measures one too.
 pub const UA_STORAGE_BYTES: u64 = 89;
 
 impl Token {
-    /// Before a credit to `to`: a registered native receiver or an existing UA record needs exactly 1 yoctoNEAR
-    /// (NEP-141); otherwise (deviation) the attached deposit must cover the new record, the receiver is registered
-    /// and the excess goes back to the predecessor.
+    /// Before a credit to `to` (every entry that credits calls it first): a registered native receiver or an
+    /// existing UA record needs exactly 1 yoctoNEAR (NEP-141); otherwise (deviation) the attached deposit must cover
+    /// the new record, the record is created (registration / zero UA balance) and the excess goes back to the
+    /// predecessor. Tasks 5–10 whose entries create other records charge them per §2 row 15 the same way.
     pub(crate) fn pay_receiver_storage(&mut self, to: &Holder) {
         let bytes = match to {
             Holder::Near(a) => {
@@ -27,7 +28,14 @@ impl Token {
                     ACCOUNT_STORAGE_BYTES
                 }
             }
-            Holder::Ua(id) => if self.ua.contains_key(id) { 0 } else { UA_STORAGE_BYTES },
+            Holder::Ua(id) => {
+                if self.ua.contains_key(id) {
+                    0
+                } else {
+                    self.ua.insert(*id, 0);
+                    UA_STORAGE_BYTES
+                }
+            }
         };
         take_storage_deposit(bytes);
     }

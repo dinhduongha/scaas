@@ -35,8 +35,10 @@ pub enum Event {
 
 #[near]
 impl Token {
-    /// Borsh args. Registers the token's own account (the UA pool), paid from the token account's balance.
+    /// Borsh args; only the token account itself (the deploy run, before its keys are deleted). Pins both record
+    /// sizes against a measurement and registers the token's own account (the UA pool), paid from its own balance.
     #[init]
+    #[private]
     pub fn new(
         #[serializer(borsh)] network: [u8; 32],
         #[serializer(borsh)] admin: AccountId,
@@ -46,7 +48,14 @@ impl Token {
         let mut ft = FungibleToken::new(b"f");
         require!(ft.account_storage_usage == ACCOUNT_STORAGE_BYTES, "account record size differs from the pin");
         ft.internal_register_account(&env::current_account_id());
-        Self { network, admin, metadata, ft, ua: LookupMap::new(b"u") }
+        let mut ua = LookupMap::new(b"u");
+        let u0 = env::storage_usage();
+        ua.insert([0xff; 32], 0);
+        ua.flush();
+        require!(env::storage_usage() - u0 == UA_STORAGE_BYTES, "UA record size differs from the pin");
+        ua.remove(&[0xff; 32]);
+        ua.flush();
+        Self { network, admin, metadata, ft, ua }
     }
 
     /// Admin only (tier 1). An unregistered receiver is registered from the deposit, as `ft_transfer`.
@@ -72,8 +81,9 @@ impl Token {
 }
 
 impl Token {
-    /// Adds to a holder's balance (and the total supply). A native receiver must be registered; the token itself
-    /// never receives (spec §2 row 12). A UA record is created if absent: the caller has charged its storage.
+    /// Adds to a holder's balance (and the total supply). The receiver's record must exist: a native receiver
+    /// registered, a UA record created by `pay_receiver_storage` (which charges its storage) — never an unpaid record.
+    /// The token itself never receives (spec §2 row 12).
     pub(crate) fn credit(&mut self, to: &Holder, amount: u128) {
         match to {
             Holder::Near(a) => {
@@ -81,19 +91,23 @@ impl Token {
                 self.ft.internal_deposit(a, amount);
             }
             Holder::Ua(id) => {
-                let b = self.ua.get(id).copied().unwrap_or(0);
+                let b = *self.ua.get(id).unwrap_or_else(|| env::panic_str("UA record not paid for"));
                 self.ua.insert(*id, b.checked_add(amount).unwrap_or_else(|| env::panic_str("Balance overflow")));
                 self.ft.internal_deposit(&env::current_account_id(), amount);
             }
         }
     }
 
-    /// Takes from a holder's balance (and the total supply); panics on a short balance.
+    /// Takes from a holder's balance (and the total supply); panics on a short balance. The token's own account is
+    /// the UA pool, moved only through `Ua` holders, never debited as a native holder.
     pub(crate) fn debit(&mut self, from: &Holder, amount: u128) {
         match from {
-            Holder::Near(a) => self.ft.internal_withdraw(a, amount),
+            Holder::Near(a) => {
+                require!(*a != env::current_account_id(), "the UA pool is never debited as a native holder");
+                self.ft.internal_withdraw(a, amount)
+            }
             Holder::Ua(id) => {
-                let b = self.ua.get(id).copied().unwrap_or(0);
+                let b = self.ua.get(id).copied().unwrap_or_else(|| env::panic_str("The UA has no balance"));
                 require!(b >= amount, "The UA doesn't have enough balance");
                 self.ua.insert(*id, b - amount);
                 self.ft.internal_withdraw(&env::current_account_id(), amount);

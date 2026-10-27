@@ -42,6 +42,9 @@ async fn setup() -> T {
         decimals: 6,
     };
     let args = borsh::to_vec(&(NETWORK, admin.id().to_string(), meta)).unwrap();
+    // `new` is #[private]: a foreign caller (racing the deploy run) cannot initialise and become admin.
+    let out = admin.call(token.id(), "new").args(args.clone()).max_gas().transact().await.unwrap();
+    assert!(out.is_failure() && format!("{:?}", out.failures()).contains("private"), "foreign new accepted");
     token.call("new").args(args).transact().await.unwrap().into_result().unwrap();
     let alice = w.dev_create_account().await.unwrap();
     let bob = w.dev_create_account().await.unwrap();
@@ -244,15 +247,19 @@ async fn ft_transfer_call_resolves_as_nep141() {
 async fn transfer_to_ua_credits_ua_ledger() {
     let t = setup().await;
     t.fund_alice(100).await;
-    let min = t.min().await;
     let alice = t.alice.id().as_str();
     let ua_cost = UA_STORAGE_BYTES as u128 * t.byte_cost().await;
 
     // A new UA id: the record's storage from the deposit (one yocto below refused), the excess refunded.
     let args = json!({ "id": UA, "amount": "40" });
     assert!(t.call(&t.alice, "transfer_to_ua", args.clone(), ua_cost - 1).await.is_failure());
-    let out = t.call(&t.alice, "transfer_to_ua", args.clone(), min).await;
+    let excess = NearToken::from_near(1).as_yoctonear();
+    let before = t.near_balance(&t.alice).await;
+    let out = t.call(&t.alice, "transfer_to_ua", args.clone(), ua_cost + excess).await;
     assert!(out.is_success(), "{:?}", out.failures());
+    let spent = before - t.near_balance(&t.alice).await;
+    println!("transfer_to_ua new record: alice spent {spent} yocto (UA record {ua_cost} + fees)");
+    assert!(spent >= ua_cost && spent < ua_cost + excess / 20, "excess not refunded: spent {spent}");
     let logs = out.logs();
     let ua_hex = format!("0x{}", "5a".repeat(32));
     assert!(logs.iter().any(|l| l.contains(r#""standard":"nep141""#) && l.contains(t.token.id().as_str())));
@@ -315,10 +322,24 @@ fn check_no_authority_finds_forbidden_api() {
     assert!(clean.status.success(), "{}", String::from_utf8_lossy(&clean.stderr));
     let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("no_authority_fixture");
     std::fs::create_dir_all(&dir).unwrap();
-    for api in ["deploy_contract", "add_full_access_key", "add_access_key", "delete_key", "delete_account",
-                "deploy_global_contract", "use_global_contract"] {
-        std::fs::write(dir.join("lib.rs"), format!("fn f() {{ Promise::new(a).{api}(x); }}\n")).unwrap();
+    let mut lines: Vec<String> = [
+        "deploy_contract", "add_full_access_key", "add_access_key", "add_access_key_allowance", "delete_key",
+        "delete_account", "deploy_global_contract", "use_global_contract", "add_gas_key_full_access",
+        "add_gas_key_allowance_function_call", "transfer_to_gas_key",
+    ]
+    .iter()
+    .map(|api| format!("fn f() {{ Promise::new(a).{api}(x); }}"))
+    .collect();
+    for env_fn in ["deploy_contract", "add_key_with_full_access", "add_key_with_function_call",
+                   "add_key_allowance_with_function_call", "add_gas_key_with_full_access",
+                   "add_gas_key_with_function_call", "delete_key", "delete_account", "use_global_contract"] {
+        lines.push(format!("fn f() {{ env::promise_batch_action_{env_fn}(0); }}"));
+    }
+    lines.push("use near_contract_standards::upgrade::Ownable;".into());
+    lines.push("impl Upgradable for Token {}".into());
+    for line in lines {
+        std::fs::write(dir.join("lib.rs"), format!("{line}\n")).unwrap();
         let out = run(&[dir.to_str().unwrap()]);
-        assert!(!out.status.success(), "{api} not caught");
+        assert!(!out.status.success(), "not caught: {line}");
     }
 }

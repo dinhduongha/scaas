@@ -1,0 +1,234 @@
+# test.sh near (Task 4 fix 1: authority gate, private init, UA storage guards) at commit 42cc7a96 + uncommitted fix tree
+# rustc 1.97.1, cargo-near 0.22.0, near-sdk 5.30.0, near-workspaces 0.24.0, near-sandbox crate 0.4.0 -> neard (release 2.14.0) (build 2.14.0) (commit bc4e9e8cfb03d9e82f027883055624e18576993e) (rustc 1.95.0) (min_protocol 84) (protocol 88) (db 51), p256 0.13.2
+# RED (fix tests vs the 42cc7a96 wasm, not rebuilt): 9 token tests fail at setup 'foreign new accepted' (#[init] not private); check_no_authority_finds_forbidden_api already runs the widened script (the old script printed the reviewer's gas-key fixture clean)
+#   test check_no_authority_finds_forbidden_api ... ok
+#   test ft_transfer_call_resolves_as_nep141 ... FAILED
+#   test ft_transfer_registered_needs_one_yocto ... FAILED
+#   test ft_transfer_unregistered_auto_registers ... FAILED
+#   test mint_admin_only ... FAILED
+#   test storage_bounds_min_equals_max_equals_measured ... FAILED
+#   test storage_unregister_registered_panics_force_included ... FAILED
+#   test storage_withdraw_positive_panics ... FAILED
+#   test token_refuses_transfer_to_self ... FAILED
+#   test transfer_to_ua_credits_ua_ledger ... FAILED
+#   test result: FAILED. 1 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.21s
+# GREEN:
+== test near
+check_no_authority: clean (3 paths)
+== build near
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.16s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793133928, tv_nsec: 574243442 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793129403, tv_nsec: 791529972 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 155ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                  Size: 84.3 KB (84274 bytes)
+     - SHA-256 checksum hex : 9bee9d4175944d00002ccb269ca4bcab28146eaccd66aa635dfda793491d6a83
+     - SHA-256 checksum bs58: BVhE3LQYqyEofvVvuuNsZDNKMQwTLugnRFNjtNSfoCqg
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.13s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 666366610 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 857892155 }
+
+• Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                  Size: 84.6 KB (84631 bytes)
+     - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
+     - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │    Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+ │     Finished `release` profile [optimized] target(s) in 2.87s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_token.wasm" = SystemTime { tv_sec: 1793135081, tv_nsec: 592853266 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm" = SystemTime { tv_sec: 1793134176, tv_nsec: 79835889 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 681ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                  Size: 196.6 KB (196562 bytes)
+     - SHA-256 checksum hex : c5039477c51937337d053cdef3c6462bb8da3502b83b7a547cd73efe1fe93869
+     - SHA-256 checksum bs58: EG4UzRYV226Up5a4xXHTBR8h7gKB2EjcB5tWHZi3tPRi
+    Finished cargo near build in 3s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
+   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.92s
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_common-41db587762e4910d)
+
+running 1 test
+test holder::tests::borsh_and_display_match_the_vectors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/p256_spike.rs (target/debug/deps/p256_spike-4e3a9e0d9c7a6afd)
+
+running 2 tests
+test p256_two_passkey_relay_fee_fits_300_tgas ... wasm 84274 B
+success true
+total_gas_burnt 42271489823347 gas = 42.271 Tgas (limit 300 Tgas)
+receipt 0 (function call) burnt 41952413876529 gas
+tx -> receipt conversion burnt 319075946818 gas
+verify a (vector): 19990656891759 gas = 19.991 Tgas
+verify b (generated): 20005484600391 gas = 20.005 Tgas
+ok
+test webauthn_vector_accepted ... wasm 84274 B
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.54s
+
+     Running tests/token.rs (target/debug/deps/token-8aa19308c7b57d86)
+
+running 10 tests
+test check_no_authority_finds_forbidden_api ... ok
+test ft_transfer_call_resolves_as_nep141 ... storage_deposit by dev-20261027210451-69531413101170.test.near: 1817459640182 = 1.817 Tgas, ok true
+mint by dev-20261027210451-85573954142433.test.near: 1928302005660 = 1.928 Tgas, ok true
+ft_transfer_call by dev-20261027210451-69531413101170.test.near: 6339319526056 = 6.339 Tgas, ok true
+ft_transfer_call by dev-20261027210451-69531413101170.test.near: 1614699344111 = 1.615 Tgas, ok false
+ft_transfer_call by dev-20261027210451-69531413101170.test.near: 6211715477011 = 6.212 Tgas, ok true
+ok
+test ft_transfer_registered_needs_one_yocto ... storage_deposit by dev-20261027210457-62218523535112.test.near: 1817459640182 = 1.817 Tgas, ok true
+mint by dev-20261027210456-79196117002024.test.near: 1928302005660 = 1.928 Tgas, ok true
+storage_deposit by dev-20261027210457-62218523535112.test.near: 1822019640182 = 1.822 Tgas, ok true
+ft_transfer by dev-20261027210457-62218523535112.test.near: 1600378037960 = 1.600 Tgas, ok false
+ft_transfer by dev-20261027210457-62218523535112.test.near: 2046743162960 = 2.047 Tgas, ok false
+ft_transfer by dev-20261027210457-62218523535112.test.near: 2136788955808 = 2.137 Tgas, ok true
+ok
+test ft_transfer_unregistered_auto_registers ... storage_deposit by dev-20261027210502-35528697262147.test.near: 1817459640182 = 1.817 Tgas, ok true
+mint by dev-20261027210501-55046783134883.test.near: 1928302005660 = 1.928 Tgas, ok true
+ft_transfer by dev-20261027210502-35528697262147.test.near: 2143866130847 = 2.144 Tgas, ok false
+ft_transfer by dev-20261027210502-35528697262147.test.near: 2893018947910 = 2.893 Tgas, ok true
+auto-register: alice spent 1717847944791000000000 yocto (min 1250000000000000000000 + fees)
+ok
+test mint_admin_only ... storage_deposit by dev-20261027210507-12681125034153.test.near: 1817459640182 = 1.817 Tgas, ok true
+mint by dev-20261027210507-12681125034153.test.near: 1973579332778 = 1.974 Tgas, ok false
+mint by dev-20261027210506-63913621390242.test.near: 1927765436046 = 1.928 Tgas, ok true
+ok
+test storage_bounds_min_equals_max_equals_measured ... storage_deposit by dev-20261027210513-43536527282524.test.near: 1822530344681 = 1.823 Tgas, ok true
+storage_deposit by dev-20261027210513-43536527282524.test.near: 1822019640182 = 1.822 Tgas, ok true
+mint by dev-20261027210512-53708981894400.test.near: 1932862005660 = 1.933 Tgas, ok true
+transfer_to_ua by dev-20261027210513-43536527282524.test.near: 3022547242744 = 3.023 Tgas, ok true
+storage_byte_cost 10000000000000000000 yocto/byte (protocol config)
+record account (NEP-145 registration, 64-char id): 125 B, deposit 1250000000000000000000 yocto
+record ua_balance (UA ledger entry): 89 B, deposit 890000000000000000000 yocto
+ok
+test storage_unregister_registered_panics_force_included ... storage_deposit by dev-20261027210519-79640865027917.test.near: 1817459640182 = 1.817 Tgas, ok true
+mint by dev-20261027210518-28137982485922.test.near: 1927244498796 = 1.927 Tgas, ok true
+storage_unregister by dev-20261027210519-79640865027917.test.near: 2043794740772 = 2.044 Tgas, ok false
+storage_unregister by dev-20261027210519-79640865027917.test.near: 2045135300327 = 2.045 Tgas, ok false
+storage_unregister by dev-20261027210519-79640865027917.test.near: 2045071862516 = 2.045 Tgas, ok false
+storage_unregister by dev-20261027210519-93571320950361.test.near: 1675151788619 = 1.675 Tgas, ok true
+ok
+test storage_withdraw_positive_panics ... storage_deposit by dev-20261027210526-78464932832485.test.near: 1817459640182 = 1.817 Tgas, ok true
+storage_withdraw by dev-20261027210526-78464932832485.test.near: 2042593299134 = 2.043 Tgas, ok false
+storage_withdraw by dev-20261027210526-78464932832485.test.near: 1676779459226 = 1.677 Tgas, ok true
+ok
+test token_refuses_transfer_to_self ... storage_deposit by dev-20261027210531-46489448840773.test.near: 1817459640182 = 1.817 Tgas, ok true
+mint by dev-20261027210530-62246751905967.test.near: 1928265804396 = 1.928 Tgas, ok true
+ft_transfer by dev-20261027210531-46489448840773.test.near: 1983068976185 = 1.983 Tgas, ok false
+ft_transfer by dev-20261027210531-46489448840773.test.near: 1983068976185 = 1.983 Tgas, ok false
+ft_transfer_call by dev-20261027210531-46489448840773.test.near: 1997066596832 = 1.997 Tgas, ok false
+ft_transfer_call by dev-20261027210531-46489448840773.test.near: 1997066596832 = 1.997 Tgas, ok false
+mint by dev-20261027210530-62246751905967.test.near: 1994825359199 = 1.995 Tgas, ok false
+ok
+test transfer_to_ua_credits_ua_ledger ... storage_deposit by dev-20261027210537-14659867646650.test.near: 1817459640182 = 1.817 Tgas, ok true
+mint by dev-20261027210536-41411269487624.test.near: 1928302005660 = 1.928 Tgas, ok true
+transfer_to_ua by dev-20261027210537-14659867646650.test.near: 2053214511350 = 2.053 Tgas, ok false
+transfer_to_ua by dev-20261027210537-14659867646650.test.near: 3014285557057 = 3.014 Tgas, ok true
+transfer_to_ua new record: alice spent 1369974605705700000000 yocto (UA record 890000000000000000000 + fees)
+transfer_to_ua by dev-20261027210537-14659867646650.test.near: 1599898495502 = 1.600 Tgas, ok false
+transfer_to_ua by dev-20261027210537-14659867646650.test.near: 2046263620502 = 2.046 Tgas, ok false
+transfer_to_ua by dev-20261027210537-14659867646650.test.near: 2399682565109 = 2.400 Tgas, ok true
+ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 50.79s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_spike_p256-074f11e72a5ca467)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_test_receiver-b374742d6b35f8d8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_token-edf44a4d90031abf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_common
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_spike_p256
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_token
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0

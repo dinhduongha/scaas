@@ -56,11 +56,12 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
 32. [Networks — Aptos](#32-networks--aptos)
 33. [Networks — Solana](#33-networks--solana)
 34. [Networks — GRAM](#34-networks--gram)
-35. [Clients — signers and clientkeys](#35-clients--signers-and-clientkeys)
-36. [Clients — SCaaS app](#36-clients--scaas-app)
-37. [Integration — ERP](#37-integration--erp)
-38. [Integration — example connector](#38-integration--example-connector)
-39. [Alias index](#alias-index)
+35. [Networks — NEAR](#35-networks--near)
+36. [Clients — signers and clientkeys](#36-clients--signers-and-clientkeys)
+37. [Clients — SCaaS app](#37-clients--scaas-app)
+38. [Integration — ERP](#38-integration--erp)
+39. [Integration — example connector](#39-integration--example-connector)
+40. [Alias index](#alias-index)
 
 ## 1. Architecture and register policy
 
@@ -5357,7 +5358,43 @@ It said: domainHash pinned in wallet init; replaced by NET-TON-02.
 It said: Bounced payouts via admin RefundBounced; replaced by NET-TON-03.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 250.
 
-## 35. Clients — signers and clientkeys
+## 35. Networks — NEAR
+
+<a id="NET-NEAR-01"></a>
+### NET-NEAR-01 — NEAR token: UA balances pooled in the token's own NEP-141 account
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-01 · superseded-by: —
+
+**Rule.** The NEAR token keeps every UA balance in its UA ledger (`Ua` id → balance) and also, in sum, as the
+NEP-141 balance of the token's own account (the UA pool, registered at `new`), as EVM's `UA_POOL`:
+`ft_balance_of(token)` = the UA total, `ft_total_supply` = the sum of `ft_balance_of` over native accounts, the pool
+included. A move with a UA side emits NEP-141 `ft_transfer` from / to the token account plus `"scaas"` `ua_transfer`;
+a UA → UA move emits only `ua_transfer`. The token still refuses to be a payee or a native debit source (spec §2
+row 12). Status: BUILT (near-algorand Task 4, commits 42cc7a96 and the Task 4 fix 1 commit). Controller call
+2026-10-28, owner may override.
+**Why.** NEP-141 indexers and wallets reconcile balances from `nep141` events and `ft_total_supply`; without the pool,
+a native → UA move would look like a burn or leave the supply unbalanced (spec R6).
+**Cost if wrong.** A different event / pool scheme: a token redeploy (all chains are test-only) and indexer changes.
+**Source.** near-algorand Task 4 report (`.superpowers/sdd/2026-10-28-near-algorand/task-4-report.md`); spec
+[2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §3.2, R6.
+
+<a id="NET-NEAR-02"></a>
+### NET-NEAR-02 — NEAR token: a new record's storage from the attached deposit in transfer_to_ua and mint
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-02 · superseded-by: —
+
+**Rule.** `ft_transfer`, `ft_transfer_call`, `transfer_to_ua` and the admin `mint` take exactly 1 yoctoNEAR when the
+receiver's record exists (a registered account, an existing UA record); when it does not, the attached deposit must
+cover the new record (registration 125 B, UA record 89 B, × `env::storage_byte_cost()`), the record is created and
+the excess is refunded to the predecessor in the same receipt; less panics. Spec §3.2's "1 yoctoNEAR" for
+`transfer_to_ua` is thus refined by §2 row 15 (the caller pays every record it creates); `mint` follows the same rule.
+Status: BUILT (near-algorand Task 4, commits 42cc7a96 and the Task 4 fix 1 commit). Controller call 2026-10-28,
+owner may override.
+**Why.** A new UA record or registration costs storage stake that someone must pay; users hold no NEAR (spec §0), so
+the caller (relayer or native sender) pays, as for the NEP-145 auto-registration deviation.
+**Cost if wrong.** A stricter 1-yocto-only rule would make a first `transfer_to_ua` impossible without a separate
+storage call; the entry signatures stay, only the deposit check changes.
+**Source.** near-algorand Task 4 report; spec §2 row 15, §3.2.
+
+## 36. Clients — signers and clientkeys
 
 ### CLI-SGN-01 — Ephemeral agent session keys (1-8 h)
 - old: req:blockchain.md:session-keys · status: open · owner: yes · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-01 · superseded-by: —
@@ -5683,7 +5720,7 @@ It said: Seed vault scrypt N=2^15 with PIN; replaced by CLI-SGN-21.
 It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 861.
 
-## 36. Clients — SCaaS app
+## 37. Clients — SCaaS app
 
 ### CLI-APP-01 — One SPA, two halves, one build
 - old: R150 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-01 · superseded-by: —
@@ -5866,7 +5903,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 **Why.** With an open factory anyone can deploy "USDC".
 **Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 133.
 
-## 37. Integration — ERP
+## 38. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets
 - old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
@@ -6059,7 +6096,7 @@ Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; th
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
 
 <!-- example:odoo -->
-## 38. Integration — example connector
+## 39. Integration — example connector
 
 ### INT-ODOO-01 — Deploy job precedes pay via prerequisite
 - old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
@@ -6169,7 +6206,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 
 <!-- /example -->
 
-## <a id="alias-index"></a>39. Alias index
+## <a id="alias-index"></a>40. Alias index
 
 <!-- BEGIN alias-index (generated by scripts/docs_check.py --write) -->
 | Old id | New id(s) | Status |
