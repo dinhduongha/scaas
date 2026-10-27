@@ -55,17 +55,20 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      branches diverged at `61476cd0`), doc conflicts resolved (`pq-zero-knowledge.md`, `decisions.md`, `TODO.md`),
      `docs_check`, forge at n2304 and the size gate (no full gate: no core / set change). Pushing `main` needs the
      owner's go. From then on 8d part 2b and every later step branch from `main`.
-  2. [ ] **8d part 2b** — **paused 2026-10-26 at shutdown** (`pqz-8d2b` `6027eff5`: item 2 and (a)–(d) done, PQZH
-     calldata note + proposal written (owner decides), e2e on the testnet and the report left; resume steps in HANDOFF.md
-     top note) (gas; PQZH calldata over the EIP-7825 cap), together with the part b open items:
-     (a) the C wasm32 arena peak and margin at M = 2 at n2048 / n2304 / n2560 (M = 2 known to fit 512 MiB; peak
-     unmeasured; the leg limits stay labelled estimates until then); (b) the R4-C6 panic child-process test (needs a
-     test-only panic export in `fault-hooks`; drop it if not cheap); (c) `PQZ-START` logs the head timestamp the id
-     check used; (d) the Dockerfile's `scaas.pqz.selftest` image label is hard-coded to pqz4's `23d7a1db…` (pqz5
-     carries it stale; the plugin's start-up check is right): take it from the set's `ExpectedHash` at the next image.
-  3. [ ] **One Codex pass on the contracts** after 8d part 2a / 2b (owner request; `codex sandbox` check first).
+  2. [x] **8d part 2b — DONE 2026-10-27** (merged into `main` `6fd75c83`): `ROLL_MAX` 96 / 80 / 64 / 32 on both relay
+     paths (owner ruling 2026-10-27), gas per relation and set, PQZH calldata research + owner ruling option (A), part b
+     items (a)–(d), testnet contracts e2e 217 ok / 0 FAIL, review + fix round, pqz-core READMEs updated.
+  3. [x] **Contracts review (part 2 of the three-part review) — DONE 2026-10-27**: Codex C0–C2 (credits ran out; owner:
+     no refill), agy C0–C6, Claude UltraCode workflow C0–C6, Fable C0 + consolidation
+     (`pqz-core/research/code-review-2026-10-26/README.md`: 1 P0, 2 P1, 5 P2, 57 P3); owner rulings 2026-10-27 (C0-1 (ii),
+     C0-2 (2), C0-3 (1), C0-6 (3)); fix round plan `docs/superpowers/plans/2026-10-27-contracts-review-fixes.md`, merged
+     `e2e7a01e` (9 tasks, each reviewed; final review Yes with fixes; gates green at four sets + clients). Open from it: the
+     Zether prover's per-M `gas_limits` re-measurement (needs the owner's go for a gas run), ~40 deferred minors (README
+     "Fix round" and `scratchpad/review2-fix-ledger-2026-10-27.md`), `docs_check facts check` 9 pre-existing misses in
+     `history/` (also on main before). Part 3 (pqz-prover + node relay) after P6h / P6i.
   4. [ ] **Task 9 calibration** (timing: needs the owner's go) → final prices replace the provisional rows.
-  5. [ ] the metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → `MtxRelayFee` (CTR-MTX-27), with or
+  5. [ ] (re-check with it: PQZH `n2048-kmax1024` debits keep only 1.3–2.8 KB on `uaExecute`; `n2560-kmax16384`'s `ROLL_MAX`
+     64 keeps 15,281 gas — any envelope growth re-opens both) the metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → `MtxRelayFee` (CTR-MTX-27), with or
      before UA-7. Then UA-8 (before fs3 Task 13), fs3 Task 12 → 6 → 13 → 14, UA-7, governance code.
 
   `pqz-core` is a dev-freeze at the current ids; 8d part 2b may reopen it (PQZH calldata).

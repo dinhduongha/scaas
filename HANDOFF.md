@@ -1,3 +1,48 @@
+## Session 2026-10-26 / 27 (8d part 2b merged, pqz-core docs, contracts review part 2 + its fix round merged) — resume here
+
+**State:** `main` `e2e7a01e` (local, **not pushed**; last push `d14fe16f`). Merged today: `pqz-8d2b` (`6fd75c83`) and
+`review2-fix` (`e2e7a01e`). The SCaaS testnet node (7622, `2.2.0-pqz5`) was started by hand for the contracts e2e and is
+**running** (no restart policy). Worktrees: `pqz-8d2b`, `review2-fix` (merged; removable), `review-2026-10-26` (detached
+review target `64549aa4`, read-only; removable).
+
+**Done:**
+- **8d part 2b** (`ROLL_MAX` per set, gas per relation, PQZH calldata research, part b items (a)–(d)), its review + fix
+  round: `ROLL_MAX` **96 / 80 / 64 / 32** bounded on both relay paths (`mtxExecute`, `uaExecute`; owner ruling
+  2026-10-27). PQZH per-transaction cap: **owner ruling option (A)**. Testnet contracts e2e **217 ok / 0 FAIL** (three
+  `e2e.py` fixes: `CAP_PQZ`, non-zero `out` probe for T, PQZ key via `recordOf`).
+- **pqz-core READMEs** brought to the current state (owner: "not accurate"; 23 files, `f5abd77f`).
+- **Contracts review, part 2 of three** (part 1 = core, 2026-10-25; part 3 = pqz-prover + node relay, after P6h / P6i):
+  Codex C0–C2 (credits ran out at C3; **owner: no refill**), agy C0–C6, Claude UltraCode workflow C0–C6 (465 agents),
+  Fable C0 + consolidation → `pqz-core/research/code-review-2026-10-26/README.md`: **1 P0, 2 P1, 5 P2, 57 P3**.
+  P0 C0-1: classical Zether audited multi-recipient transfers shared one auditor mask (amounts and decoys public; PQZ not
+  affected).
+- **Owner rulings 2026-10-27:** C0-1 → **(ii) independent auditor randomness per leg** (the controller's first proposal
+  (i), per-leg coefficients under one `s`, was found broken: `h_k·C_aud_j − h_j·C_aud_k = [h_k v_j − h_j v_k]G`); C0-2 →
+  PQZH value tokens only at `n2048-kmax1024` with single-key `mldsa44` / `mldsa65` / `fndsa512` holders; C0-3 → Zether
+  records in state (SSTORE2), NONE retired; C0-6 → accept (spec corrected, wallets re-prove on `PendingRange`). Triage
+  items 5–10 (C0-7, C0-9, C0-10, C0-18, C5-1, C2-5) are **controller proposals, owner may override**.
+- **Fix round** (`docs/superpowers/plans/2026-10-27-contracts-review-fixes.md`, subagent-driven, 9 tasks, each reviewed,
+  final whole-branch review "Yes with fixes" → fix wave → re-review clean): classical Zether label `…/v3` (per-leg `t_j`,
+  E6′_j, `validUntilBlock`, `AuditorKeyAsParty`), disclosure strong Fiat–Shamir (tag `SCAAS-ZETHER-DISCLOSE-V2`), PQZ
+  guards, PQZ holder authorization bound, metatx / DEX hardening (500 k cap on outside-token calls, nonce cap, release
+  deploy gate on `block.gaslimit`), node / client items (`uaSigner` required on relayed Zether builds), docs. Gates
+  (resumable runner `smartcontracts/evm/runs/2026-10-27-review2-gates.sh`, owner 2026-10-27: per-step logs, skip done):
+  forge at four sets 1,396–1,402 pass / 0 fail, sizes 0, gen-set, docs, zether-prover cargo + wasm + cross-check 6/6,
+  scaas-node, clientkeys — all rc=0. Every controller ruling of the round: README "Fix round" and the ledger copy
+  `scratchpad/review2-fix-ledger-2026-10-27.md` (`Ruling:` lines).
+
+**Open / owner:**
+1. **Push `main`** (owner's go; several merges since `d14fe16f`).
+2. **Gas run** for the Zether prover's per-M `gas_limits` (audited legs ≈ 50 k gas per leg optimistic; needs the owner
+   to stop other heavy sessions) and Task 9 calibration (timing).
+3. ~40 deferred minors (README "Fix round"); `docs_check facts check` reports 9 pre-existing misses in `history/` (on main
+   before this work; CI's facts gate would fail).
+4. The node is running; stop it or leave it (`docker compose stop blockchain-node` in `/home/dockers/mba-chain-nethermind`).
+
+**Next (TODO §00):** Task 9 calibration (owner's go) → metatx split + `mtxPayMeta` → `MtxRelayFee` (re-check PQZH n2048
+`uaExecute` headroom 1.3–2.8 KB and n2560's `ROLL_MAX` margin 15,281 gas with it) → UA-8 → fs3 Task 12 → 6 → 13 → 14,
+UA-7, governance; publications (fill gas / timing / package placeholders, LaZer preview mail).
+
 ## Session 2026-10-26 (part b merged, testnet on pqz5, pqz-16k merged into main, 8d part 2b paused, publication drafts) — resume here
 
 **State:** `main` has plan 5h part B, R0 fix part a + b and the pqz5 roll-out (merge `d07d0057`; forge 1361 / 0 / 9,
