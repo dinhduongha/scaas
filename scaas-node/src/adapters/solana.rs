@@ -832,7 +832,7 @@ pub fn classify_submit(e: &RpcError) -> Result<()> {
 
 /// Event `emit_cpi!` trong inner instruction ⇒ event chuẩn hoá cho Odoo; `None` nếu không phải của program/event
 /// authority này, không phải event Odoo đọc, hoặc mint chưa đăng ký.
-pub fn normalize(data: &[u8], tokens: &[String], slot: u64, block_hash: &str, tx_hash: &str, log_index: usize) -> Option<Value> {
+pub fn normalize(data: &[u8], router: &str, tokens: &[String], slot: u64, block_hash: &str, tx_hash: &str, log_index: usize) -> Option<Value> {
     if data.len() < 16 || data[..8] != EVENT_IX_TAG {
         return None;
     }
@@ -854,6 +854,25 @@ pub fn normalize(data: &[u8], tokens: &[String], slot: u64, block_hash: &str, tx
         out["to"] = json!(b58(&k32(64)?));
         out["amount"] = json!(u64::from_le_bytes(body[96..104].try_into().ok()?).to_string());
         out["entry_ref"] = json!(hx(&k32(104)?));
+    } else if disc == discriminator("event", "PaymentMeta") && body.len() >= 68 {
+        // CTR-MTX-26 / -27: joined to their `PaymentSettled` (`indexer::join_pay_events`), never sent alone
+        let n = u32::from_le_bytes(body[64..68].try_into().ok()?) as usize;
+        if body.len() != 68 + n {
+            return None;
+        }
+        out["event"] = json!("PaymentMeta");
+        out["entry_ref"] = json!(hx(&k32(32)?));
+        out["meta"] = json!(hx(&body[68..]));
+    } else if disc == discriminator("event", "RelayFeePaid") && body.len() == 168 {
+        // the program is the router; `contract` in the event is the fee's mint
+        out["event"] = json!("RelayFeePaid");
+        out["token"] = json!(contract);
+        out["contract"] = json!(router);
+        out["entry_ref"] = json!(hx(&k32(32)?));
+        out["target"] = json!(b58(&k32(64)?));
+        out["from"] = json!(b58(&k32(96)?));
+        out["to"] = json!(b58(&k32(128)?));
+        out["amount"] = json!(u64::from_le_bytes(body[160..168].try_into().ok()?).to_string());
     } else {
         return None;
     }
@@ -890,14 +909,14 @@ pub fn tx_events(program: &Key, tokens: &[String], tx: &Value, block_hash: &str)
             }
             let data = bs58::decode(ix["data"].as_str().unwrap_or_default()).into_vec()?;
             if data.starts_with(&EVENT_IX_TAG) {
-                if let Some(e) = normalize(&data, tokens, slot, block_hash, &tx_hash, n) {
+                if let Some(e) = normalize(&data, &prog, tokens, slot, block_hash, &tx_hash, n) {
                     out.push(e);
                 }
                 n += 1;
             }
         }
     }
-    Ok(out)
+    Ok(crate::indexer::join_pay_events(out))
 }
 
 // ------------------------------------------------------------------ adapter
@@ -1662,6 +1681,32 @@ mod tests {
         d
     }
 
+    /// T17 (G): `PaymentMeta` and `RelayFeePaid` (the program is the router) decode and join the expected mint's
+    /// `PaymentSettled` of the same transaction; a fee in an unregistered mint is dropped; neither is a row.
+    #[test]
+    fn solana_indexer_joins_pay_meta_and_relay_fee() {
+        let program = key(PROGRAM).unwrap();
+        let usd = key(USD).unwrap();
+        let tokens = vec![USD.to_string()];
+        let (alice, bob, lane) = (key(ALICE).unwrap(), key(BOB).unwrap(), lane0_key());
+        let settled = |to: &Key, amount: u64, r: [u8; 32]| [&usd[..], &alice, to, &amount.to_le_bytes(), &r].concat();
+        let pm = [&usd[..], &[4; 32], &2u32.to_le_bytes(), &[0xab, 0xcd]].concat();
+        let fee = |mint: &Key| [&mint[..], &[5; 32], &[0x7a; 32], &alice, &lane, &5u64.to_le_bytes()].concat();
+        let ea = b58(&event_authority(&program));
+        let ix = |d: Vec<u8>| json!({"programIdIndex": 1, "accounts": [2], "data": b58(&d)});
+        let tx = json!({"slot": 77, "meta": {"err": null, "innerInstructions": [{"index": 2, "instructions": [
+                ix(event("PaymentMeta", &pm)), ix(event("PaymentSettled", &settled(&bob, 100, [4; 32]))),
+                ix(event("PaymentSettled", &settled(&lane, 5, [5; 32]))), ix(event("RelayFeePaid", &fee(&usd))),
+                ix(event("RelayFeePaid", &fee(&[9; 32]))), ix(event("PaymentMeta", &[&usd[..], &[4; 32], &9u32.to_le_bytes()].concat()))]}],
+                "loadedAddresses": {"writable": [], "readonly": []}},
+            "transaction": {"signatures": [b58(&[7; 64])], "message": {"accountKeys": [ALICE, PROGRAM, ea]}}});
+        let out = tx_events(&program, &tokens, &tx, "0xbb").unwrap();
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
+        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None), "a malformed meta event decodes to nothing");
+        assert_eq!((out[1]["relay_target"].as_str(), out[1]["relay_payee"].as_str()), (Some(b58(&[0x7a; 32]).as_str()), Some(b58(&lane).as_str())));
+    }
+
     #[test]
     fn events_of_other_programs_authorities_or_mints_are_dropped() {
         let program = key(PROGRAM).unwrap();
@@ -2136,7 +2181,7 @@ mod tests {
             let _ = parse_auth(&alloy::hex::encode(&b), &k);
             let _ = parse_auth(&alloy::hex::encode(&b), &alloy::hex::encode(&b[..b.len().min(33)]));
             let _ = parse_nonce(&b);
-            let _ = normalize(&b, &[], 0, "", "", 0);
+            let _ = normalize(&b, "", &[], 0, "", "", 0);
             let _ = key(&s);
         }
 

@@ -398,8 +398,32 @@ pub fn tx_in_block(block: &Value, results: &Value, tx_id: &str) -> Option<TxStat
 }
 
 /// Event của một tx (`block_results.txs_results[i].events`) ⇒ event chuẩn hoá (thiếu `block_hash`, adapter điền).
-/// Chỉ contract trong `contracts`; tx lỗi (code ≠ 0) không có event.
-pub fn normalize_tx(tx: &Value, contracts: &[String]) -> Vec<Value> {
+/// Chỉ contract trong `contracts`; tx lỗi (code ≠ 0) không có event. CTR-MTX-26 / -27: the token's `payment_meta` and
+/// the router's `relay_fee_paid` (only from `router`, in a registered token) are joined to their `payment_settled`
+/// (`indexer::join_pay_events`) and never sent alone.
+/// The fields of one normalized event from its wasm attributes; `None` = malformed (dropped).
+fn fill(kind: &str, attrs: &HashMap<String, String>, e: &mut Value) -> Option<()> {
+    let a = |k: &str| attrs.get(k).cloned();
+    let r32 = |k: &str| attrs.get(k).and_then(|r| hash32(r));
+    match kind {
+        "PaymentSettled" => {
+            (e["from"], e["to"], e["amount"], e["entry_ref"]) = (json!(a("from")?), json!(a("to")?), json!(a("amount")?), json!(r32("pay_ref")?));
+        }
+        "MetaTransactionExecuted" => (e["from"], e["digest"]) = (json!(a("from").unwrap_or_default()), json!(r32("digest")?)),
+        "PaymentMeta" => {
+            let meta = a("meta")?;
+            let meta = meta.strip_prefix("0x").filter(|m| alloy::hex::decode(m).is_ok())?;
+            (e["entry_ref"], e["meta"]) = (json!(r32("pay_id")?), json!(format!("0x{}", meta.to_ascii_lowercase())));
+        }
+        _ => {
+            (e["entry_ref"], e["target"], e["token"]) = (json!(r32("ref")?), json!(a("target")?), json!(a("token")?));
+            (e["from"], e["to"], e["amount"]) = (json!(a("payer")?), json!(a("payee")?), json!(a("amount")?));
+        }
+    }
+    Some(())
+}
+
+pub fn normalize_tx(tx: &Value, contracts: &[String], router: Option<&str>) -> Vec<Value> {
     let mut out = Vec::new();
     if tx["tx_result"]["code"].as_u64().unwrap_or(0) != 0 {
         return out;
@@ -415,30 +439,26 @@ pub fn normalize_tx(tx: &Value, contracts: &[String]) -> Vec<Value> {
         let kind = match ev["type"].as_str() {
             Some("wasm-payment_settled") => "PaymentSettled",
             Some("wasm-meta_tx_executed") => "MetaTransactionExecuted",
+            Some("wasm-payment_meta") => "PaymentMeta",
+            Some("wasm-relay_fee_paid") => "RelayFeePaid",
             _ => continue,
         };
         let attrs = attributes(ev);
         let Some(contract) = attrs.get("_contract_address") else { continue };
-        if !contracts.iter().any(|c| c == contract) {
+        let ours = if kind == "RelayFeePaid" {
+            Some(contract.as_str()) == router && attrs.get("token").is_some_and(|t| contracts.contains(t))
+        } else {
+            contracts.contains(contract)
+        };
+        if !ours {
             continue;
         }
-        let mut e = json!({"event": kind, "contract": contract, "block_number": height, "tx_hash": hash,
-                           "log_index": i, "from": attrs.get("from").cloned().unwrap_or_default()});
-        if kind == "PaymentSettled" {
-            let (Some(to), Some(amount), Some(r)) = (attrs.get("to"), attrs.get("amount"), attrs.get("pay_ref").and_then(|r| hash32(r)))
-            else {
-                continue;
-            };
-            e["to"] = json!(to);
-            e["amount"] = json!(amount);
-            e["entry_ref"] = json!(r);
-        } else {
-            let Some(d) = attrs.get("digest").and_then(|d| hash32(d)) else { continue };
-            e["digest"] = json!(d);
+        let mut e = json!({"event": kind, "contract": contract, "block_number": height, "tx_hash": hash, "log_index": i});
+        if fill(kind, &attrs, &mut e).is_some() {
+            out.push(e);
         }
-        out.push(e);
     }
-    out
+    crate::indexer::join_pay_events(out)
 }
 
 // ------------------------------------------------------------------ adapter
@@ -710,7 +730,8 @@ impl ChainAdapter for CosmosAdapter {
         for h in from..=to {
             let br = self.rpc(&format!("block_results?height={h}")).await?;
             let results = br["txs_results"].as_array().cloned().unwrap_or_default();
-            let probe = |r: &Value| !normalize_tx(&json!({"hash": "00".repeat(32), "height": h.to_string(), "tx_result": r}), contracts).is_empty();
+            let router = self.relay_fee.router.as_deref();
+            let probe = |r: &Value| !normalize_tx(&json!({"hash": "00".repeat(32), "height": h.to_string(), "tx_result": r}), contracts, router).is_empty();
             if !results.iter().any(probe) {
                 continue;
             }
@@ -723,7 +744,7 @@ impl ChainAdapter for CosmosAdapter {
             for (raw, r) in txs.iter().zip(&results) {
                 let bytes = B64.decode(raw.as_str().unwrap_or_default()).context("tx bytes")?;
                 let tx = json!({"hash": alloy::hex::encode(Sha256::digest(&bytes)), "height": h.to_string(), "tx_result": r});
-                for mut e in normalize_tx(&tx, contracts) {
+                for mut e in normalize_tx(&tx, contracts, router) {
                     e["block_hash"] = json!(hash);
                     out.push(e);
                 }
@@ -794,6 +815,33 @@ mod tests {
         json!({"hash": "AB".repeat(32), "height": "7", "tx_result": {"code": 0, "events": events}})
     }
 
+    /// T17 (G): the token's `payment_meta` and the router's `relay_fee_paid` join the expected token's
+    /// `payment_settled` of the same transaction; a fee in an unregistered token or from another contract joins nothing.
+    #[test]
+    fn cosmos_indexer_joins_pay_meta_and_relay_fee() {
+        let attrs = |kv: &[(&str, String)]| json!(kv.iter().map(|(k, v)| json!({"key": k, "value": v})).collect::<Vec<_>>());
+        let (pid, rf) = (format!("0x{}", "04".repeat(32)), format!("0x{}", "05".repeat(32)));
+        let fee = |token: &str| json!({"type": "wasm-relay_fee_paid", "attributes": attrs(&[("_contract_address", "wasm1router".into()),
+            ("ref", rf.clone()), ("target", "wasm1target".into()), ("token", token.into()), ("payer", "wasm1a".into()),
+            ("payee", "wasm1lane".into()), ("amount", "5".into())])});
+        let ev = json!([
+            // the router's own event first (wasmd lists it before the sub-messages' events)
+            fee("wasm1tok"),
+            fee("wasm1fake"),
+            {"type": "wasm-payment_meta", "attributes": attrs(&[("_contract_address", "wasm1tok".into()), ("pay_id", pid.clone()), ("meta", "0xABcd".into())])},
+            {"type": "wasm-payment_settled", "attributes": attrs(&[("_contract_address", "wasm1tok".into()), ("from", "wasm1a".into()),
+                ("to", "wasm1b".into()), ("amount", "100".into()), ("pay_ref", pid.clone())])},
+            {"type": "wasm-payment_settled", "attributes": attrs(&[("_contract_address", "wasm1tok".into()), ("from", "wasm1a".into()),
+                ("to", "wasm1router".into()), ("amount", "5".into()), ("pay_ref", rf.clone())])},
+        ]);
+        let out = normalize_tx(&tx(ev.clone()), &["wasm1tok".into()], Some("wasm1router"));
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
+        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None));
+        assert_eq!((out[1]["relay_target"].as_str(), out[1]["relay_payee"].as_str()), (Some("wasm1target"), Some("wasm1lane")), "open mode");
+        assert!(normalize_tx(&tx(ev), &["wasm1tok".into()], None).iter().all(|e| e["relay_payee"].is_null()), "no router: nothing joins");
+    }
+
     #[test]
     fn events_are_normalized_and_filtered() {
         let ev = json!([
@@ -807,7 +855,7 @@ mod tests {
                 {"key": "digest", "value": format!("0x{}", "EE".repeat(32))}]},
             {"type": "wasm-payment_settled", "attributes": [{"key": "_contract_address", "value": "wasm1other"}]}
         ]);
-        let out = normalize_tx(&tx(ev.clone()), &["wasm1tok".into()]);
+        let out = normalize_tx(&tx(ev.clone()), &["wasm1tok".into()], None);
         assert_eq!(out.len(), 2);
         assert_eq!(out[0]["event"], "PaymentSettled");
         assert_eq!((out[0]["log_index"].as_u64(), out[0]["block_number"].as_u64()), (Some(1), Some(7)));
@@ -815,7 +863,7 @@ mod tests {
         assert_eq!(out[1]["digest"], format!("0x{}", "ee".repeat(32)));
         let mut failed = tx(ev);
         failed["tx_result"]["code"] = json!(5);
-        assert!(normalize_tx(&failed, &["wasm1tok".into()]).is_empty());
+        assert!(normalize_tx(&failed, &["wasm1tok".into()], None).is_empty());
     }
 
     /// Review L2: chỉ lỗi thực thi (gRPC Unknown/InvalidArgument) là `Revert`; lỗi cổng/gRPC thoáng qua thử lại.
@@ -872,7 +920,7 @@ mod tests {
             {"key": b("_contract_address"), "value": b("wasm1tok"), "index": true}, {"key": b("from"), "value": b("wasm1a")},
             {"key": b("to"), "value": b("wasm1b")}, {"key": b("amount"), "value": b("5")},
             {"key": b("pay_ref"), "value": b(&format!("0x{}", "22".repeat(32)))}]}]);
-        let out = normalize_tx(&tx(ev), &["wasm1tok".into()]);
+        let out = normalize_tx(&tx(ev), &["wasm1tok".into()], None);
         assert_eq!(out.len(), 1);
         assert_eq!((out[0]["from"].as_str(), out[0]["amount"].as_str()), (Some("wasm1a"), Some("5")));
     }
@@ -1091,7 +1139,7 @@ mod tests {
         #[test]
         fn normalize_never_panics(s in "\\PC{0,300}") {
             if let Ok(v) = serde_json::from_str::<Value>(&s) {
-                let _ = normalize_tx(&v, &["wasm1tok".into()]);
+                let _ = normalize_tx(&v, &["wasm1tok".into()], Some("wasm1router"));
                 let _ = relay_msg(&v);
             }
         }
@@ -1125,7 +1173,7 @@ mod tests {
                 {"key": "_contract_address", "value": "wasm1tok"}, {"key": "from", "value": "wasm1a"},
                 {"key": "to", "value": "wasm1b"}, {"key": "amount", "value": amount.to_string()},
                 {"key": "pay_ref", "value": format!("0x{}", alloy::hex::encode(r))}]}));
-            let out = normalize_tx(&tx(json!(evs)), &["wasm1tok".into()]);
+            let out = normalize_tx(&tx(json!(evs)), &["wasm1tok".into()], None);
             prop_assert_eq!(out.len(), 1);
             prop_assert_eq!(out[0]["amount"].as_str().unwrap(), amount.to_string());
             prop_assert_eq!(out[0]["entry_ref"].as_str().unwrap(), format!("0x{}", alloy::hex::encode(r)));

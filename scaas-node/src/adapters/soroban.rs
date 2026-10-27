@@ -180,23 +180,38 @@ pub fn decode_event(ev: &Value) -> Option<Value> {
     let mut out = json!({
         "contract": ev["contractId"].as_str()?, "block_number": ledger,
         "tx_hash": format!("0x{}", tx.to_lowercase()), "log_index": log_index,
-        "from": scval_addr(topics.get(1)?)?,
     });
+    let amount = |v: &ScVal| scval_i128(v).filter(|a| *a >= 0).map(|a| a.to_string());
     match scval_str(topics.first()?)?.as_str() {
         "PaymentSettled" => {
             let ScVal::Vec(Some(data)) = &value else { return None };
-            let amount = scval_i128(data.first()?)?;
-            if amount < 0 {
-                return None;
-            }
             out["event"] = json!("PaymentSettled");
+            out["from"] = json!(scval_addr(topics.get(1)?)?);
             out["to"] = json!(scval_addr(topics.get(2)?)?);
-            out["amount"] = json!(amount.to_string());
+            out["amount"] = json!(amount(data.first()?)?);
             out["entry_ref"] = json!(scval_b32(data.get(1)?)?);
         }
         "MetaTransactionExecuted" => {
             out["event"] = json!("MetaTransactionExecuted");
+            out["from"] = json!(scval_addr(topics.get(1)?)?);
             out["digest"] = json!(scval_b32(&value)?);
+        }
+        // CTR-MTX-26 / -27: joined to their `PaymentSettled` (`indexer::join_pay_events`), never sent alone
+        "PaymentMeta" => {
+            let ScVal::Bytes(meta) = &value else { return None };
+            out["event"] = json!("PaymentMeta");
+            out["entry_ref"] = json!(scval_b32(topics.get(1)?)?);
+            out["meta"] = json!(format!("0x{}", hex(meta.as_slice())));
+        }
+        "RelayFeePaid" => {
+            let ScVal::Vec(Some(data)) = &value else { return None };
+            out["event"] = json!("RelayFeePaid");
+            out["entry_ref"] = json!(scval_b32(topics.get(1)?)?);
+            out["target"] = json!(scval_addr(topics.get(2)?)?);
+            out["token"] = json!(scval_addr(topics.get(3)?)?);
+            out["from"] = json!(scval_addr(data.first()?)?);
+            out["to"] = json!(scval_addr(data.get(1)?)?);
+            out["amount"] = json!(amount(data.get(2)?)?);
         }
         _ => return None,
     }
@@ -432,6 +447,9 @@ impl ChainAdapter for SorobanAdapter {
 
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let mut out = Vec::new();
+        // the tokens' events, and the router's `RelayFeePaid` (`RelayFeePaid` only from it, a token event never)
+        let router = self.relay_fee.router.as_ref().map(|r| r.to_string());
+        let contracts: Vec<String> = contracts.iter().cloned().chain(router.clone()).collect();
         for chunk in contracts.chunks(CONTRACTS_PER_FILTER) {
             let filter = json!([{"type": "contract", "contractIds": chunk}]);
             let mut cursor: Option<String> = None;
@@ -443,7 +461,7 @@ impl ChainAdapter for SorobanAdapter {
                     if ev["ledger"].as_u64().is_some_and(|l| l > to) {
                         break 'pages;
                     }
-                    if let Some(mut e) = decode_event(ev) {
+                    if let Some(mut e) = decode_event(ev).filter(|e| (e["event"] == "RelayFeePaid") == (e["contract"].as_str() == router.as_deref())) {
                         e["block_hash"] = json!(self.block_hash(e["block_number"].as_u64().unwrap_or_default()).await?);
                         out.push(e);
                     }
@@ -455,7 +473,7 @@ impl ChainAdapter for SorobanAdapter {
             }
         }
         out.sort_by_key(|e| (e["block_number"].as_u64(), e["tx_hash"].as_str().map(str::to_owned), e["log_index"].as_u64()));
-        Ok(out)
+        Ok(crate::indexer::join_pay_events(out))
     }
 }
 
@@ -719,6 +737,37 @@ mod tests {
         let ev = json!({"ledger": 7, "contractId": CONTRACT, "txHash": "ab".repeat(32), "id": "1-2",
                         "topic": [sym("transfer"), addr(FROM)], "value": b32.to_xdr_base64(Limits::none()).unwrap()});
         assert!(decode_event(&ev).is_none(), "SEP-41 transfer events are not ours");
+    }
+
+    /// T17 (G): `PaymentMeta` and the router's `RelayFeePaid` decode and join the expected token's `PaymentSettled`
+    /// of the same transaction (`indexer::join_pay_events`); a fee in another token joins nothing; neither is a row.
+    #[test]
+    fn soroban_indexer_joins_pay_meta_and_relay_fee() {
+        const ROUTER: &str = "CBCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEJ5HZ";
+        let x = |v: ScVal| v.to_xdr_base64(Limits::none()).unwrap();
+        let addr = |s: &str| x(ScVal::Address(ScAddress::from_str(s).unwrap()));
+        let sym = |s: &str| x(ScVal::Symbol(ScSymbol(s.try_into().unwrap())));
+        let b = |v: &[u8]| ScVal::Bytes(v.to_vec().try_into().unwrap());
+        let amt = |n: u64| ScVal::I128(stellar_xdr::Int128Parts { hi: 0, lo: n });
+        let vecv = |v: Vec<ScVal>| x(ScVal::Vec(Some(v.try_into().unwrap())));
+        let ev = |contract: &str, i: u32, topic: Vec<String>, value: String| json!({"ledger": 7, "contractId": contract,
+            "txHash": "ab".repeat(32), "id": format!("1-{i}"), "topic": topic, "value": value});
+        let (pid, rf) = ([4u8; 32], [5u8; 32]);
+        let evs = [
+            ev(CONTRACT, 1, vec![sym("PaymentMeta"), x(b(&pid))], x(b(&[0xab, 0xcd]))),
+            ev(CONTRACT, 2, vec![sym("PaymentSettled"), addr(FROM), addr(WALLET)], vecv(vec![amt(100), b(&pid)])),
+            ev(CONTRACT, 3, vec![sym("PaymentSettled"), addr(FROM), addr(ROUTER)], vecv(vec![amt(5), b(&rf)])),
+            ev(ROUTER, 4, vec![sym("RelayFeePaid"), x(b(&rf)), addr(WALLET), addr(CONTRACT)],
+               vecv(vec![ScVal::Address(ScAddress::from_str(FROM).unwrap()), ScVal::Address(ScAddress::from_str(FROM).unwrap()), amt(5)])),
+            ev(ROUTER, 5, vec![sym("RelayFeePaid"), x(b(&rf)), addr(WALLET), addr(WALLET)],
+               vecv(vec![ScVal::Address(ScAddress::from_str(FROM).unwrap()), ScVal::Address(ScAddress::from_str(FROM).unwrap()), amt(5)])),
+        ];
+        let out = crate::indexer::join_pay_events(evs.iter().filter_map(decode_event).collect());
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
+        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None));
+        assert_eq!((out[1]["relay_target"].as_str(), out[1]["relay_payee"].as_str()), (Some(WALLET), Some(FROM)), "open mode: paid to the router");
+        assert!(out[0]["relay_payee"].is_null());
     }
 
     // ------------------------------------------------------------ metatx-split T10 (CTR-MTX-26 / 27)

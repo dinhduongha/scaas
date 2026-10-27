@@ -740,7 +740,9 @@ pub fn mandate_pay_body(op: &Arc<Cell>, signature: &[u8; 64], response: &Addr) -
 
 pub const OP_RELAY_CALL: u128 = 0x5b0a1d30;
 pub const OP_RELAY_REFUND: u128 = 0x5b0a1d31;
-// TODO(T17): the indexer decodes `RelayFeePaid` / `RelayFeeRefunded` (joined to `PaymentSettled` by `pay_ref`).
+// The router's events identify OUR relay's outcome (`settled_event`, `tx_status`); the indexer does not join them to
+// the escrow's `PaymentSettled`: the release / refund lands in a later transaction, often a later range, after that
+// row reached Odoo (T17, recorded).
 pub const EV_RELAY_FEE_PAID: u128 = 0x9b1c0d05;
 pub const EV_RELAY_FEE_REFUNDED: u128 = 0x9b1c0d06;
 /// The served fee-less entries (relayfee.tact `servedCall`): the wallet's `revoke` / `set_key`, the Mandate's `revoke`.
@@ -1011,6 +1013,24 @@ pub type WalletCode = ([u8; 32], u16);
 pub enum TonEvent {
     Executed { master: Addr, from: Addr, digest: [u8; 32] },
     Paid { from: Addr, to: Addr, amount: u128, pay_ref: [u8; 32] },
+    /// CTR-MTX-26 (`EV_META`): no `from`; the payer is the same transaction's `Executed` (`meta_payer`).
+    Meta { master: Addr, pay_id: [u8; 32], meta: Vec<u8> },
+}
+
+/// The bytes of a snake chain (each cell whole bytes, at most one ref). A cell with more than one ref is refused:
+/// Tact's `keccak256(Slice)` (the `payId` commitment) follows only the first ref, so further refs would be unsigned
+/// bytes the event shows (T15).
+pub fn snake_bytes(c: &Arc<Cell>) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    let mut cur = c.clone();
+    loop {
+        if cur.refs().len() > 1 || !cur.bits.is_multiple_of(8) {
+            bail!("meta is not a snake chain (a cell with {} refs, {} bits)", cur.refs().len(), cur.bits);
+        }
+        out.extend_from_slice(&cur.data[..cur.bits / 8]);
+        let Some(next) = cur.refs().first().cloned() else { return Ok(out) };
+        cur = next;
+    }
 }
 
 pub fn decode_event(body: &Arc<Cell>) -> Result<Option<TonEvent>> {
@@ -1025,6 +1045,13 @@ pub fn decode_event(body: &Arc<Cell>) -> Result<Option<TonEvent>> {
             let digest = s.b256()?;
             s.end()?;
             Some(TonEvent::Executed { master, from, digest })
+        }
+        EV_META => {
+            let master = s.addr()?.ok_or_else(|| anyhow!("event master"))?;
+            let pay_id = s.b256()?;
+            let meta = snake_bytes(&s.reference()?)?;
+            s.end()?;
+            Some(TonEvent::Meta { master, pay_id, meta })
         }
         EV_PAID => {
             let from = s.addr()?.ok_or_else(|| anyhow!("event from"))?;
@@ -1181,6 +1208,8 @@ pub struct TonAdapter {
     relay_fee: RelayFeePolicy,
     /// escrow key ⇒ when this node last sent its `RelayRefund` (one in flight per escrow).
     refunds: RwLock<HashMap<[u8; 32], u64>>,
+    /// `PaymentMeta`s waiting for their `PaymentSettled` (`ton_tx_events`).
+    metas: std::sync::Mutex<MetaWait>,
 }
 
 fn param_str(cfg: &ChainCfg, k: &str) -> Option<String> {
@@ -1223,6 +1252,7 @@ impl TonAdapter {
             codes: RwLock::new(HashMap::new()),
             relay_fee: RelayFeePolicy::from_cfg(cfg).with_context(|| format!("chain {}", cfg.chain_key()))?,
             refunds: RwLock::new(HashMap::new()),
+            metas: Default::default(),
         })
     }
 
@@ -1437,7 +1467,52 @@ pub fn authenticate(emitter: &Addr, ev: &TonEvent, masters: &[(Addr, Option<Wall
             (wallet_of(master, from).as_ref() == Some(emitter) || registered).then(|| (*master, ev.clone()))
         }
         TonEvent::Paid { to, .. } => masters.iter().map(|(m, _)| m).find(|m| wallet_of(m, to).as_ref() == Some(emitter)).map(|m| (*m, ev.clone())),
+        // authenticated through its transaction's `Executed` (`meta_payer`)
+        TonEvent::Meta { .. } => None,
     }
+}
+
+/// The payer of a `PaymentMeta`: the `Executed` of the same transaction, same emitter (the payer's jetton wallet) and
+/// master, authenticated like any `Executed` (the wallet derives from `(from, master)`). `PaymentMeta` has no `from`.
+pub fn meta_payer(evs: &[(usize, Addr, TonEvent)], emitter: &Addr, master: &Addr, masters: &[(Addr, Option<WalletCode>)]) -> Option<Addr> {
+    evs.iter().find_map(|(_, e, ev)| match ev {
+        TonEvent::Executed { master: m, from, .. } if e == emitter && m == master => {
+            authenticate(e, ev, masters).map(|_| *from)
+        }
+        _ => None,
+    })
+}
+
+/// `(master, payer, payId)` ⇒ `(meta, mc seqno)`: a `PaymentMeta` waits for its `PaymentSettled`, emitted by the payee's
+/// wallet in a later transaction, maybe a later range. ponytail: in memory, bounded by `META_WAIT_BLOCKS`; a restart
+/// (or a payee bounce: then it is never paid) drops the entry and the payment reaches Odoo without its `meta`.
+pub type MetaWait = HashMap<(Addr, Addr, [u8; 32]), (Vec<u8>, u64)>;
+const META_WAIT_BLOCKS: u64 = 10_000;
+
+/// One transaction's normalized events (TON's join, T17 G): `Executed` and `Paid` as before; a `PaymentMeta` (payer
+/// from the same transaction's `Executed`) waits in `wait`, and the `Paid` of the same `(master, from, pay_ref)` takes
+/// its `meta`. Never by `pay_ref` alone; a `PaymentMeta` is never sent as a row (without its payment it proves nothing).
+pub fn ton_tx_events(evs: Vec<(usize, Addr, TonEvent)>, masters: &[(Addr, Option<WalletCode>)], wait: &mut MetaWait, seqno: u64)
+    -> Vec<(usize, Addr, TonEvent, Option<Vec<u8>>)>
+{
+    wait.retain(|_, (_, at)| at.saturating_add(META_WAIT_BLOCKS) >= seqno);
+    for (_, emitter, ev) in &evs {
+        if let TonEvent::Meta { master, pay_id, meta } = ev {
+            if let Some(from) = meta_payer(&evs, emitter, master, masters) {
+                wait.insert((*master, from, *pay_id), (meta.clone(), seqno));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (i, emitter, ev) in &evs {
+        let Some((master, ev)) = authenticate(emitter, ev, masters) else { continue };
+        let meta = match &ev {
+            TonEvent::Paid { from, pay_ref, .. } => wait.remove(&(master, *from, *pay_ref)).map(|(m, _)| m),
+            _ => None,
+        };
+        out.push((*i, master, ev, meta));
+    }
+    out
 }
 
 /// The forward TON floor a pay op signed (`MetaOp.extra`, review H2).
@@ -1659,8 +1734,11 @@ impl ChainAdapter for TonAdapter {
                         continue;
                     }
                     let tx_hash = hex0x(&api_hash(tx.get("hash").unwrap_or(&Value::Null))?);
-                    for (log_index, emitter, ev) in evs {
-                        let Some((master, ev)) = authenticate(&emitter, &ev, &masters) else { continue };
+                    let evs = {
+                        let mut wait = self.metas.lock().map_err(|_| anyhow!("meta wait poisoned"))?;
+                        ton_tx_events(evs, &masters, &mut wait, seqno)
+                    };
+                    for (log_index, master, ev, meta) in evs {
                         if block_hash.is_none() {
                             block_hash = Some(self.mc_block(seqno).await?);
                         }
@@ -1680,7 +1758,11 @@ impl ChainAdapter for TonAdapter {
                                 e["to"] = json!(to.raw());
                                 e["amount"] = json!(amount.to_string());
                                 e["entry_ref"] = json!(hex0x(&pay_ref));
+                                if let Some(m) = meta {
+                                    e["meta"] = json!(hex0x(&m));
+                                }
                             }
+                            TonEvent::Meta { .. } => continue,
                         }
                         out.push(e);
                     }
@@ -1867,6 +1949,41 @@ mod tests {
 
     /// Review M3 + L10: authentication is local (no RPC per event), a forged emitter, an unregistered master and an
     /// unregistered Mandate are skipped, and one transaction cannot make us decode more than a handful of events.
+    /// T17 (G): a `PaymentMeta` takes its payer from the same transaction's authenticated `Executed`, waits, and gives
+    /// its `meta` to the later `PaymentSettled` of the same `(master, from, pay_ref)` (never by `pay_ref` alone; a
+    /// 0-amount `Paid` of another payer joins nothing); it is never a row of its own; a meta cell with more than one
+    /// ref is refused; a wait expires.
+    #[test]
+    fn ton_indexer_joins_payment_meta_by_payer() {
+        let v = vectors();
+        let code = cell(&v, "/jetton/wallet_code_boc");
+        let (payer, master) = (Addr::parse(s(&v, "/metaop/from")).unwrap(), Addr::parse(s(&v, "/jetton/master")).unwrap());
+        let wallet = Addr::parse(s(&v, "/jetton/payer_wallet")).unwrap();
+        let masters = vec![(master, Some((code.hash(), code.depth())))];
+        let payee = Addr { wc: 0, hash: [0x5e; 32] };
+        let payee_wallet = jetton_wallet_address(&payee, &master, &code.hash(), code.depth()).unwrap();
+        let two = Builder::new().bytes(&[1]).reference(snake(&[2]).unwrap()).reference(snake(&[3]).unwrap()).end().unwrap();
+        let bad = Builder::new().uint(EV_META, 32).addr(Some(&master)).bytes(&[4; 32]).reference(two).end().unwrap();
+        assert!(decode_event(&bad).is_err(), "a meta cell with two refs");
+        let pid = [4u8; 32];
+        let exe = TonEvent::Executed { master, from: payer, digest: [1; 32] };
+        let pm = |m: Vec<u8>| TonEvent::Meta { master, pay_id: pid, meta: m };
+        let mut wait = MetaWait::new();
+        let forger = Addr { wc: 0, hash: [9; 32] };
+        let forged = ton_tx_events(vec![(0, forger, exe.clone()), (1, forger, pm(vec![0xff]))], &masters, &mut wait, 10);
+        assert!(forged.is_empty() && wait.is_empty(), "a meta from a wallet that is not the payer's");
+        let a = ton_tx_events(vec![(0, wallet, exe.clone()), (1, wallet, pm(vec![0xab]))], &masters, &mut wait, 10);
+        assert_eq!(a.iter().map(|e| matches!(e.2, TonEvent::Executed { .. })).collect::<Vec<_>>(), [true], "never a row");
+        let paid = |from: Addr, amount| TonEvent::Paid { from, to: payee, amount, pay_ref: pid };
+        let b = ton_tx_events(vec![(0, payee_wallet, paid(Addr { wc: 0, hash: [0x77; 32] }, 0)), (1, payee_wallet, paid(payer, 100))],
+                              &masters, &mut wait, 11);
+        assert_eq!((b[0].3.clone(), b[1].3.clone()), (None, Some(vec![0xab])), "joined by (master, from, pay_ref)");
+        assert!(wait.is_empty(), "taken once");
+        ton_tx_events(vec![(0, wallet, exe), (1, wallet, pm(vec![0xab]))], &masters, &mut wait, 10);
+        ton_tx_events(vec![], &masters, &mut wait, 10 + META_WAIT_BLOCKS + 1);
+        assert!(wait.is_empty(), "a payment that never settled (payee bounce) stops waiting");
+    }
+
     #[test]
     fn events_are_authenticated_locally_and_capped() {
         let v = vectors();
@@ -2144,8 +2261,9 @@ mod tests {
         // the plain pay still sends params = null
         let (plain, _) = pay_job(id, pay_lane(&id), 0, 1, json!({}));
         assert!(built_params(&a.build(&plain, 0).await.unwrap()).is_none());
-        // the `PaymentMeta` event is not one the indexer decodes yet (T17), and never an error
-        assert_eq!(decode_event(&cell(&v, "/events/pm_boc")).unwrap(), None);
+        // the `PaymentMeta` event decodes (T17): the vector's payment id and meta
+        let Some(TonEvent::Meta { pay_id, meta: m, .. }) = decode_event(&cell(&v, "/events/pm_boc")).unwrap() else { panic!("pm_boc") };
+        assert_eq!((pay_id, m), (id, meta.clone()));
 
         // fail closed before any getter: an adapter whose API is unreachable still refuses each with its reason
         let dead = adapter("http://127.0.0.1:9");

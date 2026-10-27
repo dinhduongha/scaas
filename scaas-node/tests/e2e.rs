@@ -356,7 +356,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(balance(&rpc, token, shop).await, U256::from(250_000_000u64));
 
     let ichain = Chain::with_signer(&cfg, relayer.clone()).unwrap();
-    assert!(scaas_node::indexer::step(&ichain, &odoo).await.unwrap());
+    assert!(scaas_node::indexer::step(&ichain, &odoo, None).await.unwrap());
     let ingested = state.lock().unwrap().ingested.clone();
     let pay = ingested.iter().find(|e| e["event"] == "PaymentSettled").expect("PaymentSettled ingested");
     assert_eq!(pay["entry_ref"], format!("{entry_ref:#x}"));

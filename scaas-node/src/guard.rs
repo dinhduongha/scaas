@@ -285,6 +285,11 @@ impl Guard {
         })
     }
 
+    /// The chain's `MtxRelayFee` router (`params.relay_fee.router`), if any.
+    pub fn router(&self) -> Option<Address> {
+        self.relay_fee.as_ref().map(|r| r.router)
+    }
+
     /// A token of the chain's registered list (refreshed from the client, review T4 m1); an unreadable list is none.
     fn registered(&self, a: Address) -> bool {
         self.tokens.read().is_ok_and(|t| t.contains(&a))

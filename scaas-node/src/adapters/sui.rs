@@ -793,31 +793,48 @@ pub fn normalize(package: &Addr, registries: &[String], ev: &Value, block: u64, 
     let ty = ev.get("type")?.as_str()?;
     let mut it = ty.splitn(3, "::");
     let (pkg, module, name) = (it.next()?, it.next()?, it.next()?);
-    if parse_addr(pkg).ok()? != *package || module != "meta" {
+    if parse_addr(pkg).ok()? != *package || !matches!(module, "meta" | "relayfee") {
         return None;
     }
     let p = ev.get("parsedJson")?;
-    let contract = canon(p.get("contract")?)?;
+    // `RelayFeePaid` (the `relayfee` module) names its token; the `meta` events are the token's own
+    let contract = canon(p.get(if module == "relayfee" { "token" } else { "contract" })?)?;
     if !registries.contains(&contract) {
         return None;
     }
     let log_index = str_or_num(ev.get("id")?.get("eventSeq")?)?.parse::<u64>().ok()?;
     let mut out = json!({
-        "contract": contract, "block_number": block, "block_hash": block_hash, "tx_hash": tx_hash,
-        "log_index": log_index, "from": canon(p.get("from")?)?,
+        "contract": contract, "block_number": block, "block_hash": block_hash, "tx_hash": tx_hash, "log_index": log_index,
     });
-    match name {
-        "PaymentSettled" => {
-            let r = bytes_of(p.get("pay_ref")?).filter(|b| b.len() == 32)?;
+    let b32 = |k: &str| bytes_of(p.get(k)?).filter(|b| b.len() == 32).map(|b| addr_hex(&b));
+    match (module, name) {
+        ("meta", "PaymentSettled") => {
             out["event"] = json!("PaymentSettled");
+            out["from"] = json!(canon(p.get("from")?)?);
             out["to"] = json!(canon(p.get("to")?)?);
             out["amount"] = json!(str_or_num(p.get("amount")?)?);
-            out["entry_ref"] = json!(addr_hex(&r));
+            out["entry_ref"] = json!(b32("pay_ref")?);
         }
-        "MetaTransactionExecuted" => {
-            let d = bytes_of(p.get("digest")?).filter(|b| b.len() == 32)?;
+        ("meta", "MetaTransactionExecuted") => {
             out["event"] = json!("MetaTransactionExecuted");
-            out["digest"] = json!(addr_hex(&d));
+            out["from"] = json!(canon(p.get("from")?)?);
+            out["digest"] = json!(b32("digest")?);
+        }
+        // CTR-MTX-26 / -27: joined to their `PaymentSettled` (`indexer::join_pay_events`), never sent alone
+        ("meta", "PaymentMeta") => {
+            out["event"] = json!("PaymentMeta");
+            out["entry_ref"] = json!(b32("pay_id")?);
+            out["meta"] = json!(format!("0x{}", alloy::hex::encode(bytes_of(p.get("meta")?)?)));
+        }
+        ("relayfee", "RelayFeePaid") => {
+            out["event"] = json!("RelayFeePaid");
+            out["contract"] = json!(addr_hex(package));
+            out["token"] = json!(contract);
+            out["entry_ref"] = json!(b32("ref")?);
+            out["target"] = json!(canon(p.get("target")?)?);
+            out["from"] = json!(canon(p.get("payer")?)?);
+            out["to"] = json!(canon(p.get("payee")?)?);
+            out["amount"] = json!(str_or_num(p.get("amount")?)?);
         }
         _ => return None,
     }
@@ -838,7 +855,7 @@ pub fn tx_events(package: &Addr, registries: &[String], chunk: &[(String, u64, S
             _ => bail!("transaction {d58} not served with its events: {blk}"),
         };
         let tx_hash = addr_hex(&bs58::decode(d58).into_vec()?);
-        out.extend(events.iter().filter_map(|ev| normalize(package, registries, ev, *seq, ch, &tx_hash)));
+        out.extend(crate::indexer::join_pay_events(events.iter().filter_map(|ev| normalize(package, registries, ev, *seq, ch, &tx_hash)).collect()));
     }
     Ok(out)
 }
@@ -1763,6 +1780,34 @@ mod tests {
         let e = SuiAdapter::new(&cfg("0xnot-hex"), &k).err().unwrap();
         assert!(format!("{e:#}").contains("tokens"), "{e:#}");
         assert_eq!(SuiAdapter::new(&cfg(REG_SUI), &k).unwrap().relay_fee.tokens, vec![parse_addr(REG_SUI).unwrap()]);
+    }
+
+    /// T17 (G): `meta::PaymentMeta` and `relayfee::RelayFeePaid` decode and join the expected registry's
+    /// `PaymentSettled` of the same transaction (`indexer::join_pay_events`); a fee in an unregistered token is
+    /// dropped; neither is sent as a row.
+    #[test]
+    fn sui_indexer_joins_pay_meta_and_relay_fee() {
+        let pkg = parse_addr("0xabc").unwrap();
+        let reg = addr_hex(&parse_addr("0x7c95").unwrap());
+        let regs = std::slice::from_ref(&reg);
+        let ev = |module: &str, name: &str, seq: u32, data: Value| json!({"id": {"txDigest": "x", "eventSeq": seq.to_string()},
+            "type": format!("{}::{module}::{name}", addr_hex(&pkg)), "parsedJson": data});
+        let pid = vec![4u8; 32];
+        let evs = [
+            ev("meta", "PaymentMeta", 0, json!({"contract": "0x7c95", "pay_id": pid, "meta": [0xab, 0xcd]})),
+            ev("meta", "PaymentSettled", 1, json!({"contract": "0x7c95", "from": "0x1", "to": "0xbeef", "amount": "100", "pay_ref": pid})),
+            ev("meta", "PaymentSettled", 2, json!({"contract": "0x7c95", "from": "0x1", "to": "0x1e", "amount": "5", "pay_ref": vec![5u8; 32]})),
+            ev("relayfee", "RelayFeePaid", 3, json!({"ref": vec![5u8; 32], "target": "0xabc", "token": "0x7c95", "payer": "0x1",
+                                                     "payee": "0x1e", "amount": "5"})),
+            ev("relayfee", "RelayFeePaid", 4, json!({"ref": vec![5u8; 32], "target": "0xabc", "token": "0x9999", "payer": "0x1",
+                                                     "payee": "0x1e", "amount": "5"})),
+        ];
+        let out = crate::indexer::join_pay_events(evs.iter().filter_map(|e| normalize(&pkg, regs, e, 5, "0xh", "0xt")).collect());
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
+        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None));
+        assert_eq!(out[1]["relay_payee"], addr_hex(&parse_addr("0x1e").unwrap()));
+        assert!(out[0]["relay_payee"].is_null());
     }
 
     /// A configured but unparsable `params.relay_fee.router` / `min_amount` fails at startup.

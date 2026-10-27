@@ -617,30 +617,48 @@ pub fn normalize(package: &Addr, tokens: &[String], ev: &Value, block: u64, bloc
     let ty = ev.get("type")?.as_str()?;
     let mut it = ty.splitn(3, "::");
     let (pkg, module, name) = (it.next()?, it.next()?, it.next()?);
-    if parse_addr(pkg).ok()? != *package || module != "meta" {
+    if parse_addr(pkg).ok()? != *package || !matches!(module, "meta" | "relayfee") {
         return None;
     }
     let d = ev.get("data")?;
-    let contract = canon(d.get("contract")?)?;
+    // `RelayFeePaid` (the `relayfee` module) names its token; the `meta` events are the token's own
+    let contract = canon(d.get(if module == "relayfee" { "token" } else { "contract" })?)?;
     if !tokens.contains(&contract) {
         return None;
     }
+    let log_index = log_index as u64;
     let mut out = json!({
-        "contract": contract, "block_number": block, "block_hash": block_hash, "tx_hash": tx_hash,
-        "log_index": log_index, "from": canon(d.get("from")?)?,
+        "contract": contract, "block_number": block, "block_hash": block_hash, "tx_hash": tx_hash, "log_index": log_index,
     });
-    match name {
-        "PaymentSettled" => {
-            let r = bytes_of(d.get("pay_ref")?).filter(|b| b.len() == 32)?;
+    let b32 = |k: &str| bytes_of(d.get(k)?).filter(|b| b.len() == 32).map(|b| addr_hex(&b));
+    match (module, name) {
+        ("meta", "PaymentSettled") => {
             out["event"] = json!("PaymentSettled");
+            out["from"] = json!(canon(d.get("from")?)?);
             out["to"] = json!(canon(d.get("to")?)?);
             out["amount"] = json!(num(d.get("amount")?)?.to_string());
-            out["entry_ref"] = json!(addr_hex(&r));
+            out["entry_ref"] = json!(b32("pay_ref")?);
         }
-        "MetaTransactionExecuted" => {
-            let dg = bytes_of(d.get("digest")?).filter(|b| b.len() == 32)?;
+        ("meta", "MetaTransactionExecuted") => {
             out["event"] = json!("MetaTransactionExecuted");
-            out["digest"] = json!(addr_hex(&dg));
+            out["from"] = json!(canon(d.get("from")?)?);
+            out["digest"] = json!(b32("digest")?);
+        }
+        // CTR-MTX-26 / -27: joined to their `PaymentSettled` (`indexer::join_pay_events`), never sent alone
+        ("meta", "PaymentMeta") => {
+            out["event"] = json!("PaymentMeta");
+            out["entry_ref"] = json!(b32("pay_id")?);
+            out["meta"] = json!(format!("0x{}", alloy::hex::encode(bytes_of(d.get("meta")?)?)));
+        }
+        ("relayfee", "RelayFeePaid") => {
+            out["event"] = json!("RelayFeePaid");
+            out["contract"] = json!(addr_hex(package));
+            out["token"] = json!(contract);
+            out["entry_ref"] = json!(b32("ref")?);
+            out["target"] = json!(canon(d.get("target")?)?);
+            out["from"] = json!(canon(d.get("payer")?)?);
+            out["to"] = json!(canon(d.get("payee")?)?);
+            out["amount"] = json!(num(d.get("amount")?)?.to_string());
         }
         _ => return None,
     }
@@ -1055,11 +1073,9 @@ impl ChainAdapter for AptosAdapter {
                 continue;
             }
             let hash = bytes_of(&tx["hash"]).filter(|h| h.len() == 32).map(|h| addr_hex(&h)).ok_or_else(|| anyhow!("bad tx hash"))?;
-            for (i, ev) in tx["events"].as_array().cloned().unwrap_or_default().iter().enumerate() {
-                if let Some(e) = normalize(&self.package, &tokens, ev, height, &bh, &hash, i) {
-                    out.push(e);
-                }
-            }
+            let evs = tx["events"].as_array().cloned().unwrap_or_default();
+            out.extend(crate::indexer::join_pay_events(
+                evs.iter().enumerate().filter_map(|(i, ev)| normalize(&self.package, &tokens, ev, height, &bh, &hash, i)).collect()));
         }
         Ok(out)
     }
@@ -1189,6 +1205,31 @@ mod tests {
         assert!(events_adapter(&[&honest, &liar], 2).events(5, 5, &tokens).await.is_err(), "no quorum");
         let one = events_adapter(&[&liar, &honest], 1).events(5, 5, &tokens).await.unwrap();
         assert_eq!(one[0]["amount"].as_str(), Some("999"), "quorum 1 trusts the first endpoint (documented)");
+    }
+
+    /// T17 (G): `meta::PaymentMeta` and `relayfee::RelayFeePaid` decode and join the expected token's
+    /// `PaymentSettled` of the same transaction; a fee in an unregistered token is dropped; neither is a row.
+    #[test]
+    fn aptos_indexer_joins_pay_meta_and_relay_fee() {
+        let pkg = parse_addr("0xb0b").unwrap();
+        let tok = addr_hex(&parse_addr("0xa").unwrap());
+        let ev = |module: &str, name: &str, data: Value| json!({"type": format!("{}::{module}::{name}", addr_hex(&pkg)), "data": data});
+        let (pid, rf) = (format!("0x{}", "04".repeat(32)), format!("0x{}", "05".repeat(32)));
+        let evs = [
+            ev("meta", "PaymentMeta", json!({"contract": "0xa", "pay_id": pid, "meta": "0xabcd"})),
+            ev("meta", "PaymentSettled", json!({"contract": "0xa", "from": "0x1", "to": "0xbeef", "amount": "100", "pay_ref": pid})),
+            ev("meta", "PaymentSettled", json!({"contract": "0xa", "from": "0x1", "to": "0x1e", "amount": "5", "pay_ref": rf})),
+            ev("relayfee", "RelayFeePaid", json!({"ref": rf, "target": "0xb0b", "token": "0xa", "payer": "0x1", "payee": "0x1e", "amount": "5"})),
+            ev("relayfee", "RelayFeePaid", json!({"ref": rf, "target": "0xb0b", "token": "0xb", "payer": "0x1", "payee": "0x1e", "amount": "5"})),
+            // a meta whose payment never settled in this transaction
+            ev("meta", "PaymentMeta", json!({"contract": "0xa", "pay_id": rf, "meta": "0x01"})),
+        ];
+        let out = crate::indexer::join_pay_events(evs.iter().enumerate()
+            .filter_map(|(i, e)| normalize(&pkg, std::slice::from_ref(&tok), e, 5, "0xbb", "0xcc", i)).collect());
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
+        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None), "the later meta joins nothing");
+        assert_eq!(out[1]["relay_payee"], addr_hex(&parse_addr("0x1e").unwrap()));
     }
 
     #[test]
