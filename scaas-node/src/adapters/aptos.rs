@@ -490,12 +490,13 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 /// `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0`, `meta` within the cap) or
 /// `"relay_fee"` (`op.extra.call` hex = the wrapped call's bytes, optional `op.ref`): the policy (router marker as
 /// relayer, registered token, minimum fee) and the payment commits to exactly this call: `pay_ref == ref`,
-/// `lane == payLane(ref)`, `nonce == 0`. Anything else is `relay_pay`. A plain pay or pay-meta to the router marker is
-/// refused: nobody can spend from it, so the funds would be stranded (CTR-MTX-27: never pay the marker; the router's
-/// open mode pays the submitting lane instead).
+/// `lane == payLane(ref)`, `nonce == 0`. No `op.kind` is `relay_pay`; any other kind is refused (a typo must not burn
+/// the `(payer, payId)` lane as a plain pay). A plain pay or pay-meta to the router marker is refused whether or not a
+/// router is configured (the marker is derived from the package): nobody can spend from it, so the funds would be
+/// stranded (CTR-MTX-27: never pay the marker; the router's open mode pays the submitting lane instead).
 pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
     let kind = o["kind"].as_str();
-    if kind != Some("relay_fee") && policy.router == Some(op.to) {
+    if kind != Some("relay_fee") && op.to == relay_marker(package) {
         bail!("a plain pay to the relay-fee router marker {} would strand the funds", addr_hex(&op.to));
     }
     match kind {
@@ -535,7 +536,8 @@ pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) ->
             }
             Ok(Entry::Fee { call })
         }
-        _ => Ok(Entry::Pay),
+        None => Ok(Entry::Pay),
+        Some(k) => bail!("unknown op.kind {k:?} (pay_meta, relay_fee, or none for a plain pay)"),
     }
 }
 
@@ -1414,9 +1416,23 @@ mod tests {
             let e = format!("{:#}", entry(&pkg(), &pol, &op, &j).unwrap_err());
             assert!(e.contains("strand"), "{j}: {e}");
         }
-        assert_eq!(entry(&pkg(), &RelayFeePolicy::default(), &op, &json!({})).unwrap(), Entry::Pay, "no router configured");
+        // no router configured: the marker is still derived from the package, so a plain pay to it is refused
+        let plain = MetaOp { relayer: [0; 32], ..op.clone() };
+        let e = format!("{:#}", entry(&pkg(), &RelayFeePolicy::default(), &plain, &json!({})).unwrap_err());
+        assert!(e.contains("strand"), "no router configured: {e}");
         let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), ..op };
         assert_eq!(entry(&pkg(), &pol, &to_beef, &json!({})).unwrap(), Entry::Pay);
+    }
+
+    /// Fix 1: an unknown `op.kind` (a typo of `pay_meta`) is refused, never run as a plain pay.
+    #[test]
+    fn unknown_job_kind_is_refused() {
+        let op = vector_op();
+        assert_eq!(entry(&pkg(), &RelayFeePolicy::default(), &op, &json!({})).unwrap(), Entry::Pay);
+        for k in ["pay-meta", "pay", ""] {
+            let e = format!("{:#}", entry(&pkg(), &RelayFeePolicy::default(), &op, &json!({"kind": k})).unwrap_err());
+            assert!(e.contains("unknown op.kind"), "{k}: {e}");
+        }
     }
 
     fn relay_cfg(params: &str, tokens: &str) -> ChainCfg {

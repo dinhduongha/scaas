@@ -341,13 +341,13 @@ def cancel(name, maker, ob):
     CALLS[name] = (args, F.addr(MARKET) + F.vec(ob) + F.vec(maker.pk) + F.vec(sig) + F.vec(env))
 
 
-def invalidate(name, maker, min_nonce):
-    dg = F.sha3(F.vec(b'scaas.nonces.v1') + bytes([CHAIN]) + F.addr(MARKET) + F.addr(maker.address)
+def invalidate(name, maker, min_nonce, market=MARKET):
+    dg = F.sha3(F.vec(b'scaas.nonces.v1') + bytes([CHAIN]) + F.addr(market) + F.addr(maker.address)
                 + min_nonce.to_bytes(16, 'little'))
     sig, env = maker.sign('scaas.nonces.v1', dg)
-    args = '%s, %s, %d, %s, %s, %s' % (a(MARKET), a(maker.address), min_nonce, h(maker.pk), h(sig), h(env))
+    args = '%s, %s, %d, %s, %s, %s' % (a(market), a(maker.address), min_nonce, h(maker.pk), h(sig), h(env))
     fn(name, '', 'dex::invalidate_nonces_signed(%s)' % args)
-    CALLS[name] = (args, F.addr(MARKET) + F.addr(maker.address) + min_nonce.to_bytes(16, 'little') + F.vec(maker.pk)
+    CALLS[name] = (args, F.addr(market) + F.addr(maker.address) + min_nonce.to_bytes(16, 'little') + F.vec(maker.pk)
                    + F.vec(sig) + F.vec(env))
 
 
@@ -457,6 +457,10 @@ relay('nonces_by_bob', 'relay_invalidate_nonces_signed', b'dex::invalidate_nonce
 # The revoke's payment sent through another wrapper: signed for another `ref`.
 relay('nonces_with_revoke_pay', 'relay_invalidate_nonces_signed', b'dex::invalidate_nonces_signed',
       'alice_min_nonce_2', MARKER, 0x53, pay_name='revoke')
+# The nonces payment through the same wrapper with another instance of the call (Alice's invalidate on market2).
+invalidate('alice_min_nonce_2_m2', alice, 2, market=MARKET2)
+relay('nonces_m2_with_nonces_pay', 'relay_invalidate_nonces_signed', b'dex::invalidate_nonces_signed',
+      'alice_min_nonce_2_m2', MARKER, 0x55, pay_name='nonces')
 # The manage payment (router-bound) sent to the plain `relay_pay`.
 pay('rf_manage_direct', alice, EUR, 10, r_manage, pay_lane(r_manage), 0, valid_until=PAY_UNTIL, relayer=MARKER,
     to=MARKER, extra=bytes([0x51]) * 32)

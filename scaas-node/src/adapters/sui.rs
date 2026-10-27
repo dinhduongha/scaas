@@ -695,7 +695,7 @@ fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
 /// `"relay_fee"` (`op.extra.call` hex = the wrapped call's bytes, `op.extra.registry` = the payment's `Registry<T>`,
 /// optional `op.ref`): the policy (router, registered token whose account is the payer's, minimum fee), the call
 /// names the paying account where the wrapper uses one account for both, and the payment commits to exactly this
-/// call: `pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == router`. Anything else is `relay_pay`.
+/// call: `pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == router`. No `op.kind` is `relay_pay`; any other kind is refused.
 /// A plain pay or pay-meta to the router marker is refused: the `RelayFee` object has no `receive`, so the coins would
 /// be stranded (CTR-MTX-27: never pay the marker; the router's open mode pays the submitter instead).
 pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
@@ -748,7 +748,8 @@ pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) ->
             }
             Ok(Entry::Fee { call: Box::new(call), router })
         }
-        _ => Ok(Entry::Pay),
+        None => Ok(Entry::Pay),
+        Some(k) => bail!("unknown op.kind {k:?} (pay_meta, relay_fee, or none for a plain pay)"),
     }
 }
 
@@ -1725,6 +1726,20 @@ mod tests {
         assert_eq!(entry(&pkg, &RelayFeePolicy::default(), &op, &json!({})).unwrap(), Entry::Pay, "no router configured");
         let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), ..op };
         assert_eq!(entry(&pkg, &pol, &to_beef, &json!({})).unwrap(), Entry::Pay);
+    }
+
+    /// T14 fix 1: an unknown `op.kind` (a typo of `pay_meta`) is refused, never run as a plain pay that burns the
+    /// `(payer, payId)` lane without publishing `meta`.
+    #[test]
+    fn unknown_job_kind_is_refused() {
+        let (op, _, _) = manage_job();
+        let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), relayer: [0; 32], ..op };
+        let pkg = parse_addr("0x0").unwrap();
+        assert_eq!(entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({})).unwrap(), Entry::Pay);
+        for k in ["pay-meta", "pay", ""] {
+            let e = format!("{:#}", entry(&pkg, &RelayFeePolicy::default(), &to_beef, &json!({"kind": k})).unwrap_err());
+            assert!(e.contains("unknown op.kind"), "{k}: {e}");
+        }
     }
 
     /// Fix 2: a malformed `tokens[].address` is a startup error, not a silently dropped token.

@@ -219,6 +219,15 @@ module scaas::relayfee_tests {
         v::rf_nonces_with_revoke_pay(&lane, e);
     }
 
+    // The same wrapper, another instance of the call (the invalidate on market2) with the market-1 payment.
+    #[test(f = @aptos_framework, b = @scaas, lane = @0x7e2)]
+    #[expected_failure(abort_code = 1, location = scaas::meta)]
+    fun relay_payment_does_not_cross_instances(f: signer, b: signer, lane: signer) {
+        let e = ready(&f, &b, 1000);
+        dex::list_market(&b, v::eur(), v::gbp(), true, false, 0, 0, @0x0);
+        v::rf_nonces_m2_with_nonces_pay(&lane, e);
+    }
+
     // The same call relayed twice (revoke is idempotent): the pay lane pays the ref once.
     #[test(f = @aptos_framework, b = @scaas, lane = @0x7e2)]
     #[expected_failure(abort_code = 4, location = scaas::meta)]

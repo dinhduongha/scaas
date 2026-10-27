@@ -44,6 +44,11 @@ module wrapcheck::wrap {
         scaas::meta::pay_routed(l, o, o, a, o, 1, v, 0, v, v, v, v)
     }
 
+    /// `cancel_signed`'s body (returns whether the cancel changed anything): package-only.
+    public fun dex_cancel(m: address, v: vector<u8>): bool {
+        scaas::dex::cancel(m, v, v, v, v)
+    }
+
     public entry fun relay_manage_signed(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>) {
         scaas::relayfee::relay_manage_signed(l, o, 0, 0, v, v, v, o, 0, v, v, v, o, a, o, 1, 0, v, v, v, v);
     }

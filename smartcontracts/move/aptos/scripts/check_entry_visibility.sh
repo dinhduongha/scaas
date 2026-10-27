@@ -9,7 +9,7 @@ if [ "$rc" -eq 0 ]; then echo "FAIL: wrapcheck compiled — a relayed entry is c
 missing=0
 # `grep -w`: `meta::relay_pay` must not be satisfied by the error of `meta::relay_pay_meta`.
 fns="meta::relay_pay mandate::pay mandate::revoke_signed mandate::open dex::settle dex::cancel_signed
-     dex::invalidate_nonces_signed meta::manage_signed meta::relay_pay_meta meta::pay_routed
+     dex::invalidate_nonces_signed meta::manage_signed meta::relay_pay_meta meta::pay_routed dex::cancel
      relayfee::relay_manage_signed relayfee::relay_mandate_open relayfee::relay_revoke_signed
      relayfee::relay_cancel_signed relayfee::relay_invalidate_nonces_signed p256::verify_with"
 n=0
@@ -18,4 +18,4 @@ for f in $fns; do
   grep -qw "$f" <<<"$out" || { echo "FAIL: no visibility error for $f"; missing=1; }
 done
 [ "$missing" -eq 0 ] || { echo "$out" | tail -40; exit 1; }
-echo "ok: $((n - 2)) relayed entries, meta::pay_routed and p256::verify_with are not callable from other modules"
+echo "ok: $((n - 3)) relayed entries, meta::pay_routed, dex::cancel and p256::verify_with are not callable from other modules"
