@@ -233,3 +233,34 @@ fn webauthn_grammar_net_all_04() {
     }
     assert_eq!(webauthn::origin(format!("{pre}}}").as_bytes(), &ch).as_deref(), Some(origin));
 }
+
+const PAYMETA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/metatx/paymeta.json");
+
+/// Spec §2 rows 3, 16 (R16): every `paymeta.json` row's `payId` / `payLane` through `env::keccak256`.
+#[test]
+fn pay_meta_vectors_match() {
+    use scaas_near_common::hash::{meta_pay_id, pay_lane};
+    let rows = load(PAYMETA);
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 6);
+    for r in rows {
+        let id = meta_pay_id(&b32(&r["salt"]), &hx(&r["meta"]));
+        assert_eq!(id, b32(&r["payId"]), "{}", r["name"]);
+        assert_eq!(pay_lane(&id), b32(&r["payLane"]), "{}", r["name"]);
+    }
+}
+
+/// Spec §2 row 8 (ruling R11): every `relayRefs` row's `ref` from its own bytes, salt = its payment op's `extra`.
+#[test]
+fn relay_ref_vectors_match() {
+    use scaas_near_common::hash::{pay_lane, relay_ref};
+    let d = load(VECTORS);
+    let net = b32(&d["network"]);
+    let ops = d["metaops"]["vectors"].as_array().unwrap();
+    for r in d["relayRefs"].as_array().unwrap() {
+        let pay = metaop(&ops.iter().find(|m| m["name"] == r["payment"]).unwrap()["fields"]);
+        let got = relay_ref(&net, &hx(&r["targetBytes"]), &hx(&r["call"]), &pay.extra);
+        assert_eq!(got, b32(&r["ref"]), "{}", r["name"]);
+        assert_eq!((pay.pay_ref, pay.lane, pay.nonce), (got, pay_lane(&got), 0), "{}", r["name"]);
+    }
+}

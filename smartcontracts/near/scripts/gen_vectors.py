@@ -205,9 +205,19 @@ router('router_4096', DEX, 'settle', filler('router_4096', 4096 - 2 - len(DEX) -
 
 
 # ---------------------------------------------------------------- extension points (ruling R5)
+TRANSFERS = []
+metaop('transfer', erin, ua(UA_ERIN), near(BOB), 50, V.ZERO32, b32(0xa6), nonce=3, code=V.OP['transfer'], out=TRANSFERS,
+       note='mtx_transfer(op, auth): pay_ref zero (else refused), a client-chosen lane at its next nonce; no '
+            'payment_settled')
+metaop('execute_transfer_ref', carol, ua(UA_CAROL), near(ALICE), 9, b32(0x06), b32(0xa7), relayer=RELAYER,
+       extra=b32(0x99), code=V.OP['execute_transfer'], out=TRANSFERS,
+       note='mtx_execute_transfer(op, auth): any lane and pay_ref; pay_ref != 0 emits payment_settled; extra '
+            'payer-chosen')
+
+
 def transfer_vectors():
-    """Ops 4 transfer, 5 execute_transfer (`mtx_transfer`, `mtx_execute_transfer`): Task 6 adds rows here."""
-    return []
+    """Ops 4 transfer, 5 execute_transfer (`mtx_transfer`, `mtx_execute_transfer`), Task 6."""
+    return TRANSFERS
 
 
 # Key ops (Task 5, spec §3.3): amount 0, pay_ref / lane zero, nonce = the signer's key nonce, to = from (start_recovery:
@@ -325,6 +335,10 @@ MEASURED_STORAGE_BYTES = {
                               'record = 41 + Borsh(holder) + Borsh(subject) (token SUBJECT_RECORD_OVERHEAD, measured in '
                               '`new`); a second ed25519 key +38 B (169 B, test ua_opened_lazily_relayer_pays_storage)'),
 }
+MEASURED_STORAGE_BYTES['lane'] = (
+    114, 'lane record of a UA payer: key b"l" ‖ Borsh((Holder::Ua, lane)) 66 B, value u64 (next nonce) 8 B, record '
+         'overhead 40 B; any lane = 81 + Borsh(holder) (token LANE_RECORD_OVERHEAD, measured in `new`); a first '
+         'UA → UA pay of a new UA = subject 131 + lane 114 + UA record 89 = 334 B (test near_check_storage_needed_is_exact)')
 SANDBOX_BYTE_COST = 10**19                          # near-sandbox protocol config storage_amount_per_byte (yocto)
 
 

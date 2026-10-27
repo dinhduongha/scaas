@@ -15,11 +15,13 @@ use scaas_near_common::ua::{KeyRecord, KIND_ED25519};
 
 mod account;
 mod ft;
+mod metatx;
 mod storage;
 pub use account::{
     record_bytes, Check, Recovery, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
     RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
 };
+pub use metatx::{lane_bytes, LANE_RECORD_OVERHEAD};
 pub use storage::{ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
 
 #[near(contract_state)]
@@ -32,6 +34,8 @@ pub struct Token {
     ua: LookupMap<[u8; 32], u128>,
     /// Subject accounts (keys, origins, guardian, recovery), spec §3.3.
     subjects: LookupMap<Holder, Subject>,
+    /// Lanes per payer, `(from, lane)` → the next nonce (spec §2 row 6, §3.7); never removed.
+    lanes: LookupMap<(Holder, [u8; 32]), u64>,
     /// Bytes of new records this call created, paid once by `charge_storage` (not state).
     #[borsh(skip)]
     storage_due: u64,
@@ -45,12 +49,21 @@ pub enum Event {
     /// A subject account's keys changed (`action`: the key op or `add_key_native`).
     #[event_version("1.0.0")]
     KeyOp { subject: String, action: String },
+    /// CTR-MTX-26: `mtx_pay_meta`'s `meta` (never parsed), before its `payment_settled`; bytes as `0x` ‖ hex.
+    #[event_version("1.0.0")]
+    PaymentMeta { pay_ref: String, meta: String },
+    /// A value entry with a `pay_ref` (`mtx_pay`, `mtx_pay_meta`, `mtx_execute_transfer` with `pay_ref ≠ 0`).
+    #[event_version("1.0.0")]
+    PaymentSettled { from: String, to: String, amount: U128, pay_ref: String },
+    /// Every value entry: the signer, the submitting account, the lane and nonce consumed, the op digest.
+    #[event_version("1.0.0")]
+    MetaTransactionExecuted { from: String, relayer: String, lane: String, nonce: u64, digest: String },
 }
 
 #[near]
 impl Token {
-    /// Borsh args; only the token account itself (the deploy run, before its keys are deleted). Pins both record
-    /// sizes against a measurement and registers the token's own account (the UA pool), paid from its own balance.
+    /// Borsh args; only the token account itself (the deploy run, before its keys are deleted). Pins every record
+    /// size against a measurement and registers the token's own account (the UA pool), paid from its own balance.
     #[init]
     #[private]
     pub fn new(
@@ -80,7 +93,14 @@ impl Token {
         require!(env::storage_usage() - u0 == record_bytes(&h, &s), "subject record size differs from the pin");
         subjects.remove(&h);
         subjects.flush();
-        Self { network, admin, metadata, ft, ua, subjects, storage_due: 0 }
+        let mut lanes = LookupMap::new(b"l");
+        let u0 = env::storage_usage();
+        lanes.insert((h.clone(), [0xff; 32]), 1);
+        lanes.flush();
+        require!(env::storage_usage() - u0 == lane_bytes(&h), "lane record size differs from the pin");
+        lanes.remove(&(h, [0xff; 32]));
+        lanes.flush();
+        Self { network, admin, metadata, ft, ua, subjects, lanes, storage_due: 0 }
     }
 
     /// Admin only (tier 1). An unregistered receiver is registered from the deposit, as `ft_transfer`.

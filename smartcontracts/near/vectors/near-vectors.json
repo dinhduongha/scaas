@@ -705,6 +705,72 @@
     "note": "payment of relayRefs router_4096: pay_ref = ref, lane = payLane(ref), nonce 0, extra = salt (ruling R11)"
    },
    {
+    "name": "transfer",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 4,
+     "from": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "to": {
+      "Near": "bob.test.near"
+     },
+     "relayer": null,
+     "amount": "50",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0xa6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6",
+     "nonce": 3,
+     "valid_until": 4102444800,
+     "extra": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e656172040102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8000d000000626f622e746573742e6e65617200320000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a60300000000000000005786f4000000000000000000000000000000000000000000000000000000000000000000000000",
+    "digest": "0xf732bd9d5bbe1a44755269c35cc719a189de883bc9f35e369f5fb18009852c35",
+    "text": "scaas.metaop.v1:f732bd9d5bbe1a44755269c35cc719a189de883bc9f35e369f5fb18009852c35",
+    "auth": {
+     "kind": "ed25519",
+     "key": "0x84b5757b40a54b18184b53f106e44b492a956635d981966557ffa7f640c8ee78",
+     "message": "scaas.metaop.v1:f732bd9d5bbe1a44755269c35cc719a189de883bc9f35e369f5fb18009852c35",
+     "nonce": "0xf732bd9d5bbe1a44755269c35cc719a189de883bc9f35e369f5fb18009852c35",
+     "recipient": "token.test.near",
+     "nep413Payload": "0x5000000073636161732e6d6574616f702e76313a66373332626439643562626531613434373535323639633335636337313961313839646538383362633966333565333639663566623138303039383532633335f732bd9d5bbe1a44755269c35cc719a189de883bc9f35e369f5fb18009852c350f000000746f6b656e2e746573742e6e65617200",
+     "nep413Hash": "0xe27eac4bb1d9865a7dd41f80eee975cc5ba39b9842320e9e5f1ddb2eabd7a91a",
+     "sig": "0xa6d732be0d511fdc687b2f6670b95f2c56c6104c07fd2e0f138a57b5697bff6ff12b0ae40e2eded880ba9160413ca7e7ee851951e9209e298d29d9b349811507"
+    },
+    "note": "mtx_transfer(op, auth): pay_ref zero (else refused), a client-chosen lane at its next nonce; no payment_settled"
+   },
+   {
+    "name": "execute_transfer_ref",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 5,
+     "from": {
+      "Ua": "0x10b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e0"
+     },
+     "to": {
+      "Near": "alice.test.near"
+     },
+     "relayer": "relayer.test.near",
+     "amount": "9",
+     "pay_ref": "0x0606060606060606060606060606060606060606060606060606060606060606",
+     "lane": "0xa7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0x9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e656172050110b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e0000f000000616c6963652e746573742e6e656172011100000072656c617965722e746573742e6e656172090000000000000000000000000000000606060606060606060606060606060606060606060606060606060606060606a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a70000000000000000005786f4000000009999999999999999999999999999999999999999999999999999999999999999",
+    "digest": "0xdcec69e453f15b3ba0319523af3a4f338f8537db7aaa40a4e7b908b00cc792b6",
+    "text": "scaas.metaop.v1:dcec69e453f15b3ba0319523af3a4f338f8537db7aaa40a4e7b908b00cc792b6",
+    "auth": {
+     "kind": "secp256k1",
+     "key": "0x9094567ba7245794198952f68e5723ac5866ad2f67dd97223db40e14c15b092e6a00346749144744142a33f0769d9028fc028a841c076417efaf20e1d1be0584",
+     "sig": "0xddde70f540fd7e6317aa47498de00b3baab9cc68cc75c91a995b8e26cb83531b5eef66ecca142b368fedaba31e30c71eeeae149c24ec22d33fbc0599ddef7cca",
+     "v": 1
+    },
+    "note": "mtx_execute_transfer(op, auth): any lane and pay_ref; pay_ref != 0 emits payment_settled; extra payer-chosen"
+   },
+   {
     "name": "add_key_secp256k1",
     "fields": {
      "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
@@ -1304,6 +1370,11 @@
     "bytes": 131,
     "layout": "subject account of a UA with one ed25519 key, no origin / guardian / recovery: key b\"a\" ‖ Borsh(Holder::Ua) 34 B, value Borsh(Subject) 57 B (keys 4 + 38, origins 4, guardian 1, recovery 1, key_nonce 8, policy 1), record overhead 40 B; any subject record = 41 + Borsh(holder) + Borsh(subject) (token SUBJECT_RECORD_OVERHEAD, measured in `new`); a second ed25519 key +38 B (169 B, test ua_opened_lazily_relayer_pays_storage)",
     "depositSandbox": "1310000000000000000000"
+   },
+   "lane": {
+    "bytes": 114,
+    "layout": "lane record of a UA payer: key b\"l\" ‖ Borsh((Holder::Ua, lane)) 66 B, value u64 (next nonce) 8 B, record overhead 40 B; any lane = 81 + Borsh(holder) (token LANE_RECORD_OVERHEAD, measured in `new`); a first UA → UA pay of a new UA = subject 131 + lane 114 + UA record 89 = 334 B (test near_check_storage_needed_is_exact)",
+    "depositSandbox": "1140000000000000000000"
    }
   }
  }

@@ -19,3 +19,19 @@ pub fn nep413_hash(digest: &[u8; 32], recipient: &AccountId) -> [u8; 32] {
     borsh::to_writer(&mut b, &(signed_text(digest), digest, recipient.as_str(), None::<String>)).expect("borsh");
     env::sha256_array(b)
 }
+
+/// CTR-MTX-26 `metaPayId(salt, meta) = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, byte-for-byte EVM.
+pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {
+    env::keccak256_array([&b"scaas.pay.meta"[..], salt, &env::keccak256_array(meta)].concat())
+}
+
+/// CTR-MTX-10 `payLane(p) = keccak256("scaas.pay.lane" ‖ p)`.
+pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
+    env::keccak256_array([&b"scaas.pay.lane"[..], p].concat())
+}
+
+/// CTR-MTX-27 `ref = keccak256("scaas.relayfee" ‖ network ‖ target ‖ keccak256(call) ‖ salt)`; `salt` = the payment
+/// op's payer-signed `extra` (spec §2 row 8).
+pub fn relay_ref(network: &[u8; 32], target: &[u8], call: &[u8], salt: &[u8; 32]) -> [u8; 32] {
+    env::keccak256_array([&b"scaas.relayfee"[..], network, target, &env::keccak256_array(call), salt].concat())
+}

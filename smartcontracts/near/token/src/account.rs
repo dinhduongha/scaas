@@ -215,10 +215,15 @@ impl Token {
     pub fn authorize(&mut self, op: &MetaOp, auth: &Auth) -> Holder {
         let p = env::predecessor_account_id();
         let (s, old) = self.signed(&p, &p, op, auth).unwrap_or_else(|e| env::panic_str(e));
-        if old == 0 {
-            self.save(Write { holder: op.from.clone(), subject: s, old });
-        }
+        self.open_lazily(&op.from, s, old);
         op.from.clone()
+    }
+
+    /// After `signed`: a lazily opened record (`old == 0`) is written, its bytes added to the call's `storage_due`.
+    pub(crate) fn open_lazily(&mut self, holder: &Holder, s: Subject, old: u64) {
+        if old == 0 {
+            self.save(Write { holder: holder.clone(), subject: s, old });
+        }
     }
 
     pub(crate) fn plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, act: &Action) -> R<Vec<Write>> {

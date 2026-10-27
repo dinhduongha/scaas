@@ -18,26 +18,33 @@ impl Token {
     /// the new record, the record is created (registration / zero UA balance) and the excess goes back to the
     /// predecessor. Tasks 5–10 whose entries create other records charge them per §2 row 15 the same way.
     pub(crate) fn pay_receiver_storage(&mut self, to: &Holder) {
-        let bytes = match to {
+        take_storage_deposit(self.register(to));
+    }
+
+    /// Bytes a credit to `to` creates: a registration or a UA record, 0 when it exists. The token never receives.
+    pub(crate) fn receiver_bytes(&self, to: &Holder) -> u64 {
+        match to {
             Holder::Near(a) => {
                 require!(*a != env::current_account_id(), "token refuses a transfer to the token itself");
-                if self.ft.accounts.contains_key(a) {
-                    0
-                } else {
-                    self.ft.internal_register_account(a);
-                    ACCOUNT_STORAGE_BYTES
-                }
+                if self.ft.accounts.contains_key(a) { 0 } else { ACCOUNT_STORAGE_BYTES }
             }
-            Holder::Ua(id) => {
-                if self.ua.contains_key(id) {
-                    0
-                } else {
+            Holder::Ua(id) => if self.ua.contains_key(id) { 0 } else { UA_STORAGE_BYTES },
+        }
+    }
+
+    /// Creates `to`'s record when missing; returns its bytes (the caller charges them: `pay_receiver_storage`, or the
+    /// signed entries' `storage_due`).
+    pub(crate) fn register(&mut self, to: &Holder) -> u64 {
+        let bytes = self.receiver_bytes(to);
+        if bytes > 0 {
+            match to {
+                Holder::Near(a) => self.ft.internal_register_account(a),
+                Holder::Ua(id) => {
                     self.ua.insert(*id, 0);
-                    UA_STORAGE_BYTES
                 }
             }
-        };
-        take_storage_deposit(bytes);
+        }
+        bytes
     }
 
     /// The end of a signed (`mtx_*`) entry: the attached deposit pays every byte of new records the call created

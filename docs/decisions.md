@@ -5478,6 +5478,44 @@ call 2026-10-28, owner may override.
 **Cost if wrong.** Add the checks in `KeyRecord::validate` (P-256 through the `p256` crate already linked).
 **Source.** near-algorand Task 5 report, concern 3.
 
+<a id="NET-NEAR-07"></a>
+### NET-NEAR-07 — NEAR value entries: lanes per payer, mtx_pay on any lane, storage charged once, no meta cap
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-07 · superseded-by: —
+
+**Rule.** The token's value entries (spec §3.4) take a whole `MetaOp` and its `Auth` (Borsh), each with a
+`*_check(caller, op, auth, …)` view: `mtx_pay` (op 0, `pay_ref ≠ 0`), `mtx_pay_meta(op, auth, salt, meta)` (op 0,
+`pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0`, else "pay-meta shape …"; CTR-MTX-26),
+`mtx_transfer` (op 4, `pay_ref == 0`) and `mtx_execute_transfer` (op 5, any `pay_ref`). (1) **Lanes:**
+`LookupMap<(Holder, lane), u64>` (prefix `l`, the next nonce), one per payer and lane, never removed; every value
+entry of a payer shares its lanes; an op is accepted only at the lane's next nonce. `mtx_pay` takes any lane, as the
+built families' plain pay (Sui / Solana / Cosmos `relay_pay`) and the Task 3 vectors (nonces 1 and 7); EVM
+`mtxPay`'s derived lane is the pay-meta and relay-fee shape here, so a `(from, pay_ref)` pays once through
+`mtx_pay_meta` and another payer's pre-burn of the same id uses that payer's own lane. (2) **Checks**, cheap first:
+op code, shape, `to ≠ Near(token)` (spec §2 row 12), `amount > 0`, `from ≠ to`, `signed` with the predecessor as the
+relayer (rule 7: `relayer` None or the predecessor, so `relayer == token` is refused on the plain entries), the value
+policy, the lane nonce, the balance. **Policy** (NET-ALL-23 item 3, ruling R8): with `POLICY_PASSKEY_FOR_VALUE` a value
+op's auth is `Passkey`, or an `Msig` whose members are all webauthn-p256; key ops stay open to wallet keys. (3)
+**Storage**, one charge per call (spec §2 row 15): the lazy UA open (subject record), a new lane (81 B + Borsh(holder),
+114 B for a UA payer, pinned in `new`) and the receiver's record (registration 125 B, UA record 89 B; `register`
+splits Task 4's `pay_receiver_storage`) accumulate in `storage_due`; `charge_storage` takes `bytes ×
+storage_byte_cost` and refunds the excess; `storage_needed` is exact (a first UA → new-UA pay: 334 B). (4) **Events**
+(`"scaas"`): `payment_meta { pay_ref, meta }` (pay-meta only), then `meta_transaction_executed { from, relayer =
+predecessor, lane, nonce, digest }`, the NEP-141 / `ua_transfer` events, then `payment_settled { from, to, amount,
+pay_ref }` when `pay_ref ≠ 0`; bytes as `0x` ‖ hex. (5) **`settle_pay(op, from, payee)`** is the shared pay body
+(lane, payee registration, move, events) with no authorisation of its own: the relay-fee wrappers and the router
+release (Tasks 9–10) authorise with the marker as relayer and pass the open-mode payee (ruling R2). (6) **No contract
+cap on `meta`** (metatx-split §6.2): measured on near-sandbox, 7,540 B settles and 7,541 B exceeds NEAR's 16,384 B log
+limit (the hex `payment_meta` log; the call fails whole, nothing moves); the node's `max_pay_meta_bytes` (2,048 B) is
+far below. Status: BUILT (near-algorand Task 6). Controller call 2026-10-28, owner may override.
+**Why.** One rule with the built families for plain pay and pay-meta; one storage charge per call keeps the refund
+correct when a call opens a UA, a lane and a receiver at once (Task 5 concern 2); a shared pay body keeps Tasks 9–10
+from re-implementing settlement.
+**Cost if wrong.** A derived-lane `mtx_pay` (EVM `mtxPay` exactly) is one shape check in `value_plan` plus the Task 3
+pay rows' lanes regenerated.
+**Source.** near-algorand Task 6 report (`.superpowers/sdd/2026-10-28-near-algorand/task-6-report.md`); spec
+[2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §2 rows 4–7, 10, 12, 15,
+§3.4, §3.7; `smartcontracts/near/runs/2026-10-28-near-metatx.txt`.
+
 ## 36. Clients — signers and clientkeys
 
 ### CLI-SGN-01 — Ephemeral agent session keys (1-8 h)
