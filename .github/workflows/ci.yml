@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: v1.3.5 # the forge every local build, gas figure and KAT was made with (stable drifts)
+          version: v1.8.5 # the forge every local build, gas figure and KAT was made with (stable drifts; Amsterdam since F185)
       # lib/ is not committed: install the pinned commits and check their sources (CTR-GEN-01, scripts/evm_libs.sh).
       - name: Libraries at pinned commits
         run: |
@@ -68,7 +68,7 @@ jobs:
           workspaces: scaas-node
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: v1.3.5 # the forge every local build, gas figure and KAT was made with (stable drifts)
+          version: v1.8.5 # the forge every local build, gas figure and KAT was made with (stable drifts; Amsterdam since F185)
       - name: Contract libraries for the e2e deploy script
         working-directory: smartcontracts/evm
         run: |

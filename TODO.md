@@ -346,7 +346,7 @@ stream definition (scope, gate, depends) in `docs/history/specs/` — section nu
 
 ## 2. Ops / housekeeping
 
-- [ ] **Foundry 1.3.5 → 1.8.5** (not scheduled; CI pins 1.3.5 since 2026-10-13): upgrade local and CI together; 13
+- [x] **Foundry 1.3.5 → 1.8.5** (machine 2026-10-21; CI pin v1.3.5 → v1.8.5 2026-10-27 — CI had been red since F185 on "Unknown evm version: amsterdam"): upgrade local and CI together; 13
   forge tests to re-measure / regenerate (gas pins, KAT addresses, `selfdestruct`); `forge script` then needs
   `--disable-code-size-limit` (EIP-3860 on the script contract: `Deploy.s.sol` initcode 368,154 B); anvil keeps
   `--code-size-limit 65536`. Full note in COMPLETED.md.
