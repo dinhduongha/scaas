@@ -233,14 +233,13 @@ fn modes_in_the_request() {
 
 /// Review T1 I1, final review I1: over the EIP-7825 cap the refusal names the cap, the measured gas limit at this `M`,
 /// the most recipients the form takes and the cheaper forms that fit (here BLS12-381 commit-reveal with the auditor at
-/// M = 8, direct: at most 7; one cheaper form fits at M = 8).
+/// M = 9, direct: at most 8; no cheaper form fits at M = 9).
 #[test]
 fn gas_cap_message() {
     let mut req = multi("bls12381");
-    req["recipients"] = json!((1..=8).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
+    req["recipients"] = json!((1..=9).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
     let e = err("proveTransferMulti", &req);
-    for part in ["EIP-7825", "16777216", "M = 8", "16941647", "at most 7 recipients", "bls12381 compact with the auditor, direct",
-        "a cheaper form: compact without the auditor (~16580056)"] {
+    for part in ["EIP-7825", "16777216", "M = 9", "17478898", "at most 8 recipients", "bls12381 compact with the auditor, direct"] {
         assert!(e.contains(part), "{part}: {e}");
     }
     #[cfg(feature = "bn254")]
@@ -255,12 +254,12 @@ fn gas_cap_message() {
 }
 
 /// Review2 C3-2: a relayed build names how it is relayed, so the gas check never takes the `mtxExecute` figures for a
-/// `uaExecute` relay. BLS12-381 compact with the auditor at M = 7 is 15.6 M relayed through `mtxExecute`, 18.1 M through
+/// `uaExecute` relay. BLS12-381 compact with the auditor at M = 8 is 15.8 M regular gas relayed through `mtxExecute`, 18.3 M through
 /// an `fndsa512` UA.
 #[test]
 fn a_relayed_build_names_its_signer_kind() {
     let mut req = multi("bls12381");
-    req["recipients"] = json!((1..=7).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
+    req["recipients"] = json!((1..=8).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
     req["envelopeBinding"] = json!(format!("0x{}", "33".repeat(32)));
     assert!(err("proveTransferMulti", &req).contains("needs `uaSigner`"));
     req["uaSigner"] = json!("nope");
@@ -269,7 +268,7 @@ fn a_relayed_build_names_its_signer_kind() {
     assert!(err("proveTransferMulti", &req).contains("EIP-7825"), "over the cap through a UA");
     req["uaSigner"] = json!("ecdsa");
     ok("proveTransferMulti", &req);
-    // the other accounts.md kinds: 15.63 M relayed + the cap builds under 16.78 M for the light kinds (ed25519 0.21 M,
+    // the other accounts.md kinds: 15.85 M relayed + the cap builds under 16.78 M for the light kinds (ed25519 0.21 M,
     // p256 / webauthn-p256 0.4 M), is refused for the heavy ones (slhdsa128s 1.4 M, mldsa44 4.25 M)
     for k in ["ed25519", "p256", "webauthn-p256"] {
         req["uaSigner"] = json!(k);

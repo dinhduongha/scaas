@@ -741,26 +741,24 @@ pub const MAX_RECIPIENTS: usize = 16;
 /// EIP-7825: 2^24. Under Amsterdam (EIP-8037, every chain after its Glamsterdam fork, owner 2026-10-21) it caps a
 /// transaction's REGULAR gas (intrinsic, calldata floor, execution); state gas (new slots 97,920 each) comes on top, so
 /// the transaction's gas LIMIT is larger and comes from `eth_estimateGas`, never from this table: the largest admitted
-/// cells need 21.4 M to 34.3 M in total (BLS12-381, `ZetherGasLimit` `test_edge_*`: F185 at a 2^25 limit, branch pqz-16k;
-/// review2 T3 at 36 M, the `…/v3` BUNDLE record with `D_aud_j`: bundle with the auditor at M = 6, 33.1 M direct, 34.3 M
-/// relayed).
+/// cells need up to 37.9 M in total (BLS12-381, 2026-10-27: bundle with the auditor, M = 7, relayed: 15.6 M regular + 22.2 M
+/// state; `ZetherGasLimit` `test_edge_*` settles them at `2^24 + 40 M`).
 pub const TX_GAS_CAP: u64 = 16_777_216;
 /// Headroom the prover keeps under [`TX_GAS_CAP`]: 1 % (167,772 gas) for bytecode, calldata and state drift; the
 /// measured limits are already the dear case (cold accounts, every account's first credit).
 pub const GAS_MARGIN: u64 = TX_GAS_CAP / 100;
 
-/// zether.md §19 (a): the smallest transaction gas limit that settles a transfer to `M = 1, 2, …` recipients
-/// (`ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`): every call its own transaction (cold accounts and slots, 21,000 +
-/// calldata with the EIP-7623 floor), binary search on the limit, inner fee paid. Relayed = through `mtxExecute`, which
-/// adds the envelope and two more frames that each keep 1/64 (EIP-150). A row ends at the first `M` over the cap less
-/// the margin. Re-measure with §19 and the edges move (`gas_table_edges` pins them).
-/// Measured on Osaka (one gas dimension). Under Amsterdam the table is kept as the bound on a transfer's REGULAR gas:
-/// F185 re-ran every edge cell (the largest `M` of each form, direct and relayed) under Amsterdam and each settles,
-/// so its regular gas is within 2^24 (`ZetherGasLimit` `test_edge_*`); the per-`M` regular gas has not been re-measured
-/// (needs `vm.lastCallGas()` in `test_measure_*`, a gas run on the owner's go): an Amsterdam cell one past an edge may
-/// fit and is still refused, the safe side. `…/v3` (review C0-1) adds per audited leg one `D_aud_j` (calldata, statement,
-/// the BUNDLE record), one commitment, one scalar and one 3-point MSM: the audited rows below predate it (the edges still
-/// settle, review2 T3; the per-`M` rows want that re-measurement).
+/// zether.md §19 (a): the REGULAR gas (EIP-7825's dimension: intrinsic 21,000, the calldata floor, execution) of a
+/// transfer to `M = 1, 2, …` recipients, BLS12-381, measured 2026-10-27 on the `…/v3` code (controller):
+/// `ZetherGasLimit.t.sol`, `ZETHER_GAS_PROBE=1`, every call its own isolated transaction (cold accounts and slots, every
+/// account's first credit, inner fee paid), `vm.lastCallGas()`; forge gas is deterministic. The EIP-8037 STATE gas of the
+/// same transaction (new slots, the SSTORE2 record) is NOT in these rows: it comes on top of the cap and a sender's
+/// gas limit covers it (`eth_estimateGas`; figures in zether.md §19). Relayed = through `mtxExecute` (the envelope).
+/// A row ends at the first `M` over the cap less the margin. Re-measure with §19 and the edges move (`gas_table_edges`
+/// pins them; `ZetherGasLimit` `test_edge_*` settles each form's largest `M` on chain).
+/// The bn254 rows are LEGACY: minimum gas limits measured on Osaka before UA-6 and before the audited `…/v3` legs, kept
+/// as they were (no bn254 verifier is deployed any more, so forge cannot re-measure them; the stop-gap
+/// [`HASH_RECORD_GAS`] still rides on bn254 compact).
 fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'static [u64] {
     use TransferMode::*;
     match (bls, mode, auditor, relayed) {
@@ -772,14 +770,14 @@ fn gas_limits(bls: bool, mode: TransferMode, auditor: bool, relayed: bool) -> &'
         (false, Bundle, true, true) => &[3_766_809, 5_608_032, 7_453_356, 9_302_535, 11_155_836, 13_013_253, 14_874_606, 16_739_892],
         (false, Bundle, false, false) => &[3_538_940, 5_271_739, 7_008_161, 8_748_026, 10_491_746, 12_239_058, 13_990_088, 15_744_842, 17_503_407],
         (false, Bundle, false, true) => &[3_693_950, 5_482_779, 7_275_523, 9_071_916, 10_872_083, 12_676_303, 14_484_274, 16_295_902, 18_111_911],
-        (true, Hash, true, false) => &[3_972_477, 5_835_602, 7_677_109, 9_519_630, 11_362_946, 13_210_159, 15_076_920, 16_924_647],
-        (true, Hash, true, true) => &[4_143_205, 6_067_704, 7_969_869, 9_873_697, 11_778_279, 13_686_874, 15_615_982, 17_525_754],
-        (true, Hash, false, false) => &[3_928_577, 5_746_969, 7_543_429, 9_340_702, 11_138_674, 12_940_423, 14_761_256, 16_563_056, 18_365_576],
-        (true, Hash, false, true) => &[4_098_048, 5_976_320, 7_831_997, 9_689_024, 11_547_014, 13_408_784, 15_290_789, 17_153_058],
-        (true, Bundle, true, false) => &[4_284_877, 6_463_561, 8_643_468, 10_824_280, 13_005_980, 15_188_797, 17_372_899],
-        (true, Bundle, true, true) => &[4_465_468, 6_715_522, 8_966_956, 11_219_857, 13_473_501, 15_728_743, 17_985_178],
-        (true, Bundle, false, false) => &[4_158_866, 6_210_524, 8_263_263, 10_316_704, 12_370_838, 14_426_048, 16_482_217, 18_539_733],
-        (true, Bundle, false, true) => &[4_335_571, 6_454_705, 8_574_830, 10_696_141, 12_818_465, 14_941_807, 17_066_376],
+        (true, Hash, true, false) => &[3_668_948, 5_395_844, 7_112_613, 8_832_001, 10_553_767, 12_280_288, 14_017_143, 15_746_755, 17_478_898],
+        (true, Hash, true, true) => &[3_739_409, 5_469_533, 7_189_978, 8_913_154, 10_638_882, 12_369_693, 14_110_830, 15_845_170, 17_582_157],
+        (true, Hash, false, false) => &[3_586_211, 5_229_117, 6_860_942, 8_493_722, 10_128_010, 11_765_713, 13_412_496, 15_050_888, 16_690_653],
+        (true, Hash, false, true) => &[3_656_636, 5_302_974, 6_938_139, 8_574_923, 10_213_185, 11_854_974, 13_506_363, 15_149_411, 16_793_840],
+        (true, Bundle, true, false) => &[3_866_396, 5_806_396, 7_748_737, 9_693_084, 11_639_701, 13_588_563, 15_539_766, 17_493_789],
+        (true, Bundle, true, true) => &[3_936_711, 5_880_167, 7_825_701, 9_773_852, 11_724_153, 13_677_358, 15_633_050, 17_591_776],
+        (true, Bundle, false, false) => &[3_703_599, 5_479_837, 7_256_826, 9_034_673, 10_813_764, 12_593_845, 14_375_144, 16_157_755, 17_941_923],
+        (true, Bundle, false, true) => &[3_774_010, 5_553_524, 7_333_778, 9_115_525, 10_898_552, 12_682_676, 14_468_428, 16_255_778, 18_044_925],
     }
 }
 
@@ -793,13 +791,12 @@ pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool,
     } else {
         t[n - 1] + (t[n - 1] - t[n - 2]) * (m - n) as u64
     };
-    row + if mode == TransferMode::Hash { HASH_RECORD_GAS } else { 0 }
+    row + if C::NAME != "bls12381" && mode == TransferMode::Hash { HASH_RECORD_GAS } else { 0 }
 }
 
-/// What commit-reveal's SSTORE2 write of `R` adds to a transfer's REGULAR gas (review C0-3): 12,900 at M = 1 to 16,100 at
-/// M = 8 measured (`ZetherMulti.test_gasM*Hash`, `vm.lastCallGas()`, BLS12-381, Amsterdam, isolated); the rows of
-/// [`gas_limits`] predate it. The bulk of its cost is EIP-8037 STATE gas (+1.19 M at M = 1, +8.04 M at M = 8), which the
-/// 2^24 cap does not count and a sender's gas limit must cover on top.
+/// LEGACY bn254 only: what commit-reveal's SSTORE2 write of `R` adds to a transfer's regular gas (12,900 at M = 1 to
+/// 16,100 at M = 8, measured on BLS12-381). The BLS12-381 rows of [`gas_limits`] are measured with it and carry no
+/// stop-gap. (Its STATE gas, +1.19 M at M = 1 to +8.04 M at M = 8, is outside the cap.)
 pub const HASH_RECORD_GAS: u64 = 17_000;
 
 /// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`mtxConfidentialTransfer*` builds above it
