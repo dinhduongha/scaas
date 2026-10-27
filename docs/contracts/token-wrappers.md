@@ -579,7 +579,7 @@ check was dropped); the rule handles each one explicitly:
 | Case | `code.length` | Treated as | Why |
 |---|---|---|---|
 | Plain EOA | 0 | EOA | — |
-| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague, available on the SCaaS testnet) | 23 | **EOA** | the code is only a designator; the EOA's private key still signs anything |
+| EOA with an EIP-7702 delegation (`0xef0100 ‖ addr`, 23 bytes, starting `0xef0100`; Prague, available on the SCaaS testnet, chain 7622) | 23 | **EOA** | the code is only a designator; the EOA's private key still signs anything |
 | Contract during its constructor | 0 | **EOA** (refused) | indistinguishable from an EOA at that moment; consequence: a contract **cannot** be approved or spend an allowance from its own constructor |
 | Deployed contract | > 0, not a designator | contract | — |
 
