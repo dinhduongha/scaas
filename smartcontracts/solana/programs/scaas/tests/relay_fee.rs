@@ -355,3 +355,31 @@ fn adapter_ix_data_vectors() {
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
+
+/// CTR-MTX-16 / -27 (T11 fix 1): `invoke` forwards the outer signers' privileges, so a target account flagged signer
+/// is refused on chain before the CPI, whatever the relayer runs: a payer-signed `system_program::transfer` from the
+/// lane, and a call flagging another co-signer of the transaction, move nothing.
+#[test]
+fn relay_fee_target_signer_refused() {
+    let mut t = setup();
+    let lane = t.env.lane.pubkey();
+    let mallory = Ed::new("mallory").pubkey();
+    let system = anchor_lang::solana_program::system_program::ID;
+    let steal = solana_system_interface::instruction::transfer(&lane, &mallory, 1_000_000_000);
+    let args = fee_args(&t.env, marker(), 1, &system, &steal.accounts, &steal.data, [1; 32]);
+    let before = t.env.lamports(&lane);
+    expect_err(relay(&mut t.env, &t.alice, &t.usd, &args, lane, system, &steal.accounts, &steal.data), E::RelayFeeShape);
+    assert_eq!(t.env.lamports(&mallory), 0);
+    assert!(before - t.env.lamports(&lane) <= 10_000, "only the transaction fee");
+    // another outer signer flagged signer on the target's account list
+    let co = solana_keypair::Keypair::new();
+    t.env.svm.airdrop(&co.pubkey(), 1_000_000_000).unwrap();
+    let metas = vec![AccountMeta::new(t.record, false), AccountMeta::new(co.pubkey(), true)];
+    let data = b"\x09co".to_vec();
+    let args = fee_args(&t.env, marker(), 1, &t.target, &metas, &data, [2; 32]);
+    let ix = relay_ix(&t.env, &t.alice, &t.usd, &args, lane, t.target, &metas, &data);
+    let dg = t.env.metaop_digest(&t.alice.account(), &t.usd, A::OP_PAY, &t.alice.pk(), &args);
+    let e = t.alice.sign(A::KIND_RAW, A::METAOP_LABEL, &dg);
+    expect_err(t.env.send(&[ed_ix(&[e]), ix], &[&co]), E::RelayFeeShape);
+    assert_eq!((record(&t), t.env.balance(&ata(&t.alice.account(), &t.usd, &TOKEN))), (vec![0; 8], TOKEN_FUNDS));
+}

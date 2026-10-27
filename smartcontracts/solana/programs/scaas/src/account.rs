@@ -306,12 +306,15 @@ pub struct RelayFee<'info> {
     pub pay: RelayPay<'info>,
 }
 
-/// CTR-MTX-27: shape (`pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == marker`, the target is not
-/// `scaas` and is executable), the call (CPI with the accounts' own flags, no PDA signs), then `relay_pay`'s body
+/// CTR-MTX-27: shape (`pay_ref == ref`, `lane == payLane(ref)`, `nonce == 0`, `relayer == marker`, no target account
+/// is a signer, the target is not `scaas` and is executable), the call (CPI with the accounts' own flags, no PDA signs), then `relay_pay`'s body
 /// with the marker as relayer; open mode (`args.to == marker`) pays the lane signer. Any failure reverts both.
 pub fn relay_fee<'info>(ctx: Context<'info, RelayFee<'info>>, owner: [u8; 32], args: PayArgs, target_data: Vec<u8>, target_accounts: u8, auth: Auth) -> Result<()> {
     let (target, accts) = ctx.remaining_accounts.split_first().ok_or(ScaasError::RelayFeeShape)?;
     require!(accts.len() == target_accounts as usize && *target.key != crate::ID, ScaasError::RelayFeeShape);
+    // `invoke` forwards the outer transaction's signer privileges: a target account flagged signer would let the
+    // payer's call spend with the relayer's (or any co-signer's) signature. The router grants no authority (CTR-MTX-16).
+    require!(accts.iter().all(|a| !a.is_signer), ScaasError::RelayFeeShape);
     let metas: Vec<AccountMeta> =
         accts.iter().map(|a| AccountMeta { pubkey: *a.key, is_signer: a.is_signer, is_writable: a.is_writable }).collect();
     let r = relay_ref(&ctx.accounts.pay.config.network, target.key, &relay_call(target.key, &metas, &target_data), &args.extra);

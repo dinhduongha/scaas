@@ -440,14 +440,20 @@ pub struct RelayFeePolicy {
 }
 
 impl RelayFeePolicy {
-    /// `params.relay_fee = { router = "<program id>", min_amount = N }` (default 1) and the chain's `tokens` (mints).
-    pub fn from_cfg(cfg: &ChainCfg) -> Self {
+    /// `params.relay_fee = { router = "<program id>", min_amount = N }` (default 1) and the chain's `tokens` (mints). A
+    /// `router` that is set but is not a base58 address is a config error, never a silently disabled router.
+    pub fn from_cfg(cfg: &ChainCfg) -> Result<Self> {
         let t = cfg.params.get("relay_fee");
-        Self {
-            router: t.and_then(|t| t.get("router")).and_then(|v| v.as_str()).and_then(|a| key(a).ok()),
+        let router = match t.and_then(|t| t.get("router")) {
+            None => None,
+            Some(v) => Some(key(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a base58 string"))?)
+                .context("params.relay_fee.router")?),
+        };
+        Ok(Self {
+            router,
             tokens: cfg.tokens.iter().filter_map(|t| key(&t.address).ok()).collect(),
             min_amount: t.and_then(|t| t.get("min_amount")).and_then(|v| v.as_integer()).map_or(1, |v| v.max(0) as u64),
-        }
+        })
     }
 }
 
@@ -502,8 +508,11 @@ pub fn entry(program: &Key, network: &Key, lane: &Key, policy: &RelayFeePolicy, 
                 let pubkey = key(a["pubkey"].as_str().ok_or_else(|| anyhow!("target account pubkey missing"))?)?;
                 accounts.push(Meta { key: pubkey, signer: flag("is_signer")?, writable: flag("is_writable")? });
             }
+            if accounts.iter().any(|a| a.key == *lane) {
+                bail!("a target account is this lane: the target call must not touch the relayer's account");
+            }
             if accounts.iter().any(|a| a.signer) {
-                bail!("a target account is flagged signer: the lane would lend its signature to the target");
+                bail!("a target account is flagged signer: the program refuses it (no signature is lent to the target)");
             }
             if target == *program {
                 bail!("the target is the scaas program itself");
@@ -870,7 +879,7 @@ impl SolanaAdapter {
             signers: own,
             sent: Mutex::new(HashMap::new()),
             domain_checked: tokio::sync::OnceCell::new(),
-            relay_fee: RelayFeePolicy::from_cfg(cfg),
+            relay_fee: RelayFeePolicy::from_cfg(cfg)?,
         })
     }
 
@@ -1430,6 +1439,27 @@ mod tests {
         assert!(SolanaAdapter::new(&cfg(NETWORK, TEST_PROGRAM_ID), &[lane0()]).is_ok(), "localnet");
     }
 
+    /// A configured but unparsable `params.relay_fee.router` fails at startup instead of disabling the router.
+    #[test]
+    fn relay_fee_router_config_must_parse() {
+        let cfg = |router: Option<toml::Value>| {
+            let mut params = toml::Table::new();
+            params.insert("program_id".into(), PROGRAM.into());
+            if let Some(r) = router {
+                let mut t = toml::Table::new();
+                t.insert("router".into(), r);
+                params.insert("relay_fee".into(), toml::Value::Table(t));
+            }
+            ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec!["http://rpc".into()], lanes: vec![0], params, ..Default::default() }
+        };
+        for bad in [toml::Value::from("not-base58-0OIl"), toml::Value::from(7), toml::Value::from(b58(&[1; 31]))] {
+            let e = SolanaAdapter::new(&cfg(Some(bad.clone())), &[lane0()]).err().unwrap_or_else(|| panic!("{bad} accepted"));
+            assert!(format!("{e:#}").contains("relay_fee.router"), "{e:#}");
+        }
+        assert_eq!(RelayFeePolicy::from_cfg(&cfg(Some(PROGRAM.into()))).unwrap().router, Some(key(PROGRAM).unwrap()));
+        assert_eq!(RelayFeePolicy::from_cfg(&cfg(None)).unwrap().router, None, "no relay_fee: relay-fee jobs refused");
+    }
+
     #[test]
     fn nonce_account_and_sequence() {
         let lane = key("3Cy3YNTFywCmxoxt8n7UH6hg6dLo5uACowX3CFceaSnx").unwrap();
@@ -1758,6 +1788,10 @@ mod tests {
         let mut j = job.clone();
         j["extra"]["target_accounts"][0]["is_signer"] = json!(true);
         assert!(err(&op, &j, &pol).contains("signer"));
+        // the lane itself among the target accounts (even unsigned): refused with its own message
+        let mut j = job.clone();
+        j["extra"]["target_accounts"][0]["pubkey"] = json!(b58(&lane));
+        assert!(err(&op, &j, &pol).contains("this lane"));
         let mut j = job.clone();
         j["extra"]["target"] = json!(PROGRAM);
         assert!(err(&op, &j, &pol).contains("scaas program"));
