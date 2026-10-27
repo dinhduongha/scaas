@@ -105,6 +105,7 @@ fn relayed_and_disclosure<C: ZCurve>() {
         recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
+        valid_until_block: 100,
     };
     let (st, p, w) = prove_transfer(&gens, &from, h, to.y, aud.y, acc, 5000, 1234, &mut rng).unwrap();
     verify_transfer(&gens, &st, &p).unwrap();
@@ -138,6 +139,7 @@ fn relayed_and_disclosure<C: ZCurve>() {
         d_out: st.d_out,
         y_a: st.y_a,
         c_aud: st.c_aud,
+        d_aud: st.d_out,
     };
     let s_open = open_sender::<C>(&w.s);
     verify_opening(&e, 1234, OpeningKind::SenderS, &s_open).unwrap();
@@ -247,7 +249,8 @@ fn burn_recipient_address_or_ua() {
     padded[12..].fill(0x44);
     let req = |given: String| json!({
         "curve": "bls12381", "key": {"x": hx(&encode_scalar::<C>(&from.x))}, "chainId": 31337, "chainUid": hx(&UID),
-        "token": hx(&TOK), "sendCounter": 0, "accSeq": 1, "balance": 5000, "amount": 1000, "recipient": given,
+        "token": hx(&TOK), "sendCounter": 0, "accSeq": 1, "validUntilBlock": 100, "balance": 5000, "amount": 1000,
+        "recipient": given,
         "acc": {"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))},
     });
     for (given, id) in [(hx(&[0x44; 20]), padded), (hx(&ua), ua)] {

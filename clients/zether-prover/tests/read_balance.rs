@@ -75,13 +75,13 @@ fn recovery<C: ZCurve>() {
     let t = api("proveTransfer", json!({
         "curve": curve, "key": k0, "chainId": 31337, "chainUid": hx(&[0x24; 32]),
         "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
-        "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": bal.to_string(), "yTo": b["Y"],
+        "sendCounter": 0, "accSeq": 1, "validUntilBlock": 100, "acc": acc, "balance": bal.to_string(), "yTo": b["Y"],
         "amount": v.to_string(), "fee": fee, "beneficiary": hx(&[0x22; 32]),
     })).unwrap();
     assert_eq!(api("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]})).unwrap()["ok"], json!(true));
-    // The token's debit: acc −= (C_deb + [fee]G, D_out). Payload = 64 B ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud.
+    // The token's debit: acc −= (C_deb + [fee]G, D_out). Payload = 96 B ‖ salt(16) ‖ Y_f ‖ Y_t ‖ C_out ‖ D_out ‖ C_deb ‖ C_aud.
     let pl = hex::decode(&t["payload"].as_str().unwrap()[2..]).unwrap();
-    let at = |i: usize| decode_point::<C>(&pl[80 + n * i..80 + n * (i + 1)]).unwrap();
+    let at = |i: usize| decode_point::<C>(&pl[112 + n * i..112 + n * (i + 1)]).unwrap();
     let (d_out, c_deb) = (at(3), at(4));
     let g = generator::<C>();
     let acc2 = Ciphertext::<C> { c: pt::<C>(&acc["C"]) - c_deb - g * Fr::<C>::from(fee), d: pt::<C>(&acc["D"]) - d_out };

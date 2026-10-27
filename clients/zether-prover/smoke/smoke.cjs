@@ -35,7 +35,7 @@ for (const curve of ["bls12381"]) {
 
   const t0 = Date.now();
   const tx = call("proveTransfer", {
-    curve, key: k0, chainId: 31337, chainUid: "0x" + "24".repeat(32), token, sendCounter: 0, accSeq: 1, acc, balance: 50000,
+    curve, key: k0, chainId: 31337, chainUid: "0x" + "24".repeat(32), token, sendCounter: 0, accSeq: 1, validUntilBlock: 100, acc, balance: 50000,
     yTo: to.Y, amount: 1234, fee: 10, beneficiary: "0x" + "22".repeat(32),
   });
   const ms = Date.now() - t0;
@@ -62,7 +62,7 @@ for (const curve of ["bls12381"]) {
   // the calldata path), openMemo → the keys registry.keyOf would return → recoverTransfer rebuilds R.
   const chain = { curve, key: k0, chainId: 31337, chainUid: "0x" + "24".repeat(32), token, sendCounter: 0 };
   const mt = call("proveTransferMulti", {
-    ...chain, accSeq: 1, acc, balance: 50000, disclosureMode: "compact", recipients: [{ yTo: to.Y, amount: 1234 }],
+    ...chain, accSeq: 1, validUntilBlock: 100, acc, balance: 50000, disclosureMode: "compact", recipients: [{ yTo: to.Y, amount: 1234 }],
   });
   assert.equal(mt.mode, "compact");
   const entry = call("recoverTransfer", { ...chain, payload: mt.payload }).commitment + mt.memo.slice(2);

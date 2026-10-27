@@ -47,7 +47,7 @@ impl ZCurve for ark_bn254::g1::Config {
     const COORD_LEN: usize = 32;
     const KEYGEN_SALT: &'static [u8] = b"SCAAS-ZETHER-BN254-v1";
     const PATH_ROOT: u32 = 254;
-    const PROOF_SYSTEM_LABEL: &'static [u8] = b"scaas/zether/sigma-bullets/bn254/n64-n64/v2";
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"scaas/zether/sigma-bullets/bn254/n64-n64/v3";
 
     fn bsgs_slot() -> &'static BsgsSlot<Self> {
         static T: BsgsSlot<ark_bn254::g1::Config> = BsgsSlot::new(None);
@@ -79,7 +79,7 @@ impl ZCurve for ark_bls12_381::g1::Config {
     const COORD_LEN: usize = 64;
     const KEYGEN_SALT: &'static [u8] = b"BLS-SIG-KEYGEN-SALT-";
     const PATH_ROOT: u32 = 12381;
-    const PROOF_SYSTEM_LABEL: &'static [u8] = b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v2";
+    const PROOF_SYSTEM_LABEL: &'static [u8] = b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v3";
 
     fn bsgs_slot() -> &'static BsgsSlot<Self> {
         static T: BsgsSlot<ark_bls12_381::g1::Config> = BsgsSlot::new(None);

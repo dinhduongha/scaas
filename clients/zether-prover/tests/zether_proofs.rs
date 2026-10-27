@@ -35,6 +35,7 @@ fn header(fee: u64) -> Header {
         recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
+        valid_until_block: 1_000,
     }
 }
 
@@ -76,7 +77,7 @@ fn valid_and_effects<C: ZCurve>() {
         assert_eq!(enc.len(), if point_len::<C>() == 64 { 3200 } else { 5888 });
         assert!(TransferProof::<C>::decode(&enc).unwrap() == p);
         assert!(TransferStatement::<C>::decode(&st.encode()).unwrap() == st);
-        assert_eq!(st.payload().len(), 80 + 6 * point_len::<C>(), "accSeq ‖ sendCounter ‖ salt ‖ points");
+        assert_eq!(st.payload().len(), 112 + 6 * point_len::<C>(), "accSeq ‖ sendCounter ‖ validUntilBlock ‖ salt ‖ points");
         assert_eq!(st.record().len(), 16 + 4 * point_len::<C>(), "R = salt ‖ B");
         assert_eq!(&st.record()[..16], &st.header.salt);
         // On-chain effects (§5), then decrypt both sides.
@@ -225,6 +226,7 @@ fn header_binding<C: ZCurve>() {
         |h| h.acc_seq += 1,
         |h| h.fee += 1,
         |h| h.beneficiary[0] ^= 1,
+        |h| h.valid_until_block += 1,
     ];
     for m in muts {
         let mut s = st.clone();
@@ -273,13 +275,19 @@ fn burn_suite<C: ZCurve>() {
     assert_eq!(enc.len(), if point_len::<C>() == 64 { 1536 } else { 2816 });
     assert!(BurnProof::<C>::decode(&enc).unwrap() == p);
     assert!(BurnStatement::<C>::decode(&st.encode()).unwrap() == st);
-    assert_eq!(st.payload().len(), 64 + point_len::<C>());
+    assert_eq!(st.payload().len(), 96 + point_len::<C>(), "accSeq ‖ sendCounter ‖ validUntilBlock ‖ Y_f");
     // Effect: acc −= [amount + fee]G.
     let acc2 = Ciphertext { c: st.acc.c - generator::<C>() * Fr::<C>::from(400_300u64), d: st.acc.d };
     assert_eq!(decrypt(&acc2, &f.from.x), BAL - 400_300);
     // Relayer cannot redirect or resize the withdrawal.
-    let muts: Vec<fn(&mut Header)> =
-        vec![|h| h.recipient[0] ^= 1, |h| h.amount += 1, |h| h.amount -= 1, |h| h.fee += 1, |h| h.send_counter += 1];
+    let muts: Vec<fn(&mut Header)> = vec![
+        |h| h.recipient[0] ^= 1,
+        |h| h.amount += 1,
+        |h| h.amount -= 1,
+        |h| h.fee += 1,
+        |h| h.send_counter += 1,
+        |h| h.valid_until_block -= 1,
+    ];
     for m in muts {
         let mut s = st.clone();
         m(&mut s.header);
@@ -398,8 +406,8 @@ fn multi_valid_and_effects<C: ZCurve>() {
         let memo = if mode == TransferMode::Hash { memo_len(m) } else { 0 };
         assert_eq!(w.memo.len(), memo, "a memo on commit-reveal only");
         assert_eq!(st.header.memo_hash == [0; 32], memo == 0, "memoHash in the header exactly then");
-        assert_eq!(st.payload(w.decoy_fee, &w.memo).len(), 144 + (3 + 3 * m) * point_len::<C>() + memo, "… ‖ legs [‖ memo]");
-        assert_eq!(st.bundles().len(), 16 + 4 * m * point_len::<C>(), "R = salt ‖ B_1 ‖ … ‖ B_M");
+        assert_eq!(st.payload(w.decoy_fee, &w.memo).len(), 176 + (3 + 4 * m) * point_len::<C>() + memo, "… ‖ legs [‖ memo]");
+        assert_eq!(st.bundles().len(), 16 + 5 * m * point_len::<C>(), "R = salt ‖ B_1 ‖ … ‖ B_M, 5 points per leg");
         // Effects: the sender loses Σv + fee, each recipient decrypts its own v (decoys: 0).
         let g = generator::<C>();
         let acc2 = Ciphertext { c: st.acc.c - st.c_deb - g * Fr::<C>::from(300u64), d: st.acc.d - st.d_out };
@@ -407,14 +415,15 @@ fn multi_valid_and_effects<C: ZCurve>() {
         for (j, l) in st.legs.iter().enumerate() {
             assert_eq!(decrypt(&Ciphertext { c: l.c_out, d: st.d_out }, &key::<C>(10 + j as u32).x), vs[j]);
             if aud {
-                assert_eq!(decrypt(&Ciphertext { c: l.c_aud, d: st.d_out }, &f.aud.x), vs[j]);
+                assert_eq!(decrypt(&Ciphertext { c: l.c_aud, d: l.d_aud }, &f.aud.x), vs[j]);
             } else {
-                assert!(l.c_aud.is_zero() && p.legs[j].a_aud.is_zero());
+                assert!(l.c_aud.is_zero() && l.d_aud.is_zero() && p.legs[j].a_aud.is_zero() && p.legs[j].a_daud.is_zero());
+                assert!(p.legs[j].z_t.is_zero());
             }
         }
     }
-    // M = 1 has exactly the single transfer's proof size (42P + 512).
-    assert_eq!(MultiTransferProof::<C>::wire_len(1), TransferProof::<C>::wire_len());
+    // M = 1 is the single transfer's proof (42P + 512) plus `A_Daud` and `z_t` (review C0-1).
+    assert_eq!(MultiTransferProof::<C>::wire_len(1), TransferProof::<C>::wire_len() + point_len::<C>() + 32);
 }
 
 #[cfg(feature = "bn254")]
@@ -428,7 +437,7 @@ fn multi_valid_bls12_381() {
     multi_valid_and_effects::<Bls12381>();
 }
 
-/// Owner fee ruling 4 (2026-10-20): the payload's `decoyFee` word (bytes 112..144), the statement fee `txFee + M · d`
+/// Owner fee ruling 4 (2026-10-20): the payload's `decoyFee` word (bytes 144..176), the statement fee `txFee + M · d`
 /// (with and without a beneficiary), the sender debited by it, the bound `< 2^64`, and the gas a decoy payout adds.
 #[test]
 fn multi_decoy_fee_bls12_381() {
@@ -442,8 +451,8 @@ fn multi_decoy_fee_bls12_381() {
     assert_eq!(st.header.fee, 300 + 3 * 5, "statement fee = txFee + M · decoyFee");
     verify_transfer_multi(&f.gens, &st, &p).unwrap();
     let pl = st.payload(w.decoy_fee, &w.memo);
-    assert_eq!(&pl[80..112], &{ let mut x = [0u8; 32]; x[31] = 3; x }, "be32(M)");
-    assert_eq!(&pl[112..144], &{ let mut x = [0u8; 32]; x[31] = 5; x }, "be32(decoyFee)");
+    assert_eq!(&pl[112..144], &{ let mut x = [0u8; 32]; x[31] = 3; x }, "be32(M)");
+    assert_eq!(&pl[144..176], &{ let mut x = [0u8; 32]; x[31] = 5; x }, "be32(decoyFee)");
     let g = generator::<C>();
     let acc2 = Ciphertext { c: st.acc.c - st.c_deb - g * Fr::<C>::from(315u64), d: st.acc.d - st.d_out };
     assert_eq!(decrypt(&acc2, &f.from.x), BAL - 70 - 315);
@@ -488,12 +497,17 @@ fn multi_negatives<C: ZCurve>() {
     // statement validates and round-trips, a 17-leg one does not
     let (st, _, _) = multi(&f, header(0), TransferMode::Hash, true, &[0, 500, 0]);
     let mut s16 = st.clone();
+    // structural only: every extra leg its own auditor copy (two legs never share C_aud / D_aud)
+    let leg = |yt: G<C>, i: u64| {
+        let d = generator::<C>() * Fr::<C>::from(1000 + i);
+        Leg { y_t: yt, c_aud: st.legs[0].c_aud + d, d_aud: st.legs[0].d_aud + d, ..st.legs[0].clone() }
+    };
     for i in 0..13 {
-        s16.legs.push(Leg { y_t: y(40 + i), c_out: st.legs[0].c_out, c_aud: st.legs[0].c_aud });
+        s16.legs.push(leg(y(40 + i), i as u64));
     }
     s16.validate().unwrap();
     assert!(MultiTransferStatement::<C>::decode(&s16.encode()).unwrap() == s16, "16 legs decode");
-    s16.legs.push(Leg { y_t: y(60), c_out: st.legs[0].c_out, c_aud: st.legs[0].c_aud });
+    s16.legs.push(leg(y(60), 99));
     bad(s16.validate());
     bad(MultiTransferStatement::<C>::decode(&s16.encode()).map(|_| ()));
     // review T1 m2: a memo hash exactly on commit-reveal
@@ -686,4 +700,164 @@ fn memo_roundtrip() {
     assert_eq!(open_memo::<Bls12381>(&x, &header(0), &ua, &long).unwrap().2[15].amount, 16);
     let off = seal_memo::<Bls12381>(&x, &header(0), &ua, &salt, false, &[(y1, 1200u64)]);
     assert!(!open_memo::<Bls12381>(&x, &header(0), &ua, &off).unwrap().1, "the auditor flag");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Review C0-1 (owner ruling 2026-10-27, option (ii)): every audited leg its own auditor randomness `t_j`
+// ---------------------------------------------------------------------------------------------
+
+/// The audited multi-recipient transfer round-trips, the auditor decrypts every leg as `C_aud_j − [x_a]D_aud_j`, the
+/// sender re-derives every `t_j` (`derive_t`), and no public combination of the auditor copies cancels the mask: two
+/// decoys (`v = 0`) have distinct `C_aud`, `C_aud_j − C_aud_k ≠ [v_j − v_k]G`, and `h_k·C_aud_j − h_j·C_aud_k ≠
+/// [h_k·v_j − h_j·v_k]G` for every small public `h` (what broke option (i)).
+#[test]
+fn multi_audited_roundtrip() {
+    type C = Bls12381;
+    let f = fx::<C>();
+    let vs = [0u64, 70_000, 0, 5];
+    let (st, p, w) = multi(&f, header(300), TransferMode::Bundle, true, &vs);
+    verify_transfer_multi(&f.gens, &st, &p).unwrap();
+    assert!(MultiTransferStatement::<C>::decode(&st.encode()).unwrap() == st);
+    assert!(MultiTransferProof::<C>::decode(&p.encode(), vs.len()).unwrap() == p);
+    let g = generator::<C>();
+    for (j, l) in st.legs.iter().enumerate() {
+        assert_eq!(l.c_aud - l.d_aud * f.aud.x, g * Fr::<C>::from(vs[j]), "the auditor decrypts leg {j}");
+        let t = derive_t::<C>(&f.from.x, &st.header, &f.from.ua(), &st.header.salt, j);
+        assert!(t == w.t[j] && l.d_aud == g * t, "t_{j} re-derives from the key and chain data");
+        assert!(t != w.s, "t_{j} is not s");
+        assert!(l.d_aud != st.d_out);
+    }
+    // decoys 0 and 2 encrypt the same 0: their copies still differ
+    assert!(st.legs[0].c_aud != st.legs[2].c_aud && st.legs[0].d_aud != st.legs[2].d_aud, "decoys share no C_aud");
+    for j in 0..vs.len() {
+        for k in 0..vs.len() {
+            if j == k {
+                continue;
+            }
+            let (cj, ck) = (st.legs[j].c_aud, st.legs[k].c_aud);
+            assert!(cj - ck != g * (Fr::<C>::from(vs[j]) - Fr::<C>::from(vs[k])), "C_aud_{j} − C_aud_{k} leaks");
+            for hj in 1..=4u64 {
+                for hk in 1..=4u64 {
+                    let (hj, hk) = (Fr::<C>::from(hj), Fr::<C>::from(hk));
+                    let lin = cj * hk - ck * hj;
+                    assert!(!lin.is_zero(), "h_k·C_aud_{j} − h_j·C_aud_{k} = O");
+                    assert!(lin != g * (hk * Fr::<C>::from(vs[j]) - hj * Fr::<C>::from(vs[k])), "the mask cancels");
+                }
+            }
+        }
+    }
+    // the indices differ per leg; tag, salt and counter enter t_j, the binding and accSeq do not (as `s`)
+    let (x, ua, salt) = (Fr::<C>::from(7u64), [0x77u8; 32], [0x5a; 16]);
+    let t0 = derive_t::<C>(&x, &header(0), &ua, &salt, 0);
+    assert!(t0 != derive_t::<C>(&x, &header(0), &ua, &salt, 1), "j");
+    assert!(t0 != derive_t::<C>(&x, &header(0), &ua, &[0x5b; 16], 0), "salt");
+    assert!(t0 != derive_s::<C>(&x, &header(0), &ua, &salt), "its own tag");
+    let mut h = header(0);
+    h.send_counter += 1;
+    assert!(t0 != derive_t::<C>(&x, &h, &ua, &salt, 0), "sendCounter");
+    let mut h = header(300);
+    (h.acc_seq, h.binding, h.valid_until_block) = (9, Binding::Relayed([1; 32]), 7);
+    assert!(t0 == derive_t::<C>(&x, &h, &ua, &salt, 0), "accSeq, binding, validUntilBlock are no inputs");
+    // the auditor key as a party, with the auditor on: refused (prover and statement); off: allowed
+    let rs = |y0: G<C>| vec![(y0, 1u64), (key::<C>(11).y, 2)];
+    let pm = |rs: &[(G<C>, u64)], ya: G<C>| {
+        prove_transfer_multi(&f.gens, &f.from, header(0), 0, TransferMode::Bundle, rs, ya, f.acc, BAL, &mut rng()).map(|_| ())
+    };
+    assert!(pm(&rs(f.aud.y), f.aud.y).unwrap_err().to_string().contains("AuditorKeyAsParty"), "Y_tj == Y_a");
+    assert!(pm(&rs(f.aud.y), G::<C>::zero()).is_ok(), "the auditor's key as a recipient with the auditor off");
+    let ya_f = f.from.y;
+    assert!(pm(&rs(key::<C>(12).y), ya_f).unwrap_err().to_string().contains("AuditorKeyAsParty"), "Y_f == Y_a");
+    let single = |y_to: G<C>, ya: G<C>| prove_transfer(&f.gens, &f.from, header(0), y_to, ya, f.acc, BAL, 5, &mut rng());
+    assert!(single(f.aud.y, f.aud.y).map(|_| ()).unwrap_err().to_string().contains("AuditorKeyAsParty"), "single Y_t");
+    assert!(single(f.to.y, f.from.y).map(|_| ()).unwrap_err().to_string().contains("AuditorKeyAsParty"), "single Y_f");
+}
+
+/// `D_aud_j` is bound by E6′_j: another `D_aud_j`, `A_Daud_j` or `z_tj` is refused; `D_aud_j = O` with the auditor on and
+/// `D_aud_j ≠ O` (or `z_tj ≠ 0`) with it off are refused before the equations.
+#[test]
+fn multi_tampered_d_aud_rejected() {
+    type C = Bls12381;
+    let f = fx::<C>();
+    let g = generator::<C>();
+    let (st, p, w) = multi(&f, header(0), TransferMode::Hash, true, &[0, 900, 0]);
+    verify_transfer_multi(&f.gens, &st, &p).unwrap();
+    let mut s = st.clone();
+    s.legs[1].d_aud += g;
+    assert!(verify_transfer_multi(&f.gens, &s, &p).is_err(), "D_aud moved");
+    let mut s = st.clone();
+    s.legs[1].d_aud = st.legs[0].d_aud;
+    assert!(verify_transfer_multi(&f.gens, &s, &p).is_err(), "another leg's D_aud");
+    let mut s = st.clone();
+    s.legs[2].d_aud = G::<C>::zero();
+    assert!(s.validate().is_err(), "auditor on, D_aud = O");
+    // two decoys (v = 0) under one reused t: byte-identical copies, refused even with an otherwise honest proof
+    let (mut s, mut w2) = (st.clone(), w.clone());
+    (s.legs[2].c_aud, s.legs[2].d_aud, w2.t[2]) = (st.legs[0].c_aud, st.legs[0].d_aud, w.t[0]);
+    let q = prove_transfer_multi_core(&f.gens, &s, &w2, &mut rng()).unwrap();
+    match verify_transfer_multi(&f.gens, &s, &q) {
+        Err(ZError::BadStatement(m)) => assert!(m.contains("share C_aud"), "{m}"),
+        other => panic!("a reused t_j not refused: {:?}", other.map(|_| ())),
+    }
+    let mut q = p.clone();
+    q.legs[1].a_daud += g;
+    assert!(verify_transfer_multi(&f.gens, &st, &q).is_err(), "A_Daud moved");
+    let mut q = p.clone();
+    q.legs[1].z_t += Fr::<C>::one();
+    assert!(verify_transfer_multi(&f.gens, &st, &q).is_err(), "z_t moved");
+    // a witness whose t_j is not the one inside (C_aud_j, D_aud_j): E6_j / E6′_j fail
+    let mut w2 = w.clone();
+    w2.t[1] += Fr::<C>::one();
+    let q = prove_transfer_multi_core(&f.gens, &st, &w2, &mut rng()).unwrap();
+    assert!(verify_transfer_multi(&f.gens, &st, &q).is_err(), "wrong t_j");
+    // a forged copy under the shared s (the pre-fix form) does not verify under its D_aud
+    let mut s = st.clone();
+    s.legs[1].c_aud = g * Fr::<C>::from(900u64) + st.y_a * w.s;
+    let q = prove_transfer_multi_core(&f.gens, &s, &w, &mut rng()).unwrap();
+    assert!(verify_transfer_multi(&f.gens, &s, &q).is_err(), "C_aud under s");
+    // auditor off: every D_aud_j = O, every z_tj = 0
+    let (st, p, _) = multi(&f, header(0), TransferMode::Hash, false, &[0, 900]);
+    verify_transfer_multi(&f.gens, &st, &p).unwrap();
+    let mut s = st.clone();
+    s.legs[0].d_aud = g;
+    assert!(s.validate().is_err(), "auditor off, D_aud != O");
+    let mut q = p.clone();
+    q.legs[0].z_t = Fr::<C>::one();
+    assert!(verify_transfer_multi(&f.gens, &st, &q).is_err(), "auditor off, z_t != 0");
+    let mut q = p.clone();
+    q.legs[0].a_daud = g;
+    assert!(verify_transfer_multi(&f.gens, &st, &q).is_err(), "auditor off, A_Daud != O");
+}
+
+/// `…/v2` statements and proofs (the committed pre-fix vectors, `vectors/v2/`) are refused: another `proofSystemId`
+/// (`…/v3`), another header (512 bytes, `validUntilBlock`), another leg layout. A v3 statement relabelled `…/v2` is refused
+/// too.
+#[test]
+fn v2_vectors_refused() {
+    use serde_json::{json, Value};
+    use zether_prover::curve::keccak256;
+    assert_eq!(zether_prover::curve::proof_system_id::<Bls12381>(), keccak256(b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"));
+    assert_eq!(
+        zether_prover::curve::proof_system_id_multi::<Bls12381>(),
+        keccak256(b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v3/multi")
+    );
+    let dir = format!("{}/vectors/v2", env!("CARGO_MANIFEST_DIR"));
+    for (file, cmd) in [
+        ("transfer_bls12381.json", "verifyTransfer"),
+        ("transfer_multi_bls12381.json", "verifyTransferMulti"),
+        ("burn_bls12381.json", "verifyBurn"),
+    ] {
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}/{file}")).unwrap()).unwrap();
+        let req = json!({"curve": "bls12381", "statement": v["statement"], "proof": v["proof"]});
+        let out: Value = serde_json::from_str(&zether_prover::api::call(cmd, &req.to_string()).unwrap()).unwrap();
+        assert_eq!(out["ok"], json!(false), "{file}: a v2 proof verified");
+    }
+    let f = fx::<Bls12381>();
+    let (st, _, _) = multi(&f, header(0), TransferMode::Hash, true, &[0, 900]);
+    let mut b = st.encode();
+    b[32..64].copy_from_slice(&keccak256(b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v2/multi"));
+    assert!(MultiTransferStatement::<Bls12381>::decode(&b).is_err(), "v2 multi label");
+    let (st, _, _) = transfer(&f, header(0), true, 5);
+    let mut b = st.encode();
+    b[32..64].copy_from_slice(&keccak256(b"scaas/zether/sigma-bullets/bls12-381/n64-n64/v2"));
+    assert!(TransferStatement::<Bls12381>::decode(&b).is_err(), "v2 label");
 }

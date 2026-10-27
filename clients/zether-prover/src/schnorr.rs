@@ -139,7 +139,8 @@ pub fn entry_ref(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], from_ua:
 }
 
 /// Stored transfer record the opening is checked against: leg `index` of `entry_ref`
-/// (`B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud`; a single-recipient transfer has `index = 0`).
+/// (`B_j = Y_t ‖ C_out ‖ D_out ‖ C_aud ‖ D_aud`; a single-recipient transfer has `index = 0`, `B = Y_t ‖ C_out ‖ D_out ‖
+/// C_aud` and `D_aud = D_out`, its auditor copy being under `s`).
 pub struct Entry<C: ZCurve> {
     pub chain_id: u64,
     pub chain_uid: [u8; 32],
@@ -151,6 +152,8 @@ pub struct Entry<C: ZCurve> {
     pub d_out: G<C>,
     pub y_a: G<C>,
     pub c_aud: G<C>,
+    /// The auditor copy's `D` (`[t_j]G` on a multi-recipient leg, review C0-1; `D_out` on the single format).
+    pub d_aud: G<C>,
 }
 
 /// `SENDER_S`: `abi.encode(uint256 s)`.
@@ -181,7 +184,7 @@ fn cp_challenge<C: ZCurve>(e: &Entry<C>, amount: u64, kind: OpeningKind, a1: &[u
 /// `(K, M, B)` of the Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` for `kind`.
 fn kmb<C: ZCurve>(e: &Entry<C>, kind: OpeningKind) -> (G<C>, G<C>, G<C>) {
     match kind {
-        OpeningKind::Auditor => (e.y_a, e.c_aud, e.d_out),
+        OpeningKind::Auditor => (e.y_a, e.c_aud, e.d_aud),
         OpeningKind::SenderCp => (e.d_out, e.c_out, e.y_t),
         _ => (e.y_t, e.c_out, e.d_out),
     }
@@ -207,8 +210,8 @@ fn cp_open<C: ZCurve, R: RngCore + CryptoRng>(
     abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))])
 }
 
-/// `RECEIVER_X` / `AUDITOR`: Chaum-Pedersen `log_G(K) == log_{D_out}(M − [amount]G)`,
-/// `abi.encode(bytes A1, bytes A2, uint256 z)`.
+/// `RECEIVER_X` / `AUDITOR`: Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` (`B = D_out`, or `D_aud` for the
+/// auditor), `abi.encode(bytes A1, bytes A2, uint256 z)`.
 pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     e: &Entry<C>,
     amount: u64,
@@ -216,14 +219,14 @@ pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     key: &ZetherKey<C>,
     rng: &mut R,
 ) -> Result<Vec<u8>, ZError> {
-    let (k_pt, m, _) = kmb(e, kind);
+    let (k_pt, m, b) = kmb(e, kind);
     if !crate::zether::value_in_range(amount) {
         return Err(ZError::OutOfRange);
     }
     if matches!(kind, OpeningKind::SenderS | OpeningKind::SenderCp) || key.y != k_pt {
         return Err(ZError::BadStatement("opening key does not match the entry"));
     }
-    if m - generator::<C>() * Fr::<C>::from(amount) != e.d_out * key.x {
+    if m - generator::<C>() * Fr::<C>::from(amount) != b * key.x {
         return Err(ZError::BadStatement("amount does not open this ciphertext"));
     }
     Ok(cp_open(e, amount, kind, &key.x, rng))

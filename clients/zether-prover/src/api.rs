@@ -136,7 +136,8 @@ fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
 
 /// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `mtxUnshieldUnwrap`, burns only), or direct.
 /// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement. The memo word
-/// is the prove functions' (0 on a burn).
+/// is the prove functions' (0 on a burn). `validUntilBlock` (required): the last block the token accepts the proof in
+/// (review C0-9, `TransferExpired`).
 fn header(v: &Value, amount: u64, recipient: [u8; 32], burn: bool) -> R<Header> {
     let has = |k: &str| v.get(k).is_some_and(|x| !x.is_null());
     let binding = match (has("envelopeBinding"), has("unwrapBinding")) {
@@ -159,6 +160,7 @@ fn header(v: &Value, amount: u64, recipient: [u8; 32], burn: bool) -> R<Header> 
         recipient,
         salt: [0; 16],
         memo_hash: [0; 32],
+        valid_until_block: num(v, "validUntilBlock")?,
     })
 }
 
@@ -301,7 +303,8 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b), "bPrime": sc::<C>(&w.b_prime),
-            "v": w.v.iter().map(sc::<C>).collect::<Vec<_>>(), "gammaV": w.gamma_v.iter().map(sc::<C>).collect::<Vec<_>>(),
+            "v": w.v.iter().map(sc::<C>).collect::<Vec<_>>(), "t": w.t.iter().map(sc::<C>).collect::<Vec<_>>(),
+            "gammaV": w.gamma_v.iter().map(sc::<C>).collect::<Vec<_>>(),
             "gammaB": sc::<C>(&w.gamma_b)});
     }
     Ok(out)
@@ -345,21 +348,37 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
     Ok(out)
 }
 
+/// A recovery source: the counter, `R` when the source carries it, the memo and the commitment when it has them, and
+/// whether it is the single format (`B = Y_t ‖ C_out ‖ D_out ‖ C_aud`, 4 points) or the multi-recipient one (`B_j = Y_tj ‖
+/// C_out_j ‖ D_out ‖ C_aud_j ‖ D_aud_j`, 5 points, review C0-1).
+struct Source {
+    send_counter: u64,
+    rec: Option<Vec<u8>>,
+    memo: Option<Vec<u8>>,
+    commitment: Option<[u8; 32]>,
+    single: bool,
+}
+
 /// The source of a recovery: `payload` (the transfer's calldata argument, any entry) or `entry` =
-/// `transferEntry(entryRef)` with `sendCounter`: the record `R` (BUNDLE, single) or `keccak256(R) ‖ memo` (commit-reveal).
-/// Returns the counter, `R` when the source carries it, the memo and the commitment when it has them.
-fn recovery_source<C: ZCurve>(v: &Value) -> R<(u64, Option<Vec<u8>>, Option<Vec<u8>>, Option<[u8; 32]>)> {
+/// `transferEntry(entryRef)` with `sendCounter`: the record `R` (BUNDLE, single: `16 + 4P` bytes exactly, multi `16 + 5P·M`)
+/// or `keccak256(R) ‖ memo` (commit-reveal, multi only; `49 + 40·M` bytes is never a record length).
+fn recovery_source<C: ZCurve>(v: &Value) -> R<Source> {
+    let p = point_len::<C>();
     if v.get("payload").is_some_and(|x| !x.is_null()) {
         let b = bytes(v, "payload")?;
         let (rec, memo) = payload_record::<C>(&b)?;
-        return Ok((abi::word_u64(&b, 32).ok_or("payload: sendCounter")?, Some(rec), memo, None));
+        let single = b.len() == 112 + 6 * p;
+        let send_counter = abi::word_u64(&b, 32).ok_or("payload: sendCounter")?;
+        return Ok(Source { send_counter, rec: Some(rec), memo, commitment: None, single });
     }
     let e = bytes(v, "entry")?;
-    let p = point_len::<C>();
-    if e.len() > 16 && (e.len() - 16) % (4 * p) == 0 {
-        Ok((num(v, "sendCounter")?, Some(e), None, None))
+    let send_counter = num(v, "sendCounter")?;
+    if e.len() == 16 + 4 * p || (e.len() > 16 && (e.len() - 16) % (5 * p) == 0) {
+        let single = e.len() == 16 + 4 * p;
+        Ok(Source { send_counter, rec: Some(e), memo: None, commitment: None, single })
     } else if e.len() >= 32 + zether::memo_len(1) {
-        Ok((num(v, "sendCounter")?, None, Some(e[32..].to_vec()), Some(e[..32].try_into().unwrap())))
+        let commitment = Some(e[..32].try_into().unwrap());
+        Ok(Source { send_counter, rec: None, memo: Some(e[32..].to_vec()), commitment, single: false })
     } else {
         Err("`entry`: neither a record nor a commitment with its memo (an unknown or no-bundle entry)".into())
     }
@@ -380,6 +399,7 @@ fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
         recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
+        valid_until_block: 0,
     })
 }
 
@@ -390,7 +410,7 @@ fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
 /// garbage here, which `recoverTransfer` then refuses against the commitment.
 pub fn open_memo_json<C: ZCurve>(v: &Value) -> R<Value> {
     let k = key::<C>(v)?;
-    let (send_counter, _, memo, _) = recovery_source::<C>(v)?;
+    let Source { send_counter, memo, .. } = recovery_source::<C>(v)?;
     let memo = memo.ok_or("`entry`/`payload` carries no memo (not commit-reveal): `recoverTransfer` needs no keys")?;
     let h = recovery_header(v, send_counter)?;
     let (salt, aud, legs) = zether::open_memo::<C>(&k.x, &h, &k.ua(), &memo).map_err(e)?;
@@ -429,13 +449,14 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
 ) -> R<Value> {
     let k = key::<C>(v)?;
     let p = point_len::<C>();
-    let (send_counter, rec, memo, commitment) = recovery_source::<C>(v)?;
+    let Source { send_counter, rec, memo, commitment, single } = recovery_source::<C>(v)?;
     let h = recovery_header(v, send_counter)?;
     let salt: [u8; 16] = rec.as_ref().or(memo.as_ref()).ok_or("no record")?[..16].try_into().unwrap();
     let s = zether::derive_s::<C>(&k.x, &h, &k.ua(), &salt);
     let g = generator::<C>();
     let d_out = g * s;
-    let ys = |r: &[u8]| (16..r.len()).step_by(4 * p).map(|o| decode_point::<C>(&r[o..o + p]).map_err(e)).collect::<R<Vec<_>>>();
+    let stride = if single { 4 * p } else { 5 * p };
+    let ys = |r: &[u8]| (16..r.len()).step_by(stride).map(|o| decode_point::<C>(&r[o..o + p]).map_err(e)).collect::<R<Vec<_>>>();
     let (legs, aud): (Vec<(G<C>, u64)>, bool) = match (&rec, &memo) {
         (Some(r), Some(m)) => {
             // calldata, commit-reveal: the keys from the payload, the amounts from the memo
@@ -482,7 +503,7 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
             let pt = |o: usize| decode_point::<C>(&r[o..o + p]).map_err(e);
             let mut legs = Vec::new();
             let mut aud = false;
-            for o in (16..r.len()).step_by(4 * p) {
+            for o in (16..r.len()).step_by(stride) {
                 let (y, c_out, d, c_aud) = (pt(o)?, pt(o + p)?, pt(o + 2 * p)?, pt(o + 3 * p)?);
                 if d != d_out {
                     return Err("D_out != [s]G: not this key's transfer (or another chainUid / token)".into());
@@ -496,11 +517,22 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
         (None, None) => return Err("no record".into()),
     };
     let y_a = if aud { point::<C>(v, "yAud")? } else { G::<C>::zero() };
-    let c_aud = |a: u64| if y_a.is_zero() { G::<C>::zero() } else { g * Fr::<C>::from(a) + y_a * s };
+    // The auditor copy `(C_aud, D_aud)` of leg `j`: under `s` on the single format (`D_aud = D_out`, not in its record),
+    // under its own `t_j` on a multi-recipient leg (review C0-1); `O` when the auditor is off.
+    let aud_ct = |j: usize, a: u64| {
+        let t = if single { s } else { zether::derive_t::<C>(&k.x, &h, &k.ua(), &salt, j) };
+        if y_a.is_zero() {
+            (G::<C>::zero(), if single { d_out } else { G::<C>::zero() })
+        } else {
+            (g * Fr::<C>::from(a) + y_a * t, g * t)
+        }
+    };
     let mut bundles = salt.to_vec();
-    for (y, a) in &legs {
-        for pt in [*y, g * Fr::<C>::from(*a) + *y * s, d_out, c_aud(*a)] {
-            bundles.extend(encode_point::<C>(&pt));
+    for (j, (y, a)) in legs.iter().enumerate() {
+        let (c_aud, d_aud) = aud_ct(j, *a);
+        let b = [*y, g * Fr::<C>::from(*a) + *y * s, d_out, c_aud, d_aud];
+        for pt in &b[..if single { 4 } else { 5 }] {
+            bundles.extend(encode_point::<C>(pt));
         }
     }
     if rec.as_ref().is_some_and(|r| *r != bundles) || commitment.is_some_and(|c| c != keccak256(&bundles)) {
@@ -509,6 +541,7 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
     let entry_ref = schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), send_counter);
     let mut cps = Vec::new();
     for (j, (y, a)) in legs.iter().enumerate() {
+        let (c_aud, d_aud) = aud_ct(j, *a);
         let entry = schnorr::Entry {
             chain_id: h.chain_id,
             chain_uid: h.chain_uid,
@@ -519,7 +552,8 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
             c_out: g * Fr::<C>::from(*a) + *y * s,
             d_out,
             y_a,
-            c_aud: c_aud(*a),
+            c_aud,
+            d_aud,
         };
         cps.push(hx(&schnorr::open_sender_cp(&entry, *a, &s, rng).map_err(e)?));
     }
@@ -534,26 +568,28 @@ pub fn recover_transfer_with<C: ZCurve, Rn: RngCore + CryptoRng>(
     }))
 }
 
-/// `R = salt ‖ B_1 ‖ … ‖ B_M` as a transfer payload carries it, and its memo (commit-reveal) if any.
+/// `R = salt ‖ B_1 ‖ … ‖ B_M` as a transfer payload carries it, and its memo (commit-reveal) if any. Every payload starts
+/// `be32(accSeq) ‖ be32(sendCounter) ‖ be32(validUntilBlock) ‖ salt(16)`.
 fn payload_record<C: ZCurve>(b: &[u8]) -> R<(Vec<u8>, Option<Vec<u8>>)> {
     let p = point_len::<C>();
-    let salt = b.get(64..80).ok_or("payload: too short")?;
+    let salt = b.get(96..112).ok_or("payload: too short")?;
     let cut = |o: usize| &b[o..o + p];
     let mut r = salt.to_vec();
-    if b.len() == 80 + 6 * p {
-        for o in [80 + p, 80 + 2 * p, 80 + 3 * p, 80 + 5 * p] {
+    if b.len() == 112 + 6 * p {
+        for o in [112 + p, 112 + 2 * p, 112 + 3 * p, 112 + 5 * p] {
             r.extend_from_slice(cut(o));
         }
         return Ok((r, None));
     }
-    let m = abi::word_u64(b, 80).ok_or("payload: M")? as usize;
-    let end = 144 + 3 * p * (1 + m); // … ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ legs
+    let m = abi::word_u64(b, 112).ok_or("payload: M")? as usize;
+    // … ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j ‖ D_aud_j)_j
+    let end = 176 + 3 * p + 4 * p * m;
     if m == 0 || m > zether::MAX_RECIPIENTS || (b.len() != end && b.len() != end + zether::memo_len(m)) {
         return Err("payload: neither format".into());
     }
     for j in 0..m {
-        let o = 144 + 3 * p * (j + 1);
-        for at in [o, o + p, 144 + p, o + 2 * p] {
+        let o = 176 + 3 * p + 4 * p * j;
+        for at in [o, o + p, 176 + p, o + 2 * p, o + 3 * p] {
             r.extend_from_slice(cut(at));
         }
     }

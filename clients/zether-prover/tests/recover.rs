@@ -50,7 +50,7 @@ fn multi(curve: &str) -> Value {
     let acc = ok("encrypt", &json!({"curve": curve, "Y": y(curve, 0), "amount": 5000}));
     json!({
         "curve": curve, "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN, "sendCounter": 4, "accSeq": 1,
-        "acc": acc, "balance": 5000, "includeWitness": true, "yAud": y(curve, 9), "disclosureMode": "compact",
+        "validUntilBlock": 100, "acc": acc, "balance": 5000, "includeWitness": true, "yAud": y(curve, 9), "disclosureMode": "compact",
         "recipients": [{"yTo": y(curve, 1), "amount": 1200}, {"yTo": y(curve, 2), "amount": 0},
                        {"yTo": y(curve, 3), "amount": 77}],
     })

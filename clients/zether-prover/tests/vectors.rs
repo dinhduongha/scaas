@@ -51,7 +51,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         let req = json!({
             "curve": curve, "key": k0, "chainId": 31337, "chainUid": "0x".to_string() + &"24".repeat(32),
             "token": "0x5fbdb2315678afecb367f032d93f642f64180aa3",
-            "sendCounter": 0, "accSeq": 1, "acc": acc, "balance": 5000, "yTo": b["Y"], "amount": 1200,
+            "sendCounter": 0, "accSeq": 1, "validUntilBlock": 100, "acc": acc, "balance": 5000, "yTo": b["Y"], "amount": 1200,
         });
         let t = call("proveTransfer", req.clone());
         // review T2 M3: `unwrapBinding` only on a burn, never with `envelopeBinding`; an unwrap-bound burn gets no
