@@ -1,3 +1,12 @@
+# Handoff addendum, 2026-10-28 (metatx split, branch `metatx-split`, not merged)
+
+**State:** Tasks 1-19 of `docs/superpowers/plans/2026-10-27-metatx-split.md` are built on branch `metatx-split` (worktree
+`.claude/worktrees/metatx-split`): the `MtxPipelineLib` split, `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) and `MtxRelayFee`
+(CTR-MTX-27) on all eight families, the node (T17) and the clients (T18). Merge and push need the owner's go; the whole-branch
+review is open (TODO P6 item 5, "metatx split — final review"). Figures: `docs/contracts/metatx.md` §8; rulings: decisions
+CTR-MTX-07 / -17 / -26 / -27. Owed on a real node: TODO "metatx split — e2e still owed". NEAR + Algorand bring-up starts on
+its own branch from `metatx-split` (owner 2026-10-27).
+
 ## Session 2026-10-26 / 27 (8d part 2b merged, pqz-core docs, contracts review part 2 + its fix round merged) — resume here
 
 **State:** `main` pushed up to `3fd2e384` (owner 2026-10-27, "push đi"). Merged today: `pqz-8d2b` (`6fd75c83`) and
@@ -40,7 +49,7 @@ review target `64549aa4`, read-only; removable).
 4. The node keeps running (owner 2026-10-27: leave it).
 
 **Next (TODO §00):** Task 9 calibration (owner's go) → metatx split + `mtxPayMeta` → `MtxRelayFee` (re-check PQZH n2048
-`uaExecute` headroom 1.3–2.8 KB and n2560's `ROLL_MAX` margin 15,281 gas with it) → UA-8 → fs3 Task 12 → 6 → 13 → 14,
+`uaExecute` headroom 1.3–2.8 KB and n2560's `ROLL_MAX` margin 15,281 gas with it; done on branch `metatx-split`: the margin is now 6,032 gas, see TODO P6 item 5) → UA-8 → fs3 Task 12 → 6 → 13 → 14,
 UA-7, governance; publications (fill gas / timing / package placeholders, LaZer preview mail).
 
 ## Session 2026-10-26 (part b merged, testnet on pqz5, pqz-16k merged into main, 8d part 2b paused, publication drafts) — resume here

@@ -48,8 +48,8 @@ Nothing here was timed (owner rule: no timing runs).
    `pqz-core/nethermind/runs/2026-10-26-t8d2b-test-n2816-kmax65536.txt`).
 2. **Contracts built for this set**: wired to `PqzSet.sol` and tested at this set since plan 5h Task 8d part 2a; in part
    2b `ROLL_MAX` is pinned at **32** (controller proposal, owner may override): the largest multiple of 16 under
-   0.75 · 2^24 on both relay paths, the relayed full rollover 11,081,668 gas via `mtxExecute`, 11,238,795 via
-   `uaExecute` (1,344,117 under); 48 would be 12,575,616 / 12,732,731, over the cap on `uaExecute`
+   0.75 · 2^24 on both relay paths, the relayed full rollover 11,089,680 gas via `mtxExecute`, 11,248,044 via
+   `uaExecute` (1,334,868 under; re-measured on the split bytecode, `runs/2026-10-27-metatx-split-gas-n2816-kmax65536.txt`); 48 would be 12,583,604 / 12,741,980, over the cap on `uaExecute`
    (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2816-kmax65536.txt`; the first pin, 48, measured
    `mtxExecute` only, review fix of 2026-10-26). Forge passes at this set (1,365 passed / 0 failed / 13 skipped,
    `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-forge-n2816-kmax65536.txt`).

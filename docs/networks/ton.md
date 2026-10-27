@@ -423,7 +423,7 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   malformed `params` is exit 9), then emits `PaymentMeta { master, payId, meta }` (`0x9b1c0d04`) right after
   `MetaTransactionExecuted`. Measured: 38,100 B settles in the sandbox; the node caps at 2,048 B.
 - **Payee bounce burns the id.** The payer's wallet writes its lane (the once-set) before the payee's wallet runs. If the
-  payee's wallet bounces (for instance a frozen or uninitialised destination), the `PaymentMeta` was emitted without a
+  payee's wallet bounces (any rejected transfer), the `PaymentMeta` was emitted without a
   `PaymentSettled`, and `(payer, payId)` is burnt for good. `PaymentMeta` alone is never proof of payment. A client that
   sees a bounce signs again with a **new salt** (a new `payId`); the indexer joins on `(from, pay_ref)` and rejects a meta
   with more than one ref.

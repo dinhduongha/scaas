@@ -146,6 +146,26 @@ Payload by kind:
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` to a configured PQZ token (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying: neither is a node job; `mtxRollOver` and `mtxPrepareAcc` are allowlisted self-calls too, so a keeper may call them directly or relay them as ordinary `metatx` jobs, owner 2026-10-20); stored like `call`: `digest` NULL, `call_hash` set |
 | PQZ envelopes (SPECIFIED) | **No new kind** ([CTR-PQZ-15](../contracts/pq-zero-knowledge.md#CTR-PQZ-15)): a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `mtxConfidentialTransfer`/`mtxUnshield`/`mtxShield` (opaque to the client) ([CTR-PQZ-21](../contracts/pq-zero-knowledge.md#CTR-PQZ-21)); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `mtxUnshield` paying the underlying to `recipient` |
 
+<a id="paymeta-relayfee-jobs"></a>**Pay-meta and relay-fee jobs ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26), [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); BUILT, metatx-split T17).** No new job kind.
+- *EVM, address payers.* A pay-meta job is a `metatx` job with `struct = transfer` that also carries `salt` (32 B) and `meta`
+  (hex). Before any simulation the node checks `entryRef == metaPayId(salt, meta)`, `batch == payLane(entryRef)`, `nonce == 0`
+  and `len(meta) <= max_pay_meta_bytes` (chain `params`, default 2,048), then relays `mtxPayMeta` (on-chain meta) or the plain
+  `mtxExecuteTransfer` (off-chain meta). A relay-fee job is a `call` job to the configured `MtxRelayFee`
+  (`params.relay_fee.router`) with selector `relay`; it has its own call-table row ([call table](#call-table)).
+  UA payers (`uaPayMeta`, `uaRelay`) are not served until the `ua_metatx` kind is built (TODO.md).
+- *Other families.* The same `signed_op` job; `op.kind` is absent (a plain pay), `"pay_meta"` (`op.salt`, `op.meta` hex) or
+  `"relay_fee"` (per-family fields, `op.extra`). Any other `op.kind`, including a non-string, is refused; a plain pay that carries
+  `salt` / `meta` is refused; a plain pay or pay-meta whose recipient is the router, marker or executor is refused.
+- *Config* (`[chains.params]`): `relay_fee = { router, min_amount (default 1), relay_bound_payee (default false) }`,
+  `max_pay_meta_bytes`; TON adds `relay_fee.min_ton_value = { "<master>" = nanoton }`, Solana `min_lamports_value` (first-use lane
+  rent). An unparsable `router`, `min_amount` or key is a startup error. A bound-payee fee (not the node's lane) is refused unless
+  `relay_bound_payee = true`, then relayed as a sponsored job.
+- *Job errors:* `CALL_TARGET_REFUSED` (not the configured router), `TOKEN_NOT_SERVED`, `RELAY_FEE_SHAPE` (ref, lane, nonce, relayer,
+  fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere), `BAD_PAYLOAD`.
+- *Indexer:* `PaymentMeta` and `RelayFeePaid` are never rows of their own; they enrich the `PaymentSettled` of the expected token
+  in the same transaction with the same `(from, entry_ref)` (TON: `from` via the message's `MetaTransactionExecuted`) and
+  `amount`; without a settlement they prove nothing. A `PaymentMeta` with more than one ref is rejected.
+
 `payload` is exactly what every adapter `build` consumes today; `work_from_job` and the family adapters are
 unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-OPS-09](ops.md#NODE-OPS-09)).
 

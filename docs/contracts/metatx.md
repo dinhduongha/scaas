@@ -285,6 +285,8 @@ prefix:
 | 6 | Fee through `_chargeFee`, **after** the call: a token transfers it from `from` in this token; any other contract has already refused every mode but `NONE`; a failing fee transfer reverts everything | ERC-20 errors |
 | 7 | Emit `MetaTransactionExecuted(from, relayer, batch, nonce, digest, feeRecipient, fee)` (the selector is in the transaction input) | — |
 
+On a token, steps 1-4 and the fee checks of step 3 (class, amount argument, `FeeExceedsCap`, mode) run in `MtxPipelineLib.preCall` by DELEGATECALL (the order of every revert is pinned by `test_preCall_orderAddressPath` / `test_preCall_orderUaPath`); step 6 moves the fee from the `Out` the library returned, after the call, in the token. `SmartKeyAccount`, `MandateWallet` and `HederaMandateWallet` run the same internals inlined from `MetaTxBase`. The ERC-1271 call of a `SmartKeyAccount` signer therefore runs two frames below the token; the least relayer call gas of a `SmartKeyAccount`-signed `mtxExecute` is 446,904 (`runs/2026-10-27-metatx-split-node-floor.txt`).
+
 No error is swallowed: the user never pays for an operation that did not happen. The relayer simulates before
 broadcasting and bears gas only for a transaction whose state changed between simulation and inclusion; the node's
 breaker per `(from, selector)` covers repeat offenders ([node/submit-lanes.md](../node/submit-lanes.md)).
@@ -686,7 +688,7 @@ same value clients derive off chain, so "at most once" holds per path. The node 
 with the job, so a pay job never changes lanes after it is signed.
 
 <a id="CTR-MTX-26"></a>**CTR-MTX-26** — **Payment metadata: `mtxPayMeta` / `uaPayMeta`, the payment id commits to
-its metadata.** **SPECIFIED** (owner 2026-10-26; decision [CTR-MTX-26](../decisions.md#ctr-mtx-26--payment-metadata-by-commitment-mtxpaymeta--uapaymeta)). The
+its metadata.** **BUILT** on the EVM and every non-EVM family (owner 2026-10-26; metatx-split T7, T10-T16; decision [CTR-MTX-26](../decisions.md#ctr-mtx-26--payment-metadata-by-commitment-mtxpaymeta--uapaymeta)). The
 payment id is a commitment, so the payer's signature over `entryRef` binds the metadata with no new struct field and no
 new typehash ([CTR-MTX-11](#CTR-MTX-11)):
 
@@ -818,6 +820,23 @@ function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes
 function metaPayId(bytes32 salt, bytes calldata meta) external pure returns (bytes32);
 ```
 
+`MtxRelayFee` (CTR-MTX-27, `src/metatx/MtxRelayFee.sol`; stateless, no owner, `DeployBase` CREATE2) and its executor:
+
+```solidity
+event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer, bytes32 payee, uint256 amount);
+error RelayFeeShape();
+error RelayTargetNoCode(address target);
+function relay(address target, bytes calldata callData, address token, MetaTxLib.MetaTransfer calldata t, bytes calldata sig) external;
+function uaRelay(address target, bytes calldata callData, address token, MetaTxLib.UAMetaTransfer calldata t, bytes calldata auth) external;
+function relayRef(address target, bytes calldata callData) public view returns (bytes32);
+    // keccak256(abi.encodePacked("scaas.relayfee", block.chainid, target, keccak256(callData)))
+// MtxRelayExecutor (created by the router's constructor): error NotRouter(); exec(address target, bytes callData) router-only
+```
+
+`MtxPipelineLib` (`src/metatx/MtxPipelineLib.sol`, linked; DELEGATECALL only, no state of its own) exposes `preCall`,
+`preTransfer`, `requireSignature`, `authorize`, `callDigest` and `transferDigest` over the structs `Ctx`, `Envelope`,
+`CallFacts` and `Out`; it is an internal interface of the tokens, not part of any token's ABI.
+
 `MetaTokenBase` adds `NotFactory()`, `AlreadyInitialized()` and the provenance getters (the pay functions work only with `PAYABLE`, [CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the trade entry points and
 their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwrap, rates, legs) are in
 [token-wrappers.md](token-wrappers.md#interfaces). The node's event normaliser decodes `MetaNonceCancelled`;
@@ -835,7 +854,7 @@ their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwra
 | **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built; the UA twin `uaPayReceiverFee` **BUILT** (UA-5a) |
 | Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)); on-chain `SponsorshipPool` **PLANNED** later |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
-| **Token fee for a fee-less call** | The payer signs a token payment bound to one call on another contract (a PqChat record, a `UARegistry` write); `MtxRelayFee` runs the call, then the payment, atomically ([CTR-MTX-27](#CTR-MTX-27)) | Relayer, paid in token by the payer | **SPECIFIED** |
+| **Token fee for a fee-less call** | The payer signs a token payment bound to one call on another contract (a PqChat record, a `UARegistry` write); `MtxRelayFee` runs the call, then the payment, atomically ([CTR-MTX-27](#CTR-MTX-27)) | Relayer, paid in token by the payer | **BUILT** |
 | Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A); intake rules that stop door A being a free gas faucet **SPECIFIED** ([NODE-GW-01](../node/gateway.md#NODE-GW-01)) |
 
 Per-family equivalents (the subject never pays, a relayer lane submits): Hedera — the same Solidity on HSCS, no
@@ -847,8 +866,10 @@ GRAM — a relayer W5 lane sends `SignedOp` to the payer's jetton wallet, subjec
 Solana — the relayer lane is the fee payer, the subject signature is checked through the Ed25519/Secp256r1 precompile
 instruction ([networks/README.md](../networks/README.md)).
 
+The token fee for a fee-less call ([CTR-MTX-27](#CTR-MTX-27)) per family: Soroban — the `relay-fee` contract (payer auth rooted at its `relay` call, node adds a `SourceAccount` entry); Solana — static `relay_fee_<entry>` wrappers plus a generic `relay_fee` CPI router; Cosmos — `relayfee` router with the `relayexec` executor, no admin; Sui and Aptos — the `scaas::relayfee` module, one static wrapper per fee-less signed entry; GRAM — an escrow released only on a positive acknowledgment from a known SCaaS target. Each is in the family's network document, section "Pay-meta and relay fee".
+
 <a id="CTR-MTX-27"></a>**CTR-MTX-27** — **`MtxRelayFee`: a token fee to the relayer for a fee-less mtx call.**
-**SPECIFIED** (owner 2026-10-26; decision [CTR-MTX-27](../decisions.md#ctr-mtx-27--mtxrelayfee-token-fee-for-a-fee-less-call)).
+**BUILT** on the EVM and every non-EVM family (owner 2026-10-26; metatx-split T9-T16; node T17, clients T18; decision [CTR-MTX-27](../decisions.md#ctr-mtx-27--mtxrelayfee-token-fee-for-a-fee-less-call)).
 Two payers: the relayer pays the native gas, and the payer pays the relayer, or another payee, in a token, for one call
 that has no fee of its own: a PqChat record, a `UARegistry` write, a `MandateWallet` action, or any SCaaS contract's
 entry with fee `NONE`. The call and its contract are unchanged: no token logic in them, records stay chain-independent
