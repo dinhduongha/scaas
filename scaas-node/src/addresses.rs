@@ -46,8 +46,21 @@ pub fn canonical(family: &str, value: &str, bech32_prefix: Option<&str>, ton_tes
             ensure!(n == 32, "a Solana address is base58 of 32 bytes");
             Ok(v.to_string())
         }
+        "near" => near(v),
         other => bail!("unknown network family {other:?}"),
     }
+}
+
+/// A NEAR account id (nearcore `AccountId` rules): 2–64 characters of `a-z 0-9`, parts separated by one `-`, `_` or
+/// `.`, no separator first or last; an implicit account is 64 lower-case hex. Upper case is refused, never folded: it
+/// names no account (near-vectors.json `nativeIds.invalid`).
+pub fn near(v: &str) -> Result<String> {
+    let b = v.as_bytes();
+    let sep = |c: u8| matches!(c, b'-' | b'_' | b'.');
+    ensure!((2..=64).contains(&b.len()), "a NEAR account id is 2 to 64 characters: {v:?}");
+    ensure!(b.iter().all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || sep(c)), "not a NEAR account id: {v:?}");
+    ensure!(!sep(b[0]) && !sep(b[b.len() - 1]) && !b.windows(2).any(|w| sep(w[0]) && sep(w[1])), "not a NEAR account id: {v:?}");
+    Ok(v.to_string())
 }
 
 /// `eip712.parse_address`: `0x` + 40 hex; trộn hoa-thường thì phải đúng EIP-55. Trả chữ thường.
@@ -145,6 +158,18 @@ mod tests {
                 (None, Err(_)) => {}
                 (want, got) => panic!("{c}: want {want:?}, got {got:?}"),
             }
+        }
+    }
+
+    /// Task 16: NEAR ids as nearcore accepts them (named, 64-hex implicit, `0x` ETH-implicit), never case-folded.
+    #[test]
+    fn near_account_ids() {
+        let imp = "c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6";
+        for ok in ["token.test.near", "a_b-c.near", imp, "0x52908400098527886e0f7030069857d2e4169ee7", "ab"] {
+            assert_eq!(canonical("near", ok, None, None).unwrap(), ok);
+        }
+        for bad in [&imp.to_ascii_uppercase()[..], "Token.near", "a", ".near", "near.", "a..b", "a-.b", "a b", "a@b", &"a".repeat(65)] {
+            assert!(canonical("near", bad, None, None).is_err(), "{bad}");
         }
     }
 }

@@ -1,0 +1,1682 @@
+# T16 RED: adapters::near tests against the API skeleton (bodies stubbed), at commit 23c8530a + T16 work tree
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-dbe39b21340e8e02)
+
+running 23 tests
+test adapters::near::tests::near_events_join_meta_relay_fee_and_mandate ... FAILED
+test adapters::near::tests::near_events_trades_from_transfers ... FAILED
+test adapters::near::tests::near_events_success_only_configured ... FAILED
+test adapters::near::tests::near_amount_above_2_pow_53_round_trips ... FAILED
+test adapters::near::tests::near_metaop_decode_vectors ... FAILED
+test adapters::near::tests::near_pay_meta_job_checks_commitment ... FAILED
+test adapters::near::tests::escrow_tracking_times_out_after_deadline ... FAILED
+test adapters::near::tests::near_relay_fee_job_checks_ref ... FAILED
+test adapters::near::tests::relay_fee_target_router_or_executor_refused ... FAILED
+test adapters::near::tests::signature_budgets ... FAILED
+test adapters::near::tests::quote_covers_gas_and_storage_needed ... FAILED
+test adapters::near::tests::deposit_equals_storage_needed_plus_nep_yocto ... FAILED
+test adapters::near::tests::events_scan_blocks ... FAILED
+test adapters::near::tests::key_sets_per_token ... FAILED
+test adapters::near::tests::relay_fee_config_must_parse ... FAILED
+test adapters::near::tests::relay_fee_target_without_code_refused ... FAILED
+test adapters::near::tests::unknown_job_kind_is_refused ... FAILED
+test adapters::near::tests::start_check_access_key_present_halts ... FAILED
+test adapters::near::tests::start_check_genesis_mismatch_errors ... FAILED
+test adapters::near::tests::tx_matches_near_primitives ... FAILED
+test adapters::near::tests::start_check_lane_unregistered_errors ... FAILED
+test adapters::near::tests::submit_errors_are_classified ... FAILED
+test adapters::near::tests::near_jobs_never_panic ... FAILED
+
+failures:
+
+---- adapters::near::tests::near_events_join_meta_relay_fee_and_mandate stdout ----
+
+thread 'adapters::near::tests::near_events_join_meta_relay_fee_and_mandate' (2977437) panicked at src/adapters/near.rs:1122:9:
+assertion `left == right` failed: []
+  left: 0
+ right: 1
+
+---- adapters::near::tests::near_events_trades_from_transfers stdout ----
+
+thread 'adapters::near::tests::near_events_trades_from_transfers' (2977439) panicked at src/adapters/near.rs:1163:9:
+assertion `left == right` failed: []
+  left: 0
+ right: 2
+
+---- adapters::near::tests::near_events_success_only_configured stdout ----
+
+thread 'adapters::near::tests::near_events_success_only_configured' (2977438) panicked at src/adapters/near.rs:1100:9:
+assertion `left == right` failed: []
+  left: []
+ right: ["MetaTransactionExecuted", "Transfer", "PaymentSettled", "Transfer"]
+
+---- adapters::near::tests::near_amount_above_2_pow_53_round_trips stdout ----
+
+thread 'adapters::near::tests::near_amount_above_2_pow_53_round_trips' (2977436) panicked at src/adapters/near.rs:286:53:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::near_metaop_decode_vectors stdout ----
+
+thread 'adapters::near::tests::near_metaop_decode_vectors' (2977441) panicked at src/adapters/near.rs:513:62:
+"pay": RED
+
+---- adapters::near::tests::near_pay_meta_job_checks_commitment stdout ----
+
+thread 'adapters::near::tests::near_pay_meta_job_checks_commitment' (2977442) panicked at src/adapters/near.rs:597:58:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::escrow_tracking_times_out_after_deadline stdout ----
+
+thread 'adapters::near::tests::escrow_tracking_times_out_after_deadline' (2977433) panicked at src/adapters/near.rs:286:53:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::near_relay_fee_job_checks_ref stdout ----
+
+thread 'adapters::near::tests::near_relay_fee_job_checks_ref' (2977443) panicked at src/adapters/near.rs:634:13:
+assertion `left == right` failed: "wrapper_short"
+  left: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+ right: [159, 241, 84, 152, 6, 172, 141, 79, 252, 159, 181, 120, 156, 75, 169, 50, 112, 254, 24, 127, 137, 170, 180, 25, 80, 194, 139, 69, 150, 72, 215, 211]
+
+---- adapters::near::tests::relay_fee_target_router_or_executor_refused stdout ----
+
+thread 'adapters::near::tests::relay_fee_target_router_or_executor_refused' (2977446) panicked at src/adapters/near.rs:286:53:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::signature_budgets stdout ----
+
+thread 'adapters::near::tests::signature_budgets' (2977448) panicked at src/adapters/near.rs:758:37:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::quote_covers_gas_and_storage_needed stdout ----
+
+thread 'adapters::near::tests::quote_covers_gas_and_storage_needed' (2977444) panicked at src/adapters/near.rs:286:53:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::deposit_equals_storage_needed_plus_nep_yocto stdout ----
+
+thread 'adapters::near::tests::deposit_equals_storage_needed_plus_nep_yocto' (2977432) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::events_scan_blocks stdout ----
+
+thread 'adapters::near::tests::events_scan_blocks' (2977434) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::key_sets_per_token stdout ----
+
+thread 'adapters::near::tests::key_sets_per_token' (2977435) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::relay_fee_config_must_parse stdout ----
+
+thread 'adapters::near::tests::relay_fee_config_must_parse' (2977445) panicked at src/adapters/near.rs:775:110:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::relay_fee_target_without_code_refused stdout ----
+
+thread 'adapters::near::tests::relay_fee_target_without_code_refused' (2977447) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::unknown_job_kind_is_refused stdout ----
+
+thread 'adapters::near::tests::unknown_job_kind_is_refused' (2977454) panicked at src/adapters/near.rs:286:53:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::start_check_access_key_present_halts stdout ----
+
+thread 'adapters::near::tests::start_check_access_key_present_halts' (2977449) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::start_check_genesis_mismatch_errors stdout ----
+
+thread 'adapters::near::tests::start_check_genesis_mismatch_errors' (2977450) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::tx_matches_near_primitives stdout ----
+
+thread 'adapters::near::tests::tx_matches_near_primitives' (2977453) panicked at src/adapters/near.rs:286:53:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::start_check_lane_unregistered_errors stdout ----
+
+thread 'adapters::near::tests::start_check_lane_unregistered_errors' (2977451) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::submit_errors_are_classified stdout ----
+
+thread 'adapters::near::tests::submit_errors_are_classified' (2977452) panicked at src/adapters/near.rs:478:62:
+called `Result::unwrap()` on an `Err` value: RED
+
+---- adapters::near::tests::near_jobs_never_panic stdout ----
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+called `Result::unwrap()` on an `Err` value: RED
+
+Test failed: called `Result::unwrap()` on an `Err` value: RED.
+minimal failing input: b = [], s = "", k = 0, n = 0, relayer = None
+	successes: 0
+	local rejects: 0
+	global rejects: 0
+
+
+
+failures:
+    adapters::near::tests::deposit_equals_storage_needed_plus_nep_yocto
+    adapters::near::tests::escrow_tracking_times_out_after_deadline
+    adapters::near::tests::events_scan_blocks
+    adapters::near::tests::key_sets_per_token
+    adapters::near::tests::near_amount_above_2_pow_53_round_trips
+    adapters::near::tests::near_events_join_meta_relay_fee_and_mandate
+    adapters::near::tests::near_events_success_only_configured
+    adapters::near::tests::near_events_trades_from_transfers
+    adapters::near::tests::near_jobs_never_panic
+    adapters::near::tests::near_metaop_decode_vectors
+    adapters::near::tests::near_pay_meta_job_checks_commitment
+    adapters::near::tests::near_relay_fee_job_checks_ref
+    adapters::near::tests::quote_covers_gas_and_storage_needed
+    adapters::near::tests::relay_fee_config_must_parse
+    adapters::near::tests::relay_fee_target_router_or_executor_refused
+    adapters::near::tests::relay_fee_target_without_code_refused
+    adapters::near::tests::signature_budgets
+    adapters::near::tests::start_check_access_key_present_halts
+    adapters::near::tests::start_check_genesis_mismatch_errors
+    adapters::near::tests::start_check_lane_unregistered_errors
+    adapters::near::tests::submit_errors_are_classified
+    adapters::near::tests::tx_matches_near_primitives
+    adapters::near::tests::unknown_job_kind_is_refused
+
+test result: FAILED. 0 passed; 23 failed; 0 ignored; 0 measured; 344 filtered out; finished in 1.32s
+
+error: test failed, to rerun pass `--lib`
+rc=101

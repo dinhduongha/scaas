@@ -163,6 +163,8 @@ pub fn lane_path(family: &str, i: u32) -> Result<(Curve, String)> {
         "solana" => (Curve::Ed25519, format!("m/44'/501'/{i}'/0'")),
         // aptos-core PR #2073 / TS SDK: m/44'/637'/account'/change'/address_index', account index = lane.
         "aptos" => (Curve::Ed25519, format!("m/44'/637'/{i}'/0'/0'")),
+        // near-algorand spec §11 (controller call 2026-10-28): fully hardened, lane = the last level.
+        "near" => (Curve::Ed25519, format!("m/44'/397'/0'/0'/{i}'")),
         other => bail!("unknown family {other}"),
     })
 }
@@ -303,6 +305,19 @@ mod tests {
             let (c, k) = lane_secret(&s, "solana", i).unwrap();
             assert_eq!(bs58::encode(LocalSigner::new(c, &k).unwrap().public_key()).into_string(), want);
         }
+    }
+
+    /// Task 16: NEAR lanes at `m/44'/397'/0'/0'/i'` (spec §11, fully hardened); lane 0 of ART24 is the key of
+    /// `smartcontracts/near/vectors/near-tx.json` (its implicit account = the hex public key).
+    #[test]
+    fn lane_path_near() {
+        assert_eq!(lane_path("near", 0).unwrap(), (Curve::Ed25519, "m/44'/397'/0'/0'/0'".to_string()));
+        assert_eq!(lane_path("near", 1).unwrap(), (Curve::Ed25519, "m/44'/397'/0'/0'/1'".to_string()));
+        let s = Seed::from_phrase(ART24.as_bytes(), None).unwrap();
+        let (c, k) = lane_secret(&s, "near", 0).unwrap();
+        assert_eq!(hexs(k.as_slice()), "1b46248b085a906e6c934d1056e0778a7b0af8ebb72a1dd8a6cc882e3b0cf977");
+        assert_eq!(hexs(&LocalSigner::new(c, &k).unwrap().public_key()), "c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6");
+        assert_ne!(lane_secret(&s, "near", 1).unwrap().1.as_slice(), k.as_slice());
     }
 
     #[test]

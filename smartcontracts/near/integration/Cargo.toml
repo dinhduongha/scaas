@@ -18,6 +18,7 @@ scaas-near-common = { path = "../common" }
 scaas-near-spike-p256 = { path = "../spike-p256" }
 near-contract-standards = { workspace = true }
 near-crypto = "0.38.0"  # ed25519 / secp256k1 test signers (already in the lock through near-sdk)
+near-primitives = "0.38.0"  # Task 16: the node's hand-encoded transaction vector (node_tx_vector.rs; already in the lock through near-workspaces)
 scaas-near-token = { path = "../token" }
 scaas-near-dex = { path = "../dex" }
 scaas-near-relayfee = { path = "../relayfee" }

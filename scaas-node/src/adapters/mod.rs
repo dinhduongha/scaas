@@ -11,6 +11,7 @@ pub mod aptos;
 pub mod cosmos;
 pub mod evm;
 pub mod hedera;
+pub mod near;
 pub mod solana;
 pub mod soroban;
 pub mod sui;
@@ -34,6 +35,7 @@ pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAda
         "sui" => Ok(Arc::new(sui::SuiAdapter::new(cfg, signers)?)),
         "solana" => Ok(Arc::new(solana::SolanaAdapter::new(cfg, signers)?)),
         "aptos" => Ok(Arc::new(aptos::AptosAdapter::new(cfg, signers)?)),
+        "near" => Ok(Arc::new(near::NearAdapter::new(cfg, signers)?)),
         other => bail!("chain {}: no adapter for family {other} in this build", cfg.chain_key()),
     }
 }
@@ -58,7 +60,7 @@ mod tests {
         let want = uids["chains"].as_array().unwrap().iter().find(|c| c["chainId"] == 7622).unwrap()["chainUid"].as_str().unwrap();
         assert_eq!(cfg.chains.iter().find(|c| c.family == "evm").unwrap().chain_uid, Some(want.parse().unwrap()));
         let families: BTreeSet<&str> = cfg.chains.iter().map(|c| c.family.as_str()).collect();
-        assert_eq!(families, BTreeSet::from(["aptos", "cosmos", "evm", "hedera", "solana", "soroban", "sui", "ton"]));
+        assert_eq!(families, BTreeSet::from(["aptos", "cosmos", "evm", "hedera", "near", "solana", "soroban", "sui", "ton"]));
         let words = format!("{}art", "abandon ".repeat(23));
         let seed = Seed::from_words(&words, None).unwrap();
         let dir = std::env::temp_dir().join(format!("example-journal-{}", std::process::id()));

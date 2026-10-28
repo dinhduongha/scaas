@@ -198,3 +198,17 @@ finality = { mode = "instant", quorum = 1 }      # AptosBFT: a committed block i
 # hinted there and re-read from the full node; the cursor never passes what its user_transaction_processor has
 # processed. indexer_api_key_env names the env var holding an API key (optional). tx_ttl_s caps a lane tx's life.
 params = { package = "0x<package address>", indexer_url = "https://api.testnet.aptoslabs.com/v1/graphql", tx_ttl_s = 600, max_gas_amount = 200000 }
+
+[[chains]]                                       # NEAR (near-sandbox / localnet; no public network yet)
+family = "near"
+network = "68XTWuVmYJkVmj4HM9zFwXdDiS4DE2KX7RbVBdRERiCk"  # the genesis hash (RPC `status`, base58): every token's `network`
+rpc_urls = ["http://127.0.0.1:3030"]            # the RPC must allow `max_gas_burnt_view` >= 300 Tgas (`*_check` views)
+lanes = [0, 1]                                   # implicit accounts (64-hex ed25519 key, m/44'/397'/0'/0'/i'): fund each with NEAR
+finality = { mode = "instant", quorum = 1 }      # the adapter reads `final` blocks only
+# tokens: the SCaaS token accounts; at start each must exist with code and no access key (else the chain is halted),
+# carry this network, and have every lane registered (`storage_deposit`). dex: the escrow DEX (its `matched` joins
+# trade legs). relay_fee: the escrow router and its executor (both keyless; `router.executor()` must match),
+# min_yocto_value = yoctoNEAR per base unit of each fee token (decimal string): a fee must cover gas × the node's
+# gas price + the deposits the job attaches.
+tokens = [{ address = "token.test.near", decimals = 6 }]
+params = { dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }

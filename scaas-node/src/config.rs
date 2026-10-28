@@ -237,7 +237,7 @@ pub struct FinalityCfg {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ChainCfg {
-    /// `evm` (mặc định) | `hedera` | `sui` | `soroban` | `cosmos` | `ton` | `solana` | `aptos`.
+    /// `evm` (mặc định) | `hedera` | `sui` | `soroban` | `cosmos` | `ton` | `solana` | `aptos` | `near`.
     #[serde(default = "evm")]
     pub family: String,
     /// Mạng ngoài EVM: `localnet`, `testnet`, chain-id Cosmos, genesis hash Solana (base58), chain id Aptos (`1`, `2`,
@@ -853,11 +853,17 @@ impl ChainCfg {
                 "router" | "min_amount" | "relay_bound_payee" => true,
                 "min_ton_value" => self.family == "ton",
                 "min_lamports_value" => self.family == "solana",
+                "executor" | "min_yocto_value" => self.family == "near",
                 _ => false,
             };
             if !ok {
                 bail!("params.relay_fee.{k} is not a key of the {} family (router, min_amount, relay_bound_payee{})", self.family,
-                    match self.family.as_str() { "ton" => ", min_ton_value", "solana" => ", min_lamports_value", _ => "" });
+                    match self.family.as_str() {
+                        "ton" => ", min_ton_value",
+                        "solana" => ", min_lamports_value",
+                        "near" => ", executor, min_yocto_value",
+                        _ => "",
+                    });
             }
         }
         let get = |k: &str| t.and_then(|t| t.get(k));
