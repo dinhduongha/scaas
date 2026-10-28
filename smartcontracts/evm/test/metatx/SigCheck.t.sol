@@ -94,15 +94,14 @@ contract SigCheckTest is Test {
         assertTrue(h.isValid(delegated, D, _sig(0xD7702, D), SigCheck.ERC1271_GAS));
         Mock1271Wallet.Mode[3] memory modes = [Mock1271Wallet.Mode.WrongMagic, Mock1271Wallet.Mode.Reverts, Mock1271Wallet.Mode.Short];
         for (uint256 i; i < modes.length; ++i) {
-            Mock1271Wallet bad = new Mock1271Wallet(signer);
-            bad.setMode(modes[i]);
-            vm.signAndAttachDelegation(address(bad), 0xD7702);
+            // the delegate's code runs on the account's storage: its mode is set through the account
+            vm.signAndAttachDelegation(address(new Mock1271Wallet(signer)), 0xD7702);
+            Mock1271Wallet(delegated).setMode(modes[i]);
             assertFalse(h.isValid(delegated, D, viaDelegate, SigCheck.ERC1271_GAS), "bad delegate");
             assertTrue(h.isValid(delegated, D, _sig(0xD7702, D), SigCheck.ERC1271_GAS), "the base key stays root");
         }
-        Mock1271Wallet burner = new Mock1271Wallet(signer);
-        burner.setMode(Mock1271Wallet.Mode.Burn); // ~46 k: over a 20 k cap
-        vm.signAndAttachDelegation(address(burner), 0xD7702);
+        vm.signAndAttachDelegation(address(new Mock1271Wallet(signer)), 0xD7702);
+        Mock1271Wallet(delegated).setMode(Mock1271Wallet.Mode.Burn); // ~46 k: over a 20 k cap
         assertFalse(h.isValid(delegated, D, viaDelegate, 20_000), "gas-exhausting delegate");
         address fake = vm.addr(0xFA4E);
         vm.etch(fake, abi.encodePacked(hex"63ffffffff60e01b60005260206000f3", bytes7(0)));
