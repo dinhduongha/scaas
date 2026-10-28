@@ -211,6 +211,9 @@ impl Token {
         let dex = Holder::Near(p.clone());
         self.open_lazily(&op.from, s, old);
         let digest = op.digest();
+        // Ruling T8-I1 (controller call): the order closes here, for good. When the counter-leg fails, the DEX refunds
+        // this leg's amount, but the order stays `Filled` (it never re-opens): the maker re-signs. Clients bind orders to
+        // a relayer (`Order.relayer = Some`, CTR-DEX-09) by default so only the chosen relayer can pair them.
         self.storage_due += order_bytes(&op.from, &OrderClose::Filled(digest));
         self.orders.insert((op.from.clone(), op.lane, op.nonce), OrderClose::Filled(digest));
         self.storage_due += self.register(&dex) + self.register(&receiver);

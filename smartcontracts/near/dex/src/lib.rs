@@ -26,10 +26,16 @@ use scaas_near_common::metaop::{MetaOp, Order, OP_TRADE};
 use scaas_near_common::{Auth, Holder};
 
 /// Static gas per receipt (spec §3.8 sizing: the measured maximum × 1.5, near-sandbox 2026-10-28, `runs/2026-10-28-near-gas.txt`;
-/// tests `settle_gas_pin` and `refund_expired_after_lost_callback` fail when a measurement exceeds `pin / 1.2`).
-/// A leg gets at least `GAS_LEG_MIN` (a passkey leg, 23.7 Tgas) plus an equal share of the unused gas, so an msig leg
-/// runs on the relayer's extra gas.
-pub const GAS_LEG_MIN: Gas = Gas::from_tgas(36);
+/// tests `settle_gas_pin`, `settle_msig_leg_gas_limit` and `refund_expired_after_lost_callback` fail when a measurement
+/// exceeds `pin / 1.2`). A leg's static gas is derived from its auth (`leg_gas`, ruling T8-I2): `GAS_LEG_BASE` plus one
+/// per-signature cost per signature (an msig: each member signature), and it also gets an equal share of the unused gas.
+///
+/// A leg without its signature checks: an ed25519 leg opening a UA burns 4.03 Tgas, a passkey leg 23.70 − 20.0 = 3.7.
+pub const GAS_LEG_BASE: Gas = Gas::from_tgas(6);
+/// One ed25519 (`ed25519_verify`) or secp256k1 (`ecrecover`) signature, incl. its msig member checks (< 0.5 Tgas).
+pub const GAS_SIG_KEY: Gas = Gas::from_tgas(1);
+/// One P-256 passkey signature: 20.005 Tgas per verify at opt-level 3 (Task 1, `runs/2026-10-28-p256-spike.txt`) × 1.25.
+pub const GAS_SIG_PASSKEY: Gas = Gas::from_tgas(25);
 /// `ft_transfer` / `transfer_to_ua` to a registered receiver (2.41 Tgas).
 pub const GAS_PAYOUT: Gas = Gas::from_tgas(4);
 /// `on_legs` (2.31 Tgas) plus what it prepays for its two payouts (their static gas and exec fees; 2 × 2.41 Tgas).
@@ -38,11 +44,9 @@ pub const GAS_ON_LEGS: Gas = Gas::from_tgas(10 + 2 * 4);
 pub const GAS_VIEW: Gas = Gas::from_tgas(3);
 /// `on_refund` (2.86 Tgas) plus what it prepays for its two refunds (2 × 2.13 Tgas).
 pub const GAS_ON_REFUND: Gas = Gas::from_tgas(10 + 2 * 4);
-/// `settle`'s own receipt (3.24 Tgas burnt) plus the exec fees it prepays for the three receipts it creates, × 1.5
-/// (`settle_gas_pin` runs two passkey legs at exactly `SETTLE_MIN_GAS`).
+/// `settle`'s own receipt (3.24 Tgas burnt with two single-key legs) plus the exec fees it prepays for the three receipts
+/// it creates, × 1.5 (`settle_gas_pin` runs two passkey legs at exactly `settle_gas`).
 pub const GAS_SETTLE_SELF: Gas = Gas::from_tgas(9);
-/// What `settle` needs prepaid: itself, the callback (with its payouts), two legs at their minimum (99 Tgas).
-pub const SETTLE_MIN_GAS: Gas = Gas::from_gas(GAS_SETTLE_SELF.as_gas() + GAS_ON_LEGS.as_gas() + 2 * GAS_LEG_MIN.as_gas());
 /// Kept per settle for the two payouts / refunds (1 yoctoNEAR each, NEP-141).
 const PAYOUT_YOCTO: u128 = 2;
 
@@ -80,12 +84,13 @@ pub enum OrderClose {
 
 #[near(event_json(standard = "scaas"))]
 pub enum Event {
-    /// Both legs arrived; each seller is paid the other's amount.
+    /// Both legs arrived; each seller is paid the other's amount. `legs` = the two leg op digests (settle-argument order),
+    /// the tokens' `order_filled.digest`.
     #[event_version("1.0.0")]
-    Matched { settle_id: String },
-    /// Not both legs arrived (or the callback was lost): `refunded` = the sellers refunded.
+    Matched { settle_id: String, legs: [String; 2] },
+    /// Not both legs arrived (or the callback was lost): `refunded` = the digests of the legs paid back to their sellers.
     #[event_version("1.0.0")]
-    MatchFailed { settle_id: String, refunded: Vec<String> },
+    MatchFailed { settle_id: String, legs: [String; 2], refunded: Vec<String> },
 }
 
 #[near(contract_state)]
@@ -98,6 +103,10 @@ pub struct Dex {
 
 fn x(b: &[u8]) -> String {
     format!("0x{}", b.iter().map(|v| format!("{v:02x}")).collect::<String>())
+}
+
+fn digests(s: &Settle) -> [String; 2] {
+    [x(&s.legs[0].digest), x(&s.legs[1].digest)]
 }
 
 fn now_s() -> u64 {
@@ -122,6 +131,26 @@ fn leg(order: &Order, op: &MetaOp, me: &AccountId, caller: &AccountId) -> R<Leg>
         return Err("order expired");
     }
     Ok(Leg { token: order.sell_token.clone(), seller: op.from.clone(), lane: op.lane, nonce: op.nonce, digest: op.digest(), amount: op.amount })
+}
+
+/// A leg's static gas from its auth: `GAS_LEG_BASE` + each signature's cost (an msig: its member signatures; a
+/// `near-account` member signs as the predecessor, free).
+pub fn leg_gas(auth: &Auth) -> Gas {
+    fn sigs(a: &Auth) -> u64 {
+        match a {
+            Auth::Passkey { .. } => GAS_SIG_PASSKEY.as_gas(),
+            Auth::Ed25519 { .. } | Auth::Secp256k1 { .. } => GAS_SIG_KEY.as_gas(),
+            Auth::Msig { sigs: s, .. } => s.iter().map(|(_, a)| sigs(a)).fold(0, u64::saturating_add),
+        }
+    }
+    Gas::from_gas(GAS_LEG_BASE.as_gas().saturating_add(sigs(auth)))
+}
+
+/// What `settle` needs prepaid: itself, the callback (with its payouts) and both legs' derived gas.
+pub fn settle_gas(auth_a: &Auth, auth_b: &Auth) -> Gas {
+    Gas::from_gas(
+        (GAS_SETTLE_SELF.as_gas() + GAS_ON_LEGS.as_gas()).saturating_add(leg_gas(auth_a).as_gas()).saturating_add(leg_gas(auth_b).as_gas()),
+    )
 }
 
 /// `sha256(digest(op_a) ‖ digest(op_b))` (ruling, T8 pre-flight).
@@ -185,7 +214,8 @@ impl Dex {
             .and_then(|a| Ok([a, leg(&order_b, &op_b, &me, &caller)?]))
             .and_then(|l| pair(&order_a, &order_b).map(|_| l))
             .unwrap_or_else(|e| env::panic_str(e));
-        require!(env::prepaid_gas() >= SETTLE_MIN_GAS, "prepaid gas below the settle minimum (legs + callback)");
+        // Ruling T8-I2: refused before any write or promise (nothing held, no leg can run out of gas).
+        require!(env::prepaid_gas() >= settle_gas(&auth_a, &auth_b), "prepaid gas below the settle minimum (legs + callback)");
         let id = settle_id(&legs[0].digest, &legs[1].digest);
         require!(legs.iter().all(|l| !self.legs.contains_key(&l.digest)), "a leg is already in a settle");
         let u0 = env::storage_usage();
@@ -203,14 +233,9 @@ impl Dex {
             .checked_sub(deposit + PAYOUT_YOCTO)
             .unwrap_or_else(|| env::panic_str("attached deposit below the escrow entry storage"));
         let call = |order: Order, op: MetaOp, auth: Auth, receiver: &Holder, d: u128| {
+            let gas = leg_gas(&auth);
             let args = borsh::to_vec(&(op, auth, &order, receiver)).unwrap();
-            Promise::new(order.sell_token.clone()).function_call_weight(
-                "mtx_trade",
-                args,
-                NearToken::from_yoctonear(d),
-                GAS_LEG_MIN,
-                GasWeight(1),
-            )
+            Promise::new(order.sell_token.clone()).function_call_weight("mtx_trade", args, NearToken::from_yoctonear(d), gas, GasWeight(1))
         };
         let (da, db) = (rest / 2, rest - rest / 2);
         let leg_a = call(order_a, op_a, auth_a, &legs[1].seller, da);
@@ -237,15 +262,15 @@ impl Dex {
         if ok == [true, true] {
             pay(&a.token, &b.seller, a.amount);
             pay(&b.token, &a.seller, b.amount);
-            Event::Matched { settle_id: x(&settle_id) }.emit();
+            Event::Matched { settle_id: x(&settle_id), legs: digests(&s) }.emit();
             return;
         }
         let mut refunded = vec![];
         for (l, _) in s.legs.iter().zip(ok).filter(|(_, ok)| *ok) {
             pay(&l.token, &l.seller, l.amount);
-            refunded.push(l.seller.to_string());
+            refunded.push(x(&l.digest));
         }
-        Event::MatchFailed { settle_id: x(&settle_id), refunded }.emit();
+        Event::MatchFailed { settle_id: x(&settle_id), legs: digests(&s), refunded }.emit();
     }
 
     /// Anyone, after both orders' expiries: prunes a done entry; refunds the legs of an unresolved one (lost callback).
@@ -285,9 +310,9 @@ impl Dex {
             let mut refunded = vec![];
             for (l, _) in s.legs.iter().zip(arr).filter(|(_, a)| *a) {
                 pay(&l.token, &l.seller, l.amount);
-                refunded.push(l.seller.to_string());
+                refunded.push(x(&l.digest));
             }
-            Event::MatchFailed { settle_id: x(&settle_id), refunded }.emit();
+            Event::MatchFailed { settle_id: x(&settle_id), legs: digests(&s), refunded }.emit();
         }
         self.prune(settle_id, &s);
     }
@@ -372,6 +397,36 @@ mod tests {
         dex.on_legs([7; 32]);
         assert_eq!(get_created_receipts().len(), 2, "an unresolved entry pays both out");
         assert!(dex.settles.get(&[7; 32]).unwrap().done);
+    }
+
+    /// Refund wins only once: an `on_refund` that finds the entry already done (an `on_legs` ran between
+    /// `refund_expired` and it) refunds nothing and just prunes (review T8-M1).
+    #[test]
+    fn on_refund_after_on_legs_pays_nothing() {
+        use near_sdk::test_utils::get_created_receipts;
+        use near_sdk::PromiseResult;
+        let me: AccountId = "dex.test.near".parse().unwrap();
+        let ctx = VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(me.clone()).build();
+        let r = |d: [u8; 32]| PromiseResult::Successful(borsh::to_vec(&Some(OrderClose::Filled(d))).unwrap());
+        testing_env!(ctx, near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), vec![r([2; 32]), r([3; 32])]);
+        let mut dex = Dex::new();
+        let l = |t: &str, d: u8| Leg { token: t.parse().unwrap(), seller: Holder::Ua([1; 32]), lane: [0; 32], nonce: 0, digest: [d; 32], amount: 5 };
+        dex.settles.insert([7; 32], Settle { legs: [l("a.near", 2), l("b.near", 3)], relayer: me, deposit: 0, expiry: 0, done: true });
+        dex.on_refund([7; 32]);
+        assert!(get_created_receipts().is_empty(), "done entry: on_refund must not refund");
+        assert!(dex.settles.get(&[7; 32]).is_none(), "pruned");
+    }
+
+    /// `leg_gas`: base + per signature by kind; an msig counts its member signatures.
+    #[test]
+    fn leg_gas_by_auth() {
+        let ed = Auth::Ed25519 { key: [0; 32], sig: [0; 64] };
+        let pk = Auth::Passkey { key: [0; 64], authenticator_data: vec![], client_data_json: vec![], sig: [0; 64] };
+        let t = |g: Gas| g.as_tgas();
+        assert_eq!((t(leg_gas(&ed)), t(leg_gas(&pk))), (7, 31));
+        let m = |n: usize| Auth::Msig { key_data: vec![], sigs: (0..n as u8).map(|i| (i, pk.clone())).chain([(99, ed.clone())]).collect() };
+        assert_eq!(t(leg_gas(&m(10))), 6 + 250 + 1);
+        assert_eq!(t(settle_gas(&m(10), &ed)), 9 + 18 + 257 + 7);
     }
 
     /// The refund pays a leg back only when its order was filled by this settle's own leg op.

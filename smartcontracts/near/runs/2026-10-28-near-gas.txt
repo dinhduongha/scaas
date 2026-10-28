@@ -1,45 +1,50 @@
-# near-sandbox gas of the DEX (Task 8: settle_gas_pin, settle_short_gas_refused, refund_expired_after_lost_callback; build.sh near + cargo test -p scaas-near-integration --test dex) at commit 3918209c + Task 8 finish (the T8 commit)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.01s
+# near-sandbox gas of the DEX (Task 8 fix 1: leg gas derived from each leg's auth; settle_gas_pin, settle_short_gas_refused, settle_msig_leg_gas_limit, refund_expired_after_lost_callback; build.sh near + cargo test -p scaas-near-integration --test dex) at commit 8ba4fdf5 + Task 8 fix 1 (the T8 fix 1 commit)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.82s
      Running tests/dex.rs (target/debug/deps/dex-a6c004a01597429e)
 
-running 3 tests
-test refund_expired_after_lost_callback ... settle by dev-20261028105718-28311112347537.test.near: 19.284 Tgas, ok true
-refund_expired by dev-20261028105719-52476566884936.test.near: 14.109 Tgas, ok true
-  receipt dev-20261028105720-36695179312037.test.near 2.503 Tgas None
-  receipt dev-20261028105717-34520226099253.test.near 1.544 Tgas None
-  receipt dev-20261028105719-52476566884936.test.near 0.223 Tgas None
-  receipt dev-20261028105719-29590666979735.test.near 1.544 Tgas None
-  receipt dev-20261028105719-52476566884936.test.near 0.223 Tgas None
-  receipt dev-20261028105720-36695179312037.test.near 2.838 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"match_failed\",\"data\":{\"settle_id\":\"0x8aa9ab430e8b907406df5e9e973aa97660704fed2d13142c03d68fa2a6c5c159\",\"refunded\":[\"dev-20261028105718-31102349788163.test.near\",\"dev-20261028105719-52476566884936.test.near\"]}}")
-  receipt dev-20261028105717-34520226099253.test.near 2.125 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028105720-36695179312037.test.near\",\"new_owner_id\":\"dev-20261028105718-31102349788163.test.near\",\"amount\":\"100\"}]}")
-  receipt dev-20261028105719-29590666979735.test.near 2.129 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028105720-36695179312037.test.near\",\"new_owner_id\":\"dev-20261028105719-52476566884936.test.near\",\"amount\":\"60\"}]}")
-  receipt dev-20261028105718-28311112347537.test.near 0.223 Tgas None
-  receipt dev-20261028105719-52476566884936.test.near 0.223 Tgas None
-  receipt dev-20261028105719-52476566884936.test.near 0.223 Tgas None
+running 4 tests
+test refund_expired_after_lost_callback ... settle by dev-20261028112653-31144682653695.test.near: 19.329 Tgas, ok true
+refund_expired by dev-20261028112654-36382920009760.test.near: 14.266 Tgas, ok true
+  receipt dev-20261028112655-25111968652950.test.near 2.504 Tgas None
+  receipt dev-20261028112653-31975863279178.test.near 1.544 Tgas None
+  receipt dev-20261028112654-36382920009760.test.near 0.223 Tgas None
+  receipt dev-20261028112654-85048842427321.test.near 1.544 Tgas None
+  receipt dev-20261028112654-36382920009760.test.near 0.223 Tgas None
+  receipt dev-20261028112655-25111968652950.test.near 3.026 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"match_failed\",\"data\":{\"settle_id\":\"0x710b094febb35ae582899db8bc6d1219db5671f35de46dd7caec388e08847501\",\"legs\":[\"0x31c6543847d2a42a5a5d33c2f8b084488a1dd2fb48daf50bd7601a6bf309eddc\",\"0x07ac4752ad9d649308dee49f960456e2821fec5cb52879d09c4ce2b718ff195f\"],\"refunded\":[\"0x31c6543847d2a42a5a5d33c2f8b084488a1dd2fb48daf50bd7601a6bf309eddc\",\"0x07ac4752ad9d649308dee49f960456e2821fec5cb52879d09c4ce2b718ff195f\"]}}")
+  receipt dev-20261028112653-31975863279178.test.near 2.111 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028112655-25111968652950.test.near\",\"new_owner_id\":\"dev-20261028112654-72926933653851.test.near\",\"amount\":\"100\"}]}")
+  receipt dev-20261028112654-85048842427321.test.near 2.111 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028112655-25111968652950.test.near\",\"new_owner_id\":\"dev-20261028112654-36382920009760.test.near\",\"amount\":\"60\"}]}")
+  receipt dev-20261028112653-31144682653695.test.near 0.223 Tgas None
+  receipt dev-20261028112654-36382920009760.test.near 0.223 Tgas None
+  receipt dev-20261028112654-36382920009760.test.near 0.223 Tgas None
 pins: GAS_VIEW 3, GAS_ON_REFUND 18, GAS_PAYOUT 4 Tgas
-refund_expired by dev-20261028105719-52476566884936.test.near: 1.512 Tgas, ok false
+refund_expired by dev-20261028112654-36382920009760.test.near: 1.513 Tgas, ok false
 ok
-test settle_gas_pin ... settle by dev-20261028105727-89419307049786.test.near: 59.973 Tgas, ok true
-  receipt dev-20261028105728-82484341582316.test.near 3.253 Tgas None
-  receipt dev-20261028105726-82759131775716.test.near 23.700 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0xe1942f44408ab0ae3f58968bbac3e4c0ac7450ed329e48f65a7a9a72ad836566\",\"dex\":\"dev-20261028105728-82484341582316.test.near\",\"lane\":\"0xa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0\",\"nonce\":0,\"amount\":\"100\",\"digest\":\"0xa27ceef3eab5c9107dcd83983bd63477188eb0e3e0f759965dbf3324a84e24b0\"}}")
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-  receipt dev-20261028105728-80591369814762.test.near 23.730 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0x7dfa29c49e3677bab639fc36f9b4515d71c98173942468614353fd6ac57e1b6f\",\"dex\":\"dev-20261028105728-82484341582316.test.near\",\"lane\":\"0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0\",\"nonce\":0,\"amount\":\"60\",\"digest\":\"0x66077f822e15bc0274f188d89f521f2abf2ce0acc15c76decbaef2e7e4e17074\"}}")
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-  receipt dev-20261028105728-82484341582316.test.near 2.320 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"matched\",\"data\":{\"settle_id\":\"0x71fba1d69f93237f44b5db0dae5b5ec3366fa45ea3a4b265c4938b76b0cf8693\"}}")
-  receipt dev-20261028105726-82759131775716.test.near 2.387 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028105728-82484341582316.test.near\",\"new_owner_id\":\"dev-20261028105726-82759131775716.test.near\",\"amount\":\"100\"}]}")
-  receipt dev-20261028105728-80591369814762.test.near 2.414 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028105728-82484341582316.test.near\",\"new_owner_id\":\"dev-20261028105728-80591369814762.test.near\",\"amount\":\"60\"}]}")
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-  receipt dev-20261028105727-89419307049786.test.near 0.223 Tgas None
-settle_gas_pin: total 59.973 Tgas (pin 90, prepaid 99 Tgas); legs [23.700008409506, 23.730216256085]; on_legs 2.320; payouts [2.387285492472, 2.414010352366]
+test settle_gas_pin ... settle by dev-20261028112702-98485418826756.test.near: 60.001 Tgas, ok true
+  receipt dev-20261028112704-98564722817261.test.near 3.235 Tgas None
+  receipt dev-20261028112701-11449220149660.test.near 23.703 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0xe1942f44408ab0ae3f58968bbac3e4c0ac7450ed329e48f65a7a9a72ad836566\",\"dex\":\"dev-20261028112704-98564722817261.test.near\",\"lane\":\"0xa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0\",\"nonce\":0,\"amount\":\"100\",\"digest\":\"0xc492d3cc0c5be69fec938410e5dc3df1fd21e80a913a051be90503b8d271b53c\"}}")
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+  receipt dev-20261028112703-99848119813472.test.near 23.699 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0x7dfa29c49e3677bab639fc36f9b4515d71c98173942468614353fd6ac57e1b6f\",\"dex\":\"dev-20261028112704-98564722817261.test.near\",\"lane\":\"0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0\",\"nonce\":0,\"amount\":\"60\",\"digest\":\"0x2dbd9c62a347abc7abcf52f40629fdc1272696dc5d0354bfb3ec7ad36711f9aa\"}}")
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+  receipt dev-20261028112704-98564722817261.test.near 2.421 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"matched\",\"data\":{\"settle_id\":\"0xc58863278ded6e75adcd5165ff74a3ed491cc1c325338bef2c00ed2a988dccc2\",\"legs\":[\"0xc492d3cc0c5be69fec938410e5dc3df1fd21e80a913a051be90503b8d271b53c\",\"0x2dbd9c62a347abc7abcf52f40629fdc1272696dc5d0354bfb3ec7ad36711f9aa\"]}}")
+  receipt dev-20261028112701-11449220149660.test.near 2.387 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028112704-98564722817261.test.near\",\"new_owner_id\":\"dev-20261028112701-11449220149660.test.near\",\"amount\":\"100\"}]}")
+  receipt dev-20261028112703-99848119813472.test.near 2.387 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261028112704-98564722817261.test.near\",\"new_owner_id\":\"dev-20261028112703-99848119813472.test.near\",\"amount\":\"60\"}]}")
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+  receipt dev-20261028112702-98485418826756.test.near 0.223 Tgas None
+settle_gas_pin: total 60.001 Tgas (pin 90, prepaid 89 Tgas); legs [23.703097858286, 23.699494045697]; on_legs 2.421; payouts [2.387285492472, 2.386541748574]
 ok
-test settle_short_gas_refused ... settle by dev-20261028105733-87673190410274.test.near: 2.128 Tgas, ok false
-settle by dev-20261028105733-87673190410274.test.near: 19.861 Tgas, ok true
+test settle_msig_leg_gas_limit ... settle by dev-20261028112709-53965652539533.test.near: 2.349 Tgas, ok false
+settle by dev-20261028112709-53965652539533.test.near: 220.625 Tgas, ok true
+  settle receipt 3.462 Tgas
+settle_msig_leg_gas_limit: 10-signature passkey msig leg 204.284 Tgas (leg_gas 256 Tgas), ed25519 leg 3.623 Tgas; total 220.625 Tgas at 300 prepaid; 11 signatures refused (settle_gas 315 Tgas)
+ok
+test settle_short_gas_refused ... settle by dev-20261028112715-36622734768995.test.near: 2.128 Tgas, ok false
+settle by dev-20261028112715-36622734768995.test.near: 19.894 Tgas, ok true
 ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 21.27s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 28.57s
 
 rc=0

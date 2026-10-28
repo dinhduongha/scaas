@@ -74,4 +74,14 @@ KILLED       D9 leg in one settle                 no_partial_fill  | panicked at
     # rebuild the restored wasm so later runs use the real code
     subprocess.run(['bash', '-c', 'for c in token dex; do (cd $c && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi); done'], cwd=NEAR, capture_output=True)
     print('\n'.join(['== summary'] + res))
+== fix 1 (at commit 8ba4fdf5 + Task 8 fix 1; harness now also rebuilds the restored token wasm)
+KILLED       D10 on_refund done guard (M1)        on_refund_after_on_legs_pays_nothing  | thread 'tests::on_refund_after_on_legs_pays_nothing' (664924) panicked at dex/src/lib.rs:416:9:
+KILLED       D11 settle gas from auths (I2)       settle_msig_leg_gas_limit  | thread 'settle_msig_leg_gas_limit' (665892) panicked at integration/tests/dex.rs:745:5:
+KILLED       D12 leg static gas from auth (I2)    settle_msig_leg_gas_limit  | thread 'settle_msig_leg_gas_limit' (672101) panicked at integration/tests/dex.rs:752:5:
+    added to the harness list:
+        ('D10 on_refund done guard (M1)', DEX, 'if !s.done {', 'if true {', 'unit', 'on_refund_after_on_legs_pays_nothing'),
+        ('D11 settle gas from auths (I2)', DEX, 'require!(env::prepaid_gas() >= settle_gas(&auth_a, &auth_b),', 'require!(env::prepaid_gas() >= Gas::from_tgas(99),', 'it', 'settle_msig_leg_gas_limit'),
+        ('D12 leg static gas from auth (I2)', DEX, 'NearToken::from_yoctonear(d), gas, GasWeight(1))', 'NearToken::from_yoctonear(d), { let _ = gas; GAS_LEG_BASE }, GasWeight(1))', 'it', 'settle_msig_leg_gas_limit'),
+            if kind == 'it' and f == TOK:  # the restored token wasm, so later dex mutants run against the real token
+                subprocess.run(['bash', '-c', 'cd token && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi'], cwd=NEAR, capture_output=True)
 rc=0

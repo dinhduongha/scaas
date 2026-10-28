@@ -9,7 +9,7 @@ use common::*;
 use near_workspaces::types::Gas;
 use scaas_near_common::hash::hex;
 use scaas_near_common::Order;
-use scaas_near_dex::{Settle, GAS_LEG_MIN, GAS_ON_LEGS, GAS_ON_REFUND, GAS_PAYOUT, GAS_SETTLE_SELF, GAS_VIEW, SETTLE_MIN_GAS};
+use scaas_near_dex::{leg_gas, settle_gas, Settle, GAS_ON_LEGS, GAS_ON_REFUND, GAS_PAYOUT, GAS_SETTLE_SELF, GAS_VIEW};
 use scaas_near_token::{order_bytes, OrderClose, ACCOUNT_STORAGE_BYTES, TRADE_RECORD_OVERHEAD};
 
 const DEX_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_dex/scaas_near_dex.wasm");
@@ -182,6 +182,19 @@ impl D {
         tok.view("filled").args(b(&(&l.op.from, l.op.lane, l.op.nonce))).await.unwrap().borsh().unwrap()
     }
 
+    /// Each leg's receipt burnt ≤ its derived static gas (`leg_gas` of its auth) / 1.2; returns the two figures (Tgas).
+    fn legs_within(&self, out: &ExecutionFinalResult, a: &L, bl: &L) -> [f64; 2] {
+        let mut r = [0.0; 2];
+        for o in out.receipt_outcomes().iter().filter(|o| o.logs.iter().any(|l| l.contains("order_filled"))) {
+            let (i, l) = if o.executor_id.as_str() == a.order.sell_token.as_str() { (0, a) } else { (1, bl) };
+            let (burnt, pin) = (o.gas_burnt.as_gas() as f64 / 1e12, leg_gas(&l.auth).as_gas() as f64 / 1e12);
+            assert!(burnt <= pin / 1.2, "leg {i}: {burnt} Tgas over leg_gas {pin} / 1.2");
+            r[i] = burnt;
+        }
+        assert!(r[0] > 0.0 && r[1] > 0.0, "both legs ran");
+        r
+    }
+
     async fn usage(&self, c: &Contract) -> u64 {
         c.view_account().await.unwrap().storage_usage
     }
@@ -200,6 +213,15 @@ impl D {
 
 fn has(out: &ExecutionFinalResult, s: &str) -> bool {
     out.logs().iter().any(|l| l.contains(s))
+}
+
+/// `matched` / `match_failed` carry both leg digests (settle-argument order) and the refunded legs by digest (M2).
+fn legs_json(a: &L, bl: &L) -> String {
+    format!(r#""legs":["0x{}","0x{}"]"#, hex(&a.op.digest()), hex(&bl.op.digest()))
+}
+
+fn refunded_json(ls: &[&L]) -> String {
+    format!(r#""refunded":[{}]"#, ls.iter().map(|l| format!(r#""0x{}""#, hex(&l.op.digest()))).collect::<Vec<_>>().join(","))
 }
 
 fn failed_with(out: &ExecutionFinalResult, err: &str) -> bool {
@@ -240,6 +262,7 @@ async fn settle_pays_both_legs() {
     assert_eq!((d.bal(&d.t.token, &d.dex_h()).await, d.bal(&d.b, &d.dex_h()).await), (0, 0), "escrow empty");
     let id = settle_id(&a.op, &bl.op);
     assert!(has(&out, r#""event":"matched""#) && has(&out, &hex(&id)), "{:?}", out.logs());
+    assert!(has(&out, &legs_json(&a, &bl)), "matched names both leg digests: {:?}", out.logs());
     assert!(has(&out, r#""event":"order_filled""#));
     assert!(has(&out, &format!(r#""old_owner_id":"{}","new_owner_id":"{}","amount":"100""#, d.dex.id(), d.t.bob.id())));
     assert!(has(&out, &format!(r#""from":"{}","to":"{e}","amount":"60""#, d.dex.id())), "ua_transfer to erin");
@@ -294,6 +317,7 @@ async fn one_leg_fails_other_refunded() {
     let kept = d.dex.view_account().await.unwrap().balance.as_yoctonear() - n0 - s.deposit;
     assert!(kept < NearToken::from_millinear(1).as_yoctonear(), "DEX kept {kept} yocto");
     assert!(has(&out, r#""event":"match_failed""#), "{:?}", out.logs());
+    assert!(has(&out, &format!("{},{}", legs_json(&a, &bl), refunded_json(&[&a]))), "{:?}", out.logs());
     assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.b, &bob).await), (100, 10), "erin refunded, bob untouched");
     assert_eq!((d.bal(&d.t.token, &d.dex_h()).await, d.bal(&d.t.token, &bob).await), (0, 0));
     assert_eq!(d.usage(&d.b).await, ub, "the refused leg wrote nothing");
@@ -305,6 +329,7 @@ async fn one_leg_fails_other_refunded() {
     let out = d.settle(&d.t.relayer, &a2, &b2).await;
     assert!(has(&out, "mtx_trade refused: not a key of the subject"), "{:?}", out.logs());
     assert!(out.is_success() && has(&out, r#""event":"match_failed""#), "{:?}", out.logs());
+    assert!(has(&out, &format!("{},{}", legs_json(&a2, &b2), refunded_json(&[&b2]))), "{:?}", out.logs());
     assert_eq!((d.bal(&d.b, &bob).await, d.bal(&d.b, &d.dex_h()).await, d.bal(&d.t.token, &e).await), (60, 0, 100));
     assert!(d.filled(&b2).await, "bob's refunded order stays closed");
 }
@@ -461,6 +486,7 @@ async fn refund_expired_after_lost_callback() {
         println!("  receipt {} {:.3} Tgas {:?}", o.executor_id, o.gas_burnt.as_gas() as f64 / 1e12, o.logs.first());
     }
     assert!(has(&out, r#""event":"match_failed""#), "{:?}", out.logs());
+    assert!(has(&out, &format!("{},{}", legs_json(&a, &bl), refunded_json(&[&a, &bl]))), "{:?}", out.logs());
     assert_eq!((d.bal(&d.t.token, &alice).await, d.bal(&d.b, &bob).await), (100, 60), "both sellers refunded");
     assert_eq!((d.bal(&d.t.token, &d.dex_h()).await, d.bal(&d.b, &d.dex_h()).await), (0, 0), "escrow empty");
     assert_eq!((d.pending(id).await, d.usage(&d.dex).await), (None, ud), "pruned");
@@ -627,22 +653,27 @@ async fn no_partial_fill() {
     assert!(failed_with(&out, IN_SETTLE), "{:?}", out.failures());
 }
 
-/// The callback's gas is reserved before any leg runs: `settle` refuses a prepaid gas below the minimum.
+/// The callback's and both legs' gas (derived from each leg's auth) is reserved before any leg runs: `settle` refuses a
+/// prepaid gas below `settle_gas`; at exactly `settle_gas` two ed25519 legs settle, each within its gas / 1.2.
 #[tokio::test]
 async fn settle_short_gas_refused() {
     let d = setup_dex().await;
     let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
     let (a, bl) = d.pair(&erin, &bobk).await;
-    let out = d.settle_gas(&d.t.relayer, &a, &bl, Gas::from_gas(SETTLE_MIN_GAS.as_gas() - 1)).await;
+    let need = settle_gas(&a.auth, &bl.auth);
+    assert_eq!(need.as_tgas(), 9 + 18 + 7 + 7);
+    let out = d.settle_gas(&d.t.relayer, &a, &bl, Gas::from_gas(need.as_gas() - 1)).await;
     assert!(failed_with(&out, SHORT_GAS), "{:?}", out.failures());
     assert_eq!(d.bal(&d.t.token, &erin.ua()).await, 100);
-    let out = d.settle_gas(&d.t.relayer, &a, &bl, Gas::from_gas(SETTLE_MIN_GAS.as_gas())).await;
-    assert!(out.is_success(), "{:?}", out.failures());
+    let out = d.settle_gas(&d.t.relayer, &a, &bl, need).await;
+    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
+    d.legs_within(&out, &a, &bl);
 }
 
 /// Ruling (T8 pre-flight): `settle`'s gas pinned — two passkey legs (the costliest single-key kind), both paid out, at
-/// exactly `SETTLE_MIN_GAS` prepaid; each receipt within its static gas / 1.2 (legs: `GAS_LEG_MIN`; `on_legs`:
-/// `GAS_ON_LEGS` less its two payouts).
+/// exactly `settle_gas` prepaid; each receipt within its static gas / 1.2 (legs: `leg_gas`; `on_legs`: `GAS_ON_LEGS`
+/// less its two payouts).
 #[tokio::test]
 async fn settle_gas_pin() {
     let d = setup_dex().await;
@@ -652,7 +683,7 @@ async fn settle_gas_pin() {
     d.fund(&d.b, &hb, 60).await;
     let a = d.leg(&pa, &ha, d.order(true, 100, 50), [0xa0; 32], 0);
     let bl = d.leg(&pb, &hb, d.order(false, 60, 100), [0xb0; 32], 0);
-    let out = d.settle_gas(&d.t.relayer, &a, &bl, SETTLE_MIN_GAS).await;
+    let out = d.settle_gas(&d.t.relayer, &a, &bl, settle_gas(&a.auth, &bl.auth)).await;
     assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
     assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "every receipt at the minimum: {:?}", out.failures());
     let tg = |g: u64| g as f64 / 1e12;
@@ -672,14 +703,63 @@ async fn settle_gas_pin() {
         }
     }
     let total = tgas(&out);
-    println!("settle_gas_pin: total {total:.3} Tgas (pin {SETTLE_TGAS_PIN}, prepaid {} Tgas); legs {legs:?}; on_legs {on_legs:.3}; payouts {payouts:?}", SETTLE_MIN_GAS.as_tgas());
+    println!("settle_gas_pin: total {total:.3} Tgas (pin {SETTLE_TGAS_PIN}, prepaid {} Tgas); legs {legs:?}; on_legs {on_legs:.3}; payouts {payouts:?}", settle_gas(&a.auth, &bl.auth).as_tgas());
     assert_eq!((legs.len(), payouts.len()), (2, 2));
     assert!(total <= SETTLE_TGAS_PIN / 1.2, "settle {total} Tgas > pin {SETTLE_TGAS_PIN} / 1.2");
     let g = |x: near_sdk::Gas| tg(x.as_gas());
-    assert!(legs.iter().all(|&l| l <= g(GAS_LEG_MIN) / 1.2), "passkey leg over GAS_LEG_MIN / 1.2");
+    d.legs_within(&out, &a, &bl);
     assert!(payouts.iter().all(|&p| p <= g(GAS_PAYOUT) / 1.2), "payout over GAS_PAYOUT / 1.2");
     // on_legs prepays its payouts' static gas and their exec fees (each ≤ the payout's burnt gas)
     let used = (on_legs + payouts.iter().sum::<f64>()) * 1.2 + 2.0 * g(GAS_PAYOUT);
     assert!(used <= g(GAS_ON_LEGS), "on_legs + payouts: {used} Tgas with margin > GAS_ON_LEGS");
 }
 
+
+/// Ruling T8-I2: a passkey msig leg gets `leg_gas` = base + 25 Tgas per member signature. Against an ed25519 counter-leg,
+/// 10 passkey signatures settle within 300 Tgas prepaid (9 + 18 + 256 + 7 = 290); an 11th is refused at `settle`, before
+/// any write or promise (nothing held, no leg runs, the relayer's deposit back).
+#[tokio::test]
+async fn settle_msig_leg_gas_limit() {
+    let d = setup_dex().await;
+    let bobk = Signer::ed("bobk");
+    let bob = d.t.near(&d.t.bob);
+    // a 12-member passkey msig (MSIG_MAX_MEMBERS), threshold 10, each weight 1
+    let mut ms: Vec<Signer> = (20..32).map(|i| Signer::pk(i, RP)).collect();
+    ms.sort_by_key(|s| s.key().id());
+    let body: Vec<u8> = ms.iter().flat_map(|s| [&ua::KIND_WEBAUTHN_P256.to_be_bytes()[..], &s.key().id(), &[0, 1]].concat()).collect();
+    let kd = [&[0u8, 10, 0, 12][..], &body].concat();
+    let m = Holder::Ua(ua::ua_of(KIND_MSIG, &kd));
+    d.fund(&d.t.token, &m, 100).await;
+    d.fund(&d.b, &bob, 60).await;
+    d.native_key(&d.b, &d.t.bob, &bobk).await;
+    let bl = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 0);
+    let one = d.leg(&ms[0], &m, d.order(true, 100, 50), [0xa0; 32], 0);
+    let msig = |n: usize| L {
+        auth: Auth::Msig { key_data: kd.clone(), sigs: ms[..n].iter().enumerate().map(|(i, s)| (i as u8, s.sign(&one.op, ORIGIN))).collect() },
+        ..one.clone()
+    };
+    let (a10, a11) = (msig(10), msig(11));
+    assert_eq!((settle_gas(&a10.auth, &bl.auth).as_tgas(), settle_gas(&a11.auth, &bl.auth).as_tgas()), (290, 315));
+    let r0 = d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    let out = d.settle(&d.t.relayer, &a11, &bl).await;
+    assert!(failed_with(&out, SHORT_GAS), "11 signatures refused at settle: {:?}", out.failures());
+    assert_eq!(out.receipt_outcomes().iter().filter(|o| o.executor_id != *d.t.relayer.id()).count(), 1, "no leg ran");
+    assert_eq!((d.bal(&d.t.token, &m).await, d.bal(&d.b, &bob).await), (100, 60), "nothing moved");
+    assert_eq!(d.pending(settle_id(&a11.op, &bl.op)).await, None, "nothing held");
+    let spent = r0 - d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    assert!(spent < NearToken::from_millinear(10).as_yoctonear(), "deposit back, only gas spent: {spent} yocto");
+    let out = d.settle(&d.t.relayer, &a10, &bl).await;
+    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
+    let [lm, le] = d.legs_within(&out, &a10, &bl);
+    for o in out.receipt_outcomes() {
+        let g = o.gas_burnt.as_gas() as f64 / 1e12;
+        if o.executor_id == *d.dex.id() && o.logs.is_empty() && g > 1.0 {
+            assert!(g <= GAS_SETTLE_SELF.as_gas() as f64 / 1e12 / 1.2, "settle receipt {g} Tgas over GAS_SETTLE_SELF / 1.2");
+            println!("  settle receipt {g:.3} Tgas");
+        }
+    }
+    assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await), (100, 60));
+    println!("settle_msig_leg_gas_limit: 10-signature passkey msig leg {lm:.3} Tgas (leg_gas {} Tgas), ed25519 leg {le:.3} Tgas; \
+        total {:.3} Tgas at 300 prepaid; 11 signatures refused (settle_gas 315 Tgas)", leg_gas(&a10.auth).as_tgas(), tgas(&out));
+}
