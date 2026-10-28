@@ -135,3 +135,11 @@ MBR (uALGO): router none (stateless; its address must hold the 100,000 base: an 
 executor salt: puyapy 5.10.1 salts LogicSigs off-curve by default with a trailing `intcblock 1 s` chosen per program hash, so s depends on the router id (measured: ids 1 and 0xabcdef salted, 1001 / 1234 / 7 not) -> built with autosalt=False (puyapy warns: the address may be on-curve). Experiment on this algod (future consensus): on-curve and off-curve LogicSigs at AVM 10 / 11 / 12 are both accepted as senders; an on-curve address has no known private key (sha512_256 output, discrete log)
 executor vector: router app 1002 -> GNXUIEQHOIGFOLL3CR273L374OJSO53CGASDNLEBANRGH6GHPYXWRPI24M (algorand-vectors.json "executor")
 rc=0
+
+## T15 fix 1 (Ruling T15-salt: creation-time executor salt) at commit 22296ddc + the fix-1 tree
+executor program = prefix 8 B ‖ router id 8 B ‖ suffix 66 B ‖ 20 01 salt (intcblock 1 salt, dead code after the final return) = 85 B; salt < 128 = the router's create argument (one global uint), the lowest that makes sha512_256("Program" ‖ program) off-curve (go-algorand IsEdwards25519Point / puya is_ed25519_point predicate; the test cross-checks the stdlib copy on 800 programs)
+22296ddc executor without a salt, router ids 1000..1019: on-curve for 1002, 1003, 1009, 1010, 1012, 1013, 1014, 1017, 1018 (fix-1 RED log)
+executor vector: router 1002 -> salt 2, PPJPQNRRHPOJNZGCPZ7YDIO55QC24JMPHPMZ3JUPMP43RIVNXERC4B7DLY (off-curve)
+relay group opcode budget (consumed, inner app calls): {'ping, native payer': (3738, 5), 'ping, ed25519 UA payer': (4411, 5), 'ping, passkey UA payer': (6506, 8), 'ed25519 UA transfer, passkey UA payer': (9758, 13), 'msig 3 passkey transfer, passkey UA payer': (22294, 31), 'msig 3 passkey transfer, msig 3 passkey payer': (32403, 45)} (+9 each: the salt global read; pins unchanged)
+program size (B): relayfee approval 857 (was 818), clear 4; executor 85 (the test's print still names the 82 B template parts); only the relayfee hash changed: 638272e9752afda65dd1b5ad67d6fa818fe140e437ae9713993a2c79f980bda5
+rc=0

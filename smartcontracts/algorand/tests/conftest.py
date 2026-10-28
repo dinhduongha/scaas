@@ -340,10 +340,34 @@ EXEC_PREFIX = open(os.path.join(OUT, 'Executor.prefix.bin'), 'rb').read()
 EXEC_SUFFIX = open(os.path.join(OUT, 'Executor.suffix.bin'), 'rb').read()
 
 
+ED_P = 2**255 - 19
+ED_D = (-121665 * pow(121666, ED_P - 2, ED_P)) % ED_P
+
+
+def on_curve(key):
+    """32 bytes decode to an ed25519 point (the broad predicate of go-algorand basics.IsEdwards25519Point / puya's
+    autosalt): x^2 = (y^2 - 1) / (d y^2 + 1) has a root mod p."""
+    y = (int.from_bytes(key, 'little') & ((1 << 255) - 1)) % ED_P
+    u, v = (y * y - 1) % ED_P, (ED_D * y * y + 1) % ED_P
+    x = (u * pow(v, 3, ED_P) * pow(u * pow(v, 7, ED_P) % ED_P, (ED_P - 5) // 8, ED_P)) % ED_P
+    return (v * x * x) % ED_P in (u % ED_P, (-u) % ED_P)
+
+
+def exec_program(router_id, salt):
+    """The executor LogicSig of router `router_id`: the template around its id (u64 BE), then the dead-code salt
+    `intcblock 1 salt` (20 01 salt) after the final return (T15 fix 1)."""
+    return EXEC_PREFIX + router_id.to_bytes(8, 'big') + EXEC_SUFFIX + bytes([0x20, 1, salt])
+
+
+def exec_salt(router_id):
+    """The lowest salt < 128 whose executor address is off-curve (no ed25519 key can exist for it)."""
+    return next(s for s in range(128)
+                if not on_curve(hashlib.new('sha512_256', b'Program' + exec_program(router_id, s)).digest()))
+
+
 class Router(Deployed):
     def program(self):
-        """The executor LogicSig of this router: the template around its app id (u64 big-endian)."""
-        return EXEC_PREFIX + self.id.to_bytes(8, 'big') + EXEC_SUFFIX
+        return exec_program(self.id, self.salt)
 
     @property
     def lsig(self):
@@ -356,10 +380,38 @@ class Router(Deployed):
 
 def deploy_router(dispenser):
     """A router, funded with its 100,000 µALGO base minimum (an account below it cannot receive the MBR payment it
-    forwards); stateless, so tests share one unless they fund its executor."""
-    d = deploy(dispenser, 'RelayFee', [])
-    r = Router(d.app, d.id)
-    DEPLOYED[r.id] = r
+    forwards); stateless, so tests share one unless they fund its executor. Its creation salt (T15 fix 1) is chosen
+    for the app id the create will get (predicted by simulate) so that the executor address is off-curve; then
+    `executor()` must equal the SDK LogicSig address and be off-curve — a miss (another app created in between)
+    deploys again."""
+    a = spec('RelayFee')
+    for _ in range(3):
+        created = []
+
+        def create(salt, simulate):
+            atc = AtomicTransactionComposer()
+            atc.add_method_call(0, a.methods['create'], dispenser.addr, sp(), dispenser.signer, [salt],
+                                approval_program=a.approval, clear_program=a.clear,
+                                global_schema=transaction.StateSchema(a.schema['ints'], a.schema['bytes']),
+                                local_schema=transaction.StateSchema(0, 0))
+            if simulate:
+                r = atc.simulate(ALGOD, models.SimulateRequest(txn_groups=[]))
+                return r.simulate_response['txn-groups'][0]['txn-results'][0]['txn-result']['application-index']
+            return ALGOD.pending_transaction_info(atc.execute(ALGOD, 4).tx_ids[0])['application-index']
+        predicted = create(0, True)
+        salt = exec_salt(predicted)
+        app_id = create(salt, False)
+        created.append(app_id)
+        r = Router(a, app_id)
+        r.salt = salt
+        DEPLOYED[r.id] = r
+        fund(dispenser, r.address, 100_000)
+        if app_id == predicted:
+            break
+    else:
+        raise AssertionError('router app id not predicted three times: %s' % created)
+    v, _, fail, _ = sim(VIEWER, r, 'executor', [], extra_budget=20_000)
+    assert fail is None and v == r.executor and not on_curve(encoding.decode_address(v)), (v, r.executor)
     return r
 
 

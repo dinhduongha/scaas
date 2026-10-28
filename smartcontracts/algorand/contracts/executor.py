@@ -8,14 +8,16 @@ the rest (rule 13: the target app exists and is not the router, no `add_key_nati
 
 Template `ROUTER_APP_ID`: 8 bytes, the router app id big-endian. `build.sh algorand` splits the compiled program around
 it into `EXEC_PREFIX ‖ ROUTER_APP_ID ‖ EXEC_SUFFIX` and bakes both parts into the router, which derives this address on
-chain: `sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(router app id) ‖ EXEC_SUFFIX)` (no admin step).
+chain: `sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(router app id) ‖ EXEC_SUFFIX ‖ 20 01 salt)` (no admin step; the
+salt, fixed at the router's creation, is dead code after the final return that makes the address off-curve).
 """
 from algopy import Bytes, Global, OnCompleteAction, TemplateVar, TransactionType, Txn, arc4, gtxn, logicsig, op
 
 from common import RELAY
 
 
-# no off-curve salt: puyapy picks it per program hash, so it would depend on the router id and break the split
+# no puyapy salt (it picks one per program hash, so it would depend on the router id and break the split): the
+# router appends its own creation-time salt `intcblock 1 s` after the final return instead (T15 fix 1)
 @logicsig(name="Executor", autosalt=False)
 def executor() -> bool:
     assert Txn.type_enum == TransactionType.ApplicationCall, "only an app call"

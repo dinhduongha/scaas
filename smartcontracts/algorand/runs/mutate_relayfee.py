@@ -75,6 +75,10 @@ M = [
     def budget(self) -> None:''', ACTIONS),
     ('R25 inner payment closes to the token', F, 'itxn.Payment(receiver=app.address, amount=fwd, fee=0)',
      'itxn.Payment(receiver=app.address, amount=fwd, fee=0, close_remainder_to=app.address)', INNER),
+    # router: creation salt (T15 fix 1)
+    ('S1 salt >= 128 accepted', F, 'assert salt.as_uint64() < 128, ', AT, T + 'test_router_salt_below_128'),
+    ('S2 salt not in the derivation', F, '+ b"\\x20\\x01" + op.extract(op.itob(self.salt.value), 7, 1)))', '))', ADDR),
+    ('S3 salt not stored', F, '        self.salt.value = salt.as_uint64()\n', '        self.salt.value = UInt64(0)\n', ADDR),
     # executor LogicSig
     ('E1 only an app call', E, 'assert Txn.type_enum == TransactionType.ApplicationCall, ', AT, REKEY),
     ('E2 only NoOp', E, 'assert Txn.on_completion == OnCompleteAction.NoOp, "only NoOp"', 'assert True, "only NoOp"', CLEAR),
@@ -88,7 +92,8 @@ M = [
     ('E8 next is on the router app (weakened to >=: the template constant must stay in the program)', E,
      'assert nxt.app_id.id == op.btoi(TemplateVar[Bytes]("ROUTER_APP_ID")), ',
      'assert nxt.app_id.id >= op.btoi(TemplateVar[Bytes]("ROUTER_APP_ID")), ', NEXT),
-    ('E9 next is NoOp (by construction: the router refuses another relay action)', E,
+    ('E9 next is NoOp (by construction: ClearState by the protocol opt-in requirement, OptIn / CloseOut by the '
+     'router\'s ARC-4 dispatch)', E,
      'assert nxt.on_completion == OnCompleteAction.NoOp, ', AT, NEXT),
     ('E10 next is relay (selector)', E, 'assert nxt.app_args(0) == arc4.arc4_signature(RELAY), ', AT, NEXT),
     # dex: relayed settle submitter

@@ -190,15 +190,34 @@ relay('router_4096', [selector(METHOD), filler('router_4096', 4096 - 8 - 1 - 2 -
 
 
 # ---------------------------------------------------------------- executor (§4.8): the LogicSig of router ROUTER_APP
+ED_P = 2**255 - 19
+ED_D = (-121665 * pow(121666, ED_P - 2, ED_P)) % ED_P
+
+
+def on_curve(key):
+    """32 bytes decode to an ed25519 point (go-algorand basics.IsEdwards25519Point, puya's autosalt predicate)."""
+    y = (int.from_bytes(key, 'little') & ((1 << 255) - 1)) % ED_P
+    u, v = (y * y - 1) % ED_P, (ED_D * y * y + 1) % ED_P
+    x = (u * pow(v, 3, ED_P) * pow(u * pow(v, 7, ED_P) % ED_P, (ED_P - 5) // 8, ED_P)) % ED_P
+    return (v * x * x) % ED_P in (u % ED_P, (-u) % ED_P)
+
+
 def executor_vector():
-    """The executor program = `executor_prefix ‖ router app id (u64 BE) ‖ executor_suffix` (artifacts.json, T15: the
-    built template); its address = sha512_256("Program" ‖ program), which the router derives on chain."""
+    """The executor program = `executor_prefix ‖ router app id (u64 BE) ‖ executor_suffix ‖ 20 01 salt` (artifacts.json,
+    T15: the built template; fix 1: the dead-code `intcblock 1 salt` after the final return, salt < 128 fixed at the
+    router's creation, the lowest that makes the address off-curve); its address = sha512_256("Program" ‖ program),
+    which the router derives on chain."""
     art = json.load(open(os.path.join(V.REPO, 'smartcontracts', 'algorand', 'artifacts.json')))['relayfee']
     pre, suf = bytes.fromhex(art['executor_prefix']), bytes.fromhex(art['executor_suffix'])
-    prog = pre + ROUTER_APP.to_bytes(8, 'big') + suf
-    return {'note': 'program = prefix ‖ u64 BE router app id ‖ suffix; address = sha512_256("Program" ‖ program)',
-            'routerApp': ROUTER_APP, 'prefix': V.hx(pre), 'suffix': V.hx(suf), 'program': V.hx(prog),
-            'address': address(sha512_256(b'Program' + prog))}
+
+    def prog(s):
+        return pre + ROUTER_APP.to_bytes(8, 'big') + suf + bytes([0x20, 1, s])
+    salt = next(s for s in range(128) if not on_curve(sha512_256(b'Program' + prog(s))))
+    return {'note': 'program = prefix ‖ u64 BE router app id ‖ suffix ‖ 20 01 salt (intcblock 1 salt, dead code); salt '
+                    '< 128 = the router\'s creation argument, the lowest making the address off-curve; address = '
+                    'sha512_256("Program" ‖ program)',
+            'routerApp': ROUTER_APP, 'prefix': V.hx(pre), 'suffix': V.hx(suf), 'salt': salt, 'program': V.hx(prog(salt)),
+            'address': address(sha512_256(b'Program' + prog(salt)))}
 
 
 # ---------------------------------------------------------------- MBR (§2 row 15): 2500 + 400·(name + value) µALGO
@@ -523,8 +542,9 @@ def selftest(doc):
         assert V.unhx(f['extra']) == V.sha256(V.unhx(rows[n]['params'])) and f['to'] == f['from']
     e = doc['executor']
     prog = V.unhx(e['program'])
-    assert prog == V.unhx(e['prefix']) + struct.pack('>Q', e['routerApp']) + V.unhx(e['suffix'])
-    assert e['address'] == address(sha512_256(b'Program' + prog))
+    assert prog == (V.unhx(e['prefix']) + struct.pack('>Q', e['routerApp']) + V.unhx(e['suffix'])
+                    + bytes([0x20, 1, e['salt']]))
+    assert e['address'] == address(sha512_256(b'Program' + prog)) and not on_curve(sha512_256(b'Program' + prog))
     for b in doc['mbr']['boxes']:
         assert b['microAlgo'] == 2500 + 400 * (b['nameLength'] + b['valueLength']) and b['nameLength'] <= 64
 

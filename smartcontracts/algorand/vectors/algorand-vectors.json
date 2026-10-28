@@ -1513,12 +1513,13 @@
   "note": "dex.settle(order_a, op_a, auth_a, order_b, op_b, auth_b, mbr): fill-or-kill 100 >= 100 (B min_buy) and 60 >= 50 (A min_buy); erin receives 60 of token 1007, carol 100 of token 1001; event Matched(settle_id, 1001, 1007, digest a, digest b)"
  },
  "executor": {
-  "note": "program = prefix ‖ u64 BE router app id ‖ suffix; address = sha512_256(\"Program\" ‖ program)",
+  "note": "program = prefix ‖ u64 BE router app id ‖ suffix ‖ 20 01 salt (intcblock 1 salt, dead code); salt < 128 = the router's creation argument, the lowest making the address off-curve; address = sha512_256(\"Program\" ‖ program)",
   "routerApp": 1002,
   "prefix": "0x0b20020601260108",
   "suffix": "0x3110221244311914443120320312443109320312443115320312443101144431162308493810221244493818281712444938191444391a0080044af7ebf512442343",
-  "program": "0x0b2002060126010800000000000003ea3110221244311914443120320312443109320312443115320312443101144431162308493810221244493818281712444938191444391a0080044af7ebf512442343",
-  "address": "GNXUIEQHOIGFOLL3CR273L374OJSO53CGASDNLEBANRGH6GHPYXWRPI24M"
+  "salt": 2,
+  "program": "0x0b2002060126010800000000000003ea3110221244311914443120320312443109320312443115320312443101144431162308493810221244493818281712444938191444391a0080044af7ebf512442343200102",
+  "address": "PPJPQNRRHPOJNZGCPZ7YDIO55QC24JMPHPMZ3JUPMP43RIVNXERC4B7DLY"
  },
  "routerCall": {
   "layout": "target app id (u64 BE) ‖ u8 n ‖ (u16 BE len ‖ arg)×n; arg 0 = the ARC-4 selector",

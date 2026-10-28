@@ -19,8 +19,9 @@ from algosdk.error import AlgodHTTPError
 from algosdk.v2client import models
 
 from conftest import (ALGOD, DEPLOYED, EXEC_PREFIX, EXEC_SUFFIX, MBR_BALANCE, MBR_LANE, MIN_FEE, OUT, ROOT, SLOT, Z32,
-                      EdKey, MsigKey, Refused, deploy, deploy_router, digest, explain, fund, genesis, holder, keccak,
-                      native, pay_lane, rec_mbr, refused_actions, run, sha256, sign_as, sp, view)
+                      EdKey, MsigKey, Refused, deploy, deploy_router, digest, exec_salt, explain, fund, genesis, holder,
+                      keccak, native, on_curve, exec_program, pay_lane, rec_mbr, refused_actions, run, sha256,
+                      sign_as, sp, spec, view)
 from test_account import ChromeKey, arg_bytes
 from test_dex import LANE_A, MBR_ORDER, deploy_dex, min_nonce_key, order_key, pair, setup_legs  # noqa: F401 (pair)
 from test_mandate import (FEE_CREDIT, MBR_MANDATE, Group, Man, amount_box, bal, events, fund_ua, patch, sim_view,
@@ -494,18 +495,47 @@ def test_executor_transfer_moves_nothing(router, token, lane):
 
 
 def test_executor_address_matches_offchain_derivation(router, fresh_router):
-    """`executor()` = sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(router id) ‖ EXEC_SUFFIX), the LogicSig address the
-    SDK derives from the template; the template is the built program around the router-id constant, and
-    artifacts.json records it."""
+    """`executor()` = sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(router id) ‖ EXEC_SUFFIX ‖ 20 01 salt), the LogicSig
+    address the SDK derives: the template is the built program around the router-id constant (artifacts.json records
+    it), the salt (T15 fix 1) a dead-code `intcblock 1 salt` after the final return, fixed at the router's creation —
+    the lowest < 128 that makes the address off-curve (no ed25519 key can exist for the executor). Off-chain
+    `on_curve` agrees with puya's go-algorand predicate on salted and unsalted programs."""
     import hashlib
+    from puya.utils import is_ed25519_point
     art = json.load(open(os.path.join(ROOT, 'artifacts.json')))['relayfee']
     assert bytes.fromhex(art['executor_prefix']) == EXEC_PREFIX and bytes.fromhex(art['executor_suffix']) == EXEC_SUFFIX
     assert EXEC_PREFIX + SENTINEL + EXEC_SUFFIX == open(os.path.join(OUT, 'Executor.bin'), 'rb').read()
     for r in (router, fresh_router):
-        prog = EXEC_PREFIX + r.id.to_bytes(8, 'big') + EXEC_SUFFIX
-        mine = encoding.encode_address(hashlib.new('sha512_256', b'Program' + prog).digest())
+        salt = gstate(r)['salt']
+        prog = EXEC_PREFIX + r.id.to_bytes(8, 'big') + EXEC_SUFFIX + bytes([0x20, 1, salt])
+        key = hashlib.new('sha512_256', b'Program' + prog).digest()
+        mine = encoding.encode_address(key)
         assert view(r, 'executor') == mine == transaction.LogicSigAccount(prog).address() == r.executor
+        assert salt == exec_salt(r.id) < 128 and not on_curve(key)
     assert router.executor != fresh_router.executor
+    seen = set()
+    for i in range(1, 400):     # the predicate, and that a salt is needed for some ids (about half are on-curve)
+        for s in (None, 0):
+            p = EXEC_PREFIX + i.to_bytes(8, 'big') + EXEC_SUFFIX + (bytes([0x20, 1, s]) if s is not None else b'')
+            k = hashlib.new('sha512_256', b'Program' + p).digest()
+            assert on_curve(k) == is_ed25519_point(k)
+            seen.add(on_curve(k))
+    assert seen == {True, False} and max(exec_salt(i) for i in range(1, 400)) > 0
+
+
+def test_router_salt_below_128(dispenser):
+    """The creation salt is one byte below 128 (a single-byte `intcblock` immediate): 128 and above refused; any lower
+    one is stored and enters `executor()` (the deployer's job to pick the lowest off-curve one: deploy_router)."""
+    a = spec('RelayFee')
+    for salt in (128, 255):
+        with pytest.raises(AlgodHTTPError) as e:     # the app never exists, so its pc is read from the spec
+            deploy(dispenser, 'RelayFee', [salt], fund_app=0)
+        assert a.errors[int(re.search(r'assert failed pc=(\d+)', str(e.value)).group(1))] == 'salt must be below 128'
+    assert a.schema == {'ints': 1, 'bytes': 0}
+    d = deploy(dispenser, 'RelayFee', [127], fund_app=0)   # any salt below 128 is stored and derived (here: not the lowest)
+    DEPLOYED[d.id] = d
+    assert gstate(d) == {'salt': 127}
+    assert view(d, 'executor') == transaction.LogicSigAccount(exec_program(d.id, 127)).address()
 
 
 def test_relay_ref_vectors(router):
@@ -524,8 +554,10 @@ def test_relay_ref_vectors(router):
         mine = keccak(b'scaas.relayfee', genesis(), app_key(app_id), keccak(call), salt)
         assert bytes(view(router, 'relay_ref', call, salt)) == mine, r['name']
     e = V['executor']
-    prog = bytes.fromhex(e['prefix'][2:]) + e['routerApp'].to_bytes(8, 'big') + bytes.fromhex(e['suffix'][2:])
+    prog = (bytes.fromhex(e['prefix'][2:]) + e['routerApp'].to_bytes(8, 'big') + bytes.fromhex(e['suffix'][2:])
+            + bytes([0x20, 1, e['salt']]))
     assert prog.hex() == e['program'][2:] and transaction.LogicSigAccount(prog).address() == e['address']
+    assert e['salt'] == exec_salt(e['routerApp']) and not on_curve(encoding.decode_address(e['address']))
     assert (bytes.fromhex(e['prefix'][2:]), bytes.fromhex(e['suffix'][2:])) == (EXEC_PREFIX, EXEC_SUFFIX)
 
 
@@ -707,13 +739,15 @@ def test_dex_bound_order_via_router(router, pair, lane, make, dispenser):
 
 
 def test_router_update_delete_optin_refused(router, dispenser, make):
-    """R11 / §4.9: the router refuses Update / Delete (creator included) and OptIn / CloseOut; it has no state."""
+    """R11 / §4.9: the router refuses Update / Delete (creator included) and OptIn / CloseOut; its only state is the
+    creation salt (one global uint, no method writes it)."""
     refused_actions(router, dispenser, ['update', 'delete'])
     refused_actions(router, make(1_000_000), ['optin', 'closeout'])
     assert ALGOD.application_info(router.id)['params']['approval-program'] == base64.b64encode(
         router.app.approval).decode()
     s = router.app.spec['state']['schema']
-    assert s['local'] == {'ints': 0, 'bytes': 0} and s['global'] == {'ints': 0, 'bytes': 0}
+    assert s['local'] == {'ints': 0, 'bytes': 0} and s['global'] == {'ints': 1, 'bytes': 0}
+    assert gstate(router) == {'salt': router.salt}
 
 
 INNER_FIELDS = re.compile(r'itxn_field (RekeyTo|CloseRemainderTo|AssetCloseTo)\b')

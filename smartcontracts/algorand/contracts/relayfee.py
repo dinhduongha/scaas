@@ -1,5 +1,6 @@
 """SCaaS relay-fee router on Algorand (near-algorand T15; spec §4.8, §2 rows 8–15, CTR-MTX-16 / CTR-MTX-27; rulings R2,
-R3, T15 pre-flight (a)–(j)). Stateless: no box, no global or local state, no admin.
+R3, T15 pre-flight (a)–(j), Ruling T15-salt). Stateless but for its creation salt (one global uint, no method writes
+it): no box, no local state, no admin.
 
 A payer pays a relayer for one call on any app (the token's own entries, `account` key ops, `mandate`, `dex`, third-party
 apps) in one atomic group — no escrow, no refund, no residual (CTR-MTX-16):
@@ -30,8 +31,8 @@ apps) in one atomic group — no escrow, no refund, no residual (CTR-MTX-16):
 Inner fees 0 (the lane pools them); no inner transaction rekeys or closes. No local state (OptIn refused); Update /
 Delete refused (the ARC-4 router accepts neither).
 """
-from algopy import (Account, Application, Bytes, Global, OnCompleteAction, OpUpFeeSource, TemplateVar, TransactionType,
-                    Txn, UInt64, arc4, ensure_budget, gtxn, itxn, op, subroutine, urange)
+from algopy import (Account, Application, Bytes, Global, GlobalState, OnCompleteAction, OpUpFeeSource, TemplateVar,
+                    TransactionType, Txn, UInt64, arc4, ensure_budget, gtxn, itxn, op, subroutine, urange)
 
 from common import KIND_ADDRESS, MTX_PAY, Bytes32, Holder, MetaOp, pay_lane, relay_ref
 
@@ -43,9 +44,16 @@ RELAY_COST = 1000
 
 
 class RelayFee(arc4.ARC4Contract):
+    def __init__(self) -> None:
+        self.salt = GlobalState(UInt64, key="salt")
+
     @arc4.abimethod(create="require")
-    def create(self) -> None:
-        pass
+    def create(self, salt: arc4.UInt8) -> None:
+        """`salt` (T15 fix 1): the executor program ends with the dead code `intcblock 1 salt` (20 01 salt) after its
+        final return; the deployer picks the lowest salt that makes the executor address off-curve (no ed25519 key can
+        exist for it, as puyapy's autosalt intends) for this app's id. Below 128: a one-byte `intcblock` immediate."""
+        assert salt.as_uint64() < 128, "salt must be below 128"
+        self.salt.value = salt.as_uint64()
 
     @arc4.baremethod(allow_actions=["NoOp"])
     def budget(self) -> None:
@@ -62,7 +70,7 @@ class RelayFee(arc4.ARC4Contract):
         assert exists, "target app missing (rule 13)"
         assert target != Global.current_application_id, "target is the router"
         assert t.on_completion == OnCompleteAction.NoOp, "target call must be NoOp (rule 13)"
-        exe = executor_address()
+        exe = self._executor()
         assert t.sender == exe, "target sender is not the executor"
         assert t.num_app_args == 0 or t.app_args(0) != arc4.arc4_signature(ADD_KEY_NATIVE), \
             "add_key_native is never relayed (no key for the executor)"
@@ -97,14 +105,15 @@ class RelayFee(arc4.ARC4Contract):
 
     @arc4.abimethod(readonly=True)
     def executor(self) -> arc4.Address:
-        return arc4.Address(executor_address())
+        return arc4.Address(self._executor())
 
-
-@subroutine
-def executor_address() -> Account:
-    """The executor LogicSig of this router: `sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(app id) ‖ EXEC_SUFFIX)`."""
-    return Account(op.sha512_256(b"Program" + TemplateVar[Bytes]("EXEC_PREFIX")
-                                 + op.itob(Global.current_application_id.id) + TemplateVar[Bytes]("EXEC_SUFFIX")))
+    @subroutine
+    def _executor(self) -> Account:
+        """The executor LogicSig of this router: `sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(app id) ‖ EXEC_SUFFIX ‖
+        20 01 salt)`."""
+        return Account(op.sha512_256(b"Program" + TemplateVar[Bytes]("EXEC_PREFIX")
+                                     + op.itob(Global.current_application_id.id) + TemplateVar[Bytes]("EXEC_SUFFIX")
+                                     + b"\x20\x01" + op.extract(op.itob(self.salt.value), 7, 1)))
 
 
 @subroutine
