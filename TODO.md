@@ -78,7 +78,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      T17 node `9777679f`..`d784f264`, T18 clients `a0ab2e47`/`e7c9e3c4`, T19 docs `f80f2e73`/`a3a02a1c`, T20 closing gates
      `67fa7a45`/`cecde76b`, final fix wave `deead173` (TON relayed-call pre-check, review minors M1–M13), records `4f12980c`, logs `6b2cdd89`,
      re-review fixes `6c31fbac` (re-review F1/F2/m1–m5, TON Mandate `get_lane_nonce`), records `2ffa9c73`/`0beebc7c`,
-     logs `c043e5b7`, second re-review `f0d4025e` (TON payment leg: LANE_TTL, balance) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
+     logs `c043e5b7`, second re-review `f0d4025e` (TON payment leg: LANE_TTL, balance), records/logs
+     `afb8dd1d`..`31b02ed1`, third re-review `07d2f411` (payment validity floor) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
      (relayed overhead +7.4 k to +7.6 k per call; `n2560-kmax16384` `ROLL_MAX` 64 keeps 6,032 gas, was 15,281: any further
      token-path growth above ~6 k forces 48). Next: NEAR and Algorand on their own branch from `metatx-split` (owner
      2026-10-27; spec approved 2026-10-28; its plan is written in the main checkout, executes in parallel,
