@@ -25,8 +25,10 @@
 //!    return that failed (the refund not landed yet) leaves it as `Owed`, forwarded by `relay_timeout`.
 //!
 //! `relay_timeout(ref)`, anyone, after the deadline, while no settlement is in flight: refunds (the call's success can no
-//! longer be proven), or forwards an owed deposit. Each callback checks the entry's stage, so a late `on_hold` refunds
-//! what it held and a late `on_call` pays nothing; the token's held record makes release and refund exclusive anyway.
+//! longer be proven), or forwards an owed deposit. Each callback carries its entry's `id` (a per-router counter: after a
+//! timeout the same `ref` can open again) and checks the entry's id and stage, so a late `on_hold` refunds what it held,
+//! a late `on_call` pays nothing (a failure only returns its own deposit), and neither touches a newer entry of the same
+//! `ref` (review m1); the token's held record makes release and refund exclusive anyway.
 //! The router never pays itself or the executor (open mode `to == router` pays the relayer, `to == executor` is
 //! refused); it has no admin, no upgrade path and no access key (§3.9).
 use near_sdk::json_types::U128;
@@ -91,11 +93,13 @@ pub enum Stage {
     Owed,
 }
 
-/// An escrow entry: `payee` `None` = open mode (the relayer); `deposit` = this entry's storage, back to `relayer`;
-/// `owed`: the call failed and `target_deposit` goes back to the relayer through the executor.
+/// An escrow entry: `id` = the router's counter at `relay` (the callbacks' identity of it); `payee` `None` = open mode
+/// (the relayer); `deposit` = this entry's storage, back to `relayer`; `owed`: the call failed and `target_deposit` goes
+/// back to the relayer through the executor.
 #[near(serializers = [borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Pending {
+    pub id: u64,
     pub token: AccountId,
     pub target: AccountId,
     pub payer: Holder,
@@ -177,6 +181,8 @@ fn call(to: &AccountId, method: &str, args: Vec<u8>, deposit: u128, gas: Gas, we
 pub struct Router {
     executor: AccountId,
     pending: LookupMap<[u8; 32], Pending>,
+    /// The next entry's `id`.
+    next_id: u64,
 }
 
 impl Router {
@@ -218,8 +224,8 @@ impl Router {
         call(&self.executor, "return_deposit", borsh::to_vec(&(to, U128(amount))).unwrap(), 0, GAS_RELEASE, 0)
     }
 
-    fn on_settle_promise(r: &[u8; 32], released: bool) -> Promise {
-        call(&env::current_account_id(), "on_settle", borsh::to_vec(&(r, released)).unwrap(), 0, GAS_ON_SETTLE, 1)
+    fn on_settle_promise(r: &[u8; 32], id: u64, released: bool) -> Promise {
+        call(&env::current_account_id(), "on_settle", borsh::to_vec(&(r, id, released)).unwrap(), 0, GAS_ON_SETTLE, 1)
     }
 }
 
@@ -229,7 +235,7 @@ impl Router {
     #[init]
     #[private]
     pub fn new(#[serializer(borsh)] executor: AccountId) -> Self {
-        Self { executor, pending: LookupMap::new(b"p") }
+        Self { executor, pending: LookupMap::new(b"p"), next_id: 0 }
     }
 
     /// The transaction's value is `on_settle`'s: `true` = released (or `false`: refunded / hold refused).
@@ -252,6 +258,7 @@ impl Router {
         require!(env::prepaid_gas() >= relay_gas(&auth, target_gas), "prepaid gas below the relay minimum (hold, call, callbacks)");
         let payee = (op.to != Holder::Near(me.clone())).then(|| op.to.clone());
         let mut p = Pending {
+            id: self.next_id,
             token: token.clone(),
             target: target.clone(),
             payer: op.from.clone(),
@@ -270,22 +277,25 @@ impl Router {
         let floor = keep + env::storage_byte_cost().as_yoctonear() * PAYEE_REGISTRATION_BYTES as u128 + FLOOR_YOCTO;
         let attached = env::attached_deposit().as_yoctonear();
         require!(attached >= floor, "attached deposit below the escrow entry, a payee registration, 2 yoctoNEAR and target_deposit");
+        self.next_id += 1;
+        let id = p.id;
         let u0 = env::storage_usage();
         self.pending.insert(r, p);
         self.pending.flush();
         require!(env::storage_usage() - u0 == bytes, "escrow entry size differs from entry_bytes");
         let hold = call(&token, "relay_hold", borsh::to_vec(&(&op, &auth, &relayer)).unwrap(), attached - keep, hold_gas(&auth), 0);
         let next = Gas::from_gas(GAS_ON_HOLD.as_gas() + GAS_EXEC.as_gas() + target_gas.as_gas() + call_gas().as_gas());
-        hold.then(call(&me, "on_hold", borsh::to_vec(&(r, &token, &target, &method, &args, target_gas)).unwrap(), 0, next, 1))
+        hold.then(call(&me, "on_hold", borsh::to_vec(&(r, id, &token, &target, &method, &args, target_gas)).unwrap(), 0, next, 1))
     }
 
-    /// Step 3. `token`, `target`, `method`, `args`, `target_gas` come from `relay` (the call is not stored).
+    /// Step 3. `id`, `token`, `target`, `method`, `args`, `target_gas` come from `relay` (the call is not stored).
     #[private]
     #[result_serializer(borsh)]
     #[allow(clippy::too_many_arguments)]
     pub fn on_hold(
         &mut self,
         #[serializer(borsh)] pay_ref: [u8; 32],
+        #[serializer(borsh)] id: u64,
         #[serializer(borsh)] token: AccountId,
         #[serializer(borsh)] target: AccountId,
         #[serializer(borsh)] method: String,
@@ -293,8 +303,9 @@ impl Router {
         #[serializer(borsh)] target_gas: Gas,
     ) -> PromiseOrValue<bool> {
         let held = env::promise_result_checked(0, 1).is_ok_and(|v| v == [1]);
-        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.stage == Stage::Hold) else {
-            // the timeout ran first (and already returned the deposits): refund wins, the hold goes back
+        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.id == id && p.stage == Stage::Hold) else {
+            // the timeout ran first (and already returned the deposits): refund wins, the hold goes back. The key (router,
+            // ref) holds this relay's payment only: a newer entry's hold is refused while it is held.
             if held {
                 call(&token, "relay_refund", borsh::to_vec(&pay_ref).unwrap(), 0, GAS_RELEASE, 0).detach();
             }
@@ -311,22 +322,23 @@ impl Router {
         let (relayer, td) = (p.relayer.clone(), p.target_deposit);
         let exec = call(&self.executor, "exec", borsh::to_vec(&(&target, &method, &args, target_gas)).unwrap(), td, Gas::from_gas(GAS_EXEC.as_gas() + target_gas.as_gas()), 0);
         let me = env::current_account_id();
-        exec.then(call(&me, "on_call", borsh::to_vec(&(pay_ref, &relayer, U128(td))).unwrap(), 0, call_gas(), 1)).into()
+        exec.then(call(&me, "on_call", borsh::to_vec(&(pay_ref, id, &relayer, U128(td))).unwrap(), 0, call_gas(), 1)).into()
     }
 
-    /// Step 4. `relayer` and `target_deposit` come from `on_hold`, so a late call (after a timeout deleted the entry)
-    /// still returns a failed call's deposit; it pays nothing else.
+    /// Step 4. `id`, `relayer` and `target_deposit` come from `on_hold`, so a late call (after a timeout deleted the
+    /// entry, or a newer entry of the same ref opened) still returns its own failed call's deposit; it pays nothing else.
     #[private]
     #[result_serializer(borsh)]
     pub fn on_call(
         &mut self,
         #[serializer(borsh)] pay_ref: [u8; 32],
+        #[serializer(borsh)] id: u64,
         #[serializer(borsh)] relayer: AccountId,
         #[serializer(borsh)] target_deposit: U128,
     ) -> PromiseOrValue<bool> {
         let ok = !failed(0);
         let td = target_deposit.0;
-        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.stage == Stage::Call) else {
+        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.id == id && p.stage == Stage::Call) else {
             if !ok && td > 0 {
                 self.return_deposit(&relayer, td).detach();
             }
@@ -339,15 +351,20 @@ impl Router {
         if p.owed {
             settle = settle.and(self.return_deposit(&relayer, td));
         }
-        settle.then(Self::on_settle_promise(&pay_ref, ok)).into()
+        settle.then(Self::on_settle_promise(&pay_ref, id, ok)).into()
     }
 
     /// Step 5 (and the timeout's settlement). Results: the token call, then the deposit return when `owed`; only the
     /// return when the token was settled before (`Owed` retried by the timeout).
     #[private]
     #[result_serializer(borsh)]
-    pub fn on_settle(&mut self, #[serializer(borsh)] pay_ref: [u8; 32], #[serializer(borsh)] released: bool) -> bool {
-        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.stage == Stage::Settle) else { return false };
+    pub fn on_settle(
+        &mut self,
+        #[serializer(borsh)] pay_ref: [u8; 32],
+        #[serializer(borsh)] id: u64,
+        #[serializer(borsh)] released: bool,
+    ) -> bool {
+        let Some(p) = self.pending.get_mut(&pay_ref).filter(|p| p.id == id && p.stage == Stage::Settle) else { return false };
         let (token_ok, ret_ok) = match (env::promise_results_count(), p.owed) {
             (2, _) => (!failed(0), !failed(1)),
             (_, true) => (true, !failed(0)),
@@ -409,7 +426,7 @@ impl Router {
             (true, true) => Self::token_settle(&p, "relay_refund", &pay_ref).and(ret()),
             (false, _) => ret(),
         };
-        settle.then(Self::on_settle_promise(&pay_ref, false))
+        settle.then(Self::on_settle_promise(&pay_ref, p.id, false))
     }
 
     #[result_serializer(borsh)]
@@ -441,6 +458,7 @@ impl Router {
             Ok(_) => {
                 let cost = env::storage_byte_cost().as_yoctonear();
                 let p = Pending {
+                    id: 0,
                     token,
                     target,
                     payer: op.from.clone(),
@@ -506,6 +524,8 @@ mod tests {
     }
 
     const REF: [u8; 32] = [7; 32];
+    /// The live entry's id in these tests.
+    const ID: u64 = 2;
 
     fn ctx(results: Vec<PromiseResult>, now_s: u64) {
         let me: AccountId = "router.near".parse().unwrap();
@@ -518,8 +538,9 @@ mod tests {
     }
 
     fn router(stage: Stage, owed: bool) -> Router {
-        let mut r = Router { executor: "exec.near".parse().unwrap(), pending: LookupMap::new(b"p") };
+        let mut r = Router { executor: "exec.near".parse().unwrap(), pending: LookupMap::new(b"p"), next_id: 3 };
         let p = Pending {
+            id: ID,
             token: "token.near".parse().unwrap(),
             target: "target.near".parse().unwrap(),
             payer: Holder::Ua([1; 32]),
@@ -570,18 +591,49 @@ mod tests {
         for stage in [Stage::Hold, Stage::Settle, Stage::Owed] {
             ctx(vec![ok()], 0);
             let mut r = router(stage, false);
-            assert!(matches!(r.on_call(REF, relayer.clone(), U128(5)), PromiseOrValue::Value(false)));
+            assert!(matches!(r.on_call(REF, ID, relayer.clone(), U128(5)), PromiseOrValue::Value(false)));
             assert!(receipts().is_empty(), "{stage:?}: a late success pays nothing");
             ctx(vec![PromiseResult::Failed], 0);
-            assert!(matches!(r.on_call([9; 32], relayer.clone(), U128(5)), PromiseOrValue::Value(false)));
+            assert!(matches!(r.on_call([9; 32], ID, relayer.clone(), U128(5)), PromiseOrValue::Value(false)));
             assert_eq!(receipts(), vec![rc("exec.near", "return_deposit", 0)], "a late failure returns the deposit only");
         }
         ctx(vec![PromiseResult::Successful(vec![1])], 0);
         let mut r = router(Stage::Call, false);
         let t: AccountId = "token.near".parse().unwrap();
-        assert!(matches!(r.on_hold(REF, t.clone(), t.clone(), "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
+        assert!(matches!(r.on_hold(REF, ID, t.clone(), t.clone(), "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
         assert_eq!(receipts(), vec![rc("token.near", "relay_refund", 0)], "a late hold is refunded");
         assert_eq!(r.pending.get(&REF).unwrap().stage, Stage::Call, "the live entry untouched");
+    }
+
+    /// Review m1: relay 1 (its call in flight) times out and its entry is deleted; relay 2 opens the same ref on another
+    /// token and is waiting for its own call. Relay 1's late `on_call` — a success or a failure — must not settle relay
+    /// 2: no token call, relay 2's entry untouched; a late failure only returns relay 1's own deposit.
+    #[test]
+    fn stale_callback_leaves_a_newer_entry_alone() {
+        let r1: AccountId = "relayer1.near".parse().unwrap();
+        for (res, want) in [(ok(), vec![]), (PromiseResult::Failed, vec![rc("exec.near", "return_deposit", 0)])] {
+            ctx(vec![res], 0);
+            let mut r = router(Stage::Call, false); // relay 2's entry under the same ref
+            r.pending.get_mut(&REF).unwrap().token = "token2.near".parse().unwrap();
+            let before = r.pending.get(&REF).cloned();
+            let _ = r.on_call(REF, 1, r1.clone(), U128(7));
+            assert_eq!(receipts(), want, "relay 1's late callback acts on relay 1 only");
+            assert_eq!(r.pending.get(&REF).cloned(), before, "relay 2's entry untouched");
+        }
+        // relay 1's late on_hold (its hold succeeded, so relay 2's hold is refused): refunds relay 1, relay 2 untouched
+        ctx(vec![PromiseResult::Successful(vec![1])], 0);
+        let mut r = router(Stage::Hold, false);
+        let before = r.pending.get(&REF).cloned();
+        let t: AccountId = "token1.near".parse().unwrap();
+        assert!(matches!(r.on_hold(REF, 1, t.clone(), t, "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
+        assert_eq!(receipts(), vec![rc("token1.near", "relay_refund", 0)]);
+        assert_eq!(r.pending.get(&REF).cloned(), before);
+        // a settle result carrying another entry's id is ignored
+        ctx(vec![ok()], 0);
+        let mut r = router(Stage::Settle, false);
+        let before = r.pending.get(&REF).cloned();
+        assert!(!r.on_settle(REF, 1, true));
+        assert_eq!((receipts(), r.pending.get(&REF).cloned()), (vec![], before));
     }
 
     /// `on_hold` refused: the entry deleted, its deposit and `target_deposit` back to the relayer, no call.
@@ -590,7 +642,7 @@ mod tests {
         ctx(vec![PromiseResult::Successful(vec![0])], 0);
         let mut r = router(Stage::Hold, false);
         let t: AccountId = "token.near".parse().unwrap();
-        assert!(matches!(r.on_hold(REF, t.clone(), t, "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
+        assert!(matches!(r.on_hold(REF, ID, t.clone(), t, "m".into(), vec![], Gas::from_tgas(1)), PromiseOrValue::Value(false)));
         assert_eq!(receipts(), vec![rc("relayer.near", "transfer", 105)]);
         assert!(r.pending.get(&REF).is_none());
     }
@@ -601,7 +653,7 @@ mod tests {
     fn failed_settle_kept_for_the_timeout() {
         ctx(vec![PromiseResult::Failed], 0);
         let mut r = router(Stage::Settle, false);
-        assert!(!r.on_settle(REF, true));
+        assert!(!r.on_settle(REF, ID, true));
         assert_eq!((r.pending.get(&REF).unwrap().stage, receipts()), (Stage::Call, vec![]), "release failed: refund wins later");
         ctx(vec![], 51);
         let _ = r.relay_timeout(REF);
@@ -609,7 +661,7 @@ mod tests {
         // refund ok, deposit return failed: owed
         ctx(vec![ok(), PromiseResult::Failed], 0);
         let mut r = router(Stage::Settle, true);
-        assert!(!r.on_settle(REF, false));
+        assert!(!r.on_settle(REF, ID, false));
         assert_eq!(r.pending.get(&REF).unwrap().stage, Stage::Owed);
         ctx(vec![], 50);
         let e = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| r.relay_timeout(REF)));
@@ -618,7 +670,7 @@ mod tests {
         let _ = r.relay_timeout(REF);
         assert_eq!(receipts().iter().map(|x| (x.0.as_str(), x.1.as_str())).collect::<Vec<_>>(), [("exec.near", "return_deposit"), ("router.near", "on_settle")]);
         ctx(vec![ok()], 51);
-        assert!(!r.on_settle(REF, false));
+        assert!(!r.on_settle(REF, ID, false));
         assert!(r.pending.get(&REF).is_none(), "settled");
         assert_eq!(receipts(), vec![rc("relayer.near", "transfer", 100)], "the entry deposit back");
         // a timeout while a settlement is in flight is refused
@@ -638,7 +690,7 @@ mod tests {
         let p = r.pending.get(&REF).unwrap();
         assert_eq!((p.stage, p.target_deposit), (Stage::Settle, 0));
         ctx(vec![PromiseResult::Successful(vec![0])], 51);
-        assert!(!r.on_settle(REF, false));
+        assert!(!r.on_settle(REF, ID, false));
         assert_eq!(receipts(), vec![rc("relayer.near", "transfer", 100)]);
     }
 }

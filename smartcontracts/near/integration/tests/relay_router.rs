@@ -35,6 +35,7 @@ const SHORT_DEPOSIT: &str = "attached deposit below the escrow entry, a payee re
 const BEFORE_DEADLINE: &str = "relay_timeout before the deadline";
 const NO_PENDING: &str = "no such pending ref";
 const ARGS_CAP: &str = "args over 16,384 bytes";
+const PASSKEY_CAP: &str = "passkey clientDataJSON / authenticatorData over 1024 bytes";
 const IN_FLIGHT: &str = "this ref is already in flight";
 const METHOD_LEN: &str = "method name: 1 to 255 bytes";
 const OTHER_TOKEN: &str = "the payment op is not for this token";
@@ -266,6 +267,20 @@ impl R {
         assert!(de >= 0 && de as u128 <= re, "executor balance moved {de} yocto (gas reward ≤ {re})");
     }
 
+    /// A refused hold sent its whole deposit back to the relayer: the token's NEAR moved by its gas reward only (≤ 30 %
+    /// of what its receipts burnt) and its storage is unchanged (review m2).
+    async fn token_kept_nothing(&self, t0: (u128, u64), out: &ExecutionFinalResult) {
+        let reward = out.receipt_outcomes().iter().filter(|o| o.executor_id == *self.t.token.id()).map(|o| o.tokens_burnt.as_yoctonear()).sum::<u128>() * 3 / 10;
+        let t1 = (self.near(self.t.token.id()).await, self.t.usage().await);
+        let d = t1.0 as i128 - t0.0 as i128;
+        assert!(d >= 0 && d as u128 <= reward, "token kept {d} yocto of the refused hold's deposit (gas reward ≤ {reward})");
+        assert_eq!(t1.1, t0.1, "token storage unchanged");
+    }
+
+    async fn token_near(&self) -> (u128, u64) {
+        (self.near(self.t.token.id()).await, self.t.usage().await)
+    }
+
     /// A funded UA payer (ed25519 key `seed`), `FEE * 10` tokens.
     async fn payer(&self, seed: &str) -> Signer {
         let s = Signer::ed(seed);
@@ -411,11 +426,12 @@ async fn hold_failure_clears_pending() {
     let r = setup_router().await;
     let p = r.payer("p1").await;
     let j = r.resign(&p, r.fx_job(&p, "ok", TD), |o| o.amount = FEE * 11);
-    let s0 = r.snap().await;
+    let (s0, t0) = (r.snap().await, r.token_near().await);
     let d = r.check(&j).await.deposit_needed.0 + NearToken::from_millinear(10).as_yoctonear();
     let out = r.relay_with(&r.t.relayer, &j, d, relay_gas(&j.auth, j.target_gas)).await;
     assert!(out.is_success() && !final_bool(&out), "{:?}", out.failures());
     assert!(has(&out, "relay_hold refused: The UA doesn't have enough balance"), "{:?}", out.logs());
+    r.token_kept_nothing(t0, &out).await;
     assert!(!out.receipt_outcomes().iter().any(|o| o.executor_id == *r.fx.id() || o.executor_id == *r.exec.id()), "no call");
     assert_eq!(r.t.balance(&j.op.from).await, FEE * 10);
     r.nothing_held(&j).await;
@@ -439,10 +455,11 @@ async fn short_deposit_refused() {
     let out = r.relay_with(&r.t.relayer, &j, floor - short - 1, gas).await;
     assert!(out.is_failure() && failed_with(&out, SHORT_DEPOSIT), "{:?}", out.failures());
     r.nothing_held(&j).await;
-    let s0 = r.snap().await;
+    let (s0, t0) = (r.snap().await, r.token_near().await);
     let out = r.relay_with(&r.t.relayer, &j, floor - short, gas).await;
     assert!(out.is_success() && !final_bool(&out), "{:?}", out.failures());
     assert!(has(&out, "relay_hold refused: the attached deposit is short of the hold's storage"), "{:?}", out.logs());
+    r.token_kept_nothing(t0, &out).await;
     r.nothing_held(&j).await;
     r.settled(s0, &[&out], j.op.pay_ref).await;
 }
@@ -541,20 +558,25 @@ async fn release_and_refund_exclusive() {
     r.settled(s0, &[&late], j.op.pay_ref).await;
 }
 
-/// Each branch (release, target panic, missing code, hold refused, timeout): the router keeps no entry and no NEAR.
+/// Each branch (release, target panic, missing code, hold refused, detached / returned failing child) and a timeout
+/// with the call in flight and its late failure: the router keeps no entry and no NEAR.
 #[tokio::test]
 async fn pending_empty_and_router_balance_unchanged_after_each_branch() {
-    branches().await;
+    branches(true).await;
 }
 
-/// Each branch: the executor holds nothing above its storage stake (its balance moves by its gas reward only).
+/// Each branch through the real executor, every one with a `target_deposit` (forwarded, or refunded to the executor
+/// and returned): the executor holds nothing above its storage stake (its balance moves by its gas reward only). The
+/// executor side of a timeout is not stageable here — with the real executor a call cannot stay in flight past a
+/// deadline — and is covered by the router unit tests (`late_callbacks_pay_nothing`, `stale_callback_leaves_a_newer_entry_alone`).
 #[tokio::test]
 async fn executor_holds_only_its_stake_after_each_branch() {
-    branches().await;
+    branches(false).await;
 }
 
-/// Every branch in one sandbox, `settled` (router and executor) after each.
-async fn branches() {
+/// Every branch in one sandbox, `settled` (router and executor) after each; with `timeout`, also a timeout on a slow
+/// router (its executor is the fixture, so only the router side is meaningful there).
+async fn branches(timeout: bool) {
     let r = setup_router().await;
     let cases: [(&str, &str, u128, bool); 6] = [
         ("ok", "ok", TD, true),
@@ -577,6 +599,9 @@ async fn branches() {
         assert!(out.is_success() && final_bool(&out) == released, "{name}: {:?}", out.failures());
         r.settled(s0, &[&out], j.op.pay_ref).await;
         println!("branch {name}: settled");
+    }
+    if !timeout {
+        return;
     }
     // timeout with the call in flight (a slow router), then the late failure
     let r = r.slow().await;
@@ -698,6 +723,13 @@ async fn relay_shape_and_salt_refused() {
     r.refused(&r.t.relayer, &r.resign(&p, j.clone(), |o| o.contract = "other.test.near".parse().unwrap()), OTHER_TOKEN).await;
     r.refused(&r.t.relayer, &r.job(&p, &r.open(), r.fid(), "", vec![], 0), METHOD_LEN).await;
     r.refused(&r.t.relayer, &r.job(&p, &r.open(), r.fid(), &"m".repeat(256), vec![], 0), METHOD_LEN).await;
+    // a passkey assertion with a 1,025-byte clientDataJSON (its verify gas is budgeted for ≤ 1 KiB fields, review m3)
+    let pk = Signer::pk(9, RP);
+    let mut big = r.fx_job(&pk, "ok", 0);
+    if let Auth::Passkey { client_data_json, .. } = &mut big.auth {
+        client_data_json.resize(1_025, b' ');
+    }
+    r.refused(&r.t.relayer, &big, PASSKEY_CAP).await;
     // the call's arguments are capped (their bytes travel through three receipts with static gas)
     let big = r.job(&p, &r.open(), r.fid(), "ok", vec![7; 16_385], 0);
     r.refused(&r.t.relayer, &big, ARGS_CAP).await;

@@ -447,9 +447,9 @@ MEASURED_STORAGE_BYTES['dexEntry'] = (
          '43-char token / seller / relayer ids (test settle_pays_both_legs); pruned after both expiries, the deposit back '
          'to the submitting relayer')
 MEASURED_STORAGE_BYTES['routerEntry'] = (
-    306, 'relay router escrow entry (Task 10): key b"p" ‖ ref 33 B + Borsh(Pending) + 40 B = 73 + Borsh(Pending) (token, target, '
+    314, 'relay router escrow entry (Task 10): key b"p" ‖ ref 33 B + Borsh(Pending) + 40 B = 73 + Borsh(Pending) (id u64, token, target, '
          'payer Holder, payee Option<Holder>, amount u128, relayer, target_deposit u128, deposit u128, deadline u64, stage u8, '
-         'owed bool); 306 B for a UA payer in open mode with 43-char token / target / relayer ids (test '
+         'owed bool); 314 B for a UA payer in open mode with 43-char token / target / relayer ids (test '
          'timeout_refund_refused_before_deadline); relay_check quotes a 64-char relayer; deleted at settle, the deposit back '
          'to the relayer that staked it')
 MEASURED_STORAGE_BYTES['relayHeld'] = (
