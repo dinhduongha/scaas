@@ -1,4 +1,4 @@
-# docs at commit 0beebc7c
+# docs at commit 3638b08f
 test_docs_check: ok
   note: accepted budget contracts/accounts.md: 1755 lines > 1.3 x 1100
   note: accepted budget contracts/dex.md: 653 lines > 1.3 x 400
@@ -14,7 +14,7 @@ test_docs_check: ok
   note: accepted budget networks/solana.md: 902 lines > 1.3 x 550
   note: accepted budget networks/soroban.md: 346 lines > 1.3 x 230
   note: accepted budget networks/sui.md: 470 lines > 1.3 x 300
-  note: accepted budget networks/ton.md: 460 lines > 1.3 x 280
+  note: accepted budget networks/ton.md: 472 lines > 1.3 x 280
   note: accepted budget node/README.md: 388 lines > 1.3 x 250
   warn: budget clients/signers-clientkeys.md: 892 lines > 1.3 x 650
   warn: budget contracts/token-wrappers.md: 1018 lines > 1.3 x 650
