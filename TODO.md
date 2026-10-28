@@ -77,7 +77,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      T11 Solana `b2986c5b`, T12 Cosmos `9dfcc559`, T13 Sui `8a033b0e`, T14 Aptos `78c67cff`, T15-T16 TON `1bba36e0`/`16bac7d0`,
      T17 node `9777679f`..`d784f264`, T18 clients `a0ab2e47`/`e7c9e3c4`, T19 docs `f80f2e73`/`a3a02a1c`, T20 closing gates
      `67fa7a45`/`cecde76b`, final fix wave `deead173` (TON relayed-call pre-check, review minors M1–M13), records `4f12980c`, logs `6b2cdd89`,
-     round 1 `6c31fbac` (re-review F1/F2/m1–m5, TON Mandate `get_lane_nonce`) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
+     re-review fixes `6c31fbac` (re-review F1/F2/m1–m5, TON Mandate `get_lane_nonce`) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
      (relayed overhead +7.4 k to +7.6 k per call; `n2560-kmax16384` `ROLL_MAX` 64 keeps 6,032 gas, was 15,281: any further
      token-path growth above ~6 k forces 48). Next: NEAR and Algorand on their own branch from `metatx-split` (owner
      2026-10-27; spec approved 2026-10-28; its plan is written in the main checkout, executes in parallel,
@@ -258,7 +258,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     metadata cut; per-set fixtures instead of the skips in `MetaTxParity` / `MtxSplitOverhead` (owner may prefer); Soroban
     `relay-fee/src/test.rs:376,393` bare `is_err()`; Sui same-entry-other-instance Move test; Aptos `vectors.move` P-256 lines
     churn on regeneration (use RFC 6979 in `gen_vectors`).
-  - TON relay fee after the I1 fix and its round 1 (decisions "TON only, node" and its round-1 Change): passkey-signed
+  - TON relay fee after the I1 fix and its re-review fixes (decisions "TON only, node" and its re-review Change): passkey-signed
     relayed calls are refused until the node verifies P-256 (passkey users send revoke / set_key directly; P-256 in the node
     is the owner's call); a race in which the owner spends the lane between the check and the call still bounces at the
     relayer's cost (costs the submitter a direct op each time); no per-payer failure budget (owner's call).

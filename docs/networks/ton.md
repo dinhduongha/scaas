@@ -434,7 +434,7 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   lane `payLane(payRef)`, and lanes rotate out after one to two `LANE_TTL` (30 days each; `jetton.tact` `rotateLanes`):
   after that the same `payId` can be signed and settled again. A signed payment never replays (`valid_until <= now +
   LANE_TTL` bounds it). As Solana and Aptos (final review M9).
-- **The node pre-checks the relayed call** (final review I1, final fix wave and its round 1). Before it sends a `RelayCall`
+- **The node pre-checks the relayed call** (final review I1, final fix wave and its re-review fixes). Before it sends a `RelayCall`
   the node checks the call against its target with getters, as it checks the payment, and refuses the job with
   `RELAY_CALL_REFUSED` (job error `simulation: RELAY_CALL_REFUSED: …`; permanent, never retried):
   - the call's `contract`, network and `from` are the target, this chain and the target's owner (the first field of the
@@ -448,7 +448,7 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
     `n + 1`; `get_owner_pubkey` or the StateInit key; the signature); `valid_until <= now + LANE_TTL`; a set_key with
     `extra != 0` carries `params` that hash to `extra` and are a passkey record (520 bits and one ref, as the wallet
     parses it); a revoke at `n + 1` forwards at least `CANCEL_TON`;
-  - Mandate: an owner revoke only, TON Connect-signed, at the Mandate's `get_lane_nonce` (getter added in round 1),
+  - Mandate: an owner revoke only, TON Connect-signed, at the Mandate's `get_lane_nonce` (getter added by the re-review fixes),
     verified against `get_state`'s `ownerPubkey`. A revoke of an already revoked Mandate would run and change nothing; the
     node refuses it as a no-op (the payer does not pay for nothing; owner rulings list item 6), not as a failure.
 
