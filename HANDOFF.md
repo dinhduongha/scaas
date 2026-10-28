@@ -1,4 +1,81 @@
-## Session 2026-10-27 / 28 (metatx split T1–T19, CI fixed, NEAR + Algorand spec + plan + T1–T6) — resume here
+## Session 2026-10-28 evening (metatx-split T20 + final review, near-algorand T7 + T8 WIP) — resume here
+
+**State (owner paused 2026-10-28 evening to shut down):** nothing running (agents stopped, no capped jobs).
+- `main` = this note, **ahead of origin** (spec `387583e9`, plan `1e28f850`, HANDOFF/TODO notes); owner 2026-10-28:
+  **do not push yet**.
+- **`metatx-split`** (worktree `.claude/worktrees/metatx-split`) at **`cecde76b`**, clean. Tasks 1–20 complete.
+  - T20: `67fa7a45` (TON `jest.config.js` `verbose: true`, so `named-tests` sees per-test lines) + `cecde76b`. The
+    resumable runner `smartcontracts/evm/runs/2026-10-27-metatx-split-gates.sh` (`--only <step>`, `GATES_FRESH=1`)
+    ran all 21 steps with rc=0. Results: forge 1482 / 1482 / 1480 / 1473 pass, 0 fail; sizes 0 errors (45 contracts);
+    docs 0 errors, facts 0; zether 59 + cross 6/0/0 + wasm; scaas-node 344; clientkeys 119; ua-rs 21; ua-qt 14;
+    soroban 41, solana 68, cosmos 27, sui 94, aptos 140, ton 54; named-tests 260 names. The guard was self-checked:
+    3 tampered log copies each exit 1.
+  - Figures: `ROLL_MAX` unchanged 96 / 80 / 64 / 32 (n2560: 6,032 gas under on `uaExecute`). `debit_min_gas`
+    6,826,921 / 6,998,368 / 7,168,690 / 7,358,343. The part of the split overhead that grows with data size is
+    ≤ 2,405 gas (bound 8,000). `UnderlyingPqzToken` is 61,137 B (4,399 B headroom).
+    `clients/ua-qt/build` (2 GB, git-ignored) is kept for incremental re-runs.
+  - **Final whole-branch review: Ready with fixes**
+    (`.superpowers/sdd/2026-10-27-metatx-split/final-review.md`, git-ignored).
+    - ABIs and storage layouts vs main: only additions (`mtxPayMeta`, `uaPayMeta`, `metaPayId`, `PaymentMeta`).
+      The pay-meta and relay-ref vectors, recomputed independently, show 0 mismatches. The cross-family rules hold
+      on all 7 families. A trial merge into `main` conflicts only in `HANDOFF.md`.
+    - **I1 (fix):** the TON node's `build_relay_fee` (`scaas-node/src/adapters/ton.rs` ~:1334-1366) never checks the
+      relayed inner call. The relayer pays about 0.025 TON in bounce fees for every failing relay, and a submitter
+      can repeat this at no cost. Fix: a getter-check of the inner call, refuse on failure, plus a test.
+    - **I2 (owner ruling, pre-existing `6c02d686`):** Solana account recovery replaces every key. CTR-ACC-03, which
+      EVM / Sui / Aptos follow, says recovery adds a key and removes none. Choose: align Solana, or record a Solana
+      exception.
+    - **M1–M13:** docs and records. M1–M3 `+16` cells / SET.md (n2048 `uaExecute` = 13,030,688, measured). M4
+      sizes cite `size-baseline.json`. M5 relay-fee cost from `t9-fix1-relaygas.txt` + `evm.md` size rows. M6 TODO
+      hashes. M7 standalone "§9 node checks per adapter" decision. M8 TON settlement-ring residual. M9 "once until
+      prune / rotation" for Aptos + TON. M10 / M11 spec wording. M12 job-api errors. M13 TON meta journal: fsync the
+      directory after the rename.
+    - **Owner rulings list (final-review.md):**
+      1. EIP-7702 delegate-only signatures: refused on the address path, accepted on the UA path.
+      2. Solana recovery (I2).
+      3. ua-rs / ua-qt narrowed to hash libraries.
+      4. TON relay-fee only for SCaaS wallet / Mandate targets, open mode only.
+      5. Keep or drop Solana's generic relay-fee entry.
+      6. One rule for paying for a no-op cancel / revoke (Solana charges, Sui / Aptos abort, TON refunds).
+      7. `min_amount` is one flat floor per chain, while TON / Solana have per-token maps.
+      8. Once-per-payment holds only until prune / rotation (Solana, Aptos, TON).
+      9. Sui / Aptos packages are upgradeable as built, while the specs say immutable.
+      10. The EVM node does not serve UA payers.
+      11. TON relay outcomes older than the last 128 router transactions stay `Pending`.
+      12. Info: the split shrank each token kind only 269–456 B.
+      13. Per-set test fixtures instead of skips.
+      The earlier controller calls (previous session note) also go on this list.
+- **`near-algorand`** (worktree `.claude/worktrees/near-algorand`) at **`3918209c`**.
+  - **Task 7 (NEAR mandate)** is done: `a73620bb` + fix `e6986995`. The review found no Critical or Important issue
+    and fund safety holds; the fix round added tests for the minors.
+    - Mandate tests 9/9. Gas: open 3.9, pay 3.9–4.1, revoke 3.4, refund 2.7 Tgas. Wasm 392,814 B.
+    - Choices taken (they go to decisions.md in T21):
+      - `delegate: Holder` in `MandateTerms`;
+      - funds held under `Ua(mandate id)`;
+      - pays use `payLane(pay_ref)` at nonce 0, so `payment_settled.from` = the mandate id;
+      - a pay applies the delegate's own policy;
+      - revoke by the owner or the delegate, no nonce;
+      - permissionless `mandate_refund`;
+      - one-shot mandates.
+    - Carry-forward: T13 (Algorand) needs the `delegate` field; T16 keys mandates by (token, id).
+  - **Task 8 (NEAR escrow DEX): WIP commit `3918209c`.** The agent was stopped while adding extra guard tests; the
+    commit is unreviewed and its test state is unknown. Controller rulings for T8 (in the ledger):
+    `settle_id = sha256(digest(op_a) ‖ digest(op_b))`; a `settle_gas_pin` test; the Order / cancel / invalidate
+    `extra` vectors go in the generator.
+
+**Next (in order, subagent-driven):**
+1. `metatx-split` **final fix wave** (not started; brief = final-review.md I1 + M1–M13, not I2). Then the affected
+   gate steps only: `--only cargo-scaas-node`, `--only docs`, `--only gen-set`. Then a scoped re-review.
+2. **Owner rulings** on I2 + list 1–13 (+ earlier controller calls). Then merge `metatx-split` into `main`
+   (HANDOFF.md conflict only) and push, both only on the owner's go.
+3. `near-algorand` **Task 8**: re-dispatch on top of `3918209c` (finish the tests; NEAR family to rc=0 with log
+   `runs/2026-10-28-near-dex.txt`), then review. Then Tasks 9–22 automatically. Rebase onto `metatx-split` after its
+   fix wave.
+
+Ledgers: `.claude/worktrees/metatx-split/.superpowers/sdd/2026-10-27-metatx-split/progress.md` and
+`.claude/worktrees/near-algorand/.superpowers/sdd/2026-10-28-near-algorand/progress.md` (each ends with a PAUSED line).
+
+## Session 2026-10-27 / 28 (metatx split T1–T19, CI fixed, NEAR + Algorand spec + plan + T1–T6) 
 
 **State (owner paused 2026-10-28 to shut down):** nothing running; both worktrees clean.
 - `main` = `1e28f850`, **ahead of origin by 2** (NEAR + Algorand spec `387583e9`, plan `1e28f850`; not pushed). CI on

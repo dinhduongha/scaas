@@ -71,6 +71,12 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   5. [ ] (re-check with it: PQZH `n2048-kmax1024` debits keep only 1.3–2.8 KB on `uaExecute`; `n2560-kmax16384`'s `ROLL_MAX`
      64 keeps 15,281 gas — any envelope growth re-opens both) the metatx split together with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) → `MtxRelayFee` (CTR-MTX-27), with or
      before UA-7. Then UA-8 (before fs3 Task 13), fs3 Task 12 → 6 → 13 → 14, UA-7, governance code.
+     Status 2026-10-28 (evening pause): branch `metatx-split` `cecde76b` — Tasks 1–20 done (T19 `f80f2e73` +
+     `a3a02a1c`, T20 `67fa7a45` + `cecde76b`: resumable runner, 21 gate steps rc=0, named-tests 260 names); `ROLL_MAX`
+     unchanged 96 / 80 / 64 / 32 (n2560 6,032 gas under on `uaExecute`), so both re-checks above hold. Final whole-branch
+     review **Ready with fixes** (`.superpowers/sdd/2026-10-27-metatx-split/final-review.md` in the worktree): I1 TON node
+     inner-call check + docs M1–M13 → final fix wave (not started) → scoped re-review → owner rulings (I2 Solana
+     recovery + list 1–13) → merge / push on the owner's go.
 
   `pqz-core` is a dev-freeze at the current ids; 8d part 2b may reopen it (PQZH calldata).
 - [ ] **Label scheme at the production freeze** (owner 2026-10-25): keep the current labels during development; at
@@ -234,7 +240,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   MSBuild property, image build argument; default off); a node built without it refuses a chainspec that activates it.
   bn254 stays Solidity-only. Controller notes in COMPLETED.md.
 - [ ] **NEAR and Algorand family bring-up — owner 2026-10-27: build right after the metatx split** (own item: family spec → plan → build; contracts, `scaas-node` adapters, clients, devnets, tests), with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) and `MtxRelayFee` (CTR-MTX-27) from the start; the long-lived-balance assessment below (NEAR storage staking, Algorand minimum balance / boxes) is part of its family spec.
-  Status 2026-10-28: spec `387583e9` (owner approved), plan `1e28f850` (22 tasks); branch `near-algorand` Tasks 1–6 done (`25f98847`, rebased onto metatx-split); next Task 7 (NEAR mandate). Ledger `.claude/worktrees/near-algorand/.superpowers/sdd/2026-10-28-near-algorand/progress.md`.
+  Status 2026-10-28: spec `387583e9` (owner approved), plan `1e28f850` (22 tasks); branch `near-algorand` Tasks 1–7 done (rebased onto metatx-split `a3a02a1c`); Task 7 (NEAR mandate) done + reviewed (`a73620bb`, fix `e6986995`); Task 8 (NEAR escrow DEX) WIP commit `3918209c` (paused, unreviewed). Ledger `.claude/worktrees/near-algorand/.superpowers/sdd/2026-10-28-near-algorand/progress.md`.
 - [ ] **Family priority for UA and long-lived balances (owner 2026-10-19, late):** first EVM, Cosmos, Sui, Aptos and Solana (balances and records stay in state for good: no TTL, a one-time deposit or fee); then assess Soroban, NEAR and Algorand — whether balances can be kept long-term there and at what cost (Soroban TTL / archival and restore fees, NEAR storage staking, Algorand minimum balance and boxes). The UA F phases on non-EVM follow this order.
 - [ ] **`secp256k1` UA kind: EIP-191 `personal_sign` variant (owner 2026-10-19, on-chain review W-J; after P6)**: today the kind 0x0108 verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (residual risk recorded in accounts.md S23). Add a verifier for the `personal_sign` form, new vectors, the six clients.
 - [ ] **ERC-7674 temporary approvals on SCaaS tokens (owner 2026-10-18; after P6)**: `temporaryApprove(spender, value)`
