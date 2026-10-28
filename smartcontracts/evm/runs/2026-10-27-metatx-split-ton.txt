@@ -1,4 +1,4 @@
-# ton at commit 67fa7a45
+# ton at commit 2ffa9c73
 == test ton
 
 > scaas-ton@0.1.0 test
@@ -67,9 +67,9 @@
    > Mandate: func compiler
    > ScaasJettonMaster: tact compiler
    > ScaasJettonMaster: func compiler
-(node:1257435) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 uncaughtException listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:752500) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 uncaughtException listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
 (Use `node --trace-warnings ...` to show where the warning was created)
-(node:1257435) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unhandledRejection listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(node:752500) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 unhandledRejection listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
    > RelayExecutor: tact compiler
    > RelayExecutor: func compiler
    > ScaasRelayFee: tact compiler
@@ -101,95 +101,95 @@
    > ActFail
    > Reports
    > ActFail
+PASS tests/vectors.spec.ts (72.902 s)
+  cross-implementation vectors
+    ✓ match vectors/ton-vectors.json (52428 ms)
+  paymeta vectors match
+    ✓ metaPayId and payLane of every paymeta.json row (8250 ms)
+
+PASS tests/mandate.spec.ts (102.415 s)
+  Mandate (R25 on TON)
+    ✓ deposit is tracked; delegate pays listed payee within caps; PaymentSettled from the mandate (18463 ms)
+    ✓ enforces payee, per-payment, per-period, payRef once, signature, expiry; period resets (26617 ms)
+    ✓ owner revokes (signed op); delegate stops; owner withdraws the rest (14287 ms)
+    ✓ a deposit through a wallet that is not the mandate wallet is not counted (19240 ms)
+    ✓ an under-funded copy of a signed deposit is refused: no deposit is stranded uncounted (review H2) (1349 ms)
+    ✓ the owner withdraws what reached the wallet uncounted; a refused payout is undone (balance, spend, payRef) (review L9) (10262 ms)
+
   console.log
     router TON 275
 
       at Object.<anonymous> (tests/relayfee.spec.ts:134:17)
 
   console.log
-    relay-fee release {"txs":16,"fees":"26294197","value":"167275699","routerTon":"275","gas":[{"to":"k3FpLt","op":"ec0a0547","gas":"1937"},{"to":"mmpVQs","op":"5b0a1d30","gas":"81645"},{"to":"Tu9a31","op":"5b0a1d01","gas":"27802"},{"to":"jG6KmF","op":"178d4519","gas":"16854"},{"to":"mmpVQs","op":"7362d09c","gas":"34399"},{"to":"k3FpLt","op":"d53276db","gas":"309"},{"to":"_VchY-","op":"5b0a1d33","gas":"15541"},{"to":"W8BDE7","op":"5b0a1d01","gas":"25193"},{"to":"W8BDE7","op":"5b0a1d32","gas":"2269"},{"to":"_VchY-","op":"5b0a1d35","gas":"4966"},{"to":"_VchY-","op":"d53276db","gas":"2553"},{"to":"_VchY-","op":"ffffffff","gas":"7745"},{"to":"mmpVQs","op":"5b0a1d34","gas":"25503"},{"to":"jG6KmF","op":"f8a7ea5","gas":"9820"},{"to":"T_mgTr","op":"178d4519","gas":"12082"},{"to":"k3FpLt","op":"d53276db","gas":"309"}]}
+    relay-fee release {"txs":16,"fees":"26294197","value":"167275699","routerTon":"275","gas":[{"to":"k3FpLt","op":"ec0a0547","gas":"1937"},{"to":"_-Koec","op":"5b0a1d30","gas":"81645"},{"to":"Tu9a31","op":"5b0a1d01","gas":"27802"},{"to":"fuFIMi","op":"178d4519","gas":"16854"},{"to":"_-Koec","op":"7362d09c","gas":"34399"},{"to":"k3FpLt","op":"d53276db","gas":"309"},{"to":"pUF0cM","op":"5b0a1d33","gas":"15541"},{"to":"W8BDE7","op":"5b0a1d01","gas":"25193"},{"to":"W8BDE7","op":"5b0a1d32","gas":"2269"},{"to":"pUF0cM","op":"5b0a1d35","gas":"4966"},{"to":"pUF0cM","op":"d53276db","gas":"2553"},{"to":"pUF0cM","op":"ffffffff","gas":"7745"},{"to":"_-Koec","op":"5b0a1d34","gas":"25503"},{"to":"fuFIMi","op":"f8a7ea5","gas":"9820"},{"to":"T_mgTr","op":"178d4519","gas":"12082"},{"to":"k3FpLt","op":"d53276db","gas":"309"}]}
 
       at Object.<anonymous> (tests/relayfee.spec.ts:138:17)
 
-PASS tests/vectors.spec.ts (171.476 s)
-  cross-implementation vectors
-    ✓ match vectors/ton-vectors.json (51505 ms)
-  paymeta vectors match
-    ✓ metaPayId and payLane of every paymeta.json row (85953 ms)
-
-PASS tests/mandate.spec.ts (336.191 s)
-  Mandate (R25 on TON)
-    ✓ deposit is tracked; delegate pays listed payee within caps; PaymentSettled from the mandate (34264 ms)
-    ✓ enforces payee, per-payment, per-period, payRef once, signature, expiry; period resets (121743 ms)
-    ✓ owner revokes (signed op); delegate stops; owner withdraws the rest (90157 ms)
-    ✓ a deposit through a wallet that is not the mandate wallet is not counted (18590 ms)
-    ✓ an under-funded copy of a signed deposit is refused: no deposit is stranded uncounted (review H2) (15673 ms)
-    ✓ the owner withdraws what reached the wallet uncounted; a refused payout is undone (balance, spend, payRef) (review L9) (23717 ms)
-
-PASS tests/dex.spec.ts (342.968 s)
+PASS tests/dex.spec.ts (124.879 s)
   ScaasDex escrow (R35 on TON, R10-7)
-    ✓ two signed legs settle with maker/taker fees; fees accrue; nobody needs an allowance (29767 ms)
-    ✓ price limit, fee cap and counterparty are enforced; Match is permissionless once valid (112701 ms)
-    ✓ two resting legs are matched by anyone with Match; price limit blocks a bad pair (72051 ms)
-    ✓ unmatched legs refund to their owner after expiry, by anyone; not before (17938 ms)
-    ✓ cancel by signed revoke: before sending, the order can never execute; after escrow, it is refunded (17194 ms)
-    ✓ a revoke of a sent order runs once, needs its cancel TON, and only its owner can cancel (review L11) (5647 ms)
-    ✓ a payout our wallet bounces is kept on record for the admin, not lost (review L14) (6937 ms)
-    ✓ an under-funded copy of a signed leg is refused at the payer wallet: nothing is stranded (review H2) (8990 ms)
-    ✓ Match and Refund hand unspent TON back to the caller instead of keeping it (17244 ms)
-    ✓ fees above 1 % are refused by SetMarket (11932 ms)
+    ✓ two signed legs settle with maker/taker fees; fees accrue; nobody needs an allowance (10599 ms)
+    ✓ price limit, fee cap and counterparty are enforced; Match is permissionless once valid (28007 ms)
+    ✓ two resting legs are matched by anyone with Match; price limit blocks a bad pair (9881 ms)
+    ✓ unmatched legs refund to their owner after expiry, by anyone; not before (10020 ms)
+    ✓ cancel by signed revoke: before sending, the order can never execute; after escrow, it is refunded (14206 ms)
+    ✓ a revoke of a sent order runs once, needs its cancel TON, and only its owner can cancel (review L11) (8835 ms)
+    ✓ a payout our wallet bounces is kept on record for the admin, not lost (review L14) (10020 ms)
+    ✓ an under-funded copy of a signed leg is refused at the payer wallet: nothing is stranded (review H2) (4678 ms)
+    ✓ Match and Refund hand unspent TON back to the caller instead of keeping it (8292 ms)
+    ✓ fees above 1 % are refused by SetMarket (1846 ms)
 
   console.log
     relay-fee refund {"txs":16,"fees":"25100574"}
 
       at Object.<anonymous> (tests/relayfee.spec.ts:227:17)
 
-PASS tests/relayfee.spec.ts (418.612 s)
-  relay-fee escrow router (CTR-MTX-27, TON)
-    ✓ release on the served entry's acknowledgment, before the probe's bounce (53667 ms)
-    ✓ the Mandate's owner revoke is the other served entry: released on its ack (136945 ms)
-    ✓ a revoke of an order already sent: its forward TON is in the call's floor, its late cancel excess goes to the relayer (63008 ms)
-    ✓ a revoke replayed after it ran is refused: the escrow is refunded, no second cancel (T16 fix 2) (31537 ms)
-    ✓ a copied RelayCall after the release names its own relayer in the refund event (node attribution) (28308 ms)
-    ✓ refund on call bounce: payer refunded, nothing to the relayer (3027 ms)
-    ✓ refund when the target does not exist: a served code at an address with no account bounces (rule 5) (5313 ms)
-    ✓ executor: an action-phase failure sends no ack and is refunded; an ack is released; the start-value edge (3683 ms)
-    ✓ refund by RelayRefund after deadline, refused before or below the settle TON; permissionless (2414 ms)
-    ✓ release and refund are exclusive (3103 ms)
-    ✓ a settlement transfer that bounces restores the escrow; RelayRefund sends it again (important 3) (2250 ms)
-    ✓ second RelayCall for a pending (payer, ref) refused; another payer on the same target is not blocked (2138 ms)
-    ✓ an attacker cannot pre-burn the victim's ref: the call names the victim's executor (per payer) (3309 ms)
-    ✓ payment bounce clears pending (5776 ms)
-    ✓ ton router bound pay refused direct (4811 ms)
-    ✓ call that is a SignedOp naming the router refused (5934 ms)
-    ✓ notification from a foreign jetton wallet ignored; a stray payment is handed back (7630 ms)
-    ✓ target, shape, deadline and value refusals (exact exit codes) (6296 ms)
-    ✓ relay ref vectors: every ref of the call is hashed, and the salt and target (1380 ms)
-
-PASS tests/jetton.spec.ts (425.036 s)
+PASS tests/jetton.spec.ts (182.606 s)
   ScaasJettonWallet meta-tx (R30, R67)
-    ✓ sandbox global id is what MetaOp.network must carry (37074 ms)
-    ✓ relayer pays a signed transfer; payer never sends a tx; events carry digest and payRef (104671 ms)
-    ✓ rejects replay, expiry, wrong network/contract/relayer/from, foreign key, missing key, bad domain cell (38936 ms)
-    ✓ a signed revoke runs once in either form: a resend is refused and sends no cancel (NET-TON-18, T16 fix 2) (89722 ms)
-    ✓ same lane, increasing nonces; nonce gap refused (30177 ms)
-    ✓ ANTI-LOCK: op X on contract 1 withheld, op Y on contract 2 succeeds, then X succeeds (30789 ms)
-    ✓ works for a V4R2 owner too (StateInit binding by code hash) (1574 ms)
-    ✓ standard TEP-74 transfer by the owner still works and only the owner may send it (1689 ms)
-    ✓ a forged JettonTransferInternal (not from the master or a sibling wallet) cannot credit a real wallet (2857 ms)
-    ✓ passkey (P-256 WebAuthn via P256_CHKSIGNS): set by the ed25519 key, then signs a pay (3695 ms)
-    ✓ signature over the TON Connect envelope uses the domain the wallet reports (1529 ms)
-    ✓ a long-idle, heavily used wallet keeps its jettons: lanes are pruned and storage is reserved (review M4) (42300 ms)
+    ✓ sandbox global id is what MetaOp.network must carry (26608 ms)
+    ✓ relayer pays a signed transfer; payer never sends a tx; events carry digest and payRef (41191 ms)
+    ✓ rejects replay, expiry, wrong network/contract/relayer/from, foreign key, missing key, bad domain cell (5256 ms)
+    ✓ a signed revoke runs once in either form: a resend is refused and sends no cancel (NET-TON-18, T16 fix 2) (1160 ms)
+    ✓ same lane, increasing nonces; nonce gap refused (2803 ms)
+    ✓ ANTI-LOCK: op X on contract 1 withheld, op Y on contract 2 succeeds, then X succeeds (4671 ms)
+    ✓ works for a V4R2 owner too (StateInit binding by code hash) (3158 ms)
+    ✓ standard TEP-74 transfer by the owner still works and only the owner may send it (3604 ms)
+    ✓ a forged JettonTransferInternal (not from the master or a sibling wallet) cannot credit a real wallet (994 ms)
+    ✓ passkey (P-256 WebAuthn via P256_CHKSIGNS): set by the ed25519 key, then signs a pay (1345 ms)
+    ✓ signature over the TON Connect envelope uses the domain the wallet reports (1661 ms)
+    ✓ a long-idle, heavily used wallet keeps its jettons: lanes are pruned and storage is reserved (review M4) (16833 ms)
   pay-meta on OP_PAY (CTR-MTX-26)
-    ✓ pay with params emits PaymentMeta then PaymentSettled (1997 ms)
-    ✓ ton pay meta mismatch and replay (2038 ms)
-    ✓ an attacker's minimal pre-burn of the victim's payId does not block the victim (per payer) (1044 ms)
-    ✓ pay without params unchanged (765 ms)
-    ✓ meta size limit: measured through a W5R1 lane (5369 ms)
+    ✓ pay with params emits PaymentMeta then PaymentSettled (808 ms)
+    ✓ ton pay meta mismatch and replay (1476 ms)
+    ✓ an attacker's minimal pre-burn of the victim's payId does not block the victim (per payer) (925 ms)
+    ✓ pay without params unchanged (854 ms)
+    ✓ meta size limit: measured through a W5R1 lane (4783 ms)
+
+PASS tests/relayfee.spec.ts (183.02 s)
+  relay-fee escrow router (CTR-MTX-27, TON)
+    ✓ release on the served entry's acknowledgment, before the probe's bounce (11758 ms)
+    ✓ the Mandate's owner revoke is the other served entry: released on its ack (52599 ms)
+    ✓ a revoke of an order already sent: its forward TON is in the call's floor, its late cancel excess goes to the relayer (2984 ms)
+    ✓ a revoke replayed after it ran is refused: the escrow is refunded, no second cancel (T16 fix 2) (1916 ms)
+    ✓ a copied RelayCall after the release names its own relayer in the refund event (node attribution) (1995 ms)
+    ✓ refund on call bounce: payer refunded, nothing to the relayer (1740 ms)
+    ✓ refund when the target does not exist: a served code at an address with no account bounces (rule 5) (1915 ms)
+    ✓ executor: an action-phase failure sends no ack and is refunded; an ack is released; the start-value edge (1087 ms)
+    ✓ refund by RelayRefund after deadline, refused before or below the settle TON; permissionless (1312 ms)
+    ✓ release and refund are exclusive (1560 ms)
+    ✓ a settlement transfer that bounces restores the escrow; RelayRefund sends it again (important 3) (1205 ms)
+    ✓ second RelayCall for a pending (payer, ref) refused; another payer on the same target is not blocked (1412 ms)
+    ✓ an attacker cannot pre-burn the victim's ref: the call names the victim's executor (per payer) (1176 ms)
+    ✓ payment bounce clears pending (1352 ms)
+    ✓ ton router bound pay refused direct (990 ms)
+    ✓ call that is a SignedOp naming the router refused (958 ms)
+    ✓ notification from a foreign jetton wallet ignored; a stray payment is handed back (1610 ms)
+    ✓ target, shape, deadline and value refusals (exact exit codes) (3713 ms)
+    ✓ relay ref vectors: every ref of the call is hashed, and the salt and target (838 ms)
 
 Test Suites: 5 passed, 5 total
 Tests:       54 passed, 54 total
 Snapshots:   0 total
-Time:        426.45 s
+Time:        184.559 s
 Ran all test suites.
 rc=0
