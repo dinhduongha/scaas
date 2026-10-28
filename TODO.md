@@ -80,8 +80,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      re-review fixes `6c31fbac` (re-review F1/F2/m1–m5, TON Mandate `get_lane_nonce`), records `2ffa9c73`/`0beebc7c`,
      logs `c043e5b7`, second re-review `f0d4025e` (TON payment leg: LANE_TTL, balance), records/logs
      `afb8dd1d`..`31b02ed1`, third re-review `07d2f411`/`3dd94fb0`/`eff492c3`
-     (payment validity floor; removed in `2cac867a`, restored by its revert: owner ruling 2026-10-28, risk acceptance
-     reversed, fix kept) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
+     (payment validity floor; removed in `2cac867a`, restored by its revert `0c90f031`: owner ruling 2026-10-28, risk
+     acceptance reversed, fix kept); owner rulings 2026-10-28 on the final review list: Solana recovery and no-op
+     wrappers `e04a5733`, records and immutable Sui / Aptos deploy `99e44cce`, EIP-7702 address path `84b0a469` + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
      (relayed overhead +7.4 k to +7.6 k per call; `n2560-kmax16384` `ROLL_MAX` 64 keeps 6,032 gas, was 15,281: any further
      token-path growth above ~6 k forces 48). Next: NEAR and Algorand on their own branch from `metatx-split` (owner
      2026-10-27; spec approved 2026-10-28; its plan is written in the main checkout, executes in parallel,
