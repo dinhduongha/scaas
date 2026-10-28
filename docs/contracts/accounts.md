@@ -1121,7 +1121,10 @@ break plain 7702 wallets, while the 1271 fallback lets delegated wallets with se
 path (`SigCheck.isValid`: `mtxExecute`, the transfers, the DEX, the wallets) follows the same rule since the owner ruling
 of 2026-10-28; before it, it took a 7702 account's base key only and refused its 1271 signatures. (A 7702 account is still
 not a contract for allowances, `ERC20MetaTx` `CallerNotContract` / `SpenderNotContract`, CTR-TOK-01.) If a future EIP lets a 7702 account disable its base key, ECDSA acceptance for it
-must follow that EIP's flag (a new registry generation).
+must follow that EIP's flag (a new registry generation). Functional limit, consistent with this rule: a 7702 account
+delegated to `SmartKeyAccount` code with P-256 keys needs about 280 k gas for its ERC-1271 check on a chain without the
+P-256 precompile, so it fails under the 50 k cap there (only a `SmartKeyAccount` clone, matched by codehash, gets 400 k);
+its base key still signs.
 
 A chain is identified by `(chain_key, chain_uid)`, never by its chain id alone ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
 `chain_uid` (`bytes32`, `≠ 0`) is the genesis block hash as the RPC reports it (EVM, Hedera), a **constructor
@@ -1716,7 +1719,9 @@ raw message.
 **added** (recovery is for a LOST key; a STOLEN key could already spend through meta-transactions and needs no
 recovery). An existing key cancels through `mtxExecuteAsOwner(cancelRecovery)`; `setGuardian` cancels a pending recovery.
 The guardian may be a multisig contract. Watching `RecoveryInitiated` events is the owner's defence against a
-compromised guardian (the 2-day delay plus cancel by key).
+compromised guardian (the 2-day delay plus cancel by key). Where the key set is capped (Sui and Aptos `MAX_KEYS`, Solana
+8 keys) the recovery key needs a free slot: a full set refuses it (Solana already at `start_recovery`), so an owner who
+lost every key of a full set cannot be recovered; keep a slot free.
 
 ```mermaid
 stateDiagram-v2

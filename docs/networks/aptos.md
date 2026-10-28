@@ -148,7 +148,8 @@ inside `Account` itself (`meta.move:103-106`), not in an extra resource. Rules:
   the owner's own native transaction; subjects whose Aptos account is passkey/keyless/MultiKey use it once to attach an
   ed25519 seed key (an administrative transaction off the hot path); (3) the guardian (native tx) calls
   `start_recovery(new_key)`, `finish_recovery` after `RECOVERY_DELAY` = 2 days (172 800 s); a current key or the owner
-  can cancel.
+  can cancel. `finish_recovery` adds the key through `add_key`, which aborts on a key already present or a full set
+  (`MAX_KEYS`): an owner who lost every key of a full set cannot be recovered, so keep a free slot (as Solana).
 - Never zero keys; an account with a passkey never has zero origins. Rotating the native Aptos auth key does **not**
   touch `keys`, so it never bricks the Account; the consequence: an owner who rotates the auth key *because* a key
   leaked is still exposed through the old key in `Account.keys` (the chain reads the auth key only at open). The

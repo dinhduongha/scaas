@@ -257,7 +257,10 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   the 4,096-byte v1 limit; (e) a TON relay-fee run on a testnet (the sandbox config is the only pricing seen so far), which also exercises the node's
   new getter call shapes against TON Center v3 `runGetMethod`: `get_executor`'s address argument as `{"type": "slice"}` and
   its slice result read through `stack_cell`, `get_codes`, the Mandate's `get_lane_nonce`, `get_wallet_data` (only the
-  fake API checks them today).
+  fake API checks them today); (f) the immutable deploys (owner ruling 2026-10-28): Sui `deploy.sh sui` publish +
+  `0x2::package::make_immutable` on the created `UpgradeCap` in the same run (the `--gas-budget` flag for older CLIs,
+  `SUI_GAS_BUDGET`; the cap object must be gone afterwards), and the Aptos `deploy-object` publish with
+  `upgrade_policy = "immutable"` (the package registry reads back policy 2); neither has run against a network.
 - [ ] **metatx split — final review** (whole-branch review, before the merge; items the per-task reviews deferred):
   - [x] 7702 intent: ruled (owner 2026-10-28): delegate-only signatures accepted on both paths; the address path follows
     CTR-UA-24 (`SigCheck.isValid`), parity case `ok_e7702_viaDelegate_addr`.

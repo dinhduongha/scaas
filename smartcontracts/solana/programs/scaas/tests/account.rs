@@ -226,6 +226,61 @@ fn guardian_recovery_waits_and_can_be_cancelled() {
     ok(env.manage(&acct, &fresh, 1, later(&env), None));
 }
 
+/// Alice's Account with a guardian, and a closure that adds a key signed by Alice.
+fn guarded() -> (Env, Ed, Keypair, Pubkey) {
+    let mut env = Env::new();
+    let alice = Ed::new("alice");
+    let guardian = Keypair::new();
+    env.svm.airdrop(&guardian.pubkey(), 1_000_000_000).unwrap();
+    open_ed(&mut env, &alice);
+    let acct = alice.account();
+    let mut op = env.keyop(&acct, SET_GUARDIAN);
+    op.guardian = guardian.pubkey().to_bytes();
+    ok(env.manage(&acct, &alice, 0, op, None));
+    (env, alice, guardian, acct)
+}
+
+fn add_key(env: &mut Env, acct: &Pubkey, alice: &Ed, key: AuthKey) {
+    let mut op = env.keyop(acct, ADD_KEY);
+    op.key = key;
+    ok(env.manage(acct, alice, 0, op, None));
+}
+
+/// CTR-ACC-03 adds a key: a recovery key that is already a key is refused when the recovery starts (fail fast) and,
+/// if it was added meanwhile, when it finishes (`BadKey`, as Aptos `add_key`).
+#[test]
+fn recovery_refuses_a_present_key() {
+    let (mut env, alice, guardian, acct) = guarded();
+    let (start, _) = guardian_ixs(&env, &guardian.pubkey(), &acct, alice.key());
+    expect_err(env.send_as(&guardian, &[start], &[]), E::BadKey);
+    let fresh = Ed::new("fresh");
+    let (start, finish) = guardian_ixs(&env, &guardian.pubkey(), &acct, fresh.key());
+    ok(env.send_as(&guardian, &[start], &[]));
+    add_key(&mut env, &acct, &alice, fresh.key());
+    env.set_time(NOW + 3 * 86_400);
+    expect_err(env.send(&[finish], &[]), E::BadKey);
+    assert_eq!(env.subject(&acct).keys, vec![alice.key(), fresh.key()]);
+}
+
+/// A full set (`MAX_KEYS` = 8) takes no recovery key: refused at the start (fail fast) and, if the set filled
+/// meanwhile, at the finish (`TooMany`, as Aptos). An owner who lost every key of a full set removes one first.
+#[test]
+fn recovery_refuses_a_full_set() {
+    let (mut env, alice, guardian, acct) = guarded();
+    for i in 0..6 {
+        add_key(&mut env, &acct, &alice, Ed::new(&format!("k{i}")).key());
+    }
+    let (start, finish) = guardian_ixs(&env, &guardian.pubkey(), &acct, Ed::new("new").key());
+    ok(env.send_as(&guardian, &[start], &[]));
+    add_key(&mut env, &acct, &alice, Ed::new("k6").key());
+    assert_eq!(env.subject(&acct).keys.len(), 8);
+    let (ninth, _) = guardian_ixs(&env, &guardian.pubkey(), &acct, Ed::new("ninth").key());
+    expect_err(env.send_as(&guardian, &[ninth], &[]), E::TooMany);
+    env.set_time(NOW + 3 * 86_400);
+    expect_err(env.send(&[finish], &[]), E::TooMany);
+    assert_eq!(env.subject(&acct).keys.len(), 8);
+}
+
 /// Owner OQ1 (mặc định TẮT): bật khi chưa có backup ⇒ từ chối; bật rồi thì không xoá được backup cuối, nhưng thay
 /// guardian (kể cả guardian bị lộ) vẫn được.
 #[test]

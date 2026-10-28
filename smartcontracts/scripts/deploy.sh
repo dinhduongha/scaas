@@ -44,7 +44,9 @@ case "$FAMILY" in
            cap="$(python3 -c 'import json,sys; print(next(c["objectId"] for c in json.loads(sys.stdin.read())["objectChanges"]
                   if c.get("type") == "created" and c.get("objectType") == "0x2::package::UpgradeCap"))' <<< "$out")" \
              || { echo "no UpgradeCap in the publish output: make the package immutable by hand" >&2; exit 1; }
-           exec sui client --client.env "$NET" call --package 0x2 --module package --function make_immutable --args "$cap" ;;
+           # --gas-budget: older Sui CLIs require it (SUI_GAS_BUDGET, MIST)
+           exec sui client --client.env "$NET" call --package 0x2 --module package --function make_immutable --args "$cap" \
+             --gas-budget "${SUI_GAS_BUDGET:-50000000}" ;;
   soroban) C="${1:?contract (token|mandate|dex|smart_key_account)}"; shift
            exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/scaas_$C.wasm" "$@" ;;
   solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;

@@ -278,7 +278,9 @@ assertion.** Owner decision. Rules:
   relayed. (2) The guardian (native tx signed with its Solana key) `start_recovery(new_key)`; `finish_recovery` after
   `RECOVERY_DELAY` = 2 days **adds** the key and removes none (CTR-ACC-03, as EVM / Sui / Aptos; owner ruling 2026-10-28):
   the owner keeps its keys, sees the new one and removes a lost key with a KeyOp; a recovery key already present or a full
-  key set (8) aborts; `key_nonce` is bumped. A current key can cancel.
+  key set (8) is refused at `start_recovery` (fail fast) and again at `finish_recovery` (the set may change meanwhile;
+  `BadKey` / `TooMany`, as Aptos); `key_nonce` is bumped. An owner who lost every key of a full 8-key set cannot be
+  recovered: keep a free slot (remove a key first). A current key can cancel.
 - **Never bricked:** never zero keys; while a P-256 key exists, never zero origins. An assertion whose `rpIdHash` matches
   the key but whose `origin ∉ origins` is accepted for exactly one thing: `KeyOp{action=add_origin, origin = the
   assertion's own origin}` (the origin carried in that assertion). Browsers let only origins of the rpId (or related origins published by the rpId owner) assert

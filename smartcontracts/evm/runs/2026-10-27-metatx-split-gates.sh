@@ -142,6 +142,8 @@ solana|cargo|wrapper_router_bound_pay_refused_direct
 solana|cargo|wrapper_ref_vectors
 solana|cargo|wrapper_noop_refused_payer_not_charged
 solana|cargo|guardian_recovery_waits_and_can_be_cancelled
+solana|cargo|recovery_refuses_a_present_key
+solana|cargo|recovery_refuses_a_full_set
 solana|cargo|wrapper_any_lane_may_submit
 solana|cargo|wrapper_other_instance_refused
 cosmos|cargo|pay_meta_vectors_match

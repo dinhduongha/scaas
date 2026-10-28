@@ -526,6 +526,9 @@ pub fn start_recovery(ctx: Context<StartRecovery>, key: AuthKey, origin: String)
     require!(origin.len() <= MAX_ORIGIN_LEN, ScaasError::BadOrigin);
     let s = &mut ctx.accounts.subject;
     require!(key.scheme != SCHEME_P256 || !origin.is_empty() || !s.origins.is_empty(), ScaasError::WouldBrick);
+    // fail fast on what `finish_recovery` refuses (it re-checks: the set may change meanwhile)
+    require!(!s.keys.iter().any(|k| k.pubkey == key.pubkey), ScaasError::BadKey);
+    require!(s.keys.len() < MAX_KEYS, ScaasError::TooMany);
     s.recovery = Some(Recovery { key, origin, ready_at: util::now()? + RECOVERY_DELAY });
     let len = s.space();
     let info = ctx.accounts.subject.to_account_info();
