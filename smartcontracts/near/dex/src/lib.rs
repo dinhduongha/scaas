@@ -313,6 +313,13 @@ impl Dex {
     pub fn pending(&self, #[serializer(borsh)] settle_id: [u8; 32]) -> Option<Settle> {
         self.settles.get(&settle_id).cloned()
     }
+
+    /// The settle a leg digest is indexed in (until that entry is pruned): a relayer refuses a settle reusing it
+    /// ("a leg is already in a settle"), e.g. the scaas-node router pre-check (Task 16 fix 2, review f1).
+    #[result_serializer(borsh)]
+    pub fn leg_settle(&self, #[serializer(borsh)] digest: [u8; 32]) -> Option<[u8; 32]> {
+        self.legs.get(&digest).copied()
+    }
 }
 
 impl Dex {

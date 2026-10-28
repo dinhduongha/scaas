@@ -153,6 +153,10 @@ impl D {
         self.dex.view("pending").args(b(&id)).await.unwrap().borsh().unwrap()
     }
 
+    async fn leg_settle(&self, l: &L) -> Option<[u8; 32]> {
+        self.dex.view("leg_settle").args(b(&l.op.digest())).await.unwrap().borsh().unwrap()
+    }
+
     /// The escrow entry under key `s` ‖ id (the sandbox clock cannot jump to an expiry; a lost callback is staged).
     async fn patch(&self, id: [u8; 32], f: impl FnOnce(&mut Settle)) {
         let mut s = self.pending(id).await.unwrap();
@@ -292,6 +296,27 @@ async fn settle_pays_both_legs() {
     assert_eq!((d.pending(id).await, d.usage(&d.dex).await), (None, ud), "pruned");
     // nothing moved on the prune
     assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &e).await), (100, 60));
+}
+
+/// Task 16 fix 2 (review f1): `leg_settle(digest)` answers the settle a leg is indexed in, from `settle` until the entry
+/// is pruned; a second settle reusing an indexed leg is refused (the node refuses it up front through this view).
+#[tokio::test]
+async fn leg_settle_view_tracks_the_index() {
+    let d = setup_dex().await;
+    let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
+    let (a, bl) = d.pair(&erin, &bobk).await;
+    assert_eq!((d.leg_settle(&a).await, d.leg_settle(&bl).await), (None, None), "not indexed before settle");
+    let out = d.settle(&d.t.relayer, &a, &bl).await;
+    assert!(out.is_success(), "{:?}", out.failures());
+    let id = settle_id(&a.op, &bl.op);
+    assert_eq!((d.leg_settle(&a).await, d.leg_settle(&bl).await), (Some(id), Some(id)));
+    let out = d.settle(&d.t.relayer, &a, &bl).await;
+    assert!(failed_with(&out, IN_SETTLE), "{:?}", out.failures());
+    let now = d.t.now_s().await;
+    d.patch(id, |s| s.expiry = now - 1).await;
+    let out = d.refund(&d.t.alice, id).await;
+    assert!(out.is_success(), "{:?}", out.failures());
+    assert_eq!((d.leg_settle(&a).await, d.leg_settle(&bl).await), (None, None), "pruned with the entry");
 }
 
 /// One leg refused (it returns `false` and nothing moves on its token), the other refunded by `on_legs`: a UA seller by
