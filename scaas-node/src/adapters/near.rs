@@ -16,7 +16,7 @@
 //! simulation can disagree with its run where the entry changes what the payment's checks read (the entry adds or
 //! removes the payment's signing key, a revoke refund funds the payer, `set_policy` turns on passkey-for-value for the
 //! payer): such a job fails on chain and is reported reverted, never retried blindly (Task 9 note).
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -61,6 +61,10 @@ const ROUTER_SIG_KEY: u64 = TGAS;
 pub const MAX_ARGS_BYTES: usize = 16_384;
 /// common/src/auth.rs `PASSKEY_FIELD_MAX`: a longer passkey field is refused on chain (its verify is not budgeted).
 pub const PASSKEY_FIELD_MAX: usize = 1024;
+/// Fix 2 R1 / R2: a relay-fee payment, its wrapped entry op, a router target op or a DEX order / leg must stay valid
+/// this long past now (controller ruling), else it could expire in transit (checks read `final` state ≈ 2–3 blocks
+/// old; the hold, the target and a settle's legs run blocks after inclusion) and the relay fails unpaid.
+pub const RELAY_EXPIRY_MARGIN_S: u64 = 120;
 /// `relay_timeout(ref)`: its receipt, a token settle and a deposit return (`GAS_RELEASE` 5 each), `on_settle` 3.
 const GAS_RELAY_TIMEOUT: u64 = 30 * TGAS;
 /// A `relay_timeout` this node sent that has not settled the entry yet is sent again after this long.
@@ -567,8 +571,9 @@ pub struct RelayFeePolicy {
     pub min_yocto_value: HashMap<String, u128>,
     /// `params.dex`: the escrow DEX (a router target, its `matched` joins trade legs).
     pub dex: Option<String>,
-    /// `params.relay_fee.targets`: third-party router targets beside the configured tokens and the DEX.
-    pub targets: Vec<String>,
+    /// `params.relay_fee.targets`: third-party router targets beside the configured tokens and the DEX, each with the
+    /// methods the operator vouches for.
+    pub targets: BTreeMap<String, Vec<String>>,
 }
 
 impl RelayFeePolicy {
@@ -601,16 +606,22 @@ impl RelayFeePolicy {
             None => None,
             Some(v) => Some(near_id(v.as_str().ok_or_else(|| anyhow!("params.dex must be a string"))?).context("params.dex")?),
         };
-        let mut targets = Vec::new();
+        // fix 2 f2: `targets = { "<account id>" = ["method", …] }`, strict
+        let mut targets = BTreeMap::new();
         if let Some(v) = t.and_then(|t| t.get("targets")) {
-            let list = v.as_array().ok_or_else(|| anyhow!("params.relay_fee.targets must be a list of account ids"))?;
-            for x in list {
-                let id = near_id(x.as_str().ok_or_else(|| anyhow!("params.relay_fee.targets: {x} is not a string"))?)
-                    .context("params.relay_fee.targets")?;
-                if Some(&id) == router.as_ref() || Some(&id) == executor.as_ref() {
-                    bail!("params.relay_fee.targets: {id} is the router or its executor");
+            let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.targets must be a table of account id = [methods]"))?;
+            for (k, ms) in table {
+                let id = near_id(k).context("params.relay_fee.targets")?;
+                if Some(&id) == router.as_ref() || Some(&id) == executor.as_ref() || tokens.contains(&id) || dex.as_ref() == Some(&id) {
+                    bail!("params.relay_fee.targets: {id} is the router, its executor, a token or the DEX");
                 }
-                targets.push(id);
+                let list = ms.as_array().filter(|l| !l.is_empty())
+                    .ok_or_else(|| anyhow!("params.relay_fee.targets.{k} must be a non-empty list of method names"))?;
+                let methods = list.iter().map(|m| match m.as_str() {
+                    Some(m) if (1..=255).contains(&m.len()) && m != "add_key_native" => Ok(m.to_string()),
+                    _ => Err(anyhow!("params.relay_fee.targets.{k}: {m} is not a method name")),
+                }).collect::<Result<Vec<_>>>()?;
+                targets.insert(id, methods);
             }
         }
         let mut min_yocto_value = HashMap::new();
@@ -741,9 +752,12 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
                 bail!("a relay-fee target method add_key_native is refused (no key is ever registered for the executor)");
             }
             // fix 1 I2: only targets whose calls the node can vouch for (SCaaS, checked in `build`) or the operator lists
-            let allowed = policy.tokens.iter().chain(&policy.dex).chain(&policy.targets).any(|x| *x == target);
+            let allowed = policy.tokens.iter().chain(&policy.dex).chain(policy.targets.keys()).any(|x| *x == target);
             if !allowed {
                 bail!("{target} is not an allowed router target (configured tokens, params.dex, params.relay_fee.targets)");
+            }
+            if policy.targets.get(&target).is_some_and(|ms| !ms.contains(&method)) {
+                bail!("{method} is not a listed method of router target {target} (params.relay_fee.targets)");
             }
             if pays(op, Some(executor)) {
                 bail!("the executor is never paid");
@@ -831,6 +845,10 @@ fn decode_held(b: &[u8]) -> Result<bool> {
 struct SettleLeg {
     order: Vec<u8>,
     sell_token: String,
+    buy_token: String,
+    sell_amount: u128,
+    min_buy: u128,
+    expiry: u64,
     relayer: Option<String>,
     op: MetaOp,
     auth_raw: Vec<u8>,
@@ -844,20 +862,53 @@ fn settle_legs(b: &[u8]) -> Result<Vec<SettleLeg>> {
     for _ in 0..2 {
         let start = r.i;
         let sell_token = r.account()?;
-        r.account()?;
-        r.u128()?;
-        r.u128()?;
+        let buy_token = r.account()?;
+        let (sell_amount, min_buy) = (r.u128()?, r.u128()?);
         let relayer = r.option(|r| r.account())?;
-        r.u64()?;
+        let expiry = r.u64()?;
         let order = b[start..r.i].to_vec();
         let op = MetaOp::read(&mut r)?;
         let at = r.i;
         let auth = Auth::read(&mut r, true)?;
-        legs.push(SettleLeg { order, sell_token, relayer, op, auth_raw: b[at..r.i].to_vec(), auth });
+        legs.push(SettleLeg { order, sell_token, buy_token, sell_amount, min_buy, expiry, relayer, op, auth_raw: b[at..r.i].to_vec(), auth });
     }
     r.end()?;
     Ok(legs)
 }
+
+/// dex/src/lib.rs `leg()` without the clock: op 1 for the order's sell token, `to = relayer = the DEX`, amount =
+/// `sell_amount` > 0, `extra = sha256(Borsh(order))`.
+fn dex_leg(l: &SettleLeg, dex: &str) -> std::result::Result<(), &'static str> {
+    let me = Holder::Near(dex.into());
+    if l.op.op != 1 || l.op.contract != l.sell_token || l.op.to != me || l.op.relayer.as_deref() != Some(dex) {
+        return Err("leg: op 1 for the order's sell token, to = relayer = this DEX");
+    }
+    if l.op.amount != l.sell_amount || l.op.amount == 0 {
+        return Err("fill-or-kill: op amount = sell_amount");
+    }
+    if l.op.extra != sha256(&l.order) {
+        return Err("extra is not sha256 of the order");
+    }
+    Ok(())
+}
+
+/// dex/src/lib.rs `pair()`: the orders cross (each buys what the other sells, two distinct tokens) and are fill-or-kill;
+/// two distinct legs (`settle` indexes each leg once).
+fn dex_pair(a: &SettleLeg, b: &SettleLeg) -> std::result::Result<(), &'static str> {
+    if a.sell_token != b.buy_token || b.sell_token != a.buy_token || a.sell_token == a.buy_token {
+        return Err("orders do not pair (each buys what the other sells)");
+    }
+    if a.sell_amount < b.min_buy || b.sell_amount < a.min_buy {
+        return Err("fill-or-kill: each side's sell_amount covers the other's min_buy");
+    }
+    if a.op.digest() == b.op.digest() {
+        return Err("the same leg twice");
+    }
+    Ok(())
+}
+
+/// The token entries that move value from the op's `from` (`op.amount`; a mandate open: its funding).
+const VALUE_ENTRIES: &[&str] = &["mtx_pay", "mtx_pay_meta", "mtx_transfer", "mtx_execute_transfer", "mtx_mandate_open"];
 
 /// The token entries a router job may target: each has a `<method>_check(caller, …same args)` view and takes
 /// `(op, auth, …)` first (token/src/{metatx,account,mandate,trade}.rs).
@@ -1562,30 +1613,44 @@ impl NearAdapter {
     /// each leg's `mtx_trade_check` on its (configured) sell token as the DEX, `target_gas` ≥ `settle_gas`,
     /// `target_deposit` ≥ the settle entry + 2 yoctoNEAR + both legs' storage. A listed third-party target:
     /// `target_gas` ≥ `GAS_TARGET_MIN` only (the operator vouches for it).
-    async fn target_check(&self, target: &str, method: &str, args: &[u8], gas: u64, deposit: u128) -> std::result::Result<(), SimError> {
+    async fn target_check(&self, pay: &MetaOp, target: &str, method: &str, args: &[u8], gas: u64, deposit: u128) -> std::result::Result<(), SimError> {
         let rv = |m: String| SimError::Revert(m);
         let executor = self.relay_fee.executor.as_deref().ok_or_else(|| rv("no executor configured".into()))?;
         let gas_floor = |floor: u64| match gas < floor {
             true => Err(rv(format!("target_gas {gas} is below the {floor} the {method} call on {target} needs"))),
             false => Ok(()),
         };
-        let short = |need: u128| match deposit < need {
-            true => Err(rv(format!("target_deposit {deposit} is below the {need} yoctoNEAR the {method} call on {target} stores"))),
-            false => Ok(()),
-        };
         let check = |b: Vec<u8>, what: &str| -> std::result::Result<u128, SimError> {
             decode_check(&b).map_err(transport)?.map_err(|e| rv(format!("router target {what}: {e}")))
+        };
+        let margin = |vu: u64, what: &str| match vu <= now().saturating_add(RELAY_EXPIRY_MARGIN_S) {
+            true => Err(rv(format!("{what} expires within {RELAY_EXPIRY_MARGIN_S} s (at {vu}): it would expire in transit"))),
+            false => Ok(()),
         };
         if self.relay_fee.tokens.iter().any(|t| t == target) {
             if !TOKEN_CHECKED.contains(&method) {
                 return Err(rv(format!("router target {target}: {method} is not a relayable token entry (no check view)")));
             }
             let mut r = Reader::new(args);
-            let auth = MetaOp::read(&mut r).and_then(|_| Auth::read(&mut r, true))
+            let (top, auth) = MetaOp::read(&mut r).and_then(|op| Ok((op, Auth::read(&mut r, true)?)))
                 .map_err(|e| rv(format!("router target args of {method}: {e:#}")))?;
+            margin(top.valid_until, "the target op")?;
             gas_floor(GAS_JOB_BASE.saturating_add(auth.attach_gas()))?;
             let c = self.view(target, &format!("{method}_check"), &[borsh_str(executor), args.to_vec()].concat()).await.map_err(sim)?;
-            return short(check(c, &format!("{method}_check"))?);
+            let need = check(c, &format!("{method}_check"))?;
+            // fix 2 f4: exactly what it stores (a surplus would be refunded to the executor, its predecessor)
+            if deposit != need {
+                return Err(rv(format!("target_deposit {deposit} must equal the {need} yoctoNEAR the {method} call on {target} stores")));
+            }
+            // fix 2 R3: relay_hold debits the fee before the target runs; the target's check read the balance before it
+            if target == pay.contract && VALUE_ENTRIES.contains(&method) && top.from == pay.from {
+                let have = self.balance(target, &pay.from).await?;
+                let want = top.amount.saturating_add(pay.amount);
+                if have < want {
+                    return Err(rv(format!("the payer's balance {have} on {target} is below the target's {} + the fee {}", top.amount, pay.amount)));
+                }
+            }
+            return Ok(());
         }
         if self.relay_fee.dex.as_deref() == Some(target) {
             if method != "settle" {
@@ -1598,23 +1663,58 @@ impl NearAdapter {
             if let Some(l) = legs.iter().find(|l| !self.relay_fee.tokens.contains(&l.sell_token)) {
                 return Err(rv(format!("a settle leg sells {}, not a configured token", l.sell_token)));
             }
+            // fix 2 R4: dex `leg()` and `pair()`, off chain
+            for l in &legs {
+                dex_leg(l, target).map_err(|e| rv(e.into()))?;
+                margin(l.expiry, "a DEX order")?;
+                margin(l.op.valid_until, "a DEX leg op")?;
+            }
+            dex_pair(&legs[0], &legs[1]).map_err(|e| rv(e.into()))?;
             gas_floor(legs.iter().fold(DEX_SETTLE_GAS, |g, l| g.saturating_add(DEX_LEG_GAS).saturating_add(l.auth.router_gas())))?;
-            let mut stored = DEX_PAYOUT_YOCTO;
+            let (da, db) = (legs[0].op.digest(), legs[1].op.digest());
+            if self.view(target, "pending", &sha256(&[da, db].concat())).await.map_err(transport)?.first() != Some(&0) {
+                return Err(rv("this pair is already pending at the DEX (settle_id(a, b))".into()));
+            }
+            // fix 2 f1: a leg indexed in another settle (e.g. a failed direct settle) panics `settle`
+            for d in [da, db] {
+                if self.view(target, "leg_settle", &d).await.map_err(transport)?.first() != Some(&0) {
+                    return Err(rv(format!("leg {} is already in a settle at the DEX", hex0x(&d))));
+                }
+            }
+            let mut larger = 0u128;
             for (i, l) in legs.iter().enumerate() {
                 let receiver = &legs[1 - i].op.from;
                 let mut a = [borsh_str(target), l.op.borsh(), l.auth_raw.clone(), l.order.clone()].concat();
                 receiver.write(&mut a);
                 let c = self.view(&l.sell_token, "mtx_trade_check", &a).await.map_err(sim)?;
-                stored = stored.saturating_add(check(c, "mtx_trade_check")?);
+                larger = larger.max(check(c, "mtx_trade_check")?);
             }
             // Borsh(Settle): per leg token, seller, lane 32, nonce 8, digest 32, amount 16; relayer; deposit 16, expiry 8, done 1
             let settle = legs.iter().map(|l| 4 + l.sell_token.len() as u64 + holder_len(&l.op.from) + 88).sum::<u64>()
                 + 4 + executor.len() as u64 + 25;
             let pc = self.rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"})).await.map_err(transport)?;
             let cost = dec_u128(&pc["runtime_config"]["storage_amount_per_byte"], "storage_amount_per_byte").map_err(transport)?;
-            return short(stored.saturating_add(cost.saturating_mul(u128::from(DEX_ENTRY_FIXED_BYTES + settle))));
+            // fix 2 f3: settle splits the rest evenly between the legs: 2 × the larger leg
+            let need = cost.saturating_mul(u128::from(DEX_ENTRY_FIXED_BYTES + settle))
+                .saturating_add(DEX_PAYOUT_YOCTO).saturating_add(larger.saturating_mul(2));
+            if deposit < need {
+                return Err(rv(format!("target_deposit {deposit} is below the {need} yoctoNEAR the settle on {target} needs")));
+            }
+            return Ok(());
         }
+        // fix 2 f2: a listed third-party target, only its listed methods (checked in `entry`)
         gas_floor(GAS_TARGET_MIN)
+    }
+
+    /// A holder's balance on a token (`ft_balance_of` / `ua_balance_of`, NEP-141 JSON).
+    async fn balance(&self, token: &str, h: &Holder) -> std::result::Result<u128, SimError> {
+        let (method, args) = match h {
+            Holder::Near(a) => ("ft_balance_of", json!({"account_id": a})),
+            Holder::Ua(id) => ("ua_balance_of", json!({"id": id})),
+        };
+        let b = self.view(token, method, &serde_json::to_vec(&args).map_err(|e| transport(e.into()))?).await.map_err(sim)?;
+        let v: Value = serde_json::from_slice(&b).map_err(|e| transport(e.into()))?;
+        dec_u128(&v, method).map_err(transport)
     }
 
     /// Fix 1 m6 (R9): logs the key-op subject's key sets on every configured token; a drift is a warning.
@@ -1697,6 +1797,17 @@ impl ChainAdapter for NearAdapter {
         let fee = marker(&self.relay_fee, &w.op, &w.entry).cloned();
         if fee.is_some() {
             relay_payee(&self.relay_fee, &w.op, &w.entry, &lane_id).map_err(revert)?;
+            // fix 2 R1 / R2: the payment and a wrapped entry's op stay valid through the relay
+            let entry_vu = match &w.entry {
+                Entry::FeeWrapper { args, .. } => MetaOp::read(&mut Reader::new(args)).ok().map(|o| o.valid_until),
+                _ => None,
+            };
+            let soon = now().saturating_add(RELAY_EXPIRY_MARGIN_S);
+            for (vu, what) in [(Some(w.op.valid_until), "the fee payment"), (entry_vu, "the wrapped entry op")] {
+                if vu.is_some_and(|vu| vu <= soon) {
+                    return Err(SimError::Revert(format!("{what} expires within {RELAY_EXPIRY_MARGIN_S} s: it would expire in transit")));
+                }
+            }
         }
         let mut call = call_of(&self.relay_fee, &w.entry, &w.op, &w.auth_raw).map_err(revert)?;
         call.deposit = match &w.entry {
@@ -1706,7 +1817,7 @@ impl ChainAdapter for NearAdapter {
                     Some(false) => return Err(SimError::Revert(format!("relay-fee target {target} has no code"))),
                     Some(true) => {}
                 }
-                self.target_check(target, method, args, *target_gas, *target_deposit).await?;
+                self.target_check(&w.op, target, method, args, *target_gas, *target_deposit).await?;
                 let rc = self.view(&call.receiver, "relay_check", &call.args).await.map_err(sim)?;
                 let (deposit, gas) = decode_router_check(&rc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_check: {e}")))?;
                 if gas != call.gas {
@@ -2031,7 +2142,7 @@ mod tests {
             params: crate::config::RelayParams { min_amount: 1, ..Default::default() },
             min_yocto_value: HashMap::from([(TOKEN.to_string(), 1_000)]),
             dex: Some(DEX.into()),
-            targets: vec![],
+            targets: BTreeMap::new(),
         }
     }
 
@@ -2207,6 +2318,9 @@ mod tests {
         w.views.insert((TOKEN.into(), "network".into()), net);
         w.views.insert((ROUTER.into(), "executor".into()), bstr(EXECUTOR));
         w.views.insert((TOKEN.into(), "storage_balance_of".into()), br#"{"total":"1250000000000000000000","available":"0"}"#.to_vec());
+        w.views.insert((TOKEN.into(), "ft_balance_of".into()), br#""1000000000000""#.to_vec());
+        w.views.insert((DEX.into(), "leg_settle".into()), vec![0]);
+        w.views.insert((DEX.into(), "pending".into()), vec![0]);
         w.blocks.push(json!({"header": {"height": 100, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []}));
         w
     }
@@ -2983,19 +3097,36 @@ mod tests {
 
     const TOKENB: &str = "tokenb.test.near";
 
+    const FAR: u64 = 4_102_444_800;
+
     fn order(sell: &str, buy: &str, amount: u128, min_buy: u128, relayer: Option<&str>) -> Vec<u8> {
+        order_x(sell, buy, amount, min_buy, relayer, FAR)
+    }
+
+    fn order_x(sell: &str, buy: &str, amount: u128, min_buy: u128, relayer: Option<&str>, expiry: u64) -> Vec<u8> {
         let rel = match relayer {
             None => vec![0],
             Some(r) => [vec![1], bstr(r)].concat(),
         };
-        [bstr(sell), bstr(buy), amount.to_le_bytes().to_vec(), min_buy.to_le_bytes().to_vec(), rel, 4_102_444_800u64.to_le_bytes().to_vec()].concat()
+        [bstr(sell), bstr(buy), amount.to_le_bytes().to_vec(), min_buy.to_le_bytes().to_vec(), rel, expiry.to_le_bytes().to_vec()].concat()
+    }
+
+    /// A shared trade leg op bound to `order` (`extra = sha256(Borsh(order))`, as the DEX's `leg()` checks).
+    fn leg_op(name: &str, order: &[u8]) -> MetaOp {
+        MetaOp { extra: sha256(order), ..op_of(name) }
+    }
+
+    fn settle_with(oa: &[u8], a: &MetaOp, ob: &[u8], b: &MetaOp) -> Vec<u8> {
+        [oa.to_vec(), a.borsh(), auth_bytes(&row("trade_a")["auth"]), ob.to_vec(), b.borsh(), auth_bytes(&row("trade_b")["auth"])].concat()
+    }
+
+    fn settle_orders(oa: &[u8], ob: &[u8]) -> Vec<u8> {
+        settle_with(oa, &leg_op("trade_a", oa), ob, &leg_op("trade_b", ob))
     }
 
     /// The settle args of the shared trade legs with the given orders' relayers.
     fn settle_args(ra: Option<&str>, rb: Option<&str>) -> Vec<u8> {
-        let (a, b) = (op_of("trade_a"), op_of("trade_b"));
-        [order(TOKEN, TOKENB, 100, 50, ra), a.borsh(), auth_bytes(&row("trade_a")["auth"]),
-         order(TOKENB, TOKEN, 60, 100, rb), b.borsh(), auth_bytes(&row("trade_b")["auth"])].concat()
+        settle_orders(&order(TOKEN, TOKENB, 100, 50, ra), &order(TOKENB, TOKEN, 60, 100, rb))
     }
 
     /// A world where the honest router job's views pass.
@@ -3012,7 +3143,11 @@ mod tests {
 
     async fn build_router(w: World, relay_fee: &str, target: &str, method: &str, args: &[u8], tg: &str, td: &str) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
         let (op, o) = router_op_g(target, method, args, Holder::Near("bob.test.near".into()), tg, td);
-        let gas = entry(&RelayFeePolicy { dex: Some(DEX.into()), targets: vec!["app.near".into()], tokens: vec![TOKEN.into(), TOKENB.into()], ..pol() }, &op, &o)
+        build_router_op(w, relay_fee, op, o).await
+    }
+
+    async fn build_router_op(w: World, relay_fee: &str, op: MetaOp, o: Value) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
+        let gas = entry(&RelayFeePolicy { dex: Some(DEX.into()), targets: BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]), tokens: vec![TOKEN.into(), TOKENB.into()], ..pol() }, &op, &o)
             .ok().and_then(|e| job_gas(&e, &Auth::decode(&hx(&o["signature"])).unwrap()).ok()).unwrap_or(0);
         let mut w = w;
         w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, gas));
@@ -3028,7 +3163,7 @@ mod tests {
     /// `target_gas` must reach the call's pinned floor and its `target_deposit` what the call stores.
     #[tokio::test]
     async fn router_target_bound_to_fail_refused() {
-        let sponsored = format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", relay_bound_payee = true, targets = [\"app.near\"] }}");
+        let sponsored = format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", relay_bound_payee = true, targets = {{ \"app.near\" = [\"anything\"] }} }}");
         let ok = |r: &std::result::Result<Built, SimError>| r.is_ok();
         let refused = |r: &std::result::Result<Built, SimError>, what: &str| matches!(r, Err(SimError::Revert(e)) if e.contains(what));
         let big = "100000000000000000000000";
@@ -3062,6 +3197,9 @@ mod tests {
         assert!(refused(&r, "target_gas"), "{r:?}");
         let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", "6").await;
         assert!(refused(&r, "target_deposit"), "{r:?}");
+        // fix 2 f4: no surplus left at the executor (a token refunds it to the predecessor)
+        let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", "8").await;
+        assert!(refused(&r, "target_deposit"), "{r:?}");
         let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(None, None), "200000000000000", "0").await;
         assert!(refused(&r, "target_deposit"), "{r:?}");
         // the target's own refusal; a leg bound to another relayer (the executor submits); a leg on an unconfigured token
@@ -3079,14 +3217,19 @@ mod tests {
         let k = [lane0()];
         for (t, what) in [
             (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = \"app.near\" }}"), "targets"),
-            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = [\"Bad\"] }}"), "targets"),
-            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = [\"{EXECUTOR}\"] }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = [\"app.near\"] }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = {{ \"Bad\" = [\"m\"] }} }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = {{ \"{EXECUTOR}\" = [\"m\"] }} }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = {{ \"{DEX}\" = [\"settle\"] }} }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = {{ \"app.near\" = \"m\" }} }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = {{ \"app.near\" = [] }} }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = {{ \"app.near\" = [\"add_key_native\"] }} }}"), "targets"),
         ] {
             let e = NearAdapter::new(&cfg("http://r", &t), &k).err().unwrap();
             assert!(format!("{e:#}").contains(what), "{t}: {e:#}");
         }
         let p = NearAdapter::new(&cfg("http://r", &sponsored), &k).unwrap();
-        assert_eq!((p.relay_fee.targets.clone(), p.relay_fee.dex.as_deref()), (vec!["app.near".to_string()], Some(DEX)));
+        assert_eq!((p.relay_fee.targets.clone(), p.relay_fee.dex.as_deref()), (BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]), Some(DEX)));
     }
 
     /// I3 (review RV3): a non-archival RPC answers UNKNOWN_BLOCK for garbage-collected heights too; a range starting
@@ -3219,6 +3362,165 @@ mod tests {
         assert!(matches!(a.build(&job(o_of("pay", json!({}))), 0).await, Err(SimError::Revert(_))));
     }
 
+    // ------------------------------------------------------------------------------------------------ fix 2
+
+    fn sponsored_cfg() -> String {
+        format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", relay_bound_payee = true, targets = {{ \"app.near\" = [\"anything\"] }} }}")
+    }
+
+    /// R3 (review RV4): `relay_hold` debits the fee before the executor calls the target, while the target's check read
+    /// the balance before it. A value target on the payment's token by the same payer needs balance ≥ target amount +
+    /// fee; the shape itself stays allowed, and another payer's target is not read against this balance.
+    #[tokio::test]
+    async fn same_token_value_target_needs_balance() {
+        let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat(); // alice pays bob 100 on TOKEN
+        let fee = op_of("relay_fee_pay_router_short").amount; // alice's fee on TOKEN
+        let bal = |n: u128| {
+            let mut w = router_world(0);
+            w.views.insert((TOKEN.into(), "ft_balance_of".into()), format!("\"{n}\"").into_bytes());
+            w
+        };
+        let (r, w) = build_router(bal(100 + fee - 1), &sponsored_cfg(), TOKEN, "mtx_pay", &pay, "20000000000000", "7").await;
+        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("balance")), "{r:?}");
+        assert_eq!(view_args(&w, "ft_balance_of"), br#"{"account_id":"alice.test.near"}"#.to_vec());
+        let (r, _) = build_router(bal(100 + fee), &sponsored_cfg(), TOKEN, "mtx_pay", &pay, "20000000000000", "7").await;
+        assert!(r.is_ok(), "{r:?}");
+        // a UA payer is read through ua_balance_of; another payer's target is not this balance's business
+        let from_bob = [MetaOp { from: Holder::Near("bob.test.near".into()), to: Holder::Near("carol.test.near".into()), ..op_of("pay") }.borsh(),
+                        auth_bytes(&row("pay")["auth"])].concat();
+        let (r, w) = build_router(bal(0), &sponsored_cfg(), TOKEN, "mtx_pay", &from_bob, "20000000000000", "7").await;
+        assert!(r.is_ok(), "{r:?}");
+        assert!(!w.lock().unwrap().calls.iter().any(|c| c.1["method_name"] == "ft_balance_of"));
+        // a non-value target (a key op) on the same token by the same payer is not a value target
+        let key_op = [MetaOp { from: Holder::Near("alice.test.near".into()), ..op_of("cancel_recovery") }.borsh(), auth_bytes(&row("cancel_recovery")["auth"])].concat();
+        let mut w = bal(0);
+        w.views.insert((TOKEN.into(), "mtx_cancel_recovery_check".into()), check_ok(0));
+        let (r, _) = build_router(w, &sponsored_cfg(), TOKEN, "mtx_cancel_recovery", &key_op, "20000000000000", "0").await;
+        assert!(r.is_ok(), "{r:?}");
+    }
+
+    /// R4 (review RV5) + f1: the DEX's `leg()` / `pair()` replicated off chain (each leg bound to its order and the DEX,
+    /// the orders crossing, fill-or-kill, two distinct tokens, two distinct legs), and no settle reusing a pending pair
+    /// (`pending(settle_id)`) or an indexed leg (`leg_settle`).
+    #[tokio::test]
+    async fn dex_pair_and_index_replicated() {
+        let big = "100000000000000000000000";
+        let go = |args: Vec<u8>, w: World| async move { build_router(w, &sponsored_cfg(), DEX, "settle", &args, "200000000000000", big).await.0 };
+        let refused = |r: &std::result::Result<Built, SimError>, what: &str| matches!(r, Err(SimError::Revert(e)) if e.contains(what));
+        assert!(go(settle_args(None, None), router_world(0)).await.is_ok());
+        let cases: Vec<(Vec<u8>, &str)> = vec![
+            (settle_orders(&order(TOKEN, TOKENB, 100, 61, None), &order(TOKENB, TOKEN, 60, 100, None)), "fill-or-kill"),
+            (settle_orders(&order(TOKEN, TOKENB, 100, 50, None), &order(TOKENB, TOKEN, 60, 101, None)), "fill-or-kill"),
+            (settle_orders(&order(TOKEN, TOKENB, 100, 50, None), &order(TOKENB, TOKENB, 60, 100, None)), "pair"),
+            (settle_orders(&order(TOKEN, TOKEN, 100, 50, None), &order(TOKENB, TOKEN, 60, 100, None)), "pair"),
+        ];
+        for (args, what) in cases {
+            let r = go(args, router_world(0)).await;
+            assert!(refused(&r, what), "{what}: {r:?}");
+        }
+        // a leg not bound to its order (extra), amount != sell_amount, the same leg twice
+        let (oa, ob) = (order(TOKEN, TOKENB, 100, 50, None), order(TOKENB, TOKEN, 60, 100, None));
+        let r = go(settle_with(&oa, &op_of("trade_a"), &ob, &leg_op("trade_b", &ob)), router_world(0)).await;
+        assert!(refused(&r, "order"), "{r:?}");
+        let r = go(settle_with(&oa, &MetaOp { amount: 99, ..leg_op("trade_a", &oa) }, &ob, &leg_op("trade_b", &ob)), router_world(0)).await;
+        assert!(refused(&r, "sell_amount"), "{r:?}");
+        let r = go(settle_with(&oa, &leg_op("trade_a", &oa), &oa, &leg_op("trade_a", &oa)), router_world(0)).await;
+        assert!(r.is_err(), "the same leg twice: {r:?}");
+        // a pair already pending, a leg already indexed in another settle (f1: an attacker's failed direct settle)
+        let mut w = router_world(0);
+        w.views.insert((DEX.into(), "pending".into()), vec![1, 0]);
+        let (r, w) = build_router(w, &sponsored_cfg(), DEX, "settle", &settle_args(None, None), "200000000000000", big).await;
+        assert!(refused(&r, "pending"), "{r:?}");
+        let (a, b) = (leg_op("trade_a", &oa), leg_op("trade_b", &ob));
+        assert_eq!(view_args(&w, "pending"), sha256(&[a.digest(), b.digest()].concat()).to_vec(), "settle_id(a, b)");
+        let mut w = router_world(0);
+        w.views.insert((DEX.into(), "leg_settle".into()), [vec![1], vec![7; 32]].concat());
+        let r = go(settle_args(None, None), w).await;
+        assert!(refused(&r, "already in a settle"), "{r:?}");
+    }
+
+    /// R1 / R2 (review RV6): a payment, a target op, a wrapped entry op or a DEX order that expires within
+    /// RELAY_EXPIRY_MARGIN_S of now is refused (it would expire while the relay is in transit, unpaid).
+    #[tokio::test]
+    async fn expiry_margin_refused() {
+        let now = crate::submit::now();
+        let soon = now + RELAY_EXPIRY_MARGIN_S - 5;
+        let later = now + RELAY_EXPIRY_MARGIN_S + 60;
+        let refused = |r: &std::result::Result<Built, SimError>| matches!(r, Err(SimError::Revert(e)) if e.contains("expires"));
+        let pay = |vu: u64| [MetaOp { valid_until: vu, ..op_of("pay") }.borsh(), auth_bytes(&row("pay")["auth"])].concat();
+        // the payment
+        for (vu, bad) in [(soon, true), (later, false)] {
+            let (mut op, mut o) = router_op_g(TOKEN, "mtx_pay", &pay(FAR), Holder::Near("bob.test.near".into()), "20000000000000", "7");
+            op.valid_until = vu;
+            o["payload"] = json!(h(&op.encode()));
+            let (r, _) = build_router_op(router_world(0), &sponsored_cfg(), op, o).await;
+            assert_eq!(refused(&r), bad, "payment {vu}: {r:?}");
+        }
+        // the target op
+        let (r, _) = build_router(router_world(0), &sponsored_cfg(), TOKEN, "mtx_pay", &pay(soon), "20000000000000", "7").await;
+        assert!(refused(&r), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored_cfg(), TOKEN, "mtx_pay", &pay(later), "20000000000000", "7").await;
+        assert!(r.is_ok(), "{r:?}");
+        // a DEX order, and a leg op
+        let big = "100000000000000000000000";
+        let (oa, ob) = (order_x(TOKEN, TOKENB, 100, 50, None, soon), order(TOKENB, TOKEN, 60, 100, None));
+        let (r, _) = build_router(router_world(0), &sponsored_cfg(), DEX, "settle", &settle_orders(&oa, &ob), "200000000000000", big).await;
+        assert!(refused(&r), "{r:?}");
+        let oa = order(TOKEN, TOKENB, 100, 50, None);
+        let a = MetaOp { valid_until: soon, ..leg_op("trade_a", &oa) };
+        let (r, _) = build_router(router_world(0), &sponsored_cfg(), DEX, "settle", &settle_with(&oa, &a, &ob, &leg_op("trade_b", &ob)), "200000000000000", big).await;
+        assert!(refused(&r), "{r:?}");
+        // a wrapper job: its payment, and its entry op
+        let (wop, wo) = wrapper_job("wrapper_add_key_real");
+        let mut w = world();
+        w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(1));
+        let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
+        a.build(&job(wo.clone()), 0).await.unwrap();
+        let mut j = wo.clone();
+        j["payload"] = json!(h(&MetaOp { valid_until: soon, ..wop.clone() }.encode()));
+        assert!(refused(&a.build(&job(j), 0).await));
+        let eop = MetaOp { valid_until: soon, ..op_of("cancel_recovery") };
+        let call = [&[19u8][..], b"mtx_cancel_recovery", &eop.borsh(), &auth_bytes(&row("cancel_recovery")["auth"])].concat();
+        let mut op = MetaOp { relayer: Some(TOKEN.into()), to: Holder::Near(TOKEN.into()), extra: [0x51; 32], ..op_of("pay") };
+        op.pay_ref = relay_ref(&op.network, &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(), &call, &op.extra);
+        op.lane = pay_lane(&op.pay_ref);
+        let o = o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}));
+        let mut w = world();
+        w.views.insert((TOKEN.into(), "relay_fee_cancel_recovery_check".into()), check_ok(1));
+        let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
+        assert!(refused(&a.build(&job(o), 0).await));
+    }
+
+    /// f2: a listed third-party target accepts only the methods listed for it.
+    #[tokio::test]
+    async fn third_party_methods_listed() {
+        let (r, _) = build_router(router_world(0), &sponsored_cfg(), "app.near", "anything", &[1], "5000000000000", "0").await;
+        assert!(r.is_ok(), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored_cfg(), "app.near", "other_method", &[1], "5000000000000", "0").await;
+        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("other_method")), "{r:?}");
+    }
+
+    /// f3: `settle` splits the rest of its deposit evenly between the legs, so the floor is the entry + 2 yoctoNEAR +
+    /// 2 × the larger leg's storage (a + b would leave the bigger leg short: settle's own receipt succeeds, the fee is
+    /// released, the trade fails).
+    #[tokio::test]
+    async fn dex_deposit_floor_covers_the_larger_leg_twice() {
+        let mut w = router_world(0);
+        w.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(50));
+        let (oa, ob) = (order(TOKEN, TOKENB, 100, 50, None), order(TOKENB, TOKEN, 60, 100, None));
+        let (a, b) = (leg_op("trade_a", &oa), leg_op("trade_b", &ob));
+        let settle = [(TOKEN, &a), (TOKENB, &b)].iter().map(|(t, l)| 4 + t.len() as u64 + holder_len(&l.from) + 88).sum::<u64>() + 4 + EXECUTOR.len() as u64 + 25;
+        let entry = 10u128.pow(19) * u128::from(283 + settle) + 2;
+        let floor = entry + 2 * 50;
+        for (td, ok) in [(floor, true), (floor - 1, false), (entry + 5 + 50, false)] {
+            let mut w2 = router_world(0);
+            w2.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(50));
+            let (r, _) = build_router(w2, &sponsored_cfg(), DEX, "settle", &settle_args(None, None), "200000000000000", &td.to_string()).await;
+            assert_eq!(r.is_ok(), ok, "{td}: {r:?}");
+        }
+        drop(w);
+    }
+
     proptest! {
         /// Untrusted input never panics (§5): job bytes and JSON, RPC JSON, event logs.
         #[test]
@@ -3252,7 +3554,7 @@ mod tests {
                 op.pay_ref = relay_ref(&op.network, &[&[target.len() as u8][..], target.as_bytes()].concat(), &call, &op.extra);
                 op.lane = pay_lane(&op.pay_ref);
                 let o = json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": route, "target_gas": n.to_string(), "target_deposit": s}});
-                let p = RelayFeePolicy { dex: Some(DEX.into()), targets: vec!["app.near".into()], ..pol() };
+                let p = RelayFeePolicy { dex: Some(DEX.into()), targets: BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]), ..pol() };
                 if let Ok(e) = entry(&p, &op, &o) {
                     let _ = job_gas(&e, &Auth::Ed25519([0; 32]));
                     let _ = wrapper_conflicts(&e, &op, &Auth::Ed25519([0; 32]));
