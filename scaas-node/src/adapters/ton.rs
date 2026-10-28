@@ -756,7 +756,10 @@ const RELAY_REFUND_RETRY_S: u64 = 120;
 const LANE_TTL_S: u64 = 2_592_000;
 
 /// The `SignedOp` fields (Tact layout, `signed_op_body`): `(op, auth, params, state_init, responseDestination, forwardTon)`.
-pub fn parse_signed_op(c: &Arc<Cell>) -> Result<(Arc<Cell>, Arc<Cell>, Option<Arc<Cell>>, Option<Arc<Cell>>, Addr, u128)> {
+pub type SignedOpFields = (Arc<Cell>, Arc<Cell>, Option<Arc<Cell>>, Option<Arc<Cell>>, Addr, u128);
+
+/// Splits a `SignedOp` cell into its [`SignedOpFields`].
+pub fn parse_signed_op(c: &Arc<Cell>) -> Result<SignedOpFields> {
     let mut s = c.parser();
     if s.uint(32)? != OP_SIGNED {
         bail!("not a SignedOp");
