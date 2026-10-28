@@ -38,11 +38,11 @@ pub const GAS_ON_LEGS: Gas = Gas::from_tgas(10 + 2 * 4);
 pub const GAS_VIEW: Gas = Gas::from_tgas(3);
 /// `on_refund` (2.86 Tgas) plus what it prepays for its two refunds (2 × 2.13 Tgas).
 pub const GAS_ON_REFUND: Gas = Gas::from_tgas(10 + 2 * 4);
-/// `settle`'s own receipt (3.24 Tgas burnt) plus the exec fees it prepays for its three receipts: with two passkey legs
-/// it needs 90 Tgas prepaid against 84 Tgas of static gas (probe 2026-10-28), so 6 Tgas; × 1.5.
+/// `settle`'s own receipt (3.24 Tgas burnt) plus the exec fees it prepays for the three receipts it creates, × 1.5
+/// (`settle_gas_pin` runs two passkey legs at exactly `SETTLE_MIN_GAS`).
 pub const GAS_SETTLE_SELF: Gas = Gas::from_tgas(9);
-/// What `settle` needs prepaid: itself, the callback (with its payouts), two legs at their minimum.
-pub const SETTLE_MIN_GAS: Gas = Gas::from_tgas(9 + 18 + 2 * 36);
+/// What `settle` needs prepaid: itself, the callback (with its payouts), two legs at their minimum (99 Tgas).
+pub const SETTLE_MIN_GAS: Gas = Gas::from_gas(GAS_SETTLE_SELF.as_gas() + GAS_ON_LEGS.as_gas() + 2 * GAS_LEG_MIN.as_gas());
 /// Kept per settle for the two payouts / refunds (1 yoctoNEAR each, NEP-141).
 const PAYOUT_YOCTO: u128 = 2;
 

@@ -1,0 +1,77 @@
+# Task 8 mutation spot-checks (each guard removed, crate rebuilt, its test run; expect KILLED) at commit 3918209c + Task 8 finish (the T8 commit)
+# first pass (all 15); D4-D9 ran with token wasm still carrying T4 (the harness rebuilt only the mutated crate), so D5/D6/D9 were re-run on a clean token wasm (second pass)
+== summary
+KILLED       D1 order relayer (CTR-DEX-09)        order_relayer_mismatch_refused  | thread 'order_relayer_mismatch_refused' (117721) panicked at integration/tests/dex.rs:321:5:
+KILLED       T1 leg pulled only by DEX            leg_called_by_non_dex_refused  | thread 'leg_called_by_non_dex_refused' (123783) panicked at integration/tests/dex.rs:337:5:
+KILLED       D2 refund before expiry              refund_before_expiry_refused  | thread 'refund_before_expiry_refused' (129489) panicked at integration/tests/dex.rs:502:5:
+KILLED       T2 cancel of filled order            cancel_filled_order_refused  | thread 'cancel_filled_order_refused' (135536) panicked at integration/tests/common/mod.rs:200:9:
+KILLED       T3 min_nonce cap 2^63                min_nonce_cap_refused  | thread 'min_nonce_cap_refused' (141674) panicked at integration/tests/common/mod.rs:200:9:
+KILLED       D3 fill-or-kill price                no_partial_fill  | thread 'no_partial_fill' (147374) panicked at integration/tests/dex.rs:605:5:
+KILLED       T4 fill-or-kill amount (token)       no_partial_fill  | thread 'no_partial_fill' (153464) panicked at integration/tests/dex.rs:599:5:
+KILLED       D4 prepaid gas check                 settle_short_gas_refused  | thread 'settle_short_gas_refused' (159185) panicked at integration/tests/dex.rs:637:5:
+KILLED       D5 on_legs refunds arrived leg       one_leg_fails_other_refunded  | thread 'one_leg_fails_other_refunded' (164840) panicked at integration/tests/dex.rs:297:5:
+KILLED       D6 on_refund refunds                 refund_expired_after_lost_callback  | thread 'refund_expired_after_lost_callback' (170484) panicked at integration/tests/dex.rs:464:5:
+KILLED       D7 refund only own leg op            refund_only_own_leg  | thread 'tests::refund_only_own_leg' (175927) panicked at dex/src/lib.rs:383:9:
+KILLED       D8 refund wins (done entry)          late_on_legs_pays_nothing  | thread 'tests::late_on_legs_pays_nothing' (176083) panicked at dex/src/lib.rs:367:9:
+KILLED       D9 leg in one settle                 no_partial_fill  | thread 'no_partial_fill' (176589) panicked at integration/tests/dex.rs:599:5:
+KILLED       T5 order expiry (token)              leg_called_by_non_dex_refused  | thread 'leg_called_by_non_dex_refused' (182686) panicked at integration/tests/dex.rs:360:9:
+KILLED       T6 leg storage deposit (token)       settle_deposit_short_refused  | thread 'settle_deposit_short_refused' (188597) panicked at integration/tests/dex.rs:420:5:
+== second pass (clean token wasm)
+KILLED       D5 on_legs refunds arrived leg       one_leg_fails_other_refunded  | panicked at integration/tests/dex.rs:297:5
+KILLED       D6 on_refund refunds                 refund_expired_after_lost_callback  | panicked at integration/tests/dex.rs:464:5
+KILLED       D9 leg in one settle                 no_partial_fill  | panicked at integration/tests/dex.rs:625:5 (IN_SETTLE)
+== harness (python3 -I, run under scripts/capped)
+    #!/usr/bin/env python3
+    """T8 mutation spot-checks: for each guard, remove it (exact replace, count 1), rebuild the crate's wasm (or run the
+    unit test), run the named test, expect FAIL, restore the file from an in-memory copy. Run inside scripts/capped."""
+    import subprocess, sys, pathlib
+    NEAR = pathlib.Path('/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near')
+    DEX, TOK = 'dex/src/lib.rs', 'token/src/trade.rs'
+    M = [
+        ('D1 order relayer (CTR-DEX-09)', DEX, 'if order.relayer.as_ref().is_some_and(|r| r != caller) {', 'if false {', 'it', 'order_relayer_mismatch_refused'),
+        ('T1 leg pulled only by DEX', TOK, 'if op.to != dex || op.relayer.as_ref() != Some(caller) {', 'if false {', 'it', 'leg_called_by_non_dex_refused'),
+        ('D2 refund before expiry', DEX, 'require!(now_s() > s.expiry, "refund before expiry");', '', 'it', 'refund_before_expiry_refused'),
+        ('T2 cancel of filled order', TOK, 'self.open_order(&op.from, lane, nonce, "order filled: cancel refused")?;', '', 'it', 'cancel_filled_order_refused'),
+        ('T3 min_nonce cap 2^63', TOK, 'if min_nonce >= MIN_NONCE_CAP {', 'if false {', 'it', 'min_nonce_cap_refused'),
+        ('D3 fill-or-kill price', DEX, 'if a.sell_amount < b.min_buy || b.sell_amount < a.min_buy {', 'if false {', 'it', 'no_partial_fill'),
+        ('T4 fill-or-kill amount (token)', TOK, 'if op.amount != order.sell_amount || op.amount == 0 {', 'if false {', 'it', 'no_partial_fill'),
+        ('D4 prepaid gas check', DEX, 'require!(env::prepaid_gas() >= SETTLE_MIN_GAS, "prepaid gas below the settle minimum (legs + callback)");', '', 'it', 'settle_short_gas_refused'),
+        ('D5 on_legs refunds arrived leg', DEX, 'for (l, _) in s.legs.iter().zip(ok).filter(|(_, ok)| *ok) {', 'for (l, _) in s.legs.iter().zip(ok).filter(|_| false) {', 'it', 'one_leg_fails_other_refunded'),
+        ('D6 on_refund refunds', DEX, 'for (l, _) in s.legs.iter().zip(arr).filter(|(_, a)| *a) {', 'for (l, _) in s.legs.iter().zip(arr).filter(|_| false) {', 'it', 'refund_expired_after_lost_callback'),
+        ('D7 refund only own leg op', DEX, 'Some(v == Some(OrderClose::Filled(l.digest)))', 'Some(matches!(v, Some(OrderClose::Filled(_))))', 'unit', 'refund_only_own_leg'),
+        ('D8 refund wins (done entry)', DEX, 'if s.done {\n            return;\n        }\n        s.done = true;', 's.done = true;', 'unit', 'late_on_legs_pays_nothing'),
+        ('D9 leg in one settle', DEX, 'require!(legs.iter().all(|l| !self.legs.contains_key(&l.digest)), "a leg is already in a settle");', '', 'it', 'no_partial_fill'),
+        ('T5 order expiry (token)', TOK, 'if now_s() > order.expiry {\n            return Err("order expired");\n        }\n        if *receiver', 'if *receiver', 'it', 'leg_called_by_non_dex_refused'),
+        ('T6 leg storage deposit (token)', TOK, 'match env::attached_deposit() >= env::storage_byte_cost().saturating_mul(bytes.into()) {', 'match true {', 'it', 'settle_deposit_short_refused'),
+    ]
+    only = set(sys.argv[1:])
+    res = []
+    for name, f, old, new, kind, test in M:
+        if only and name.split()[0] not in only:
+            continue
+        p = NEAR / f
+        src = p.read_text()
+        assert src.count(old) == 1, f'{name}: pattern count {src.count(old)}'
+        try:
+            p.write_text(src.replace(old, new))
+            if kind == 'unit':
+                cmd = f'cargo test -j2 -p scaas-near-dex --lib {test}'
+            else:
+                crate = f.split('/')[0]
+                cmd = (f'(cd {crate} && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi) && '
+                       f'cargo test -j2 -p scaas-near-integration --test dex {test} -- --exact --test-threads=1')
+            r = subprocess.run(['bash', '-c', cmd], cwd=NEAR, capture_output=True, text=True)
+            out = r.stdout + r.stderr
+            built = 'test result' in out
+            verdict = 'KILLED' if (built and r.returncode != 0) else ('SURVIVED' if built else 'BUILD-ERROR')
+            why = next((l.strip() for l in out.splitlines() if 'panicked at' in l or 'assertion' in l), '')
+            res.append(f'{verdict:12} {name:36} {test}  | {why[:160]}')
+            print(res[-1], flush=True)
+            if verdict == 'BUILD-ERROR':
+                print(out[-3000:], flush=True)
+        finally:
+            p.write_text(src)
+    # rebuild the restored wasm so later runs use the real code
+    subprocess.run(['bash', '-c', 'for c in token dex; do (cd $c && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi); done'], cwd=NEAR, capture_output=True)
+    print('\n'.join(['== summary'] + res))
+rc=0

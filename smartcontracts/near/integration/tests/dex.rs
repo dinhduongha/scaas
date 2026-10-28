@@ -640,8 +640,9 @@ async fn settle_short_gas_refused() {
     assert!(out.is_success(), "{:?}", out.failures());
 }
 
-/// Ruling (T8 pre-flight): `settle`'s gas pinned — two passkey legs (the costliest single-key kind), both paid out;
-/// each receipt within its static gas / 1.2 (legs: `GAS_LEG_MIN`; `on_legs`: `GAS_ON_LEGS` less its two payouts).
+/// Ruling (T8 pre-flight): `settle`'s gas pinned — two passkey legs (the costliest single-key kind), both paid out, at
+/// exactly `SETTLE_MIN_GAS` prepaid; each receipt within its static gas / 1.2 (legs: `GAS_LEG_MIN`; `on_legs`:
+/// `GAS_ON_LEGS` less its two payouts).
 #[tokio::test]
 async fn settle_gas_pin() {
     let d = setup_dex().await;
@@ -651,8 +652,9 @@ async fn settle_gas_pin() {
     d.fund(&d.b, &hb, 60).await;
     let a = d.leg(&pa, &ha, d.order(true, 100, 50), [0xa0; 32], 0);
     let bl = d.leg(&pb, &hb, d.order(false, 60, 100), [0xb0; 32], 0);
-    let out = d.settle(&d.t.relayer, &a, &bl).await;
+    let out = d.settle_gas(&d.t.relayer, &a, &bl, SETTLE_MIN_GAS).await;
     assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "every receipt at the minimum: {:?}", out.failures());
     let tg = |g: u64| g as f64 / 1e12;
     let (mut legs, mut payouts, mut on_legs) = (vec![], vec![], 0.0);
     for o in out.receipt_outcomes() {
@@ -670,7 +672,7 @@ async fn settle_gas_pin() {
         }
     }
     let total = tgas(&out);
-    println!("settle_gas_pin: total {total:.3} Tgas (pin {SETTLE_TGAS_PIN}); legs {legs:?}; on_legs {on_legs:.3}; payouts {payouts:?}");
+    println!("settle_gas_pin: total {total:.3} Tgas (pin {SETTLE_TGAS_PIN}, prepaid {} Tgas); legs {legs:?}; on_legs {on_legs:.3}; payouts {payouts:?}", SETTLE_MIN_GAS.as_tgas());
     assert_eq!((legs.len(), payouts.len()), (2, 2));
     assert!(total <= SETTLE_TGAS_PIN / 1.2, "settle {total} Tgas > pin {SETTLE_TGAS_PIN} / 1.2");
     let g = |x: near_sdk::Gas| tg(x.as_gas());
@@ -679,6 +681,5 @@ async fn settle_gas_pin() {
     // on_legs prepays its payouts' static gas and their exec fees (each ≤ the payout's burnt gas)
     let used = (on_legs + payouts.iter().sum::<f64>()) * 1.2 + 2.0 * g(GAS_PAYOUT);
     assert!(used <= g(GAS_ON_LEGS), "on_legs + payouts: {used} Tgas with margin > GAS_ON_LEGS");
-    let _ = (GAS_VIEW, GAS_ON_REFUND);
 }
 
