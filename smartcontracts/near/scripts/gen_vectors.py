@@ -291,6 +291,15 @@ def recovery_vectors():
     return [r for r in KEY_OPS if r['fields']['op'] >= V.OP['start_recovery']]
 
 
+# Task 9 (ruling R6, T9 pre-flight (d)): `relay_fee_add_key` with real entry arguments, `call = u8 len ‖ "mtx_add_key" ‖
+# Borsh(op, auth, key, origin)` of the key op row `add_key_secp256k1` (Auth::Ed25519 = variant 0 ‖ key 32 ‖ sig 64).
+_ka = next(r for r in KEY_OPS if r['name'] == 'add_key_secp256k1')
+wrapper('wrapper_add_key_real', 'mtx_add_key',
+        V.unhx(_ka['encoding'])[len(V.LABEL):] + b'\x00' + V.unhx(_ka['auth']['key']) + V.unhx(_ka['auth']['sig'])
+        + V.unhx(_ka['params']), b32(0x55))
+RELAY_REFS[-1]['entryOp'] = _ka['name']
+
+
 # Mandate (Task 7, spec §3.6): `MandateTerms` Borsh = delegate Holder ‖ payee Holder ‖ per_payment u128 ‖ per_period u128 ‖
 # period_s u64 ‖ expiry u64 ‖ funding u128. Open (op 13, owner-signed value op on its lane): id = sha256(Borsh(from,
 # terms, lane, nonce)), to = Ua(id), amount = funding (ruling R9), extra = sha256(id ‖ terms) (params). Pay (op 2,

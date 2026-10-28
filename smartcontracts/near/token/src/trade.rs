@@ -12,7 +12,7 @@
 //!   15 (`min_nonce < 2^63`, only increasing). Shape as the revoke: `to = from`, amount / `pay_ref` / lane / nonce zero,
 //!   `extra = sha256(Borsh(params))`; a replay is refused by the state (closed order, `min_nonce` not raised). Their
 //!   bodies (`cancel`, `invalidate_nonces`) charge nothing themselves, for Task 9's `relay_fee_<entry>` wrappers.
-use crate::account::now_s;
+use crate::account::{check_of as check, now_s};
 use crate::metatx::{value_policy, x};
 use crate::storage::charge;
 use crate::{record_bytes, Check, Holder, Subject, Token, TokenExt};
@@ -44,14 +44,6 @@ pub fn order_bytes(h: &Holder, c: &OrderClose) -> u64 {
 
 pub fn min_nonce_bytes(h: &Holder) -> u64 {
     TRADE_RECORD_OVERHEAD + borsh::to_vec(h).unwrap().len() as u64
-}
-
-/// `Check` from a plan's new bytes.
-fn check(r: R<u64>) -> Check {
-    match r {
-        Ok(bytes) => Check { error: None, storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128) },
-        Err(e) => Check { error: Some(e.into()), storage_needed: U128(0) },
-    }
 }
 
 /// The shape of a cancel / invalidate: `to = from`, amount, `pay_ref`, lane and nonce zero, `extra` = the params.
@@ -129,7 +121,7 @@ impl Token {
         Ok((s, old, open + rec + self.receiver_bytes(&dex) + self.receiver_bytes(receiver)))
     }
 
-    fn cancel_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, lane: &[u8; 32], nonce: u64) -> R<(Subject, u64, u64)> {
+    pub(crate) fn cancel_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, lane: &[u8; 32], nonce: u64) -> R<(Subject, u64, u64)> {
         let shape = "cancel shape (op 14, to = from, amount, pay_ref, lane and nonce zero)";
         admin_shape(op, OP_CANCEL, &borsh::to_vec(&(lane, nonce)).unwrap(), shape)?;
         if let Some(OrderClose::Cancelled) = self.closed(&op.from, lane, nonce) {
@@ -141,7 +133,7 @@ impl Token {
         Ok((s, old, open + order_bytes(&op.from, &OrderClose::Cancelled)))
     }
 
-    fn invalidate_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, lane: &[u8; 32], min_nonce: u64) -> R<(Subject, u64, u64)> {
+    pub(crate) fn invalidate_plan(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, lane: &[u8; 32], min_nonce: u64) -> R<(Subject, u64, u64)> {
         let shape = "invalidate shape (op 15, to = from, amount, pay_ref, lane and nonce zero)";
         admin_shape(op, OP_INVALIDATE_NONCES, &borsh::to_vec(&(lane, min_nonce)).unwrap(), shape)?;
         if min_nonce >= MIN_NONCE_CAP {

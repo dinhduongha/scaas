@@ -48,3 +48,27 @@ ok
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 28.57s
 
 rc=0
+
+# near-sandbox gas of the relay-fee wrappers (Task 9: relay_fee_<entry>, 300 Tgas prepaid, assert burnt <= 300 Tgas per ruling R1 / T9 pre-flight (b); test.sh near, tests/relay_fee_wrappers.rs) at commit 194fe8e7 + T9 (the T9 commit); every relay_fee_*_ok row = passkey entry auth + passkey payment; storage charged = storage_needed / byte cost (NEP-145 fixed 125 B registration of the open-mode relayer; records never shrink the deposit back), grown = the token's storage_usage delta
+GAS relay_fee_mandate_open: 45.863 Tgas burnt (margin 254.137 Tgas to 300); storage charged 1160 B, grown 1139 B
+GAS two-passkey relay_fee_mandate_open: 45.863 Tgas burnt, margin 254.137 Tgas to 300
+GAS relay_fee_add_key: 44.257 Tgas burnt (margin 255.743 Tgas to 300); storage charged 498 B, grown 477 B
+GAS relay_fee_add_origin: 44.457 Tgas burnt (margin 255.543 Tgas to 300); storage charged 707 B, grown 686 B
+GAS relay_fee_cancel: 44.729 Tgas burnt (margin 255.271 Tgas to 300); storage charged 796 B, grown 775 B
+GAS relay_fee_cancel_recovery: 44.411 Tgas burnt (margin 255.589 Tgas to 300); storage charged 460 B, grown 392 B
+GAS relay_fee_finish_recovery: 44.636 Tgas burnt (margin 255.364 Tgas to 300); storage charged 460 B, grown 430 B
+GAS relay_fee_invalidate_nonces: 44.666 Tgas burnt (margin 255.334 Tgas to 300); storage charged 795 B, grown 774 B
+GAS relay_fee_mandate_open: 45.449 Tgas burnt (margin 254.551 Tgas to 300); storage charged 939 B, grown 918 B
+GAS relay_fee_invalidate_nonces: 265.559 Tgas burnt (margin 34.441 Tgas to 300); storage charged 1135 B, grown 1114 B
+GAS msig-cap (12 passkey signatures) + passkey payment, relay_fee_invalidate_nonces: 265.559 Tgas burnt, margin 34.441 Tgas to 300
+GAS relay_fee_remove_key: 44.414 Tgas burnt (margin 255.586 Tgas to 300); storage charged 460 B, grown 401 B
+GAS relay_fee_remove_origin: 44.414 Tgas burnt (margin 255.586 Tgas to 300); storage charged 460 B, grown 413 B
+GAS relay_fee_revoke: 45.320 Tgas burnt (margin 254.680 Tgas to 300); storage charged 460 B, grown 439 B
+GAS relay_fee_set_guardian: 44.444 Tgas burnt (margin 255.556 Tgas to 300); storage charged 714 B, grown 693 B
+GAS relay_fee_set_policy: 44.454 Tgas burnt (margin 255.546 Tgas to 300); storage charged 681 B, grown 660 B
+GAS relay_fee_start_recovery: 44.703 Tgas burnt (margin 255.297 Tgas to 300); storage charged 728 B, grown 707 B
+GAS relay_fee_invalidate_nonces: 5.112 Tgas burnt (margin 294.888 Tgas to 300); storage charged 522 B, grown 522 B
+GAS relay_fee_invalidate_nonces: 5.186 Tgas burnt (margin 294.814 Tgas to 300); storage charged 647 B, grown 626 B
+GAS relay_fee_invalidate_nonces: 24.749 Tgas burnt (margin 275.251 Tgas to 300); storage charged 484 B, grown 463 B
+# rows in test order (alphabetical): near_relay_fee_two_passkey_within_300_tgas (mandate_open, separate payer: the costliest two-passkey wrapper), relay_fee_*_ok (relay_fee_mandate_open_ok: the owner pays its own fee, 45.449), relay_fee_msig_cap_fits_300_tgas (12-passkey msig entry + passkey payment), then wrapper_bound_payee_paid_directly (ed25519 entry, secp256k1 payment, 5.112), wrapper_open_mode_pays_predecessor (same, 5.186), wrapper_payment_policy_passkey_for_value (ed25519 entry, passkey payment, 24.749)
+rc=0

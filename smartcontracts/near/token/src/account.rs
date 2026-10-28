@@ -60,6 +60,14 @@ pub struct Check {
     pub storage_needed: U128,
 }
 
+/// `Check` from a plan's new bytes (every `*_check` view).
+pub(crate) fn check_of(r: R<u64>) -> Check {
+    match r {
+        Ok(bytes) => Check { error: None, storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128) },
+        Err(e) => Check { error: Some(e.into()), storage_needed: U128(0) },
+    }
+}
+
 pub fn record_bytes(h: &Holder, s: &Subject) -> u64 {
     let len = |b: Vec<u8>| b.len() as u64;
     SUBJECT_RECORD_OVERHEAD + len(borsh::to_vec(h).unwrap()) + len(borsh::to_vec(s).unwrap())
@@ -321,14 +329,13 @@ impl Token {
         crate::Event::KeyOp { subject, action: act.name().into() }.emit();
     }
 
+    /// A key op's checks, no write: the bytes its records grow by.
+    pub(crate) fn key_op_bytes(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, act: &Action) -> R<u64> {
+        self.plan(caller, op, auth, act).map(|ws| ws.iter().map(Write::growth).sum())
+    }
+
     fn check(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, act: Action) -> Check {
-        match self.plan(caller, op, auth, &act) {
-            Ok(ws) => {
-                let bytes: u64 = ws.iter().map(Write::growth).sum();
-                Check { error: None, storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128) }
-            }
-            Err(e) => Check { error: Some(e.into()), storage_needed: U128(0) },
-        }
+        check_of(self.key_op_bytes(caller, op, auth, &act))
     }
 }
 

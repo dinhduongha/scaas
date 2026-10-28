@@ -17,6 +17,7 @@ mod account;
 mod ft;
 mod mandate;
 mod metatx;
+mod relayfee;
 mod storage;
 mod trade;
 pub use account::{
@@ -25,6 +26,7 @@ pub use account::{
 };
 pub use mandate::{mandate_bytes, Mandate, MandateTerms, MANDATE_RECORD_OVERHEAD};
 pub use metatx::{lane_bytes, LANE_RECORD_OVERHEAD};
+pub use relayfee::wrapper_ref;
 pub use storage::{ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
 pub use trade::{min_nonce_bytes, order_bytes, OrderClose, MIN_NONCE_CAP, TRADE_RECORD_OVERHEAD};
 
@@ -78,6 +80,9 @@ pub enum Event {
     OrderCancelled { from: String, lane: String, nonce: u64 },
     #[event_version("1.0.0")]
     NoncesInvalidated { from: String, lane: String, min_nonce: u64 },
+    /// CTR-MTX-27: a `relay_fee_<entry>` wrapper's payment settled (`target` = `token` = this token), the call's last log.
+    #[event_version("1.0.0")]
+    RelayFeePaid { r#ref: String, target: String, token: String, payer: String, payee: String, amount: U128 },
 }
 
 #[near]

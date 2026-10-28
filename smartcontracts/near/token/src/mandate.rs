@@ -17,10 +17,9 @@
 //!
 //! The entry bodies (`mandate_open`, `mandate_pay`, `revoke`) charge nothing themselves: the `mtx_*` entries and Task 9's
 //! `relay_fee_<entry>` wrappers call them, then `charge_storage` once.
-use crate::account::now_s;
+use crate::account::{check_of as check, now_s};
 use crate::metatx::{lane_bytes, value_policy, x};
 use crate::{record_bytes, Check, Event, Holder, Subject, Token, TokenExt};
-use near_sdk::json_types::U128;
 use near_sdk::{borsh, env, near, AccountId};
 use scaas_near_common::auth::Auth;
 use scaas_near_common::hash::pay_lane;
@@ -68,14 +67,6 @@ pub fn mandate_id(from: &Holder, terms: &MandateTerms, lane: &[u8; 32], nonce: u
 
 fn no_params() -> [u8; 32] {
     env::sha256_array([])
-}
-
-/// `Check` from a plan's new bytes.
-fn check(r: R<u64>) -> Check {
-    match r {
-        Ok(bytes) => Check { error: None, storage_needed: U128(env::storage_byte_cost().as_yoctonear() * bytes as u128) },
-        Err(e) => Check { error: Some(e.into()), storage_needed: U128(0) },
-    }
 }
 
 /// A signer's record after `signed` and the bytes of a lazy open.
@@ -201,6 +192,15 @@ impl Token {
         Ok((Signer { who: op.from.clone(), subject, old }, id, m))
     }
 
+    /// `mandate_open`'s / `revoke`'s checks, no write: the new bytes (Task 9's `relay_fee_*_check`).
+    pub(crate) fn open_bytes(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, terms: &MandateTerms) -> R<u64> {
+        self.open_plan(caller, op, auth, terms).map(|(_, _, b)| b)
+    }
+
+    pub(crate) fn revoke_bytes(&self, caller: &AccountId, op: &MetaOp, auth: &Auth) -> R<u64> {
+        self.revoke_plan(caller, op, auth).map(|(s, _, _)| s.open_bytes())
+    }
+
     /// The whole balance under the mandate's id back to its owner (registered: it funded the mandate).
     fn sweep(&mut self, id: [u8; 32], m: &Mandate) {
         let bal = self.balance(&Holder::Ua(id));
@@ -287,7 +287,7 @@ impl Token {
         #[serializer(borsh)] auth: Auth,
         #[serializer(borsh)] terms: MandateTerms,
     ) -> Check {
-        check(self.open_plan(&caller, &op, &auth, &terms).map(|(_, _, b)| b))
+        check(self.open_bytes(&caller, &op, &auth, &terms))
     }
 
     #[result_serializer(borsh)]
@@ -307,7 +307,7 @@ impl Token {
         #[serializer(borsh)] op: MetaOp,
         #[serializer(borsh)] auth: Auth,
     ) -> Check {
-        check(self.revoke_plan(&caller, &op, &auth).map(|(s, _, _)| s.open_bytes()))
+        check(self.revoke_bytes(&caller, &op, &auth))
     }
 }
 

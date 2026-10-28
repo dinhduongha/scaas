@@ -1,0 +1,35 @@
+# T9 mutation spot-checks at commit 194fe8e7 + T9 working tree (each: one mutation, build.sh near, the named relay_fee_wrappers tests, file restored)
+# M1 routed relayer None accepted | metatx.rs 
+  pay_op_shape_enforced FAILED (killed)
+      thread 'pay_op_shape_enforced' (1735364) panicked at integration/tests/relay_fee_wrappers.rs:92:9:
+      invalidate_nonces: check None, want routed pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the marker)
+# M2 ref salt not pay_op.extra | relayfee.rs 
+  pay_op_shape_enforced FAILED (killed)
+      thread 'pay_op_shape_enforced' (1741391) panicked at integration/tests/relay_fee_wrappers.rs:92:9:
+      invalidate_nonces: check None, want routed pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the marker)
+# M3 relay_fee_cancel skips the entry | relayfee.rs 
+  refused_entry_pays_nothing FAILED (killed)
+      thread 'refused_entry_pays_nothing' (1747601) panicked at integration/tests/relay_fee_wrappers.rs:93:9:
+  relay_fee_cancel_ok FAILED (killed)
+      thread 'relay_fee_cancel_ok' (1752508) panicked at integration/tests/relay_fee_wrappers.rs:120:9:
+# M4 check counts the lazy open twice | relayfee.rs 
+  relay_fee_add_key_ok FAILED (killed)
+      thread 'relay_fee_add_key_ok' (1758660) panicked at integration/tests/relay_fee_wrappers.rs:120:9:
+# M5 check ignores the entry amount | relayfee.rs 
+  relay_fee_mandate_open_ok FAILED (killed)
+      thread 'relay_fee_mandate_open_ok' (1764647) panicked at integration/tests/relay_fee_wrappers.rs:92:9:
+      mandate_open: check None, want doesn't have enough balance
+# M6 payment before entry | relayfee.rs 
+  relay_fee_add_key_ok FAILED (killed)
+      thread 'relay_fee_add_key_ok' (1770763) panicked at integration/tests/relay_fee_wrappers.rs:120:9:
+# M7 no value policy on the routed pay | metatx.rs 
+  wrapper_payment_policy_passkey_for_value FAILED (killed)
+      thread 'wrapper_payment_policy_passkey_for_value' (1776714) panicked at integration/tests/relay_fee_wrappers.rs:92:9:
+      invalidate_nonces: check None, want POLICY_PASSKEY_FOR_VALUE: value ops need a passkey signature
+# M8 no relay_fee_paid | relayfee.rs 
+  wrapper_bound_payee_paid_directly FAILED (killed)
+      thread 'wrapper_bound_payee_paid_directly' (1782868) panicked at integration/tests/relay_fee_wrappers.rs:130:9:
+# M9 wrapper marker = the predecessor (not the token id) | relayfee.rs 
+  wrapper_open_mode_pays_predecessor FAILED (killed)
+      thread 'wrapper_open_mode_pays_predecessor' (1788969) panicked at integration/tests/relay_fee_wrappers.rs:120:9:
+rc=0

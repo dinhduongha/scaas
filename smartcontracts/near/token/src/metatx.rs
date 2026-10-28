@@ -22,9 +22,12 @@ pub fn lane_bytes(h: &Holder) -> u64 {
 
 type R<T> = Result<T, &'static str>;
 
+/// `routed_plan`'s shape refusal. `relayer` must name the marker (not `None`): a payment open to any relayer could be
+/// settled by the plain `mtx_pay` without the routed call (rule 7 refuses only a relayer other than the predecessor).
+pub(crate) const ROUTED_SHAPE: &str = "routed pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the marker)";
+
 /// `routed_plan`'s result: the signer's record and old size (for `open_lazily`), the new bytes, the resolved payee.
 #[derive(Debug)]
-#[allow(dead_code)] // consumed by Tasks 9–10
 pub(crate) struct Routed {
     pub subject: Subject,
     pub old: u64,
@@ -85,11 +88,10 @@ impl Token {
     }
 
     /// The only authorisation of a routed pay (Task 9 `relay_fee_<entry>`, Task 10 router hold): op 0 with `pay_ref =
-    /// ref`, `lane = payLane(ref)`, nonce 0, `relayer` = the marker (`signed` with `marker` as relayer: rule 7, so a plain
-    /// entry can never settle it), the payee `open_payee` (the submitting relayer) when `op.to` is the marker (open
+    /// ref`, `lane = payLane(ref)`, nonce 0, `relayer == Some(marker)` (`signed` with `marker` as relayer: rule 7, so a
+    /// plain entry can never settle it), the payee `open_payee` (the submitting relayer) when `op.to` is the marker (open
     /// mode, CTR-MTX-27 step 5) else `op.to`, then the value policy, the lane, the balance (`pay_checks`). Callers do
     /// `open_lazily`, `settle_pay(op, &op.from, &routed.payee)`, `charge_storage` with what this returns.
-    #[allow(dead_code)] // called by Tasks 9–10 (relay_fee_<entry>, router hold)
     pub(crate) fn routed_plan(
         &self,
         caller: &AccountId,
@@ -99,8 +101,9 @@ impl Token {
         auth: &Auth,
         pay_ref: &[u8; 32],
     ) -> R<Routed> {
-        if op.op != OP_PAY || op.pay_ref != *pay_ref || op.lane != pay_lane(pay_ref) || op.nonce != 0 {
-            return Err("routed pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0)");
+        let bound = op.relayer.as_ref() == Some(marker);
+        if op.op != OP_PAY || op.pay_ref != *pay_ref || op.lane != pay_lane(pay_ref) || op.nonce != 0 || !bound {
+            return Err(ROUTED_SHAPE);
         }
         let payee = if op.to == Holder::Near(marker.clone()) { open_payee.clone() } else { op.to.clone() };
         let (subject, old, bytes) = self.pay_checks(caller, marker, op, auth, &payee)?;
@@ -348,18 +351,21 @@ pub(crate) mod tests {
         // the plain entries refuse what the routed plan accepts (relayer = the marker, to = the token)
         assert_eq!(t.value_plan(&relayer, &op, &a, OP_PAY).err(), Some("token refuses a transfer to the token itself"));
         // shape: another ref, a lane other than payLane(ref), a nonce other than 0
-        let shape = "routed pay shape (op 0, pay_ref = ref, lane = payLane(ref), nonce 0)";
+        let shape = ROUTED_SHAPE;
         assert_eq!(t.routed_plan(&relayer, &me, &open, &op, &a, &[0x52; 32]).err(), Some(shape));
-        let fs: [fn(&mut MetaOp); 3] = [|o| o.lane = [1; 32], |o| o.nonce = 1, |o| o.op = OP_EXECUTE_TRANSFER];
+        // another lane, nonce, op code; relayer None (any relayer: a plain mtx_pay could settle it) or not the marker
+        let fs: [fn(&mut MetaOp); 5] = [
+            |o| o.lane = [1; 32],
+            |o| o.nonce = 1,
+            |o| o.op = OP_EXECUTE_TRANSFER,
+            |o| o.relayer = None,
+            |o| o.relayer = Some("relayer.test.near".parse().unwrap()),
+        ];
         for f in fs {
             let mut o = op.clone();
             f(&mut o);
             assert_eq!(t.routed_plan(&relayer, &me, &open, &o, &erin.sign(&o), &r).err(), Some(shape));
         }
-        // relayer must be the marker
-        let mut o = op.clone();
-        o.relayer = Some(relayer.clone());
-        assert_eq!(t.routed_plan(&relayer, &me, &open, &o, &erin.sign(&o), &r).err(), Some("relayer is not the predecessor"));
         // a bound payee is paid directly
         let bob = Holder::Near("bob.test.near".parse().unwrap());
         let mut o = op.clone();
