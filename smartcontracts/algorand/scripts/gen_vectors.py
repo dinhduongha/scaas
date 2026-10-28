@@ -29,7 +29,7 @@ import famvec as V  # noqa: E402
 
 OUT = os.path.join(V.REPO, 'smartcontracts', 'algorand', 'vectors', 'algorand-vectors.json')
 NETWORK = V.seed('scaas.algorand.test-genesis')     # stands in for `global GenesisHash`
-TOKEN_APP, ROUTER_APP, TARGET_APP = 1001, 1002, 1003
+TOKEN_APP, ROUTER_APP, TARGET_APP, ACCOUNT_APP = 1001, 1002, 1003, 1004
 VU = 4_102_444_800                                  # 2100-01-01 in seconds
 SIGN_PREFIX = b'MX'
 ENCODING_LEN = 306
@@ -59,6 +59,7 @@ def selector(signature):
 
 TOKEN = app_address(TOKEN_APP)
 ROUTER = app_address(ROUTER_APP)
+ACCOUNT = app_address(ACCOUNT_APP)
 alice = V.Ed('alice')                               # a native address (signs with its own key: not rekeyed)
 bob = V.Ed('bob')
 relayer = V.Ed('relayer')
@@ -105,14 +106,15 @@ METAOPS = []
 
 
 def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer_=V.ZERO32, extra=V.ZERO32, note=None,
-           code=V.OP['pay'], keep=True):
-    op = {'contract': TOKEN, 'op': code, 'from': frm, 'to': to, 'relayer': relayer_, 'amount': amount,
+           code=V.OP['pay'], keep=True, contract=TOKEN):
+    op = {'contract': contract, 'op': code, 'from': frm, 'to': to, 'relayer': relayer_, 'amount': amount,
           'pay_ref': pay_ref, 'lane': lane, 'nonce': nonce, 'valid_until': VU, 'extra': extra}
     enc = encode(op)
     assert len(enc) == ENCODING_LEN
     dg = V.sha256(enc)
     row = {'name': name, 'fields': {
-        'network': V.hx(NETWORK), 'contract': V.hx(TOKEN), 'contractApp': TOKEN_APP, 'op': op['op'],
+        'network': V.hx(NETWORK), 'contract': V.hx(contract),
+        'contractApp': ACCOUNT_APP if contract == ACCOUNT else TOKEN_APP, 'op': op['op'],
         'from': holder_json(frm), 'to': holder_json(to), 'relayer': V.hx(relayer_), 'amount': str(amount),
         'pay_ref': V.hx(pay_ref), 'lane': V.hx(lane), 'nonce': nonce, 'valid_until': VU, 'extra': V.hx(extra)},
         'encoding': V.hx(enc), 'digest': V.hx(dg), 'text': V.text(dg).decode(), 'auth': auth(signer, dg)}
@@ -197,6 +199,8 @@ MBR_BOXES = [
     ('ua_balance', b'u' + UA_ERIN, 32, '"u" ‖ UA id → uint256'),
     ('lane', lane_box(0, alice.pk, b32(0xa1)), 8, '"l" ‖ sha256(kind ‖ holder ‖ lane) → uint64 nonce'),
     ('allowance', b'a' + V.sha256(alice.pk, ROUTER), 32, '"a" ‖ sha256(owner ‖ spender) → uint256 (app-to-app only)'),
+    ('account_record', b's' + bytes([1]) + UA_ERIN, 118 + 32, 'account app: "s" ‖ kind ‖ id → record (118 B header + '
+                                                             '32 per key and origin); here one key'),
 ]
 
 
@@ -210,14 +214,124 @@ def transfer_vectors():
                    note='mtx_execute_transfer: op 5, any pay_ref (payment_settled when non-zero)')]
 
 
+# Key ops (Task 12, spec §4.3; account app, contract = its address): amount 0, pay_ref / lane zero, nonce = the
+# signer's key nonce, to = from (start / finish recovery: from = the guardian, to = the subject), extra =
+# sha256(ARC-4 tuple of the entry parameters after (op, auth)); set_policy / finish_recovery are actions under codes
+# 10 / 11 with signed parameters [6, policy] / [7]. `authBytes` = the account app's auth encoding (account.py).
+KIND_ALGORAND_ADDRESS, KIND_MSIG = 0x0018, 0x0120
+
+
+def u16(n):
+    return n.to_bytes(2, 'big')
+
+
+def arc4_bytes(b):
+    return u16(len(b)) + b
+
+
+def key_record(kind, data):
+    """ARC-4 `KeyRecord (uint16 kind, byte[] key_data)`: kind ‖ offset 4 ‖ len ‖ data."""
+    return u16(kind) + u16(4) + arc4_bytes(data)
+
+
+def tup(*dyn):
+    """An ARC-4 tuple of dynamic elements: the u16 offsets, then the elements."""
+    head, off, tail = b'', 2 * len(dyn), b''
+    for e in dyn:
+        head, off, tail = head + u16(off), off + len(e), tail + e
+    return head + tail
+
+
+def account_auth(signer, digest):
+    """The account app's `auth`: a native address's 64-byte wallet signature, else tag ‖ body."""
+    if isinstance(signer, Msig):
+        return signer.auth(digest)
+    if isinstance(signer, V.Ed):
+        return bytes([1]) + signer.pk + signer.sign(SIGN_PREFIX + V.text(digest))
+    if signer.c is V.SECP256K1:
+        return bytes([2]) + signer.key + signer.sign(digest)[0]
+    p = V.passkey(signer, digest)
+    ad = V.unhx(p['authenticatorData'])
+    return bytes([3]) + signer.key + V.unhx(p['sig']) + u16(len(ad)) + ad + p['clientDataJSON'].encode()
+
+
+class Msig:
+    """`msig` (kind 288) key data and its auth (member index ‖ u16 len ‖ member auth; an algorand-address member signs
+    with its wallet key)."""
+
+    def __init__(self, threshold, members):
+        self.rows = sorted(members, key=lambda m: m[1])
+        self.key_data = u16(threshold) + u16(len(members)) + b''.join(u16(k) + i + u16(w) for k, i, w, _ in self.rows)
+        self.ua = V.ua_of(KIND_MSIG, self.key_data)
+
+    def auth(self, digest):
+        sigs = b''
+        for i, (k, _, _, s) in enumerate(self.rows):
+            a = s.sign(SIGN_PREFIX + V.text(digest)) if k == KIND_ALGORAND_ADDRESS else account_auth(s, digest)
+            sigs += bytes([i]) + u16(len(a)) + a
+        return bytes([4]) + u16(len(self.key_data)) + self.key_data + sigs
+
+
+frank = V.Ed('frank')
+SEC_KEY = key_record(V.KIND_SECP256K1, carol.key)
+DAVE_KEY = key_record(V.KIND_WEBAUTHN_P256, dave.key + V.sha256(V.RP_ID.encode()))
+FRANK_KEY = key_record(V.KIND_ED25519, frank.pk)
+APP_ORIGIN = b'https://app.scaas.test'
+MSIG = Msig(2, [(KIND_ALGORAND_ADDRESS, alice.pk, 1, alice), (V.KIND_ED25519, UA_ERIN, 1, erin)])
+KEY_OPS = []
+
+
+def key_op(name, code, signer, frm, params, ptype, nonce, to=None, note=None):
+    row = metaop(name, alice, frm, to or frm, 0, V.ZERO32, V.ZERO32, nonce=nonce, extra=V.sha256(params), note=note,
+                 code=V.OP[code], keep=False, contract=ACCOUNT)
+    dg = V.unhx(row['digest'])
+    native = frm[0] == 0 and signer is alice
+    a = alice.sign(SIGN_PREFIX + V.text(dg)) if native else account_auth(signer, dg)
+    row['auth'] = {'kind': 'native' if native else 'account'}
+    row['authBytes'] = V.hx(a)
+    row['params'], row['paramsType'] = V.hx(params), ptype
+    KEY_OPS.append(row)
+    return row
+
+
+KR = '(uint16,byte[])'
+key_op('add_key_secp256k1', 'add_key', erin, ua(UA_ERIN), tup(SEC_KEY, arc4_bytes(b'')), '(%s,byte[])' % KR, 0,
+       note='mtx_add_key(op, auth, key, origin empty = none); opens UA erin lazily (key nonce 0)')
+key_op('add_key_passkey_with_origin', 'add_key', carol, ua(UA_CAROL), tup(DAVE_KEY, arc4_bytes(V.ORIGIN.encode())),
+       '(%s,byte[])' % KR, 0, note='mtx_add_key(op, auth, key = webauthn-p256 x ‖ y ‖ rpIdHash, origin)')
+key_op('remove_key', 'remove_key', erin, ua(UA_ERIN), tup(SEC_KEY), '(%s)' % KR, 1,
+       note='mtx_remove_key(op, auth, key)')
+key_op('add_origin_passkey', 'add_origin', dave, ua(UA_DAVE), tup(arc4_bytes(APP_ORIGIN)), '(byte[])', 0,
+       note='mtx_add_origin(op, auth, origin); passkey UA opened lazily with its assertion origin')
+key_op('remove_origin', 'remove_origin', dave, ua(UA_DAVE), tup(arc4_bytes(APP_ORIGIN)), '(byte[])', 1,
+       note='mtx_remove_origin(op, auth, origin)')
+key_op('set_guardian', 'set_guardian', erin, ua(UA_ERIN), bytes([0]) + alice.pk, '((uint8,byte[32]))', 2,
+       note='mtx_set_guardian(op, auth, guardian Holder (0, alice)); zero holder = none')
+key_op('set_policy', 'set_guardian', erin, ua(UA_ERIN), bytes([6, 1]), 'action', 3,
+       note='mtx_set_policy(op, auth, policy uint8): the set_policy action under op code 10, signed params '
+            '[KEYOP_SET_POLICY 6, policy] (POLICY_PASSKEY_FOR_VALUE = 1); a wallet-kind key may sign')
+key_op('set_guardian_msig', 'set_guardian', MSIG, ua(MSIG.ua), bytes(33), '((uint8,byte[32]))', 0,
+       note='msig UA (algorand-address alice, wallet signature by her current authority + ed25519 erin), guardian none')
+
+
 def key_op_vectors():
-    """Ops 6–10 (`mtx_add_key` … `mtx_set_guardian`): Task 12 adds rows, `extra = sha256(ARC-4(params))`."""
-    return []
+    """Ops 6–10 (`mtx_add_key` … `mtx_set_guardian`), `extra = sha256(ARC-4(params))`."""
+    return [r for r in KEY_OPS if r['fields']['op'] <= V.OP['set_guardian']]
+
+
+key_op('start_recovery', 'start_recovery', alice, addr(alice.pk), tup(FRANK_KEY, arc4_bytes(b'')), '(%s,byte[])' % KR,
+       0, to=ua(UA_ERIN), note='mtx_start_recovery(op, auth, key, origin): from = the guardian (alice, wallet '
+                               'signature), to = the subject; finish after 172,800 s adds the key (CTR-ACC-03)')
+key_op('finish_recovery', 'start_recovery', alice, addr(alice.pk), bytes([7]), 'action', 1, to=ua(UA_ERIN),
+       note='mtx_finish_recovery(op, auth): the finish_recovery action under op code 11, signed params '
+            '[KEYOP_FINISH_RECOVERY 7]; adds the recovery key, removes none')
+key_op('cancel_recovery', 'cancel_recovery', erin, ua(UA_ERIN), b'', '()', 4,
+       note='mtx_cancel_recovery(op, auth): no params')
 
 
 def recovery_vectors():
-    """Ops 11 start_recovery, 12 cancel_recovery: Task 12 adds rows, `extra = sha256(ARC-4(params))`."""
-    return []
+    """Ops 11 start_recovery, 12 cancel_recovery, `extra = sha256(ARC-4(params))`."""
+    return [r for r in KEY_OPS if r['fields']['op'] >= V.OP['start_recovery']]
 
 
 def mandate_vectors():
@@ -258,6 +372,9 @@ def selftest(doc):
     assert len(rows) == sum('paymetaRow' in m for m in doc['metaops']['vectors'])
     k24 = [r for r in V._KINDS['natives'] if r['kind'] == 0x18]
     assert k24 and all(r['id'] == r['raw'] for r in k24)    # kind 0x0018 ids are the 32-byte keys themselves
+    for m in KEY_OPS:                                # key ops: extra = sha256(params), the shape of §4.3
+        f = m['fields']
+        assert f['extra'] == V.hx(V.sha256(V.unhx(m['params']))) and f['amount'] == '0' and f['contract'] == V.hx(ACCOUNT)
     for b in doc['mbr']['boxes']:
         assert b['microAlgo'] == 2500 + 400 * (b['nameLength'] + b['valueLength']) and b['nameLength'] <= 64
 
@@ -273,6 +390,7 @@ def build():
                 'hand. Read by the Algorand apps, the scaas-node Algorand adapter and the clients.',
         'network': V.hx(NETWORK),
         'apps': {'token': {'id': TOKEN_APP, 'address': address(TOKEN), 'key': V.hx(TOKEN)},
+                 'account': {'id': ACCOUNT_APP, 'address': address(ACCOUNT), 'key': V.hx(ACCOUNT)},
                  'router': {'id': ROUTER_APP, 'address': address(ROUTER), 'key': V.hx(ROUTER)},
                  'target': {'id': TARGET_APP, 'address': address(app_address(TARGET_APP)),
                             'key': V.hx(app_address(TARGET_APP))}},

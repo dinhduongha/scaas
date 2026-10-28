@@ -4,7 +4,7 @@ import base64
 import json
 import os
 
-from algosdk import encoding
+from algosdk import abi, encoding
 
 from conftest import LABEL, METAOP_T, REPO, ROOT, Acct, sha256, view
 
@@ -67,3 +67,20 @@ def test_pay_meta_vectors(probe):
 def test_native_ids_are_the_address_keys():
     for r in V['nativeIds']['rows']:
         assert encoding.encode_address(unhx(r['key'])) == r['address']
+
+
+def test_key_op_vectors(account):
+    """T12 (R5): every key-op row's `extra` is sha256 of its parameters, which are the ARC-4 encoding of the entry's
+    argument types (the encoding the account app hashes); its `authBytes` verify on the AVM for its signer
+    (`verify_mbr`: a lazily opened UA needs its record's MBR, a native wallet signature none)."""
+    rows = [r for r in V['metaops']['vectors'] if 6 <= r['fields']['op'] <= 12]
+    assert {r['fields']['op'] for r in rows} == set(range(6, 13))
+    for r in rows:
+        p, t = unhx(r['params']), r['paramsType']
+        assert sha256(p) == unhx(r['fields']['extra']), r['name']
+        if t != 'action':
+            typ = abi.ABIType.from_string(t) if t != '()' else None
+            assert typ is None and p == b'' or typ.encode(typ.decode(p)) == p, r['name']
+        frm = r['fields']['from']
+        need = view(account, 'verify_mbr', frm['kind'], unhx(frm['id']), unhx(r['digest']), unhx(r['authBytes']))
+        assert (need == 0) == (r['auth']['kind'] == 'native'), r['name']

@@ -6,7 +6,7 @@ form `SIGN_PREFIX ‖ text` by the address's current authority. `payId` / `payLa
 """
 import typing
 
-from algopy import Account, Bytes, FixedBytes, Global, arc4, op, subroutine, urange
+from algopy import Account, Bytes, FixedBytes, Global, TransactionType, Txn, UInt64, arc4, gtxn, op, subroutine, urange
 
 Bytes32 = FixedBytes[typing.Literal[32]]
 
@@ -19,6 +19,13 @@ KIND_UA = 1
 OP_PAY = 0
 OP_TRANSFER = 4
 OP_EXECUTE_TRANSFER = 5
+OP_ADD_KEY = 6
+OP_REMOVE_KEY = 7
+OP_ADD_ORIGIN = 8
+OP_REMOVE_ORIGIN = 9
+OP_SET_GUARDIAN = 10
+OP_START_RECOVERY = 11
+OP_CANCEL_RECOVERY = 12
 
 
 class Holder(arc4.Struct, frozen=True):
@@ -102,3 +109,41 @@ def relay_ref(network: Bytes32, target: Bytes32, call: Bytes, salt: Bytes32) -> 
 def lane_key(h: Holder, lane: Bytes32) -> Bytes32:
     """Lane box name body (after the `l` prefix): `sha256(kind ‖ holder ‖ lane)` (the raw 65 B exceeds 64 B)."""
     return Bytes32.from_bytes(op.sha256(h.bytes + lane.bytes))
+
+
+@subroutine
+def zero() -> Bytes32:
+    return Bytes32.from_bytes(op.bzero(32))
+
+
+@subroutine
+def check_envelope(o: MetaOp) -> None:
+    """Rules 1, 2, 7 for every signed entry: this network, this app, not expired, relayer zero or the sender."""
+    assert o.network.bytes == Global.genesis_hash, "wrong network"
+    assert o.contract.bytes == Global.current_application_address.bytes, "wrong contract"
+    assert Global.latest_timestamp <= o.valid_until.as_uint64(), "expired"
+    assert o.relayer == zero() or o.relayer.bytes == Txn.sender.bytes, "relayer is not the sender"
+
+
+@subroutine
+def mbr_payment() -> UInt64:
+    """The MBR payment of this call: the group transaction just before it when that is a payment to the app address
+    (it neither closes nor rekeys: a close-out would over-fund the app), else 0."""
+    if Txn.group_index > 0:
+        p = gtxn.Transaction(Txn.group_index - 1)
+        if p.type == TransactionType.Payment and p.receiver == Global.current_application_address:
+            assert p.close_remainder_to == Global.zero_address and p.rekey_to == Global.zero_address, \
+                "MBR payment must not close or rekey"
+            assert p.amount > 0, "MBR payment must equal the new boxes' MBR exactly"
+            return p.amount
+    return UInt64(0)
+
+
+@subroutine
+def mbr_paid(before: UInt64, forwarded: UInt64) -> None:
+    """§2 row 15: the MBR payment equals exactly what this call added to the app's AcctMinBalance (after minus
+    `before`; a shrink adds nothing and refunds nothing) plus what it `forwarded` by inner payment to another app's
+    exact-MBR call; no payment when that is 0."""
+    after = Global.current_application_address.min_balance
+    grown = after - before if after > before else UInt64(0)
+    assert mbr_payment() == grown + forwarded, "MBR payment must equal the new boxes' MBR exactly"

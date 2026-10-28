@@ -1,6 +1,10 @@
 {
  "token": {
-  "approval_sha512_256": "b4d74f4dc5f53fbecff79a8f8ddb73b8fa6a5c429425435d6d52cce9b6dff667",
+  "approval_sha512_256": "0af61c14f82886ac7932290407672409503175cd90a981aba3b3c6eb5b6c4c95",
+  "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
+ },
+ "account": {
+  "approval_sha512_256": "372bb99e75062bcaa964f566705b29836b089364ec240aa6f193efee2a223594",
   "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
  }
 }

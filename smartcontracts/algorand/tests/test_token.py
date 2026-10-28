@@ -8,8 +8,8 @@ from algosdk import encoding, transaction
 from algosdk.error import AlgodHTTPError
 
 from conftest import (ALGOD, BUDGET, MBR_ALLOWANCE, MBR_BALANCE, MBR_LANE, MBR_UA, MIN_FEE, REPO,
-                      U128_MAX, Z32, Refused, digest, latest_ts, meta_pay_id, native, pay_lane, run, sha256, sim, sp,
-                      ua, view, wait)
+                      U128_MAX, Z32, PasskeyKey, Refused, digest, latest_ts, meta_pay_id, native, pay_lane,
+                      rec_mbr, refused_actions, run, sha256, sim, sp, ua, view, wait)
 
 ZERO_ADDR = encoding.encode_address(Z32)
 PAYMETA = json.load(open(os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'paymeta.json')))
@@ -179,23 +179,29 @@ def test_algorand_pay_meta_mismatch_and_replay(token, make, relayer):
 
 
 def test_pay_meta_cap_measured(token, make, relayer):
-    """Ruling (d): MAX_PAY_META_BYTES succeeds, one byte more is refused (the AVM's 1,024 B log limit)."""
-    alice = token.alice
-    for size, ok in ((MAX_PAY_META_BYTES, True), (MAX_PAY_META_BYTES + 1, False)):
-        salt = sha256(b'cap', size.to_bytes(4, 'big'))
-        meta = bytes([0xab]) * size
-        pid = meta_pay_id(salt, meta)
-        o, a = signed(token, alice, ua(sha256(b'ua', salt)), 1, pay_ref=pid, lane=pay_lane(pid))
-        args = 4 + 291 + 2 + 64 + 32 + 2 + size     # selector, op, auth (len ‖ 64), salt, meta (len ‖ bytes)
-        assert args <= 2048
-        if ok:
-            r = token.mtx(relayer, 'mtx_pay_meta', o, a, salt, meta)
-            logged = sum(len(x) for x in r.logs)
-            print('\nMAX_PAY_META_BYTES = %d (logs %d / 1024 B, app args %d / 2048 B)' % (size, logged, args))
-            assert logged <= 1024 and 'UaTransfer' in names(token, r)
-        else:
-            with no('logs'):
-                token.mtx(relayer, 'mtx_pay_meta', o, a, salt, meta)
+    """Ruling (d): MAX_PAY_META_BYTES succeeds, one byte more is refused (the AVM's 1,024 B log limit), on both
+    costliest log paths: a native payer → a UA (T11) and a passkey UA payer → a native address (T12)."""
+    alice, dave = token.alice, PasskeyKey('dave-meta')
+    run(alice, token, 'transfer_to_ua', [dave.id, 10], mbr=MBR_UA, boxes=[b'b' + alice.key, b'u' + dave.id])
+    for payer in (alice, dave):
+        for size, ok in ((MAX_PAY_META_BYTES, True), (MAX_PAY_META_BYTES + 1, False)):
+            salt = sha256(b'cap', size.to_bytes(4, 'big'), bytes([payer is dave]))
+            meta = bytes([0xab]) * size
+            pid = meta_pay_id(salt, meta)
+            to = ua(sha256(b'ua', salt)) if payer is alice else native(make())
+            o = token.op(payer if payer is alice else dave.ua(), to, 1, pay_ref=pid, lane=pay_lane(pid))
+            a = payer.sign_op(digest(o)) if payer is alice else dave.auth(digest(o))
+            args = 4 + 291 + 2 + len(a) + 32 + 2 + size     # selector, op, auth (len ‖ bytes), salt, meta
+            assert args <= 2048
+            if ok:
+                r = token.mtx(relayer, 'mtx_pay_meta', o, a, salt, meta)
+                logged = sum(len(x) for x in r.logs if x[:4] in token.app.events)   # the token's own logs
+                print('\nMAX_PAY_META_BYTES = %d, %s payer (logs %d / 1024 B, app args %d / 2048 B)'
+                      % (size, 'native' if payer is alice else 'passkey UA', logged, args))
+                assert logged <= 1024 and 'UaTransfer' in names(token, r)
+            else:
+                with no('logs'):
+                    token.mtx(relayer, 'mtx_pay_meta', o, a, salt, meta)
 
 
 # ---------------------------------------------------------------- signatures (§4.3, §4.6; R7)
@@ -263,12 +269,13 @@ def test_relayer_bound_to_sender(token, make, relayer):
     assert bal(token, bob) == 2
 
 
-def test_ua_signer_needs_the_account_app(token, make, relayer):
+def test_ua_signer_goes_through_the_account_app(token, make, relayer):
+    """T12: a UA payer is verified by the account app; a 64-byte auth is a wallet signature only for a native payer."""
     i = b'\x55' * 32
     run(token.alice, token, 'transfer_to_ua', [i, 10], mbr=MBR_UA, boxes=[b'b' + token.alice.key, b'u' + i])
     o = token.op(ua(i), native(make()), 1, pay_ref=b'\x01' * 32)
-    with no('UA signer'):
-        token.mtx(relayer, 'mtx_pay', o, b'\x00' * 64, ZERO_ADDR, mbr=None)
+    with no('unknown auth tag'):                     # a 64-byte "wallet signature" for a UA: no such key kind
+        token.mtx(relayer, 'mtx_pay', o, b'\x00' * 64, ZERO_ADDR, mbr=MBR_LANE + MBR_BALANCE)
 
 
 # ---------------------------------------------------------------- entries
@@ -414,25 +421,6 @@ def test_box_prefixes_disjoint(token, make, relayer):
     pay(token, relayer, alice, native(make()), 1)
     boxes = [bytes(__import__('base64').b64decode(b['name'])) for b in ALGOD.application_boxes(token.id)['boxes']]
     assert sorted({b[:1] for b in boxes}) == [b'b', b'l', b'u'] and all(len(b) == 33 for b in boxes)
-
-
-def refused_actions(token, who, kinds):
-    """Each OnCompletion in `kinds`, bare and with an ABI selector: the bare form is the router's `budget` path
-    (`return OnCompletion == NoOp && app ≠ 0` → "rejected by ApprovalProgram"), the ABI form fails the router's
-    `OnCompletion == NoOp` assert (the same pc for every kind)."""
-    a, sel = token.app, token.app.methods['arc200_name'].get_selector()
-    make_ = {'update': lambda **k: transaction.ApplicationUpdateTxn(who.addr, sp(), token.id, a.approval, a.clear, **k),
-             'delete': lambda **k: transaction.ApplicationDeleteTxn(who.addr, sp(), token.id, **k),
-             'optin': lambda **k: transaction.ApplicationOptInTxn(who.addr, sp(), token.id, **k),
-             'closeout': lambda **k: transaction.ApplicationCloseOutTxn(who.addr, sp(), token.id, **k)}
-    pcs = set()
-    for kind in kinds:
-        with pytest.raises(AlgodHTTPError, match='rejected by ApprovalProgram'):
-            wait(ALGOD.send_transaction(make_[kind]().sign(who.sk)))
-        with pytest.raises(AlgodHTTPError, match=r'logic eval error: assert failed pc=\d+') as e:
-            wait(ALGOD.send_transaction(make_[kind](app_args=[sel]).sign(who.sk)))
-        pcs.add(re.search(r'assert failed pc=(\d+)', str(e.value)).group(1))
-    assert len(pcs) == 1
 
 
 def test_update_and_delete_refused(token, make):

@@ -8,16 +8,21 @@ payment when nothing is created). No local state (OptIn refused); Update / Delet
 neither). Supply ≤ 2^128 − 1, so every balance fits the `MetaOp` uint128 amount.
 
 UA balances: the token's own address is the UA pool in ARC-200 terms (`arc200_balanceOf(app) =` the UA total, a move
-with a UA side shows as an `arc200_Transfer` to / from it, plus `UaTransfer`), as NEAR's token account. UA signers are
-verified by the `account` app (T12); this task signs natively only.
+with a UA side shows as an `arc200_Transfer` to / from it, plus `UaTransfer`), as NEAR's token account.
+
+Signers (T12, spec §4.3): a native payer's 64-byte wallet signature is checked here (its current authority); every other
+auth — a UA, or an address signing through its account record — by an inner call to the `account` app fixed at
+creation (`verify`, which also opens a UA record lazily and enforces POLICY_PASSKEY_FOR_VALUE). The relayer's MBR
+payment then covers this app's new boxes plus the record: the part beyond this app's own boxes is forwarded to the
+account app by an inner payment immediately before the inner `verify` (its own exact-MBR check).
 """
 import typing
 
-from algopy import (Account, BigUInt, Bytes, BoxMap, FixedBytes, Global, GlobalState, TransactionType, Txn, UInt64,
-                    arc4, gtxn, op, subroutine)
+from algopy import (Account, Application, BigUInt, Bytes, BoxMap, FixedBytes, Global, GlobalState, Txn, UInt64, arc4,
+                    itxn, op, subroutine)
 
-from common import (KIND_ADDRESS, KIND_UA, OP_EXECUTE_TRANSFER, OP_PAY, OP_TRANSFER, Bytes32, Holder, MetaOp, digest, lane_key,
-                    meta_pay_id, pay_lane, verify_native)
+from common import (KIND_ADDRESS, KIND_UA, OP_EXECUTE_TRANSFER, OP_PAY, OP_TRANSFER, Bytes32, Holder, MetaOp,
+                    check_envelope, digest, lane_key, mbr_paid, mbr_payment, meta_pay_id, pay_lane, verify_native, zero)
 
 Bytes8 = FixedBytes[typing.Literal[8]]
 U128_MAX = 2**128 - 1
@@ -25,6 +30,7 @@ BOX_FLAT = 2500  # protocol box MBR: 2,500 + 400 per name + value byte (µALGO)
 BOX_BYTE = 400
 MBR_AMOUNT_BOX = BOX_FLAT + BOX_BYTE * (33 + 32)  # "b" / "u" / "a" boxes
 MBR_LANE_BOX = BOX_FLAT + BOX_BYTE * (33 + 8)
+ARC4_TRUE = b"\x15\x1f\x7c\x75\x80"  # an ABI `bool` return log: the return prefix ‖ true
 
 
 class Token(arc4.ARC4Contract):
@@ -35,13 +41,17 @@ class Token(arc4.ARC4Contract):
         self.admin = GlobalState(Account, key="admin")
         self.supply = GlobalState(BigUInt, key="supply")
         self.ua_total = GlobalState(BigUInt, key="ua_total")
+        self.account_app = GlobalState(UInt64, key="account_app")
         self.balances = BoxMap(Account, arc4.UInt256, key_prefix=b"b")
         self.ua = BoxMap(Bytes32, arc4.UInt256, key_prefix=b"u")
         self.lanes = BoxMap(Bytes32, UInt64, key_prefix=b"l")
         self.allowances = BoxMap(Bytes32, arc4.UInt256, key_prefix=b"a")
 
     @arc4.abimethod(create="require")
-    def create(self, name: Bytes32, symbol: Bytes8, decimals: arc4.UInt8, admin: Account) -> None:
+    def create(self, name: Bytes32, symbol: Bytes8, decimals: arc4.UInt8, admin: Account,
+               account_app: arc4.UInt64) -> None:
+        """`account_app`: the deployment's `account` app (fixed: no method changes it)."""
+        self.account_app.value = account_app.as_uint64()
         self.name.value = name
         self.symbol.value = symbol
         self.decimals.value = decimals.as_uint64()
@@ -84,7 +94,7 @@ class Token(arc4.ARC4Contract):
     def arc200_transfer(self, to: Account, value: arc4.UInt256) -> bool:
         before = Global.current_application_address.min_balance
         self._move(addr_holder(Txn.sender), addr_holder(to), value.as_biguint())
-        mbr_paid(before)
+        mbr_paid(before, UInt64(0))
         return True
 
     @arc4.abimethod
@@ -98,7 +108,7 @@ class Token(arc4.ARC4Contract):
         if key in self.allowances:
             self.allowances[key] = arc4.UInt256(left - value.as_biguint())
         self._move(addr_holder(owner), addr_holder(to), value.as_biguint())
-        mbr_paid(before)
+        mbr_paid(before, UInt64(0))
         return True
 
     @arc4.abimethod
@@ -110,7 +120,7 @@ class Token(arc4.ARC4Contract):
         assert Txn.num_applications >= 1 and Txn.applications(1).address == spender, "approve: spender must be an app"
         self.allowances[allowance_key(Txn.sender, spender)] = value
         arc4.emit("arc200_Approval", arc4.Address(Txn.sender), arc4.Address(spender), value)
-        mbr_paid(before)
+        mbr_paid(before, UInt64(0))
         return True
 
     # ------------------------------------------------------------ admin, UA ledger
@@ -123,14 +133,14 @@ class Token(arc4.ARC4Contract):
         self.supply.value = supply
         self._credit(addr_holder(to), amount.as_biguint())
         arc4.emit("arc200_Transfer", arc4.Address(Global.zero_address), arc4.Address(to), amount)
-        mbr_paid(before)
+        mbr_paid(before, UInt64(0))
 
     @arc4.abimethod
     def transfer_to_ua(self, id: Bytes32, amount: arc4.UInt256) -> None:
         """The sender's native balance → UA `id` (NEAR `transfer_to_ua`, EVM `transferToUA`)."""
         before = Global.current_application_address.min_balance
         self._move(addr_holder(Txn.sender), Holder(arc4.UInt8(KIND_UA), id), amount.as_biguint())
-        mbr_paid(before)
+        mbr_paid(before, UInt64(0))
 
     @arc4.abimethod(readonly=True)
     def ua_balance_of(self, id: Bytes32) -> arc4.UInt256:
@@ -146,8 +156,8 @@ class Token(arc4.ARC4Contract):
         if (called_by_app() and op.to.kind.as_uint64() == KIND_ADDRESS and op.to.id == op.relayer
                 and op.relayer.bytes == Txn.sender.bytes):
             payee = addr_holder(open_payee)
-        self._value(op, auth, UInt64(OP_PAY), payee)
-        mbr_paid(before)
+        forwarded = self._value(op, auth, UInt64(OP_PAY), payee)
+        mbr_paid(before, forwarded)
 
     @arc4.abimethod
     def mtx_pay_meta(self, op: MetaOp, auth: Bytes, salt: Bytes32, meta: Bytes) -> None:
@@ -157,31 +167,31 @@ class Token(arc4.ARC4Contract):
         assert (op.pay_ref == meta_pay_id(salt, meta) and op.lane == pay_lane(op.pay_ref)
                 and op.nonce.as_uint64() == 0), "pay-meta shape (pay_ref = metaPayId(salt, meta), lane = payLane, nonce 0)"
         arc4.emit("PaymentMeta", op.pay_ref, arc4.DynamicBytes(meta))
-        self._value(op, auth, UInt64(OP_PAY), op.to)
-        mbr_paid(before)
+        forwarded = self._value(op, auth, UInt64(OP_PAY), op.to)
+        mbr_paid(before, forwarded)
 
     @arc4.abimethod
     def mtx_transfer(self, op: MetaOp, auth: Bytes) -> None:
         before = Global.current_application_address.min_balance
-        self._value(op, auth, UInt64(OP_TRANSFER), op.to)
-        mbr_paid(before)
+        forwarded = self._value(op, auth, UInt64(OP_TRANSFER), op.to)
+        mbr_paid(before, forwarded)
 
     @arc4.abimethod
     def mtx_execute_transfer(self, op: MetaOp, auth: Bytes) -> None:
         before = Global.current_application_address.min_balance
-        self._value(op, auth, UInt64(OP_EXECUTE_TRANSFER), op.to)
-        mbr_paid(before)
+        forwarded = self._value(op, auth, UInt64(OP_EXECUTE_TRANSFER), op.to)
+        mbr_paid(before, forwarded)
 
     @arc4.abimethod(readonly=True)
     def mbr_needed(self, op: MetaOp) -> UInt64:
-        """The exact payment a value entry of `op` needs: its new lane box and `op.to`'s new balance box (for an
-        open-mode pay ask with `to` = the open payee)."""
-        need = UInt64(0)
-        if lane_key(op.from_, op.lane) not in self.lanes:
-            need += MBR_LANE_BOX
-        if not self._exists(op.to):
-            need += MBR_AMOUNT_BOX
-        return need
+        """This app's part of a value entry's exact payment: its new lane box and `op.to`'s new balance box (for an
+        open-mode pay ask with `to` = the open payee). A payer verified by the account app adds that app's
+        `verify_mbr` (a UA's first signed op opens its record)."""
+        return self._need(op.from_, op.lane, op.to)
+
+    @arc4.abimethod(readonly=True)
+    def account(self) -> UInt64:
+        return self.account_app.value
 
     @arc4.abimethod(readonly=True)
     def lane_nonce(self, kind: arc4.UInt8, holder: Bytes32, lane: Bytes32) -> UInt64:
@@ -189,21 +199,34 @@ class Token(arc4.ARC4Contract):
 
     # ------------------------------------------------------------ internals
     @subroutine
-    def _value(self, o: MetaOp, auth: Bytes, code: UInt64, payee: Holder) -> None:
-        """Every value entry: op code and pay_ref rule, the signed op (rules 1, 2, 7; §4.6), the payee (rule 12),
-        the payer's lane at `nonce` (rule 6), the move, then MetaTransactionExecuted and (pay_ref ≠ 0) PaymentSettled."""
+    def _need(self, frm: Holder, lane: Bytes32, payee: Holder) -> UInt64:
+        need = UInt64(0)
+        if lane_key(frm, lane) not in self.lanes:
+            need += MBR_LANE_BOX
+        if not self._exists(payee):
+            need += MBR_AMOUNT_BOX
+        return need
+
+    @subroutine
+    def _value(self, o: MetaOp, auth: Bytes, code: UInt64, payee: Holder) -> UInt64:
+        """Every value entry: op code and pay_ref rule, the signed op (rules 1, 2, 7; §4.3, §4.6), the payee (rule
+        12), the payer's lane at `nonce` (rule 6), the move, then MetaTransactionExecuted and (pay_ref ≠ 0)
+        PaymentSettled. Returns the MBR forwarded to the account app."""
         assert o.op.as_uint64() == code, "wrong op code"
         if code == OP_PAY:
             assert o.pay_ref != zero(), "mtx_pay needs a pay_ref"
         if code == OP_TRANSFER:
             assert o.pay_ref == zero(), "mtx_transfer carries no pay_ref"
-        assert o.network.bytes == Global.genesis_hash, "wrong network"
-        assert o.contract.bytes == Global.current_application_address.bytes, "wrong contract"
-        assert Global.latest_timestamp <= o.valid_until.as_uint64(), "expired"
-        assert o.relayer == zero() or o.relayer.bytes == Txn.sender.bytes, "relayer is not the sender"
-        assert o.from_.kind.as_uint64() == KIND_ADDRESS, "UA signer: verified by the account app (T12)"
+        check_envelope(o)
         d = digest(o)
-        assert verify_native(Account(o.from_.id.bytes), d, auth), "bad signature"
+        forwarded = UInt64(0)
+        if o.from_.kind.as_uint64() == KIND_ADDRESS and auth.length == 64:
+            assert verify_native(Account(o.from_.id.bytes), d, auth), "bad signature"
+        else:
+            paid, need = mbr_payment(), self._need(o.from_, o.lane, payee)
+            assert paid >= need, "MBR payment must equal the new boxes' MBR exactly"
+            forwarded = paid - need
+            self._account_verify(o.from_, d, auth, forwarded)
         assert o.amount.as_biguint() > 0, "The amount should be a positive number"
         assert o.from_.bytes != payee.bytes, "Sender and receiver should be different"
         key = lane_key(o.from_, o.lane)
@@ -214,6 +237,22 @@ class Token(arc4.ARC4Contract):
         self._move(o.from_, payee, o.amount.as_biguint())
         if o.pay_ref != zero():
             arc4.emit("PaymentSettled", o.from_, payee, arc4.UInt256(o.amount.as_biguint()), o.pay_ref)
+        return forwarded
+
+    @subroutine
+    def _account_verify(self, h: Holder, d: Bytes32, auth: Bytes, forwarded: UInt64) -> None:
+        """Inner `account.verify(h, d, auth)`, preceded by the forwarded MBR payment when there is one (inner fees 0:
+        the relayer's group pays them by fee pooling)."""
+        app = Application(self.account_app.value)
+        call = itxn.ApplicationCall(
+            app_id=app, fee=0,
+            app_args=(arc4.arc4_signature("verify(uint8,byte[32],byte[32],byte[])bool"), h.kind.bytes, h.id.bytes,
+                      d.bytes, arc4.DynamicBytes(auth).bytes))
+        if forwarded:
+            _pay, res = itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
+            assert res.last_log == ARC4_TRUE, "bad signature"
+        else:
+            assert call.submit().last_log == ARC4_TRUE, "bad signature"
 
     @subroutine
     def _exists(self, h: Holder) -> bool:
@@ -255,24 +294,6 @@ class Token(arc4.ARC4Contract):
 
 
 @subroutine
-def mbr_paid(before: UInt64) -> None:
-    """§2 row 15: the group transaction just before this call is a payment to the app address of exactly the MBR
-    this call added (the app's AcctMinBalance after minus `before`), and there is none when it added nothing. It
-    neither closes nor rekeys (a close-out would over-fund the app: not exact)."""
-    need = Global.current_application_address.min_balance - before
-    paid = UInt64(0)
-    has = False
-    if Txn.group_index > 0:
-        p = gtxn.Transaction(Txn.group_index - 1)
-        if p.type == TransactionType.Payment and p.receiver == Global.current_application_address:
-            assert p.close_remainder_to == Global.zero_address and p.rekey_to == Global.zero_address, \
-                "MBR payment must not close or rekey"
-            has = True
-            paid = p.amount
-    assert has == (need > 0) and paid == need, "MBR payment must equal the new boxes' MBR exactly"
-
-
-@subroutine
 def called_by_app() -> bool:
     """An inner call whose sender is the calling app's own address (not an account rekeyed to that app)."""
     return Global.caller_application_id != 0 and Txn.sender == Global.caller_application_address
@@ -291,8 +312,3 @@ def native_view(h: Holder) -> Account:
 @subroutine
 def allowance_key(owner: Account, spender: Account) -> Bytes32:
     return Bytes32.from_bytes(op.sha256(owner.bytes + spender.bytes))
-
-
-@subroutine
-def zero() -> Bytes32:
-    return Bytes32.from_bytes(op.bzero(32))

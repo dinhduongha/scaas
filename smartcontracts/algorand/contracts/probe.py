@@ -32,6 +32,11 @@ class Probe(arc4.ARC4Contract):
     def ref_of(self, network: Bytes32, target: Bytes32, call: Bytes, salt: Bytes32) -> Bytes32:
         return relay_ref(network, target, call, salt)
 
+    @arc4.abimethod
+    def verify(self, holder_kind: arc4.UInt8, holder: Bytes32, digest: Bytes32, auth: Bytes) -> bool:
+        """An `account.verify` stand-in that answers false (a token must not take that as a signature)."""
+        return False
+
     @arc4.baremethod(allow_actions=["NoOp"], create="allow")
     def budget(self) -> None:
         pass
