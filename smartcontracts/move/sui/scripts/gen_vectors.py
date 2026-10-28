@@ -17,10 +17,12 @@ import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 _pkg = types.ModuleType('dmslib')  # nạp lib mà không chạy lib/__init__ (kéo Odoo)
-_pkg.__path__ = [os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')]
+# `DMS_LIB` = thư mục `dms_blockchain/lib` (mặc định: repo anh em cạnh scaas).
+_pkg.__path__ = [os.environ.get('DMS_LIB') or os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')]
 sys.modules['dmslib'] = _pkg
 F = importlib.import_module('dmslib.fam_sui')
 
+from Crypto.Hash import keccak as _keccak  # noqa: E402  (pycryptodome)
 from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils  # noqa: E402
 
@@ -31,6 +33,10 @@ DEX = '0xd726ecf6f7036ee3557cd6c7b93a49b231070e8eecada9cfa157e40e3f02e5d3'
 # `dex::market_address<EUR, SUI>` / `<USD, SUI>` (derived từ DEX — `fixtures::print_ids`).
 MARKET = '0x4c5e7c0aa01e77f7c83bc1bd0c19fc6fdfd44f12920176c52c005f5f6b90326b'
 MARKET_USD = '0xefe418838a1646cb7f0a12168dfddaa6353e52e80313e45150fec5539c8431d'
+# `relayfee::RelayFee` (the router marker, tx1 — `fixtures::print_ids`); the package's id in `sui move test`.
+RELAY_FEE = '0x5ef2fcf809fb9535ea0aeaea421f683026f06c34569aafc42bcde652ef6dd270'
+PACKAGE = '0x0'
+PAYMETA = os.path.join(HERE, '..', '..', '..', 'vectors', 'metatx', 'paymeta.json')
 MANDATE = '0xbfd1d3ac3d6c37f03afe4d7c244e677f9b01fcbff79dae3394640a7944e5f5ab'
 NET = 'localnet'
 SUI_T = b'0000000000000000000000000000000000000000000000000000000000000002::sui::SUI'
@@ -119,11 +125,14 @@ def auth_const(name, key, digest, **kw):
     return ser
 
 
-def pay(name, key, registry, amount, ref, lane, nonce, valid_until=1000, relayer='0x0', to=BEEF, owner=None, **kw):
+def pay(name, key, registry, amount, ref, lane, nonce, valid_until=1000, relayer='0x0', to=BEEF, owner=None, extra=bytes(32),
+        **kw):
+    """`ref` / `lane`: one byte (repeated ×32) or the 32 bytes themselves."""
     owner = owner or key.address
     account = F.derive_account(registry, owner)
-    payload = F.metaop_bytes(NET, account, F.OP_PAY, owner, to, amount, bytes([ref]) * 32,
-                             bytes([lane]) * 32, nonce, valid_until, relayer)
+    b32 = lambda x: x if isinstance(x, bytes) else bytes([x]) * 32  # noqa: E731
+    payload = F.metaop_bytes(NET, account, F.OP_PAY, owner, to, amount, b32(ref), b32(lane), nonce, valid_until,
+                             relayer, extra)
     digest = F.personal_digest(payload)
     ser = auth_const(name, key, digest, **kw)
     return account, payload, digest, ser
@@ -150,12 +159,15 @@ auth_const('d_open', dave, open_ch)
 
 
 # Vòng đời khoá (review M1): `meta::KeyOp`, ký bởi một khoá hiện có của account.
+keyops = {}
+
+
 def keyop(name, signer, owner, action, nonce, scheme=0, pk=b'', rp=b'', origin='', guardian='0x0', **kw):
     account = F.derive_account(REG_SUI, owner.address)
     b = (F._vec(b'scaas.keyop.v1') + F._vec(NET.encode()) + F.addr(account) + bytes([action, scheme]) + F._vec(pk)
          + F._vec(rp) + F._vec(origin.encode()) + F.addr(guardian) + nonce.to_bytes(8, 'little')
          + (1000).to_bytes(8, 'little'))
-    auth_const(name, signer, F.personal_digest(b), **kw)
+    keyops[name] = auth_const(name, signer, F.personal_digest(b), **kw)
 
 
 keyop('k_a_add_a2', alice, alice, ADD_KEY, 0, 0, alice2.pk)
@@ -176,15 +188,18 @@ for name, amount, ref in (('m_pay_1', 40, 0x61), ('m_pay_2', 40, 0x62), ('m_pay_
                        bytes([ref]) * 32, 0, 1000)
     auth_const(name, delegate, F.personal_digest(p))
 p = F.metaop_bytes(NET, MANDATE, F.OP_REVOKE, alice.address, '0x0', 0, bytes(32), bytes(32), 0, 1000)
-auth_const('m_revoke', delegate, F.personal_digest(p))
+m_revoke_ser = auth_const('m_revoke', delegate, F.personal_digest(p))
 
 
-def order(maker, sell_t, buy_t, sell, buy, nonce, flags=0, max_fee=3000, expiry=1000, taker='0x0'):
-    b = (F._vec(b'scaas.order.v1') + F._vec(NET.encode()) + F.addr(MARKET) + F.addr(maker.address) + F.addr(taker)
+def order_bytes(maker, sell_t, buy_t, sell, buy, nonce, flags=0, max_fee=3000, expiry=1000, taker='0x0'):
+    return (F._vec(b'scaas.order.v1') + F._vec(NET.encode()) + F.addr(MARKET) + F.addr(maker.address) + F.addr(taker)
          + F._vec(sell_t) + F._vec(buy_t) + sell.to_bytes(8, 'little') + buy.to_bytes(8, 'little')
          + nonce.to_bytes(16, 'little') + expiry.to_bytes(8, 'little') + max_fee.to_bytes(4, 'little')
          + bytes([flags]) + F.addr('0x0'))
-    return F.personal_digest(b)
+
+
+def order(*args, **kw):
+    return F.personal_digest(order_bytes(*args, **kw))
 
 
 orders = {
@@ -200,11 +215,88 @@ for name, args in orders.items():
     const(name + '_hash', d)
     auth_const(name, args[0], d)
 cancel = F._vec(b'scaas.cancel.v1') + F._vec(NET.encode()) + F.addr(MARKET) + F._vec(order(*orders['o_a']))
-auth_const('cancel_o_a', alice, F.personal_digest(cancel))
+cancel_ser = auth_const('cancel_o_a', alice, F.personal_digest(cancel))
+sigs = {'m_revoke': m_revoke_ser, 'cancel_o_a': cancel_ser}
 for name, market in (('nonces_a_2', MARKET), ('nonces_a_2_usd', MARKET_USD)):
     nonces = (F._vec(b'scaas.nonces.v1') + F._vec(NET.encode()) + F.addr(market) + F.addr(alice.address)
               + (2).to_bytes(16, 'little'))
-    auth_const(name, alice, F.personal_digest(nonces))
+    sigs[name] = auth_const(name, alice, F.personal_digest(nonces))
+
+
+def keccak(b):
+    return _keccak.new(digest_bits=256, data=b).digest()
+
+
+# ------------------------------------------------------------------ CTR-MTX-26 pay-meta (spec §6.2)
+def meta_pay_id(salt, meta):
+    return keccak(b'scaas.pay.meta' + salt + keccak(meta))
+
+
+def pay_lane(p):
+    return keccak(b'scaas.pay.lane' + p)
+
+
+# Every row of the shared vectors (`long_body_4096` is a hash vector only, never submitted).
+rows = json.load(open(PAYMETA))
+quads = []
+for r in rows:
+    salt, meta = bytes.fromhex(r['salt'][2:]), bytes.fromhex(r['meta'][2:])
+    pid = meta_pay_id(salt, meta)
+    assert pid.hex() == r['payId'][2:] and pay_lane(pid).hex() == r['payLane'][2:], r['name']
+    quads.append('vector[%s]' % ', '.join(h(x) for x in (salt, meta, bytes.fromhex(r['payId'][2:]),
+                                                           bytes.fromhex(r['payLane'][2:]))))
+    if r['name'] == 'note_utf8':
+        const('pm_note_salt', salt)
+        const('pm_note_meta', meta)
+        const('pm_note_id', pid)
+# `[salt, meta, payId, payLane]` of every row, as in the file (`payId` / `payLane` copied, not recomputed).
+out.append('public fun pm_rows(): vector<vector<vector<u8>>> { vector[%s] }' % ', '.join(quads))
+NOTE = next(r for r in rows if r['name'] == 'note_utf8')
+note_id = bytes.fromhex(NOTE['payId'][2:])
+# Alice pays 0xbeef 100 SUI with payId(note_utf8): the same signed MetaOp as a plain pay of that pay_ref.
+pay('pm_a_note', alice, REG_SUI, 100, note_id, pay_lane(note_id), 0)
+# Bob (another payer) signs his own pay of 1 with Alice's payId: his lane, never hers (rule 6).
+pay('pm_b_note', bob, REG_SUI, 1, note_id, pay_lane(note_id), 0)
+
+
+# ------------------------------------------------------------------ CTR-MTX-27 relayfee (spec §7.2)
+def bcs_auth(ser):
+    """BCS of `auth::Auth` from the serialized signature `auth_const` returned."""
+    raw = base64.b64decode(ser)
+    if raw[0] != F.PASSKEY:
+        return F._vec(raw[1:65]) + F._vec(b'') + F._vec(b'')
+    _, sig, _, ad, cd = F.parse_signature(ser)
+    return F._vec(sig) + F._vec(ad) + F._vec(cd)
+
+
+def relay_ref(call, salt):
+    """`keccak256("scaas.relayfee" ‖ network ‖ package ‖ keccak256(call) ‖ salt)`."""
+    return keccak(b'scaas.relayfee' + NET.encode() + F.addr(PACKAGE) + keccak(call) + salt)
+
+
+A_SUI = F.derive_account(REG_SUI, alice.address)
+PAY_UNTIL = 2000  # the payments outlive the inner calls (valid until 1000) so a call's own expiry is testable
+calls = {
+    # name: (call bytes, payee, salt byte)
+    'manage': (F._vec(b'meta::manage') + F.addr(A_SUI) + bytes([SET_GUARDIAN, 0]) + F._vec(b'') + F._vec(b'')
+               + F._vec(b'') + F.addr(GUARDIAN) + (1000).to_bytes(8, 'little') + bcs_auth(keyops['k_a_guardian']),
+               RELAY_FEE, 0x51),
+    'revoke': (F._vec(b'mandate::revoke_with_sig') + F.addr(MANDATE) + (1000).to_bytes(8, 'little')
+               + bcs_auth(sigs['m_revoke']), BEEF, 0x52),
+    'cancel': (F._vec(b'dex::cancel') + F.addr(MARKET) + F.addr(A_SUI) + order_bytes(*orders['o_a'])
+               + bcs_auth(sigs['cancel_o_a']), RELAY_FEE, 0x53),
+    'nonces': (F._vec(b'dex::invalidate_nonces') + F.addr(MARKET) + F.addr(A_SUI) + (2).to_bytes(16, 'little')
+               + bcs_auth(sigs['nonces_a_2']), RELAY_FEE, 0x54),
+}
+for name, (call, to, salt_b) in calls.items():
+    salt = bytes([salt_b]) * 32
+    r = relay_ref(call, salt)
+    const('rf_%s_call' % name, call)
+    const('rf_%s_ref' % name, r)
+    # Alice pays 10 SUI for the call: pay_ref = ref, lane = payLane(ref), nonce 0, relayer = the marker.
+    pay('rf_%s_pay' % name, alice, REG_SUI, 10, r, pay_lane(r), 0, valid_until=PAY_UNTIL, relayer=RELAY_FEE, to=to,
+        extra=salt)
+addr_const('relay_fee_marker', RELAY_FEE)
 
 print('// GENERATED by smartcontracts/move/sui/scripts/gen_vectors.py — do not edit.')
 print('// Cross-implementation vector (also pinned in Rust and Odoo tests):')

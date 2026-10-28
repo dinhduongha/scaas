@@ -274,6 +274,49 @@ pools" (default off); allows `receiveToken` = the sell token with a "cycle" labe
 amount`; asks an outside-token holder to approve the listed DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)),
 never the DEX; and checks each `ExchangeLegSettled` against `limitReceive`, showing `surplus` as price improvement.
 
+<a id="CLI-SGN-38"></a>**CLI-SGN-38** — **A pay-meta payment is signed only when its `entryRef` is `metaPayId(salt, meta)` of
+the `(salt, meta)` the client holds, and the decoded `meta` is shown next to the typed data.** Status: clientkeys
+**BUILT** (metatx split T18; [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)). `metaPayId(salt, meta)`, `decodeMeta`
+(the envelope `abi.encode(uint16 schema, bytes body)` in canonical form only; schema 1 a UTF-8 note, 2 `{creditorRef,
+invoiceNo, dueDate}`, 3 `{chainId, target, callHash}`, 4 encrypted (its length only; not decrypted here); any other
+schema refused), `buildMtxPayMeta` / `buildUaPayMeta` (the payment of `mtxPay` / `uaPay` with `entryRef = payId`, lane
+`payLane(payId)`, nonce 0; calldata `mtxPayMeta` / `uaPayMeta`, or with `onChain: false` the off-chain variant `mtxPay` /
+`uaPay` with the same digest, `(salt, meta)` then kept by the payee) and `checkPayMeta` (the server's `MetaTransfer` must
+carry that `payId`, then every [CLI-SGN-05](#CLI-SGN-05) `checkPayment` check). A request whose `entryRef` differs from
+`metaPayId(salt, meta)` is refused before anything is signed. The vectors are `smartcontracts/vectors/metatx/paymeta.json`
+(also read by `scaas-ua` `meta_pay_id` / `pay_lane` and QML `UaKinds.metaPayId` / `payLane`). A `meta` sent on chain is
+public forever ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); private metadata uses schema 4 or the off-chain variant.
+Family wallets (other families sign their own `MetaOp`): the same `payId` derivation byte for byte; **TON**: a pay-meta
+whose payee bounces still uses up that `(payer, payId)` (its lane is spent), so a retry picks a new `salt` (a new
+`payId`).
+
+<a id="CLI-SGN-39"></a>**CLI-SGN-39** — **A relay-fee payment is built for exactly one signed call, shown together with
+it, and never pays or approves the router's executor or marker.** Status: clientkeys (EVM) **BUILT** (metatx split T18;
+[CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)). `relayRef(chainId, target, callData)` (`keccak256("scaas.relayfee" ‖
+uint256 chainId ‖ target ‖ keccak256(callData))`, vectors `smartcontracts/vectors/metatx/relayref.json`, written by forge
+against `MtxRelayFee` itself; `scaas-ua` `relay_ref`, QML `UaKinds.relayRef`), `mtxExecuteCalldata(td, signature)` and
+`buildRelayFee`: it returns the inner call's typed data to sign first (an inner `MetaTransaction` with
+`MODE_RESTRICT_RELAYER` gets the **executor** as its relayer; left open it stays open; bound to anything else, or on
+another contract than `target`, refused), one `prompt` with both intents (the call: target, data, signer, relayer; the
+payment: token, amount, payee), and `payment(callData)`: the router-bound `MetaTransfer` / `UAMetaTransfer` `{to: router
+(open mode, the default: the submitting relayer is paid) or the payee, value: amount, entryRef: ref, batch: payLane(ref),
+nonce: 0, mode: RESTRICT_RELAYER, relayer: router, fee: 0}` and the `relay` / `uaRelay` calldata. Refused: a payee that is
+the executor, the zero address or the token itself; a target that is the router or the executor; an inner call whose
+domain names another chain (`chainId`, `salt`) or whose `validUntil` is later than the payment's. Clients build relay payments only for SCaaS targets. Rules for
+the family wallets, which build their own router payments (each family's `ref` form is its own: EVM `chainid ‖ target ‖
+keccak(callData)`; Soroban + the payer-signed salt; Solana the accounts with their flags + salt, a wrapper `ref` with the
+router marker in the lane slot; Cosmos `chain id ‖ target ‖ keccak(msg)`; Sui / Aptos the BCS of the entry name and every
+argument + salt; TON the call cell's representation hash + salt, known SCaaS targets only — each family's suite pins
+its vectors):
+1. never pay or approve the router, its executor or the router marker (a PDA, object or contract address that only the
+   router's code path spends; open mode is expressed as `to = router`, never as an approval);
+2. **Cosmos**: read the router's `ContractInfo` and sign `relayer = router` only when its `admin` is `None` (a migratable
+   router could settle the payment without the call);
+3. **Aptos**: open the payer's Account first (`meta::open` or any plain pay): the node refuses a relay-fee job while it
+   is not open;
+4. **TON**: do not queue an op at lane nonce `n + 1` behind a revocable order at `n`: a revoke moves the lane to `n + 2`,
+   so the queued op fails.
+
 <a id="portal-signer-rules"></a>**Portal signer rules.** A portal or ERP page that hosts a signer also:
 
 1. shows the operation in human terms (amount, payee, token, chain, expiry) **before** invoking the authenticator;
@@ -704,7 +747,7 @@ Built entry points (BUILT; load only what the chosen signer needs):
 
 | Entry | Exports (main) | Use |
 |---|---|---|
-| `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment`, `checkCall`, `checkTradeOrder`, `checkCancel`, `payLane`, `metaTransferTypedData`, `tradeOrderTypedData`, `orderCancelTypedData`, the UA ledger's `uaMetaTxTypedData`, `uaMetaTransferTypedData` and `padId` (UA-4, accounts.md CTR-UA-26) (both bundles) | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
+| `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment`, `checkCall`, `checkTradeOrder`, `checkCancel`, `payLane`, `metaTransferTypedData`, `tradeOrderTypedData`, `orderCancelTypedData`, the UA ledger's `uaMetaTxTypedData`, `uaMetaTransferTypedData` and `padId` (UA-4, accounts.md CTR-UA-26), the pay-meta and relay-fee helpers `metaPayId`, `decodeMeta`, `checkPayMeta`, `buildMtxPayMeta`, `buildUaPayMeta`, `relayRef`, `mtxExecuteCalldata`, `buildRelayFee` ([CLI-SGN-38](#CLI-SGN-38), [CLI-SGN-39](#CLI-SGN-39)) (both bundles) | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
 | `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signDigest`, `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
 | `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (the tagged UA, `zetherKind`), `zetherPop` (the UA registry PoP, CTR-UA-07; `popMessage` removed in UA-3), `zetherOwnerAuth` (a self account's roll-over / mode signature), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `ownerAuth`, `fundCalldata`, `envelope`) |
 

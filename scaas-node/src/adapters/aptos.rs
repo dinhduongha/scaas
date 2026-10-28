@@ -63,8 +63,12 @@ impl<'a> Reader<'a> {
     fn u8(&mut self) -> Result<u8> {
         Ok(self.take(1)?[0])
     }
-    /// ULEB128 chuẩn (BCS): ≤ 4 byte cho độ dài, không byte thừa.
     fn vec(&mut self) -> Result<Vec<u8>> {
+        let n = self.uleb()?;
+        Ok(self.take(n)?.to_vec())
+    }
+    /// ULEB128 chuẩn (BCS): ≤ 4 byte cho độ dài, không byte thừa.
+    fn uleb(&mut self) -> Result<usize> {
         let (mut n, mut shift) = (0usize, 0u32);
         loop {
             let b = self.u8()?;
@@ -80,7 +84,7 @@ impl<'a> Reader<'a> {
             }
             shift += 7;
         }
-        Ok(self.take(n)?.to_vec())
+        Ok(n)
     }
     fn u64(&mut self) -> Result<u64> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into()?))
@@ -240,18 +244,33 @@ pub fn parse_auth(signature: &str, public_key: &str) -> Result<Auth> {
 
 // ------------------------------------------------------------------ transaction (spec §6.2)
 
-/// `TransactionPayload::EntryFunction` (biến thể 2) của `<package>::meta::relay_pay` — đối số đúng thứ tự Move.
-pub fn relay_pay_payload(package: &Addr, op: &MetaOp, auth: &Auth) -> Vec<u8> {
+/// `TransactionPayload::EntryFunction` (biến thể 2) của `<package>::<module>::<function>`, không type arg; mỗi đối số
+/// là BCS của giá trị, đúng thứ tự Move (sau `&signer` của lane).
+fn entry_payload(package: &Addr, module: &str, function: &str, args: &[Vec<u8>]) -> Vec<u8> {
     let mut o = vec![2u8];
     o.extend_from_slice(package);
-    vec(&mut o, b"meta");
-    vec(&mut o, b"relay_pay");
+    vec(&mut o, module.as_bytes());
+    vec(&mut o, function.as_bytes());
     uleb(&mut o, 0); // type args
-    let bytes = |b: &[u8]| {
-        let mut v = Vec::new();
-        vec(&mut v, b);
-        v
-    };
+    uleb(&mut o, args.len());
+    args.iter().for_each(|a| vec(&mut o, a));
+    o
+}
+
+/// BCS của `vector<u8>`.
+fn bytes(b: &[u8]) -> Vec<u8> {
+    let mut v = Vec::new();
+    vec(&mut v, b);
+    v
+}
+
+/// The pay entries' last three arguments: `public_key, sig, envelope`.
+fn auth_args(auth: &Auth) -> [Vec<u8>; 3] {
+    [bytes(&auth.public_key), bytes(&auth.sig), bytes(&auth.envelope)]
+}
+
+/// `<package>::meta::relay_pay` — đối số đúng thứ tự Move.
+pub fn relay_pay_payload(package: &Addr, op: &MetaOp, auth: &Auth) -> Vec<u8> {
     let args: Vec<Vec<u8>> = vec![
         op.from.to_vec(),
         op.asset.to_vec(),
@@ -267,9 +286,251 @@ pub fn relay_pay_payload(package: &Addr, op: &MetaOp, auth: &Auth) -> Vec<u8> {
         bytes(&auth.sig),
         bytes(&auth.envelope),
     ];
-    uleb(&mut o, args.len());
-    args.iter().for_each(|a| vec(&mut o, a));
-    o
+    entry_payload(package, "meta", "relay_pay", &args)
+}
+
+/// CTR-MTX-26: `meta::relay_pay_meta(lane, owner, asset, to, amount, salt, meta, valid_until, relayer, extra,
+/// public_key, sig, envelope)`; `pay_ref`, `lane`, `nonce` are derived on chain.
+pub fn relay_pay_meta_payload(package: &Addr, op: &MetaOp, auth: &Auth, salt: &[u8], meta: &[u8]) -> Vec<u8> {
+    let mut args = vec![
+        op.from.to_vec(),
+        op.asset.to_vec(),
+        op.to.to_vec(),
+        op.amount.to_le_bytes().to_vec(),
+        bytes(salt),
+        bytes(meta),
+        op.valid_until.to_le_bytes().to_vec(),
+        op.relayer.to_vec(),
+        bytes(&op.extra),
+    ];
+    args.extend(auth_args(auth));
+    entry_payload(package, "meta", "relay_pay_meta", &args)
+}
+
+/// CTR-MTX-27: `relayfee::relay_<entry>(lane, <the call's arguments>, payer, asset, to, amount, valid_until, extra,
+/// public_key, sig, envelope)`; `pay_ref`, `lane`, `nonce`, `relayer` are derived on chain from the call.
+pub fn relay_fee_payload(package: &Addr, op: &MetaOp, auth: &Auth, call: &RelayCall) -> Vec<u8> {
+    let mut args = call.args.clone();
+    args.extend([
+        op.from.to_vec(),
+        op.asset.to_vec(),
+        op.to.to_vec(),
+        op.amount.to_le_bytes().to_vec(),
+        op.valid_until.to_le_bytes().to_vec(),
+        bytes(&op.extra),
+    ]);
+    args.extend(auth_args(auth));
+    entry_payload(package, "relayfee", call.wrapper, &args)
+}
+
+// ------------------------------------------------------------------ CTR-MTX-26 / -27 (spec §6.2, §7.2)
+
+
+fn keccak(parts: &[&[u8]]) -> [u8; 32] {
+    alloy::primitives::keccak256(parts.concat()).0
+}
+
+/// CTR-MTX-26: `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))` (`meta::meta_pay_id`).
+pub fn meta_pay_id(salt: &[u8], meta: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.meta", salt, &keccak(&[meta])])
+}
+
+/// `keccak256("scaas.pay.lane" ‖ p)` (`meta::pay_lane`).
+pub fn pay_lane(p: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.lane", p])
+}
+
+/// `relayfee::marker()` = `object::create_object_address(&package, b"scaas.relayfee")`: no transaction can sign for it.
+pub fn relay_marker(package: &Addr) -> Addr {
+    object_address(package, b"scaas.relayfee")
+}
+
+/// `relayfee::relay_ref`: `keccak256("scaas.relayfee" ‖ chain_id (1) ‖ package (32) ‖ keccak256(call) ‖ salt)`, `salt`
+/// the payment's `extra`.
+pub fn relay_ref(chain_id: u8, package: &Addr, call: &[u8], salt: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.relayfee", &[chain_id], package, &keccak(&[call]), salt])
+}
+
+/// BCS kinds of a wrapped entry's arguments.
+#[derive(Debug, Clone, Copy)]
+enum Arg {
+    Addr,
+    U8,
+    U64,
+    U128,
+    Bytes,
+    Addrs,
+}
+
+/// The fee-less signed entries `scaas::relayfee` wraps: (entry, wrapper, arguments after the lane signer).
+const WRAPPED: &[(&str, &str, &[Arg])] = {
+    use Arg::*;
+    &[
+        ("meta::manage_signed", "relay_manage_signed", &[Addr, U8, U8, Bytes, Bytes, Bytes, Addr, U64, Bytes, Bytes, Bytes]),
+        ("mandate::open", "relay_mandate_open", &[Addr, Bytes, Bytes, U64, U64, U64, U64, Addrs, U64, Bytes, Bytes, Bytes]),
+        ("mandate::revoke_signed", "relay_revoke_signed", &[Addr, U64, Bytes, Bytes, Bytes]),
+        ("dex::cancel_signed", "relay_cancel_signed", &[Addr, Bytes, Bytes, Bytes, Bytes]),
+        ("dex::invalidate_nonces_signed", "relay_invalidate_nonces_signed", &[Addr, Addr, U128, Bytes, Bytes, Bytes]),
+    ]
+};
+
+/// The wrapped call (`op.extra.call`): `bcs(entry name) ‖ bcs(each argument)`, the entry's signature included, the
+/// lane signer excluded — the bytes `relayfee` hashes into `ref`. Each argument's BCS is also its argument in the
+/// entry-function payload, so the node forwards exactly the bytes the payer's `ref` commits to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayCall {
+    pub wrapper: &'static str,
+    pub args: Vec<Vec<u8>>,
+}
+
+impl RelayCall {
+    /// Exactly one wrapped entry's call (canonical BCS: ULEB128 lengths are canonical), nothing after it.
+    pub fn decode(b: &[u8]) -> Result<Self> {
+        let mut r = Reader { b, i: 0 };
+        let name = r.vec()?;
+        let (_, wrapper, kinds) = WRAPPED.iter().find(|w| w.0.as_bytes() == name.as_slice()).ok_or_else(|| {
+            anyhow!("not a call of a wrapped entry (meta::manage_signed, mandate::open, mandate::revoke_signed, \
+                     dex::cancel_signed, dex::invalidate_nonces_signed)")
+        })?;
+        let mut args = Vec::with_capacity(kinds.len());
+        for k in kinds.iter() {
+            let start = r.i;
+            match k {
+                Arg::Addr => {
+                    r.addr()?;
+                }
+                Arg::U8 => {
+                    r.u8()?;
+                }
+                Arg::U64 => {
+                    r.u64()?;
+                }
+                Arg::U128 => {
+                    r.u128()?;
+                }
+                Arg::Bytes => {
+                    r.vec()?;
+                }
+                Arg::Addrs => {
+                    let n = r.uleb()?;
+                    r.take(n.checked_mul(32).ok_or_else(|| anyhow!("too many addresses"))?)?;
+                }
+            }
+            args.push(b[start..r.i].to_vec());
+        }
+        if r.i != b.len() {
+            bail!("trailing bytes after the call");
+        }
+        Ok(Self { wrapper, args })
+    }
+}
+
+/// What the node accepts as a relay-fee job (controller call 2026-10-27, owner may override): the router marker of
+/// this package as the payment's relayer, a registered token, and a fee of at least `min_amount`.
+#[derive(Debug, Clone, Default)]
+pub struct RelayFeePolicy {
+    pub router: Option<Addr>,
+    pub tokens: Vec<Addr>,
+    pub params: crate::config::RelayParams,
+}
+
+impl RelayFeePolicy {
+    /// `params.relay_fee = { router = "<relayfee::marker()>", min_amount = N }` (default 1) and the chain's `tokens`
+    /// (FA metadata addresses). A `router` that is set but is not an Aptos address or not `relayfee::marker()` of
+    /// `package`, a `min_amount` that is not a non-negative integer, or a malformed token is a startup error, never a
+    /// silently disabled router.
+    pub fn from_cfg(cfg: &ChainCfg, package: &Addr) -> Result<Self> {
+        let t = cfg.params.get("relay_fee");
+        let router = match t.and_then(|t| t.get("router")) {
+            None => None,
+            Some(v) => {
+                let r = parse_addr(v.as_str().ok_or_else(|| anyhow!("params.relay_fee.router must be a 0x… string"))?)
+                    .context("params.relay_fee.router")?;
+                if r != relay_marker(package) {
+                    bail!("params.relay_fee.router {} is not relayfee::marker() {} of this package", addr_hex(&r),
+                          addr_hex(&relay_marker(package)));
+                }
+                Some(r)
+            }
+        };
+        let tokens = cfg
+            .tokens
+            .iter()
+            .map(|t| parse_addr(&t.address).with_context(|| format!("tokens: {} is not an Aptos address", t.address)))
+            .collect::<Result<_>>()?;
+        Ok(Self { router, tokens, params: cfg.relay_params()? })
+    }
+}
+
+/// The entry a job runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Entry {
+    Pay,
+    PayMeta { salt: Vec<u8>, meta: Vec<u8> },
+    Fee { call: RelayCall },
+}
+
+fn hex_field(v: &Value, what: &str) -> Result<Vec<u8>> {
+    let s = v.as_str().ok_or_else(|| anyhow!("op.{what} missing"))?;
+    Ok(alloy::hex::decode(s.trim().trim_start_matches("0x"))?)
+}
+
+/// The entry of a job, checked before simulation (fail closed). `op.kind`: `"pay_meta"` (`op.salt`, `op.meta` hex:
+/// `pay_ref == metaPayId(salt, meta)`, `lane == payLane(pay_ref)`, `nonce == 0`, `meta` within the cap) or
+/// `"relay_fee"` (`op.extra.call` hex = the wrapped call's bytes, optional `op.ref`): the policy (router marker as
+/// relayer, registered token, minimum fee) and the payment commits to exactly this call: `pay_ref == ref`,
+/// `lane == payLane(ref)`, `nonce == 0`. No `op.kind` is `relay_pay`; any other kind is refused (a typo must not burn
+/// the `(payer, payId)` lane as a plain pay). A plain pay or pay-meta to the router marker is refused whether or not a
+/// router is configured (the marker is derived from the package): nobody can spend from it, so the funds would be
+/// stranded (CTR-MTX-27: never pay the marker; the router's open mode pays the submitting lane instead).
+pub fn entry(package: &Addr, policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
+    let kind = crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)?;
+    if kind != Some("relay_fee") && op.to == relay_marker(package) {
+        bail!("a plain pay to the relay-fee router marker {} would strand the funds", addr_hex(&op.to));
+    }
+    match kind {
+        Some("pay_meta") => {
+            let (salt, meta) = (hex_field(&o["salt"], "salt")?, hex_field(&o["meta"], "meta")?);
+            if salt.len() != 32 {
+                bail!("op.salt is 32 bytes");
+            }
+            if meta.len() > policy.params.max_pay_meta_bytes {
+                bail!("meta is {} B, above max_pay_meta_bytes {}", meta.len(), policy.params.max_pay_meta_bytes);
+            }
+            let id = meta_pay_id(&salt, &meta);
+            if op.pay_ref != id || op.lane != pay_lane(&id) || op.nonce != 0 {
+                bail!("pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0");
+            }
+            Ok(Entry::PayMeta { salt, meta })
+        }
+        Some("relay_fee") => {
+            let Some(router) = policy.router else { bail!("relay-fee jobs need params.relay_fee.router") };
+            if op.relayer != router {
+                bail!("the payment's relayer {} is not the configured params.relay_fee.router", addr_hex(&op.relayer));
+            }
+            if !policy.tokens.contains(&op.asset) {
+                bail!("token {} is not registered on this chain", addr_hex(&op.asset));
+            }
+            let bytes = hex_field(&o["extra"]["call"], "extra.call")?;
+            let call = RelayCall::decode(&bytes)?;
+            let r = relay_ref(op.chain_id, package, &bytes, &op.extra);
+            if op.pay_ref != r || op.lane != pay_lane(&r) || op.nonce != 0 {
+                bail!("the payment is not bound to this call (ref, payLane(ref), nonce 0)");
+            }
+            if !o["ref"].is_null() && hex_field(&o["ref"], "ref")? != r {
+                bail!("op.ref != relay_ref(call, salt)");
+            }
+            Ok(Entry::Fee { call })
+        }
+        _ => Ok(Entry::Pay),
+    }
+}
+
+/// T17 (one payee rule, `adapter::relay_fee_ours`): a relay fee reaches this lane in open mode (`to` = the router
+/// marker, which pays the submitting lane) or bound to the lane, and then must be at least `min_amount`; a fee bound
+/// to anyone else only with `relay_bound_payee` (sponsored). Checked per lane in `build`.
+pub fn relay_payee(policy: &RelayFeePolicy, op: &MetaOp, lane: &Addr) -> Result<()> {
+    crate::adapter::relay_fee_ours(policy.router == Some(op.to), op.to == *lane, op.amount, &policy.params)
 }
 
 /// `RawTransaction` BCS.
@@ -350,34 +611,54 @@ fn canon(v: &Value) -> Option<String> {
 }
 
 /// Event REST của một tx ⇒ event chuẩn hoá cho Odoo; `None` nếu không phải của package này / token lạ / hỏng.
+// TODO(T17): `meta::PaymentMeta` (`pay_id`, `meta`, joined by `pay_ref`) and `relayfee::RelayFeePaid` (module
+// `relayfee`; `token` filtered against the registered assets).
 pub fn normalize(package: &Addr, tokens: &[String], ev: &Value, block: u64, block_hash: &str, tx_hash: &str, log_index: usize) -> Option<Value> {
     let ty = ev.get("type")?.as_str()?;
     let mut it = ty.splitn(3, "::");
     let (pkg, module, name) = (it.next()?, it.next()?, it.next()?);
-    if parse_addr(pkg).ok()? != *package || module != "meta" {
+    if parse_addr(pkg).ok()? != *package || !matches!(module, "meta" | "relayfee") {
         return None;
     }
     let d = ev.get("data")?;
-    let contract = canon(d.get("contract")?)?;
+    // `RelayFeePaid` (the `relayfee` module) names its token; the `meta` events are the token's own
+    let contract = canon(d.get(if module == "relayfee" { "token" } else { "contract" })?)?;
     if !tokens.contains(&contract) {
         return None;
     }
+    let log_index = log_index as u64;
     let mut out = json!({
-        "contract": contract, "block_number": block, "block_hash": block_hash, "tx_hash": tx_hash,
-        "log_index": log_index, "from": canon(d.get("from")?)?,
+        "contract": contract, "block_number": block, "block_hash": block_hash, "tx_hash": tx_hash, "log_index": log_index,
     });
-    match name {
-        "PaymentSettled" => {
-            let r = bytes_of(d.get("pay_ref")?).filter(|b| b.len() == 32)?;
+    let b32 = |k: &str| bytes_of(d.get(k)?).filter(|b| b.len() == 32).map(|b| addr_hex(&b));
+    match (module, name) {
+        ("meta", "PaymentSettled") => {
             out["event"] = json!("PaymentSettled");
+            out["from"] = json!(canon(d.get("from")?)?);
             out["to"] = json!(canon(d.get("to")?)?);
             out["amount"] = json!(num(d.get("amount")?)?.to_string());
-            out["entry_ref"] = json!(addr_hex(&r));
+            out["entry_ref"] = json!(b32("pay_ref")?);
         }
-        "MetaTransactionExecuted" => {
-            let dg = bytes_of(d.get("digest")?).filter(|b| b.len() == 32)?;
+        ("meta", "MetaTransactionExecuted") => {
             out["event"] = json!("MetaTransactionExecuted");
-            out["digest"] = json!(addr_hex(&dg));
+            out["from"] = json!(canon(d.get("from")?)?);
+            out["digest"] = json!(b32("digest")?);
+        }
+        // CTR-MTX-26 / -27: joined to their `PaymentSettled` (`indexer::join_pay_events`), never sent alone
+        ("meta", "PaymentMeta") => {
+            out["event"] = json!("PaymentMeta");
+            out["entry_ref"] = json!(b32("pay_id")?);
+            out["meta"] = json!(format!("0x{}", alloy::hex::encode(bytes_of(d.get("meta")?)?)));
+        }
+        ("relayfee", "RelayFeePaid") => {
+            out["event"] = json!("RelayFeePaid");
+            out["contract"] = json!(addr_hex(package));
+            out["token"] = json!(contract);
+            out["entry_ref"] = json!(b32("ref")?);
+            out["target"] = json!(canon(d.get("target")?)?);
+            out["from"] = json!(canon(d.get("payer")?)?);
+            out["to"] = json!(canon(d.get("payee")?)?);
+            out["amount"] = json!(num(d.get("amount")?)?.to_string());
         }
         _ => return None,
     }
@@ -399,11 +680,13 @@ pub struct AptosAdapter {
     quorum: usize,
     lanes: Vec<Lane>,
     signers: Vec<LocalSigner>,
+    relay_fee: RelayFeePolicy,
 }
 
 struct Work {
     op: MetaOp,
     auth: Auth,
+    entry: Entry,
 }
 
 fn transport(e: anyhow::Error) -> SimError {
@@ -449,6 +732,7 @@ impl AptosAdapter {
             quorum: cfg.finality.quorum.max(1),
             lanes,
             signers: own,
+            relay_fee: RelayFeePolicy::from_cfg(cfg, &package)?,
         })
     }
 
@@ -516,7 +800,8 @@ impl AptosAdapter {
             bail!("payload contract is not the payer's Account under this package");
         }
         let auth = parse_auth(o["signature"].as_str().unwrap_or_default(), o["public_key"].as_str().unwrap_or_default())?;
-        Ok(Work { op, auth })
+        let entry = entry(&self.package, &self.relay_fee, &op, o)?;
+        Ok(Work { op, auth, entry })
     }
 
     async fn account_exists(&self, owner: &Addr) -> Result<bool> {
@@ -524,16 +809,19 @@ impl AptosAdapter {
         v.as_bool().ok_or_else(|| anyhow!("bad exists_at {v}"))
     }
 
-    /// `meta::pay_check` (view): abort ⇒ `Revert` (job chết), lỗi khác ⇒ `Transport`.
+    /// `meta::pay_check` / `pay_meta_check` (view): abort ⇒ `Revert` (job chết), lỗi khác ⇒ `Transport`.
     async fn pay_check(&self, lane: &Addr, w: &Work) -> std::result::Result<(), SimError> {
         let (op, a) = (&w.op, &w.auth);
         let hx = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
-        let args = [
-            addr_hex(lane), addr_hex(&op.from), addr_hex(&op.asset), addr_hex(&op.to), op.amount.to_string(),
-            hx(&op.pay_ref), hx(&op.lane), op.nonce.to_string(), op.valid_until.to_string(), addr_hex(&op.relayer),
-            hx(&op.extra), hx(&a.public_key), hx(&a.sig), hx(&a.envelope),
-        ];
-        match self.view(&format!("{}::meta::pay_check", addr_hex(&self.package)), &[], &args).await {
+        let (function, mid) = match &w.entry {
+            Entry::PayMeta { salt, meta } => ("pay_meta_check", vec![hx(salt), hx(meta)]),
+            Entry::Pay => ("pay_check", vec![hx(&op.pay_ref), hx(&op.lane), op.nonce.to_string()]),
+            Entry::Fee { .. } => return Err(SimError::Revert("relay-fee jobs are simulated, never pay_check'ed".into())),
+        };
+        let mut args = vec![addr_hex(lane), addr_hex(&op.from), addr_hex(&op.asset), addr_hex(&op.to), op.amount.to_string()];
+        args.extend(mid);
+        args.extend([op.valid_until.to_string(), addr_hex(&op.relayer), hx(&op.extra), hx(&a.public_key), hx(&a.sig), hx(&a.envelope)]);
+        match self.view(&format!("{}::meta::{function}", addr_hex(&self.package)), &[], &args).await {
             Ok(_) => Ok(()),
             Err(e) if format!("{e:#}").contains("Move abort") => Err(SimError::Revert(format!("{e:#}"))),
             Err(e) => Err(transport(e)),
@@ -609,11 +897,23 @@ impl ChainAdapter for AptosAdapter {
             return Err(SimError::Revert("payload expired".into()));
         }
         let sender = self.lane_addr(lane).map_err(transport)?;
+        if matches!(w.entry, Entry::Fee { .. }) {
+            relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        }
         let seq = self.sequence(lane).await.map_err(transport)?;
         let price = self.gas_price().await.map_err(transport)?;
-        let payload = relay_pay_payload(&self.package, &w.op, &w.auth);
+        let payload = match &w.entry {
+            Entry::Pay => relay_pay_payload(&self.package, &w.op, &w.auth),
+            Entry::PayMeta { salt, meta } => relay_pay_meta_payload(&self.package, &w.op, &w.auth, salt, meta),
+            Entry::Fee { call } => relay_fee_payload(&self.package, &w.op, &w.auth, call),
+        };
         let exp = w.op.valid_until.min(now() + self.ttl);
         if !self.account_exists(&w.op.from).await.map_err(transport)? {
+            if matches!(w.entry, Entry::Fee { .. }) {
+                // No view runs the wrapped call, and `simulate` hangs on a payment that opens the Account (below):
+                // fail closed. The payer opens its Account first (`meta::open` or any plain pay).
+                return Err(SimError::Revert("relay-fee: the payer's Account is not open yet".into()));
+            }
             // Account chưa mở: `simulate` của aptos-node 9.6.0 treo với tx vừa tạo object vừa chi từ store có sẵn của nó
             // (tx thật chạy bình thường — spec §16). View `pay_check` chạy đúng mọi kiểm tra của `relay_pay` thay mô
             // phỏng; gas = trần cấu hình (lần chi đầu gồm phí lưu trữ Account).
@@ -773,11 +1073,9 @@ impl ChainAdapter for AptosAdapter {
                 continue;
             }
             let hash = bytes_of(&tx["hash"]).filter(|h| h.len() == 32).map(|h| addr_hex(&h)).ok_or_else(|| anyhow!("bad tx hash"))?;
-            for (i, ev) in tx["events"].as_array().cloned().unwrap_or_default().iter().enumerate() {
-                if let Some(e) = normalize(&self.package, &tokens, ev, height, &bh, &hash, i) {
-                    out.push(e);
-                }
-            }
+            let evs = tx["events"].as_array().cloned().unwrap_or_default();
+            out.extend(crate::indexer::join_pay_events(
+                evs.iter().enumerate().filter_map(|(i, ev)| normalize(&self.package, &tokens, ev, height, &bh, &hash, i)).collect()));
         }
         Ok(out)
     }
@@ -909,6 +1207,31 @@ mod tests {
         assert_eq!(one[0]["amount"].as_str(), Some("999"), "quorum 1 trusts the first endpoint (documented)");
     }
 
+    /// T17 (G): `meta::PaymentMeta` and `relayfee::RelayFeePaid` decode and join the expected token's
+    /// `PaymentSettled` of the same transaction; a fee in an unregistered token is dropped; neither is a row.
+    #[test]
+    fn aptos_indexer_joins_pay_meta_and_relay_fee() {
+        let pkg = parse_addr("0xb0b").unwrap();
+        let tok = addr_hex(&parse_addr("0xa").unwrap());
+        let ev = |module: &str, name: &str, data: Value| json!({"type": format!("{}::{module}::{name}", addr_hex(&pkg)), "data": data});
+        let (pid, rf) = (format!("0x{}", "04".repeat(32)), format!("0x{}", "05".repeat(32)));
+        let evs = [
+            ev("meta", "PaymentMeta", json!({"contract": "0xa", "pay_id": pid, "meta": "0xabcd"})),
+            ev("meta", "PaymentSettled", json!({"contract": "0xa", "from": "0x1", "to": "0xbeef", "amount": "100", "pay_ref": pid})),
+            ev("meta", "PaymentSettled", json!({"contract": "0xa", "from": "0x1", "to": "0x1e", "amount": "5", "pay_ref": rf})),
+            ev("relayfee", "RelayFeePaid", json!({"ref": rf, "target": "0xb0b", "token": "0xa", "payer": "0x1", "payee": "0x1e", "amount": "5"})),
+            ev("relayfee", "RelayFeePaid", json!({"ref": rf, "target": "0xb0b", "token": "0xb", "payer": "0x1", "payee": "0x1e", "amount": "5"})),
+            // a meta whose payment never settled in this transaction
+            ev("meta", "PaymentMeta", json!({"contract": "0xa", "pay_id": rf, "meta": "0x01"})),
+        ];
+        let out = crate::indexer::join_pay_events(evs.iter().enumerate()
+            .filter_map(|(i, e)| normalize(&pkg, std::slice::from_ref(&tok), e, 5, "0xbb", "0xcc", i)).collect());
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
+        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None), "the later meta joins nothing");
+        assert_eq!(out[1]["relay_payee"], addr_hex(&parse_addr("0x1e").unwrap()));
+    }
+
     #[test]
     fn events_of_other_packages_or_tokens_are_dropped() {
         let pkg = parse_addr("0xb0b").unwrap();
@@ -926,6 +1249,273 @@ mod tests {
         assert_eq!(m["digest"], json!(format!("0x{}", "ab".repeat(32))));
     }
 
+    // ---------------------------------------------------------------- CTR-MTX-26 / -27 (spec §6.2, §7.2)
+
+    const VECTORS: &str = include_str!("../../../smartcontracts/move/aptos/tests/vectors.move");
+
+    /// The line of `public fun <name>(` in the Move suite's vectors (`smartcontracts/move/aptos/tests/vectors.move`,
+    /// `scripts/gen_vectors.py`). Only ed25519 (deterministic) signatures are read.
+    fn mv_line(name: &str) -> &'static str {
+        VECTORS.lines().map(str::trim).find(|l| l.starts_with(&format!("public fun {name}("))).unwrap_or_else(|| panic!("{name}"))
+    }
+
+    /// Every `x"…"` literal of that function's body, in order.
+    fn hexes(name: &str) -> Vec<Vec<u8>> {
+        let line = mv_line(name);
+        line[line.find('{').unwrap()..].split("x\"").skip(1).map(|h| alloy::hex::decode(&h[..h.find('"').unwrap()]).unwrap()).collect()
+    }
+
+    fn mvb(name: &str) -> Vec<u8> {
+        hexes(name).remove(0)
+    }
+
+    fn b32(name: &str) -> [u8; 32] {
+        mvb(name).try_into().unwrap()
+    }
+
+    /// `public fun <name>(): address { @0x… }`.
+    fn mva(name: &str) -> Addr {
+        let line = mv_line(name);
+        let a = &line[line.find('@').unwrap() + 1..];
+        parse_addr(a.split_whitespace().next().unwrap()).unwrap()
+    }
+
+    fn pkg() -> Addr {
+        parse_addr("0xb0b").unwrap()
+    }
+
+    /// The payment of a vector: its last four literals are `extra, public_key, sig, envelope`.
+    fn pay_auth(name: &str) -> (Vec<u8>, Auth) {
+        let mut h = hexes(name);
+        let n = h.len();
+        let mut t = h.split_off(n - 4).into_iter();
+        let extra = t.next().unwrap();
+        (extra, Auth { public_key: t.next().unwrap(), sig: t.next().unwrap(), envelope: t.next().unwrap() })
+    }
+
+    /// Alice's pay op as `gen_vectors.py` signed it: the envelope carries this op's digest.
+    fn alice_op(to: Addr, amount: u128, pay_ref: [u8; 32], valid_until: u64, relayer: Addr, extra: Vec<u8>, auth: &Auth) -> MetaOp {
+        let alice = mva("alice");
+        let op = MetaOp {
+            chain_id: 4, contract: account_of(&pkg(), &alice), asset: mva("eur"), op: OP_PAY, from: alice, to, amount,
+            pay_ref: pay_ref.to_vec(), lane: pay_lane(&pay_ref).to_vec(), nonce: 0, valid_until, relayer, extra,
+        };
+        let env = String::from_utf8(auth.envelope.clone()).unwrap();
+        assert!(env.contains(&alloy::hex::encode(sha3(&op.encode()))), "the vector signed another op");
+        op
+    }
+
+    /// `(module, function, args)` of an entry-function payload (variant 2, this package, no type args).
+    fn decode_entry(p: &[u8]) -> (String, String, Vec<Vec<u8>>) {
+        let mut r = Reader { b: p, i: 0 };
+        assert_eq!(r.u8().unwrap(), 2);
+        assert_eq!(r.addr().unwrap(), pkg());
+        let (m, f) = (String::from_utf8(r.vec().unwrap()).unwrap(), String::from_utf8(r.vec().unwrap()).unwrap());
+        assert_eq!(r.uleb().unwrap(), 0, "no type arguments");
+        let args = (0..r.uleb().unwrap()).map(|_| r.vec().unwrap()).collect();
+        assert_eq!(r.i, p.len());
+        (m, f, args)
+    }
+
+    /// Rule 1 (every row of the shared vectors) and the pay-meta payload: `relay_pay_meta`'s arguments in Move order
+    /// (owner, asset, to, amount, salt, meta, valid_until, relayer, extra, public_key, sig, envelope), the first four
+    /// those of `relay_pay` (whose payload the TS SDK pins, `tx_matches_the_ts_sdk`).
+    #[test]
+    fn aptos_pay_meta_payload_bytes() {
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        let h = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
+        assert_eq!(rows.len(), 6);
+        for r in &rows {
+            let id = meta_pay_id(&h(&r["salt"]), &h(&r["meta"]));
+            assert_eq!((id.to_vec(), pay_lane(&id).to_vec()), (h(&r["payId"]), h(&r["payLane"])), "{}", r["name"]);
+        }
+        let (salt, meta, id) = (mvb("pm_note_salt"), mvb("pm_note_meta"), b32("pm_note_id"));
+        let (extra, auth) = pay_auth("pm_a_note");
+        let op = alice_op(parse_addr("0xbeef").unwrap(), 100, id, 1000, [0; 32], extra, &auth);
+        assert_eq!(sha3(&op.encode()).to_vec(), mvb("pm_a_note_digest"));
+        let job = json!({"kind": "pay_meta", "salt": alloy::hex::encode(&salt), "meta": alloy::hex::encode(&meta)});
+        let pol = RelayFeePolicy::default();
+        assert_eq!(entry(&pkg(), &pol, &op, &job).unwrap(), Entry::PayMeta { salt: salt.clone(), meta: meta.clone() });
+        let p = relay_pay_meta_payload(&pkg(), &op, &auth, &salt, &meta);
+        let (m, f, args) = decode_entry(&p);
+        assert_eq!((m.as_str(), f.as_str(), args.len()), ("meta", "relay_pay_meta", 12));
+        assert_eq!(args[..4], decode_entry(&relay_pay_payload(&pkg(), &op, &auth)).2[..4]);
+        assert_eq!((&args[4], &args[5]), (&bytes(&salt), &bytes(&meta)));
+        assert_eq!(args[6..9], [1000u64.to_le_bytes().to_vec(), vec![0; 32], bytes(&[0; 32])]);
+        assert_eq!(args[9..], auth_args(&auth));
+        assert_eq!(addr_hex(&sha3(&p)), "0x4509e9eade5f0bfe819e962172106cf07ede479ea7a57969286639c52cc0c9fa", "{}", alloy::hex::encode(&p));
+        // fail closed before the simulation
+        let bad = |o: &MetaOp, j: &Value| entry(&pkg(), &pol, o, j).is_err();
+        let mut j = job.clone();
+        j["meta"] = json!(format!("{}00", job["meta"].as_str().unwrap()));
+        assert!(bad(&op, &j), "meta does not hash to pay_ref");
+        j["meta"] = job["meta"].clone();
+        j["salt"] = json!(alloy::hex::encode([0u8; 32]));
+        assert!(bad(&op, &j), "salt does not hash to pay_ref");
+        j["salt"] = json!(alloy::hex::encode(&salt[..31]));
+        assert!(bad(&op, &j), "salt is 32 bytes");
+        assert!(bad(&op, &json!({"kind": "pay_meta", "meta": job["meta"]})), "no salt");
+        assert!(bad(&MetaOp { nonce: 1, ..op.clone() }, &job), "nonce 1");
+        assert!(bad(&MetaOp { lane: vec![1; 32], ..op.clone() }, &job), "another lane");
+        let big = vec![0u8; 2049];
+        let id = meta_pay_id(&[1; 32], &big);
+        let o = MetaOp { pay_ref: id.to_vec(), lane: pay_lane(&id).to_vec(), ..op.clone() };
+        let bj = json!({"kind": "pay_meta", "salt": alloy::hex::encode([1; 32]), "meta": alloy::hex::encode(&big)});
+        assert!(bad(&o, &bj), "over the cap");
+        let wide = RelayFeePolicy { params: crate::config::RelayParams { max_pay_meta_bytes: 4096, ..Default::default() }, ..pol.clone() };
+        assert!(entry(&pkg(), &wide, &o, &bj).is_ok(), "params.max_pay_meta_bytes raises it");
+    }
+
+    fn fee_policy() -> RelayFeePolicy {
+        RelayFeePolicy { router: Some(mva("relay_fee_marker")), tokens: vec![mva("eur")],
+                         params: crate::config::RelayParams { min_amount: 5, ..Default::default() } }
+    }
+
+    /// Alice's open-mode payment for `relay_manage_signed` (`rf_manage`: 10 EUR, valid until 2000 s, salt 0x51…).
+    fn manage_job() -> (MetaOp, Auth, Value) {
+        let marker = mva("relay_fee_marker");
+        let (extra, auth) = pay_auth("rf_manage");
+        assert_eq!(extra, vec![0x51; 32]);
+        let op = alice_op(marker, 10, b32("rf_manage_ref"), 2000, marker, extra, &auth);
+        let job = json!({"kind": "relay_fee", "ref": alloy::hex::encode(mvb("rf_manage_ref")),
+                         "extra": {"call": alloy::hex::encode(mvb("rf_manage_call"))}});
+        (op, auth, job)
+    }
+
+    /// The wrapped calls' `ref` (rule 5: the bytes the Move wrappers rebuild on chain; `relay_ref_vectors` there), the
+    /// policy (rule 8), the binding, and the wrapper payload: the call's arguments as the payload's arguments.
+    #[test]
+    fn aptos_relay_fee_job_checks_ref() {
+        let pkg = pkg();
+        assert_eq!(relay_marker(&pkg), mva("relay_fee_marker"));
+        for (name, salt, wrapper, n) in [("manage", 0x51u8, "relay_manage_signed", 11), ("open", 0x52, "relay_mandate_open", 12),
+                                         ("revoke", 0x53, "relay_revoke_signed", 5), ("cancel", 0x54, "relay_cancel_signed", 5),
+                                         ("nonces", 0x55, "relay_invalidate_nonces_signed", 6),
+                                         ("nonces_by_bob", 0x56, "relay_invalidate_nonces_signed", 6)] {
+            let call = mvb(&format!("rf_{name}_call"));
+            assert_eq!(relay_ref(4, &pkg, &call, &[salt; 32]).to_vec(), mvb(&format!("rf_{name}_ref")), "{name}");
+            let c = RelayCall::decode(&call).unwrap();
+            assert_eq!((c.wrapper, c.args.len()), (wrapper, n), "{name}");
+            assert!(mv_line(&format!("rf_{name}")).contains(&format!("relayfee::{wrapper}(lane, ")), "{name}");
+            let mut r = Reader { b: &call, i: 0 };
+            r.vec().unwrap();
+            assert_eq!(c.args.concat(), call[r.i..], "{name}: the arguments are the call bytes");
+        }
+        let (op, auth, job) = manage_job();
+        let pol = fee_policy();
+        let Entry::Fee { call } = entry(&pkg, &pol, &op, &job).unwrap() else { panic!("not a fee entry") };
+        let p = relay_fee_payload(&pkg, &op, &auth, &call);
+        let (m, f, args) = decode_entry(&p);
+        assert_eq!((m.as_str(), f.as_str(), args.len()), ("relayfee", "relay_manage_signed", 20));
+        assert_eq!(args[..11], call.args[..]);
+        assert_eq!(args[11..15], decode_entry(&relay_pay_payload(&pkg, &op, &auth)).2[..4], "payer, asset, to, amount");
+        assert_eq!(args[15..17], [2000u64.to_le_bytes().to_vec(), bytes(&[0x51; 32])]);
+        assert_eq!(args[17..], auth_args(&auth));
+        assert_eq!(addr_hex(&sha3(&p)), "0xed7a46258277d794a0d2aeacf6eba6f7a151097f982d9ba10c73bd3300a51c3b", "{}", alloy::hex::encode(&p));
+
+        let err = |o: &MetaOp, j: &Value, p: &RelayFeePolicy| format!("{:#}", entry(&pkg, p, o, j).unwrap_err());
+        // policy (rule 8): router configured and named as relayer, registered token, minimum fee
+        assert!(err(&op, &job, &RelayFeePolicy { router: None, ..pol.clone() }).contains("params.relay_fee.router"));
+        assert!(err(&op, &job, &RelayFeePolicy { router: Some([9; 32]), ..pol.clone() }).contains("router"));
+        assert!(err(&op, &job, &RelayFeePolicy { tokens: vec![], ..pol.clone() }).contains("registered"));
+        // the payee rule (T17), per lane: open mode at min_amount, a fee bound to the lane, elsewhere only sponsored
+        let lane = [0x1e; 32];
+        relay_payee(&pol, &op, &lane).unwrap();
+        let dear = RelayFeePolicy { params: crate::config::RelayParams { min_amount: 11, ..Default::default() }, ..pol.clone() };
+        assert!(format!("{:#}", relay_payee(&dear, &op, &lane).unwrap_err()).contains("min_amount"));
+        relay_payee(&pol, &MetaOp { to: lane, ..op.clone() }, &lane).unwrap();
+        let elsewhere = MetaOp { to: [0x44; 32], ..op.clone() };
+        assert!(format!("{:#}", relay_payee(&pol, &elsewhere, &lane).unwrap_err()).contains("relay_bound_payee"));
+        let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, min_amount: 1 << 100, ..Default::default() }, ..pol.clone() };
+        relay_payee(&sponsored, &elsewhere, &lane).unwrap();
+        // binding: other call bytes, another salt, a lane / nonce off the ref, a wrong `ref`, a plain-relayer payment
+        let mut c = mvb("rf_manage_call");
+        let n = c.len();
+        c[n - 70] ^= 1; // a byte of the KeyOp's envelope
+        let mut j = job.clone();
+        j["extra"]["call"] = json!(alloy::hex::encode(&c));
+        assert!(err(&op, &j, &pol).contains("not bound"), "another call");
+        assert!(err(&MetaOp { extra: vec![0x52; 32], ..op.clone() }, &job, &pol).contains("not bound"));
+        assert!(err(&MetaOp { nonce: 1, ..op.clone() }, &job, &pol).contains("not bound"));
+        assert!(err(&MetaOp { lane: vec![1; 32], ..op.clone() }, &job, &pol).contains("not bound"));
+        assert!(err(&MetaOp { chain_id: 1, ..op.clone() }, &job, &pol).contains("not bound"), "another chain");
+        assert!(err(&MetaOp { relayer: [0; 32], ..op.clone() }, &job, &pol).contains("router"));
+        j = job.clone();
+        j["ref"] = json!(alloy::hex::encode([1u8; 32]));
+        assert!(err(&op, &j, &pol).contains("op.ref"));
+        assert!(err(&op, &json!({"kind": "relay_fee"}), &pol).contains("extra.call"));
+        // canonical bytes of a wrapped entry only: trailing data, a truncated call, an unknown entry
+        let mut c = mvb("rf_manage_call");
+        c.push(0);
+        assert!(RelayCall::decode(&c).is_err(), "trailing");
+        assert!(RelayCall::decode(&c[..c.len() - 2]).is_err(), "truncated");
+        let mut c = vec![];
+        vec(&mut c, b"meta::relay_pay");
+        assert!(RelayCall::decode(&c).is_err(), "not wrapped");
+    }
+
+    /// No plain pay / pay-meta to the router marker (rule 4): nobody can spend from it. The router's open-mode
+    /// payment (`to == marker`) still passes.
+    #[test]
+    fn plain_pay_to_the_marker_is_refused() {
+        let (op, _, job) = manage_job();
+        let pol = fee_policy();
+        assert!(matches!(entry(&pkg(), &pol, &op, &job), Ok(Entry::Fee { .. })), "router open mode");
+        for j in [json!({}), json!({"kind": "pay_meta", "salt": alloy::hex::encode([0u8; 32]), "meta": ""})] {
+            let e = format!("{:#}", entry(&pkg(), &pol, &op, &j).unwrap_err());
+            assert!(e.contains("strand"), "{j}: {e}");
+        }
+        // no router configured: the marker is still derived from the package, so a plain pay to it is refused
+        let plain = MetaOp { relayer: [0; 32], ..op.clone() };
+        let e = format!("{:#}", entry(&pkg(), &RelayFeePolicy::default(), &plain, &json!({})).unwrap_err());
+        assert!(e.contains("strand"), "no router configured: {e}");
+        let to_beef = MetaOp { to: parse_addr("0xbeef").unwrap(), ..op };
+        assert_eq!(entry(&pkg(), &pol, &to_beef, &json!({})).unwrap(), Entry::Pay);
+    }
+
+    /// Fix 1: an unknown `op.kind` (a typo of `pay_meta`) is refused, never run as a plain pay.
+    #[test]
+    fn unknown_job_kind_is_refused() {
+        let op = vector_op();
+        assert_eq!(entry(&pkg(), &RelayFeePolicy::default(), &op, &json!({})).unwrap(), Entry::Pay);
+        for k in [json!("pay-meta"), json!("pay"), json!(""), json!(7), json!(true), json!({})] {
+            let e = format!("{:#}", entry(&pkg(), &RelayFeePolicy::default(), &op, &json!({"kind": k})).unwrap_err());
+            assert!(e.contains("unknown op.kind"), "{k}: {e}");
+        }
+        assert!(entry(&pkg(), &RelayFeePolicy::default(), &op, &json!({"meta": "00"})).is_err(), "a kind-less job with meta");
+    }
+
+    fn relay_cfg(params: &str, tokens: &str) -> ChainCfg {
+        toml::from_str(&format!(
+            "family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [\"http://r\"]\nlanes = [0]\ntokens = [{tokens}]\n\
+             finality = {{ mode = \"instant\" }}\nparams = {{ package = \"0xb0b\", indexer_url = \"http://i\"{params} }}"
+        ))
+        .unwrap()
+    }
+
+    /// A configured but unparsable or foreign `params.relay_fee.router`, a bad `min_amount` or a malformed token fails
+    /// at startup.
+    #[test]
+    fn relay_fee_config_must_parse() {
+        let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
+        let marker = addr_hex(&relay_marker(&pkg()));
+        let eur = format!("{{ address = \"{}\", decimals = 6 }}", addr_hex(&mva("eur")));
+        for (t, tokens, what) in [
+            (", relay_fee = { router = \"0xzz\" }".to_string(), eur.clone(), "router"),
+            (", relay_fee = { router = 7 }".to_string(), eur.clone(), "router"),
+            (", relay_fee = { router = \"0x5\" }".to_string(), eur.clone(), "marker"),
+            (format!(", relay_fee = {{ router = \"{marker}\", min_amount = \"9\" }}"), eur.clone(), "min_amount"),
+            (format!(", relay_fee = {{ router = \"{marker}\", min_amount = -1 }}"), eur.clone(), "min_amount"),
+            (String::new(), "{ address = \"0xnot-hex\", decimals = 6 }".to_string(), "tokens"),
+        ] {
+            let e = AptosAdapter::new(&relay_cfg(&t, &tokens), &k).err().unwrap();
+            assert!(format!("{e:#}").contains(what), "{t} {tokens}: {e:#}");
+        }
+        let a = AptosAdapter::new(&relay_cfg(&format!(", relay_fee = {{ router = \"{marker}\", min_amount = 9 }}"), &eur), &k).unwrap();
+        assert_eq!((a.relay_fee.router, a.relay_fee.params.min_amount, a.relay_fee.tokens.clone()), (Some(relay_marker(&pkg())), 9, vec![mva("eur")]));
+        assert_eq!(AptosAdapter::new(&relay_cfg("", &eur), &k).unwrap().relay_fee.router, None, "no relay_fee: relay-fee jobs refused");
+    }
+
     proptest! {
         #[test]
         fn decoders_never_panic(b in proptest::collection::vec(any::<u8>(), 0..400), s in ".{0,300}", k in ".{0,140}") {
@@ -933,6 +1523,24 @@ mod tests {
             let _ = parse_auth(&s, &k);
             let _ = parse_auth(&alloy::hex::encode(&b), &k);
             let _ = classify_submit(400, &s);
+        }
+
+        /// The new jobs on untrusted input (rule 8): no panic, whatever the bytes / JSON.
+        #[test]
+        fn relay_fee_and_pay_meta_jobs_never_panic(b in proptest::collection::vec(any::<u8>(), 0..400), kind in 0usize..3,
+                                                   s in "\\PC{0,80}", w in 0usize..5, relayer in any::<[u8; 32]>()) {
+            let _ = RelayCall::decode(&b);
+            let mut c = vec![];
+            vec(&mut c, WRAPPED[w].0.as_bytes());
+            c.extend_from_slice(&b);
+            let _ = RelayCall::decode(&c);
+            let hexb = alloy::hex::encode(&b);
+            let kind_s = ["pay_meta", "relay_fee", "other"][kind];
+            let job = json!({"kind": kind_s, "salt": hexb, "meta": s, "ref": hexb,
+                             "extra": {"call": if kind == 1 { alloy::hex::encode(&c) } else { s.clone() }}});
+            let op = MetaOp { relayer, ..vector_op() };
+            let pol = RelayFeePolicy { router: Some(relayer), tokens: vec![op.asset], params: crate::config::RelayParams { min_amount: 0, ..Default::default() } };
+            let _ = entry(&pkg(), &pol, &op, &job);
         }
 
         #[test]

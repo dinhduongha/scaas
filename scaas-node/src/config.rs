@@ -488,6 +488,23 @@ fn any() -> String {
 }
 
 impl Config {
+    /// The directory of the sqlite store (`sqlite:///var/lib/scaas/node.db` ⇒ `/var/lib/scaas`): where the node keeps its
+    /// other small state files (the TON `PaymentMeta` wait, T17 fix 1).
+    pub fn store_dir(&self) -> std::path::PathBuf {
+        let path = self.store.url.strip_prefix("sqlite://").or_else(|| self.store.url.strip_prefix("sqlite:")).unwrap_or("");
+        let path = path.split('?').next().unwrap_or("");
+        std::path::Path::new(path).parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(std::path::Path::new(".")).to_path_buf()
+    }
+
+    /// The config an adapter is built from: the TON `params.meta_journal` defaults to a file under `store_dir`.
+    pub fn adapter_cfg(&self, c: &ChainCfg) -> ChainCfg {
+        let mut c = c.clone();
+        if c.family == "ton" && !c.params.contains_key("meta_journal") {
+            let f = self.store_dir().join(format!("ton-meta-{}.json", c.chain_key().replace([':', '/'], "_")));
+            c.params.insert("meta_journal".into(), f.to_string_lossy().into_owned().into());
+        }
+        c
+    }
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
         let cfg: Config = toml::from_str(&raw).context("parse config")?;
@@ -553,6 +570,7 @@ impl Config {
             for t in &c.tokens {
                 c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
             }
+            c.relay_params().with_context(|| format!("chain {key}"))?;
         }
         self.validate_store_sections(&seen)
     }
@@ -788,7 +806,76 @@ fn same_port(a: &str, b: &str) -> bool {
     }
 }
 
+/// CTR-MTX-26 / -27 node keys, one set for every family (T17, controller ruling 2026-10-28, owner may override):
+/// `params.relay_fee = { router, min_amount, relay_bound_payee, … }` and `params.max_pay_meta_bytes`. A key that is set
+/// but invalid is a startup error (`Config::validate`), never a silent default. Each family parses `router` in its own
+/// address form (unparsable = startup error there) and its own extra price keys (`min_ton_value`,
+/// `min_lamports_value`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayParams {
+    /// `relay_fee.router` as written; `None` = no relay-fee jobs on this chain.
+    pub router: Option<String>,
+    /// `relay_fee.min_amount` (default 1): the smallest fee, in the token's base units, that reaches this node's lane.
+    pub min_amount: u128,
+    /// `relay_fee.relay_bound_payee` (default false): relay a job whose fee goes to a bound payee other than the lane,
+    /// as a sponsored job (no `min_amount`).
+    pub relay_bound_payee: bool,
+    /// `max_pay_meta_bytes` (default 2,048, spec §9): the cap on a pay-meta `meta`.
+    pub max_pay_meta_bytes: usize,
+}
+
+pub const DEFAULT_MAX_PAY_META_BYTES: usize = 2048;
+
+impl Default for RelayParams {
+    /// The defaults of an unset key set: no router, `min_amount` 1, no bound-payee relays, 2,048 B of meta.
+    fn default() -> Self {
+        Self { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES }
+    }
+}
+
 impl ChainCfg {
+    /// [`RelayParams`] from `params`.
+    pub fn relay_params(&self) -> Result<RelayParams> {
+        let uint = |v: &toml::Value, k: &str| v.as_integer().and_then(|n| u64::try_from(n).ok())
+            .with_context(|| format!("params.{k} must be a non-negative integer, not {v}"));
+        let max_pay_meta_bytes = match self.params.get("max_pay_meta_bytes") {
+            None => DEFAULT_MAX_PAY_META_BYTES,
+            Some(v) => uint(v, "max_pay_meta_bytes")? as usize,
+        };
+        let t = match self.params.get("relay_fee") {
+            None => None,
+            Some(toml::Value::Table(t)) => Some(t),
+            Some(v) => bail!("params.relay_fee must be a table, not {v}"),
+        };
+        // T17 fix 1: a misspelt key (`min_ammount`) or another family's price key is an error, never ignored
+        for k in t.into_iter().flat_map(|t| t.keys()) {
+            let ok = match k.as_str() {
+                "router" | "min_amount" | "relay_bound_payee" => true,
+                "min_ton_value" => self.family == "ton",
+                "min_lamports_value" => self.family == "solana",
+                _ => false,
+            };
+            if !ok {
+                bail!("params.relay_fee.{k} is not a key of the {} family (router, min_amount, relay_bound_payee{})", self.family,
+                    match self.family.as_str() { "ton" => ", min_ton_value", "solana" => ", min_lamports_value", _ => "" });
+            }
+        }
+        let get = |k: &str| t.and_then(|t| t.get(k));
+        let router = match get("router") {
+            None => None,
+            Some(v) => Some(v.as_str().with_context(|| format!("params.relay_fee.router must be a string, not {v}"))?.to_string()),
+        };
+        let min_amount = match get("min_amount") {
+            None => 1,
+            Some(v) => u128::from(uint(v, "relay_fee.min_amount")?),
+        };
+        let relay_bound_payee = match get("relay_bound_payee") {
+            None => false,
+            Some(v) => v.as_bool().with_context(|| format!("params.relay_fee.relay_bound_payee must be true or false, not {v}"))?,
+        };
+        Ok(RelayParams { router, min_amount, relay_bound_payee, max_pay_meta_bytes })
+    }
+
     /// Dạng chuẩn của một địa chỉ trên chain này (`addresses::canonical`, như Odoo `canonical_for_chain`).
     pub fn canonical(&self, value: &str) -> Result<String> {
         let prefix = self.params.get("prefix").and_then(|v| v.as_str());
@@ -841,6 +928,45 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         c.validate().unwrap();
         assert!(c.modules.submit && c.modules.indexer && !c.modules.gateway);
         assert_eq!(c.chains[0].stuck_after_secs, 60);
+    }
+
+    /// T17: the relay-fee / pay-meta keys of every family: defaults, and a set-but-invalid value is a startup error.
+    #[test]
+    fn relay_params_default_and_refuse_invalid_values() {
+        let c: Config = toml::from_str(OK).unwrap();
+        assert_eq!(c.chains[0].relay_params().unwrap(),
+            RelayParams { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: 2048 });
+        let with = |p: &str| -> Result<RelayParams> {
+            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\nparams = {{ {p} }}")))?;
+            c.validate()?;
+            c.chains[0].relay_params()
+        };
+        let p = with(r#"max_pay_meta_bytes = 4096, relay_fee = { router = "0x7f", min_amount = 0, relay_bound_payee = true }"#).unwrap();
+        assert_eq!(p, RelayParams { router: Some("0x7f".into()), min_amount: 0, relay_bound_payee: true, max_pay_meta_bytes: 4096 });
+        for bad in ["max_pay_meta_bytes = -1", r#"max_pay_meta_bytes = "2048""#, "relay_fee = 7", "relay_fee = { router = 7 }",
+                    "relay_fee = { min_amount = -1 }", r#"relay_fee = { min_amount = "9" }"#, "relay_fee = { min_amount = 1.5 }",
+                    r#"relay_fee = { relay_bound_payee = "yes" }"#, "relay_fee = { min_ammount = 5 }",
+                    "relay_fee = { min_ton_value = {} }", "relay_fee = { min_lamports_value = {} }"] {
+            assert!(with(bad).is_err(), "{bad}");
+        }
+        let e = format!("{:#}", with("relay_fee = { min_ammount = 5 }").unwrap_err());
+        assert!(e.contains("params.relay_fee.min_ammount"), "{e}");
+        let fam = |family: &str, k: &str| ChainCfg { family: family.into(),
+            params: toml::from_str(&format!("relay_fee = {{ {k} = {{}} }}")).unwrap(), ..Default::default() }.relay_params();
+        assert!(fam("ton", "min_ton_value").is_ok() && fam("solana", "min_lamports_value").is_ok(), "each on its own family");
+        assert!(fam("solana", "min_ton_value").is_err() && fam("ton", "min_lamports_value").is_err(), "never on another");
+    }
+
+    #[test]
+    fn the_ton_meta_journal_lives_in_the_store_dir() {
+        let mut c: Config = toml::from_str(OK).unwrap();
+        assert_eq!(c.store_dir(), std::path::PathBuf::from("/var/lib/scaas"));
+        let ton = ChainCfg { family: "ton".into(), network: Some("-239".into()), ..Default::default() };
+        let a = c.adapter_cfg(&ton);
+        assert_eq!(a.params["meta_journal"].as_str(), Some("/var/lib/scaas/ton-meta-ton_-239.json"));
+        assert!(!c.adapter_cfg(&c.chains[0].clone()).params.contains_key("meta_journal"), "TON only");
+        c.store.url = "sqlite:node.db".into();
+        assert_eq!(c.store_dir(), std::path::PathBuf::from("."));
     }
 
     #[test]

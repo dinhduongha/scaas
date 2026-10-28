@@ -297,7 +297,7 @@ to the DEX (≥ `CANCEL_TON`) — on the same jetton path as the order leg, so t
 the lane at `nonce + 2` (the first form consumes the second form's slot too), and the node's `build` follows the same
 rule. Why: as built the wallet accepts `next == nonce` or `nonce + 1` (`jetton.tact:229`) and the first form sets
 `next + 1`, so a resend of the **same** signature runs again in the second form, consuming `nonce + 1` and sending a
-`CancelTag`. SPECIFIED. Test: resending the same revoke ⇒ `E_NONCE`, no second `CancelTag`.
+`CancelTag`. BUILT (metatx-split T16 fix 2: `setLane(lane, nonce + 2)` for every revoke). Test: `jetton.spec.ts` › a signed revoke runs once in either form (resend ⇒ `E_NONCE`, no second `CancelTag`), `relayfee.spec.ts` › a revoke replayed after it ran is refused.
 
 ## <a id="dex"></a>7. DEX
 
@@ -413,3 +413,79 @@ GRAM `pay` only.
   roll-over in one transaction), so confidential balances would sit in **one** contract (losing jetton sharding) at
   hundreds of thousands to millions of gas per transfer. Not built; a single-contract BLS12-381 `ZetherTon` would be the
   shape.
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** The plain `OP_PAY` `SignedOp` with `params = salt:uint256 ^meta`. The payer's jetton wallet requires
+  `payRef == metaPayId(salt, meta)`, `lane == payLane(payRef)`, `nonce == 0` and a plain snake `meta` (else `E_PARAMS` 713;
+  malformed `params` is exit 9), then emits `PaymentMeta { master, payId, meta }` (`0x9b1c0d04`) right after
+  `MetaTransactionExecuted`. Measured: 38,100 B settles in the sandbox; the node caps at 2,048 B.
+- **Payee bounce burns the id.** The payer's wallet writes its lane (the once-set) before the payee's wallet runs. If the
+  payee's wallet bounces (any rejected transfer), the `PaymentMeta` was emitted without a
+  `PaymentSettled`, and `(payer, payId)` is burnt for good. `PaymentMeta` alone is never proof of payment. A client that
+  sees a bounce signs again with a **new salt** (a new `payId`); the indexer joins on `(from, pay_ref)` and rejects a meta
+  with more than one ref.
+- **Relay fee.** Escrow router `ScaasRelayFee` (`relayfee.tact`) and a one-shot `RelayExecutor`, served targets = the SCaaS
+  jetton wallet and the Mandate; released only on a positive `RelayAck` from the known target (spec §7.2 TON row, T16 fix 1).
+  Open mode only. `RelayCall.deadline` within 3,600 s; anyone can `RelayRefund` after it.
+- **Once per (payer, payId) until the lane rotates.** The once-set of a pay-meta or relay-fee payment is the payer wallet's
+  lane `payLane(payRef)`, and lanes rotate out after one to two `LANE_TTL` (30 days each; `jetton.tact` `rotateLanes`):
+  after that the same `payId` can be signed and settled again. A signed payment never replays (`valid_until <= now +
+  LANE_TTL` bounds it). As Solana and Aptos (final review M9).
+- **The node pre-checks the relayed call** (final review I1, final fix wave and its re-review fixes). Before it sends a `RelayCall`
+  the node checks the call against its target with getters, as it checks the payment, and refuses the job with
+  `RELAY_CALL_REFUSED` (job error `simulation: RELAY_CALL_REFUSED: …`; permanent, never retried):
+  - the call's `contract`, network and `from` are the target, this chain and the target's owner (the first field of the
+    StateInit data);
+  - **validity floor:** the call's `valid_until` must be later than the relay's `deadline`, which the node sets to now +
+    600 s (`RELAY_DEADLINE_S`): a client signs the call valid for more than 600 s from submission;
+  - `relayer` is none or the executor, and `responseDestination` is the payer's executor (`get_executor(payer, salt)` on
+    the router);
+  - the target's code is the jetton wallet's or the Mandate's (`get_codes`); any other code is refused at once;
+  - jetton wallet: **TON Connect only** (see below); the same check as a signed op (`get_lane_nonce`, a revoke at `n` or
+    `n + 1`; `get_owner_pubkey` or the StateInit key; the signature); `valid_until <= now + LANE_TTL`; a set_key with
+    `extra != 0` carries `params` that hash to `extra` and are a passkey record (520 bits and one ref, as the wallet
+    parses it); a revoke at `n + 1` forwards at least `CANCEL_TON`;
+  - Mandate: an owner revoke only, TON Connect-signed, at the Mandate's `get_lane_nonce` (getter added by the re-review fixes),
+    verified against `get_state`'s `ownerPubkey`. A revoke of an already revoked Mandate would run and change nothing; the
+    node refuses it as a no-op (the payer does not pay for nothing; owner rulings list item 6), not as a failure.
+
+  Without the check a failing call bounced and the relayer paid the bounce (about 0.025 TON in the sandbox), repeatable at
+  no cost to the submitter. **Passkey users on TON cannot use the relay-fee router for now** (owner ruling 2026-10-28:
+  P-256 in the node is a TODO item): the node cannot verify a passkey's P-256 signature, and any submitter could send a passkey call
+  with a garbage signature, so a passkey-signed relayed call is refused until the node verifies P-256 (then
+  `get_passkey` + the WebAuthn check). A passkey owner sends its revoke / set_key directly.
+
+  The **payment** leg is checked as the payer's wallet runs it, so it cannot bounce after the router escrowed it: besides
+  the signed-op check (nonce, key, signature), the payment must be valid at most `LANE_TTL` ahead (`E_TTL`) and within the
+  payer wallet's `get_wallet_data` balance (`E_BALANCE`); else the job is refused (`the payment is valid further ahead
+  than LANE_TTL` / `the payer's wallet holds …`). The payment also has the call's **validity floor** (owner ruling 2026-10-28: kept): it must stay valid
+  more than 600 s (`RELAY_DEADLINE_S`), since it reaches the payer's wallet two hops after the lane (`E_EXPIRED` there
+  would bounce at the relayer's cost), and the lane transaction expires at `min(valid_until − 300 s, deadline)`, so a late
+  lane transaction never delivers a nearly expired payment. A plain pay has the same gaps today (`LANE_TTL`, balance, and
+  no validity floor), at one hop's cost to the relayer; that sits with the fee policy (owner rulings list item 7), and no
+  plain-pay check is built.
+
+  **Remaining exposure (recorded):**
+  - a race in which the owner spends the lane, or moves its tokens away, between the node's check and the message's
+    arrival still bounces at the relayer's cost; it costs the submitter a direct op or a paid relay each time;
+  - two relay-fee jobs of one payer wallet sent within one payment round trip (different salts, both pass every check):
+    the router refuses the second with 742 (one payment of a payer wallet in flight) after the relayer paid its forward fee
+    and part of the router's compute. The node does not hold the second job (that needs a per-payer-wallet hold across
+    lanes until the first escrow leaves the paying stage; not built: an accepted risk, owner ruling 2026-10-28); every burst of such failures rides on
+    one paid relay of the submitter;
+  - no per-payer failure budget is built (owner's call).
+- **Settlement ring (recorded residual, final review M8).** A settlement transfer is kept for a bounce in a ring of the
+  last `SETTLE_RING = 16` settlements (`relayfee.tact:106`, `settle`). If more than 16 settlements happen between a
+  settlement's send and its bounce, the entry is evicted, the bounce is ignored and the tokens stay in the router's jetton
+  wallet; there is no admin to recover them. Rare: only an underfunded settlement bounces, and its bounce arrives in the
+  next transaction.
+- **Revoke needs n + 2.** A signed revoke runs at most once and leaves its lane at `nonce + 2` (NET-TON-18, T16 fix 2). A
+  client must not queue an op at `n + 1` behind a revocable order at `n`: after the revoke the wallet's next nonce is `n + 2`,
+  so the `n + 1` op fails with `E_NONCE`. Queue after the revoke at `n + 2`.
+- **Recorded, low.** When another relayer's release races ours, our amount-0 refund path makes the node say "payer not
+  charged" though the other relayer charged the payer. `RelayFeePaid` / `RelayFeeRefunded` stay with the node's `tx_status`
+  scan (a job older than the scan window stays Pending).
+- Commits: T15 `1bba36e0`, T16 `16bac7d0`, fixes `9a62093f`, `f9f27f7d`.

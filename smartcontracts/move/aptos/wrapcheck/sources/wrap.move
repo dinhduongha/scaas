@@ -35,6 +35,40 @@ module wrapcheck::wrap {
         scaas::meta::manage_signed(o, 0, 0, v, v, v, o, 0, v, v, v);
     }
 
+    public entry fun relay_pay_meta(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>) {
+        scaas::meta::relay_pay_meta(l, o, a, o, 1, v, v, 0, o, v, v, v, v);
+    }
+
+    /// CTR-MTX-27: the router payment is package-only (called by `relayfee` alone).
+    public fun pay_routed(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>): address {
+        scaas::meta::pay_routed(l, o, o, a, o, 1, v, 0, v, v, v, v)
+    }
+
+    /// `cancel_signed`'s body (returns whether the cancel changed anything): package-only.
+    public fun dex_cancel(m: address, v: vector<u8>): bool {
+        scaas::dex::cancel(m, v, v, v, v)
+    }
+
+    public entry fun relay_manage_signed(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>) {
+        scaas::relayfee::relay_manage_signed(l, o, 0, 0, v, v, v, o, 0, v, v, v, o, a, o, 1, 0, v, v, v, v);
+    }
+
+    public entry fun relay_mandate_open(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>) {
+        scaas::relayfee::relay_mandate_open(l, o, v, v, 1, 1, 1, 1, vector[], 0, v, v, v, o, a, o, 1, 0, v, v, v, v);
+    }
+
+    public entry fun relay_revoke_signed(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>) {
+        scaas::relayfee::relay_revoke_signed(l, o, 0, v, v, v, o, a, o, 1, 0, v, v, v, v);
+    }
+
+    public entry fun relay_cancel_signed(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>) {
+        scaas::relayfee::relay_cancel_signed(l, o, v, v, v, v, o, a, o, 1, 0, v, v, v, v);
+    }
+
+    public entry fun relay_invalidate_nonces_signed(l: &signer, o: address, a: Object<Metadata>, v: vector<u8>) {
+        scaas::relayfee::relay_invalidate_nonces_signed(l, o, o, 1, v, v, v, o, a, o, 1, 0, v, v, v, v);
+    }
+
     /// Review I1: kiểm theo bảng do người gọi đưa ⇒ chỉ trong package.
     public fun verify_with(v: vector<u8>): bool {
         scaas::p256::verify_with(&vector[], &v, &v)

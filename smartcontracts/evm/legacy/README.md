@@ -58,3 +58,12 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   fixture with `useBls`, the bn254 KATs, S3 vector and prover-cross suites, the bn254 gas rows). The registry side
   (kind 0x0140, slot 12, `requireZetherAuthorized`) is in the pre-UA-6 `src/ua/` copies above. The vector JSON
   (`test/vectors/zether/*bn254*`, the 0x0140 rows of `../vectors/ua/kinds.json`) stays in place until UA-6 Task 8.
+- `metatx-v1/`: the token meta-tx pipeline before the metatx split (spec
+  `docs/superpowers/specs/2026-10-27-metatx-split-design.md`; owner: backup, not delete), taken from `main` commit
+  `f50d18a4` (`src/metatx/` identical to the branch base `0c191232`): `src/metatx/ERC20MetaTx.sol`, `MetaTokenBase.sol`,
+  `MetaTxBase.sol` whole. Superseded there by `MtxPipelineLib` (Tasks 2–4): `MetaTxBase._checkCall` / `_checkIntent`
+  (still the wallets' path, now on the library's internals), `ERC20MetaTx._chargeFee` / `_callFee` (the fee after the
+  call; now before it, owner 2026-10-27), `_checkTransfer`, `_checkUATransfer`, `_uaAuthorize`,
+  `_requireNativeUASignature`, and the Hedera overrides of `MetaTokenBase` (`_requireValidSignature`,
+  `_requireNativeUASignature`, `_erc1271Gas`); the trade, cancel, invalidate and receiver-fee signatures now go through
+  `MtxPipelineLib.requireSignature` / `authorize`. Not built.

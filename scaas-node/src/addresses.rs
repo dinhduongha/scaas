@@ -32,7 +32,8 @@ pub fn canonical(family: &str, value: &str, bech32_prefix: Option<&str>, ton_tes
             Ok(v.to_string())
         }
         "cosmos" => {
-            let (hrp, len) = bech32_decode(v)?;
+            let (hrp, data) = bech32_decode(v)?;
+            let len = data.len();
             if let Some(p) = bech32_prefix.filter(|p| !p.is_empty() && *p != hrp) {
                 bail!("bech32 prefix {hrp:?}, expected {p:?}");
             }
@@ -95,8 +96,8 @@ fn b32decode(s: &str) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// BIP-173: trả `(hrp, số byte dữ liệu)`.
-fn bech32_decode(v: &str) -> Result<(String, usize)> {
+/// BIP-173: trả `(hrp, bytes dữ liệu)`.
+pub(crate) fn bech32_decode(v: &str) -> Result<(String, Vec<u8>)> {
     ensure!(v == v.to_ascii_lowercase() || v == v.to_ascii_uppercase(), "mixed-case bech32");
     let v = v.to_ascii_lowercase();
     let pos = v.rfind('1').filter(|&p| p >= 1 && p + 7 <= v.len() && v.len() <= 90)
@@ -117,7 +118,16 @@ fn bech32_decode(v: &str) -> Result<(String, usize)> {
     let spare = total % 8;
     let last = five.last().copied().unwrap_or(0);
     ensure!(spare < 5 && (last as u32) & ((1 << spare) - 1) == 0, "bech32 padding");
-    Ok((hrp.to_string(), total / 8))
+    let (mut acc, mut bits, mut out) = (0u32, 0u32, Vec::with_capacity(total / 8));
+    for &d in five {
+        acc = (acc << 5 | d as u32) & 0xfff;
+        bits += 5;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Ok((hrp.to_string(), out))
 }
 
 #[cfg(test)]

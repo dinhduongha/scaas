@@ -1290,6 +1290,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "scaas-relay-fee"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "scaas-mandate",
+ "scaas-token",
+ "sha2",
+ "soroban-ledger-snapshot",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "scaas-smart-key-account"
 version = "0.1.0"
 dependencies = [
@@ -1305,6 +1317,7 @@ dependencies = [
 name = "scaas-token"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "soroban-sdk",
 ]
 

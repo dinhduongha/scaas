@@ -5,5 +5,6 @@ export { SeedBackup } from './backup.js';
 export {
   hashTypedData, secpSubjectKey, passkeySubjectKey, accountSignature, merkleBatch, checkOwnerCall, checkPayment, keyProofMessage,
   checkCall, checkTradeOrder, checkCancel, payLane, metaTransferTypedData, tradeOrderTypedData, orderCancelTypedData,
+  metaPayId, decodeMeta, checkPayMeta, buildMtxPayMeta, buildUaPayMeta, relayRef, mtxExecuteCalldata, buildRelayFee,
 } from './evm.js';
 export { b64url, fromB64url, hex, fromHex, wipe } from './bytes.js';

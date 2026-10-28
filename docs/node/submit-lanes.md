@@ -605,3 +605,15 @@ batches them.** For gasless unwrap ops ([CTR-MTX-12](../contracts/metatx.md#CTR-
   ERC-1363) the node may refuse gasless unwraps to recipients that have code.
 - Unwrap items are **never batched** (`mtxBatch`): their failure modes are outside the signer's and the relayer's
   control. The outer gas limit comes from the simulation plus the usual margin; `max_gas_per_tx` applies unchanged.
+
+<a id="relay-fee-lane"></a>**Relay-fee and pay-meta on the lane (CTR-MTX-26 / -27; BUILT, metatx-split T17).** A `MtxRelayFee.relay`
+job is simulated whole (the call and the payment) and sent only when the payment reaches this lane (open mode, or bound to it) and
+is at least the operator's `params.relay_fee.min_amount`: there is no token price feed and no gas price or limit is assumed, so
+the fee-covers-gas rule is the operator's floor (TON: `min_ton_value` prices the TON the escrow ties up; Solana: `min_lamports_value`
+covers a first-use lane PDA's rent). The router, the registered token, the shape of the payment (`entryRef == relayRef(...)`,
+`batch == payLane(entryRef)`, nonce 0, relayer = router, fee mode NONE) and the inner target's chain are checked before the
+simulation; a refusal is terminal. The gas floor
+of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,904 (forge's least relayer
+CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,594 at zero calldata;
+an anvil run sends exactly that gas and it settles. A TON relay-fee job tracks the escrow (pending, funded, released or refunded)
+by the router's own events naming the lane, never by absence, and sends `RelayRefund` after the deadline.

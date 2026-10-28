@@ -21,6 +21,9 @@ pub mod vectors;
 pub mod flows;
 
 pub const SO: &[u8] = include_bytes!("../../../../target/deploy/scaas.so");
+/// Test-only programs (never deployed): the `relay_fee` target and the CPI wrapper.
+pub const RELAY_TARGET_SO: &[u8] = include_bytes!("../../../../target/deploy/relay_target.so");
+pub const CPI_WRAPPER_SO: &[u8] = include_bytes!("../../../../target/deploy/cpi_wrapper.so");
 pub const NOW: i64 = 500;
 pub const ED25519: Pubkey = A::ED25519_PROGRAM;
 pub const SECP256R1: Pubkey = A::SECP256R1_PROGRAM;
@@ -363,18 +366,18 @@ impl Env {
         }
     }
 
-    /// `relay_pay` (Account readonly nếu đã mở — RS12-2; writable chỉ khi mở lười).
-    pub fn pay_ix(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, args: &scaas::PayArgs, auth: Auth) -> Instruction {
+    /// Account của `relay_pay` / `relay_pay_meta` / `relay_fee` (Account readonly nếu đã mở — RS12-2; writable chỉ khi mở
+    /// lười). `recipient` = `args.to`, hoặc lane ở open mode của `relay_fee`.
+    pub fn pay_accounts(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, lane_id: &[u8; 32], recipient: Pubkey) -> scaas::accounts::RelayPay {
         let subject = account_of(owner);
-        let to = Pubkey::new_from_array(args.to);
-        let mut metas = scaas::accounts::RelayPay {
+        scaas::accounts::RelayPay {
             lane: self.lane.pubkey(),
             config: self.config(),
             subject,
-            lane_pda: pda(&[b"lane", subject.as_ref(), &args.lane]),
+            lane_pda: pda(&[b"lane", subject.as_ref(), lane_id]),
             source,
-            recipient: to,
-            destination: ata(&to, mint, &tp),
+            recipient,
+            destination: ata(&recipient, mint, &tp),
             mint: *mint,
             token_program: tp,
             associated_token_program: ATA,
@@ -383,15 +386,63 @@ impl Env {
             event_authority: event_authority(),
             program: scaas::ID,
         }
-        .to_account_metas(None);
-        if !self.exists(&subject) {
+    }
+
+    fn lazy(&self, owner: &[u8; 32], mut metas: Vec<AccountMeta>) -> Vec<AccountMeta> {
+        if !self.exists(&account_of(owner)) {
             metas[2].is_writable = true;
         }
+        metas
+    }
+
+    /// `relay_pay` (Account readonly nếu đã mở — RS12-2; writable chỉ khi mở lười).
+    pub fn pay_ix(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, args: &scaas::PayArgs, auth: Auth) -> Instruction {
+        let to = Pubkey::new_from_array(args.to);
+        let metas = self.pay_accounts(owner, mint, tp, source, &args.lane, to).to_account_metas(None);
+        Instruction {
+            program_id: scaas::ID,
+            accounts: self.lazy(owner, metas),
+            data: scaas::instruction::RelayPay { owner: *owner, args: args.clone(), auth }.data(),
+        }
+    }
+
+    /// `relay_pay_meta`: cùng account với `relay_pay`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn pay_meta_ix(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, args: &scaas::PayArgs, salt: [u8; 32], meta: &[u8], auth: Auth) -> Instruction {
+        let mut ix = self.pay_ix(owner, mint, tp, source, args, auth.clone());
+        ix.data = scaas::instruction::RelayPayMeta { owner: *owner, args: args.clone(), salt, meta: meta.to_vec(), auth }.data();
+        ix
+    }
+
+    /// `relay_fee`: account của pay (`recipient` chọn bởi người gọi), rồi target program + account của nó.
+    #[allow(clippy::too_many_arguments)]
+    pub fn relay_fee_ix(&self, owner: &[u8; 32], mint: &Pubkey, tp: Pubkey, source: Pubkey, args: &scaas::PayArgs, recipient: Pubkey,
+                        target: Pubkey, target_metas: &[AccountMeta], target_data: &[u8], auth: Auth) -> Instruction {
+        let pay = self.pay_accounts(owner, mint, tp, source, &args.lane, recipient);
+        let mut metas = self.lazy(owner, scaas::accounts::RelayFee { pay }.to_account_metas(None));
+        metas.push(AccountMeta::new_readonly(target, false));
+        metas.extend_from_slice(target_metas);
         Instruction {
             program_id: scaas::ID,
             accounts: metas,
-            data: scaas::instruction::RelayPay { owner: *owner, args: args.clone(), auth }.data(),
+            data: scaas::instruction::RelayFee {
+                owner: *owner,
+                args: args.clone(),
+                target_data: target_data.to_vec(),
+                target_accounts: target_metas.len() as u8,
+                auth,
+            }
+            .data(),
         }
+    }
+
+    /// Ký + gửi một `relay_pay_meta` của ví ed25519 `who` (khoá 0, kind 0).
+    pub fn pay_meta(&mut self, who: &Ed, mint: &Pubkey, tp: Pubkey, args: &scaas::PayArgs, salt: [u8; 32], meta: &[u8]) -> Res {
+        let source = ata(&who.account(), mint, &tp);
+        let dg = self.metaop_digest(&who.account(), mint, A::OP_PAY, &who.pk(), args);
+        let e = who.sign(A::KIND_RAW, A::METAOP_LABEL, &dg);
+        let ix = self.pay_meta_ix(&who.pk(), mint, tp, source, args, salt, meta, auth(A::KIND_RAW, 0, 0, 0));
+        self.send(&[ed_ix(&[e]), ix], &[])
     }
 
     pub fn args(&self, to: &Pubkey, amount: u64, pay_ref: u8, lane: u8, nonce: u64, valid_until: u64) -> scaas::PayArgs {

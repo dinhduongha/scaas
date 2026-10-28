@@ -223,7 +223,7 @@ settlement that does not simulate (planned: only the side at fault).
 <a id="oog-pairs"></a><a id="NODE-DEX-06"></a>**NODE-DEX-06** — **ERC-1271 orders whose check ran out of gas are never
 restored (PLANNED, Q2 open).** The contract caps an ERC-1271 check ([CTR-DEX-08](../contracts/dex.md#CTR-DEX-08)); built:
 the venue checks signatures with that cap and restores every failed leg still open and funded. (`_erc1271Gas(signer)`:
-400k for the `SmartKeyAccount` clone codehash, else 50k; exactly 32 bytes of return data; a 7702 designator is an EOA.)
+400k for the `SmartKeyAccount` clone codehash, else 50k; exactly 32 bytes of return data; a 7702 designator signs with its base key, else ERC-1271 through its delegate, CTR-UA-24.)
 
 ## <a id="routes"></a>6. Routes
 

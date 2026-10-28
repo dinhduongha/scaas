@@ -18,8 +18,11 @@
 #                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (dev chains only) adds the Zether
 #                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
-#   aptos   <cli-profile>    aptos move deploy-object --address-name scaas
-#   sui     <client-env>     sui client --client.env <env> publish
+#   aptos   <cli-profile>    aptos move deploy-object --address-name scaas; Move.toml upgrade_policy = "immutable"
+#                            (NET-APT-20, owner ruling 2026-10-28): check the package registry reports policy 2
+#   sui     <client-env>     sui client --client.env <env> publish, then in the same run
+#                            0x2::package::make_immutable(UpgradeCap) (NET-SUI-15, owner ruling 2026-10-28): the cap
+#                            object is gone afterwards; the script stops if it cannot find or destroy it
 #   soroban <network> <contract>   stellar contract deploy of scaas_<contract>.wasm (build.sh soroban first); STELLAR_BIN overrides the CLI
 #   solana  <cluster-url> <program-keypair> <upgrade-authority-keypair>   solana/scripts/deploy.sh
 set -euo pipefail
@@ -36,7 +39,14 @@ case "$FAMILY" in
   hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
-  sui)     exec sui client --client.env "$NET" publish "$@" "$SC/move/sui" ;;
+  sui)     out="$(sui client --client.env "$NET" publish --json "$@" "$SC/move/sui")" || { echo "$out"; exit 1; }
+           echo "$out"
+           cap="$(python3 -c 'import json,sys; print(next(c["objectId"] for c in json.loads(sys.stdin.read())["objectChanges"]
+                  if c.get("type") == "created" and c.get("objectType") == "0x2::package::UpgradeCap"))' <<< "$out")" \
+             || { echo "no UpgradeCap in the publish output: make the package immutable by hand" >&2; exit 1; }
+           # --gas-budget: older Sui CLIs require it (SUI_GAS_BUDGET, MIST)
+           exec sui client --client.env "$NET" call --package 0x2 --module package --function make_immutable --args "$cap" \
+             --gas-budget "${SUI_GAS_BUDGET:-50000000}" ;;
   soroban) C="${1:?contract (token|mandate|dex|smart_key_account)}"; shift
            exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/scaas_$C.wasm" "$@" ;;
   solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;

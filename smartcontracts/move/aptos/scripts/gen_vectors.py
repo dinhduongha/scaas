@@ -15,13 +15,16 @@ import sys
 import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LIB = os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')
+# `DMS_LIB` = thư mục `dms_blockchain/lib` (mặc định: repo anh em cạnh scaas).
+LIB = os.environ.get('DMS_LIB') or os.path.join(HERE, '..', '..', '..', '..', '..', 'dms_blockchain', 'lib')
+PAYMETA = os.path.join(HERE, '..', '..', '..', 'vectors', 'metatx', 'paymeta.json')
 OUT = os.path.join(HERE, '..', 'tests', 'vectors.move')
 _pkg = types.ModuleType('aptlib')
 _pkg.__path__ = [LIB]            # nạp lib mà không chạy lib/__init__ (kéo Odoo)
 sys.modules['aptlib'] = _pkg
 F = importlib.import_module('aptlib.fam_aptos')
 
+from Crypto.Hash import keccak as _keccak  # noqa: E402  (pycryptodome)
 from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, utils  # noqa: E402
 
@@ -42,7 +45,11 @@ RP_ID_HASH = hashlib.sha256(b'pay.scaas.test').digest()
 APP = 'https://pay.scaas.test'
 ZERO32 = bytes(32)
 N = F.P256_N
+# CTR-MTX-27 router marker: `object::create_object_address(&@scaas, b"scaas.relayfee")` (no one can sign for it).
+MARKER = F.object_address(SCAAS, b'scaas.relayfee')
 out = []
+# vector name ⇒ (Move argument text, BCS of the same arguments): the relay-fee wrappers' `call` (spec §7.2 Aptos)
+CALLS = {}
 
 
 def seed(name):
@@ -129,19 +136,24 @@ def addr_const(name, value):
     out.append('public fun %s(): address { @%s }' % (name, value))
 
 
+def b32(x):
+    return x if isinstance(x, bytes) else bytes([x]) * 32
+
+
 def pay(name, key, asset, amount, ref, lane, nonce, valid_until=VU, relayer='0x0', to=BEEF, owner=None, style='minimal',
-        signer=None):
-    """`meta::relay_pay` đã ký. `signer` ≠ `key` = khoá khác ký thay chủ `owner`."""
+        signer=None, extra=ZERO32):
+    """`meta::relay_pay` đã ký. `signer` ≠ `key` = khoá khác ký thay chủ `owner`. `ref` / `lane`: byte lặp 32 lần hoặc
+    32 byte."""
     owner = owner or key.address
     signer = signer or key
     account = F.account_of(ROOT, owner)
-    pay_ref, lane_b = bytes([ref]) * 32, bytes([lane]) * 32
+    pay_ref, lane_b = b32(ref), b32(lane)
     payload = F.metaop_bytes(CHAIN, account, asset, F.OP_PAY, owner, to, amount, pay_ref, lane_b, nonce, valid_until,
-                             relayer)
+                             relayer, extra)
     dg = F.digest(payload)
     sig, env = signer.sign(F.LABEL, dg, lane_b, style)
     tail = '%s, asset, %s, %d, %s, %s, %d, %d, %s, %s, %s, %s, %s)' % (
-        a(owner), a(to), amount, h(pay_ref), h(lane_b), nonce, valid_until, a(relayer), h(ZERO32), h(signer.pk), h(sig),
+        a(owner), a(to), amount, h(pay_ref), h(lane_b), nonce, valid_until, a(relayer), h(extra), h(signer.pk), h(sig),
         h(env))
     fn(name, 'lane: &signer, asset: Object<Metadata>', 'meta::relay_pay(lane, ' + tail, p256=signer.kind != 'ed25519')
     out.append('public fun %s_check(lane: address, asset: Object<Metadata>): vector<u8> { meta::pay_check(lane, %s }%s'
@@ -207,9 +219,11 @@ def keyop_digest(owner, action, nonce, scheme=0, pk=b'', rp=b'', origin=b'', gua
 def keyop(name, signer, owner, action, nonce, scheme=0, pk=b'', rp=b'', origin=b'', guardian_='0x0'):
     dg = keyop_digest(owner, action, nonce, scheme, pk, rp, origin, guardian_)
     sig, env = signer.sign('scaas.keyop.v1', dg)
-    fn(name, '', 'meta::manage_signed(%s, %d, %d, %s, %s, %s, %s, %d, %s, %s, %s)' % (
-        a(owner), action, scheme, h(pk), h(rp), h(origin), a(guardian_), VU, h(signer.pk), h(sig), h(env)),
-       p256=signer.kind != 'ed25519')
+    args = '%s, %d, %d, %s, %s, %s, %s, %d, %s, %s, %s' % (
+        a(owner), action, scheme, h(pk), h(rp), h(origin), a(guardian_), VU, h(signer.pk), h(sig), h(env))
+    fn(name, '', 'meta::manage_signed(%s)' % args, p256=signer.kind != 'ed25519')
+    CALLS[name] = (args, F.addr(owner) + bytes([action, scheme]) + F.vec(pk) + F.vec(rp) + F.vec(origin)
+                   + F.addr(guardian_) + VU.to_bytes(8, 'little') + F.vec(signer.pk) + F.vec(sig) + F.vec(env))
     return dg
 
 
@@ -234,9 +248,13 @@ def mandate_open(name, signer, max_pay=100, max_period=150, period=600, expiry=5
                 + max_period.to_bytes(8, 'little') + period.to_bytes(8, 'little') + expiry.to_bytes(8, 'little')
                 + F.uleb128(len(payees)) + b''.join(F.addr(p) for p in payees) + VU.to_bytes(8, 'little'))
     sig, env = signer.sign('scaas.mandate.v1', dg)
-    fn(name, '', 'mandate::open(%s, %s, %s, %d, %d, %d, %d, %s, %d, %s, %s, %s)' % (
+    args = '%s, %s, %s, %d, %d, %d, %d, %s, %d, %s, %s, %s' % (
         a(alice.address), h(M_SEED), h(delegate.pk), max_pay, max_period, period, expiry, vecaddr(payees), VU,
-        h(signer.pk), h(sig), h(env)))
+        h(signer.pk), h(sig), h(env))
+    fn(name, '', 'mandate::open(%s)' % args)
+    CALLS[name] = (args, F.addr(alice.address) + F.vec(M_SEED) + F.vec(delegate.pk) + b''.join(
+        x.to_bytes(8, 'little') for x in (max_pay, max_period, period, expiry)) + F.uleb128(len(payees))
+        + b''.join(F.addr(p) for p in payees) + VU.to_bytes(8, 'little') + F.vec(signer.pk) + F.vec(sig) + F.vec(env))
 
 
 def mandate_pay(name, asset, amount, ref, to=BEEF, signer=delegate, valid_until=VU):
@@ -251,8 +269,10 @@ def mandate_pay(name, asset, amount, ref, to=BEEF, signer=delegate, valid_until=
 def mandate_revoke(name, signer):
     payload = F.metaop_bytes(CHAIN, MANDATE, '0x0', F.OP_REVOKE, alice.address, '0x0', 0, ZERO32, ZERO32, 0, VU)
     sig, env = signer.sign(F.LABEL, F.digest(payload))
-    fn(name, 'lane: &signer', 'mandate::revoke_signed(lane, %s, %d, %s, %s, %s)' % (
-        a(MANDATE), VU, h(signer.pk), h(sig), h(env)))
+    args = '%s, %d, %s, %s, %s' % (a(MANDATE), VU, h(signer.pk), h(sig), h(env))
+    fn(name, 'lane: &signer', 'mandate::revoke_signed(lane, %s)' % args)
+    # the lane is not part of `call` (no sender in `ref`): the wrapper's own lane submits
+    CALLS[name] = (args, F.addr(MANDATE) + VU.to_bytes(8, 'little') + F.vec(signer.pk) + F.vec(sig) + F.vec(env))
 
 
 pay('a_pay_eur_to_mandate', alice, EUR, 200, 14, 0xad, 0, to=MANDATE)
@@ -316,15 +336,19 @@ order('o_alice_by_mallory', alice, EUR, USD, 100, 200, 8, signer=mallory)
 def cancel(name, maker, ob):
     dg = F.sha3(F.vec(b'scaas.cancel.v1') + bytes([CHAIN]) + F.addr(MARKET) + F.vec(F.sha3(ob)))
     sig, env = maker.sign('scaas.cancel.v1', dg)
-    fn(name, '', 'dex::cancel_signed(%s, %s, %s, %s, %s)' % (a(MARKET), h(ob), h(maker.pk), h(sig), h(env)))
+    args = '%s, %s, %s, %s, %s' % (a(MARKET), h(ob), h(maker.pk), h(sig), h(env))
+    fn(name, '', 'dex::cancel_signed(%s)' % args)
+    CALLS[name] = (args, F.addr(MARKET) + F.vec(ob) + F.vec(maker.pk) + F.vec(sig) + F.vec(env))
 
 
-def invalidate(name, maker, min_nonce):
-    dg = F.sha3(F.vec(b'scaas.nonces.v1') + bytes([CHAIN]) + F.addr(MARKET) + F.addr(maker.address)
+def invalidate(name, maker, min_nonce, market=MARKET):
+    dg = F.sha3(F.vec(b'scaas.nonces.v1') + bytes([CHAIN]) + F.addr(market) + F.addr(maker.address)
                 + min_nonce.to_bytes(16, 'little'))
     sig, env = maker.sign('scaas.nonces.v1', dg)
-    fn(name, '', 'dex::invalidate_nonces_signed(%s, %s, %d, %s, %s, %s)' % (
-        a(MARKET), a(maker.address), min_nonce, h(maker.pk), h(sig), h(env)))
+    args = '%s, %s, %d, %s, %s, %s' % (a(market), a(maker.address), min_nonce, h(maker.pk), h(sig), h(env))
+    fn(name, '', 'dex::invalidate_nonces_signed(%s)' % args)
+    CALLS[name] = (args, F.addr(market) + F.addr(maker.address) + min_nonce.to_bytes(16, 'little') + F.vec(maker.pk)
+                   + F.vec(sig) + F.vec(env))
 
 
 # Market thứ hai (EUR/GBP): min_nonce/filled/huỷ của market này không đụng market kia.
@@ -334,6 +358,114 @@ order('o2_alice_sell_eur', alice, EUR, GBP, 100, 200, 1, market=MARKET2)
 order('o2_carol_sell_gbp', carol, GBP, EUR, 200, 100, 1, market=MARKET2)
 cancel('cancel_o_alice_sell_eur', alice, o_a)
 invalidate('alice_min_nonce_2', alice, 2)
+
+
+# ---------------------------------------------------------------- CTR-MTX-26 pay-meta (spec §6.2)
+def keccak(b):
+    return _keccak.new(digest_bits=256, data=b).digest()
+
+
+def meta_pay_id(salt, meta):
+    return keccak(b'scaas.pay.meta' + salt + keccak(meta))
+
+
+def pay_lane(p):
+    return keccak(b'scaas.pay.lane' + p)
+
+
+def pay_meta(name, key, asset, amount, salt, meta, relayer='0x0', to=BEEF):
+    """`meta::relay_pay_meta` / `pay_meta_check` of a signed plain pay with `pay_ref = metaPayId(salt, meta)`,
+    `lane = payLane(pay_ref)`, nonce 0. `salt` / `meta` are parameters, so a test can pass others."""
+    pid = meta_pay_id(salt, meta)
+    payload = F.metaop_bytes(CHAIN, F.account_of(ROOT, key.address), asset, F.OP_PAY, key.address, to, amount, pid,
+                             pay_lane(pid), 0, VU, relayer)
+    sig, env = key.sign(F.LABEL, F.digest(payload), pay_lane(pid))
+    tail = '%s, asset, %s, %d, s, m, %d, %s, %s, %s, %s, %s)' % (
+        a(key.address), a(to), amount, VU, a(relayer), h(ZERO32), h(key.pk), h(sig), h(env))
+    fn(name, 'lane: &signer, asset: Object<Metadata>, s: vector<u8>, m: vector<u8>', 'meta::relay_pay_meta(lane, ' + tail)
+    out.append('public fun %s_check(lane: address, asset: Object<Metadata>, s: vector<u8>, m: vector<u8>): vector<u8> '
+               '{ meta::pay_meta_check(lane, %s }' % (name, tail))
+    return F.digest(payload)
+
+
+# Every row of the shared vectors (`long_body_4096` is a hash vector only, never submitted).
+rows = json.load(open(PAYMETA))
+quads = []
+for r in rows:
+    salt, meta = bytes.fromhex(r['salt'][2:]), bytes.fromhex(r['meta'][2:])
+    pid = meta_pay_id(salt, meta)
+    assert pid.hex() == r['payId'][2:] and pay_lane(pid).hex() == r['payLane'][2:], r['name']
+    # `[salt, meta, payId, payLane]` as in the file (`payId` / `payLane` copied, not recomputed)
+    quads.append('vector[%s]' % ', '.join(h(bytes.fromhex(r[k][2:])) for k in ('salt', 'meta', 'payId', 'payLane')))
+out.append('public fun pm_rows(): vector<vector<vector<u8>>> { vector[%s] }' % ', '.join(quads))
+NOTE = next(r for r in rows if r['name'] == 'note_utf8')
+PM_SALT, PM_META, PM_ID = (bytes.fromhex(NOTE[k][2:]) for k in ('salt', 'meta', 'payId'))
+const('pm_note_salt', PM_SALT)
+const('pm_note_meta', PM_META)
+const('pm_note_id', PM_ID)
+const('pm_note_lane', pay_lane(PM_ID))
+# Alice pays 0xbeef 100 EUR with payId(note_utf8): the same signed MetaOp as a plain pay of that pay_ref.
+const('pm_a_note_digest', pay_meta('pm_a_note', alice, EUR, 100, PM_SALT, PM_META))
+pay('pm_a_note_plain', alice, EUR, 100, PM_ID, pay_lane(PM_ID), 0)
+# Bob (another payer) pays 1 with Alice's payId from his own Account (an attacker's pre-burn; rule 6).
+pay('pm_b_note', bob, EUR, 1, PM_ID, pay_lane(PM_ID), 0)
+# A pay-meta signed for the router marker as relayer: only the router may spend it.
+pay_meta('pm_a_marker', alice, EUR, 100, PM_SALT, PM_META, relayer=MARKER)
+
+
+# ---------------------------------------------------------------- CTR-MTX-27 relayfee (spec §7.2 Aptos)
+def relay_ref(call, salt):
+    """`keccak256("scaas.relayfee" ‖ chain_id (1 byte) ‖ @scaas (32) ‖ keccak256(call) ‖ salt (32))`."""
+    return keccak(b'scaas.relayfee' + bytes([CHAIN]) + F.addr(SCAAS) + keccak(call) + salt)
+
+
+PAY_UNTIL = 2000  # the payments outlive the inner calls (valid until 1000), so a call's own expiry is testable
+keyop('rf_k_guardian', alice, alice.address, SET_GUARDIAN, 0, guardian_=guardian)
+addr_const('relay_fee_marker', MARKER)
+PAYS = {}
+
+
+def relay(name, wrapper, entry, inner, to, salt_b, payer=alice, amount=10, pay_name=None):
+    """`relayfee::<wrapper>(lane, <inner call's arguments>, <payer's payment>)`. `call = bcs(entry name) ‖ bcs(each
+    argument)`; the payment: `pay_ref = ref`, `lane = payLane(ref)`, nonce 0, `relayer = marker`, `extra = salt`.
+    `pay_name`: reuse that vector's payment (signed for another call)."""
+    args, bcs_args = CALLS[inner]
+    call = F.vec(entry) + bcs_args
+    salt = bytes([salt_b]) * 32
+    r = relay_ref(call, salt)
+    if pay_name is None:
+        const('rf_%s_call' % name, call)
+        const('rf_%s_ref' % name, r)
+        payload = F.metaop_bytes(CHAIN, F.account_of(ROOT, payer.address), EUR, F.OP_PAY, payer.address, to, amount, r,
+                                 pay_lane(r), 0, PAY_UNTIL, MARKER, salt)
+        sig, env = payer.sign(F.LABEL, F.digest(payload), pay_lane(r))
+        PAYS[name] = '%s, asset, %s, %d, %d, %s, %s, %s, %s' % (
+            a(payer.address), a(to), amount, PAY_UNTIL, h(salt), h(payer.pk), h(sig), h(env))
+    fn('rf_%s' % name, 'lane: &signer, asset: Object<Metadata>',
+       'relayfee::%s(lane, %s, %s)' % (wrapper, args, PAYS[pay_name or name]))
+    return r
+
+
+r_manage = relay('manage', 'relay_manage_signed', b'meta::manage_signed', 'rf_k_guardian', MARKER, 0x51)
+relay('open', 'relay_mandate_open', b'mandate::open', 'm_open', MARKER, 0x52)
+relay('revoke', 'relay_revoke_signed', b'mandate::revoke_signed', 'm_revoke_by_owner', BEEF, 0x53)
+relay('cancel', 'relay_cancel_signed', b'dex::cancel_signed', 'cancel_o_alice_sell_eur', MARKER, 0x54)
+relay('nonces', 'relay_invalidate_nonces_signed', b'dex::invalidate_nonces_signed', 'alice_min_nonce_2', MARKER, 0x55)
+# Bob pays for Alice's call (any payer: no `&mut` object ties the payment to the call's account on Aptos).
+relay('nonces_by_bob', 'relay_invalidate_nonces_signed', b'dex::invalidate_nonces_signed', 'alice_min_nonce_2', MARKER,
+      0x56, payer=bob)
+# The revoke's payment sent through another wrapper: signed for another `ref`.
+relay('nonces_with_revoke_pay', 'relay_invalidate_nonces_signed', b'dex::invalidate_nonces_signed',
+      'alice_min_nonce_2', MARKER, 0x53, pay_name='revoke')
+# The nonces payment through the same wrapper with another instance of the call (Alice's invalidate on market2).
+invalidate('alice_min_nonce_2_m2', alice, 2, market=MARKET2)
+relay('nonces_m2_with_nonces_pay', 'relay_invalidate_nonces_signed', b'dex::invalidate_nonces_signed',
+      'alice_min_nonce_2_m2', MARKER, 0x55, pay_name='nonces')
+# The manage payment (router-bound) sent to the plain `relay_pay`.
+pay('rf_manage_direct', alice, EUR, 10, r_manage, pay_lane(r_manage), 0, valid_until=PAY_UNTIL, relayer=MARKER,
+    to=MARKER, extra=bytes([0x51]) * 32)
+# Bob pre-burns Alice's manage `ref` with a plain pay of 1 from his own Account (rule 6).
+pay('rf_manage_preburn_by_bob', bob, EUR, 1, r_manage, pay_lane(r_manage), 0)
 
 
 def main():
@@ -351,6 +483,7 @@ def main():
         '    use scaas::dex;',
         '    use scaas::mandate;',
         '    use scaas::meta;',
+        '    use scaas::relayfee;',
         '',
     ]
     text = '\n'.join(head + ['    ' + line for line in out] + ['}']) + '\n'

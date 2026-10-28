@@ -42,7 +42,7 @@ arrangement on chain, as an option.
 payer's signature, all without breaking `payId`'s unlinkability.
 
 **Proposal A1: the payment id commits to its metadata, with no typehash change.** **Adopted** (owner 2026-10-26) as
-[CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26), SPECIFIED.
+[CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26), BUILT (metatx-split).
 
 ```text
 salt  = 32 bytes from a CSPRNG
@@ -98,7 +98,7 @@ PqChat `postMessage(record, sig)`, `createSession`, a UA-8 `UARegistry` write, a
 
 ### B1 (recommended): a stateless router, Tender's pattern generalised
 
-**Adopted** (owner 2026-10-26) as [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27), SPECIFIED. The spec adds an
+**Adopted** (owner 2026-10-26) as [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27), BUILT (metatx-split). The spec adds an
 unprivileged executor for the target call (a `callData` could otherwise execute another router-bound payment) and
 limits the scope to all-or-nothing SCaaS targets.
 

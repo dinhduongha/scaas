@@ -1,5 +1,5 @@
 [workspace]
-members = ["programs/scaas", "programs/cpi_wrapper"]
+members = ["programs/scaas", "programs/cpi_wrapper", "programs/relay_target"]
 resolver = "2"
 
 [profile.release]

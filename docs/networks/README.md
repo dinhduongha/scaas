@@ -30,6 +30,8 @@ The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its o
 (Stellar and Pi Network), Move (Sui and Aptos), GRAM (formerly TON), Solana. Planned (owner 2026-10-17): NEAR,
 Algorand, and TRON as an EVM profile (Base is already a draft EVM profile).
 
+Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)) are built on the EVM, Hedera, Soroban, Solana, Cosmos, Sui, Aptos and GRAM families (see each family's "Pay-meta and relay fee" section). NEAR and Algorand carry the same two rules: they are brought up on their own branch from `metatx-split` (owner 2026-10-27; spec approved 2026-10-28), with their own spec and plan.
+
 <p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the SCaaS testnet (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), GRAM (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built. Planned, no code yet: TRON (an EVM profile on TVM), NEAR and Algorand. GRAM is the former TON."></p>
 
 | Family | Chains | Meta-tx mechanism | Subject signature | Relayer lane key | Mesh v1 | Status |

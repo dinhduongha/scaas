@@ -1,0 +1,172 @@
+# solana at commit d53153aa
+== test solana
+== build solana
+    Finished `release` profile [optimized] target(s) in 0.33s
+warning: variable does not need to be mutable
+  --> programs/scaas/tests/mandate.rs:58:9
+   |
+58 |     let mut m = setup();
+   |         ----^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `scaas` (test "mandate") generated 1 warning (run `cargo fix --test "mandate" -p scaas` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s
+     Running unittests src/lib.rs (target/debug/deps/cpi_wrapper-0b28e9c03b839bef)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/relay_target-8cca7f5bd2c0c467)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas-a7c87c1d709c37f7)
+
+running 2 tests
+test auth::tests::b64url_matches_rfc4648 ... ok
+test auth::tests::text_and_ocms_layout ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/account.rs (target/debug/deps/account-0d6f5f54dc399f17)
+
+running 14 tests
+test open_needs_the_wallet_signature ... ok
+test open_passkey_binds_owner_challenge_and_origin ... ok
+test backup_policy_is_opt_in_and_guards_removal ... ok
+test prune_returns_rent_to_the_lane_after_the_delay_only ... ok
+test smart_key_account_discriminator_follows_the_name ... ok
+test keys_are_added_used_removed_and_never_all_gone ... ok
+test passkey_rules_high_s_origin_uv_and_tampering ... ok
+test passkey_adds_a_new_origin_of_its_rp_id ... ok
+test guardian_recovery_waits_and_can_be_cancelled ... ok
+test python_passkey_vector_opens_and_pays ... ok
+test recovery_refuses_a_present_key ... ok
+test recovery_refuses_a_full_set ... ok
+test stray_lamports_are_withdrawn_by_keyop ... ok
+test two_signed_ops_for_one_request_pay_once_before_and_after_prune ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s
+
+     Running tests/antilock.rs (target/debug/deps/antilock-7b33a77e6119bd9f)
+
+running 4 tests
+test hot_path_write_sets_are_disjoint ... ok
+test two_assets_two_lanes_in_any_order ... ok
+test deposits_after_the_account_exists_are_spendable ... ok
+test withheld_payment_blocks_nothing_else_of_the_subject ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/dex.rs (target/debug/deps/dex-cc4d48b7e20ce1b9)
+
+running 7 tests
+test admin_lists_and_caps_fees ... ok
+test fok_and_ioc ... ok
+test two_pairs_in_one_transaction ... ok
+test cancel_even_before_any_fill ... ok
+test fees_go_to_the_market_vault_within_the_signed_cap ... ok
+test min_nonce_is_per_market ... ok
+test settle_moves_both_legs_at_the_signed_prices ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+
+     Running tests/mandate.rs (target/debug/deps/mandate-85b5a7283008b392)
+
+running 7 tests
+test delegate_revokes_and_the_account_closes_back ... ok
+test a_mandate_does_not_pay_a_token_account ... ok
+test open_is_signed_by_an_account_key_and_validated ... ok
+test two_ops_with_one_pay_ref_pay_once_before_and_after_prune ... ok
+test a_mandate_pays_only_its_own_mint ... ok
+test reopening_a_seed_does_not_revive_old_delegate_ops ... ok
+test caps_payee_and_one_time_ref ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/pay.rs (target/debug/deps/pay-f589cd175578ed4e)
+
+running 15 tests
+test payload_digest_and_addresses_match_python ... ok
+test pay_meta_id_is_per_payer ... ok
+test deadline_amount_and_relayer_binding ... ok
+test a_token_account_or_mint_is_not_a_recipient ... ok
+test pay_meta_emits_meta_then_settled ... ok
+test pay_meta_vectors_match ... ok
+test any_token_account_of_the_pda_is_spendable ... ok
+test precompile_introspection_is_strict ... ok
+test initialize_is_upgrade_authority_only_and_once ... ok
+test recipient_and_destination_are_bound_to_the_signed_to ... ok
+test signature_for_another_domain_contract_asset_or_op_is_refused ... ok
+test relay_pay_pdas_are_checked_in_the_body ... ok
+test solana_pay_meta_mismatch_and_replay ... ok
+test python_signatures_pay_and_replay_is_refused ... ok
+test token_2022_extension_policy ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.14s
+
+     Running tests/relay_fee.rs (target/debug/deps/relay_fee-99755a2a84aaa3a4)
+
+running 13 tests
+test adapter_ix_data_vectors ... ok
+test relay_fee_relayer_must_sign ... ok
+test relay_fee_self_target_refused ... ok
+test relay_fee_indirect_reentry_refused ... ok
+test relay_fee_ref_is_per_payer ... ok
+test relay_fee_bound_payee ... ok
+test relay_ref_vectors ... ok
+test relay_fee_target_failure_reverts ... ok
+test relay_fee_shape_refused ... ok
+test relay_fee_open_mode_pays_lane ... ok
+test solana_router_bound_pay_refused_direct ... ok
+test relay_fee_target_signer_refused ... ok
+test relay_fee_target_must_be_executable ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+
+     Running tests/vectors.rs (target/debug/deps/vectors-3bd816e9b8e91c2f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/wrappers.rs (target/debug/deps/wrappers-dcb7f2636dddb921)
+
+running 9 tests
+test wrapper_ref_vectors ... ok
+test wrapper_other_instance_refused ... ok
+test wrapper_bound_payee ... ok
+test wrapper_router_bound_pay_refused_direct ... ok
+test wrapper_noop_refused_payer_not_charged ... ok
+test wrapper_inner_failure_leaves_no_payment ... ok
+test wrapper_any_lane_may_submit ... ok
+test wrapper_payment_failure_rolls_back_the_call ... ok
+test wrapper_settles_and_pays ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.38s
+
+   Doc-tests cpi_wrapper
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests relay_target
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0

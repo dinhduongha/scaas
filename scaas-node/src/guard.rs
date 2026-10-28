@@ -46,12 +46,16 @@ pub enum Rule {
     SelfAuth,
     /// A DEX on the chain's DEX list (`dex`), bound to this chain.
     Dex,
+    /// `MtxRelayFee.relay` (CTR-MTX-27): the target is the configured router (`params.relay_fee.router`), the payment a
+    /// registered token's router-bound `MetaTransfer` for exactly this call, the inner target bound to this chain
+    /// ([`relay_call_ok`]).
+    RelayFee,
 }
 
 /// The call table as built in P5: the rows whose contracts exist (`cast sig` of the Solidity signatures; pinned
 /// against the KAT calldata). `mtxExecuteAsOwner` is one selector on `SmartKeyAccount` and `MandateWallet`, so it takes
 /// the wallet's rule. Every other selector is refused.
-pub const CALL_TABLE: [([u8; 4], &str, Rule); 10] = [
+pub const CALL_TABLE: [([u8; 4], &str, Rule); 11] = [
     ([0x45, 0x9b, 0x5b, 0x50], "SmartKeyAccountFactory.deploy", Rule::AccountFactory),
     ([0xfd, 0xf2, 0xd3, 0x38], "mtxExecuteAsOwner", Rule::SelfAuth),
     ([0x3a, 0x5b, 0x07, 0x08], "HederaMandateWallet.mtxExecuteAsOwnerRaw", Rule::SelfAuth),
@@ -62,15 +66,26 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 10] = [
     (<crate::abi::ISCaaSDex::mtxExchangeViaCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxExchangeVia", Rule::Dex),
     ([0x2d, 0xe6, 0x21, 0xd2], "SCaaSDex.mtxCancelOrders", Rule::Dex),
     (SEL_MTX_INVALIDATE_NONCES, "SCaaSDex.mtxInvalidateNonces", Rule::Dex),
+    (<crate::abi::IMtxRelayFee::relayCall as alloy::sol_types::SolCall>::SELECTOR, "MtxRelayFee.relay", Rule::RelayFee),
 ];
 
 /// The token entries a `metatx` job may name (job-api.md, order and wrap entries).
 pub const ENTRIES: [[u8; 4]; 3] = [SEL_MTX_CANCEL_ORDER, SEL_MTX_INVALIDATE_NONCES, SEL_MTX_WRAP];
 
-/// 21 000 intrinsic (pre-Amsterdam; EIP-2780 makes it 15,000, so the floor only grows the margin) + the 400 k `SmartKeyAccount` ERC-1271 cap the contract must still hold at the call (×64/63)
-/// + `SigCheck`'s 5 000 margin (P1b note c): a contract signer's meta-tx never gets less. Entries get no floor (P5
-///   review m6, closed): a starved `SigCheck` reverts `SigCheckGasStarved`, so their estimate already covers the call.
-pub const ERC1271_FLOOR: u64 = 21_000 + 400_000 * 64 / 63 + 5_000;
+/// Forge's minimum relayer CALL gas of a `SmartKeyAccount`-signed `mtxExecute` after the split (the ERC-1271 call two
+/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,904
+/// (`smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`, `test_minGas_smartKeyAccountMtxExecute`, Task 8).
+/// It is execution gas only (`call{gas: g}`): no intrinsic, no calldata.
+pub const ERC1271_CALL_GAS: u64 = 446_904;
+
+/// The gas floor of a contract signer's meta-tx whose calldata is `len` bytes (P1b note c; T17 fix 1): 21,000
+/// intrinsic (pre-Amsterdam; EIP-2780 lowers it, which only grows the margin) + 64 gas per calldata byte (the EIP-7976
+/// floor rate, the dearest calldata price, as `calldata_floor`) + `ERC1271_CALL_GAS` + 10 % of it (a larger proof or
+/// key set grows the prefix). Entries get no floor (P5 review m6, closed): a starved `SigCheck` reverts
+/// `SigCheckGasStarved`, so their estimate already covers the call.
+pub fn erc1271_floor(len: usize) -> u64 {
+    21_000 + 64 * len as u64 + ERC1271_CALL_GAS + ERC1271_CALL_GAS / 10
+}
 
 /// EIP-7825 under Amsterdam (EIP-8037): the cap on a transaction's REGULAR gas (intrinsic, calldata floor and
 /// execution). State gas (new slots 97,920, code 1,530 per byte) comes on top, so the gas LIMIT may exceed it.
@@ -121,7 +136,58 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
             Rule::AccountFactory => f.account_factory,
             Rule::SelfAuth => true,
             Rule::Dex => f.dex,
+            Rule::RelayFee => false, // never by facts: `relay_call_ok`
         }
+}
+
+/// The chain's relay-fee router (CTR-MTX-27) and the node's policy for it (`params.relay_fee`, `RelayParams`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RelayFee {
+    pub router: Address,
+    /// `MtxRelayExecutor`: the router's first `CREATE` (constructor, nonce 1), so derived, never configured.
+    pub executor: Address,
+    pub params: crate::config::RelayParams,
+}
+
+impl RelayFee {
+    /// `None` without `params.relay_fee.router`; a router that is not an address is a startup error.
+    pub fn from_cfg(cfg: &ChainCfg) -> anyhow::Result<Option<Self>> {
+        let params = cfg.relay_params()?;
+        let Some(r) = params.router.as_deref() else { return Ok(None) };
+        let router = crate::metatx::addr(r).map_err(|e| anyhow::anyhow!("params.relay_fee.router: {e:#}"))?;
+        Ok(Some(Self { router, executor: router.create(1), params }))
+    }
+}
+
+/// NODE-LANE (CTR-MTX-27) intake of a `relay` call before any simulation: the target is the router; the payment is
+/// a registered token's `MetaTransfer` bound to exactly this call (`entryRef = relayRef(target, callData)`, lane
+/// `payLane(ref)`, nonce 0, `RESTRICT_RELAYER` to the router, fee `NONE` and 0, never to the executor — the router's
+/// own shape, refused here before gas is spent); the fee reaches this lane (open mode or bound to it) and is at least
+/// `min_amount`, else the job is refused unless `relay_bound_payee` (a sponsored job). Returns the inner target, which
+/// must be bound to this chain. "The fee covers the gas" is the operator's `min_amount` (no token price feed; no gas
+/// price or limit assumed).
+pub fn relay_call_ok(rf: &RelayFee, chain_id: u64, lane: Address, to: Address, data: &[u8], registered: impl Fn(Address) -> bool)
+    -> Result<Address, String>
+{
+    use alloy::sol_types::SolCall;
+    if to != rf.router {
+        return Err(format!("CALL_TARGET_REFUSED: MtxRelayFee.relay on {to:#x}, not params.relay_fee.router"));
+    }
+    let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(data).map_err(|e| format!("BAD_PAYLOAD: relay: {e}"))?;
+    if !registered(c.token) {
+        return Err(format!("TOKEN_NOT_SERVED: {:#x} is not a registered token of this chain", c.token));
+    }
+    let (t, r) = (&c.t, crate::metatx::relay_ref(chain_id, c.target, &c.callData));
+    let shape = t.entryRef == r && t.batch == crate::metatx::pay_lane(&r) && t.nonce.is_zero()
+        && t.mode & crate::metatx::MODE_RESTRICT_RELAYER != 0 && t.relayer == rf.router
+        && t.mode & MODE_FEE_MASK == 0 && t.fee.is_zero() && t.to != rf.executor;
+    if !shape {
+        return Err("RELAY_FEE_SHAPE: the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router, \
+                    fee NONE, never the executor)".into());
+    }
+    let amount = u128::try_from(t.value).unwrap_or(u128::MAX);
+    crate::adapter::relay_fee_ours(t.to == rf.router, t.to == lane, amount, &rf.params).map_err(|e| format!("RELAY_FEE_REFUSED: {e}"))?;
+    Ok(c.target)
 }
 
 /// A contract's published allowlist: `(selector, fee class, amount argument)` and `supportedModes()`.
@@ -154,12 +220,11 @@ pub fn self_call_ok(t: &Table, data: &[u8], mode: u32) -> Result<(), String> {
     Ok(())
 }
 
-/// The gas limit of a simulated estimate (regular + state): +20 %, at least the ERC-1271 floor for a contract signer,
+/// The gas limit of a simulated estimate (regular + state): +20 %, at least `floor` (`erc1271_floor` for a contract signer),
 /// at most `cap` ([`total_cap`]). Above 2^24 is fine under Amsterdam: the chain gives execution at most 2^24 of it and
 /// the rest is the state-gas reservoir (EIP-8037).
-pub fn gas_limit(estimate: u64, contract_signer: bool, cap: u64) -> u64 {
-    let g = estimate.saturating_add(estimate / 5);
-    (if contract_signer { g.max(ERC1271_FLOOR) } else { g }).min(cap)
+pub fn gas_limit(estimate: u64, floor: u64, cap: u64) -> u64 {
+    estimate.saturating_add(estimate / 5).max(floor).min(cap)
 }
 
 /// `mtxSettle` returned `ok` for every settlement it was given.
@@ -198,6 +263,8 @@ impl From<Refusal> for SimError {
 /// allowlist never change (a contract that is not bound yet is asked again).
 pub struct Guard {
     pub tokens: Arc<RwLock<Vec<Address>>>,
+    relay_fee: Option<RelayFee>,
+    max_pay_meta_bytes: usize,
     token_factory: Option<Address>,
     account_factory: Option<Address>,
     dexes: Vec<Address>,
@@ -206,15 +273,22 @@ pub struct Guard {
 }
 
 impl Guard {
-    pub fn new(cfg: &ChainCfg, tokens: Arc<RwLock<Vec<Address>>>) -> Self {
-        Self {
+    pub fn new(cfg: &ChainCfg, tokens: Arc<RwLock<Vec<Address>>>) -> anyhow::Result<Self> {
+        Ok(Self {
+            relay_fee: RelayFee::from_cfg(cfg)?,
+            max_pay_meta_bytes: cfg.relay_params()?.max_pay_meta_bytes,
             tokens,
             token_factory: cfg.token_factory,
             account_factory: cfg.account_factory,
             dexes: cfg.dex.into_iter().collect(),
             bound: Default::default(),
             tables: Default::default(),
-        }
+        })
+    }
+
+    /// The chain's `MtxRelayFee` router (`params.relay_fee.router`), if any.
+    pub fn router(&self) -> Option<Address> {
+        self.relay_fee.as_ref().map(|r| r.router)
     }
 
     /// A token of the chain's registered list (refreshed from the client, review T4 m1); an unreadable list is none.
@@ -228,6 +302,19 @@ impl Guard {
             // review T4 I1: a transfer or payment only on a registered token
             if !matches!(Mtx::from_calldata(&w.data), Some((Mtx::Call(_), _))) && !self.registered(w.to) {
                 return Err(not_served(w.to));
+            }
+            if let Some((Mtx::Transfer(t), _)) = Mtx::from_calldata(&w.data) {
+                // CTR-MTX-27: never pay the router or its executor outside a relay (the coins would sit where any relay
+                // can move them, or nowhere)
+                if self.relay_fee.as_ref().is_some_and(|r| t.to == r.router || t.to == r.executor) {
+                    return Err(Refusal::Policy(format!("PAYEE_REFUSED: a plain pay to the relay-fee router / executor {:#x}", t.to)));
+                }
+            }
+            if let Ok(c) = <IToken::mtxPayMetaCall as alloy::sol_types::SolCall>::abi_decode(&w.data) {
+                if c.meta.len() > self.max_pay_meta_bytes {
+                    return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: meta is {} B, above max_pay_meta_bytes {}",
+                        c.meta.len(), self.max_pay_meta_bytes)));
+                }
             }
             self.require_bound(chain, w.to).await?;
             if let Some((Mtx::Call(m), _)) = Mtx::from_calldata(&w.data) {
@@ -252,6 +339,13 @@ impl Guard {
         let Some((name, rule)) = row(sel) else {
             return Err(Refusal::Policy(format!("CALL_TARGET_REFUSED: 0x{} is not in the call table", alloy::hex::encode(sel))));
         };
+        if rule == Rule::RelayFee {
+            let Some(rf) = &self.relay_fee else {
+                return Err(Refusal::Policy("CALL_TARGET_REFUSED: no params.relay_fee.router on this chain".into()));
+            };
+            let target = relay_call_ok(rf, chain.number, chain.address(), w.to, &w.data, |a| self.registered(a)).map_err(Refusal::Policy)?;
+            return self.require_bound(chain, target).await;
+        }
         let facts = Facts {
             token: self.tokens.read().map(|t| t.contains(&w.to)).unwrap_or(true),
             token_factory: self.token_factory == Some(w.to),
@@ -342,7 +436,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
             Some(m) => chain.has_code(m.from).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
             None => false,
         };
-        gas_limit(est, contract_signer, max)
+        gas_limit(est, if contract_signer { erc1271_floor(w.data.len()) } else { 0 }, max)
     };
     if g >= block.limit {
         // review L1 (controller 2026-10-22): accepted, but the transaction fills a whole block's gas reservation
@@ -356,7 +450,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
 /// `SigCheckGasStarved` is forgeable by a hook-token destination); a transport error is transient, never a size. At the
 /// cap the refusal names the settlements still failing (review P5 m4: a state failure looks the same as too little gas).
 pub async fn settle_gas(chain: &Chain, to: Address, data: &Bytes, estimate: u64, max: u64) -> Result<u64, SimError> {
-    let mut g = gas_limit(estimate, false, max);
+    let mut g = gas_limit(estimate, 0, max);
     loop {
         let ret = chain.call_with_gas(to, data.clone(), g).await?;
         if settled_all(&ret) {
@@ -421,7 +515,8 @@ mod tests {
         // and each row keeps its rule
         let rules: Vec<Rule> = CALL_TABLE.iter().map(|r| r.2).collect();
         assert_eq!(rules, [Rule::AccountFactory, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth,
-            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex]);
+            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee]);
+        assert!(!allowed(Rule::RelayFee, &Facts { bound: true, ..Default::default() }), "never by facts");
     }
 
     /// An entry job carries only an order or wrap entry; anything else is refused before any chain read.
@@ -429,7 +524,7 @@ mod tests {
     async fn an_entry_job_is_only_an_entry() {
         let cfg = ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
         let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
-        let g = Guard::new(&cfg, Default::default());
+        let g = Guard::new(&cfg, Default::default()).unwrap();
         let w = |data: Vec<u8>| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, meta: None, entry: true };
         let transfer = IToken::transferCall { to: Address::repeat_byte(2), value: alloy::primitives::U256::from(1) }.abi_encode();
         assert!(matches!(g.check(&chain, &w(transfer)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
@@ -438,9 +533,9 @@ mod tests {
         let cancel = [&SEL_MTX_CANCEL_ORDER[..], &[0u8; 32]].concat();
         assert!(matches!(g.check(&chain, &w(cancel.clone())).await, Err(Refusal::Policy(r)) if r.starts_with("TOKEN_NOT_SERVED")));
         // on a registered token it passes the selector check and then needs the chain (unreachable: transient)
-        let g = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(1)])));
+        let g = Guard::new(&cfg, Arc::new(RwLock::new(vec![Address::repeat_byte(1)]))).unwrap();
         assert!(matches!(g.check(&chain, &w(cancel.clone())).await, Err(Refusal::Transport(_))));
-        let g = Guard::new(&ChainCfg { dex: Some(Address::repeat_byte(1)), ..cfg.clone() }, Default::default());
+        let g = Guard::new(&ChainCfg { dex: Some(Address::repeat_byte(1)), ..cfg.clone() }, Default::default()).unwrap();
         assert!(matches!(g.check(&chain, &w(cancel)).await, Err(Refusal::Transport(_))), "or on a listed DEX");
     }
 
@@ -478,22 +573,41 @@ mod tests {
         assert!(self_call_ok(&odd, &data([1, 2, 3, 4], 1), 0).is_err(), "unknown fee class");
     }
 
+    /// Spec §9 / R8 (T17 fix 1): the floor covers forge's measured minimum relayer call gas of a `SmartKeyAccount`-signed
+    /// `mtxExecute` (two frames above the ERC-1271 call), the intrinsic 21,000, the job's calldata at 64 gas a byte and
+    /// a 10 % margin.
+    #[test]
+    fn erc1271_floor_covers_forge_minimum() {
+        let log = std::fs::read_to_string(format!(
+            "{}/../smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let tag = "min gas, SmartKeyAccount-signed mtxExecute (relayer's call gas):";
+        let measured: u64 = log.lines().find_map(|l| l.trim().strip_prefix(tag)).unwrap().trim().parse().unwrap();
+        assert_eq!(measured, ERC1271_CALL_GAS, "Task 8's figure");
+        const { assert!(ERC1271_CALL_GAS >= (400_000 * 64 / 63 + 5_000) * 64 / 63, "two frames above the 400 k cap") };
+        for len in [0usize, 708, 4_000] {
+            let f = erc1271_floor(len);
+            assert!(f >= 21_000 + 64 * len as u64 + measured + measured / 10, "{len}: {f}");
+        }
+        assert_eq!(erc1271_floor(0), 512_594);
+        assert_eq!(erc1271_floor(708), 512_594 + 45_312);
+    }
+
     #[test]
     fn gas_floor_and_settle_sizing() {
-        assert_eq!(ERC1271_FLOOR, 432_349);
+        let fl = erc1271_floor(100);
         let ams = |limit| BlockGas { limit, amsterdam: true };
         let cap = total_cap(u64::MAX, ams(200_000_000));
-        assert_eq!(gas_limit(100_000, false, cap), 120_000);
-        assert_eq!(gas_limit(100_000, true, cap), ERC1271_FLOOR);
-        assert_eq!(gas_limit(1_000_000, true, cap), 1_200_000);
-        assert_eq!(gas_limit(MAX_TX_GAS, false, cap), MAX_TX_GAS + MAX_TX_GAS / 5, "Amsterdam: a limit past 2^24 is kept");
-        assert_eq!(gas_limit(190_000_000, false, cap), 200_000_000, "the padded estimate is clamped to the cap");
-        assert_eq!(gas_limit(u64::MAX, true, total_cap(u64::MAX, ams(u64::MAX))), MAX_TX_TOTAL_GAS, "EIP-8037: 2^32 - 1");
+        assert_eq!(gas_limit(100_000, 0, cap), 120_000);
+        assert_eq!(gas_limit(100_000, fl, cap), fl);
+        assert_eq!(gas_limit(1_000_000, fl, cap), 1_200_000);
+        assert_eq!(gas_limit(MAX_TX_GAS, 0, cap), MAX_TX_GAS + MAX_TX_GAS / 5, "Amsterdam: a limit past 2^24 is kept");
+        assert_eq!(gas_limit(190_000_000, 0, cap), 200_000_000, "the padded estimate is clamped to the cap");
+        assert_eq!(gas_limit(u64::MAX, fl, total_cap(u64::MAX, ams(u64::MAX))), MAX_TX_TOTAL_GAS, "EIP-8037: 2^32 - 1");
         assert_eq!(total_cap(50_000_000, ams(30_000_000)), 30_000_000, "the block gas limit binds");
         assert_eq!(total_cap(50_000_000, ams(200_000_000)), 50_000_000, "max_gas_per_tx binds");
         let osaka = BlockGas { limit: 200_000_000, amsterdam: false };
         assert_eq!(total_cap(50_000_000, osaka), MAX_TX_GAS, "before Amsterdam the whole limit stays under 2^24");
-        assert_eq!(gas_limit(MAX_TX_GAS, false, total_cap(u64::MAX, osaka)), MAX_TX_GAS);
+        assert_eq!(gas_limit(MAX_TX_GAS, 0, total_cap(u64::MAX, osaka)), MAX_TX_GAS);
         assert_eq!(calldata_floor(220_415), 14_121_560, "measured on the SCaaS testnet");
         assert!(calldata_floor(261_909) <= MAX_TX_GAS && calldata_floor(261_910) > MAX_TX_GAS, "261,909 B per transaction");
         assert_eq!(next_gas(1_000, 3_000), Some(1_500));

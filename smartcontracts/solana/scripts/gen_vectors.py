@@ -86,6 +86,46 @@ DAVE_AD, DAVE_CDJ, DAVE_SIG = webauthn(DAVE_SK, F.digest(DAVE_PAYLOAD))
 OPEN_CHALLENGE = hashlib.sha256(b'scaas.open.v1' + F.key32(PROGRAM) + DAVE).digest()
 OPEN_AD, OPEN_CDJ, OPEN_SIG = webauthn(DAVE_SK, OPEN_CHALLENGE)
 
+def relay_fee_vectors():
+    """CTR-MTX-27 `ref` của `relay_fee` (spec §7.2, hàng Solana): `call = target ‖ u8 n ‖ (pubkey ‖ is_signer ‖
+    is_writable)×n ‖ data`, `ref = keccak256("scaas.relayfee" ‖ network ‖ target ‖ keccak256(call) ‖ salt)` với
+    `salt = args.extra` (payer ký trong MetaOp), `lane = keccak256("scaas.pay.lane" ‖ ref)`. Chỉ hashlib + Keccak."""
+    from Crypto.Hash import keccak
+
+    def k(b):
+        return keccak.new(digest_bits=256, data=b).digest()
+    network = seed('scaas.solana.test-genesis')
+    target, record = seed('relay_target'), seed('relay_target.record')
+    data, salt = b'\x00hello', bytes([9]) * 32
+    call = target + bytes([1]) + record + bytes([0, 1]) + data
+    ref = k(b'scaas.relayfee' + network + target + k(call) + salt)
+    out = [('RELAY_TARGET', target.hex()), ('RELAY_RECORD', record.hex()), ('RELAY_DATA', data.hex()),
+           ('RELAY_SALT', salt.hex()), ('RELAY_CALL', call.hex()), ('RELAY_REF', ref.hex()),
+           ('RELAY_LANE', k(b'scaas.pay.lane' + ref).hex())]
+    # Static wrapper `relay_fee_invalidate_nonces_signed` (owner 2026-10-27): `call` = the inner entry as if sent
+    # alone, target = scaas, its declared accounts (lane slot = marker, signer+writable; config, market, subject,
+    # min_nonce writable, instructions sysvar, system), data = discriminator ‖ u64 min_nonce ‖ Auth (raw, key 0, precompile 2, entry 0).
+    alphabet = b'123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+    def b58d(s):
+        n = 0
+        for c in s.encode():
+            n = n * 58 + alphabet.index(c)
+        return n.to_bytes(32, 'big')
+    program = b58d(PROGRAM)
+    # the lane slot hashes as the router marker, PDA [b"relayfee"] of PROGRAM (pinned in tests/relay_fee.rs)
+    metas = [(b58d('9wtnhXbQazahGQXbNLD5ZAERPfzmvFvC2mYwCRjPvT5t'), 1, 1), (seed('wrap.config'), 0, 0), (seed('wrap.market'), 0, 0),
+             (seed('wrap.subject'), 0, 0), (seed('wrap.min_nonce'), 0, 1),
+             (b58d('Sysvar1nstructions1111111111111111111111111'), 0, 0), (bytes(32), 0, 0)]
+    wdata = (hashlib.sha256(b'global:invalidate_nonces_signed').digest()[:8] + (5).to_bytes(8, 'little')
+             + bytes([0, 0, 2, 0]) + (0).to_bytes(4, 'little'))
+    wcall = program + bytes([len(metas)]) + b''.join(key + bytes([s, w]) for key, s, w in metas) + wdata
+    wsalt = bytes([0x0a]) * 32
+    wref = k(b'scaas.relayfee' + network + program + k(wcall) + wsalt)
+    return out + [('WRAP_CALL', wcall.hex()), ('WRAP_SALT', wsalt.hex()), ('WRAP_REF', wref.hex()),
+                  ('WRAP_LANE', k(b'scaas.pay.lane' + wref).hex())]
+
+
 VECTORS = [
     ('PROGRAM', PROGRAM), ('NETWORK', NETWORK),
     ('ALICE', b58(ALICE)), ('BOB', b58(BOB)), ('DELEGATE', b58(DELEGATE)), ('LANE', b58(LANE)),
@@ -104,7 +144,7 @@ VECTORS = [
     ('DAVE_AUTH_DATA', DAVE_AD.hex()), ('DAVE_CDJ', DAVE_CDJ.decode()), ('DAVE_SIG', DAVE_SIG.hex()),
     ('DAVE_BLOB', F.passkey_blob(0, DAVE_SIG, DAVE_AD, DAVE_CDJ).hex()),
     ('OPEN_AUTH_DATA', OPEN_AD.hex()), ('OPEN_CDJ', OPEN_CDJ.decode()), ('OPEN_SIG', OPEN_SIG.hex()),
-]
+] + relay_fee_vectors()
 
 
 def render():

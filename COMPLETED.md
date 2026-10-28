@@ -1538,3 +1538,17 @@ Reviews (local, git-ignored): `docs/reviews/specs/`. Owner decisions are recorde
 - `rtk` mangles `git diff`/`grep`/`ls` output in scripts — use `rtk proxy …` or `/usr/bin/grep`.
 - Never `git commit -a` in scaas while an agent edits a spec in the main checkout (happened once: 9ad8711).
 - Ruling-number ranges collided twice — reserve a range per spec before dispatching.
+
+## From TODO.md, 2026-10-28 (metatx split)
+
+Moved verbatim from "Recorded, not scheduled" when the items were built on branch `metatx-split` (commits in TODO.md, P6 item 5):
+
+- [ ] **`mtxPayMeta` / `uaPayMeta` — payment metadata by commitment (owner 2026-10-26; after P6 / PQZ)**: spec
+  [CTR-MTX-26](docs/contracts/metatx.md#CTR-MTX-26) (SPECIFIED), decision CTR-MTX-26. Build on every `MetaTokenBase`
+  tier (`PaymentMeta` event, `metaPayId` view; size gate), then every non-EVM family's pay relay; connectors /
+  `clientkeys` recompute and show the meta, refuse a mismatch; vectors shared by the clients.
+- [ ] **`MtxRelayFee` — token fee for a fee-less mtx call (owner 2026-10-26; after P6 / PQZ, with or before UA-7)**:
+  spec [CTR-MTX-27](docs/contracts/metatx.md#CTR-MTX-27) (SPECIFIED), decision CTR-MTX-27. Router + executor in
+  `src/metatx/`, `DeployBase` CREATE2; forge conformance list of CTR-MTX-27; gas; node quote + simulation; clients
+  (ref, open-mode payment, one prompt); then the non-EVM shapes (GRAM escrow). The relay-fee router
+    research: `docs/research/mtx-relay-fees.md` §3, owner answers §5.

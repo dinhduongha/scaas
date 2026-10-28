@@ -148,7 +148,8 @@ inside `Account` itself (`meta.move:103-106`), not in an extra resource. Rules:
   the owner's own native transaction; subjects whose Aptos account is passkey/keyless/MultiKey use it once to attach an
   ed25519 seed key (an administrative transaction off the hot path); (3) the guardian (native tx) calls
   `start_recovery(new_key)`, `finish_recovery` after `RECOVERY_DELAY` = 2 days (172 800 s); a current key or the owner
-  can cancel.
+  can cancel. `finish_recovery` adds the key through `add_key`, which aborts on a key already present or a full set
+  (`MAX_KEYS`): an owner who lost every key of a full set cannot be recovered, so keep a free slot (as Solana).
 - Never zero keys; an account with a passkey never has zero origins. Rotating the native Aptos auth key does **not**
   touch `keys`, so it never bricks the Account; the consequence: an owner who rotates the auth key *because* a key
   leaked is still exposed through the old key in `Account.keys` (the chain reads the auth key only at open). The
@@ -619,9 +620,10 @@ the production command) reads `0x1::code::PackageRegistry` back at the code-obje
 policy is immutable. The node refuses to activate a chain whose package is upgradeable (`halted`,
 `PROGRAM_UPGRADEABLE`, [NODE-STO-07](../node/store.md#NODE-STO-07)). Consequences: every contract fix is a new deployment
 at a new address with new tokens/Accounts; old Accounts remain spendable through the old package; the DEX admin role
-(code-object owner) is unchanged. Owner ruling 2026-10-07 ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)). SPECIFIED
-(as built `upgrade_policy = "compatible"`, `Move.toml:4`). Test: the publish script on localnet prints policy 2; a node
-with a `compatible` package ⇒ chain `halted`.
+(code-object owner) is unchanged. Owner ruling 2026-10-07 ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)), confirmed by
+owner ruling 2026-10-28. `Move.toml` `upgrade_policy = "immutable"` is BUILT (owner ruling 2026-10-28); the publish
+script's registry read-back and the node's refusal stay SPECIFIED. Test: the publish script on localnet prints policy 2;
+a node with a `compatible` package ⇒ chain `halted`.
 
 ## 13. Conformance
 
@@ -718,3 +720,29 @@ an ed25519 signature, but one transaction still suffices.
   (`m/44'/637'/0'/0'/0'`).
 - signMessage: github.com/aptos-labs/wallet-standard `src/features/aptosSignMessage.ts`; petra.app/docs/signing-a-message.
 - Localnet: aptos.dev/network/nodes/localnet (defaults REST 8080, faucet 8081, ready 8070, stream 50051).
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+- **Pay-meta.** `meta::relay_pay_meta` (`package entry`): `pay_ref = meta_pay_id(salt, meta)`, `lane = pay_lane(pay_ref)`,
+  `nonce = 0` derived on chain, then `relay_pay`'s body; the view `pay_meta_check` is the twin of `pay_check`. Once per
+  `(payer, payId)` in `Account.lanes` until the lane is pruned: `meta::prune` is permissionless 30 days
+  (`PRUNE_DELAY_S`) after the lane's `valid_until`, after which the same `payId` can be signed and settled again (a signed
+  payment itself never replays: `valid_until` bounds it). The same holds for the relay-fee payment's lane (final review M9,
+  as Solana's lane PDA).
+- **Relay fee.** Module `scaas::relayfee`, one `package entry` per fee-less signed entry (`relay_manage_signed`,
+  `relay_mandate_open`, `relay_revoke_signed`, `relay_cancel_signed`, `relay_invalidate_nonces_signed`), each running the
+  entry then `meta::pay_routed`. `ref = keccak256("scaas.relayfee" ‖ chain_id (1 byte) ‖ @scaas ‖ keccak256(call) ‖ salt)`.
+  Marker = `object::create_object_address(&@scaas, b"scaas.relayfee")`; a plain pay to it is refused on chain by
+  `relay_pay` (`EWRONG_RELAYER`) and by the node. A cancel that changes nothing aborts (`ECALL_REFUSED`).
+- **Client rule: open the Account first.** No view runs the wrapped call and `simulate` hangs on a payment that opens the
+  Account, so the node refuses a relay-fee job while the payer's Account is not open. A client opens the Account (any
+  signed pay or `manage_signed`) before it asks for a relay-fee job.
+- **Chain-id reuse.** `ref` and the `MetaOp` domain carry a 1-byte `chain_id`, not network bytes. A customer chain that reuses
+  an Aptos chain id and publishes the package at the same address shares signatures with that chain; give a customer chain
+  its own id (or its own package address) before it carries payments.
+- **Upgrade authority.** `upgrade_policy = "immutable"` (NET-APT-20, owner ruling 2026-10-28): nobody can upgrade
+  `relayfee` or `meta` after the deploy.
+- **Owed.** A two-passkey relay may exceed the 9,200 exec-gas ceiling (unmeasured); measure it on a localnet or testnet
+  (TODO.md). Commits: T14 `78c67cff`, fix 1 `d48c51f9`.

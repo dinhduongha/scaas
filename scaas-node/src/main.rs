@@ -174,7 +174,7 @@ async fn main() -> Result<()> {
         // G2 (§8.4): MỘT tập digest in-flight mỗi chain, chung cho mọi lane.
         let digests = submit::InflightSet::default();
         if cc.uses_adapter() {
-            let adapter = adapters::build(cc, &signers)?;
+            let adapter = adapters::build(&cfg.adapter_cfg(cc), &signers)?;
             if cfg.modules.submit {
                 let relay = legacy(&cfg, true)?;
                 for lane in 0..signers.len() {
@@ -245,8 +245,9 @@ async fn main() -> Result<()> {
         if cfg.modules.indexer {
             let idx = legacy(&cfg, false)?;
             let (c, key) = (shared.clone(), cc.chain_key());
+            let router = scaas_node::guard::RelayFee::from_cfg(cc)?.map(|r| r.router);
             set.spawn(async move {
-                indexer::run(c, idx, poll, key).await;
+                indexer::run(c, idx, poll, key, router).await;
                 Err(anyhow!("indexer loop ended"))
             });
         }
@@ -276,7 +277,7 @@ async fn main() -> Result<()> {
                 }
                 _ => None,
             };
-            let guard = Arc::new(scaas_node::guard::Guard::new(cc, tokens.clone()));
+            let guard = Arc::new(scaas_node::guard::Guard::new(cc, tokens.clone())?);
             gw_chains.insert(num, gateway::GwChain { chain: shared, tx, tokens, dex: venue, breaker: first_breaker, fee_recipient: cc.fee_recipient, guard });
         }
     }

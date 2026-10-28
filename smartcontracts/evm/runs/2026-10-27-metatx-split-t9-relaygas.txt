@@ -1,0 +1,8 @@
+# T9 relay gas at 004890a2 + T9 tree: forge test --match-test test_relayGas_ecdsaAndMldsa65 -vv (Amsterdam, isolate)
+[PASS] test_relayGas_ecdsaAndMldsa65() (gas: 2629983)
+  bare call (mtxExecute, bump) gas: regular / state / total 63205 195840 259045
+  relay, ECDSA payer, open mode gas: regular / state / total 172182 391680 563862
+  relay, ECDSA payer, bound payee gas: regular / state / total 155552 391680 547232
+  uaRelay, mldsa65 payer, open mode gas: regular / state / total 310168 391680 701848
+  overhead over the bare call (regular): ECDSA open / ECDSA bound / mldsa65 open 108977 92347 246963
+  bare call state gas 195840

@@ -8,6 +8,7 @@ module scaas::meta {
     use std::hash::sha3_256;
     use std::option::{Self, Option};
     use std::signer;
+    use aptos_std::aptos_hash::keccak256;
     use aptos_std::table::{Self, Table};
     use aptos_framework::account;
     use aptos_framework::chain_id;
@@ -23,6 +24,10 @@ module scaas::meta {
     const KEYOP_DOMAIN: vector<u8> = b"scaas.keyop.v1";
     const ROOT_SEED: vector<u8> = b"scaas.root";
     const OP_PAY: u8 = 0;
+    /// CTR-MTX-26 (spec §6.2): `payId = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`,
+    /// `payLane(p) = keccak256("scaas.pay.lane" ‖ p)` — byte for byte the EVM derivation.
+    const PAY_META_DOMAIN: vector<u8> = b"scaas.pay.meta";
+    const PAY_LANE_DOMAIN: vector<u8> = b"scaas.pay.lane";
     const U64_MAX: u128 = 0xffffffffffffffff;
     /// Vòng đời khoá (round-3 §C): `manage_*`.
     const ADD_KEY: u8 = 0;
@@ -160,6 +165,14 @@ module scaas::meta {
     }
 
     #[event]
+    /// CTR-MTX-26: emitted by `relay_pay_meta` right before its `PaymentSettled`. The contract never parses `meta`.
+    struct PaymentMeta has drop, store {
+        contract: address,
+        pay_id: vector<u8>,
+        meta: vector<u8>,
+    }
+
+    #[event]
     struct PaymentSettled has drop, store {
         contract: address,
         from: address,
@@ -272,17 +285,133 @@ module scaas::meta {
     ) acquires Root, Account {
         let (digest, table) = pay_checked(signer::address_of(lane), owner, asset, to, amount, pay_ref, lane_id, nonce,
             valid_until, relayer, extra, public_key, sig, envelope);
+        settle(owner, asset, to, amount, pay_ref, lane_id, nonce, valid_until, digest, table, &public_key, &envelope,
+            option::none());
+    }
+
+    /// CTR-MTX-26 (spec §6.2): `relay_pay` with `pay_ref = metaPayId(salt, meta)`, `lane = payLane(pay_ref)`,
+    /// `nonce = 0` derived on chain ⇒ the same signed `MetaOp` as a plain pay of that `pay_ref`, and a
+    /// `(payer, payId)` pays at most once (the payer's own lane table). `PaymentMeta` before `PaymentSettled`.
+    package entry fun relay_pay_meta(
+        lane: &signer,
+        owner: address,
+        asset: Object<Metadata>,
+        to: address,
+        amount: u128,
+        salt: vector<u8>,
+        meta: vector<u8>,
+        valid_until: u64,
+        relayer: address,
+        extra: vector<u8>,
+        public_key: vector<u8>,
+        sig: vector<u8>,
+        envelope: vector<u8>,
+    ) acquires Root, Account {
+        let pay_ref = meta_pay_id(salt, meta);
+        let lane_id = pay_lane(pay_ref);
+        let (digest, table) = pay_checked(signer::address_of(lane), owner, asset, to, amount, pay_ref, lane_id, 0,
+            valid_until, relayer, extra, public_key, sig, envelope);
+        settle(owner, asset, to, amount, pay_ref, lane_id, 0, valid_until, digest, table, &public_key, &envelope,
+            option::some(meta));
+    }
+
+    #[view]
+    /// `pay_check`'s twin for `relay_pay_meta`: every check, no write; the digest or `relay_pay_meta`'s abort code.
+    public fun pay_meta_check(
+        lane: address,
+        owner: address,
+        asset: Object<Metadata>,
+        to: address,
+        amount: u128,
+        salt: vector<u8>,
+        meta: vector<u8>,
+        valid_until: u64,
+        relayer: address,
+        extra: vector<u8>,
+        public_key: vector<u8>,
+        sig: vector<u8>,
+        envelope: vector<u8>,
+    ): vector<u8> acquires Account {
+        let pay_ref = meta_pay_id(salt, meta);
+        let (digest, _) = pay_checked(lane, owner, asset, to, amount, pay_ref, pay_lane(pay_ref), 0, valid_until,
+            relayer, extra, public_key, sig, envelope);
+        digest
+    }
+
+    /// CTR-MTX-27 (spec §7.2): the router's payment, called only by `scaas::relayfee` right after the wrapped entry.
+    /// `pay_ref` is the ref the router computed from the call; lane `payLane(pay_ref)`, nonce 0 and relayer =
+    /// `marker` are fixed here (the relayer is checked against the marker, not the lane), so the payer's signature
+    /// verifies only for a payment signed for exactly this call through the router. Open mode (`to == marker`) pays
+    /// the submitting lane; the marker itself is never paid. Returns the payee.
+    package fun pay_routed(
+        lane: &signer,
+        marker: address,
+        owner: address,
+        asset: Object<Metadata>,
+        to: address,
+        amount: u128,
+        pay_ref: vector<u8>,
+        valid_until: u64,
+        extra: vector<u8>,
+        public_key: vector<u8>,
+        sig: vector<u8>,
+        envelope: vector<u8>,
+    ): address acquires Root, Account {
+        let lane_id = pay_lane(pay_ref);
+        let (digest, table) = pay_checked(marker, owner, asset, to, amount, pay_ref, lane_id, 0, valid_until, marker,
+            extra, public_key, sig, envelope);
+        let payee = if (to == marker) signer::address_of(lane) else to;
+        settle(owner, asset, payee, amount, pay_ref, lane_id, 0, valid_until, digest, table, &public_key, &envelope,
+            option::none());
+        payee
+    }
+
+    /// `relay_pay`'s body after `pay_checked`: lazy open, lane nonce, move to `payee`, events.
+    fun settle(
+        owner: address,
+        asset: Object<Metadata>,
+        payee: address,
+        amount: u128,
+        pay_ref: vector<u8>,
+        lane_id: vector<u8>,
+        nonce: u64,
+        valid_until: u64,
+        digest: vector<u8>,
+        table: vector<u256>,
+        public_key: &vector<u8>,
+        envelope: &vector<u8>,
+        meta: Option<vector<u8>>,
+    ) acquires Root, Account {
         let addr = account_of(owner);
-        if (!exists<Account>(addr)) open_lazily(owner, &public_key, &envelope, table);
+        if (!exists<Account>(addr)) open_lazily(owner, public_key, envelope, table);
         let acct = &mut Account[addr];
         let l = acct.lanes.borrow_mut_with_default(lane_id, Lane { next: 0, valid_until: 0 });
         l.next = nonce + 1;
         if (valid_until > l.valid_until) l.valid_until = valid_until;
         let amt = amount as u64;
-        primary_fungible_store::transfer(&object::generate_signer_for_extending(&acct.extend), asset, to, amt);
+        primary_fungible_store::transfer(&object::generate_signer_for_extending(&acct.extend), asset, payee, amt);
         let asset_addr = object::object_address(&asset);
         emit_executed(asset_addr, addr, owner, digest, lane_id, nonce);
-        emit_settled(asset_addr, owner, to, amt, pay_ref);
+        meta.for_each(|m| event::emit(PaymentMeta { contract: asset_addr, pay_id: pay_ref, meta: m }));
+        emit_settled(asset_addr, owner, payee, amt, pay_ref);
+    }
+
+    #[view]
+    /// CTR-MTX-26 `metaPayId(salt, meta)`; `salt` is 32 bytes.
+    public fun meta_pay_id(salt: vector<u8>, meta: vector<u8>): vector<u8> {
+        assert!(salt.length() == 32, EBAD_FIELD);
+        let b = PAY_META_DOMAIN;
+        b.append(salt);
+        b.append(keccak256(meta));
+        keccak256(b)
+    }
+
+    #[view]
+    /// `payLane(p)`: the 32-byte lane of a pay-meta / router payment.
+    public fun pay_lane(p: vector<u8>): vector<u8> {
+        let b = PAY_LANE_DOMAIN;
+        b.append(p);
+        keccak256(b)
     }
 
     #[view]
@@ -673,4 +802,14 @@ module scaas::meta {
 
     #[test_only]
     public fun init_for_test(publisher: &signer) { init_module(publisher) }
+
+    #[test_only]
+    public fun payment_meta_for_testing(contract: address, pay_id: vector<u8>, meta: vector<u8>): PaymentMeta {
+        PaymentMeta { contract, pay_id, meta }
+    }
+
+    #[test_only]
+    public fun payment_settled_for_testing(contract: address, from: address, to: address, amount: u64, pay_ref: vector<u8>): PaymentSettled {
+        PaymentSettled { contract, from, to, amount, pay_ref }
+    }
 }

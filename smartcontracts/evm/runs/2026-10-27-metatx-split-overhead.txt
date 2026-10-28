@@ -1,0 +1,54 @@
+# metatx-split T5 data-size bound at n2304-kmax4096, head b36c9dac + T5 test (pre-split: 2ceda92d, test/vectors/metatx-overhead-presplit.json)
+    tx regular / state / execution 5812462 195840 5796408
+  MEAS n2304-kmax4096 ecdsa S 5796408
+    tx regular / state / execution 12740063 65663010 10762201
+  MEAS n2304-kmax4096 ecdsa pqzl-M8-on 10762201
+  OVERHEAD n2304-kmax4096 ecdsa pqzl-M8-on smallest / largest / difference 7892 8861 969
+    tx regular / state / execution 21707672 43288290 10400254
+  MEAS n2304-kmax4096 ecdsa pqzh-M4-on 10400254
+  OVERHEAD n2304-kmax4096 ecdsa pqzh-M4-on smallest / largest / difference 7892 9963 2071
+    tx regular / state / execution 5970748 195840 5902182
+  MEAS n2304-kmax4096 mldsa65 S 5902182
+    tx regular / state / execution 12878910 65663010 10848536
+  MEAS n2304-kmax4096 mldsa65 pqzl-M8-on 10848536
+  OVERHEAD n2304-kmax4096 mldsa65 pqzl-M8-on smallest / largest / difference 9074 10111 1037
+    tx regular / state / execution 21922712 43288290 10489105
+  MEAS n2304-kmax4096 mldsa65 pqzh-M4-on 10489105
+  OVERHEAD n2304-kmax4096 mldsa65 pqzh-M4-on smallest / largest / difference 9074 11453 2379
+    tx regular / state / execution 8151458 195840 8125196
+  MEAS n2304-kmax4096 fndsa512 S 8125196
+    tx regular / state / execution 15064281 65663010 13076211
+  MEAS n2304-kmax4096 fndsa512 pqzl-M8-on 13076211
+  OVERHEAD n2304-kmax4096 fndsa512 pqzl-M8-on smallest / largest / difference 8517 9580 1063
+    tx regular / state / execution 21752728 43288290 12714791
+  MEAS n2304-kmax4096 fndsa512 pqzh-M4-on 12714791
+  OVERHEAD n2304-kmax4096 fndsa512 pqzh-M4-on smallest / largest / difference 8517 10922 2405
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 993.76ms (532.81ms CPU time)
+Ran 1 test suite in 994.58ms (993.76ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+# metatx-split T5 data-size bound at n2048-kmax1024, head b36c9dac + T5 test (pre-split: 2ceda92d, test/vectors/metatx-overhead-presplit.json)
+    tx regular / state / execution 4791506 195840 4775452
+  MEAS n2048-kmax1024 ecdsa S 4775452
+    tx regular / state / execution 13104581 70448850 10931507
+  MEAS n2048-kmax1024 ecdsa pqzl-M8-on 10931507
+  OVERHEAD n2048-kmax1024 ecdsa pqzl-M8-on smallest / largest / difference 7892 8945 1053
+    tx regular / state / execution 20390808 35540370 9999365
+  MEAS n2048-kmax1024 ecdsa pqzh-M4-on 9999365
+  OVERHEAD n2048-kmax1024 ecdsa pqzh-M4-on smallest / largest / difference 7892 9847 1955
+    tx regular / state / execution 4949792 195840 4881226
+  MEAS n2048-kmax1024 mldsa65 S 4881226
+    tx regular / state / execution 13243621 70448850 11018035
+  MEAS n2048-kmax1024 mldsa65 pqzl-M8-on 11018035
+  OVERHEAD n2048-kmax1024 mldsa65 pqzl-M8-on smallest / largest / difference 9074 10214 1140
+    tx regular / state / execution 20605848 35540370 10087952
+  MEAS n2048-kmax1024 mldsa65 pqzh-M4-on 10087952
+  OVERHEAD n2048-kmax1024 mldsa65 pqzh-M4-on smallest / largest / difference 9074 11312 2238
+    tx regular / state / execution 7130502 195840 7104240
+  MEAS n2048-kmax1024 fndsa512 S 7104240
+    tx regular / state / execution 15428839 70448850 13245557
+  MEAS n2048-kmax1024 fndsa512 pqzl-M8-on 13245557
+  OVERHEAD n2048-kmax1024 fndsa512 pqzl-M8-on smallest / largest / difference 8517 9683 1166
+    tx regular / state / execution 20435864 35540370 12313847
+  MEAS n2048-kmax1024 fndsa512 pqzh-M4-on 12313847
+  OVERHEAD n2048-kmax1024 fndsa512 pqzh-M4-on smallest / largest / difference 8517 10781 2264
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.01s (566.98ms CPU time)
+Ran 1 test suite in 1.01s (1.01s CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)

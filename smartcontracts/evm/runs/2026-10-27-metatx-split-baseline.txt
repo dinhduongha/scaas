@@ -1,0 +1,114 @@
+=== metatx-split T1 (+ fix 1) baseline on the pre-split code (head c9ec6fb0), forge forge Version: 1.8.5 ===
+=== 1. write (twice, byte-identical files): PARITY_WRITE=1 ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
+No files changed, compilation skipped
+Ran 2 tests for test/metatx/MetaTxParity.t.sol:MetaTxParityTest
+[PASS] test_parity() (gas: 759050803)
+Logs:
+  parity fixture written: cases / rule rows 1822 198
+[PASS] test_ruleTableParity() (gas: 3597)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 2.66s (2.51s CPU time)
+Ran 1 test suite in 2.66s (2.66s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 2.67s (2.52s CPU time)
+
+Ran 1 test suite in 2.67s (2.67s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+second write: files byte-identical (cmp)
+=== 2. replay (gas not compared): ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
+No files changed, compilation skipped
+Ran 2 tests for test/metatx/MetaTxParity.t.sol:MetaTxParityTest
+[PASS] test_parity() (gas: 950370720)
+[PASS] test_ruleTableParity() (gas: 62866057)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.50s (3.75s CPU time)
+Ran 1 test suite in 3.50s (3.50s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+=== 3. self-check with gas compared (PARITY_GAS=1, pre-split code only): PARITY_GAS=1 ../../scripts/capped forge test --match-path test/metatx/MetaTxParity.t.sol -vv ===
+No files changed, compilation skipped
+Ran 2 tests for test/metatx/MetaTxParity.t.sol:MetaTxParityTest
+[PASS] test_parity() (gas: 956930724)
+[PASS] test_ruleTableParity() (gas: 62866057)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 3.50s (3.75s CPU time)
+Ran 1 test suite in 3.50s (3.50s CPU time): 2 tests passed, 0 failed, 0 skipped (2 total tests)
+=== 4. gas baseline: ../../scripts/capped forge test --match-path test/v2/MetaTxGasV2.t.sol -vv ===
+No files changed, compilation skipped
+
+Ran 16 tests for test/v2/MetaTxGasV2.t.sol:MetaTxGasV2Test
+[PASS] test_gasA_warmBatchNoFee() (gas: 227787)
+Logs:
+  A warm batch, NONE
+     v1 (frozen) / v2 / delta 36017 80375 44358
+
+[PASS] test_gasB_coldBatchNoFee() (gas: 325714)
+Logs:
+  B cold batch, NONE
+     v1 (frozen) / v2 / delta 53117 178259 125142
+
+[PASS] test_gasBatchOfThreeVersusThreeSingles() (gas: 630520)
+Logs:
+  mtxBatchTransfer x3 (cold lanes), excl. 21000 intrinsic per tx 437562
+
+[PASS] test_gasC_warmFixedFee() (gas: 243762)
+Logs:
+  C warm batch, FIXED fee
+     v1 (frozen) / v2 / delta 44329 96205 51876
+
+[PASS] test_gasCalldata() (gas: 483850)
+Logs:
+  I calldata mtxExecuteTransfer 516 3372
+  I calldata mtxTransfer 420 2988
+  I calldata mtxExecuteTransfer(pay) 516 4128
+  I calldata mtxPay 452 3476
+
+[PASS] test_gasD_warmPercentFee() (gas: 243734)
+Logs:
+  D warm batch, PERCENT fee
+     v1 (frozen) / v2 / delta 44275 96132 51857
+
+[PASS] test_gasE_warmFixedRestricted() (gas: 245806)
+Logs:
+  E warm batch, FIXED+restrict
+     v1 (frozen) / v2 / delta 44521 96236 51715
+
+[PASS] test_gasF_newRecipient() (gas: 325787)
+Logs:
+  F warm batch, new recipient
+     v1 (frozen) / v2 / delta 53117 178283 125166
+
+[PASS] test_gasG_erc1271() (gas: 296681)
+Logs:
+  G cold batch, ERC-1271  v1 (frozen) / v2 50762 174940
+
+[PASS] test_gasGaslessUnwrap() (gas: 387906)
+Logs:
+  mtxExecute(unwrap) (cold lane, plain token, existing holder) 243939
+
+[PASS] test_gasH_cancel() (gas: 257939)
+Logs:
+  H cancel (cold)  v1 cancelMetaNonce (frozen) / v2 cancelNonce 23142 136853
+
+[PASS] test_gasNamedTransferVersusGeneric_logOnly() (gas: 334353)
+Logs:
+  mtxTransfer / mtxExecuteTransfer (warm lane) 80001 80420
+  mtxTransfer: 80001
+  mtxExecuteTransfer: 80420
+
+[PASS] test_gasNamedTransferWithFeeVersusGeneric_logOnly() (gas: 370756)
+Logs:
+  mtxTransferWithFee / mtxExecuteTransfer 96500 96123
+  mtxTransferWithFee: 96500
+  mtxExecuteTransfer: 96123
+
+[PASS] test_gasP_payOpColdLane() (gas: 548977)
+Logs:
+  P pay, fresh lane  v1 op (frozen) / v2 mtxExecuteTransfer / mtxPay 58040 181936 183749
+  P mtxPay: 183749
+  P mtxExecuteTransfer: 181936
+
+[PASS] test_gasUnwrapDirect() (gas: 148634)
+Logs:
+  unwrap 1:1 direct, existing holder 112966
+
+[PASS] test_gasWrap() (gas: 148375)
+Logs:
+  wrap 1:1 (fixed rate) 112714
+
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 7.19ms (10.06ms CPU time)
+
+Ran 1 test suite in 12.42ms (7.19ms CPU time): 16 tests passed, 0 failed, 0 skipped (16 total tests)

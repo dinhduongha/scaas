@@ -391,3 +391,14 @@ the proof is independent of the signing key.
 - The payer-account sponsorship and HTS-token relayer rewards described in early requirements are not used
   ([NET-HED-04](#NET-HED-04)); relayer fees on EVM-family chains are token fees in the meta-tx
   ([contracts/metatx](../contracts/metatx.md)).
+
+## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
+
+Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; rules [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) and [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27); decisions CTR-MTX-26 / -27 (commit per family below). Status BUILT unless a line says owed.
+
+Hedera runs the same EVM contracts, so `mtxPayMeta` / `uaPayMeta` and `MtxRelayFee` (CTR-MTX-26 / -27) are the EVM ones
+([evm.md](evm.md#paymeta-relayfee)). What differs is the signature rule, which the split keeps inside `MtxPipelineLib`
+(`requireSignature`): a 64-byte signature from an address with no code goes to the HIP-632 `HederaLib.requireValid`
+(a library the pipeline library links); otherwise the ERC-1271 / ECDSA rule. The Hedera mandate wallet and
+`SmartKeyAccount` keep their own composition (they do not link the library). No Hedera-specific figure was measured; the
+EVM figures stand as an upper bound for the token paths. Gas is priced by the node's simulation as for any call.

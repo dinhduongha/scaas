@@ -102,6 +102,22 @@ message(0x9b1c0d03) TradeSettled {
     b: Int as uint256;
 }
 
+/// CTR-MTX-26: emitted by the payer's wallet before its transfer, so it precedes the payee wallet's
+/// `PaymentSettled` in logical time. `meta` is the snake chain exactly as the relayer sent it (never parsed).
+message(0x9b1c0d04) PaymentMeta {
+    master: Address;
+    payId: Int as uint256;
+    meta: Cell;
+}
+
+/// CTR-MTX-27 (TON): a served fee-less entry (wallet `set_key` / `revoke`, Mandate owner `revoke`) acknowledges its
+/// successful handling to the sender of the call, just before its own outgoing message (the excess, or a revoke's
+/// cancel transfer to the DEX, whose excess comes back later along the DEX path). A failed action phase sends no message
+/// at all, so the ack proves compute and action ran; `digest` is the MetaOp the entry executed.
+message(0x5b0a1d35) RelayAck {
+    digest: Int as uint256;
+}
+
 // ------------------------------------------------------------------ constants
 
 const METAOP_DOMAIN: Int = 0x73636161732e6d6574616f702e7631; // "scaas.metaop.v1" (120 bits)
@@ -353,6 +369,40 @@ fun checkPasskey(a: Slice, record: Cell, digest: Int) {
     let signed = beginCell().storeSlice(authData).storeUint(cdjHash, 256).asSlice();
     let sig = beginCell().storeUint(r, 256).storeUint(sv, 256).asSlice();
     throwUnless(E_SIG, p256CheckDataSignature(signed, sig, pub));
+}
+
+// ------------------------------------------------------------------ CTR-MTX-26 (payment metadata)
+
+/// `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, `meta` = the bytes of the snake chain (each cell's
+/// data along its first ref; Tact's `keccak256(Slice)`), byte for byte the EVM `metaPayId`.
+fun metaPayId(salt: Int, meta: Cell): Int {
+    return keccak256(beginCell().storeSlice("scaas.pay.meta".asSlice()).storeUint(salt, 256)
+        .storeUint(keccak256(meta.beginParse()), 256).asSlice());
+}
+
+/// A pay-meta `meta` must be a plain snake: at most one ref per cell. `keccak256(Slice)` follows only the first ref of
+/// each cell, so a second ref would ride into `PaymentMeta` unsigned (T15 follow-up). Else `E_PARAMS`.
+fun requireSnake(meta: Cell) {
+    let s = meta.beginParse();
+    while (s.refs() == 1) {
+        s = s.preloadRef().beginParse();
+    }
+    throwUnless(E_PARAMS, s.refs() == 0);
+}
+
+/// `keccak256("scaas.pay.lane" ‖ p)`: the lane of a payment id (CTR-MTX-23).
+fun payLane(p: Int): Int {
+    return keccak256(beginCell().storeSlice("scaas.pay.lane".asSlice()).storeUint(p, 256).asSlice());
+}
+
+// ------------------------------------------------------------------ CTR-MTX-27 ack
+
+/// Gas the relay-fee executor spends on a `RelayAck` (measured ≈ 4.5 k in @ton/sandbox 0.45.0; ×2).
+const ACK_GAS: Int = 9000;
+
+/// The ack carries the TON for its receiver's gas at the chain's current price; its forward fee is paid apart.
+fun relayAck(to: Address, digest: Int) {
+    message(MessageParameters { to, value: getComputeFee(ACK_GAS, false), mode: SendPayFwdFeesSeparately, bounce: false, body: RelayAck { digest }.toCell() });
 }
 
 // ------------------------------------------------------------------ jetton helpers

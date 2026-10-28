@@ -260,7 +260,7 @@ consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners rela
 | Aptos | `sha3_256(bcs(MetaOp))` | `Account.lanes: Table<lane, Lane{next}>` | `#[view] lane_nonce(owner, lane)` | **yes** |
 | GRAM | `MetaOp` cell digest checked and emitted in `MetaTransactionExecuted` | jetton wallet `lanes: map<uint256, uint64>`, `next == m.nonce` (revoke: `next == nonce + 1`) | getter `get_lane_nonce(lane)` | **yes** (`pay`; lanes rotate every `LANE_TTL` — a check after `valid_until` is meaningless, expiry decides) |
 | Solana | `sha256(MetaOp)` | `LanePda{next}` seeded `["lane", subject, lane]`, `lp.next == args.nonce` | read the `LanePda` account | **yes** (`pay`; lane PDA prunable after `valid_until`) |
-| Soroban | `op_digest` = sha256(XDR) emitted by the token | **none in our contract**: replay protection is the host's `SorobanAddressCredentials` nonce (`i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖ validUntil)[0..8])`, a per-entry value, not a per-subject sequence); our contract only has a one-shot `pay_ref` | `ref_used(pay_ref)` only | **no** |
+| Soroban | `op_digest` = sha256(XDR) emitted by the token | **none in our contract**: replay protection is the host's `SorobanAddressCredentials` nonce (`i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖ validUntil)[0..8])`, a per-entry value, not a per-subject sequence); our contract only has a one-shot `pay_ref` | `ref_used(from, pay_ref)` only (was `ref_used(pay_ref)`; the token's `PayRef` set is per payer since metatx-split T10 fix 1) | **no** |
 
 Contract source lines (orientation, as of 2026-10-07, before the single `ERC20MetaTx` base replaces the earlier
 token lines): EVM `smartcontracts/src/metatx/ERC20MetaTx.sol` digest l.62–103,
@@ -446,7 +446,7 @@ given):
 9–13. Cosmos, Sui, Aptos, GRAM, Solana `pay` ops whose payload/digest are the existing cross-language vectors
    (`chains/cosmos/tests`, `adapters/aptos.rs` `payload_and_digest_match_move_and_python`, `adapters/solana.rs`
    `payload_digest_and_addresses_match_python_and_the_program`, `adapters/sui.rs` tests,
-   `chains/ton/vectors/ton-vectors.json`); expected decoded `from`/`lane`/`nonce`/`valid_until`/`token`, and
+   `smartcontracts/ton/vectors/ton-vectors.json` (was `chains/ton/vectors/ton-vectors.json`; read by the TON suite, `tests/vectors.spec.ts`)); expected decoded `from`/`lane`/`nonce`/`valid_until`/`token`, and
    `may_submit = true` **computed** from the file's `tokens` map and a full/submit policy on `token_of`. Each of 10–13
    has a twin whose `contract` is another payer's account ⇒ `may_submit = false`.
 14. Soroban op ⇒ `FAMILY_NOT_SUPPORTED`.

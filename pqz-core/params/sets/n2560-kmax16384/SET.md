@@ -39,7 +39,7 @@ Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-
 2. **Per-transaction regular gas ≤ 2^24** (Ethereum-like cap; no zero-gas or own-block-limit assumption, owner
    2026-10-21) [measured]: relayed op 1 (auditor) 9.35 M; op 7 M = 1 / 2 / 4 (auditor) 7.05 / 7.26 / 8.05 M; op 7 M = 8
    12.17 M with the auditor (G = 2), 10.91 M without; `UARegistry.register` 4.62 M; `mtxPrepareAcc` halves 3.17 M each;
-   `mtxRollOver` at `ROLL_MAX` 64: 12,410,516 via `mtxExecute`, 12,567,631 via `uaExecute` (≤ 0.75 · 2^24, the
+   `mtxRollOver` at `ROLL_MAX` 64: 12,418,528 via `mtxExecute`, 12,576,880 via `uaExecute` (metatx split, `runs/2026-10-27-metatx-split-rollscan-n2560-kmax16384.txt`) (≤ 0.75 · 2^24, the
    rollover rule on both relay paths; spec §7.6).
 3. **Calldata ≤ the EIP-7976 floor's 261,909 B per transaction:** the largest relayed PQZL calldata is 120,708 B (op 7
    M = 8, auditor) [measured]; the precompile input is built in memory by the token, bounded by `MAX_INPUT`, not by
@@ -51,9 +51,9 @@ Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-
    op 1 debits of this set and one op 7 M = 8; a transaction needs a block limit ≥ its state gas (the SCaaS testnet:
    200 M); no rule assumes a larger limit. The real cost (state gas is paid) applies on a customer chain.
 5. **`ROLL_MAX` 64** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas on both relay paths;
-   80 gives 13,792,932 / 13,950,047 via `mtxExecute` / `uaExecute`) [measured, `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2560-kmax16384.txt`;
-   the Task 7b measurement, with the contracts of then, gave 80]. **Tight:** on `uaExecute` (the binding path) 64 is
-   only 15,281 gas under the cap, so the next contract change may move it to 48: re-run the rollscan
+   80 gives 13,800,944 / 13,959,296 via `mtxExecute` / `uaExecute`) [measured, linear fit on the split bytecode, `smartcontracts/evm/runs/2026-10-27-metatx-split-gas-n2560-kmax16384.txt:572,581`;
+   the pre-split scan: `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2560-kmax16384.txt`; the Task 7b measurement, with the contracts of then, gave 80]. **Tight:** on `uaExecute` (the binding path) 64 is
+   only 6,032 gas under the cap (12,576,880 of 12,582,912; the metatx split moved it from 15,281), so the next contract change may move it to 48: re-run the rollscan
    (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan.sh`). Controller proposal, owner may override.
 6. **PQZH:** a backup only — its debit proofs (bounds 303,412–305,120 B [crate]) need `MAX_PROOF_PQZH` 327,680 B (owner
    2026-10-23, built in 8c part 2), and its debits exceed one transaction's calldata (relayed op 1 329,668 B, 21.11 M

@@ -1,0 +1,13 @@
+# forge build src --sizes --json (scripts/capped), metatx-split owner ruling item 1 (SigCheck.isValid follows CTR-UA-24), working tree on 99e44cce
+HederaMandateWallet: runtime 16748 -> 16793 B, init 17519 -> 17564 B
+MandateWallet: runtime 16260 -> 16305 B, init 17026 -> 17071 B
+MtxPipelineLib: runtime 8136 -> 8106 B, init 8188 -> 8158 B
+SCaaSDex: runtime 23151 -> 23196 B, init 24811 -> 24856 B
+SmartKeyAccount: runtime 19793 -> 19838 B, init 20459 -> 20504 B
+SmartKeyAccountFactory: runtime 1264 -> 1264 B, init 21911 -> 21956 B
+MtxRelayFee: runtime 2908 B (unchanged)
+MtxRelayExecutor: runtime 554 B (unchanged)
+UnderlyingPqzToken: runtime 61137 B (unchanged)
+NoUnderlyingToken: runtime 38195 B (unchanged)
+size gate: 0 error(s), 45 contracts
+rc=0

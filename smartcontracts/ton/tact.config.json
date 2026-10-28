@@ -3,6 +3,8 @@
   "projects": [
     { "name": "jetton", "path": "./contracts/jetton.tact", "output": "./build/jetton" },
     { "name": "mandate", "path": "./contracts/mandate.tact", "output": "./build/mandate" },
-    { "name": "dex", "path": "./contracts/dex.tact", "output": "./build/dex" }
+    { "name": "dex", "path": "./contracts/dex.tact", "output": "./build/dex" },
+    { "name": "relayfee", "path": "./contracts/relayfee.tact", "output": "./build/relayfee" },
+    { "name": "testkit", "path": "./tests/contracts/actfail.tact", "output": "./build/testkit" }
   ]
 }

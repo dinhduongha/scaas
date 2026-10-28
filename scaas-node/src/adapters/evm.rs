@@ -5,19 +5,16 @@ use std::sync::{Arc, RwLock};
 
 use alloy::primitives::{Address, Bytes, B256};
 use alloy::providers::Provider;
-use alloy::rpc::types::Filter;
-use alloy::sol_types::SolEvent;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 
-use crate::abi::IToken;
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
 use crate::finality::{quorum_ok, safe_head, Mode};
 use crate::guard::{self, Guard};
-use crate::indexer::encode_event;
+use crate::indexer::{pay_events, pay_filter};
 use crate::odoo::Job;
 use crate::submit::{job_digest, work_from_job};
 
@@ -49,7 +46,7 @@ impl EvmAdapter {
             .collect();
         let mode = if cfg.finality.mode == "tag" { Mode::Tag } else { Mode::Depth(cfg.finality.depth) };
         Ok(Self {
-            guard: Guard::new(cfg, tokens.clone()),
+            guard: Guard::new(cfg, tokens.clone())?,
             key: cfg.chain_key(),
             family: if cfg.family == "hedera" { Family::Hedera } else { Family::Evm },
             chains,
@@ -176,11 +173,8 @@ impl ChainAdapter for EvmAdapter {
         if addrs.is_empty() {
             return Ok(vec![]);
         }
-        let f = Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
-            IToken::PaymentSettled::SIGNATURE_HASH,
-            IToken::MetaTransactionExecuted::SIGNATURE_HASH,
-        ]);
-        Ok(self.chains[0].primary().get_logs(&f).await?.iter().filter_map(encode_event).collect())
+        let router = self.guard.router();
+        Ok(pay_events(&self.chains[0].primary().get_logs(&pay_filter(from, to, addrs, router)).await?, router))
     }
 
     async fn lane_balance(&self, lane: usize) -> Result<Option<u128>> {

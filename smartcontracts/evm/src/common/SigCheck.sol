@@ -9,8 +9,9 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 ///         `isValidSignature` by `staticcall` with a per-signer gas cap (50 000 by default; 400 000 only for
 ///         `SmartKeyAccount` clones, CTR-ACC-05), at most 32 bytes of returndata read, and the EIP-150 rule of
 ///         CTR-DEX-08: the caller must hold `cap·64/63 + GAS_MARGIN` gas, so a relayer cannot starve the call to
-///         turn a valid signature into an invalid one. "Contract" excludes an EIP-7702 delegated EOA
-///         (`0xef0100‖address`): its key still signs.
+///         turn a valid signature into an invalid one. An EIP-7702 delegated EOA (code exactly `0xef0100‖address`)
+///         follows accounts.md CTR-UA-24 on every path (owner ruling 2026-10-28): ECDSA by its base key, else ERC-1271
+///         on the address (it runs the delegate) under the same cap.
 /// @dev HIP-632 hook (P1c, CTR-TOK-23): `isValid` gains a `bool hedera` argument (the implementation's
 ///      `IS_HEDERA`); when it is set, `sig.length == 64` and `signer` has no code, the answer is HIP-632
 ///      `isAuthorizedRaw(signer, digest, sig)` (built: `HederaAccountAuth.asView()`; moved into `HederaLib` in
@@ -33,16 +34,10 @@ library SigCheck {
         return true;
     }
 
+    /// @notice accounts.md CTR-UA-24, one rule for the address and the UA paths (owner ruling 2026-10-28): no code ⇒
+    ///         ECDSA; the 23-byte EIP-7702 designator ⇒ ECDSA by the base key, else ERC-1271 through the delegate; other
+    ///         code ⇒ ERC-1271.
     function isValid(address signer, bytes32 digest, bytes memory sig, uint256 cap1271)
-        internal view returns (bool ok)
-    {
-        if (!isContract(signer)) return _ecdsa(signer, digest, sig);
-        return _erc1271(signer, digest, sig, cap1271);
-    }
-
-    /// @notice accounts.md CTR-UA-24 (the UA ledger's native path, like the UA registry): no code ⇒ ECDSA; the 23-byte
-    ///         EIP-7702 designator ⇒ ECDSA by the base key, else ERC-1271 through the delegate; other code ⇒ ERC-1271.
-    function isValid7702(address signer, bytes32 digest, bytes memory sig, uint256 cap1271)
         internal view returns (bool)
     {
         if (signer.code.length == 0) return _ecdsa(signer, digest, sig);

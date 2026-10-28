@@ -1,0 +1,196 @@
+# ua-qt at commit 67fa7a45
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Performing Test HAVE_STDATOMIC
+-- Performing Test HAVE_STDATOMIC - Success
+-- Found WrapAtomic: TRUE  
+-- Found OpenGL: /usr/lib/x86_64-linux-gnu/libOpenGL.so   
+-- Found WrapOpenGL: TRUE  
+-- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
+-- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
+-- Rust Toolchain: 1.99.0-x86_64-unknown-linux-gnu
+-- Rust Target: x86_64-unknown-linux-gnu
+-- Determining required link libraries for target x86_64-unknown-linux-gnu
+-- Required static libs for target x86_64-unknown-linux-gnu: gcc_s;util;rt;pthread;m;dl;c
+-- Required link flags for target x86_64-unknown-linux-gnu: 
+-- Found Rust: /home/ha/.rustup/toolchains/1.99.0-x86_64-unknown-linux-gnu/bin/rustc (found version "1.99.0") 
+-- Using Corrosion as a subdirectory
+-- CXX-Qt Found crate(s): scaas_ua_qt
+-- Configuring done (9.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/build
+[  0%] Built target cargo-prebuild_scaas_ua_qt
+[  0%] Built target tst_ua_autogen_timestamp_deps
+warning: failed to connect to jobserver from environment variable `MAKEFLAGS="s -j2 --jobserver-auth=3,4"`: cannot open file descriptor 3 from the jobserver environment variable value: Bad file descriptor (os error 9)
+[  0%] Built target scaas_ua_qml_module_mock_obj_output
+[ 25%] Automatic MOC for target tst_ua
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling rand_core v0.6.4
+   Compiling libc v0.2.190
+   Compiling autocfg v1.5.1
+   Compiling thiserror v1.0.69
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling semver v1.0.28
+   Compiling equivalent v1.0.2
+   Compiling generic-array v0.14.9
+   Compiling hashbrown v0.17.1
+   Compiling termcolor v1.4.1
+[ 25%] Built target tst_ua_autogen
+   Compiling serde_core v1.0.229
+   Compiling zerocopy v0.8.62
+   Compiling unicode-width v0.2.2
+   Compiling num-traits v0.2.19
+   Compiling serde_json v1.0.145
+   Compiling serde v1.0.229
+   Compiling indexmap v2.14.2
+   Compiling codespan-reporting v0.13.1
+   Compiling unicode-segmentation v1.13.3
+   Compiling syn v2.0.119
+   Compiling syn v3.0.8
+   Compiling anyhow v1.0.104
+   Compiling jobserver v0.1.35
+   Compiling convert_case v0.6.0
+   Compiling indoc v2.0.8
+   Compiling cfg-if v1.0.5
+   Compiling cc v1.8.0
+   Compiling which v8.0.6
+   Compiling unicode-width v0.1.14
+   Compiling ryu v1.0.23
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling codespan-reporting v0.11.1
+   Compiling num-integer v0.1.47
+   Compiling paste v1.0.15
+   Compiling cxx-gen v0.7.202
+   Compiling cxxbridge-flags v1.0.202
+   Compiling num-bigint v0.4.8
+   Compiling ahash v0.8.12
+   Compiling ff v0.13.1
+   Compiling arrayvec v0.7.8
+   Compiling base16ct v0.2.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling either v1.19.0
+   Compiling group v0.13.0
+   Compiling rand_chacha v0.3.1
+   Compiling link-cplusplus v1.0.12
+   Compiling cxx v1.0.202
+   Compiling rand v0.8.8
+   Compiling itertools v0.13.0
+   Compiling allocator-api2 v0.2.21
+   Compiling ark-std v0.5.0
+   Compiling once_cell v1.21.4
+   Compiling cpufeatures v0.2.17
+   Compiling hashbrown v0.15.5
+   Compiling rustc_version v0.4.1
+   Compiling serde_derive v1.0.229
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling curve25519-dalek v4.1.3
+   Compiling cxxbridge-macro v1.0.202
+   Compiling foldhash v0.2.0
+   Compiling enum-ordinalize v4.4.2
+   Compiling static_assertions v1.1.0
+   Compiling keccak v0.1.6
+   Compiling zeroize_derive v1.5.0
+   Compiling thiserror-impl v1.0.69
+   Compiling ark-serialize-derive v0.5.0
+   Compiling ark-ff-asm v0.5.0
+   Compiling educe v0.6.0
+   Compiling ark-ff-macros v0.5.0
+   Compiling zeroize v1.9.1
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling der v0.7.10
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling clang-format v0.3.0
+   Compiling digest v0.10.7
+   Compiling crypto-bigint v0.5.5
+   Compiling cxx-qt-gen v0.10.0
+   Compiling ark-serialize v0.5.0
+   Compiling sec1 v0.7.3
+   Compiling signature v2.2.0
+   Compiling hmac v0.12.1
+   Compiling sha2 v0.10.9
+   Compiling rfc6979 v0.4.0
+   Compiling elliptic-curve v0.13.8
+   Compiling ed25519 v2.2.3
+   Compiling qt-build-utils v0.10.0
+   Compiling ecdsa v0.16.9
+   Compiling primeorder v0.13.6
+   Compiling sha3 v0.10.9
+   Compiling ark-ff v0.5.0
+   Compiling cxx-qt-build v0.10.0
+   Compiling p256 v0.13.2
+   Compiling k256 v0.13.4
+   Compiling ed25519-dalek v2.2.0
+   Compiling cxx-qt-macro v0.10.0
+   Compiling cxx-qt v0.10.0
+   Compiling cxx-qt-lib v0.10.0
+   Compiling scaas_ua_qt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt)
+   Compiling ark-poly v0.5.0
+   Compiling ark-ec v0.5.0
+   Compiling ark-bls12-381 v0.5.0
+   Compiling ark-bn254 v0.5.0
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-rs)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4m 06s
+Copying byproducts `libscaas_ua_qt.a` to /home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/build
+[ 25%] Built target _cargo-build_scaas_ua_qt
+[ 25%] Built target cargo-build_scaas_ua_qt
+[ 50%] Building CXX object CMakeFiles/tst_ua.dir/tst_ua_autogen/mocs_compilation.cpp.o
+[ 75%] Building CXX object CMakeFiles/tst_ua.dir/tests/tst_ua.cpp.o
+[100%] Linking CXX executable tst_ua
+[100%] Built target tst_ua
+UpdateCTestConfiguration  from :/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/build/DartConfiguration.tcl
+Test project /home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: tst_ua
+
+1: Test command: /home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/build/tst_ua "-input" "/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/tests/tst_ua.qml"
+1: Working Directory: /home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/ua-qt/build
+1: Environment variables: 
+1:  QT_QPA_PLATFORM=offscreen
+1: Test timeout computed to be: 10000000
+1: ********* Start testing of ua *********
+1: Config: Using QtTest library 6.12.0, Qt 6.12.0 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 11.5.0 20240719 (Red Hat 11.5.0-5)), ubuntu 24.04
+1: PASS   : ua::UaKinds::initTestCase()
+1: PASS   : ua::UaKinds::test_encode_msig()
+1: PASS   : ua::UaKinds::test_invalid_rows()
+1: PASS   : ua::UaKinds::test_last_error_cleared_and_notifies()
+1: PASS   : ua::UaKinds::test_malformed_input_sets_last_error()
+1: PASS   : ua::UaKinds::test_malformed_numbers_and_hex()
+1: PASS   : ua::UaKinds::test_messages()
+1: PASS   : ua::UaKinds::test_meta_pay_id_vectors()
+1: PASS   : ua::UaKinds::test_natives_native_space_canonical_ids()
+1: PASS   : ua::UaKinds::test_relay_ref_matches_vector()
+1: PASS   : ua::UaKinds::test_structures()
+1: PASS   : ua::UaKinds::test_table_groups_purposes_constants()
+1: PASS   : ua::UaKinds::test_valid_rows()
+1: PASS   : ua::UaKinds::cleanupTestCase()
+1: Totals: 14 passed, 0 failed, 0 skipped, 0 blacklisted, 168ms
+1: ********* Finished testing of ua *********
+1/1 Test #1: tst_ua ...........................   Passed    0.35 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.36 sec
+rc=0

@@ -374,7 +374,8 @@ contract UALedgerTest is UALedgerBase {
 
     // ----- CTR-UA-24: an EIP-7702 delegated native `from` -----
 
-    /// The base key's ECDSA passes; a delegate's ERC-1271 passes on the UA path (not on v2's `_isContract` rule).
+    /// The base key's ECDSA passes; a delegate's ERC-1271 passes on the UA path and, since the owner ruling of 2026-10-28
+    /// (CTR-UA-24 on every path), on the address path too.
     function test_7702_nativeFrom() public {
         MockWallet delegate = new MockWallet(bob, 0, 0, address(0)); // ERC-1271: ECDSA by bob over the hash
         vm.signAndAttachDelegation(address(delegate), ALICE_PK);
@@ -390,9 +391,10 @@ contract UALedgerTest is UALedgerBase {
             mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
         bytes memory v2Session = _ecdsa(BOB_PK, tok.mtxTransferDigest(v2));
-        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        uint256 before = tok.balanceOf(bob);
         vm.prank(RELAYER);
-        tok.mtxExecuteTransfer(v2, v2Session);
+        tok.mtxExecuteTransfer(v2, v2Session); // through the delegate's isValidSignature on the address path
+        assertEq(tok.balanceOf(bob), before + 1);
     }
 
     // ----- registry binding (CTR-UA-19) -----

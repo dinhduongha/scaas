@@ -1,0 +1,85 @@
+No files changed, compilation skipped
+
+Ran 16 tests for test/v2/MetaTxGasV2.t.sol:MetaTxGasV2Test
+[PASS] test_gasA_warmBatchNoFee() (gas: 241067)
+Logs:
+  A warm batch, NONE
+     v1 (frozen) / v2 / delta 36017 87936 51919
+
+[PASS] test_gasB_coldBatchNoFee() (gas: 339018)
+Logs:
+  B cold batch, NONE
+     v1 (frozen) / v2 / delta 53117 185844 132727
+
+[PASS] test_gasBatchOfThreeVersusThreeSingles() (gas: 664412)
+Logs:
+  mtxBatchTransfer x3 (cold lanes), excl. 21000 intrinsic per tx 454310
+
+[PASS] test_gasC_warmFixedFee() (gas: 257027)
+Logs:
+  C warm batch, FIXED fee
+     v1 (frozen) / v2 / delta 44329 103751 59422
+
+[PASS] test_gasCalldata() (gas: 489572)
+Logs:
+  I calldata mtxExecuteTransfer 516 3372
+  I calldata mtxTransfer 420 2988
+  I calldata mtxExecuteTransfer(pay) 516 4128
+  I calldata mtxPay 452 3476
+
+[PASS] test_gasD_warmPercentFee() (gas: 256987)
+Logs:
+  D warm batch, PERCENT fee
+     v1 (frozen) / v2 / delta 44275 103666 59391
+
+[PASS] test_gasE_warmFixedRestricted() (gas: 258995)
+Logs:
+  E warm batch, FIXED+restrict
+     v1 (frozen) / v2 / delta 44521 103744 59223
+
+[PASS] test_gasF_newRecipient() (gas: 339091)
+Logs:
+  F warm batch, new recipient
+     v1 (frozen) / v2 / delta 53117 185868 132751
+
+[PASS] test_gasG_erc1271() (gas: 304172)
+Logs:
+  G cold batch, ERC-1271  v1 (frozen) / v2 50762 182453
+
+[PASS] test_gasGaslessUnwrap() (gas: 402130)
+Logs:
+  mtxExecute(unwrap) (cold lane, plain token, existing holder) 252861
+
+[PASS] test_gasH_cancel() (gas: 257917)
+Logs:
+  H cancel (cold)  v1 cancelMetaNonce (frozen) / v2 cancelNonce 23142 136853
+
+[PASS] test_gasNamedTransferVersusGeneric_logOnly() (gas: 360749)
+Logs:
+  mtxTransfer / mtxExecuteTransfer (warm lane) 87421 87974
+  mtxTransfer: 87421
+  mtxExecuteTransfer: 87974
+
+[PASS] test_gasNamedTransferWithFeeVersusGeneric_logOnly() (gas: 397167)
+Logs:
+  mtxTransferWithFee / mtxExecuteTransfer 103950 103662
+  mtxTransferWithFee: 103950
+  mtxExecuteTransfer: 103662
+
+[PASS] test_gasP_payOpColdLane() (gas: 575389)
+Logs:
+  P pay, fresh lane  v1 op (frozen) / v2 mtxExecuteTransfer / mtxPay 58040 189496 191179
+  P mtxPay: 191179
+  P mtxExecuteTransfer: 189496
+
+[PASS] test_gasUnwrapDirect() (gas: 148568)
+Logs:
+  unwrap 1:1 direct, existing holder 112922
+
+[PASS] test_gasWrap() (gas: 148331)
+Logs:
+  wrap 1:1 (fixed rate) 112692
+
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 12.12ms (14.15ms CPU time)
+
+Ran 1 test suite in 18.02ms (12.12ms CPU time): 16 tests passed, 0 failed, 0 skipped (16 total tests)

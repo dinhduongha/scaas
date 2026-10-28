@@ -270,6 +270,12 @@ module scaas::dex {
     /// Đóng vĩnh viễn một lệnh bằng chữ ký `Cancel` của một khoá Account của maker (ai nộp cũng được). Không hạn
     /// (RS5-10): huỷ chỉ có lợi cho người ký. Đã đóng ⇒ không làm gì.
     package entry fun cancel_signed(market: address, order: vector<u8>, pk: vector<u8>, sig: vector<u8>, env: vector<u8>) {
+        cancel(market, order, pk, sig, env);
+    }
+
+    /// `cancel_signed`'s body: `false` = the order was already closed and nothing changed (`relayfee` pays nothing
+    /// for that, CTR-MTX-27).
+    package fun cancel(market: address, order: vector<u8>, pk: vector<u8>, sig: vector<u8>, env: vector<u8>): bool {
         let o = parse_order(&order);
         assert!(o.market == market, EBAD_ORDER);
         let h = sha3_256(order);
@@ -278,9 +284,10 @@ module scaas::dex {
         assert!(meta::verify_signed(meta::account_of(o.maker), &pk, CANCEL_DOMAIN, &d, &sig, &env), EBAD_SIGNATURE);
         let m = &mut Market[market];
         let done = *m.filled.borrow_with_default(h, &0);
-        if (done >= o.sell_amount) return;
+        if (done >= o.sell_amount) return false;
         m.filled.upsert(h, o.sell_amount);
         event::emit(OrderCancelled { market, order_hash: h, maker: o.maker });
+        true
     }
 
     /// Vô hiệu mọi lệnh `nonce < min_nonce` của maker trên market NÀY. Tăng nghiêm ngặt ⇒ phát lại vô hại.

@@ -34,6 +34,7 @@ fs_permissions = [
   { access = "read", path = "./out" },
   { access = "read", path = "./src" },
   { access = "read", path = "../vectors" },
+  { access = "read-write", path = "../vectors/metatx" },
   { access = "read", path = "./size-baseline.json" },
 ]
 

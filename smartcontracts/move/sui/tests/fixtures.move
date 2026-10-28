@@ -5,6 +5,7 @@ module scaas::fixtures;
 
 use scaas::dex::{Self, Dex};
 use scaas::meta::{Self, Account, AdminCap, Registry, Root};
+use scaas::relayfee::{Self, RelayFee};
 use scaas::vectors as v;
 use sui::clock::{Self, Clock};
 use sui::coin::{Self, Coin};
@@ -19,10 +20,11 @@ const ADMIN: address = @0xad;
 
 public fun admin(): address { ADMIN }
 
-/// tx1 init · tx2 network + registry SUI/EUR + DEX. Trả scenario ở đầu tx3 (sender ADMIN).
+/// tx1 init (meta, relayfee) · tx2 network + registry SUI/EUR + DEX. Trả scenario ở đầu tx3 (sender ADMIN).
 public fun setup(): Scenario {
     let mut sc = ts::begin(ADMIN);
     meta::init_for_testing(sc.ctx());
+    relayfee::init_for_testing(sc.ctx());
     sc.next_tx(ADMIN);
     let mut root = sc.take_shared<Root>();
     let cap = sc.take_from_sender<AdminCap>();
@@ -115,5 +117,8 @@ fun print_ids() {
     let b = sc.take_shared<Registry<EUR>>();
     std::debug::print(&object::id(&b));
     ts::return_shared(b);
+    let rf = sc.take_shared<RelayFee>();
+    std::debug::print(&object::id(&rf));
+    ts::return_shared(rf);
     sc.end();
 }

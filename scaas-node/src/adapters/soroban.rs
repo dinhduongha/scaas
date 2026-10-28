@@ -16,8 +16,8 @@ use stellar_xdr::{
     AccountId, DecoratedSignature, FeeBumpTransaction, FeeBumpTransactionEnvelope, FeeBumpTransactionExt,
     FeeBumpTransactionInnerTx, HashIdPreimage, HostFunction, InvokeContractArgs, InvokeHostFunctionOp, LedgerEntryData,
     LedgerKey, LedgerKeyAccount, Limits, Memo, MuxedAccount, Operation, OperationBody, Preconditions, PublicKey,
-    ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, SequenceNumber, Signature, SignatureHint,
-    SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanCredentials,
+    ReadXdr, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal, ScVec, SequenceNumber, Signature, SignatureHint,
+    SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials,
     SorobanTransactionData, TimeBounds, TimePoint, Transaction, TransactionEnvelope, TransactionExt,
     TransactionV1Envelope, Uint256, WriteXdr,
 };
@@ -45,6 +45,7 @@ pub struct SorobanAdapter {
     fee_bump: Option<usize>,
     base_fee: u32,
     quorum: usize,
+    relay_fee: RelayFeePolicy,
     hashes: Mutex<HashMap<u64, String>>,
 }
 
@@ -179,23 +180,38 @@ pub fn decode_event(ev: &Value) -> Option<Value> {
     let mut out = json!({
         "contract": ev["contractId"].as_str()?, "block_number": ledger,
         "tx_hash": format!("0x{}", tx.to_lowercase()), "log_index": log_index,
-        "from": scval_addr(topics.get(1)?)?,
     });
+    let amount = |v: &ScVal| scval_i128(v).filter(|a| *a >= 0).map(|a| a.to_string());
     match scval_str(topics.first()?)?.as_str() {
         "PaymentSettled" => {
             let ScVal::Vec(Some(data)) = &value else { return None };
-            let amount = scval_i128(data.first()?)?;
-            if amount < 0 {
-                return None;
-            }
             out["event"] = json!("PaymentSettled");
+            out["from"] = json!(scval_addr(topics.get(1)?)?);
             out["to"] = json!(scval_addr(topics.get(2)?)?);
-            out["amount"] = json!(amount.to_string());
+            out["amount"] = json!(amount(data.first()?)?);
             out["entry_ref"] = json!(scval_b32(data.get(1)?)?);
         }
         "MetaTransactionExecuted" => {
             out["event"] = json!("MetaTransactionExecuted");
+            out["from"] = json!(scval_addr(topics.get(1)?)?);
             out["digest"] = json!(scval_b32(&value)?);
+        }
+        // CTR-MTX-26 / -27: joined to their `PaymentSettled` (`indexer::join_pay_events`), never sent alone
+        "PaymentMeta" => {
+            let ScVal::Bytes(meta) = &value else { return None };
+            out["event"] = json!("PaymentMeta");
+            out["entry_ref"] = json!(scval_b32(topics.get(1)?)?);
+            out["meta"] = json!(format!("0x{}", hex(meta.as_slice())));
+        }
+        "RelayFeePaid" => {
+            let ScVal::Vec(Some(data)) = &value else { return None };
+            out["event"] = json!("RelayFeePaid");
+            out["entry_ref"] = json!(scval_b32(topics.get(1)?)?);
+            out["target"] = json!(scval_addr(topics.get(2)?)?);
+            out["token"] = json!(scval_addr(topics.get(3)?)?);
+            out["from"] = json!(scval_addr(data.first()?)?);
+            out["to"] = json!(scval_addr(data.get(1)?)?);
+            out["amount"] = json!(amount(data.get(2)?)?);
         }
         _ => return None,
     }
@@ -227,6 +243,7 @@ impl SorobanAdapter {
             fee_bump,
             base_fee: p.get("base_fee").and_then(|v| v.as_integer()).map(|v| v as u32).unwrap_or(DEFAULT_BASE_FEE),
             quorum: cfg.finality.quorum.max(1),
+            relay_fee: RelayFeePolicy::from_cfg(cfg).with_context(|| format!("chain {}", cfg.chain_key()))?,
             hashes: Mutex::new(HashMap::new()),
         })
     }
@@ -311,7 +328,10 @@ impl ChainAdapter for SorobanAdapter {
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let op = job.op.clone().ok_or_else(|| SimError::Revert("job without op".into()))?;
         let valid_until = op["valid_until"].as_u64().ok_or_else(|| SimError::Revert("op.valid_until missing".into()))?;
-        let (call, auth) = host_call(&self.network_id, &op).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let pk = lane_pk(self.signer(lane).map_err(rv)?).map_err(rv)?;
+        let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
+        let (call, auth) = job_call(&self.network_id, &op, &lane_addr, &self.relay_fee).map_err(rv)?;
         let tx = self.tx(lane, 0, valid_until, call, auth).map_err(|e| SimError::Revert(format!("{e:#}")))?;
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: Default::default() });
         let b64 = env.to_xdr_base64(Limits::none()).map_err(|e| SimError::Revert(e.to_string()))?;
@@ -427,6 +447,9 @@ impl ChainAdapter for SorobanAdapter {
 
     async fn events(&self, from: u64, to: u64, contracts: &[String]) -> Result<Vec<Value>> {
         let mut out = Vec::new();
+        // the tokens' events, and the router's `RelayFeePaid` (`RelayFeePaid` only from it, a token event never)
+        let router = self.relay_fee.router.as_ref().map(|r| r.to_string());
+        let contracts: Vec<String> = contracts.iter().cloned().chain(router.clone()).collect();
         for chunk in contracts.chunks(CONTRACTS_PER_FILTER) {
             let filter = json!([{"type": "contract", "contractIds": chunk}]);
             let mut cursor: Option<String> = None;
@@ -438,7 +461,7 @@ impl ChainAdapter for SorobanAdapter {
                     if ev["ledger"].as_u64().is_some_and(|l| l > to) {
                         break 'pages;
                     }
-                    if let Some(mut e) = decode_event(ev) {
+                    if let Some(mut e) = decode_event(ev).filter(|e| (e["event"] == "RelayFeePaid") == (e["contract"].as_str() == router.as_deref())) {
                         e["block_hash"] = json!(self.block_hash(e["block_number"].as_u64().unwrap_or_default()).await?);
                         out.push(e);
                     }
@@ -450,7 +473,7 @@ impl ChainAdapter for SorobanAdapter {
             }
         }
         out.sort_by_key(|e| (e["block_number"].as_u64(), e["tx_hash"].as_str().map(str::to_owned), e["log_index"].as_u64()));
-        Ok(out)
+        Ok(crate::indexer::join_pay_events(out))
     }
 }
 
@@ -461,6 +484,199 @@ fn events_params(filter: &Value, from: u64, to: u64, cursor: Option<&str>) -> Va
         None => json!({"startLedger": from, "endLedger": to + 1, "filters": filter, "pagination": {"limit": EVENT_PAGE}}),
         Some(c) => json!({"filters": filter, "pagination": {"cursor": c, "limit": EVENT_PAGE}}),
     }
+}
+
+/// CTR-MTX-26: `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, the token's `meta_pay_id`.
+pub fn meta_pay_id(salt: &[u8], meta: &[u8]) -> [u8; 32] {
+    let mut b = b"scaas.pay.meta".to_vec();
+    b.extend_from_slice(salt);
+    b.extend_from_slice(alloy::primitives::keccak256(meta).as_slice());
+    alloy::primitives::keccak256(b).0
+}
+
+/// CTR-MTX-27 `ref` (the router's `relay_ref`): `keccak256("scaas.relayfee" ‖ network id ‖ xdr(target) ‖
+/// keccak256(xdr((func, args))) ‖ salt)`, `xdr((func, args))` the ScVal `Vec[Symbol(func), Vec(args)]`. The
+/// function symbol is hashed as received (any bytes), never re-encoded.
+pub fn relay_ref(network: &[u8; 32], target: &ScAddress, func: &ScSymbol, args: &[ScVal], salt: &[u8; 32]) -> [u8; 32] {
+    let pair = vec![ScVal::Symbol(func.clone()), ScVal::Vec(Some(ScVec(args.to_vec().try_into().expect("args"))))];
+    let call = ScVal::Vec(Some(ScVec(pair.try_into().expect("pair"))));
+    let mut b = b"scaas.relayfee".to_vec();
+    b.extend_from_slice(network);
+    b.extend_from_slice(&ScVal::Address(target.clone()).to_xdr(Limits::none()).expect("xdr"));
+    b.extend_from_slice(alloy::primitives::keccak256(call.to_xdr(Limits::none()).expect("xdr")).as_slice());
+    b.extend_from_slice(salt);
+    alloy::primitives::keccak256(b).0
+}
+
+fn bytes_arg(v: &ScVal) -> Option<&[u8]> {
+    match v {
+        ScVal::Bytes(b) => Some(b.as_slice()),
+        _ => None,
+    }
+}
+
+fn op_bytes(op: &Value, k: &str) -> Result<Vec<u8>> {
+    unhex(op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"))?.trim_start_matches("0x"))
+}
+
+/// The signed invocation of `op.payload`.
+fn signed_call(network: &[u8; 32], op: &Value) -> Result<InvokeContractArgs> {
+    let s = |k: &str| op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"));
+    Ok(auth_entry(network, s("payload")?, s("from")?, s("signature")?)?.1)
+}
+
+/// Pay-meta job: the signed invocation is the token's `pay_meta`; `op.salt` / `op.meta` must be the signed
+/// arguments (the auth entry covers them), `op.pay_ref` (when given) the commitment, `meta` within the cap.
+pub fn pay_meta_job(network: &[u8; 32], op: &Value, max_meta: usize) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)> {
+    let (call, auth) = host_call(network, op)?;
+    let signed = signed_call(network, op)?;
+    if signed.function_name.0.as_slice() != b"pay_meta" || signed.args.len() != 6 {
+        bail!("pay-meta job must sign pay_meta(from, to, amount, salt, meta, valid_until)");
+    }
+    if call != signed {
+        bail!("the executed call is not the signed pay_meta");
+    }
+    let (salt, meta) = (op_bytes(op, "salt")?, op_bytes(op, "meta")?);
+    if meta.len() > max_meta {
+        bail!("meta is {} B, above max_pay_meta_bytes {max_meta}", meta.len());
+    }
+    if bytes_arg(&signed.args[3]) != Some(&salt[..]) || bytes_arg(&signed.args[4]) != Some(&meta[..]) {
+        bail!("op.salt / op.meta differ from the signed pay_meta arguments");
+    }
+    if !op["pay_ref"].is_null() && op_bytes(op, "pay_ref")? != meta_pay_id(&salt, &meta) {
+        bail!("pay_ref != metaPayId(salt, meta)");
+    }
+    Ok((call, auth))
+}
+
+/// What the node accepts as a relay-fee job (controller call 2026-10-27, owner may override): the configured
+/// router, a registered token, and a fee that reaches this lane and is at least `min_amount` (`relay_fee_ours`).
+pub struct RelayFeePolicy {
+    pub router: Option<ScAddress>,
+    pub tokens: Vec<ScAddress>,
+    pub params: crate::config::RelayParams,
+}
+
+impl RelayFeePolicy {
+    /// `params.relay_fee = { router = "C…", min_amount = N, relay_bound_payee }`, `params.max_pay_meta_bytes`
+    /// (`ChainCfg::relay_params`) and the chain's registered `tokens`. A `router` that is set but is not a contract
+    /// strkey is a startup error, never a silently disabled router.
+    pub fn from_cfg(cfg: &ChainCfg) -> Result<Self> {
+        let params = cfg.relay_params()?;
+        let router = match params.router.as_deref() {
+            None => None,
+            Some(r) => match ScAddress::from_str(r) {
+                Ok(a @ ScAddress::Contract(_)) => Some(a),
+                _ => bail!("params.relay_fee.router {r:?} is not a Soroban contract address (C…)"),
+            },
+        };
+        let tokens = cfg.tokens.iter()
+            .map(|t| ScAddress::from_str(&t.address).map_err(|e| anyhow!("tokens: {} is not a Soroban address: {e}", t.address)))
+            .collect::<Result<_>>()?;
+        Ok(Self { router, tokens, params })
+    }
+}
+
+/// The job's invocation, checked before simulation (fail closed): `op.kind` by the one rule (`adapter::op_kind`):
+/// `"pay_meta"` (`pay_meta_job`), `"relay_fee"` (`relay_fee_job`), none = the signed invocation as it is; outside a
+/// relay, never a pay to the router.
+pub fn job_call(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &RelayFeePolicy)
+    -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)>
+{
+    let kind = crate::adapter::op_kind(op, &crate::adapter::PAY_KINDS)?;
+    let (call, auth) = match kind {
+        Some("pay_meta") => pay_meta_job(network, op, policy.params.max_pay_meta_bytes)?,
+        Some(_) => {
+            let (c, a, _) = relay_fee_job(network, op, lane, policy)?;
+            return Ok((c, a));
+        }
+        None => host_call(network, op)?,
+    };
+    if pays_router(&call, policy) {
+        bail!("a plain pay to the relay-fee router is refused (CTR-MTX-27: never pay the router)");
+    }
+    Ok((call, auth))
+}
+
+/// CTR-MTX-27: a token `pay` / `pay_meta` / `transfer` whose payee (argument 1) is the router. The router's balance is
+/// whatever a relay in open mode forwards, so coins sent there outside a relay are stranded.
+pub fn pays_router(call: &InvokeContractArgs, policy: &RelayFeePolicy) -> bool {
+    let Some(router) = &policy.router else { return false };
+    matches!(call.function_name.0.as_slice(), b"pay" | b"pay_meta" | b"transfer")
+        && call.args.get(1) == Some(&ScVal::Address(router.clone()))
+}
+
+/// Relay-fee job: `extra.call` is the router's `relay(payer, target, func, args, salt, token, to, amount,
+/// valid_until, relayer)`; the payer's signed root is the same call with the eight `require_auth_for_args`
+/// arguments (no payer, no relayer) and the token's `pay` (carrying `ref`) as sub-invocation. Checks the policy,
+/// `ref` against the call bytes, the relayer against this lane (`relayer` is the transaction source) and the signed
+/// tree against the executed call. Soroban does not satisfy `relayer.require_auth()` from the transaction source
+/// alone: the returned auth carries an explicit `SourceAccount` entry rooted at the same call.
+pub fn relay_fee_job(
+    network: &[u8; 32],
+    op: &Value,
+    lane: &ScAddress,
+    policy: &RelayFeePolicy,
+) -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>, [u8; 32])> {
+    let (call, mut auth) = host_call(network, op)?;
+    if op["extra"]["call"].is_null() {
+        bail!("relay-fee job needs extra.call (the router call)");
+    }
+    let SorobanCredentials::Address(cred) = &auth[0].credentials else { bail!("payer entry has no address credentials") };
+    let SorobanAuthorizedFunction::ContractFn(root) = &auth[0].root_invocation.function else { bail!("signed root is not a contract call") };
+    if call.function_name.0.as_slice() != b"relay" || call.args.len() != 10 || root.function_name.0.as_slice() != b"relay" {
+        bail!("relay-fee job must call relay(payer, target, func, args, salt, token, to, amount, valid_until, relayer)");
+    }
+    if root.contract_address != call.contract_address || root.args.as_slice() != &call.args[1..9] {
+        bail!("the signed root is not this relay call");
+    }
+    if policy.router.as_ref() != Some(&call.contract_address) {
+        bail!("relay target is not the configured router");
+    }
+    if call.args[0] != ScVal::Address(cred.address.clone()) {
+        bail!("payer argument is not the signer");
+    }
+    if call.args[9] != ScVal::Address(lane.clone()) {
+        bail!("relayer argument is not this lane");
+    }
+    let (ScVal::Address(target), ScVal::Symbol(func), ScVal::Vec(Some(inner))) = (&call.args[1], &call.args[2], &call.args[3]) else {
+        bail!("relay target / func / args malformed");
+    };
+    let salt: [u8; 32] = bytes_arg(&call.args[4]).and_then(|b| b.try_into().ok()).ok_or_else(|| anyhow!("salt is 32 bytes"))?;
+    let ScVal::Address(token) = &call.args[5] else { bail!("token argument malformed") };
+    if !policy.tokens.contains(token) {
+        bail!("token is not registered on this chain");
+    }
+    let amount = scval_i128(&call.args[7]).and_then(|a| u128::try_from(a).ok()).ok_or_else(|| anyhow!("amount argument malformed or negative"))?;
+    // open mode: `to` is the router (it forwards to the relayer, this lane); a bound payee is `to` itself
+    let to = &call.args[6];
+    crate::adapter::relay_fee_ours(*to == ScVal::Address(call.contract_address.clone()), *to == ScVal::Address(lane.clone()), amount, &policy.params)?;
+    let rf = relay_ref(network, target, func, inner.as_slice(), &salt);
+    if op_bytes(op, "ref")? != rf {
+        bail!("op.ref != relay_ref(target, func, args, salt)");
+    }
+    // The signed tree must contain exactly the payment that commits to `ref`.
+    let pays = auth[0].root_invocation.sub_invocations.iter().filter(|s| match &s.function {
+        SorobanAuthorizedFunction::ContractFn(f) => {
+            f.contract_address == *token
+                && f.function_name.0.as_slice() == b"pay"
+                && f.args.len() == 5
+                && f.args[0] == call.args[0]
+                && f.args[1] == call.args[6]
+                && f.args[2] == call.args[7]
+                && bytes_arg(&f.args[3]) == Some(&rf[..])
+                && f.args[4] == call.args[8]
+        }
+        _ => false,
+    });
+    if pays.count() != 1 {
+        bail!("the payer's signature does not carry token.pay(payer, to, amount, ref, valid_until)");
+    }
+    auth.push(SorobanAuthorizationEntry {
+        credentials: SorobanCredentials::SourceAccount,
+        root_invocation: SorobanAuthorizedInvocation { function: SorobanAuthorizedFunction::ContractFn(call.clone()), sub_invocations: Default::default() },
+    });
+    Ok((call, auth, rf))
 }
 
 #[cfg(test)]
@@ -526,10 +742,294 @@ mod tests {
         assert!(decode_event(&ev).is_none(), "SEP-41 transfer events are not ours");
     }
 
+    /// T17 (G): `PaymentMeta` and the router's `RelayFeePaid` decode and join the expected token's `PaymentSettled`
+    /// of the same transaction (`indexer::join_pay_events`); a fee in another token joins nothing; neither is a row.
+    #[test]
+    fn soroban_indexer_joins_pay_meta_and_relay_fee() {
+        const ROUTER: &str = "CBCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEJ5HZ";
+        let x = |v: ScVal| v.to_xdr_base64(Limits::none()).unwrap();
+        let addr = |s: &str| x(ScVal::Address(ScAddress::from_str(s).unwrap()));
+        let sym = |s: &str| x(ScVal::Symbol(ScSymbol(s.try_into().unwrap())));
+        let b = |v: &[u8]| ScVal::Bytes(v.to_vec().try_into().unwrap());
+        let amt = |n: u64| ScVal::I128(stellar_xdr::Int128Parts { hi: 0, lo: n });
+        let vecv = |v: Vec<ScVal>| x(ScVal::Vec(Some(v.try_into().unwrap())));
+        let ev = |contract: &str, i: u32, topic: Vec<String>, value: String| json!({"ledger": 7, "contractId": contract,
+            "txHash": "ab".repeat(32), "id": format!("1-{i}"), "topic": topic, "value": value});
+        let (pid, rf) = ([4u8; 32], [5u8; 32]);
+        let evs = [
+            ev(CONTRACT, 1, vec![sym("PaymentMeta"), x(b(&pid))], x(b(&[0xab, 0xcd]))),
+            ev(CONTRACT, 2, vec![sym("PaymentSettled"), addr(FROM), addr(WALLET)], vecv(vec![amt(100), b(&pid)])),
+            ev(CONTRACT, 3, vec![sym("PaymentSettled"), addr(FROM), addr(ROUTER)], vecv(vec![amt(5), b(&rf)])),
+            ev(ROUTER, 4, vec![sym("RelayFeePaid"), x(b(&rf)), addr(WALLET), addr(CONTRACT)],
+               vecv(vec![ScVal::Address(ScAddress::from_str(FROM).unwrap()), ScVal::Address(ScAddress::from_str(FROM).unwrap()), amt(5)])),
+            ev(ROUTER, 5, vec![sym("RelayFeePaid"), x(b(&rf)), addr(WALLET), addr(WALLET)],
+               vecv(vec![ScVal::Address(ScAddress::from_str(FROM).unwrap()), ScVal::Address(ScAddress::from_str(FROM).unwrap()), amt(5)])),
+        ];
+        let out = crate::indexer::join_pay_events(evs.iter().filter_map(decode_event).collect());
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| e["event"] == "PaymentSettled"));
+        assert_eq!((out[0]["meta"].as_str(), out[1]["meta"].as_str()), (Some("0xabcd"), None));
+        assert_eq!((out[1]["relay_target"].as_str(), out[1]["relay_payee"].as_str()), (Some(WALLET), Some(FROM)), "open mode: paid to the router");
+        assert!(out[0]["relay_payee"].is_null());
+    }
+
+    // ------------------------------------------------------------ metatx-split T10 (CTR-MTX-26 / 27)
+
+    use stellar_xdr::{
+        HashIdPreimageSorobanAuthorization, Hash, Int128Parts, StringM,
+    };
+
+    const WALLET: &str = "CAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGGJH";
+    const OWNER: &str = FROM;
+    /// `smartcontracts/soroban/contracts/relay-fee/src/test.rs::VEC_REF` (network id 0x07 x 32, salt 0x09 x 32).
+    const VEC_REF: &str = "ce0e8797ad9aa168b64b32821f51bea8a931dbb5e8e15e0044cb94ca9dd4f106";
+    const SALT: [u8; 32] = [9; 32];
+    const NET7: [u8; 32] = [7; 32];
+
+    fn addr(s: &str) -> ScVal {
+        ScVal::Address(ScAddress::from_str(s).unwrap())
+    }
+    fn sym(s: &str) -> ScVal {
+        ScVal::Symbol(ScSymbol(s.try_into().unwrap()))
+    }
+    fn byt(b: &[u8]) -> ScVal {
+        ScVal::Bytes(b.to_vec().try_into().unwrap())
+    }
+    fn vecv(v: Vec<ScVal>) -> ScVal {
+        ScVal::Vec(Some(ScVec(v.try_into().unwrap())))
+    }
+    fn i128v(x: u64) -> ScVal {
+        ScVal::I128(Int128Parts { hi: 0, lo: x })
+    }
+    fn inv(contract: &str, f: &str, args: Vec<ScVal>, subs: Vec<SorobanAuthorizedInvocation>) -> SorobanAuthorizedInvocation {
+        SorobanAuthorizedInvocation {
+            function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
+                contract_address: ScAddress::from_str(contract).unwrap(),
+                function_name: ScSymbol(f.try_into().unwrap()),
+                args: args.try_into().unwrap(),
+            }),
+            sub_invocations: subs.try_into().unwrap(),
+        }
+    }
+    fn payload(net: [u8; 32], root: SorobanAuthorizedInvocation) -> String {
+        let p = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
+            network_id: Hash(net),
+            nonce: 42,
+            signature_expiration_ledger: 1000,
+            invocation: root,
+        });
+        hex(&p.to_xdr(Limits::none()).unwrap())
+    }
+    fn sig() -> String {
+        "ab".repeat(64)
+    }
+    fn meta_row() -> Value {
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        rows[0].clone()
+    }
+    fn strip(s: &Value) -> Vec<u8> {
+        unhex(s.as_str().unwrap().trim_start_matches("0x")).unwrap()
+    }
+    fn pay_meta_op(salt: &[u8], meta: &[u8], op_salt: &[u8], op_meta: &[u8]) -> Value {
+        let args = vec![addr(FROM), addr(WALLET), i128v(40), byt(salt), byt(meta), ScVal::U64(1_800_000_300)];
+        json!({"payload": payload(NET7, inv(CONTRACT, "pay_meta", args, vec![])), "from": FROM, "signature": sig(),
+               "contract": CONTRACT, "valid_until": 1_800_000_300u64,
+               "salt": format!("0x{}", hex(op_salt)), "meta": format!("0x{}", hex(op_meta)), "extra": {}})
+    }
+
+    #[test]
+    fn soroban_pay_meta_job_builds_pay_meta() {
+        let r = meta_row();
+        let (salt, meta, id) = (strip(&r["salt"]), strip(&r["meta"]), strip(&r["payId"]));
+        // The shared vector: payId = keccak256("scaas.pay.meta" || salt || keccak256(meta)).
+        assert_eq!(meta_pay_id(&salt, &meta).to_vec(), id);
+        let mut op = pay_meta_op(&salt, &meta, &salt, &meta);
+        let (call, auth) = pay_meta_job(&NET7, &op, 2048).unwrap();
+        assert_eq!((call.function_name.0.as_slice(), call.args.len(), auth.len()), (&b"pay_meta"[..], 6, 1));
+        // pay_ref given by the job must equal the commitment.
+        op["pay_ref"] = json!(format!("0x{}", hex(&id)));
+        assert!(pay_meta_job(&NET7, &op, 2048).is_ok());
+        op["pay_ref"] = json!(format!("0x{}", "00".repeat(32)));
+        assert!(pay_meta_job(&NET7, &op, 2048).is_err(), "pay_ref != metaPayId");
+        // The unsigned salt / meta must be the signed ones (the auth entry covers them).
+        assert!(pay_meta_job(&NET7, &pay_meta_op(&salt, &meta, &[1; 32], &meta), 2048).is_err());
+        assert!(pay_meta_job(&NET7, &pay_meta_op(&salt, &meta, &salt, b"other"), 2048).is_err());
+        // Wrong function, over the cap.
+        let mut plain = pay_meta_op(&salt, &meta, &salt, &meta);
+        plain["payload"] = json!(payload(NET7, inv(CONTRACT, "pay", vec![addr(FROM), addr(WALLET), i128v(1), byt(&id), ScVal::U64(1)], vec![])));
+        assert!(pay_meta_job(&NET7, &plain, 2048).is_err());
+        let big = vec![7u8; 2049];
+        assert!(pay_meta_job(&NET7, &pay_meta_op(&salt, &big, &salt, &big), 2048).unwrap_err().to_string().contains("max_pay_meta_bytes"));
+        assert!(pay_meta_job(&NET7, &pay_meta_op(&salt, &big, &salt, &big), 4096).is_ok(), "params.max_pay_meta_bytes raises it");
+        assert!(pay_meta_job(&network_id(NETWORK), &op, 2048).is_err(), "foreign network");
+    }
+
+    fn relay_job(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8]) -> Value {
+        relay_job_with(token_pay_ref, relayer, target_in_call, op_ref, sym("revoke"))
+    }
+
+    fn relay_job_with(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8], func: ScVal) -> Value {
+        relay_job_to(token_pay_ref, relayer, target_in_call, op_ref, func, WALLET2)
+    }
+
+    /// `to` = the payee: the router (open mode, the default), the lane, or anyone else (bound).
+    fn relay_job_to(token_pay_ref: &[u8], relayer: &str, target_in_call: &str, op_ref: &[u8], func: ScVal, payee: &str) -> Value {
+        let token = CONTRACT;
+        let args = vec![addr(token), addr(OWNER)];
+        let to = addr(payee);
+        let signed = vec![addr(WALLET), func, vecv(args.clone()), byt(&SALT), addr(token), to.clone(), i128v(7), ScVal::U64(1_800_000_300)];
+        let pay = inv(token, "pay", vec![addr(OWNER), to.clone(), i128v(7), byt(token_pay_ref), ScVal::U64(1_800_000_300)], vec![]);
+        let root = inv(WALLET2, "relay", signed.clone(), vec![pay]);
+        let mut full = vec![addr(OWNER)];
+        let mut sg = signed;
+        sg[0] = addr(target_in_call);
+        full.extend(sg);
+        full.push(addr(relayer));
+        let call = InvokeContractArgs {
+            contract_address: ScAddress::from_str(WALLET2).unwrap(),
+            function_name: ScSymbol("relay".try_into().unwrap()),
+            args: full.try_into().unwrap(),
+        };
+        json!({"kind": "relay_fee", "payload": payload(NET7, root), "from": OWNER, "signature": sig(), "contract": WALLET2,
+               "valid_until": 1_800_000_300u64, "ref": format!("0x{}", hex(op_ref)),
+               "extra": {"call": hex(&call.to_xdr(Limits::none()).unwrap())}})
+    }
+    const WALLET2: &str = "CBCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEJ5HZ"; // the router
+    const LANE: &str = "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6";
+
+    fn policy() -> RelayFeePolicy {
+        RelayFeePolicy { router: Some(ScAddress::from_str(WALLET2).unwrap()), tokens: vec![ScAddress::from_str(CONTRACT).unwrap()],
+                         params: rp(5) }
+    }
+
+    fn rp(min_amount: u128) -> crate::config::RelayParams {
+        crate::config::RelayParams { min_amount, ..Default::default() }
+    }
+
+    /// T17 (every adapter): the one `op.kind` rule, never a pay to the router outside a relay, a relay fee that
+    /// reaches this lane (open or bound to it) else refused unless `relay_bound_payee`, and a router that is set but
+    /// not a contract address is a startup error.
+    #[test]
+    fn soroban_kind_router_and_payee_rules() {
+        let lane = ScAddress::from_str(LANE).unwrap();
+        let pay = |to: &str| json!({"payload": payload(NET7, inv(CONTRACT, "pay", vec![addr(FROM), addr(to), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": 1_800_000_300u64, "extra": {}});
+        assert!(job_call(&NET7, &pay(WALLET), &lane, &policy()).is_ok());
+        for k in [json!(7), json!(true), json!({}), json!("pay")] {
+            let mut o = pay(WALLET);
+            o["kind"] = k.clone();
+            assert!(job_call(&NET7, &o, &lane, &policy()).unwrap_err().to_string().contains("unknown op.kind"), "{k}");
+        }
+        let mut o = pay(WALLET);
+        o["meta"] = json!("0x00");
+        assert!(job_call(&NET7, &o, &lane, &policy()).is_err(), "kind-less meta");
+        assert!(job_call(&NET7, &pay(WALLET2), &lane, &policy()).unwrap_err().to_string().contains("router"), "never pay the router");
+        assert!(job_call(&NET7, &pay(WALLET2), &lane, &RelayFeePolicy { router: None, ..policy() }).is_ok(), "no router configured");
+        // the payee rule
+        let args = vec![addr(CONTRACT), addr(OWNER)];
+        let rf = relay_ref(&NET7, &ScAddress::from_str(WALLET).unwrap(), &ScSymbol("revoke".try_into().unwrap()), &args, &SALT);
+        let to = |payee: &str| relay_job_to(&rf, LANE, WALLET, &rf, sym("revoke"), payee);
+        assert!(relay_fee_job(&NET7, &to(LANE), &lane, &policy()).is_ok(), "bound to this lane");
+        let e = relay_fee_job(&NET7, &to(WALLET), &lane, &policy()).err().unwrap().to_string();
+        assert!(e.contains("relay_bound_payee"), "{e}");
+        let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, min_amount: 1_000, ..Default::default() }, ..policy() };
+        assert!(relay_fee_job(&NET7, &to(WALLET), &lane, &sponsored).is_ok(), "sponsored: no min_amount");
+        assert!(relay_fee_job(&NET7, &to(LANE), &lane, &sponsored).is_err(), "ours: min_amount");
+        // config
+        let cfg = |router: toml::Value| {
+            let mut t = toml::Table::new();
+            t.insert("router".into(), router);
+            let mut c = ChainCfg::default();
+            c.params.insert("relay_fee".into(), toml::Value::Table(t));
+            c
+        };
+        assert!(RelayFeePolicy::from_cfg(&cfg(WALLET2.into())).unwrap().router.is_some());
+        for bad in [toml::Value::from("CNOTANADDRESS"), toml::Value::from(FROM), toml::Value::from(7)] {
+            assert!(RelayFeePolicy::from_cfg(&cfg(bad.clone())).is_err(), "{bad}");
+        }
+        let mut c = cfg(WALLET2.into());
+        c.params["relay_fee"].as_table_mut().unwrap().insert("min_amount".into(), (-1).into());
+        assert!(RelayFeePolicy::from_cfg(&c).is_err(), "a negative min_amount is an error, never the default");
+        let mut c = cfg(WALLET2.into());
+        c.tokens = vec![crate::config::TokenCfg { address: "CNOTANADDRESS".into(), decimals: 7 }];
+        assert!(format!("{:#}", RelayFeePolicy::from_cfg(&c).err().expect("bad token accepted")).contains("tokens"), "T17 fix 1");
+    }
+
+    #[test]
+    fn soroban_relay_fee_job_checks_ref() {
+        let args = vec![addr(CONTRACT), addr(OWNER)];
+        let revoke = ScSymbol("revoke".try_into().unwrap());
+        let rf = relay_ref(&NET7, &ScAddress::from_str(WALLET).unwrap(), &revoke, &args, &SALT);
+        assert_eq!(hex(&rf), VEC_REF, "same ref as the contract's test");
+        assert_ne!(rf, relay_ref(&NET7, &ScAddress::from_str(WALLET).unwrap(), &revoke, &args, &[8; 32]), "salt is in the ref");
+        let lane = ScAddress::from_str(LANE).unwrap();
+        let ok = relay_job(&rf, LANE, WALLET, &rf);
+        let (call, auth, got) = relay_fee_job(&NET7, &ok, &lane, &policy()).unwrap();
+        assert_eq!((call.function_name.0.as_slice(), call.args.len(), got), (&b"relay"[..], 10, rf));
+        // The payer's entry plus the explicit source-account entry (source auth is not implicit), rooted at the call.
+        assert_eq!(auth.len(), 2);
+        assert!(matches!(auth[0].credentials, SorobanCredentials::Address(_)));
+        assert!(matches!(auth[1].credentials, SorobanCredentials::SourceAccount));
+        assert_eq!(auth[1].root_invocation.function, SorobanAuthorizedFunction::ContractFn(call.clone()));
+        assert!(auth[1].root_invocation.sub_invocations.is_empty());
+        let bad = |o: Value| relay_fee_job(&NET7, &o, &lane, &policy()).is_err();
+        // The payment's ref is not the call's; the job's declared ref is not the call's.
+        assert!(bad(relay_job(&[9; 32], LANE, WALLET, &rf)));
+        assert!(bad(relay_job(&rf, LANE, WALLET, &[9; 32])));
+        // The relayer argument is not this lane (the router marker).
+        assert!(bad(relay_job(&rf, FROM, WALLET, &rf)));
+        // The executed call differs from the signed one.
+        assert!(bad(relay_job(&rf, LANE, CONTRACT, &rf)));
+        // No explicit call: refused.
+        let mut bare = ok.clone();
+        bare["extra"] = json!({});
+        assert!(bad(bare));
+        // Policy: other router, unregistered token, fee below the minimum.
+        let other = RelayFeePolicy { router: Some(ScAddress::from_str(WALLET).unwrap()), ..policy() };
+        assert!(relay_fee_job(&NET7, &ok, &lane, &other).is_err());
+        let none = RelayFeePolicy { router: None, ..policy() };
+        assert!(relay_fee_job(&NET7, &ok, &lane, &none).is_err());
+        let no_token = RelayFeePolicy { tokens: vec![], ..policy() };
+        assert!(relay_fee_job(&NET7, &ok, &lane, &no_token).is_err());
+        let dear = RelayFeePolicy { params: rp(8), ..policy() };
+        assert!(relay_fee_job(&NET7, &ok, &lane, &dear).is_err());
+        assert!(relay_fee_job(&NET7, &ok, &lane, &RelayFeePolicy { params: rp(7), ..policy() }).is_ok());
+    }
+
+    /// A function symbol that is not UTF-8 (32 raw bytes) is hashed as received: no panic, and a bad ref.
+    #[test]
+    fn relay_fee_job_survives_non_utf8_symbol() {
+        let weird = ScVal::Symbol(ScSymbol(StringM::<32>::try_from(vec![0xffu8; 32]).unwrap()));
+        let lane = ScAddress::from_str(LANE).unwrap();
+        let o = relay_job_with(&[1; 32], LANE, WALLET, &[2; 32], weird);
+        assert!(relay_fee_job(&NET7, &o, &lane, &policy()).is_err());
+    }
+
     proptest! {
         #[test]
         fn payload_decoder_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..512), sig in "[0-9a-f]{0,200}") {
             let _ = host_call(&network_id(NETWORK), &op(&hex(&bytes), &sig));
+        }
+
+        #[test]
+        fn jobs_never_panic_on_untrusted_input(bytes in proptest::collection::vec(any::<u8>(), 0..512), sig in "[0-9a-f]{0,200}",
+                                               call in "[0-9a-f]{0,400}", i in any::<usize>(), b in any::<u8>()) {
+            let net = network_id(NETWORK);
+            let lane = ScAddress::from_str(LANE).unwrap();
+            let mut o = op(&hex(&bytes), &sig);
+            o["extra"] = json!({"call": call});
+            o["salt"] = json!(sig);
+            o["meta"] = json!(sig);
+            let _ = pay_meta_job(&net, &o, 2048);
+            let _ = relay_fee_job(&net, &o, &lane, &policy());
+            // A well-formed job with one byte of its call mutated.
+            let rf = [1u8; 32];
+            let mut v = relay_job(&rf, LANE, WALLET, &rf);
+            let mut c = unhex(v["extra"]["call"].as_str().unwrap()).unwrap();
+            let n = c.len();
+            c[i % n] = b;
+            v["extra"]["call"] = json!(hex(&c));
+            let _ = relay_fee_job(&NET7, &v, &lane, &policy());
         }
 
         #[test]

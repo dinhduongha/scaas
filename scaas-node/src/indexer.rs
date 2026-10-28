@@ -9,7 +9,7 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::IToken;
+use crate::abi::{IMtxRelayFee, IToken};
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -42,6 +42,23 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["from"] = json!(format!("{:#x}", e.from));
         v["to"] = json!(format!("{:#x}", e.to));
         v["amount"] = json!(e.value.to_string());
+    } else if topic0 == IToken::PaymentMeta::SIGNATURE_HASH {
+        // joined to its PaymentSettled, never sent alone (`join_pay_events`)
+        let e = log.log_decode::<IToken::PaymentMeta>().ok()?.inner.data;
+        v["event"] = json!("PaymentMeta");
+        v["entry_ref"] = json!(format!("{:#x}", e.payId));
+        v["meta"] = json!(format!("0x{}", alloy::hex::encode(&e.meta)));
+    } else if topic0 == IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH {
+        let e = log.log_decode::<IMtxRelayFee::RelayFeePaid>().ok()?.inner.data;
+        // ids: a zero-padded address, else a UA id (the node indexes no UA payment on EVM: it then joins nothing)
+        let id = |w: B256| if w[..12] == [0; 12] { format!("{:#x}", Address::from_word(w)) } else { format!("{w:#x}") };
+        v["event"] = json!("RelayFeePaid");
+        v["entry_ref"] = json!(format!("{:#x}", e.r#ref));
+        v["target"] = json!(format!("{:#x}", e.target));
+        v["token"] = json!(format!("{:#x}", e.token));
+        v["from"] = json!(id(e.payer));
+        v["to"] = json!(id(e.payee));
+        v["amount"] = json!(e.amount.to_string());
     } else if topic0 == IToken::MetaTransactionExecuted::SIGNATURE_HASH {
         let e = log.log_decode::<IToken::MetaTransactionExecuted>().ok()?.inner.data;
         v["event"] = json!("MetaTransactionExecuted");
@@ -56,6 +73,73 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         return None;
     }
     Some(v)
+}
+
+/// CTR-MTX-26 / -27 indexer join, one rule for every family (T17, controller ruling 2026-10-28, owner may override).
+/// Each family's decoder emits, next to `PaymentSettled`, `PaymentMeta` (`contract` = the token, `entry_ref` = the
+/// payId, `meta` hex, `from` when the event names it) and `RelayFeePaid` (`contract` = the router, `entry_ref` = `ref`,
+/// `token`, `from` = the payer, `to` = the payee, `amount`, `target`). Only the expected token's `PaymentSettled`
+/// proves a payment, and nothing joins by `entry_ref` alone (a 0-amount or fake-token event with the same id joins
+/// nothing):
+/// - a `PaymentMeta` gives its `meta` to the first later `PaymentSettled` of the same token in the same transaction
+///   with the same `entry_ref` (and `from`, when the meta event has one);
+/// - a `RelayFeePaid` gives `relay_target` / `relay_payee` to the `PaymentSettled` of its `token` in the same
+///   transaction with the same `(from, entry_ref)` and `amount`, paid to the payee or to the router (open mode).
+///
+/// A `PaymentMeta` or `RelayFeePaid` without its `PaymentSettled` proves nothing (not paid) and neither is ever sent
+/// as a row of its own: Odoo's `chain_event_ingest` knows `PaymentSettled`, `MetaTransactionExecuted`, `Transfer`, and
+/// reads the new fields only as fields.
+pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
+    let key = |v: &Value, k: &str| v[k].as_str().map(str::to_string);
+    let at = |v: &Value| v["log_index"].as_u64().unwrap_or(0);
+    let of = |events: &[Value], e: &str| events.iter().enumerate().filter(|(_, v)| v["event"] == e).map(|(i, _)| i).collect::<Vec<_>>();
+    let (settled, metas, fees) = (of(&events, "PaymentSettled"), of(&events, "PaymentMeta"), of(&events, "RelayFeePaid"));
+    let mut taken = vec![false; events.len()];
+    for i in metas {
+        let m = events[i].clone();
+        let j = settled.iter().copied().filter(|&j| {
+            let p = &events[j];
+            !taken[j] && key(p, "tx_hash") == key(&m, "tx_hash") && key(p, "contract") == key(&m, "contract")
+                && key(p, "entry_ref") == key(&m, "entry_ref") && at(p) > at(&m)
+                && (m["from"].is_null() || key(p, "from") == key(&m, "from"))
+        }).min_by_key(|&j| at(&events[j]));
+        if let Some(j) = j {
+            taken[j] = true;
+            events[j]["meta"] = m["meta"].clone();
+        }
+    }
+    for i in fees {
+        let f = events[i].clone();
+        if let Some(&j) = settled.iter().find(|&&j| {
+            let p = &events[j];
+            p["relay_payee"].is_null() && key(p, "tx_hash") == key(&f, "tx_hash") && key(p, "contract") == key(&f, "token")
+                && key(p, "entry_ref") == key(&f, "entry_ref") && key(p, "from") == key(&f, "from")
+                && key(p, "amount") == key(&f, "amount") && (key(p, "to") == key(&f, "to") || key(p, "to") == key(&f, "contract"))
+        }) {
+            events[j]["relay_target"] = f["target"].clone();
+            events[j]["relay_payee"] = f["to"].clone();
+        }
+    }
+    events.retain(|v| v["event"] != "PaymentMeta" && v["event"] != "RelayFeePaid");
+    events
+}
+
+/// The token events the indexer reads (and, with a router, its `RelayFeePaid`), decoded and joined.
+pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Address>) -> Filter {
+    addrs.extend(router);
+    Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
+        IToken::PaymentSettled::SIGNATURE_HASH,
+        IToken::MetaTransactionExecuted::SIGNATURE_HASH,
+        IToken::PaymentMeta::SIGNATURE_HASH,
+        IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH,
+    ])
+}
+
+/// `pay_filter`'s logs ⇒ Odoo's events: a `RelayFeePaid` only from the router, a token event only from a token.
+pub fn pay_events(logs: &[Log], router: Option<Address>) -> Vec<Value> {
+    let rf = IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH;
+    let ours = |l: &&Log| (l.topic0() == Some(&rf)) == (Some(l.address()) == router);
+    join_pay_events(logs.iter().filter(ours).filter_map(encode_event).collect())
 }
 
 /// Cặp (token, ví nhận) đã duyệt; Odoo gửi dạng chuẩn, cặp nào không parse được thì bỏ.
@@ -80,10 +164,10 @@ const DRIFT_ERR_BACKOFF: Duration = Duration::from_secs(300);
 
 /// Vòng indexer. Drift C chạy TRONG vòng này, giữa hai bước ingest: cursor đứng yên trong lúc đọc số dư nên
 /// `height == indexed_block` luôn đúng (review S1-2: task riêng đua với indexer và có thể không bao giờ ghi được).
-pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: String) {
+pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: String, router: Option<Address>) {
     let mut drift_due = std::time::Instant::now();
     loop {
-        match step(&chain, &odoo).await {
+        match step(&chain, &odoo, router).await {
             Ok(true) => continue, // còn tồn đọng: đi tiếp ngay
             Ok(false) => {}
             Err(e) => warn!(chain = chain.number, "indexer: {e:#}"),
@@ -103,7 +187,7 @@ pub async fn run(chain: Arc<Chain>, odoo: Odoo, poll: Duration, chain_key: Strin
 }
 
 /// Một vòng: đọc cursor + token từ Odoo, tính vùng final, kiểm quorum, gửi. `true` = đã tiến.
-pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
+pub async fn step(chain: &Chain, odoo: &Odoo, router: Option<Address>) -> anyhow::Result<bool> {
     let nc = odoo.node_config(chain.number, None).await?;
     // Không token nào đăng ký: không ai lọc được vùng này ⇒ giữ con trỏ (recipe M1), đọc lại khi có token.
     let addrs: Vec<Address> = nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect();
@@ -124,11 +208,7 @@ pub async fn step(chain: &Chain, odoo: &Odoo) -> anyhow::Result<bool> {
         warn!(chain = chain.number, block = to, "quorum not reached; not advancing");
         return Ok(false);
     }
-    let f = Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
-        IToken::PaymentSettled::SIGNATURE_HASH,
-        IToken::MetaTransactionExecuted::SIGNATURE_HASH,
-    ]);
-    let mut events: Vec<Value> = chain.primary().get_logs(&f).await?.iter().filter_map(encode_event).collect();
+    let mut events = pay_events(&chain.primary().get_logs(&pay_filter(from, to, addrs, router)).await?, router);
     let pairs = receiving_pairs(&nc);
     if !pairs.is_empty() {
         let tokens: Vec<Address> = pairs.iter().map(|p| p.0).collect();
@@ -236,6 +316,65 @@ mod tests {
         assert!(encode_event(&foreign).is_none());
     }
 
+    fn log_at(address: Address, tx: u8, log_index: u64, data: LogData) -> Log {
+        Log { inner: alloy::primitives::Log { address, data }, transaction_hash: Some(B256::repeat_byte(tx)), log_index: Some(log_index),
+              ..log_of(LogData::new_unchecked(vec![], Default::default())) }
+    }
+
+    /// T17 (G): `PaymentMeta` joins its `PaymentSettled` (same token, transaction and payId, the next one), a
+    /// `RelayFeePaid` of the router joins the expected token's `PaymentSettled` by `(from, ref)`, amount and payee; no
+    /// join by id alone, an unjoined one proves nothing, and neither reaches Odoo as a row.
+    #[test]
+    fn indexer_joins_payment_meta() {
+        let (token, fake, router) = (Address::repeat_byte(9), Address::repeat_byte(0x66), Address::repeat_byte(0x7f));
+        let (alice, shop, mallory) = (Address::repeat_byte(1), Address::repeat_byte(2), Address::repeat_byte(3));
+        let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
+        let settled = |from: Address, to: Address, amount: u64, entry_ref: B256| IToken::PaymentSettled { from, to,
+            amount: U256::from(amount), feeAmount: U256::ZERO, feeRecipient: Address::ZERO, entryRef: entry_ref }.encode_log_data();
+        let meta = IToken::PaymentMeta { payId: p, meta: vec![0xab, 0xcd].into() }.encode_log_data();
+        let fee_by = |token: Address, payer: Address, amount: u64| IMtxRelayFee::RelayFeePaid { r#ref: r, target: shop, token,
+            payer: payer.into_word(), payee: Address::repeat_byte(0x1a).into_word(), amount: U256::from(amount) }.encode_log_data();
+        let fee = |token: Address, amount: u64| fee_by(token, alice, amount);
+        let logs = vec![
+            // tx 1: a 0-amount spoof with the same id before the meta, then the meta and its payment
+            log_at(token, 1, 0, settled(mallory, shop, 0, p)),
+            log_at(token, 1, 1, meta.clone()),
+            log_at(token, 1, 2, settled(alice, shop, 100, p)),
+            // tx 2: a meta whose payment never settled; a payment of the same id in another tx
+            log_at(token, 2, 0, meta.clone()),
+            log_at(token, 3, 0, settled(alice, shop, 100, p)),
+            // tx 4: an open-mode relay fee (paid to the router, forwarded), and the router's event
+            log_at(token, 4, 0, settled(alice, router, 5, r)),
+            log_at(router, 4, 1, fee(token, 5)),
+            // tx 5: a fake token's relay fee (no payment of a registered token), and one whose amount differs
+            log_at(router, 5, 0, fee(fake, 5)),
+            log_at(token, 6, 0, settled(alice, router, 4, r)),
+            log_at(router, 6, 1, fee(token, 5)),
+            // tx 7: a RelayFeePaid from a contract that is not the router
+            log_at(token, 7, 0, settled(alice, router, 5, r)),
+            log_at(fake, 7, 1, fee(token, 5)),
+            // tx 8 / 9: the registered token's payment in the same tx, the router's event naming another token / payer
+            log_at(token, 8, 0, settled(alice, router, 5, r)),
+            log_at(router, 8, 1, fee_by(fake, alice, 5)),
+            log_at(token, 9, 0, settled(alice, router, 5, r)),
+            log_at(router, 9, 1, fee_by(token, mallory, 5)),
+        ];
+        let out = pay_events(&logs, Some(router));
+        let names: Vec<&str> = out.iter().map(|v| v["event"].as_str().unwrap()).collect();
+        assert_eq!(names, ["PaymentSettled"; 8], "PaymentMeta / RelayFeePaid never reach Odoo as rows");
+        let with_meta: Vec<(&str, u64)> = out.iter().filter(|v| !v["meta"].is_null())
+            .map(|v| (v["tx_hash"].as_str().unwrap(), v["log_index"].as_u64().unwrap())).collect();
+        assert_eq!(with_meta, [(format!("{:#x}", B256::repeat_byte(1)).as_str(), 2)], "only the payment right after its meta");
+        assert_eq!(out[1]["meta"], "0xabcd");
+        assert_eq!(out[1]["from"], format!("{alice:#x}"));
+        let relayed: Vec<&str> = out.iter().filter(|v| !v["relay_payee"].is_null()).map(|v| v["tx_hash"].as_str().unwrap()).collect();
+        assert_eq!(relayed, [format!("{:#x}", B256::repeat_byte(4))], "the expected token's payment, same (from, ref), amount and payee or router");
+        let j = out.iter().find(|v| !v["relay_payee"].is_null()).unwrap();
+        assert_eq!((j["relay_target"].as_str(), j["relay_payee"].as_str()),
+            (Some(format!("{shop:#x}").as_str()), Some(format!("{:#x}", Address::repeat_byte(0x1a)).as_str())));
+        assert!(pay_events(&logs, None).iter().all(|v| v["relay_payee"].is_null()), "no router: no relay fee joins");
+    }
+
     /// Merge TODO a (recipe M1 on the EVM indexer): no registered token ⇒ nobody can filter this range, so the
     /// cursor stays put (a token activated later still gets its events) and no RPC is spent.
     #[tokio::test]
@@ -244,7 +383,7 @@ mod tests {
         let (odoo, o) = fake_odoo(Fake { tokens: json!([]), ..Default::default() }).await;
         let cfg = crate::config::ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
         let chain = Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap();
-        assert!(!step(&chain, &odoo).await.unwrap());
+        assert!(!step(&chain, &odoo, None).await.unwrap());
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
     }
 }

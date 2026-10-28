@@ -236,27 +236,42 @@ contract UnderlyingTest is V2Fixture {
 
     /// Errors raised inside the external `UnderlyingLib` (OpenZeppelin's `FailedCall`, `SafeERC20FailedOperation`,
     /// `InsufficientBalance`) are in the token ABI only if `IUnderlyingToken` declares them.
+    /// R4 (metatx split): an error raised only inside a linked library must still be in the token's ABI, so a client
+    /// decodes it (`SigCheckGasStarved`, `ModeFeeInvalid`, `FeeRecipientRequired`, `HtsQueryFailed`, …). Checked for
+    /// `UnderlyingLib` × `UnderlyingToken` and `MtxPipelineLib` × every kind's artifact.
     function test_libraryErrorsAreInTheTokenAbi() public view {
-        string memory lib = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/UnderlyingLib.sol/UnderlyingLib.json"));
-        string memory tok = vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/UnderlyingToken.sol/UnderlyingToken.json"));
-        bytes4[] memory have = _errorSelectors(tok);
-        bytes4[] memory want = _errorSelectors(lib);
+        _requireErrorsIn("UnderlyingLib", "UnderlyingToken");
+        string[6] memory kinds = ["NoUnderlyingToken", "UnderlyingToken", "NoUnderlyingZetherToken",
+            "UnderlyingZetherToken", "NoUnderlyingPqzToken", "UnderlyingPqzToken"];
+        for (uint256 k; k < kinds.length; ++k) _requireErrorsIn("MtxPipelineLib", kinds[k]);
+    }
+
+    function _requireErrorsIn(string memory libName, string memory tokName) internal view {
+        (bytes4[] memory want, string[] memory names) = _errorSelectors(_artifact(libName));
+        (bytes4[] memory have,) = _errorSelectors(_artifact(tokName));
         assertGt(want.length, 0);
         for (uint256 i; i < want.length; ++i) {
             bool found;
             for (uint256 j; j < have.length; ++j) found = found || have[j] == want[i];
-            assertTrue(found, vm.toString(want[i]));
+            assertTrue(found, string.concat(
+                tokName, " ABI lacks ", libName, ".", names[i], " ", vm.toString(abi.encodePacked(want[i]))));
         }
     }
 
-    function _errorSelectors(string memory art) internal view returns (bytes4[] memory out) {
+    function _artifact(string memory c) internal view returns (string memory) {
+        return vm.readFile(string.concat("./", vm.envOr("FOUNDRY_OUT", string("out")), "/", c, ".sol/", c, ".json"));
+    }
+
+    function _errorSelectors(string memory art) internal view returns (bytes4[] memory out, string[] memory names) {
         uint256 n;
         while (vm.keyExistsJson(art, _at(".abi[", n, "]"))) ++n;
         bytes4[] memory tmp = new bytes4[](n);
+        string[] memory tmpN = new string[](n);
         uint256 k;
         for (uint256 i; i < n; ++i) {
             if (!_eq(art.readString(_at(".abi[", i, "].type")), "error")) continue;
-            string memory sig = string.concat(art.readString(_at(".abi[", i, "].name")), "(");
+            tmpN[k] = art.readString(_at(".abi[", i, "].name"));
+            string memory sig = string.concat(tmpN[k], "(");
             for (uint256 j; vm.keyExistsJson(art, _at(".abi[", i, string.concat("].inputs[", vm.toString(j), "]"))); ++j) {
                 sig = string.concat(sig, j == 0 ? "" : ",", art.readString(
                     _at(".abi[", i, string.concat("].inputs[", vm.toString(j), "].type"))));
@@ -264,7 +279,8 @@ contract UnderlyingTest is V2Fixture {
             tmp[k++] = bytes4(keccak256(bytes(string.concat(sig, ")"))));
         }
         out = new bytes4[](k);
-        for (uint256 i; i < k; ++i) out[i] = tmp[i];
+        names = new string[](k);
+        for (uint256 i; i < k; ++i) (out[i], names[i]) = (tmp[i], tmpN[i]);
     }
 
     function _at(string memory a, uint256 i, string memory b) internal pure returns (string memory) {

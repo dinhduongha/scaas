@@ -356,7 +356,7 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     assert_eq!(balance(&rpc, token, shop).await, U256::from(250_000_000u64));
 
     let ichain = Chain::with_signer(&cfg, relayer.clone()).unwrap();
-    assert!(scaas_node::indexer::step(&ichain, &odoo).await.unwrap());
+    assert!(scaas_node::indexer::step(&ichain, &odoo, None).await.unwrap());
     let ingested = state.lock().unwrap().ingested.clone();
     let pay = ingested.iter().find(|e| e["event"] == "PaymentSettled").expect("PaymentSettled ingested");
     assert_eq!(pay["entry_ref"], format!("{entry_ref:#x}"));
@@ -432,6 +432,97 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let lane99 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(99) }.abi_encode();
     let out = p.call(TransactionRequest::default().to(token).input(lane99.into())).await.unwrap();
     assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64));
+
+    // T17 (CTR-MTX-26) on the real token: a pay-meta job relays `mtxPayMeta`, and the indexer gives the meta to its
+    // PaymentSettled (never a row of its own)
+    let (salt, meta) = (B256::repeat_byte(0x51), alloy::hex::decode("00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000568656c6c6f000000000000000000000000000000000000000000000000000000").unwrap());
+    let pid = scaas_node::metatx::meta_pay_id(&salt, &meta);
+    let pm = payment(payer.address(), shop, 1_000, pid, scaas_node::metatx::pay_lane(&pid), MODE_RESTRICT_RELAYER, relayer.address(), 0, Address::ZERO);
+    let mut j = job(7, token, &pm, "0x", sign(&payer, &d, &pm));
+    (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
+    state.lock().unwrap().jobs.push(j);
+    s.poll_outbox().await;
+    for _ in 0..50 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let reports = state.lock().unwrap().reports.clone();
+    let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
+    assert_eq!(of(7)["chain_state"], "mined", "{}", of(7));
+    while scaas_node::indexer::step(&ichain, &odoo, None).await.unwrap() {}
+    let ingested = state.lock().unwrap().ingested.clone();
+    assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta"), "never a row");
+    let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("pay-meta settled");
+    assert_eq!((paid["amount"].as_str(), paid["meta"].as_str()), (Some("1000"), Some(format!("0x{}", alloy::hex::encode(&meta)).as_str())));
+
+    // T17 (CTR-MTX-27) on the real router: a fee-less `cancelNonce(77)` of the payer, its fee of 10 in open mode; the
+    // node relays `relay` (call-table row MtxRelayFee.relay), the fee reaches the lane, the indexer joins RelayFeePaid
+    let router: Address = dep["mtx_relay_fee"].as_str().expect("mtx_relay_fee in the deploy JSON").parse().unwrap();
+    let out = p.call(TransactionRequest::default().to(router).input(scaas_node::abi::IMtxRelayFee::EXECUTORCall {}.abi_encode().into()))
+        .await.unwrap();
+    assert_eq!(Address::abi_decode(&out).unwrap(), router.create(1), "the executor the node derives (never paid)");
+    let inner = call(alloy::hex::decode(format!("cfdd7aea{:064x}", 77)).unwrap(), 8);
+    let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
+    let r = scaas_node::metatx::relay_ref(chain_id, token, &call_data);
+    let Mtx::Transfer(t) = payment(payer.address(), router, 10, r, scaas_node::metatx::pay_lane(&r), MODE_RESTRICT_RELAYER, router, 0, Address::ZERO)
+        else { unreachable!() };
+    let fee_sig = sign(&payer, &d, &Mtx::Transfer(t.clone()));
+    let relay = scaas_node::abi::IMtxRelayFee::relayCall { target: token, callData: call_data, token, t,
+        sig: alloy::hex::decode(&fee_sig[2..]).unwrap().into() }.abi_encode();
+    let mut rcfg = cfg.clone();
+    rcfg.params = toml::toml! { relay_fee = { min_amount = 10 } };
+    rcfg.params["relay_fee"].as_table_mut().unwrap().insert("router".into(), format!("{router:#x}").into());
+    let before = balance(&rpc, token, relayer.address()).await;
+    let mut s3 = Submitter::start(Chain::with_signer(&rcfg, relayer.clone()).unwrap(), odoo.clone(), rcfg.clone(), "e2e-3".into(), Default::default())
+        .await
+        .unwrap();
+    state.lock().unwrap().jobs.push(json!({"id": 9, "kind": "call", "call": {"target": format!("{router:#x}"),
+        "calldata": format!("0x{}", alloy::hex::encode(relay)), "validUntil": (now() + 300).to_string()}}));
+    s3.poll_outbox().await;
+    for _ in 0..50 {
+        s3.track().await;
+        if s3.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let reports = state.lock().unwrap().reports.clone();
+    let of = |id: i64| reports.iter().rev().find(|r| r["job_id"] == id).unwrap().clone();
+    assert_eq!(of(9)["chain_state"], "mined", "{}", of(9));
+    assert_eq!(balance(&rpc, token, relayer.address()).await, before + U256::from(10u64), "the fee reached the lane");
+    let lane77 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(8) }.abi_encode();
+    let out = p.call(TransactionRequest::default().to(token).input(lane77.into())).await.unwrap();
+    assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64), "the inner call ran");
+    while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
+    let ingested = state.lock().unwrap().ingested.clone();
+    assert!(ingested.iter().all(|e| e["event"] != "RelayFeePaid"), "never a row");
+    let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("fee settled");
+    assert_eq!((fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
+        (Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
+
+    // T17 fix 1 (spec §9, R8): a SmartKeyAccount-signed mtxExecute sent with exactly the node's ERC-1271 floor for its
+    // calldata settles (the ERC-1271 call two frames below the token keeps its 400 k cap)
+    let owner = small_key(0x5ca);
+    let factory: Address = dep["smart_key_account_factory"].as_str().unwrap().parse().unwrap();
+    let first = SubjectKey { kind: 2, x: owner.address().into_word(), y: B256::ZERO, rpIdHash: B256::ZERO, originHash: B256::ZERO };
+    let acct = create(&rpc, &relayer, factory, deployCall { firstKey: first, guardian: Address::repeat_byte(0x6a) }.abi_encode()).await;
+    let m = Mtx::Call(scaas_node::abi::MetaTransaction { from: acct, data: alloy::hex::decode(format!("cfdd7aea{:064x}", 9)).unwrap().into(),
+        batch: U256::from(3), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO,
+        feeRecipient: Address::ZERO });
+    let ecdsa = owner.sign_hash_sync(&m.digest(&d)).unwrap().as_bytes().to_vec();
+    let sig = (U256::ZERO, Vec::<B256>::new(), alloy::primitives::Bytes::from(ecdsa)).abi_encode_params();
+    let data = m.calldata(sig.into());
+    let floor = scaas_node::guard::erc1271_floor(data.len());
+    let w = ProviderBuilder::new().wallet(EthereumWallet::from(relayer.clone())).connect_http(rpc.parse().unwrap());
+    let rc = w.send_transaction(TransactionRequest::default().to(token).input(data.into()).gas_limit(floor)).await.unwrap()
+        .get_receipt().await.unwrap();
+    assert!(rc.status(), "settles at the floor {floor} (used {})", rc.gas_used);
+    let lane3 = IToken::mtxNonceCall { from: acct, batch: U256::from(3) }.abi_encode();
+    let out = p.call(TransactionRequest::default().to(token).input(lane3.into())).await.unwrap();
+    assert_eq!(U256::abi_decode(&out).unwrap(), U256::from(1u64), "the account's lane moved");
 }
 
 fn sign_hash(signer: &PrivateKeySigner, h: B256) -> String {
@@ -488,6 +579,8 @@ alloy::sol! {
     function approve(address spender, uint256 value) external returns (bool);
     function mint(address to, uint256 value) external;
     function puller() external view returns (address);
+    struct SubjectKey { uint8 kind; bytes32 x; bytes32 y; bytes32 rpIdHash; bytes32 originHash; }
+    function deploy(SubjectKey firstKey, address guardian) external returns (address account);
 }
 
 /// `eth_call` then send: the return value of a state-changing call (the DEX address from `createDex`).
@@ -566,7 +659,7 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let (tx, mut rx) = mpsc::channel::<Work>(16);
     let fee_wallet = Address::repeat_byte(0xfa);
     let tokens = Arc::new(RwLock::new(vec![token_a, token_b]));
-    let guard = Arc::new(scaas_node::guard::Guard::new(&cfg, tokens.clone()));
+    let guard = Arc::new(scaas_node::guard::Guard::new(&cfg, tokens.clone()).unwrap());
     let gw = GwChain { chain: shared.clone(), tx, tokens, dex: Some(venue.clone()), breaker: None, fee_recipient: Some(fee_wallet), guard };
     let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:18651").await.unwrap();

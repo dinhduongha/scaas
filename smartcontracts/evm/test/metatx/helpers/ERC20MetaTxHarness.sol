@@ -10,7 +10,7 @@ import {FeeMode} from "../../../src/common/FeePolicy.sol";
 contract ERC20MetaTxHarness is ERC20MetaTx {
     event Touched(address who);
 
-    constructor(bytes32 chainUid_) ERC20MetaTx(chainUid_, address(0)) {}
+    constructor(bytes32 chainUid_) ERC20MetaTx(chainUid_, address(0), address(0), false) {}
 
     function mint(address to, uint256 v) external { _mint(to, v); }
 

@@ -162,6 +162,41 @@ impl std::fmt::Display for Rejected {
 
 impl std::error::Error for Rejected {}
 
+/// The pay kinds every family serves (CTR-MTX-26 / -27); a family adds its own wrapper kinds, if any.
+pub const PAY_KINDS: [&str; 2] = ["pay_meta", "relay_fee"];
+
+/// `op.kind` of a `signed_op` job, one rule for every family (T17, controller ruling 2026-10-28): absent (or null) =
+/// the plain pay; one of `known` = that kind; any other string, or a present non-string (`7`, `true`, `{}`), is
+/// refused, never a plain pay (a typo must not burn the `(payer, payId)` lane as one). A kind-less job carrying
+/// `salt` / `meta` is refused too: that is a pay-meta without its kind.
+pub fn op_kind<'a>(op: &'a Value, known: &[&str]) -> anyhow::Result<Option<&'a str>> {
+    match op.get("kind").filter(|k| !k.is_null()) {
+        None if op.get("salt").is_some_and(|v| !v.is_null()) || op.get("meta").is_some_and(|v| !v.is_null()) => {
+            anyhow::bail!("a plain pay carries no salt / meta (a pay-meta is op.kind = \"pay_meta\")")
+        }
+        None => Ok(None),
+        Some(Value::String(k)) if known.contains(&k.as_str()) => Ok(Some(k.as_str())),
+        Some(k) => anyhow::bail!("unknown op.kind {k} ({}, or none for a plain pay)", known.join(", ")),
+    }
+}
+
+/// Whose fee a relay-fee job is, one rule for every family (T17, controller ruling 2026-10-28): the node relays a job
+/// whose fee reaches its own lane (open mode, or a bound payee that is the lane) only when `amount >= min_amount`; a
+/// fee bound to anyone else only with `params.relay_fee.relay_bound_payee = true`, and then as a sponsored job (no
+/// `min_amount`: the fee is not the node's).
+pub fn relay_fee_ours(open: bool, payee_is_lane: bool, amount: u128, p: &crate::config::RelayParams) -> anyhow::Result<()> {
+    if open || payee_is_lane {
+        if amount < p.min_amount {
+            anyhow::bail!("fee {amount} is below relay_fee.min_amount {}", p.min_amount);
+        }
+        return Ok(());
+    }
+    if !p.relay_bound_payee {
+        anyhow::bail!("the fee is bound to another payee, not this lane (params.relay_fee.relay_bound_payee is false)");
+    }
+    Ok(())
+}
+
 const STATUS_POLL: Duration = Duration::from_millis(500);
 /// Lùi khi lane lỗi (RPC/Odoo chết): 1 s nhân đôi tới 60 s; một vòng thành công đặt lại (merge TODO c).
 const BACKOFF_MIN: Duration = Duration::from_secs(1);
@@ -506,6 +541,29 @@ pub async fn index_step(adapter: &dyn ChainAdapter, odoo: &Odoo) -> Result<bool>
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// T17: one job-kind rule and one payee rule for every family.
+    #[test]
+    fn one_kind_rule_and_one_payee_rule() {
+        use serde_json::json;
+        let k = |op: Value| op_kind(&op, &PAY_KINDS).map(|o| o.map(str::to_string)).map_err(|e| e.to_string());
+        assert_eq!(k(json!({})), Ok(None));
+        assert_eq!(k(json!({"kind": null})), Ok(None));
+        assert_eq!(k(json!({"kind": "pay_meta"})), Ok(Some("pay_meta".into())));
+        assert_eq!(k(json!({"kind": "relay_fee"})), Ok(Some("relay_fee".into())));
+        for bad in [json!("pay"), json!("PAY_META"), json!(7), json!(true), json!({}), json!([])] {
+            assert!(k(json!({"kind": bad})).unwrap_err().contains("unknown op.kind"), "{bad}");
+        }
+        assert!(k(json!({"salt": "0x00"})).is_err() && k(json!({"meta": "0x"})).is_err(), "a pay-meta without its kind");
+        assert_eq!(op_kind(&json!({"kind": "wrap"}), &["pay_meta", "wrap"]).unwrap(), Some("wrap"), "a family's own kind");
+        let p = crate::config::RelayParams { router: None, min_amount: 10, relay_bound_payee: false, max_pay_meta_bytes: 2048 };
+        assert!(relay_fee_ours(true, false, 10, &p).is_ok());
+        assert!(relay_fee_ours(true, false, 9, &p).unwrap_err().to_string().contains("min_amount"));
+        assert!(relay_fee_ours(false, true, 10, &p).is_ok(), "bound to the lane");
+        assert!(relay_fee_ours(false, false, 1_000, &p).unwrap_err().to_string().contains("relay_bound_payee"));
+        let sponsored = crate::config::RelayParams { relay_bound_payee: true, ..p };
+        assert!(relay_fee_ours(false, false, 0, &sponsored).is_ok(), "sponsored: no minimum");
+    }
 
     #[test]
     fn families_parse() {

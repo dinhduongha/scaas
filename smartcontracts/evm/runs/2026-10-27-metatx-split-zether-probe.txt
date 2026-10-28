@@ -1,0 +1,196 @@
+Compiling 1 files with Solc 0.8.37
+Solc 0.8.37 finished in 3.81s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/zether/ZetherVerifier.sol:89:28:
+   |
+89 |     error PrecompileFailed(uint256 at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:269:13:
+    |
+269 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:374:9:
+    |
+374 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:140:38:
+    |
+140 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:144:38:
+    |
+144 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/helpers/Catalogue.sol:47:1:
+   |
+47 | function closureLibs(IOpenFactory.TokenKind kind) view returns (address[] memory l) {
+   | ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 8 tests for test/zether/ZetherGasLimit.t.sol:ZetherGasLimitBls12381Test
+[PASS] test_edge_bundleOn() (gas: 292328422)
+Logs:
+  EDGE cell 2 direct M=7 regular=15539680 state=22032000
+  EDGE cell 2 relayed M=7 regular=15641578 state=22227840
+
+[PASS] test_edge_bundleOut() (gas: 319628875)
+Logs:
+  EDGE cell 3 direct M=8 regular=16157801 state=18800640
+  EDGE cell 3 relayed M=8 regular=16264074 state=18996480
+
+[PASS] test_edge_compactOn() (gas: 320773481)
+Logs:
+  EDGE cell 0 direct M=8 regular=15746731 state=18520650
+  EDGE cell 0 relayed M=8 regular=15853660 state=18716490
+
+[PASS] test_edge_compactOut() (gas: 316969960)
+Logs:
+  EDGE cell 1 direct M=8 regular=15050768 state=18520650
+  EDGE cell 1 relayed M=8 regular=15157685 state=18716490
+
+[PASS] test_isolated() (gas: 6672411)
+[PASS] test_measure_bundle() (gas: 3391712424)
+Logs:
+  GAS bls12381 direct bundle on M=1 regular=3866454 state=3818880 ok
+  GAS bls12381 direct bundle on M=2 regular=5806478 state=6854400 ok
+  GAS bls12381 direct bundle on M=3 regular=7748615 state=9889920 ok
+  GAS bls12381 direct bundle on M=4 regular=9693118 state=12925440 ok
+  GAS bls12381 direct bundle on M=5 regular=11639903 state=15960960 ok
+  GAS bls12381 direct bundle on M=6 regular=13588357 state=18996480 ok
+  GAS bls12381 direct bundle on M=7 regular=15539680 state=22032000 ok
+  GAS bls12381 direct bundle on M=8 regular=17493907 state=25067520 ok
+  GAS bls12381 direct bundle out M=1 regular=3703717 state=3035520 ok
+  GAS bls12381 direct bundle out M=2 regular=5479631 state=5287680 ok
+  GAS bls12381 direct bundle out M=3 regular=7256812 state=7539840 ok
+  GAS bls12381 direct bundle out M=4 regular=9034863 state=9792000 ok
+  GAS bls12381 direct bundle out M=5 regular=10813894 state=12044160 ok
+  GAS bls12381 direct bundle out M=6 regular=12593783 state=14296320 ok
+  GAS bls12381 direct bundle out M=7 regular=14375094 state=16548480 ok
+  GAS bls12381 direct bundle out M=8 regular=16157801 state=18800640 ok
+  GAS bls12381 direct bundle out M=9 regular=17942017 state=21052800 ok
+  GAS bls12381 relayed bundle on M=1 regular=3944967 state=4014720 ok
+  GAS bls12381 relayed bundle on M=2 regular=5888299 state=7050240 ok
+  GAS bls12381 relayed bundle on M=3 regular=7834044 state=10085760 ok
+  GAS bls12381 relayed bundle on M=4 regular=9782142 state=13121280 ok
+  GAS bls12381 relayed bundle on M=5 regular=11732883 state=16156800 ok
+  GAS bls12381 relayed bundle on M=6 regular=13685795 state=19192320 ok
+  GAS bls12381 relayed bundle on M=7 regular=15641578 state=22227840 ok
+  GAS bls12381 relayed bundle on M=8 regular=17600072 state=25263360 ok
+  GAS bls12381 relayed bundle out M=1 regular=3782374 state=3231360 ok
+  GAS bls12381 relayed bundle out M=2 regular=5561692 state=5483520 ok
+  GAS bls12381 relayed bundle out M=3 regular=7342193 state=7735680 ok
+  GAS bls12381 relayed bundle out M=4 regular=9123959 state=9987840 ok
+  GAS bls12381 relayed bundle out M=5 regular=10906910 state=12240000 ok
+  GAS bls12381 relayed bundle out M=6 regular=12691101 state=14492160 ok
+  GAS bls12381 relayed bundle out M=7 regular=14476944 state=16744320 ok
+  GAS bls12381 relayed bundle out M=8 regular=16264074 state=18996480 ok
+  GAS bls12381 relayed bundle out M=9 regular=18053348 state=21248640 ok
+
+[PASS] test_measure_compact() (gas: 3679992173)
+Logs:
+  GAS bls12381 direct compact on M=1 regular=3668876 state=3245130 ok
+  GAS bls12381 direct compact on M=2 regular=5395784 state=5497290 ok
+  GAS bls12381 direct compact on M=3 regular=7112685 state=7651530 ok
+  GAS bls12381 direct compact on M=4 regular=8832061 state=9805770 ok
+  GAS bls12381 direct compact on M=5 regular=10553923 state=11960010 ok
+  GAS bls12381 direct compact on M=6 regular=12280408 state=14114250 ok
+  GAS bls12381 direct compact on M=7 regular=14017011 state=16366410 ok
+  GAS bls12381 direct compact on M=8 regular=15746731 state=18520650 ok
+  GAS bls12381 direct compact on M=9 regular=17478934 state=20674890 ok
+  GAS bls12381 direct compact out M=1 regular=3586199 state=3245130 ok
+  GAS bls12381 direct compact out M=2 regular=5228973 state=5497290 ok
+  GAS bls12381 direct compact out M=3 regular=6860798 state=7651530 ok
+  GAS bls12381 direct compact out M=4 regular=8493842 state=9805770 ok
+  GAS bls12381 direct compact out M=5 regular=10128154 state=11960010 ok
+  GAS bls12381 direct compact out M=6 regular=11765401 state=14114250 ok
+  GAS bls12381 direct compact out M=7 regular=13412544 state=16366410 ok
+  GAS bls12381 direct compact out M=8 regular=15050768 state=18520650 ok
+  GAS bls12381 direct compact out M=9 regular=16690593 state=20674890 ok
+  GAS bls12381 relayed compact on M=1 regular=3747629 state=3440970 ok
+  GAS bls12381 relayed compact on M=2 regular=5477833 state=5693130 ok
+  GAS bls12381 relayed compact on M=3 regular=7198165 state=7847370 ok
+  GAS bls12381 relayed compact on M=4 regular=8921661 state=10001610 ok
+  GAS bls12381 relayed compact on M=5 regular=10647397 state=12155850 ok
+  GAS bls12381 relayed compact on M=6 regular=12378095 state=14310090 ok
+  GAS bls12381 relayed compact on M=7 regular=14119157 state=16562250 ok
+  GAS bls12381 relayed compact on M=8 regular=15853660 state=18716490 ok
+  GAS bls12381 relayed compact on M=9 regular=17590811 state=20870730 ok
+  GAS bls12381 relayed compact out M=1 regular=3664904 state=3440970 ok
+  GAS bls12381 relayed compact out M=2 regular=5311130 state=5693130 ok
+  GAS bls12381 relayed compact out M=3 regular=6946254 state=7847370 ok
+  GAS bls12381 relayed compact out M=4 regular=8583106 state=10001610 ok
+  GAS bls12381 relayed compact out M=5 regular=10221436 state=12155850 ok
+  GAS bls12381 relayed compact out M=6 regular=11863496 state=14310090 ok
+  GAS bls12381 relayed compact out M=7 regular=13514642 state=16562250 ok
+  GAS bls12381 relayed compact out M=8 regular=15157685 state=18716490 ok
+  GAS bls12381 relayed compact out M=9 regular=16802362 state=20870730 ok
+
+[PASS] test_measure_single() (gas: 116496298)
+Logs:
+  GAS bls12381 direct single on M=1 regular=3753914 state=3427200 ok
+  GAS bls12381 direct single out M=1 regular=3669942 state=3035520 ok
+  GAS bls12381 relayed single on M=1 regular=3832458 state=3623040 ok
+  GAS bls12381 relayed single out M=1 regular=3748294 state=3231360 ok
+
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 20.63s (49.37s CPU time)
+
+Ran 1 test suite in 20.64s (20.63s CPU time): 8 tests passed, 0 failed, 0 skipped (8 total tests)

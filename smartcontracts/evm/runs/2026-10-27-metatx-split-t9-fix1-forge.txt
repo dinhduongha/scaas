@@ -1,0 +1,4 @@
+# T9 fix 1 full forge at 333c96b6 + fix-1 tree (worktree /home/ha/work/ainative/scaas/.claude/worktrees/metatx-split)
+[PASS] test_aFailingSettlementIsIsolated() (gas: 1700786)
+Ran 134 test suites in 75.73s (574.38s CPU time): 1481 tests passed, 0 failed, 10 skipped (1491 total tests)
+rc=0

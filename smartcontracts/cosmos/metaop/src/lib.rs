@@ -156,3 +156,30 @@ pub fn verify(api: &dyn Api, env: &Env, payload: &[u8], auth: &Auth) -> StdResul
     }
     Ok(Verified { op, digest, from })
 }
+
+/// Keccak-256 over the concatenation of `parts` (the EVM's `keccak256(abi.encodePacked(…))`).
+pub fn keccak256(parts: &[&[u8]]) -> [u8; 32] {
+    use sha3::{Digest as _, Keccak256};
+    let mut h = Keccak256::new();
+    for p in parts {
+        h.update(p);
+    }
+    h.finalize().into()
+}
+
+/// CTR-MTX-26: `payId = keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, byte for byte the EVM `metaPayId`.
+pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {
+    keccak256(&[b"scaas.pay.meta", salt, &keccak256(&[meta])])
+}
+
+/// `payLane(p) = keccak256("scaas.pay.lane" ‖ p)`, the 32-byte lane of a pay-meta / relay-fee payment.
+pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[b"scaas.pay.lane", p])
+}
+
+/// CTR-MTX-27 `ref = keccak256("scaas.relayfee" ‖ chain id ‖ target ‖ keccak256(msg))`: `chain_id` the chain id's
+/// bytes (the `MetaOp`'s `network`), `target` the target's canonical address bytes, `msg` the exact bytes the
+/// executor sends to it. No salt: the target sees the unprivileged executor, so its own authorisation is in `msg`.
+pub fn relay_ref(chain_id: &str, target: &[u8], msg: &[u8]) -> [u8; 32] {
+    keccak256(&[b"scaas.relayfee", chain_id.as_bytes(), target, &keccak256(&[msg])])
+}

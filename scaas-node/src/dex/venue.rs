@@ -385,14 +385,17 @@ impl Venue {
         Ok(out)
     }
 
-    /// `SigCheck.isValid` exactly as `verifier` (the order's token, or the DEX) runs it (CTR-MTX-25, review T3 C1): no
-    /// code or an EIP-7702 designator ⇒ ECDSA only; a contract ⇒ ERC-1271 called from `verifier` with the cap by
-    /// codehash as the callee's gas, accepted only as exactly 32 bytes equal to the magic word. `Err` = the RPC, never
-    /// a verdict.
+    /// `SigCheck.isValid` exactly as `verifier` (the order's token, or the DEX) runs it (CTR-MTX-25, review T3 C1; CTR-UA-24
+    /// on every path, owner ruling 2026-10-28): no code ⇒ ECDSA only; an EIP-7702 designator ⇒ ECDSA by the base key,
+    /// else ERC-1271 through the delegate; a contract ⇒ ERC-1271 called from `verifier` with the cap by codehash as the
+    /// callee's gas, accepted only as exactly 32 bytes equal to the magic word. `Err` = the RPC, never a verdict.
     async fn valid_sig(&self, verifier: Address, signer: Address, digest: B256, sig: &Bytes) -> Result<bool> {
         let code = self.chain.primary().get_code_at(signer).await?;
-        if !is_contract(&code) {
+        if code.is_empty() {
             return Ok(ecdsa_ok(signer, digest, sig));
+        }
+        if !is_contract(&code) && ecdsa_ok(signer, digest, sig) {
+            return Ok(true);
         }
         alloy::sol! {
             function isValidSignature(bytes32 hash, bytes signature) external view returns (bytes4);
@@ -1723,6 +1726,27 @@ mod tests {
         }
         world.lock().unwrap().sig_errors.insert(wallet, json!({"code": -32603, "message": "upstream unavailable"}));
         assert!(v.valid_sig(BASE, wallet, d, &sig).await.is_err());
+    }
+
+    /// CTR-UA-24 on the venue too (owner ruling 2026-10-28): an EIP-7702 maker signs with its base key, or through its
+    /// delegate's ERC-1271 (called on the maker's address with the 50 k cap); a wrong answer is invalid.
+    #[tokio::test]
+    async fn a_7702_maker_signs_with_its_key_or_its_delegate() {
+        let maker = PrivateKeySigner::random();
+        let mut designator = vec![0xef, 0x01, 0x00];
+        designator.extend_from_slice(Address::repeat_byte(0x55).as_slice());
+        let mut w = World::default();
+        w.codes.insert(maker.address(), Bytes::from(designator));
+        let (v, world) = venue(w, vec![]).await;
+        let d = B256::repeat_byte(1);
+        let own = Bytes::from(maker.sign_hash_sync(&d).unwrap().as_bytes().to_vec());
+        assert!(v.valid_sig(BASE, maker.address(), d, &own).await.unwrap(), "the base key");
+        assert!(world.lock().unwrap().sig_calls.is_empty(), "the base key needs no ERC-1271 call");
+        let other = Bytes::from_static(&[0xab; 65]);
+        assert!(!v.valid_sig(BASE, maker.address(), d, &other).await.unwrap(), "no answer from the delegate");
+        world.lock().unwrap().answers.insert(maker.address(), Bytes::from([MAGIC_1271.to_vec(), vec![0; 28]].concat()));
+        assert!(v.valid_sig(BASE, maker.address(), d, &other).await.unwrap(), "the delegate's ERC-1271");
+        assert_eq!(world.lock().unwrap().sig_calls.last().map(|c| (c.0, c.1)), Some((BASE, maker.address())));
     }
 
     /// Outside legs are never probed through `mtxTrade` (an outside token has none: an honest maker would revert there

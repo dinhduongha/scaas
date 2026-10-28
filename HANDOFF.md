@@ -155,7 +155,7 @@ review target `64549aa4`, read-only; removable).
 4. The node keeps running (owner 2026-10-27: leave it).
 
 **Next (TODO §00):** Task 9 calibration (owner's go) → metatx split + `mtxPayMeta` → `MtxRelayFee` (re-check PQZH n2048
-`uaExecute` headroom 1.3–2.8 KB and n2560's `ROLL_MAX` margin 15,281 gas with it) → UA-8 → fs3 Task 12 → 6 → 13 → 14,
+`uaExecute` headroom 1.3–2.8 KB and n2560's `ROLL_MAX` margin 15,281 gas with it; done on branch `metatx-split`: the margin is now 6,032 gas, see TODO P6 item 5) → UA-8 → fs3 Task 12 → 6 → 13 → 14,
 UA-7, governance; publications (fill gas / timing / package placeholders, LaZer preview mail).
 
 ## Session 2026-10-26 (part b merged, testnet on pqz5, pqz-16k merged into main, 8d part 2b paused, publication drafts) — resume here

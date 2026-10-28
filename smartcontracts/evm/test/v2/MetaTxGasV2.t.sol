@@ -50,14 +50,20 @@ contract MetaTxGasV2Test is Test {
     // prices and EIP-8037 charges state gas for a new slot, the writes: a warm batch (A, C, D, E) 36,017 -> 80,249 /
     // 95,950 / 95,889 / 95,993; a cold batch (B, F: the batch lane's first write) 53,117 -> 178,157; ERC-1271 (G) 50,762 ->
     // 174,814; the pay op on a fresh lane (P) 58,040 -> 181,810. The v1 contract is gone, so the old rows cannot be re-run.
-    uint256 constant AMS_A = 80_249;
-    uint256 constant AMS_B = 178_157;
-    uint256 constant AMS_C = 95_950;
-    uint256 constant AMS_D = 95_889;
-    uint256 constant AMS_E = 95_993;
-    uint256 constant AMS_F = 178_157;
-    uint256 constant AMS_G = 174_814;
-    uint256 constant AMS_P = 181_810;
+    // Metatx split T3 (2026-10-27): the typed path DELEGATECALLs `MtxPipelineLib.preTransfer` (a cold account, the ABI of
+    // `Ctx` + `UAMetaTransfer` + signature, the returned `Out`): A 80,249 -> 87,899, B 178,157 -> 185,807, C 95,950 ->
+    // 103,702, D 95,889 -> 103,629, E 95,993 -> 103,695, F 178,157 -> 185,819, G 174,814 -> 182,404, P 181,810 -> 189,459
+    // (+7.6k to +7.8k).
+    // Metatx split T8 (2026-10-27) re-measured on the final token bytecode (split + PayMeta): A 87,936, B 185,844, C 103,751,
+    // D 103,666, E 103,744, F 185,868, G 182,453, P 189,496 (runs/2026-10-27-metatx-split-overhead-final.txt).
+    uint256 constant AMS_A = 87_936;
+    uint256 constant AMS_B = 185_844;
+    uint256 constant AMS_C = 103_751;
+    uint256 constant AMS_D = 103_666;
+    uint256 constant AMS_E = 103_744;
+    uint256 constant AMS_F = 185_868;
+    uint256 constant AMS_G = 182_453;
+    uint256 constant AMS_P = 189_496;
     address signer;
     address relayer = address(0xBEEF);
     address recipient = address(0xCAFE);

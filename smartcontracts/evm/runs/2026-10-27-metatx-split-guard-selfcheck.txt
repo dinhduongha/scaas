@@ -1,0 +1,20 @@
+# guard self-check at commit 67fa7a45 (plan Task 20 Step 2; NAMED_TESTS_LOG_DIR = a scratch copy of the step logs)
+## 1. unmodified copy
+named-tests: 260 names, 0 problem(s)
+rc=0
+## 2. sui log without the line of relayfee_tests::sui_router_bound_pay_refused_direct
+1
+named-tests: not passed in sui: relayfee_tests::sui_router_bound_pay_refused_direct
+named-tests: 260 names, 1 problem(s)
+rc=1 (must be non-zero)
+## 3. ton log: one new test reported skipped instead of passed
+named-tests: not passed in ton: release and refund are exclusive
+named-tests: 260 names, 1 problem(s)
+rc=1 (must be non-zero)
+## 4. cosmos log: a new test reported ignored
+named-tests: not passed in cosmos: relay_fee_bound_payee
+named-tests: 260 names, 1 problem(s)
+rc=1 (must be non-zero)
+## 5. restored copy
+named-tests: 260 names, 0 problem(s)
+rc=0

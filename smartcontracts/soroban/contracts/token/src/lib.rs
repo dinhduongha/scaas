@@ -7,7 +7,7 @@
 #![no_std]
 use soroban_sdk::{
     contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, xdr::ToXdr, Address,
-    BytesN, Env, Executable, MuxedAddress, String, Symbol,
+    Bytes, BytesN, Env, Executable, MuxedAddress, String, Symbol,
 };
 
 const DAY: u32 = 17_280;
@@ -36,7 +36,7 @@ enum Key {
     Symbol,
     Balance(Address),
     Allowance(Address, Address),
-    PayRef(BytesN<32>),
+    PayRef(Address, BytesN<32>),
 }
 
 #[contracttype]
@@ -54,6 +54,14 @@ pub struct PaymentSettled {
     pub to: Address,
     pub amount: i128,
     pub pay_ref: BytesN<32>,
+}
+
+/// CTR-MTX-26: phát trước `PaymentSettled` của `pay_meta`; hợp đồng không phân tích `meta`.
+#[contractevent(topics = ["PaymentMeta"], data_format = "single-value")]
+pub struct PaymentMeta {
+    #[topic]
+    pub pay_id: BytesN<32>,
+    pub meta: Bytes,
 }
 
 #[contractevent(topics = ["MetaTransactionExecuted"], data_format = "single-value")]
@@ -108,6 +116,13 @@ pub fn op_digest(env: &Env, function: &str, args: soroban_sdk::Vec<soroban_sdk::
         args,
     );
     env.crypto().sha256(&v.to_xdr(env)).into()
+}
+
+fn meta_pay_id(env: &Env, salt: &BytesN<32>, meta: &Bytes) -> BytesN<32> {
+    let mut b = Bytes::from_slice(env, b"scaas.pay.meta");
+    b.append(&salt.clone().into());
+    b.append(&env.crypto().keccak256(meta).to_bytes().into());
+    env.crypto().keccak256(&b).into()
 }
 
 fn check_amount(env: &Env, amount: i128) {
@@ -197,27 +212,32 @@ impl Token {
     /// với auth entry chủ thể đã ký (R30) hoặc trực tiếp bởi contract (mandate) — `require_auth` như nhau.
     pub fn pay(env: Env, from: Address, to: Address, amount: i128, pay_ref: BytesN<32>, valid_until: u64) {
         from.require_auth();
-        if env.ledger().timestamp() > valid_until {
-            panic_with_error!(&env, Error::Expired);
-        }
-        let k = Key::PayRef(pay_ref.clone());
-        let s = env.storage().persistent();
-        if s.has(&k) {
-            panic_with_error!(&env, Error::RefUsed);
-        }
-        s.set(&k, &true);
-        s.extend_ttl(&k, TTL_MIN, TTL_BUMP);
-        env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
-        move_funds(&env, &from, &to, amount);
-        let args = (from.clone(), to.clone(), amount, pay_ref.clone(), valid_until);
+        Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
+        let args = (from.clone(), to, amount, pay_ref, valid_until);
         let digest = op_digest(&env, "pay", soroban_sdk::IntoVal::into_val(&args, &env));
-        PaymentSettled { from: from.clone(), to, amount, pay_ref }.publish(&env);
         MetaTransactionExecuted { from, digest }.publish(&env);
     }
 
-    /// `pay_ref` đã dùng chưa (Odoo/relayer đọc trước khi phát lại).
-    pub fn ref_used(env: Env, pay_ref: BytesN<32>) -> bool {
-        env.storage().persistent().has(&Key::PayRef(pay_ref))
+    /// CTR-MTX-26: như `pay` với `pay_ref = meta_pay_id(salt, meta)`. Auth entry phủ cả `salt` và `meta`.
+    /// Không có lane trên Soroban: bộ `PayRef` của `settle_pay` đảm bảo mỗi `(token, from, pay_ref)` một lần (như lane theo payer trên EVM: người khác không đốt được ref của payer).
+    pub fn pay_meta(env: Env, from: Address, to: Address, amount: i128, salt: BytesN<32>, meta: Bytes, valid_until: u64) {
+        from.require_auth();
+        let pay_ref = meta_pay_id(&env, &salt, &meta);
+        PaymentMeta { pay_id: pay_ref.clone(), meta: meta.clone() }.publish(&env);
+        Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
+        let args = (from.clone(), to, amount, salt, meta, valid_until);
+        let digest = op_digest(&env, "pay_meta", soroban_sdk::IntoVal::into_val(&args, &env));
+        MetaTransactionExecuted { from, digest }.publish(&env);
+    }
+
+    /// `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))` — view cho client/payee.
+    pub fn meta_pay_id(env: Env, salt: BytesN<32>, meta: Bytes) -> BytesN<32> {
+        meta_pay_id(&env, &salt, &meta)
+    }
+
+    /// `(from, pay_ref)` đã dùng chưa (Odoo/relayer đọc trước khi phát lại).
+    pub fn ref_used(env: Env, from: Address, pay_ref: BytesN<32>) -> bool {
+        env.storage().persistent().has(&Key::PayRef(from, pay_ref))
     }
 
     // ------------------------------------------------------------------ SEP-41
@@ -287,6 +307,23 @@ impl Token {
 }
 
 impl Token {
+    /// Thân chung của `pay` / `pay_meta`: hạn, `PayRef` một lần, chuyển tiền, `PaymentSettled`.
+    fn settle_pay(env: &Env, from: &Address, to: &Address, amount: i128, pay_ref: &BytesN<32>, valid_until: u64) {
+        if env.ledger().timestamp() > valid_until {
+            panic_with_error!(env, Error::Expired);
+        }
+        let k = Key::PayRef(from.clone(), pay_ref.clone());
+        let s = env.storage().persistent();
+        if s.has(&k) {
+            panic_with_error!(env, Error::RefUsed);
+        }
+        s.set(&k, &true);
+        s.extend_ttl(&k, TTL_MIN, TTL_BUMP);
+        env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
+        move_funds(env, from, to, amount);
+        PaymentSettled { from: from.clone(), to: to.clone(), amount, pay_ref: pay_ref.clone() }.publish(env);
+    }
+
     fn burn_inner(env: &Env, from: Address, amount: i128) {
         check_amount(env, amount);
         let b = balance_of(env, &from);

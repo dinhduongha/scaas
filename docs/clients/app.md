@@ -274,7 +274,7 @@ the terms. Every adapter receives transports wired to the guarded `fetch` ([CLI-
 | **Soroban** | `fam/soroban.js` | Freighter `signAuthEntry`, or seed `m/44'/148'/i'` (Pi coin 314159): sha256 of the auth preimage (`G…`) / `Ed25519{key_id, sig}` (`C…`) | `/v1/ops` | user = transaction source: simulate, attach auth, sign the envelope hash (only via `buildSelfPaid`) | SEP-41 `balance`; random nonce | `getEvents`, `getTransaction` |
 | **Sui** | `fam/sui.js` incl. KeyOp | `sui:signPersonalMessage`; seed `m/44'/784'/i'/0'/0'`; passkey flag 6 | `/v1/ops` | PTB `meta::relay_pay<T>` | `Account<T>` fields, owned coins | `queryEvents`, checkpoint final |
 | **Aptos** | `fam/aptos.js` | AIP-62 `aptos:signMessage`; seed `m/44'/637'/i'/0'/0'` over the client-built `fullMessage` | `/v1/ops` | entry `scaas::meta::relay_pay` | primary store, lane view | account txs; `waitForTransaction` |
-| **GRAM** | `fam/ton.js`, `ton-vectors.json` | GRAM JS bridge `signData` cell; seed `m/44'/607'/i'` with a bound pubkey | `/v1/ops` | `SignedOp` internal message + `attachNanoton` | jetton wallet get-methods (v3 `runGetMethod`) | v3 `transactions` |
+| **GRAM** | `fam/ton.js` (vectors: the TON cases of `mesh-envelope-v1.2.json`) | GRAM JS bridge `signData` cell; seed `m/44'/607'/i'` with a bound pubkey | `/v1/ops` | `SignedOp` internal message + `attachNanoton` | jetton wallet get-methods (v3 `runGetMethod`) | v3 `transactions` |
 | **Solana** | `fam/solana.js`, `solana_derivation.json` | `solana:signOffchainMessage` (kind 1), else `solana:signMessage` (kind 0, **extension only**); seed: OCMS kind 1 only | `/v1/ops` | Ed25519 precompile instruction + `relay_pay`, the user as fee payer | PDA token accounts, `LanePda.next` | `getSignaturesForAddress` + `getTransaction` (`finalized`), polling |
 
 Where funds must sit: the token balance itself on EVM, Hedera, Cosmos, Soroban and GRAM (in the jetton wallet); Sui the
@@ -749,7 +749,7 @@ Unit (Vitest / `node --test`, no network):
 | Area | Vectors / method |
 |---|---|
 | EVM encoders | `metatx_kat`, `metatransfer_kat`, `trade_kat`, `dex_order_kat` (relayed calldata too), `hedera_kat`, `wrap_rate_vectors`, `smart_key_account_create2`, `smart_key_account_kat`, `mandate_pay_kat`, `mandate_revoke_kat`, `webauthn_soft` |
-| Non-EVM encoders (clientkeys) | `mesh-envelope-v1.2.json` cross-language payloads, `ton-vectors.json`, `fam_*.json` per family, `sui_vectors.json`, the seed-signed vectors, `solana_derivation.json` |
+| Non-EVM encoders (clientkeys) | `mesh-envelope-v1.2.json` cross-language payloads (the TON cases of it; `smartcontracts/ton/vectors/ton-vectors.json` belongs to the TON suite, no clientkeys code reads it), `fam_*.json` per family, `sui_vectors.json`, the seed-signed vectors, `solana_derivation.json` |
 | UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/7622'` |
 | Backup / vault | `backup_policy.json` plus the de-duplication and `msig` rows; `vault_v2_fixture.json` |
 | Zether | prover vectors through the WASM `nodejs` build; clientkeys `zether.test.js` |

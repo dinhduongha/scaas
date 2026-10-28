@@ -79,6 +79,25 @@ export function tradeParamsCell(p: { tokenIn: Address; tokenOut: Address; minOut
         .endCell();
 }
 
+/// CTR-MTX-26 `meta` as snake bytes: 127 bytes per cell along the first ref (`ton.rs` `snake`, the same chunking as
+/// `storeStringTail`); an empty `meta` is one empty cell.
+export function snakeCell(b: Buffer): Cell {
+    const chunks: Buffer[] = [];
+    for (let i = 0; i < Math.max(b.length, 1); i += 127) chunks.push(b.subarray(i, i + 127));
+    let c: Cell | null = null;
+    for (const ch of chunks.reverse()) {
+        const bb = beginCell().storeBuffer(ch);
+        if (c) bb.storeRef(c);
+        c = bb.endCell();
+    }
+    return c!;
+}
+
+/// `SignedOp.params` of a pay-meta: `salt:uint256 ^meta`.
+export function payMetaParams(salt: bigint, meta: Cell): Cell {
+    return beginCell().storeUint(salt, 256).storeRef(meta).endCell();
+}
+
 export function stateInitCell(init: StateInit): Cell {
     const b = beginCell();
     storeStateInit(init)(b);

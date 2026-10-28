@@ -1,0 +1,24 @@
+{
+ "n2304-kmax4096": {
+  "ecdsa|S": 5788516,
+  "ecdsa|pqzl-M8-on": 10753340,
+  "ecdsa|pqzh-M4-on": 10390291,
+  "mldsa65|S": 5893108,
+  "mldsa65|pqzl-M8-on": 10838425,
+  "mldsa65|pqzh-M4-on": 10477652,
+  "fndsa512|S": 8116679,
+  "fndsa512|pqzl-M8-on": 13066631,
+  "fndsa512|pqzh-M4-on": 12703869
+ },
+ "n2048-kmax1024": {
+  "ecdsa|S": 4767560,
+  "ecdsa|pqzl-M8-on": 10922562,
+  "ecdsa|pqzh-M4-on": 9989518,
+  "mldsa65|S": 4872152,
+  "mldsa65|pqzl-M8-on": 11007821,
+  "mldsa65|pqzh-M4-on": 10076640,
+  "fndsa512|S": 7095723,
+  "fndsa512|pqzl-M8-on": 13235874,
+  "fndsa512|pqzh-M4-on": 12303066
+ }
+}

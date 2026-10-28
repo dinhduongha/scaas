@@ -99,6 +99,7 @@ contract Mandate(
             self.st.revoked = true;
             nativeReserve(max(myBalance() - ctx.value, MIN_STORAGE), ReserveAtMost);
             emit(MetaTransactionExecuted { master: self.master, from: self.owner, digest: m.digest }.toCell());
+            relayAck(ctx.sender, m.digest);
             message(MessageParameters { to: msg.responseDestination, value: 0, mode: SendRemainingBalance | SendIgnoreErrors, bounce: false, body: JettonExcesses { queryId: 0 }.toCell() });
             return;
         }
@@ -163,5 +164,12 @@ contract Mandate(
 
     get fun get_wallet(): Address {
         return self.myWallet();
+    }
+
+    /// Next nonce of an owner lane (0 = unused): the relayer checks a relayed owner revoke against it before sending
+    /// (final review F2c; the Mandate's lanes never rotate).
+    get fun get_lane_nonce(lane: Int): Int {
+        let used = self.lanes.get(lane);
+        return used == null ? 0 : used!!;
     }
 }

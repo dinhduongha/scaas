@@ -8,13 +8,15 @@ publish = false
 
 [dev-dependencies]
 cosmwasm-std.workspace = true
-cw-multi-test = "3.0"
+cw-multi-test = { version = "3.0", features = ["cosmwasm_2_1"] }
 sha2.workspace = true
 ripemd.workspace = true
 scaas-metaop.workspace = true
 scaas-token = { path = "../token", features = ["library"] }
 scaas-mandate = { path = "../mandate", features = ["library"] }
 scaas-dex = { path = "../dex", features = ["library"] }
+scaas-relayfee = { path = "../relayfee", features = ["library"] }
+scaas-relayexec = { path = "../relayexec", features = ["library"] }
 k256 = { version = "0.13", features = ["ecdsa"] }
 p256 = { version = "0.13", features = ["ecdsa"] }
 serde_json = "1"

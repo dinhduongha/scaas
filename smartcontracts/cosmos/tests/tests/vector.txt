@@ -5,3 +5,6 @@ payload={"amount":"1000","contract":"wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3
 digest=42a059030fddc512dafac824352497ef2d2a97fe426c00b7eb9960b3f7d62831
 doc_sha256=0838f3c5ae45ccd436feb2960d39df0cba4b54252b2d24457410cc0a0122170f
 sig=bnFynDb3etgy3RysEUXatcouBH6FzYCsrMiK6H01Bvc6i/X/fMpV/1NdEVandZ2PWvpmgIv5XLLHmZ1JX8D3nQ==
+relay_chain=scaas-1
+relay_msg={"record":{"note":"hello"}}
+relay_ref=50cec647f4efc209e1cbce63d6bcb18cb29648784b9060a5f6df52f471088b16

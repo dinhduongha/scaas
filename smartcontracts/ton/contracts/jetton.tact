@@ -224,16 +224,28 @@ contract ScaasJettonWallet(
 
         self.rotateLanes();
         let next = self.laneNext(m.lane);
-        // A revoke may name an order that already left this wallet (its nonce is spent): it takes the next
-        // nonce, so each revoke runs once (review L11).
+        // A revoke may name an order that already left this wallet (its nonce is spent): it takes the next nonce.
+        // Both forms leave the lane at nonce + 2 (NET-TON-18): the first form also spends the second form's slot, so a
+        // resend of the same signed revoke is refused (E_NONCE) and never sends a cancel (review L11; T16 fix 2).
         throwUnless(E_NONCE, next == m.nonce || (m.op == OP_REVOKE && next == m.nonce + 1));
-        self.setLane(m.lane, next + 1);
+        self.setLane(m.lane, m.op == OP_REVOKE ? m.nonce + 2 : next + 1);
 
         nativeReserve(max(myBalance() - ctx.value, self.storageReserve()), ReserveAtMost);
         emit(MetaTransactionExecuted { master: self.master, from: self.owner, digest: m.digest }.toCell());
         if (m.op == OP_PAY) {
             throwUnless(E_VALUE, msg.forwardTon >= m.extra);
             throwUnless(E_BALANCE, m.amount > 0);
+            if (msg.params != null) {
+                // CTR-MTX-26 pay-meta: `params = salt:uint256 ^meta`; the signed payRef commits to (salt, meta), and
+                // lane payLane(payRef) at nonce 0 pays a (payer, payId) at most once (this wallet is the payer's).
+                let p = msg.params!!.beginParse();
+                let salt = p.loadUint(256);
+                let meta = p.loadRef();
+                p.endParse();
+                throwUnless(E_PARAMS, m.payRef == metaPayId(salt, meta) && m.lane == payLane(m.payRef) && m.nonce == 0);
+                requireSnake(meta);
+                emit(PaymentMeta { master: self.master, payId: m.payRef, meta }.toCell());
+            }
             self.sendOut(m.to, m.amount, 0, msg.responseDestination, msg.forwardTon, payTag(m.payRef), SendRemainingBalance);
         } else if (m.op == OP_TRADE) {
             throwUnless(E_PARAMS, msg.params != null && msg.params!!.hash() == m.extra);
@@ -248,6 +260,7 @@ contract ScaasJettonWallet(
             self.sendOut(m.to, m.amount, 0, msg.responseDestination, msg.forwardTon,
                          beginCell().storeBit(true).storeRef(leg).asSlice(), SendRemainingBalance);
         } else if (m.op == OP_REVOKE) {
+            relayAck(ctx.sender, m.digest);
             if (next == m.nonce) {
                 // The order never left this wallet and now never will: spending its nonce is the whole cancel.
                 self.excessTo(msg.responseDestination);
@@ -268,6 +281,7 @@ contract ScaasJettonWallet(
                 rec.endParse();
                 self.passkey = msg.params;
             }
+            relayAck(ctx.sender, m.digest);
             self.excessTo(msg.responseDestination);
         } else {
             throw(E_OP);
@@ -366,5 +380,13 @@ contract ScaasJettonWallet(
 
     get fun get_passkey(): Cell? {
         return self.passkey;
+    }
+
+    get fun get_meta_pay_id(salt: Int, meta: Cell): Int {
+        return metaPayId(salt, meta);
+    }
+
+    get fun get_pay_lane(p: Int): Int {
+        return payLane(p);
     }
 }

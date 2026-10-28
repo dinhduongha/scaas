@@ -177,7 +177,7 @@ impl Chain {
         self.primary().call(tx).await.map_err(|e| classify(&e))
     }
 
-    /// `who` has code (a contract signer: ERC-1271, `guard::ERC1271_FLOOR`).
+    /// `who` has code (a contract signer: ERC-1271, `guard::erc1271_floor`).
     pub async fn has_code(&self, who: Address) -> Result<bool> {
         Ok(!self.primary().get_code_at(who).await?.is_empty())
     }

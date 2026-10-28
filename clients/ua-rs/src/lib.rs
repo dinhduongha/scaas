@@ -129,6 +129,21 @@ pub fn keccak256(data: &[u8]) -> [u8; 32] {
     keccak(&[data])
 }
 
+/// CTR-MTX-26: the payment id that commits to its metadata, `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`
+/// (`meta = abi.encode(uint16 schema, bytes body)`; on chain `metaPayId`).
+pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.meta", salt, &keccak256(meta)])
+}
+/// CTR-MTX-03: a payment's lane, `keccak256("scaas.pay.lane" ‖ p)` (the 32 bytes of the on-chain `uint256 payLane(p)`).
+pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
+    keccak(&[b"scaas.pay.lane", p])
+}
+/// CTR-MTX-27 (EVM `MtxRelayFee.relayRef`): `keccak256("scaas.relayfee" ‖ uint256 chain_id ‖ target ‖ keccak256(call_data))`.
+/// Other families use their own `ref` forms (salted, family address bytes); this is the EVM one only.
+pub fn relay_ref(chain_id: u64, target: &[u8; 20], call_data: &[u8]) -> [u8; 32] {
+    keccak(&[b"scaas.relayfee", &word(chain_id), target, &keccak256(call_data)])
+}
+
 pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
     let mut h = Keccak256::new();
     for p in parts {

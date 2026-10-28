@@ -298,3 +298,186 @@ fn initialize_is_upgrade_authority_only_and_once() {
     let k = auth_kp.pubkey();
     ok(env2.send(&[env2.initialize_ix(&k)], &[&auth_kp]));
 }
+
+// ------------------------------------------------------------------ CTR-MTX-26: relay_pay_meta
+
+/// `smartcontracts/vectors/metatx/paymeta.json`, shared with the EVM forge test, `clientkeys` and every family.
+fn meta_rows() -> Vec<serde_json::Value> {
+    serde_json::from_str(include_str!("../../../../vectors/metatx/paymeta.json")).unwrap()
+}
+
+fn h(v: &serde_json::Value) -> Vec<u8> {
+    hexd(v.as_str().unwrap().trim_start_matches("0x"))
+}
+
+fn h32(v: &serde_json::Value) -> [u8; 32] {
+    h(v).try_into().unwrap()
+}
+
+/// A pay-meta pay of `amount` to `to` for the vector row (`pay_ref = payId`, `lane = payLane(payId)`, nonce 0).
+fn meta_args(to: &Pubkey, amount: u64, row: &serde_json::Value) -> scaas::PayArgs {
+    scaas::PayArgs {
+        to: to.to_bytes(),
+        amount,
+        pay_ref: h32(&row["payId"]),
+        lane: h32(&row["payLane"]),
+        nonce: 0,
+        valid_until: 1000,
+        relayer: [0; 32],
+        extra: [0; 32],
+    }
+}
+
+fn events(m: &litesvm::types::TransactionMetadata) -> Vec<Vec<u8>> {
+    m.inner_instructions.iter().flatten().map(|i| i.instruction.data.clone())
+        .filter(|d| d.starts_with(&anchor_lang::event::EVENT_IX_TAG_LE)).collect()
+}
+
+fn disc<E: anchor_lang::Discriminator>() -> &'static [u8] {
+    E::DISCRIMINATOR
+}
+
+/// Rule 1: every row's `payId` / `payLane` byte for byte (the program's keccak), and every row that fits a
+/// transaction pays on chain under it (`long_body_4096` is a hash vector only).
+#[test]
+fn pay_meta_vectors_match() {
+    let rows = meta_rows();
+    assert_eq!(rows.len(), 6);
+    for r in &rows {
+        let (salt, meta) = (h32(&r["salt"]), h(&r["meta"]));
+        assert_eq!(scaas::meta_pay_id(&salt, &meta), h32(&r["payId"]), "{}", r["name"]);
+        assert_eq!(scaas::pay_lane(&h32(&r["payId"])), h32(&r["payLane"]), "{}", r["name"]);
+    }
+    let (mut env, alice, usd) = vector_env();
+    let bob = pk(V::BOB);
+    for r in rows.iter().filter(|r| r["name"] != "long_body_4096") {
+        let m = ok(env.pay_meta(&alice, &usd, TOKEN, &meta_args(&bob, 1, r), h32(&r["salt"]), &h(&r["meta"])));
+        assert!(events(&m).iter().any(|e| e.windows(32).any(|w| w == h(&r["payId"]).as_slice())), "{}", r["name"]);
+    }
+    assert_eq!(env.balance(&pk(V::BOB_ATA_USD)), 5);
+}
+
+/// Events: `MetaTransactionExecuted`, `PaymentMeta { contract: mint, pay_id, meta }`, then `PaymentSettled`.
+#[test]
+fn pay_meta_emits_meta_then_settled() {
+    let (mut env, alice, usd) = vector_env();
+    let r = &meta_rows()[0];
+    let (salt, meta) = (h32(&r["salt"]), h(&r["meta"]));
+    let m = ok(env.pay_meta(&alice, &usd, TOKEN, &meta_args(&pk(V::BOB), 40, r), salt, &meta));
+    eprintln!("relay_pay_meta ({} B meta, lazy open): {} CU", meta.len(), m.compute_units_consumed);
+    assert_eq!(env.balance(&pk(V::BOB_ATA_USD)), 40);
+    let ev = events(&m);
+    assert_eq!(ev.len(), 3);
+    assert_eq!(&ev[0][8..16], disc::<scaas::MetaTransactionExecuted>());
+    assert_eq!(&ev[1][8..16], disc::<scaas::PaymentMeta>());
+    assert_eq!(&ev[2][8..16], disc::<scaas::PaymentSettled>());
+    let mut want = usd.to_bytes().to_vec();
+    want.extend_from_slice(&h(&r["payId"]));
+    want.extend_from_slice(&(meta.len() as u32).to_le_bytes());
+    want.extend_from_slice(&meta);
+    assert_eq!(&ev[1][16..], want.as_slice());
+    assert!(ev[2].ends_with(&h(&r["payId"])), "PaymentSettled.pay_ref = payId");
+    let plain = ok(env.pay(&alice, &usd, TOKEN, &env.args(&pk(V::BOB), 1, 1, 0xa1, 0, 1000)));
+    eprintln!("relay_pay (warm, same accounts): {} CU", plain.compute_units_consumed);
+    let r = &meta_rows()[4];
+    let m = ok(env.pay_meta(&alice, &usd, TOKEN, &meta_args(&pk(V::BOB), 1, r), h32(&r["salt"]), &h(&r["meta"])));
+    eprintln!("relay_pay_meta (warm, {} B meta): {} CU", h(&r["meta"]).len(), m.compute_units_consumed);
+}
+
+/// Review focus 4: `(salt, meta)` that does not hash to `pay_ref`, a lane that is not `payLane(pay_ref)`, a nonce
+/// other than 0, and a second pay of the same `(payer, payId)` (pay-meta or plain) are refused.
+#[test]
+fn solana_pay_meta_mismatch_and_replay() {
+    let (mut env, alice, usd) = vector_env();
+    let bob = pk(V::BOB);
+    let r = &meta_rows()[1];
+    let (salt, meta) = (h32(&r["salt"]), h(&r["meta"]));
+    let good = meta_args(&bob, 5, r);
+    let mut other = meta.clone();
+    other[40] ^= 1;
+    expect_err(env.pay_meta(&alice, &usd, TOKEN, &good, salt, &other), E::PayMetaShape);
+    expect_err(env.pay_meta(&alice, &usd, TOKEN, &good, [0; 32], &meta), E::PayMetaShape);
+    let mut a = good.clone();
+    a.lane = [0xa1; 32];
+    expect_err(env.pay_meta(&alice, &usd, TOKEN, &a, salt, &meta), E::PayMetaShape);
+    let mut a = good.clone();
+    a.nonce = 1;
+    expect_err(env.pay_meta(&alice, &usd, TOKEN, &a, salt, &meta), E::PayMetaShape);
+    ok(env.pay_meta(&alice, &usd, TOKEN, &good, salt, &meta));
+    expect_err(env.pay_meta(&alice, &usd, TOKEN, &good, salt, &meta), E::BadNonce);
+    expect_err(env.pay(&alice, &usd, TOKEN, &good), E::BadNonce);
+    assert_eq!(env.balance(&pk(V::BOB_ATA_USD)), 5);
+    // plain pay first, then the pay-meta of the same payId
+    let r = &meta_rows()[2];
+    ok(env.pay(&alice, &usd, TOKEN, &meta_args(&bob, 2, r)));
+    expect_err(env.pay_meta(&alice, &usd, TOKEN, &meta_args(&bob, 2, r), h32(&r["salt"]), &h(&r["meta"])), E::BadNonce);
+    assert_eq!(env.balance(&pk(V::BOB_ATA_USD)), 7);
+}
+
+/// Rule 6: the once-set is per payer (the lane PDA is keyed by the payer's Account): someone else paying under the
+/// victim's `(salt, meta)` / `payId` uses their own lane and never blocks the victim.
+#[test]
+fn pay_meta_id_is_per_payer() {
+    let (mut env, alice, usd) = vector_env();
+    let mallory = Ed::new("mallory");
+    env.fund(&mallory.account(), &usd, TOKEN, 10);
+    let bob = pk(V::BOB);
+    let r = &meta_rows()[0];
+    let (salt, meta) = (h32(&r["salt"]), h(&r["meta"]));
+    expect_err(env.pay_meta(&mallory, &usd, TOKEN, &meta_args(&mallory.pubkey(), 0, r), salt, &meta), E::ZeroAmount);
+    ok(env.pay_meta(&mallory, &usd, TOKEN, &meta_args(&mallory.pubkey(), 1, r), salt, &meta));
+    ok(env.pay_meta(&alice, &usd, TOKEN, &meta_args(&bob, 30, r), salt, &meta));
+    assert_eq!(env.balance(&pk(V::BOB_ATA_USD)), 30);
+}
+
+// ------------------------------------------------------------------ RelayPay PDAs checked in `settle` (T11 fix 2/3)
+
+/// `RelayPay` derives `subject` and `lane_pda` in the body: a substituted Account (with its own token account) or
+/// lane PDA is `BadAccounts`; a program-owned account with another discriminator at the lane PDA address is
+/// `AccountDiscriminatorMismatch`; a foreign-owned account there is `BadOwner`; an address only pre-funded with
+/// lamports (no data) is topped up and created.
+#[test]
+fn relay_pay_pdas_are_checked_in_the_body() {
+    let (mut env, alice, usd) = vector_env();
+    let bob = Ed::new("bob");
+    let kp = bob.kp();
+    ok(env.send(&[env.open_ix(&bob.pubkey())], &[&kp]));
+    env.fund(&bob.account(), &usd, TOKEN, 100);
+    let to = pk(V::BOB);
+    let args = env.args(&to, 5, 1, 0x21, 0, 1000);
+    let dg = env.metaop_digest(&alice.account(), &usd, A::OP_PAY, &alice.pk(), &args);
+    let e = alice.sign(A::KIND_RAW, A::METAOP_LABEL, &dg);
+    let src = ata(&alice.account(), &usd, &TOKEN);
+    let ix0 = env_pay_ix(&env, &alice, &usd, src, &args);
+    let base = || ix0.clone();
+    // another Account (and its token account, so the token constraint holds)
+    let mut ix = base();
+    ix.accounts[2].pubkey = bob.account();
+    ix.accounts[4].pubkey = ata(&bob.account(), &usd, &TOKEN);
+    expect_err(env.send(&[ed_ix(std::slice::from_ref(&e)), ix], &[]), E::BadAccounts);
+    // another lane PDA (of another lane id)
+    let mut ix = base();
+    ix.accounts[3].pubkey = pda(&[b"lane", alice.account().as_ref(), &[0x22; 32]]);
+    expect_err(env.send(&[ed_ix(std::slice::from_ref(&e)), ix], &[]), E::BadAccounts);
+    let lp = pda(&[b"lane", alice.account().as_ref(), &args.lane]);
+    let rent = env.svm.minimum_balance_for_rent_exemption(56);
+    // a program-owned account with another discriminator
+    let mut data = <scaas::state::MandateRef as anchor_lang::Discriminator>::DISCRIMINATOR.to_vec();
+    data.resize(56, 0);
+    env.svm.set_account(lp, solana_account::Account { lamports: rent, data, owner: scaas::ID, executable: false, rent_epoch: 0 }).unwrap();
+    let res = env.send(&[ed_ix(std::slice::from_ref(&e)), base()], &[]);
+    assert_eq!(custom(&res), Some(anchor_lang::error::ErrorCode::AccountDiscriminatorMismatch as u32));
+    // a foreign-owned account with data
+    env.svm.set_account(lp, solana_account::Account { lamports: rent, data: vec![0; 56], owner: TOKEN, executable: false, rent_epoch: 0 }).unwrap();
+    expect_err(env.send(&[ed_ix(std::slice::from_ref(&e)), base()], &[]), E::BadOwner);
+    // pre-funded with lamports only: topped up to rent and created
+    env.svm.set_account(lp, solana_account::Account { lamports: 1_000, data: vec![], owner: SYSTEM, executable: false, rent_epoch: 0 }).unwrap();
+    ok(env.send(&[ed_ix(&[e]), base()], &[]));
+    let lane: scaas::state::LanePda = env.account(&lp).unwrap();
+    assert_eq!((lane.next, lane.rent_payer), (1, env.lane.pubkey()));
+    assert_eq!(env.balance(&pk(V::BOB_ATA_USD)), 5);
+}
+
+fn env_pay_ix(env: &Env, who: &Ed, usd: &Pubkey, src: Pubkey, args: &scaas::PayArgs) -> Instruction {
+    env.pay_ix(&who.pk(), usd, TOKEN, src, args, auth(A::KIND_RAW, 0, 0, 0))
+}

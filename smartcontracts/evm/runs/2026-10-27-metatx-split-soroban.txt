@@ -1,0 +1,75 @@
+# soroban at commit 67fa7a45
+== test soroban
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running unittests src/lib.rs (target/debug/deps/scaas_dex-dfb6714ca5930530)
+
+running 9 tests
+test test::cancelled_order_never_settles ... ok
+test test::taker_must_name_a_positive_price ... ok
+test test::same_token_order_cannot_match_itself ... ok
+test test::price_limits_and_expiry ... ok
+test test::unknown_market_is_refused ... ok
+test test::fee_inside_signed_max_and_under_cap ... ok
+test test::eighteen_decimal_amounts_do_not_overflow ... ok
+test test::partial_fills_never_overfill ... ok
+test test::settles_both_signed_orders_with_fees ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_mandate-ff202451b142ece5)
+
+running 4 tests
+test test::owner_or_delegate_revokes_nobody_else ... ok
+test test::bad_mandates_are_refused_and_owner_withdraws ... ok
+test test::unbounded_period_never_overflows ... ok
+test test::delegate_pays_within_caps_and_period_resets ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_relay_fee-c4a4336e9575f09d)
+
+running 9 tests
+test test::relay_refuses_target_without_contract ... ok
+test test::relay_bound_payee ... ok
+test test::relay_open_mode_pays_relayer ... ok
+test test::relay_same_call_with_different_salts_and_replay ... ok
+test test::soroban_router_bound_pay_refused_direct ... ok
+test test::relay_ref_vectors ... ok
+test test::relay_attacker_cannot_pre_burn_the_ref ... ok
+test test::relay_target_failure_reverts_all ... ok
+test test::relay_g_account_payer_real_signed_entries ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_smart_key_account-6de4ce6878267dd6)
+
+running 10 tests
+test test::expired_signature_ledger_is_refused ... ok
+test test::last_key_cannot_be_removed ... ok
+test test::anti_lock_withheld_op_does_not_block_another_contract ... ok
+test test::passkey_challenge_must_be_this_payload ... ok
+test test::adding_a_key_needs_an_existing_key ... ok
+test test::signature_for_token_1_does_not_open_token_2 ... ok
+test test::passkey_pays_and_bad_assertions_are_refused ... ok
+test test::ed25519_key_pays_and_nonce_cannot_replay ... ok
+test test::passkey_batch_merkle ... ok
+test test::dex_settles_on_real_signatures_once_per_signature ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_token-4b80acc13777ab4b)
+
+running 9 tests
+test test::pay_meta_vectors_match ... ok
+test test::pay_requires_the_payer ... ok
+test test::cross_implementation_vector ... ok
+test test::sep41_basics ... ok
+test test::approve_only_to_contracts ... ok
+test test::pay_moves_funds_once_per_ref_and_respects_expiry ... ok
+test test::pay_meta_settles_and_emits_meta_first ... ok
+test test::pay_ref_is_per_payer_nobody_can_pre_burn_it ... ok
+test test::soroban_pay_meta_mismatch_and_replay ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+rc=0
