@@ -1,0 +1,123 @@
+# T16 fix 1 RED: new tests against stubs (fix bodies absent), at commit 3a53404e + fix-1 work tree
+warning: methods `origins` and `passkey_only` are never used
+   --> src/adapters/near.rs:415:8
+    |
+331 | impl Auth {
+    | --------- methods in this implementation
+...
+415 |     fn origins(&self) -> Vec<String> {
+    |        ^^^^^^^
+...
+424 |     fn passkey_only(&self) -> bool {
+    |        ^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `scaas-node` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.50s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-dbe39b21340e8e02)
+
+running 32 tests
+test adapters::near::tests::action_fees_and_timeout_are_priced ... FAILED
+test adapters::near::tests::key_sets_shown_for_key_op_jobs ... FAILED
+test adapters::near::tests::near_events_success_only_configured ... ok
+test adapters::near::tests::near_events_join_meta_relay_fee_and_mandate ... ok
+test adapters::near::tests::near_events_trades_from_transfers ... ok
+test adapters::near::tests::near_metaop_decode_vectors ... ok
+test adapters::near::tests::near_pay_meta_job_checks_commitment ... ok
+test adapters::near::tests::key_sets_per_token ... ok
+test adapters::near::tests::deposit_equals_storage_needed_plus_nep_yocto ... ok
+test adapters::near::tests::events_scan_blocks ... ok
+test adapters::near::tests::escrow_foreign_entry_not_followed ... FAILED
+test adapters::near::tests::escrow_tracking_times_out_after_deadline ... ok
+test adapters::near::tests::near_amount_above_2_pow_53_round_trips ... ok
+test adapters::near::tests::near_relay_fee_job_checks_ref ... ok
+test adapters::near::tests::relay_fee_target_router_or_executor_refused ... ok
+test adapters::near::tests::refunded_router_job_is_not_consumed ... FAILED
+test adapters::near::tests::relay_fee_config_must_parse ... ok
+test adapters::near::tests::signature_budgets ... ok
+test adapters::near::tests::pruned_heights_error ... FAILED
+test adapters::near::tests::start_check_lane_unregistered_errors ... ok
+test adapters::near::tests::router_target_bound_to_fail_refused ... FAILED
+test adapters::near::tests::relay_fee_target_without_code_refused ... ok
+test adapters::near::tests::unknown_job_kind_is_refused ... ok
+test adapters::near::tests::stuck_settle_checks_relay_held ... FAILED
+test adapters::near::tests::wrapper_conflicts_refused ... FAILED
+test adapters::near::tests::submit_errors_are_classified ... ok
+test adapters::near::tests::tx_matches_near_primitives ... ok
+test adapters::near::tests::view_over_gas_cap_is_transport ... FAILED
+test adapters::near::tests::start_check_genesis_mismatch_errors ... ok
+test adapters::near::tests::quote_covers_gas_and_storage_needed ... ok
+test adapters::near::tests::start_check_access_key_present_halts ... ok
+test adapters::near::tests::near_jobs_never_panic ... ok
+
+failures:
+
+---- adapters::near::tests::action_fees_and_timeout_are_priced stdout ----
+
+thread 'adapters::near::tests::action_fees_and_timeout_are_priced' (3085956) panicked at src/adapters/near.rs:2356:9:
+assertion `left == right` failed
+  left: 0
+ right: 4856320489876
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapters::near::tests::key_sets_shown_for_key_op_jobs stdout ----
+
+thread 'adapters::near::tests::key_sets_shown_for_key_op_jobs' (3085962) panicked at src/adapters/near.rs:2919:9:
+
+
+---- adapters::near::tests::escrow_foreign_entry_not_followed stdout ----
+
+thread 'adapters::near::tests::escrow_foreign_entry_not_followed' (3085958) panicked at src/adapters/near.rs:2846:9:
+assertion failed: matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { .. })
+
+---- adapters::near::tests::refunded_router_job_is_not_consumed stdout ----
+
+thread 'adapters::near::tests::refunded_router_job_is_not_consumed' (3086011) panicked at src/adapters/near.rs:2699:9:
+assertion `left == right` failed
+  left: Some(true)
+ right: None
+
+---- adapters::near::tests::pruned_heights_error stdout ----
+
+thread 'adapters::near::tests::pruned_heights_error' (3086005) panicked at src/adapters/near.rs:2820:72:
+called `Result::unwrap_err()` on an `Ok` value: []
+
+---- adapters::near::tests::router_target_bound_to_fail_refused stdout ----
+
+thread 'adapters::near::tests::router_target_bound_to_fail_refused' (3086040) panicked at src/adapters/near.rs:2742:94:
+called `Result::unwrap()` on an `Err` value: params.relay_fee.targets is not a key of the near family (router, min_amount, relay_bound_payee, executor, min_yocto_value)
+
+---- adapters::near::tests::stuck_settle_checks_relay_held stdout ----
+
+thread 'adapters::near::tests::stuck_settle_checks_relay_held' (3086046) panicked at src/adapters/near.rs:2869:9:
+assertion failed: matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if
+    reason.contains("still held"))
+
+---- adapters::near::tests::wrapper_conflicts_refused stdout ----
+
+thread 'adapters::near::tests::wrapper_conflicts_refused' (3086085) panicked at src/adapters/near.rs:2891:66:
+called `Result::unwrap_err()` on an `Ok` value: ()
+
+---- adapters::near::tests::view_over_gas_cap_is_transport stdout ----
+
+thread 'adapters::near::tests::view_over_gas_cap_is_transport' (3086072) panicked at src/adapters/near.rs:2938:9:
+assertion failed: matches!(a.build(&job(o_of("pay", json!({}))), 0).await,
+    Err(SimError::Transport(_)))
+
+
+failures:
+    adapters::near::tests::action_fees_and_timeout_are_priced
+    adapters::near::tests::escrow_foreign_entry_not_followed
+    adapters::near::tests::key_sets_shown_for_key_op_jobs
+    adapters::near::tests::pruned_heights_error
+    adapters::near::tests::refunded_router_job_is_not_consumed
+    adapters::near::tests::router_target_bound_to_fail_refused
+    adapters::near::tests::stuck_settle_checks_relay_held
+    adapters::near::tests::view_over_gas_cap_is_transport
+    adapters::near::tests::wrapper_conflicts_refused
+
+test result: FAILED. 23 passed; 9 failed; 0 ignored; 0 measured; 344 filtered out; finished in 3.77s
+
+error: test failed, to rerun pass `--lib`
+rc=101

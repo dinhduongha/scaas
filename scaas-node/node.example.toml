@@ -209,6 +209,8 @@ finality = { mode = "instant", quorum = 1 }      # the adapter reads `final` blo
 # carry this network, and have every lane registered (`storage_deposit`). dex: the escrow DEX (its `matched` joins
 # trade legs). relay_fee: the escrow router and its executor (both keyless; `router.executor()` must match),
 # min_yocto_value = yoctoNEAR per base unit of each fee token (decimal string): a fee must cover gas × the node's
-# gas price + the deposits the job attaches.
+# gas price + the transaction's action fees + the deposits the job attaches (+ one relay_timeout for a router job).
+# Router targets: the tokens and the DEX (their call is checked first), plus `targets = ["<account>", …]` the operator
+# vouches for. A view stopped by the RPC's max_gas_burnt_view is retried, never fatal.
 tokens = [{ address = "token.test.near", decimals = 6 }]
 params = { dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }

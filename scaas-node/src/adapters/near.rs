@@ -311,15 +311,22 @@ impl MetaOp {
     }
 }
 
-/// The shape of a Borsh `Auth` (common/src/auth.rs: 0 ed25519, 1 secp256k1, 2 passkey, 3 msig), checked off chain only
-/// for its size and signature budget; the job forwards the bytes as signed.
+/// A Borsh `Auth` (common/src/auth.rs: 0 ed25519, 1 secp256k1, 2 passkey, 3 msig), read off chain for its size, its
+/// signature budget and the key record / passkey origin it signs with; the job forwards the bytes as signed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Auth {
-    Ed25519,
-    Secp256k1,
-    Passkey,
-    Msig(Vec<Auth>),
+    Ed25519([u8; 32]),
+    Secp256k1([u8; 64]),
+    /// `rp` = the authenticatorData's rpIdHash (its first 32 bytes), `origin` = clientDataJSON's `origin`.
+    Passkey { key: [u8; 64], rp: Option<[u8; 32]>, origin: Option<String> },
+    Msig { key_data: Vec<u8>, sigs: Vec<Auth> },
 }
+
+/// UA kinds (common/src/ua.rs).
+const KIND_WEBAUTHN_P256: u16 = 0x0100;
+const KIND_ED25519: u16 = 0x0102;
+const KIND_SECP256K1: u16 = 0x0108;
+const KIND_MSIG: u16 = 0x0120;
 
 impl Auth {
     /// Exactly one `Auth`; an msig inside an msig and a passkey field over `PASSKEY_FIELD_MAX` refused (as on chain).
@@ -333,31 +340,35 @@ impl Auth {
     fn read(r: &mut Reader, top: bool) -> Result<Self> {
         Ok(match r.u8()? {
             0 => {
-                r.take(32 + 64)?;
-                Auth::Ed25519
+                let key = r.arr32()?;
+                r.take(64)?;
+                Auth::Ed25519(key)
             }
             1 => {
-                r.take(64 + 64 + 1)?;
-                Auth::Secp256k1
+                let key: [u8; 64] = r.take(64)?.try_into()?;
+                r.take(64 + 1)?;
+                Auth::Secp256k1(key)
             }
             2 => {
+                let key: [u8; 64] = r.take(64)?.try_into()?;
+                let (ad, cd) = (r.bytes()?, r.bytes()?);
                 r.take(64)?;
-                let (ad, cd) = (r.bytes()?.len(), r.bytes()?.len());
-                r.take(64)?;
-                if ad > PASSKEY_FIELD_MAX || cd > PASSKEY_FIELD_MAX {
+                if ad.len() > PASSKEY_FIELD_MAX || cd.len() > PASSKEY_FIELD_MAX {
                     bail!("passkey clientDataJSON / authenticatorData over {PASSKEY_FIELD_MAX} bytes");
                 }
-                Auth::Passkey
+                let rp = ad.get(..32).and_then(|x| x.try_into().ok());
+                let origin = serde_json::from_slice::<Value>(cd).ok().and_then(|v| v["origin"].as_str().map(str::to_string));
+                Auth::Passkey { key, rp, origin }
             }
             3 if top => {
-                r.bytes()?;
+                let key_data = r.bytes()?.to_vec();
                 let n = r.u32()?;
                 let mut sigs = Vec::new();
                 for _ in 0..n {
                     r.u8()?;
                     sigs.push(Self::read(r, false)?);
                 }
-                Auth::Msig(sigs)
+                Auth::Msig { key_data, sigs }
             }
             3 => bail!("msig inside msig"),
             t => bail!("auth tag {t}"),
@@ -366,8 +377,8 @@ impl Auth {
 
     pub fn passkeys(&self) -> usize {
         match self {
-            Auth::Passkey => 1,
-            Auth::Msig(v) => v.iter().map(Self::passkeys).sum(),
+            Auth::Passkey { .. } => 1,
+            Auth::Msig { sigs, .. } => sigs.iter().map(Self::passkeys).sum(),
             _ => 0,
         }
     }
@@ -375,18 +386,50 @@ impl Auth {
     /// Gas a job prepays for this auth's signatures.
     fn attach_gas(&self) -> u64 {
         match self {
-            Auth::Passkey => GAS_PASSKEY,
-            Auth::Ed25519 | Auth::Secp256k1 => GAS_KEY_SIG,
-            Auth::Msig(v) => v.iter().map(Self::attach_gas).fold(0, u64::saturating_add),
+            Auth::Passkey { .. } => GAS_PASSKEY,
+            Auth::Ed25519(_) | Auth::Secp256k1(_) => GAS_KEY_SIG,
+            Auth::Msig { sigs, .. } => sigs.iter().map(Self::attach_gas).fold(0, u64::saturating_add),
         }
     }
 
-    /// The router's `sig_gas` of this auth (its `relay_gas` term).
+    /// The router's `sig_gas` of this auth (its `relay_gas` term; the DEX's `leg_gas` term).
     fn router_gas(&self) -> u64 {
         match self {
-            Auth::Passkey => ROUTER_SIG_PASSKEY,
-            Auth::Ed25519 | Auth::Secp256k1 => ROUTER_SIG_KEY,
-            Auth::Msig(v) => v.iter().map(Self::router_gas).fold(0, u64::saturating_add),
+            Auth::Passkey { .. } => ROUTER_SIG_PASSKEY,
+            Auth::Ed25519(_) | Auth::Secp256k1(_) => ROUTER_SIG_KEY,
+            Auth::Msig { sigs, .. } => sigs.iter().map(Self::router_gas).fold(0, u64::saturating_add),
+        }
+    }
+
+    /// The subject key record this auth signs as (`Auth::key` on chain), `None` for a passkey without an rpIdHash.
+    pub fn record(&self) -> Option<(u16, Vec<u8>)> {
+        match self {
+            Auth::Ed25519(k) => Some((KIND_ED25519, k.to_vec())),
+            Auth::Secp256k1(k) => Some((KIND_SECP256K1, k.to_vec())),
+            Auth::Passkey { key, rp, .. } => rp.map(|rp| (KIND_WEBAUTHN_P256, [&key[..], &rp].concat())),
+            Auth::Msig { key_data, .. } => Some((KIND_MSIG, key_data.clone())),
+        }
+    }
+
+    /// The origins of its passkey signatures.
+    fn origins(&self) -> Vec<String> {
+        match self {
+            Auth::Passkey { origin, .. } => origin.iter().cloned().collect(),
+            Auth::Msig { sigs, .. } => sigs.iter().flat_map(Self::origins).collect(),
+            _ => vec![],
+        }
+    }
+
+    /// Passes `POLICY_PASSKEY_FOR_VALUE` (token `value_policy`): a passkey, or an msig whose members are all passkeys.
+    fn passkey_only(&self) -> bool {
+        match self {
+            Auth::Passkey { .. } => true,
+            Auth::Msig { key_data, .. } => {
+                let n = key_data.get(2..4).map_or(0, |c| u16::from_be_bytes([c[0], c[1]]) as usize);
+                n > 0 && key_data.len() == 4 + 36 * n
+                    && (0..n).all(|i| key_data[4 + 36 * i..4 + 36 * i + 2] == KIND_WEBAUTHN_P256.to_be_bytes())
+            }
+            _ => false,
         }
     }
 }
@@ -522,6 +565,10 @@ pub struct RelayFeePolicy {
     pub params: crate::config::RelayParams,
     /// `min_yocto_value = { "<token>" = "<yoctoNEAR per base unit>" }`: the node's floor price of a fee token.
     pub min_yocto_value: HashMap<String, u128>,
+    /// `params.dex`: the escrow DEX (a router target, its `matched` joins trade legs).
+    pub dex: Option<String>,
+    /// `params.relay_fee.targets`: third-party router targets beside the configured tokens and the DEX.
+    pub targets: Vec<String>,
 }
 
 impl RelayFeePolicy {
@@ -550,6 +597,22 @@ impl RelayFeePolicy {
             }
             _ => {}
         }
+        let dex = match cfg.params.get("dex") {
+            None => None,
+            Some(v) => Some(near_id(v.as_str().ok_or_else(|| anyhow!("params.dex must be a string"))?).context("params.dex")?),
+        };
+        let mut targets = Vec::new();
+        if let Some(v) = t.and_then(|t| t.get("targets")) {
+            let list = v.as_array().ok_or_else(|| anyhow!("params.relay_fee.targets must be a list of account ids"))?;
+            for x in list {
+                let id = near_id(x.as_str().ok_or_else(|| anyhow!("params.relay_fee.targets: {x} is not a string"))?)
+                    .context("params.relay_fee.targets")?;
+                if Some(&id) == router.as_ref() || Some(&id) == executor.as_ref() {
+                    bail!("params.relay_fee.targets: {id} is the router or its executor");
+                }
+                targets.push(id);
+            }
+        }
         let mut min_yocto_value = HashMap::new();
         if let Some(v) = t.and_then(|t| t.get("min_yocto_value")) {
             let table = v.as_table().ok_or_else(|| anyhow!("params.relay_fee.min_yocto_value must be a table of token = yoctoNEAR"))?;
@@ -566,7 +629,7 @@ impl RelayFeePolicy {
                 min_yocto_value.insert(k.clone(), price);
             }
         }
-        Ok(Self { router, executor, tokens, params, min_yocto_value })
+        Ok(Self { router, executor, tokens, params, min_yocto_value, dex, targets })
     }
 }
 
@@ -677,6 +740,11 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
             if method == "add_key_native" {
                 bail!("a relay-fee target method add_key_native is refused (no key is ever registered for the executor)");
             }
+            // fix 1 I2: only targets whose calls the node can vouch for (SCaaS, checked in `build`) or the operator lists
+            let allowed = policy.tokens.iter().chain(&policy.dex).chain(&policy.targets).any(|x| *x == target);
+            if !allowed {
+                bail!("{target} is not an allowed router target (configured tokens, params.dex, params.relay_fee.targets)");
+            }
             if pays(op, Some(executor)) {
                 bail!("the executor is never paid");
             }
@@ -743,6 +811,155 @@ fn fee_covers(policy: &RelayFeePolicy, op: &MetaOp, quote: u128) -> Result<()> {
     }
     Ok(())
 }
+
+/// relayfee `relay_held(router, ref) -> Option<Held>` ⇒ something is held.
+fn decode_held(b: &[u8]) -> Result<bool> {
+    let mut r = Reader::new(b);
+    let held = r.option(|r| {
+        r.holder()?;
+        r.holder()?;
+        r.u128()?;
+        r.account()?;
+        r.u128()
+    })?;
+    r.end()?;
+    Ok(held.is_some())
+}
+
+/// One leg of a DEX `settle(order_a, op_a, auth_a, order_b, op_b, auth_b)` (common/src/metaop.rs `Order`).
+#[derive(Debug, Clone)]
+struct SettleLeg {
+    order: Vec<u8>,
+    sell_token: String,
+    relayer: Option<String>,
+    op: MetaOp,
+    auth_raw: Vec<u8>,
+    auth: Auth,
+}
+
+/// A `settle` call's arguments, canonical and complete.
+fn settle_legs(b: &[u8]) -> Result<Vec<SettleLeg>> {
+    let mut r = Reader::new(b);
+    let mut legs = Vec::new();
+    for _ in 0..2 {
+        let start = r.i;
+        let sell_token = r.account()?;
+        r.account()?;
+        r.u128()?;
+        r.u128()?;
+        let relayer = r.option(|r| r.account())?;
+        r.u64()?;
+        let order = b[start..r.i].to_vec();
+        let op = MetaOp::read(&mut r)?;
+        let at = r.i;
+        let auth = Auth::read(&mut r, true)?;
+        legs.push(SettleLeg { order, sell_token, relayer, op, auth_raw: b[at..r.i].to_vec(), auth });
+    }
+    r.end()?;
+    Ok(legs)
+}
+
+/// The token entries a router job may target: each has a `<method>_check(caller, …same args)` view and takes
+/// `(op, auth, …)` first (token/src/{metatx,account,mandate,trade}.rs).
+const TOKEN_CHECKED: &[&str] = &[
+    "mtx_pay", "mtx_pay_meta", "mtx_transfer", "mtx_execute_transfer", "mtx_add_key", "mtx_remove_key", "mtx_add_origin",
+    "mtx_remove_origin", "mtx_set_guardian", "mtx_set_policy", "mtx_start_recovery", "mtx_finish_recovery",
+    "mtx_cancel_recovery", "mtx_mandate_open", "mtx_mandate_pay", "mtx_revoke", "mtx_trade", "mtx_cancel",
+    "mtx_invalidate_nonces",
+];
+/// The DEX `settle` floor (dex/src/lib.rs `settle_gas`): `GAS_SETTLE_SELF` 9 + `GAS_ON_LEGS` 18 + per leg `GAS_LEG_BASE`
+/// 6 + its `sig_gas`.
+const DEX_SETTLE_GAS: u64 = 27 * TGAS;
+const DEX_LEG_GAS: u64 = 6 * TGAS;
+/// dex `PAYOUT_YOCTO`, and the fixed bytes of a settle entry beside Borsh(Settle) (near-vectors.json `dexEntry`: key
+/// `s` ‖ id 33 + 40, two leg-index records 105 each).
+const DEX_PAYOUT_YOCTO: u128 = 2;
+const DEX_ENTRY_FIXED_BYTES: u64 = 283;
+/// The `target_gas` floor of a listed third-party target (`params.relay_fee.targets`): the node cannot read its call,
+/// so only an empty budget is refused; the operator vouches for the target.
+pub const GAS_TARGET_MIN: u64 = 5 * TGAS;
+
+/// The Borsh size of a holder.
+fn holder_len(h: &Holder) -> u64 {
+    match h {
+        Holder::Near(a) => 1 + 4 + a.len() as u64,
+        Holder::Ua(_) => 33,
+    }
+}
+
+/// Fix 1 m4: a wrapper job whose entry makes its own fee payment fail is refused before simulation (the check view
+/// runs both against the state before the entry, so it passes): removing the payment's signing key, removing its
+/// passkey's origin, or turning on passkey-for-value while the payment is not passkey-signed — when the entry's subject
+/// is the payer.
+pub fn wrapper_conflicts(entry: &Entry, op: &MetaOp, auth: &Auth) -> Result<()> {
+    let Entry::FeeWrapper { entry, args } = entry else { return Ok(()) };
+    let mut r = Reader::new(args);
+    let eop = MetaOp::read(&mut r)?;
+    Auth::read(&mut r, true)?;
+    if eop.from != op.from {
+        return Ok(());
+    }
+    match entry.as_str() {
+        "mtx_remove_key" => {
+            let key = (r.u16()?, r.bytes()?.to_vec());
+            if auth.record() == Some(key) {
+                bail!("the entry would remove the key the fee payment is signed with: the payment must fail");
+            }
+        }
+        "mtx_remove_origin" => {
+            let origin = r.string()?;
+            if auth.origins().contains(&origin) {
+                bail!("the entry would remove the origin {origin} of the fee payment's passkey: the payment must fail");
+            }
+        }
+        "mtx_set_policy" => anyhow::ensure!(
+            r.u8()? & 1 == 0 || auth.passkey_only(),
+            "the entry turns on passkey-for-value but the fee payment is not passkey-signed: the payment must fail"
+        ),
+        _ => {}
+    }
+    Ok(())
+}
+
+/// nearcore `RuntimeFeesConfig` defaults (gas): an action receipt's creation, a function call's base and per byte of
+/// method name and args, each charged at send and at execution, on top of the prepaid gas.
+const FEE_ACTION_RECEIPT: u64 = 108_059_500_000;
+const FEE_FUNCTION_CALL: u64 = 2_319_861_500_000;
+const FEE_FUNCTION_CALL_BYTE: u64 = 2_235_934;
+
+/// Fix 1 m5: the gas a lane transaction burns besides its prepaid gas (its action fees).
+pub fn action_fees(call: &Call) -> u64 {
+    let bytes = (call.method.len() as u64).saturating_add(call.args.len() as u64);
+    2 * FEE_ACTION_RECEIPT + 2 * FEE_FUNCTION_CALL + FEE_FUNCTION_CALL_BYTE.saturating_mul(bytes).saturating_mul(2)
+}
+
+/// Fix 1 m5: one `relay_timeout(ref)` transaction (prepaid + action fees), which a router job may have to send.
+pub fn timeout_gas() -> u64 {
+    let c = Call { receiver: String::new(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
+    GAS_RELAY_TIMEOUT + action_fees(&c)
+}
+
+/// A subject's keys on one token: `(kind, key_data)`.
+pub type KeyList = Vec<(u16, Vec<u8>)>;
+
+/// Fix 1 m6 (R9): a one-line view of a subject's key sets per token, and whether they differ between tokens.
+pub fn describe_key_sets(sets: &[(String, Option<KeyList>)]) -> (String, bool) {
+    let drift = sets.windows(2).any(|w| w[0].1 != w[1].1);
+    let line = sets.iter().map(|(t, k)| match k {
+        None => format!("{t}: no account"),
+        Some(k) => {
+            let keys: Vec<String> = k.iter().map(|(kind, d)| format!("{kind:#06x}:{}", alloy::hex::encode(&d[..d.len().min(8)]))).collect();
+            format!("{t}: [{}]", keys.join(", "))
+        }
+    });
+    (line.collect::<Vec<_>>().join("; "), drift)
+}
+
+/// The wrapped key ops (their subject's key set is shown, R9).
+const KEY_OPS: &[&str] = &[
+    "mtx_add_key", "mtx_remove_key", "mtx_add_origin", "mtx_remove_origin", "mtx_set_guardian", "mtx_set_policy",
+    "mtx_start_recovery", "mtx_cancel_recovery", "mtx_finish_recovery",
+];
 
 // ------------------------------------------------------------------ transaction (Borsh, hand-encoded)
 
@@ -834,23 +1051,33 @@ fn decode_router_check(b: &[u8]) -> Result<std::result::Result<(u128, u64), Stri
     Ok(err.map_or(Ok((deposit, gas)), Err))
 }
 
-/// relayfee `pending(ref) -> Option<Pending>` ⇒ `(deadline, stage)` (stage 0 Hold, 1 Call, 2 Settle, 3 Owed).
-fn decode_pending(b: &[u8]) -> Result<Option<(u64, u8)>> {
+/// An escrow entry as the node follows it: who staked it, at which token, until when, at which stage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingEntry {
+    token: String,
+    relayer: String,
+    deadline: u64,
+    /// 0 Hold, 1 Call, 2 Settle, 3 Owed.
+    stage: u8,
+}
+
+/// relayfee `pending(ref) -> Option<Pending>`.
+fn decode_pending(b: &[u8]) -> Result<Option<PendingEntry>> {
     let mut r = Reader::new(b);
     let p = r.option(|r| {
         r.u64()?;
-        r.account()?;
+        let token = r.account()?;
         r.account()?;
         r.holder()?;
         r.option(|r| r.holder())?;
         r.u128()?;
-        r.account()?;
+        let relayer = r.account()?;
         r.u128()?;
         r.u128()?;
         let deadline = r.u64()?;
         let stage = r.u8()?;
         r.bool()?;
-        Ok((deadline, stage))
+        Ok(PendingEntry { token, relayer, deadline, stage })
     })?;
     r.end()?;
     Ok(p)
@@ -1068,9 +1295,13 @@ fn transport(e: anyhow::Error) -> SimError {
 }
 
 /// A view's own failure (the contract panicked) kills the job; anything else is retried.
+/// Fix 1 m7: a view stopped by the RPC's own `max_gas_burnt_view` (`GasLimitExceeded`) is the RPC's limit, not the
+/// job's: retried (the relayer's RPC must allow ≥ 300 Tgas, module doc).
 fn sim(e: anyhow::Error) -> SimError {
+    let text = format!("{e:#}");
+    let rpc_limit = text.contains("GasLimitExceeded") || text.contains("Exceeded the maximum amount of gas");
     match cause_of(&e) {
-        Some("CONTRACT_EXECUTION_ERROR") => SimError::Revert(format!("{e:#}")),
+        Some("CONTRACT_EXECUTION_ERROR") if !rpc_limit => SimError::Revert(text),
         _ => transport(e),
     }
 }
@@ -1093,7 +1324,6 @@ pub struct NearAdapter {
     pks: Vec<[u8; 32]>,
     signers: Vec<LocalSigner>,
     relay_fee: RelayFeePolicy,
-    dex: Option<String>,
     /// `ref` ⇒ when this node last sent `relay_timeout` for it.
     timeouts: Mutex<HashMap<[u8; 32], u64>>,
 }
@@ -1111,10 +1341,6 @@ impl NearAdapter {
         }
         let net = cfg.network.as_deref().ok_or_else(|| anyhow!("near: network must be the genesis hash (base58)"))?;
         let network = b58_32(net).context("near: network must be the genesis hash (base58 of 32 bytes)")?;
-        let dex = match cfg.params.get("dex") {
-            None => None,
-            Some(v) => Some(near_id(v.as_str().ok_or_else(|| anyhow!("params.dex must be a string"))?).context("params.dex")?),
-        };
         let (mut lanes, mut pks, mut own) = (Vec::new(), Vec::new(), Vec::new());
         for (s, &i) in signers.iter().zip(&cfg.lanes) {
             let LocalSigner::Ed(k) = s else { bail!("near lanes are ed25519") };
@@ -1134,7 +1360,6 @@ impl NearAdapter {
             pks,
             signers: own,
             relay_fee: RelayFeePolicy::from_cfg(cfg)?,
-            dex,
             timeouts: Mutex::new(HashMap::new()),
         })
     }
@@ -1219,7 +1444,9 @@ impl NearAdapter {
         }
         let auth_raw = hex_field(&o["signature"], "signature")?;
         let entry = entry(&self.relay_fee, &op, o)?;
-        job_gas(&entry, &Auth::decode(&auth_raw)?)?;
+        let auth = Auth::decode(&auth_raw)?;
+        job_gas(&entry, &auth)?;
+        wrapper_conflicts(&entry, &op, &auth)?;
         Ok(Work { op, auth_raw, entry })
     }
 
@@ -1266,13 +1493,39 @@ impl NearAdapter {
         if matches!(&value, Ok(Some(b)) if b == &[1]) {
             return Ok(TxStatus::Mined { height, tx_hash: None });
         }
+        // fix 1 m1: our relay refused at its own first receipt (e.g. this ref already in flight): nothing of ours is held
+        let first = v.pointer("/transaction_outcome/outcome/status/SuccessReceiptId").and_then(Value::as_str);
+        let tx_failed = v.pointer("/transaction_outcome/outcome/status/Failure").is_some();
+        let first_failed = v["receipts_outcome"].as_array().into_iter().flatten()
+            .find(|rc| first.is_some() && rc["id"].as_str() == first)
+            .is_some_and(|rc| !succeeded(&rc["outcome"]));
+        if tx_failed || first_failed {
+            let why = value.err().unwrap_or_default();
+            return Ok(TxStatus::Reverted { reason: format!("relay refused at its first receipt: nothing was held ({why})") });
+        }
         let args = b64d(v.pointer("/transaction/actions/0/FunctionCall/args").and_then(Value::as_str).ok_or_else(|| anyhow!("relay without args"))?)?;
         let r = relay_args_ref(&args)?;
-        let Some((deadline, stage)) = decode_pending(&self.view(router, "pending", &r).await?)? else {
+        let signer = v.pointer("/transaction/signer_id").and_then(Value::as_str).unwrap_or_default();
+        let entry = decode_pending(&self.view(router, "pending", &r).await?)?;
+        if entry.as_ref().is_some_and(|p| p.relayer != signer) {
+            return Ok(TxStatus::Reverted { reason: format!("the escrow entry under {} was staked by another relayer; ours held nothing", hex0x(&r)) });
+        }
+        let Some(PendingEntry { token, deadline, stage, .. }) = entry else {
             let why = value.err().map(|f| format!(" ({f})")).unwrap_or_default();
             return Ok(TxStatus::Reverted { reason: format!("relay fee refunded: the call failed, the hold was refused or the relay timed out (the payer was not charged){why}") });
         };
         let now = now();
+        if now > deadline.saturating_add(RELAY_STUCK_S) && stage == 2 {
+            // fix 1 m2: on_settle failed after a token settle that may have been a release: ask the token
+            let mut a = borsh_str(router);
+            a.extend_from_slice(&r);
+            let reason = if decode_held(&self.view(&token, "relay_held", &a).await?)? {
+                format!("escrow entry {} still held at token {token} {RELAY_STUCK_S} s past its deadline with a settlement stuck in flight: the payer is not charged while it is held", hex0x(&r))
+            } else {
+                format!("escrow entry {} settled at the token {token} (released or refunded) but the router's on_settle failed: the token's payment_settled for this ref tells which", hex0x(&r))
+            };
+            return Ok(TxStatus::Reverted { reason });
+        }
         if now > deadline.saturating_add(RELAY_STUCK_S) {
             return Ok(TxStatus::Reverted { reason: format!("escrow entry {} still pending {RELAY_STUCK_S} s past its deadline: relay_timeout(ref) settles it", hex0x(&r)) });
         }
@@ -1302,9 +1555,87 @@ impl NearAdapter {
         Ok(TxStatus::Pending)
     }
 
+    /// Fix 1 I2 (the TON I1 rule on every family: the relayer never pays for a call bound to fail): the router target's
+    /// call as far as the node can see it. A configured token: a relayable entry (`TOKEN_CHECKED`) whose `<method>_check`
+    /// passes with the executor as caller (the target sees the executor), `target_gas` ≥ the entry's pinned job gas,
+    /// `target_deposit` ≥ what it stores. The DEX's `settle`: canonical legs, each order open or bound to the executor,
+    /// each leg's `mtx_trade_check` on its (configured) sell token as the DEX, `target_gas` ≥ `settle_gas`,
+    /// `target_deposit` ≥ the settle entry + 2 yoctoNEAR + both legs' storage. A listed third-party target:
+    /// `target_gas` ≥ `GAS_TARGET_MIN` only (the operator vouches for it).
+    async fn target_check(&self, target: &str, method: &str, args: &[u8], gas: u64, deposit: u128) -> std::result::Result<(), SimError> {
+        let rv = |m: String| SimError::Revert(m);
+        let executor = self.relay_fee.executor.as_deref().ok_or_else(|| rv("no executor configured".into()))?;
+        let gas_floor = |floor: u64| match gas < floor {
+            true => Err(rv(format!("target_gas {gas} is below the {floor} the {method} call on {target} needs"))),
+            false => Ok(()),
+        };
+        let short = |need: u128| match deposit < need {
+            true => Err(rv(format!("target_deposit {deposit} is below the {need} yoctoNEAR the {method} call on {target} stores"))),
+            false => Ok(()),
+        };
+        let check = |b: Vec<u8>, what: &str| -> std::result::Result<u128, SimError> {
+            decode_check(&b).map_err(transport)?.map_err(|e| rv(format!("router target {what}: {e}")))
+        };
+        if self.relay_fee.tokens.iter().any(|t| t == target) {
+            if !TOKEN_CHECKED.contains(&method) {
+                return Err(rv(format!("router target {target}: {method} is not a relayable token entry (no check view)")));
+            }
+            let mut r = Reader::new(args);
+            let auth = MetaOp::read(&mut r).and_then(|_| Auth::read(&mut r, true))
+                .map_err(|e| rv(format!("router target args of {method}: {e:#}")))?;
+            gas_floor(GAS_JOB_BASE.saturating_add(auth.attach_gas()))?;
+            let c = self.view(target, &format!("{method}_check"), &[borsh_str(executor), args.to_vec()].concat()).await.map_err(sim)?;
+            return short(check(c, &format!("{method}_check"))?);
+        }
+        if self.relay_fee.dex.as_deref() == Some(target) {
+            if method != "settle" {
+                return Err(rv(format!("router target {target}: {method} is not the DEX's settle")));
+            }
+            let legs = settle_legs(args).map_err(|e| rv(format!("router target args of settle: {e:#}")))?;
+            if let Some(l) = legs.iter().find(|l| l.relayer.as_deref().is_some_and(|x| x != executor)) {
+                return Err(rv(format!("order relayer {:?} is not the executor: the DEX refuses it via the router", l.relayer)));
+            }
+            if let Some(l) = legs.iter().find(|l| !self.relay_fee.tokens.contains(&l.sell_token)) {
+                return Err(rv(format!("a settle leg sells {}, not a configured token", l.sell_token)));
+            }
+            gas_floor(legs.iter().fold(DEX_SETTLE_GAS, |g, l| g.saturating_add(DEX_LEG_GAS).saturating_add(l.auth.router_gas())))?;
+            let mut stored = DEX_PAYOUT_YOCTO;
+            for (i, l) in legs.iter().enumerate() {
+                let receiver = &legs[1 - i].op.from;
+                let mut a = [borsh_str(target), l.op.borsh(), l.auth_raw.clone(), l.order.clone()].concat();
+                receiver.write(&mut a);
+                let c = self.view(&l.sell_token, "mtx_trade_check", &a).await.map_err(sim)?;
+                stored = stored.saturating_add(check(c, "mtx_trade_check")?);
+            }
+            // Borsh(Settle): per leg token, seller, lane 32, nonce 8, digest 32, amount 16; relayer; deposit 16, expiry 8, done 1
+            let settle = legs.iter().map(|l| 4 + l.sell_token.len() as u64 + holder_len(&l.op.from) + 88).sum::<u64>()
+                + 4 + executor.len() as u64 + 25;
+            let pc = self.rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"})).await.map_err(transport)?;
+            let cost = dec_u128(&pc["runtime_config"]["storage_amount_per_byte"], "storage_amount_per_byte").map_err(transport)?;
+            return short(stored.saturating_add(cost.saturating_mul(u128::from(DEX_ENTRY_FIXED_BYTES + settle))));
+        }
+        gas_floor(GAS_TARGET_MIN)
+    }
+
+    /// Fix 1 m6 (R9): logs the key-op subject's key sets on every configured token; a drift is a warning.
+    async fn show_key_sets(&self, args: &[u8]) {
+        let Ok(op) = MetaOp::read(&mut Reader::new(args)) else { return };
+        match self.key_sets(&op.from).await {
+            Ok(sets) => {
+                let (line, drift) = describe_key_sets(&sets);
+                if drift {
+                    tracing::warn!(chain = %self.key, subject = %op.from.display(), "key sets differ between tokens: {line}");
+                } else {
+                    tracing::info!(chain = %self.key, subject = %op.from.display(), "key sets: {line}");
+                }
+            }
+            Err(e) => tracing::warn!(chain = %self.key, subject = %op.from.display(), "key sets unreadable: {e:#}"),
+        }
+    }
+
     /// R9: a subject's SCaaS key set on each configured token (`(kind, key_data)`; `None` = no account there). Keys
     /// live per token (spec §3.1), so they can drift between tokens; this is what the node shows.
-    pub async fn key_sets(&self, holder: &Holder) -> Result<Vec<(String, Option<Vec<(u16, Vec<u8>)>>)>> {
+    pub async fn key_sets(&self, holder: &Holder) -> Result<Vec<(String, Option<KeyList>)>> {
         let mut args = Vec::new();
         holder.write(&mut args);
         let mut out = Vec::new();
@@ -1342,6 +1673,10 @@ impl ChainAdapter for NearAdapter {
     /// R80: the payer's lane `(from, lane)` has passed the op's nonce (every NEAR job kind consumes a lane).
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Ok(w) = self.work(job) else { return Ok(None) };
+        // fix 1 I1: relay_hold spends the payment lane even when the escrow refunds: the outcome is the escrow's
+        if matches!(w.entry, Entry::FeeRouter { .. }) {
+            return Ok(None);
+        }
         let mut args = Vec::new();
         w.op.from.write(&mut args);
         args.extend_from_slice(&w.op.lane);
@@ -1365,12 +1700,13 @@ impl ChainAdapter for NearAdapter {
         }
         let mut call = call_of(&self.relay_fee, &w.entry, &w.op, &w.auth_raw).map_err(revert)?;
         call.deposit = match &w.entry {
-            Entry::FeeRouter { target, .. } => {
+            Entry::FeeRouter { target, method, args, target_gas, target_deposit } => {
                 match self.has_code(target).await.map_err(transport)? {
                     None => return Err(SimError::Revert(format!("relay-fee target {target} does not exist"))),
                     Some(false) => return Err(SimError::Revert(format!("relay-fee target {target} has no code"))),
                     Some(true) => {}
                 }
+                self.target_check(target, method, args, *target_gas, *target_deposit).await?;
                 let rc = self.view(&call.receiver, "relay_check", &call.args).await.map_err(sim)?;
                 let (deposit, gas) = decode_router_check(&rc).map_err(transport)?.map_err(|e| SimError::Revert(format!("relay_check: {e}")))?;
                 if gas != call.gas {
@@ -1390,8 +1726,16 @@ impl ChainAdapter for NearAdapter {
         };
         if fee.as_ref().is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone())) {
             let price = self.gas_price().await.map_err(transport)?;
-            let quote = u128::from(call.gas).saturating_mul(price).saturating_add(call.deposit);
+            // fix 1 m5: the transaction's action fees, and a router job's possible relay_timeout transaction
+            let resend = if matches!(w.entry, Entry::FeeRouter { .. }) { timeout_gas() } else { 0 };
+            let gas = call.gas.saturating_add(action_fees(&call)).saturating_add(resend);
+            let quote = u128::from(gas).saturating_mul(price).saturating_add(call.deposit);
             fee_covers(&self.relay_fee, &w.op, quote).map_err(revert)?;
+        }
+        if let Entry::FeeWrapper { entry, args } = &w.entry {
+            if KEY_OPS.contains(&entry.as_str()) {
+                self.show_key_sets(args).await;
+            }
         }
         let meta = json!({"receiver": call.receiver, "method": call.method, "gas": call.gas, "deposit": call.deposit.to_string()});
         Ok(Built { job_id: job.id, body: call.args, valid_until: w.op.valid_until, meta })
@@ -1499,7 +1843,14 @@ impl ChainAdapter for NearAdapter {
         if tokens.is_empty() || from > to {
             return Ok(vec![]);
         }
-        let ids = Ids { tokens, router: self.relay_fee.router.clone(), dex: self.dex.clone() };
+        // fix 1 I3: a non-archival RPC answers UNKNOWN_BLOCK for pruned heights too: never read below its horizon
+        let st = self.rpc("status", json!([])).await?;
+        let earliest = st.pointer("/sync_info/earliest_block_height").and_then(Value::as_u64)
+            .ok_or_else(|| anyhow!("status without sync_info.earliest_block_height"))?;
+        if from < earliest {
+            bail!("range starts at {from}, below the RPC's earliest kept block {earliest} (pruned: use an archival RPC)");
+        }
+        let ids = Ids { tokens, router: self.relay_fee.router.clone(), dex: self.relay_fee.dex.clone() };
         let watched = |a: &str| ids.tokens.iter().chain(&ids.router).chain(&ids.dex).any(|x| x == a);
         let mut out = Vec::new();
         for h in from..=to {
@@ -1544,7 +1895,7 @@ impl ChainAdapter for NearAdapter {
         let mut ids: Vec<(&str, &str)> = self.relay_fee.tokens.iter().map(|t| (t.as_str(), "token")).collect();
         ids.extend(self.relay_fee.router.as_deref().map(|r| (r, "router")));
         ids.extend(self.relay_fee.executor.as_deref().map(|e| (e, "executor")));
-        ids.extend(self.dex.as_deref().map(|d| (d, "dex")));
+        ids.extend(self.relay_fee.dex.as_deref().map(|d| (d, "dex")));
         for (id, what) in &ids {
             match self.has_code(id).await? {
                 None => bail!("missing contract id: {what} {id} does not exist"),
@@ -1679,6 +2030,8 @@ mod tests {
             tokens: vec![TOKEN.into()],
             params: crate::config::RelayParams { min_amount: 1, ..Default::default() },
             min_yocto_value: HashMap::from([(TOKEN.to_string(), 1_000)]),
+            dex: Some(DEX.into()),
+            targets: vec![],
         }
     }
 
@@ -1701,6 +2054,10 @@ mod tests {
 
     /// A router payment for (target, method, args) consistent with its ref (signature not checked off chain).
     fn router_op(target: &str, method: &str, args: &[u8], to: Holder) -> (MetaOp, Value) {
+        router_op_g(target, method, args, to, "30000000000000", "0")
+    }
+
+    fn router_op_g(target: &str, method: &str, args: &[u8], to: Holder, tg: &str, td: &str) -> (MetaOp, Value) {
         let mut op = op_of("relay_fee_pay_router_short");
         let call = router_call(target, method, args);
         let tb = [&[target.len() as u8][..], target.as_bytes()].concat();
@@ -1709,7 +2066,7 @@ mod tests {
         op.lane = pay_lane(&r);
         op.to = to;
         let o = o_op(&op, &auth_bytes(&row("relay_fee_pay_router_short")["auth"]), json!({"kind": "relay_fee",
-            "extra": {"call": h(&call), "route": "router", "target_gas": "30000000000000", "target_deposit": "0"}}));
+            "extra": {"call": h(&call), "route": "router", "target_gas": tg, "target_deposit": td}}));
         (op, o)
     }
 
@@ -1743,6 +2100,12 @@ mod tests {
         chunks: HashMap<String, Value>,
         send_err: Option<Value>,
         calls: Vec<(String, Value)>,
+        /// `status.sync_info.earliest_block_height` (the RPC's oldest kept block).
+        earliest: u64,
+        /// `storage_amount_per_byte` (yoctoNEAR).
+        byte_cost: u128,
+        /// (account, view) → the error text of a failing view.
+        view_errs: HashMap<(String, String), String>,
     }
 
     fn rpc_err(name: &str) -> Value {
@@ -1753,7 +2116,9 @@ mod tests {
         w.calls.push((method.to_string(), p.clone()));
         let s = |k: &str| p[k].as_str().unwrap_or_default().to_string();
         match method {
-            "status" => Ok(json!({"chain_id": "localnet", "genesis_hash": w.genesis})),
+            "status" => Ok(json!({"chain_id": "localnet", "genesis_hash": w.genesis,
+                                  "sync_info": {"earliest_block_height": w.earliest, "latest_block_height": 100}})),
+            "EXPERIMENTAL_protocol_config" => Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string()}})),
             "gas_price" => Ok(json!({"gas_price": w.gas_price.to_string()})),
             "block" => {
                 let b = match (&p["finality"], &p["block_id"]) {
@@ -1776,6 +2141,11 @@ mod tests {
                     Ok(json!({"keys": if k { json!([{"public_key": "ed25519:x", "access_key": {"nonce": 1, "permission": "FullAccess"}}]) } else { json!([]) }}))
                 }
                 "view_access_key" => Ok(json!({"nonce": w.nonce, "permission": "FullAccess"})),
+                "call_function" if w.view_errs.contains_key(&(s("account_id"), s("method_name"))) => {
+                    let m = &w.view_errs[&(s("account_id"), s("method_name"))];
+                    Err(json!({"name": "HANDLER_ERROR", "cause": {"name": "CONTRACT_EXECUTION_ERROR", "info": {"vm_error": m}},
+                               "code": -32000, "message": "Server error", "data": m}))
+                }
                 "call_function" => match w.views.get(&(s("account_id"), s("method_name"))) {
                     Some(b) => Ok(json!({"result": b, "logs": [], "block_height": 1})),
                     None => Err(rpc_err("CONTRACT_EXECUTION_ERROR")),
@@ -1812,10 +2182,15 @@ mod tests {
     const LANE0: &str = "c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6";
 
     fn cfg(url: &str, relay_fee: &str) -> ChainCfg {
+        cfg_tokens(url, relay_fee, &[TOKEN])
+    }
+
+    fn cfg_tokens(url: &str, relay_fee: &str, tokens: &[&str]) -> ChainCfg {
+        let t: Vec<String> = tokens.iter().map(|t| format!("{{ address = \"{t}\", decimals = 6 }}")).collect();
         toml::from_str(&format!(
             "family = \"near\"\nnetwork = \"{NET_B58}\"\nrpc_urls = [\"{url}\"]\nlanes = [0]\n\
-             tokens = [{{ address = \"{TOKEN}\", decimals = 6 }}]\nfinality = {{ mode = \"instant\" }}\n\
-             params = {{ dex = \"{DEX}\"{relay_fee} }}"
+             tokens = [{}]\nfinality = {{ mode = \"instant\" }}\n\
+             params = {{ dex = \"{DEX}\"{relay_fee} }}", t.join(", ")
         ))
         .unwrap()
     }
@@ -1826,7 +2201,7 @@ mod tests {
 
     /// A healthy chain: genesis = the vectors' network, every contract deployed and keyless, lane 0 registered.
     fn world() -> World {
-        let mut w = World { genesis: NET_B58.into(), gas_price: 100_000_000, nonce: 41, ..Default::default() };
+        let mut w = World { genesis: NET_B58.into(), gas_price: 100_000_000, nonce: 41, byte_cost: 10u128.pow(19), ..Default::default() };
         w.code = [TOKEN, ROUTER, EXECUTOR, DEX].map(String::from).to_vec();
         let net: Vec<u8> = serde_json::to_vec(&b32(&nv()["network"]).to_vec()).unwrap();
         w.views.insert((TOKEN.into(), "network".into()), net);
@@ -1900,7 +2275,7 @@ mod tests {
             }
         }
         assert_eq!(n_auth, rows.len(), "every row's auth decodes");
-        assert_eq!(Auth::decode(&auth_bytes(&row("set_guardian_msig")["auth"])).unwrap(), Auth::Msig(vec![Auth::Ed25519]));
+        assert!(matches!(Auth::decode(&auth_bytes(&row("set_guardian_msig")["auth"])).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
         assert_eq!(op_of("pay_ua_ed25519_u128_max").amount, u128::MAX);
         assert_eq!(Holder::Ua([0xab; 32]).display(), format!("0x{}", "ab".repeat(32)));
         assert_eq!(Holder::Near("alice.test.near".into()).display(), "alice.test.near");
@@ -1920,10 +2295,10 @@ mod tests {
         assert!(Auth::decode(&[&a[..], &[0]].concat()).is_err());
         assert!(Auth::decode(&[&[4u8][..], &a[1..]].concat()).is_err());
         let msig = |inner: &[u8]| [vec![3], bvec(&[0, 1]), 1u32.to_le_bytes().to_vec(), vec![0], inner.to_vec()].concat();
-        assert_eq!(Auth::decode(&msig(&a)).unwrap(), Auth::Msig(vec![Auth::Ed25519]));
+        assert!(matches!(Auth::decode(&msig(&a)).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
         assert!(Auth::decode(&msig(&msig(&a))).is_err(), "msig inside msig");
         let pk = |cd: usize| [vec![2], vec![0; 64], bvec(&[0; 37]), bvec(&vec![b'x'; cd]), vec![0; 64]].concat();
-        assert_eq!(Auth::decode(&pk(1024)).unwrap(), Auth::Passkey);
+        assert_eq!(Auth::decode(&pk(1024)).unwrap().passkeys(), 1);
         assert!(Auth::decode(&pk(1025)).is_err(), "passkey field over 1024 bytes (contract PASSKEY_FIELD_MAX)");
     }
 
@@ -2193,8 +2568,8 @@ mod tests {
         // wrapper (open mode: to = the token, the fee pays the lane)
         let (wop, wo) = wrapper_job("wrapper_add_key_real");
         let storage = 1_160 * 10u128.pow(19);
-        let gas = job_gas(&entry(&pol(), &wop, &wo).unwrap(), &Auth::decode(&hx(&wo["signature"])).unwrap()).unwrap();
-        let quote = gas as u128 * 100_000_000 + storage;
+        let wcall = call_of(&pol(), &entry(&pol(), &wop, &wo).unwrap(), &wop, &hx(&wo["signature"])).unwrap();
+        let quote = (wcall.gas + action_fees(&wcall)) as u128 * 100_000_000 + storage;
         for (price, ok) in [(quote.div_ceil(wop.amount), true), ((quote - 1) / wop.amount, false)] {
             let mut w = world();
             w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(storage));
@@ -2206,15 +2581,19 @@ mod tests {
             }
         }
         // router: deposit_needed (entry + payee registration + 2 yocto + target_deposit) + the hold's storage_needed
+        // (a token's mtx_pay as the target: fix 1 I2 checks it as the executor)
         let td = 7 * 10u128.pow(21);
-        let (rop, ro) = router_job("router_short", "30000000000000", &td.to_string());
+        let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
+        let (rop, ro) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near(ROUTER.into()), "30000000000000", &td.to_string());
         let g = job_gas(&entry(&pol(), &rop, &ro).unwrap(), &Auth::decode(&hx(&ro["signature"])).unwrap()).unwrap();
         let (entry_dep, hold) = (3_140 * 10u128.pow(18) + 1_250 * 10u128.pow(18) + 2 + td, 2_800 * 10u128.pow(18));
-        let quote = g as u128 * 100_000_000 + entry_dep + hold;
+        let rcall = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let quote = (g + action_fees(&rcall) + timeout_gas()) as u128 * 100_000_000 + entry_dep + hold;
         for (price, ok) in [(quote.div_ceil(rop.amount), true), ((quote - 1) / rop.amount, false)] {
             let mut w = world();
             w.views.insert((ROUTER.into(), "relay_check".into()), router_check(3_140 * 10u128.pow(18), entry_dep, g));
             w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(hold));
+            w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(td));
             let (a, _) = adapter(w, &fee_cfg(&price.to_string())).await;
             match (a.build(&job(ro.clone()), 0).await, ok) {
                 (Ok(b), true) => assert_eq!(b.meta["deposit"], json!((entry_dep + hold).to_string())),
@@ -2223,10 +2602,11 @@ mod tests {
             }
         }
         // sponsored: bound to bob (not the lane), relayed only with relay_bound_payee, and then not priced
-        let (bop, bo) = router_job("router_bound", "30000000000000", "0");
+        let (bop, bo) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near("bob.test.near".into()), "30000000000000", "0");
         let mut w = world();
         w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, job_gas(&entry(&pol(), &bop, &bo).unwrap(), &Auth::decode(&hx(&bo["signature"])).unwrap()).unwrap()));
         w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
+        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(0));
         let (a, _) = adapter(w, &fee_cfg("1")).await;
         match a.build(&job(bo.clone()), 0).await {
             Err(SimError::Revert(r)) => assert!(r.contains("relay_bound_payee"), "{r}"),
@@ -2235,6 +2615,7 @@ mod tests {
         let mut w = world();
         w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, job_gas(&entry(&pol(), &bop, &bo).unwrap(), &Auth::decode(&hx(&bo["signature"])).unwrap()).unwrap()));
         w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
+        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(0));
         let sponsored = format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", relay_bound_payee = true }}");
         let (a, _) = adapter(w, &sponsored).await;
         a.build(&job(bo), 0).await.unwrap();
@@ -2243,6 +2624,17 @@ mod tests {
         w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_err("wrong lane nonce"));
         let (a, _) = adapter(w, &fee_cfg("1")).await;
         assert!(matches!(a.build(&job(wo), 0).await, Err(SimError::Revert(r)) if r.contains("wrong lane nonce")));
+    }
+
+    /// Fix 1 m5: nearcore's action fees (receipt creation + function call base + per byte of method and args, send and
+    /// execution, `RuntimeFeesConfig` defaults) are charged on top of the prepaid gas; a router job may need one
+    /// `relay_timeout` transaction more.
+    #[test]
+    fn action_fees_and_timeout_are_priced() {
+        let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 1, deposit: 0 };
+        assert_eq!(action_fees(&c), 2 * 108_059_500_000 + 2 * 2_319_861_500_000 + 2 * 2_235_934 * 107);
+        let t = Call { receiver: ROUTER.into(), method: "relay_timeout".into(), args: vec![0; 32], gas: 30 * TGAS, deposit: 0 };
+        assert_eq!(timeout_gas(), 30 * TGAS + action_fees(&t));
     }
 
     /// §5 Submit: the attached deposit is exactly the check view's `storage_needed` (+ 0 yoctoNEAR: no `mtx_*` /
@@ -2573,11 +2965,266 @@ mod tests {
         assert_eq!(ks, vec![(TOKEN.to_string(), Some(vec![(258u16, vec![7u8; 32])]))]);
     }
 
+    // ------------------------------------------------------------------------------------------------ fix 1
+
+    /// I1 (review RV1): `relay_hold` spends the payment lane even when the escrow is refunded, so a router job's
+    /// outcome is the escrow's (`tx_status`), never "consumed"; a wrapper (atomic) or plain job keeps the lane answer.
+    #[tokio::test]
+    async fn refunded_router_job_is_not_consumed() {
+        let mut w = world();
+        w.views.insert((TOKEN.into(), "lane_nonce".into()), 1u64.to_le_bytes().to_vec());
+        let (a, _) = adapter(w, &fee_cfg("1")).await;
+        let (_, ro) = router_job("router_short", "30000000000000", "0");
+        assert_eq!(a.op_consumed(&job(ro)).await.unwrap(), None);
+        let (_, wo) = wrapper_job("wrapper_add_key_real");
+        assert_eq!(a.op_consumed(&job(wo)).await.unwrap(), Some(true));
+        assert_eq!(a.op_consumed(&job(o_of("pay", json!({})))).await.unwrap(), Some(true));
+    }
+
+    const TOKENB: &str = "tokenb.test.near";
+
+    fn order(sell: &str, buy: &str, amount: u128, min_buy: u128, relayer: Option<&str>) -> Vec<u8> {
+        let rel = match relayer {
+            None => vec![0],
+            Some(r) => [vec![1], bstr(r)].concat(),
+        };
+        [bstr(sell), bstr(buy), amount.to_le_bytes().to_vec(), min_buy.to_le_bytes().to_vec(), rel, 4_102_444_800u64.to_le_bytes().to_vec()].concat()
+    }
+
+    /// The settle args of the shared trade legs with the given orders' relayers.
+    fn settle_args(ra: Option<&str>, rb: Option<&str>) -> Vec<u8> {
+        let (a, b) = (op_of("trade_a"), op_of("trade_b"));
+        [order(TOKEN, TOKENB, 100, 50, ra), a.borsh(), auth_bytes(&row("trade_a")["auth"]),
+         order(TOKENB, TOKEN, 60, 100, rb), b.borsh(), auth_bytes(&row("trade_b")["auth"])].concat()
+    }
+
+    /// A world where the honest router job's views pass.
+    fn router_world(g: u64) -> World {
+        let mut w = world();
+        w.code.extend([TOKENB.to_string(), "app.near".to_string(), "elsewhere.near".to_string()]);
+        w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, g));
+        w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
+        w.views.insert((TOKEN.into(), "mtx_trade_check".into()), check_ok(5));
+        w.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(5));
+        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_ok(7));
+        w
+    }
+
+    async fn build_router(w: World, relay_fee: &str, target: &str, method: &str, args: &[u8], tg: &str, td: &str) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
+        let (op, o) = router_op_g(target, method, args, Holder::Near("bob.test.near".into()), tg, td);
+        let gas = entry(&RelayFeePolicy { dex: Some(DEX.into()), targets: vec!["app.near".into()], tokens: vec![TOKEN.into(), TOKENB.into()], ..pol() }, &op, &o)
+            .ok().and_then(|e| job_gas(&e, &Auth::decode(&hx(&o["signature"])).unwrap()).ok()).unwrap_or(0);
+        let mut w = w;
+        w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, gas));
+        let w = Arc::new(Mutex::new(w));
+        let url = serve(w.clone()).await;
+        let a = NearAdapter::new(&cfg_tokens(&url, relay_fee, &[TOKEN, TOKENB]), &[lane0()]).unwrap();
+        (a.build(&job(o), 0).await, w)
+    }
+
+    /// I2 (TON I1 rule on every family): the relayer never pays for a target call bound to fail. Router targets are
+    /// allowlisted (configured tokens, the DEX, `params.relay_fee.targets`); a SCaaS target's call is checked first
+    /// (`<method>_check` as the executor on a token, each leg's `mtx_trade_check` for the DEX's `settle`), its
+    /// `target_gas` must reach the call's pinned floor and its `target_deposit` what the call stores.
+    #[tokio::test]
+    async fn router_target_bound_to_fail_refused() {
+        let sponsored = format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", relay_bound_payee = true, targets = [\"app.near\"] }}");
+        let ok = |r: &std::result::Result<Built, SimError>| r.is_ok();
+        let refused = |r: &std::result::Result<Built, SimError>, what: &str| matches!(r, Err(SimError::Revert(e)) if e.contains(what));
+        let big = "100000000000000000000000";
+        // honest: DEX settle of two open orders; a token's mtx_pay as the executor; a listed third-party target
+        let (r, w) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(None, Some(EXECUTOR)), "200000000000000", big).await;
+        assert!(ok(&r), "{r:?}");
+        assert_eq!(view_args(&w, "mtx_trade_check")[..4 + DEX.len()], bstr(DEX)[..], "legs checked as the DEX");
+        let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
+        let (r, w) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", "7").await;
+        assert!(ok(&r), "{r:?}");
+        assert_eq!(view_args(&w, "mtx_pay_check"), [bstr(EXECUTOR), pay.clone()].concat(), "the target's check as the executor");
+        let (r, _) = build_router(router_world(0), &sponsored, "app.near", "anything", &[1, 2, 3], "5000000000000", "0").await;
+        assert!(ok(&r), "{r:?}");
+        // unlisted target; a method without a check view; garbage args; target_gas below the floor; short deposit
+        let (r, w) = build_router(router_world(0), &sponsored, "elsewhere.near", "anything", &[1], "100000000000000", "0").await;
+        assert!(refused(&r, "not an allowed router target"), "{r:?}");
+        assert!(sent(&w).is_empty());
+        let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_nope", &pay, "100000000000000", big).await;
+        assert!(refused(&r, "mtx_nope"), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &[1, 2, 3], "100000000000000", big).await;
+        assert!(refused(&r, "args"), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &[9; 40], "200000000000000", big).await;
+        assert!(refused(&r, "args"), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored, DEX, "nope", &settle_args(None, None), "200000000000000", big).await;
+        assert!(refused(&r, "nope"), "{r:?}");
+        for (t, m, a) in [(TOKEN, "mtx_pay", pay.clone()), (DEX, "settle", settle_args(None, None))] {
+            let (r, _) = build_router(router_world(0), &sponsored, t, m, &a, "0", big).await;
+            assert!(refused(&r, "target_gas"), "{m}: {r:?}");
+        }
+        let (r, _) = build_router(router_world(0), &sponsored, "app.near", "anything", &[1], "0", "0").await;
+        assert!(refused(&r, "target_gas"), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", "6").await;
+        assert!(refused(&r, "target_deposit"), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(None, None), "200000000000000", "0").await;
+        assert!(refused(&r, "target_deposit"), "{r:?}");
+        // the target's own refusal; a leg bound to another relayer (the executor submits); a leg on an unconfigured token
+        let mut w = router_world(0);
+        w.views.insert((TOKEN.into(), "mtx_pay_check".into()), check_err("wrong lane nonce"));
+        let (r, _) = build_router(w, &sponsored, TOKEN, "mtx_pay", &pay, "20000000000000", big).await;
+        assert!(refused(&r, "wrong lane nonce"), "{r:?}");
+        let mut w = router_world(0);
+        w.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_err("order expired"));
+        let (r, _) = build_router(w, &sponsored, DEX, "settle", &settle_args(None, None), "200000000000000", big).await;
+        assert!(refused(&r, "order expired"), "{r:?}");
+        let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(Some("relayer.test.near"), None), "200000000000000", big).await;
+        assert!(refused(&r, "relayer"), "{r:?}");
+        // config: targets is a list of account ids, none the router or the executor
+        let k = [lane0()];
+        for (t, what) in [
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = \"app.near\" }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = [\"Bad\"] }}"), "targets"),
+            (format!(", relay_fee = {{ router = \"{ROUTER}\", executor = \"{EXECUTOR}\", targets = [\"{EXECUTOR}\"] }}"), "targets"),
+        ] {
+            let e = NearAdapter::new(&cfg("http://r", &t), &k).err().unwrap();
+            assert!(format!("{e:#}").contains(what), "{t}: {e:#}");
+        }
+        let p = NearAdapter::new(&cfg("http://r", &sponsored), &k).unwrap();
+        assert_eq!((p.relay_fee.targets.clone(), p.relay_fee.dex.as_deref()), (vec!["app.near".to_string()], Some(DEX)));
+    }
+
+    /// I3 (review RV3): a non-archival RPC answers UNKNOWN_BLOCK for garbage-collected heights too; a range starting
+    /// below `earliest_block_height` is an error, never an empty answer that moves the cursor past real payments.
+    #[tokio::test]
+    async fn pruned_heights_error() {
+        let mut w = world();
+        w.earliest = 50;
+        let (a, _) = adapter(w, "").await;
+        let e = format!("{:#}", a.events(1, 99, &[TOKEN.into()]).await.unwrap_err());
+        assert!(e.contains("earliest"), "{e}");
+        assert!(a.events(50, 99, &[TOKEN.into()]).await.unwrap().is_empty(), "skipped heights above the horizon pass");
+    }
+
+    /// m1 (review RV2): our `relay` failed at its first receipt (e.g. "this ref is already in flight") ⇒ reverted at once;
+    /// an entry under the ref staked by another relayer is never followed nor timed out as ours.
+    #[tokio::test]
+    async fn escrow_foreign_entry_not_followed() {
+        let (rop, ro) = router_job("router_short", "30000000000000", "0");
+        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let key = bs58::encode([0x44u8; 32]).into_string();
+        let id = format!("0x{}", "44".repeat(32));
+        let now = crate::submit::now();
+        let foreign = |deadline: u64| {
+            let mut p = pending(deadline, 1);
+            let at = p.len() - (16 + 16 + 8 + 2) - (4 + LANE0.len());
+            p.splice(at..at + 4 + LANE0.len(), bstr("other.near"));
+            p
+        };
+        let mut failed = outcome(ROUTER, fc("relay", &relay.args), json!({"Failure": {"ActionError": {}}}), vec![receipt(ROUTER, false, &[])]);
+        failed["receipts_outcome"][0]["id"] = json!("r");
+        let mut w = world();
+        w.txs.insert(key.clone(), failed);
+        w.views.insert((ROUTER.into(), "pending".into()), foreign(now - 10));
+        let (a, w) = adapter(w, &fee_cfg("1")).await;
+        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { .. }));
+        assert!(sent(&w).is_empty(), "no relay_timeout for an entry that is not ours");
+        let mut held = outcome(ROUTER, fc("relay", &relay.args), json!({"SuccessValue": b64(&[0])}), vec![receipt(ROUTER, true, &[])]);
+        held["receipts_outcome"][0]["id"] = json!("r");
+        w.lock().unwrap().txs.insert(key.clone(), held);
+        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("another relayer")));
+        assert!(sent(&w).is_empty());
+    }
+
+    /// m2: an entry stuck at stage Settle past deadline + 1 h: the token's `relay_held` tells what happened; a settled
+    /// hold (release or refund) is never reported as "not charged".
+    #[tokio::test]
+    async fn stuck_settle_checks_relay_held() {
+        let (rop, ro) = router_job("router_short", "30000000000000", "0");
+        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let key = bs58::encode([0x55u8; 32]).into_string();
+        let id = format!("0x{}", "55".repeat(32));
+        let mut w = world();
+        w.txs.insert(key, outcome(ROUTER, fc("relay", &relay.args), json!({"SuccessValue": b64(&[0])}), vec![]));
+        w.views.insert((ROUTER.into(), "pending".into()), pending(crate::submit::now() - 7_300, 2));
+        let held = [vec![1], vec![0], bstr("alice.test.near"), vec![0], bstr(LANE0), 10u128.to_le_bytes().to_vec(), bstr(LANE0), 3u128.to_le_bytes().to_vec()].concat();
+        w.views.insert((TOKEN.into(), "relay_held".into()), held);
+        let (a, w) = adapter(w, &fee_cfg("1")).await;
+        assert!(matches!(a.tx_status(&id).await.unwrap(), TxStatus::Reverted { reason } if reason.contains("still held")));
+        assert_eq!(view_args(&w, "relay_held"), [bstr(ROUTER), rop.pay_ref.to_vec()].concat());
+        w.lock().unwrap().views.insert((TOKEN.into(), "relay_held".into()), vec![0]);
+        let st = a.tx_status(&id).await.unwrap();
+        assert!(matches!(&st, TxStatus::Reverted { reason } if reason.contains("settled at the token") && !reason.contains("not charged")), "{st:?}");
+    }
+
+    /// m4: wrapper jobs whose check passes but whose run must fail are refused up front: the entry removes the payment's
+    /// own key or its passkey's origin, or turns on passkey-for-value while the payment is not passkey-signed.
+    #[tokio::test]
+    async fn wrapper_conflicts_refused() {
+        let alice = Holder::Near("alice.test.near".into());
+        let pay = op_of("pay");
+        let ed = Auth::decode(&auth_bytes(&row("pay")["auth"])).unwrap();
+        let pk_auth = Auth::decode(&auth_bytes(&row("pay_ua_passkey")["auth"])).unwrap();
+        let eop = MetaOp { from: alice.clone(), ..op_of("remove_key") };
+        let ea = auth_bytes(&row("remove_key")["auth"]);
+        let w = |name: &str, params: Vec<u8>, from: &Holder| Entry::FeeWrapper {
+            entry: name.into(), args: [MetaOp { from: from.clone(), ..eop.clone() }.borsh(), ea.clone(), params].concat() };
+        let rec = |a: &Auth| { let (k, d) = a.record().unwrap(); [k.to_le_bytes().to_vec(), bvec(&d)].concat() };
+        let bob = Holder::Near("bob.test.near".into());
+        let err = |e: &Entry, a: &Auth| wrapper_conflicts(e, &pay, a).map_err(|e| format!("{e:#}"));
+        assert!(err(&w("mtx_remove_key", rec(&ed), &alice), &ed).unwrap_err().contains("remove"));
+        assert!(err(&w("mtx_remove_key", rec(&ed), &bob), &ed).is_ok(), "another subject's key");
+        assert!(err(&w("mtx_remove_key", rec(&pk_auth), &alice), &ed).is_ok(), "another key");
+        let origin = row("pay_ua_passkey")["auth"]["origin"].as_str().unwrap().to_string();
+        assert!(err(&w("mtx_remove_origin", bstr(&origin), &alice), &pk_auth).unwrap_err().contains("origin"));
+        assert!(err(&w("mtx_remove_origin", bstr("https://other.test"), &alice), &pk_auth).is_ok());
+        assert!(err(&w("mtx_set_policy", vec![1], &alice), &ed).unwrap_err().contains("passkey"));
+        assert!(err(&w("mtx_set_policy", vec![1], &alice), &pk_auth).is_ok(), "a passkey payment passes the policy");
+        assert!(err(&w("mtx_set_policy", vec![0], &alice), &ed).is_ok());
+        assert!(err(&Entry::Pay, &ed).is_ok());
+        // and the job is refused before simulation
+        let call = [&[14u8][..], b"mtx_remove_key", &[MetaOp { from: alice.clone(), ..eop.clone() }.borsh(), ea.clone(), rec(&ed)].concat()].concat();
+        let mut op = MetaOp { relayer: Some(TOKEN.into()), to: Holder::Near(TOKEN.into()), extra: [0x51; 32], ..pay.clone() };
+        op.pay_ref = relay_ref(&op.network, &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(), &call, &op.extra);
+        op.lane = pay_lane(&op.pay_ref);
+        let o = o_op(&op, &auth_bytes(&row("pay")["auth"]), json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}));
+        let mut wd = world();
+        wd.views.insert((TOKEN.into(), "relay_fee_remove_key_check".into()), check_ok(1));
+        let (a, _) = adapter(wd, &fee_cfg("1000000000000000000000000")).await;
+        assert!(matches!(a.build(&job(o), 0).await, Err(SimError::Revert(r)) if r.contains("remove")));
+    }
+
+    /// m6 (R9): a key-op wrapper job shows the subject's key set on every configured token (keys live per token and can
+    /// drift); `describe_key_sets` flags a drift.
+    #[tokio::test]
+    async fn key_sets_shown_for_key_op_jobs() {
+        let one = |k: u8| Some(vec![(258u16, vec![k; 32])]);
+        let (s, drift) = describe_key_sets(&[(TOKEN.into(), one(7)), (TOKENB.into(), one(8))]);
+        assert!(drift && s.contains(TOKEN) && s.contains(TOKENB), "{s}");
+        assert!(!describe_key_sets(&[(TOKEN.into(), one(7)), (TOKENB.into(), one(7))]).1);
+        assert!(describe_key_sets(&[(TOKEN.into(), one(7)), (TOKENB.into(), None)]).1, "an account on one token only");
+        let mut w = world();
+        w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(1));
+        w.views.insert((TOKEN.into(), "subject".into()), vec![0]);
+        let (a, w) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
+        let (_, wo) = wrapper_job("wrapper_add_key_real");
+        a.build(&job(wo), 0).await.unwrap();
+        assert!(w.lock().unwrap().calls.iter().any(|c| c.1["method_name"] == "subject"), "key sets read for a key op");
+    }
+
+    /// m7: a view stopped by the RPC's own `max_gas_burnt_view` is the RPC's limit, not the job's: retried (Transport);
+    /// a contract panic still kills the job.
+    #[tokio::test]
+    async fn view_over_gas_cap_is_transport() {
+        let mut w = world();
+        w.view_errs.insert((TOKEN.into(), "mtx_pay_check".into()), "wasm execution failed with error: HostError(GasLimitExceeded)".into());
+        let (a, w) = adapter(w, "").await;
+        assert!(matches!(a.build(&job(o_of("pay", json!({}))), 0).await, Err(SimError::Transport(_))));
+        w.lock().unwrap().view_errs.insert((TOKEN.into(), "mtx_pay_check".into()), "wasm execution failed with error: Smart contract panicked: x".into());
+        assert!(matches!(a.build(&job(o_of("pay", json!({}))), 0).await, Err(SimError::Revert(_))));
+    }
+
     proptest! {
         /// Untrusted input never panics (§5): job bytes and JSON, RPC JSON, event logs.
         #[test]
         fn near_jobs_never_panic(b in proptest::collection::vec(any::<u8>(), 0..600), s in "\\PC{0,120}", k in 0usize..4,
-                                 n in any::<u64>(), relayer in proptest::option::of("[a-z.]{0,12}")) {
+                                 n in any::<u64>(), relayer in prop_oneof![Just(None), Just(Some(TOKEN.to_string())),
+                                     Just(Some(ROUTER.to_string())), proptest::option::of("[a-z.]{0,12}")]) {
             let _ = MetaOp::decode(&b);
             let _ = MetaOp::decode(&[LABEL, &b[..]].concat());
             let _ = Auth::decode(&b);
@@ -2591,11 +3238,32 @@ mod tests {
             let _ = entry(&pol(), &op, &o);
             let _ = entry(&pol(), &op_of("pay"), &o);
             if let Ok(e) = entry(&pol(), &op, &o) {
-                let _ = job_gas(&e, &Auth::Ed25519);
+                let _ = job_gas(&e, &Auth::Ed25519([0; 32]));
                 let _ = call_of(&pol(), &e, &op, &b);
             }
-            let _ = job_gas(&Entry::FeeWrapper { entry: "mtx_cancel".into(), args: b.clone() }, &Auth::Passkey);
+            let _ = job_gas(&Entry::FeeWrapper { entry: "mtx_cancel".into(), args: b.clone() }, &Auth::Passkey { key: [0; 64], rp: None, origin: None });
             let _ = dec_u128(&json!(s), "x");
+            // fix 1 m3: reach the relay-fee parsers past the binding (a payment consistent with random call bytes)
+            for (route, call) in [("wrapper", [&[11u8][..], b"mtx_add_key", &b].concat()), ("wrapper", [&[9u8][..], b"mtx_cancel", &b].concat()),
+                                  ("router", [&[13u8][..], DEX.as_bytes(), &[6], b"settle", &b].concat()),
+                                  ("router", [&[15u8][..], TOKEN.as_bytes(), &[7], b"mtx_pay", &b].concat()), ("router", b.clone())] {
+                let target = if route == "wrapper" { TOKEN } else { DEX };
+                let mut op = MetaOp { relayer: Some(if route == "wrapper" { TOKEN } else { ROUTER }.into()), ..op_of("relay_fee_pay_router_short") };
+                op.pay_ref = relay_ref(&op.network, &[&[target.len() as u8][..], target.as_bytes()].concat(), &call, &op.extra);
+                op.lane = pay_lane(&op.pay_ref);
+                let o = json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": route, "target_gas": n.to_string(), "target_deposit": s}});
+                let p = RelayFeePolicy { dex: Some(DEX.into()), targets: vec!["app.near".into()], ..pol() };
+                if let Ok(e) = entry(&p, &op, &o) {
+                    let _ = job_gas(&e, &Auth::Ed25519([0; 32]));
+                    let _ = wrapper_conflicts(&e, &op, &Auth::Ed25519([0; 32]));
+                    let _ = call_of(&p, &e, &op, &b);
+                }
+            }
+            let _ = (decode_check(&b), decode_router_check(&b), decode_pending(&b), decode_held(&b), relay_args_ref(&b), settle_legs(&b));
+            let _ = (parse_router_call(&b), parse_wrapper_call(&b));
+            if let Ok(v) = serde_json::from_str::<Value>(&s) {
+                let _ = (outcome_status(&v), header(&v), outcome_status(&json!({"SuccessValue": v})), header(&json!({"header": v})));
+            }
             let logs = [s.clone(), format!("EVENT_JSON:{s}"), ev("scaas", "payment_settled", json!({"from": s, "to": s, "amount": s, "pay_ref": s})),
                         ev("nep141", "ft_transfer", json!(s)), ev("scaas", "matched", json!({"settle_id": s, "legs": s}))];
             let tx = outcome(TOKEN, fc("relay", &b), json!({"SuccessValue": s}), vec![receipt(TOKEN, true, &logs), receipt(ROUTER, true, &logs), receipt(DEX, true, &logs)]);

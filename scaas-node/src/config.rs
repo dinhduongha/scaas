@@ -853,7 +853,7 @@ impl ChainCfg {
                 "router" | "min_amount" | "relay_bound_payee" => true,
                 "min_ton_value" => self.family == "ton",
                 "min_lamports_value" => self.family == "solana",
-                "executor" | "min_yocto_value" => self.family == "near",
+                "executor" | "min_yocto_value" | "targets" => self.family == "near",
                 _ => false,
             };
             if !ok {
@@ -861,7 +861,7 @@ impl ChainCfg {
                     match self.family.as_str() {
                         "ton" => ", min_ton_value",
                         "solana" => ", min_lamports_value",
-                        "near" => ", executor, min_yocto_value",
+                        "near" => ", executor, min_yocto_value, targets",
                         _ => "",
                     });
             }
