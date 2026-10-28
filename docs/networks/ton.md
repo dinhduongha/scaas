@@ -461,8 +461,12 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   The **payment** leg is checked as the payer's wallet runs it, so it cannot bounce after the router escrowed it: besides
   the signed-op check (nonce, key, signature), the payment must be valid at most `LANE_TTL` ahead (`E_TTL`) and within the
   payer wallet's `get_wallet_data` balance (`E_BALANCE`); else the job is refused (`the payment is valid further ahead
-  than LANE_TTL` / `the payer's wallet holds …`). A plain pay has the same two gaps today, at one hop's cost to the
-  relayer; that sits with the fee policy (owner rulings list item 7), and no plain-pay check is built.
+  than LANE_TTL` / `the payer's wallet holds …`). The payment also has the call's **validity floor**: it must stay valid
+  more than 600 s (`RELAY_DEADLINE_S`), since it reaches the payer's wallet two hops after the lane (`E_EXPIRED` there
+  would bounce at the relayer's cost), and the lane transaction expires at `min(valid_until − 300 s, deadline)`, so a late
+  lane transaction never delivers a nearly expired payment. A plain pay has the same gaps today (`LANE_TTL`, balance, and
+  no validity floor), at one hop's cost to the relayer; that sits with the fee policy (owner rulings list item 7), and no
+  plain-pay check is built.
 
   **Remaining exposure (recorded):**
   - a race in which the owner spends the lane, or moves its tokens away, between the node's check and the message's
@@ -470,7 +474,8 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   - two relay-fee jobs of one payer wallet sent within one payment round trip (different salts, both pass every check):
     the router refuses the second with 742 (one payment of a payer wallet in flight) after the relayer paid its forward fee
     and part of the router's compute. The node does not hold the second job (that needs a per-payer-wallet hold across
-    lanes until the first escrow leaves the paying stage); each such failure rides on a relay the submitter pays;
+    lanes until the first escrow leaves the paying stage; not built, controller call); every burst of such failures rides on
+    one paid relay of the submitter;
   - no per-payer failure budget is built (owner's call).
 - **Settlement ring (recorded residual, final review M8).** A settlement transfer is kept for a bounce in a ring of the
   last `SETTLE_RING = 16` settlements (`relayfee.tact:106`, `settle`). If more than 16 settlements happen between a

@@ -268,7 +268,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     gaps at one hop's cost: owner rulings item 7, no code); a race in which the owner spends the lane or moves its tokens
     between the check and the message still bounces at the relayer's cost (costs the submitter a direct op or a paid relay
     each time); two relay-fee jobs of one payer wallet within one payment round trip: the router refuses the second (742)
-    after the relayer paid its forward fee (no per-payer-wallet hold in the node); no per-payer failure budget (owner's call).
+    after the relayer paid its forward fee; every burst rides on one paid relay (no per-payer-wallet hold in the node); the
+    payment must stay valid more than 600 s, the lane tx expires at min(valid_until − 300 s, deadline) (plain pays: same
+    window, owner rulings item 7, no code); no per-payer failure budget (owner's call).
   - `MtxRelayExecutor` copies return data on success (a hostile target can inflate the relayer's memory cost; the node simulates
     first).
   - Observation: the Zether prover's relayed gas rows are 8.2-8.7 k below the measured figures (inside `GAS_MARGIN`); re-pin
