@@ -60,3 +60,19 @@ program sizes (B): approval 2588, clear 4
 .
 7 passed, 45 deselected in 4.67s
 rc=0
+
+## T13 mandate app (tests/test_mandate.py: test_mandate_pay_within_limits MBR deltas, test_figures_pinned budgets in the minimal group without bare budget calls) at commit 9b41463e + the T13 tree
+mandate box: 41 B name + 204 B value, MBR 100500 µALGO; payee balance box forwarded to the token 28500 µALGO
+mtx_mandate_pay (first, delegate opened): lane box 18900 µALGO + record 76100 µALGO forwarded
+.
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (7184, 10, None), 'pay ed25519 (delegate opened)': (3951, 6, None), 'pay ed25519': (3817, 6, None), 'revoke ed25519': (3464, 6, None), 'open passkey': (8721, 14, None), 'pay passkey (delegate opened)': (4747, 8, None), 'pay passkey': (4601, 8, None), 'revoke passkey': (4248, 8, None), 'open native': (6077, 9, None), 'refund': (410, 1, None)}
+pins {'open ed25519': (7500, 11), 'open passkey': (9150, 15), 'open native': (6400, 10), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (450, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2324, clear 4
+.
+opcode budget used: {'mtx_pay': 2868, 'mtx_transfer': 2828, 'mtx_pay_meta': 3324, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2588, clear 4
+.
+3 passed, 66 deselected in 1.87s
+rc=0

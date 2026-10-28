@@ -8,7 +8,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-APPS = {'token': 'Token', 'account': 'Account'}   # artifacts.json key → puyapy contract name
+APPS = {'token': 'Token', 'account': 'Account', 'mandate': 'Mandate'}   # artifacts.json key → puyapy contract name
 OUT, FILE = os.path.join(ROOT, 'out'), os.path.join(ROOT, 'artifacts.json')
 
 

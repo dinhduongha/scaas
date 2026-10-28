@@ -1,0 +1,226 @@
+# algorand-mandate-red (tests first, contracts/mandate.py an ABI stub whose entries all fail; vectors without mandate rows) at commit 9b41463e + the T13 tree
+
+UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
+.....UP only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+UV only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+short authData                   refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+crossOrigin true                 refused: passkey clientDataJSON (members after origin)
+topOrigin                        refused: passkey clientDataJSON (topOrigin)
+second crossOrigin               refused: passkey clientDataJSON (crossOrigin)
+member before crossOrigin        refused: passkey clientDataJSON (members after origin)
+whitespace                       refused: passkey clientDataJSON (type, challenge or origin)
+no closing brace                 refused: passkey clientDataJSON (members after origin)
+no closing brace after a member  refused: passkey clientDataJSON (members after origin)
+type create                      refused: passkey clientDataJSON (type, challenge or origin)
+type of the same length          refused: passkey clientDataJSON (type, challenge or origin)
+origin extended                  refused: passkey origin not listed
+origin prefix                    refused: passkey origin not listed
+empty origin                     refused: passkey clientDataJSON (type, challenge or origin)
+backslash in origin              refused: passkey clientDataJSON (type, challenge or origin)
+challenge of another digest      refused: passkey clientDataJSON (type, challenge or origin)
+........msig 2 passkeys S1 add_key   consumed  10845 added  11200 args  1330 ok
+msig 2 passkeys S2 mtx_pay   consumed  10911 added  11200 args  1322 ok
+msig 2 passkeys S3 relay     consumed  21396 added  21700 args  None ok
+msig 3 passkeys S1 add_key   consumed  15749 added  16100 args  1823 ok
+msig 3 passkeys S2 mtx_pay   consumed  15806 added  16100 args  1815 ok
+msig 3 passkeys S3 relay     consumed  31186 added  31500 args  None ok
+budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ 256; arguments ≤ 2,048 B
+.
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 3 passkey': (11409, 18), 'token mtx_pay native': (2913, 5), 'token mtx_pay ed25519 UA': (3449, 4), 'token mtx_pay secp256k1 UA': (2891, 4), 'token mtx_pay passkey UA': (4233, 6), 'token mtx_pay msig 3 passkey UA': (11888, 17)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 3 passkey': (12000, 19), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 3 passkey UA': (12500, 18)}
+.
+inner budget calls of a msig-3 key op: 17 (created and deleted in one inner transaction each)
+.........FFFFFFFFF.FFFF.F......
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+
+MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
+................
+opcode budget used: {'mtx_pay': 2868, 'mtx_transfer': 2828, 'mtx_pay_meta': 3324, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2588, clear 4
+......F
+=================================== FAILURES ===================================
+________________________ test_mandate_pay_within_limits ________________________
+tests/test_mandate.py:286: in test_mandate_pay_within_limits
+    with no(FUNDING):                                       # no MBR payment: the shape is broken
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: "funding:\\ the\\ token's\\ mtx_pay\\ must\\ come\\ just\\ before\\ the\\ open's\\ MBR\\ payment"
+E     Actual message: ' :: TransactionPool.Remember: transaction SXG2TW3HSBPLZ2URIEGEYHEERPOE53ME7IDTJ5OLTR35RPN2PE7Q: logic eval error: err opcode executed. Details: app=4671, pc=148, opcodes===; assert; err; label4:'
+______________________ test_open_funding_equals_op_amount ______________________
+tests/test_mandate.py:347: in test_open_funding_equals_op_amount
+    with no(err):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'terms\\.funding\\ must\\ equal\\ op\\.amount'
+E     Actual message: ' :: TransactionPool.Remember: transaction IETJ7J76WNSKRNHS2IA2H4CCZNUP7HOEAX36E7FQVZDD6WDILMWQ: logic eval error: err opcode executed. Details: app=4685, pc=148, opcodes===; assert; err; label4:'
+___________________________ test_funding_pay_checked ___________________________
+tests/test_mandate.py:419: in test_funding_pay_checked
+    with no(err):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'funding:\\ amount\\ must\\ equal\\ terms\\.funding'
+E     Actual message: ' :: TransactionPool.Remember: transaction BUWQPB3ZWXWXCBHTUJK542HUG4YKCQ2FTZU7CBB43JJA5SUQDOEQ: logic eval error: err opcode executed. Details: app=4699, pc=148, opcodes===; assert; err; label4:'
+_________________________ test_limits_exceeded_refused _________________________
+tests/test_mandate.py:470: in test_limits_exceeded_refused
+    mid = opened(mandate, relayer, token, erin, 1_000, mandate.terms(dele.ua(), b, 50, 80, 300))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction GE6QN2DKLDIEUYQMCLS67S5FKCPJU6CLZ4UJWPSRTWHLKYQAGZQQ: logic eval error: err opcode executed. Details: app=4716, pc=148, opcodes===; assert; err; label4:
+___________________________ test_wrong_payee_refused ___________________________
+tests/test_mandate.py:499: in test_wrong_payee_refused
+    mid = opened(mandate, relayer, token, erin, 1_000, mandate.terms(dele.ua(), b, 100, 250, 300))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction 3NH53YHNZ7W6X6N2TH6NEVGGIA2E4ILKWSEAPLHNUZIYBV4RAQZA: logic eval error: err opcode executed. Details: app=4730, pc=148, opcodes===; assert; err; label4:
+_____________________________ test_expired_refused _____________________________
+tests/test_mandate.py:514: in test_expired_refused
+    mid = opened(mandate, relayer, token, erin, 1_000, mandate.terms(dele.ua(), b, 100, 250, 300, expiry=expiry))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction 2NLSX4J7BBGK52I4WVGJDXKDAI5BPRQDECJWRYMHA7WGJHI2DA6A: logic eval error: err opcode executed. Details: app=4744, pc=148, opcodes===; assert; err; label4:
+____________________ test_delegate_policy_passkey_for_value ____________________
+tests/test_mandate.py:550: in test_delegate_policy_passkey_for_value
+    mid = opened(mandate, relayer, token, erin, 1_000, mandate.terms(d, b, 100, 250, 300))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction DMRABVCVT3YUNX5DBSWBM3TLHA3CT7WN65K2RN7OPXYTBTOO4N3Q: logic eval error: err opcode executed. Details: app=4758, pc=148, opcodes===; assert; err; label4:
+_____________________ test_revoked_refused_then_funds_back _____________________
+tests/test_mandate.py:569: in test_revoked_refused_then_funds_back
+    mid = opened(mandate, relayer, token, erin, 1_000, terms)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction 67ISAAHWYDMUBFHOAXNBVJMW6D6BS4YWU7FOWDMXQ3GWHC6JBLCQ: logic eval error: err opcode executed. Details: app=4772, pc=148, opcodes===; assert; err; label4:
+______________________________ test_pay_ref_once _______________________________
+tests/test_mandate.py:606: in test_pay_ref_once
+    mid = opened(mandate, relayer, token, erin, 1_000, terms)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction EKLETV2WCSARZZ7S464P7JZQMOI6KVTCOZG64TZZI6AI4LYCK72Q: logic eval error: err opcode executed. Details: app=4786, pc=148, opcodes===; assert; err; label4:
+__________________________ test_native_owner_ua_payee __________________________
+tests/test_mandate.py:648: in test_native_owner_ua_payee
+    r, mid = mandate.open(relayer, token, alice, terms, mbr=MBR_MANDATE + MBR_UA)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction 27JGJ6O3KT5AVLWQOZPDRAHMFBTU7THT44VMRQ7GNX554Q7LYTBA: logic eval error: err opcode executed. Details: app=4811, pc=148, opcodes===; assert; err; label4:
+______________________________ test_msig_delegate ______________________________
+tests/test_mandate.py:666: in test_msig_delegate
+    mid = opened(mandate, relayer, token, erin, 1_000, mandate.terms(m.ua(), native(bob), 100, 250, 300))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction DCFBVENIV3LXOUNRDB2NJG5LGQJ6RIE3FFGWFU4L4Q5LCTG3NLQQ: logic eval error: err opcode executed. Details: app=4822, pc=148, opcodes===; assert; err; label4:
+___________________ test_replay_across_tokens_networks_apps ____________________
+tests/test_mandate.py:679: in test_replay_across_tokens_networks_apps
+    mid = opened(mandate, relayer, token, erin, 1_000, terms)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction SK7P4TYBTM2P5W2TBGUA344YWH6UIXALWSUWGKWP6TTK5PNGTRJA: logic eval error: err opcode executed. Details: app=4836, pc=148, opcodes===; assert; err; label4:
+___________________ test_fake_token_cannot_touch_other_funds ___________________
+tests/test_mandate.py:707: in test_fake_token_cannot_touch_other_funds
+    mid = opened(mandate, relayer, token, erin, 1_000, mandate.terms(dele.ua(), b, 100, 250, 300))
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:277: in opened
+    return mandate.open(relayer, token, owner, terms, **kw)[1]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction YV5GZOE3JLZPCCUZSWWKMYSO2266B2TSV5TSKDVZNEAPFF3J3VHA: logic eval error: err opcode executed. Details: app=4856, pc=148, opcodes===; assert; err; label4:
+_____________________________ test_figures_pinned ______________________________
+tests/test_mandate.py:759: in test_figures_pinned
+    mid = mandate.open(relayer, token, owner, terms)[1]
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:161: in open
+    r = send(relayer, self, items, boxes, accounts, simulate)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mandate.py:244: in send
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused:  :: TransactionPool.Remember: transaction LAO7E2FSIBLUOW5LCFXMR7OMUL2CXS7MFYPXF6NCQEI4QDB2HRLA: logic eval error: err opcode executed. Details: app=4876, pc=148, opcodes===; assert; err; label4:
+_____________________________ test_mandate_vectors _____________________________
+tests/test_vectors.py:97: in test_mandate_vectors
+    assert set(rows) == {'mandate_open', 'mandate_funding', 'mandate_pay', 'mandate_revoke'}
+E   AssertionError: assert set() == {'mandate_fun...ndate_revoke'}
+E     
+E     Extra items in the right set:
+E     'mandate_pay'
+E     'mandate_open'
+E     'mandate_revoke'
+E     'mandate_funding'
+E     Use -v to get more diff
+=========================== short test summary info ============================
+FAILED tests/test_mandate.py::test_mandate_pay_within_limits - AssertionError...
+FAILED tests/test_mandate.py::test_open_funding_equals_op_amount - AssertionE...
+FAILED tests/test_mandate.py::test_funding_pay_checked - AssertionError: Rege...
+FAILED tests/test_mandate.py::test_limits_exceeded_refused - conftest.Refused...
+FAILED tests/test_mandate.py::test_wrong_payee_refused - conftest.Refused:  :...
+FAILED tests/test_mandate.py::test_expired_refused - conftest.Refused:  :: Tr...
+FAILED tests/test_mandate.py::test_delegate_policy_passkey_for_value - confte...
+FAILED tests/test_mandate.py::test_revoked_refused_then_funds_back - conftest...
+FAILED tests/test_mandate.py::test_pay_ref_once - conftest.Refused:  :: Trans...
+FAILED tests/test_mandate.py::test_native_owner_ua_payee - conftest.Refused: ...
+FAILED tests/test_mandate.py::test_msig_delegate - conftest.Refused:  :: Tran...
+FAILED tests/test_mandate.py::test_replay_across_tokens_networks_apps - conft...
+FAILED tests/test_mandate.py::test_fake_token_cannot_touch_other_funds - conf...
+FAILED tests/test_mandate.py::test_figures_pinned - conftest.Refused:  :: Tra...
+FAILED tests/test_vectors.py::test_mandate_vectors - AssertionError: assert s...
+15 failed, 54 passed in 18.60s
+rc=1

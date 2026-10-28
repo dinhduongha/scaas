@@ -18,11 +18,12 @@ account app by an inner payment immediately before the inner `verify` (its own e
 """
 import typing
 
-from algopy import (Account, Application, BigUInt, Bytes, BoxMap, FixedBytes, Global, GlobalState, Txn, UInt64, arc4,
-                    itxn, op, subroutine)
+from algopy import (Account, BigUInt, Bytes, BoxMap, FixedBytes, Global, GlobalState, Txn, UInt64, arc4,
+                    op, subroutine)
 
 from common import (KIND_ADDRESS, KIND_UA, OP_EXECUTE_TRANSFER, OP_PAY, OP_TRANSFER, Bytes32, Holder, MetaOp,
-                    check_envelope, digest, lane_key, mbr_paid, mbr_payment, meta_pay_id, pay_lane, verify_native, zero)
+                    account_verify, check_envelope, digest, lane_key, mbr_paid, mbr_payment, meta_pay_id, pay_lane,
+                    verify_native, zero)
 
 Bytes8 = FixedBytes[typing.Literal[8]]
 U128_MAX = 2**128 - 1
@@ -30,7 +31,6 @@ BOX_FLAT = 2500  # protocol box MBR: 2,500 + 400 per name + value byte (µALGO)
 BOX_BYTE = 400
 MBR_AMOUNT_BOX = BOX_FLAT + BOX_BYTE * (33 + 32)  # "b" / "u" / "a" boxes
 MBR_LANE_BOX = BOX_FLAT + BOX_BYTE * (33 + 8)
-ARC4_TRUE = b"\x15\x1f\x7c\x75\x80"  # an ABI `bool` return log: the return prefix ‖ true
 
 
 class Token(arc4.ARC4Contract):
@@ -226,7 +226,7 @@ class Token(arc4.ARC4Contract):
             paid, need = mbr_payment(), self._need(o.from_, o.lane, payee)
             assert paid >= need, "MBR payment must equal the new boxes' MBR exactly"
             forwarded = paid - need
-            self._account_verify(o.from_, d, auth, forwarded)
+            account_verify(self.account_app.value, o.from_, d, auth, forwarded)
         assert o.amount.as_biguint() > 0, "The amount should be a positive number"
         assert o.from_.bytes != payee.bytes, "Sender and receiver should be different"
         key = lane_key(o.from_, o.lane)
@@ -238,21 +238,6 @@ class Token(arc4.ARC4Contract):
         if o.pay_ref != zero():
             arc4.emit("PaymentSettled", o.from_, payee, arc4.UInt256(o.amount.as_biguint()), o.pay_ref)
         return forwarded
-
-    @subroutine
-    def _account_verify(self, h: Holder, d: Bytes32, auth: Bytes, forwarded: UInt64) -> None:
-        """Inner `account.verify(h, d, auth)`, preceded by the forwarded MBR payment when there is one (inner fees 0:
-        the relayer's group pays them by fee pooling)."""
-        app = Application(self.account_app.value)
-        call = itxn.ApplicationCall(
-            app_id=app, fee=0,
-            app_args=(arc4.arc4_signature("verify(uint8,byte[32],byte[32],byte[])bool"), h.kind.bytes, h.id.bytes,
-                      d.bytes, arc4.DynamicBytes(auth).bytes))
-        if forwarded:
-            _pay, res = itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
-            assert res.last_log == ARC4_TRUE, "bad signature"
-        else:
-            assert call.submit().last_log == ARC4_TRUE, "bad signature"
 
     @subroutine
     def _exists(self, h: Holder) -> bool:

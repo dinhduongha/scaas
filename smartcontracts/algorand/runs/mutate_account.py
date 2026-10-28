@@ -113,7 +113,8 @@ M = [
     ('M47 account OptIn allowed', A, '    @arc4.baremethod(allow_actions=["NoOp"])\n    def budget(self)',
      '    @arc4.baremethod(allow_actions=["NoOp", "OptIn"])\n    def budget(self)',
      TA + 'test_account_update_delete_optin_refused'),
-    ('M48 token: UA signer not verified', T, '            self._account_verify(o.from_, d, auth, forwarded)\n',
+    ('M48 token: UA signer not verified', T,
+     '            account_verify(self.account_app.value, o.from_, d, auth, forwarded)\n',
      '', TA + 'test_token_ua_pay_via_account_verify'),
     ('M49 token: nothing forwarded', T, '            forwarded = paid - need\n', '',
      TA + 'test_token_ua_pay_via_account_verify'),
@@ -122,7 +123,7 @@ M = [
     ('M51 token: native fast path for any 64-byte auth', T,
      'if o.from_.kind.as_uint64() == KIND_ADDRESS and auth.length == 64:', 'if auth.length == 64:',
      'tests/test_token.py::test_ua_signer_goes_through_the_account_app'),
-    ('M52 token: verify result ignored', T, 'assert call.submit().last_log == ARC4_TRUE, "bad signature"',
+    ('M52 token: verify result ignored', C, 'assert call.submit().last_log == ARC4_TRUE, "bad signature"',
      'call.submit()', TA + 'test_token_takes_only_a_true_verify'),
     ('M53 shrink refunds nothing → grows checked', C, 'grown = after - before if after > before else UInt64(0)',
      'grown = UInt64(0)', TA + 'test_ua_opened_lazily_relayer_pays_mbr'),
@@ -155,10 +156,9 @@ def run(cmd):
     return subprocess.run(cmd, shell=True, cwd=R, capture_output=True, text=True)
 
 
-def main():
-    orig = {f: open(os.path.join(R, f)).read() for f in (A, T, C)}
-    print('# algorand-account-mutations at commit %s + the T12 tree' %
-          run('git rev-parse --short HEAD').stdout.strip())
+def main(M=M, title='algorand-account-mutations', tree='T12'):
+    orig = {f: open(os.path.join(R, f)).read() for f in {m[1] for m in M}}
+    print('# %s at commit %s + the %s tree' % (title, run('git rev-parse --short HEAD').stdout.strip(), tree))
     killed = 0
     only = sys.argv[1:]
     todo = [m for m in M if not only or m[0].split()[0] in only]

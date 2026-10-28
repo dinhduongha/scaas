@@ -6,8 +6,8 @@ form `SIGN_PREFIX ‖ text` by the address's current authority. `payId` / `payLa
 """
 import typing
 
-from algopy import (Account, Bytes, FixedBytes, Global, OpUpFeeSource, TransactionType, Txn, UInt64, arc4, ensure_budget,
-                    gtxn, op, subroutine, urange)
+from algopy import (Account, Application, Bytes, FixedBytes, Global, OpUpFeeSource, TransactionType, Txn, UInt64, arc4,
+                    ensure_budget, gtxn, itxn, op, subroutine, urange)
 
 Bytes32 = FixedBytes[typing.Literal[32]]
 
@@ -25,6 +25,8 @@ KIND_ADDRESS = 0  # holder kinds (vectors: 0 = a native address, its 32-byte key
 KIND_UA = 1
 
 OP_PAY = 0
+OP_MANDATE_PAY = 2
+OP_REVOKE = 3
 OP_TRANSFER = 4
 OP_EXECUTE_TRANSFER = 5
 OP_ADD_KEY = 6
@@ -34,6 +36,8 @@ OP_REMOVE_ORIGIN = 9
 OP_SET_GUARDIAN = 10
 OP_START_RECOVERY = 11
 OP_CANCEL_RECOVERY = 12
+OP_MANDATE_OPEN = 13
+ARC4_TRUE = b"\x15\x1f\x7c\x75\x80"  # an ABI `bool` return log: the return prefix ‖ true
 
 
 class Holder(arc4.Struct, frozen=True):
@@ -156,3 +160,19 @@ def mbr_paid(before: UInt64, forwarded: UInt64) -> None:
     after = Global.current_application_address.min_balance
     grown = after - before if after > before else UInt64(0)
     assert mbr_payment() == grown + forwarded, "MBR payment must equal the new boxes' MBR exactly"
+
+
+@subroutine
+def account_verify(account_app: UInt64, h: Holder, d: Bytes32, auth: Bytes, forwarded: UInt64) -> None:
+    """Inner `account.verify(h, d, auth)` (a value op: POLICY_PASSKEY_FOR_VALUE binds), preceded by the forwarded MBR
+    payment when there is one (inner fees 0: the relayer's group pays them by fee pooling)."""
+    app = Application(account_app)
+    call = itxn.ApplicationCall(
+        app_id=app, fee=0,
+        app_args=(arc4.arc4_signature("verify(uint8,byte[32],byte[32],byte[])bool"), h.kind.bytes, h.id.bytes,
+                  d.bytes, arc4.DynamicBytes(auth).bytes))
+    if forwarded:
+        _pay, res = itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
+        assert res.last_log == ARC4_TRUE, "bad signature"
+    else:
+        assert call.submit().last_log == ARC4_TRUE, "bad signature"

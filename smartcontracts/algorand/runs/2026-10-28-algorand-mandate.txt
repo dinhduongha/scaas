@@ -1,0 +1,76 @@
+# algorand-mandate (scripts/capped smartcontracts/scripts/test.sh algorand: build + artifacts --check, vectors --check, localnet pytest) at commit 9b41463e + the T13 tree
+== test algorand
+== build algorand
+ok artifacts.json
+ok smartcontracts/algorand/vectors/algorand-vectors.json
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Created 
+ Network scaas-algorand_default Created 
+ Container scaas-algorand-indexer-db-1 Creating 
+ Container scaas-algorand-algod-1 Creating 
+ Container scaas-algorand-algod-1 Created 
+ Container scaas-algorand-indexer-db-1 Created 
+ Container scaas-algorand-conduit-1 Creating 
+ Container scaas-algorand-conduit-1 Created 
+ Container scaas-algorand-indexer-1 Creating 
+ Container scaas-algorand-indexer-1 Created 
+ Container scaas-algorand-algod-1 Starting 
+ Container scaas-algorand-indexer-db-1 Starting 
+ Container scaas-algorand-algod-1 Started 
+ Container scaas-algorand-indexer-db-1 Started 
+ Container scaas-algorand-conduit-1 Starting 
+ Container scaas-algorand-conduit-1 Started 
+ Container scaas-algorand-indexer-1 Starting 
+ Container scaas-algorand-indexer-1 Started 
+algod up
+
+UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
+.....UP only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+UV only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+short authData                   refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+crossOrigin true                 refused: passkey clientDataJSON (members after origin)
+topOrigin                        refused: passkey clientDataJSON (topOrigin)
+second crossOrigin               refused: passkey clientDataJSON (crossOrigin)
+member before crossOrigin        refused: passkey clientDataJSON (members after origin)
+whitespace                       refused: passkey clientDataJSON (type, challenge or origin)
+no closing brace                 refused: passkey clientDataJSON (members after origin)
+no closing brace after a member  refused: passkey clientDataJSON (members after origin)
+type create                      refused: passkey clientDataJSON (type, challenge or origin)
+type of the same length          refused: passkey clientDataJSON (type, challenge or origin)
+origin extended                  refused: passkey origin not listed
+origin prefix                    refused: passkey origin not listed
+empty origin                     refused: passkey clientDataJSON (type, challenge or origin)
+backslash in origin              refused: passkey clientDataJSON (type, challenge or origin)
+challenge of another digest      refused: passkey clientDataJSON (type, challenge or origin)
+........msig 2 passkeys S1 add_key   consumed  10845 added  11200 args  1330 ok
+msig 2 passkeys S2 mtx_pay   consumed  10911 added  11200 args  1322 ok
+msig 2 passkeys S3 relay     consumed  21396 added  21700 args  None ok
+msig 3 passkeys S1 add_key   consumed  15749 added  16100 args  1823 ok
+msig 3 passkeys S2 mtx_pay   consumed  15806 added  16100 args  1815 ok
+msig 3 passkeys S3 relay     consumed  31186 added  31500 args  None ok
+budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ 256; arguments ≤ 2,048 B
+.
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 3 passkey': (11409, 18), 'token mtx_pay native': (2913, 5), 'token mtx_pay ed25519 UA': (3449, 4), 'token mtx_pay secp256k1 UA': (2891, 4), 'token mtx_pay passkey UA': (4233, 6), 'token mtx_pay msig 3 passkey UA': (11888, 17)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 3 passkey': (12000, 19), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 3 passkey UA': (12500, 18)}
+.
+inner budget calls of a msig-3 key op: 17 (created and deleted in one inner transaction each)
+.........
+mandate box: 41 B name + 204 B value, MBR 100500 µALGO; payee balance box forwarded to the token 28500 µALGO
+mtx_mandate_pay (first, delegate opened): lane box 18900 µALGO + record 76100 µALGO forwarded
+...............
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (7184, 10, None), 'pay ed25519 (delegate opened)': (3951, 6, None), 'pay ed25519': (3817, 6, None), 'revoke ed25519': (3464, 6, None), 'open passkey': (8721, 14, None), 'pay passkey (delegate opened)': (4747, 8, None), 'pay passkey': (4601, 8, None), 'revoke passkey': (4248, 8, None), 'open native': (6077, 9, None), 'refund': (410, 1, None)}
+pins {'open ed25519': (7500, 11), 'open passkey': (9150, 15), 'open native': (6400, 10), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (450, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2324, clear 4
+.......
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+
+MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
+................
+opcode budget used: {'mtx_pay': 2868, 'mtx_transfer': 2828, 'mtx_pay_meta': 3324, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2588, clear 4
+.......
+69 passed in 25.91s
+rc=0

@@ -6,5 +6,9 @@
  "account": {
   "approval_sha512_256": "994ba4373eaed2ea3fcf18d0f528d043c2f928b5c63c4992d0b58204ea963dfc",
   "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
+ },
+ "mandate": {
+  "approval_sha512_256": "98afd4460934c8f01c3c24127f6d2abb7fbec8786d6db3a4f0ead38e17c2e280",
+  "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
  }
 }

@@ -84,3 +84,38 @@ def test_key_op_vectors(account):
         frm = r['fields']['from']
         need = view(account, 'verify_mbr', frm['kind'], unhx(frm['id']), unhx(r['digest']), unhx(r['authBytes']))
         assert (need == 0) == (r['auth']['kind'] == 'native'), r['name']
+
+
+def test_mandate_vectors(probe):
+    """T13 (R5, R9): the mandate rows — open (op 13: id = sha256(ARC-4(from, terms, lane, nonce)), to = Ua(id), amount =
+    funding, extra = sha256(token id ‖ id ‖ terms)), the funding pay (op 0 to the mandate app address, pay_ref = id),
+    pay (op 2: from = Ua(id), lane = payLane(pay_ref) on the AVM, nonce 0, extra = sha256(token id)) and revoke (op 3)
+    — recomputed with the harness encodings the mandate app accepts (test_mandate.py); the pay lane is byte-for-byte
+    the NEAR vector's (the EVM payLane)."""
+    from test_mandate import TERMS_T, mandate_id
+    rows = {r['name']: r for r in V['metaops']['vectors'] if r['name'].startswith('mandate_')}
+    assert set(rows) == {'mandate_open', 'mandate_funding', 'mandate_pay', 'mandate_revoke'}
+    op_, fund, pay, rev = (rows[n] for n in ('mandate_open', 'mandate_funding', 'mandate_pay', 'mandate_revoke'))
+    terms = TERMS_T.decode(unhx(op_['terms']))
+    assert TERMS_T.encode(terms) == unhx(op_['terms'])
+    f = op_['fields']
+    frm = (f['from']['kind'], unhx(f['from']['id']))
+    mid = mandate_id(frm, terms, unhx(f['lane']), f['nonce'])
+    tok = V['apps']['token']['id'].to_bytes(8, 'big')
+    assert mid == unhx(op_['mandateId']) == unhx(f['to']['id']) and f['to']['kind'] == 1 and f['op'] == 13
+    assert int(f['amount']) == terms[6] and f['pay_ref'] == '0x' + '00' * 32
+    assert sha256(tok, mid, unhx(op_['terms'])) == unhx(f['extra'])
+    assert f['contract'] == V['apps']['mandate']['key'] == fund['fields']['to']['id']
+    ff = fund['fields']
+    assert (ff['op'], ff['from'], ff['amount'], unhx(ff['pay_ref']), ff['contract']) == (
+        0, f['from'], f['amount'], mid, V['apps']['token']['key'])
+    for r, code in ((pay, 2), (rev, 3)):
+        assert r['fields']['op'] == code and unhx(r['fields']['extra']) == sha256(tok), r['name']
+        assert r['fields']['contract'] == V['apps']['mandate']['key'], r['name']
+    pf = pay['fields']
+    assert unhx(pf['from']['id']) == mid and pf['nonce'] == 0
+    assert bytes(view(probe, 'lane_of', unhx(pf['pay_ref']))) == unhx(pf['lane'])
+    near = json.load(open(os.path.join(REPO, 'smartcontracts', 'near', 'vectors', 'near-vectors.json')))
+    npay = next(r for r in near['metaops']['vectors'] if r['name'] == 'mandate_pay')['fields']
+    assert (npay['pay_ref'], npay['lane']) == (pf['pay_ref'], pf['lane'])
+    assert unhx(rev['fields']['to']['id']) == mid and rev['fields']['amount'] == '0'

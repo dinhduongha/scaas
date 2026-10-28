@@ -29,7 +29,7 @@ import famvec as V  # noqa: E402
 
 OUT = os.path.join(V.REPO, 'smartcontracts', 'algorand', 'vectors', 'algorand-vectors.json')
 NETWORK = V.seed('scaas.algorand.test-genesis')     # stands in for `global GenesisHash`
-TOKEN_APP, ROUTER_APP, TARGET_APP, ACCOUNT_APP = 1001, 1002, 1003, 1004
+TOKEN_APP, ROUTER_APP, TARGET_APP, ACCOUNT_APP, MANDATE_APP = 1001, 1002, 1003, 1004, 1005
 VU = 4_102_444_800                                  # 2100-01-01 in seconds
 SIGN_PREFIX = b'MX'
 ENCODING_LEN = 306
@@ -60,6 +60,7 @@ def selector(signature):
 TOKEN = app_address(TOKEN_APP)
 ROUTER = app_address(ROUTER_APP)
 ACCOUNT = app_address(ACCOUNT_APP)
+MANDATE = app_address(MANDATE_APP)
 alice = V.Ed('alice')                               # a native address (signs with its own key: not rekeyed)
 bob = V.Ed('bob')
 relayer = V.Ed('relayer')
@@ -114,7 +115,7 @@ def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer_=V.ZER
     dg = V.sha256(enc)
     row = {'name': name, 'fields': {
         'network': V.hx(NETWORK), 'contract': V.hx(contract),
-        'contractApp': ACCOUNT_APP if contract == ACCOUNT else TOKEN_APP, 'op': op['op'],
+        'contractApp': {ACCOUNT: ACCOUNT_APP, MANDATE: MANDATE_APP}.get(contract, TOKEN_APP), 'op': op['op'],
         'from': holder_json(frm), 'to': holder_json(to), 'relayer': V.hx(relayer_), 'amount': str(amount),
         'pay_ref': V.hx(pay_ref), 'lane': V.hx(lane), 'nonce': nonce, 'valid_until': VU, 'extra': V.hx(extra)},
         'encoding': V.hx(enc), 'digest': V.hx(dg), 'text': V.text(dg).decode(), 'auth': auth(signer, dg)}
@@ -202,6 +203,8 @@ MBR_BOXES = [
     ('account_record', b's' + bytes([1]) + UA_ERIN, 118 + 32, 'account app: "s" ‖ kind ‖ id → record (118 B header + '
                                                              '32 per key and origin); here one key'),
 ]
+# Mandate app (T13): the mandate (owner 33 ‖ terms 130 ‖ period_start 8 ‖ spent 16 ‖ remaining 16 ‖ revoked 1) and a
+# paid pay_ref's lane; ids from the mandate rows below (appended there)
 
 
 # ---------------------------------------------------------------- extension points (ruling R5)
@@ -334,9 +337,62 @@ def recovery_vectors():
     return [r for r in KEY_OPS if r['fields']['op'] >= V.OP['start_recovery']]
 
 
+# Mandate (Task 13, spec §4.7 → §3.6; the mandate app, contract = its address; state keyed by (token app id, id)).
+# `MandateTerms` ARC-4 = delegate (uint8,byte[32]) ‖ payee (uint8,byte[32]) ‖ per_payment uint128 ‖ per_period uint128
+# ‖ period_s uint64 ‖ expiry uint64 ‖ funding uint128 (130 B, big-endian). Open (op 13, owner-signed): id =
+# sha256(ARC-4(from, terms, lane, nonce)), to = Ua(id), amount = funding (R9), pay_ref zero, extra = sha256(token app
+# id u64 ‖ id ‖ terms); funded in the same group by the owner's token mtx_pay (op 0) of `funding` to the mandate app
+# address with pay_ref = id. Pay (op 2, delegate-signed): from = Ua(id), lane = payLane(pay_ref) (the NEAR vector's
+# bytes), nonce 0, extra = sha256(token app id u64). Revoke (op 3, owner or delegate): to = Ua(id), amount / pay_ref /
+# lane / nonce zero, extra = sha256(token app id u64). `authBytes` = the account app's auth encoding.
+MANDATES = []
+
+
+def mandate_terms(delegate, payee, per_payment, per_period, period_s, expiry, funding):
+    return (bytes([delegate[0]]) + delegate[1] + bytes([payee[0]]) + payee[1] + per_payment.to_bytes(16, 'big')
+            + per_period.to_bytes(16, 'big') + struct.pack('>QQ', period_s, expiry) + funding.to_bytes(16, 'big'))
+
+
+def mandate_row(name, signer, frm, to, amount, pay_ref, lane, code, extra, note, contract=MANDATE):
+    row = metaop(name, signer, frm, to, amount, pay_ref, lane, code=code, extra=extra, note=note, keep=False,
+                 contract=contract)
+    row['authBytes'] = V.hx(account_auth(signer, V.unhx(row['digest'])))
+    MANDATES.append(row)
+    return row
+
+
+_tok = TOKEN_APP.to_bytes(8, 'big')
+_terms = mandate_terms(ua(UA_CAROL), addr(bob.pk), 100, 250, 86_400, VU, 1_000)
+_lane, _nonce = b32(0xb0), 0
+MANDATE_ID = V.sha256(bytes([1]) + UA_ERIN + _terms + _lane + struct.pack('>Q', _nonce))
+assert len(_terms) == 130
+_row = mandate_row('mandate_open', erin, ua(UA_ERIN), ua(MANDATE_ID), 1_000, V.ZERO32, _lane, V.OP['mandate_open'],
+                   V.sha256(_tok + MANDATE_ID + _terms),
+                   'mtx_mandate_open(token 1001, op, auth, terms): owner erin; delegate carol (UA), payee bob, per '
+                   'payment 100, per period 250 per 86,400 s, funding 1,000 = amount; after mandate_funding and the '
+                   'open\'s exact-MBR payment in one group')
+_row.update(params=V.hx(_tok + MANDATE_ID + _terms), terms=V.hx(_terms), mandateId=V.hx(MANDATE_ID))
+mandate_row('mandate_funding', erin, ua(UA_ERIN), addr(MANDATE), 1_000, MANDATE_ID, b32(0xb1), V.OP['pay'], V.ZERO32,
+            'token.mtx_pay(op, auth, open_payee zero) funding mandate_open: owner erin pays funding to the mandate app '
+            'address, pay_ref = the mandate id', contract=TOKEN)
+_pr = b32(0x07)
+mandate_row('mandate_pay', carol, ua(MANDATE_ID), addr(bob.pk), 100, _pr, V.pay_lane(_pr), V.OP['mandate_pay'],
+            V.sha256(_tok), "mtx_mandate_pay(token 1001, op, auth): from = the mandate id, signed by the delegate "
+            "carol; the mandate's lane payLane(pay_ref) at nonce 0 (each pay_ref once per (token, mandate))")
+mandate_row('mandate_revoke', carol, ua(UA_CAROL), ua(MANDATE_ID), 0, V.ZERO32, V.ZERO32, V.OP['revoke'],
+            V.sha256(_tok), "mtx_revoke(token 1001, op, auth): the delegate's kill switch (the owner may sign it too); "
+            "the remaining funds go back to the owner")
+
+
+MBR_BOXES += [
+    ('mandate', b'm' + _tok + MANDATE_ID, 204, 'mandate app: "m" ‖ token app id u64 ‖ mandate id → Mandate'),
+    ('mandate_lane', b'l' + V.sha256(_tok + MANDATE_ID + V.pay_lane(_pr)), 8,
+     'mandate app: "l" ‖ sha256(token app id u64 ‖ mandate id ‖ lane) → u64 (a paid pay_ref)')]
+
+
 def mandate_vectors():
-    """Ops 2 mandate_pay, 3 revoke, 13 mandate_open (`MandateTerms`): Task 13 adds rows."""
-    return []
+    """Ops 2 mandate_pay, 3 revoke, 13 mandate_open (`MandateTerms`), and the open's funding pay (op 0)."""
+    return MANDATES
 
 
 def dex_vectors():
@@ -375,6 +431,15 @@ def selftest(doc):
     for m in KEY_OPS:                                # key ops: extra = sha256(params), the shape of §4.3
         f = m['fields']
         assert f['extra'] == V.hx(V.sha256(V.unhx(m['params']))) and f['amount'] == '0' and f['contract'] == V.hx(ACCOUNT)
+    rows = {m['name']: m for m in MANDATES}         # mandate: id, extra, funding bound to the open
+    o, f, p = rows['mandate_open'], rows['mandate_funding']['fields'], rows['mandate_pay']['fields']
+    tid = V.unhx(o['mandateId'])
+    assert V.sha256(bytes([o['fields']['from']['kind']])
+                    + V.unhx(o['fields']['from']['id']) + V.unhx(o['terms']) + V.unhx(o['fields']['lane'])
+                    + struct.pack('>Q', o['fields']['nonce'])) == tid
+    assert V.unhx(o['fields']['extra']) == V.sha256(V.unhx(o['params'])) and o['fields']['to']['id'] == V.hx(tid)
+    assert (V.unhx(f['pay_ref']), f['amount'], f['to']['id']) == (tid, o['fields']['amount'], V.hx(MANDATE))
+    assert p['lane'] == V.hx(V.pay_lane(V.unhx(p['pay_ref']))) and p['from']['id'] == V.hx(tid)
     for b in doc['mbr']['boxes']:
         assert b['microAlgo'] == 2500 + 400 * (b['nameLength'] + b['valueLength']) and b['nameLength'] <= 64
 
@@ -391,6 +456,7 @@ def build():
         'network': V.hx(NETWORK),
         'apps': {'token': {'id': TOKEN_APP, 'address': address(TOKEN), 'key': V.hx(TOKEN)},
                  'account': {'id': ACCOUNT_APP, 'address': address(ACCOUNT), 'key': V.hx(ACCOUNT)},
+                 'mandate': {'id': MANDATE_APP, 'address': address(MANDATE), 'key': V.hx(MANDATE)},
                  'router': {'id': ROUTER_APP, 'address': address(ROUTER), 'key': V.hx(ROUTER)},
                  'target': {'id': TARGET_APP, 'address': address(app_address(TARGET_APP)),
                             'key': V.hx(app_address(TARGET_APP))}},
