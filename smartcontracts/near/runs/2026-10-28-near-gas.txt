@@ -77,3 +77,48 @@ rc=0
 GAS msig-cap (12 passkey signatures) + passkey payment, relay_fee_mandate_open: 266.772 Tgas burnt, margin 33.228 Tgas to 300
 GAS relay_fee_mandate_open: 266.772 Tgas burnt (margin 33.228 Tgas to 300); storage charged 1500 B, grown 1479 B
 rc=0
+
+# near-sandbox gas of the escrow relay-fee router (Task 10: relayfee + relayexec + token relay_hold / relay_release / relay_refund; test gas_pins_hold, tests/relay_router.rs, test.sh near) at commit 1421b24e + T10 (the T10 commit); every run at exactly relay_gas prepaid (all receipts succeed, the target's own failure aside); per receipt burnt vs pin, assert burnt <= pin / 1.2; pins = measured max x 1.5 rounded up (relay_hold: GAS_HOLD 5 + sig_gas: passkey 25 = T1 20.005 x 1.25, ed25519 1); target_gas 20 Tgas
+release ed25519: total 21.305 Tgas; router [2.229504995781, 2.179457747873, 2.183947455199, 1.839714704953]; token [3.980825372422, 2.768600621024]; executor [1.585089852741]
+release: total 41.021 Tgas; router [2.252391800001, 2.188577747873, 2.183947455199, 1.839593759821]; token [23.635453542357, 2.768479675892]; executor [1.585089852741]
+refund: total 43.079 Tgas; router [2.252495800675, 2.188720453721, 2.595369989562, 1.648318765915]; token [23.460334782051, 2.771203581022]; executor [1.585230913077, 1.371610789686]
+hold-refused: total 27.873 Tgas; router [2.252391800001, 1.651344998486]; token [22.285176680599]; executor []
+timeout: total 8.219 Tgas; router [2.159680697624, 1.639267222033]; token [2.771203581022]
+GAS router release ed25519 relay: 2.230 Tgas (pin 5, limit 4.167)
+GAS router release ed25519 on_hold: 2.179 Tgas (pin 5, limit 4.167)
+GAS router release ed25519 on_call: 2.184 Tgas (pin 4, limit 3.333)
+GAS router release ed25519 on_settle: 1.840 Tgas (pin 3, limit 2.500)
+GAS router release ed25519 relay_hold: 3.981 Tgas (pin 6, limit 5.000)
+GAS router release ed25519 release/refund: 2.769 Tgas (pin 5, limit 4.167)
+GAS router release ed25519 exec: 1.585 Tgas (pin 4, limit 3.333)
+GAS router release relay: 2.252 Tgas (pin 5, limit 4.167)
+GAS router release on_hold: 2.189 Tgas (pin 5, limit 4.167)
+GAS router release on_call: 2.184 Tgas (pin 4, limit 3.333)
+GAS router release on_settle: 1.840 Tgas (pin 3, limit 2.500)
+GAS router release relay_hold: 23.635 Tgas (pin 30, limit 25.000)
+GAS router release release/refund: 2.768 Tgas (pin 5, limit 4.167)
+GAS router release exec: 1.585 Tgas (pin 4, limit 3.333)
+GAS router release 16 KiB args relay: 2.918 Tgas (pin 5, limit 4.167)
+GAS router release 16 KiB args on_hold: 3.171 Tgas (pin 5, limit 4.167)
+GAS router release 16 KiB args on_call: 2.184 Tgas (pin 4, limit 3.333)
+GAS router release 16 KiB args on_settle: 1.839 Tgas (pin 3, limit 2.500)
+GAS router release 16 KiB args relay_hold: 23.471 Tgas (pin 30, limit 25.000)
+GAS router release 16 KiB args release/refund: 2.768 Tgas (pin 5, limit 4.167)
+GAS router release 16 KiB args exec: 2.539 Tgas (pin 4, limit 3.333)
+GAS router refund relay: 2.252 Tgas (pin 5, limit 4.167)
+GAS router refund on_hold: 2.189 Tgas (pin 5, limit 4.167)
+GAS router refund on_call: 2.595 Tgas (pin 4, limit 3.333)
+GAS router refund on_settle: 1.648 Tgas (pin 3, limit 2.500)
+GAS router refund relay_hold: 23.460 Tgas (pin 30, limit 25.000)
+GAS router refund release/refund: 2.771 Tgas (pin 5, limit 4.167)
+GAS router refund exec: 1.585 Tgas (pin 4, limit 3.333)
+GAS router refund return_deposit: 1.372 Tgas (pin 5, limit 4.167)
+GAS router hold-refused relay: 2.252 Tgas (pin 5, limit 4.167)
+GAS router hold-refused on_hold: 1.651 Tgas (pin 5, limit 4.167)
+GAS router hold-refused relay_hold: 22.285 Tgas (pin 30, limit 25.000)
+GAS router timeout refund: 2.771 Tgas (pin 5, limit 4.167)
+GAS router timeout on_settle: 1.639 Tgas (pin 3, limit 2.500)
+GAS router pins: GAS_RELAY 5, GAS_HOLD 5 (+ sig_gas: passkey 25, ed25519/secp256k1 1), GAS_ON_HOLD 5, GAS_EXEC 4, GAS_ON_CALL 4, GAS_RELEASE 5, GAS_ON_SETTLE 3; relay_gas(passkey, 20 Tgas target) = 81 Tgas
+STORAGE router entry 306 B (open mode, UA payer, 43-char token / target / relayer ids; relay_check quotes 327 B), held record 280 B
+# relay_gas(auth, target_gas) = GAS_RELAY 5 + hold_gas 5+sig + GAS_ON_HOLD 5 + GAS_EXEC 4 + target_gas + call_gas (GAS_ON_CALL 4 + 2 x GAS_RELEASE 5 + GAS_ON_SETTLE 3) = 36 Tgas + sig_gas + target_gas; at 300 Tgas per transaction: (264 - target_gas) / 25 passkey signatures (9 at a 20 Tgas target)
+rc=0

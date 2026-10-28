@@ -153,12 +153,23 @@ impl Token {
         self.charge_storage();
     }
 
-    /// The pay body, shared by every value entry and by Tasks 9–10 (relay-fee wrappers, router release): consumes
-    /// `from`'s lane `op.lane` at `op.nonce`, registers `payee` (bytes into `storage_due`), moves `op.amount`, emits
-    /// `meta_transaction_executed` and, when `pay_ref ≠ 0`, `payment_settled`. No authorisation of its own: callers
+    /// The pay body, shared by every value entry and by Task 9's relay-fee wrappers: `consume_pay`, then moves
+    /// `op.amount` to `payee` and, when `pay_ref ≠ 0`, emits `payment_settled`. No authorisation of its own: callers
     /// first run `value_plan` (plain entries, `payee = op.to`) or `routed_plan` (Tasks 9–10, `payee = Routed.payee`),
     /// never `signed` alone, so the relayer rule, the shape and the value policy (R8) always apply.
     pub(crate) fn settle_pay(&mut self, op: &MetaOp, from: &Holder, payee: &Holder) {
+        self.consume_pay(op, from, payee);
+        self.move_balance(from, payee, op.amount, None);
+        if op.pay_ref != [0; 32] {
+            Event::PaymentSettled { from: from.to_string(), to: payee.to_string(), amount: U128(op.amount), pay_ref: x(&op.pay_ref) }
+                .emit();
+        }
+    }
+
+    /// The first half of the pay body (`settle_pay`; Task 10's router hold, which moves the amount into escrow instead):
+    /// consumes `from`'s lane `op.lane` at `op.nonce`, registers `payee` (bytes into `storage_due`), emits
+    /// `meta_transaction_executed`.
+    pub(crate) fn consume_pay(&mut self, op: &MetaOp, from: &Holder, payee: &Holder) {
         let next = self.next_nonce(from, &op.lane);
         require!(next.unwrap_or(0) == op.nonce, "wrong lane nonce");
         if next.is_none() {
@@ -174,11 +185,6 @@ impl Token {
             digest: x(&op.digest()),
         }
         .emit();
-        self.move_balance(from, payee, op.amount, None);
-        if op.pay_ref != [0; 32] {
-            Event::PaymentSettled { from: from.to_string(), to: payee.to_string(), amount: U128(op.amount), pay_ref: x(&op.pay_ref) }
-                .emit();
-        }
     }
 
     fn value_check(&self, caller: &AccountId, op: &MetaOp, auth: &Auth, code: u8) -> Check {

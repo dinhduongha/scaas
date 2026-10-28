@@ -14,7 +14,7 @@ build() {
     cosmos)  "$SC/cosmos/build-wasm.sh" ;;
     ton)     (cd "$SC/ton" && { [ -d node_modules ] || npm ci; } && npm run build) ;;
     solana)  (export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"; cd "$SC/solana" && cargo build-sbf) ;;
-    near)    for m in "$SC"/near/*/Cargo.toml; do grep -q 'cdylib' "$m" || continue  # contract crates only
+    near)    for m in "$SC"/near/*/Cargo.toml "$SC"/near/integration/*/Cargo.toml; do grep -q 'cdylib' "$m" || continue  # contract crates (+ test fixtures)
                (cd "$(dirname "$m")" && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi); done ;;
     *) echo "unknown family '$1' (one of: $FAMILIES all)" >&2; exit 2 ;;
   esac

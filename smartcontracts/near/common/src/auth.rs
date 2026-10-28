@@ -5,7 +5,7 @@
 use crate::hash::nep413_hash;
 use crate::ua::{self, KeyRecord, KIND_ED25519, KIND_MSIG, KIND_NEAR_ACCOUNT, KIND_SECP256K1, KIND_WEBAUTHN_P256};
 use crate::webauthn::{self, AuthError};
-use near_sdk::{env, near, AccountId};
+use near_sdk::{env, near, AccountId, Gas};
 
 type R<T> = Result<T, &'static str>;
 
@@ -31,6 +31,44 @@ impl Auth {
             Auth::Msig { key_data, .. } => (KIND_MSIG, key_data.clone()),
         };
         Ok(KeyRecord { kind, key_data })
+    }
+}
+
+/// One ed25519 (`ed25519_verify`) or secp256k1 (`ecrecover`) signature, incl. its msig member checks (< 0.5 Tgas).
+pub const GAS_SIG_KEY: Gas = Gas::from_tgas(1);
+/// One P-256 passkey signature: 20.005 Tgas per verify at opt-level 3 (Task 1, `runs/2026-10-28-p256-spike.txt`) × 1.25.
+pub const GAS_SIG_PASSKEY: Gas = Gas::from_tgas(25);
+
+/// The verify gas a call checking `auth` budgets (ruling T8-I2; the DEX legs, the relay router's hold): one figure per
+/// signature by kind, an msig's member signatures summed (a `near-account` member signs as the predecessor, free).
+pub fn sig_gas(auth: &Auth) -> Gas {
+    fn g(a: &Auth) -> u64 {
+        match a {
+            Auth::Passkey { .. } => GAS_SIG_PASSKEY.as_gas(),
+            Auth::Ed25519 { .. } | Auth::Secp256k1 { .. } => GAS_SIG_KEY.as_gas(),
+            Auth::Msig { sigs, .. } => sigs.iter().map(|(_, a)| g(a)).fold(0, u64::saturating_add),
+        }
+    }
+    Gas::from_gas(g(auth))
+}
+
+/// Largest `client_data_json` / `authenticator_data` of a passkey signature that `sig_gas` budgets (review T8-M4,
+/// controller ruling). The budget is a fixed 25 Tgas per passkey, but the verify cost grows with these sizes (scan and
+/// sha256 of clientDataJSON, sha256 of authenticatorData ‖ hash); real assertions are ≈ 400 B. Without the cap a signer
+/// could pad assertions until the budgeted call runs out of gas.
+pub const PASSKEY_FIELD_MAX: usize = 1024;
+
+/// Every passkey signature of `auth` (directly or as an msig member) within `PASSKEY_FIELD_MAX`.
+pub fn passkey_fields(auth: &Auth) -> R<()> {
+    match auth {
+        Auth::Passkey { authenticator_data: ad, client_data_json: cd, .. } => {
+            if cd.len() > PASSKEY_FIELD_MAX || ad.len() > PASSKEY_FIELD_MAX {
+                return Err("passkey clientDataJSON / authenticatorData over 1024 bytes");
+            }
+            Ok(())
+        }
+        Auth::Msig { sigs, .. } => sigs.iter().try_for_each(|(_, a)| passkey_fields(a)),
+        Auth::Ed25519 { .. } | Auth::Secp256k1 { .. } => Ok(()),
     }
 }
 

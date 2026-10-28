@@ -706,6 +706,41 @@
     "note": "payment of relayRefs router_4096: pay_ref = ref, lane = payLane(ref), nonce 0, extra = salt (ruling R11)"
    },
    {
+    "name": "relay_fee_pay_router_bound",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 0,
+     "from": {
+      "Near": "alice.test.near"
+     },
+     "to": {
+      "Near": "bob.test.near"
+     },
+     "relayer": "relayfee.test.near",
+     "amount": "10",
+     "pay_ref": "0xc62544bf7c9d21d8bd236b0bedb183609214a915af3bd17058a3d26656a89f1a",
+     "lane": "0x3b147d7e890ecacc0304db585d2d7706475495e026205e0e4e2e820675d85481",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0x5656565656565656565656565656565656565656565656565656565656565656"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e65617200000f000000616c6963652e746573742e6e656172000d000000626f622e746573742e6e656172011200000072656c61796665652e746573742e6e6561720a000000000000000000000000000000c62544bf7c9d21d8bd236b0bedb183609214a915af3bd17058a3d26656a89f1a3b147d7e890ecacc0304db585d2d7706475495e026205e0e4e2e820675d854810000000000000000005786f4000000005656565656565656565656565656565656565656565656565656565656565656",
+    "digest": "0x15c1c96758e571c255be451e0aa645ac5969b9658c51d1beeeb97fa506db81fd",
+    "text": "scaas.metaop.v1:15c1c96758e571c255be451e0aa645ac5969b9658c51d1beeeb97fa506db81fd",
+    "auth": {
+     "kind": "ed25519",
+     "key": "0xd5bf4a3fcce717b0388bcc2749ebc148ad9969b23f45ee1b605fd58778576ac4",
+     "message": "scaas.metaop.v1:15c1c96758e571c255be451e0aa645ac5969b9658c51d1beeeb97fa506db81fd",
+     "nonce": "0x15c1c96758e571c255be451e0aa645ac5969b9658c51d1beeeb97fa506db81fd",
+     "recipient": "token.test.near",
+     "nep413Payload": "0x5000000073636161732e6d6574616f702e76313a3135633163393637353865353731633235356265343531653061613634356163353936396239363538633531643162656565623937666135303664623831666415c1c96758e571c255be451e0aa645ac5969b9658c51d1beeeb97fa506db81fd0f000000746f6b656e2e746573742e6e65617200",
+     "nep413Hash": "0x571a37cb881561b6a58f3a319bdee1a2009eadc2028c823c72a649e6f9810a82",
+     "sig": "0x06b7d07847b005345e97a96c709c25b45f5b9847df01fc42a7f9c277da04176afdac8ab6e8aac64a5c206e069cfda902e4e1faaeea3aefd0c077e61b8cbf3708"
+    },
+    "note": "payment of relayRefs router_bound: pay_ref = ref, lane = payLane(ref), nonce 0, extra = salt (ruling R11)"
+   },
+   {
     "name": "relay_fee_pay_wrapper_add_key_real",
     "fields": {
      "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
@@ -1631,6 +1666,21 @@
    "payment": "relay_fee_pay_router_4096"
   },
   {
+   "name": "router_bound",
+   "kind": "router",
+   "method": "settle",
+   "args": "0xc74d987a55d8f15729118d1dc2458ed0721d0c1524d9cbab9eb2818bfac90fc4447145c4376d10d3",
+   "target": "dex.test.near",
+   "targetBytes": "0x0d6465782e746573742e6e656172",
+   "call": "0x0d6465782e746573742e6e65617206736574746c65c74d987a55d8f15729118d1dc2458ed0721d0c1524d9cbab9eb2818bfac90fc4447145c4376d10d3",
+   "callLength": 61,
+   "callHash": "0x57b705ce2ed2301b8f973904c25c8c97adf6dfbe39a4b1e89c8d00689d69be21",
+   "salt": "0x5656565656565656565656565656565656565656565656565656565656565656",
+   "ref": "0xc62544bf7c9d21d8bd236b0bedb183609214a915af3bd17058a3d26656a89f1a",
+   "lane": "0x3b147d7e890ecacc0304db585d2d7706475495e026205e0e4e2e820675d85481",
+   "payment": "relay_fee_pay_router_bound"
+  },
+  {
    "name": "wrapper_add_key_real",
    "kind": "wrapper",
    "entry": "mtx_add_key",
@@ -1703,6 +1753,16 @@
     "bytes": 706,
     "layout": "DEX escrow entry of a settle: key b\"s\" ‖ settle_id 33 B + Borsh(Settle) (legs: token, seller, lane, nonce, digest, amount; relayer, deposit, expiry, done) + 40 B, and two leg-index records (key b\"l\" ‖ digest 33 B, value settle_id 32 B, + 40 B = 105 B each); = 283 + Borsh(Settle); 706 B for a UA seller and a native seller with 43-char token / seller / relayer ids (test settle_pays_both_legs); pruned after both expiries, the deposit back to the submitting relayer",
     "depositSandbox": "7060000000000000000000"
+   },
+   "routerEntry": {
+    "bytes": 306,
+    "layout": "relay router escrow entry (Task 10): key b\"p\" ‖ ref 33 B + Borsh(Pending) + 40 B = 73 + Borsh(Pending) (token, target, payer Holder, payee Option<Holder>, amount u128, relayer, target_deposit u128, deposit u128, deadline u64, stage u8, owed bool); 306 B for a UA payer in open mode with 43-char token / target / relayer ids (test timeout_refund_refused_before_deadline); relay_check quotes a 64-char relayer; deleted at settle, the deposit back to the relayer that staked it",
+    "depositSandbox": "3060000000000000000000"
+   },
+   "relayHeld": {
+    "bytes": 280,
+    "layout": "token relay escrow record (Task 10): key b\"h\" ‖ Borsh((router, pay_ref)) + Borsh(Held {payer, payee, amount, relayer, deposit}) + 40 B = 73 + Borsh(router) + Borsh(Held) (token HELD_RECORD_OVERHEAD, measured in `new`); 280 B for a UA payer and a native payee with 43-char ids; removed at release / refund, the deposit back to the relayer",
+    "depositSandbox": "2800000000000000000000"
    }
   }
  }

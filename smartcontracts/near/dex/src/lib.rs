@@ -24,6 +24,8 @@ use near_sdk::store::LookupMap;
 use near_sdk::{borsh, env, near, require, AccountId, Gas, GasWeight, NearToken, PanicOnDefault, Promise, PromiseError};
 use scaas_near_common::metaop::{MetaOp, Order, OP_TRADE};
 use scaas_near_common::{Auth, Holder};
+/// Per-signature gas and the passkey field cap (review T8-M4) live in `common::auth` (shared with the relay router).
+pub use scaas_near_common::auth::{passkey_fields, sig_gas, GAS_SIG_KEY, GAS_SIG_PASSKEY, PASSKEY_FIELD_MAX};
 
 /// Static gas per receipt (spec §3.8 sizing: the measured maximum × 1.5, near-sandbox 2026-10-28, `runs/2026-10-28-near-gas.txt`;
 /// tests `settle_gas_pin`, `settle_msig_leg_gas_limit` and `refund_expired_after_lost_callback` fail when a measurement
@@ -32,10 +34,6 @@ use scaas_near_common::{Auth, Holder};
 ///
 /// A leg without its signature checks: an ed25519 leg opening a UA burns 4.03 Tgas, a passkey leg 23.70 − 20.0 = 3.7.
 pub const GAS_LEG_BASE: Gas = Gas::from_tgas(6);
-/// One ed25519 (`ed25519_verify`) or secp256k1 (`ecrecover`) signature, incl. its msig member checks (< 0.5 Tgas).
-pub const GAS_SIG_KEY: Gas = Gas::from_tgas(1);
-/// One P-256 passkey signature: 20.005 Tgas per verify at opt-level 3 (Task 1, `runs/2026-10-28-p256-spike.txt`) × 1.25.
-pub const GAS_SIG_PASSKEY: Gas = Gas::from_tgas(25);
 /// `ft_transfer` / `transfer_to_ua` to a registered receiver (2.41 Tgas).
 pub const GAS_PAYOUT: Gas = Gas::from_tgas(4);
 /// `on_legs` (2.31 Tgas) plus what it prepays for its two payouts (their static gas and exec fees; 2 × 2.41 Tgas).
@@ -133,17 +131,10 @@ fn leg(order: &Order, op: &MetaOp, me: &AccountId, caller: &AccountId) -> R<Leg>
     Ok(Leg { token: order.sell_token.clone(), seller: op.from.clone(), lane: op.lane, nonce: op.nonce, digest: op.digest(), amount: op.amount })
 }
 
-/// A leg's static gas from its auth: `GAS_LEG_BASE` + each signature's cost (an msig: its member signatures; a
-/// `near-account` member signs as the predecessor, free).
+/// A leg's static gas from its auth: `GAS_LEG_BASE` + `sig_gas` (each signature's cost; an msig: its member signatures;
+/// a `near-account` member signs as the predecessor, free).
 pub fn leg_gas(auth: &Auth) -> Gas {
-    fn sigs(a: &Auth) -> u64 {
-        match a {
-            Auth::Passkey { .. } => GAS_SIG_PASSKEY.as_gas(),
-            Auth::Ed25519 { .. } | Auth::Secp256k1 { .. } => GAS_SIG_KEY.as_gas(),
-            Auth::Msig { sigs: s, .. } => s.iter().map(|(_, a)| sigs(a)).fold(0, u64::saturating_add),
-        }
-    }
-    Gas::from_gas(GAS_LEG_BASE.as_gas().saturating_add(sigs(auth)))
+    Gas::from_gas(GAS_LEG_BASE.as_gas().saturating_add(sig_gas(auth).as_gas()))
 }
 
 /// What `settle` needs prepaid: itself, the callback (with its payouts) and both legs' derived gas.
@@ -151,26 +142,6 @@ pub fn settle_gas(auth_a: &Auth, auth_b: &Auth) -> Gas {
     Gas::from_gas(
         (GAS_SETTLE_SELF.as_gas() + GAS_ON_LEGS.as_gas()).saturating_add(leg_gas(auth_a).as_gas()).saturating_add(leg_gas(auth_b).as_gas()),
     )
-}
-
-/// Largest `client_data_json` / `authenticator_data` of a passkey signature on a trade leg (review T8-M4, controller
-/// ruling). `leg_gas` budgets a passkey at a fixed 25 Tgas, but its verify cost grows with these sizes (scan and
-/// sha256 of clientDataJSON, sha256 of authenticatorData ‖ hash); real assertions are ≈ 400 B. Without the cap a maker
-/// could sign padded assertions that run the leg out of gas (deposit share stranded at the DEX).
-pub const PASSKEY_FIELD_MAX: usize = 1024;
-
-/// Every passkey signature of `auth` (directly or as an msig member) within `PASSKEY_FIELD_MAX`.
-fn passkey_fields(auth: &Auth) -> R<()> {
-    match auth {
-        Auth::Passkey { authenticator_data: ad, client_data_json: cd, .. } => {
-            if cd.len() > PASSKEY_FIELD_MAX || ad.len() > PASSKEY_FIELD_MAX {
-                return Err("passkey clientDataJSON / authenticatorData over 1024 bytes");
-            }
-            Ok(())
-        }
-        Auth::Msig { sigs, .. } => sigs.iter().try_for_each(|(_, a)| passkey_fields(a)),
-        Auth::Ed25519 { .. } | Auth::Secp256k1 { .. } => Ok(()),
-    }
 }
 
 /// `sha256(digest(op_a) ‖ digest(op_b))` (ruling, T8 pre-flight).

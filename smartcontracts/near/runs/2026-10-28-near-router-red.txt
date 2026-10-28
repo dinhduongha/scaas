@@ -1,0 +1,164 @@
+# relay_router RED at commit 1421b24e + T10 working tree: tests, fixture, token escrow (relay_hold / relay_release / relay_refund), router + executor stubs (relay and relay_timeout panic "not implemented"); build.sh near rc=0 before this run
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_router.rs:740:5
+    |
+740 |     st.await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+740 |     let _ = st.await.unwrap();
+    |     +++++++
+
+warning: `scaas-near-integration` (test "relay_router") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.54s
+     Running tests/relay_router.rs (target/debug/deps/relay_router-9f2d114186fc3e80)
+
+running 20 tests
+test executor_holds_only_its_stake_after_each_branch ... FAILED
+test forwarded_call_cannot_spend_router_bound_payment ... FAILED
+test gas_pins_hold ... FAILED
+test hold_failure_clears_pending ... FAILED
+test near_router_bound_pay_refused_direct ... ok
+test near_router_release_to_unregistered_payee ... FAILED
+test payee_executor_refused ... FAILED
+test pending_empty_and_router_balance_unchanged_after_each_branch ... FAILED
+test refund_on_missing_code ... FAILED
+test refund_on_target_panic ... FAILED
+test relay_shape_and_salt_refused ... FAILED
+test release_and_refund_exclusive ... FAILED
+test release_on_success ... FAILED
+test short_deposit_refused ... FAILED
+test short_prepaid_gas_refused ... FAILED
+test target_deposit_forwarded_and_returned_on_failure ... FAILED
+test target_router_or_executor_refused ... FAILED
+test target_success_with_failing_child_releases ... FAILED
+test timeout_refund_refused_before_deadline ... FAILED
+test timeout_refunds_after_deadline ... FAILED
+
+failures:
+
+---- executor_holds_only_its_stake_after_each_branch stdout ----
+
+thread 'executor_holds_only_its_stake_after_each_branch' (2763357) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 40, block_hash: 5XpkJT5BGFjNJArs7o69LnkrXe4t8oFiKMeetTZhuZFb })) } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- forwarded_call_cannot_spend_router_bound_payment stdout ----
+
+thread 'forwarded_call_cannot_spend_router_bound_payment' (2768312) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 45, block_hash: EPzL583Ccc5jEW3nNsL4FrzPEGmHy9ZvHvnJyJt23cAT })) } }
+
+---- gas_pins_hold stdout ----
+
+thread 'gas_pins_hold' (2773379) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 39, block_hash: BfFsf16wfFkcueb4DjM9nnSa64yQXmcciWmcTXPhkBiS })) } }
+
+---- hold_failure_clears_pending stdout ----
+
+thread 'hold_failure_clears_pending' (2778341) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 38, block_hash: H3qCiACXernpcDvNKiN5f2pBCB8mujFwHQmABS2aKRqx })) } }
+
+---- near_router_release_to_unregistered_payee stdout ----
+
+thread 'near_router_release_to_unregistered_payee' (2788357) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 40, block_hash: BZj7W4yzESRA4heqAbS93ZEJthrxMyXGcKnJe31ug5aK })) } }
+
+---- payee_executor_refused stdout ----
+
+thread 'payee_executor_refused' (2793342) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 40, block_hash: FNn2zvD665v9haKdXDwwtVdkKsWtuKVSVtB4R8BBXKLD })) } }
+
+---- pending_empty_and_router_balance_unchanged_after_each_branch stdout ----
+
+thread 'pending_empty_and_router_balance_unchanged_after_each_branch' (2798377) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 38, block_hash: DGN2EWqWHzNWBAAizmXmYsFysSyqP23NGB9fLbPpqtNb })) } }
+
+---- refund_on_missing_code stdout ----
+
+thread 'refund_on_missing_code' (2803319) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 38, block_hash: WbXWzpHjayMoNjxF5TZrcWWGJHrXCa5UkhTPSg7395a })) } }
+
+---- refund_on_target_panic stdout ----
+
+thread 'refund_on_target_panic' (2808335) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 37, block_hash: FJ8RHUFSaKwAJRmVkW4GR44AAPXatACSDQrD7Y9iiWCK })) } }
+
+---- relay_shape_and_salt_refused stdout ----
+
+thread 'relay_shape_and_salt_refused' (2813276) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 40, block_hash: 5qEHkiqRRscfevBYM3CgboY2UyRyx6RKuACQhT3KuVsN })) } }
+
+---- release_and_refund_exclusive stdout ----
+
+thread 'release_and_refund_exclusive' (2818287) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 39, block_hash: 2qXHdZHq7UdqGv8WEJHEW2FxtgmXskuSxMgNmdAsMDZM })) } }
+
+---- release_on_success stdout ----
+
+thread 'release_on_success' (2823268) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 41, block_hash: CHJNckuFgXvv56BDX3b8PBso8GaKb2TXPMFewc1Wp3F8 })) } }
+
+---- short_deposit_refused stdout ----
+
+thread 'short_deposit_refused' (2828279) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 40, block_hash: BK8Fa3pH1M877eGdcupQNdLcnv5nVMAWZUEnyw3PkAvu })) } }
+
+---- short_prepaid_gas_refused stdout ----
+
+thread 'short_prepaid_gas_refused' (2833279) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 37, block_hash: ad7YN7imvixjkp3p8Wm5pC5DkQa68NvBt8cmM1gbK3n })) } }
+
+---- target_deposit_forwarded_and_returned_on_failure stdout ----
+
+thread 'target_deposit_forwarded_and_returned_on_failure' (2838245) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 37, block_hash: UipgnsNuwBvtHkr8azkrbUyVNoaCHY6JFNfcALo9W99 })) } }
+
+---- target_router_or_executor_refused stdout ----
+
+thread 'target_router_or_executor_refused' (2843223) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 40, block_hash: 5GoyAUQUWD6tJbMrk4q89PvJjctKDwk41W1xVnuN3oQ4 })) } }
+
+---- target_success_with_failing_child_releases stdout ----
+
+thread 'target_success_with_failing_child_releases' (2848204) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 41, block_hash: BHFPaKSD81eKR2nNnEPBHjiRMNGZjdzU1qbbN5beh6sX })) } }
+
+---- timeout_refund_refused_before_deadline stdout ----
+
+thread 'timeout_refund_refused_before_deadline' (2853248) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 36, block_hash: sBwmFEg9T6WGVo9jaZbWw98Poq17q8DPBTZYXq2e8Cp })) } }
+
+---- timeout_refunds_after_deadline stdout ----
+
+thread 'timeout_refunds_after_deadline' (2858186) panicked at integration/tests/relay_router.rs:140:66:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 41, block_hash: B98wbMcbWpZoWJR8aJVSE8wjVXqF8YLHQ2vFUDz8wPAK })) } }
+
+
+failures:
+    executor_holds_only_its_stake_after_each_branch
+    forwarded_call_cannot_spend_router_bound_payment
+    gas_pins_hold
+    hold_failure_clears_pending
+    near_router_release_to_unregistered_payee
+    payee_executor_refused
+    pending_empty_and_router_balance_unchanged_after_each_branch
+    refund_on_missing_code
+    refund_on_target_panic
+    relay_shape_and_salt_refused
+    release_and_refund_exclusive
+    release_on_success
+    short_deposit_refused
+    short_prepaid_gas_refused
+    target_deposit_forwarded_and_returned_on_failure
+    target_router_or_executor_refused
+    target_success_with_failing_child_releases
+    timeout_refund_refused_before_deadline
+    timeout_refunds_after_deadline
+
+test result: FAILED. 1 passed; 19 failed; 0 ignored; 0 measured; 0 filtered out; finished in 106.50s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test relay_router`
+rc=101

@@ -3,7 +3,9 @@
 //!
 //! UA pool: every UA balance is also held, in sum, by the token's own NEP-141 account (as EVM's `UA_POOL`), so
 //! `ft_total_supply` = the sum of `ft_balance_of` over native accounts, the pool included, and a move with a UA side
-//! emits the NEP-141 `ft_transfer` from / to the token account plus `"scaas"` `ua_transfer`.
+//! emits the NEP-141 `ft_transfer` from / to the token account plus `"scaas"` `ua_transfer`. The relay router's escrow
+//! (Task 10, `escrow.rs`) sits in the same account while a relay is in flight: `ft_balance_of(token)` = the UA total +
+//! the held total.
 use near_contract_standards::fungible_token::events::FtTransfer;
 use near_contract_standards::fungible_token::metadata::FungibleTokenMetadata;
 use near_contract_standards::fungible_token::FungibleToken;
@@ -14,12 +16,14 @@ pub use scaas_near_common::{Auth, Holder, MetaOp, Order};
 use scaas_near_common::ua::{KeyRecord, KIND_ED25519};
 
 mod account;
+mod escrow;
 mod ft;
 mod mandate;
 mod metatx;
 mod relayfee;
 mod storage;
 mod trade;
+pub use escrow::{held_bytes, Held, HELD_RECORD_OVERHEAD};
 pub use account::{
     record_bytes, Check, Recovery, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
     RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
@@ -48,6 +52,8 @@ pub struct Token {
     orders: LookupMap<(Holder, [u8; 32], u64), OrderClose>,
     /// `min_nonce` per `(holder, order lane)` (CTR-DEX-10); never removed.
     min_nonces: LookupMap<(Holder, [u8; 32]), u64>,
+    /// Relay escrow `(router, pay_ref)` → the held payment (spec §3.8 router steps 2, 6); removed at release / refund.
+    held: LookupMap<(AccountId, [u8; 32]), Held>,
     /// Bytes of new records this call created, paid once by `charge_storage` (not state).
     #[borsh(skip)]
     storage_due: u64,
@@ -146,9 +152,18 @@ impl Token {
         min_nonces.insert((h.clone(), [0xff; 32]), 1);
         min_nonces.flush();
         require!(env::storage_usage() - u0 == min_nonce_bytes(&h), "min_nonce record size differs from the pin");
-        min_nonces.remove(&(h, [0xff; 32]));
+        min_nonces.remove(&(h.clone(), [0xff; 32]));
         min_nonces.flush();
-        Self { network, admin, metadata, ft, ua, subjects, lanes, mandates, orders, min_nonces, storage_due: 0 }
+        let mut held = LookupMap::new(b"h");
+        let me = env::current_account_id();
+        let x = Held { payer: h.clone(), payee: h, amount: 1, relayer: me.clone(), deposit: 1 };
+        let u0 = env::storage_usage();
+        held.insert((me.clone(), [0xff; 32]), x.clone());
+        held.flush();
+        require!(env::storage_usage() - u0 == held_bytes(&me, &x), "held record size differs from the pin");
+        held.remove(&(me, [0xff; 32]));
+        held.flush();
+        Self { network, admin, metadata, ft, ua, subjects, lanes, mandates, orders, min_nonces, held, storage_due: 0 }
     }
 
     /// Admin only (tier 1). An unregistered receiver is registered from the deposit, as `ft_transfer`.
@@ -208,24 +223,29 @@ impl Token {
         }
     }
 
-    /// `debit` + `credit` + events: NEP-141 `ft_transfer` when a native balance changes (a UA side shows as the
-    /// token account, the pool), `"scaas"` `ua_transfer` when a side is a UA.
+    /// `debit` + `credit` + `transfer_events`.
     pub(crate) fn move_balance(&mut self, from: &Holder, to: &Holder, amount: u128, memo: Option<&str>) {
         require!(from != to, "Sender and receiver should be different");
         require!(amount > 0, "The amount should be a positive number");
         self.debit(from, amount);
         self.credit(to, amount);
-        let pool = env::current_account_id();
-        let native = |h: &Holder| match h {
-            Holder::Near(a) => a.clone(),
-            Holder::Ua(_) => pool.clone(),
-        };
-        let (old, new) = (native(from), native(to));
-        if old != new {
-            FtTransfer { old_owner_id: &old, new_owner_id: &new, amount: U128(amount), memo }.emit();
-        }
-        if matches!(from, Holder::Ua(_)) || matches!(to, Holder::Ua(_)) {
-            Event::UaTransfer { from: from.to_string(), to: to.to_string(), amount: U128(amount) }.emit();
-        }
+        transfer_events(from, to, amount, memo);
+    }
+}
+
+/// NEP-141 `ft_transfer` when a native balance changes (a UA side, and the relay escrow `Near(token)`, show as the
+/// token account), `"scaas"` `ua_transfer` when a side is a UA.
+pub(crate) fn transfer_events(from: &Holder, to: &Holder, amount: u128, memo: Option<&str>) {
+    let pool = env::current_account_id();
+    let native = |h: &Holder| match h {
+        Holder::Near(a) => a.clone(),
+        Holder::Ua(_) => pool.clone(),
+    };
+    let (old, new) = (native(from), native(to));
+    if old != new {
+        FtTransfer { old_owner_id: &old, new_owner_id: &new, amount: U128(amount), memo }.emit();
+    }
+    if matches!(from, Holder::Ua(_)) || matches!(to, Holder::Ua(_)) {
+        Event::UaTransfer { from: from.to_string(), to: to.to_string(), amount: U128(amount) }.emit();
     }
 }

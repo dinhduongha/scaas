@@ -190,11 +190,11 @@ def wrapper(name, entry, args, salt):
     relay(name, 'wrapper', call, TOKEN, salt, TOKEN, TOKEN, {'entry': entry, 'args': V.hx(args)})
 
 
-def router(name, target, method, args, salt):
+def router(name, target, method, args, salt, to=ROUTER):
     """escrow router `relay`: call = u8 len ‖ target ‖ u8 len ‖ method ‖ args; ref target = u8 len ‖ target id; the
-    payment is bound to the router (open mode: to = relayer = router)."""
+    payment is bound to the router (relayer = router; open mode: to = router, else a bound payee)."""
     call = target_bytes(target) + bytes([len(method)]) + method.encode() + args
-    relay(name, 'router', call, target, salt, ROUTER, ROUTER, {'method': method, 'args': V.hx(args)})
+    relay(name, 'router', call, target, salt, to, ROUTER, {'method': method, 'args': V.hx(args)})
 
 
 # `args` are opaque filler here: the entries' argument structs belong to Tasks 5–8, which add real-argument rows.
@@ -203,6 +203,8 @@ _long_entry = 'mtx_add_key'
 wrapper('wrapper_4096', _long_entry, filler('wrapper_4096', 4096 - 1 - len(_long_entry)), b32(0x52))
 router('router_short', DEX, 'settle', filler('router_short', 40), b32(0x53))
 router('router_4096', DEX, 'settle', filler('router_4096', 4096 - 2 - len(DEX) - len('settle')), b32(0x54))
+# Task 10: a bound payee (bob, paid directly; the ref is the same rule, the payment op differs)
+router('router_bound', DEX, 'settle', filler('router_bound', 40), b32(0x56), to=BOB)
 
 
 # ---------------------------------------------------------------- extension points (ruling R5)
@@ -444,6 +446,17 @@ MEASURED_STORAGE_BYTES['dexEntry'] = (
          'value settle_id 32 B, + 40 B = 105 B each); = 283 + Borsh(Settle); 706 B for a UA seller and a native seller with '
          '43-char token / seller / relayer ids (test settle_pays_both_legs); pruned after both expiries, the deposit back '
          'to the submitting relayer')
+MEASURED_STORAGE_BYTES['routerEntry'] = (
+    306, 'relay router escrow entry (Task 10): key b"p" ‖ ref 33 B + Borsh(Pending) + 40 B = 73 + Borsh(Pending) (token, target, '
+         'payer Holder, payee Option<Holder>, amount u128, relayer, target_deposit u128, deposit u128, deadline u64, stage u8, '
+         'owed bool); 306 B for a UA payer in open mode with 43-char token / target / relayer ids (test '
+         'timeout_refund_refused_before_deadline); relay_check quotes a 64-char relayer; deleted at settle, the deposit back '
+         'to the relayer that staked it')
+MEASURED_STORAGE_BYTES['relayHeld'] = (
+    280, 'token relay escrow record (Task 10): key b"h" ‖ Borsh((router, pay_ref)) + Borsh(Held {payer, payee, amount, '
+         'relayer, deposit}) + 40 B = 73 + Borsh(router) + Borsh(Held) (token HELD_RECORD_OVERHEAD, measured in `new`); '
+         '280 B for a UA payer and a native payee with 43-char ids; removed at release / refund, the deposit back to the '
+         'relayer')
 SANDBOX_BYTE_COST = 10**19                          # near-sandbox protocol config storage_amount_per_byte (yocto)
 
 

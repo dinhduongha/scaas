@@ -3320,6 +3320,7 @@ dependencies = [
  "p256 0.13.2",
  "scaas-near-common",
  "scaas-near-dex",
+ "scaas-near-relayfee",
  "scaas-near-spike-p256",
  "scaas-near-token",
  "serde_json",
@@ -3328,11 +3329,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "scaas-near-relayexec"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+]
+
+[[package]]
+name = "scaas-near-relayfee"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+ "scaas-near-common",
+]
+
+[[package]]
 name = "scaas-near-spike-p256"
 version = "0.1.0"
 dependencies = [
  "near-sdk",
  "scaas-near-common",
+]
+
+[[package]]
+name = "scaas-near-target-fixture"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
 ]
 
 [[package]]
