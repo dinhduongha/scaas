@@ -10,7 +10,7 @@ use near_contract_standards::fungible_token::FungibleToken;
 use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
 use near_sdk::{env, near, require, AccountId, PanicOnDefault};
-pub use scaas_near_common::{Auth, Holder, MetaOp};
+pub use scaas_near_common::{Auth, Holder, MetaOp, Order};
 use scaas_near_common::ua::{KeyRecord, KIND_ED25519};
 
 mod account;
@@ -18,6 +18,7 @@ mod ft;
 mod mandate;
 mod metatx;
 mod storage;
+mod trade;
 pub use account::{
     record_bytes, Check, Recovery, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
     RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
@@ -25,6 +26,7 @@ pub use account::{
 pub use mandate::{mandate_bytes, Mandate, MandateTerms, MANDATE_RECORD_OVERHEAD};
 pub use metatx::{lane_bytes, LANE_RECORD_OVERHEAD};
 pub use storage::{ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
+pub use trade::{min_nonce_bytes, order_bytes, OrderClose, MIN_NONCE_CAP, TRADE_RECORD_OVERHEAD};
 
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
@@ -40,6 +42,10 @@ pub struct Token {
     lanes: LookupMap<(Holder, [u8; 32]), u64>,
     /// Mandates by id (spec §3.6); never removed. Their funds sit in `ua` under the same id.
     mandates: LookupMap<[u8; 32], Mandate>,
+    /// Closed orders `(holder, lane, nonce)` (spec §3.6); never removed.
+    orders: LookupMap<(Holder, [u8; 32], u64), OrderClose>,
+    /// `min_nonce` per `(holder, order lane)` (CTR-DEX-10); never removed.
+    min_nonces: LookupMap<(Holder, [u8; 32]), u64>,
     /// Bytes of new records this call created, paid once by `charge_storage` (not state).
     #[borsh(skip)]
     storage_due: u64,
@@ -65,6 +71,13 @@ pub enum Event {
     /// A mandate opened (`by` the owner) or revoked (`by` the owner or the delegate); id as `0x` ‖ hex.
     #[event_version("1.0.0")]
     Mandate { mandate: String, action: String, by: String },
+    /// A trade leg moved `amount` from `from` into `dex`'s balance (order `(from, lane, nonce)`, leg op `digest`).
+    #[event_version("1.0.0")]
+    OrderFilled { from: String, dex: String, lane: String, nonce: u64, amount: U128, digest: String },
+    #[event_version("1.0.0")]
+    OrderCancelled { from: String, lane: String, nonce: u64 },
+    #[event_version("1.0.0")]
+    NoncesInvalidated { from: String, lane: String, min_nonce: u64 },
 }
 
 #[near]
@@ -116,7 +129,21 @@ impl Token {
         require!(env::storage_usage() - u0 == mandate_bytes(&m), "mandate record size differs from the pin");
         mandates.remove(&[0xff; 32]);
         mandates.flush();
-        Self { network, admin, metadata, ft, ua, subjects, lanes, mandates, storage_due: 0 }
+        let (mut orders, mut min_nonces) = (LookupMap::new(b"o"), LookupMap::new(b"n"));
+        let (h, f) = (Holder::Ua([0xff; 32]), OrderClose::Filled([0xff; 32]));
+        let u0 = env::storage_usage();
+        orders.insert((h.clone(), [0xff; 32], 1), f.clone());
+        orders.flush();
+        require!(env::storage_usage() - u0 == order_bytes(&h, &f), "order record size differs from the pin");
+        orders.remove(&(h.clone(), [0xff; 32], 1));
+        orders.flush();
+        let u0 = env::storage_usage();
+        min_nonces.insert((h.clone(), [0xff; 32]), 1);
+        min_nonces.flush();
+        require!(env::storage_usage() - u0 == min_nonce_bytes(&h), "min_nonce record size differs from the pin");
+        min_nonces.remove(&(h, [0xff; 32]));
+        min_nonces.flush();
+        Self { network, admin, metadata, ft, ua, subjects, lanes, mandates, orders, min_nonces, storage_due: 0 }
     }
 
     /// Admin only (tier 1). An unregistered receiver is registered from the deposit, as `ft_transfer`.

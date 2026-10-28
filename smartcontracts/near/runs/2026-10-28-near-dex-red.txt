@@ -1,0 +1,105 @@
+# build.sh near + cargo test -p scaas-near-integration --test dex (Task 8 RED: types only, no entries) at commit e6986995 + the Task 8 tests
+   Compiling scaas-near-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/common)
+   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+   Compiling scaas-near-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/dex)
+   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
+   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.05s
+     Running tests/dex.rs (target/debug/deps/dex-a6c004a01597429e)
+
+running 11 tests
+test cancel_filled_order_refused ... FAILED
+test leg_called_by_non_dex_refused ... FAILED
+test min_nonce_cap_refused ... FAILED
+test no_partial_fill ... FAILED
+test one_leg_fails_other_refunded ... FAILED
+test order_relayer_mismatch_refused ... FAILED
+test refund_before_expiry_refused ... FAILED
+test refund_expired_after_lost_callback ... FAILED
+test settle_gas_pin ... FAILED
+test settle_pays_both_legs ... FAILED
+test settle_short_gas_refused ... FAILED
+
+failures:
+
+---- cancel_filled_order_refused stdout ----
+settle by dev-20261028091001-74760557456758.test.near: 1.700 Tgas, ok false
+
+thread 'cancel_filled_order_refused' (1327390) panicked at integration/tests/dex.rs:430:5:
+assertion failed: d.settle(&d.t.relayer, &a, &bl).await.is_success()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- leg_called_by_non_dex_refused stdout ----
+
+thread 'leg_called_by_non_dex_refused' (1332457) panicked at integration/tests/dex.rs:172:54:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 42, block_hash: vsUbYHtsoME5nCinRXDyLZTzkamnhUm6dGNGJ4mqDeU })) } }
+
+---- min_nonce_cap_refused stdout ----
+
+thread 'min_nonce_cap_refused' (1337650) panicked at integration/tests/common/mod.rs:166:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 35, block_hash: 8T3Jy3fncFLSCULLB891pqXDq3VNVFXLruPqYx9YE4QW })) } }
+
+---- no_partial_fill stdout ----
+
+thread 'no_partial_fill' (1342662) panicked at integration/tests/dex.rs:172:54:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 43, block_hash: 6KPTu4Apq9evuiv2Pu44jEuP9uA21Ymcq5LRzkxp9nAA })) } }
+
+---- one_leg_fails_other_refunded stdout ----
+settle by dev-20261028091024-38085612609770.test.near: 1.700 Tgas, ok false
+
+thread 'one_leg_fails_other_refunded' (1347751) panicked at integration/tests/dex.rs:283:5:
+[ExecutionOutcome { transaction_hash: 4ThrjzBRPRwEpggopoZcExxagugjfL34KD2wFKVAGSJx, block_hash: 3sa7LcDoT8Kj21uC4dwi2cPUAvjhkibBTuiUPkb9fS8G, logs: [], receipt_ids: [Cyukw8w5uqurN932mYxHEtq1Sc2s7PmaWZLc8tX4ghgr, 3HYvQRCtSuKr2t4tWrKvjxJuJjxya4DYwNsqiA4dU9dw], gas_burnt: NearGas { inner: 890650947506 }, tokens_burnt: NearToken { inner: 89065094750600000000 }, executor_id: AccountId("dev-20261028091025-28848120170226.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(MethodResolveError(MethodNotFound)) })) }]
+
+---- order_relayer_mismatch_refused stdout ----
+settle by dev-20261028091030-83707083666544.test.near: 1.703 Tgas, ok false
+
+thread 'order_relayer_mismatch_refused' (1352904) panicked at integration/tests/dex.rs:310:5:
+[ExecutionOutcome { transaction_hash: CgdsNwetk58xbFy5vT76G2SCSFdgy8wUnEHt47gV9AWo, block_hash: 9kdfjuaXpWzijK61ydL7HFzmCt2ffAApyZqUdMNHxZpv, logs: [], receipt_ids: [9WJ1Ta7vZuwdL9AqB3uAswrw52M5g63wD5bLq7aWYsQ2, 7pUVoWMce5xHtYMcBRx1Vxax42U1TMqg8qtNay4UVv6e], gas_burnt: NearGas { inner: 890756036404 }, tokens_burnt: NearToken { inner: 89075603640400000000 }, executor_id: AccountId("dev-20261028091031-97330014767272.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(MethodResolveError(MethodNotFound)) })) }]
+
+---- refund_before_expiry_refused stdout ----
+settle by dev-20261028091035-76054576264138.test.near: 1.700 Tgas, ok false
+
+thread 'refund_before_expiry_refused' (1357982) panicked at integration/tests/dex.rs:408:5:
+[ExecutionOutcome { transaction_hash: Fo5Js1R5rzDXxwVtoZqKge9FeCftqSia2PzXVbe2P7FB, block_hash: 92BuvxyNPAkUHiCYi7FEkNdcYnAsfXwwwdzF6xmZM3Kw, logs: [], receipt_ids: [CFLgKWHjhJaTZfgDwHcRLhQB9iXtKBAHzg48gbbNWDEc, GSpBLWVh5ACQdka1kPTQCAAswe18EUH6eyU5eAhF7Bvc], gas_burnt: NearGas { inner: 890650947506 }, tokens_burnt: NearToken { inner: 89065094750600000000 }, executor_id: AccountId("dev-20261028091037-47114768676540.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(MethodResolveError(MethodNotFound)) })) }]
+
+---- refund_expired_after_lost_callback stdout ----
+settle by dev-20261028091042-29028721283810.test.near: 1.701 Tgas, ok false
+
+thread 'refund_expired_after_lost_callback' (1363115) panicked at integration/tests/dex.rs:357:5:
+[ExecutionOutcome { transaction_hash: CdF8mN3CpGicdqJYmkVM2A9ZmoMQ7uFdRsPqnSg8h1tu, block_hash: AtbgTv72ka2uoMh41KTBeFz5gzLDWQTzCMEDC2Njv3Tc, logs: [], receipt_ids: [2NwPescGNhdPkmtJuSSM3oNMeDbYmCKkxhDskEgemhGq, 9hXhhGn2sicZmQwJUB8s6dL2ETihNpcs4eN92FNvRMKa], gas_burnt: NearGas { inner: 890684486516 }, tokens_burnt: NearToken { inner: 89068448651600000000 }, executor_id: AccountId("dev-20261028091043-80858452139288.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(MethodResolveError(MethodNotFound)) })) }]
+
+---- settle_gas_pin stdout ----
+settle by dev-20261028091047-40520493898238.test.near: 1.721 Tgas, ok false
+
+thread 'settle_gas_pin' (1368397) panicked at integration/tests/dex.rs:559:5:
+[ExecutionOutcome { transaction_hash: FojbjyQzAZUFsMBd8MC5Ys3LnT113bBo99Uytt3FSf2B, block_hash: FY7WiNRt7zaCkAANKpPxGBeb7zQSdtevfrNLR8Q5ga4v, logs: [], receipt_ids: [Bhbo8EhwTPVoSMMHTfHJkTXZDXARfUBSqSagpixiAn1c, 7jq5ar8PxCveL2d8Le1NWb3VN5DEHpGxSZBJ67DsuMrs], gas_burnt: NearGas { inner: 891565444512 }, tokens_burnt: NearToken { inner: 89156544451200000000 }, executor_id: AccountId("dev-20261028091049-43156031713287.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(MethodResolveError(MethodNotFound)) })) }]
+
+---- settle_pays_both_legs stdout ----
+
+thread 'settle_pays_both_legs' (1373479) panicked at integration/tests/dex.rs:172:54:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 43, block_hash: E2DcAunAu5Bphqo3kM5QNQ7fsnrchTSopgaWJEnvCDK })) } }
+
+---- settle_short_gas_refused stdout ----
+settle by dev-20261028091059-70778243084495.test.near: 1.700 Tgas, ok false
+
+thread 'settle_short_gas_refused' (1378672) panicked at integration/tests/dex.rs:542:5:
+[ExecutionOutcome { transaction_hash: 8Jzjsdmftvm3W15cMmhVJjWerASFw94u9LmW4SkZspfe, block_hash: Hsv42NQ6rC5UvMEhbzvRmVQeCqztA9yM2BmTmjnXEwv2, logs: [], receipt_ids: [3GxqVF1iqafqWFwTUf2GnCLMaqcR6AZH3kstqQQNcC3S, 7UJ6PLpxJwN5MwVyW7k1x65LKtJfGQFrULPqQmQXGNVu], gas_burnt: NearGas { inner: 890650947506 }, tokens_burnt: NearToken { inner: 89065094750600000000 }, executor_id: AccountId("dev-20261028091101-58850783120519.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(MethodResolveError(MethodNotFound)) })) }]
+
+
+failures:
+    cancel_filled_order_refused
+    leg_called_by_non_dex_refused
+    min_nonce_cap_refused
+    no_partial_fill
+    one_leg_fails_other_refunded
+    order_relayer_mismatch_refused
+    refund_before_expiry_refused
+    refund_expired_after_lost_callback
+    settle_gas_pin
+    settle_pays_both_legs
+    settle_short_gas_refused
+
+test result: FAILED. 0 passed; 11 failed; 0 ignored; 0 measured; 0 filtered out; finished in 63.96s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test dex`
+rc=101

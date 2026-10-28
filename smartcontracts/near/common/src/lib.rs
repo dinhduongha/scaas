@@ -8,4 +8,4 @@ pub mod webauthn;
 
 pub use auth::Auth;
 pub use holder::Holder;
-pub use metaop::MetaOp;
+pub use metaop::{MetaOp, Order};

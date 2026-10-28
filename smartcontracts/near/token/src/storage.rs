@@ -50,7 +50,7 @@ impl Token {
     /// The end of a signed (`mtx_*`) entry: the attached deposit pays every byte of new records the call created
     /// (`storage_due`), the excess refunded to the predecessor; no yoctoNEAR rule (the signature is the authority).
     pub(crate) fn charge_storage(&mut self) {
-        charge(std::mem::take(&mut self.storage_due));
+        charge(std::mem::take(&mut self.storage_due), env::predecessor_account_id());
     }
 }
 
@@ -59,17 +59,17 @@ fn take_storage_deposit(bytes: u64) {
     if bytes == 0 {
         return assert_one_yocto();
     }
-    charge(bytes)
+    charge(bytes, env::predecessor_account_id())
 }
 
-/// Attached ≥ `bytes × storage_byte_cost`, the excess refunded to the predecessor.
-fn charge(bytes: u64) {
+/// Attached ≥ `bytes × storage_byte_cost`, the excess refunded to `refund_to` (the predecessor; a DEX leg: the signer).
+pub(crate) fn charge(bytes: u64, refund_to: AccountId) {
     let need = env::storage_byte_cost().saturating_mul(bytes.into());
     let attached = env::attached_deposit();
     require!(attached >= need, "The attached deposit is less than the storage cost of the new record");
     let refund = attached.saturating_sub(need);
     if refund > NearToken::from_yoctonear(0) {
-        Promise::new(env::predecessor_account_id()).transfer(refund).detach();
+        Promise::new(refund_to).transfer(refund).detach();
     }
 }
 

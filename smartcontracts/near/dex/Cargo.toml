@@ -1,0 +1,15 @@
+[package]
+name = "scaas-near-dex"
+version = "0.1.0"
+edition = "2021"
+description = "SCaaS NEAR escrow DEX (spec §3.6): relayer-bound, fill-or-kill; legs pulled by token mtx_trade, paid out by the join callback"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+scaas-near-common = { path = "../common" }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

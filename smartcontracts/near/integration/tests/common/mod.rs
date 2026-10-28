@@ -104,8 +104,8 @@ pub struct T {
     pub bob: Account,
 }
 
-pub async fn setup() -> T {
-    let w = near_workspaces::sandbox().await.unwrap();
+/// A token initialised with `new` (its own admin).
+pub async fn deploy_token(w: &Worker<Sandbox>) -> Contract {
     let token = w.dev_deploy(&std::fs::read(TOKEN_WASM).expect("run build.sh near first")).await.unwrap();
     let meta = FungibleTokenMetadata {
         spec: FT_METADATA_SPEC.into(),
@@ -118,6 +118,12 @@ pub async fn setup() -> T {
     };
     let args = b(&(NETWORK, token.id().to_string(), meta));
     token.call("new").args(args).transact().await.unwrap().into_result().unwrap();
+    token
+}
+
+pub async fn setup() -> T {
+    let w = near_workspaces::sandbox().await.unwrap();
+    let token = deploy_token(&w).await;
     let relayer = w.dev_create_account().await.unwrap();
     let alice = w.dev_create_account().await.unwrap();
     let bob = w.dev_create_account().await.unwrap();

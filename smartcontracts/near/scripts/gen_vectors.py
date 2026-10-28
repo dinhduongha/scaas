@@ -26,6 +26,7 @@ import famvec as V  # noqa: E402
 OUT = os.path.join(V.REPO, 'smartcontracts', 'near', 'vectors', 'near-vectors.json')
 NETWORK = V.seed('scaas.near.test-genesis')         # stands in for the genesis hash (RPC `status`)
 TOKEN = 'token.test.near'
+TOKEN_B = 'tokenb.test.near'                        # the second token of the DEX pair (Task 8)
 ROUTER = 'relayfee.test.near'
 EXECUTOR = 'relayexec.test.near'
 DEX = 'dex.test.near'
@@ -120,16 +121,16 @@ METAOPS = []
 
 
 def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer=None, extra=V.ZERO32, valid_until=VU,
-           note=None, code=V.OP['pay'], out=None):
-    op = {'contract': TOKEN, 'op': code, 'from': frm, 'to': to, 'relayer': relayer, 'amount': amount,
+           note=None, code=V.OP['pay'], out=None, contract=TOKEN):
+    op = {'contract': contract, 'op': code, 'from': frm, 'to': to, 'relayer': relayer, 'amount': amount,
           'pay_ref': pay_ref, 'lane': lane, 'nonce': nonce, 'valid_until': valid_until, 'extra': extra}
     enc = encode(op)
     dg = V.sha256(enc)
     row = {'name': name, 'fields': {
-        'network': V.hx(NETWORK), 'contract': TOKEN, 'op': op['op'], 'from': holder_json(frm), 'to': holder_json(to),
+        'network': V.hx(NETWORK), 'contract': contract, 'op': op['op'], 'from': holder_json(frm), 'to': holder_json(to),
         'relayer': relayer, 'amount': str(amount), 'pay_ref': V.hx(pay_ref), 'lane': V.hx(lane), 'nonce': nonce,
         'valid_until': valid_until, 'extra': V.hx(extra)},
-        'encoding': V.hx(enc), 'digest': V.hx(dg), 'text': V.text(dg).decode(), 'auth': auth(signer, dg, TOKEN)}
+        'encoding': V.hx(enc), 'digest': V.hx(dg), 'text': V.text(dg).decode(), 'auth': auth(signer, dg, contract)}
     if note:
         row['note'] = note
     (METAOPS if out is None else out).append(row)
@@ -327,9 +328,50 @@ def mandate_vectors():
     return MANDATES
 
 
+# DEX (Task 8, spec §3.6): `Order` Borsh = sell_token AccountId ‖ buy_token AccountId ‖ sell_amount u128 ‖ min_buy u128 ‖
+# relayer Option<AccountId> ‖ expiry u64 (s). Leg (op 1, `mtx_trade(op, auth, order, receiver)`): contract = the sell
+# token, to = Near(dex), relayer = dex, amount = sell_amount, pay_ref zero, the maker's order lane at any nonce >=
+# min_nonce, extra = sha256(Borsh(Order)). Cancel (op 14, `mtx_cancel(op, auth, target_lane, target_nonce)`) and
+# invalidate (op 15, `mtx_invalidate_nonces(op, auth, lane, min_nonce)`, min_nonce < 2^63): to = from, amount / pay_ref /
+# lane / nonce zero, extra = sha256(Borsh(params)). settle_id = sha256(digest(op_a) ‖ digest(op_b)).
+DEX_OPS = []
+
+
+def order(sell, buy, sell_amount, min_buy, relayer, expiry):
+    return (string(sell) + string(buy) + sell_amount.to_bytes(16, 'little') + min_buy.to_bytes(16, 'little')
+            + option(relayer) + struct.pack('<Q', expiry))
+
+
+_oa = order(TOKEN, TOKEN_B, 100, 50, RELAYER, VU)
+_ob = order(TOKEN_B, TOKEN, 60, 100, None, VU)
+_ta = metaop('trade_a', erin, ua(UA_ERIN), near(DEX), 100, V.ZERO32, b32(0xc0), relayer=DEX, extra=V.sha256(_oa),
+             code=V.OP['trade'], out=DEX_OPS,
+             note='mtx_trade leg of order A (erin sells 100 token for >= 50 tokenb, order relayer bound to RELAYER): '
+                  'to = relayer = dex, amount = sell_amount, extra = sha256(Borsh(Order))')
+_ta['order'] = V.hx(_oa)
+_tb = metaop('trade_b', carol, ua(UA_CAROL), near(DEX), 60, V.ZERO32, b32(0xc1), nonce=3, relayer=DEX, extra=V.sha256(_ob),
+             code=V.OP['trade'], out=DEX_OPS, contract=TOKEN_B,
+             note='mtx_trade leg of order B (carol sells 60 tokenb for >= 100 token, open relayer) on tokenb, order lane '
+                  'nonce 3')
+_tb['order'] = V.hx(_ob)
+SETTLE = {'legs': ['trade_a', 'trade_b'],
+          'settleId': V.hx(V.sha256(V.unhx(_ta['digest']), V.unhx(_tb['digest']))),
+          'derivation': 'sha256(digest(op_a) ‖ digest(op_b)), the two leg ops in settle-argument order',
+          'note': 'fill-or-kill: 100 >= 100 (B min_buy) and 60 >= 50 (A min_buy); erin receives 60 tokenb, carol 100 token'}
+_p = b32(0xc0) + struct.pack('<Q', 5)
+metaop('cancel', erin, ua(UA_ERIN), ua(UA_ERIN), 0, V.ZERO32, V.ZERO32, extra=V.sha256(_p), code=V.OP['cancel'],
+       out=DEX_OPS, note='mtx_cancel(op, auth, target_lane, target_nonce): closes erin\'s open order (lane c0, nonce 5); a '
+                         'filled order is refused')['params'] = V.hx(_p)
+_p = b32(0xc0) + struct.pack('<Q', 10)
+metaop('invalidate_nonces', erin, ua(UA_ERIN), ua(UA_ERIN), 0, V.ZERO32, V.ZERO32, extra=V.sha256(_p),
+       code=V.OP['invalidate_nonces'], out=DEX_OPS,
+       note='mtx_invalidate_nonces(op, auth, lane, min_nonce): voids erin\'s orders below nonce 10 on lane c0; '
+            'min_nonce < 2^63, only increasing (CTR-DEX-10)')['params'] = V.hx(_p)
+
+
 def dex_vectors():
-    """Ops 1 trade (`Order`, `extra = sha256(Borsh(Order))`), 14 cancel, 15 invalidate_nonces: Task 8 adds rows."""
-    return []
+    """Ops 1 trade (`Order`, `extra = sha256(Borsh(Order))`), 14 cancel, 15 invalidate_nonces."""
+    return DEX_OPS
 
 
 # ---------------------------------------------------------------- native ids (kind 0x0017 near-account, §3.3)
@@ -377,6 +419,22 @@ MEASURED_STORAGE_BYTES['mandate'] = (
          'spent 16, revoked 1), record overhead 40 B; any mandate = 73 + Borsh(Mandate) (token MANDATE_RECORD_OVERHEAD, '
          'measured in `new` with this record); an open also pays the UA record of the mandate id (89 B) and, first time, '
          'the owner\'s lane; each mandate pay a lane of the mandate id (114 B) (test mandate_pay_within_limits)')
+MEASURED_STORAGE_BYTES['orderFilledUa'] = (
+    147, 'order record of a UA maker, filled: key b"o" ‖ Borsh((Holder::Ua, lane, nonce)) 74 B, value OrderClose::Filled(leg '
+         'op digest) 33 B, record overhead 40 B; any order record = 81 + Borsh(holder) + Borsh(OrderClose) (token '
+         'TRADE_RECORD_OVERHEAD, measured in `new`); a native maker with a 43-char id: 162 B (test settle_pays_both_legs)')
+MEASURED_STORAGE_BYTES['orderCancelledUa'] = (
+    115, 'order record of a UA maker, cancelled: as orderFilledUa with value OrderClose::Cancelled 1 B '
+         '(test cancel_filled_order_refused)')
+MEASURED_STORAGE_BYTES['minNonceUa'] = (
+    114, 'min_nonce record of a UA maker: key b"n" ‖ Borsh((Holder::Ua, lane)) 66 B, value u64 8 B, record overhead 40 B; '
+         'any = 81 + Borsh(holder) (test min_nonce_cap_refused)')
+MEASURED_STORAGE_BYTES['dexEntry'] = (
+    706, 'DEX escrow entry of a settle: key b"s" ‖ settle_id 33 B + Borsh(Settle) (legs: token, seller, lane, nonce, '
+         'digest, amount; relayer, deposit, expiry, done) + 40 B, and two leg-index records (key b"l" ‖ digest 33 B, '
+         'value settle_id 32 B, + 40 B = 105 B each); = 283 + Borsh(Settle); 706 B for a UA seller and a native seller with '
+         '43-char token / seller / relayer ids (test settle_pays_both_legs); pruned after both expiries, the deposit back '
+         'to the submitting relayer')
 SANDBOX_BYTE_COST = 10**19                          # near-sandbox protocol config storage_amount_per_byte (yocto)
 
 
@@ -409,6 +467,17 @@ def selftest(doc):
             r = rows[m['paymetaRow']]
             assert m['fields']['pay_ref'] == r['payId'] and m['fields']['lane'] == r['payLane']
     assert len(rows) == sum('paymetaRow' in m for m in doc['metaops']['vectors'])
+    legs = {m['name']: m for m in doc['metaops']['vectors'] if 'order' in m}
+    for m in legs.values():                          # leg extra = sha256(Borsh(Order)), amount = sell_amount
+        o = V.unhx(m['order'])
+        assert m['fields']['extra'] == V.hx(V.sha256(o)) and m['fields']['op'] == V.OP['trade']
+        n = struct.unpack('<I', o[:4])[0]
+        assert m['fields']['contract'] == o[4:4 + n].decode()
+        m2 = 4 + n + 4 + struct.unpack('<I', o[4 + n:8 + n])[0]
+        assert int.from_bytes(o[m2:m2 + 16], 'little') == int(m['fields']['amount'])
+    d = doc['dexSettle']
+    a, b = (V.unhx(legs[n]['digest']) for n in d['legs'])
+    assert d['settleId'] == V.hx(V.sha256(a, b))
     k23 = [r for r in V._KINDS['natives'] if r['kind'] == 0x17]
     assert k23 and all(r['id'] == r['raw'] for r in k23)    # kind 0x0017 ids are the 32 bytes themselves
 
@@ -425,7 +494,7 @@ def build():
         'network': V.hx(NETWORK),
         'accounts': {'note': 'placeholders: the *.test.near names stand in for the deployed accounts; the tasks '
                              'that deploy those contracts replace them',
-                     'token': TOKEN, 'router': ROUTER, 'executor': EXECUTOR, 'dex': DEX, 'alice': ALICE, 'bob': BOB,
+                     'token': TOKEN, 'tokenB': TOKEN_B, 'router': ROUTER, 'executor': EXECUTOR, 'dex': DEX, 'alice': ALICE, 'bob': BOB,
                      'relayer': RELAYER},
         'keys': {'alice': {'ed25519': V.hx(alice.pk)}, 'erin': {'ed25519': V.hx(erin.pk), 'ua': V.hx(UA_ERIN)},
                  'carol': {'secp256k1': V.hx(carol.key), 'ua': V.hx(UA_CAROL)},
@@ -459,6 +528,7 @@ def build():
                  'predecessor': ALICE,
                  'note': 'near-account member alice.test.near (id sha256 of the id) counts only as the predecessor'},
         'relayRefs': RELAY_REFS,
+        'dexSettle': SETTLE,
         'storage': storage_section(),
     }
     selftest(doc)

@@ -3300,6 +3300,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "scaas-near-dex"
+version = "0.1.0"
+dependencies = [
+ "near-sdk",
+ "scaas-near-common",
+]
+
+[[package]]
 name = "scaas-near-integration"
 version = "0.1.0"
 dependencies = [
@@ -3311,6 +3319,7 @@ dependencies = [
  "near-workspaces",
  "p256 0.13.2",
  "scaas-near-common",
+ "scaas-near-dex",
  "scaas-near-spike-p256",
  "scaas-near-token",
  "serde_json",

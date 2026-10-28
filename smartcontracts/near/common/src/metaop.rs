@@ -51,3 +51,25 @@ impl MetaOp {
         env::sha256_array(self.encode())
     }
 }
+
+/// A DEX order (spec §3.6, plan Task 8): signed through its trade leg, op 1 with `to = Near(dex)`, `relayer =
+/// Some(dex)`, `amount = sell_amount`, `extra = sha256(Borsh(Order))`; the order travels verbatim. Fill-or-kill: a
+/// fill moves the whole `sell_amount` and pays at least `min_buy` of `buy_token`. `relayer`: the settlement submitter
+/// (CTR-DEX-09), `None` = any. `expiry` in seconds; no leg moves after it.
+#[near(serializers = [borsh])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Order {
+    pub sell_token: AccountId,
+    pub buy_token: AccountId,
+    pub sell_amount: u128,
+    pub min_buy: u128,
+    pub relayer: Option<AccountId>,
+    pub expiry: u64,
+}
+
+impl Order {
+    /// The leg op's `extra`.
+    pub fn hash(&self) -> [u8; 32] {
+        env::sha256_array(borsh::to_vec(self).expect("borsh"))
+    }
+}

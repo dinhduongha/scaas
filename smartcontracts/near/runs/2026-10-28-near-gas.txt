@@ -1,0 +1,1 @@
+# near-sandbox gas of the DEX (Task 8: settle_gas_pin, settle_short_gas_refused, refund_expired_after_lost_callback; cargo test -p scaas-near-integration --test dex) at commit e6986995 + Task 8

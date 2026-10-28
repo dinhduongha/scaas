@@ -4,6 +4,7 @@
  "accounts": {
   "note": "placeholders: the *.test.near names stand in for the deployed accounts; the tasks that deploy those contracts replace them",
   "token": "token.test.near",
+  "tokenB": "tokenb.test.near",
   "router": "relayfee.test.near",
   "executor": "relayexec.test.near",
   "dex": "dex.test.near",
@@ -1274,6 +1275,146 @@
     },
     "note": "mtx_revoke(op, auth): the delegate's kill switch (the owner may sign it too); the balance goes back to the owner",
     "params": "0x"
+   },
+   {
+    "name": "trade_a",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 1,
+     "from": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "to": {
+      "Near": "dex.test.near"
+     },
+     "relayer": "dex.test.near",
+     "amount": "100",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0x2233630610a4cb25605ac6fb30cba4f1e409d8d17cdf162b5ee2e8ff206e7f42"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e656172010102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8000d0000006465782e746573742e6e656172010d0000006465782e746573742e6e656172640000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c00000000000000000005786f4000000002233630610a4cb25605ac6fb30cba4f1e409d8d17cdf162b5ee2e8ff206e7f42",
+    "digest": "0x3ee822e2690bc041cd8813e7152242dd162fd2ce7b10753f6b5f70c7b7a51361",
+    "text": "scaas.metaop.v1:3ee822e2690bc041cd8813e7152242dd162fd2ce7b10753f6b5f70c7b7a51361",
+    "auth": {
+     "kind": "ed25519",
+     "key": "0x84b5757b40a54b18184b53f106e44b492a956635d981966557ffa7f640c8ee78",
+     "message": "scaas.metaop.v1:3ee822e2690bc041cd8813e7152242dd162fd2ce7b10753f6b5f70c7b7a51361",
+     "nonce": "0x3ee822e2690bc041cd8813e7152242dd162fd2ce7b10753f6b5f70c7b7a51361",
+     "recipient": "token.test.near",
+     "nep413Payload": "0x5000000073636161732e6d6574616f702e76313a336565383232653236393062633034316364383831336537313532323432646431363266643263653762313037353366366235663730633762376135313336313ee822e2690bc041cd8813e7152242dd162fd2ce7b10753f6b5f70c7b7a513610f000000746f6b656e2e746573742e6e65617200",
+     "nep413Hash": "0xeaecc94086ae6e7cfef1d615a32a86085ef5de089c79ac8b8456433a01741efa",
+     "sig": "0x5b84bc0a8187f7cbfbd8e3621ede395d1bcc414e9610b08d6d1cdaca4ee1343902f83ca2d571646a6c95e0191cc8156a3df75cd9b7634dae76a3da34c6ad6a0b"
+    },
+    "note": "mtx_trade leg of order A (erin sells 100 token for >= 50 tokenb, order relayer bound to RELAYER): to = relayer = dex, amount = sell_amount, extra = sha256(Borsh(Order))",
+    "order": "0x0f000000746f6b656e2e746573742e6e65617210000000746f6b656e622e746573742e6e6561726400000000000000000000000000000032000000000000000000000000000000011100000072656c617965722e746573742e6e656172005786f400000000"
+   },
+   {
+    "name": "trade_b",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "tokenb.test.near",
+     "op": 1,
+     "from": {
+      "Ua": "0x10b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e0"
+     },
+     "to": {
+      "Near": "dex.test.near"
+     },
+     "relayer": "dex.test.near",
+     "amount": "60",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0xc1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1",
+     "nonce": 3,
+     "valid_until": 4102444800,
+     "extra": "0xcb2f7e97ae22ad92d92be2dc77f6a01cf60f7852184666d52b43d072f3eeb322"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd10000000746f6b656e622e746573742e6e656172010110b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e0000d0000006465782e746573742e6e656172010d0000006465782e746573742e6e6561723c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c10300000000000000005786f400000000cb2f7e97ae22ad92d92be2dc77f6a01cf60f7852184666d52b43d072f3eeb322",
+    "digest": "0x1c05c3f3c7e0efde38a1bc2f9808c867e9afeb5ae553f9b089e7f84f45a8d369",
+    "text": "scaas.metaop.v1:1c05c3f3c7e0efde38a1bc2f9808c867e9afeb5ae553f9b089e7f84f45a8d369",
+    "auth": {
+     "kind": "secp256k1",
+     "key": "0x9094567ba7245794198952f68e5723ac5866ad2f67dd97223db40e14c15b092e6a00346749144744142a33f0769d9028fc028a841c076417efaf20e1d1be0584",
+     "sig": "0xf5fa019e0e201ffe0d6ed586b7bfa7b1a6f3c218c4855d11d4f5956ed542a1b4230a280be5a94b47359c619cc5ba2d879d5d91d39bff62f6d5df2d50ba574ecb",
+     "v": 1
+    },
+    "note": "mtx_trade leg of order B (carol sells 60 tokenb for >= 100 token, open relayer) on tokenb, order lane nonce 3",
+    "order": "0x10000000746f6b656e622e746573742e6e6561720f000000746f6b656e2e746573742e6e6561723c0000000000000000000000000000006400000000000000000000000000000000005786f400000000"
+   },
+   {
+    "name": "cancel",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 14,
+     "from": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "to": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "relayer": null,
+     "amount": "0",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0x16841aa74f82d059b98c5921d244e1a8bf7d49da0d7bc6f04dfb92a820b51f95"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e6561720e0102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f80102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005786f40000000016841aa74f82d059b98c5921d244e1a8bf7d49da0d7bc6f04dfb92a820b51f95",
+    "digest": "0xbbff6ad32288a2b6a41004a214b7d04bf8ea0db6a0e2fe16befa3ae1ccb56211",
+    "text": "scaas.metaop.v1:bbff6ad32288a2b6a41004a214b7d04bf8ea0db6a0e2fe16befa3ae1ccb56211",
+    "auth": {
+     "kind": "ed25519",
+     "key": "0x84b5757b40a54b18184b53f106e44b492a956635d981966557ffa7f640c8ee78",
+     "message": "scaas.metaop.v1:bbff6ad32288a2b6a41004a214b7d04bf8ea0db6a0e2fe16befa3ae1ccb56211",
+     "nonce": "0xbbff6ad32288a2b6a41004a214b7d04bf8ea0db6a0e2fe16befa3ae1ccb56211",
+     "recipient": "token.test.near",
+     "nep413Payload": "0x5000000073636161732e6d6574616f702e76313a62626666366164333232383861326236613431303034613231346237643034626638656130646236613065326665313662656661336165316363623536323131bbff6ad32288a2b6a41004a214b7d04bf8ea0db6a0e2fe16befa3ae1ccb562110f000000746f6b656e2e746573742e6e65617200",
+     "nep413Hash": "0xf0e4aeb12f33ffaa56d850f4c197863b0409dadcdfec824195c3f930d80133e7",
+     "sig": "0xc63df15defe7679911fc0c5b2b944cb03d8eac20ec1ca376b76d80ece9196dfb9dc4e11bb79ff8c46cb74d898f6ff484854b4c7388198ce15b75dba5b1210e09"
+    },
+    "note": "mtx_cancel(op, auth, target_lane, target_nonce): closes erin's open order (lane c0, nonce 5); a filled order is refused",
+    "params": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c00500000000000000"
+   },
+   {
+    "name": "invalidate_nonces",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 15,
+     "from": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "to": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "relayer": null,
+     "amount": "0",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0xd8d4063e13b138cb214fdc229b0c4dc8d5143a116413d4d5427d9efa455d14cc"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e6561720f0102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f80102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005786f400000000d8d4063e13b138cb214fdc229b0c4dc8d5143a116413d4d5427d9efa455d14cc",
+    "digest": "0x3ec9dd7a1587ef453d7df4274715bb2aa58ced80c53316af2c9a4a2d924e7991",
+    "text": "scaas.metaop.v1:3ec9dd7a1587ef453d7df4274715bb2aa58ced80c53316af2c9a4a2d924e7991",
+    "auth": {
+     "kind": "ed25519",
+     "key": "0x84b5757b40a54b18184b53f106e44b492a956635d981966557ffa7f640c8ee78",
+     "message": "scaas.metaop.v1:3ec9dd7a1587ef453d7df4274715bb2aa58ced80c53316af2c9a4a2d924e7991",
+     "nonce": "0x3ec9dd7a1587ef453d7df4274715bb2aa58ced80c53316af2c9a4a2d924e7991",
+     "recipient": "token.test.near",
+     "nep413Payload": "0x5000000073636161732e6d6574616f702e76313a336563396464376131353837656634353364376466343237343731356262326161353863656438306335333331366166326339613461326439323465373939313ec9dd7a1587ef453d7df4274715bb2aa58ced80c53316af2c9a4a2d924e79910f000000746f6b656e2e746573742e6e65617200",
+     "nep413Hash": "0xa54a6b72d452f2fabfd1fa5117a31438ff13265e4aeb19bfa65efa102b8ab1e3",
+     "sig": "0x89c03de7b1cf9da46390bf0b8e35361569959e0f51097aad3c070e10437088cb526e6ef8cf3750bf9e11c2b34cf2b91452e4d57af94b9934e22649e7e25bb402"
+    },
+    "note": "mtx_invalidate_nonces(op, auth, lane, min_nonce): voids erin's orders below nonce 10 on lane c0; min_nonce < 2^63, only increasing (CTR-DEX-10)",
+    "params": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c00a00000000000000"
    }
   ]
  },
@@ -1455,6 +1596,15 @@
    "payment": "relay_fee_pay_router_4096"
   }
  ],
+ "dexSettle": {
+  "legs": [
+   "trade_a",
+   "trade_b"
+  ],
+  "settleId": "0x0bec33ed174079846676f5d5414f738d1ed962690f00cea866c471e40123e366",
+  "derivation": "sha256(digest(op_a) ‖ digest(op_b)), the two leg ops in settle-argument order",
+  "note": "fill-or-kill: 100 >= 100 (B min_buy) and 60 >= 50 (A min_buy); erin receives 60 tokenb, carol 100 token"
+ },
  "storage": {
   "note": "deposit = bytes × env::storage_byte_cost() read at run time; depositSandbox at the sandbox protocol config (10000000000000000000 yocto per byte)",
   "records": {
@@ -1482,6 +1632,26 @@
     "bytes": 261,
     "layout": "mandate record with a UA owner, delegate and payee: key b\"m\" ‖ id 33 B, value Borsh(Mandate) 188 B (owner 33, terms: delegate 33, payee 33, per_payment 16, per_period 16, period_s 8, expiry 8, funding 16; period_start 8, spent 16, revoked 1), record overhead 40 B; any mandate = 73 + Borsh(Mandate) (token MANDATE_RECORD_OVERHEAD, measured in `new` with this record); an open also pays the UA record of the mandate id (89 B) and, first time, the owner's lane; each mandate pay a lane of the mandate id (114 B) (test mandate_pay_within_limits)",
     "depositSandbox": "2610000000000000000000"
+   },
+   "orderFilledUa": {
+    "bytes": 147,
+    "layout": "order record of a UA maker, filled: key b\"o\" ‖ Borsh((Holder::Ua, lane, nonce)) 74 B, value OrderClose::Filled(leg op digest) 33 B, record overhead 40 B; any order record = 81 + Borsh(holder) + Borsh(OrderClose) (token TRADE_RECORD_OVERHEAD, measured in `new`); a native maker with a 43-char id: 162 B (test settle_pays_both_legs)",
+    "depositSandbox": "1470000000000000000000"
+   },
+   "orderCancelledUa": {
+    "bytes": 115,
+    "layout": "order record of a UA maker, cancelled: as orderFilledUa with value OrderClose::Cancelled 1 B (test cancel_filled_order_refused)",
+    "depositSandbox": "1150000000000000000000"
+   },
+   "minNonceUa": {
+    "bytes": 114,
+    "layout": "min_nonce record of a UA maker: key b\"n\" ‖ Borsh((Holder::Ua, lane)) 66 B, value u64 8 B, record overhead 40 B; any = 81 + Borsh(holder) (test min_nonce_cap_refused)",
+    "depositSandbox": "1140000000000000000000"
+   },
+   "dexEntry": {
+    "bytes": 706,
+    "layout": "DEX escrow entry of a settle: key b\"s\" ‖ settle_id 33 B + Borsh(Settle) (legs: token, seller, lane, nonce, digest, amount; relayer, deposit, expiry, done) + 40 B, and two leg-index records (key b\"l\" ‖ digest 33 B, value settle_id 32 B, + 40 B = 105 B each); = 283 + Borsh(Settle); 706 B for a UA seller and a native seller with 43-char token / seller / relayer ids (test settle_pays_both_legs); pruned after both expiries, the deposit back to the submitting relayer",
+    "depositSandbox": "7060000000000000000000"
    }
   }
  }

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["common", "token", "test-receiver", "spike-p256", "integration"]
+members = ["common", "token", "dex", "test-receiver", "spike-p256", "integration"]
 
 [workspace.dependencies]
 near-sdk = "5.30.0"
