@@ -184,17 +184,24 @@ def explain(msg):
 DEPLOYED = {}
 
 
-def group(sender, calls, mbr=None, budget=0, boxes=(), fee_extra=0, box_app=None):
+def group(sender, calls, mbr=None, budget=0, boxes=(), fee_extra=0, box_app=None, pay=None):
     """One atomic group: [payment `mbr` → the first call's app (when not None)] [calls…] [`budget` bare NoOp calls
     on the first call's app]; `boxes` (names on the first call's app) go on the budget calls, 8 per transaction
     (group resource sharing); `box_app` takes the budget calls instead (an app called through another).
-    `calls` = [(Deployed, method, args, {accounts, apps, on_complete, sender})]."""
+    `calls` = [(Deployed, method, args, {accounts, apps, on_complete, sender})]. `pay` bends the MBR payment for
+    the refusal tests: {payer, to, close, rekey, gap (a budget call between the payment and the call)}."""
+    pay = pay or {}
     atc = AtomicTransactionComposer()
     first = calls[0][0]
     bapp = box_app or first
     if mbr is not None:
+        payer = pay.get('payer', sender)
         atc.add_transaction(TransactionWithSigner(
-            transaction.PaymentTxn(sender.addr, sp(), first.address, mbr), sender.signer))
+            transaction.PaymentTxn(payer.addr, sp(), pay.get('to', first.address), mbr,
+                                   close_remainder_to=pay.get('close'), rekey_to=pay.get('rekey')), payer.signer))
+        if pay.get('gap'):
+            atc.add_transaction(TransactionWithSigner(
+                transaction.ApplicationNoOpTxn(sender.addr, sp(), bapp.id, note=b'gap'), sender.signer))
     for i, (d, method, args, kw) in enumerate(calls):
         atc.add_method_call(d.id, d.app.methods[method], kw.get('sender', sender).addr,
                             sp(MIN_FEE + (fee_extra if i == 0 else 0)), kw.get('sender', sender).signer, args,
@@ -229,8 +236,7 @@ def run(sender, d, method, args, **kw):
         r = atc.execute(ALGOD, 4)
     except AlgodHTTPError as e:
         raise Refused(explain(str(e))) from None
-    idx = 1 if kw.get('mbr') is not None else 0
-    res = Result(ALGOD.pending_transaction_info(r.tx_ids[idx]))
+    res = Result(ALGOD.pending_transaction_info(r.abi_results[0].tx_id))
     res.ret = r.abi_results[0].return_value
     return res
 
@@ -314,12 +320,12 @@ class Tok(Deployed):
         return names
 
     def mtx(self, relayer, method, o, auth, *extra_args, mbr='auto', budget=BUDGET,
-            payee=None, extra_boxes=()):
+            payee=None, extra_boxes=(), pay=None):
         if mbr == 'auto':
             mbr = view(self, 'mbr_needed', o) or None
         acc = [encoding.encode_address(bytes(o[3][1]))] if o[3][0] == 0 else []
         return run(relayer, self, method, [o, auth, *extra_args], mbr=mbr, budget=budget,
-                   boxes=self.boxes(o, payee) + list(extra_boxes), accounts=acc)
+                   boxes=self.boxes(o, payee) + list(extra_boxes), accounts=acc, pay=pay)
 
 
 def digest(o):

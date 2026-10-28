@@ -1,0 +1,37 @@
+# algorand-token fix 1 (scripts/capped smartcontracts/scripts/test.sh algorand) at commit b9e758d8 + the fix-1 tree
+== test algorand
+== build algorand
+[32minfo: [0musing puyapy version 5.10.1[0m
+[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+ok artifacts.json
+ok smartcontracts/algorand/vectors/algorand-vectors.json
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Created 
+ Network scaas-algorand_default Created 
+ Container scaas-algorand-algod-1 Creating 
+ Container scaas-algorand-indexer-db-1 Creating 
+ Container scaas-algorand-algod-1 Created 
+ Container scaas-algorand-indexer-db-1 Created 
+ Container scaas-algorand-conduit-1 Creating 
+ Container scaas-algorand-conduit-1 Created 
+ Container scaas-algorand-indexer-1 Creating 
+ Container scaas-algorand-indexer-1 Created 
+ Container scaas-algorand-algod-1 Starting 
+ Container scaas-algorand-indexer-db-1 Starting 
+ Container scaas-algorand-algod-1 Started 
+ Container scaas-algorand-indexer-db-1 Started 
+ Container scaas-algorand-conduit-1 Starting 
+ Container scaas-algorand-conduit-1 Started 
+ Container scaas-algorand-indexer-1 Starting 
+ Container scaas-algorand-indexer-1 Started 
+algod up
+......
+MAX_PAY_META_BYTES = 507 (logs 1024 / 1024 B, app args 902 / 2048 B)
+................
+opcode budget used: {'mtx_pay': 2841, 'mtx_transfer': 2801, 'mtx_pay_meta': 3297, 'arc200_transfer': 270} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 4 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2294, clear 4
+.....
+27 passed in 6.85s
+rc=0

@@ -112,6 +112,14 @@ def test_mbr_payment_exact(token, make, relayer):
     for m in (None, 0, need - 1, need + 1):
         with no('MBR payment'):
             token.mtx(relayer, 'mtx_pay', o, a, ZERO_ADDR, mbr=m)
+    for bent in ({'to': relayer.addr},                   # the exact amount, but to another receiver
+                 {'gap': True}):                          # in the group, but not right before the call
+        with no('MBR payment must equal'):
+            token.mtx(relayer, 'mtx_pay', o, a, ZERO_ADDR, mbr=need, pay=bent)
+    payer = make(1_000_000)
+    for bent in ({'close': token.address}, {'rekey': relayer.addr}):     # ruling m4: no close-out, no rekey
+        with no('MBR payment must not close or rekey'):
+            token.mtx(relayer, 'mtx_pay', o, a, ZERO_ADDR, mbr=need, pay={'payer': payer, **bent})
     before = token.min_balance()
     token.mtx(relayer, 'mtx_pay', o, a, ZERO_ADDR, mbr=need)
     assert token.min_balance() - before == need          # the app's AcctMinBalance delta
@@ -211,6 +219,14 @@ def test_rekeyed_to_logicsig_refused_natively(token, make, relayer):
                                 .sign(alice.sk)))
     with no('bad signature'):
         pay(token, relayer, alice, native(bob), 1, lane=b'\x0b' * 32)
+    dave = make(300_000)                                                     # rekeyed to a 2-of-2 multisig
+    msig = transaction.Multisig(1, 2, [dave.addr, bob.addr])
+    wait(ALGOD.send_transaction(transaction.PaymentTxn(dave.addr, sp(), dave.addr, 0, rekey_to=msig.address())
+                                .sign(dave.sk)))
+    o = token.op(dave, native(bob), 1, pay_ref=b'\x01' * 32, lane=b'\x0c' * 32)
+    for signer in (dave, bob):                       # neither the old key nor a member's key alone verifies
+        with no('bad signature'):
+            token.mtx(relayer, 'mtx_pay', o, signer.sign_op(digest(o)), ZERO_ADDR)
     assert bal(token, bob) == 1
 
 
@@ -329,6 +345,11 @@ def test_open_payee_only_in_open_mode(token, probe, make, relayer):
     o, a = signed(token, alice, native(carol), 8, pay_ref=b'\x32' * 32, relayer=probe.key, lane=b'\x32' * 32)
     via_probe(o, a, bob, carol)                                   # bound payee: open_payee ignored
     assert bal(token, carol) == 8 and bal(token, bob) == 7
+    o, a = signed(token, alice, native(Z32), 6, pay_ref=b'\x34' * 32, lane=b'\x34' * 32)
+    run(relayer, probe, 'pay', [token.id, o, a, bob.addr, MBR_LANE + MBR_BALANCE], apps=[token.id],
+        accounts=[alice.addr], fee_extra=2 * MIN_FEE, budget=BUDGET, box_app=token,
+        boxes=token.boxes(o, native(Z32)))        # to == relayer == zero: no open mode (relayer ≠ the calling app)
+    assert bal(token, ZERO_ADDR) == 6 and bal(token, bob) == 7
     o, a = signed(token, alice, native(relayer), 9, pay_ref=b'\x33' * 32, relayer=relayer.key, lane=b'\x33' * 32)
     token.mtx(relayer, 'mtx_pay', o, a, bob.addr)                 # to == relayer, but no app: op.to is paid
     assert bal(token, relayer) == 9 and bal(token, bob) == 7
@@ -395,20 +416,33 @@ def test_box_prefixes_disjoint(token, make, relayer):
     assert sorted({b[:1] for b in boxes}) == [b'b', b'l', b'u'] and all(len(b) == 33 for b in boxes)
 
 
+def refused_actions(token, who, kinds):
+    """Each OnCompletion in `kinds`, bare and with an ABI selector: the bare form is the router's `budget` path
+    (`return OnCompletion == NoOp && app ≠ 0` → "rejected by ApprovalProgram"), the ABI form fails the router's
+    `OnCompletion == NoOp` assert (the same pc for every kind)."""
+    a, sel = token.app, token.app.methods['arc200_name'].get_selector()
+    make_ = {'update': lambda **k: transaction.ApplicationUpdateTxn(who.addr, sp(), token.id, a.approval, a.clear, **k),
+             'delete': lambda **k: transaction.ApplicationDeleteTxn(who.addr, sp(), token.id, **k),
+             'optin': lambda **k: transaction.ApplicationOptInTxn(who.addr, sp(), token.id, **k),
+             'closeout': lambda **k: transaction.ApplicationCloseOutTxn(who.addr, sp(), token.id, **k)}
+    pcs = set()
+    for kind in kinds:
+        with pytest.raises(AlgodHTTPError, match='rejected by ApprovalProgram'):
+            wait(ALGOD.send_transaction(make_[kind]().sign(who.sk)))
+        with pytest.raises(AlgodHTTPError, match=r'logic eval error: assert failed pc=\d+') as e:
+            wait(ALGOD.send_transaction(make_[kind](app_args=[sel]).sign(who.sk)))
+        pcs.add(re.search(r'assert failed pc=(\d+)', str(e.value)).group(1))
+    assert len(pcs) == 1
+
+
 def test_update_and_delete_refused(token, make):
-    a = token.app
-    for txn in (transaction.ApplicationUpdateTxn(token.admin.addr, sp(), token.id, a.approval, a.clear),
-                transaction.ApplicationDeleteTxn(token.admin.addr, sp(), token.id)):
-        with pytest.raises(AlgodHTTPError, match='rejected|err|assert'):
-            wait(ALGOD.send_transaction(txn.sign(token.admin.sk)))
-    assert ALGOD.application_info(token.id)['params']['approval-program']
+    refused_actions(token, token.admin, ['update', 'delete'])          # the creator included
+    assert ALGOD.application_info(token.id)['params']['approval-program'] == __import__('base64').b64encode(
+        token.app.approval).decode()
 
 
 def test_optin_refused(token):
-    for txn in (transaction.ApplicationOptInTxn(token.alice.addr, sp(), token.id),
-                transaction.ApplicationCloseOutTxn(token.alice.addr, sp(), token.id)):
-        with pytest.raises(AlgodHTTPError):
-            wait(ALGOD.send_transaction(txn.sign(token.alice.sk)))
+    refused_actions(token, token.alice, ['optin', 'closeout'])
 
 
 # ---------------------------------------------------------------- figures (§11: measured and pinned)

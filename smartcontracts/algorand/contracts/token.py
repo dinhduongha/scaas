@@ -257,13 +257,16 @@ class Token(arc4.ARC4Contract):
 @subroutine
 def mbr_paid(before: UInt64) -> None:
     """§2 row 15: the group transaction just before this call is a payment to the app address of exactly the MBR
-    this call added (the app's AcctMinBalance after minus `before`), and there is none when it added nothing."""
+    this call added (the app's AcctMinBalance after minus `before`), and there is none when it added nothing. It
+    neither closes nor rekeys (a close-out would over-fund the app: not exact)."""
     need = Global.current_application_address.min_balance - before
     paid = UInt64(0)
     has = False
     if Txn.group_index > 0:
         p = gtxn.Transaction(Txn.group_index - 1)
         if p.type == TransactionType.Payment and p.receiver == Global.current_application_address:
+            assert p.close_remainder_to == Global.zero_address and p.rekey_to == Global.zero_address, \
+                "MBR payment must not close or rekey"
             has = True
             paid = p.amount
     assert has == (need > 0) and paid == need, "MBR payment must equal the new boxes' MBR exactly"
