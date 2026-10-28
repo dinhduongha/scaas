@@ -202,10 +202,10 @@ sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metat
 | `NONE_PQZ` (`NoUnderlyingPqzToken`) | 49,067 B | 75.1 M | 91.8 M |
 | `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) | 60,282 B | 92.2 M | 109.0 M |
 | `UNDERLYING_PQZ` (`UnderlyingPqzToken`) | 61,137 B | 93.5 M | **110.3 M** |
-| information: `MtxPipelineLib` (linked library of every release) | 8,136 B | 12.4 M | 29.2 M |
+| information: `MtxPipelineLib` (linked library of every release) | 8,106 B | 12.4 M | 29.2 M |
 | information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,908 B | 4.4 M | 21.2 M |
 
-The two information rows (`forge build src --sizes`, `smartcontracts/evm/runs/2026-10-28-metatx-split-fixwave-sizes.txt`; both under 24,576 B, so not in the baseline) have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
+The two information rows (`forge build src --sizes`, `smartcontracts/evm/runs/2026-10-28-metatx-split-fixwave-sizes.txt`, `MtxPipelineLib` re-measured after the EIP-7702 owner ruling in `runs/2026-10-28-metatx-split-7702-sizes.txt`; both under 24,576 B, so not in the baseline) have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
 most 54.4 M. A chain with an Ethereum-like 60 M block holds none of the confidential kinds and only the smallest plain
 one; it needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
 value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before each `deployImplementation` /
@@ -266,7 +266,8 @@ plus a voluntary migration.
 <a id="eip7702"></a>
 
 An EOA that delegated its code through EIP-7702 is still a native account: SCaaS classifies `from` by its code
-([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)).
+([CTR-UA-24](../contracts/accounts.md#CTR-UA-24)), on every path (owner ruling 2026-10-28): its base key signs, else
+ERC-1271 on its address runs the delegate under the 50 k cap.
 
 ## 6. Limitations
 

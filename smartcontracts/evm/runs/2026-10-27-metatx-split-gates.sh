@@ -58,6 +58,8 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 # (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19)
 NEW_TESTS=$(cat <<'EOF'
 forge|forge|test_parity
+forge|forge|test_isValid_7702_ctrUa24
+forge|forge|test_isValid_7702_badDelegates
 forge|forge|test_ruleTableParity
 forge|forge|test_preCall_orderAddressPath
 forge|forge|test_preCall_orderUaPath
@@ -138,6 +140,8 @@ solana|cargo|wrapper_inner_failure_leaves_no_payment
 solana|cargo|wrapper_payment_failure_rolls_back_the_call
 solana|cargo|wrapper_router_bound_pay_refused_direct
 solana|cargo|wrapper_ref_vectors
+solana|cargo|wrapper_noop_refused_payer_not_charged
+solana|cargo|guardian_recovery_waits_and_can_be_cancelled
 solana|cargo|wrapper_any_lane_may_submit
 solana|cargo|wrapper_other_instance_refused
 cosmos|cargo|pay_meta_vectors_match
@@ -293,6 +297,7 @@ cargo-scaas-node|cargo|ton::ton_relay_fee_job_tracks_escrow
 cargo-scaas-node|cargo|ton::ton_relay_fee_refunds_after_deadline
 cargo-scaas-node|cargo|ton::ton_relay_fee_refuses_failing_call_before_send
 cargo-scaas-node|cargo|ton::ton_relay_fee_refuses_failing_payment_before_send
+cargo-scaas-node|cargo|venue::a_7702_maker_signs_with_its_key_or_its_delegate
 cargo-scaas-node|cargo|ton::pay_meta_job_never_panics
 cargo-scaas-node|cargo|ton::relay_fee_job_never_panics
 cargo-scaas-node|cargo|config::relay_params_default_and_refuse_invalid_values

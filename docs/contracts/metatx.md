@@ -99,7 +99,10 @@ use `NoUnderlyingToken`, 1:1 wrappers use an `UnderlyingToken` with one leg and 
 One domain version, `"1"`, for every token.
 
 <a id="CTR-MTX-25"></a>**CTR-MTX-25** — One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632
-hook) is used by `MetaTxBase`, `SCaaSDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib` is deleted.
+hook) is used by `MetaTxBase`, `SCaaSDex`, `MandateWallet` and `SmartKeyAccount`; `SigLib` is deleted. An EIP-7702
+delegated EOA follows [CTR-UA-24](accounts.md#CTR-UA-24) on the address path as on the UA path (owner ruling 2026-10-28;
+one function, `SigCheck.isValid`): its base key's ECDSA, else ERC-1271 on its address (the delegate) under the cap; a
+delegate-only signature is accepted on `mtxExecute`, the transfers, the DEX and the wallets alike.
 
 <a id="metatxbase"></a>
 <a id="CTR-MTX-22"></a>**CTR-MTX-22** — **`MetaTxBase`: the generic base of every SCaaS contract** (owner). It holds

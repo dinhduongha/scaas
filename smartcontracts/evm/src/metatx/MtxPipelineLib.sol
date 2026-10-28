@@ -250,7 +250,7 @@ library MtxPipelineLib {
     }
 
     /// @dev A derived id: the registry under `purpose`. A native id (whatever the purpose): 0 and the pools refused
-    ///      (C5-2, C5-3), then CTR-UA-24 (`SigCheck.isValid7702`) or HIP-632 on Hedera.
+    ///      (C5-2, C5-3), then CTR-UA-24 (`SigCheck.isValid`) or HIP-632 on Hedera.
     function _authorize(Ctx calldata c, bytes32 from, bytes32 purpose, bytes32 digest, bytes calldata auth)
         private view
     {
@@ -262,7 +262,7 @@ library MtxPipelineLib {
         if (a == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
         if (a == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable();
         if (c.hedera && auth.length == 64 && !SigCheck.isContract(a)) return HederaLib.requireValid(a, digest, auth);
-        if (!SigCheck.isValid7702(a, digest, auth, _erc1271Gas(c, a))) revert IMetaTx.MetaTxBadSignature();
+        if (!SigCheck.isValid(a, digest, auth, _erc1271Gas(c, a))) revert IMetaTx.MetaTxBadSignature();
     }
 
     /// @dev The address path's signer: a native id (upper 96 bits zero), never truncated from a derived one.

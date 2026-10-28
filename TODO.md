@@ -258,9 +258,8 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   its slice result read through `stack_cell`, `get_codes`, the Mandate's `get_lane_nonce`, `get_wallet_data` (only the
   fake API checks them today).
 - [ ] **metatx split — final review** (whole-branch review, before the merge; items the per-task reviews deferred):
-  - 7702 intent: the code refuses an EIP-7702-delegate-only signature on the address path
-    (`err_e7702_viaDelegate_addrPathRefuses`) but accepts it on the UA path (`ok_e7702_viaDelegate`); the parity fixture pins
-    both; check against CTR-MTX-25 / accounts.md and rule.
+  - [x] 7702 intent: ruled (owner 2026-10-28): delegate-only signatures accepted on both paths; the address path follows
+    CTR-UA-24 (`SigCheck.isValid`), parity case `ok_e7702_viaDelegate_addr`.
   - Node items that T17 pulled forward (verify, they are believed done): bound-payee relay-fee jobs (Cosmos, Solana) refused
     unless `params.relay_fee.relay_bound_payee = true`; a plain pay to the router / marker / executor refused in every adapter;
     unknown or non-string `op.kind` refused in every adapter (T17c `3a98e74a`).

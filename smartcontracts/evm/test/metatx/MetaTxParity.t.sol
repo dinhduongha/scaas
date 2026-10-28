@@ -1783,8 +1783,8 @@ abstract contract ParityCases is ParityIO {
         _pSignerCases(d, "e7702", false);
         // signed by the delegate's owner instead of the account's key: accepted through ERC-1271 of the delegate
         m = _pMt(d, _pCancel(7), 0, P_RR, 0, address(0));
-        // (the address path's `SigCheck.isValid` does not follow the designator: refused; the UA path's does)
-        _pMx(d, "mtxExecute", "err_e7702_viaDelegate_addrPathRefuses", "", IMetaTx.mtxExecute.selector, m, _pEcdsa(P_OWNER, MetaTokenBase(d.t).mtxDigest(m)), d.relayer);
+        // (one rule on both paths, CTR-UA-24, owner ruling 2026-10-28: the address path follows the designator too)
+        _pMx(d, "mtxExecute", "ok_e7702_viaDelegate_addr", "", IMetaTx.mtxExecute.selector, m, _pEcdsa(P_OWNER, MetaTokenBase(d.t).mtxDigest(m)), d.relayer);
         u = _pUm(d, MetaTxLib.pad(e), _pAmt(d, 1_000), 0, P_RR, 0, address(0));
         _pUx(d, "ok_e7702_viaDelegate", "", u, _pEcdsa(P_OWNER, MetaTokenBase(d.t).uaDigest(u)), d.relayer);
     }
