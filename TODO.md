@@ -69,12 +69,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      `scratchpad/review2-fix-ledger-2026-10-27.md`). Part 3 (pqz-prover + node relay) after P6h / P6i.
   4. [ ] **Task 9 calibration** (timing: needs the owner's go) → final prices replace the provisional rows.
   5. [x] **The metatx split, `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) and `MtxRelayFee` (CTR-MTX-27) — built on branch
-     `metatx-split` 2026-10-27/28 (Tasks 1-19; head at T19; NOT merged: merge and push need the owner's go; the whole-branch
-     review is open, see "metatx split — final review" below)**: T1 parity fixture `c9ec6fb0`/`2ceda92d`, T2 library `76dc5be2`,
+     `metatx-split` 2026-10-27/28 (Tasks 1-20 and the final fix wave; NOT merged: merge and push need the owner's go; the
+     whole-branch review: Ready with fixes, its fix wave done, the owner rulings list and I2 (Solana recovery) open, see
+     "metatx split — final review" below)**: T1 parity fixture `c9ec6fb0`/`2ceda92d`, T2 library `76dc5be2`,
      T3 token paths `04a2ede6`, T4 trade `b36c9dac`, T5 PQZ/Zether `840f0642`, T6 link closure `c213e24a`, T7 pay-meta
      `a221b015`/`2623719a`, T8 re-measure `69fce983`/`004890a2`, T9 router `333c96b6`/`3f30ff87`, T10 Soroban `cd5e508c`,
      T11 Solana `b2986c5b`, T12 Cosmos `9dfcc559`, T13 Sui `8a033b0e`, T14 Aptos `78c67cff`, T15-T16 TON `1bba36e0`/`16bac7d0`,
-     T17 node `9777679f`..`d784f264`, T18 clients `a0ab2e47`, T19 docs. Figures: `docs/contracts/metatx.md` §8
+     T17 node `9777679f`..`d784f264`, T18 clients `a0ab2e47`/`e7c9e3c4`, T19 docs `f80f2e73`/`a3a02a1c`, T20 closing gates
+     `67fa7a45`/`cecde76b`, final fix wave `deead173` (TON relayed-call pre-check, review minors M1–M13) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
      (relayed overhead +7.4 k to +7.6 k per call; `n2560-kmax16384` `ROLL_MAX` 64 keeps 6,032 gas, was 15,281: any further
      token-path growth above ~6 k forces 48). Next: NEAR and Algorand on their own branch from `metatx-split` (owner
      2026-10-27; spec approved 2026-10-28; its plan is written in the main checkout, executes in parallel,
@@ -255,6 +257,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     metadata cut; per-set fixtures instead of the skips in `MetaTxParity` / `MtxSplitOverhead` (owner may prefer); Soroban
     `relay-fee/src/test.rs:376,393` bare `is_err()`; Sui same-entry-other-instance Move test; Aptos `vectors.move` P-256 lines
     churn on regeneration (use RFC 6979 in `gen_vectors`).
+  - TON relay-fee residuals after the I1 fix (`deead173`, decisions "TON only, node"): the node does not check a passkey's
+    P-256 signature on a relayed call (needs P-256 in the node), and a Mandate has no lane-nonce getter (a stale-nonce owner
+    revoke still bounces at the relayer's cost; needs `Mandate.get_lane_nonce`, a contract change). Owner's call.
   - `MtxRelayExecutor` copies return data on success (a hostile target can inflate the relayer's memory cost; the node simulates
     first).
   - Observation: the Zether prover's relayed gas rows are 8.2-8.7 k below the measured figures (inside `GAS_MARGIN`); re-pin
