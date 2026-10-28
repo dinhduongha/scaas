@@ -76,3 +76,15 @@ program sizes (B): approval 2588, clear 4
 .
 3 passed, 66 deselected in 1.87s
 rc=0
+
+## T13 fix 1 mandate app (open = the owner's one funding op executed by the open: [MBR → mandate][mtx_mandate_open]; minimal groups without bare budget calls) at commit c9a0b197 + the fix-1 tree
+mandate box: 41 B name + 204 B value, MBR 100500 µALGO; payee balance box forwarded to the token 28500 µALGO
+mtx_mandate_pay (first, delegate opened): lane box 18900 µALGO + record 76100 µALGO forwarded
+.
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (4334, 6, None), 'pay ed25519 (delegate opened)': (3938, 6, None), 'pay ed25519': (3804, 6, None), 'revoke ed25519': (3450, 6, None), 'open passkey': (5108, 9, None), 'pay passkey (delegate opened)': (4734, 8, None), 'pay passkey': (4588, 8, None), 'revoke passkey': (4234, 8, None), 'open native': (3589, 6, None), 'refund': (443, 1, None)}
+pins {'open ed25519': (4550, 7), 'open passkey': (5350, 10), 'open native': (3800, 7), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (470, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2304, clear 4
+.
+2 passed, 67 deselected in 1.80s
+rc=0

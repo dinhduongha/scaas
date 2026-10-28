@@ -339,10 +339,11 @@ def recovery_vectors():
 
 # Mandate (Task 13, spec §4.7 → §3.6; the mandate app, contract = its address; state keyed by (token app id, id)).
 # `MandateTerms` ARC-4 = delegate (uint8,byte[32]) ‖ payee (uint8,byte[32]) ‖ per_payment uint128 ‖ per_period uint128
-# ‖ period_s uint64 ‖ expiry uint64 ‖ funding uint128 (130 B, big-endian). Open (op 13, owner-signed): id =
-# sha256(ARC-4(from, terms, lane, nonce)), to = Ua(id), amount = funding (R9), pay_ref zero, extra = sha256(token app
-# id u64 ‖ id ‖ terms); funded in the same group by the owner's token mtx_pay (op 0) of `funding` to the mandate app
-# address with pay_ref = id. Pay (op 2, delegate-signed): from = Ua(id), lane = payLane(pay_ref) (the NEAR vector's
+# ‖ period_s uint64 ‖ expiry uint64 ‖ funding uint128 (130 B, big-endian). Open (Ruling T13-open, fix 1 C1): the
+# owner's one signed op is the funding, a token mtx_pay (op 0, contract = the token) with relayer = to = the mandate app
+# address, amount = funding (R9), pay_ref = id = sha256(ARC-4(from, terms, lane, nonce)) from its own lane / nonce,
+# extra = sha256(token app id u64 ‖ id ‖ terms); only mtx_mandate_open(token, op, auth, terms, fund_mbr) executes it
+# (inner call; the token's rule 7 refuses it elsewhere). No op 13 on Algorand. Pay (op 2, delegate-signed): from = Ua(id), lane = payLane(pay_ref) (the NEAR vector's
 # bytes), nonce 0, extra = sha256(token app id u64). Revoke (op 3, owner or delegate): to = Ua(id), amount / pay_ref /
 # lane / nonce zero, extra = sha256(token app id u64). `authBytes` = the account app's auth encoding.
 MANDATES = []
@@ -353,9 +354,9 @@ def mandate_terms(delegate, payee, per_payment, per_period, period_s, expiry, fu
             + per_period.to_bytes(16, 'big') + struct.pack('>QQ', period_s, expiry) + funding.to_bytes(16, 'big'))
 
 
-def mandate_row(name, signer, frm, to, amount, pay_ref, lane, code, extra, note, contract=MANDATE):
+def mandate_row(name, signer, frm, to, amount, pay_ref, lane, code, extra, note, contract=MANDATE, relayer_=V.ZERO32):
     row = metaop(name, signer, frm, to, amount, pay_ref, lane, code=code, extra=extra, note=note, keep=False,
-                 contract=contract)
+                 contract=contract, relayer_=relayer_)
     row['authBytes'] = V.hx(account_auth(signer, V.unhx(row['digest'])))
     MANDATES.append(row)
     return row
@@ -366,15 +367,13 @@ _terms = mandate_terms(ua(UA_CAROL), addr(bob.pk), 100, 250, 86_400, VU, 1_000)
 _lane, _nonce = b32(0xb0), 0
 MANDATE_ID = V.sha256(bytes([1]) + UA_ERIN + _terms + _lane + struct.pack('>Q', _nonce))
 assert len(_terms) == 130
-_row = mandate_row('mandate_open', erin, ua(UA_ERIN), ua(MANDATE_ID), 1_000, V.ZERO32, _lane, V.OP['mandate_open'],
+_row = mandate_row('mandate_open', erin, ua(UA_ERIN), addr(MANDATE), 1_000, MANDATE_ID, _lane, V.OP['pay'],
                    V.sha256(_tok + MANDATE_ID + _terms),
-                   'mtx_mandate_open(token 1001, op, auth, terms): owner erin; delegate carol (UA), payee bob, per '
-                   'payment 100, per period 250 per 86,400 s, funding 1,000 = amount; after mandate_funding and the '
-                   'open\'s exact-MBR payment in one group')
+                   'mtx_mandate_open(token 1001, op, auth, terms, fund_mbr): owner erin signs the funding token.mtx_pay '
+                   '(relayer = to = the mandate app, pay_ref = the mandate id, extra = sha256(token id ‖ id ‖ terms)); '
+                   'delegate carol (UA), payee bob, per payment 100, per period 250 per 86,400 s, funding 1,000 = '
+                   'amount', contract=TOKEN, relayer_=MANDATE)
 _row.update(params=V.hx(_tok + MANDATE_ID + _terms), terms=V.hx(_terms), mandateId=V.hx(MANDATE_ID))
-mandate_row('mandate_funding', erin, ua(UA_ERIN), addr(MANDATE), 1_000, MANDATE_ID, b32(0xb1), V.OP['pay'], V.ZERO32,
-            'token.mtx_pay(op, auth, open_payee zero) funding mandate_open: owner erin pays funding to the mandate app '
-            'address, pay_ref = the mandate id', contract=TOKEN)
 _pr = b32(0x07)
 mandate_row('mandate_pay', carol, ua(MANDATE_ID), addr(bob.pk), 100, _pr, V.pay_lane(_pr), V.OP['mandate_pay'],
             V.sha256(_tok), "mtx_mandate_pay(token 1001, op, auth): from = the mandate id, signed by the delegate "
@@ -391,7 +390,7 @@ MBR_BOXES += [
 
 
 def mandate_vectors():
-    """Ops 2 mandate_pay, 3 revoke, 13 mandate_open (`MandateTerms`), and the open's funding pay (op 0)."""
+    """The open (its funding op 0, `MandateTerms`), ops 2 mandate_pay, 3 revoke (op 13 unused on Algorand)."""
     return MANDATES
 
 
@@ -432,13 +431,14 @@ def selftest(doc):
         f = m['fields']
         assert f['extra'] == V.hx(V.sha256(V.unhx(m['params']))) and f['amount'] == '0' and f['contract'] == V.hx(ACCOUNT)
     rows = {m['name']: m for m in MANDATES}         # mandate: id, extra, funding bound to the open
-    o, f, p = rows['mandate_open'], rows['mandate_funding']['fields'], rows['mandate_pay']['fields']
+    o, p = rows['mandate_open'], rows['mandate_pay']['fields']
     tid = V.unhx(o['mandateId'])
     assert V.sha256(bytes([o['fields']['from']['kind']])
                     + V.unhx(o['fields']['from']['id']) + V.unhx(o['terms']) + V.unhx(o['fields']['lane'])
                     + struct.pack('>Q', o['fields']['nonce'])) == tid
-    assert V.unhx(o['fields']['extra']) == V.sha256(V.unhx(o['params'])) and o['fields']['to']['id'] == V.hx(tid)
-    assert (V.unhx(f['pay_ref']), f['amount'], f['to']['id']) == (tid, o['fields']['amount'], V.hx(MANDATE))
+    f = o['fields']
+    assert V.unhx(f['extra']) == V.sha256(V.unhx(o['params'])) and V.unhx(f['pay_ref']) == tid
+    assert (f['to']['id'], f['relayer'], f['contract'], f['op']) == (V.hx(MANDATE), V.hx(MANDATE), V.hx(TOKEN), 0)
     assert p['lane'] == V.hx(V.pay_lane(V.unhx(p['pay_ref']))) and p['from']['id'] == V.hx(tid)
     for b in doc['mbr']['boxes']:
         assert b['microAlgo'] == 2500 + 400 * (b['nameLength'] + b['valueLength']) and b['nameLength'] <= 64

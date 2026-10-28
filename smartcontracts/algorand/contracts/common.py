@@ -36,7 +36,6 @@ OP_REMOVE_ORIGIN = 9
 OP_SET_GUARDIAN = 10
 OP_START_RECOVERY = 11
 OP_CANCEL_RECOVERY = 12
-OP_MANDATE_OPEN = 13
 ARC4_TRUE = b"\x15\x1f\x7c\x75\x80"  # an ABI `bool` return log: the return prefix ‖ true
 
 
@@ -166,11 +165,17 @@ def mbr_paid(before: UInt64, forwarded: UInt64) -> None:
 def account_verify(account_app: UInt64, h: Holder, d: Bytes32, auth: Bytes, forwarded: UInt64) -> None:
     """Inner `account.verify(h, d, auth)` (a value op: POLICY_PASSKEY_FOR_VALUE binds), preceded by the forwarded MBR
     payment when there is one (inner fees 0: the relayer's group pays them by fee pooling)."""
+    account_call(account_app, arc4.arc4_signature("verify(uint8,byte[32],byte[32],byte[])bool"), h, d, auth, forwarded)
+
+
+@subroutine
+def account_call(account_app: UInt64, method: Bytes, h: Holder, d: Bytes32, auth: Bytes, forwarded: UInt64) -> None:
+    """Inner `account.<method>(h, d, auth)` (`verify`, or `verify_key` for an op that moves no value), after the
+    forwarded MBR payment when there is one; the call must answer true."""
     app = Application(account_app)
     call = itxn.ApplicationCall(
         app_id=app, fee=0,
-        app_args=(arc4.arc4_signature("verify(uint8,byte[32],byte[32],byte[])bool"), h.kind.bytes, h.id.bytes,
-                  d.bytes, arc4.DynamicBytes(auth).bytes))
+        app_args=(method, h.kind.bytes, h.id.bytes, d.bytes, arc4.DynamicBytes(auth).bytes))
     if forwarded:
         _pay, res = itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
         assert res.last_log == ARC4_TRUE, "bad signature"

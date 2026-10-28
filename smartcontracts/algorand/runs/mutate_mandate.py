@@ -10,7 +10,7 @@ from mutate_account import main  # noqa: E402
 
 D = 'contracts/mandate.py'
 T = 'tests/test_mandate.py::'
-OPEN, FUND, LIM, PAYEE = (T + n for n in ('test_open_funding_equals_op_amount', 'test_funding_pay_checked',
+OPEN, FUND, LIM, PAYEE = (T + n for n in ('test_open_terms_bound_by_the_funding_op', 'test_funding_only_through_the_open',
                                           'test_limits_exceeded_refused', 'test_wrong_payee_refused'))
 WITHIN, EXP, REV, ONCE = (T + n for n in ('test_mandate_pay_within_limits', 'test_expired_refused',
                                           'test_revoked_refused_then_funds_back', 'test_pay_ref_once'))
@@ -18,9 +18,11 @@ REPLAY, FAKE, NATIVE = (T + n for n in ('test_replay_across_tokens_networks_apps
                                         'test_fake_token_cannot_touch_other_funds', 'test_native_owner_ua_payee'))
 AT = 'assert True, '
 M = [
-    # open
-    ('D1 open: op code', D, 'assert op_.op.as_uint64() == OP_MANDATE_OPEN, ', AT, OPEN),
-    ('D2 open: pay_ref zero', D, 'assert op_.pay_ref == zero(), "mtx_mandate_open', 'assert True, "mtx_mandate_open', OPEN),
+    # open (fix 1: the owner's one funding op, executed by the open)
+    ('D1 open: to and relayer = this app', D, 'assert op_.to.bytes == this().bytes and op_.relayer.bytes == '
+     'Global.current_application_address.bytes, ', AT, OPEN),
+    ('D2 open: relayer = this app (C1: else a front-runnable funding)', D,
+     ' and op_.relayer.bytes == Global.current_application_address.bytes, ', ', ', OPEN),
     ('D3 open: funding == op.amount (R9)', D, 'assert terms.funding == op_.amount, ', AT, OPEN),
     ('D4 open: limits', D, 'assert (terms.period_s.as_uint64() > 0 and', 'assert True or (terms.period_s.as_uint64() > 0 and',
      OPEN),
@@ -28,33 +30,24 @@ M = [
      '), ', OPEN),
     ('D6 open: expiry past', D, 'assert terms.expiry.as_uint64() > Global.latest_timestamp, ', AT, OPEN),
     ('D7 open: holder kinds', D, 'assert terms.delegate.kind.as_uint64() <= KIND_UA and', 'assert True or', OPEN),
-    ('D8 open: to = Ua(id)', D, 'assert op_.to.bytes == ua(id).bytes, ', AT, OPEN),
+    ('D8 open: to = this app', D, 'assert op_.to.bytes == this().bytes and op_.relayer', 'assert op_.relayer', OPEN),
     ('D9 open: extra binds token, id, terms', D, 'assert op_.extra.bytes == op.sha256(op.itob(t) + id.bytes + terms.bytes), ',
      AT, OPEN),
     ('D10 open: payee = this app', D, 'assert terms.payee.bytes != this().bytes, ', AT, OPEN),
     ('D11 open: one-shot (mandate exists)', D, 'assert key not in self.mandates, ', AT, OPEN),
-    ('D12 open: envelope', D, '        check_envelope(op_)\n        tok = rest(', '        tok = rest(', OPEN),
-    ('D13 open: owner signature', D,
-     '        acc = signed_by(self.account_app.value, op_.from_, digest(op_), auth, UInt64(0))\n',
-     '        acc = UInt64(0)\n', OPEN),
-    ('D14 open: payee box created (zero transfer)', D, '        send(t, terms.payee, BigUInt(0), tok)', '        pass',
+    ('D12 open: pay_ref = the id', D, 'assert op_.pay_ref == id, ', AT, OPEN),
+    ('D13 funding: open payee not this app', D, '                                                             '
+     'Global.current_application_address.bytes))', '                                                             '
+     'Txn.sender.bytes))', FUND),
+    ('D14 open: payee box created (zero transfer)', D, '        send(t, terms.payee, BigUInt(0), payee_box)', '        pass',
      WITHIN),
     ('D15 open: MBR constant', D, 'MBR_MANDATE_BOX = 2500 + 400 * (41 + MANDATE_LEN)',
      'MBR_MANDATE_BOX = 2500 + 400 * (42 + MANDATE_LEN)', WITHIN),
     ('D16 open: Mandate event', D, '        arc4.emit("Mandate", token, id, arc4.String("open"), op_.from_)\n', '',
      WITHIN),
-    # funding (ruling a)
-    ('D17 funding: shape (app call, token, mtx_pay)', D,
-     'assert (f.type == TransactionType.ApplicationCall and f.app_id.id == token', 'assert True or (f.type == '
-     'TransactionType.ApplicationCall and f.app_id.id == token', FUND),
-    ('D18 funding: on the named token', D, 'and f.app_id.id == token and', 'and', FUND),
-    ('D19 funding: mtx_pay only', D, '\n            and f.app_args(0) == arc4.arc4_signature(MTX_PAY)), ', '), ', FUND),
-    ('D20 funding: position (just before the MBR payment)', D, 'gtxn.Transaction(Txn.group_index - 2)',
-     'gtxn.Transaction(Txn.group_index - 1)', FUND),
-    ('D21 funding: from = owner', D, 'assert p.from_.bytes == owner.bytes, ', AT, FUND),
-    ('D22 funding: to = this app', D, 'assert p.to.bytes == this().bytes, ', AT, FUND),
-    ('D23 funding: amount', D, 'assert p.amount == amount, ', AT, FUND),
-    ('D24 funding: pay_ref = id', D, 'assert p.pay_ref == id, ', AT, FUND),
+    ('D17 funding: not executed', D, '        fund_it(t, op_, auth, fund)\n', '', FUND),
+    ('D18 funding: token MBR part not forwarded', D, '        fund_it(t, op_, auth, fund)\n',
+     '        fund_it(t, op_, auth, UInt64(0))\n', FUND),
     # pay
     ('D25 pay: op code', D, 'assert op_.op.as_uint64() == OP_MANDATE_PAY, ', AT, ONCE),
     ('D26 pay: from must be a UA (mandate id)', D, 'assert h.kind.as_uint64() == KIND_UA and key in', 'assert key in', ONCE),
@@ -77,8 +70,8 @@ M = [
     ('D40 pay: spent not counted', D, 'spent=arc4.UInt128(spent + amount)', 'spent=arc4.UInt128(spent)', LIM),
     ('D41 pay: envelope', D, '        check_envelope(op_)\n        d = digest(op_)', '        d = digest(op_)', REPLAY),
     ('D42 pay: delegate signature', D,
-     'fwd = signed_by(self.account_app.value, m.terms.delegate, d, auth, rest(UInt64(MBR_LANE_BOX)))',
-     'fwd = rest(UInt64(MBR_LANE_BOX))', WITHIN),
+     'fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY), m.terms.delegate, d, auth,\n'
+     '                        rest(UInt64(MBR_LANE_BOX)))', 'fwd = rest(UInt64(MBR_LANE_BOX))', WITHIN),
     ('D43 pay: pay_ref once', D, 'assert lane not in self.lanes, ', AT, ONCE),
     ('D44 pay: lane not recorded', D, '        self.lanes[lane] = UInt64(1)\n', '', ONCE),
     ('D45 pay: lane keyed per (token, mandate)', D, 'op.sha256(key + op_.lane.bytes)', 'op.sha256(op_.lane.bytes)', ONCE),
@@ -86,10 +79,13 @@ M = [
     ('D47 pay: remaining not debited', D, 'remaining=arc4.UInt128(left - amount))', 'remaining=arc4.UInt128(left))',
      WITHIN),
     ('D48 pay: nothing sent', D, '        send(t, op_.to, amount, UInt64(0))\n', '', WITHIN),
-    ('D49 pay: MBR exactness (native signer)', D, '''        arc4.emit("PaymentSettled", op_.from_, op_.to, arc4.UInt256(amount), op_.pay_ref)
-        mbr_paid(before, fwd)''', '''        arc4.emit("PaymentSettled", op_.from_, op_.to, arc4.UInt256(amount), op_.pay_ref)''', NATIVE),
-    ('D50 pay: PaymentSettled event', D,
-     '        arc4.emit("PaymentSettled", op_.from_, op_.to, arc4.UInt256(amount), op_.pay_ref)\n', '', WITHIN),
+    ('D49 pay: MBR exactness (native signer)', D, '''op_.pay_ref)
+        mbr_paid(before, fwd)''', '''op_.pay_ref)''', NATIVE),
+    ('D50 pay: MandatePaymentSettled event', D,
+     '        arc4.emit("MandatePaymentSettled", token, op_.from_, op_.to, arc4.UInt256(amount), op_.pay_ref)\n', '',
+     WITHIN),
+    ('D50b pay event without the token (I1)', D, 'arc4.emit("MandatePaymentSettled", token,',
+     'arc4.emit("MandatePaymentSettled", arc4.UInt64(0),', FAKE),
     # revoke, refund, close
     ('D51 revoke: shape', D, 'assert (op_.op.as_uint64() == OP_REVOKE and op_.amount.as_biguint() == 0', 'assert (True',
      REV),
@@ -99,10 +95,13 @@ M = [
     ('D53 revoke: owner or delegate', D, 'assert op_.from_.bytes == m.owner.bytes or', 'assert True or', REV),
     ('D54 revoke: no-op revoke refused', D, '        assert not m.revoked.native, "mandate revoked"\n        check_envelope',
      '        check_envelope', REV),
-    ('D55 revoke: envelope', D, '        check_envelope(op_)\n        fwd = signed_by(self.account_app.value, op_.from_',
-     '        fwd = signed_by(self.account_app.value, op_.from_', REPLAY),
-    ('D56 revoke: signature', D, 'fwd = signed_by(self.account_app.value, op_.from_, digest(op_), auth, rest(UInt64(0)))',
-     'fwd = UInt64(0)', REV),
+    ('D55 revoke: envelope', D, '        check_envelope(op_)\n        fwd = signed_by(self.account_app.value, '
+     'arc4.arc4_signature(VERIFY_KEY)', '        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY)',
+     REPLAY),
+    ('D56 revoke: signature', D, 'fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op_.from_, '
+     'digest(op_), auth,\n                        rest(UInt64(0)))', 'fwd = UInt64(0)', REV),
+    ('D56b revoke under the value policy (m3)', D, 'arc4.arc4_signature(VERIFY_KEY), op_.from_',
+     'arc4.arc4_signature(VERIFY), op_.from_', T + 'test_delegate_policy_passkey_for_value'),
     ('D57 revoke: MBR exactness', D, '''        arc4.emit("Mandate", token, op_.to.id, arc4.String("revoke"), op_.from_)
         mbr_paid(before, fwd)''', '''        arc4.emit("Mandate", token, op_.to.id, arc4.String("revoke"), op_.from_)''', NATIVE),
     ('D58 close: not marked closed', D, 'revoked=arc4.Bool(True))', 'revoked=m.revoked)', REV),
@@ -111,6 +110,7 @@ M = [
      '            send(token, m.terms.payee, left, UInt64(0))', REV),
     ('D61 refund: nothing to refund', D, 'assert m.remaining.as_biguint() > 0, ', AT, REV),
     ('D62 refund: live', D, 'assert Global.latest_timestamp > m.terms.expiry.as_uint64(), ', AT, EXP),
+    ('D62b refund: stray payment kept (m2)', D, '        mbr_paid(before, UInt64(0))  # §2 row 15', '        pass  #', EXP),
     ('D63 refund: at now == expiry', D, 'assert Global.latest_timestamp > m.terms.expiry.as_uint64(), ',
      'assert Global.latest_timestamp >= m.terms.expiry.as_uint64(), ', EXP),
     # state keys, signer routing, authority

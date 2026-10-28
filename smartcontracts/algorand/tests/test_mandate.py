@@ -1,9 +1,10 @@
 """Mandate app on localnet (near-algorand T13; spec §4.7 → §3.6, README §3 item 2, CTR-ACC-06 / CTR-ACC-07; rulings R4,
 R9, R11, T13 pre-flight (a)–(f); parity with the NEAR mandate of Task 7: smartcontracts/near/integration/tests/mandate.rs).
 
-The owner opens a mandate with two ops in one group: the token's `mtx_pay` of `terms.funding` to the mandate app
-address (pay_ref = the mandate id), then — after the open's exact-MBR payment — `mtx_mandate_open(token, op 13, auth,
-terms)`; the delegate signs each `mtx_mandate_pay` (op 2, from = Ua(id), lane payLane(pay_ref), nonce 0) within the
+The owner signs one op to open a mandate (Ruling T13-open, fix 1 C1): a token `mtx_pay` of `terms.funding` with relayer
+= to = the mandate app address, pay_ref = the mandate id, extra = sha256(token ‖ id ‖ terms); only
+`mtx_mandate_open(token, op, auth, terms, fund_mbr)` can execute it (by an inner call, so the token's rule 7 refuses it
+anywhere else); the delegate signs each `mtx_mandate_pay` (op 2, from = Ua(id), lane payLane(pay_ref), nonce 0) within the
 caps, to the payee, until the expiry; the owner or the delegate revokes (op 3); anyone refunds after the expiry. State
 is keyed by (token, id); pay / revoke ops bind the token by `extra = sha256(token id)`."""
 import base64
@@ -30,10 +31,10 @@ MBR_MANDATE = box_mbr(1 + 8 + 32, MANDATE_LEN)      # "m" ‖ token id ‖ manda
 MBR_MLANE = box_mbr(33, 8)                          # "l" ‖ sha256(token id ‖ mandate id ‖ lane) → u64
 # Opcode budget per entry in the minimal group (simulate, no bare budget calls: the app raises its own budget by inner
 # budget calls on the relayer's pooled fee), (consumed, inner app calls) — pinned in runs/2026-10-28-algorand-limits.txt
-BUDGET_PIN = {'open ed25519': (7500, 11), 'open passkey': (9150, 15), 'open native': (6400, 10),
+BUDGET_PIN = {'open ed25519': (4550, 7), 'open passkey': (5350, 10), 'open native': (3800, 7),
               'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7),
               'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9),
-              'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (450, 1)}
+              'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (470, 1)}
 
 PER_PAYMENT = 'over the per-payment cap'
 PER_PERIOD = 'over the per-period cap'
@@ -42,7 +43,7 @@ EXPIRED = 'mandate expired'
 REVOKED = 'mandate revoked'
 PAID = 'pay_ref already paid under this mandate'
 PAY_SHAPE = 'mandate pay shape (pay_ref set, lane = payLane(pay_ref), nonce 0, extra = sha256(token))'
-FUNDING = "funding: the token's mtx_pay must come just before the open's MBR payment"
+TO_RELAYER = 'to and relayer must be the mandate app'
 
 
 def no(*msgs):
@@ -54,7 +55,7 @@ def u64(n):
 
 
 def mandate_id(frm, terms, lane, nonce):
-    """`sha256(ARC-4(from, terms, lane, nonce))` of the open op (a static tuple: the concatenation)."""
+    """`sha256(ARC-4(from, terms, lane, nonce))` of the funding op (a static tuple: the concatenation)."""
     return sha256(bytes([frm[0]]) + bytes(frm[1]), TERMS_T.encode(terms), lane, u64(nonce))
 
 
@@ -115,15 +116,13 @@ class Man(Deployed):
         v = box(self, self.mkey(token, mid))
         return parse(v) if v else None
 
-    def open_op(self, token, owner, terms, lane, nonce, **kw):
-        mid = mandate_id(owner, terms, lane, nonce)
-        o = [genesis(), self.key, 13, list(owner), [1, mid], Z32, terms[6], Z32, lane, nonce, FAR,
-             sha256(u64(token.id), mid, TERMS_T.encode(terms))]
+    def open_op(self, token, owner, terms, at_lane, at_nonce, **kw):
+        """The owner's one signed op: token.mtx_pay of `funding` with relayer = to = this app, pay_ref = the id (from the
+        op's own lane and nonce), extra = sha256(token ‖ id ‖ terms)."""
+        mid = mandate_id(owner, terms, at_lane, at_nonce)
+        o = token.op(tuple(owner), native(self.key), terms[6], pay_ref=mid, lane=at_lane, nonce=at_nonce, relayer=self.key,
+                     extra=sha256(u64(token.id), mid, TERMS_T.encode(terms)))
         return patch(o, kw), mid
-
-    def fund_op(self, token, owner, value, mid, **kw):
-        o = token.op(owner, native(self.key), value, pay_ref=mid, lane=sha256(b'fund', mid))
-        return patch(o, kw)
 
     def pay_op(self, token, mid, payee, value, ref, **kw):
         o = [genesis(), self.key, 2, [1, mid], list(holder(payee)), Z32, value, ref, pay_lane(ref), 0, FAR,
@@ -142,25 +141,23 @@ class Man(Deployed):
             out.append((self, self.mkey(token, mid)))
         return out
 
-    def open(self, relayer, token, owner, terms, lane=b'\xb0' * 32, nonce=0, sign=None, op_kw=None, fund=None,
-             fund_kw=None, mbr='auto', fund_mbr='auto', simulate=False):
-        """`owner` (an `Acct` or a `Key`) funds (`fund` = the funding op, default `fund_op`) and opens."""
+    def open(self, relayer, token, owner, terms, lane=b'\xb0' * 32, nonce=0, sign=None, op_kw=None, mbr='auto',
+             fund_mbr='auto', mbr_delta=0, fund_delta=0, simulate=False):
+        """`owner` (an `Acct` or a `Key`) signs the funding op; the relayer submits [MBR → mandate][mtx_mandate_open]:
+        the mandate box + `fund_mbr` (the token's part, forwarded with the funding) + the payee's new box."""
         oh = holder(owner)
         o, mid = self.open_op(token, oh, terms, lane, nonce, **(op_kw or {}))
-        fo = fund or self.fund_op(token, oh, terms[6], mid, **(fund_kw or {}))
-        fa = sign_as(owner, digest(fo))
         a = (sign or (lambda d: sign_as(owner, d)))(digest(o))
         if fund_mbr == 'auto':
-            fund_mbr = token_mbr(token, fo, fa)
+            fund_mbr = token_mbr(token, o, a)
         if mbr == 'auto':
-            mbr = MBR_MANDATE + (0 if box(token, amount_box(terms[1])) else MBR_BALANCE)
-        items = ([('pay', token.address, fund_mbr)] if fund_mbr else []) + [
-            (token, 'mtx_pay', [fo, fa, ZERO_ADDR], {'apps': [token.account.id]})]
-        items += ([('pay', self.address, mbr)] if mbr is not None else []) + [
-            (self, 'mtx_mandate_open', [token.id, o, a, terms], {'apps': [token.id, token.account.id]})]
+            mbr = MBR_MANDATE + fund_mbr + (0 if box(token, amount_box(terms[1])) else MBR_BALANCE) + mbr_delta
+        items = ([('pay', self.address, mbr)] if mbr is not None else []) + [
+            (self, 'mtx_mandate_open', [token.id, o, a, terms, fund_mbr + fund_delta],
+             {'apps': [token.id, token.account.id]})]
         boxes = self.boxes(token, oh, tuple(terms[1]), mid=mid) + [
-            (token, b'l' + sha256(bytes([fo[3][0]]), bytes(fo[3][1]), fo[8]))]
-        accounts = [encoding.encode_address(bytes(h[1])) for h in (oh, tuple(terms[0])) if h[0] == 0]
+            (token, b'l' + sha256(bytes([o[3][0]]), bytes(o[3][1]), o[8]))]
+        accounts = [encoding.encode_address(bytes(oh[1]))] if oh[0] == 0 else []
         r = send(relayer, self, items, boxes, accounts, simulate)
         return (r, mid) if not simulate else r
 
@@ -195,10 +192,11 @@ class Man(Deployed):
         acc = [encoding.encode_address(bytes(h[1])) for h in (bh, owner) if h[0] == 0]
         return send(relayer, self, items, boxes, acc, simulate)
 
-    def refund(self, relayer, token, mid, simulate=False):
+    def refund(self, relayer, token, mid, simulate=False, mbr=None):
         m = self.get(token, mid)
         owner = m['owner'] if m else (1, mid)
-        return send(relayer, self, [(self, 'mandate_refund', [token.id, mid], {'apps': [token.id]})],
+        return send(relayer, self, ([('pay', self.address, mbr)] if mbr else []) + [
+            (self, 'mandate_refund', [token.id, mid], {'apps': [token.id]})],
                     self.boxes(token, owner, mid=mid), [], simulate)
 
 
@@ -288,11 +286,12 @@ def test_mandate_pay_within_limits(mandate, token, make, relayer):
     h, b = erin.ua(), native(bob)
     fund_ua(token, erin, 1_000)
     terms = mandate.terms(dele.ua(), b, 100, 1_000, 300)
-    with no(FUNDING):                                       # no MBR payment: the shape is broken
-        mandate.open(relayer, token, erin, terms, mbr=None)
-    for m in (MBR_MANDATE - 1, MBR_MANDATE, MBR_MANDATE + MBR_BALANCE - 1, MBR_MANDATE + MBR_BALANCE + 1):
-        with no('MBR payment must equal'):                      # the mandate box + the payee's new balance box
-            mandate.open(relayer, token, erin, terms, mbr=m)
+    # one payment: the mandate box + the token's part (fund_mbr: the owner's lane box, the mandate address's balance
+    # box, the owner's record) + the payee's new balance box; each app checks its own part exactly
+    for kw in ({'mbr': None}, {'mbr_delta': -1}, {'mbr_delta': 1}, {'fund_delta': -1}, {'fund_delta': 1},
+               {'mbr': MBR_MANDATE - 1, 'fund_mbr': 0}):
+        with no('MBR payment must equal'):
+            mandate.open(relayer, token, erin, terms, **kw)
     m0, t0 = mandate.min_balance(), token.min_balance()
     r, mid = mandate.open(relayer, token, erin, terms)
     grew = mandate.min_balance() - m0
@@ -317,8 +316,7 @@ def test_mandate_pay_within_limits(mandate, token, make, relayer):
     assert mandate.min_balance() - m0 == MBR_MLANE and token.account.min_balance() - a0 == lane_rec
     print('mtx_mandate_pay (first, delegate opened): lane box %d µALGO + record %d µALGO forwarded'
           % (MBR_MLANE, lane_rec))
-    assert [n for n, _ in r.own(mandate)] == ['MetaTransactionExecuted', 'PaymentSettled']
-    assert r.own(mandate)[1][1] == [[1, list(mid)], [0, list(bob.key)], 100, [1] * 32]
+    assert r.own(mandate) == [('MandatePaymentSettled', [token.id, [1, list(mid)], [0, list(bob.key)], 100, [1] * 32])]
     assert ('arc200_Transfer', [mandate.address, bob.addr, 100]) in events(token.app, r.logs)
     # the owner's own key is not the delegate
     with no('not a key of the subject'):
@@ -338,24 +336,29 @@ def test_mandate_pay_within_limits(mandate, token, make, relayer):
         mandate.pay(relayer, token, mid, dele, b, 100, b'\x04' * 32)
 
 
-def test_open_funding_equals_op_amount(mandate, token, make, relayer):
-    """R9: the funded amount is op.amount and terms.funding must equal it; the id is bound by `extra` and `to`."""
+def test_open_terms_bound_by_the_funding_op(mandate, token, make, relayer):
+    """Ruling T13-open + R9: the owner's one signed op binds the terms — amount == terms.funding, relayer = to = the
+    mandate app, pay_ref = the id from the op's own lane / nonce, extra = sha256(token ‖ id ‖ terms); the token checks
+    the rest (op code, network, contract, expiry, signature, policy, lane nonce)."""
     erin, dele, bob = EdKey('erin'), EdKey('dele'), make()
     h, b = erin.ua(), native(bob)
     fund_ua(token, erin, 1_000)
     terms = mandate.terms(dele.ua(), b, 100, 250, 300)
     for kw, err in (({'amount': 299}, 'terms.funding must equal op.amount'),
                     ({'extra': Z32}, 'extra is not sha256 of the token, the mandate id and terms'),
-                    ({'to': [1, b'\x07' * 32]}, 'to must be the mandate id'),
-                    ({'pay_ref': b'\x01' * 32}, 'mtx_mandate_open carries no pay_ref'),
-                    ({'op': 0}, 'wrong op code'),
+                    ({'to': [0, bob.key]}, TO_RELAYER), ({'relayer': Z32}, TO_RELAYER),
+                    ({'relayer': relayer.key}, TO_RELAYER),
+                    ({'pay_ref': b'\x07' * 32}, 'pay_ref must be the mandate id'),
+                    ({'lane': b'\xb1' * 32}, 'pay_ref must be the mandate id'),
+                    ({'nonce': 1}, 'pay_ref must be the mandate id'),
+                    ({'op': 4}, 'wrong op code'),
                     ({'network': sha256(b'another genesis')}, 'wrong network'),
-                    ({'contract': sha256(b'another mandate app')}, 'wrong contract'),
-                    ({'valid_until': 1}, 'expired'), ({'relayer': bob.key}, 'relayer is not the sender')):
+                    ({'contract': sha256(b'another token app')}, 'wrong contract'),
+                    ({'valid_until': 1}, 'expired')):
         with no(err):
-            mandate.open(relayer, token, erin, terms, op_kw=kw)
-    with no('not a key of the subject'):                   # the open op signed by another key (the funding by erin)
-        mandate.open(relayer, token, erin, terms, sign=lambda d: EdKey('zed').auth(d))
+            mandate.open(relayer, token, erin, terms, op_kw=kw, fund_mbr=0, mbr=MBR_MANDATE + MBR_BALANCE)
+    with no('the key does not derive the UA id'):         # signed by another key (erin's record not open yet)
+        mandate.open(relayer, token, erin, terms, sign=lambda d: EdKey('zed').auth(d), fund_mbr=MBR_LANE + MBR_BALANCE)
     # the extra binds the token: an open signed for another token
     _, mid = mandate.open_op(token, h, terms, b'\xb0' * 32, 0)
     with no('extra is not sha256 of the token'):
@@ -372,23 +375,22 @@ def test_open_funding_equals_op_amount(mandate, token, make, relayer):
         with no(err):
             mandate.open(relayer, token, erin, tm)
     assert bal(token, h) == 1_000, 'nothing moved'
-    r, mid = mandate.open(relayer, token, erin, terms)
-    # the same open again: the mandate exists (one-shot); a second funding cannot top it up
-    with no('mandate exists'):
-        mandate.open(relayer, token, erin, terms, fund_kw={'lane': b'\xf2' * 32})
+    mandate.open(relayer, token, erin, terms)
+    with no('mandate exists'):                            # the same open again (one-shot)
+        mandate.open(relayer, token, erin, terms, fund_mbr=0, mbr=MBR_MANDATE)
     assert bal(token, h) == 700
-    # R8: a value op of a POLICY_PASSKEY_FOR_VALUE owner needs a passkey: the open op signed by the ed25519 key is
-    # refused (the funding pay is signed by the passkey), signed by the passkey it opens
+    # R8: a POLICY_PASSKEY_FOR_VALUE owner funds (opens) only with a passkey (the token's account.verify) …
     dave = PasskeyKey('dave-owner')
     token.account.key_op(relayer, 'mtx_add_key', erin, [dave.record(), ORIGIN.encode()], mbr=2 * SLOT)
     token.account.key_op(relayer, 'mtx_set_policy', erin, [POLICY_PASSKEY_FOR_VALUE], nonce=1)
-    o, mid = mandate.open_op(token, h, terms, b'\xb0' * 32, 1)
-    fo = mandate.fund_op(token, h, 300, mid)
     with no('POLICY_PASSKEY_FOR_VALUE'):
-        _open_signed(mandate, relayer, token, h, terms, 1, fo, dave.auth(digest(fo)), erin.auth(digest(o)))
+        mandate.open(relayer, token, erin, terms, nonce=1)
     assert bal(token, h) == 700
-    _open_signed(mandate, relayer, token, h, terms, 1, fo, dave.auth(digest(fo)), dave.auth(digest(o)))
+    mid2 = mandate.open(relayer, token, erin, terms, nonce=1, sign=lambda d: dave.auth(d))[1]
     assert bal(token, h) == 400
+    # … but revokes with any of its keys: the kill switch is not a value op (fix 1 m3, NEAR's rule)
+    mandate.revoke(relayer, token, mid2, erin)
+    assert bal(token, h) == 700
 
 
 def token_mbr(token, o, a):
@@ -400,77 +402,34 @@ def token_mbr(token, o, a):
     return need
 
 
-def _open_signed(mandate, relayer, token, h, terms, nonce, fo, fa, a, mbr=MBR_MANDATE, fund_mbr=MBR_LANE,
-                 simulate=False):
-    """An open whose two signatures are given (`fa` the funding pay's, `a` the open op's)."""
-    o, mid = mandate.open_op(token, h, terms, b'\xb0' * 32, nonce)
-    items = ([('pay', token.address, fund_mbr)] if fund_mbr else []) + [
-        (token, 'mtx_pay', [fo, fa, ZERO_ADDR], {'apps': [token.account.id]})]
-    items += ([('pay', mandate.address, mbr)] if mbr else []) + [
-        (mandate, 'mtx_mandate_open', [token.id, o, a, terms], {'apps': [token.id, token.account.id]})]
-    boxes = mandate.boxes(token, h, tuple(fo[3]), tuple(terms[1]), mid=mid) + [
-        (token, b'l' + sha256(bytes([fo[3][0]]), bytes(fo[3][1]), fo[8]))]
-    return send(relayer, mandate, items, boxes, [], simulate)
-
-
-def test_funding_pay_checked(mandate, token, dispenser, make, relayer):
-    """T13 ruling (a): the owner's token `mtx_pay` to the mandate app address, in the same group just before the
-    open's MBR payment, amount == terms.funding, from == owner, pay_ref == the mandate id, on the named token."""
-    erin, dele, bob, zed = EdKey('erin'), EdKey('dele'), make(), EdKey('zed')
-    h, b = erin.ua(), native(bob)
+def test_funding_only_through_the_open(mandate, token, probe, make, relayer):
+    """Fix 1 C1 (reproducer): the owner's funding op names the mandate app as relayer, so the token's rule 7 refuses
+    it at the top level and through any other app (the probe: a router or DEX stand-in) — nothing moves, nothing is
+    stranded; only the open executes it. The token's part of the MBR (`fund_mbr`) is split exactly."""
+    erin, dele, bob = EdKey('erin'), EdKey('dele'), make()
+    h = erin.ua()
     fund_ua(token, erin, 1_000)
-    fund_ua(token, zed, 1_000)
-    terms = mandate.terms(dele.ua(), b, 100, 250, 300)
-    _, mid = mandate.open_op(token, h, terms, b'\xb0' * 32, 0)
-    for kw, err in (({'amount': 299}, 'funding: amount must equal terms.funding'),
-                    ({'amount': 301}, 'funding: amount must equal terms.funding'),
-                    ({'to': [0, bob.key]}, 'funding: to must be the mandate app'),
-                    ({'pay_ref': b'\x09' * 32}, 'funding: pay_ref must be the mandate id')):
-        with no(err):
-            mandate.open(relayer, token, erin, terms, fund_kw=kw)
-    # funded by someone else (zed signs his own pay of the same amount)
-    fo = mandate.fund_op(token, zed.ua(), 300, mid)
-    with no('funding: from must be the owner'):
-        _open_signed(mandate, relayer, token, h, terms, 0, fo, zed.auth(digest(fo)),
-                     erin.auth(digest(mandate.open_op(token, h, terms, b'\xb0' * 32, 0)[0])),
-                     fund_mbr=token_mbr(token, fo, zed.auth(digest(fo))))
-    # the funding pay on another token (the open names `token`)
-    token2 = make_token(dispenser, make, token.account)
-    fund_ua(token2, erin, 1_000)
-    o, _ = mandate.open_op(token, h, terms, b'\xb0' * 32, 0)
-    fo = mandate.fund_op(token2, h, 300, mid)
-    items = [('pay', token2.address, token_mbr(token2, fo, erin.auth(digest(fo)))),
-             (token2, 'mtx_pay', [fo, erin.auth(digest(fo)), ZERO_ADDR], {'apps': [token.account.id]}),
-             ('pay', mandate.address, MBR_MANDATE + MBR_BALANCE),
-             (mandate, 'mtx_mandate_open', [token.id, o, erin.auth(digest(o)), terms], {'apps': [token.id, token.account.id]})]
-    boxes = mandate.boxes(token, h, b, mid=mid) + [(token2, b'b' + mandate.key), (token2, b'u' + erin.id),
-                                                   (token2, b'l' + sha256(b'\x01', erin.id, fo[8]))]
-    with no(FUNDING):
-        send(relayer, mandate, items, boxes, [])
-    # another entry than mtx_pay (an mtx_transfer moves the same funds, but is not the funding)
-    fo = mandate.fund_op(token, h, 300, Z32, op=4)
-    items = [('pay', token.address, token_mbr(token, fo, erin.auth(digest(fo)))),
-             (token, 'mtx_transfer', [fo, erin.auth(digest(fo)), ], {'apps': [token.account.id]}),
-             ('pay', mandate.address, MBR_MANDATE + MBR_BALANCE),
-             (mandate, 'mtx_mandate_open', [token.id, o, erin.auth(digest(o)), terms], {'apps': [token.id, token.account.id]})]
-    with no(FUNDING):
-        send(relayer, mandate, items, mandate.boxes(token, h, b, mid=mid) + [
-            (token, b'l' + sha256(b'\x01', erin.id, fo[8]))], [])
-    # no funding at all; the funding after the MBR payment (not just before it)
-    with no(FUNDING):
-        send(relayer, mandate, [('pay', mandate.address, MBR_MANDATE + MBR_BALANCE),
-                                (mandate, 'mtx_mandate_open', [token.id, o, erin.auth(digest(o)), terms],
-                                 {'apps': [token.id, token.account.id]})], mandate.boxes(token, h, b, mid=mid), [])
-    fo = mandate.fund_op(token, h, 300, mid)
-    with no(FUNDING):
-        send(relayer, mandate, [('pay', token.address, token_mbr(token, fo, erin.auth(digest(fo)))),
-                                (token, 'mtx_pay', [fo, erin.auth(digest(fo)), ZERO_ADDR], {'apps': [token.account.id]}),
-                                (mandate, 'mtx_mandate_open', [token.id, o, erin.auth(digest(o)), terms],
-                                 {'apps': [token.id, token.account.id]})],
-             mandate.boxes(token, h, b, mid=mid) + [(token, b'l' + sha256(b'\x01', erin.id, fo[8]))], [])
-    assert bal(token, h) == 1_000 and bal(token, native(mandate.key)) == 0
-    mandate.open(relayer, token, erin, terms)
-    assert bal(token, h) == 700 and bal(token, native(mandate.key)) == 300
+    terms = mandate.terms(dele.ua(), native(bob), 100, 250, 300)
+    o, mid = mandate.open_op(token, h, terms, b'\xb0' * 32, 0)
+    a = erin.auth(digest(o))
+    with no('relayer is not the sender'):                 # front-run at the top level, by any relayer
+        token.mtx(relayer, 'mtx_pay', o, a, ZERO_ADDR, mbr=None)
+    with no('relayer is not the sender'):                 # through another app, with itself as the open payee
+        run(relayer, probe, 'pay', [token.id, o, a, probe.address, 0], apps=[token.id, token.account.id],
+            fee_extra=FEE_CREDIT)
+    assert (bal(token, h), bal(token, native(mandate.key)), mandate.get(token, mid)) == (1_000, 0, None)
+    for kw in ({'fund_delta': -1}, {'fund_delta': 1}):    # the token's part off by one (the total unchanged)
+        with no('MBR payment must equal'):
+            mandate.open(relayer, token, erin, terms, **kw)
+    r, mid2 = mandate.open(relayer, token, erin, terms)
+    assert mid2 == mid and (bal(token, h), bal(token, native(mandate.key))) == (700, 300)
+    tev = events(token.app, r.logs)                       # the token paid the open payee: the mandate app itself
+    assert ('PaymentSettled', [[1, list(erin.id)], [0, list(mandate.key)], 300, list(mid)]) in tev
+    with no('mandate exists'):                            # replay through the open
+        mandate.open(relayer, token, erin, terms, fund_mbr=0, mbr=MBR_MANDATE)
+    with no('relayer is not the sender'):                 # replay at the top level
+        token.mtx(relayer, 'mtx_pay', o, a, ZERO_ADDR, mbr=None)
+    assert bal(token, h) == 700
 
 
 def test_limits_exceeded_refused(mandate, token, make, relayer):
@@ -532,6 +491,8 @@ def test_expired_refused(mandate, token, make, relayer):
     advance(1)
     with no(EXPIRED):
         mandate.pay(relayer, token, mid, dele, b, 10, b'\x01' * 32)
+    with no('MBR payment must equal'):                                  # a stray payment is refused (fix 1 m2)
+        mandate.refund(relayer, token, mid, mbr=1)
     m0 = mandate.min_balance()
     r = mandate.refund(make(1_000_000), token, mid)                     # anyone; no box, no MBR
     assert mandate.min_balance() == m0
@@ -555,8 +516,8 @@ def test_expired_refused(mandate, token, make, relayer):
 
 
 def test_delegate_policy_passkey_for_value(mandate, token, make, relayer):
-    """R8 for the pay: the delegate's own POLICY_PASSKEY_FOR_VALUE binds its mandate pays (and, on Algorand, its
-    revoke: `account.verify` is the value-op check)."""
+    """R8 for the pay: the delegate's own POLICY_PASSKEY_FOR_VALUE binds its mandate pays, never its revoke (the kill
+    switch is not a value op: fix 1 m3, as NEAR)."""
     erin, dele, pk, bob = EdKey('erin'), EdKey('dele'), PasskeyKey('dele-pk'), make()
     d, b = dele.ua(), native(bob)
     mid = opened(mandate, relayer, token, erin, 1_000, mandate.terms(d, b, 100, 250, 300))
@@ -568,9 +529,7 @@ def test_delegate_policy_passkey_for_value(mandate, token, make, relayer):
     assert bal(token, native(mandate.key)) == 300
     mandate.pay(relayer, token, mid, dele, b, 10, b'\x01' * 32, sign=lambda x: pk.auth(x))
     assert (bal(token, b), mandate.get(token, mid)['remaining']) == (10, 290)
-    with no('POLICY_PASSKEY_FOR_VALUE'):
-        mandate.revoke(relayer, token, mid, dele)
-    mandate.revoke(relayer, token, mid, dele, sign=lambda x: pk.auth(x))
+    mandate.revoke(relayer, token, mid, dele)                    # its ed25519 key
     assert bal(token, erin.ua()) == 990
 
 
@@ -659,7 +618,7 @@ def test_native_owner_ua_payee(mandate, token, make, relayer):
     alice, dele, payee = token.alice, make(), EdKey('payee')
     terms = mandate.terms(native(dele), payee.ua(), 100, 250, 300)
     t0 = token.min_balance()
-    r, mid = mandate.open(relayer, token, alice, terms, mbr=MBR_MANDATE + MBR_UA)
+    r, mid = mandate.open(relayer, token, alice, terms)
     assert token.min_balance() - t0 == MBR_BALANCE + MBR_LANE + MBR_UA     # mandate address, funding lane, payee UA
     assert bal(token, alice) == 1_000_000 - 300 and view(token, 'ua_balance_of', payee.id) == 0
     with no('MBR payment must equal'):                     # native delegate: exactly the lane box, nothing more
@@ -673,7 +632,7 @@ def test_native_owner_ua_payee(mandate, token, make, relayer):
     mandate.revoke(relayer, token, mid, alice)
     assert bal(token, alice) == 1_000_000 - 30
     # a payee box that exists: the open forwards nothing to the token
-    r, mid = mandate.open(relayer, token, alice, terms, nonce=1, mbr=MBR_MANDATE)
+    r, mid = mandate.open(relayer, token, alice, terms, nonce=1)
     assert mandate.get(token, mid)['remaining'] == 300
 
 
@@ -734,19 +693,19 @@ def test_fake_token_cannot_touch_other_funds(mandate, token, make, relayer):
     fake = Tok(token.app, info['application-index'])
     fake.account = token.account
     fund(relayer, fake.address, 100_000)
-    mallory = EdKey('mallory')
-    token.account.key_op(relayer, 'mtx_set_guardian', mallory, [NONE_HOLDER], mbr=rec_mbr(1))   # its record exists
-    huge = mandate.terms(mallory.ua(), native(make()), 10**6, 10**6, 10**6)
-    o, fmid = mandate.open_op(fake, mallory.ua(), huge, b'\xb0' * 32, 0)
-    fo = mandate.fund_op(fake, mallory.ua(), 10**6, fmid)
-    items = [(fake, 'mtx_pay', [fo, b'', ZERO_ADDR], {}), ('pay', mandate.address, MBR_MANDATE),
-             (mandate, 'mtx_mandate_open', [fake.id, o, mallory.auth(digest(o)), huge], {'apps': [fake.id, token.account.id]})]
-    send(relayer, mandate, items, [(mandate, mandate.mkey(fake, fmid)), (token.account, token.account.name(mallory.ua()))],
-         [])
+    mallory, merchant = EdKey('mallory'), make()
+    huge = mandate.terms(mallory.ua(), native(merchant), 10**6, 10**6, 10**6)
+    r, fmid = mandate.open(relayer, fake, mallory, huge, fund_mbr=0, mbr=MBR_MANDATE)
     assert mandate.get(fake, fmid)['remaining'] == 10**6
+    assert r.own(mandate) == [('Mandate', [fake.id, list(fmid), 'open', [1, list(mallory.id)]])]
     real0 = bal(token, native(mandate.key))
-    mandate.pay(relayer, fake, fmid, mallory, tuple(huge[1]), 10**6, b'\x01' * 32)
-    mandate.revoke(relayer, fake, fmid, mallory)
+    # fix 1 I1 (reproducer): the pay on the fake token logs the fake token's id, so it books nothing for the real one
+    r = mandate.pay(relayer, fake, fmid, mallory, tuple(huge[1]), 10**6, b'\x01' * 32)
+    assert r.own(mandate) == [('MandatePaymentSettled', [fake.id, [1, list(fmid)], [0, list(merchant.key)], 10**6,
+                                                         [1] * 32])]
+    assert bal(token, native(merchant)) == 0
+    r = mandate.revoke(relayer, fake, fmid, mallory)
+    assert r.own(mandate)[0][1][:3] == [fake.id, list(fmid), 'revoke']
     assert bal(token, native(mandate.key)) == real0 == 300
     # the fake mandate's id has no state under the real token
     with no('no such mandate'):

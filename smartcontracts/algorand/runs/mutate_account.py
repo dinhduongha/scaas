@@ -84,9 +84,11 @@ M = [
     ('M37 POLICY_PASSKEY_FOR_VALUE', A, 'assert mode != 1, ', 'assert True, ',
      TA + 'test_policy_passkey_for_value'),
     ('M38 verify: lazy-open MBR unchecked', A,
-     '''        if opened:
+     '''        rec, opened = value_signed(h, digest, auth)
+        if opened:
             put(h, rec)
-        mbr_paid(before, UInt64(0))''', '''        if opened:
+        mbr_paid(before, UInt64(0))''', '''        rec, opened = value_signed(h, digest, auth)
+        if opened:
             put(h, rec)''',
      TA + 'test_token_ua_pay_via_account_verify'),
     ('M39 key op MBR unchecked (add_key)', A, '''        save(op_.from_, rec, String("add_key"))

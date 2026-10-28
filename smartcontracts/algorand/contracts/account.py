@@ -119,6 +119,19 @@ class AccountApp(arc4.ARC4Contract, name="Account"):
         mbr_paid(before, UInt64(0))
         return True
 
+    @arc4.abimethod
+    def verify_key(self, holder_kind: arc4.UInt8, holder: Bytes32, digest: Bytes32, auth: Bytes) -> bool:
+        """`verify` for an op that moves no value (a mandate revoke: the kill switch): POLICY_PASSKEY_FOR_VALUE does not
+        apply (NEAR's revoke rule, one rule for every family). Opens an unknown UA's record as `verify` does."""
+        before = Global.current_application_address.min_balance
+        ensure_budget(COST_ENTRY, OpUpFeeSource.GroupCredit)
+        h = Holder(holder_kind, holder)
+        rec, opened, _mode = signed(h, digest, auth)
+        if opened:
+            put(h, rec)
+        mbr_paid(before, UInt64(0))
+        return True
+
     @arc4.abimethod(readonly=True)
     def verify_mbr(self, holder_kind: arc4.UInt8, holder: Bytes32, digest: Bytes32, auth: Bytes) -> UInt64:
         """`verify`'s checks, no write: the MBR its lazy open needs (0 when the record exists)."""
