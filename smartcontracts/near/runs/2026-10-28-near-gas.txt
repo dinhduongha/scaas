@@ -72,3 +72,8 @@ GAS relay_fee_invalidate_nonces: 5.186 Tgas burnt (margin 294.814 Tgas to 300); 
 GAS relay_fee_invalidate_nonces: 24.749 Tgas burnt (margin 275.251 Tgas to 300); storage charged 484 B, grown 463 B
 # rows in test order (alphabetical): near_relay_fee_two_passkey_within_300_tgas (mandate_open, separate payer: the costliest two-passkey wrapper), relay_fee_*_ok (relay_fee_mandate_open_ok: the owner pays its own fee, 45.449), relay_fee_msig_cap_fits_300_tgas (12-passkey msig entry + passkey payment), then wrapper_bound_payee_paid_directly (ed25519 entry, secp256k1 payment, 5.112), wrapper_open_mode_pays_predecessor (same, 5.186), wrapper_payment_policy_passkey_for_value (ed25519 entry, passkey payment, 24.749)
 rc=0
+
+# T9 fix 1 (review m2) at commit 9cdce144 + fix 1: relay_fee_msig_cap_fits_300_tgas on the costliest wrapper relay_fee_mandate_open (12-passkey msig owner, all signing, + passkey payment), 300 Tgas prepaid; supersedes the 265.559 Tgas invalidate_nonces figure above
+GAS msig-cap (12 passkey signatures) + passkey payment, relay_fee_mandate_open: 266.772 Tgas burnt, margin 33.228 Tgas to 300
+GAS relay_fee_mandate_open: 266.772 Tgas burnt (margin 33.228 Tgas to 300); storage charged 1500 B, grown 1479 B
+rc=0

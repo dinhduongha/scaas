@@ -4,6 +4,7 @@
 //! mtx_<entry> ‖ Borsh(entry arguments)) ‖ pay_op.extra)`. Open mode (`to` = the token) pays the submitting relayer, a
 //! bound payee is paid directly. Every wrapper here is signed by passkeys on both sides (the two-passkey case of R1) and
 //! submitted with 300 Tgas prepaid. One sandbox per test.
+#![allow(unused_must_use)] // `relay` asserts success itself; only the gas tests read its result
 mod common;
 use common::*;
 use scaas_near_common::hash::{hex, pay_lane, relay_ref};
@@ -385,7 +386,8 @@ async fn wrapper_bound_payee_paid_directly() {
     assert!(!t.registered(&t.relayer).await, "the submitting relayer is not paid");
 }
 
-/// Spec §3.8: a refused entry (a cancel of a filled order) panics, so nothing is paid.
+/// Spec §3.8: a refused entry panics, so nothing is paid — a cancel of a filled order, and the no-op wrappers (review
+/// T9 m4): a cancel of an already-cancelled order, a revoke of an already-revoked mandate.
 #[tokio::test]
 async fn refused_entry_pays_nothing() {
     let (t, pa, py) = two().await;
@@ -397,6 +399,24 @@ async fn refused_entry_pays_nothing() {
     let pay = t.pay_op(&py.ua(), &t.marker(), FEE, t.fee_ref(&e, SALT), SALT);
     t.fee_refused(&t.relayer, &e, &pay, &py.sign(&pay, ORIGIN), "order filled: cancel refused").await;
     assert_eq!(t.subject(&h).await, None, "the entry wrote nothing (no lazy open)");
+    // cancel of an order already cancelled (plain mtx_cancel first)
+    let p = b(&([0xc0u8; 32], 6u64));
+    let op = t.op(OP_CANCEL, &h, &h, 0, &p);
+    t.ok(&t.relayer, "mtx_cancel", &op, &pa.sign(&op, ORIGIN), &p).await;
+    let e = t.entry("cancel", &pa, op, p);
+    let pay = t.pay_op(&py.ua(), &t.marker(), FEE, t.fee_ref(&e, SALT), SALT);
+    t.fee_refused(&t.relayer, &e, &pay, &py.sign(&pay, ORIGIN), "order already cancelled").await;
+    // revoke of a mandate already revoked (plain mtx_revoke first)
+    t.fund(&h, 1_000).await;
+    let terms = t.terms(&Signer::ed("dele").ua(), 1_000);
+    let (op, id) = t.open_op(&h, &terms);
+    t.ok(&t.relayer, "mtx_mandate_open", &op, &pa.sign(&op, ORIGIN), &b(&terms)).await;
+    let op = t.op(OP_REVOKE, &h, &Holder::Ua(id), 0, &[]);
+    t.ok(&t.relayer, "mtx_revoke", &op, &pa.sign(&op, ORIGIN), &[]).await;
+    let e = t.entry("revoke", &pa, op, vec![]);
+    let pay = t.pay_op(&py.ua(), &t.marker(), FEE, t.fee_ref(&e, SALT), SALT);
+    t.fee_refused(&t.relayer, &e, &pay, &py.sign(&pay, ORIGIN), "mandate revoked").await;
+    assert_eq!(t.balance(&py.ua()).await, 1_000, "the payer paid nothing across the three refusals");
 }
 
 /// Shape (spec §3.8, R2): `pay_ref = ref`, `lane = payLane(ref)`, nonce 0, `relayer` = the token, op 0 — each violation
@@ -476,8 +496,9 @@ async fn near_relay_fee_two_passkey_within_300_tgas() {
     println!("GAS two-passkey relay_fee_mandate_open: {:.3} Tgas burnt, margin {:.3} Tgas to 300", tgas(&out), 300.0 - tgas(&out));
 }
 
-/// R1: entry auth = an msig of `MSIG_MAX_MEMBERS` (12) passkey members, all signing (threshold 12), plus a passkey
-/// payment: fits 300 Tgas.
+/// R1: the costliest wrapper (`relay_fee_mandate_open`, review T9 m2) with entry auth = an msig of `MSIG_MAX_MEMBERS`
+/// (12) passkey members, all signing (threshold 12), owning and funding the mandate, plus a passkey payment: fits 300
+/// Tgas.
 #[tokio::test]
 async fn relay_fee_msig_cap_fits_300_tgas() {
     let t = setup().await;
@@ -489,10 +510,12 @@ async fn relay_fee_msig_cap_fits_300_tgas() {
     let body: Vec<u8> = ms.iter().flat_map(|s| [&ua::KIND_WEBAUTHN_P256.to_be_bytes()[..], &s.key().id(), &[0, 1]].concat()).collect();
     let kd = [&[0u8, n, 0, n][..], &body].concat();
     let m = Holder::Ua(ua::ua_of(KIND_MSIG, &kd));
-    let p = b(&([0xc0u8; 32], 10u64));
-    let op = t.op(OP_INVALIDATE_NONCES, &m, &m, 0, &p);
+    t.fund(&m, 1_000).await;
+    let terms = t.terms(&Signer::ed("dele").ua(), 1_000);
+    let (op, id) = t.open_op(&m, &terms);
     let auth = Auth::Msig { key_data: kd.clone(), sigs: ms.iter().enumerate().map(|(i, s)| (i as u8, s.sign(&op, ORIGIN))).collect() };
-    let e = Entry { name: "invalidate_nonces", op, auth, params: p };
+    let e = Entry { name: "mandate_open", op, auth, params: b(&terms) };
     let out = t.relay(&t.relayer, &e, &py, &t.marker()).await;
-    println!("GAS msig-cap ({n} passkey signatures) + passkey payment, relay_fee_invalidate_nonces: {:.3} Tgas burnt, margin {:.3} Tgas to 300", tgas(&out), 300.0 - tgas(&out));
+    assert_eq!(t.balance(&Holder::Ua(id)).await, 1_000, "the mandate funded");
+    println!("GAS msig-cap ({n} passkey signatures) + passkey payment, relay_fee_mandate_open: {:.3} Tgas burnt, margin {:.3} Tgas to 300", tgas(&out), 300.0 - tgas(&out));
 }
