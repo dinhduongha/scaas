@@ -668,7 +668,8 @@ async fn settle_short_gas_refused() {
     let out = d.settle_gas(&d.t.relayer, &a, &bl, need).await;
     assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
     assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
-    d.legs_within(&out, &a, &bl);
+    let [la, lb] = d.legs_within(&out, &a, &bl);
+    println!("settle_short_gas_refused: ed25519 legs {la:.3} Tgas (erin, UA opened lazily) / {lb:.3} Tgas (bob), leg_gas 7 Tgas");
 }
 
 /// Ruling (T8 pre-flight): `settle`'s gas pinned — two passkey legs (the costliest single-key kind), both paid out, at
@@ -762,4 +763,39 @@ async fn settle_msig_leg_gas_limit() {
     assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await), (100, 60));
     println!("settle_msig_leg_gas_limit: 10-signature passkey msig leg {lm:.3} Tgas (leg_gas {} Tgas), ed25519 leg {le:.3} Tgas; \
         total {:.3} Tgas at 300 prepaid; 11 signatures refused (settle_gas 315 Tgas)", leg_gas(&a10.auth).as_tgas(), tgas(&out));
+}
+
+/// Review T8-M4: a passkey signature with clientDataJSON or authenticatorData over 1024 bytes (`PASSKEY_FIELD_MAX`),
+/// directly or as an msig member, is refused at `settle` before any write or promise; nothing moves.
+#[tokio::test]
+async fn settle_passkey_field_cap_refused() {
+    let d = setup_dex().await;
+    let (pa, bobk) = (Signer::pk(7, RP), Signer::ed("bobk"));
+    let (ha, bob) = (pa.ua(), d.t.near(&d.t.bob));
+    d.fund(&d.t.token, &ha, 100).await;
+    d.fund(&d.b, &bob, 60).await;
+    d.native_key(&d.b, &d.t.bob, &bobk).await;
+    let a = d.leg(&pa, &ha, d.order(true, 100, 50), [0xa0; 32], 0);
+    let bl = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 0);
+    let pad = |cd: usize, ad: usize| {
+        let mut l = a.clone();
+        if let Auth::Passkey { client_data_json, authenticator_data, .. } = &mut l.auth {
+            client_data_json.resize(cd.max(client_data_json.len()), b' ');
+            authenticator_data.resize(ad.max(authenticator_data.len()), 0);
+        }
+        l
+    };
+    let in_msig = |l: L| L { auth: Auth::Msig { key_data: vec![], sigs: vec![(0, l.auth.clone())] }, ..l };
+    let cap = "passkey clientDataJSON / authenticatorData over 1024 bytes";
+    for (name, l) in [("clientDataJSON 1025 B", pad(1025, 0)), ("authenticatorData 1025 B", pad(0, 1025)), ("msig member", in_msig(pad(1025, 0)))] {
+        let out = d.settle(&d.t.relayer, &l, &bl).await;
+        assert!(failed_with(&out, cap), "{name}: {:?}", out.failures());
+        let out = d.settle(&d.t.relayer, &bl, &l).await;
+        assert!(failed_with(&out, cap), "{name}, either side: {:?}", out.failures());
+    }
+    assert_eq!((d.bal(&d.t.token, &ha).await, d.bal(&d.b, &bob).await), (100, 60), "nothing moved");
+    assert_eq!(d.pending(settle_id(&a.op, &bl.op)).await, None, "nothing held");
+    // the real assertion (well under the cap) settles
+    let out = d.settle(&d.t.relayer, &a, &bl).await;
+    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
 }

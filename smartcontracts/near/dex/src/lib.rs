@@ -153,6 +153,26 @@ pub fn settle_gas(auth_a: &Auth, auth_b: &Auth) -> Gas {
     )
 }
 
+/// Largest `client_data_json` / `authenticator_data` of a passkey signature on a trade leg (review T8-M4, controller
+/// ruling). `leg_gas` budgets a passkey at a fixed 25 Tgas, but its verify cost grows with these sizes (scan and
+/// sha256 of clientDataJSON, sha256 of authenticatorData ‖ hash); real assertions are ≈ 400 B. Without the cap a maker
+/// could sign padded assertions that run the leg out of gas (deposit share stranded at the DEX).
+pub const PASSKEY_FIELD_MAX: usize = 1024;
+
+/// Every passkey signature of `auth` (directly or as an msig member) within `PASSKEY_FIELD_MAX`.
+fn passkey_fields(auth: &Auth) -> R<()> {
+    match auth {
+        Auth::Passkey { authenticator_data: ad, client_data_json: cd, .. } => {
+            if cd.len() > PASSKEY_FIELD_MAX || ad.len() > PASSKEY_FIELD_MAX {
+                return Err("passkey clientDataJSON / authenticatorData over 1024 bytes");
+            }
+            Ok(())
+        }
+        Auth::Msig { sigs, .. } => sigs.iter().try_for_each(|(_, a)| passkey_fields(a)),
+        Auth::Ed25519 { .. } | Auth::Secp256k1 { .. } => Ok(()),
+    }
+}
+
 /// `sha256(digest(op_a) ‖ digest(op_b))` (ruling, T8 pre-flight).
 pub fn settle_id(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
     env::sha256_array([&a[..], b].concat())
@@ -213,6 +233,7 @@ impl Dex {
         let legs = leg(&order_a, &op_a, &me, &caller)
             .and_then(|a| Ok([a, leg(&order_b, &op_b, &me, &caller)?]))
             .and_then(|l| pair(&order_a, &order_b).map(|_| l))
+            .and_then(|l| passkey_fields(&auth_a).and(passkey_fields(&auth_b)).map(|_| l))
             .unwrap_or_else(|e| env::panic_str(e));
         // Ruling T8-I2: refused before any write or promise (nothing held, no leg can run out of gas).
         require!(env::prepaid_gas() >= settle_gas(&auth_a, &auth_b), "prepaid gas below the settle minimum (legs + callback)");
@@ -415,6 +436,18 @@ mod tests {
         dex.on_refund([7; 32]);
         assert!(get_created_receipts().is_empty(), "done entry: on_refund must not refund");
         assert!(dex.settles.get(&[7; 32]).is_none(), "pruned");
+    }
+
+    /// M4: a passkey field over 1024 bytes is refused, directly or as an msig member; 1024 is accepted.
+    #[test]
+    fn passkey_field_cap() {
+        let pk = |cd: usize, ad: usize| Auth::Passkey { key: [0; 64], authenticator_data: vec![0; ad], client_data_json: vec![0; cd], sig: [0; 64] };
+        let err = Err("passkey clientDataJSON / authenticatorData over 1024 bytes");
+        assert_eq!(passkey_fields(&pk(1024, 1024)), Ok(()));
+        assert_eq!((passkey_fields(&pk(1025, 37)), passkey_fields(&pk(400, 1025))), (err, err));
+        let ed = Auth::Ed25519 { key: [0; 32], sig: [0; 64] };
+        let m = |p: Auth| Auth::Msig { key_data: vec![], sigs: vec![(0, ed.clone()), (1, p)] };
+        assert_eq!((passkey_fields(&m(pk(400, 37))), passkey_fields(&m(pk(1025, 37)))), (Ok(()), err));
     }
 
     /// `leg_gas`: base + per signature by kind; an msig counts its member signatures.

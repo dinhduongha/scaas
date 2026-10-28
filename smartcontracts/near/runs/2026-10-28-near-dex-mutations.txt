@@ -84,4 +84,10 @@ KILLED       D12 leg static gas from auth (I2)    settle_msig_leg_gas_limit  | t
         ('D12 leg static gas from auth (I2)', DEX, 'NearToken::from_yoctonear(d), gas, GasWeight(1))', 'NearToken::from_yoctonear(d), { let _ = gas; GAS_LEG_BASE }, GasWeight(1))', 'it', 'settle_msig_leg_gas_limit'),
             if kind == 'it' and f == TOK:  # the restored token wasm, so later dex mutants run against the real token
                 subprocess.run(['bash', '-c', 'cd token && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi'], cwd=NEAR, capture_output=True)
+== fix 2 (at commit 3b1f91ce + Task 8 fix 2)
+KILLED       D13 passkey field cap (M4)           settle_passkey_field_cap_refused  | thread 'settle_passkey_field_cap_refused' (1050749) panicked at integration/tests/dex.rs:792:9:
+KILLED       D13u passkey field cap (M4, unit)    passkey_field_cap  | thread 'tests::passkey_field_cap' (1056096) panicked at dex/src/lib.rs:447:9:
+    added to the harness list:
+        ('D13 passkey field cap (M4)', DEX, 'if cd.len() > PASSKEY_FIELD_MAX || ad.len() > PASSKEY_FIELD_MAX {', 'if false {', 'it', 'settle_passkey_field_cap_refused'),
+        ('D13u passkey field cap (M4, unit)', DEX, 'if cd.len() > PASSKEY_FIELD_MAX || ad.len() > PASSKEY_FIELD_MAX {', 'if false {', 'unit', 'passkey_field_cap'),
 rc=0
