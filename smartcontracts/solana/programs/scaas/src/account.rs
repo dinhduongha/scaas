@@ -538,16 +538,21 @@ pub struct FinishRecovery<'info> {
     pub subject: Account<'info, SmartKeyAccount>,
 }
 
-/// Sau trễ: khoá khôi phục thay MỌI khoá cũ (khoá mất/bị lộ). Không cần quyền — đã hẹn trước 2 ngày, khoá hiện có huỷ
-/// được bằng KeyOp `cancel_recovery`.
+/// After the delay the recovery key is ADDED and no key is removed (CTR-ACC-03, owner ruling 2026-10-28; as EVM /
+/// Sui / Aptos): the owner keeps its keys and sees the new one, and removes a lost or leaked key with a KeyOp. No
+/// authority needed — announced 2 days ahead, a current key cancels with KeyOp `cancel_recovery`. A recovery key that is
+/// already a key, or a full key set, aborts (as Aptos `add_key`). The account never grows: the pending `Recovery` it
+/// drops is larger than the key and origin it adds.
 pub fn finish_recovery(ctx: Context<FinishRecovery>) -> Result<()> {
     let s = &mut ctx.accounts.subject;
     let r = s.recovery.take().ok_or(ScaasError::NoRecovery)?;
     require!(util::now()? >= r.ready_at, ScaasError::TooEarly);
+    require!(!s.keys.iter().any(|k| k.pubkey == r.key.pubkey), ScaasError::BadKey);
+    require!(s.keys.len() < MAX_KEYS, ScaasError::TooMany);
     if !r.origin.is_empty() {
         add_origin(s, &r.origin)?;
     }
-    s.keys = vec![r.key];
+    s.keys.push(r.key);
     s.key_nonce += 1;
     s.check_usable()
 }

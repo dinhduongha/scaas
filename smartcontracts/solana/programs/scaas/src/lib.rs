@@ -374,4 +374,6 @@ pub enum ScaasError {
     RelayFeeShape,
     #[msg("relay-fee: the target is not an executable program")]
     RelayTargetNoCode,
+    #[msg("relay-fee: the call changes nothing (no fee for a no-op)")]
+    RelayCallNoOp,
 }

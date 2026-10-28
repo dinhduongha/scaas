@@ -180,13 +180,35 @@ type Mk = fn(&W, &Ed) -> (Inner, Effect);
 
 /// Every wrapper with the inner signer of its entry (Alice, or the delegate for the revoke) and the exact error of a
 /// replay: the entry's own replay guard when it has one (KeyOp / min-nonce `BadNonce`, the mandate PDA already in use
-/// (System `AccountAlreadyInUse` = 0), the closed mandate (`AccountNotInitialized`)), else the pay lane (`BadNonce`)
-/// for the idempotent revoke and cancel.
+/// (System `AccountAlreadyInUse` = 0), the closed mandate (`AccountNotInitialized`)), and for the revoke and cancel,
+/// idempotent entries, the wrapper's no-op refusal (`RelayCallNoOp`: no fee for a no-op, owner ruling 2026-10-28).
 fn cases() -> Vec<(Mk, bool, u32)> {
     let bad_nonce = code(E::BadNonce);
     let not_init = anchor_lang::error::ErrorCode::AccountNotInitialized as u32;
-    vec![(manage, false, bad_nonce), (mandate_open_call, false, 0), (revoke, true, bad_nonce), (close, false, not_init),
-         (cancel, false, bad_nonce), (invalidate, false, bad_nonce)]
+    let no_op = code(E::RelayCallNoOp);
+    vec![(manage, false, bad_nonce), (mandate_open_call, false, 0), (revoke, true, no_op), (close, false, not_init),
+         (cancel, false, no_op), (invalidate, false, bad_nonce)]
+}
+
+/// One rule (owner ruling 2026-10-28, as Sui / Aptos `ECALL_REFUSED` and TON's refund): no fee for a no-op. A revoke of
+/// a mandate already revoked, or a cancel of an order already closed (here: by an earlier relay; a front-run is the
+/// same state), is refused by the wrapper with a fresh payment too, and the payer is not charged.
+#[test]
+fn wrapper_noop_refused_payer_not_charged() {
+    for (mk, delegate_signs) in [(revoke as Mk, true), (cancel as Mk, false)] {
+        let mut w = world();
+        let signer = if delegate_signs { Ed::new("delegate") } else { Ed::new("alice") };
+        let (inner, effect) = mk(&w, &signer);
+        let lane = w.env.lane.pubkey();
+        let first = pay_args(&w, &inner, 7, None, [1; 32]);
+        ok(send(&mut w, &inner, &Ed::new("alice"), &first, lane));
+        assert!(effect(&w), "{}: the real call ran and was paid", inner.name);
+        let before = payer_balance(&w);
+        let again = pay_args(&w, &inner, 7, None, [2; 32]);
+        expect_err(send(&mut w, &inner, &Ed::new("alice"), &again, lane), E::RelayCallNoOp);
+        assert_eq!(payer_balance(&w), before, "{}: the no-op is not charged", inner.name);
+        assert!(!w.env.exists(&pda(&[b"lane", w.alice.account().as_ref(), &again.lane])), "{}", inner.name);
+    }
 }
 
 fn marker() -> Pubkey {

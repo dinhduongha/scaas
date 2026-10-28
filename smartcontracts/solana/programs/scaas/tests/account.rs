@@ -191,7 +191,8 @@ fn guardian_ixs(env: &Env, guardian: &Pubkey, subject: &Pubkey, key: AuthKey) ->
     (start, finish)
 }
 
-/// Guardian khởi động khôi phục (tx native), chờ 2 ngày; khoá hiện có huỷ được; sau trễ khoá mới thay mọi khoá cũ.
+/// Guardian khởi động khôi phục (tx native), chờ 2 ngày; khoá hiện có huỷ được; sau trễ khoá mới được THÊM, không khoá
+/// nào bị xoá (CTR-ACC-03, owner ruling 2026-10-28, như EVM / Sui / Aptos): chủ vẫn ký được và thấy khoá mới.
 #[test]
 fn guardian_recovery_waits_and_can_be_cancelled() {
     let mut env = Env::new();
@@ -218,7 +219,11 @@ fn guardian_recovery_waits_and_can_be_cancelled() {
     expect_err(env.send(&[finish.clone()], &[]), E::TooEarly);
     env.set_time(NOW + 5 * 86_400 + 1);
     ok(env.send(&[finish], &[]));
-    assert_eq!(env.subject(&acct).keys, vec![fresh.key()]);
+    assert_eq!(env.subject(&acct).keys, vec![alice.key(), fresh.key()], "recovery adds a key and removes none");
+    // the owner's key still signs (at the bumped key nonce: a lifecycle op signed before the recovery is void)
+    let later = |env: &Env| scaas::KeyOp { valid_until: (NOW + 6 * 86_400) as u64, ..env.keyop(&acct, SET_GUARDIAN) };
+    ok(env.manage(&acct, &alice, 0, later(&env), None));
+    ok(env.manage(&acct, &fresh, 1, later(&env), None));
 }
 
 /// Owner OQ1 (mặc định TẮT): bật khi chưa có backup ⇒ từ chối; bật rồi thì không xoá được backup cuối, nhưng thay

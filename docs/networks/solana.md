@@ -276,7 +276,9 @@ assertion.** Owner decision. Rules:
   key, origin, guardian, policy, to, nonce=key_nonce, valid_until}` signed by **one current key**; `action` ∈
   {add_key, remove_key, add_origin, remove_origin, set_guardian, cancel_recovery, set_policy, withdraw_lamports};
   relayed. (2) The guardian (native tx signed with its Solana key) `start_recovery(new_key)`; `finish_recovery` after
-  `RECOVERY_DELAY` = 2 days; a current key can cancel.
+  `RECOVERY_DELAY` = 2 days **adds** the key and removes none (CTR-ACC-03, as EVM / Sui / Aptos; owner ruling 2026-10-28):
+  the owner keeps its keys, sees the new one and removes a lost key with a KeyOp; a recovery key already present or a full
+  key set (8) aborts; `key_nonce` is bumped. A current key can cancel.
 - **Never bricked:** never zero keys; while a P-256 key exists, never zero origins. An assertion whose `rpIdHash` matches
   the key but whose `origin ∉ origins` is accepted for exactly one thing: `KeyOp{action=add_origin, origin = the
   assertion's own origin}` (the origin carried in that assertion). Browsers let only origins of the rpId (or related origins published by the rpId owner) assert
@@ -909,9 +911,10 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   `ref = keccak256("scaas.relayfee" ‖ Config.network ‖ scaas ‖ keccak256(call) ‖ args.extra)`; the lane slot of `call` is the
   marker, so the payer signs before a lane is known and any lane may submit (a payer cannot pin a wrapper payment to one
   lane except by a bound payee). Not wrapped: `open_passkey`, `settle`, the pay entries.
-- **Idempotent entries.** `cancel_signed` and `mandate_revoke_signed` can be front-run by anyone holding the signed bytes; the
-  wrapper still runs (the entry is idempotent) and the payer pays its signed fee once. That is by design (the payer's
-  intent is met either way).
+- **No fee for a no-op (owner ruling 2026-10-28, one rule with Sui / Aptos `ECALL_REFUSED` and TON's refund).**
+  `cancel_signed` and `mandate_revoke_signed` stay idempotent when called directly, but their wrappers refuse a call that
+  changes nothing (`RelayCallNoOp`: the order is already closed, `fill.filled >= sell_amount`; the mandate is already
+  revoked), including after a front-run, so the payer is never charged for it.
 - **Generic `relay_fee`** (external programs): `relay_fee(owner, args, target_data, target_accounts, auth)`; refuses the `scaas`
   program as target (`RelayFeeShape`), any target account flagged signer (the router must lend no authority), and a
   non-executable target (`RelayTargetNoCode`).
