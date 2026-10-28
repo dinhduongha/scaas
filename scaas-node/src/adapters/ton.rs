@@ -1477,11 +1477,8 @@ impl TonAdapter {
         if m.valid_until <= now {
             return Err(SimError::Revert("signed payload expired".into()));
         }
-        // A payment that could expire in transit (two hops: lane, router, payer wallet; E_EXPIRED) bounces at the
-        // relayer's cost: the same floor as the relayed call (Q1); the lane tx expires half of it before the payment.
-        if m.valid_until <= now + RELAY_DEADLINE_S {
-            return Err(SimError::Revert(format!("the payment must stay valid more than {RELAY_DEADLINE_S} s")));
-        }
+        // No validity floor on the payment (owner ruling 2026-10-28, Q1: risk accepted): one that expires in transit
+        // bounces at the relayer's cost.
         // The payer's wallet refuses it (E_TTL) after the router escrowed it: the relayer would pay the bounce (P1).
         if m.valid_until > now + LANE_TTL_S {
             return Err(SimError::Revert("the payment is valid further ahead than LANE_TTL".into()));
@@ -1514,8 +1511,7 @@ impl TonAdapter {
             return Err(SimError::Revert(format!("fee {} × min_ton_value {price} is below the {value} nanoton the relay puts at risk", m.amount)));
         }
         // The lane tx expires before the RelayCall's deadline would (the router refuses a past deadline).
-        Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: (m.valid_until - RELAY_DEADLINE_S / 2).min(rc.deadline as u64),
-            meta: built_meta(&router, value) })
+        Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: m.valid_until.min(rc.deadline as u64), meta: built_meta(&router, value) })
     }
 
     /// A relay-fee job's lane tx: the router's transaction, then the escrow (`get_escrow_state`). Open: pending; past the
@@ -3008,17 +3004,6 @@ mod tests {
         assert!(a.build(&job_of(&o), 0).await.is_ok(), "a payment within the balance and LANE_TTL");
         let far = relay_job_with(25, call(), |m| m.valid_until = crate::submit::now() + LANE_TTL_S + 600).0;
         job_refused_before_send(&a, &sh, &far, "LANE_TTL").await;
-        // Q1: valid for at most the floor: it could expire in transit
-        let soon = relay_job_with(25, call(), |m| m.valid_until = crate::submit::now() + RELAY_DEADLINE_S - 1).0;
-        job_refused_before_send(&a, &sh, &soon, "stay valid more than 600 s").await;
-        // the lane tx expires half the floor before the payment, and never after the relay's deadline
-        let now = crate::submit::now();
-        let (near, nm, _, _) = relay_job_with(25, call(), |m| m.valid_until = now + RELAY_DEADLINE_S + 100);
-        let b = a.build(&job_of(&near), 0).await.unwrap();
-        assert_eq!(b.valid_until, nm.valid_until - RELAY_DEADLINE_S / 2, "min(valid_until - 300, deadline): the payment's side");
-        let b = a.build(&job_of(&o), 0).await.unwrap();
-        assert_eq!(b.valid_until, RelayCall::parse(&boc_parse(&b.body).unwrap()).unwrap().deadline as u64,
-            "min(valid_until - 300, deadline): the deadline's side (valid for an hour)");
         // q1: a balance equal to the amount pays
         sh.lock().unwrap().getters.insert(format!("get_wallet_data@{}", m.contract.raw()), num(25));
         assert!(a.build(&job_of(&o), 0).await.is_ok(), "balance == amount");
