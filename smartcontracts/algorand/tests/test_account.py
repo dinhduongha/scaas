@@ -17,15 +17,15 @@ from conftest import (ACC_BUDGET, ALGOD, CDJ, KEYREC, MBR_BALANCE, MBR_LANE, MBR
 
 ZERO_ADDR = encoding.encode_address(Z32)
 VEC = json.load(open(os.path.join(ROOT, 'vectors', 'algorand-vectors.json')))
-MSIG_MAX_MEMBERS = 4         # account.py; measured by test_msig_cap_fits_limits
+MSIG_MAX_MEMBERS = 3         # account.py; measured by test_msig_cap_fits_limits
 # Opcode budget per signer kind (simulate, pooled), pinned in runs/2026-10-28-algorand-limits.txt
 # (consumed, inner budget calls) in the minimal group
 BUDGET_PIN = {
     'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6),
     'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8),
-    'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 4 passkey': (15800, 24),
+    'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 3 passkey': (12000, 19),
     'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5),
-    'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 4 passkey UA': (16300, 23),
+    'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 3 passkey UA': (12500, 18),
 }
 
 
@@ -432,7 +432,7 @@ def sim_group(sender, calls, mbr=None, fee_extra=FEE_CREDIT):
     atc = group(sender, calls, mbr=mbr, fee_extra=fee_extra)
     r = atc.simulate(ALGOD, models.SimulateRequest(txn_groups=[], allow_unnamed_resources=True))
     g = r.simulate_response['txn-groups'][0]
-    return g.get('app-budget-consumed'), g.get('app-budget-added'), (explain(r.failure_message)[:160]
+    return g.get('app-budget-consumed'), g.get('app-budget-added'), (explain(r.failure_message)
                                                                      if r.failure_message else None)
 
 
@@ -441,12 +441,25 @@ def arg_bytes(d, method, args):
     return 4 + sum(len(a.type.encode(v)) for a, v in zip(m.args, args) if not isinstance(a.type, str))
 
 
+# The realistic worst-case assertion (fix 2): Chrome's clientDataJSON with its random extra member and a 64 B origin
+# — 286 B in all (the default test assertion: 134 B)
+LONG_ORIGIN = 'https://checkout.payments.enterprise-wallet.scaas-example.com.vn'
+CHROME_CDJ = CDJ[:-1] + (',"other_keys_can_be_added_here":"do not compare clientDataJSON against a template. '
+                         'See https://goo.gl/yabPex"}')
+
+
+class ChromeKey(PasskeyKey):
+    def auth(self, d, **kw):
+        return PasskeyKey.auth(self, d, **{'origin': LONG_ORIGIN, 'cdj': CHROME_CDJ, **kw})
+
+
 def msig_shapes(account, token, probe, relayer, n, make):
     """The group shapes an all-passkey n-of-n msig's ops take, none with bare budget calls (each app adds inner budget
     calls, fee-pooled by the relayer): S1 its lazily opening mtx_add_key, S2 a token mtx_pay, S3 the T15 relay shape — a
     key op call and, in the same group, a router-like app call (the probe) whose inner token.mtx_pay the same msig
     signed. → {shape: (consumed, added, failure, app-call argument bytes)}."""
-    m = MsigKey(n, [(PasskeyKey('cap-%d-%d' % (n, i)), 1) for i in range(n)])
+    m = MsigKey(n, [(ChromeKey('cap-%d-%d' % (n, i)), 1) for i in range(n)])
+    assert len((CHROME_CDJ % ('x' * 43, LONG_ORIGIN)).encode()) == 286 and len(LONG_ORIGIN) == 64
     new, out = EdKey('cap-new-%d' % n), {}
     o = account.op(6, m.ua(), params=key_params('mtx_add_key', [new.record(), b'']))
     args = [o, m.auth(digest(o)), new.record(), b'']
@@ -471,9 +484,9 @@ def msig_shapes(account, token, probe, relayer, n, make):
 
 def test_msig_cap_fits_limits(account, token, probe, relayer, make):
     """Ruling T12-budget: MSIG_MAX_MEMBERS = min(the 2,048 B app-call argument bound, the budget bound of every real
-    group shape), each shape without bare budget calls. Inner transactions are pooled per group (256), so the budget
-    bound is far away (S3, the T15 entry + payment group, adds ≈ 7.5 k per member against ≈ 180 k); the arguments
-    bind: S1's lazily opening mtx_add_key grows ≈ 342 B per passkey member. The cap msig works in every shape; one
+    group shape), each shape without bare budget calls, every member signing a Chrome-shaped assertion (fix 2: extra
+    member, 64 B origin). Inner transactions are pooled per group (256), so the budget bound is far away; the arguments
+    bind: S1's lazily opening mtx_add_key grows ≈ 494 B per passkey member. The cap msig works in every shape; one
     member more is refused (the cap) and, by the measured step, exceeds 2,048 B. The measure harness
     (runs/measure_msig_cap.py) builds with a higher cap and sets SCAAS_MSIG_MEASURE to tabulate n = 1…5."""
     upto = int(os.environ.get('SCAAS_MSIG_MEASURE', 0))
@@ -481,7 +494,7 @@ def test_msig_cap_fits_limits(account, token, probe, relayer, make):
     res = {n: msig_shapes(account, token, probe, relayer, n, make) for n in ns}
     for n, shapes in res.items():
         for k, (used, added, fail, args) in shapes.items():
-            print('msig %d passkeys %-12s consumed %6s added %6s args %5s %s' % (n, k, used, added, args, fail or 'ok'))
+            print('msig %d passkeys %-12s consumed %6s added %6s args %5s %s' % (n, k, used, added, args, (fail or 'ok')[-160:]))
     print('budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ %d; arguments ≤ 2,048 B'
           % GROUP_INNER)
     if upto:

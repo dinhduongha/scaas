@@ -44,10 +44,12 @@ RECOVERY_DELAY_S = 172_800
 POLICY_PASSKEY_FOR_VALUE = 1
 KEYOP_SET_POLICY = 6
 KEYOP_FINISH_RECOVERY = 7
-# Members per msig (T12 fix 1, Ruling T12-budget): min(the 2,048 B app-call argument bound, the budget bound of every
-# group shape). With inner budget calls (pooled 256 per group) the budget never binds; the arguments do: the lazily
-# opening all-passkey n-of-n mtx_add_key takes 1,712 B at 4 members, 2,054 B at 5 (runs/2026-10-28-algorand-limits.txt).
-MSIG_MAX_MEMBERS = 4
+# Members per msig (T12 fixes 1-2, Ruling T12-budget): min(the 2,048 B app-call argument bound, the budget bound of
+# every group shape), so that a registered msig always signs at its full threshold with real browser assertions. With
+# inner budget calls (pooled 256 per group) the budget never binds; the arguments do: the lazily opening all-passkey
+# n-of-n mtx_add_key with Chrome-shaped assertions (its extra member, a 64 B origin: 286 B clientDataJSON) takes
+# 1,823 B at 3 members, 2,316 B at 4 (runs/2026-10-28-algorand-limits.txt).
+MSIG_MAX_MEMBERS = 3
 PASSKEY_FIELD_MAX = 1024
 # signature costs ensured before each check (common.TAIL added); a passkey's also grows with its clientDataJSON
 COST_SECP256K1 = 2000
