@@ -1,0 +1,122 @@
+# sui at commit 67fa7a45
+== test sui
+INCLUDING DEPENDENCY MoveStdlib
+INCLUDING DEPENDENCY Sui
+BUILDING scaas
+Running Move unit tests
+[debug] 0x2::object::ID {
+  bytes: @0xa4137e2ed945e7f4e8c307001c32e97472fb3eebb8f7b4ab7534b447d22da89b
+}
+[debug] 0x2::object::ID {
+  bytes: @0xd726ecf6f7036ee3557cd6c7b93a49b231070e8eecada9cfa157e40e3f02e5d3
+}
+[debug] @0x4c5e7c0aa01e77f7c83bc1bd0c19fc6fdfd44f12920176c52c005f5f6b90326b
+[debug] @0xefe418838a1646cb7f0a12168dfddaa6353e52e80313e45150fec5539c8431d
+[debug] 0x2::object::ID {
+  bytes: @0x7c9575082976f063e7bfa16aa86ca20e1675b50efa7d5a64d1fa66ce127f5fdf
+}
+[debug] 0x2::object::ID {
+  bytes: @0x168544589e67ec4f3a15a388d1a4ed44eca52abd8ff1c04a1057d2d4f53e3960
+}
+[debug] 0x2::object::ID {
+  bytes: @0x5ef2fcf809fb9535ea0aeaea421f683026f06c34569aafc42bcde652ef6dd270
+}
+[ PASS    ] scaas::mandate_tests::coins_sent_to_the_mandate_id_are_not_stuck
+[ PASS    ] scaas::fixtures::print_ids
+[ PASS    ] scaas::mandate_tests::delegate_kill_switch_stops_payments
+[ PASS    ] scaas::meta_tests::a_key_cancels_the_recovery
+[ PASS    ] scaas::mandate_tests::delegate_pays_within_caps_and_period_resets
+[ PASS    ] scaas::mandate_tests::delegate_signature_binds_the_amount
+[ PASS    ] scaas::mandate_tests::expired_mandate_pays_nothing
+[ PASS    ] scaas::relayfee_tests::marker_is_the_relay_fee_object
+[ PASS    ] scaas::meta_tests::account_id_and_digest_match_python
+[ PASS    ] scaas::mandate_tests::extreme_limits_do_not_overflow
+[ PASS    ] scaas::dex_tests::anti_lock_dex_and_payment_are_independent
+[ PASS    ] scaas::relayfee_tests::relay_cancel_succeeds
+[ PASS    ] scaas::mandate_tests::only_owner_withdraws
+[ PASS    ] scaas::mandate_tests::owner_withdraws_and_revokes
+[ PASS    ] scaas::relayfee_tests::relay_cancel_target_refused_aborts_all
+[ PASS    ] scaas::meta_tests::anti_lock_withheld_op_blocks_nothing
+[ PASS    ] scaas::meta_tests::base64url_matches_rfc4648
+[ PASS    ] scaas::relayfee_tests::relay_invalidate_nonces_succeeds
+[ PASS    ] scaas::meta_tests::cannot_pay_more_than_the_balance
+[ PASS    ] scaas::dex_tests::cancelled_order_never_settles
+[ PASS    ] scaas::relayfee_tests::relay_nonces_target_abort_aborts_all
+[ PASS    ] scaas::mandate_tests::pay_ref_is_paid_once
+[ PASS    ] scaas::meta_tests::coins_sent_to_the_account_id_are_not_stuck
+[ PASS    ] scaas::dex_tests::delisted_market_settles_nothing
+[ PASS    ] scaas::mandate_tests::per_payment_cap_holds
+[ PASS    ] scaas::meta_tests::expired_payload_is_refused
+[ PASS    ] scaas::relayfee_tests::relay_open_mode_pays_sender
+[ PASS    ] scaas::mandate_tests::period_cap_holds
+[debug] 0x2::object::ID {
+  bytes: @0xbfd1d3ac3d6c37f03afe4d7c244e677f9b01fcbff79dae3394640a7944e5f5ab
+}
+[ PASS    ] scaas::mandate_tests::print_mandate_id
+[ PASS    ] scaas::dex_tests::dex_fee_is_taken_from_what_each_side_receives
+[ PASS    ] scaas::meta_tests::guardian_recovers_after_the_delay
+[ PASS    ] scaas::mandate_tests::removed_payee_cannot_be_paid
+[ PASS    ] scaas::meta_tests::key_op_is_not_replayed
+[ PASS    ] scaas::relayfee_tests::relay_payment_abort_aborts_cancel
+[ PASS    ] scaas::dex_tests::expired_order_is_refused
+[ PASS    ] scaas::meta_tests::last_key_cannot_be_removed
+[ PASS    ] scaas::meta_tests::network_is_set_once
+[ PASS    ] scaas::relayfee_tests::relay_payment_abort_aborts_manage
+[ PASS    ] scaas::dex_tests::fee_above_signed_max_is_refused
+[ PASS    ] scaas::meta_tests::nonce_gap_is_refused
+[ PASS    ] scaas::dex_tests::fee_cap_is_one_percent
+[ PASS    ] scaas::dex_tests::fee_off_moves_no_fee
+[ PASS    ] scaas::meta_tests::only_the_guardian_recovers
+[ PASS    ] scaas::meta_tests::passkey_account_cannot_be_opened_without_the_key
+[ PASS    ] scaas::dex_tests::fill_or_kill_fills_whole
+[ PASS    ] scaas::relayfee_tests::relay_payment_abort_aborts_nonces
+[ PASS    ] scaas::dex_tests::fill_or_kill_refuses_partial
+[ PASS    ] scaas::meta_tests::passkey_account_keeps_one_origin
+[ PASS    ] scaas::meta_tests::passkey_account_needs_open_passkey
+[ PASS    ] scaas::relayfee_tests::relay_payment_abort_aborts_revoke
+[ PASS    ] scaas::dex_tests::invalidated_nonce_never_settles
+[ PASS    ] scaas::meta_tests::passkey_from_an_unlisted_origin_is_refused
+[ PASS    ] scaas::relayfee_tests::relay_payment_does_not_cross_wrappers
+[ PASS    ] scaas::relayfee_tests::relay_ref_vectors
+[ PASS    ] scaas::meta_tests::passkey_from_another_origin_is_refused
+[ PASS    ] scaas::relayfee_tests::relay_revoke_pays_bound_payee
+[ PASS    ] scaas::dex_tests::ioc_closes_the_rest
+[ PASS    ] scaas::dex_tests::min_nonce_only_increases
+[ PASS    ] scaas::relayfee_tests::relay_revoke_target_abort_aborts_all
+[ PASS    ] scaas::relayfee_tests::relay_same_ref_pays_once
+[ PASS    ] scaas::meta_tests::passkey_origin_is_added_by_the_key
+[ PASS    ] scaas::dex_tests::never_overfills
+[ PASS    ] scaas::relayfee_tests::relay_target_abort_aborts_all
+[ PASS    ] scaas::meta_tests::passkey_without_user_verification_is_refused
+[ PASS    ] scaas::dex_tests::nonce_invalidation_is_scoped_to_its_market
+[ PASS    ] scaas::relayfee_tests::sui_router_bound_pay_meta_refused_direct
+[ PASS    ] scaas::meta_tests::pay_meta_and_plain_pay_share_one_lane
+[ PASS    ] scaas::relayfee_tests::sui_router_bound_pay_refused_direct
+[ PASS    ] scaas::dex_tests::one_market_per_pair
+[ PASS    ] scaas::meta_tests::pay_meta_emits_meta_then_settled
+[ PASS    ] scaas::dex_tests::order_hash_matches_python
+[ PASS    ] scaas::meta_tests::pay_meta_once_set_is_per_payer
+[ PASS    ] scaas::meta_tests::pay_meta_salt_is_32_bytes
+[ PASS    ] scaas::dex_tests::order_signature_binds_every_field
+[ PASS    ] scaas::meta_tests::pay_meta_vectors_match
+[ PASS    ] scaas::dex_tests::orders_settle_only_on_their_own_market
+[ PASS    ] scaas::meta_tests::pay_with_every_scheme
+[ PASS    ] scaas::dex_tests::partial_fill_at_the_limit_price_moves_both_legs
+[ PASS    ] scaas::meta_tests::recovery_waits_for_the_delay
+[ PASS    ] scaas::dex_tests::price_limit_of_the_maker_holds
+[ PASS    ] scaas::meta_tests::relayer_bound_payload_refuses_other_senders
+[ PASS    ] scaas::dex_tests::price_limit_of_the_taker_holds
+[ PASS    ] scaas::meta_tests::relayer_bound_payload_runs_from_that_relayer
+[ PASS    ] scaas::meta_tests::relayer_cannot_change_the_amount
+[ PASS    ] scaas::meta_tests::removed_key_no_longer_signs
+[ PASS    ] scaas::meta_tests::replay_is_refused
+[ PASS    ] scaas::meta_tests::rotate_key_keeps_the_account
+[ PASS    ] scaas::meta_tests::second_account_for_the_same_subject_is_refused
+[ PASS    ] scaas::meta_tests::second_registry_for_a_coin_type_is_refused
+[ PASS    ] scaas::meta_tests::signature_does_not_cross_contracts
+[ PASS    ] scaas::meta_tests::signature_of_another_subject_is_refused
+[ PASS    ] scaas::meta_tests::sui_pay_meta_mismatch_and_replay
+[ PASS    ] scaas::meta_tests::sui_pay_meta_mismatch_salt
+[ PASS    ] scaas::meta_tests::sui_pay_meta_replay
+Test result: OK. Total tests: 94; passed: 94; failed: 0
+rc=0

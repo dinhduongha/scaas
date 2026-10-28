@@ -1,0 +1,74 @@
+# wasm-zether-prover at commit 67fa7a45
+    Finished `release` profile [optimized] target(s) in 0.07s
+   Compiling wasm-bindgen-shared v0.2.129
+   Compiling syn v3.0.6
+   Compiling rustversion v1.0.23
+   Compiling cfg-if v1.0.5
+   Compiling bumpalo v3.20.3
+   Compiling generic-array v0.14.9
+   Compiling wasm-bindgen v0.2.129
+   Compiling typenum v1.20.1
+   Compiling unicode-ident v1.0.26
+   Compiling once_cell v1.21.4
+   Compiling wasm-bindgen-macro-support v0.2.129
+   Compiling pin-project-lite v0.2.17
+   Compiling futures-core v0.3.34
+   Compiling slab v0.4.12
+   Compiling futures-task v0.3.34
+   Compiling futures-util v0.3.34
+   Compiling zerocopy v0.8.59
+   Compiling wasm-bindgen-macro v0.2.129
+   Compiling js-sys v0.3.106
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling subtle v2.6.1
+   Compiling digest v0.10.7
+   Compiling num-traits v0.2.19
+   Compiling ppv-lite86 v0.2.21
+   Compiling arrayvec v0.7.8
+   Compiling num-integer v0.1.47
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling enum-ordinalize v4.4.2
+   Compiling num-bigint v0.4.8
+   Compiling either v1.18.0
+   Compiling itertools v0.13.0
+   Compiling serde_core v1.0.229
+   Compiling ahash v0.8.12
+   Compiling zeroize v1.9.0
+   Compiling educe v0.6.0
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.8
+   Compiling allocator-api2 v0.2.21
+   Compiling ark-std v0.5.0
+   Compiling ark-serialize v0.5.0
+   Compiling hashbrown v0.15.5
+   Compiling ark-ff v0.5.0
+   Compiling zmij v1.0.23
+   Compiling serde v1.0.229
+   Compiling hex-conservative v0.2.3
+   Compiling serde_derive v1.0.229
+   Compiling ark-poly v0.5.0
+   Compiling tinyvec v1.13.3
+   Compiling unicode-normalization v0.1.25
+   Compiling ark-ec v0.5.0
+   Compiling thiserror v2.0.21
+   Compiling serde_json v1.0.151
+   Compiling bitcoin_hashes v0.14.101
+   Compiling hmac v0.12.1
+   Compiling thiserror-impl v2.0.21
+   Compiling itoa v1.0.18
+   Compiling keccak v0.1.6
+   Compiling memchr v2.8.3
+   Compiling sha3 v0.10.9
+   Compiling hkdf v0.12.4
+   Compiling ark-bls12-381 v0.5.0
+   Compiling bip39 v2.2.2
+   Compiling sha2 v0.10.9
+   Compiling hex v0.4.3
+   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/zether-prover)
+    Finished `release` profile [optimized] target(s) in 46.82s
+bls12381: proveTransfer 718 ms in wasm
+wasm smoke: 9 checks passed
+rc=0

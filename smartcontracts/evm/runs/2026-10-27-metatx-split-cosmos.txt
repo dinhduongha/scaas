@@ -1,0 +1,121 @@
+# cosmos at commit 67fa7a45
+== test cosmos
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.45s
+     Running unittests src/lib.rs (target/debug/deps/scaas_cosmos_tests-c0f5411783e632de)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/flows.rs (target/debug/deps/flows-301c0fe1cac69281)
+
+running 27 tests
+test allowance_only_to_contracts_and_transfer_from_only_by_contracts ... ok
+test dex_admin_sweeps_stray_balance ... ok
+test cross_implementation_vector ... ok
+test cosmos_router_bound_pay_refused_direct ... ok
+test dex_cancel_by_signed_revoke_and_no_direct_pull ... ok
+test cosmos_pay_meta_mismatch_and_replay ... ok
+test pay_meta_vectors_match ... ok
+test passkey_scheme_pays_from_its_derived_address ... ok
+test domain_expiry_relayer_and_key_binding_are_enforced ... ok
+test pay_by_signature_moves_funds_and_emits_events_once ... ok
+test dex_settles_two_signed_orders_with_fees_and_limits ... ok
+test mandate_caps_payees_refs_expiry_and_revoke ... ok
+test anti_lock_withheld_op_never_blocks_others ... ok
+test relay_fee_attacker_cannot_pre_burn_ref ... ok
+test relay_fee_bound_payee ... ok
+test relay_fee_open_mode_pays_sender ... ok
+test relay_fee_target_failure_reverts_all ... ok
+test relay_fee_reentry_refused ... ok
+test relay_fee_passkey_payer ... ok
+test relay_fee_target_must_be_contract ... ok
+test relay_ref_vectors ... ok
+test relayexec_only_router ... ok
+test relay_fee_target_is_router_refused ... ok
+test relay_fee_target_sees_executor ... ok
+test relay_fee_router_with_admin_refused ... ok
+test relay_fee_shape_refusals ... ok
+test pay_meta_emits_meta_then_settled ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_dex-1938d2890f428753)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_mandate-4459342f493f7493)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_metaop-323483db7d8d7a02)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_relayexec-af254050ac24becf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_relayfee-189dc12fd7f1f57a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_token-62d86706d0002be8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_cosmos_tests
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_dex
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_mandate
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_metaop
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_relayexec
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_relayfee
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_token
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0
