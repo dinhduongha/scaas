@@ -1,0 +1,441 @@
+# cargo-scaas-node at commit 2800ca16
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 16s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-dbe39b21340e8e02)
+
+running 342 tests
+test adapter::tests::families_parse ... ok
+test abi::tests::known_errors_are_named ... ok
+test adapter::tests::one_kind_rule_and_one_payee_rule ... ok
+test adapter::tests::a_job_whose_digest_is_in_flight_is_skipped_before_claim ... ok
+test adapter::tests::rejected_broadcast_releases_the_lane_at_once ... ok
+test adapter::tests::reverted_status_of_a_consumed_op_reports_consumed ... ok
+test adapter::tests::index_step_filters_on_odoo_tokens_and_holds_the_cursor_without_them ... ok
+test adapters::aptos::tests::aptos_indexer_joins_pay_meta_and_relay_fee ... ok
+test adapter::tests::restart_settles_the_lanes_inflight_jobs ... ok
+test adapter::tests::mined_report_carries_the_final_tx_hash_when_the_adapter_has_one ... ok
+test adapters::aptos::tests::committed_failures_are_classified ... ok
+test adapter::tests::simulation_revert_of_a_consumed_op_reports_consumed ... ok
+test adapters::aptos::tests::aptos_pay_meta_payload_bytes ... ok
+test adapters::aptos::tests::events_of_other_packages_or_tokens_are_dropped ... ok
+test adapters::aptos::tests::payload_and_digest_match_move_and_python ... ok
+test adapters::aptos::tests::aptos_relay_fee_job_checks_ref ... ok
+test adapters::aptos::tests::plain_pay_to_the_marker_is_refused ... ok
+test adapters::aptos::tests::payload_round_trips ... ok
+test adapters::aptos::tests::relay_fee_config_must_parse ... ok
+test adapters::aptos::tests::submit_errors_are_classified ... ok
+test adapters::aptos::tests::event_bodies_follow_the_quorum ... ok
+test adapters::aptos::tests::unknown_job_kind_is_refused ... ok
+test adapters::cosmos::tests::adapter_refuses_unsafe_config ... ok
+test adapters::cosmos::tests::base64_attributes_are_detected ... ok
+test adapters::cosmos::tests::checktx_rejections_are_not_retried_byte_for_byte ... ok
+test adapters::cosmos::tests::cosmos_executor_is_lazy_and_never_stalls_plain_pays ... ok
+test adapters::cosmos::tests::cosmos_indexer_joins_pay_meta_and_relay_fee ... ok
+test adapters::aptos::tests::tx_matches_the_ts_sdk ... ok
+test adapters::cosmos::tests::cosmos_kind_rule_and_never_pay_router_or_executor ... ok
+test adapters::cosmos::tests::cosmos_pay_meta_job_builds_msg ... ok
+test adapters::cosmos::tests::cosmos_relay_fee_job_checks_ref ... ok
+test adapters::aptos::tests::relay_fee_and_pay_meta_jobs_never_panic ... ok
+test adapters::cosmos::tests::cosmos_relay_fee_policy_config ... ok
+test adapters::cosmos::tests::events_are_normalized_and_filtered ... ok
+test adapters::aptos::tests::decoders_never_panic ... ok
+test adapters::cosmos::tests::passkey_signature_maps_to_passkey_auth ... ok
+test adapters::cosmos::tests::payment_attributes_round_trip ... ok
+test adapters::cosmos::tests::protobuf_and_bech32_basics ... ok
+test adapters::cosmos::tests::simulate_errors_are_classified ... ok
+test adapters::cosmos::tests::tx_is_found_in_a_block_without_the_indexer ... ok
+test adapters::cosmos::tests::cross_implementation_vector ... ok
+test adapters::hedera::tests::config_routes_hedera_through_the_adapter ... ok
+test adapters::hedera::tests::contract_revert_stays_terminal ... ok
+test adapters::hedera::tests::expired_job_on_unfunded_lane_is_dead ... ok
+test adapters::hedera::tests::hedera_refusal_without_execution_requeues ... ok
+test adapters::hedera::tests::hedera_revert_reasons ... ok
+test adapters::hedera::tests::kat_digest_and_ed25519_signature ... ok
+test adapters::cosmos::tests::normalize_never_panics ... ok
+test adapters::hedera::tests::only_known_hedera_codes_read_as_status ... ok
+test adapters::hedera::tests::mined_only_with_status_one_and_a_height ... ok
+test adapters::hedera::tests::recorded_receipt_decodes ... ok
+test adapters::hedera::tests::recorded_relay_responses_parse_with_alloy_types ... ok
+test adapters::hedera::tests::refuses_non_hedera_chain_ids ... ok
+test adapters::hedera::tests::relay_precheck_rejection_requeues_and_duplicate_counts_as_sent ... ok
+test adapters::hedera::tests::revert_after_a_lost_race_is_consumed ... ok
+test adapters::cosmos::tests::cosmos_jobs_never_panic ... ok
+test adapters::hedera::tests::the_hedera_lane_keeps_the_job_kind_rule ... ok
+test adapters::solana::tests::decoders_never_panic ... ok
+test adapters::solana::tests::events_of_other_programs_authorities_or_mints_are_dropped ... ok
+test adapters::solana::tests::events_page_past_short_pages_and_refuse_unparsable_tokens ... ok
+test adapter::tests::the_lane_loop_refreshes_the_registered_tokens ... ok
+test adapters::solana::tests::landed_and_submit_errors_are_classified ... ok
+test adapters::solana::tests::nonce_account_and_sequence ... ok
+test adapters::solana::tests::nonce_creation_survives_a_prefunded_address ... ok
+test adapters::solana::tests::payload_digest_and_addresses_match_python_and_the_program ... ok
+test adapter::tests::unknown_consumption_never_stops_a_job ... ok
+test adapters::solana::tests::payload_round_trips ... ok
+test adapters::solana::tests::signature_blobs_parse ... ok
+test adapters::solana::tests::simulation_errors_are_classified ... ok
+test adapters::solana::tests::relay_fee_router_config_must_parse ... ok
+test adapters::solana::tests::solana_indexer_joins_pay_meta_and_relay_fee ... ok
+test adapters::solana::tests::solana_relay_fee_covers_first_use_rent ... ok
+test adapters::solana::tests::solana_relay_fee_job_checks_ref ... ok
+test adapters::solana::tests::solana_pay_meta_job_builds_ix ... ok
+test adapters::solana::tests::the_test_program_id_is_refused_on_public_clusters ... ok
+test adapters::solana::tests::solana_relay_fee_wrapper_job_builds_ix ... ok
+test adapters::solana::tests::tx_v1_matches_solana_kit ... ok
+test adapters::soroban::tests::cross_implementation_vector_decodes_into_the_call ... ok
+test adapters::soroban::tests::decodes_payment_and_executed_events ... ok
+test adapters::soroban::tests::event_decoder_never_panics ... ok
+test adapters::soroban::tests::event_pages_after_the_first_carry_only_the_cursor ... ok
+test adapters::soroban::tests::foreign_network_wrong_contract_and_bad_signatures_are_refused ... ok
+test adapters::solana::tests::wrapper_jobs_never_panic ... ok
+test adapters::soroban::tests::mutated_preimage_never_panics ... ok
+test adapters::soroban::tests::payload_decoder_never_panics ... ok
+test adapters::soroban::tests::relay_fee_job_survives_non_utf8_symbol ... ok
+test adapters::soroban::tests::soroban_indexer_joins_pay_meta_and_relay_fee ... ok
+test adapters::soroban::tests::soroban_kind_router_and_payee_rules ... ok
+test adapters::soroban::tests::soroban_pay_meta_job_builds_pay_meta ... ok
+test adapters::soroban::tests::soroban_relay_fee_job_checks_ref ... ok
+test adapters::sui::tests::decoders_never_panic ... ok
+test adapters::sui::tests::events_are_normalized_and_filtered ... ok
+test adapters::sui::tests::lane_journal_is_required ... ok
+test adapters::sui::tests::malformed_token_is_a_startup_error ... ok
+test adapters::sui::tests::metaop_round_trips ... ok
+test adapters::sui::tests::missing_or_pruned_tx_fails_the_range ... ok
+test adapters::sui::tests::normalize_never_panics ... ok
+test adapters::sui::tests::passkey_signature_parses ... ok
+test adapters::sui::tests::pay_tx_bytes_vector ... ok
+test adapters::sui::tests::payload_and_digest_match_move_and_python ... ok
+test adapters::sui::tests::plain_pay_to_the_marker_is_refused ... ok
+test adapter::tests::consumed_before_resend_stops_resending_and_releases_the_lane_at_the_end ... ok
+test adapters::sui::tests::relay_fee_config_must_parse ... ok
+test adapters::soroban::tests::jobs_never_panic_on_untrusted_input ... ok
+test adapters::solana::tests::jobs_never_panic_on_untrusted_input ... ok
+test adapters::sui::tests::sui_indexer_joins_pay_meta_and_relay_fee ... ok
+test adapters::hedera::tests::receipt_decoder_never_panics ... ok
+test adapters::sui::tests::sui_pay_meta_job_builds_ptb ... ok
+test adapters::sui::tests::type_tags_and_addresses ... ok
+test adapters::sui::tests::settled_or_superseded_journal_is_cleared ... ok
+test adapters::sui::tests::upgraded_package_calls_the_new_id_and_reads_original_types ... ok
+test adapters::sui::tests::unknown_job_kind_is_refused ... ok
+test adapters::ton::tests::base64_and_stack_helpers ... ok
+test adapters::sui::tests::sui_relay_fee_job_checks_ref ... ok
+test adapters::ton::tests::envelope_state_init_and_signature ... ok
+test adapters::ton::tests::events_are_authenticated_locally_and_capped ... ok
+test adapters::ton::tests::events_decode ... ok
+test adapters::ton::tests::jetton_wallet_code_and_addresses ... ok
+test adapters::ton::tests::metaop_vector_parses_and_hashes ... ok
+test adapters::ton::tests::op_consumed_reads_the_lane_nonce_for_pay_only ... ok
+test adapters::ton::tests::passkey_auth_cell_splits_client_data ... ok
+test adapters::ton::tests::build_attaches_the_signed_forward_floor_and_sizes_value_per_job ... ok
+test adapters::ton::tests::prop::boc_parser_never_panics ... ok
+test adapters::sui::tests::relay_fee_and_pay_meta_jobs_never_panic ... ok
+test adapters::tests::example_config_builds_every_family ... ok
+test adapters::ton::tests::prop::cells_round_trip ... ok
+test adapters::ton::tests::prop::decoders_never_panic ... ok
+test adapters::ton::tests::ton_indexer_joins_payment_meta_by_payer ... ok
+test adapters::ton::tests::ton_plain_pay_to_router_refused ... ok
+test adapters::ton::tests::ton_relay_fee_event_vectors ... ok
+test adapters::ton::tests::ton_pay_meta_job_builds_params ... ok
+test adapters::ton::tests::ton_relay_fee_job_tracks_escrow ... ok
+test adapters::ton::tests::ton_relay_fee_policy_config ... ok
+test adapters::ton::tests::ton_relay_fee_job_checks_ref ... ok
+test adapters::ton::tests::ton_relay_fee_refunds_after_deadline ... ok
+test adapters::ton::tests::prop::pay_meta_job_never_panics ... ok
+test adapters::ton::tests::ton_relay_fee_vectors ... ok
+test adapters::ton::tests::tx_status_follows_the_tokens_and_spots_a_front_run_copy ... ok
+test adapters::ton::tests::w5r1_lane_wallet_and_external_message_match_ton_core ... ok
+test adapters::ton::tests::wallet_address_without_rpc_matches_the_contract ... ok
+test addresses::tests::matches_the_odoo_vectors ... ok
+test admin::tests::endpoints_serve_the_cached_snapshot ... ok
+test admin::tests::metrics_text_format_golden ... ok
+test admin::tests::ready_only_when_rpc_odoo_and_lag_are_fine ... ok
+test breaker::tests::balance_floor_per_lane ... ok
+test breaker::tests::hourly_budget_warns_trips_and_rolls ... ok
+test breaker::tests::spike_trips_against_the_hour_average_and_clears ... ok
+test chain::tests::chain_uid_is_block_zero_and_a_wrong_pin_is_refused ... ok
+test config::tests::addresses_and_selectors_take_one_spelling ... ok
+test config::tests::admin_auth_modes_are_validated ... ok
+test config::tests::boot_set_maps_toml_to_store_rows ... ok
+test config::tests::bootstrap_lists_are_validated ... ok
+test config::tests::breaker_amounts_accept_integers_and_big_strings ... ok
+test config::tests::gossip_sections_parse_without_networking ... ok
+test config::tests::listener_binds_never_collide ... ok
+test config::tests::non_evm_chain_with_mnemonic_lanes ... ok
+test config::tests::open_gateway_must_be_authenticated ... ok
+test config::tests::parses_with_defaults ... ok
+test adapters::ton::tests::ton_relay_fee_refuses_failing_payment_before_send ... ok
+test config::tests::quorum_above_endpoints_is_refused ... ok
+test config::tests::raw_key_is_one_lane_and_keys_are_required ... ok
+test config::tests::relay_params_default_and_refuse_invalid_values ... ok
+test config::tests::retention_is_bounded ... ok
+test config::tests::store_is_required_and_odoo_is_legacy ... ok
+test config::tests::the_ton_meta_journal_lives_in_the_store_dir ... ok
+test config::tests::unknown_finality_mode_is_refused ... ok
+test dex::tests::a_hand_back_below_the_taker_rate_rests ... ok
+test dex::tests::a_maker_too_large_for_the_taker_is_skipped_for_a_deeper_one ... ok
+test dex::tests::a_partial_fill_runs_at_the_makers_price_and_keeps_the_maker_resting ... ok
+test dex::tests::a_planned_settlement_encodes_as_the_dex_reads_it ... ok
+test dex::tests::admit_enforces_the_intake_rules ... ok
+test dex::tests::dust_makers_leave_the_book ... ok
+test dex::tests::fee_rates_by_role_at_intake ... ok
+test dex::tests::fill_or_kill_aggregates_makers_or_settles_nothing ... ok
+test dex::tests::ioc_remainder_is_dropped_not_rested ... ok
+test dex::tests::kat_hashes_and_calldata_match_forge ... ok
+test dex::tests::limits_and_the_settlement_mirror_the_contract_including_rounding ... ok
+test dex::tests::non_crossing_orders_rest_on_both_sides ... ok
+test dex::tests::poc_second_fill_of_an_unmined_remainder ... ok
+test dex::tests::price_is_scaled_by_decimals ... ok
+test dex::tests::price_time_priority_best_price_then_earliest ... ok
+test dex::tests::purge_and_drop_below ... ok
+test dex::tests::restore_returns_a_failed_fill_and_never_revives_ioc ... ok
+test dex::tests::restoring_both_sides_rematches_instead_of_leaving_a_crossed_book ... ok
+test dex::tests::rows_round_trip_rebuilds_the_same_book ... ok
+test dex::tests::self_trade_and_cheap_makers_are_skipped ... ok
+test dex::tests::the_minimum_fill_binds_makers_and_takers ... ok
+test dex::tests::wire_round_trips_and_rejects_garbage ... ok
+test dex::venue::tests::a_7702_maker_signs_with_its_key_or_its_delegate ... ok
+test config::tests::pi_chain_lanes_use_the_chain_coin_type ... ok
+test dex::venue::tests::a_failing_leg_is_found_by_its_own_pull_and_no_evidence_is_never_the_takers_fault ... ok
+test dex::venue::tests::a_hostile_1271_maker_at_the_best_price_never_blocks_a_taker ... ok
+test dex::venue::tests::a_reverting_wallet_is_invalid_and_an_rpc_failure_is_no_verdict ... ok
+test dex::venue::tests::cancel_rate_limit_is_per_signer_and_per_hour ... ok
+test dex::venue::tests::cancels_invalidations_and_failures_are_encoded ... ok
+test dex::venue::tests::leg_settled_is_encoded_for_the_client ... ok
+test dex::venue::tests::a_mined_leg_releases_its_pending_fill ... ok
+test dex::venue::tests::outside_legs_are_blamed_only_on_their_own_evidence ... ok
+test dex::venue::tests::restores_never_over_credit ... ok
+test dex::venue::tests::revert_words_that_name_no_leg_are_no_names ... ok
+test dex::venue::tests::settle_jobs_are_one_per_market_and_cancels_go_where_the_order_lives ... ok
+test dex::venue::tests::pending_fills_are_loaded_from_chain_and_released_by_a_failed_trade ... ok
+test dex::venue::tests::the_watcher_checks_who_emitted_the_log ... ok
+test dex::venue::tests::the_signature_rules_are_sigcheck_s ... ok
+test dex::venue::tests::trade_tape_reads_side_and_price_from_the_market_base ... ok
+test dex::venue::tests::ua_leg_settled_is_encoded_with_ids ... ok
+test drift::tests::report_rows_are_decimal_strings ... ok
+test finality::tests::depth_mode_subtracts_and_saturates ... ok
+test finality::tests::quorum_counts_the_primary ... ok
+test finality::tests::ranges_are_contiguous_and_bounded ... ok
+test finality::tests::tag_mode_waits_without_a_finalized_block ... ok
+test gateway::tests::an_expired_request_is_refused ... ok
+test gateway::tests::bound_fields_are_untouched ... ok
+test gateway::tests::open_breaker_refuses_before_simulation ... ok
+test gateway::tests::the_guard_refuses_before_the_simulation ... ok
+test gateway::tests::the_struct_is_named_or_a_transfer ... ok
+test gateway::tests::unbound_fee_recipient_and_relayer_are_normalized ... ok
+test guard::tests::an_entry_job_is_only_an_entry ... ok
+test guard::tests::an_invalidation_already_done_is_success ... ok
+test guard::tests::each_rule_needs_its_target ... ok
+test guard::tests::erc1271_floor_covers_forge_minimum ... ok
+test guard::tests::gas_floor_and_settle_sizing ... ok
+test guard::tests::self_calls_follow_the_published_allowlist ... ok
+test guard::tests::settle_sizing_tells_transport_from_size_and_names_what_fails ... ok
+test guard::tests::the_call_table_is_pinned ... ok
+test gwauth::tests::bearer ... ok
+test gwauth::tests::hmac_replay_stale_and_tamper ... ok
+test gwauth::tests::short_secrets_and_unknown_modes_are_refused ... ok
+test indexer::tests::executed_carries_the_digest ... ok
+test indexer::tests::indexer_joins_payment_meta ... ok
+test indexer::tests::no_tokens_holds_the_cursor ... ok
+test indexer::tests::payment_settled_is_encoded_for_odoo ... ok
+test indexer::tests::pending_or_foreign_logs_are_dropped ... ok
+test indexer::tests::transfers_are_kept_only_to_the_receiving_wallet_of_that_token ... ok
+test dex::venue::tests::three_bad_makers_at_the_top_never_cause_an_endless_503 ... ok
+test keys::tests::aptos_path_matches_the_ts_sdk ... ok
+test keys::tests::bip39_trezor_vector_24_words ... ok
+test keys::tests::mnemonic_checksum_and_length_are_enforced ... ok
+test adapters::ton::tests::ton_relay_fee_refuses_failing_call_before_send ... ok
+test keys::tests::raw_keys_and_sources ... ok
+test keys::tests::slip10_ed25519_test_vector_1 ... ok
+test adapters::hedera::tests::the_hedera_lane_keeps_n6_n2_and_registration ... ok
+test keys::tests::pi_network_is_soroban_with_coin_type_314159 ... ok
+test keys::tests::evm_hedera_cosmos_paths_match_cast ... ok
+test keys::tests::solana_path_matches_solana_keygen ... ok
+test keys::tests::stellar_sep0005_vector ... ok
+test mesh::accept::tests::lookup_most_specific_wins_without_merging ... ok
+test keys::tests::sui_path_matches_sui_keytool ... ok
+test mesh::digest::tests::effective_fee_per_mode ... ok
+test mesh::digest::tests::sui_account_matches_python_and_move ... ok
+test mesh::envelope::tests::canonical_body_bytes_are_pinned ... ok
+test mesh::envelope::tests::every_l0_code ... ok
+test mesh::envelope::tests::parse_never_panics ... ok
+test mesh::envelope::tests::parse_round_trips_and_ignores_unknown_top_level_fields ... ok
+test mesh::envelope::tests::spec_versions ... ok
+test mesh::export::tests::every_branch ... ok
+test mesh::hubsig::tests::hub_msg_bytes_are_pinned ... ok
+test mesh::hubsig::tests::pem_seed ... ok
+test mesh::hubsig::tests::rfc8032_test_1_and_spki_pin ... ok
+test metatx::tests::call_digest_and_calldata_match_forge_kat ... ok
+test metatx::tests::normalize_zeroes_unbound_fields_and_keeps_the_digest ... ok
+test metatx::tests::transfer_digest_and_calldata_match_forge_kat ... ok
+test metatx::tests::unflagged_fields_do_not_change_the_digest_and_the_salt_does ... ok
+test metatx::tests::wire_rejects_garbage_and_the_other_struct ... ok
+test metatx::tests::wire_round_trips ... ok
+test nonce::tests::bump_is_a_quarter_and_capped ... ok
+test nonce::tests::clean_start_uses_pending ... ok
+test nonce::tests::jobs_below_pending_are_tracked_not_resent ... ok
+test nonce::tests::journal_ahead_of_pending_is_gap_filled_and_requeued ... ok
+test odoo::tests::call_job_payload_decodes ... ok
+test odoo::tests::job_payload_from_odoo_decodes ... ok
+test odoo::tests::non_evm_token_addresses_decode ... ok
+test odoo::tests::paused_chain_serves_no_tokens_to_the_gateway ... ok
+test odoo::tests::report_omits_absent_fields ... ok
+test signer::tests::crc_and_base32_vectors ... ok
+test signer::tests::ed25519_rfc8032_test_1 ... ok
+test signer::tests::secp256k1_signature_recovers_and_is_low_s ... ok
+test store::tests::a_deleted_middle_audit_row_breaks_the_chain ... ok
+test mesh::digest::tests::cosmos_decoder_never_panics ... ok
+test store::tests::a_missing_store_is_never_created_implicitly ... ok
+test adapters::sui::tests::restart_resends_the_journaled_tx_and_never_reuses_its_coin ... ok
+test store::tests::a_replaced_lock_file_is_lost_ownership ... ok
+test store::tests::a_symlinked_path_is_the_same_store ... ok
+test mesh::accept::tests::codes_and_outcomes_outside_the_vectors ... ok
+test store::tests::accept_refuses_expired_payloads_and_stale_generations ... ok
+test store::tests::audit_rows_form_a_hash_chain ... ok
+test store::tests::bootstrap_imports_absent_entries_and_reports_drift ... ok
+test store::tests::bootstrap_imports_mesh_peers_and_policy ... ok
+test store::tests::cancel_by_origin_without_a_job_writes_a_tombstone ... ok
+test store::tests::digest_and_payload_hash_follow_the_kind ... ok
+test store::tests::cancel_of_a_published_job_holds_it_and_is_too_late ... ok
+test store::tests::idempotency_key_and_payload_hash ... ok
+test store::tests::every_transition_writes_one_event_atomically ... ok
+test store::tests::illegal_transitions_are_refused_and_late_noop_writes_nothing ... ok
+test store::tests::janitor_exits_when_fenced_out ... ok
+test store::tests::journal_fields_only_on_their_transitions ... ok
+test store::tests::keys_compare_byte_exact ... ok
+test store::tests::journal_max_is_monotonic_with_out_of_order_writes ... ok
+test store::tests::memory_and_unknown_urls_are_refused ... ok
+test store::tests::lease_respects_hold_and_lane_hint ... ok
+test store::tests::migrations_create_identity_and_counters ... ok
+test store::tests::live_digest_is_unique_per_chain ... ok
+test store::tests::nonces_are_i64 ... ok
+test store::tests::only_cancel_reaches_cancelled ... ok
+test store::tests::quota_counts_live_jobs_of_the_namespace ... ok
+test store::tests::purge_never_deletes_an_unexpired_origin ... ok
+test store::tests::reopen_keeps_seq_and_store_id ... ok
+test store::tests::second_owner_is_refused ... ok
+test store::tests::requeue_clears_the_journal_fields_but_not_journal_max ... ok
+test store::tests::state_machine_matches_the_vector_file ... ok
+test store::tests::signed_requires_nonce_hash_and_a_known_lane ... ok
+test store::tests::stale_owner_cannot_journal ... ok
+test store::tests::the_store_files_are_private ... ok
+test store::tests::store_restored_bumps_restore_epoch_and_is_audited ... ok
+test submit::tests::a_lane_never_starts_on_a_chain_whose_block_zero_is_not_the_pin ... ok
+test submit::tests::a_refused_rebuilt_job_is_reported_from_its_hash_or_the_gap_fill ... ok
+test store::tests::unique_violations_are_classified_by_constraint_name ... ok
+test adapter::tests::transport_errors_back_off ... ok
+test store::tests::transition_tri_state ... ok
+test submit::tests::entry_jobs_encode_as_the_token_reads_them ... ok
+test submit::tests::a_reverted_receipt_of_a_consumed_metatx_reports_consumed ... ok
+test submit::tests::an_earlier_replaced_hash_that_mines_settles_the_nonce ... ok
+test submit::tests::consumed_before_bump_gap_fills_and_never_resends_the_metatx ... ok
+test submit::tests::one_digest_is_signed_once_across_lanes_and_released_on_transient_errors ... ok
+test submit::tests::outbox_jobs_are_normalized_and_keyed_by_the_token_digest ... ok
+test submit::tests::pay_meta_cap_refused ... ok
+test submit::tests::pay_meta_job_checks_commitment_lane_nonce ... ok
+test submit::tests::relay_fee_row_requires_router_and_registered_token ... ok
+test submit::tests::simulation_revert_is_classified_by_the_subject_nonce ... ok
+test submit::tests::the_adapter_path_runs_the_guard ... ok
+test submit::tests::relay_fee_submits_only_when_fee_covers_gas ... ok
+test submit::tests::the_guard_runs_before_simulation_and_signing ... ok
+test submit::tests::the_guard_derives_its_facts_from_the_chain_and_the_config ... ok
+test submit::tests::tokens_refresh_and_rebuilt_jobs_pass_the_guard ... ok
+test submit::tests::unreadable_mtx_nonce_means_no_bump ... ok
+test submit::tests::unregistered_targets_are_refused ... ok
+test adapters::ton::tests::prop::relay_fee_job_never_panics ... ok
+test store::tests::lease_and_cancel_race_has_one_winner ... ok
+test submit::tests::gas_follows_each_chains_fork_and_tells_refusals_from_transport ... ok
+test submit::tests::gas_follows_the_two_dimensional_model ... ok
+test adapters::hedera::tests::a_block_zero_rpc_error_keeps_the_lane_stopped_and_retries ... ok
+test keys::tests::world_readable_secret_file_is_refused_and_keystore_round_trips ... ok
+
+test result: ok. 342 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.66s
+
+     Running unittests src/main.rs (target/debug/deps/scaas_node-fd2ad17a62311676)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e.rs (target/debug/deps/e2e-230761a164c8d8b6)
+
+running 4 tests
+test a_peer_landing_our_intent_makes_the_job_consumed_never_dead ... ignored
+test dex_order_book_settles_partial_fills_persists_and_cancels ... ignored
+test evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes ... ignored
+test outbox_payment_reaches_chain_and_comes_back_final ... ignored
+
+test result: ok. 0 passed; 0 failed; 4 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_aptos.rs (target/debug/deps/e2e_aptos-9d0d88c963b3f3e1)
+
+running 1 test
+test aptos_payments_relay_finalize_and_never_lock_each_other ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_cosmos.rs (target/debug/deps/e2e_cosmos-7aff1a9f14946a81)
+
+running 1 test
+test cosmos_payment_lanes_finality_and_anti_lock ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_hedera.rs (target/debug/deps/e2e_hedera-d42a3b18b351428f)
+
+running 1 test
+test hedera_native_account_pays_through_two_lanes_and_never_locks_itself ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_solana.rs (target/debug/deps/e2e_solana-06b064fba4e714c7)
+
+running 1 test
+test solana_payments_relay_finalize_and_never_lock_each_other ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_soroban.rs (target/debug/deps/e2e_soroban-4b6b2c6c85ebf0da)
+
+running 1 test
+test soroban_payments_anti_lock_fee_bump_and_finality ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_sui.rs (target/debug/deps/e2e_sui-eac4f68729429788)
+
+running 1 test
+test sui_payments_relay_finalize_and_never_lock_each_other ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e_ton.rs (target/debug/deps/e2e_ton-f9ff1e68ae31ceb0)
+
+running 1 test
+test ton_payments_lanes_finality_and_anti_lock ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fuzz.rs (target/debug/deps/fuzz-72068c607c52f8f1)
+
+running 4 tests
+test gateway_bodies_never_panic ... ok
+test wire_metatx_never_panics ... ok
+test dex_wire_order_never_panics ... ok
+test job_payloads_never_panic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.96s
+
+     Running tests/mesh_vectors.rs (target/debug/deps/mesh_vectors-6b8f1cb99b6b68d3)
+
+running 2 tests
+test regenerate ... ignored
+test vectors ... ok
+
+test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+   Doc-tests scaas_node
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0
