@@ -272,7 +272,7 @@ impl Token {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     //! `routed_plan` (Tasks 9–10's only entry to `settle_pay`): shape, open-mode payee, and the value policy.
     use super::*;
     use near_contract_standards::fungible_token::metadata::{FungibleTokenMetadata, FT_METADATA_SPEC};
@@ -281,9 +281,9 @@ mod tests {
     use scaas_near_common::hash::nep413_hash;
     use scaas_near_common::ua::{KeyRecord, KIND_ED25519};
 
-    const NET: [u8; 32] = [0x22; 32];
+    pub(crate) const NET: [u8; 32] = [0x22; 32];
 
-    fn token() -> (Token, AccountId) {
+    pub(crate) fn token() -> (Token, AccountId) {
         let me: AccountId = "token.test.near".parse().unwrap();
         testing_env!(VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(me.clone()).build());
         let meta = FungibleTokenMetadata {
@@ -301,16 +301,16 @@ mod tests {
         (t, relayer)
     }
 
-    struct Ed(near_crypto::SecretKey);
+    pub(crate) struct Ed(pub(crate) near_crypto::SecretKey);
 
     impl Ed {
-        fn pk(&self) -> [u8; 32] {
+        pub(crate) fn pk(&self) -> [u8; 32] {
             borsh::to_vec(&self.0.public_key()).unwrap()[1..].try_into().unwrap()
         }
-        fn ua(&self) -> Holder {
+        pub(crate) fn ua(&self) -> Holder {
             Holder::Ua(KeyRecord { kind: KIND_ED25519, key_data: self.pk().to_vec() }.id())
         }
-        fn sign(&self, op: &MetaOp) -> Auth {
+        pub(crate) fn sign(&self, op: &MetaOp) -> Auth {
             let sig = borsh::to_vec(&self.0.sign(&nep413_hash(&op.digest(), &op.contract))).unwrap();
             Auth::Ed25519 { key: self.pk(), sig: sig[1..].try_into().unwrap() }
         }

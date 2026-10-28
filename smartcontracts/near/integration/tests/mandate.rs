@@ -107,21 +107,28 @@ async fn mandate_pay_within_limits() {
     assert_eq!((t.balance(&h).await, t.balance(&Holder::Ua(id)).await), (700, 300));
     // the delegate pays (opened lazily); anyone may submit
     let op = t.mpay_op(id, &bob, 100, [1; 32]);
+    let u0 = t.usage().await;
     let (c, out) = t.exec(&t.relayer, "mtx_mandate_pay", &op, &dele.sign(&op, ORIGIN), &[]).await;
     assert!(out.is_success(), "{:?}", out.failures());
+    let grew = t.usage().await - u0;
     let d = record_bytes(&dele.ua(), &Subject { keys: vec![dele.key()], ..Default::default() });
     let mua = Holder::Ua(id);
     let bytes = d + lane_bytes(&mua) + scaas_near_token::ACCOUNT_STORAGE_BYTES;
     assert_eq!(c, Check { error: None, storage_needed: (bytes as u128 * cost).into() });
+    // NEP-145 charges a fixed registration (the 64-char id); the payee's shorter id measures `64 - len` B less
+    let short = 64 - t.bob.id().as_str().len() as u64;
+    assert_eq!(grew, bytes - short, "first pay: {grew} B measured, {bytes} B charged");
     println!("mtx_mandate_pay (first, delegate opened, payee registered): {:.3} Tgas, {bytes} B", tgas(&out));
     let settled = format!(r#""from":"{}","to":"{bob}","amount":"100","pay_ref":"{}""#, x(&id), x(&[1; 32]));
     assert!(out.logs().iter().any(|l| l.contains("payment_settled") && l.contains(&settled)), "{:?}", out.logs());
     // the owner's own key is not the delegate
     let op = t.mpay_op(id, &bob, 100, [2; 32]);
     t.refused(&t.relayer, "mtx_mandate_pay", &op, &erin.sign(&op, ORIGIN), &[], "not a key of the subject").await;
+    let u0 = t.usage().await;
     let (c, out) = t.exec(&t.relayer, "mtx_mandate_pay", &op, &dele.sign(&op, ORIGIN), &[]).await;
     assert!(out.is_success(), "{:?}", out.failures());
     assert_eq!(c.storage_needed.0, lane_bytes(&mua) as u128 * cost, "only the mandate's pay lane is new");
+    assert_eq!(t.usage().await - u0, lane_bytes(&mua), "next pay: measured = charged (114 B)");
     println!("mtx_mandate_pay (next): {:.3} Tgas", tgas(&out));
     assert_eq!((t.balance(&bob).await, t.balance(&mua).await, t.balance(&h).await), (200, 100, 700));
     assert_eq!(t.mandate(id).await.unwrap().spent, 200);
@@ -241,14 +248,46 @@ async fn expired_refused() {
     // a live mandate is not refunded
     let out = t.call(&t.relayer, "mandate_refund", b(&id), 0).await;
     assert!(format!("{:?}", out.failures()).contains("mandate live"), "{:?}", out.failures());
+    // up to the expiry a pay is allowed (the exact second `now == expiry`: unit test `pay_at_expiry_second_allowed`)
     let now = t.now_s().await;
+    t.patch_mandate(id, |m| m.terms.expiry = now + 30).await;
+    let op = t.mpay_op(id, &bob, 10, [2; 32]);
+    t.ok(&t.relayer, "mtx_mandate_pay", &op, &dele.sign(&op, ORIGIN), &[]).await;
     t.patch_mandate(id, |m| m.terms.expiry = now - 1).await;
     let op = t.mpay_op(id, &bob, 10, [1; 32]);
     t.refused(&t.relayer, "mtx_mandate_pay", &op, &dele.sign(&op, ORIGIN), &[], EXPIRED).await;
     // after the expiry anyone returns the funds to the owner
     let out = t.call(&t.relayer, "mandate_refund", b(&id), 0).await;
     assert!(out.is_success(), "{:?}", out.failures());
-    assert_eq!((t.balance(&h).await, t.balance(&Holder::Ua(id)).await), (1_000, 0));
+    assert_eq!((t.balance(&h).await, t.balance(&Holder::Ua(id)).await, t.balance(&bob).await), (990, 0, 10));
+    // a revoke after the expiry is allowed and returns what arrived since
+    t.fund(&t.near(&t.alice), 5).await;
+    let out = t.alice.call(t.token.id(), "transfer_to_ua").args_json(json!({"id": id.to_vec(), "amount": "5"}))
+        .deposit(NearToken::from_yoctonear(1)).transact().await.unwrap();
+    assert!(out.is_success(), "{:?}", out.failures());
+    let op = t.revoke_op(&h, id);
+    t.ok(&t.relayer, "mtx_revoke", &op, &erin.sign(&op, ORIGIN), &[]).await;
+    assert!(t.mandate(id).await.unwrap().revoked);
+    assert_eq!((t.balance(&h).await, t.balance(&Holder::Ua(id)).await), (995, 0));
+}
+
+/// Ruling R8 for the pay: the delegate's own POLICY_PASSKEY_FOR_VALUE binds its mandate pays.
+#[tokio::test]
+async fn delegate_policy_passkey_for_value() {
+    let t = setup().await;
+    let (erin, dele, pk) = (Signer::ed("erin"), Signer::ed("dele"), Signer::pk(4, RP));
+    let (d, bob) = (dele.ua(), t.near(&t.bob));
+    let id = t.opened(&erin, 1_000, t.terms(&d, &bob, 100, 250, 300)).await;
+    let p = b(&(pk.key(), Some(ORIGIN.to_string())));
+    let op = t.op(OP_ADD_KEY, &d, &d, 0, &p);
+    t.ok(&t.relayer, "mtx_add_key", &op, &dele.sign(&op, ORIGIN), &p).await;
+    let op = t.op(OP_SET_GUARDIAN, &d, &d, 1, &[KEYOP_SET_POLICY, POLICY_PASSKEY_FOR_VALUE]);
+    t.ok(&t.relayer, "mtx_set_policy", &op, &dele.sign(&op, ORIGIN), &b(&POLICY_PASSKEY_FOR_VALUE)).await;
+    let op = t.mpay_op(id, &bob, 10, [1; 32]);
+    t.refused(&t.relayer, "mtx_mandate_pay", &op, &dele.sign(&op, ORIGIN), &[], "POLICY_PASSKEY_FOR_VALUE").await;
+    assert_eq!(t.balance(&Holder::Ua(id)).await, 300);
+    t.ok(&t.relayer, "mtx_mandate_pay", &op, &pk.sign(&op, ORIGIN), &[]).await;
+    assert_eq!((t.balance(&bob).await, t.balance(&Holder::Ua(id)).await), (10, 290));
 }
 
 #[tokio::test]
@@ -265,9 +304,11 @@ async fn revoked_refused_then_funds_back() {
     t.refused(&t.relayer, "mtx_revoke", &op, &mallory.sign(&op, ORIGIN), &[], "only the owner or the delegate revokes").await;
     // the delegate's kill switch: the remaining funds go back to the owner at once
     let op = t.revoke_op(&dele.ua(), id);
+    let u0 = t.usage().await;
     let (c, out) = t.exec(&t.relayer, "mtx_revoke", &op, &dele.sign(&op, ORIGIN), &[]).await;
-    assert_eq!(c.error, None);
+    assert_eq!(c, Check { error: None, storage_needed: 0.into() });
     assert!(out.is_success(), "{:?}", out.failures());
+    assert_eq!(t.usage().await, u0, "revoke writes no new record");
     println!("mtx_revoke (delegate): {:.3} Tgas", tgas(&out));
     assert!(t.mandate(id).await.unwrap().revoked);
     assert_eq!((t.balance(&h).await, t.balance(&Holder::Ua(id)).await, t.balance(&bob).await), (960, 0, 40));

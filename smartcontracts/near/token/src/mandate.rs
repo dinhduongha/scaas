@@ -350,4 +350,56 @@ mod tests {
         }
         assert_eq!((b32(&rev["fields"]["to"]["Ua"]), rev["fields"]["op"].as_u64()), (id, Some(OP_REVOKE as u64)));
     }
+
+    /// The expiry boundary (review M3; the sandbox clock cannot be set to an exact second): a pay in the second
+    /// `now == expiry` passes every check, one second later it is refused.
+    #[test]
+    fn pay_at_expiry_second_allowed() {
+        use crate::metatx::tests::{token, Ed, NET};
+        use near_sdk::test_utils::VMContextBuilder;
+        use near_sdk::testing_env;
+        let (mut t, relayer) = token();
+        let me = env::current_account_id();
+        let dele = Ed(near_crypto::SecretKey::from_seed(near_crypto::KeyType::ED25519, "dele"));
+        let (id, expiry) = ([0x77; 32], 2_000_000_000u64);
+        let payee = Holder::Near("bob.test.near".parse().unwrap());
+        let terms = MandateTerms {
+            delegate: dele.ua(),
+            payee: payee.clone(),
+            per_payment: 10,
+            per_period: 10,
+            period_s: 60,
+            expiry,
+            funding: 10,
+        };
+        let m = Mandate { owner: Holder::Ua([0x66; 32]), terms, period_start: expiry - 30, spent: 0, revoked: false };
+        t.mandates.insert(id, m);
+        t.ua.insert(id, 10);
+        let op = MetaOp {
+            network: NET,
+            contract: me.clone(),
+            op: OP_MANDATE_PAY,
+            from: Holder::Ua(id),
+            to: payee,
+            relayer: None,
+            amount: 10,
+            pay_ref: [1; 32],
+            lane: pay_lane(&[1; 32]),
+            nonce: 0,
+            valid_until: u64::MAX,
+            extra: no_params(),
+        };
+        let a = dele.sign(&op);
+        let at = |s: u64| {
+            testing_env!(VMContextBuilder::new()
+                .current_account_id(me.clone())
+                .predecessor_account_id(relayer.clone())
+                .block_timestamp(s * 1_000_000_000)
+                .build())
+        };
+        at(expiry);
+        assert!(t.pay_plan(&relayer, &op, &a).is_ok(), "now == expiry is allowed");
+        at(expiry + 1);
+        assert_eq!(t.pay_plan(&relayer, &op, &a).err(), Some("mandate expired"));
+    }
 }
