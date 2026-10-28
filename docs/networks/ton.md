@@ -461,12 +461,12 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   The **payment** leg is checked as the payer's wallet runs it, so it cannot bounce after the router escrowed it: besides
   the signed-op check (nonce, key, signature), the payment must be valid at most `LANE_TTL` ahead (`E_TTL`) and within the
   payer wallet's `get_wallet_data` balance (`E_BALANCE`); else the job is refused (`the payment is valid further ahead
-  than LANE_TTL` / `the payer's wallet holds …`). The payment has **no validity floor** (owner ruling 2026-10-28, risk
-  accepted): it reaches the payer's wallet two hops after the lane, so one signed to expire within that window can expire
-  in transit (`E_EXPIRED`) and bounce; the relayer then pays the bounce, and a submitter can repeat it by re-signing. The
-  lane transaction expires at `min(valid_until, deadline)`. A plain pay has the same gaps (`LANE_TTL`, balance, the
-  window), at one hop's cost to the relayer; that sits with the fee policy (owner rulings list item 7), and no plain-pay
-  check is built.
+  than LANE_TTL` / `the payer's wallet holds …`). The payment also has the call's **validity floor** (owner ruling 2026-10-28: kept): it must stay valid
+  more than 600 s (`RELAY_DEADLINE_S`), since it reaches the payer's wallet two hops after the lane (`E_EXPIRED` there
+  would bounce at the relayer's cost), and the lane transaction expires at `min(valid_until − 300 s, deadline)`, so a late
+  lane transaction never delivers a nearly expired payment. A plain pay has the same gaps today (`LANE_TTL`, balance, and
+  no validity floor), at one hop's cost to the relayer; that sits with the fee policy (owner rulings list item 7), and no
+  plain-pay check is built.
 
   **Remaining exposure (recorded):**
   - a race in which the owner spends the lane, or moves its tokens away, between the node's check and the message's

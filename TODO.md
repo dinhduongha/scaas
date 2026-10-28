@@ -80,7 +80,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      re-review fixes `6c31fbac` (re-review F1/F2/m1–m5, TON Mandate `get_lane_nonce`), records `2ffa9c73`/`0beebc7c`,
      logs `c043e5b7`, second re-review `f0d4025e` (TON payment leg: LANE_TTL, balance), records/logs
      `afb8dd1d`..`31b02ed1`, third re-review `07d2f411`/`3dd94fb0`/`eff492c3`
-     (payment validity floor, then removed by the Q1 owner ruling 2026-10-28 in `2cac867a`) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
+     (payment validity floor; removed in `2cac867a`, restored by its revert: owner ruling 2026-10-28, risk acceptance
+     reversed, fix kept) + records/gate logs (head). Figures: `docs/contracts/metatx.md` §8
      (relayed overhead +7.4 k to +7.6 k per call; `n2560-kmax16384` `ROLL_MAX` 64 keeps 6,032 gas, was 15,281: any further
      token-path growth above ~6 k forces 48). Next: NEAR and Algorand on their own branch from `metatx-split` (owner
      2026-10-27; spec approved 2026-10-28; its plan is written in the main checkout, executes in parallel,
@@ -270,10 +271,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     gaps at one hop's cost: owner rulings item 7, no code); a race in which the owner spends the lane or moves its tokens
     between the check and the message still bounces at the relayer's cost (costs the submitter a direct op or a paid relay
     each time); two relay-fee jobs of one payer wallet within one payment round trip: the router refuses the second (742)
-    after the relayer paid its forward fee; every burst rides on one paid relay (no per-payer-wallet hold in the node);
-    owner-accepted risk (owner ruling 2026-10-28, Q1): no validity floor on the payment, so one that expires in transit
-    bounces at the relayer's cost, repeatable by re-signing (plain pays: same window, owner rulings item 7); no per-payer
-    failure budget (owner's call).
+    after the relayer paid its forward fee; every burst rides on one paid relay (no per-payer-wallet hold in the node); the
+    payment must stay valid more than 600 s, the lane tx expires at min(valid_until − 300 s, deadline) (plain pays: same
+    window, owner rulings item 7, no code); no per-payer failure budget (owner's call).
   - `MtxRelayExecutor` copies return data on success (a hostile target can inflate the relayer's memory cost; the node simulates
     first).
   - Observation: the Zether prover's relayed gas rows are 8.2-8.7 k below the measured figures (inside `GAS_MARGIN`); re-pin
