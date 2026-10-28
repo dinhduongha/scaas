@@ -316,6 +316,9 @@ async fn revoked_refused_then_funds_back() {
     t.refused(&t.relayer, "mtx_mandate_pay", &op, &dele.sign(&op, ORIGIN), &[], REVOKED).await;
     let op = t.revoke_op(&h, id);
     t.refused(&t.relayer, "mtx_revoke", &op, &erin.sign(&op, ORIGIN), &[], REVOKED).await;
+    // a refund that would move nothing is refused (owner rule: no effect for a no-op; as Algorand)
+    let out = t.call(&t.relayer, "mandate_refund", b(&id), 0).await;
+    assert!(format!("{:?}", out.failures()).contains("nothing to refund"), "{:?}", out.failures());
     // funds that reach a revoked mandate later go back through the permissionless refund
     t.fund(&Holder::Near(t.alice.id().as_str().parse().unwrap()), 5).await;
     let out = t.alice.call(t.token.id(), "transfer_to_ua").args_json(json!({"id": id.to_vec(), "amount": "5"}))
@@ -323,6 +326,9 @@ async fn revoked_refused_then_funds_back() {
     assert!(out.is_success(), "{:?}", out.failures());
     let out = t.call(&t.relayer, "mandate_refund", b(&id), 0).await;
     assert!(out.is_success(), "{:?}", out.failures());
+    assert_eq!(t.balance(&h).await, 965);
+    let out = t.call(&t.relayer, "mandate_refund", b(&id), 0).await;
+    assert!(format!("{:?}", out.failures()).contains("nothing to refund"), "{:?}", out.failures());
     assert_eq!(t.balance(&h).await, 965);
     // the owner revokes a second mandate (lane nonce 1)
     let (op, id2) = t.open_op(&h, &terms, [0xb0; 32], 1);

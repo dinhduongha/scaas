@@ -13,7 +13,8 @@
 //!   delegate's own `POLICY_PASSKEY_FOR_VALUE` applies (R8: the signer's policy).
 //! - `mtx_revoke(op, auth)`, op 3, signed by the owner or the delegate (kill switch): `to = Ua(id)`, amount, `pay_ref`,
 //!   lane and nonce zero, `extra = sha256([])`; once (a revoked mandate refuses it). The balance goes back to the owner.
-//! - `mandate_refund(id)`, anyone, after revocation or expiry: the balance (funds that arrived later) to the owner.
+//! - `mandate_refund(id)`, anyone, after revocation or expiry: the balance (funds that arrived later) to the owner;
+//!   refused when there is nothing to move.
 //!
 //! The entry bodies (`mandate_open`, `mandate_pay`, `revoke`) charge nothing themselves: the `mtx_*` entries and Task 9's
 //! `relay_fee_<entry>` wrappers call them, then `charge_storage` once.
@@ -265,11 +266,15 @@ impl Token {
         self.charge_storage();
     }
 
-    /// Anyone, once the mandate is revoked or expired: its balance back to the owner (nothing to attach).
+    /// Anyone, once the mandate is revoked or expired: its balance back to the owner (nothing to attach). A refund that
+    /// would move nothing is refused (owner rule: no effect for a no-op; Algorand's T13 rule).
     pub fn mandate_refund(&mut self, #[serializer(borsh)] id: [u8; 32]) {
         let (_, m) = self.load_mandate(&Holder::Ua(id)).unwrap_or_else(|e| env::panic_str(e));
         if !m.revoked && now_s() <= m.terms.expiry {
             env::panic_str("mandate live: no refund before revocation or expiry");
+        }
+        if self.balance(&Holder::Ua(id)) == 0 {
+            env::panic_str("nothing to refund");
         }
         self.sweep(id, &m);
     }
