@@ -1,6 +1,6 @@
 {
  "token": {
-  "approval_sha512_256": "a50eff775568c82cc2b18f2c7e8038860a2ae365a7946d27cd4e9a33ed1f6a5c",
+  "approval_sha512_256": "73e167d8513decfd32134d5c9a1c19a3f895c7b057922df3219c6c60ba627c79",
   "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
  },
  "account": {
@@ -9,6 +9,10 @@
  },
  "mandate": {
   "approval_sha512_256": "1c57381fcccb93cfc69a9f4fb8cbefb841ad948df2cdd8b25161bf60c64ea74b",
+  "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
+ },
+ "dex": {
+  "approval_sha512_256": "9c580f84890944782c742d124dfb903a8ac991fbd99ca1909b9671f1435a547d",
   "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
  }
 }

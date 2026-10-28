@@ -6,7 +6,7 @@ form `SIGN_PREFIX ‖ text` by the address's current authority. `payId` / `payLa
 """
 import typing
 
-from algopy import (Account, Application, Bytes, FixedBytes, Global, OpUpFeeSource, TransactionType, Txn, UInt64, arc4,
+from algopy import (Account, Application, BigUInt, Bytes, FixedBytes, Global, OpUpFeeSource, TransactionType, Txn, UInt64, arc4,
                     ensure_budget, gtxn, itxn, op, subroutine, urange)
 
 Bytes32 = FixedBytes[typing.Literal[32]]
@@ -25,6 +25,7 @@ KIND_ADDRESS = 0  # holder kinds (vectors: 0 = a native address, its 32-byte key
 KIND_UA = 1
 
 OP_PAY = 0
+OP_TRADE = 1
 OP_MANDATE_PAY = 2
 OP_REVOKE = 3
 OP_TRANSFER = 4
@@ -36,7 +37,11 @@ OP_REMOVE_ORIGIN = 9
 OP_SET_GUARDIAN = 10
 OP_START_RECOVERY = 11
 OP_CANCEL_RECOVERY = 12
+OP_CANCEL = 14
+OP_INVALIDATE_NONCES = 15
 ARC4_TRUE = b"\x15\x1f\x7c\x75\x80"  # an ABI `bool` return log: the return prefix ‖ true
+VERIFY = "verify(uint8,byte[32],byte[32],byte[])bool"          # a value op (POLICY_PASSKEY_FOR_VALUE)
+VERIFY_KEY = "verify_key(uint8,byte[32],byte[32],byte[])bool"  # an op that moves no value (revoke, cancel, invalidate)
 
 
 class Holder(arc4.Struct, frozen=True):
@@ -57,6 +62,19 @@ class MetaOp(arc4.Struct, frozen=True):
     nonce: arc4.UInt64
     valid_until: arc4.UInt64  # seconds, against Global.latest_timestamp
     extra: Bytes32
+
+
+class Order(arc4.Struct, frozen=True):
+    """A DEX order (T14, NEAR's `Order` of Task 8 in ARC-4, 88 B): signed through its trade leg, op 1 with `to = relayer
+    =` the DEX app address, `amount = sell_amount`, `extra = sha256(ARC-4(order))`. Fill-or-kill: a fill moves the
+    whole `sell_amount` and pays at least `min_buy` of `buy_token`. `relayer`: the settle submitter (CTR-DEX-09), zero
+    = any. `expiry` in seconds; no leg moves after it."""
+    sell_token: arc4.UInt64  # token app ids
+    buy_token: arc4.UInt64
+    sell_amount: arc4.UInt128
+    min_buy: arc4.UInt128
+    relayer: Bytes32
+    expiry: arc4.UInt64
 
 
 @subroutine
@@ -181,3 +199,37 @@ def account_call(account_app: UInt64, method: Bytes, h: Holder, d: Bytes32, auth
         assert res.last_log == ARC4_TRUE, "bad signature"
     else:
         assert call.submit().last_log == ARC4_TRUE, "bad signature"
+
+
+@subroutine
+def rest(need: UInt64) -> UInt64:
+    """The MBR payment beyond `need` (this app's new boxes): forwarded to another app's exact-MBR call."""
+    paid = mbr_payment()
+    assert paid >= need, "MBR payment must equal the new boxes' MBR exactly"
+    return paid - need
+
+
+@subroutine
+def signed_by(account_app: UInt64, method: Bytes, h: Holder, d: Bytes32, auth: Bytes, forward: UInt64) -> UInt64:
+    """`auth` signs `d` for `h`: a native address's 64-byte wallet signature here, else the account app's `method`
+    selector (`verify` or `verify_key`) after `forward` µALGO (a lazy record open). Returns what was forwarded."""
+    if h.kind.as_uint64() == KIND_ADDRESS and auth.length == 64:
+        assert verify_native(Account(h.id.bytes), d, auth), "bad signature"
+        return UInt64(0)
+    account_call(account_app, method, h, d, auth, forward)
+    return forward
+
+
+@subroutine
+def send(token: UInt64, to: Holder, amount: BigUInt, forwarded: UInt64) -> None:
+    """This app's token balance → `to` by an inner token call (arc200_transfer to an address, transfer_to_ua to a UA
+    id), after the MBR of the receiver's new box when `forwarded` (inner fees 0: the relayer pools them)."""
+    app = Application(token)
+    sel = arc4.arc4_signature("arc200_transfer(address,uint256)bool")
+    if to.kind.as_uint64() == KIND_UA:
+        sel = arc4.arc4_signature("transfer_to_ua(byte[32],uint256)void")
+    call = itxn.ApplicationCall(app_id=app, fee=0, app_args=(sel, to.id.bytes, arc4.UInt256(amount).bytes))
+    if forwarded:
+        itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
+    else:
+        call.submit()

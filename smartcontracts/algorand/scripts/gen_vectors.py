@@ -29,7 +29,7 @@ import famvec as V  # noqa: E402
 
 OUT = os.path.join(V.REPO, 'smartcontracts', 'algorand', 'vectors', 'algorand-vectors.json')
 NETWORK = V.seed('scaas.algorand.test-genesis')     # stands in for `global GenesisHash`
-TOKEN_APP, ROUTER_APP, TARGET_APP, ACCOUNT_APP, MANDATE_APP = 1001, 1002, 1003, 1004, 1005
+TOKEN_APP, ROUTER_APP, TARGET_APP, ACCOUNT_APP, MANDATE_APP, DEX_APP, TOKEN_B_APP = 1001, 1002, 1003, 1004, 1005, 1006, 1007
 VU = 4_102_444_800                                  # 2100-01-01 in seconds
 SIGN_PREFIX = b'MX'
 ENCODING_LEN = 306
@@ -61,6 +61,8 @@ TOKEN = app_address(TOKEN_APP)
 ROUTER = app_address(ROUTER_APP)
 ACCOUNT = app_address(ACCOUNT_APP)
 MANDATE = app_address(MANDATE_APP)
+DEX = app_address(DEX_APP)
+TOKEN_B = app_address(TOKEN_B_APP)
 alice = V.Ed('alice')                               # a native address (signs with its own key: not rekeyed)
 bob = V.Ed('bob')
 relayer = V.Ed('relayer')
@@ -115,7 +117,7 @@ def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer_=V.ZER
     dg = V.sha256(enc)
     row = {'name': name, 'fields': {
         'network': V.hx(NETWORK), 'contract': V.hx(contract),
-        'contractApp': {ACCOUNT: ACCOUNT_APP, MANDATE: MANDATE_APP}.get(contract, TOKEN_APP), 'op': op['op'],
+        'contractApp': {ACCOUNT: ACCOUNT_APP, MANDATE: MANDATE_APP, TOKEN_B: TOKEN_B_APP}.get(contract, TOKEN_APP), 'op': op['op'],
         'from': holder_json(frm), 'to': holder_json(to), 'relayer': V.hx(relayer_), 'amount': str(amount),
         'pay_ref': V.hx(pay_ref), 'lane': V.hx(lane), 'nonce': nonce, 'valid_until': VU, 'extra': V.hx(extra)},
         'encoding': V.hx(enc), 'digest': V.hx(dg), 'text': V.text(dg).decode(), 'auth': auth(signer, dg)}
@@ -394,9 +396,63 @@ def mandate_vectors():
     return MANDATES
 
 
+# DEX (Task 14, spec §4.7; the NEAR rows' values, ARC-4 here). `Order` ARC-4 = sell_token uint64 ‖ buy_token uint64
+# (token app ids) ‖ sell_amount uint128 ‖ min_buy uint128 ‖ relayer byte[32] (zero = any submitter) ‖ expiry uint64
+# (88 B). A leg is op 1 on the order's sell token: to = relayer = the DEX app address, amount = sell_amount, pay_ref
+# zero, extra = sha256(ARC-4(Order)); only `dex.settle` pulls it (inner mtx_trade). Cancel (op 14) / invalidate_nonces
+# (op 15): to = from, amount / pay_ref / lane / nonce zero, extra = sha256(ARC-4((byte[32] lane, uint64 nonce))).
+DEX_OPS = []
+
+
+def order(sell, buy, sell_amount, min_buy, relayer_, expiry):
+    return (struct.pack('>QQ', sell, buy) + sell_amount.to_bytes(16, 'big') + min_buy.to_bytes(16, 'big') + relayer_
+            + struct.pack('>Q', expiry))
+
+
+def dex_row(name, signer, frm, to, amount, lane, nonce, code, extra, note, contract=TOKEN, relayer_=V.ZERO32):
+    row = metaop(name, signer, frm, to, amount, V.ZERO32, lane, nonce=nonce, code=code, extra=extra, note=note,
+                 keep=False, contract=contract, relayer_=relayer_)
+    row['authBytes'] = V.hx(account_auth(signer, V.unhx(row['digest'])))
+    DEX_OPS.append(row)
+    return row
+
+
+_oa = order(TOKEN_APP, TOKEN_B_APP, 100, 50, relayer.pk, VU)
+_ob = order(TOKEN_B_APP, TOKEN_APP, 60, 100, V.ZERO32, VU)
+assert len(_oa) == 88
+_ta = dex_row('trade_a', erin, ua(UA_ERIN), addr(DEX), 100, b32(0xc0), 0, V.OP['trade'], V.sha256(_oa),
+              'mtx_trade leg of order A on token 1001 (erin sells 100 for >= 50 of token 1007, order relayer bound to '
+              'RELAYER): to = relayer = the DEX app address, amount = sell_amount, extra = sha256(ARC-4(Order))',
+              relayer_=DEX)
+_ta['order'] = V.hx(_oa)
+_tb = dex_row('trade_b', carol, ua(UA_CAROL), addr(DEX), 60, b32(0xc1), 3, V.OP['trade'], V.sha256(_ob),
+              'mtx_trade leg of order B on token 1007 (carol sells 60 for >= 100 of token 1001, open relayer); order '
+              'lane nonce 3 (any nonce >= min_nonce)', contract=TOKEN_B, relayer_=DEX)
+_tb['order'] = V.hx(_ob)
+DEX_SETTLE = {'legs': ['trade_a', 'trade_b'],
+              'settleId': V.hx(V.sha256(V.unhx(_ta['digest']), V.unhx(_tb['digest']))),
+              'derivation': 'sha256(digest(op_a) ‖ digest(op_b)), the two leg ops in settle-argument order',
+              'note': 'dex.settle(order_a, op_a, auth_a, order_b, op_b, auth_b, mbr): fill-or-kill 100 >= 100 (B min_buy) '
+                      'and 60 >= 50 (A min_buy); erin receives 60 of token 1007, carol 100 of token 1001; event '
+                      'Matched(settle_id, 1001, 1007, digest a, digest b)'}
+_p = b32(0xc0) + struct.pack('>Q', 5)
+dex_row('cancel', erin, ua(UA_ERIN), ua(UA_ERIN), 0, V.ZERO32, 0, V.OP['cancel'], V.sha256(_p),
+        "mtx_cancel(op, auth, target_lane, target_nonce): closes erin's open order (lane c0, nonce 5); a filled, "
+        "cancelled or voided order is refused")['params'] = V.hx(_p)
+_p = b32(0xc0) + struct.pack('>Q', 10)
+dex_row('invalidate_nonces', erin, ua(UA_ERIN), ua(UA_ERIN), 0, V.ZERO32, 0, V.OP['invalidate_nonces'], V.sha256(_p),
+        "mtx_invalidate_nonces(op, auth, lane, min_nonce): voids erin's orders below nonce 10 on lane c0; "
+        "min_nonce < 2^63, strictly increasing (CTR-DEX-10)")['params'] = V.hx(_p)
+MBR_BOXES += [
+    ('order', b'o' + V.sha256(bytes([1]) + UA_ERIN + b32(0xc0) + struct.pack('>Q', 0)), 1,
+     'token: "o" ‖ sha256(kind ‖ holder ‖ lane ‖ nonce u64) → uint8 (1 filled, 2 cancelled)'),
+    ('min_nonce', b'n' + V.sha256(bytes([1]) + UA_ERIN + b32(0xc0)), 8,
+     'token: "n" ‖ sha256(kind ‖ holder ‖ lane) → uint64 min_nonce (order lanes, never the meta-tx lanes)')]
+
+
 def dex_vectors():
-    """Ops 1 trade (`Order`, `extra = sha256(ARC-4(Order))`), 14 cancel, 15 invalidate_nonces: Task 14 adds rows."""
-    return []
+    """Ops 1 trade (`Order`, `extra = sha256(ARC-4(Order))`), 14 cancel, 15 invalidate_nonces."""
+    return DEX_OPS
 
 
 def selftest(doc):
@@ -440,6 +496,17 @@ def selftest(doc):
     assert V.unhx(f['extra']) == V.sha256(V.unhx(o['params'])) and V.unhx(f['pay_ref']) == tid
     assert (f['to']['id'], f['relayer'], f['contract'], f['op']) == (V.hx(MANDATE), V.hx(MANDATE), V.hx(TOKEN), 0)
     assert p['lane'] == V.hx(V.pay_lane(V.unhx(p['pay_ref']))) and p['from']['id'] == V.hx(tid)
+    rows = {m['name']: m for m in DEX_OPS}          # dex: legs bound to the DEX, the order, the sell token
+    for n, tok in (('trade_a', TOKEN), ('trade_b', TOKEN_B)):
+        f, o = rows[n]['fields'], V.unhx(rows[n]['order'])
+        assert V.unhx(f['extra']) == V.sha256(o) and int(f['amount']) == int.from_bytes(o[16:32], 'big')
+        assert (f['to']['id'], f['relayer'], f['contract'], f['op']) == (V.hx(DEX), V.hx(DEX), V.hx(tok), 1)
+        assert app_address(int.from_bytes(o[:8], 'big')) == tok
+    s = doc['dexSettle']
+    assert s['settleId'] == V.hx(V.sha256(V.unhx(rows['trade_a']['digest']), V.unhx(rows['trade_b']['digest'])))
+    for n in ('cancel', 'invalidate_nonces'):
+        f = rows[n]['fields']
+        assert V.unhx(f['extra']) == V.sha256(V.unhx(rows[n]['params'])) and f['to'] == f['from']
     for b in doc['mbr']['boxes']:
         assert b['microAlgo'] == 2500 + 400 * (b['nameLength'] + b['valueLength']) and b['nameLength'] <= 64
 
@@ -457,6 +524,8 @@ def build():
         'apps': {'token': {'id': TOKEN_APP, 'address': address(TOKEN), 'key': V.hx(TOKEN)},
                  'account': {'id': ACCOUNT_APP, 'address': address(ACCOUNT), 'key': V.hx(ACCOUNT)},
                  'mandate': {'id': MANDATE_APP, 'address': address(MANDATE), 'key': V.hx(MANDATE)},
+                 'dex': {'id': DEX_APP, 'address': address(DEX), 'key': V.hx(DEX)},
+                 'tokenB': {'id': TOKEN_B_APP, 'address': address(TOKEN_B), 'key': V.hx(TOKEN_B)},
                  'router': {'id': ROUTER_APP, 'address': address(ROUTER), 'key': V.hx(ROUTER)},
                  'target': {'id': TARGET_APP, 'address': address(app_address(TARGET_APP)),
                             'key': V.hx(app_address(TARGET_APP))}},
@@ -491,6 +560,7 @@ def build():
              ('router app %d' % ROUTER_APP, ROUTER))],
             'appAddress': 'sha512_256("appID" ‖ u64 BE app id)'},
         'relayRefs': RELAY_REFS,
+        'dexSettle': DEX_SETTLE,
         'routerCall': {'layout': 'target app id (u64 BE) ‖ u8 n ‖ (u16 BE len ‖ arg)×n; arg 0 = the ARC-4 selector',
                        'targetApp': short['targetApp'], 'method': METHOD, 'selector': V.hx(selector(METHOD)),
                        'args': short['args'], 'call': short['call']},

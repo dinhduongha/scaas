@@ -4,7 +4,7 @@ payee of `mtx_pay`). Inner fees are 0 (the outer group pays by fee pooling); MBR
 """
 from algopy import Account, Application, Bytes, UInt64, arc4, itxn
 
-from common import Bytes32, MetaOp, digest, meta_pay_id, pay_lane, relay_ref, sign_bytes, verify_native
+from common import Bytes32, MetaOp, Order, digest, meta_pay_id, pay_lane, relay_ref, sign_bytes, verify_native
 
 
 class Probe(arc4.ARC4Contract):
@@ -84,6 +84,20 @@ class Probe(arc4.ARC4Contract):
                 "mtx_pay((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],"
                 "byte[32],uint64,uint64,byte[32]),byte[],address)void"),
                 o.bytes, arc4.DynamicBytes(auth).bytes, open_payee.bytes))
+        if mbr:
+            itxn.submit_txns(itxn.Payment(receiver=token.address, amount=mbr, fee=0), call)
+        else:
+            call.submit()
+
+    @arc4.abimethod
+    def trade(self, token: Application, o: MetaOp, auth: Bytes, order: Order, mbr: UInt64) -> None:
+        """`token.mtx_trade` from this app (a stand-in for another DEX)."""
+        call = itxn.ApplicationCall(
+            app_id=token, fee=0,
+            app_args=(arc4.arc4_signature(
+                "mtx_trade((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],"
+                "byte[32],uint64,uint64,byte[32]),byte[],(uint64,uint64,uint128,uint128,byte[32],uint64))void"),
+                o.bytes, arc4.DynamicBytes(auth).bytes, order.bytes))
         if mbr:
             itxn.submit_txns(itxn.Payment(receiver=token.address, amount=mbr, fee=0), call)
         else:

@@ -88,3 +88,26 @@ program size (B): approval 2304, clear 4
 .
 2 passed, 67 deselected in 1.80s
 rc=0
+
+## T14 DEX app + trade legs (tests/test_dex.py::test_figures_pinned: settle budget per leg signer kind in the minimal group without bare budget calls, argument bytes, MBR; plus the token / mandate / account pins re-run on the new token) at commit d7d9d540 + the T14 tree
+
+DEX settle opcode budget, minimal group (consumed, inner app calls): {'settle native': (7306, 12), 'settle ed25519 UA': (8471, 13), 'settle passkey UA': (12661, 19), 'settle msig 3 passkey + passkey (carried)': (23059, 31)}
+pins {'settle native': (7700, 13), 'settle ed25519 UA': (8900, 14), 'settle passkey UA': (13300, 20), 'settle msig 3 passkey + passkey (carried)': (24000, 33)}
+settle argument bytes (inline, carried): {'native': (926, None), 'ed25519 UA': (992, None), 'passkey UA': (1706, None), 'msig 3 passkey + passkey (carried)': (2738, 798)}; msig-3 leg auth 1486 B, carry call 1492 B, inner mtx_trade 1871 B, inner account.verify 1557 B (limit 2048)
+MBR (µALGO): order box 16100 (name 33 B, value 1 B), min_nonce box 18900; per leg + the DEX balance box 28500 once per token, the payout receiver box 28500 when new; the DEX app: none
+program size (B): dex approval 866, clear 4; token approval 3661
+.
+opcode budget used: {'mtx_pay': 2871, 'mtx_transfer': 2831, 'mtx_pay_meta': 3327, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 3661, clear 4
+.
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (4367, 7, None), 'pay ed25519 (delegate opened)': (3938, 6, None), 'pay ed25519': (3804, 6, None), 'revoke ed25519': (3450, 6, None), 'open passkey': (5120, 9, None), 'pay passkey (delegate opened)': (4734, 8, None), 'pay passkey': (4588, 8, None), 'revoke passkey': (4234, 8, None), 'open native': (3592, 6, None), 'refund': (443, 1, None)}
+pins {'open ed25519': (4550, 7), 'open passkey': (5350, 10), 'open native': (3800, 7), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (470, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2304, clear 4
+.
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 3 passkey': (11409, 18), 'token mtx_pay native': (2916, 5), 'token mtx_pay ed25519 UA': (3461, 4), 'token mtx_pay secp256k1 UA': (2903, 4), 'token mtx_pay passkey UA': (4245, 6), 'token mtx_pay msig 3 passkey UA': (11900, 17)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 3 passkey': (12000, 19), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 3 passkey UA': (12500, 18)}
+.
+4 passed in 2.92s
+rc=0

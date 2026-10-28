@@ -117,3 +117,33 @@ def test_mandate_vectors(probe):
     npay = next(r for r in near['metaops']['vectors'] if r['name'] == 'mandate_pay')['fields']
     assert (npay['pay_ref'], npay['lane']) == (pf['pay_ref'], pf['lane'])
     assert unhx(rev['fields']['to']['id']) == mid and rev['fields']['amount'] == '0'
+
+
+def test_dex_vectors():
+    """T14 (R5): the DEX rows — legs = op 1 (to = relayer = the DEX app address, amount = sell_amount, pay_ref zero,
+    extra = sha256(ARC-4(Order)), contract = the order's sell token); cancel (op 14) / invalidate_nonces (op 15) with
+    to = from, extra = sha256(ARC-4(lane, nonce)); settle_id = sha256(digest(op_a) ‖ digest(op_b)) — recomputed with
+    the harness encodings the token and the DEX accept (test_dex.py). Values as the NEAR rows (Borsh there, ARC-4 here)."""
+    from test_dex import ORDER_T
+    rows = {r['name']: r for r in V['metaops']['vectors']}
+    dex, apps = V['apps']['dex'], V['apps']
+    a, b = rows['trade_a'], rows['trade_b']
+    for r, sell, buy in ((a, 'token', 'tokenB'), (b, 'tokenB', 'token')):
+        f, order = r['fields'], ORDER_T.decode(unhx(r['order']))
+        assert ORDER_T.encode(order) == unhx(r['order']) and len(unhx(r['order'])) == 88, r['name']
+        assert (order[0], order[1]) == (apps[sell]['id'], apps[buy]['id']), r['name']
+        assert f['op'] == 1 and sha256(unhx(r['order'])) == unhx(f['extra']) and int(f['amount']) == order[2]
+        assert (f['to']['id'], f['relayer'], f['contract'], f['pay_ref']) == (
+            dex['key'], dex['key'], apps[sell]['key'], '0x' + '00' * 32), r['name']
+    s = V['dexSettle']
+    assert s['legs'] == ['trade_a', 'trade_b']
+    assert sha256(unhx(a['digest']), unhx(b['digest'])) == unhx(s['settleId'])
+    oa, ob = ORDER_T.decode(unhx(a['order'])), ORDER_T.decode(unhx(b['order']))
+    assert oa[2] >= ob[3] and ob[2] >= oa[3]                    # the pair crosses, fill-or-kill
+    assert bytes(oa[4]) == unhx(V['keys']['relayer']['ed25519']) and bytes(ob[4]) == bytes(32)
+    for name, code in (('cancel', 14), ('invalidate_nonces', 15)):
+        f = rows[name]['fields']
+        p = unhx(rows[name]['params'])
+        assert f['op'] == code and sha256(p) == unhx(f['extra']) and len(p) == 40, name
+        assert abi.ABIType.from_string('(byte[32],uint64)').decode(p)[1] < 2**63
+        assert f['to'] == f['from'] and f['amount'] == '0' and f['lane'] == '0x' + '00' * 32 and f['nonce'] == 0

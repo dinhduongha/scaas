@@ -13,7 +13,8 @@ State, keyed by (token app id, mandate id) so a token can only ever move its own
     "m" ‖ token u64 ‖ id            → Mandate (204 B)
     "l" ‖ sha256(token u64 ‖ id ‖ lane) → u64 1  (a paid `pay_ref`: its lane payLane(pay_ref), nonce 0, once)
 
-Entries (op codes as every family; `contract` = this app's address; the token is bound by `extra`):
+Entries (op codes as every family; `contract` = this app's address — except the open's op, the funding token
+`mtx_pay`, whose `contract` is the token; the token is bound by `extra`):
 
 - `mtx_mandate_open(token, op, auth, terms, fund_mbr)` (Ruling T13-open, fix 1 C1): the owner signs ONE op, the
   funding — a token `mtx_pay` (op 0, `contract` = the token) with `relayer = to = this app's address`, `amount =
@@ -40,16 +41,14 @@ amount, pay_ref)` for a pay. Budget: the entries' own work fits the pooled budge
 account inner calls raise their own, Ruling T12-budget; pinned in the tests). No local state (OptIn refused); Update /
 Delete refused (the ARC-4 router accepts neither); no inner transaction rekeys or closes.
 """
-from algopy import Account, Application, BigUInt, Bytes, BoxMap, Global, GlobalState, Txn, UInt64, arc4, itxn, op, subroutine
+from algopy import Application, BigUInt, Bytes, BoxMap, Global, GlobalState, Txn, UInt64, arc4, itxn, op, subroutine
 
-from common import (KIND_ADDRESS, KIND_UA, OP_MANDATE_PAY, OP_REVOKE, Bytes32, Holder, MetaOp, account_call,
-                    check_envelope, digest, mbr_paid, mbr_payment, pay_lane, verify_native, zero)
+from common import (KIND_ADDRESS, KIND_UA, OP_MANDATE_PAY, OP_REVOKE, VERIFY, VERIFY_KEY, Bytes32, Holder, MetaOp,
+                    check_envelope, digest, mbr_paid, pay_lane, rest, send, signed_by, zero)
 
 MANDATE_LEN = 204  # owner 33 ‖ terms 130 ‖ period_start 8 ‖ spent 16 ‖ remaining 16 ‖ revoked 1
 MBR_MANDATE_BOX = 2500 + 400 * (41 + MANDATE_LEN)
 MBR_LANE_BOX = 2500 + 400 * (33 + 8)
-VERIFY = "verify(uint8,byte[32],byte[32],byte[])bool"          # a value op (POLICY_PASSKEY_FOR_VALUE)
-VERIFY_KEY = "verify_key(uint8,byte[32],byte[32],byte[])bool"  # an op that moves no value (the revoke)
 MTX_PAY = ("mtx_pay((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],"
            "uint64,uint64,byte[32]),byte[],address)void")
 
@@ -240,39 +239,5 @@ def fund_it(token: UInt64, o: MetaOp, auth: Bytes, fund_mbr: UInt64) -> None:
                                                              Global.current_application_address.bytes))
     if fund_mbr:
         itxn.submit_txns(itxn.Payment(receiver=app.address, amount=fund_mbr, fee=0), call)
-    else:
-        call.submit()
-
-
-@subroutine
-def rest(need: UInt64) -> UInt64:
-    """The MBR payment beyond `need` (this app's new boxes): forwarded to another app's exact-MBR call."""
-    paid = mbr_payment()
-    assert paid >= need, "MBR payment must equal the new boxes' MBR exactly"
-    return paid - need
-
-
-@subroutine
-def signed_by(account_app: UInt64, method: Bytes, h: Holder, d: Bytes32, auth: Bytes, forward: UInt64) -> UInt64:
-    """`auth` signs `d` for `h`: a native address's 64-byte wallet signature here, else the account app's `method`
-    selector (`verify` or `verify_key`) after `forward` µALGO (a lazy record open). Returns what was forwarded."""
-    if h.kind.as_uint64() == KIND_ADDRESS and auth.length == 64:
-        assert verify_native(Account(h.id.bytes), d, auth), "bad signature"
-        return UInt64(0)
-    account_call(account_app, method, h, d, auth, forward)
-    return forward
-
-
-@subroutine
-def send(token: UInt64, to: Holder, amount: BigUInt, forwarded: UInt64) -> None:
-    """This app's token balance → `to` by an inner token call (arc200_transfer to an address, transfer_to_ua to a UA
-    id), after the MBR of the receiver's new box when `forwarded` (inner fees 0: the relayer pools them)."""
-    app = Application(token)
-    sel = arc4.arc4_signature("arc200_transfer(address,uint256)bool")
-    if to.kind.as_uint64() == KIND_UA:
-        sel = arc4.arc4_signature("transfer_to_ua(byte[32],uint256)void")
-    call = itxn.ApplicationCall(app_id=app, fee=0, app_args=(sel, to.id.bytes, arc4.UInt256(amount).bytes))
-    if forwarded:
-        itxn.submit_txns(itxn.Payment(receiver=app.address, amount=forwarded, fee=0), call)
     else:
         call.submit()

@@ -1,8 +1,10 @@
 """SCaaS token on Algorand (near-algorand T11; spec §2, §4.1, §4.2, §4.4–§4.6, §4.9).
 
 An app-held ARC-200 ledger in boxes (not an ASA): `"b" ‖ address` → uint256 (native holders), `"u" ‖ UA id` → uint256,
-lanes `"l" ‖ sha256(kind ‖ holder ‖ lane)` → uint64 next nonce, allowances `"a" ‖ sha256(owner ‖ spender)` → uint256;
-every name 33 bytes, prefixes disjoint; nothing is ever deleted. Each call that creates boxes is preceded in its group
+lanes `"l" ‖ sha256(kind ‖ holder ‖ lane)` → uint64 next nonce, allowances `"a" ‖ sha256(owner ‖ spender)` → uint256,
+DEX orders sold in this token (T14) `"o" ‖ sha256(kind ‖ holder ‖ lane ‖ nonce)` → uint8 (1 filled, 2 cancelled) and
+their order lanes' `"n" ‖ sha256(kind ‖ holder ‖ lane)` → uint64 min_nonce (never the meta-tx lanes); every name 33
+bytes, prefixes disjoint; nothing is ever deleted. Each call that creates boxes is preceded in its group
 by a payment to the app address of exactly their MBR (§2 row 15: the app's `AcctMinBalance` after minus before; no
 payment when nothing is created). No local state (OptIn refused); Update / Delete refused (the ARC-4 router accepts
 neither). Supply ≤ 2^128 − 1, so every balance fits the `MetaOp` uint128 amount.
@@ -21,16 +23,21 @@ import typing
 from algopy import (Account, BigUInt, Bytes, BoxMap, FixedBytes, Global, GlobalState, Txn, UInt64, arc4,
                     op, subroutine)
 
-from common import (KIND_ADDRESS, KIND_UA, OP_EXECUTE_TRANSFER, OP_PAY, OP_TRANSFER, Bytes32, Holder, MetaOp,
-                    account_verify, check_envelope, digest, lane_key, mbr_paid, mbr_payment, meta_pay_id, pay_lane,
-                    verify_native, zero)
+from common import (KIND_ADDRESS, KIND_UA, OP_CANCEL, OP_EXECUTE_TRANSFER, OP_INVALIDATE_NONCES, OP_PAY, OP_TRADE,
+                    OP_TRANSFER, VERIFY, VERIFY_KEY, Bytes32, Holder, MetaOp, Order, account_verify, check_envelope,
+                    digest, lane_key, mbr_paid, mbr_payment, meta_pay_id, pay_lane, rest, signed_by, verify_native,
+                    zero)
 
 Bytes8 = FixedBytes[typing.Literal[8]]
 U128_MAX = 2**128 - 1
 BOX_FLAT = 2500  # protocol box MBR: 2,500 + 400 per name + value byte (µALGO)
 BOX_BYTE = 400
 MBR_AMOUNT_BOX = BOX_FLAT + BOX_BYTE * (33 + 32)  # "b" / "u" / "a" boxes
-MBR_LANE_BOX = BOX_FLAT + BOX_BYTE * (33 + 8)
+MBR_LANE_BOX = BOX_FLAT + BOX_BYTE * (33 + 8)  # also a "n" min_nonce box
+MBR_ORDER_BOX = BOX_FLAT + BOX_BYTE * (33 + 1)
+MIN_NONCE_CAP = 2**63  # CTR-DEX-10: min_nonce < 2^(w−1), w = 64
+FILLED = 1
+CANCELLED = 2
 
 
 class Token(arc4.ARC4Contract):
@@ -46,6 +53,8 @@ class Token(arc4.ARC4Contract):
         self.ua = BoxMap(Bytes32, arc4.UInt256, key_prefix=b"u")
         self.lanes = BoxMap(Bytes32, UInt64, key_prefix=b"l")
         self.allowances = BoxMap(Bytes32, arc4.UInt256, key_prefix=b"a")
+        self.orders = BoxMap(Bytes32, arc4.UInt8, key_prefix=b"o")
+        self.min_nonces = BoxMap(Bytes32, UInt64, key_prefix=b"n")
 
     @arc4.abimethod(create="require")
     def create(self, name: Bytes32, symbol: Bytes8, decimals: arc4.UInt8, admin: Account,
@@ -185,9 +194,81 @@ class Token(arc4.ARC4Contract):
     @arc4.abimethod(readonly=True)
     def mbr_needed(self, op: MetaOp) -> UInt64:
         """This app's part of a value entry's exact payment: its new lane box and `op.to`'s new balance box (for an
-        open-mode pay ask with `to` = the open payee). A payer verified by the account app adds that app's
-        `verify_mbr` (a UA's first signed op opens its record)."""
+        open-mode pay ask with `to` = the open payee); a trade leg (op 1): its order box and the DEX's new balance box.
+        A payer verified by the account app adds that app's `verify_mbr` (a UA's first signed op opens its record)."""
+        if op.op.as_uint64() == OP_TRADE:
+            return self._trade_need(op.to)
         return self._need(op.from_, op.lane, op.to)
+
+    # ------------------------------------------------------------ DEX legs (T14; §4.1, §4.7; CTR-DEX-09 / -10)
+    @arc4.abimethod
+    def mtx_trade(self, op: MetaOp, auth: Bytes, order: Order) -> None:
+        """Op 1, a settlement leg, pulled only by the order's DEX: an app (an inner call from it) whose address is
+        `op.to` and `op.relayer` — the token's open mode never applies. Fill-or-kill: the whole `sell_amount` moves from
+        the seller into the DEX's balance; `extra = sha256(ARC-4(order))`, the order sells this token, `pay_ref` zero,
+        the order `(from, lane, nonce)` open and ≥ its `min_nonce`, then closed for good; a value op (account `verify`,
+        POLICY_PASSKEY_FOR_VALUE). MBR: the order box and the DEX's balance box when new."""
+        before = Global.current_application_address.min_balance
+        assert called_by_app(), "a leg is pulled only by an app, the order's DEX"
+        dex = addr_holder(Txn.sender)
+        assert op.op.as_uint64() == OP_TRADE, "wrong op code"
+        assert op.to == dex and op.relayer.bytes == Txn.sender.bytes, \
+            "a leg is pulled only by the order's DEX (to = relayer = caller)"
+        assert order.sell_token.as_uint64() == Global.current_application_id.id, "order sells another token"
+        amount = op.amount.as_biguint()
+        assert amount == order.sell_amount.as_biguint() and amount > 0, "fill-or-kill: op amount = sell_amount"
+        assert op.pay_ref == zero(), "a trade leg carries no pay_ref"
+        assert op.extra == order_hash(order), "extra is not sha256 of the order"
+        assert Global.latest_timestamp <= order.expiry.as_uint64(), "order expired"
+        check_envelope(op)
+        key = self._open_order(op.from_, op.lane, op.nonce.as_uint64())
+        d = digest(op)
+        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY), op.from_, d, auth,
+                        rest(self._trade_need(dex)))
+        self.orders[key] = arc4.UInt8(FILLED)
+        arc4.emit("OrderFilled", op.from_, arc4.Address(Txn.sender), op.lane, op.nonce, arc4.UInt256(amount), d)
+        self._move(op.from_, dex, amount)
+        mbr_paid(before, fwd)
+
+    @arc4.abimethod
+    def mtx_cancel(self, op: MetaOp, auth: Bytes, target_lane: Bytes32, target_nonce: arc4.UInt64) -> None:
+        """Op 14: closes the open order `(from, target_lane, target_nonce)` for good (a filled, cancelled or voided one
+        is refused: no effect for a no-op). Moves no value (account `verify_key`). MBR: the order box."""
+        before = Global.current_application_address.min_balance
+        admin_shape(op, UInt64(OP_CANCEL), target_lane.bytes + target_nonce.bytes)
+        key = self._open_order(op.from_, target_lane, target_nonce.as_uint64())
+        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op.from_, digest(op), auth,
+                        rest(UInt64(MBR_ORDER_BOX)))
+        self.orders[key] = arc4.UInt8(CANCELLED)
+        arc4.emit("OrderCancelled", op.from_, target_lane, target_nonce)
+        mbr_paid(before, fwd)
+
+    @arc4.abimethod
+    def mtx_invalidate_nonces(self, op: MetaOp, auth: Bytes, lane: Bytes32, min_nonce: arc4.UInt64) -> None:
+        """Op 15: voids the holder's orders on `lane` below `min_nonce` (< 2^63, CTR-DEX-10; strictly increasing: a
+        repeat is a no-op, refused). Moves no value (account `verify_key`). MBR: the min_nonce box once per lane."""
+        before = Global.current_application_address.min_balance
+        admin_shape(op, UInt64(OP_INVALIDATE_NONCES), lane.bytes + min_nonce.bytes)
+        n = min_nonce.as_uint64()
+        assert n < MIN_NONCE_CAP, "min_nonce must be below 2^63"
+        key = lane_key(op.from_, lane)
+        assert n > self.min_nonces.get(key, default=UInt64(0)), "min_nonce only increases"
+        need = UInt64(0) if key in self.min_nonces else UInt64(MBR_LANE_BOX)
+        fwd = signed_by(self.account_app.value, arc4.arc4_signature(VERIFY_KEY), op.from_, digest(op), auth,
+                        rest(need))
+        self.min_nonces[key] = n
+        arc4.emit("NoncesInvalidated", op.from_, lane, min_nonce)
+        mbr_paid(before, fwd)
+
+    @arc4.abimethod(readonly=True)
+    def filled(self, kind: arc4.UInt8, holder: Bytes32, lane: Bytes32, nonce: arc4.UInt64) -> bool:
+        """The order `(holder, lane, nonce)` was filled (by a trade leg)."""
+        st = self.orders.get(order_key(Holder(kind, holder), lane, nonce.as_uint64()), default=arc4.UInt8(0))
+        return st.as_uint64() == FILLED
+
+    @arc4.abimethod(readonly=True)
+    def min_nonce(self, kind: arc4.UInt8, holder: Bytes32, lane: Bytes32) -> UInt64:
+        return self.min_nonces.get(lane_key(Holder(kind, holder), lane), default=UInt64(0))
 
     @arc4.abimethod(readonly=True)
     def account(self) -> UInt64:
@@ -198,6 +279,23 @@ class Token(arc4.ARC4Contract):
         return self.lanes.get(lane_key(Holder(kind, holder), lane), default=UInt64(0))
 
     # ------------------------------------------------------------ internals
+    @subroutine
+    def _open_order(self, h: Holder, lane: Bytes32, nonce: UInt64) -> Bytes32:
+        """The order `(h, lane, nonce)` is open (not filled, not cancelled, not below `min_nonce`): its box key."""
+        key = order_key(h, lane, nonce)
+        st = self.orders.get(key, default=arc4.UInt8(0)).as_uint64()
+        assert st != FILLED, "order filled"
+        assert st != CANCELLED, "order cancelled"
+        assert nonce >= self.min_nonces.get(lane_key(h, lane), default=UInt64(0)), "order nonce below min_nonce"
+        return key
+
+    @subroutine
+    def _trade_need(self, dex: Holder) -> UInt64:
+        need = UInt64(MBR_ORDER_BOX)
+        if not self._exists(dex):
+            need += MBR_AMOUNT_BOX
+        return need
+
     @subroutine
     def _need(self, frm: Holder, lane: Bytes32, payee: Holder) -> UInt64:
         need = UInt64(0)
@@ -292,6 +390,28 @@ def addr_holder(a: Account) -> Holder:
 @subroutine
 def native_view(h: Holder) -> Account:
     return Account(h.id.bytes) if h.kind.as_uint64() == KIND_ADDRESS else Global.current_application_address
+
+
+@subroutine
+def order_key(h: Holder, lane: Bytes32, nonce: UInt64) -> Bytes32:
+    """Order box name body (after the `o` prefix): `sha256(kind ‖ holder ‖ lane ‖ nonce)`."""
+    return Bytes32.from_bytes(op.sha256(h.bytes + lane.bytes + op.itob(nonce)))
+
+
+@subroutine
+def order_hash(o: Order) -> Bytes32:
+    return Bytes32.from_bytes(op.sha256(o.bytes))
+
+
+@subroutine
+def admin_shape(o: MetaOp, code: UInt64, params: Bytes) -> None:
+    """A cancel / invalidate (as the revoke): `to = from`; amount, pay_ref, lane and nonce zero; `extra` = sha256 of
+    the ARC-4 parameters; rules 1, 2, 7. A replay is refused by the state (closed order, min_nonce not raised)."""
+    assert (o.op.as_uint64() == code and o.to == o.from_ and o.amount.as_biguint() == 0 and o.pay_ref == zero()
+            and o.lane == zero() and o.nonce.as_uint64() == 0), \
+        "cancel / invalidate shape (to = from; amount, pay_ref, lane and nonce zero)"
+    assert o.extra.bytes == op.sha256(params), "extra is not sha256 of the parameters"
+    check_envelope(o)
 
 
 @subroutine
