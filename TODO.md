@@ -232,10 +232,18 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
-- [ ] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; a new feature, not T17):
+- [ ] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; owner ruling 2026-10-28: after the
+  metatx-split merge; a new feature, not T17):
   `scaas-node` relays no `ua_metatx` job today, so `uaPayMeta`, `MtxRelayFee.uaRelay` and the `UAPaymentSettled` join
   (`indexer::join_pay_events`, a UA payer's `RelayFeePaid` id) are not served; build the `ua_metatx` kind
   (job-api.md, SPECIFIED) with them.
+- [ ] **Relay-fee minimum before mainnet** (owner ruling 2026-10-28, final review owner rulings item 7): the flat
+  `params.relay_fee.min_amount` (one floor per chain, default 1 base unit, every token and call) stays until before mainnet;
+  re-decide then between a per-token minimum and gas-proportional pricing (TON `min_ton_value` and Solana
+  `min_lamports_value` already price per token).
+- [ ] **TON passkey relays need P-256 in the node** (owner ruling 2026-10-28 on the final review residuals): the node refuses a
+  passkey-signed relayed call until it verifies P-256 (`get_passkey` + the WebAuthn check; a `p256` dependency); passkey
+  users send revoke / set_key directly meanwhile.
 - [ ] **bamboo-dms portal bundle rebuild (metatx split)**: `dms_blockchain_bridge`'s vendored clientkeys bundle lacks the new
   exports (`metaPayId`, `payLane`, `relayRef`, the pay-meta / relay-fee builders, T18); rebuild it with `npm run build` and copy
   it (the build writes outside the repo; combine with the stale-bundle item under the P5 leftovers).
@@ -262,16 +270,16 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     `bothFail_feeExceedsCapFixed_callReverts` is not a fee fault and no both-fail row has a FIXED fee over the cap; tests of T3
     were written after the code; `Factory.t.sol:489` / `HederaV2.t.sol:57` "+13 B" comment is the slack delta (actual +327 B);
     a size-dependent regression below ~5.6 k passes the absolute 8,000 bound (inherent); `LinkClosure._walk` comment on the
-    metadata cut; per-set fixtures instead of the skips in `MetaTxParity` / `MtxSplitOverhead` (owner may prefer); Soroban
+    metadata cut; the skips in `MetaTxParity` / `MtxSplitOverhead` stay (owner ruling 2026-10-28, no per-set fixtures); Soroban
     `relay-fee/src/test.rs:376,393` bare `is_err()`; Sui same-entry-other-instance Move test; Aptos `vectors.move` P-256 lines
     churn on regeneration (use RFC 6979 in `gen_vectors`).
   - TON relay fee after the I1 fix and its re-review fixes (decisions "TON only, node" and its re-review Change): passkey-signed
-    relayed calls are refused until the node verifies P-256 (passkey users send revoke / set_key directly; P-256 in the node
-    is the owner's call); the payment leg is checked for `LANE_TTL` and the payer's balance (plain pays have the same two
+    relayed calls are refused until the node verifies P-256 (TODO item above); the payment leg is checked for `LANE_TTL` and the payer's balance (plain pays have the same two
     gaps at one hop's cost: owner rulings item 7, no code); a race in which the owner spends the lane or moves its tokens
     between the check and the message still bounces at the relayer's cost (costs the submitter a direct op or a paid relay
     each time); two relay-fee jobs of one payer wallet within one payment round trip: the router refuses the second (742)
-    after the relayer paid its forward fee; every burst rides on one paid relay (no per-payer-wallet hold in the node); the
+    after the relayer paid its forward fee; every burst rides on one paid relay (accepted risk, owner ruling 2026-10-28: no
+    per-payer-wallet hold in the node); the
     payment must stay valid more than 600 s, the lane tx expires at min(valid_until − 300 s, deadline) (plain pays: same
     window, owner rulings item 7, no code); no per-payer failure budget (owner's call).
   - `MtxRelayExecutor` copies return data on success (a hostile target can inflate the relayer's memory cost; the node simulates

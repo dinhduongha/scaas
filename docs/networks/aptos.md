@@ -619,9 +619,10 @@ the production command) reads `0x1::code::PackageRegistry` back at the code-obje
 policy is immutable. The node refuses to activate a chain whose package is upgradeable (`halted`,
 `PROGRAM_UPGRADEABLE`, [NODE-STO-07](../node/store.md#NODE-STO-07)). Consequences: every contract fix is a new deployment
 at a new address with new tokens/Accounts; old Accounts remain spendable through the old package; the DEX admin role
-(code-object owner) is unchanged. Owner ruling 2026-10-07 ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)). SPECIFIED
-(as built `upgrade_policy = "compatible"`, `Move.toml:4`). Test: the publish script on localnet prints policy 2; a node
-with a `compatible` package ⇒ chain `halted`.
+(code-object owner) is unchanged. Owner ruling 2026-10-07 ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)), confirmed by
+owner ruling 2026-10-28. `Move.toml` `upgrade_policy = "immutable"` is BUILT (owner ruling 2026-10-28); the publish
+script's registry read-back and the node's refusal stay SPECIFIED. Test: the publish script on localnet prints policy 2;
+a node with a `compatible` package ⇒ chain `halted`.
 
 ## 13. Conformance
 
@@ -740,7 +741,7 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
 - **Chain-id reuse.** `ref` and the `MetaOp` domain carry a 1-byte `chain_id`, not network bytes. A customer chain that reuses
   an Aptos chain id and publishes the package at the same address shares signatures with that chain; give a customer chain
   its own id (or its own package address) before it carries payments.
-- **Upgrade authority.** `upgrade_policy = "compatible"` as built (NET-APT-20 says immutable); the code-object owner can
-  upgrade `relayfee` together with `meta`.
+- **Upgrade authority.** `upgrade_policy = "immutable"` (NET-APT-20, owner ruling 2026-10-28): nobody can upgrade
+  `relayfee` or `meta` after the deploy.
 - **Owed.** A two-passkey relay may exceed the 9,200 exec-gas ceiling (unmeasured); measure it on a localnet or testnet
   (TODO.md). Commits: T14 `78c67cff`, fix 1 `d48c51f9`.

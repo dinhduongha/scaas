@@ -453,8 +453,8 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
     node refuses it as a no-op (the payer does not pay for nothing; owner rulings list item 6), not as a failure.
 
   Without the check a failing call bounced and the relayer paid the bounce (about 0.025 TON in the sandbox), repeatable at
-  no cost to the submitter. **Passkey users on TON cannot use the relay-fee router for now** (controller call 2026-10-28,
-  owner may override): the node cannot verify a passkey's P-256 signature, and any submitter could send a passkey call
+  no cost to the submitter. **Passkey users on TON cannot use the relay-fee router for now** (owner ruling 2026-10-28:
+  P-256 in the node is a TODO item): the node cannot verify a passkey's P-256 signature, and any submitter could send a passkey call
   with a garbage signature, so a passkey-signed relayed call is refused until the node verifies P-256 (then
   `get_passkey` + the WebAuthn check). A passkey owner sends its revoke / set_key directly.
 
@@ -474,7 +474,7 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   - two relay-fee jobs of one payer wallet sent within one payment round trip (different salts, both pass every check):
     the router refuses the second with 742 (one payment of a payer wallet in flight) after the relayer paid its forward fee
     and part of the router's compute. The node does not hold the second job (that needs a per-payer-wallet hold across
-    lanes until the first escrow leaves the paying stage; not built, controller call); every burst of such failures rides on
+    lanes until the first escrow leaves the paying stage; not built: an accepted risk, owner ruling 2026-10-28); every burst of such failures rides on
     one paid relay of the submitter;
   - no per-payer failure budget is built (owner's call).
 - **Settlement ring (recorded residual, final review M8).** A settlement transfer is kept for a bounce in a ring of the

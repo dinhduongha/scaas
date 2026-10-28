@@ -379,7 +379,9 @@ start (`params.upgrade_cap`); a live cap ⇒ chain `halted`, `PROGRAM_UPGRADEABL
 ([NODE-STO-07](../node/store.md#NODE-STO-07)). Consequences: `type_package = package`; every fix is a new package with
 new `Root`/`Registry<T>`/`Account<T>` ids, and owners move funds by signing `pay` from the old account (old code keeps
 running) to the new one; the deployment's vectors are regenerated. Owner ruling 2026-10-07; application of
-[CTR-GEN-02](../contracts/README.md#CTR-GEN-02). SPECIFIED (as built the publisher keeps the `UpgradeCap`).
+[CTR-GEN-02](../contracts/README.md#CTR-GEN-02); confirmed by owner ruling 2026-10-28. The deploy step is BUILT:
+`smartcontracts/scripts/deploy.sh sui <env>` publishes and calls `make_immutable` on the created `UpgradeCap` in the same
+run (untested against a network). The node's `params.upgrade_cap` re-check stays SPECIFIED.
 
 ## 12. Client key verification
 
@@ -483,6 +485,7 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
 - **Client rules.** The payer of `relay_manage` / `relay_cancel` / `relay_invalidate_nonces` is the call's own account (Move
   allows one `&mut` per object per PTB command); a sponsor needs `_from` variants (not built). `RelayFee` exists only if
   `relayfee` is in the package's first publish (no `init` runs for a module added by an upgrade).
-- **Upgrade authority.** `relayfee` shares the `scaas` package, so the publisher's `UpgradeCap` can change token and router
-  together; NET-SUI-15 (immutable) is still SPECIFIED, the deploy leaves the cap with the publisher.
+- **Upgrade authority.** `relayfee` shares the `scaas` package; the deploy makes the package immutable (NET-SUI-15,
+  owner ruling 2026-10-28: `deploy.sh sui` destroys the `UpgradeCap` in the same run), so nobody can change token or
+  router after the deploy.
 - Commits: T13 `8a033b0e`, fix 1 `3c70e5ba`.
