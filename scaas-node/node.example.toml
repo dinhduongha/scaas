@@ -211,7 +211,8 @@ finality = { mode = "instant", quorum = 1 }      # the adapter reads `final` blo
 # min_yocto_value = yoctoNEAR per base unit of each fee token (decimal string): a fee must cover gas × the node's
 # gas price + the transaction's action fees + the deposits the job attaches (+ one relay_timeout for a router job).
 # Router targets: the tokens and the DEX (their call is checked first), plus `targets = { "<account>" = ["method", …] }`
-# the operator vouches for (only those methods). Payments, target ops and DEX orders must stay valid >= 120 s.
+# the operator vouches for (only those methods). Every job's payment, a target / wrapped op, a mandate's expiry and DEX
+# orders must stay valid >= 120 s. target_gas / target_deposit of a token or DEX target are set by the node.
 # A view stopped by the RPC's max_gas_burnt_view is retried, never fatal.
 tokens = [{ address = "token.test.near", decimals = 6 }]
 params = { dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }
