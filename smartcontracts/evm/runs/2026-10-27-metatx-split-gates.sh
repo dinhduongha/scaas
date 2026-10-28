@@ -292,6 +292,7 @@ cargo-scaas-node|cargo|ton::ton_relay_fee_event_vectors
 cargo-scaas-node|cargo|ton::ton_relay_fee_job_tracks_escrow
 cargo-scaas-node|cargo|ton::ton_relay_fee_refunds_after_deadline
 cargo-scaas-node|cargo|ton::ton_relay_fee_refuses_failing_call_before_send
+cargo-scaas-node|cargo|ton::ton_relay_fee_refuses_failing_payment_before_send
 cargo-scaas-node|cargo|ton::pay_meta_job_never_panics
 cargo-scaas-node|cargo|ton::relay_fee_job_never_panics
 cargo-scaas-node|cargo|config::relay_params_default_and_refuse_invalid_values
