@@ -1,3 +1,35 @@
+## Session 2026-10-28 / 29 (metatx-split merged + pushed; near-algorand T7–T16) — resume here
+
+**State (owner paused 2026-10-29 to shut down):** nothing running (agents stopped, no capped jobs, no algorand containers).
+- `main` = `f6d5d7d7` = origin (pushed): merge of `metatx-split` (`34423173`, owner "merge và push metatx-split đi") + the
+  CI clippy fix (`SignedOpFields` alias in `scaas-node/src/adapters/ton.rs`). CI green on `f6d5d7d7`. Before the merge:
+  T20 closing gates (21 steps rc=0), final whole-branch review → fix wave (TON relayed-call pre-check I1, docs M1–M13) →
+  3 re-review rounds (TON payment leg: LANE_TTL, balance, validity floor) → owner rulings 2026-10-28 (all controller
+  proposals accepted; item 1 EIP-7702: delegate-only signatures accepted on BOTH paths, `SigCheck.isValid` follows
+  CTR-UA-24; Q1 risk acceptance reversed → payment validity floor kept; Solana recovery adds a key; no fee for a no-op;
+  immutable Sui / Aptos deploys) → review minors. Records in `docs/decisions.md`, TODO items for the follow-ups (EVM node
+  UA path, TON passkey relays need P-256 in the node, relay-fee minimum before mainnet, e2e still owed incl. Sui
+  make_immutable / Aptos immutable publish).
+- **`near-algorand`** (worktree `.claude/worktrees/near-algorand`) at **`8cc5efbc`**, clean, rebased onto `main`
+  (post-rebase gates all rc=0, DEX KAT regenerated). Tasks 1–15 complete, each reviewed (Critical findings fixed:
+  T13 C1 mandate funding front-run → the open executes the funding itself; T15 I1 executor address off-curve via a
+  creation-time salt). Key figures: NEAR msig 12 passkeys, Algorand MSIG_MAX_MEMBERS 3 (2,048 B args with Chrome-shaped
+  assertions; inner budget calls relayer-paid); Algorand executor salt chosen off-curve at deploy.
+  - **Task 16 (scaas-node NEAR adapter)**: `3a53404e` + fix 1 `a36dafa1` + fix 2 `32121167` (NEAR DEX `leg_settle`
+    view) / `8bde594c` + fix 3 `8cc5efbc`; crate 385 lib tests + clippy rc=0. Review rounds closed I1–I3, R1–R4, f1–f4,
+    N1 / N2, g1 / g2 (relayer-loss paths: router target allowlist + `_check`, same-token balance, DEX pair replica,
+    120 s expiry margin, unopened-subject origins, node-set target gas / deposit). **The round-3 re-review was stopped
+    before reporting** (round 3 of 5).
+
+**Next (in order, subagent-driven):**
+1. Re-dispatch the T16 fix-3 re-review (diff `.superpowers/sdd/2026-10-28-near-algorand/review-8bde594c..8cc5efbc-code.diff`;
+   question: any job left that passes every node check, fails on chain at the relayer's cost and is free for the payer,
+   excluding operator-listed third-party targets).
+2. T17 Algorand adapter: collect the Algorand-specific "→ T16" notes of the ledger into `task-17-notes.md`, plus T15 f1
+   (startup rebuilds the executor from the router's `salt` global, asserts == `executor()` and off-curve).
+3. T18–T22 (clients, devnets / e2e, docs + decisions T21 with every recorded choice, closing gates T22), then the
+   whole-branch review → owner rulings → merge / push on the owner's go.
+
 ## Session 2026-10-28 evening (metatx-split T20 + final review, near-algorand T7 + T8 WIP) — resume here
 
 **State (owner paused 2026-10-28 evening to shut down):** nothing running (agents stopped, no capped jobs).
