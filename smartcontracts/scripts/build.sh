@@ -16,9 +16,15 @@ build() {
     solana)  (export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"; cd "$SC/solana" && cargo build-sbf) ;;
     near)    for m in "$SC"/near/*/Cargo.toml "$SC"/near/integration/*/Cargo.toml; do grep -q 'cdylib' "$m" || continue  # contract crates (+ test fixtures)
                (cd "$(dirname "$m")" && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi); done ;;
-    # puyapy (pinned in requirements.txt, venv .venv) → out/*.{approval,clear}.bin + ARC-56; artifacts.json rewritten
-    algorand) "$SC/algorand/scripts/venv.sh" && (cd "$SC/algorand" && . .venv/bin/activate && rm -rf out \
+    # puyapy (pinned in requirements.txt, venv .venv) → out/*.{approval,clear}.bin + ARC-56; artifacts.json rewritten.
+    # Two passes (T15, spec §4.8): the executor LogicSig with a sentinel router id (+ its source map, for the tests'
+    # failure messages), split around it into EXEC_PREFIX / EXEC_SUFFIX, then every app with both baked into the router.
+    algorand) X=ROUTER_APP_ID=0x5ca5ec0de0e1ec01; "$SC/algorand/scripts/venv.sh" && (cd "$SC/algorand" \
+               && . .venv/bin/activate && rm -rf out \
+               && puyapy contracts/executor.py --out-dir "$PWD/out" --output-bytecode --no-output-teal -T "$X" \
+               && T=$(python -I scripts/exec_split.py "${X#*=}") \
                && puyapy contracts --out-dir "$PWD/out" --output-bytecode --no-output-teal --no-output-source-map \
+                    -T "$X" $T \
                && python -I scripts/artifacts.py ${ALGORAND_ARTIFACTS_CHECK:+--check}) ;;
     *) echo "unknown family '$1' (one of: $FAMILIES all)" >&2; exit 2 ;;
   esac

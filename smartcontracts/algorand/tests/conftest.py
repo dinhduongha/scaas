@@ -335,6 +335,39 @@ def deploy_probe(dispenser):
     return d
 
 
+# ---------------------------------------------------------------- relay-fee router + executor (T15)
+EXEC_PREFIX = open(os.path.join(OUT, 'Executor.prefix.bin'), 'rb').read()
+EXEC_SUFFIX = open(os.path.join(OUT, 'Executor.suffix.bin'), 'rb').read()
+
+
+class Router(Deployed):
+    def program(self):
+        """The executor LogicSig of this router: the template around its app id (u64 big-endian)."""
+        return EXEC_PREFIX + self.id.to_bytes(8, 'big') + EXEC_SUFFIX
+
+    @property
+    def lsig(self):
+        return transaction.LogicSigAccount(self.program())
+
+    @property
+    def executor(self):
+        return self.lsig.address()
+
+
+def deploy_router(dispenser):
+    """A router, funded with its 100,000 µALGO base minimum (an account below it cannot receive the MBR payment it
+    forwards); stateless, so tests share one unless they fund its executor."""
+    d = deploy(dispenser, 'RelayFee', [])
+    r = Router(d.app, d.id)
+    DEPLOYED[r.id] = r
+    return r
+
+
+@pytest.fixture(scope='session')
+def router(dispenser):
+    return deploy_router(dispenser)
+
+
 # ---------------------------------------------------------------- token
 class Tok(Deployed):
     """The token plus its admin; `mtx(...)` builds, signs and submits a MetaOp entry with its boxes and budget."""

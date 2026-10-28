@@ -43,14 +43,12 @@ Delete refused (the ARC-4 router accepts neither); no inner transaction rekeys o
 """
 from algopy import Application, BigUInt, Bytes, BoxMap, Global, GlobalState, Txn, UInt64, arc4, itxn, op, subroutine
 
-from common import (KIND_ADDRESS, KIND_UA, OP_MANDATE_PAY, OP_REVOKE, VERIFY, VERIFY_KEY, Bytes32, Holder, MetaOp,
-                    check_envelope, digest, mbr_paid, pay_lane, rest, send, signed_by, zero)
+from common import (KIND_ADDRESS, KIND_UA, MTX_PAY, OP_MANDATE_PAY, OP_REVOKE, VERIFY, VERIFY_KEY, Bytes32, Holder,
+                    MetaOp, check_envelope, digest, mbr_paid, pay_lane, rest, send, signed_by, zero)
 
 MANDATE_LEN = 204  # owner 33 ‖ terms 130 ‖ period_start 8 ‖ spent 16 ‖ remaining 16 ‖ revoked 1
 MBR_MANDATE_BOX = 2500 + 400 * (41 + MANDATE_LEN)
 MBR_LANE_BOX = 2500 + 400 * (33 + 8)
-MTX_PAY = ("mtx_pay((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],"
-           "uint64,uint64,byte[32]),byte[],address)void")
 
 
 class MandateTerms(arc4.Struct, frozen=True):

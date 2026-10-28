@@ -20,6 +20,7 @@ named for their family below (`transfer_vectors`, `key_op_vectors`, `recovery_ve
 """
 import base64
 import hashlib
+import json
 import os
 import struct
 import sys
@@ -161,8 +162,9 @@ def filler(tag, n):
     return out[:n]
 
 
-# The method signature is a placeholder (Task 12 defines the account app's ABI); the vector pins the `call` layout.
-METHOD = 'mtx_add_key(byte[])void'
+# A real target method (the account app's key add, T12); the vector pins the `call` layout.
+METHOD = ('mtx_add_key((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],'
+          'uint64,uint64,byte[32]),byte[],(uint16,byte[]),byte[])void')
 RELAY_REFS = []
 
 
@@ -185,6 +187,18 @@ def relay(name, args, salt, note=None):
 relay('router_short', [selector(METHOD), filler('router_short', 60)], b32(0x61))
 relay('router_4096', [selector(METHOD), filler('router_4096', 4096 - 8 - 1 - 2 - 4 - 2)], b32(0x62),
       note='hash vector only: above the 2,048 B app-call argument limit, never submitted')
+
+
+# ---------------------------------------------------------------- executor (§4.8): the LogicSig of router ROUTER_APP
+def executor_vector():
+    """The executor program = `executor_prefix ‖ router app id (u64 BE) ‖ executor_suffix` (artifacts.json, T15: the
+    built template); its address = sha512_256("Program" ‖ program), which the router derives on chain."""
+    art = json.load(open(os.path.join(V.REPO, 'smartcontracts', 'algorand', 'artifacts.json')))['relayfee']
+    pre, suf = bytes.fromhex(art['executor_prefix']), bytes.fromhex(art['executor_suffix'])
+    prog = pre + ROUTER_APP.to_bytes(8, 'big') + suf
+    return {'note': 'program = prefix ‖ u64 BE router app id ‖ suffix; address = sha512_256("Program" ‖ program)',
+            'routerApp': ROUTER_APP, 'prefix': V.hx(pre), 'suffix': V.hx(suf), 'program': V.hx(prog),
+            'address': address(sha512_256(b'Program' + prog))}
 
 
 # ---------------------------------------------------------------- MBR (§2 row 15): 2500 + 400·(name + value) µALGO
@@ -507,6 +521,10 @@ def selftest(doc):
     for n in ('cancel', 'invalidate_nonces'):
         f = rows[n]['fields']
         assert V.unhx(f['extra']) == V.sha256(V.unhx(rows[n]['params'])) and f['to'] == f['from']
+    e = doc['executor']
+    prog = V.unhx(e['program'])
+    assert prog == V.unhx(e['prefix']) + struct.pack('>Q', e['routerApp']) + V.unhx(e['suffix'])
+    assert e['address'] == address(sha512_256(b'Program' + prog))
     for b in doc['mbr']['boxes']:
         assert b['microAlgo'] == 2500 + 400 * (b['nameLength'] + b['valueLength']) and b['nameLength'] <= 64
 
@@ -561,6 +579,7 @@ def build():
             'appAddress': 'sha512_256("appID" ‖ u64 BE app id)'},
         'relayRefs': RELAY_REFS,
         'dexSettle': DEX_SETTLE,
+        'executor': executor_vector(),
         'routerCall': {'layout': 'target app id (u64 BE) ‖ u8 n ‖ (u16 BE len ‖ arg)×n; arg 0 = the ARC-4 selector',
                        'targetApp': short['targetApp'], 'method': METHOD, 'selector': V.hx(selector(METHOD)),
                        'args': short['args'], 'call': short['call']},

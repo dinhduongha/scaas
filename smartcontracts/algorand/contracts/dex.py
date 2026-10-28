@@ -3,14 +3,17 @@ partial fill; rulings R3, T14 pre-flight (a)–(g); the NEAR DEX of Task 8 is th
 settles both legs in one call, so nothing is held between transactions).
 
 - `settle(order_a, op_a, auth_a, order_b, op_b, auth_b, mbr)`, any submitter: each order's `relayer` is zero or the
-  submitter (`Txn.Sender`, CTR-DEX-09); the pair crosses (each buys what the other sells) and is fill-or-kill
+  submitter (CTR-DEX-09): `Txn.Sender`, or — a settle relayed through the relay-fee router (T15, §4.8), whose sender is
+  the shared executor LogicSig — the sender of the router's `relay` call right after it (the router app fixed at
+  creation; the executor's program and the router make that call follow every executor-sent settle, and binding an
+  order to the executor itself would make it open, so the executor is never the submitter); the pair crosses (each buys what the other sells) and is fill-or-kill
   (`a.sell_amount ≥ b.min_buy`, `b.sell_amount ≥ a.min_buy`: each side receives the other's whole `sell_amount`). Then,
   inside this one call: the inner `mtx_trade(op, auth, order)` of each order's sell token — leg op 1 with `to = relayer
   =` this app's address, so only this app pulls it; the token checks the rest (signature, the order, its lane and
   `min_nonce`, expiries) and moves the whole `sell_amount` into this app's balance there — and each amount straight on
   to the other leg's seller (inner `arc200_transfer` to an address, `transfer_to_ua` to a UA id). Any failure fails the
   whole group: no order closes, nothing moves (ruling R3, unlike NEAR's async escrow). This app holds nothing after a
-  settle and keeps no state at all.
+  settle and keeps no state beyond the router app id.
 - `mbr` = the exact MBR forwarded by an inner payment before each of the four inner token calls (leg a, leg b, the
   payout at token a, the payout at token b); each token checks its own part exactly, and the relayer's one payment just
   before `settle` equals their sum (§2 row 15: this app creates nothing itself).
@@ -21,23 +24,28 @@ settles both legs in one call, so nothing is held between transactions).
 - Event `Matched(settle_id, token_a, token_b, leg_a, leg_b)`: `settle_id = sha256(digest(op_a) ‖ digest(op_b))`, the
   two leg digests are the tokens' `OrderFilled.digest`; logged only on success (a failed group logs nothing).
 
-Inner fees are 0 (the relayer pools them); no inner transaction rekeys or closes. No local or global state (OptIn
-refused); Update / Delete refused (the ARC-4 router accepts neither).
+Inner fees are 0 (the relayer pools them); no inner transaction rekeys or closes. No local state; one global, the router app id
+fixed at creation (OptIn refused); Update / Delete refused (the ARC-4 router accepts neither).
 """
 import typing
 
-from algopy import Application, Bytes, Global, TransactionType, Txn, UInt64, arc4, gtxn, itxn, op, subroutine, urange
+from algopy import (Account, Application, Bytes, Global, GlobalState, OnCompleteAction, TransactionType, Txn, UInt64, arc4,
+                    gtxn, itxn, op, subroutine, urange)
 
-from common import Bytes32, MetaOp, Order, digest, mbr_paid, send, zero
+from common import RELAY, Bytes32, MetaOp, Order, digest, mbr_paid, send, zero
 
 MTX_TRADE = ("mtx_trade((byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],"
              "uint64,uint64,byte[32]),byte[],(uint64,uint64,uint128,uint128,byte[32],uint64))void")
 
 
 class Dex(arc4.ARC4Contract):
+    def __init__(self) -> None:
+        self.router_app = GlobalState(UInt64, key="router_app")
+
     @arc4.abimethod(create="require")
-    def create(self) -> None:
-        pass
+    def create(self, router_app: arc4.UInt64) -> None:
+        """`router_app`: the deployment's relay-fee router (fixed: no method changes it)."""
+        self.router_app.value = router_app.as_uint64()
 
     @arc4.baremethod(allow_actions=["NoOp"])
     def budget(self) -> None:
@@ -51,8 +59,9 @@ class Dex(arc4.ARC4Contract):
     def settle(self, order_a: Order, op_a: MetaOp, auth_a: Bytes, order_b: Order, op_b: MetaOp, auth_b: Bytes,
                mbr: arc4.StaticArray[arc4.UInt64, typing.Literal[4]]) -> None:
         before = Global.current_application_address.min_balance
-        bound(order_a)
-        bound(order_b)
+        by = submitter(self.router_app.value)
+        bound(order_a, by)
+        bound(order_b, by)
         assert (order_a.sell_token == order_b.buy_token and order_b.sell_token == order_a.buy_token
                 and order_a.sell_token != order_a.buy_token), "orders do not pair (each buys what the other sells)"
         assert (order_a.sell_amount.as_biguint() >= order_b.min_buy.as_biguint()
@@ -77,9 +86,23 @@ class Dex(arc4.ARC4Contract):
 
 
 @subroutine
-def bound(o: Order) -> None:
+def bound(o: Order, by: Account) -> None:
     """CTR-DEX-09: a relayer-bound order settles only when its relayer submits."""
-    assert o.relayer == zero() or o.relayer.bytes == Txn.sender.bytes, "order relayer is not the submitter"
+    assert o.relayer == zero() or o.relayer.bytes == by.bytes, "order relayer is not the submitter"
+
+
+@subroutine
+def submitter(router: UInt64) -> Account:
+    """Who submits this settle: the sender of the router's `relay` call right after it when there is one (the settle
+    is then the relay's target, sent by the executor), else `Txn.Sender`."""
+    i = Txn.group_index + 1
+    if i < Global.group_size:
+        n = gtxn.Transaction(i)
+        if (n.type == TransactionType.ApplicationCall and n.app_id.id == router
+                and n.on_completion == OnCompleteAction.NoOp and n.num_app_args > 0
+                and n.app_args(0) == arc4.arc4_signature(RELAY)):
+            return n.sender
+    return Txn.sender
 
 
 @subroutine

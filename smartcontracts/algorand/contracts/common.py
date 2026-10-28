@@ -42,6 +42,10 @@ OP_INVALIDATE_NONCES = 15
 ARC4_TRUE = b"\x15\x1f\x7c\x75\x80"  # an ABI `bool` return log: the return prefix ‖ true
 VERIFY = "verify(uint8,byte[32],byte[32],byte[])bool"          # a value op (POLICY_PASSKEY_FOR_VALUE)
 VERIFY_KEY = "verify_key(uint8,byte[32],byte[32],byte[])bool"  # an op that moves no value (revoke, cancel, invalidate)
+METAOP_ABI = ("(byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],uint64,"
+              "uint64,byte[32])")
+MTX_PAY = "mtx_pay(" + METAOP_ABI + ",byte[],address)void"
+RELAY = "relay(uint64," + METAOP_ABI + ",byte[])void"  # the router's entry (T15): the executor's next transaction
 
 
 class Holder(arc4.Struct, frozen=True):

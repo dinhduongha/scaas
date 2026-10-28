@@ -156,13 +156,15 @@ def relayer(make):
 
 
 @pytest.fixture
-def dex(dispenser):
-    return deploy_dex(dispenser)
+def dex(dispenser, router):
+    return deploy_dex(dispenser, router)
 
 
-def deploy_dex(dispenser):
-    d = deploy(dispenser, 'Dex', [])
+def deploy_dex(dispenser, router):
+    """`router`: the relay-fee router fixed at creation (T15: a relayer-bound order relayed through it)."""
+    d = deploy(dispenser, 'Dex', [router.id])
     x = Dx(d.app, d.id)
+    x.router_id = router.id
     DEPLOYED[x.id] = x
     return x
 
@@ -284,7 +286,7 @@ def test_order_relayer_mismatch_refused(dex, pair, relayer, make):
         dex.settle(relayer, la, lb)
 
 
-def test_leg_by_non_dex_refused(dex, pair, relayer, make, probe, dispenser):
+def test_leg_by_non_dex_refused(dex, pair, relayer, make, probe, dispenser, router):
     """A leg moves only when the order's DEX — the app whose address is the op's `to` and `relayer` — calls mtx_trade:
     not another app (the probe, a second DEX), not the address itself at the top level, and never through the token's
     open mode (mtx_pay refuses op 1)."""
@@ -294,7 +296,7 @@ def test_leg_by_non_dex_refused(dex, pair, relayer, make, probe, dispenser):
     with no(NOT_DEX):                                      # another app pulls a leg signed for this DEX
         run(relayer, probe, 'trade', [ta.id, la.op, la.auth, la.order, need], apps=[ta.id, ta.account.id],
             fee_extra=FEE_CREDIT)
-    dex2 = deploy_dex(dispenser)
+    dex2 = deploy_dex(dispenser, router)
     with no(NOT_DEX):                                      # a second DEX settles legs signed for the first
         dex.settle(relayer, la, lb, dex=dex2)
     x = make(1_000_000)                                    # a leg bound to an ordinary address, sent by it
@@ -464,7 +466,7 @@ def test_trade_leg_is_a_value_op(dex, pair, relayer):
     assert bal(tb, erin.ua()) == 60
 
 
-def test_carried_auth_after_the_settle(dex, pair, relayer, probe, dispenser):
+def test_carried_auth_after_the_settle(dex, pair, relayer, probe, dispenser, router):
     """A carried auth is the first `carry` call to this DEX after the settle, in group order (a's before b's), so each
     settle consumes the carries that follow it and several carried settles share one group (fix 1 m1); a carry to
     another app is not one, a router-like call may sit between; a carry before the settle, or one consumed by an
@@ -474,7 +476,7 @@ def test_carried_auth_after_the_settle(dex, pair, relayer, probe, dispenser):
     _, la2, lb2 = setup_legs(dex, ta, tb, relayer)
     la2 = dex.leg(ta, erin, la2.order, nonce=1)
     lb2 = dex.leg(tb, tb.alice, lb2.order, lane=LANE_B, nonce=4)
-    dex2 = deploy_dex(dispenser)
+    dex2 = deploy_dex(dispenser, router)
     apps = {'apps': [ta.id, tb.id, ta.account.id]}
     p1 = dex.mbr(la, lb)
     p2 = [MBR_ORDER, MBR_ORDER, 0, 0]                      # the second pair: every box exists by then
@@ -497,12 +499,15 @@ def test_carried_auth_after_the_settle(dex, pair, relayer, probe, dispenser):
 
 
 def test_dex_update_delete_optin_refused(dex, dispenser, make):
-    """R11: the DEX approval refuses Update / Delete (creator included) and OptIn / CloseOut; no state at all."""
+    """R11: the DEX approval refuses Update / Delete (creator included) and OptIn / CloseOut; no local state, one global
+    (the router app id, fixed at creation: no method writes it)."""
     refused_actions(dex, dispenser, ['update', 'delete'])
     refused_actions(dex, make(1_000_000), ['optin', 'closeout'])
     assert ALGOD.application_info(dex.id)['params']['approval-program'] == base64.b64encode(dex.app.approval).decode()
     s = dex.app.spec['state']['schema']
-    assert s['local'] == {'ints': 0, 'bytes': 0} and s['global'] == {'ints': 0, 'bytes': 0}
+    assert s['local'] == {'ints': 0, 'bytes': 0} and s['global'] == {'ints': 1, 'bytes': 0}
+    gs = ALGOD.application_info(dex.id)['params']['global-state']
+    assert [(base64.b64decode(g['key']), g['value']['uint']) for g in gs] == [(b'router_app', dex.router_id)]
 
 
 def test_figures_pinned(dex, pair, relayer, make):

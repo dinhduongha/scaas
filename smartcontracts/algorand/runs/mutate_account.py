@@ -158,6 +158,13 @@ def run(cmd):
     return subprocess.run(cmd, shell=True, cwd=R, capture_output=True, text=True)
 
 
+# build.sh algorand's two passes (T15: the executor template baked into the router), without artifacts.json
+X = 'ROUTER_APP_ID=0x5ca5ec0de0e1ec01'
+BUILD = ('rm -rf out && .venv/bin/puyapy contracts/executor.py --out-dir "$PWD/out" --output-bytecode --no-output-teal '
+         '-T %s && .venv/bin/puyapy contracts --out-dir "$PWD/out" --output-bytecode --no-output-teal '
+         '--no-output-source-map -T %s $(.venv/bin/python -I scripts/exec_split.py %s)' % (X, X, X.split('=')[1]))
+
+
 def main(M=M, title='algorand-account-mutations', tree='T12'):
     orig = {f: open(os.path.join(R, f)).read() for f in {m[1] for m in M}}
     print('# %s at commit %s + the %s tree' % (title, run('git rev-parse --short HEAD').stdout.strip(), tree))
@@ -169,8 +176,7 @@ def main(M=M, title='algorand-account-mutations', tree='T12'):
         assert src.count(old) == 1, (name, src.count(old))
         try:
             open(os.path.join(R, f), 'w').write(src.replace(old, new))
-            b = run('rm -rf out && .venv/bin/puyapy contracts --out-dir "$PWD/out" --output-bytecode '
-                    '--no-output-teal --no-output-source-map')
+            b = run(BUILD)
             if b.returncode:
                 print('%-50s KILLED (build fails)' % name)
                 killed += 1
@@ -183,8 +189,7 @@ def main(M=M, title='algorand-account-mutations', tree='T12'):
             print('%-50s %s  (%s)' % (name, 'KILLED' if ok else 'SURVIVED', last))
         finally:
             open(os.path.join(R, f), 'w').write(src)
-    b = run('rm -rf out && .venv/bin/puyapy contracts --out-dir "$PWD/out" --output-bytecode --no-output-teal '
-            '--no-output-source-map')
+    b = run(BUILD)
     print('%d / %d killed; tree restored, rebuilt rc=%d' % (killed, len(todo), b.returncode))
     print('rc=%d' % (0 if killed == len(todo) else 1))
 

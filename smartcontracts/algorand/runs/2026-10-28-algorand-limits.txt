@@ -122,3 +122,16 @@ program size (B): dex approval 863, clear 4; token approval 3661
 .
 1 passed in 2.38s
 rc=0
+
+## T15 relay-fee router + executor LogicSig (test_relayfee.py::test_figures_pinned; exec-trace and curve experiments) at commit a89df505 + the T15 tree
+group: [Payment -> router]? [Payment -> target]? [target, sender = executor, fee 0] [router.relay(token, op, auth)]; minimal groups, no bare budget calls
+relay group opcode budget (consumed, inner app calls): {'ping, native payer': (3729, 5), 'ping, ed25519 UA payer': (4402, 5), 'ping, passkey UA payer': (6497, 8), 'ed25519 UA transfer, passkey UA payer': (9749, 13), 'msig 3 passkey transfer, passkey UA payer': (22285, 31), 'msig 3 passkey transfer, msig 3 passkey payer': (32394, 45)}
+pins {'ping, native payer': (3950, 6), 'ping, ed25519 UA payer': (4650, 6), 'ping, passkey UA payer': (6850, 9), 'ed25519 UA transfer, passkey UA payer': (10250, 14), 'msig 3 passkey transfer, passkey UA payer': (23400, 32), 'msig 3 passkey transfer, msig 3 passkey payer': (35000, 47)}
+worst case (3-member Chrome-passkey msig target + msig-3 payer): 32,394 opcodes, 45 inner calls -> lane fee = 2 x 1,000 + FEE_CREDIT 64,000 covers it (47 + 2 <= 64)
+argument bytes (target call, relay call): {'ping, native payer': (12, 369), 'ping, ed25519 UA payer': (12, 402), 'ping, passkey UA payer': (12, 759), 'ed25519 UA transfer, passkey UA payer': (394, 759), 'msig 3 passkey transfer, passkey UA payer': (1783, 759), 'msig 3 passkey transfer, msig 3 passkey payer': (1783, 1791)} (limit 2,048)
+router's own work (exec trace, opcode-cost weighted, 2-argument target): 757 (326 ops: 3 keccak256, 1 sha512_256 executor derivation, call bytes, rule 13) + about 10 per further target argument (16 args about 900) -> RELAY_COST = 1,000 ensured by inner budget calls (Ruling T12-budget); without it the router ran out after an msig target used the pool (mutant R22 killed)
+program size (B): relayfee approval 818, clear 4; executor LogicSig 82 = prefix 8 + router id 8 + suffix 66; dex approval 961 (router app id global)
+MBR (uALGO): router none (stateless; its address must hold the 100,000 base: an account below it cannot receive the MBR payment it forwards); per relay the token part = lane box 18,900 + payee balance box 28,500 when new + a UA payer's record when it opens, forwarded whole
+executor salt: puyapy 5.10.1 salts LogicSigs off-curve by default with a trailing `intcblock 1 s` chosen per program hash, so s depends on the router id (measured: ids 1 and 0xabcdef salted, 1001 / 1234 / 7 not) -> built with autosalt=False (puyapy warns: the address may be on-curve). Experiment on this algod (future consensus): on-curve and off-curve LogicSigs at AVM 10 / 11 / 12 are both accepted as senders; an on-curve address has no known private key (sha512_256 output, discrete log)
+executor vector: router app 1002 -> GNXUIEQHOIGFOLL3CR273L374OJSO53CGASDNLEBANRGH6GHPYXWRPI24M (algorand-vectors.json "executor")
+rc=0
