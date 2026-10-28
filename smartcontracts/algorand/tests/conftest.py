@@ -34,7 +34,8 @@ METAOP = ('(byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],u
           'uint64,byte[32])')
 METAOP_T = abi.ABIType.from_string(METAOP)
 MIN_FEE = 1000
-BUDGET = 4  # bare budget calls per mtx_* entry (pooled 700 each; measured in test_figures_pinned)
+BUDGET = 5  # bare budget calls per native mtx_* entry (pooled 700 each; enough that the token needs no inner
+            # budget call: test_figures_pinned)
 UA_BUDGET = 12  # … when the signer goes through the account app (a passkey UA: ≈ 5,300 in all, test_account)
 FAR = 4_102_444_800  # 2100-01-01 (s)
 
@@ -352,7 +353,7 @@ class Tok(Deployed):
         return names
 
     def mtx(self, relayer, method, o, auth, *extra_args, mbr='auto', budget=None,
-            payee=None, extra_boxes=(), pay=None, accounts=()):
+            payee=None, extra_boxes=(), pay=None, accounts=(), fee_extra_=0):
         """A signer other than a native 64-byte wallet signature goes through `account.verify` (an inner call and,
         on a UA's first op, an inner MBR forward: 2 inner fees, the record box referenced on a budget call; budget
         UA_BUDGET). `mbr='auto'`: this token's `mbr_needed` + the account app's `verify_mbr` (0 when that refuses:
@@ -372,7 +373,7 @@ class Tok(Deployed):
         if via:
             boxes.append((self.account, self.account.name(o[3])))
         return run(relayer, self, method, [o, auth, *extra_args], mbr=mbr, budget=budget, boxes=boxes,
-                   accounts=acc, pay=pay, apps=[self.account.id], fee_extra=2 * MIN_FEE if via else 0)
+                   accounts=acc, pay=pay, apps=[self.account.id], fee_extra=(2 * MIN_FEE if via else 0) + fee_extra_)
 
 
 def digest(o):
@@ -576,11 +577,12 @@ class Acc(Deployed):
         return [network or genesis(), contract or self.key, code, list(frm), list(holder(to) if to else frm), relayer,
                 amount, pay_ref, lane, nonce, valid_until, sha256(params) if extra is None else extra]
 
-    def call(self, relayer, method, o, auth, *args, mbr=None, budget=ACC_BUDGET, boxes=(), accounts=None, pay=None):
+    def call(self, relayer, method, o, auth, *args, mbr=None, budget=ACC_BUDGET, boxes=(), accounts=None, pay=None,
+             fee_extra=0):
         names = list(dict.fromkeys([self.name(o[3]), self.name(o[4])] + list(boxes)))
         acc = [encoding.encode_address(bytes(h[1])) for h in (o[3], o[4]) if h[0] == 0] if accounts is None else accounts
         return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
-                   accounts=list(dict.fromkeys(acc)) or None, pay=pay)
+                   accounts=list(dict.fromkeys(acc)) or None, pay=pay, fee_extra=fee_extra)
 
     def key_op(self, relayer, method, signer, args=(), nonce=0, frm=None, to=None, sign=None, op_kw=None, **kw):
         """`signer` signs `method`'s op for subject `frm` (default: the signer's own holder), `relayer` submits."""

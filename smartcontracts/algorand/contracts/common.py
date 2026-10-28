@@ -6,12 +6,20 @@ form `SIGN_PREFIX ‖ text` by the address's current authority. `payId` / `payLa
 """
 import typing
 
-from algopy import Account, Bytes, FixedBytes, Global, TransactionType, Txn, UInt64, arc4, gtxn, op, subroutine, urange
+from algopy import (Account, Bytes, FixedBytes, Global, OpUpFeeSource, TransactionType, Txn, UInt64, arc4, ensure_budget,
+                    gtxn, op, subroutine, urange)
 
 Bytes32 = FixedBytes[typing.Literal[32]]
 
 LABEL = b"scaas.metaop.v1"
 SIGN_PREFIX = b"MX"  # the wallet sign-bytes prefix (ARC-60 style), the one place it is spelled
+
+# Ruling T12-budget: a signature check first raises the call's opcode budget to its cost plus TAIL (the rest of the
+# caller's work) by inner budget calls when the group's top-level calls do not give it; their fees come from the
+# group's fee credit (the relayer's fee pooling), never from an app's balance. Costs measured (limits log).
+TAIL = 1000
+COST_NATIVE = 2300  # "MX" ‖ text(d) and ed25519verify_bare (1,900)
+COST_ENTRY = 1500   # an account entry's work before its first signature check (op digest, record, key data)
 
 KIND_ADDRESS = 0  # holder kinds (vectors: 0 = a native address, its 32-byte key; 1 = a UA id)
 KIND_UA = 1
@@ -84,6 +92,7 @@ def verify_native(addr: Account, d: Bytes32, sig: Bytes) -> bool:
     """Kind 0x0018: the wallet signature of the current authority. A LogicSig or multisig authority has no ed25519
     key, so nothing verifies (such an address signs through an account record, spec §4.3)."""
     assert sig.length == 64, "ed25519 signature is 64 bytes"
+    ensure_budget(COST_NATIVE + TAIL, OpUpFeeSource.GroupCredit)
     return op.ed25519verify_bare(sign_bytes(d), sig, authority(addr).bytes)
 
 

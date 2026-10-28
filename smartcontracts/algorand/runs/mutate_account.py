@@ -84,8 +84,10 @@ M = [
     ('M37 POLICY_PASSKEY_FOR_VALUE', A, 'assert mode != 1, ', 'assert True, ',
      TA + 'test_policy_passkey_for_value'),
     ('M38 verify: lazy-open MBR unchecked', A,
-     '''            arc4.emit("KeyOp", h, arc4.String("open"))
-        mbr_paid(before, UInt64(0))''', '''            arc4.emit("KeyOp", h, arc4.String("open"))''',
+     '''        if opened:
+            put(h, rec)
+        mbr_paid(before, UInt64(0))''', '''        if opened:
+            put(h, rec)''',
      TA + 'test_token_ua_pay_via_account_verify'),
     ('M39 key op MBR unchecked (add_key)', A, '''        save(op_.from_, rec, String("add_key"))
         mbr_paid(before, UInt64(0))''', '''        save(op_.from_, rec, String("add_key"))''',
@@ -124,6 +126,28 @@ M = [
      'call.submit()', TA + 'test_token_takes_only_a_true_verify'),
     ('M53 shrink refunds nothing → grows checked', C, 'grown = after - before if after > before else UInt64(0)',
      'grown = UInt64(0)', TA + 'test_ua_opened_lazily_relayer_pays_mbr'),
+    # T12 fix 1: duplicate signing key (m1), reviewer survivors R2 / R3 (m3 / m4), the open event (m8), inner budget
+    ('M54 msig: one key counts twice', A,
+     '        assert not has(seen, UInt64(0), seen.length // 32, key), "msig member key repeated"\n', '',
+     TA + 'test_msig_one_key_counts_once'),
+    ('M55 (R2) empty origin accepted', A, 'assert i > 91 and i <= 91 + MAX_ORIGIN_LEN, ',
+     'assert i <= 91 + MAX_ORIGIN_LEN, ', TA + 'test_origin_and_rp_checked'),
+    ('M56 (R3) msig member kind not compared', A, 'assert lk == mkind and lid.bytes == mid, ',
+     'assert lid.bytes == mid, ', TA + 'test_msig_rules'),
+    ('M57 no open event', A, '        arc4.emit("KeyOp", h, arc4.String("open"))\n', '        pass\n',
+     TA + 'test_ua_opened_lazily_relayer_pays_mbr'),
+    ('M58 passkey check without inner budget', A,
+     '    ensure_budget(COST_PASSKEY + COST_PASSKEY_PER_BYTE * cd.length + TAIL, OpUpFeeSource.GroupCredit)\n', '',
+     TA + 'test_budget_per_kind_pinned'),
+    ('M59 entry without inner budget', A,
+     '    ensure_budget(COST_ENTRY, OpUpFeeSource.GroupCredit)\n    assert o.op', '    assert o.op',
+     TA + 'test_budget_per_kind_pinned'),
+    ('M60 inner budget fees from the app account', A,
+     '    ensure_budget(COST_ENTRY, OpUpFeeSource.GroupCredit)\n    assert o.op',
+     '    ensure_budget(COST_ENTRY + 20000, OpUpFeeSource.AppAccount)\n    assert o.op',
+     TA + 'test_inner_budget_calls_fee_pooled_no_residue'),
+    ('M61 native verify without inner budget', C, '    ensure_budget(COST_NATIVE + TAIL, OpUpFeeSource.GroupCredit)\n',
+     '', TA + 'test_budget_per_kind_pinned'),
 ]
 
 

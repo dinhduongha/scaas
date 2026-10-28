@@ -1,33 +1,61 @@
-# algorand-limits (opcode budget per entry and signer kind, MBR per box / record, MSIG_MAX_MEMBERS, MAX_PAY_META_BYTES, program sizes) at commit 08184a1b + the T12 tree
-# localnet: algod 5.0.5-stable (DevMode, consensus future), puyapy puyapy 5.10.1 AVM 11
-wrote artifacts.json
-program out/Token: approval 2548 B, clear 4 B
-program out/Account: approval 4668 B, clear 4 B
+# algorand-limits (opcode budget and inner budget calls per entry and signer kind, MBR per box / record, MSIG_MAX_MEMBERS derivation, MAX_PAY_META_BYTES, program sizes) at commit 70d34e8b + the T12 fix-1 tree
+# localnet: algod 5.0.5-stable (DevMode, consensus future), puyapy 5.10.1 AVM 11
+ok artifacts.json
+program out/Token: approval 2588 B, clear 4 B
+program out/Account: approval 4847 B, clear 4 B
 {
  "token": {
-  "approval_sha512_256": "0af61c14f82886ac7932290407672409503175cd90a981aba3b3c6eb5b6c4c95",
+  "approval_sha512_256": "a50eff775568c82cc2b18f2c7e8038860a2ae365a7946d27cd4e9a33ed1f6a5c",
   "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
  },
  "account": {
-  "approval_sha512_256": "372bb99e75062bcaa964f566705b29836b089364ec240aa6f193efee2a223594",
+  "approval_sha512_256": "a661da69e27821ac4749c54b2c52d7840f3d27043479c5820f8757df01ae14dd",
   "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
  }
 }
+## MSIG_MAX_MEMBERS derivation (runs/measure_msig_cap.py 5: built with a cap of 5, every group shape, no bare budget calls)
+## S1 = lazily opening mtx_add_key, S2 = token mtx_pay, S3 = T15 relay shape (key-op call + router-like call whose inner token.mtx_pay the msig signs)
+## budget: 700 per app call, top-level or inner; inner txns pooled 256 per group -> never binds here (S3 at 5 members adds 39,200)
+## args: 2,048 B per app call (current consensus; the localnet's future consensus accepts 4,096 B, so the encoded arguments are counted)
+## -> S1 args 1,712 B at 4, 2,054 B at 5: MSIG_MAX_MEMBERS = 4 (slack 336 B: ~84 B per member for longer clientDataJSON / origins)
+msig 1 passkeys S1 add_key   consumed   4682 added   6300 args   686 ok
+msig 1 passkeys S2 mtx_pay   consumed   4757 added   6300 args   678 ok
+msig 1 passkeys S3 relay     consumed   9046 added  10500 args  None ok
+msig 2 passkeys S1 add_key   consumed   8247 added   9800 args  1028 ok
+msig 2 passkeys S2 mtx_pay   consumed   8313 added   9800 args  1020 ok
+msig 2 passkeys S3 relay     consumed  16158 added  17500 args  None ok
+msig 3 passkeys S1 add_key   consumed  11831 added  13300 args  1370 ok
+msig 3 passkeys S2 mtx_pay   consumed  11888 added  13300 args  1362 ok
+msig 3 passkeys S3 relay     consumed  23308 added  24500 args  None ok
+msig 4 passkeys S1 add_key   consumed  15434 added  16800 args  1712 ok
+msig 4 passkeys S2 mtx_pay   consumed  15482 added  16800 args  1704 ok
+msig 4 passkeys S3 relay     consumed  30496 added  31500 args  None ok
+msig 5 passkeys S1 add_key   consumed  19056 added  20300 args  2054 ok
+msig 5 passkeys S2 mtx_pay   consumed  19095 added  20300 args  2046 ok
+msig 5 passkeys S3 relay     consumed  37743 added  39200 args  None ok
+account.py restored; rebuilt rc=0
 
 UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
-..
-msig mtx_add_key all-passkey n-of-n: {1: (4563, 686), 2: (7951, 1028)} (budget, args); +1 member ≈ 11339 budget > pool 10500 or args
+..msig 3 passkeys S1 add_key   consumed  11831 added  13300 args  1370 ok
+msig 3 passkeys S2 mtx_pay   consumed  11888 added  13300 args  1362 ok
+msig 3 passkeys S3 relay     consumed  23308 added  24500 args  None ok
+msig 4 passkeys S1 add_key   consumed  15434 added  16800 args  1712 ok
+msig 4 passkeys S2 mtx_pay   consumed  15482 added  16800 args  1704 ok
+msig 4 passkeys S3 relay     consumed  30496 added  31500 args  None ok
+budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ 256; arguments ≤ 2,048 B
 .
-opcode budget per signer kind (simulate): {'account mtx_set_guardian native': 2759, 'account mtx_set_guardian ed25519': 2970, 'account mtx_set_guardian secp256k1': 2412, 'account mtx_set_guardian passkey': 3702, 'account mtx_set_guardian msig 2 ed25519': 6089, 'account mtx_set_guardian msig 2 passkey': 7545, 'token mtx_pay native': 2944, 'token mtx_pay ed25519 UA': 3471, 'token mtx_pay secp256k1 UA': 2913, 'token mtx_pay passkey UA': 4207, 'token mtx_pay msig 2 passkey UA': 8050}
-pins {'account mtx_set_guardian native': 2900, 'account mtx_set_guardian ed25519': 3100, 'account mtx_set_guardian secp256k1': 2600, 'account mtx_set_guardian passkey': 3900, 'account mtx_set_guardian msig 2 ed25519': 6400, 'account mtx_set_guardian msig 2 passkey': 8000, 'token mtx_pay native': 3100, 'token mtx_pay ed25519 UA': 3700, 'token mtx_pay secp256k1 UA': 3100, 'token mtx_pay passkey UA': 4500, 'token mtx_pay msig 2 passkey UA': 8500}
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 4 passkey': (15003, 23), 'token mtx_pay native': (2913, 5), 'token mtx_pay ed25519 UA': (3449, 4), 'token mtx_pay secp256k1 UA': (2891, 4), 'token mtx_pay passkey UA': (4233, 6), 'token mtx_pay msig 4 passkey UA': (15482, 22)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 4 passkey': (15800, 24), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 4 passkey UA': (16300, 23)}
+.
+inner budget calls of a msig-4 key op: 22 (created and deleted in one inner transaction each)
 .
 MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
 
 MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
 .
-opcode budget used: {'mtx_pay': 2854, 'mtx_transfer': 2814, 'mtx_pay_meta': 3310, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 4 bare calls per mtx_*)
+opcode budget used: {'mtx_pay': 2868, 'mtx_transfer': 2828, 'mtx_pay_meta': 3324, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
 MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
-program sizes (B): approval 2548, clear 4
+program sizes (B): approval 2588, clear 4
 .
-6 passed, 43 deselected in 2.88s
+7 passed, 45 deselected in 4.78s
 rc=0

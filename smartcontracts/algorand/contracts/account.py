@@ -30,11 +30,12 @@ Key ops (op codes 6–12, the shared table): amount 0, pay_ref / lane zero, nonc
 `extra = sha256(ARC-4(entry parameters after (op, auth)))`; set_policy and finish_recovery are actions under op codes 10
 and 11 with signed parameters `[6, policy]` / `[7]` (as NEAR). No local state (OptIn refused); Update / Delete refused.
 """
-from algopy import Account, BigUInt, Bytes, Global, String, Txn, UInt64, arc4, op, subroutine, urange
+from algopy import (Account, BigUInt, Bytes, Global, OpUpFeeSource, String, Txn, UInt64, arc4, ensure_budget, op,
+                    subroutine, urange)
 
-from common import (KIND_ADDRESS, KIND_UA, OP_ADD_KEY, OP_ADD_ORIGIN, OP_CANCEL_RECOVERY, OP_REMOVE_KEY,
+from common import (COST_ENTRY, COST_NATIVE, TAIL, KIND_ADDRESS, KIND_UA, OP_ADD_KEY, OP_ADD_ORIGIN, OP_CANCEL_RECOVERY, OP_REMOVE_KEY,
                     OP_REMOVE_ORIGIN, OP_SET_GUARDIAN, OP_START_RECOVERY, Bytes32, Holder, MetaOp, check_envelope,
-                    digest, mbr_paid, sign_bytes, verify_native, zero)
+                    authority, digest, mbr_paid, sign_bytes, verify_native, zero)
 
 MAX_KEYS = 8
 MAX_ORIGINS = 8
@@ -43,12 +44,15 @@ RECOVERY_DELAY_S = 172_800
 POLICY_PASSKEY_FOR_VALUE = 1
 KEYOP_SET_POLICY = 6
 KEYOP_FINISH_RECOVERY = 7
-# Members per msig: the largest all-passkey n-of-n msig whose lazily opening mtx_add_key fits the 2,048 B app-call
-# arguments and the pooled budget of one 16-transaction group, the MBR payment + the call + 14 budget calls = 10,500
-# (test_msig_cap_fits_limits, runs/2026-10-28-algorand-limits.txt: 2 members ≈ 7,600, 3 ≈ 10,900; the budget binds,
-# the arguments would allow 4).
-MSIG_MAX_MEMBERS = 2
-PASSKEY_FIELD_MAX = 1024  # clientDataJSON / authenticatorData (budget bound, as NEAR's PASSKEY_FIELD_MAX)
+# Members per msig (T12 fix 1, Ruling T12-budget): min(the 2,048 B app-call argument bound, the budget bound of every
+# group shape). With inner budget calls (pooled 256 per group) the budget never binds; the arguments do: the lazily
+# opening all-passkey n-of-n mtx_add_key takes 1,712 B at 4 members, 2,054 B at 5 (runs/2026-10-28-algorand-limits.txt).
+MSIG_MAX_MEMBERS = 4
+PASSKEY_FIELD_MAX = 1024
+# signature costs ensured before each check (common.TAIL added); a passkey's also grows with its clientDataJSON
+COST_SECP256K1 = 2000
+COST_PASSKEY = 3300
+COST_PASSKEY_PER_BYTE = 3  # clientDataJSON / authenticatorData (budget bound, as NEAR's PASSKEY_FIELD_MAX)
 
 KIND_ALGORAND_ADDRESS = 0x0018
 KIND_WEBAUTHN_P256 = 0x0100
@@ -105,11 +109,11 @@ class AccountApp(arc4.ARC4Contract, name="Account"):
         (a native wallet signature is the address's own authority, like a direct ARC-200 transfer). An unknown UA's
         record is opened (exact-MBR payment just before this call, forwarded by the calling token). Fails otherwise."""
         before = Global.current_application_address.min_balance
+        ensure_budget(COST_ENTRY, OpUpFeeSource.GroupCredit)
         h = Holder(holder_kind, holder)
         rec, opened = value_signed(h, digest, auth)
         if opened:
             put(h, rec)
-            arc4.emit("KeyOp", h, arc4.String("open"))
         mbr_paid(before, UInt64(0))
         return True
 
@@ -246,6 +250,7 @@ class AccountApp(arc4.ARC4Contract, name="Account"):
 @subroutine
 def signed_key_op(o: MetaOp, auth: Bytes, code: UInt64, params: Bytes) -> Bytes:
     """A key op's shape, envelope and signature; the signer's record with its key nonce consumed."""
+    ensure_budget(COST_ENTRY, OpUpFeeSource.GroupCredit)
     assert o.op.as_uint64() == code and o.amount.as_biguint() == 0 and o.pay_ref == zero() and o.lane == zero(), \
         "key op shape (op code, amount 0, pay_ref and lane zero)"
     assert o.extra.bytes == op.sha256(params), "extra is not sha256 of the parameters"
@@ -328,11 +333,13 @@ def leaf_ok(auth: Bytes, d: Bytes32, rec: Bytes, lazy: bool) -> tuple[Bytes, UIn
     if tag == AUTH_ED25519:
         assert auth.length == 97, "ed25519 auth length"
         pk = op.extract(auth, 1, 32)
+        ensure_budget(COST_NATIVE + TAIL, OpUpFeeSource.GroupCredit)
         assert op.ed25519verify_bare(sign_bytes(d), op.extract(auth, 33, 64), pk), "ed25519 signature"
         return rec, UInt64(KIND_ED25519), ua_of(UInt64(KIND_ED25519), pk), False
     if tag == AUTH_SECP256K1:
         assert auth.length == 129, "secp256k1 auth length"
         # ecdsa_verify Secp256k1 accepts lower-S signatures only (libsecp256k1; test_high_s_refused)
+        ensure_budget(COST_SECP256K1 + TAIL, OpUpFeeSource.GroupCredit)
         assert op.ecdsa_verify(op.ECDSA.Secp256k1, d.bytes, op.extract(auth, 65, 32), op.extract(auth, 97, 32),
                                op.extract(auth, 1, 32), op.extract(auth, 33, 32)), "secp256k1 signature (low s)"
         return rec, UInt64(KIND_SECP256K1), ua_of(UInt64(KIND_SECP256K1), op.extract(auth, 1, 64)), False
@@ -343,6 +350,7 @@ def leaf_ok(auth: Bytes, d: Bytes32, rec: Bytes, lazy: bool) -> tuple[Bytes, UIn
     cd = op.substring(auth, 131 + n, auth.length)
     assert ad.length <= PASSKEY_FIELD_MAX and cd.length <= PASSKEY_FIELD_MAX, \
         "passkey clientDataJSON / authenticatorData over 1024 bytes"
+    ensure_budget(COST_PASSKEY + COST_PASSKEY_PER_BYTE * cd.length + TAIL, OpUpFeeSource.GroupCredit)
     # NET-ALL-04 order: authenticatorData ≥ 37 B, rpIdHash (bound by the key id below), UP and UV, the grammar, the
     # origin listed, low s, the signature
     assert ad.length >= 37 and op.getbyte(ad, 32) & 5 == 5, "passkey authenticatorData (rpIdHash or UP / UV flags)"
@@ -414,8 +422,11 @@ def zero_byte(x: UInt64) -> bool:
 @subroutine
 def msig_ok(kd: Bytes, auth: Bytes, d: Bytes32, rec: Bytes, lazy: bool) -> tuple[Bytes, bool]:
     """Msig member signatures (key data valid: `key_info`): an algorand-address member by its current authority, a
-    key member by its own kind; weights summed against the threshold. Returns (`rec`, every member a passkey)."""
+    key member by its own kind; weights summed against the threshold. A key counts for one member only (an address
+    member's authority and an ed25519 member's key are the same kind of key). Returns (`rec`, every member a
+    passkey)."""
     count = op.extract_uint16(kd, 2)
+    seen = Bytes()
     weight = UInt64(0)
     first = UInt64(0)
     pos = 3 + kd.length
@@ -431,10 +442,14 @@ def msig_ok(kd: Bytes, auth: Bytes, d: Bytes32, rec: Bytes, lazy: bool) -> tuple
         mid = op.extract(kd, o + 2, 32)
         if mkind == KIND_ALGORAND_ADDRESS:
             assert verify_native(Account(mid), d, a), "msig member signature"
+            key = authority(Account(mid)).bytes
         else:
             assert a.length > 0 and op.getbyte(a, 0) != AUTH_MSIG, "msig inside msig"
             rec, lk, lid, _needs = leaf_ok(a, d, rec, lazy)
             assert lk == mkind and lid.bytes == mid, "msig member key mismatch"
+            key = op.extract(a, 1, 32) if lk == KIND_ED25519 else lid.bytes
+        assert not has(seen, UInt64(0), seen.length // 32, key), "msig member key repeated"
+        seen += key
         weight += op.extract_uint16(kd, o + 34)
     assert weight >= op.extract_uint16(kd, 0), "msig threshold not met"
     all_pk = True
@@ -616,8 +631,11 @@ def usable(rec: Bytes, h: Holder) -> None:
 
 @subroutine
 def put(h: Holder, rec: Bytes) -> None:
+    """Writes `rec`; a record box created here is announced by `KeyOp(h, "open")` (every first write goes through
+    here: a lazy open by `verify`, a key op, a recovery's guardian, `add_key_native`)."""
     name = rec_name(h)
-    _existed = op.Box.delete(name)
+    if not op.Box.delete(name):
+        arc4.emit("KeyOp", h, arc4.String("open"))
     op.Box.put(name, rec)
 
 

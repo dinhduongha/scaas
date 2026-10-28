@@ -8,23 +8,24 @@ import re
 import pytest
 from algosdk import abi, encoding, transaction
 from algosdk.atomic_transaction_composer import LogicSigTransactionSigner, MultisigTransactionSigner
+from algosdk.v2client import models
 
 from conftest import (ACC_BUDGET, ALGOD, CDJ, KEYREC, MBR_BALANCE, MBR_LANE, MBR_UA, MIN_FEE, NONE_HOLDER, ORIGIN,
                       POLICY_PASSKEY_FOR_VALUE, RECOVERY_DELAY_S, ROOT, SLOT, Z32, EdKey, K1Key, MsigKey, PasskeyKey,
-                      Refused, V, advance, digest, latest_ts, make_token, native, rec_mbr, refused_actions, run,
+                      Acct, Refused, V, advance, digest, explain, group, key_params, latest_ts, make_token, native, rec_mbr, refused_actions, run,
                       sha256, sign_as, sim, sp, u16, view, wait)
 
 ZERO_ADDR = encoding.encode_address(Z32)
 VEC = json.load(open(os.path.join(ROOT, 'vectors', 'algorand-vectors.json')))
-MSIG_MAX_MEMBERS = 2         # account.py; measured by test_msig_cap_fits_limits
-GROUP_POOL = 15 * 700        # one 16-transaction group: the MBR payment + 15 app calls
+MSIG_MAX_MEMBERS = 4         # account.py; measured by test_msig_cap_fits_limits
 # Opcode budget per signer kind (simulate, pooled), pinned in runs/2026-10-28-algorand-limits.txt
+# (consumed, inner budget calls) in the minimal group
 BUDGET_PIN = {
-    'account mtx_set_guardian native': 2900, 'account mtx_set_guardian ed25519': 3100,
-    'account mtx_set_guardian secp256k1': 2600, 'account mtx_set_guardian passkey': 3900,
-    'account mtx_set_guardian msig 2 ed25519': 6400, 'account mtx_set_guardian msig %d passkey' % MSIG_MAX_MEMBERS: 8000,
-    'token mtx_pay native': 3100, 'token mtx_pay ed25519 UA': 3700, 'token mtx_pay secp256k1 UA': 3100,
-    'token mtx_pay passkey UA': 4500, 'token mtx_pay msig %d passkey UA' % MSIG_MAX_MEMBERS: 8500,
+    'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6),
+    'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8),
+    'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 4 passkey': (15800, 24),
+    'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5),
+    'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 4 passkey UA': (16300, 23),
 }
 
 
@@ -67,21 +68,23 @@ def test_ua_opened_lazily_relayer_pays_mbr(account, relayer):
     assert account.min_balance() - before == need          # the app's AcctMinBalance delta, paid exactly
     rec = account.record(h)
     assert (rec['keys'], rec['nonce'], rec['length']) == ([erin.id, k2.id], 1, 118 + 64)
-    assert events(account, r) == [('KeyOp', [[1, list(erin.id)], 'add_key'])]
-    assert view(account, 'key_nonce', *h) == 1
+    assert events(account, r) == [('KeyOp', [[1, list(erin.id)], 'open']), ('KeyOp', [[1, list(erin.id)], 'add_key'])]
+    r = account.key_op(relayer, 'mtx_set_guardian', erin, [NONE_HOLDER], nonce=1)        # the record exists: no "open"
+    assert events(account, r) == [('KeyOp', [[1, list(erin.id)], 'set_guardian'])]
+    assert view(account, 'key_nonce', *h) == 2
     with no('wrong key nonce'):                             # replay
         account.key_op(relayer, 'mtx_add_key', erin, [k2.record(), b''])
-    account.key_op(relayer, 'mtx_remove_key', erin, [k2.record()], nonce=1)      # shrinks: no payment, no refund
+    account.key_op(relayer, 'mtx_remove_key', erin, [k2.record()], nonce=2)      # shrinks: no payment, no refund
     assert account.record(h)['keys'] == [erin.id] and account.min_balance() == before + need - SLOT
-    account.key_op(relayer, 'mtx_add_key', erin, [k2.record(), b''], nonce=2, mbr=SLOT)   # pays the slot again
-    account.key_op(relayer, 'mtx_set_guardian', k2, [NONE_HOLDER], nonce=3, frm=h)  # k2 signs through the record
-    account.key_op(relayer, 'mtx_remove_key', erin, [erin.record()], nonce=4)       # the id-deriving key removed
+    account.key_op(relayer, 'mtx_add_key', erin, [k2.record(), b''], nonce=3, mbr=SLOT)   # pays the slot again
+    account.key_op(relayer, 'mtx_set_guardian', k2, [NONE_HOLDER], nonce=4, frm=h)  # k2 signs through the record
+    account.key_op(relayer, 'mtx_remove_key', erin, [erin.record()], nonce=5)       # the id-deriving key removed
     with no('the last key cannot be removed'):
-        account.key_op(relayer, 'mtx_remove_key', k2, [k2.record()], nonce=5, frm=h)
+        account.key_op(relayer, 'mtx_remove_key', k2, [k2.record()], nonce=6, frm=h)
     with no('unknown key'):
-        account.key_op(relayer, 'mtx_remove_key', k2, [erin.record()], nonce=5, frm=h)
+        account.key_op(relayer, 'mtx_remove_key', k2, [erin.record()], nonce=6, frm=h)
     with no('not a key of the subject'):                    # erin's own key no longer signs
-        account.key_op(relayer, 'mtx_set_guardian', erin, [NONE_HOLDER], nonce=5)
+        account.key_op(relayer, 'mtx_set_guardian', erin, [NONE_HOLDER], nonce=6)
 
 
 def test_each_kind_accepted(account, relayer, make):
@@ -213,6 +216,10 @@ def test_origin_and_rp_checked(account, relayer):
             account.key_op(relayer, 'mtx_set_guardian', dave, [NONE_HOLDER], nonce=n[0], sign=sign)
         print('%-32s refused: %s' % (case, str(e.value).split(' :: ')[0]))
     # accepted shapes: no crossOrigin, and a trailing member after crossOrigin:false (Chrome's random member)
+    with no('passkey clientDataJSON'):                      # nor an empty one (m3)
+        fresh = PasskeyKey('dave-7')
+        account.key_op(relayer, 'mtx_set_guardian', fresh, [NONE_HOLDER], mbr=rec_mbr(1, 1),
+                       sign=lambda d: fresh.auth(d, origin=''))
     with no('passkey clientDataJSON'):                      # a lazy open takes no origin with a backslash
         fresh = PasskeyKey('dave-6')
         account.key_op(relayer, 'mtx_set_guardian', fresh, [NONE_HOLDER], mbr=rec_mbr(1, 1),
@@ -259,7 +266,8 @@ def recovery_setup(account, relayer):
         account.key_op(relayer, 'mtx_start_recovery', mallory, [frank.record(), b''], to=erin.ua(), mbr=rec_mbr(1))
     with no('a subject is not its own guardian'):
         account.key_op(relayer, 'mtx_start_recovery', erin, [frank.record(), b''], nonce=1)
-    account.key_op(relayer, 'mtx_start_recovery', g, [frank.record(), b''], to=erin.ua(), mbr=rec_mbr(1))
+    r = account.key_op(relayer, 'mtx_start_recovery', g, [frank.record(), b''], to=erin.ua(), mbr=rec_mbr(1))
+    assert [e[1][1] for e in events(account, r)] == ['open', 'start_recovery']      # the guardian's record opened
     return erin, g, frank, mallory
 
 
@@ -360,6 +368,27 @@ def test_msig_native_member_by_current_authority(account, relayer, make):
     assert account.record(m.ua())['nonce'] == 2
 
 
+def test_msig_one_key_counts_once(account, relayer, make):
+    """m1: one key signs for one member only — not as an address member and an ed25519 member of the same key, nor
+    as the authority of two address members."""
+    e = EdKey('dup')
+    a = Acct(base64.b64encode(V.seed('dup') + e.key_data).decode())          # the address of e's key
+    m = MsigKey(2, [(a, 1), (e, 1)])
+    with no('msig member key repeated'):
+        account.key_op(relayer, 'mtx_set_guardian', m, [NONE_HOLDER], mbr=rec_mbr(1), accounts=[a.addr])
+    b, c, carol = make(1_000_000), make(1_000_000), make()
+    for x in (b, c):
+        wait(ALGOD.send_transaction(transaction.PaymentTxn(x.addr, sp(), x.addr, 0, rekey_to=carol.addr).sign(x.sk)))
+    m2 = MsigKey(2, [(b, 1), (c, 1)])
+    with no('msig member key repeated'):
+        account.key_op(relayer, 'mtx_set_guardian', m2, [NONE_HOLDER], mbr=rec_mbr(1), accounts=[b.addr, c.addr],
+                       sign=lambda d: m2.auth(d, sigs=[(0, carol.sign_op(d)), (1, carol.sign_op(d))]))
+    m3 = MsigKey(2, [(b, 1), (EdKey('other'), 1)])                        # distinct keys: accepted
+    account.key_op(relayer, 'mtx_set_guardian', m3, [NONE_HOLDER], mbr=rec_mbr(1), accounts=[b.addr],
+                   sign=lambda d: m3.auth(d, sigs=sorted([(m3.index(b), carol.sign_op(d)),
+                                                         (1 - m3.index(b), m3.rows[1 - m3.index(b)][3].auth(d))])))
+
+
 def test_msig_rules(account, relayer):
     erin, frank, gina = EdKey('erin'), EdKey('frank'), EdKey('gina')
     m = MsigKey(2, [(erin, 1), (frank, 1)])
@@ -376,6 +405,11 @@ def test_msig_rules(account, relayer):
             account.key_op(relayer, 'mtx_set_guardian', m, [NONE_HOLDER], mbr=rec_mbr(1),
                            sign=lambda d, sigs=sigs: m.auth(d, sigs=sigs(d)))
     account.key_op(relayer, 'mtx_set_guardian', m, [NONE_HOLDER], mbr=rec_mbr(1))
+    # m4: a member declared a passkey (0x0100) whose id is erin's ed25519 UA, signed by that ed25519 key
+    kd4 = u16(1) + u16(1) + u16(0x0100) + erin.id + u16(1)
+    with no('msig member key mismatch'):
+        account.key_op(relayer, 'mtx_set_guardian', erin, [NONE_HOLDER], frm=(1, V.ua_of(0x0120, kd4)),
+                       mbr=rec_mbr(1, 1), sign=lambda d: b'\x04' + u16(len(kd4)) + kd4 + b'\x00' + u16(97) + erin.auth(d))
     kd = m.key_data
     for msg, bad in (('msig member count out of range', u16(1) + u16(MSIG_MAX_MEMBERS + 1)
                       + b''.join(u16(0x0102) + bytes([0x10 + i]) * 32 + u16(1) for i in range(MSIG_MAX_MEMBERS + 1))),
@@ -388,36 +422,85 @@ def test_msig_rules(account, relayer):
             account.key_op(relayer, 'mtx_add_key', erin, [[0x0120, bad], b''], mbr=rec_mbr(2))
 
 
-def test_msig_cap_fits_limits(account, relayer):
-    """MSIG_MAX_MEMBERS = the largest all-passkey n-of-n msig whose lazily opening `mtx_add_key` (every member signs)
-    fits the 2,048 B app-call arguments and one group's pooled budget (the MBR payment + the call + 14 budget
-    calls); one member more fits neither the budget (measured increment per member) nor the cap."""
-    method = account.app.methods['mtx_add_key']
-    used = {}
-    for n in (MSIG_MAX_MEMBERS - 1, MSIG_MAX_MEMBERS):
-        m = MsigKey(n, [(PasskeyKey('cap-%d-%d' % (n, i)), 1) for i in range(n)])
-        new = EdKey('cap-new-%d' % n)
-        o = account.op(6, m.ua(), params=abi.ABIType.from_string('(%s,byte[])' % KEYREC).encode([new.record(), b'']))
-        auth = m.auth(digest(o))
-        args = 4 + sum(len(t.encode(v)) for t, v in zip([a.type for a in method.args],
-                                                         [o, auth, new.record(), b'']))
-        _, budget, fail, _ = sim(relayer, account, 'mtx_add_key', [o, auth, new.record(), b''], mbr=rec_mbr(2, 1),
-                                 budget=14, boxes=[account.name(m.ua())])
-        assert fail is None, fail
-        used[n] = (budget, args)
-        assert args <= 2048 and budget <= GROUP_POOL, (n, args, budget)
-        if n == MSIG_MAX_MEMBERS:
-            r = account.call(relayer, 'mtx_add_key', o, auth, new.record(), b'', mbr=rec_mbr(2, 1), budget=14)
-            assert account.record(m.ua())['keys'] == [m.id, new.id]
-    per = used[MSIG_MAX_MEMBERS][0] - used[MSIG_MAX_MEMBERS - 1][0]
-    nxt = used[MSIG_MAX_MEMBERS][0] + per
-    print('\nmsig mtx_add_key all-passkey n-of-n: %s (budget, args); +1 member ≈ %d budget > pool %d or args'
-          % (used, nxt, GROUP_POOL))
-    assert nxt > GROUP_POOL or used[MSIG_MAX_MEMBERS][1] + (used[MSIG_MAX_MEMBERS][1] - used[MSIG_MAX_MEMBERS - 1][1]) > 2048
+GROUP_INNER = 256                # inner transactions per group (pooled: 16 × the 16-transaction group size)
+FEE_CREDIT = 64 * MIN_FEE        # the relayer's fee pooling for the apps' inner budget calls
+
+
+def sim_group(sender, calls, mbr=None, fee_extra=FEE_CREDIT):
+    """Simulate `calls` as one group with no bare budget calls (the apps raise their own budget): (consumed, added,
+    failure)."""
+    atc = group(sender, calls, mbr=mbr, fee_extra=fee_extra)
+    r = atc.simulate(ALGOD, models.SimulateRequest(txn_groups=[], allow_unnamed_resources=True))
+    g = r.simulate_response['txn-groups'][0]
+    return g.get('app-budget-consumed'), g.get('app-budget-added'), (explain(r.failure_message)[:160]
+                                                                     if r.failure_message else None)
+
+
+def arg_bytes(d, method, args):
+    m = d.app.methods[method]
+    return 4 + sum(len(a.type.encode(v)) for a, v in zip(m.args, args) if not isinstance(a.type, str))
+
+
+def msig_shapes(account, token, probe, relayer, n, make):
+    """The group shapes an all-passkey n-of-n msig's ops take, none with bare budget calls (each app adds inner budget
+    calls, fee-pooled by the relayer): S1 its lazily opening mtx_add_key, S2 a token mtx_pay, S3 the T15 relay shape — a
+    key op call and, in the same group, a router-like app call (the probe) whose inner token.mtx_pay the same msig
+    signed. → {shape: (consumed, added, failure, app-call argument bytes)}."""
+    m = MsigKey(n, [(PasskeyKey('cap-%d-%d' % (n, i)), 1) for i in range(n)])
+    new, out = EdKey('cap-new-%d' % n), {}
+    o = account.op(6, m.ua(), params=key_params('mtx_add_key', [new.record(), b'']))
+    args = [o, m.auth(digest(o)), new.record(), b'']
+    out['S1 add_key'] = sim_group(relayer, [(account, 'mtx_add_key', args, {})], mbr=rec_mbr(2, 1)) + (
+        arg_bytes(account, 'mtx_add_key', args),)
+    if out['S1 add_key'][2]:
+        return out
+    account.call(relayer, 'mtx_add_key', *args, mbr=rec_mbr(2, 1), fee_extra=FEE_CREDIT)
+    run(token.alice, token, 'transfer_to_ua', [m.id, 100], mbr=MBR_UA, boxes=[b'b' + token.alice.key, b'u' + m.id])
+    o2 = token.op(m.ua(), native(make()), 1, pay_ref=b'\xc1' * 32, lane=b'\xc1' * 32)
+    a2 = [o2, m.auth(digest(o2)), ZERO_ADDR]
+    out['S2 mtx_pay'] = sim_group(relayer, [(token, 'mtx_pay', a2, {'apps': [account.id]})],
+                                  mbr=MBR_LANE + MBR_BALANCE) + (arg_bytes(token, 'mtx_pay', a2),)
+    o3 = account.op(10, m.ua(), params=bytes(33), nonce=1)
+    o4 = token.op(m.ua(), native(make()), 1, pay_ref=b'\xc2' * 32, lane=b'\xc2' * 32)
+    out['S3 relay'] = sim_group(relayer, [
+        (account, 'mtx_set_guardian', [o3, m.auth(digest(o3)), NONE_HOLDER], {}),
+        (probe, 'pay', [token.id, o4, m.auth(digest(o4)), ZERO_ADDR, MBR_LANE + MBR_BALANCE],
+         {'apps': [token.id, account.id]})]) + (None,)
+    return out
+
+
+def test_msig_cap_fits_limits(account, token, probe, relayer, make):
+    """Ruling T12-budget: MSIG_MAX_MEMBERS = min(the 2,048 B app-call argument bound, the budget bound of every real
+    group shape), each shape without bare budget calls. Inner transactions are pooled per group (256), so the budget
+    bound is far away (S3, the T15 entry + payment group, adds ≈ 7.5 k per member against ≈ 180 k); the arguments
+    bind: S1's lazily opening mtx_add_key grows ≈ 342 B per passkey member. The cap msig works in every shape; one
+    member more is refused (the cap) and, by the measured step, exceeds 2,048 B. The measure harness
+    (runs/measure_msig_cap.py) builds with a higher cap and sets SCAAS_MSIG_MEASURE to tabulate n = 1…5."""
+    upto = int(os.environ.get('SCAAS_MSIG_MEASURE', 0))
+    ns = range(1, upto + 1) if upto else (MSIG_MAX_MEMBERS - 1, MSIG_MAX_MEMBERS)
+    res = {n: msig_shapes(account, token, probe, relayer, n, make) for n in ns}
+    for n, shapes in res.items():
+        for k, (used, added, fail, args) in shapes.items():
+            print('msig %d passkeys %-12s consumed %6s added %6s args %5s %s' % (n, k, used, added, args, fail or 'ok'))
+    print('budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ %d; arguments ≤ 2,048 B'
+          % GROUP_INNER)
+    if upto:
+        return
+    for n, shapes in res.items():
+        for k, (used, added, fail, args) in shapes.items():
+            assert fail is None and (args is None or args <= 2048), (n, k, fail, args)
+    s1 = [res[n]['S1 add_key'][3] for n in ns]
+    assert s1[1] + (s1[1] - s1[0]) > 2048, s1                   # cap + 1: its add_key exceeds the arguments
+    big = MsigKey(MSIG_MAX_MEMBERS + 1, [(PasskeyKey('cap-x%d' % i), 1) for i in range(MSIG_MAX_MEMBERS + 1)])
+    with no('msig member count out of range'):
+        account.key_op(relayer, 'mtx_set_guardian', big, [NONE_HOLDER], mbr=rec_mbr(1, 1))
 
 
 # ---------------------------------------------------------------- figures (§4.6: measured per kind, pinned)
 def test_budget_per_kind_pinned(account, token, make, relayer):
+    """Opcode budget per signer kind in the minimal group (the call alone, plus its MBR payment; no bare budget
+    calls): the apps raise their budget by inner budget calls on the relayer's pooled fee. Pinned: budget consumed and
+    inner budget calls (added = 700 per app call, top-level or inner; the token's inner verify is one)."""
     bob = make()
     out = {}
     kp = MsigKey(MSIG_MAX_MEMBERS, [(PasskeyKey('pin-%d' % i), 1) for i in range(MSIG_MAX_MEMBERS)])
@@ -426,13 +509,14 @@ def test_budget_per_kind_pinned(account, token, make, relayer):
                'msig %d passkey' % MSIG_MAX_MEMBERS: kp}
     for name, k in signers.items():
         pk = name == 'passkey' or name.endswith('passkey')
-        account.key_op(relayer, 'mtx_set_guardian', k, [NONE_HOLDER], mbr=rec_mbr(0 if name == 'native' else 1, pk))
+        account.key_op(relayer, 'mtx_set_guardian', k, [NONE_HOLDER], mbr=rec_mbr(0 if name == 'native' else 1, pk),
+                       fee_extra=FEE_CREDIT)
         h = native(k) if name == 'native' else k.ua()
         o = account.op(10, h, params=bytes([0]) + Z32, nonce=1)
-        _, used, fail, _ = sim(relayer, account, 'mtx_set_guardian', [o, sign_as(k, digest(o)), NONE_HOLDER],
-                               budget=14, boxes=[account.name(h)], accounts=[k.addr] if name == 'native' else None)
+        used, added, fail = sim_group(relayer, [(account, 'mtx_set_guardian', [o, sign_as(k, digest(o)), NONE_HOLDER],
+                                                 {})])
         assert fail is None, (name, fail)
-        out['account mtx_set_guardian ' + name] = used
+        out['account mtx_set_guardian ' + name] = (used, added // 700 - 1)
     for name in ('native', 'ed25519', 'secp256k1', 'passkey', 'msig %d passkey' % MSIG_MAX_MEMBERS):
         k = token.alice if name == 'native' else signers[name]
         frm = native(k) if name == 'native' else k.ua()
@@ -441,16 +525,42 @@ def test_budget_per_kind_pinned(account, token, make, relayer):
         o = token.op(frm if name != 'native' else k, native(bob), 1, pay_ref=b'\x51' * 32, lane=b'\x51' * 32)
         a = sign_as(k, digest(o))
         via = name != 'native'
-        boxes = token.boxes(o) + ([(account, account.name(frm))] if via else [])
         need = view(token, 'mbr_needed', o) + (view(account, 'verify_mbr', frm[0], frm[1], digest(o), a) if via else 0)
-        _, used, fail, _ = sim(relayer, token, 'mtx_pay', [o, a, ZERO_ADDR], mbr=need, budget=14, boxes=boxes,
-                               apps=[account.id], accounts=[token.alice.addr] if not via else None,
-                               fee_extra=2 * MIN_FEE)
+        used, added, fail = sim_group(relayer, [(token, 'mtx_pay', [o, a, ZERO_ADDR], {'apps': [account.id]})],
+                                      mbr=need)
         assert fail is None, (name, fail)
-        out['token mtx_pay ' + name + ('' if name == 'native' else ' UA')] = used
-    print('\nopcode budget per signer kind (simulate): %s\npins %s' % (out, BUDGET_PIN))
-    for k, used in out.items():
-        assert used <= BUDGET_PIN[k] <= GROUP_POOL + 700, (k, used)
+        out['token mtx_pay ' + name + ('' if name == 'native' else ' UA')] = (used, added // 700 - 1 - via)
+    print('\nopcode budget per signer kind, minimal group (consumed, inner budget calls): %s\npins %s'
+          % (out, BUDGET_PIN))
+    for k, (used, calls) in out.items():
+        assert used <= BUDGET_PIN[k][0] and calls <= BUDGET_PIN[k][1], (k, used, calls)
+
+
+def test_inner_budget_calls_fee_pooled_no_residue(account, token, make, relayer):
+    """Ruling T12-budget: the apps' inner budget calls are paid from the group's fee credit (the relayer), never from
+    an app's balance — without the credit the call fails — and each budget app is created and deleted in one inner
+    transaction, so no app keeps a created app or MBR."""
+    m = MsigKey(MSIG_MAX_MEMBERS, [(PasskeyKey('fp-%d' % i), 1) for i in range(MSIG_MAX_MEMBERS)])
+    account.key_op(relayer, 'mtx_set_guardian', m, [NONE_HOLDER], mbr=rec_mbr(1, 1), fee_extra=FEE_CREDIT)
+    run(token.alice, token, 'transfer_to_ua', [m.id, 10], mbr=MBR_UA, boxes=[b'b' + token.alice.key, b'u' + m.id])
+
+    def state(d):
+        i = ALGOD.account_info(d.address)
+        return i['amount'] - i['min-balance'], i['min-balance'], i.get('total-created-apps', 0)
+    a0, t0 = state(account), state(token)
+    with pytest.raises(Refused, match='fee'):
+        account.key_op(relayer, 'mtx_set_guardian', m, [NONE_HOLDER], nonce=1, budget=0)
+    r = account.key_op(relayer, 'mtx_set_guardian', m, [NONE_HOLDER], nonce=1, budget=0, fee_extra=FEE_CREDIT)
+    created = [t for t in r.info.get('inner-txns', []) if t['txn']['txn'].get('type') == 'appl'
+               and not t['txn']['txn'].get('apid')]
+    o = token.op(m.ua(), native(make()), 1, pay_ref=b'\xd1' * 32, lane=b'\xd1' * 32)
+    token.mtx(relayer, 'mtx_pay', o, m.auth(digest(o)), ZERO_ADDR, budget=0, fee_extra_=FEE_CREDIT)
+    print('\ninner budget calls of a msig-%d key op: %d (created and deleted in one inner transaction each)'
+          % (MSIG_MAX_MEMBERS, len(created)))
+    assert len(created) > 10 and all(t['txn']['txn'].get('apan') == 5 for t in created)   # OnCompletion Delete
+    t1 = state(token)                                       # the token grew by the pay's boxes, paid exactly
+    assert t1[1] - t0[1] == MBR_LANE + MBR_BALANCE
+    assert state(account) == a0 and (t1[0], t1[2]) == (t0[0], t0[2])   # no balance spent, no MBR left, no app kept
 
 
 # ---------------------------------------------------------------- the token's UA path
@@ -475,6 +585,7 @@ def test_token_ua_pay_via_account_verify(token, make, relayer):
     r = token.mtx(relayer, 'mtx_pay', o, a, ZERO_ADDR, mbr=own + rec)
     assert token.min_balance() - t0 == own and account.min_balance() - a0 == rec   # the record's MBR forwarded
     assert account.record(dave.ua())['keys'] == [dave.id]                           # opened lazily
+    assert events(account, r) == [('KeyOp', [[1, list(dave.id)], 'open'])]
     ev = events(token, r)
     assert [n for n, _ in ev] == ['MetaTransactionExecuted', 'arc200_Transfer', 'UaTransfer', 'PaymentSettled']
     assert ev[1][1] == [token.address, bob.addr, 30]                                # out of the UA pool
@@ -502,6 +613,20 @@ def test_token_takes_only_a_true_verify(token, dispenser, make, relayer, probe):
     probe.name = lambda h: b's'
     with no('bad signature'):
         t.mtx(relayer, 'mtx_pay', o, erin.auth(digest(o)), ZERO_ADDR, mbr=MBR_LANE + MBR_BALANCE)
+
+
+def test_token_msig_with_address_member(token, make, relayer):
+    """m7: a msig payer with an algorand-address member pays through the token when the relayer lists the member in
+    `accounts` (the inner verify reads its authority through group resource sharing); without it the call fails."""
+    bob, erin = make(1_000_000), EdKey('erin')
+    m = MsigKey(2, [(bob, 1), (erin, 1)])
+    run(token.alice, token, 'transfer_to_ua', [m.id, 10], mbr=MBR_UA, boxes=[b'b' + token.alice.key, b'u' + m.id])
+    o = token.op(m.ua(), native(make()), 3, pay_ref=b'\x76' * 32, lane=b'\x76' * 32)
+    need = MBR_LANE + MBR_BALANCE + rec_mbr(1)
+    with pytest.raises(Refused, match='unavailable Account'):
+        token.mtx(relayer, 'mtx_pay', o, m.auth(digest(o)), ZERO_ADDR, mbr=need)
+    token.mtx(relayer, 'mtx_pay', o, m.auth(digest(o)), ZERO_ADDR, mbr=need, accounts=[bob.addr])
+    assert view(token, 'ua_balance_of', m.id) == 7
 
 
 def test_keys_shared_by_two_tokens(token, dispenser, make, relayer):
