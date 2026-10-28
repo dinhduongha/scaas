@@ -1,20 +1,20 @@
-# docs at commit 67fa7a45
+# docs at commit 4f12980c
 test_docs_check: ok
   note: accepted budget contracts/accounts.md: 1755 lines > 1.3 x 1100
   note: accepted budget contracts/dex.md: 653 lines > 1.3 x 400
-  note: accepted budget contracts/metatx.md: 1194 lines > 1.3 x 650
+  note: accepted budget contracts/metatx.md: 1198 lines > 1.3 x 650
   note: accepted budget contracts/pq-zero-knowledge.md: 2606 lines > 1.3 x 950
   note: accepted budget contracts/zether.md: 1813 lines > 1.3 x 700
-  note: accepted budget decisions.md: 6875 lines > 1.3 x 3000
+  note: accepted budget decisions.md: 6877 lines > 1.3 x 3000
   note: accepted budget networks/README.md: 637 lines > 1.3 x 400
-  note: accepted budget networks/aptos.md: 724 lines > 1.3 x 500
+  note: accepted budget networks/aptos.md: 727 lines > 1.3 x 500
   note: accepted budget networks/cosmos.md: 352 lines > 1.3 x 220
-  note: accepted budget networks/evm.md: 304 lines > 1.3 x 200
+  note: accepted budget networks/evm.md: 306 lines > 1.3 x 200
   note: accepted budget networks/hedera.md: 390 lines > 1.3 x 250
   note: accepted budget networks/solana.md: 902 lines > 1.3 x 550
   note: accepted budget networks/soroban.md: 346 lines > 1.3 x 230
   note: accepted budget networks/sui.md: 470 lines > 1.3 x 300
-  note: accepted budget networks/ton.md: 425 lines > 1.3 x 280
+  note: accepted budget networks/ton.md: 448 lines > 1.3 x 280
   note: accepted budget node/README.md: 388 lines > 1.3 x 250
   warn: budget clients/signers-clientkeys.md: 892 lines > 1.3 x 650
   warn: budget contracts/token-wrappers.md: 1018 lines > 1.3 x 650
