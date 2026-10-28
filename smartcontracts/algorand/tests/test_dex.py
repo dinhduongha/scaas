@@ -30,7 +30,7 @@ ARGS_MAX = 2048                  # app-call argument bytes (current consensus)
 # Opcode budget of a settle in its minimal group (simulate, no bare budget calls: the apps raise their own budget by
 # inner budget calls on the relayer's pooled fee), (consumed, inner app calls) — runs/2026-10-28-algorand-limits.txt
 BUDGET_PIN = {'settle native': (7700, 13), 'settle ed25519 UA': (8900, 14), 'settle passkey UA': (13300, 20),
-              'settle msig 3 passkey + passkey (carried)': (24000, 33)}
+              'settle msig 3 passkey + passkey (carried)': (24000, 33), 'settle msig 3 passkey x2 (carried)': (35000, 49)}
 
 NOT_APP = "a leg is pulled only by an app, the order's DEX"
 NOT_DEX = "a leg is pulled only by the order's DEX (to = relayer = caller)"
@@ -464,24 +464,36 @@ def test_trade_leg_is_a_value_op(dex, pair, relayer):
     assert bal(tb, erin.ua()) == 60
 
 
-def test_carried_auth_anywhere_in_group(dex, pair, relayer, probe, dispenser):
-    """A carried auth is the first `carry` call to this DEX in group order (a's before b's), wherever it sits — here
-    before the MBR payment, with an app call after settle (the T15 relay shape puts the router call there); a carry to
-    another app is not one; an empty auth without a carry call is refused."""
+def test_carried_auth_after_the_settle(dex, pair, relayer, probe, dispenser):
+    """A carried auth is the first `carry` call to this DEX after the settle, in group order (a's before b's), so each
+    settle consumes the carries that follow it and several carried settles share one group (fix 1 m1); a carry to
+    another app is not one, a router-like call may sit between; a carry before the settle, or one consumed by an
+    earlier settle, never serves it."""
     ta, tb = pair
     erin, la, lb = setup_legs(dex, ta, tb, relayer)
+    _, la2, lb2 = setup_legs(dex, ta, tb, relayer)
+    la2 = dex.leg(ta, erin, la2.order, nonce=1)
+    lb2 = dex.leg(tb, tb.alice, lb2.order, lane=LANE_B, nonce=4)
     dex2 = deploy_dex(dispenser)
-    parts = dex.mbr(la, lb)
-    args = [la.order, la.op, b'', lb.order, lb.op, b'', parts]
     apps = {'apps': [ta.id, tb.id, ta.account.id]}
-    refs = dex.refs(la, lb)
-    with no('a carried auth needs a carry call'):
-        send(relayer, dex, [(dex, 'carry', [la.auth], {}), ('pay', dex.address, sum(parts)), (dex, 'settle', args, apps)],
-             *refs)
-    items = [(dex2, 'carry', [b'\x01' * 70], {}), (dex, 'carry', [la.auth], {}), (dex, 'carry', [lb.auth], {}),
-             ('pay', dex.address, sum(parts)), (dex, 'settle', args, apps), (probe, 'lane_of', [Z32], {})]
+    p1 = dex.mbr(la, lb)
+    p2 = [MBR_ORDER, MBR_ORDER, 0, 0]                      # the second pair: every box exists by then
+
+    def settle(x, y, parts):
+        return [('pay', dex.address, sum(parts)), (dex, 'settle', [x.order, x.op, b'', y.order, y.op, b'', parts], apps)]
+    b1, a1 = dex.refs(la, lb)
+    b2, a2 = dex.refs(la2, lb2)
+    refs = (b1 + b2, a1 + a2)
+    cb = lambda x: (dex, 'carry', [x.auth], {})            # noqa: E731
+    with no('a carried auth needs a carry call'):         # carries before the settle are not its carries
+        send(relayer, dex, [cb(la), cb(lb)] + settle(la, lb, p1), *refs)
+    with no('a carried auth needs a carry call'):         # settle 2's carries were consumed by settle 1
+        send(relayer, dex, settle(la, lb, p1) + [cb(la), cb(lb)] + settle(la2, lb2, p2), *refs)
+    assert (bal(ta, erin.ua()), view(ta, 'filled', 1, erin.id, LANE_A, 0)) == (2_000, False)
+    items = (settle(la, lb, p1) + [(dex2, 'carry', [b'\x01' * 70], {}), (probe, 'lane_of', [Z32], {}), cb(la), cb(lb)]
+             + settle(la2, lb2, p2) + [cb(la2), cb(lb2)])
     send(relayer, dex, items, *refs)
-    assert (bal(tb, erin.ua()), bal(ta, native(tb.alice))) == (60, 100)
+    assert (bal(tb, erin.ua()), bal(ta, native(tb.alice)), bal(ta, erin.ua())) == (120, 200, 1_800)
 
 
 def test_dex_update_delete_optin_refused(dex, dispenser, make):
@@ -494,8 +506,8 @@ def test_dex_update_delete_optin_refused(dex, dispenser, make):
 
 
 def test_figures_pinned(dex, pair, relayer, make):
-    """Budget of a settle per leg signer kind in the minimal group (no bare budget calls), pinned; the worst-case leg —
-    a 3-member passkey msig (MSIG_MAX_MEMBERS) with Chrome-shaped assertions — against a Chrome passkey leg: its auth
+    """Budget of a settle per leg signer kind in the minimal group (no bare budget calls), pinned; the worst case is two
+    3-member passkey msig legs (MSIG_MAX_MEMBERS) with Chrome-shaped assertions (fix 1 m2); such a leg's auth
     does not fit settle's 2,048 B of arguments inline, so it rides a carry call; every app call of the group (settle,
     carry, the inner mtx_trade and account.verify) stays within 2,048 B. MBR per order / min_nonce box; program size."""
     ta, tb = pair
@@ -511,7 +523,9 @@ def test_figures_pinned(dex, pair, relayer, make):
     cases = (('native', None, None, ''), ('ed25519 UA', EdKey('fig-a'), EdKey('fig-b'), ''),
              ('passkey UA', ChromeKey('fig-pa'), ChromeKey('fig-pb'), ''),
              ('msig 3 passkey + passkey (carried)', MsigKey(3, [(ChromeKey('fig-m%d' % i), 1) for i in range(3)]),
-              ChromeKey('fig-pc'), 'ab'))
+              ChromeKey('fig-pc'), 'ab'),
+             ('msig 3 passkey x2 (carried)', MsigKey(3, [(ChromeKey('fig-n%d' % i), 1) for i in range(3)]),
+              MsigKey(3, [(ChromeKey('fig-o%d' % i), 1) for i in range(3)]), 'ab'))
     for n, (name, sa, sb, carry) in enumerate(cases):
         la, lb = legs(sa, sb, n)
         args[name] = (dex.args_of(la, lb), dex.args_of(la, lb, carry) if carry else None)
@@ -520,7 +534,7 @@ def test_figures_pinned(dex, pair, relayer, make):
         out['settle ' + name] = (used, inner)
         dex.settle(relayer, la, lb, carry=carry)
         assert (bal(ta, native(dex.key)), bal(tb, native(dex.key))) == (0, 0)
-    # la: the msig-3 leg just settled
+    # la: an msig-3 leg just settled
     inner_args = 4 + 291 + 2 + len(la.auth) + 88                     # token.mtx_trade(op, auth, order) from the DEX
     verify_args = 4 + 1 + 32 + 32 + 2 + len(la.auth)                 # account.verify(kind, id, digest, auth)
     carry_args = 4 + 2 + len(la.auth)

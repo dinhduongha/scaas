@@ -111,3 +111,14 @@ pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed
 .
 4 passed in 2.92s
 rc=0
+
+## T14 fix 1 (m1 carry scan after the settle; m2 the true worst case pinned: two 3-member Chrome-passkey msig legs, both carried) at commit bddf9110 + the fix-1 tree
+
+DEX settle opcode budget, minimal group (consumed, inner app calls): {'settle native': (7308, 12), 'settle ed25519 UA': (8473, 13), 'settle passkey UA': (12663, 19), 'settle msig 3 passkey + passkey (carried)': (23024, 31), 'settle msig 3 passkey x2 (carried)': (33337, 46)}
+pins {'settle native': (7700, 13), 'settle ed25519 UA': (8900, 14), 'settle passkey UA': (13300, 20), 'settle msig 3 passkey + passkey (carried)': (24000, 33), 'settle msig 3 passkey x2 (carried)': (35000, 49)}
+settle argument bytes (inline, carried): {'native': (926, None), 'ed25519 UA': (992, None), 'passkey UA': (1706, None), 'msig 3 passkey + passkey (carried)': (2738, 798), 'msig 3 passkey x2 (carried)': (3770, 798)}; msig-3 leg auth 1486 B, carry call 1492 B, inner mtx_trade 1871 B, inner account.verify 1557 B (limit 2048)
+MBR (µALGO): order box 16100 (name 33 B, value 1 B), min_nonce box 18900; per leg + the DEX balance box 28500 once per token, the payout receiver box 28500 when new; the DEX app: none
+program size (B): dex approval 863, clear 4; token approval 3661
+.
+1 passed in 2.38s
+rc=0

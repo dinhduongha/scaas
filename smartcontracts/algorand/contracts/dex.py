@@ -15,8 +15,9 @@ settles both legs in one call, so nothing is held between transactions).
   payout at token a, the payout at token b); each token checks its own part exactly, and the relayer's one payment just
   before `settle` equals their sum (§2 row 15: this app creates nothing itself).
 - An auth too large for `settle`'s 2,048 B of arguments (a passkey msig leg) is passed empty and carried by a `carry`
-  call to this app anywhere in the same group (in group order: a's first when both are carried); it is only a
-  signature, which the token verifies.
+  call to this app after `settle` in the same group (the first ones after it, in group order: a's first when both are
+  carried; other calls may sit between, so several settles share a group, each consuming the carries that follow it);
+  it is only a signature, which the token verifies.
 - Event `Matched(settle_id, token_a, token_b, leg_a, leg_b)`: `settle_id = sha256(digest(op_a) ‖ digest(op_b))`, the
   two leg digests are the tokens' `OrderFilled.digest`; logged only on success (a failed group logs nothing).
 
@@ -57,7 +58,7 @@ class Dex(arc4.ARC4Contract):
         assert (order_a.sell_amount.as_biguint() >= order_b.min_buy.as_biguint()
                 and order_b.sell_amount.as_biguint() >= order_a.min_buy.as_biguint()), \
             "fill-or-kill: each side's sell_amount covers the other's min_buy"
-        at = UInt64(0)
+        at = Txn.group_index + 1  # this settle's carries follow it (several settles may share a group)
         a = auth_a
         if not a:
             a, at = carried(at)
@@ -84,7 +85,7 @@ def bound(o: Order) -> None:
 @subroutine
 def carried(start: UInt64) -> tuple[Bytes, UInt64]:
     """The `byte[]` argument of the first `carry` call to this app at group index ≥ `start`, and the index after it
-    (anywhere in the group: the T15 relay shape puts the router call right after `settle`)."""
+    (other calls may sit between: the T15 relay shape puts the router call right after `settle`)."""
     for i in urange(start, Global.group_size):
         t = gtxn.Transaction(i)
         if (t.type == TransactionType.ApplicationCall and t.app_id == Global.current_application_id

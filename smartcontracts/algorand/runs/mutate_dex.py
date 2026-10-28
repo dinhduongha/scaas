@@ -15,7 +15,7 @@ SETTLE, FAILS, RELAYER, NONDEX, CANCEL, MINN, FOK, REPLAY, VALUE, ACTIONS, FIG, 
     'test_settle_both_legs_atomic', 'test_one_leg_fails_group_fails', 'test_order_relayer_mismatch_refused',
     'test_leg_by_non_dex_refused', 'test_cancel_filled_refused', 'test_min_nonce_cap_refused', 'test_no_partial_fill',
     'test_replay_across_dexes_tokens_networks', 'test_trade_leg_is_a_value_op', 'test_dex_update_delete_optin_refused',
-    'test_figures_pinned', 'test_carried_auth_anywhere_in_group'))
+    'test_figures_pinned', 'test_carried_auth_after_the_settle'))
 AT = 'assert True, '
 M = [
     # token: mtx_trade
@@ -103,6 +103,8 @@ M = [
      '', CARRY),
     ('Y16 carried: any app call to this DEX counts (settle itself)', D,
      '\n                and t.num_app_args == 2):', '):', CARRY),
+    ('Y17 carried: scan from the group start (fix 1 m1)', D, '        at = Txn.group_index + 1  #',
+     '        at = UInt64(0)  #', CARRY),
     ('Y13 Update / Delete allowed', D, '    @arc4.baremethod(allow_actions=["NoOp"])',
      '    @arc4.baremethod(allow_actions=["NoOp", "UpdateApplication", "DeleteApplication"])', ACTIONS),
     ('Y14 OptIn allowed', D, '    @arc4.baremethod(allow_actions=["NoOp"])', '    @arc4.baremethod(allow_actions=["NoOp", "OptIn"])',

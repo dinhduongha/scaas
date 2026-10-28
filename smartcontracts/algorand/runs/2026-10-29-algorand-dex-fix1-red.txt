@@ -1,0 +1,17 @@
+# algorand-dex fix 1 RED (m1 carry scan after the settle, m2 two msig-3 legs) against the T14 dex at commit bddf9110 + the fix-1 tests
+F
+DEX settle opcode budget, minimal group (consumed, inner app calls): {'settle native': (7306, 12), 'settle ed25519 UA': (8471, 13), 'settle passkey UA': (12661, 19), 'settle msig 3 passkey + passkey (carried)': (23059, 31), 'settle msig 3 passkey x2 (carried)': (33372, 46)}
+pins {'settle native': (7700, 13), 'settle ed25519 UA': (8900, 14), 'settle passkey UA': (13300, 20), 'settle msig 3 passkey + passkey (carried)': (24000, 33), 'settle msig 3 passkey x2 (carried)': (35000, 49)}
+settle argument bytes (inline, carried): {'native': (926, None), 'ed25519 UA': (992, None), 'passkey UA': (1706, None), 'msig 3 passkey + passkey (carried)': (2738, 798), 'msig 3 passkey x2 (carried)': (3770, 798)}; msig-3 leg auth 1486 B, carry call 1492 B, inner mtx_trade 1871 B, inner account.verify 1557 B (limit 2048)
+MBR (µALGO): order box 16100 (name 33 B, value 1 B), min_nonce box 18900; per leg + the DEX balance box 28500 once per token, the payout receiver box 28500 when new; the DEX app: none
+program size (B): dex approval 866, clear 4; token approval 3661
+.
+=================================== FAILURES ===================================
+______________________ test_carried_auth_after_the_settle ______________________
+tests/test_dex.py:488: in test_carried_auth_after_the_settle
+    with no('a carried auth needs a carry call'):         # carries before the settle are not its carries
+E   Failed: DID NOT RAISE Refused
+=========================== short test summary info ============================
+FAILED tests/test_dex.py::test_carried_auth_after_the_settle - Failed: DID NO...
+1 failed, 1 passed in 3.95s
+rc=1
