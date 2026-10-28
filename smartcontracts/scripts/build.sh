@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Build one on-chain family (or all) with its native tool. Heavy: the caller wraps it in scripts/capped.
-# usage: build.sh <evm|aptos|sui|soroban|cosmos|ton|solana|near|all>
+# usage: build.sh <evm|aptos|sui|soroban|cosmos|ton|solana|near|algorand|all>
 set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FAMILIES="evm aptos sui soroban cosmos ton solana near"
+FAMILIES="evm aptos sui soroban cosmos ton solana near algorand"
 build() {
   echo "== build $1"
   case "$1" in
@@ -16,6 +16,10 @@ build() {
     solana)  (export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"; cd "$SC/solana" && cargo build-sbf) ;;
     near)    for m in "$SC"/near/*/Cargo.toml "$SC"/near/integration/*/Cargo.toml; do grep -q 'cdylib' "$m" || continue  # contract crates (+ test fixtures)
                (cd "$(dirname "$m")" && CARGO_BUILD_JOBS=2 cargo near build non-reproducible-wasm --no-abi); done ;;
+    # puyapy (pinned in requirements.txt, venv .venv) → out/*.{approval,clear}.bin + ARC-56; artifacts.json rewritten
+    algorand) "$SC/algorand/scripts/venv.sh" && (cd "$SC/algorand" && . .venv/bin/activate && rm -rf out \
+               && puyapy contracts --out-dir "$PWD/out" --output-bytecode --no-output-teal --no-output-source-map \
+               && python -I scripts/artifacts.py ${ALGORAND_ARTIFACTS_CHECK:+--check}) ;;
     *) echo "unknown family '$1' (one of: $FAMILIES all)" >&2; exit 2 ;;
   esac
 }

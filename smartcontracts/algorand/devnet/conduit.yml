@@ -1,0 +1,17 @@
+log-level: info
+retry-count: 10
+retry-delay: "1s"
+hide-banner: false
+metrics: {mode: "OFF", addr: ":9999", prefix: "conduit"}
+importer:
+  name: algod
+  config:
+    mode: "follower"
+    netaddr: "http://algod:8081"
+    token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    catchup-config: {admin-token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+processors:
+exporter:
+  name: postgresql
+  config:
+    connection-string: "host=indexer-db port=5432 user=algorand password=algorand dbname=indexerdb"

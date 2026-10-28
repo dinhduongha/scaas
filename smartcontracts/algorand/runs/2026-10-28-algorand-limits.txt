@@ -1,0 +1,32 @@
+# algorand-limits (opcode budget, MBR per box, MAX_PAY_META_BYTES, program sizes) at commit 093ea592 + the T11 tree
+# localnet: algod 5.0.5-stable (DevMode, consensus future), puyapy 5.10.1 AVM 11
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Created 
+ Network scaas-algorand_default Created 
+ Container scaas-algorand-algod-1 Creating 
+ Container scaas-algorand-indexer-db-1 Creating 
+ Container scaas-algorand-algod-1 Created 
+ Container scaas-algorand-indexer-db-1 Created 
+ Container scaas-algorand-conduit-1 Creating 
+ Container scaas-algorand-conduit-1 Created 
+ Container scaas-algorand-indexer-1 Creating 
+ Container scaas-algorand-indexer-1 Created 
+ Container scaas-algorand-algod-1 Starting 
+ Container scaas-algorand-indexer-db-1 Starting 
+ Container scaas-algorand-algod-1 Started 
+ Container scaas-algorand-indexer-db-1 Started 
+ Container scaas-algorand-conduit-1 Starting 
+ Container scaas-algorand-conduit-1 Started 
+ Container scaas-algorand-indexer-1 Starting 
+ Container scaas-algorand-indexer-1 Started 
+algod up
+.
+MAX_PAY_META_BYTES = 507 (logs 1024 / 1024 B, app args 902 / 2048 B)
+.
+opcode budget used: {'mtx_pay': 2830, 'mtx_transfer': 2790, 'mtx_pay_meta': 3286, 'arc200_transfer': 259} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 4 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2271, clear 4
+.
+3 passed, 24 deselected in 3.09s
+rc=0

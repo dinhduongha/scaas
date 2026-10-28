@@ -104,8 +104,9 @@ def auth(signer, digest):
 METAOPS = []
 
 
-def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer_=V.ZERO32, extra=V.ZERO32, note=None):
-    op = {'contract': TOKEN, 'op': V.OP['pay'], 'from': frm, 'to': to, 'relayer': relayer_, 'amount': amount,
+def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer_=V.ZERO32, extra=V.ZERO32, note=None,
+           code=V.OP['pay'], keep=True):
+    op = {'contract': TOKEN, 'op': code, 'from': frm, 'to': to, 'relayer': relayer_, 'amount': amount,
           'pay_ref': pay_ref, 'lane': lane, 'nonce': nonce, 'valid_until': VU, 'extra': extra}
     enc = encode(op)
     assert len(enc) == ENCODING_LEN
@@ -117,7 +118,8 @@ def metaop(name, signer, frm, to, amount, pay_ref, lane, nonce=0, relayer_=V.ZER
         'encoding': V.hx(enc), 'digest': V.hx(dg), 'text': V.text(dg).decode(), 'auth': auth(signer, dg)}
     if note:
         row['note'] = note
-    METAOPS.append(row)
+    if keep:
+        METAOPS.append(row)
     return row
 
 
@@ -194,13 +196,18 @@ MBR_BOXES = [
     ('balance', b'b' + alice.pk, 32, '"b" ‖ address → uint256'),
     ('ua_balance', b'u' + UA_ERIN, 32, '"u" ‖ UA id → uint256'),
     ('lane', lane_box(0, alice.pk, b32(0xa1)), 8, '"l" ‖ sha256(kind ‖ holder ‖ lane) → uint64 nonce'),
+    ('allowance', b'a' + V.sha256(alice.pk, ROUTER), 32, '"a" ‖ sha256(owner ‖ spender) → uint256 (app-to-app only)'),
 ]
 
 
 # ---------------------------------------------------------------- extension points (ruling R5)
 def transfer_vectors():
-    """Ops 4 transfer, 5 execute_transfer (`mtx_transfer`, `mtx_execute_transfer`): Task 11 adds rows here."""
-    return []
+    """Ops 4 transfer (`mtx_transfer`, no pay_ref), 5 execute_transfer (`mtx_execute_transfer`, any pay_ref)."""
+    return [metaop('transfer', alice, addr(alice.pk), ua(UA_ERIN), 42, V.ZERO32, b32(0xa6), code=V.OP['transfer'],
+                   keep=False, note='mtx_transfer: op 4, pay_ref zero, extra payer-chosen'),
+            metaop('execute_transfer', alice, addr(alice.pk), addr(bob.pk), 43, b32(0x07), b32(0xa7), nonce=2,
+                   code=V.OP['execute_transfer'], keep=False, extra=b32(0x5e),
+                   note='mtx_execute_transfer: op 5, any pay_ref (payment_settled when non-zero)')]
 
 
 def key_op_vectors():

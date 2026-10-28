@@ -1,0 +1,860 @@
+# algorand-token RED at commit 093ea592 (+ uncommitted T11 tests, token ABI stub)
+== test algorand
+== build algorand
+[32minfo: [0musing puyapy version 5.10.1[0m
+[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0mWriting out/Token.arc56.json[0m
+[32minfo: [0mWriting out/Token.approval.bin[0m
+[32minfo: [0mWriting out/Token.clear.bin[0m
+[32minfo: [0mWriting out/Probe.arc56.json[0m
+[32minfo: [0mWriting out/Probe.approval.bin[0m
+[32minfo: [0mWriting out/Probe.clear.bin[0m
+ok artifacts.json
+ok smartcontracts/algorand/vectors/algorand-vectors.json
+EEEEEEEEEEEEEEEEEEEEEEE..F.
+==================================== ERRORS ====================================
+____________________ ERROR at setup of test_arc200_getters _____________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b744900>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba31eb0>, method = 'mint'
+args = ['T6RF2PYJZG5ITPMSLUEMED5IT5LP2H5VXCY35UACEJTJCASX2J6MQUXA5M', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\x9f\xa2]?\t\xc9\xba\x89\xbd\x92]\x08\xc2\x0f\xa8\x9fV\xfd\x1f\xb5\xb8\xb1\xbe\xd0\x02"f\x91\x02W\xd2|']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction BLTBQZ7GD54HRYTDGVHUY6G2C3HB5ABR6KBLOMG7KQ54GOBQAHJQ: logic eval error: err opcode executed. Details: app=1002, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+____________________ ERROR at setup of test_mint_admin_only ____________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b7449a0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba57da0>, method = 'mint'
+args = ['YT4AQOZVRZGZJQLD6OW2RVT7OIYTR3Z4LMISRLLYIKCMTUUHCUVZZV526A', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xc4\xf8\x08;5\x8eM\x94\xc1c\xf3\xad\xa8\xd6\x7fr18\xef<[\x11(\xadxB\x84\xc9\xd2\x87\x15+']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction P64D3VGDKNAFX4RZKBFG4G7L7IRCVSWGTNTU3LYTLQOS5TB2RERQ: logic eval error: err opcode executed. Details: app=1005, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_____ ERROR at setup of test_arc200_transfer_new_receiver_needs_exact_mbr ______
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b7465c0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0c178110>, method = 'mint'
+args = ['PMEEHNOGFH64KCWCZN52JHP7MHAM2WV7YNEMHU4HIAHXI5A54FMJ462TJU', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b{\x08C\xb5\xc6)\xfd\xc5\n\xc2\xcb{\xa4\x9d\xffa\xc0\xcdZ\xbf\xc3H\xc3\xd3\x87@\x0ftt\x1d\xe1X']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction CYHOQMDGJNLB6FLWJVSMFZPHJIRAJQXM2I37UFE24R5B6B2GAATA: logic eval error: err opcode executed. Details: app=1008, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+___________________ ERROR at setup of test_mbr_payment_exact ___________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b745800>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba59cd0>, method = 'mint'
+args = ['KV4H5NE2L4C7RVLYIS6W5OV3T7U7LOM2VM7F5PGCCXYP6KQYSDERAUEXSE', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'bUx~\xb4\x9a_\x05\xf8\xd5xD\xbdn\xba\xbb\x9f\xe9\xf5\xb9\x9a\xab>^\xbc\xc2\x15\xf0\xff*\x18\x90\xc9']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction NR2VY7NIPKUQLUR7WSHMO4U2EZV5VMMNCVGAT7NTETGWJTFJLSOQ: logic eval error: err opcode executed. Details: app=1011, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+___________ ERROR at setup of test_pay_meta_emits_meta_then_settled ____________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b745da0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5b170>, method = 'mint'
+args = ['7R2YH2CVNNSLJGBY4IGYBPIU43PZKSXD2JFUZWIYIQ4OP6KCMCOVKOWCK4', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xfcu\x83\xe8Ukd\xb4\x988\xe2\r\x80\xbd\x14\xe6\xdf\x95J\xe3\xd2KL\xd9\x18D8\xe7\xf9B`\x9d']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction CC4V2MFOZCE3OU4DB6SMPD3U6G6BOUFH2VKPYLC5T3EY3ZGQT6SA: logic eval error: err opcode executed. Details: app=1014, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_________ ERROR at setup of test_algorand_pay_meta_mismatch_and_replay _________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b746e80>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5dbb0>, method = 'mint'
+args = ['ZXJJOUQJAZ4CF3BNWMGDR5FVNTT2J6M5DLI5ILJP5RMBSPGBXT2WDOHHOI', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xcd\xd2\x97R\t\x06x"\xec-\xb3\x0c8\xf4\xb5l\xe7\xa4\xf9\x9d\x1a\xd1\xd4-/\xecX\x19<\xc1\xbc\xf5']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction W2A7OKKHRQMIEYMHH4IOWYAGFVXFAB4SKIT4L3EYX7GPP4R7UA3Q: logic eval error: err opcode executed. Details: app=1017, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+______________ ERROR at setup of test_pay_meta_cap_measured[507] _______________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72cc20>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5c560>, method = 'mint'
+args = ['ZB7PPCRYTZ5N46YGQ3ZBKN3KZMM73A7CUK6X7QQH7EINJOVNJFORIRUQPQ', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xc8~\xf7\x8a8\x9ez\xde{\x06\x86\xf2\x157j\xcb\x19\xfd\x83\xe2\xa2\xbd\x7f\xc2\x07\xf9\x10\xd4\xba\xadI]']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction Z5AVBMV6B5O25LZEKFIEI5HSOESGWPPQYYTIVEI4SUQ7WZLZSGCQ: logic eval error: err opcode executed. Details: app=1020, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_________ ERROR at setup of test_rekeyed_address_signs_with_auth_addr __________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72ce00>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5e360>, method = 'mint'
+args = ['ZJBCAVFB6O7YEDA7TZS6PUDZH25X7BSQ2T6HUDVSUHAFBDZCBBEY6PBC4Q', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xcaB T\xa1\xf3\xbf\x82\x0c\x1f\x9ee\xe7\xd0y>\xbb\x7f\x86P\xd4\xfcz\x0e\xb2\xa1\xc0P\x8f"\x08I']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction TLAEEQLTGPKYIZSSQMFCKKMM5V6XZG4KFDXDGIATRSDY6BCSKBAA: logic eval error: err opcode executed. Details: app=1023, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_________ ERROR at setup of test_rekeyed_to_logicsig_refused_natively __________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b747d80>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5ba70>, method = 'mint'
+args = ['S3C47OCYTLOHPDOIMTT5M3AFHVWK2N26JAC5GILDLCRW3OZ5SKWJARFRHY', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\x96\xc5\xcf\xb8X\x9a\xdcw\x8d\xc8d\xe7\xd6l\x05=l\xad7^H\x05\xd3!cX\xa3m\xbb=\x92\xac']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction RBFWD4LMOHWWIYWIECLSPECXITZD6GOYUAZVPZWVQ2QRJHMM3RAQ: logic eval error: err opcode executed. Details: app=1026, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_________________ ERROR at setup of test_wrong_network_refused _________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b7477e0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5a1e0>, method = 'mint'
+args = ['6KAXUHHHZ5JKAZWQ4ILW524Z2N2CWXWNOZASCUNKYQRFFK5EEVAAE6FVDU', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xf2\x81z\x1c\xe7\xcfR\xa0f\xd0\xe2\x17n\xeb\x99\xd3t+^\xcdvA!Q\xaa\xc4"R\xab\xa4%@']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction JGZW2OMUBKN6SRLZDX3NRAVBESMI7YEROVMPDPFOV6W3PQFVMDYQ: logic eval error: err opcode executed. Details: app=1029, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+__________________ ERROR at setup of test_valid_until_seconds __________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b746980>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0c002ff0>, method = 'mint'
+args = ['VOW72U4K2H5QBNCCGLZGMFCMBBLKGDH47GH2K2IEDLVHIU773GWB6ZELAU', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xab\xad\xfdS\x8a\xd1\xfb\x00\xb4B2\xf2f\x14L\x08V\xa3\x0c\xfc\xf9\x8f\xa5i\x04\x1a\xeatS\xff\xd9\xac']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction VVJ7UKILMTBEM77DPSZ7ZUCYWI32PY2UK4S234BRWLYZEHCJ2JFQ: logic eval error: err opcode executed. Details: app=1032, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+________________ ERROR at setup of test_relayer_bound_to_sender ________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72c4a0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0c995070>, method = 'mint'
+args = ['E6DOOBOVUZ6BHBYH7GD2J377VYX6BW4UHQKMUHYSKOQVTHBHC33POLQWLI', 1000000]
+kw = {'mbr': 28500, 'boxes': [b"b'\x86\xe7\x05\xd5\xa6|\x13\x87\x07\xf9\x87\xa4\xef\xff\xae/\xe0\xdb\x94<\x14\xca\x1f\x12S\xa1Y\x9c'\x16\xf6"]}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction NH5UPDIYKNUSBTIGZGEQHNJO6FNN6SX6HHZDAOK3CLKFPBFQNM6A: logic eval error: err opcode executed. Details: app=1035, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+____________ ERROR at setup of test_ua_signer_needs_the_account_app ____________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72c2c0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5d2e0>, method = 'mint'
+args = ['NS2U3YBKLZFJNERO4ZJEKH4KXNLLJZQECPHO6IDR3CZYRDVPDBLWP57Q7A', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'bl\xb5M\xe0*^J\x96\x92.\xe6RE\x1f\x8a\xbbV\xb4\xe6\x04\x13\xce\xef q\xd8\xb3\x88\x8e\xaf\x18W']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction VNTARRNMOEBET6WOU5QZDJUPPKYWIH7MOBKOPHGDZDQACQ73DQEA: logic eval error: err opcode executed. Details: app=1038, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_______________ ERROR at setup of test_pay_to_token_app_refused ________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72c040>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0ba5f7d0>, method = 'mint'
+args = ['J6VNH7XJ2NOWEVHNTCRXRDVNLSVHKDOAKI43CHMHR34FLSGCU7PNA3MTBM', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'bO\xaa\xd3\xfe\xe9\xd3]bT\xed\x98\xa3x\x8e\xad\\\xaau\r\xc0R9\xb1\x1d\x87\x8e\xf8U\xc8\xc2\xa7\xde']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction SZN5TPPJFVHFYZOZG3ZVHU6HRSLL4FX3B5X6SXHWNWYFIKKFLQEA: logic eval error: err opcode executed. Details: app=1041, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_____________ ERROR at setup of test_transfer_and_execute_transfer _____________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72ea20>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0baa17c0>, method = 'mint'
+args = ['PAWNV2KWQN3OHQYOGJPWE7CC6YFORY56HQGZPMFNOHKIT444BLRSAMICDE', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'bx,\xda\xe9V\x83v\xe3\xc3\x0e2_b|B\xf6\n\xe8\xe3\xbe<\r\x97\xb0\xadq\xd4\x89\xf3\x9c\n\xe3']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction KAJT4ROWD6AFOAL2SVRDOUWLJBT7KVZEL4QBDSU4RQDXKKBQWLLA: logic eval error: err opcode executed. Details: app=1044, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+___________ ERROR at setup of test_transfer_to_ua_and_ua_balance_of ____________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72d8a0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0c0036b0>, method = 'mint'
+args = ['23NAYUWSERXME3INN3NOBAV7QETOTGBMUPVLJCJ2564Y4YUB5RN5SMW52M', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xd6\xda\x0cR\xd2$n\xc2m\rn\xda\xe0\x82\xbf\x81&\xe9\x98,\xa3\xea\xb4\x89:\xef\xb9\x8eb\x81\xec[']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction 2LKBGAC5X33GZ464U2JK5ME4CGMXF5GTM6LO3SDL4UHS3YHT7EIA: logic eval error: err opcode executed. Details: app=1047, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_____________ ERROR at setup of test_open_payee_only_in_open_mode ______________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72f240>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0baa3e60>, method = 'mint'
+args = ['Y7RJSM73K3V5HL2J2DFTQNEBHTTBXSXPGPG7K6AX4BP3SNY54RYKY7E6SU', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xc7\xe2\x993\xfbV\xeb\xd3\xafI\xd0\xcb84\x81<\xe6\x1b\xca\xef3\xcd\xf5x\x17\xe0_\xb97\x1d\xe4p']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction ERVFF3DBDN5JECMELLA3VJ6QHFD7NXG2MZCOHCR5F3QRV4WZM47Q: logic eval error: err opcode executed. Details: app=1050, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+________________ ERROR at setup of test_approve_only_app_to_app ________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b8a8f40>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0b88d1f0>, method = 'mint'
+args = ['E2TR3GTFLYEN3SBZYVGQ7HA7NKLMQ2AC3B3IRA3VMILNK45DC2UHAZUKRM', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b&\xa7\x1d\x9ae^\x08\xdd\xc89\xc5M\x0f\x9c\x1fj\x96\xc8h\x02\xd8v\x88\x83ub\x16\xd5s\xa3\x16\xa8']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction FE2YENK4LH2LWYSZDJ5GXBIVZIQCKBO5CU6SI4EQOOHMIF4UEE3Q: logic eval error: err opcode executed. Details: app=1053, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+____________ ERROR at setup of test_amount_u128_max_and_supply_cap _____________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b8a9080>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0b88e660>, method = 'mint'
+args = ['LGYFXAE7JYWUK4NHQTNWZEE4LFMHAARXESUE2AYXQTLPIDSK4HSDOF3DNM', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'bY\xb0[\x80\x9fN-Eq\xa7\x84\xdbl\x90\x9cYXp\x027$\xa8M\x03\x17\x84\xd6\xf4\x0eJ\xe1\xe4']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction SLGXMWMHJGIA2EQM72GD2ATLQB3PQBPZZOEJKPXUP4X42GMEKVSA: logic eval error: err opcode executed. Details: app=1056, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_________________ ERROR at setup of test_box_prefixes_disjoint _________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b8a8680>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0b88fc20>, method = 'mint'
+args = ['PBZUDVSHIF4SDDYZXAKSHLAOBZQWVOSDE7B2NOHLE3RZTOCSZ5A2GLRYGA', 1000000]
+kw = {'mbr': 28500, 'boxes': [b"bxsA\xd6GAy!\x8f\x19\xb8\x15#\xac\x0e\x0eaj\xbaC'\xc3\xa6\xb8\xeb&\xe3\x99\xb8R\xcfA"]}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction SULBGJGCS7YBI5GSYTUI2KGVJLY3LJG4ZIQLBP6BCPW46SJAQOGQ: logic eval error: err opcode executed. Details: app=1059, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_______________ ERROR at setup of test_update_and_delete_refused _______________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72df80>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0b88e6f0>, method = 'mint'
+args = ['AWRJDUFEGVHRX2LFK3DJMVSOJNAUMBOVRYCNDUGY2BNKTC4YSW6YDML4HU', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\x05\xa2\x91\xd0\xa45O\x1b\xe9eV\xc6\x96VNKAF\x05\xd5\x8e\x04\xd1\xd0\xd8\xd0Z\xa9\x8b\x98\x95\xbd']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction 2VQW6AFNBVNGFW7NMOCDQ7MY54VMAENVCTAF6VU7FSRIB67S7RWA: logic eval error: err opcode executed. Details: app=1062, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+_____________________ ERROR at setup of test_optin_refused _____________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72f920>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0b88c620>, method = 'mint'
+args = ['SWH7PQLDYTVFZB5RITRKYDBICAGTTF3WTX5ZMETTXSP2SGMKJTV33VR7KM', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\x95\x8f\xf7\xc1c\xc4\xea\\\x87\xb1D\xe2\xac\x0c(\x10\r9\x97v\x9d\xfb\x96\x12s\xbc\x9f\xa9\x19\x8aL\xeb']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction YTLL6YQ2VT6GD2F54IDD55WKDL7FYRN6VUFNHTXJXMDPEVXXNJAQ: logic eval error: err opcode executed. Details: app=1065, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+____________________ ERROR at setup of test_figures_pinned _____________________
+
+dispenser = <conftest.Acct object at 0x7f5d0ba33c20>
+make = <function make.<locals>.f at 0x7f5d0b72e8e0>
+
+    @pytest.fixture
+    def token(dispenser, make):
+        """A fresh token (admin = the dispenser), 1,000,000 minted to `alice` (the MBR of her balance box paid)."""
+        d = deploy(dispenser, 'Token', [NAME, SYMBOL, 6, dispenser.addr])
+        t = Tok(d.app, d.id)
+        DEPLOYED[t.id] = t
+        t.admin = dispenser
+        t.alice = make(1_000_000)
+>       run(dispenser, t, 'mint', [t.alice.addr, 1_000_000], mbr=MBR_BALANCE, boxes=[b'b' + t.alice.key])
+
+tests/conftest.py:354: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+sender = <conftest.Acct object at 0x7f5d0ba33c20>
+d = <conftest.Tok object at 0x7f5d0baa12b0>, method = 'mint'
+args = ['2SYEEEY2ULKSGIGPT63NNSQMLQ7ZJV7YLZNT5MZCFQIIMC3ROTULA2GBMY', 1000000]
+kw = {'mbr': 28500, 'boxes': [b'b\xd4\xb0B\x13\x1a\xa2\xd5# \xcf\x9f\xb6\xd6\xca\x0c\\?\x94\xd7\xf8^[>\xb3",\x10\x86\x0bqt\xe8']}
+
+    def run(sender, d, method, args, **kw):
+        """Send one call (plus the MBR payment / budget calls of `group`), wait; `Refused(assert message)` on failure."""
+        call_kw = {k: kw.pop(k) for k in ('accounts', 'apps', 'on_complete') if k in kw}
+        atc = group(sender, [(d, method, args, call_kw)], **kw)
+        try:
+            r = atc.execute(ALGOD, 4)
+        except AlgodHTTPError as e:
+>           raise Refused(explain(str(e))) from None
+E           conftest.Refused: unimplemented :: TransactionPool.Remember: transaction 2BFK5C5TKXQPGUVUSYSJX7POED5OIJQL5NSVHLQ3E3M6O5CTMS6Q: logic eval error: err opcode executed. Details: app=1068, pc=303, opcodes===; assert; err; label13:
+
+tests/conftest.py:231: Refused
+=================================== FAILURES ===================================
+____________________________ test_pay_meta_vectors _____________________________
+
+probe = <conftest.Deployed object at 0x7f5d0ba58e90>
+
+    def test_pay_meta_vectors(probe):
+        for r in PAYMETA:
+>           pid = bytes(view(probe, 'pay_id', unhx(r['salt']), unhx(r['meta'])))
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_vectors.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+d = <conftest.Deployed object at 0x7f5d0ba58e90>, method = 'pay_id'
+args = (b'\x83\xb7\xe3\xd2C]3\xe9\xf1\xf8\x05\xac\rP\xa4\x8d\x8b+\xf3\xac\xe8\x94\xd9\xcf\xd0\xcd\xe9I+\x8bJ\xec', b'\x00\x00...e\x9e\x91\x82>\x13\x96\xfcXL{\x9d5\xc5\xc8\xb2\xbf\xe0\xc3.\xd3u@\xc4\xd0CX\x1c\x8e\x9c\x07^lMD\xa95\x86Y\x01\x7f\x8a')
+
+    def view(d, method, *args):
+        v, _, fail, _ = sim(VIEWER, d, method, list(args), extra_budget=20_000)
+>       assert fail is None, fail
+E       AssertionError:  :: tx.ApplicationArgs[2] length is too long. 4194 > 4096
+E       assert ' :: tx.ApplicationArgs[2] length is too long. 4194 > 4096' is None
+
+tests/conftest.py:254: AssertionError
+=============================== warnings summary ===============================
+tests/test_token.py: 47 warnings
+tests/test_vectors.py: 3 warnings
+  /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/tests/conftest.py:111: DeprecationWarning: Use sign_transaction_with_signer(txn, AccountTransactionSigner(private_key)) instead. Will be removed in a future major release.
+    wait(ALGOD.send_transaction(transaction.PaymentTxn(dispenser.addr, sp(), a, amount).sign(dispenser.sk)))
+
+tests/test_vectors.py::test_metaop_vectors
+tests/test_vectors.py::test_sign_bytes_vectors
+tests/test_vectors.py::test_pay_meta_vectors
+  /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/tests/conftest.py:292: DeprecationWarning: Use sign_transaction_with_signer(txn, AccountTransactionSigner(private_key)) instead. Will be removed in a future major release.
+    info = wait(ALGOD.send_transaction(txn.sign(dispenser.sk)))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_vectors.py::test_pay_meta_vectors - AssertionError:  :: tx....
+ERROR tests/test_token.py::test_arc200_getters - conftest.Refused: unimplemen...
+ERROR tests/test_token.py::test_mint_admin_only - conftest.Refused: unimpleme...
+ERROR tests/test_token.py::test_arc200_transfer_new_receiver_needs_exact_mbr
+ERROR tests/test_token.py::test_mbr_payment_exact - conftest.Refused: unimple...
+ERROR tests/test_token.py::test_pay_meta_emits_meta_then_settled - conftest.R...
+ERROR tests/test_token.py::test_algorand_pay_meta_mismatch_and_replay - conft...
+ERROR tests/test_token.py::test_pay_meta_cap_measured[507] - conftest.Refused...
+ERROR tests/test_token.py::test_rekeyed_address_signs_with_auth_addr - confte...
+ERROR tests/test_token.py::test_rekeyed_to_logicsig_refused_natively - confte...
+ERROR tests/test_token.py::test_wrong_network_refused - conftest.Refused: uni...
+ERROR tests/test_token.py::test_valid_until_seconds - conftest.Refused: unimp...
+ERROR tests/test_token.py::test_relayer_bound_to_sender - conftest.Refused: u...
+ERROR tests/test_token.py::test_ua_signer_needs_the_account_app - conftest.Re...
+ERROR tests/test_token.py::test_pay_to_token_app_refused - conftest.Refused: ...
+ERROR tests/test_token.py::test_transfer_and_execute_transfer - conftest.Refu...
+ERROR tests/test_token.py::test_transfer_to_ua_and_ua_balance_of - conftest.R...
+ERROR tests/test_token.py::test_open_payee_only_in_open_mode - conftest.Refus...
+ERROR tests/test_token.py::test_approve_only_app_to_app - conftest.Refused: u...
+ERROR tests/test_token.py::test_amount_u128_max_and_supply_cap - conftest.Ref...
+ERROR tests/test_token.py::test_box_prefixes_disjoint - conftest.Refused: uni...
+ERROR tests/test_token.py::test_update_and_delete_refused - conftest.Refused:...
+ERROR tests/test_token.py::test_optin_refused - conftest.Refused: unimplement...
+ERROR tests/test_token.py::test_figures_pinned - conftest.Refused: unimplemen...
+1 failed, 3 passed, 53 warnings, 23 errors in 4.25s
+rc=1
