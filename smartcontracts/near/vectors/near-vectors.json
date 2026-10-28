@@ -1172,6 +1172,108 @@
     },
     "note": "mtx_cancel_recovery(op, auth): no params",
     "params": "0x"
+   },
+   {
+    "name": "mandate_open",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 13,
+     "from": {
+      "Ua": "0x02a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f8"
+     },
+     "to": {
+      "Ua": "0xb02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c85"
+     },
+     "relayer": null,
+     "amount": "1000",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0x0884e0bd00167afbb81f3608183bf1ba657836d118a128ea33d541711713df69"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e6561720d0102a12ed02b7fc4bd656547b99952191674bc4a48ac9f3df152d8f33648a943f801b02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c8500e80300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b00000000000000000005786f4000000000884e0bd00167afbb81f3608183bf1ba657836d118a128ea33d541711713df69",
+    "digest": "0x2f1b91962a3183b7bddc3b1f34b3d673ce6030479490a844a88c176afcee0989",
+    "text": "scaas.metaop.v1:2f1b91962a3183b7bddc3b1f34b3d673ce6030479490a844a88c176afcee0989",
+    "auth": {
+     "kind": "ed25519",
+     "key": "0x84b5757b40a54b18184b53f106e44b492a956635d981966557ffa7f640c8ee78",
+     "message": "scaas.metaop.v1:2f1b91962a3183b7bddc3b1f34b3d673ce6030479490a844a88c176afcee0989",
+     "nonce": "0x2f1b91962a3183b7bddc3b1f34b3d673ce6030479490a844a88c176afcee0989",
+     "recipient": "token.test.near",
+     "nep413Payload": "0x5000000073636161732e6d6574616f702e76313a326631623931393632613331383362376264646333623166333462336436373363653630333034373934393061383434613838633137366166636565303938392f1b91962a3183b7bddc3b1f34b3d673ce6030479490a844a88c176afcee09890f000000746f6b656e2e746573742e6e65617200",
+     "nep413Hash": "0x8594a1cd0f3c8c8917bf5cf60c1fba7453566cad9e3ab5f52211076492ec6ff8",
+     "sig": "0x6b177b93e6e4b40ffa86cb173c1390ff80013accec0ff566897e4c026ed8bf22cb87570f815d1a8aa7b4b538221a5eed32854046192a196d75f20e1e26f94e01"
+    },
+    "note": "mtx_mandate_open(op, auth, terms): owner erin on its lane at its next nonce; delegate carol (UA), payee bob, per payment 100, per period 250 per 86,400 s, funding 1,000 = amount",
+    "params": "0xb02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c850110b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e0000d000000626f622e746573742e6e65617264000000000000000000000000000000fa0000000000000000000000000000008051010000000000005786f400000000e8030000000000000000000000000000",
+    "terms": "0x0110b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e0000d000000626f622e746573742e6e65617264000000000000000000000000000000fa0000000000000000000000000000008051010000000000005786f400000000e8030000000000000000000000000000",
+    "mandateId": "0xb02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c85"
+   },
+   {
+    "name": "mandate_pay",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 2,
+     "from": {
+      "Ua": "0xb02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c85"
+     },
+     "to": {
+      "Near": "bob.test.near"
+     },
+     "relayer": null,
+     "amount": "100",
+     "pay_ref": "0x0707070707070707070707070707070707070707070707070707070707070707",
+     "lane": "0x7c21c8a1467c2f047e5c85031d4a3662413aaa1246d48938d4232058791aaf24",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e6561720201b02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c85000d000000626f622e746573742e6e656172006400000000000000000000000000000007070707070707070707070707070707070707070707070707070707070707077c21c8a1467c2f047e5c85031d4a3662413aaa1246d48938d4232058791aaf240000000000000000005786f400000000e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "digest": "0x5ea13fdad09bd3bb9f81d3770628c9ae8d204fa4b6ba4912e0ad88e95fa5b8c4",
+    "text": "scaas.metaop.v1:5ea13fdad09bd3bb9f81d3770628c9ae8d204fa4b6ba4912e0ad88e95fa5b8c4",
+    "auth": {
+     "kind": "secp256k1",
+     "key": "0x9094567ba7245794198952f68e5723ac5866ad2f67dd97223db40e14c15b092e6a00346749144744142a33f0769d9028fc028a841c076417efaf20e1d1be0584",
+     "sig": "0x74f55e36e60d83d3c2645037e5630e274f64eacf0c6117f86f57f959cfa8be5d18bd666c2175bddb2f76bad26397890f285939ec1c31c953e3c26871f1badcc3",
+     "v": 1
+    },
+    "note": "mtx_mandate_pay(op, auth): from = the mandate id, signed by the delegate carol; the mandate's lane payLane(pay_ref) at nonce 0 (each pay_ref once per mandate)",
+    "params": "0x"
+   },
+   {
+    "name": "mandate_revoke",
+    "fields": {
+     "network": "0x4c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd",
+     "contract": "token.test.near",
+     "op": 3,
+     "from": {
+      "Ua": "0x10b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e0"
+     },
+     "to": {
+      "Ua": "0xb02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c85"
+     },
+     "relayer": null,
+     "amount": "0",
+     "pay_ref": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "lane": "0x0000000000000000000000000000000000000000000000000000000000000000",
+     "nonce": 0,
+     "valid_until": 4102444800,
+     "extra": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "encoding": "0x73636161732e6d6574616f702e76314c37f035e2b9c74e85a48e18e073babbcf3a9a44cc998262a11db1ef40096bfd0f000000746f6b656e2e746573742e6e656172030110b6b2652249223b29d3e67c34c25fa6127dfd549e30c363d73aec4d4be9b0e001b02e7c6b3c8c265c1e366175c3efa063aaa17e4457221315aeed6129a6db9c850000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005786f400000000e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "digest": "0x484bc937dd71253422f5a23792d7d53221612de75545c93ced7a8bb988219946",
+    "text": "scaas.metaop.v1:484bc937dd71253422f5a23792d7d53221612de75545c93ced7a8bb988219946",
+    "auth": {
+     "kind": "secp256k1",
+     "key": "0x9094567ba7245794198952f68e5723ac5866ad2f67dd97223db40e14c15b092e6a00346749144744142a33f0769d9028fc028a841c076417efaf20e1d1be0584",
+     "sig": "0xac6479f77f4d56f920bd6d8079730ab0674e3f36860905d1a23f7243e51b34f11be0dd4cbc0ccea5a4eb4faa1b30db0b3574045095a8f405b807233402b80e62",
+     "v": 1
+    },
+    "note": "mtx_revoke(op, auth): the delegate's kill switch (the owner may sign it too); the balance goes back to the owner",
+    "params": "0x"
    }
   ]
  },
@@ -1375,6 +1477,11 @@
     "bytes": 114,
     "layout": "lane record of a UA payer: key b\"l\" ‖ Borsh((Holder::Ua, lane)) 66 B, value u64 (next nonce) 8 B, record overhead 40 B; any lane = 81 + Borsh(holder) (token LANE_RECORD_OVERHEAD, measured in `new`); a first UA → UA pay of a new UA = subject 131 + lane 114 + UA record 89 = 334 B (test near_check_storage_needed_is_exact)",
     "depositSandbox": "1140000000000000000000"
+   },
+   "mandate": {
+    "bytes": 261,
+    "layout": "mandate record with a UA owner, delegate and payee: key b\"m\" ‖ id 33 B, value Borsh(Mandate) 188 B (owner 33, terms: delegate 33, payee 33, per_payment 16, per_period 16, period_s 8, expiry 8, funding 16; period_start 8, spent 16, revoked 1), record overhead 40 B; any mandate = 73 + Borsh(Mandate) (token MANDATE_RECORD_OVERHEAD, measured in `new` with this record); an open also pays the UA record of the mandate id (89 B) and, first time, the owner's lane; each mandate pay a lane of the mandate id (114 B) (test mandate_pay_within_limits)",
+    "depositSandbox": "2610000000000000000000"
    }
   }
  }

@@ -61,39 +61,6 @@ impl T {
         self.vop(OP_PAY, from, to, amount, id, pay_lane(&id), 0)
     }
 
-    /// Admin mint to alice (the token is its own admin in `setup`), then `transfer_to_ua` to a new UA `h`.
-    async fn fund(&self, h: &Holder, amount: u128) {
-        let dep = NearToken::from_millinear(100);
-        let first = if self.registered(&self.alice).await { NearToken::from_yoctonear(1) } else { dep };
-        let out = self.token.call("mint").args_json(json!({"to": self.alice.id(), "amount": amount.to_string()}))
-            .deposit(first).transact().await.unwrap();
-        assert!(out.is_success(), "{:?}", out.failures());
-        if let Holder::Ua(id) = h {
-            let out = self.alice.call(self.token.id(), "transfer_to_ua")
-                .args_json(json!({"id": id.to_vec(), "amount": amount.to_string()}))
-                .deposit(dep).transact().await.unwrap();
-            assert!(out.is_success(), "{:?}", out.failures());
-        }
-    }
-
-    async fn balance(&self, h: &Holder) -> u128 {
-        let v: String = match h {
-            Holder::Near(a) => self.token.view("ft_balance_of").args_json(json!({"account_id": a})).await.unwrap().json().unwrap(),
-            Holder::Ua(id) => self.token.view("ua_balance_of").args_json(json!({"id": id.to_vec()})).await.unwrap().json().unwrap(),
-        };
-        v.parse().unwrap()
-    }
-
-    async fn lane_nonce(&self, h: &Holder, lane: [u8; 32]) -> u64 {
-        self.token.view("lane_nonce").args(b(&(h.clone(), lane))).await.unwrap().borsh().unwrap()
-    }
-
-    async fn registered(&self, a: &Account) -> bool {
-        let v: Value =
-            self.token.view("storage_balance_of").args_json(json!({"account_id": a.id()})).await.unwrap().json().unwrap();
-        !v.is_null()
-    }
-
     async fn yocto(&self, a: &Account) -> u128 {
         a.view_account().await.unwrap().balance.as_yoctonear()
     }

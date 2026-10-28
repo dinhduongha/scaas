@@ -15,12 +15,14 @@ use scaas_near_common::ua::{KeyRecord, KIND_ED25519};
 
 mod account;
 mod ft;
+mod mandate;
 mod metatx;
 mod storage;
 pub use account::{
     record_bytes, Check, Recovery, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
     RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
 };
+pub use mandate::{mandate_bytes, Mandate, MandateTerms, MANDATE_RECORD_OVERHEAD};
 pub use metatx::{lane_bytes, LANE_RECORD_OVERHEAD};
 pub use storage::{ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
 
@@ -36,6 +38,8 @@ pub struct Token {
     subjects: LookupMap<Holder, Subject>,
     /// Lanes per payer, `(from, lane)` → the next nonce (spec §2 row 6, §3.7); never removed.
     lanes: LookupMap<(Holder, [u8; 32]), u64>,
+    /// Mandates by id (spec §3.6); never removed. Their funds sit in `ua` under the same id.
+    mandates: LookupMap<[u8; 32], Mandate>,
     /// Bytes of new records this call created, paid once by `charge_storage` (not state).
     #[borsh(skip)]
     storage_due: u64,
@@ -58,6 +62,9 @@ pub enum Event {
     /// Every value entry: the signer, the submitting account, the lane and nonce consumed, the op digest.
     #[event_version("1.0.0")]
     MetaTransactionExecuted { from: String, relayer: String, lane: String, nonce: u64, digest: String },
+    /// A mandate opened (`by` the owner) or revoked (`by` the owner or the delegate); id as `0x` ‖ hex.
+    #[event_version("1.0.0")]
+    Mandate { mandate: String, action: String, by: String },
 }
 
 #[near]
@@ -98,9 +105,18 @@ impl Token {
         lanes.insert((h.clone(), [0xff; 32]), 1);
         lanes.flush();
         require!(env::storage_usage() - u0 == lane_bytes(&h), "lane record size differs from the pin");
-        lanes.remove(&(h, [0xff; 32]));
+        lanes.remove(&(h.clone(), [0xff; 32]));
         lanes.flush();
-        Self { network, admin, metadata, ft, ua, subjects, lanes, storage_due: 0 }
+        let mut mandates = LookupMap::new(b"m");
+        let terms = MandateTerms { delegate: h.clone(), payee: h.clone(), per_payment: 1, per_period: 1, period_s: 1, expiry: 1, funding: 1 };
+        let m = Mandate { owner: h, terms, period_start: 0, spent: 0, revoked: false };
+        let u0 = env::storage_usage();
+        mandates.insert([0xff; 32], m.clone());
+        mandates.flush();
+        require!(env::storage_usage() - u0 == mandate_bytes(&m), "mandate record size differs from the pin");
+        mandates.remove(&[0xff; 32]);
+        mandates.flush();
+        Self { network, admin, metadata, ft, ua, subjects, lanes, mandates, storage_due: 0 }
     }
 
     /// Admin only (tier 1). An unregistered receiver is registered from the deposit, as `ft_transfer`.

@@ -32,7 +32,7 @@ pub(crate) struct Routed {
     pub payee: Holder,
 }
 
-fn x(b: &[u8]) -> String {
+pub(crate) fn x(b: &[u8]) -> String {
     format!("0x{}", hex(b))
 }
 
@@ -58,11 +58,11 @@ pub(crate) fn value_policy(s: &Subject, auth: &Auth) -> R<()> {
 }
 
 impl Token {
-    fn next_nonce(&self, h: &Holder, lane: &[u8; 32]) -> Option<u64> {
+    pub(crate) fn next_nonce(&self, h: &Holder, lane: &[u8; 32]) -> Option<u64> {
         self.lanes.get(&(h.clone(), *lane)).copied()
     }
 
-    fn balance(&self, h: &Holder) -> u128 {
+    pub(crate) fn balance(&self, h: &Holder) -> u128 {
         match h {
             Holder::Near(a) => self.ft.accounts.get(a).unwrap_or(0),
             Holder::Ua(id) => self.ua.get(id).copied().unwrap_or(0),
@@ -110,7 +110,7 @@ impl Token {
     /// Shared by both plans, no write: `payee` never the token (rule 12), `amount > 0`, `from ≠ payee`, `signed` with
     /// `relayer`, the value policy (R8), the lane nonce, the balance. Returns the signer's record, its old size (0 =
     /// opened lazily) and the bytes of the new records (lazy open, lane, payee's record).
-    fn pay_checks(&self, caller: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth, payee: &Holder) -> R<(Subject, u64, u64)> {
+    pub(crate) fn pay_checks(&self, caller: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth, payee: &Holder) -> R<(Subject, u64, u64)> {
         if *payee == Holder::Near(env::current_account_id()) {
             return Err("token refuses a transfer to the token itself");
         }

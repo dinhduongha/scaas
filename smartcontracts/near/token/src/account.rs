@@ -173,6 +173,11 @@ impl Token {
     /// against `op.from`'s key records; an unknown `Ua` id opens with the signing key when that key derives the id
     /// (old size 0). `caller` is the predecessor (a `near-account` msig member counts only as it).
     pub(crate) fn signed(&self, caller: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth) -> R<(Subject, u64)> {
+        self.signed_by(caller, relayer, op, auth, &op.from)
+    }
+
+    /// `signed` with the signer `who` other than `op.from` (a mandate pay: `from` = the mandate, the delegate signs).
+    pub(crate) fn signed_by(&self, caller: &AccountId, relayer: &AccountId, op: &MetaOp, auth: &Auth, who: &Holder) -> R<(Subject, u64)> {
         let me = env::current_account_id();
         if op.network != self.network {
             return Err("wrong network");
@@ -188,14 +193,14 @@ impl Token {
         }
         let digest = op.digest();
         let key = auth.key()?;
-        if let Some((s, old)) = self.load(&op.from) {
+        if let Some((s, old)) = self.load(who) {
             if !s.keys.contains(&key) {
                 return Err("not a key of the subject");
             }
             auth::verify(auth, &digest, &me, caller, Some(&s.origins))?;
             return Ok((s, old));
         }
-        let Holder::Ua(id) = &op.from else {
+        let Holder::Ua(id) = who else {
             return Err("no SCaaS key: a NEAR account signs only with keys it registered");
         };
         key.validate()?;

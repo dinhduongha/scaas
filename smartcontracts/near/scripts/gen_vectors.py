@@ -290,9 +290,41 @@ def recovery_vectors():
     return [r for r in KEY_OPS if r['fields']['op'] >= V.OP['start_recovery']]
 
 
+# Mandate (Task 7, spec §3.6): `MandateTerms` Borsh = delegate Holder ‖ payee Holder ‖ per_payment u128 ‖ per_period u128 ‖
+# period_s u64 ‖ expiry u64 ‖ funding u128. Open (op 13, owner-signed value op on its lane): id = sha256(Borsh(from,
+# terms, lane, nonce)), to = Ua(id), amount = funding (ruling R9), extra = sha256(id ‖ terms) (params). Pay (op 2,
+# delegate-signed): from = Ua(id), lane = payLane(pay_ref), nonce 0, extra = sha256([]). Revoke (op 3, owner or delegate):
+# to = Ua(id), amount / pay_ref / lane / nonce zero, extra = sha256([]).
+MANDATES = []
+
+
+def mandate_terms(delegate, payee, per_payment, per_period, period_s, expiry, funding):
+    return (holder(delegate) + holder(payee) + per_payment.to_bytes(16, 'little') + per_period.to_bytes(16, 'little')
+            + struct.pack('<QQ', period_s, expiry) + funding.to_bytes(16, 'little'))
+
+
+_terms = mandate_terms(ua(UA_CAROL), near(BOB), 100, 250, 86_400, VU, 1_000)
+_lane, _nonce = b32(0xb0), 0
+MANDATE_ID = V.sha256(holder(ua(UA_ERIN)) + _terms + _lane + struct.pack('<Q', _nonce))
+_row = metaop('mandate_open', erin, ua(UA_ERIN), ua(MANDATE_ID), 1_000, V.ZERO32, _lane, nonce=_nonce,
+              extra=V.sha256(MANDATE_ID + _terms), code=V.OP['mandate_open'], out=MANDATES,
+              note='mtx_mandate_open(op, auth, terms): owner erin on its lane at its next nonce; delegate carol (UA), payee '
+                   'bob, per payment 100, per period 250 per 86,400 s, funding 1,000 = amount')
+_row.update(params=V.hx(MANDATE_ID + _terms), terms=V.hx(_terms), mandateId=V.hx(MANDATE_ID))
+_pr = b32(0x07)
+metaop('mandate_pay', carol, ua(MANDATE_ID), near(BOB), 100, _pr, V.pay_lane(_pr), extra=V.sha256(b''),
+       code=V.OP['mandate_pay'], out=MANDATES,
+       note='mtx_mandate_pay(op, auth): from = the mandate id, signed by the delegate carol; the mandate\'s lane '
+            'payLane(pay_ref) at nonce 0 (each pay_ref once per mandate)')['params'] = V.hx(b'')
+metaop('mandate_revoke', carol, ua(UA_CAROL), ua(MANDATE_ID), 0, V.ZERO32, V.ZERO32, extra=V.sha256(b''),
+       code=V.OP['revoke'], out=MANDATES,
+       note='mtx_revoke(op, auth): the delegate\'s kill switch (the owner may sign it too); the balance goes back to '
+            'the owner')['params'] = V.hx(b'')
+
+
 def mandate_vectors():
-    """Ops 2 mandate_pay, 3 revoke, 13 mandate_open (`MandateTerms`): Task 7 adds rows."""
-    return []
+    """Ops 2 mandate_pay, 3 revoke, 13 mandate_open (`MandateTerms`)."""
+    return MANDATES
 
 
 def dex_vectors():
@@ -339,6 +371,12 @@ MEASURED_STORAGE_BYTES['lane'] = (
     114, 'lane record of a UA payer: key b"l" ‖ Borsh((Holder::Ua, lane)) 66 B, value u64 (next nonce) 8 B, record '
          'overhead 40 B; any lane = 81 + Borsh(holder) (token LANE_RECORD_OVERHEAD, measured in `new`); a first '
          'UA → UA pay of a new UA = subject 131 + lane 114 + UA record 89 = 334 B (test near_check_storage_needed_is_exact)')
+MEASURED_STORAGE_BYTES['mandate'] = (
+    261, 'mandate record with a UA owner, delegate and payee: key b"m" ‖ id 33 B, value Borsh(Mandate) 188 B (owner 33, '
+         'terms: delegate 33, payee 33, per_payment 16, per_period 16, period_s 8, expiry 8, funding 16; period_start 8, '
+         'spent 16, revoked 1), record overhead 40 B; any mandate = 73 + Borsh(Mandate) (token MANDATE_RECORD_OVERHEAD, '
+         'measured in `new` with this record); an open also pays the UA record of the mandate id (89 B) and, first time, '
+         'the owner\'s lane; each mandate pay a lane of the mandate id (114 B) (test mandate_pay_within_limits)')
 SANDBOX_BYTE_COST = 10**19                          # near-sandbox protocol config storage_amount_per_byte (yocto)
 
 
@@ -364,8 +402,9 @@ def selftest(doc):
     rows = {r['name']: r for r in V.paymeta_rows()}
     for m in doc['metaops']['vectors']:
         assert V.hx(V.sha256(V.unhx(m['encoding']))) == m['digest']
-        if 'params' in m:                            # key ops bind their parameters
-            assert m['fields']['extra'] == V.hx(V.sha256(V.unhx(m['params']))) and m['fields']['amount'] == '0'
+        if 'params' in m:                            # key ops and mandate ops bind their parameters
+            assert m['fields']['extra'] == V.hx(V.sha256(V.unhx(m['params'])))
+            assert m['fields']['amount'] == '0' or m['fields']['op'] in (V.OP['mandate_open'], V.OP['mandate_pay'])
         if 'paymetaRow' in m:
             r = rows[m['paymetaRow']]
             assert m['fields']['pay_ref'] == r['payId'] and m['fields']['lane'] == r['payLane']

@@ -14,6 +14,7 @@ pub use scaas_near_common::ua::{self, KeyRecord, KIND_ED25519, KIND_MSIG, KIND_N
 pub use scaas_near_common::webauthn::b64url;
 pub use scaas_near_common::{Auth, Holder};
 pub use scaas_near_token::{record_bytes, Check, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, POLICY_PASSKEY_FOR_VALUE, RECOVERY_DELAY_S};
+pub use serde_json::{json, Value};
 pub use sha2::{Digest, Sha256};
 
 pub const TOKEN_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_token/scaas_near_token.wasm");
@@ -216,5 +217,38 @@ impl T {
         let p = b(&g);
         let op = self.op(OP_SET_GUARDIAN, from, from, nonce, &p);
         self.ok(who, "mtx_set_guardian", &op, &s.sign(&op, ORIGIN), &p).await
+    }
+
+    /// Admin mint to alice (the token is its own admin in `setup`), then `transfer_to_ua` to a new UA `h`.
+    pub async fn fund(&self, h: &Holder, amount: u128) {
+        let dep = NearToken::from_millinear(100);
+        let first = if self.registered(&self.alice).await { NearToken::from_yoctonear(1) } else { dep };
+        let out = self.token.call("mint").args_json(json!({"to": self.alice.id(), "amount": amount.to_string()}))
+            .deposit(first).transact().await.unwrap();
+        assert!(out.is_success(), "{:?}", out.failures());
+        if let Holder::Ua(id) = h {
+            let out = self.alice.call(self.token.id(), "transfer_to_ua")
+                .args_json(json!({"id": id.to_vec(), "amount": amount.to_string()}))
+                .deposit(dep).transact().await.unwrap();
+            assert!(out.is_success(), "{:?}", out.failures());
+        }
+    }
+
+    pub async fn balance(&self, h: &Holder) -> u128 {
+        let v: String = match h {
+            Holder::Near(a) => self.token.view("ft_balance_of").args_json(json!({"account_id": a})).await.unwrap().json().unwrap(),
+            Holder::Ua(id) => self.token.view("ua_balance_of").args_json(json!({"id": id.to_vec()})).await.unwrap().json().unwrap(),
+        };
+        v.parse().unwrap()
+    }
+
+    pub async fn lane_nonce(&self, h: &Holder, lane: [u8; 32]) -> u64 {
+        self.token.view("lane_nonce").args(b(&(h.clone(), lane))).await.unwrap().borsh().unwrap()
+    }
+
+    pub async fn registered(&self, a: &Account) -> bool {
+        let v: Value =
+            self.token.view("storage_balance_of").args_json(json!({"account_id": a.id()})).await.unwrap().json().unwrap();
+        !v.is_null()
     }
 }

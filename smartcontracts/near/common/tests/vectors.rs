@@ -91,9 +91,10 @@ fn metaop_vectors_match() {
         // lazily opened (no origin list): the assertion's own origin comes back
         let seen = auth::verify(&a, &op.digest(), &token, &pred, None).unwrap();
         assert_eq!(seen.is_empty(), r["auth"]["kind"] != "passkey", "{}", r["name"]);
-        // the signer's key derives the UA the op is from, when it is a UA (lazy open)
+        // the signer's key derives the UA the op is from, when it is a UA (lazy open); not for the guardian's
+        // start_recovery (from = guardian, checked) nor a mandate pay (from = the mandate id, the delegate signs)
         if let Holder::Ua(id) = op.from {
-            if r["name"] != "start_recovery" {
+            if r["name"] != "start_recovery" && r["name"] != "mandate_pay" {
                 assert_eq!(a.key().unwrap().id(), id, "{}", r["name"]);
             }
         }
