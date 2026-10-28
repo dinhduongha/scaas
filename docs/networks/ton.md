@@ -456,10 +456,22 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   no cost to the submitter. **Passkey users on TON cannot use the relay-fee router for now** (controller call 2026-10-28,
   owner may override): the node cannot verify a passkey's P-256 signature, and any submitter could send a passkey call
   with a garbage signature, so a passkey-signed relayed call is refused until the node verifies P-256 (then
-  `get_passkey` + the WebAuthn check). A passkey owner sends its revoke / set_key directly. **Remaining exposure
-  (recorded):** a race in which the owner spends the lane itself between the node's check and the call's arrival still
-  bounces at the relayer's cost; it costs the submitter a signed direct op each time. No per-payer failure budget is
-  built (owner's call).
+  `get_passkey` + the WebAuthn check). A passkey owner sends its revoke / set_key directly.
+
+  The **payment** leg is checked as the payer's wallet runs it, so it cannot bounce after the router escrowed it: besides
+  the signed-op check (nonce, key, signature), the payment must be valid at most `LANE_TTL` ahead (`E_TTL`) and within the
+  payer wallet's `get_wallet_data` balance (`E_BALANCE`); else the job is refused (`the payment is valid further ahead
+  than LANE_TTL` / `the payer's wallet holds …`). A plain pay has the same two gaps today, at one hop's cost to the
+  relayer; that sits with the fee policy (owner rulings list item 7), and no plain-pay check is built.
+
+  **Remaining exposure (recorded):**
+  - a race in which the owner spends the lane, or moves its tokens away, between the node's check and the message's
+    arrival still bounces at the relayer's cost; it costs the submitter a direct op or a paid relay each time;
+  - two relay-fee jobs of one payer wallet sent within one payment round trip (different salts, both pass every check):
+    the router refuses the second with 742 (one payment of a payer wallet in flight) after the relayer paid its forward fee
+    and part of the router's compute. The node does not hold the second job (that needs a per-payer-wallet hold across
+    lanes until the first escrow leaves the paying stage); each such failure rides on a relay the submitter pays;
+  - no per-payer failure budget is built (owner's call).
 - **Settlement ring (recorded residual, final review M8).** A settlement transfer is kept for a bounce in a ring of the
   last `SETTLE_RING = 16` settlements (`relayfee.tact:106`, `settle`). If more than 16 settlements happen between a
   settlement's send and its bounce, the entry is evicted, the bounce is ignored and the tokens stay in the router's jetton

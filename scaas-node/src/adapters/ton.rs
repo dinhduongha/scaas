@@ -1477,6 +1477,10 @@ impl TonAdapter {
         if m.valid_until <= now {
             return Err(SimError::Revert("signed payload expired".into()));
         }
+        // The payer's wallet refuses it (E_TTL) after the router escrowed it: the relayer would pay the bounce (P1).
+        if m.valid_until > now + LANE_TTL_S {
+            return Err(SimError::Revert("the payment is valid further ahead than LANE_TTL".into()));
+        }
         pay_forward_floor(m).map_err(revert)?; // the router prices the signed floor into get_relay_value
         let auth = parse_auth(op["signature"].as_str().unwrap_or_default()).map_err(revert)?;
         let (h, d) = self.wallet_code(&rc.master).await.map_err(transport)?
@@ -1485,6 +1489,13 @@ impl TonAdapter {
             return Err(SimError::Revert("the payment's contract is not the payer's wallet of op.extra.master".into()));
         }
         self.simulate_signed(&m.contract, m, cell, &auth).await?;
+        // ... and refuses more than it holds (E_BALANCE, P1); a payer that moves its tokens away after this check pays a
+        // direct transfer each time. JettonWalletData { balance, owner, master, code }, flattened.
+        let data = self.api.run_get(&m.contract, "get_wallet_data", vec![]).await.map_err(transport)?;
+        let balance = data.first().map(stack_num).transpose().map_err(transport)?.unwrap_or(0);
+        if balance < m.amount {
+            return Err(SimError::Revert(format!("the payer's wallet holds {balance}, the payment is {}", m.amount)));
+        }
         rc.pay_auth = auth_cell(&auth).map_err(revert)?;
         rc.pay_state_init = auth_state_init(&auth);
         rc.deadline = (now + RELAY_DEADLINE_S) as u32;
@@ -2651,6 +2662,7 @@ mod tests {
             ("get_executor".into(), json!({"exit_code": 0, "stack": [{"type": "slice", "value": b64encode(&boc_serialize(&exec))}]})),
             ("get_codes".into(), json!({"exit_code": 0, "stack": [n(&hex0x(&code.hash())), n(&hex0x(&mandate_init().0.hash()))]})),
             ("get_state".into(), mandate_state(false)),
+            ("get_wallet_data".into(), num(1_000_000)),
         ])
     }
 
@@ -2962,13 +2974,36 @@ mod tests {
     /// The relay is refused for `why` by the call check, before the router is asked to price it (`get_relay_value`,
     /// the step before the lane sends).
     async fn refused_before_send(a: &TonAdapter, f: &Shared, tgt: (Arc<Cell>, Arc<Cell>, Addr), call: Arc<Cell>, why: &str) {
+        let e = job_refused_before_send(a, f, &relay_job_at(25, tgt, call, |_| {}).0, why).await;
+        assert!(e.starts_with("RELAY_CALL_REFUSED"), "{why}: {e}");
+    }
+
+    /// The relay-fee job `o` is refused for `why` before the router is asked to price it; the reason.
+    async fn job_refused_before_send(a: &TonAdapter, f: &Shared, o: &Value, why: &str) -> String {
         f.lock().unwrap().ran.clear();
-        match try_relay(a, tgt, call).await {
-            Err(SimError::Revert(e)) => assert!(e.starts_with("RELAY_CALL_REFUSED") && e.contains(why), "{why}: {e}"),
+        let e = match a.build(&job_of(o), 0).await {
+            Err(SimError::Revert(e)) => e,
             other => panic!("{why}: {other:?}"),
-        }
+        };
+        assert!(e.contains(why), "{why}: {e}");
         let ran = f.lock().unwrap().ran.clone();
         assert!(!ran.iter().any(|m| m == "get_relay_value"), "{why}: priced for sending after the refusal: {ran:?}");
+        e
+    }
+
+    /// P1 (fix-wave re-review): the payment leg is checked like the wallet runs it, so it cannot bounce at the payer's
+    /// wallet after the router escrowed it: valid at most LANE_TTL ahead (E_TTL), within the wallet's balance (E_BALANCE).
+    #[tokio::test]
+    async fn ton_relay_fee_refuses_failing_payment_before_send() {
+        let (url, sh) = fake_api_shared(Fake { getters: relay_getters(), ..Default::default() }).await;
+        let a = adapter_with(&url, relay_params(12_266_667), vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }]).unwrap();
+        let call = || signed_call_at(&target(), &[1; 32], |_| {});
+        let (o, m, _, _) = relay_job_with(25, call(), |_| {});
+        assert!(a.build(&job_of(&o), 0).await.is_ok(), "a payment within the balance and LANE_TTL");
+        let far = relay_job_with(25, call(), |m| m.valid_until = crate::submit::now() + LANE_TTL_S + 600).0;
+        job_refused_before_send(&a, &sh, &far, "LANE_TTL").await;
+        sh.lock().unwrap().getters.insert(format!("get_wallet_data@{}", m.contract.raw()), num(24));
+        job_refused_before_send(&a, &sh, &o, "holds 24, the payment is 25").await;
     }
 
     /// I1 (final review; fix round 1: F1, F2, m1, m4): the relayed call is checked on its target before anything is sent,

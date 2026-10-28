@@ -241,7 +241,10 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   gas), then set the node's gas limits from it; (c) Aptos two-passkey `relay_*` against the 9,200 exec-gas ceiling
   (unmeasured), and the relay-fee job with the payer Account closed; (d) Solana `gen_vectors.py --check` in the checkout that
   holds the vector generator (`vectors.rs` relay lines were added by hand), and a passkey x passkey wrapper transaction against
-  the 4,096-byte v1 limit; (e) a TON relay-fee run on a testnet (the sandbox config is the only pricing seen so far).
+  the 4,096-byte v1 limit; (e) a TON relay-fee run on a testnet (the sandbox config is the only pricing seen so far), which also exercises the node's
+  new getter call shapes against TON Center v3 `runGetMethod`: `get_executor`'s address argument as `{"type": "slice"}` and
+  its slice result read through `stack_cell`, `get_codes`, the Mandate's `get_lane_nonce`, `get_wallet_data` (only the
+  fake API checks them today).
 - [ ] **metatx split — final review** (whole-branch review, before the merge; items the per-task reviews deferred):
   - 7702 intent: the code refuses an EIP-7702-delegate-only signature on the address path
     (`err_e7702_viaDelegate_addrPathRefuses`) but accepts it on the UA path (`ok_e7702_viaDelegate`); the parity fixture pins
@@ -260,8 +263,11 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     churn on regeneration (use RFC 6979 in `gen_vectors`).
   - TON relay fee after the I1 fix and its re-review fixes (decisions "TON only, node" and its re-review Change): passkey-signed
     relayed calls are refused until the node verifies P-256 (passkey users send revoke / set_key directly; P-256 in the node
-    is the owner's call); a race in which the owner spends the lane between the check and the call still bounces at the
-    relayer's cost (costs the submitter a direct op each time); no per-payer failure budget (owner's call).
+    is the owner's call); the payment leg is checked for `LANE_TTL` and the payer's balance (plain pays have the same two
+    gaps at one hop's cost: owner rulings item 7, no code); a race in which the owner spends the lane or moves its tokens
+    between the check and the message still bounces at the relayer's cost (costs the submitter a direct op or a paid relay
+    each time); two relay-fee jobs of one payer wallet within one payment round trip: the router refuses the second (742)
+    after the relayer paid its forward fee (no per-payer-wallet hold in the node); no per-payer failure budget (owner's call).
   - `MtxRelayExecutor` copies return data on success (a hostile target can inflate the relayer's memory cost; the node simulates
     first).
   - Observation: the Zether prover's relayed gas rows are 8.2-8.7 k below the measured figures (inside `GAS_MARGIN`); re-pin
