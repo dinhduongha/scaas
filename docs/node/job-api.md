@@ -161,7 +161,10 @@ Payload by kind:
   rent). An unparsable `router`, `min_amount` or key is a startup error. A bound-payee fee (not the node's lane) is refused unless
   `relay_bound_payee = true`, then relayed as a sponsored job.
 - *Job errors:* `CALL_TARGET_REFUSED` (not the configured router), `TOKEN_NOT_SERVED`, `RELAY_FEE_SHAPE` (ref, lane, nonce, relayer,
-  fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere), `BAD_PAYLOAD`.
+  fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere), `PAYEE_REFUSED` (EVM: a `MetaTransfer` to the
+  relay-fee router or its executor), `PAY_META_TOO_LONG` (EVM: `mtxPayMeta`'s `meta` above `max_pay_meta_bytes`), `BAD_PAYLOAD`; TON also
+  `RELAY_CALL_REFUSED` (the relayed call would fail on its target by the getters: envelope, owner, deadline, relayer, lane
+  nonce, signature, a revoked Mandate; reported as `simulation: RELAY_CALL_REFUSED: …`, [ton.md](../networks/ton.md#paymeta-relayfee)).
 - *Indexer:* `PaymentMeta` and `RelayFeePaid` are never rows of their own; they enrich the `PaymentSettled` of the expected token
   in the same transaction with the same `(from, entry_ref)` (TON: `from` via the message's `MetaTransactionExecuted`) and
   `amount`; without a settlement they prove nothing. A `PaymentMeta` with more than one ref is rejected.

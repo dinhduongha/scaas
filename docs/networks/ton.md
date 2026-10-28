@@ -430,6 +430,29 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
 - **Relay fee.** Escrow router `ScaasRelayFee` (`relayfee.tact`) and a one-shot `RelayExecutor`, served targets = the SCaaS
   jetton wallet and the Mandate; released only on a positive `RelayAck` from the known target (spec §7.2 TON row, T16 fix 1).
   Open mode only. `RelayCall.deadline` within 3,600 s; anyone can `RelayRefund` after it.
+- **Once per (payer, payId) until the lane rotates.** The once-set of a pay-meta or relay-fee payment is the payer wallet's
+  lane `payLane(payRef)`, and lanes rotate out after one to two `LANE_TTL` (30 days each; `jetton.tact` `rotateLanes`):
+  after that the same `payId` can be signed and settled again. A signed payment never replays (`valid_until <= now +
+  LANE_TTL` bounds it). As Solana and Aptos (final review M9).
+- **The node pre-checks the relayed call** (final review I1, metatx-split final fix wave). Before it sends a `RelayCall`
+  the node checks the call against its target, as it checks the payment, and refuses the job with `RELAY_CALL_REFUSED`
+  (job error `simulation: RELAY_CALL_REFUSED: …`): the call's `contract`, network and `from` must be the target, this chain
+  and the target's owner (the first field of the StateInit data); it must stay valid past the relay's `deadline`; its
+  `relayer` must be none or its executor. On the jetton wallet: the same getter check as a signed op (`get_lane_nonce`,
+  revoke at `n` or `n + 1`; `get_owner_pubkey` or the StateInit key; the TON Connect signature), `valid_until <= now +
+  LANE_TTL`, a set_key's `params` hashing to `extra` and never by passkey, a cancel's forward ≥ `CANCEL_TON`. On a
+  Mandate: an owner revoke, TON Connect-signed, of a Mandate not yet revoked, the signature verified against
+  `get_state`'s `ownerPubkey`. Without the check, a failing call bounced and the relayer paid the bounce (about 0.025 TON
+  in the sandbox), repeatable at no cost to the submitter. **Recorded residuals** (controller call 2026-10-28, owner may
+  override): a passkey's P-256 signature is not checked by the node (no P-256 in the node; as for a passkey payment), and
+  a Mandate has no lane-nonce getter, so a stale-nonce owner revoke on a live Mandate still bounces at the relayer's cost;
+  closing them needs P-256 in the node and a Mandate `get_lane_nonce` (contract change). Only the target's owner can
+  produce either (its own key or passkey signs).
+- **Settlement ring (recorded residual, final review M8).** A settlement transfer is kept for a bounce in a ring of the
+  last `SETTLE_RING = 16` settlements (`relayfee.tact:106`, `settle`). If more than 16 settlements happen between a
+  settlement's send and its bounce, the entry is evicted, the bounce is ignored and the tokens stay in the router's jetton
+  wallet; there is no admin to recover them. Rare: only an underfunded settlement bounces, and its bounce arrives in the
+  next transaction.
 - **Revoke needs n + 2.** A signed revoke runs at most once and leaves its lane at `nonce + 2` (NET-TON-18, T16 fix 2). A
   client must not queue an op at `n + 1` behind a revocable order at `n`: after the revoke the wallet's next nonce is `n + 2`,
   so the `n + 1` op fails with `E_NONCE`. Queue after the revoke at `n + 2`.

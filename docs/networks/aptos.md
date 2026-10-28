@@ -725,7 +725,10 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
 
 - **Pay-meta.** `meta::relay_pay_meta` (`package entry`): `pay_ref = meta_pay_id(salt, meta)`, `lane = pay_lane(pay_ref)`,
   `nonce = 0` derived on chain, then `relay_pay`'s body; the view `pay_meta_check` is the twin of `pay_check`. Once per
-  `(payer, payId)` in `Account.lanes`.
+  `(payer, payId)` in `Account.lanes` until the lane is pruned: `meta::prune` is permissionless 30 days
+  (`PRUNE_DELAY_S`) after the lane's `valid_until`, after which the same `payId` can be signed and settled again (a signed
+  payment itself never replays: `valid_until` bounds it). The same holds for the relay-fee payment's lane (final review M9,
+  as Solana's lane PDA).
 - **Relay fee.** Module `scaas::relayfee`, one `package entry` per fee-less signed entry (`relay_manage_signed`,
   `relay_mandate_open`, `relay_revoke_signed`, `relay_cancel_signed`, `relay_invalidate_nonces_signed`), each running the
   entry then `meta::pay_routed`. `ref = keccak256("scaas.relayfee" ‖ chain_id (1 byte) ‖ @scaas ‖ keccak256(call) ‖ salt)`.

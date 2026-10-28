@@ -1143,15 +1143,15 @@ record and ledger: 157,115–157,139 gas more per rollover). Pinned by `PqzState
 
 | Set | `ROLL_MAX` | relayed full tx at `ROLL_MAX` / at `ROLL_MAX + 16`: `mtxExecute`; `uaExecute` | direct: fixed + per entry (fit) | 1 / 16 entries (direct) | after a TRIVIAL-only rollover | `mtxPrepareAcc` half 0 / half 1 (relayed full tx, regular: `mtxExecute`; `uaExecute`; state) |
 |---|---|---|---|---|---|---|
-| `n2048-kmax1024` | 96 | 11,711,856 / 12.87 M; 11,870,208 / 13.02 M | 4.68 M + 72,530 | 4.72 M / 5.84 M | 11.49 M | 2.18 / 2.16 M; 2.33 / 2.32 M; 16.94 / 16.84 M |
-| `n2304-kmax4096` | 80 | 12,119,170 / 13.39 M; 12,277,522 / 13.55 M | 5.69 M + 79,452 | 5.74 M / 6.96 M | 11.90 M | 2.65 / 2.64 M; 2.81 / 2.79 M; 20.76 / 20.66 M |
+| `n2048-kmax1024` | 96 | 11,711,856 / 12,872,336; 11,870,208 / 13,030,688 | 4.68 M + 72,530 | 4.72 M / 5.84 M | 11.49 M | 2.18 / 2.16 M; 2.33 / 2.32 M; 16.94 / 16.84 M |
+| `n2304-kmax4096` | 80 | 12,119,170 / 13,390,402; 12,277,522 / 13,548,754 | 5.69 M + 79,452 | 5.74 M / 6.96 M | 11.90 M | 2.65 / 2.64 M; 2.81 / 2.79 M; 20.76 / 20.66 M |
 | `n2560-kmax16384` | 64 | 12,418,528 / 13,800,944; 12,576,880 / 13,959,296 | 6.82 M + 86,401 | 6.87 M / 8.20 M | 12.20 M | 3.17 / 3.17 M; 3.33 / 3.33 M; 24.97 / 24.97 M |
 | `n2816-kmax65536` | **32** | 11,089,680 / 12,583,604; 11,248,044 / 12,741,980 | 8.03 M + 93,371 | 8.09 M / 9.52 M | 10.87 M | 3.75 / 3.75 M; 3.90 / 3.90 M; 29.57 / 29.57 M |
 
 The fixed part is the `ACC_WORDS` cold rewrites (EIP-8038: 2,100 + 10,000 each); a rollover writes no new slot, so its
 state gas is only the envelope's (195,840). `n2816-kmax65536`'s `ROLL_MAX` is 32 since the review fix round of 2026-10-26
 (48 held on `mtxExecute` alone, 7,296 gas under the cap, but not on `uaExecute`: 12,732,731; controller proposal, owner
-may override). Margins under the rule on the binding `uaExecute` path: 712,704 / 305,390 / **6,032** / 1,334,868 gas (re-measured on the metatx split bytecode, `runs/2026-10-27-metatx-split-gas-<set>.txt` and `...-rollscan-n2560-kmax16384.txt`; the `ROLL_MAX + 16` column is the pre-split scan plus the split's ~8 k, linear fit, except n2560 and n2816);
+may override). Margins under the rule on the binding `uaExecute` path: 712,704 / 305,390 / **6,032** / 1,334,868 gas (re-measured on the metatx split bytecode, `runs/2026-10-27-metatx-split-gas-<set>.txt` and `...-rollscan-n2560-kmax16384.txt`; the `ROLL_MAX + 16` column is measured at every set on the split bytecode, a linear fit from `ROLL_MAX` (the gas logs' `ROLL_MAX + 16, relayed full transaction (…, linear fit)` lines);
 `n2560-kmax16384`'s is tight (any contract change re-runs the scan). The halves of `mtxPrepareAcc` are far under
 `0.75 · 2^24` in regular gas on both paths; their new slots are EIP-8037 state gas (≈ 97,920 per slot), which counts
 against the block (both halves of `n2816-kmax65536` ≈ 59 M, so one half per transaction). Logs

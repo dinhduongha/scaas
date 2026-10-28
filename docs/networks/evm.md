@@ -192,7 +192,7 @@ Glamsterdam).** A release is one `CREATE2` of the whole implementation in the re
 code deposit is state gas at 1,530 per byte of runtime, EIP-7825 caps only the regular gas at 2^24 = 16,777,216, and the
 transaction's gas may not exceed the block gas limit, so a release needs `runtime × 1,530 + 16,777,216` of block gas limit
 (the 2^24 term is the regular-gas bound, not the measured figure: `UnderlyingPqzToken` measures about 4.1 M regular). Runtime
-sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metatx split, `runs/2026-10-27-metatx-split-sizes.txt`; the split took 269-456 B off each kind):
+sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metatx split at T8 `69fce983`; the split took 269-456 B off each kind):
 
 | Kind (contract) | Runtime | State gas | Needs |
 |---|---|---|---|
@@ -202,8 +202,10 @@ sizes are `smartcontracts/evm/size-baseline.json`'s (re-measured after the metat
 | `NONE_PQZ` (`NoUnderlyingPqzToken`) | 49,067 B | 75.1 M | 91.8 M |
 | `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) | 60,282 B | 92.2 M | 109.0 M |
 | `UNDERLYING_PQZ` (`UnderlyingPqzToken`) | 61,137 B | 93.5 M | **110.3 M** |
+| information: `MtxPipelineLib` (linked library of every release) | 8,136 B | 12.4 M | 29.2 M |
+| information: `MtxRelayFee` (CTR-MTX-27 router; its `MtxRelayExecutor` 554 B) | 2,908 B | 4.4 M | 21.2 M |
 
-So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
+The two information rows (`forge build src --sizes`, metatx-split final fix wave; both under 24,576 B, so not in the baseline) have no gate of their own: the library is smaller than every implementation that links it, so the implementation's gate binds (spec §4, controller call). So about 75 M for the plain kinds and about 110 M for the confidential ones; the DEX release (under 24,576 B) needs at
 most 54.4 M. A chain with an Ethereum-like 60 M block holds none of the confidential kinds and only the smallest plain
 one; it needs a raised block gas limit (no gas price or limit is assumed: the check below reads the chain's actual
 value). **Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before each `deployImplementation` /

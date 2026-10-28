@@ -80,7 +80,7 @@ library it names) and one in `UnderlyingLib` (to `AdminLib`). Selectors, digests
 (`smartcontracts/evm/runs/2026-10-27-metatx-split-overhead-final.txt`, baseline `...-baseline.txt`): +7.4 k to +7.6 k
 gas per relayed call (+8.9 k for `unwrap`, 0 for cancel), and about +550 gas per call permanently on the wallets that
 stay on `MetaTxBase` (`_envelopeOf` pads and hashes the envelope). Sizes: `NoUnderlyingToken` 38,195 B ... `UnderlyingPqzToken`
-61,137 B (runtime; headroom 27,341 to 4,399 B under 65,536; `runs/2026-10-27-metatx-split-sizes.txt`).
+61,137 B (runtime; headroom 27,341 to 4,399 B under 65,536; `smartcontracts/evm/size-baseline.json`, measured at T8 `69fce983`; the gate log `runs/2026-10-27-metatx-split-sizes.txt` holds only the gate's verdict).
 
 The tree is `MetaTxBase → ERC20MetaTx → MetaTokenBase`
 ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)): `MetaTxBase` holds the `MetaTransaction`, nonce lanes, signature check
@@ -974,9 +974,13 @@ Aptos: `scaas::relayfee` wraps `meta::manage_signed`, `mandate::open`, `mandate:
 
 TON: `ScaasRelayFee` (`relayfee.tact`) escrows the payer's router-bound `OP_PAY` under `(payer, ref)`, `ref = keccak256("scaas.relayfee" ‖ global id ‖ target ‖ cellHash(call) ‖ salt)` (the call by its representation hash, every ref; `salt` signed through `payRef`). It serves only known SCaaS targets: the `RelayCall` carries the target's StateInit, which must derive the target and whose code must be the SCaaS jetton wallet's or the Mandate's, and the call must be a served fee-less entry (wallet `set_key` / `revoke`, Mandate owner `revoke`) whose excess goes to the payer's executor. A one-shot `RelayExecutor` sends the call and right after it a probe; the served entry acknowledges its successful handling with `RelayAck` (a failed action phase sends nothing), and TON's in-order delivery per account pair puts that ack before the probe's bounce: ack then probe bounce → release (`RelayFeePaid`); no ack, or the call's bounce → refund (`RelayFeeRefunded`); no outcome by `deadline` (≤ 3,600 s) → anyone's `RelayRefund`. Every TON amount is priced from the config at the time; a bounced settlement transfer restores the escrow for another `RelayRefund`. Release and refund are exclusive and the escrow holds nothing once settled; the target sees the executor, never the router, and `RelayCall` refuses a `call` that is a `SignedOp` naming the router. No admin, no upgrade path (spec §7.2 TON row; T16 fix 1, controller call 2026-10-28 on the owner's delegation).
 
-**Cost [estimate; measured in the plan].** On top of the call: the token's payment path (`mtxPay` 53,868 measured),
-the payer's signature check, the pay lane's first-use slot (+17 k pre-Amsterdam, ≈ +98 k under Amsterdam, and `mtxPay` measures 181,810 in all on Amsterdam), the open-mode forward (≈ +10–30 k), and two events.
-With an ECDSA payer that is ≈ +80–100 k gas on the pre-Amsterdam figures and ≈ +200–230 k on Amsterdam (the old estimate is about 2 × low: review C5-9); with a PQ payer, one more PQ verification.
+**Cost [measured, Amsterdam, `smartcontracts/evm/runs/2026-10-27-metatx-split-t9-fix1-relaygas.txt`, `test_relayGas_ecdsaAndMldsa65`].**
+Over the bare relayed call (`mtxExecute`, 63,205 regular + 195,840 state = 259,045): +109,276 regular gas with an ECDSA
+payer in open mode, +92,718 with an ECDSA payer and a bound payee, +246,963 with an `mldsa65` UA payer (`uaRelay`, open
+mode); in each case 195,840 more state gas (391,680 against 195,840: the new slots, among them the payment's first-use pay lane). The whole transaction is
+564,161 gas (172,481 regular + 391,680 state) against 259,045 for the bare call; 547,603 bound; 701,848 for `uaRelay`
+with `mldsa65`. It covers the token's payment path, the payer's signature check, the new slots, the open-mode forward and the
+two events. (The plan's estimate was ≈ +200–230 k on Amsterdam.)
 
 **Conformance:**
 - a payment bound to another target, other call bytes or another chain is refused;

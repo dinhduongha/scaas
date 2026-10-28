@@ -51,8 +51,8 @@ Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-
    op 1 debits of this set and one op 7 M = 8; a transaction needs a block limit ≥ its state gas (the SCaaS testnet:
    200 M); no rule assumes a larger limit. The real cost (state gas is paid) applies on a customer chain.
 5. **`ROLL_MAX` 64** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas on both relay paths;
-   80 gives about 13,800,944 / 13,959,296 (linear fit on the split scan) via `mtxExecute` / `uaExecute`) [measured, `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2560-kmax16384.txt`;
-   the Task 7b measurement, with the contracts of then, gave 80]. **Tight:** on `uaExecute` (the binding path) 64 is
+   80 gives 13,800,944 / 13,959,296 via `mtxExecute` / `uaExecute`) [measured, linear fit on the split bytecode, `smartcontracts/evm/runs/2026-10-27-metatx-split-gas-n2560-kmax16384.txt:572,581`;
+   the pre-split scan: `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2560-kmax16384.txt`; the Task 7b measurement, with the contracts of then, gave 80]. **Tight:** on `uaExecute` (the binding path) 64 is
    only 6,032 gas under the cap (12,576,880 of 12,582,912; the metatx split moved it from 15,281), so the next contract change may move it to 48: re-run the rollscan
    (`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan.sh`). Controller proposal, owner may override.
 6. **PQZH:** a backup only — its debit proofs (bounds 303,412–305,120 B [crate]) need `MAX_PROOF_PQZH` 327,680 B (owner

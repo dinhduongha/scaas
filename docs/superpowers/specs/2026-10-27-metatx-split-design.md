@@ -1,6 +1,6 @@
 # Metatx split (variant A), with `mtxPayMeta` / `uaPayMeta` and `MtxRelayFee` — design
 
-**Status:** spec. Nothing is built. Written 2026-10-27 on branch `metatx-split` (from `main` `0c191232`). The owner
+**Status:** spec; built on branch `metatx-split` (Tasks 1–20 and the final fix wave, 2026-10-27/28); not merged (merge and push need the owner's go). Written 2026-10-27 on branch `metatx-split` (from `main` `0c191232`). The owner
 skipped the question round ("viết spec luôn", 2026-10-27), so this spec is written from the code on `main`, the
 2026-10-21 spike and the owner's recorded rulings. Every choice marked **controller call** is the controller's; the
 owner may override it. The owner answered the four questions of §13 the same day (§0, rows "2026-10-27 owner
@@ -514,7 +514,8 @@ the call, and the payment is consumed only together with the call. What each fam
 - **Open mode is the client default** (the submitting lane is paid); a bound payee where the family's shape allows
   it. **No PQ signatures off EVM** (§1 non-goals). **No budget mode** (owner 2026-10-26).
 - Event `RelayFeePaid(ref, target, token, payer, payee, amount)` in the family's event form, `payer` and `payee` as
-  the family's 32-byte ids (the EVM `bytes32` form, controller call 2026-10-27).
+  the family's native id form, lossless (EVM `bytes32`; each family row below names its form, e.g. Soroban `Address`
+  values, Cosmos bech32; controller call 2026-10-27, wording fixed by final review M10).
 - **The target exists** at relay time (CTR-MTX-27's ninth item): the router refuses a target that is not deployed code,
   an executable program or an instantiated contract, so a counterfactual target cannot burn the payment. Each row's
   router checks it in the family's terms.
