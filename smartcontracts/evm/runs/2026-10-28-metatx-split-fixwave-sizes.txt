@@ -1,0 +1,6 @@
+# forge build src --sizes --json (scripts/capped), metatx-split final fix wave round 1, tree at 6b2cdd89 (no EVM source change since cecde76b); forge rc=0
+MtxPipelineLib: runtime 8136 B, init 8188 B
+MtxRelayFee: runtime 2908 B, init 3633 B
+MtxRelayExecutor: runtime 554 B, init 602 B
+size gate: 0 error(s), 45 contracts
+rc=0

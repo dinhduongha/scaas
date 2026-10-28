@@ -73,7 +73,12 @@ describe('Mandate (R25 on TON)', () => {
     it('owner revokes (signed op); delegate stops; owner withdraws the rest', async () => {
         const { mandate, alice, bob, pay, send, network, relayer, token, balanceOf } = await mandateSetup();
         const rv = signedPay(alice, { contract: mandate.address, to: alice.address, amount: 0n, network, op: OP.revoke }, { responseDestination: relayer.address });
+        expect(await mandate.getGetLaneNonce(rv.fields.lane)).toBe(0n);
         expect((await mandate.send(relayer.getSender(), { value: toNano('0.2') }, rv.body)).transactions).toHaveTransaction({ to: mandate.address, success: true });
+        // get_lane_nonce (final review F2c): the revoke spent nonce 0 of its lane; another lane is unused; a replay is E_NONCE
+        expect(await mandate.getGetLaneNonce(rv.fields.lane)).toBe(1n);
+        expect(await mandate.getGetLaneNonce(rv.fields.lane ^ 1n)).toBe(0n);
+        expect((await mandate.send(relayer.getSender(), { value: toNano('0.2') }, rv.body)).transactions).toHaveTransaction({ to: mandate.address, success: false, exitCode: 706 });
         expect((await send(pay(bob.address, 10n).body)).transactions).toHaveTransaction({ to: mandate.address, success: false, exitCode: 721 });
         const wd = signedPay(alice, { contract: mandate.address, to: alice.address, amount: 200n, network }, { responseDestination: relayer.address });
         expect((await mandate.send(relayer.getSender(), { value: toNano('0.2') }, wd.body)).transactions).toHaveTransaction({ to: mandate.address, success: true });

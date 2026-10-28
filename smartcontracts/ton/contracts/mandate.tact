@@ -165,4 +165,11 @@ contract Mandate(
     get fun get_wallet(): Address {
         return self.myWallet();
     }
+
+    /// Next nonce of an owner lane (0 = unused): the relayer checks a relayed owner revoke against it before sending
+    /// (final review F2c; the Mandate's lanes never rotate).
+    get fun get_lane_nonce(lane: Int): Int {
+        let used = self.lanes.get(lane);
+        return used == null ? 0 : used!!;
+    }
 }

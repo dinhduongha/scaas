@@ -1375,17 +1375,20 @@ impl TonAdapter {
         Ok(next)
     }
 
-    /// I1 (final review): the relayed call must run on its target as far as the getters show, so the relayer never pays
-    /// the bounce of a call bound to fail (every other family simulates the whole relay). Locally: the envelope (target,
-    /// chain, `from` = the target's owner, valid past the relay's deadline), `relayer` none or the executor (the router
-    /// checks `responseDestination` = executor). The jetton wallet (`wallet_code`): like any signed op (`simulate_signed`:
-    /// lane nonce incl. a revoke at n+1, bound or StateInit key, TON Connect signature), plus its `E_TTL`, set_key and
-    /// cancel rules. A Mandate (any other code; the router admits only the two): an owner revoke, TON Connect-signed, not
-    /// yet revoked, verified against `get_state`'s `ownerPubkey`. Not visible to getters (recorded residuals, ton.md): a
-    /// passkey's P-256 signature and a Mandate lane's nonce.
-    async fn check_relayed_call(&self, rc: &RelayCall, wallet_code: &[u8; 32], now: u64) -> std::result::Result<(), SimError> {
+    /// I1 (final review, fix round 1): the relayed call must run on its target as far as the getters show, so the relayer
+    /// never pays the bounce of a call bound to fail (every other family simulates the whole relay). Locally: the envelope
+    /// (target, chain, `from` = the target's owner, valid past the relay's deadline), `relayer` none or the executor. By
+    /// the router's getters: `responseDestination` = `get_executor(payer, salt)` (else 741 in the router), the target's
+    /// code one of `get_codes` (else 741: refused here, never retried). The jetton wallet: TON Connect only (a passkey's
+    /// P-256 signature is not checkable here yet, F1), like any signed op (`simulate_signed`: lane nonce incl. a revoke at
+    /// n+1, bound or StateInit key, signature), plus its `E_TTL`, set_key (`params` hashing to `extra`, laid out as a
+    /// passkey record) and cancel rules. The Mandate: an owner revoke, TON Connect-signed, at `get_lane_nonce`, verified
+    /// against `get_state`'s `ownerPubkey`; a revoke of a revoked Mandate is a no-op and refused as such (owner rulings
+    /// list item 6), not because it would fail.
+    async fn check_relayed_call(&self, rc: &RelayCall, router: &Addr, payer: &Addr, now: u64) -> std::result::Result<(), SimError> {
         let refuse = |why: &str| SimError::Revert(format!("RELAY_CALL_REFUSED: {why}"));
         let revert = |e: anyhow::Error| refuse(&format!("{e:#}"));
+        let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
         let (op, auth, params, state_init, response, forward) = parse_signed_op(&rc.call).map_err(revert)?;
         let m = parse_metaop(&op).map_err(revert)?;
         let auth = auth_of_cell(&auth, state_init).map_err(revert)?;
@@ -1398,12 +1401,27 @@ impl TonAdapter {
         if m.relayer.is_some_and(|r| r != response) {
             return Err(refuse("the call is bound to a relayer other than its executor"));
         }
-        if rc.target_code.hash() == *wallet_code {
+        let addr_arg = |a: &Addr| Builder::new().addr(Some(a)).end().map(|c| json!({"type": "slice", "value": b64encode(&boc_serialize(&c))}));
+        let args = vec![addr_arg(payer).map_err(revert)?, json!({"type": "num", "value": hex0x(&rc.salt)})];
+        let exec = self.api.run_get(router, "get_executor", args).await.map_err(transport)?;
+        let exec = exec.first().ok_or_else(|| anyhow!("get_executor: empty")).and_then(|v| stack_cell(v)?.parser().addr()).map_err(transport)?;
+        if exec != Some(response) {
+            return Err(refuse("the call's responseDestination is not the payer's executor"));
+        }
+        // CodeSet { wallet, mandate }, flattened
+        let codes = self.api.run_get(router, "get_codes", vec![]).await.map_err(transport)?;
+        let code = |i: usize| codes.get(i).and_then(|v| v.get("value")).and_then(Value::as_str).ok_or_else(|| anyhow!("get_codes: no field {i}"))
+            .and_then(left_pad32).map_err(transport);
+        let (wallet, mandate) = (code(0)?, code(1)?);
+        if rc.target_code.hash() == wallet {
+            if matches!(auth, Auth::Passkey { .. }) {
+                return Err(refuse("a passkey-signed call is not relayed: the node cannot check its P-256 signature yet"));
+            }
             if m.valid_until > now + LANE_TTL_S {
                 return Err(refuse("the call is valid further ahead than LANE_TTL"));
             }
-            if m.op == 5 && (matches!(auth, Auth::Passkey { .. }) || (m.extra != [0; 32] && params.as_ref().map(|p| p.hash()) != Some(m.extra))) {
-                return Err(refuse("set_key: a passkey cannot rotate keys, and params must hash to extra"));
+            if m.op == 5 && m.extra != [0; 32] && !params.as_ref().is_some_and(|p| p.hash() == m.extra && p.bit_len() == 520 && p.refs().len() == 1) {
+                return Err(refuse("set_key: params must hash to extra and be a passkey record (520 bits, 1 ref)"));
             }
             let next = self.simulate_signed(&rc.target, &m, &op, &auth).await.map_err(|e| match e {
                 SimError::Revert(r) => refuse(&r),
@@ -1414,6 +1432,9 @@ impl TonAdapter {
             }
             return Ok(());
         }
+        if rc.target_code.hash() != mandate {
+            return Err(refuse("unknown target code: neither the SCaaS jetton wallet nor the Mandate"));
+        }
         let Auth::TonConnect { signature, timestamp, domain, .. } = &auth else {
             return Err(refuse("a Mandate owner op is TON Connect-signed"));
         };
@@ -1422,10 +1443,15 @@ impl TonAdapter {
         }
         // MandateState, flattened: revoked periodStart spent balance perPayment perPeriod periodSeconds expiresAt
         // ownerPubkey delegatePubkey
-        let st = self.api.run_get(&rc.target, "get_state", vec![]).await.map_err(|e| SimError::Transport(format!("{e:#}")))?;
+        let st = self.api.run_get(&rc.target, "get_state", vec![]).await.map_err(transport)?;
         let field = |i: usize| st.get(i).and_then(|v| v.get("value")).and_then(Value::as_str).ok_or_else(|| SimError::Transport(format!("get_state: no field {i}")));
         if !matches!(field(0)?, "0" | "0x0") {
-            return Err(refuse("the Mandate is already revoked"));
+            return Err(refuse("the Mandate is already revoked: the revoke would change nothing (a no-op is not relayed)"));
+        }
+        let next = self.api.run_get(&rc.target, "get_lane_nonce", vec![json!({"type": "num", "value": hex0x(&m.lane)})]).await.map_err(transport)?;
+        let next = next.first().map(stack_num).transpose().map_err(transport)?.unwrap_or(0);
+        if next != m.nonce as u128 {
+            return Err(refuse(&format!("Mandate lane nonce is {next}, the call has {}", m.nonce)));
         }
         let pk = left_pad32(field(8)?).map_err(revert)?;
         let h = envelope_hash(&m.from, *timestamp, domain, &op).map_err(revert)?;
@@ -1462,7 +1488,7 @@ impl TonAdapter {
         rc.pay_auth = auth_cell(&auth).map_err(revert)?;
         rc.pay_state_init = auth_state_init(&auth);
         rc.deadline = (now + RELAY_DEADLINE_S) as u32;
-        self.check_relayed_call(&rc, &h, now).await?;
+        self.check_relayed_call(&rc, &router, &m.from, now).await?;
         let body = rc.body().map_err(revert)?;
         let v = self.api.run_get(&router, "get_relay_value", vec![json!({"type": "cell", "value": b64encode(&boc_serialize(&body))})]).await.map_err(transport)?;
         let value = v.first().map(stack_num).transpose().map_err(transport)?.ok_or_else(|| SimError::Transport("get_relay_value: empty".into()))?;
@@ -2230,6 +2256,8 @@ mod tests {
         by_account: Vec<Value>,
         /// `message` POSTs (the BOCs the adapter sent).
         posted: Vec<Value>,
+        /// The getters run, in order (`runGetMethod` method names).
+        ran: Vec<String>,
     }
 
     type Shared = Arc<std::sync::Mutex<Fake>>;
@@ -2245,7 +2273,11 @@ mod tests {
             axum::Json(match path.as_str() {
                 "runGetMethod" => {
                     let b: Value = serde_json::from_str(&body).unwrap();
-                    f.getters.get(b["method"].as_str().unwrap()).cloned().unwrap_or(json!({"exit_code": 11, "stack": []}))
+                    let method = b["method"].as_str().unwrap().to_string();
+                    f.ran.push(method.clone());
+                    // `<method>@<raw address>` answers for that contract only, before `<method>` for every contract
+                    let at = format!("{method}@{}", b["address"].as_str().unwrap_or_default());
+                    f.getters.get(&at).or_else(|| f.getters.get(&method)).cloned().unwrap_or(json!({"exit_code": 11, "stack": []}))
                 }
                 "transactionsByMessage" => json!({"transactions": f.by_msg.get(&q["msg_hash"]).into_iter().collect::<Vec<_>>()}),
                 "transactions" => json!({"transactions": f.by_account}),
@@ -2589,8 +2621,44 @@ mod tests {
         let ts = 1_800_000_000u64;
         let sig = LocalSigner::new(Curve::Ed25519, key).unwrap().sign(&envelope_hash(&owner, ts, "pay.example", &op).unwrap()).unwrap();
         let auth = Auth::TonConnect { signature: sig.try_into().unwrap(), timestamp: ts, domain: "pay.example".into(), state_init: None };
-        let executor = Addr { wc: 0, hash: [0xec; 32] };
-        signed_op_body(&op, &auth_cell(&auth).unwrap(), None, Some(payer().1.state_init().unwrap()), &executor, 0, [0; 32]).unwrap()
+        signed_op_body(&op, &auth_cell(&auth).unwrap(), None, Some(payer().1.state_init().unwrap()), &EXECUTOR, 0, [0; 32]).unwrap()
+    }
+
+    /// The payer's executor as the fake router's `get_executor` names it (the call's `responseDestination`).
+    const EXECUTOR: Addr = Addr { wc: 0, hash: [0xec; 32] };
+
+    /// `call` with its `SignedOp` tail or auth replaced (the MetaOp and its signature unchanged).
+    fn resign(call: &Arc<Cell>, params: Option<Arc<Cell>>, auth: Option<Arc<Cell>>, response: Option<Addr>, forward: Option<u128>) -> Arc<Cell> {
+        let (op, a, p, si, r, f) = parse_signed_op(call).unwrap();
+        signed_op_body(&op, &auth.unwrap_or(a), params.or(p), si, &response.unwrap_or(r), forward.unwrap_or(f), [0; 32]).unwrap()
+    }
+
+    /// The Mandate target: a code other than the jetton wallet's, owned by the payer.
+    fn mandate_init() -> (Arc<Cell>, Arc<Cell>, Addr) {
+        target_of(Builder::new().uint(0x3a4d, 16).end().unwrap())
+    }
+
+    /// The getters of a relay-fee build: the master's wallet code, unused lanes, no bound key, the router's price,
+    /// executor and code set (`get_codes`: the wallet's, `mandate_init`'s), a live Mandate of the payer's key.
+    fn relay_getters() -> HashMap<String, Value> {
+        let code = wallet_code(&vectors());
+        let n = |v: &str| json!({"type": "num", "value": v});
+        let exec = Builder::new().addr(Some(&EXECUTOR)).end().unwrap();
+        HashMap::from([
+            ("get_jetton_data".to_string(), json!({"exit_code": 0, "stack": [num(0), num(0), num(0), num(0),
+                json!({"type": "cell", "value": b64encode(&boc_serialize(&code))})]})),
+            ("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0)), ("get_relay_value".into(), num(306_666_673)),
+            ("get_executor".into(), json!({"exit_code": 0, "stack": [{"type": "slice", "value": b64encode(&boc_serialize(&exec))}]})),
+            ("get_codes".into(), json!({"exit_code": 0, "stack": [n(&hex0x(&code.hash())), n(&hex0x(&mandate_init().0.hash()))]})),
+            ("get_state".into(), mandate_state(false)),
+        ])
+    }
+
+    /// `get_state` of a Mandate whose owner key is the payer's (`MandateState`, flattened).
+    fn mandate_state(revoked: bool) -> Value {
+        let n = |v: &str| json!({"type": "num", "value": v});
+        json!({"exit_code": 0, "stack": [n(if revoked { "-0x1" } else { "0x0" }), n("0x0"), n("0x0"), n("0x0"), n("0x0"), n("0x0"),
+            n("0x0"), n("0x0"), n(&hex0x(&payer().1.pubkey)), n("0x0")]})
     }
 
     fn target() -> Addr {
@@ -2827,16 +2895,10 @@ mod tests {
     /// still pending, never "refunded" by absence).
     #[tokio::test]
     async fn ton_relay_fee_job_tracks_escrow() {
-        let v = vectors();
-        let code = wallet_code(&v);
         let call = signed_call_at(&target(), &[1; 32], |_| {});
         let (o, m, _, r) = relay_job_with(25, call.clone(), |_| {});
-        let stack_cell = json!({"type": "cell", "value": b64encode(&boc_serialize(&code))});
-        let getters = HashMap::from([
-            ("get_jetton_data".to_string(), json!({"exit_code": 0, "stack": [num(0), num(0), num(0), num(0), stack_cell]})),
-            ("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0)), ("get_relay_value".into(), num(306_666_673)),
-            ("get_escrow_state".into(), num(2)),
-        ]);
+        let mut getters = relay_getters();
+        getters.insert("get_escrow_state".into(), num(2));
         let (url, shared) = fake_api_shared(Fake { getters, ..Default::default() }).await;
         let tok = || vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }];
         // the fee must be worth the TON the relay puts at risk: 25 units × 12,266,666 < 306,666,673
@@ -2897,45 +2959,72 @@ mod tests {
         a.build(&job_of(&relay_job_at(25, tgt, call, |_| {}).0), 0).await
     }
 
-    /// I1 (final review): the relayed call is checked on its target before anything is sent, so the relayer never pays
-    /// the bounce of a call bound to fail: on the jetton wallet a wrong signer, a `from` other than the target's owner, a
-    /// relayer other than the executor, a call that expires before the relay's deadline, a placeholder signature; on a
-    /// Mandate an owner revoke signed by another key or of a Mandate already revoked.
-    #[tokio::test]
-    async fn ton_relay_fee_refuses_failing_call_before_send() {
-        let code = wallet_code(&vectors());
-        let n = |v: &str| json!({"type": "num", "value": v});
-        let state = |revoked: &str| json!({"exit_code": 0, "stack": [n(revoked), n("0x0"), n("0x0"), n("0x0"), n("0x0"), n("0x0"), n("0x0"),
-            n("0x0"), n(&hex0x(&payer().1.pubkey)), n("0x0")]});
-        let getters = HashMap::from([
-            ("get_jetton_data".to_string(), json!({"exit_code": 0, "stack": [num(0), num(0), num(0), num(0),
-                json!({"type": "cell", "value": b64encode(&boc_serialize(&code))})]})),
-            ("get_lane_nonce".into(), num(0)), ("get_owner_pubkey".into(), num(0)), ("get_relay_value".into(), num(306_666_673)),
-            ("get_state".into(), state("0x0")),
-        ]);
-        let (url, shared) = fake_api_shared(Fake { getters, ..Default::default() }).await;
-        let a = adapter_with(&url, relay_params(12_266_667), vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }]).unwrap();
-        let refused = |r: std::result::Result<Built, SimError>, why: &str| match r {
+    /// The relay is refused for `why` by the call check, before the router is asked to price it (`get_relay_value`,
+    /// the step before the lane sends).
+    async fn refused_before_send(a: &TonAdapter, f: &Shared, tgt: (Arc<Cell>, Arc<Cell>, Addr), call: Arc<Cell>, why: &str) {
+        f.lock().unwrap().ran.clear();
+        match try_relay(a, tgt, call).await {
             Err(SimError::Revert(e)) => assert!(e.starts_with("RELAY_CALL_REFUSED") && e.contains(why), "{why}: {e}"),
             other => panic!("{why}: {other:?}"),
-        };
+        }
+        let ran = f.lock().unwrap().ran.clone();
+        assert!(!ran.iter().any(|m| m == "get_relay_value"), "{why}: priced for sending after the refusal: {ran:?}");
+    }
+
+    /// I1 (final review; fix round 1: F1, F2, m1, m4): the relayed call is checked on its target before anything is sent,
+    /// so the relayer never pays the bounce of a call bound to fail. Every check has a case that fails without it.
+    #[tokio::test]
+    async fn ton_relay_fee_refuses_failing_call_before_send() {
+        let (url, sh) = fake_api_shared(Fake { getters: relay_getters(), ..Default::default() }).await;
+        let a = adapter_with(&url, relay_params(12_266_667), vec![crate::config::TokenCfg { address: MASTER.raw(), decimals: 9 }]).unwrap();
         let (w, t) = (target_init(), target());
-        assert!(try_relay(&a, w.clone(), signed_call_at(&t, &[1; 32], |_| {})).await.is_ok(), "the owner's own set_key");
+        let ok = |r: std::result::Result<Built, SimError>, what: &str| assert!(r.is_ok(), "{what}: {r:?}");
+        let call = |f: &dyn Fn(&mut MetaOp)| signed_call_at(&t, &[1; 32], f);
         let other = Addr { wc: 0, hash: [0x99; 32] };
-        refused(try_relay(&a, w.clone(), signed_call_at(&t, &[3; 32], |_| {})).await, "signature does not verify");
-        refused(try_relay(&a, w.clone(), signed_call_at(&t, &[1; 32], |m| m.from = other)).await, "owner");
-        refused(try_relay(&a, w.clone(), signed_call_at(&t, &[1; 32], |m| m.relayer = Some(other))).await, "relayer");
-        refused(try_relay(&a, w.clone(), signed_call_at(&t, &[1; 32], |m| m.valid_until = crate::submit::now() + 60)).await, "deadline");
-        refused(try_relay(&a, w.clone(), signed_call_at(&t, &[1; 32], |m| m.extra = [9; 32])).await, "set_key");
-        refused(try_relay(&a, w, served_call(5, None)).await, "");
-        // a Mandate: the owner's revoke, verified against `get_state`'s ownerPubkey
-        let md = target_of(Builder::new().uint(0x3a4d, 16).end().unwrap());
+        // a passkey record: pubkey:264 rpIdHash:256 ^origin (jetton.tact set_key)
+        let record = Builder::new().bytes(&[2; 33]).bytes(&[3; 32]).reference(Builder::new().bytes(b"https://x").end().unwrap()).end().unwrap();
+        let junk = Builder::new().uint(1, 8).end().unwrap();
+        let passkey = auth_cell(&Auth::Passkey { r: [1; 32], s: [2; 32], authenticator_data: vec![0; 37],
+            client_data_json: format!("{CDJ_PREFIX}{}\",\"origin\":\"https://x\"}}", "A".repeat(43)) }).unwrap();
+
+        ok(try_relay(&a, w.clone(), call(&|_| {})).await, "the owner's own set_key (drop the passkey)");
+        ok(try_relay(&a, w.clone(), resign(&call(&|m| m.extra = record.hash()), Some(record.clone()), None, None, None)).await, "set_key of a record");
+        // the envelope
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.contract = other), "contract, network or from").await;
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.network = -3), "contract, network or from").await;
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.from = other), "contract, network or from").await;
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.valid_until = crate::submit::now() + 60), "deadline").await;
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.relayer = Some(other)), "relayer other than its executor").await;
+        refused_before_send(&a, &sh, w.clone(), resign(&call(&|_| {}), None, None, Some(other), None), "not the payer's executor").await;
+        refused_before_send(&a, &sh, w.clone(), served_call(5, None), "").await;
+        // the jetton wallet
+        refused_before_send(&a, &sh, w.clone(), signed_call_at(&t, &[3; 32], |_| {}), "signature does not verify").await;
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.valid_until = crate::submit::now() + LANE_TTL_S + 600), "LANE_TTL").await;
+        refused_before_send(&a, &sh, w.clone(), resign(&call(&|m| m.op = 4), None, Some(passkey.clone()), None, None), "passkey").await;
+        refused_before_send(&a, &sh, w.clone(), resign(&call(&|_| {}), None, Some(passkey.clone()), None, None), "passkey").await;
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.extra = [9; 32]), "set_key").await;
+        refused_before_send(&a, &sh, w.clone(), resign(&call(&|m| m.extra = [9; 32]), Some(record.clone()), None, None, None), "set_key").await;
+        refused_before_send(&a, &sh, w.clone(), resign(&call(&|m| m.extra = junk.hash()), Some(junk.clone()), None, None, None), "set_key").await;
+        // a revoke of an order already out (the lane is at n + 1) forwards its cancel
+        sh.lock().unwrap().getters.insert(format!("get_lane_nonce@{}", t.raw()), num(1));
+        refused_before_send(&a, &sh, w.clone(), call(&|m| m.op = 4), "CANCEL_TON").await;
+        ok(try_relay(&a, w.clone(), resign(&call(&|m| m.op = 4), None, None, None, Some(CANCEL_TON))).await, "a cancel with CANCEL_TON");
+        sh.lock().unwrap().getters.remove(&format!("get_lane_nonce@{}", t.raw()));
+        // a code that is neither the wallet's nor the Mandate's: refused for good, never retried
+        let unknown = target_of(Builder::new().uint(0xbad, 16).end().unwrap());
+        refused_before_send(&a, &sh, unknown.clone(), signed_call_at(&unknown.2, &[1; 32], |m| m.op = 4), "unknown target code").await;
+        // the Mandate: an owner revoke, TON Connect, at its lane nonce, by the owner key, of a live Mandate
+        let md = mandate_init();
         let revoke = |key: &[u8; 32]| signed_call_at(&md.2, key, |m| m.op = 4);
-        assert!(try_relay(&a, md.clone(), revoke(&[1; 32])).await.is_ok(), "the owner's revoke");
-        refused(try_relay(&a, md.clone(), revoke(&[3; 32])).await, "ownerPubkey");
-        shared.lock().unwrap().getters.insert("get_state".into(), state("-0x1"));
-        refused(try_relay(&a, md.clone(), revoke(&[1; 32])).await, "already revoked");
-        assert!(shared.lock().unwrap().posted.is_empty(), "nothing sent");
+        ok(try_relay(&a, md.clone(), revoke(&[1; 32])).await, "the owner's revoke");
+        refused_before_send(&a, &sh, md.clone(), revoke(&[3; 32]), "ownerPubkey").await;
+        refused_before_send(&a, &sh, md.clone(), signed_call_at(&md.2, &[1; 32], |_| {}), "only the owner's revoke").await;
+        refused_before_send(&a, &sh, md.clone(), resign(&revoke(&[1; 32]), None, Some(passkey.clone()), None, None), "TON Connect").await;
+        sh.lock().unwrap().getters.insert(format!("get_lane_nonce@{}", md.2.raw()), num(1));
+        refused_before_send(&a, &sh, md.clone(), revoke(&[1; 32]), "Mandate lane nonce is 1").await;
+        sh.lock().unwrap().getters.remove(&format!("get_lane_nonce@{}", md.2.raw()));
+        sh.lock().unwrap().getters.insert("get_state".into(), mandate_state(true));
+        refused_before_send(&a, &sh, md.clone(), revoke(&[1; 32]), "already revoked").await;
     }
 
     /// §9: past the deadline with the escrow funded, or at any time when a settlement is owed (its transfer bounced),

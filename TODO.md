@@ -257,9 +257,10 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     metadata cut; per-set fixtures instead of the skips in `MetaTxParity` / `MtxSplitOverhead` (owner may prefer); Soroban
     `relay-fee/src/test.rs:376,393` bare `is_err()`; Sui same-entry-other-instance Move test; Aptos `vectors.move` P-256 lines
     churn on regeneration (use RFC 6979 in `gen_vectors`).
-  - TON relay-fee residuals after the I1 fix (`deead173`, decisions "TON only, node"): the node does not check a passkey's
-    P-256 signature on a relayed call (needs P-256 in the node), and a Mandate has no lane-nonce getter (a stale-nonce owner
-    revoke still bounces at the relayer's cost; needs `Mandate.get_lane_nonce`, a contract change). Owner's call.
+  - TON relay fee after the I1 fix and its round 1 (decisions "TON only, node" and its round-1 Change): passkey-signed
+    relayed calls are refused until the node verifies P-256 (passkey users send revoke / set_key directly; P-256 in the node
+    is the owner's call); a race in which the owner spends the lane between the check and the call still bounces at the
+    relayer's cost (costs the submitter a direct op each time); no per-payer failure budget (owner's call).
   - `MtxRelayExecutor` copies return data on success (a hostile target can inflate the relayer's memory cost; the node simulates
     first).
   - Observation: the Zether prover's relayed gas rows are 8.2-8.7 k below the measured figures (inside `GAS_MARGIN`); re-pin

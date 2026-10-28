@@ -434,20 +434,32 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   lane `payLane(payRef)`, and lanes rotate out after one to two `LANE_TTL` (30 days each; `jetton.tact` `rotateLanes`):
   after that the same `payId` can be signed and settled again. A signed payment never replays (`valid_until <= now +
   LANE_TTL` bounds it). As Solana and Aptos (final review M9).
-- **The node pre-checks the relayed call** (final review I1, metatx-split final fix wave). Before it sends a `RelayCall`
-  the node checks the call against its target, as it checks the payment, and refuses the job with `RELAY_CALL_REFUSED`
-  (job error `simulation: RELAY_CALL_REFUSED: …`): the call's `contract`, network and `from` must be the target, this chain
-  and the target's owner (the first field of the StateInit data); it must stay valid past the relay's `deadline`; its
-  `relayer` must be none or its executor. On the jetton wallet: the same getter check as a signed op (`get_lane_nonce`,
-  revoke at `n` or `n + 1`; `get_owner_pubkey` or the StateInit key; the TON Connect signature), `valid_until <= now +
-  LANE_TTL`, a set_key's `params` hashing to `extra` and never by passkey, a cancel's forward ≥ `CANCEL_TON`. On a
-  Mandate: an owner revoke, TON Connect-signed, of a Mandate not yet revoked, the signature verified against
-  `get_state`'s `ownerPubkey`. Without the check, a failing call bounced and the relayer paid the bounce (about 0.025 TON
-  in the sandbox), repeatable at no cost to the submitter. **Recorded residuals** (controller call 2026-10-28, owner may
-  override): a passkey's P-256 signature is not checked by the node (no P-256 in the node; as for a passkey payment), and
-  a Mandate has no lane-nonce getter, so a stale-nonce owner revoke on a live Mandate still bounces at the relayer's cost;
-  closing them needs P-256 in the node and a Mandate `get_lane_nonce` (contract change). Only the target's owner can
-  produce either (its own key or passkey signs).
+- **The node pre-checks the relayed call** (final review I1, final fix wave and its round 1). Before it sends a `RelayCall`
+  the node checks the call against its target with getters, as it checks the payment, and refuses the job with
+  `RELAY_CALL_REFUSED` (job error `simulation: RELAY_CALL_REFUSED: …`; permanent, never retried):
+  - the call's `contract`, network and `from` are the target, this chain and the target's owner (the first field of the
+    StateInit data);
+  - **validity floor:** the call's `valid_until` must be later than the relay's `deadline`, which the node sets to now +
+    600 s (`RELAY_DEADLINE_S`): a client signs the call valid for more than 600 s from submission;
+  - `relayer` is none or the executor, and `responseDestination` is the payer's executor (`get_executor(payer, salt)` on
+    the router);
+  - the target's code is the jetton wallet's or the Mandate's (`get_codes`); any other code is refused at once;
+  - jetton wallet: **TON Connect only** (see below); the same check as a signed op (`get_lane_nonce`, a revoke at `n` or
+    `n + 1`; `get_owner_pubkey` or the StateInit key; the signature); `valid_until <= now + LANE_TTL`; a set_key with
+    `extra != 0` carries `params` that hash to `extra` and are a passkey record (520 bits and one ref, as the wallet
+    parses it); a revoke at `n + 1` forwards at least `CANCEL_TON`;
+  - Mandate: an owner revoke only, TON Connect-signed, at the Mandate's `get_lane_nonce` (getter added in round 1),
+    verified against `get_state`'s `ownerPubkey`. A revoke of an already revoked Mandate would run and change nothing; the
+    node refuses it as a no-op (the payer does not pay for nothing; owner rulings list item 6), not as a failure.
+
+  Without the check a failing call bounced and the relayer paid the bounce (about 0.025 TON in the sandbox), repeatable at
+  no cost to the submitter. **Passkey users on TON cannot use the relay-fee router for now** (controller call 2026-10-28,
+  owner may override): the node cannot verify a passkey's P-256 signature, and any submitter could send a passkey call
+  with a garbage signature, so a passkey-signed relayed call is refused until the node verifies P-256 (then
+  `get_passkey` + the WebAuthn check). A passkey owner sends its revoke / set_key directly. **Remaining exposure
+  (recorded):** a race in which the owner spends the lane itself between the node's check and the call's arrival still
+  bounces at the relayer's cost; it costs the submitter a signed direct op each time. No per-payer failure budget is
+  built (owner's call).
 - **Settlement ring (recorded residual, final review M8).** A settlement transfer is kept for a bounce in a ring of the
   last `SETTLE_RING = 16` settlements (`relayfee.tact:106`, `settle`). If more than 16 settlements happen between a
   settlement's send and its bounce, the entry is evicted, the bounce is ignored and the tokens stay in the router's jetton
