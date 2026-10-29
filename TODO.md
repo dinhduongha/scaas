@@ -60,9 +60,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
        modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
      - **UA-8 step 1 (EVM `UARegistry`):** portable PoP, optional `pqzPop`, KEM keys, relayable writes, `checked =
        chain`, clients and vectors. Must land before fs3 Task 13 (the SCaaS testnet redeploys the registry once).
-  4. **After 2026-11-03** (Stellar testnet votes Protocol 30): **4b Soroban (UA base) + UA-8 step 2 (Soroban
-     registry)** in one round — shared ML-DSA verifier (CAP-0087 host functions) and vectors, tested on the real
-     testnet.
+  4. **4b Soroban (UA base) + UA-8 step 2 (Soroban registry)** in one round — shared ML-DSA verifier (CAP-0087 host
+     functions) and vectors. **No waiting** (owner 2026-10-29): code and tests on a local network / quickstart at
+     Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
+     — check which soroban-sdk release carries it); only the testnet e2e runs after 2026-11-03 (Stellar testnet votes
+     Protocol 30), as the last step of the round.
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
