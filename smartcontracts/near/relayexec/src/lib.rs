@@ -45,7 +45,10 @@ impl Executor {
 
     pub fn return_deposit(&mut self, #[serializer(borsh)] to: AccountId, #[serializer(borsh)] amount: U128) {
         self.router_only();
-        Promise::new(to).transfer(NearToken::from_yoctonear(amount.0)).detach();
+        // T19 ruling A: never a zero-amount return (the router asks only for a deposit that came back)
+        if amount.0 > 0 {
+            Promise::new(to).transfer(NearToken::from_yoctonear(amount.0)).detach();
+        }
     }
 
     #[result_serializer(borsh)]

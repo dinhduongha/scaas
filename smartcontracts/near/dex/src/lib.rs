@@ -32,16 +32,19 @@ pub use scaas_near_common::auth::{passkey_fields, sig_gas, GAS_SIG_KEY, GAS_SIG_
 /// exceeds `pin / 1.2`). A leg's static gas is derived from its auth (`leg_gas`, ruling T8-I2): `GAS_LEG_BASE` plus one
 /// per-signature cost per signature (an msig: each member signature), and it also gets an equal share of the unused gas.
 ///
-/// A leg without its signature checks: an ed25519 leg opening a UA burns 4.03 Tgas, a passkey leg 23.70 − 20.0 = 3.7.
-pub const GAS_LEG_BASE: Gas = Gas::from_tgas(6);
+/// A leg without its signature checks: an ed25519 leg opening a UA burns 4.03 Tgas, a passkey leg 23.70 − 20.0 = 3.7;
+/// + one `IMPLICIT_TRANSFER_GAS` (T19 ruling A): the leg returns its excess deposit to the signer, a relayer lane (an
+/// implicit account), and `settle` splits the rest evenly, so the smaller leg always has an excess.
+pub const GAS_LEG_BASE: Gas = scaas_near_common::with_transfer(6);
 /// `ft_transfer` / `transfer_to_ua` to a registered receiver (2.41 Tgas).
 pub const GAS_PAYOUT: Gas = Gas::from_tgas(4);
 /// `on_legs` (2.31 Tgas) plus what it prepays for its two payouts (their static gas and exec fees; 2 × 2.41 Tgas).
 pub const GAS_ON_LEGS: Gas = Gas::from_tgas(10 + 2 * 4);
 /// The token's `order_closed` read (1.54 Tgas).
 pub const GAS_VIEW: Gas = Gas::from_tgas(3);
-/// `on_refund` (2.86 Tgas) plus what it prepays for its two refunds (2 × 2.13 Tgas).
-pub const GAS_ON_REFUND: Gas = Gas::from_tgas(10 + 2 * 4);
+/// `on_refund` (2.86 Tgas) plus what it prepays for its two refunds (2 × 2.13 Tgas); + one transfer (`prune` returns
+/// the entry's deposit to the relayer, ruling A).
+pub const GAS_ON_REFUND: Gas = scaas_near_common::with_transfer(10 + 2 * 4);
 /// `settle`'s own receipt (3.24 Tgas burnt with two single-key legs) plus the exec fees it prepays for the three receipts
 /// it creates, × 1.5 (`settle_gas_pin` runs two passkey legs at exactly `settle_gas`).
 pub const GAS_SETTLE_SELF: Gas = Gas::from_tgas(9);
@@ -434,10 +437,10 @@ mod tests {
         let ed = Auth::Ed25519 { key: [0; 32], sig: [0; 64] };
         let pk = Auth::Passkey { key: [0; 64], authenticator_data: vec![], client_data_json: vec![], sig: [0; 64] };
         let t = |g: Gas| g.as_tgas();
-        assert_eq!((t(leg_gas(&ed)), t(leg_gas(&pk))), (7, 31));
+        assert_eq!((t(leg_gas(&ed)), t(leg_gas(&pk))), (17, 41));
         let m = |n: usize| Auth::Msig { key_data: vec![], sigs: (0..n as u8).map(|i| (i, pk.clone())).chain([(99, ed.clone())]).collect() };
-        assert_eq!(t(leg_gas(&m(10))), 6 + 250 + 1);
-        assert_eq!(t(settle_gas(&m(10), &ed)), 9 + 18 + 257 + 7);
+        assert_eq!(t(leg_gas(&m(10))), 16 + 250 + 1);
+        assert_eq!(t(settle_gas(&m(10), &ed)), 9 + 18 + 267 + 17);
     }
 
     /// The refund pays a leg back only when its order was filled by this settle's own leg op.

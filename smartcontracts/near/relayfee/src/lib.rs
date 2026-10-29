@@ -39,31 +39,35 @@ use near_sdk::{
 use scaas_near_common::auth::{passkey_fields, sig_gas};
 use scaas_near_common::hash::{hex, pay_lane, relay_ref};
 use scaas_near_common::metaop::OP_PAY;
-use scaas_near_common::{Auth, Holder, MetaOp};
+use scaas_near_common::{with_transfer, Auth, Holder, MetaOp};
 
 /// Spec §3.8 timeout (controller call).
 pub const RELAY_TIMEOUT_S: u64 = 3_600;
 // Static gas per receipt (spec §3.8 sizing): the measured maximum of every branch in near-sandbox × 1.5, rounded up
 // (2026-10-28, `runs/2026-10-28-near-gas.txt`, test `gas_pins_hold`: each figure ≤ pin / 1.2 at exactly `relay_gas`
-// prepaid). A callback's figure covers its own receipt; what it prepays its children is added in `relay_gas`.
+// prepaid). A callback's figure covers its own receipt; what it prepays its children is added in `relay_gas`. T19 ruling A:
+// a receipt that sends NEAR to an account the router does not control (the relayer, the target) adds one
+// `IMPLICIT_TRANSFER_GAS` (the relayer lanes are implicit accounts: 8.35 Tgas per transfer, common/src/lib.rs).
 /// `relay`'s own receipt (entry write, the hold and `on_hold` promises): 2.261 Tgas, 2.927 with 16 KiB `args`.
 pub const GAS_RELAY: Gas = Gas::from_tgas(5);
 /// `relay_hold` without its signature budget (a lazily opened UA, lane, payee registration, held record); the hold gets
-/// `GAS_HOLD + sig_gas(auth)` (`hold_gas`). An ed25519 hold burns 3.981 Tgas (≤ (5 + 1) / 1.5), a passkey hold 23.635.
-pub const GAS_HOLD: Gas = Gas::from_tgas(5);
+/// `GAS_HOLD + sig_gas(auth)` (`hold_gas`). An ed25519 hold burns 3.981 Tgas (≤ (5 + 1) / 1.5), a passkey hold 23.635;
+/// + one transfer: the hold returns its excess deposit (the floor's payee registration and 2 yoctoNEAR) to the relayer.
+pub const GAS_HOLD: Gas = with_transfer(5);
 /// `on_hold` (the `exec` and `on_call` promises: 2.198 Tgas, 3.181 with 16 KiB `args`; the refused branch's deposit
-/// return: 1.660).
-pub const GAS_ON_HOLD: Gas = Gas::from_tgas(5);
+/// return: 1.660); + one transfer (that deposit return to the relayer).
+pub const GAS_ON_HOLD: Gas = with_transfer(5);
 /// The executor's `exec` receipt (the target call and its trailing transfer): 1.585 Tgas, 2.539 with 16 KiB `args`;
-/// the target itself gets `target_gas`.
-pub const GAS_EXEC: Gas = Gas::from_tgas(4);
+/// the target itself gets `target_gas`; + one transfer (the trailing 0-yoctoNEAR transfer action to the target, which
+/// may be an implicit account).
+pub const GAS_EXEC: Gas = with_transfer(4);
 /// `on_call` (the release, or the refund and the deposit return, then `on_settle`): 2.175 / 2.586 Tgas.
 pub const GAS_ON_CALL: Gas = Gas::from_tgas(4);
 /// One settlement call: the token's `relay_release` (2.750 Tgas) or `relay_refund` (2.748), or the executor's
-/// `return_deposit` (1.372).
-pub const GAS_RELEASE: Gas = Gas::from_tgas(5);
-/// `on_settle` (entry deleted, deposit back, event): 1.830 Tgas released, 1.639 refunded.
-pub const GAS_ON_SETTLE: Gas = Gas::from_tgas(3);
+/// `return_deposit` (1.372); + one transfer (the held record's deposit, or `target_deposit`, back to the relayer).
+pub const GAS_RELEASE: Gas = with_transfer(5);
+/// `on_settle` (entry deleted, deposit back, event): 1.830 Tgas released, 1.639 refunded; + one transfer (that deposit).
+pub const GAS_ON_SETTLE: Gas = with_transfer(3);
 /// The token's NEP-145 registration of the longest (64-char) account id (`ACCOUNT_STORAGE_BYTES`): the floor's payee
 /// registration (R10).
 pub const PAYEE_REGISTRATION_BYTES: u64 = 125;
@@ -315,7 +319,9 @@ impl Router {
             let back = p.deposit + p.target_deposit;
             let relayer = p.relayer.clone();
             self.pending.remove(&pay_ref);
-            Promise::new(relayer).transfer(yocto(back)).detach();
+            if back > 0 {
+                Promise::new(relayer).transfer(yocto(back)).detach();
+            }
             return PromiseOrValue::Value(false);
         }
         p.stage = Stage::Call;

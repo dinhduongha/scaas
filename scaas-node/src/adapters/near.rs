@@ -40,20 +40,27 @@ const OP_PAY: u8 = 0;
 pub const TGAS: u64 = 1_000_000_000_000;
 /// One transaction's protocol gas limit (spec §3.5: no chain's own larger limit is assumed).
 pub const MAX_GAS: u64 = 300 * TGAS;
+/// common `IMPLICIT_TRANSFER_GAS` (T19 ruling A): what a contract budgets per NEAR transfer to an account it does not
+/// control; a transfer to an implicit account (every lane is one) costs 8.35 Tgas (0.825 send + 7.525 prepaid).
+pub const IMPLICIT_TRANSFER_GAS: u64 = 10 * TGAS;
 /// A job's receipt without its signature checks: the costliest measured entry (a `relay_fee_<entry>` wrapper writing
 /// both records) burns ≤ 4.1 Tgas besides its verifies (`smartcontracts/near/runs/2026-10-28-near-relayfee*.txt`,
-/// `-near-gas.txt`); pinned × 2.5 for 16 KiB arguments.
-pub const GAS_JOB_BASE: u64 = 10 * TGAS;
+/// `-near-gas.txt`); pinned × 2.5 for 16 KiB arguments, plus one `IMPLICIT_TRANSFER_GAS` (T19 ruling A, concern C: a
+/// record the check counted that exists at execution makes the deposit's excess a refund to the lane).
+pub const GAS_JOB_BASE: u64 = 10 * TGAS + IMPLICIT_TRANSFER_GAS;
 /// Prepaid per P-256 passkey signature: 20.005 Tgas measured per verify (Task 1, `runs/2026-10-28-p256-spike.txt`)
-/// × 1.05, so Task 9's largest wrapper (12-passkey msig entry + passkey payment, 265.6 Tgas burnt) fits 10 + 13 × 21.
+/// × 1.05, so Task 9's largest wrapper (12-passkey msig entry + passkey payment, 265.6 Tgas burnt; 266.3 on near-sandbox
+/// through the node, T19) fits `GAS_JOB_BASE` 20 + 13 × 21 = 293.
 pub const GAS_PASSKEY: u64 = 21 * TGAS;
 /// Prepaid per ed25519 / secp256k1 signature (< 0.5 Tgas measured; the contracts' `GAS_SIG_KEY`).
 pub const GAS_KEY_SIG: u64 = TGAS;
 /// Task 9 / note 5: passkey signatures per wrapper job (entry + payment) that fit 300 Tgas.
 pub const MAX_WRAPPER_PASSKEYS: usize = 13;
-/// relayfee `relay_gas` without the payment's signatures and the target: `GAS_RELAY` 5 + `GAS_ON_HOLD` 5 + `GAS_EXEC` 4
-/// + `call_gas` (4 + 2 × 5 + 3) + `GAS_HOLD` 5 Tgas (relayfee/src/lib.rs); `relay` refuses less prepaid gas.
-pub const ROUTER_FIXED_GAS: u64 = 36 * TGAS;
+/// relayfee `relay_gas` without the payment's signatures and the target (relayfee/src/lib.rs): `GAS_RELAY` 5,
+/// `GAS_ON_HOLD` 5, `GAS_EXEC` 4, `call_gas` (4 + 2 × 5 + 3) and `GAS_HOLD` 5 Tgas, plus one `IMPLICIT_TRANSFER_GAS`
+/// for each of `GAS_HOLD`, `GAS_ON_HOLD`, `GAS_EXEC`, both `GAS_RELEASE` and `GAS_ON_SETTLE` (T19 ruling A); `relay`
+/// refuses less prepaid gas.
+pub const ROUTER_FIXED_GAS: u64 = 36 * TGAS + 6 * IMPLICIT_TRANSFER_GAS;
 /// The router's `sig_gas` figures (common/src/auth.rs `GAS_SIG_PASSKEY`, `GAS_SIG_KEY`).
 const ROUTER_SIG_PASSKEY: u64 = 25 * TGAS;
 const ROUTER_SIG_KEY: u64 = TGAS;
@@ -65,8 +72,9 @@ pub const PASSKEY_FIELD_MAX: usize = 1024;
 /// this long past now (controller ruling), else it could expire in transit (checks read `final` state ≈ 2–3 blocks
 /// old; the hold, the target and a settle's legs run blocks after inclusion) and the relay fails unpaid.
 pub const RELAY_EXPIRY_MARGIN_S: u64 = 120;
-/// `relay_timeout(ref)`: its receipt, a token settle and a deposit return (`GAS_RELEASE` 5 each), `on_settle` 3.
-const GAS_RELAY_TIMEOUT: u64 = 30 * TGAS;
+/// `relay_timeout(ref)`: its receipt, a token settle and a deposit return (`GAS_RELEASE` 5 each), `on_settle` 3; one
+/// `IMPLICIT_TRANSFER_GAS` each for its own `target_deposit` return, the two settlements and `on_settle` (ruling A).
+const GAS_RELAY_TIMEOUT: u64 = 30 * TGAS + 4 * IMPLICIT_TRANSFER_GAS;
 /// A `relay_timeout` this node sent that has not settled the entry yet is sent again after this long.
 const RELAY_TIMEOUT_RETRY_S: u64 = 120;
 /// An entry still pending this long after its deadline (every `relay_timeout` failed) ends the job as reverted, so the
@@ -944,9 +952,9 @@ const TOKEN_CHECKED: &[&str] = &[
     "mtx_invalidate_nonces",
 ];
 /// The DEX `settle` floor (dex/src/lib.rs `settle_gas`): `GAS_SETTLE_SELF` 9 + `GAS_ON_LEGS` 18 + per leg `GAS_LEG_BASE`
-/// 6 + its `sig_gas`.
+/// 6 + `IMPLICIT_TRANSFER_GAS` (a leg refunds its excess deposit to the signer, ruling A) + its `sig_gas`.
 const DEX_SETTLE_GAS: u64 = 27 * TGAS;
-const DEX_LEG_GAS: u64 = 6 * TGAS;
+const DEX_LEG_GAS: u64 = 6 * TGAS + IMPLICIT_TRANSFER_GAS;
 /// dex `PAYOUT_YOCTO`, and the fixed bytes of a settle entry beside Borsh(Settle) (near-vectors.json `dexEntry`: key
 /// `s` ‖ id 33 + 40, two leg-index records 105 each).
 const DEX_PAYOUT_YOCTO: u128 = 2;
@@ -1029,22 +1037,44 @@ fn entry_origins(entry: &str, args: &[u8]) -> Result<(Holder, Vec<String>)> {
     Ok((op.from, origins))
 }
 
-/// nearcore `RuntimeFeesConfig` defaults (gas): an action receipt's creation, a function call's base and per byte of
-/// method name and args, each charged at send and at execution, on top of the prepaid gas.
-const FEE_ACTION_RECEIPT: u64 = 108_059_500_000;
-const FEE_FUNCTION_CALL: u64 = 2_319_861_500_000;
-const FEE_FUNCTION_CALL_BYTE: u64 = 2_235_934;
+/// The chain's action fees the node prices (gas): an action receipt's creation, a function call's base and per byte of
+/// method name and args. T19 ruling B: read from the RPC's `EXPERIMENTAL_protocol_config` at start (customer chains
+/// may differ; protocol 88 has 0.2 / 0.78 Tgas per call where the old pin was 2.32), each item = max(send_sir,
+/// send_not_sir, execution), charged once at send and once at execution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ActionFees {
+    pub receipt: u64,
+    pub function_call: u64,
+    pub per_byte: u64,
+}
+
+impl ActionFees {
+    /// `runtime_config.transaction_costs` of `EXPERIMENTAL_protocol_config`; a missing item is an error.
+    pub fn from_protocol_config(pc: &Value) -> Result<Self> {
+        let tc = &pc["runtime_config"]["transaction_costs"];
+        let item = |v: &Value, what: &str| -> Result<u64> {
+            ["send_sir", "send_not_sir", "execution"].iter().try_fold(0u64, |m, k| {
+                v[k].as_u64().map(|x| m.max(x)).ok_or_else(|| anyhow!("protocol config: no transaction_costs {what}.{k}"))
+            })
+        };
+        Ok(Self {
+            receipt: item(&tc["action_receipt_creation_config"], "action_receipt_creation_config")?,
+            function_call: item(&tc["action_creation_config"]["function_call_cost"], "function_call_cost")?,
+            per_byte: item(&tc["action_creation_config"]["function_call_cost_per_byte"], "function_call_cost_per_byte")?,
+        })
+    }
+}
 
 /// Fix 1 m5: the gas a lane transaction burns besides its prepaid gas (its action fees).
-pub fn action_fees(call: &Call) -> u64 {
+pub fn action_fees(fees: &ActionFees, call: &Call) -> u64 {
     let bytes = (call.method.len() as u64).saturating_add(call.args.len() as u64);
-    2 * FEE_ACTION_RECEIPT + 2 * FEE_FUNCTION_CALL + FEE_FUNCTION_CALL_BYTE.saturating_mul(bytes).saturating_mul(2)
+    2u64.saturating_mul(fees.receipt.saturating_add(fees.function_call).saturating_add(fees.per_byte.saturating_mul(bytes)))
 }
 
 /// Fix 1 m5: one `relay_timeout(ref)` transaction (prepaid + action fees), which a router job may have to send.
-pub fn timeout_gas() -> u64 {
+pub fn timeout_gas(fees: &ActionFees) -> u64 {
     let c = Call { receiver: String::new(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
-    GAS_RELAY_TIMEOUT + action_fees(&c)
+    GAS_RELAY_TIMEOUT + action_fees(fees, &c)
 }
 
 /// A subject's keys on one token: `(kind, key_data)`.
@@ -1434,6 +1464,8 @@ pub struct NearAdapter {
     relay_fee: RelayFeePolicy,
     /// `ref` ⇒ when this node last sent `relay_timeout` for it.
     timeouts: Mutex<HashMap<[u8; 32], u64>>,
+    /// The chain's action fees, read once (`start_check`, ruling B).
+    fees: std::sync::OnceLock<ActionFees>,
 }
 
 struct Work {
@@ -1470,7 +1502,18 @@ impl NearAdapter {
             signers: own,
             relay_fee: RelayFeePolicy::from_cfg(cfg)?,
             timeouts: Mutex::new(HashMap::new()),
+            fees: std::sync::OnceLock::new(),
         })
+    }
+
+    /// T19 ruling B: the chain's action fees from `EXPERIMENTAL_protocol_config` (read once; never assumed).
+    pub async fn fees(&self) -> Result<ActionFees> {
+        if let Some(f) = self.fees.get() {
+            return Ok(*f);
+        }
+        let pc = self.rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"})).await?;
+        let f = ActionFees::from_protocol_config(&pc)?;
+        Ok(*self.fees.get_or_init(|| f))
     }
 
     async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
@@ -1945,9 +1988,10 @@ impl ChainAdapter for NearAdapter {
         };
         if fee.as_ref().is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone())) {
             let price = self.gas_price().await.map_err(transport)?;
+            let fees = self.fees().await.map_err(transport)?;
             // fix 1 m5: the transaction's action fees, and a router job's possible relay_timeout transaction
-            let resend = if matches!(w.entry, Entry::FeeRouter { .. }) { timeout_gas() } else { 0 };
-            let gas = call.gas.saturating_add(action_fees(&call)).saturating_add(resend);
+            let resend = if matches!(w.entry, Entry::FeeRouter { .. }) { timeout_gas(&fees) } else { 0 };
+            let gas = call.gas.saturating_add(action_fees(&fees, &call)).saturating_add(resend);
             let quote = u128::from(gas).saturating_mul(price).saturating_add(call.deposit);
             fee_covers(&self.relay_fee, &w.op, quote).map_err(revert)?;
         }
@@ -2110,6 +2154,8 @@ impl ChainAdapter for NearAdapter {
     /// runner retries); each token carries this network; the router's `executor()` is the configured executor; every
     /// lane is registered (`storage_deposit`) on every token.
     async fn start_check(&self) -> Result<()> {
+        // ruling B: no assumed fees: without the chain's action fees the node does not start
+        self.fees().await.context("the RPC's EXPERIMENTAL_protocol_config (action fees): the chain does not start without them")?;
         let st = self.rpc("status", json!([])).await?;
         let g = st["genesis_hash"].as_str().ok_or_else(|| anyhow!("status without genesis_hash"))?;
         if g != self.network_b58 {
@@ -2167,6 +2213,12 @@ mod tests {
     const EXECUTOR: &str = "relayexec.test.near";
     const DEX: &str = "dex.test.near";
     const NO_CODE: &str = "11111111111111111111111111111111";
+    /// The nearcore genesis `RuntimeFeesConfig` figures (send = exec), a fixture only: the node reads the chain's (ruling B).
+    const PINNED: ActionFees = ActionFees { receipt: 108_059_500_000, function_call: 2_319_861_500_000, per_byte: 2_235_934 };
+
+    fn fee_item(g: u64) -> Value {
+        json!({"send_sir": g, "send_not_sir": g, "execution": g})
+    }
 
     fn nv() -> Value {
         serde_json::from_str(NV).unwrap()
@@ -2343,8 +2395,10 @@ mod tests {
         byte_cost: u128,
         /// (account, view) → the error text of a failing view.
         view_errs: HashMap<(String, String), String>,
-        /// `relay_check` answers the contract's `relay_gas` for an ed25519 payment: 36 + 1 Tgas + the args' target_gas.
+        /// `relay_check` answers the contract's `relay_gas` for an ed25519 payment: ROUTER_FIXED_GAS + 1 Tgas + target_gas.
         auto_relay: bool,
+        /// `EXPERIMENTAL_protocol_config` without `transaction_costs` (ruling B: the node must not start).
+        no_fees: bool,
     }
 
     /// `(target_gas, target_deposit)` of `relay` (or `relay_check`) arguments: after target, method and args.
@@ -2366,7 +2420,11 @@ mod tests {
         match method {
             "status" => Ok(json!({"chain_id": "localnet", "genesis_hash": w.genesis,
                                   "sync_info": {"earliest_block_height": w.earliest, "latest_block_height": 100}})),
-            "EXPERIMENTAL_protocol_config" => Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string()}})),
+            "EXPERIMENTAL_protocol_config" if w.no_fees => Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string()}})),
+            "EXPERIMENTAL_protocol_config" => Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string(),
+                "transaction_costs": {"action_receipt_creation_config": fee_item(PINNED.receipt),
+                    "action_creation_config": {"function_call_cost": fee_item(PINNED.function_call),
+                        "function_call_cost_per_byte": fee_item(PINNED.per_byte)}}}})),
             "gas_price" => Ok(json!({"gas_price": w.gas_price.to_string()})),
             "block" => {
                 let b = match (&p["finality"], &p["block_id"]) {
@@ -2391,7 +2449,7 @@ mod tests {
                 "view_access_key" => Ok(json!({"nonce": w.nonce, "permission": "FullAccess"})),
                 "call_function" if w.auto_relay && s("method_name") == "relay_check" => {
                     let a = base64::engine::general_purpose::STANDARD.decode(s("args_base64")).unwrap();
-                    Ok(json!({"result": router_check(1, 1, 37 * TGAS + relay_figures(&a).0), "logs": []}))
+                    Ok(json!({"result": router_check(1, 1, ROUTER_FIXED_GAS + TGAS + relay_figures(&a).0), "logs": []}))
                 }
                 "call_function" if w.view_errs.contains_key(&(s("account_id"), s("method_name"))) => {
                     let m = &w.view_errs[&(s("account_id"), s("method_name"))];
@@ -2762,9 +2820,9 @@ mod tests {
         assert!(job_gas(&wrapper(13), &ed).is_ok(), "13 passkeys + an ed25519 payment");
         assert!(job_gas(&Entry::Pay, &ed).unwrap() < job_gas(&Entry::Pay, &pay).unwrap(), "a passkey costs more");
         let router = |tg: u64| Entry::FeeRouter { target: DEX.into(), method: "settle".into(), args: vec![], target_gas: tg * TGAS, target_deposit: 0 };
-        assert_eq!(job_gas(&router(10), &ed).unwrap(), (36 + 1 + 10) * TGAS);
-        assert_eq!(job_gas(&router(239), &pay).unwrap(), 300 * TGAS);
-        assert!(job_gas(&router(240), &pay).is_err(), "over 300 Tgas");
+        assert_eq!(job_gas(&router(10), &ed).unwrap(), (36 + 60 + 1 + 10) * TGAS);
+        assert_eq!(job_gas(&router(179), &pay).unwrap(), 300 * TGAS);
+        assert!(job_gas(&router(180), &pay).is_err(), "over 300 Tgas");
         assert!(job_gas(&router(u64::MAX / TGAS), &pay).is_err(), "no overflow");
     }
 
@@ -2826,7 +2884,7 @@ mod tests {
         let (wop, wo) = wrapper_job("wrapper_add_key_real");
         let storage = 1_160 * 10u128.pow(19);
         let wcall = call_of(&pol(), &entry(&pol(), &wop, &wo).unwrap(), &wop, &hx(&wo["signature"])).unwrap();
-        let quote = (wcall.gas + action_fees(&wcall)) as u128 * 100_000_000 + storage;
+        let quote = (wcall.gas + action_fees(&PINNED, &wcall)) as u128 * 100_000_000 + storage;
         for (price, ok) in [(quote.div_ceil(wop.amount), true), ((quote - 1) / wop.amount, false)] {
             let mut w = world();
             w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(storage));
@@ -2843,11 +2901,11 @@ mod tests {
         let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
         let (rop, ro) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near(ROUTER.into()), "30000000000000", &td.to_string());
         // (fix 3 g1: the node's target figures, the entry's pinned gas 11 Tgas and its storage td)
-        let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: 11 * TGAS, target_deposit: td };
+        let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: GAS_JOB_BASE + GAS_KEY_SIG, target_deposit: td };
         let g = job_gas(&set, &Auth::decode(&hx(&ro["signature"]), &rop.digest()).unwrap()).unwrap();
         let (entry_dep, hold) = (3_140 * 10u128.pow(18) + 1_250 * 10u128.pow(18) + 2 + td, 2_800 * 10u128.pow(18));
         let rcall = call_of(&pol(), &set, &rop, &hx(&ro["signature"])).unwrap();
-        let quote = (g + action_fees(&rcall) + timeout_gas()) as u128 * 100_000_000 + entry_dep + hold;
+        let quote = (g + action_fees(&PINNED, &rcall) + timeout_gas(&PINNED)) as u128 * 100_000_000 + entry_dep + hold;
         for (price, ok) in [(quote.div_ceil(rop.amount), true), ((quote - 1) / rop.amount, false)] {
             let mut w = world();
             w.views.insert((ROUTER.into(), "relay_check".into()), router_check(3_140 * 10u128.pow(18), entry_dep, g));
@@ -2889,9 +2947,9 @@ mod tests {
     #[test]
     fn action_fees_and_timeout_are_priced() {
         let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 1, deposit: 0 };
-        assert_eq!(action_fees(&c), 2 * 108_059_500_000 + 2 * 2_319_861_500_000 + 2 * 2_235_934 * 107);
-        let t = Call { receiver: ROUTER.into(), method: "relay_timeout".into(), args: vec![0; 32], gas: 30 * TGAS, deposit: 0 };
-        assert_eq!(timeout_gas(), 30 * TGAS + action_fees(&t));
+        assert_eq!(action_fees(&PINNED, &c), 2 * 108_059_500_000 + 2 * 2_319_861_500_000 + 2 * 2_235_934 * 107);
+        let t = Call { receiver: ROUTER.into(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
+        assert_eq!(timeout_gas(&PINNED), (30 + 40) * TGAS + action_fees(&PINNED, &t));
     }
 
     /// §5 Submit: the attached deposit is exactly the check view's `storage_needed` (+ 0 yoctoNEAR: no `mtx_*` /
@@ -3079,6 +3137,36 @@ mod tests {
         w.lock().unwrap().send_err = Some(rpc_err("TIMEOUT_ERROR"));
         assert!(a.submit(&signed).await.unwrap_err().downcast_ref::<Rejected>().is_none(), "retry the same bytes");
         assert_eq!(a.sequence(0).await.unwrap(), 42, "the access key's nonce + 1");
+    }
+
+    /// T19 ruling B: the action fees come from the RPC's protocol config, each item max(send_sir, send_not_sir,
+    /// execution) (protocol 88's figures here); an RPC without them stops the node at `start_check`, and a fee job is
+    /// not quoted (retried) while they are unknown.
+    #[tokio::test]
+    async fn action_fees_read_from_the_rpc() {
+        let p88 = json!({"runtime_config": {"transaction_costs": {
+            "action_receipt_creation_config": {"send_sir": 108_059_500_000u64, "send_not_sir": 108_059_500_000u64, "execution": 108_059_500_000u64},
+            "action_creation_config": {
+                "function_call_cost": {"send_sir": 200_000_000_000u64, "send_not_sir": 200_000_000_000u64, "execution": 780_000_000_000u64},
+                "function_call_cost_per_byte": {"send_sir": 2_235_934u64, "send_not_sir": 47_683_715u64, "execution": 2_235_934u64}}}}});
+        let f = ActionFees::from_protocol_config(&p88).unwrap();
+        assert_eq!(f, ActionFees { receipt: 108_059_500_000, function_call: 780_000_000_000, per_byte: 47_683_715 });
+        let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 0, deposit: 0 };
+        assert_eq!(action_fees(&f, &c), 2 * (108_059_500_000 + 780_000_000_000 + 47_683_715 * 107));
+        let mut gap = p88.clone();
+        gap["runtime_config"]["transaction_costs"]["action_creation_config"]["function_call_cost"]["execution"] = json!(null);
+        assert!(format!("{:#}", ActionFees::from_protocol_config(&gap).unwrap_err()).contains("function_call_cost.execution"));
+        // the mocked RPC serves the fixture: read once, then cached
+        let (a, w) = adapter(world(), &fee_cfg("1")).await;
+        a.start_check().await.unwrap();
+        assert_eq!(a.fees().await.unwrap(), PINNED);
+        let n = w.lock().unwrap().calls.iter().filter(|c| c.0 == "EXPERIMENTAL_protocol_config").count();
+        a.fees().await.unwrap();
+        assert_eq!(w.lock().unwrap().calls.iter().filter(|c| c.0 == "EXPERIMENTAL_protocol_config").count(), n, "cached");
+        // without them the node does not start, and a fee job is retried, never priced on assumed fees
+        let (a, _) = adapter(World { no_fees: true, ..world() }, &fee_cfg("1")).await;
+        let e = format!("{:#}", a.start_check().await.unwrap_err());
+        assert!(e.contains("EXPERIMENTAL_protocol_config") && e.contains("transaction_costs"), "{e}");
     }
 
     /// T19 (near-sandbox 2.14): `send_tx` with `wait_until = NONE` answers `{"final_execution_status": "NONE"}` even for a
@@ -3387,10 +3475,10 @@ mod tests {
         let figures = |r: &std::result::Result<Built, SimError>| relay_figures(&r.as_ref().unwrap().body);
         for (tg, td) in [("0", "6"), ("100000000000000", "8"), ("1", big)] {
             let (r, _) = build_router(router_world(0), &sponsored, TOKEN, "mtx_pay", &pay, tg, td).await;
-            assert_eq!(figures(&r), (11 * TGAS, 7), "{tg} {td}");
+            assert_eq!(figures(&r), (GAS_JOB_BASE + GAS_KEY_SIG, 7), "{tg} {td}");
         }
         let (r, _) = build_router(router_world(0), &sponsored, DEX, "settle", &settle_args(None, None), "0", "0").await;
-        assert_eq!(figures(&r).0, 27 * TGAS + 2 * (6 + 1) * TGAS, "settle_gas");
+        assert_eq!(figures(&r).0, 27 * TGAS + 2 * (6 + 10 + 1) * TGAS, "settle_gas");
         assert!(figures(&r).1 > 10u128.pow(21), "the settle entry's deposit");
         let (r, _) = build_router(router_world(0), &sponsored, "app.near", "anything", &[1], "0", "0").await;
         assert_eq!(figures(&r), (GAS_TARGET_MIN, 0), "a third party's floor");
@@ -3803,15 +3891,15 @@ mod tests {
     async fn node_target_figures_are_priced() {
         let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
         let (rop, ro) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near(ROUTER.into()), "1", "0");
-        let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: 11 * TGAS, target_deposit: 7 };
+        let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: GAS_JOB_BASE + GAS_KEY_SIG, target_deposit: 7 };
         let call = call_of(&pol(), &set, &rop, &hx(&ro["signature"])).unwrap();
-        let quote = u128::from(call.gas + action_fees(&call) + timeout_gas()) * 100_000_000 + 1 + 1;
+        let quote = u128::from(call.gas + action_fees(&PINNED, &call) + timeout_gas(&PINNED)) * 100_000_000 + 1 + 1;
         for (price, ok) in [(quote.div_ceil(rop.amount), true), ((quote - 1) / rop.amount, false)] {
             let mut w = router_world(0);
             w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
             let (r, _) = build_router_op(w, &fee_cfg(&price.to_string()), rop.clone(), ro.clone()).await;
             match (r, ok) {
-                (Ok(b), true) => assert_eq!(relay_figures(&b.body), (11 * TGAS, 7)),
+                (Ok(b), true) => assert_eq!(relay_figures(&b.body), (GAS_JOB_BASE + GAS_KEY_SIG, 7)),
                 (Err(SimError::Revert(e)), false) => assert!(e.contains("below"), "{e}"),
                 (r, _) => panic!("{price}: {r:?}"),
             }

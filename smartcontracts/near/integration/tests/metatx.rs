@@ -432,6 +432,35 @@ async fn pay_meta_size_bound_measured() {
     assert_eq!(lo, MAX_META_SETTLED);
 }
 
-/// Measured by `pay_meta_size_bound_measured` (ed25519 UA payer, dev-account payee and relayer): the receipt's logs
-/// (`payment_meta` carries `meta` as hex) reach NEAR's 16,384 B log limit at 7,541 B of `meta`.
-const MAX_META_SETTLED: usize = 7_540;
+/// Measured by `pay_meta_size_bound_measured` (ed25519 UA payer, dev-account payee, an implicit 64-char relayer as the
+/// node's lanes since T19 fix 1): the receipt's logs (`payment_meta` carries `meta` as hex, `meta_transaction_executed`
+/// the relayer id) reach NEAR's 16,384 B log limit at 7,531 B of `meta` (7,541 B with a 43-char dev-account relayer).
+const MAX_META_SETTLED: usize = 7_530;
+
+/// T19 ruling A (concern C): a record the relayer's check counted already exists when the entry runs (another
+/// transaction created it), so part of the attached deposit is excess and goes back to the relayer, an implicit account
+/// (spec §3.7). That refund fits the node's job gas: scaas-node `GAS_JOB_BASE` (10 Tgas + one `IMPLICIT_TRANSFER_GAS`)
+/// plus the key signature.
+#[tokio::test]
+async fn implicit_relayer_refund_within_job_gas() {
+    let t = setup().await;
+    let s = Signer::ed("imp-payer");
+    let h = s.ua();
+    t.fund(&h, 1_000).await;
+    let bob = Signer::ed("imp-bob").ua();
+    let op = t.vop(OP_PAY, &h, &bob, 10, [1; 32], [0xa5; 32], 0);
+    let auth = s.sign(&op, ORIGIN);
+    let c = t.check(&t.relayer, "mtx_pay", &op, &auth, &[]).await;
+    assert_eq!(c.error, None);
+    let gas = Gas::from_gas(10 * 10u64.pow(12) + scaas_near_common::auth::GAS_SIG_KEY.as_gas() + scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas());
+    let excess = NearToken::from_millinear(1).as_yoctonear();
+    let out = t.relayer.call(t.token.id(), "mtx_pay").args([b(&op), b(&auth)].concat())
+        .deposit(NearToken::from_yoctonear(c.storage_needed.0 + excess)).gas(gas).transact().await.unwrap();
+    for o in out.receipt_outcomes() {
+        println!("  receipt {} {:.3} Tgas {:?}", o.executor_id, o.gas_burnt.as_gas() as f64 / 1e12, o.is_success());
+    }
+    assert!(out.is_success() && out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
+    assert!(out.receipt_outcomes().iter().any(|o| o.executor_id == *t.relayer.id()), "the excess went back to the relayer");
+    assert_eq!(t.balance(&bob).await, 10);
+    println!("GAS mtx_pay with a refund to an implicit relayer: {:.3} Tgas burnt in all at {:.0} Tgas prepaid", tgas(&out), gas.as_gas() as f64 / 1e12);
+}

@@ -121,10 +121,21 @@ pub async fn deploy_token(w: &Worker<Sandbox>) -> Contract {
     token
 }
 
+/// A funded implicit account (64-hex id = its ed25519 key), as the node's relayer lanes are (spec §3.7). Every NEAR
+/// transfer to it is charged as an account creation (T19: 7.525 Tgas exec + 0.825 send), so `setup`'s relayer is one:
+/// every refund / deposit return to the relayer path runs at its implicit-account cost (ruling A).
+pub async fn implicit(w: &Worker<Sandbox>) -> Account {
+    let k = near_crypto::SecretKey::from_random(near_crypto::KeyType::ED25519);
+    let id: AccountId = hex::encode(k.public_key().key_data()).parse().unwrap();
+    let out = w.root_account().unwrap().transfer_near(&id, NearToken::from_near(100)).await.unwrap();
+    assert!(out.is_success(), "{:?}", out.failures());
+    Account::from_secret_key(id, k.to_string().parse().unwrap(), w)
+}
+
 pub async fn setup() -> T {
     let w = near_workspaces::sandbox().await.unwrap();
     let token = deploy_token(&w).await;
-    let relayer = w.dev_create_account().await.unwrap();
+    let relayer = implicit(&w).await;
     let alice = w.dev_create_account().await.unwrap();
     let bob = w.dev_create_account().await.unwrap();
     T { w, token, relayer, alice, bob }
