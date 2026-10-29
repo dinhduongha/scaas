@@ -323,6 +323,12 @@ impl Dex {
     pub fn leg_settle(&self, #[serializer(borsh)] digest: [u8; 32]) -> Option<[u8; 32]> {
         self.legs.get(&digest).copied()
     }
+
+    /// The gas this DEX budgets per NEAR transfer to an account it does not control (common `IMPLICIT_TRANSFER_GAS`),
+    /// checked by the relayer against the chain's fees at start (T19 review I2).
+    pub fn implicit_transfer_gas(&self) -> u64 {
+        scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas()
+    }
 }
 
 impl Dex {
@@ -437,10 +443,10 @@ mod tests {
         let ed = Auth::Ed25519 { key: [0; 32], sig: [0; 64] };
         let pk = Auth::Passkey { key: [0; 64], authenticator_data: vec![], client_data_json: vec![], sig: [0; 64] };
         let t = |g: Gas| g.as_tgas();
-        assert_eq!((t(leg_gas(&ed)), t(leg_gas(&pk))), (17, 41));
+        assert_eq!((t(leg_gas(&ed)), t(leg_gas(&pk))), (18, 42));
         let m = |n: usize| Auth::Msig { key_data: vec![], sigs: (0..n as u8).map(|i| (i, pk.clone())).chain([(99, ed.clone())]).collect() };
-        assert_eq!(t(leg_gas(&m(10))), 16 + 250 + 1);
-        assert_eq!(t(settle_gas(&m(10), &ed)), 9 + 18 + 267 + 17);
+        assert_eq!(t(leg_gas(&m(10))), 17 + 250 + 1);
+        assert_eq!(t(settle_gas(&m(10), &ed)), 9 + 18 + 268 + 18);
     }
 
     /// The refund pays a leg back only when its order was filled by this settle's own leg op.

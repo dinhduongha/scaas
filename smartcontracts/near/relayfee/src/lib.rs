@@ -445,6 +445,12 @@ impl Router {
         self.executor.clone()
     }
 
+    /// The gas this router budgets per NEAR transfer to an account it does not control (common
+    /// `IMPLICIT_TRANSFER_GAS`), checked by the relayer against the chain's fees at start (T19 review I2).
+    pub fn implicit_transfer_gas(&self) -> u64 {
+        scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas()
+    }
+
     #[result_serializer(borsh)]
     #[allow(clippy::too_many_arguments)]
     pub fn relay_check(

@@ -1,0 +1,62 @@
+# near-algorand T19 fix 3 contract RED: IMPLICIT_TRANSFER_GAS 11 + implicit_transfer_gas views in the sources and tests, the wasm still the fix 1 build (10 Tgas, no view)
+# cd smartcontracts/near && ../../scripts/capped cargo test -j2 --no-fail-fast -p scaas-near-integration --test dex --test relay_router -- --test-threads=1 settle_short_gas_refused settle_msig_leg_gas_limit gas_pins_hold
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_router.rs:858:5
+    |
+858 |     st.await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+858 |     let _ = st.await.unwrap();
+    |     +++++++
+
+warning: `scaas-near-integration` (test "relay_router") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.70s
+     Running tests/dex.rs (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/debug/deps/dex-b86fb624492a65c3)
+
+running 2 tests
+test settle_msig_leg_gas_limit ... ok
+test settle_short_gas_refused ... FAILED
+
+failures:
+
+---- settle_short_gas_refused stdout ----
+
+thread 'settle_short_gas_refused' (1681707) panicked at integration/tests/dex.rs:691:62:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 40, block_hash: EMVudjtjPFta5LKGWpr5vSd1Eiuz5W2EqCps69YwmDfm })) } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    settle_short_gas_refused
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 12.07s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test dex`
+     Running tests/relay_router.rs (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/debug/deps/relay_router-e10e18e86f2ded48)
+
+running 1 test
+test gas_pins_hold ... FAILED
+
+failures:
+
+---- gas_pins_hold stdout ----
+
+thread 'gas_pins_hold' (1686656) panicked at integration/tests/relay_router.rs:796:64:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 37, block_hash: DKLLukQbgA9a39qgMpv7rFrFxiSYJHuPMSbt5KtQ55CR })) } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    gas_pins_hold
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 19 filtered out; finished in 5.07s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test relay_router`
+error: 2 targets failed:
+    `-p scaas-near-integration --test dex`
+    `-p scaas-near-integration --test relay_router`
+rc=101

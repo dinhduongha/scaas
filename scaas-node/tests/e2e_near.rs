@@ -385,6 +385,12 @@ impl World {
         self.call(token, "transfer_to_ua", json!({"id": id.to_vec(), "amount": amount.to_string()}), NEAR / 10).await;
     }
 
+    /// A NEAR account's balance (yoctoNEAR, final).
+    async fn near(&self, a: &str) -> u128 {
+        let v = self.rpc("query", json!({"request_type": "view_account", "finality": "final", "account_id": a})).await;
+        v["amount"].as_str().unwrap().parse().unwrap()
+    }
+
     async fn head(&self) -> u64 {
         self.rpc("block", json!({"finality": "final"})).await["header"]["height"].as_u64().unwrap()
     }
@@ -608,16 +614,22 @@ async fn gas_of(w: &World, tx_hash: &str, lane: &str) -> (f64, f64, f64) {
     (tg(burnt), tg(first), tg(prepaid))
 }
 
-/// T19 fix 2 (the fee covers every known relayer cost): the node's quote for job `j` — the call as its lane sent it, the
-/// job kind from the job — covers every gas the job burnt: its transaction and all receipts, the system gas refunds and
-/// deposit returns at the implicit lane included, plus the gas of `more` (e.g. the `relay_timeout` the node sent).
-/// Returns `(quote, burnt)` in Tgas, printed as a QUOTE line.
-async fn quote_covers(w: &World, cfg: &ChainCfg, j: &Value, tx_hash: &str, lane: &str, more: &[String], what: &str) -> (f64, f64) {
-    let policy = nr::RelayFeePolicy::from_cfg(cfg).unwrap();
+/// T19 review I1: the node's quote for job `j` (its call as the lane sent it, its kind from the job; prepaid gas + action
+/// fees (+ a `relay_timeout` for a router job) at the chain's gas price, plus the attached deposit) covers what the job
+/// actually cost the lane: its NEAR balance decrease from `before` until the job's transaction and `more` (e.g. the node's
+/// `relay_timeout`) are final. The fee the lane receives is token units (NEP-141), not NEAR, so the decrease is net of
+/// nothing. Prints a QUOTE line.
+#[allow(clippy::too_many_arguments)]
+async fn quote_covers(w: &World, cfg: &ChainCfg, j: &Value, tx_hash: &str, lane: &str, more: &[String], before: u128, what: &str) {
     let fees = nr::ActionFees::from_protocol_config(&w.rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"})).await).unwrap();
+    let policy = nr::RelayFeePolicy::from_cfg(cfg).unwrap();
     let op = MetaOp::decode(&alloy::hex::decode(j["op"]["payload"].as_str().unwrap()).unwrap()).unwrap();
     let entry = nr::entry(&policy, &op, &j["op"]).unwrap();
-    let t = w.tx(tx_hash, lane).await;
+    let h = b58(&alloy::hex::decode(tx_hash.trim_start_matches("0x")).unwrap());
+    let t = w.rpc("EXPERIMENTAL_tx_status", json!({"tx_hash": h, "sender_account_id": lane, "wait_until": "FINAL"})).await;
+    for m in more {
+        w.rpc("EXPERIMENTAL_tx_status", json!({"tx_hash": m, "sender_account_id": lane, "wait_until": "FINAL"})).await;
+    }
     let fc = &t["transaction"]["actions"][0]["FunctionCall"];
     let call = nr::Call {
         receiver: t["transaction"]["receiver_id"].as_str().unwrap().into(),
@@ -626,21 +638,12 @@ async fn quote_covers(w: &World, cfg: &ChainCfg, j: &Value, tx_hash: &str, lane:
         gas: fc["gas"].as_u64().unwrap(),
         deposit: fc["deposit"].as_str().unwrap().parse().unwrap(),
     };
-    let burnt_of = |t: &Value| -> u64 {
-        std::iter::once(&t["transaction_outcome"]).chain(t["receipts_outcome"].as_array().unwrap()).map(|o| o["outcome"]["gas_burnt"].as_u64().unwrap()).sum()
-    };
-    let at_lane = |t: &Value| t["receipts_outcome"].as_array().unwrap().iter().filter(|o| o["outcome"]["executor_id"] == lane).count();
-    let (mut burnt, mut rx) = (burnt_of(&t), at_lane(&t));
-    for h in more {
-        let m = w.rpc("EXPERIMENTAL_tx_status", json!({"tx_hash": h, "sender_account_id": lane, "wait_until": "FINAL"})).await;
-        burnt += burnt_of(&m);
-        rx += at_lane(&m);
-    }
-    let quote = nr::quote_gas(&policy, &fees, &entry, &call);
-    let tg = |g: u64| g as f64 / TGAS as f64;
-    println!("QUOTE {what}: quote {:.3} Tgas >= burnt {:.3} Tgas ({rx} receipts at the lane, {} counted)", tg(quote), tg(burnt), nr::lane_receipts(&policy, &entry));
-    assert!(quote >= burnt, "{what}: the quote {quote} gas under-prices the {burnt} gas the job burnt");
-    (tg(quote), tg(burnt))
+    let price: u128 = w.rpc("gas_price", json!([null])).await["gas_price"].as_str().unwrap().parse().unwrap();
+    let quote = u128::from(nr::quote_gas(&fees, &entry, &call)) * price + call.deposit;
+    let spent = before.saturating_sub(w.near(lane).await);
+    let n = |y: u128| y as f64 / NEAR as f64;
+    println!("QUOTE {what}: quote {:.6} NEAR >= the lane's NEAR decrease {:.6} (deposit {:.6}, gas price {price})", n(quote), n(spent), n(call.deposit));
+    assert!(quote >= spent, "{what}: the quote {quote} yocto under-prices the lane's {spent} yocto decrease");
 }
 
 /// The lane's transactions to `receiver` calling `method` in blocks `from..=head` (base58 hashes).
@@ -697,6 +700,74 @@ async fn deploy_gate_fails_with_a_key_left() {
     assert_eq!(a.lanes()[0].address, lane_id(0));
 }
 
+/// Review I3: `deploy.sh near` checks NEAR_LANES before any chain step; a deploy killed once its first account exists
+/// leaves its temporary key in the 0600 resume file (that account fails the gate); a rerun resumes and ends keyless, the
+/// gate passing, the deployment written and the resume file gone; a third run does nothing new and passes again.
+#[tokio::test]
+#[ignore]
+async fn deploy_resumes_after_an_interruption() {
+    use std::os::unix::fs::PermissionsExt;
+    let w = world().await;
+    let f = "dep2.test.near";
+    let pk = w.funder.verifying_key().to_bytes();
+    w.funder_tx(f, vec![Act::Create, Act::Transfer(60 * NEAR), Act::FullKey(pk)]).await;
+    let dir = w.home.join("deploy2");
+    std::fs::create_dir_all(&dir).unwrap();
+    let key = dir.join("key.json");
+    let secret = format!("ed25519:{}", b58(&[w.funder.to_bytes(), pk].concat()));
+    std::fs::write(&key, json!({"account_id": f, "secret_key": secret}).to_string()).unwrap();
+    let env = |lanes: String| vec![
+        ("NEAR_KEY_FILE", key.to_str().unwrap().to_string()),
+        ("NEAR_TOKENS", "TKA:Token A:6".to_string()),
+        ("NEAR_LANES", lanes),
+        ("NEAR_DEPLOYMENTS_DIR", dir.to_str().unwrap().to_string()),
+    ];
+    let lanes = format!("{},{}", lane_id(0), lane_id(1));
+    let token = format!("tka.{f}");
+    let exists = |a: String| async move { rpc_try(&w.rpc, "query", json!({"request_type": "view_account", "finality": "final", "account_id": a})).await.is_ok() };
+    // a malformed lane id: refused before any transaction
+    let bad = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env(format!("{},XYZ", lane_id(0))));
+    assert!(!bad.status.success() && String::from_utf8_lossy(&bad.stderr).contains("NEAR_LANES"), "{bad:?}");
+    assert!(!exists(token.clone()).await, "nothing deployed");
+    // interrupted: killed once the first account exists
+    let mut c = Command::new(root().join("smartcontracts/scripts/deploy.sh"));
+    c.args(["near", &w.rpc]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    for (k, v) in env(lanes.clone()) {
+        c.env(k, v);
+    }
+    let mut child = c.spawn().unwrap();
+    let mut created = false;
+    for _ in 0..600 {
+        if exists(token.clone()).await {
+            created = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    assert!(created, "the first account never appeared");
+    let resume = dir.join(format!("{}.{f}.resume.json", w.net_b58));
+    assert_eq!(std::fs::metadata(&resume).expect("resume file kept").permissions().mode() & 0o777, 0o600);
+    let half = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc, "gate", &token], &[]);
+    assert!(!half.status.success(), "the interrupted account still holds its temporary key");
+    // the rerun resumes and finishes
+    let out = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env(lanes.clone()));
+    let log = ok_out("deploy.sh near (resumed)", &out);
+    println!("{log}");
+    assert!(log.contains("resuming") && log.contains("deploy gate: 4 accounts keyless"), "{log}");
+    assert!(!resume.exists(), "the resume file is removed after the gate");
+    let dep: Value = serde_json::from_str(&std::fs::read_to_string(dir.join(format!("{}.json", w.net_b58))).unwrap()).unwrap();
+    assert_eq!(dep["tokens"][0]["account"], token.as_str());
+    for l in [lane_id(0), lane_id(1)] {
+        let v: Value = serde_json::from_slice(&w.view(&token, "storage_balance_of", &serde_json::to_vec(&json!({"account_id": l})).unwrap()).await).unwrap();
+        assert!(!v.is_null(), "lane {l} registered");
+    }
+    // a third run: every step already done
+    let again = ok_out("deploy.sh near (again)", &script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env(lanes)));
+    assert!(again.contains("deployed and initialised") && !again.contains("create ") && again.contains("4 accounts keyless"), "{again}");
+}
+
 /// A plain `mtx_pay` relayed to `mined`; its hash = the RPC's; a replay is `consumed`; a stale nonce is `Rejected` before
 /// the pool; `PaymentSettled` + `MetaTransactionExecuted` indexed.
 #[tokio::test]
@@ -710,14 +781,15 @@ async fn near_pay_relay_finalize() {
     w.fund(&w.tka, &alice.h(), 100_000).await;
     let op = MetaOp { amount: 1000, pay_ref: [0x11; 32], lane: [0xa1; 32], ..w.op(&w.tka, 0, &alice.h(), &shop) };
     let j = job(1, &op, &alice.auth(&op), json!({}));
+    let b0 = w.near(&lane_id(2)).await;
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, j.clone()).await, ["signed", "broadcast", "mined"]);
-    quote_covers(w, &w.cfg(1), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane_id(2), &[], "mtx_pay").await;
+    quote_covers(w, &w.cfg(1), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane_id(2), &[], b0, "mtx_pay").await;
     assert_eq!((w.balance(&w.tka, &alice.h()).await, w.balance(&w.tka, &shop).await), (99_000, 1000));
     let hash = report(&state, 1, "signed")["tx_hash"].as_str().unwrap().to_string();
     let t = w.tx(&hash, &lane_id(2)).await;
     assert_eq!(t["transaction"]["hash"].as_str().unwrap(), b58(&alloy::hex::decode(&hash[2..]).unwrap()), "own hash = the RPC's");
     let (burnt, first, prepaid) = gas_of(w, &hash, &lane_id(2)).await;
-    println!("GAS mtx_pay (ed25519): {burnt:.3} Tgas burnt in all, {first:.3} in its receipt, {prepaid:.0} prepaid (pin 20 + 1: GAS_JOB_BASE = 10 + IMPLICIT_TRANSFER_GAS 10)");
+    println!("GAS mtx_pay (ed25519): {burnt:.3} Tgas burnt in all, {first:.3} in its receipt, {prepaid:.0} prepaid (pin 21 + 1: GAS_JOB_BASE = 10 + IMPLICIT_TRANSFER_GAS 11)");
     // replay: the lane nonce is spent ⇒ consumed (no gas)
     let mut replay = j;
     replay["id"] = json!(2);
@@ -754,8 +826,9 @@ async fn near_pay_meta_job() {
     let op = MetaOp { amount: 700, pay_ref: id, lane: pay_lane(&id), ..w.op(&w.tka, 0, &alice.h(), &shop) };
     let kind = json!({"kind": "pay_meta", "salt": hex(&salt), "meta": hex(&meta)});
     let j = job(1, &op, &alice.auth(&op), kind.clone());
+    let b0 = w.near(&lane_id(4)).await;
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, j.clone()).await, ["signed", "broadcast", "mined"]);
-    quote_covers(w, &w.cfg(2), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane_id(4), &[], "mtx_pay_meta").await;
+    quote_covers(w, &w.cfg(2), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane_id(4), &[], b0, "mtx_pay_meta").await;
     assert_eq!(w.balance(&w.tka, &shop).await, 700);
     let bad = MetaOp { amount: 1, pay_ref: [0x77; 32], lane: pay_lane(&[0x77; 32]), ..w.op(&w.tka, 0, &alice.h(), &shop) };
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 1, job(2, &bad, &alice.auth(&bad), kind)).await, ["dead"]);
@@ -811,13 +884,14 @@ async fn near_relay_fee_wrapper_job() {
     let lane_h = Holder::Near(lane.clone());
     let l0 = w.balance(&w.tka, &lane_h).await;
     let j = job(1, &pay, &payer.auth(&pay), kind);
+    let b0 = w.near(&lane).await;
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, j.clone()).await, ["signed", "broadcast", "mined"]);
-    quote_covers(w, &w.cfg(3), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane, &[], "relay_fee_add_origin (ed25519)").await;
+    quote_covers(w, &w.cfg(3), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane, &[], b0, "relay_fee_add_origin (ed25519)").await;
     assert_eq!(w.balance(&w.tka, &lane_h).await - l0, FEE, "open mode: the fee reaches the submitting lane");
     assert_eq!(w.balance(&w.tka, &payer.h()).await, 10_000 - FEE);
     let hash = report(&state, 1, "signed")["tx_hash"].as_str().unwrap().to_string();
     let (burnt, first, prepaid) = gas_of(w, &hash, &lane).await;
-    println!("GAS relay_fee_add_origin (ed25519 entry + ed25519 payment): {burnt:.3} Tgas burnt in all, {first:.3} in its receipt, {prepaid:.0} prepaid (pin 20 + 1 + 1)");
+    println!("GAS relay_fee_add_origin (ed25519 entry + ed25519 payment): {burnt:.3} Tgas burnt in all, {first:.3} in its receipt, {prepaid:.0} prepaid (pin 21 + 1 + 1)");
     assert!(first <= prepaid);
 
     // the largest shape: 12-passkey msig mandate_open (threshold 12) + a passkey payment
@@ -846,14 +920,15 @@ async fn near_relay_fee_wrapper_job() {
     let pay = w.fee_op(&w.tka, &py.h(), &Holder::Near(w.tka.clone()), &w.tka, r, salt);
     let kind = json!({"kind": "relay_fee", "extra": {"route": "wrapper", "call": hex(&call)}});
     let j = job(2, &pay, &py.auth(&pay), kind);
+    let b0 = w.near(&lane_id(7)).await;
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 1, j.clone()).await, ["signed", "broadcast", "mined"]);
-    quote_covers(w, &w.cfg(3), &j, report(&state, 2, "signed")["tx_hash"].as_str().unwrap(), &lane_id(7), &[], "relay_fee_mandate_open (13 passkeys)").await;
+    quote_covers(w, &w.cfg(3), &j, report(&state, 2, "signed")["tx_hash"].as_str().unwrap(), &lane_id(7), &[], b0, "relay_fee_mandate_open (13 passkeys)").await;
     assert_eq!(w.balance(&w.tka, &Holder::Ua(id)).await, 1_000, "the mandate funded");
     let hash2 = report(&state, 2, "signed")["tx_hash"].as_str().unwrap().to_string();
     let (burnt, first, prepaid) = gas_of(w, &hash2, &lane_id(7)).await;
-    println!("GAS relay_fee_mandate_open (12-passkey msig entry + passkey payment, 13 passkeys): {burnt:.3} Tgas burnt in all, {first:.3} in its receipt, {prepaid:.0} prepaid (pin 20 + 13 x 21 = 293), headroom {:.3} Tgas",
+    println!("GAS relay_fee_mandate_open (12-passkey msig entry + passkey payment, 13 passkeys): {burnt:.3} Tgas burnt in all, {first:.3} in its receipt, {prepaid:.0} prepaid (pin 21 + 13 x 21 = 294), headroom {:.3} Tgas",
         prepaid - first);
-    assert!(prepaid == 293.0 && first <= prepaid);
+    assert!(prepaid == 294.0 && first <= prepaid);
 
     // `relay_fee_paid` joins its `payment_settled` (relay_target = the token, relay_payee = the lane)
     let rows = index_until(a.as_ref(), &odoo, &state, |rows| rows_of(rows, "PaymentSettled", &r).iter().any(|p| p["relay_payee"].is_string())).await;
@@ -900,15 +975,16 @@ async fn near_router_release() {
     let lane_h = Holder::Near(lane.clone());
     let l0 = w.balance(&w.tka, &lane_h).await;
     let j = job(1, &pay, &payer.auth(&pay), kind);
+    let b0 = w.near(&lane).await;
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, j.clone()).await, ["signed", "broadcast", "mined"]);
-    quote_covers(w, &w.cfg(4), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane, &[], "router -> dex.settle (released)").await;
+    quote_covers(w, &w.cfg(4), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane, &[], b0, "router -> dex.settle (released)").await;
     assert_eq!((w.balance(&w.tkb, &s1.h()).await, w.balance(&w.tka, &s2.h()).await), (300, 500), "both legs paid out");
     assert_eq!((w.balance(&w.tka, &s1.h()).await, w.balance(&w.tkb, &s2.h()).await), (0, 0));
     assert_eq!(w.balance(&w.tka, &lane_h).await - l0, FEE, "open mode: the router pays the relaying lane");
     assert_eq!(w.view(&w.router, "pending", &r).await, vec![0], "the escrow holds nothing");
     let hash = report(&state, 1, "signed")["tx_hash"].as_str().unwrap().to_string();
     let (burnt, first, prepaid) = gas_of(w, &hash, &lane).await;
-    println!("GAS router relay -> dex.settle (ed25519 payment, two ed25519 legs): {burnt:.3} Tgas burnt in all, {first:.3} in relay, {prepaid:.0} prepaid (96 + 1 + settle 27 + 2 x 17)");
+    println!("GAS router relay -> dex.settle (ed25519 payment, two ed25519 legs): {burnt:.3} Tgas burnt in all, {first:.3} in relay, {prepaid:.0} prepaid (102 + 1 + settle 27 + 2 x 18)");
     // the router's `relay_fee_paid` joins the token's `payment_settled` (relay_target = the DEX, relay_payee = the lane)
     let rows = index_until(a.as_ref(), &odoo, &state, |rows| rows_of(rows, "PaymentSettled", &r).iter().any(|p| p["relay_payee"].is_string())
         && rows.iter().filter(|e| e["event"] == "Transfer" && e["settle_id"].is_string()).count() >= 2).await;
@@ -936,8 +1012,9 @@ async fn near_router_refund() {
     let pay = w.fee_op(&w.tka, &payer.h(), &Holder::Near(w.router.clone()), &w.router, r, salt);
     let kind = json!({"kind": "relay_fee", "extra": {"route": "router", "call": hex(&call), "target_gas": "5000000000000", "target_deposit": "0"}});
     let j = job(1, &pay, &payer.auth(&pay), kind);
+    let b0 = w.near(&lane_id(10)).await;
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, j.clone()).await, ["signed", "broadcast", "reverted"]);
-    quote_covers(w, &w.cfg(5), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane_id(10), &[], "router -> listed target fail (refunded)").await;
+    quote_covers(w, &w.cfg(5), &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane_id(10), &[], b0, "router -> listed target fail (refunded)").await;
     let rep = report(&state, 1, "reverted");
     assert!(rep["error"].as_str().unwrap().contains("refunded"), "{rep}");
     // the refund branch proper: the hold succeeded, the target ran and failed (not a refused hold)
@@ -979,6 +1056,7 @@ async fn near_router_timeout() {
     let lane_h = Holder::Near(lane.clone());
     let l0 = w.balance(&w.tka, &lane_h).await;
     let j = job(1, &pay, &payer.auth(&pay), kind);
+    let b0 = w.near(&lane).await;
     state.lock().unwrap().jobs.push(j.clone());
     let h0 = w.head().await;
     let run = {
@@ -1023,7 +1101,7 @@ async fn near_router_timeout() {
     assert_eq!((w.balance(&w.tka, &payer.h()).await, w.balance(&w.tka, &lane_h).await - l0), (10_000, 0), "refund wins");
     let timeouts = lane_txs(w, &lane, &w.slow_router, "relay_timeout", h0).await;
     assert!(!timeouts.is_empty(), "the node's relay_timeout transaction");
-    quote_covers(w, &c, &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane, &timeouts, "router in flight, timed out (refunded) + relay_timeout").await;
+    quote_covers(w, &c, &j, report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane, &timeouts, b0, "router in flight, timed out (refunded) + relay_timeout").await;
     let seq = a.sequence(0).await.unwrap();
     let relay_nonce = report(&state, 1, "signed")["outer_nonce"].as_u64().unwrap();
     assert!(seq > relay_nonce + 1, "the lane sent relay_timeout after its relay (next nonce {seq}, relay {relay_nonce})");
@@ -1111,10 +1189,8 @@ async fn near_lanes_do_not_block_each_other() {
     let (alice, shop) = (Ed::new("lanes-alice"), Ed::new("lanes-shop").h());
     w.fund(&w.tka, &alice.h(), 10_000).await;
     let op = |n: u128, b: u8| MetaOp { amount: n, pay_ref: [b; 32], lane: [b; 32], ..w.op(&w.tka, 0, &alice.h(), &shop) };
-    // alice's account and shop's record first: X and Y then create no record (a record X's check counted but Y created
-    // would be refunded to the implicit lane, which its pinned gas does not cover: reported, T19)
-    let o0 = op(1, 0x20);
-    assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, job(9, &o0, &alice.auth(&o0), json!({}))).await, ["signed", "broadcast", "mined"]);
+    // X's check counts alice's account and shop's record, Y creates them first: X's deposit is then excess, refunded to
+    // the implicit lane within GAS_JOB_BASE (concern C, closed by T19 fix 1)
     let (ox, oy) = (op(1000, 0x21), op(500, 0x22));
     let held = Held { inner: a.clone(), hold: 1, gate: tokio::sync::Semaphore::new(0) };
     state.lock().unwrap().jobs.push(job(1, &ox, &alice.auth(&ox), json!({})));
@@ -1136,5 +1212,10 @@ async fn near_lanes_do_not_block_each_other() {
         dump(&state, 1).await;
     }
     assert_eq!(states_of(&state, 1), ["signed", "broadcast", "mined"]);
-    assert_eq!(w.balance(&w.tka, &shop).await, 1501);
+    assert_eq!(w.balance(&w.tka, &shop).await, 1500);
+    // concern C end to end: X's excess deposit came back to the implicit lane (a token → lane transfer) and X still mined
+    let t = w.tx(report(&state, 1, "signed")["tx_hash"].as_str().unwrap(), &lane_id(16)).await;
+    let back = t["receipts"].as_array().unwrap().iter()
+        .any(|r| r["predecessor_id"] == w.tka.as_str() && r["receiver_id"] == lane_id(16).as_str());
+    assert!(back, "X's excess deposit refunded to the lane: {:#?}", t["receipts"]);
 }

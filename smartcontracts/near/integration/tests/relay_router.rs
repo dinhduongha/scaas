@@ -792,6 +792,9 @@ async fn gas_pins_hold() {
     let r = setup_router().await;
     let pk = Signer::pk(7, RP);
     r.t.fund(&pk.ua(), FEE * 10).await;
+    // T19 review I2: the pin the relayer checks against the chain's fees
+    let it: u64 = r.router.view("implicit_transfer_gas").await.unwrap().json().unwrap();
+    assert_eq!(it, scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas());
     let pin = |g: Gas| tg(g.as_gas());
     // (receipt, measured Tgas, pin Tgas)
     let mut rows: Vec<(String, f64, f64)> = vec![];

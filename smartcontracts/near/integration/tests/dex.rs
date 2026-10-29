@@ -686,7 +686,10 @@ async fn settle_short_gas_refused() {
     let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
     let (a, bl) = d.pair(&erin, &bobk).await;
     let need = settle_gas(&a.auth, &bl.auth);
-    assert_eq!(need.as_tgas(), 9 + 18 + 17 + 17, "each leg: base 6 + IMPLICIT_TRANSFER_GAS 10 + its ed25519 1");
+    assert_eq!(need.as_tgas(), 9 + 18 + 18 + 18, "each leg: base 6 + IMPLICIT_TRANSFER_GAS 11 + its ed25519 1");
+    // T19 review I2: the pin the relayer checks against the chain's fees
+    let pin: u64 = d.dex.view("implicit_transfer_gas").await.unwrap().json().unwrap();
+    assert_eq!(pin, scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas());
     let out = d.settle_gas(&d.t.relayer, &a, &bl, Gas::from_gas(need.as_gas() - 1)).await;
     assert!(failed_with(&out, SHORT_GAS), "{:?}", out.failures());
     assert_eq!(d.bal(&d.t.token, &erin.ua()).await, 100);
@@ -694,7 +697,7 @@ async fn settle_short_gas_refused() {
     assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
     assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
     let [la, lb] = d.legs_within(&out, &a, &bl);
-    println!("settle_short_gas_refused: ed25519 legs {la:.3} Tgas (erin, UA opened lazily) / {lb:.3} Tgas (bob), leg_gas 17 Tgas");
+    println!("settle_short_gas_refused: ed25519 legs {la:.3} Tgas (erin, UA opened lazily) / {lb:.3} Tgas (bob), leg_gas 18 Tgas");
 }
 
 /// Ruling (T8 pre-flight): `settle`'s gas pinned — two passkey legs (the costliest single-key kind), both paid out, at
@@ -747,7 +750,7 @@ async fn settle_gas_pin() {
 
 
 /// Ruling T8-I2: a passkey msig leg gets `leg_gas` = base + 25 Tgas per member signature. Against an ed25519 counter-leg,
-/// 9 passkey signatures settle within 300 Tgas prepaid (9 + 18 + 241 + 17 = 285; each leg's base carries one
+/// 9 passkey signatures settle within 300 Tgas prepaid (9 + 18 + 242 + 18 = 287; each leg's base carries one
 /// `IMPLICIT_TRANSFER_GAS` since T19 ruling A, so the cap went from 10 to 9); a 10th is refused at `settle`, before
 /// any write or promise (nothing held, no leg runs, the relayer's deposit back).
 #[tokio::test]
@@ -771,7 +774,7 @@ async fn settle_msig_leg_gas_limit() {
         ..one.clone()
     };
     let (a10, a11) = (msig(9), msig(10));
-    assert_eq!((settle_gas(&a10.auth, &bl.auth).as_tgas(), settle_gas(&a11.auth, &bl.auth).as_tgas()), (285, 310));
+    assert_eq!((settle_gas(&a10.auth, &bl.auth).as_tgas(), settle_gas(&a11.auth, &bl.auth).as_tgas()), (287, 312));
     let r0 = d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
     let out = d.settle(&d.t.relayer, &a11, &bl).await;
     assert!(failed_with(&out, SHORT_GAS), "10 signatures refused at settle: {:?}", out.failures());
@@ -793,7 +796,7 @@ async fn settle_msig_leg_gas_limit() {
     }
     assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await), (100, 60));
     println!("settle_msig_leg_gas_limit: 9-signature passkey msig leg {lm:.3} Tgas (leg_gas {} Tgas), ed25519 leg {le:.3} Tgas; \
-        total {:.3} Tgas at 300 prepaid; 10 signatures refused (settle_gas 310 Tgas)", leg_gas(&a10.auth).as_tgas(), tgas(&out));
+        total {:.3} Tgas at 300 prepaid; 10 signatures refused (settle_gas 312 Tgas)", leg_gas(&a10.auth).as_tgas(), tgas(&out));
 }
 
 /// Review T8-M4: a passkey signature with clientDataJSON or authenticatorData over 1024 bytes (`PASSKEY_FIELD_MAX`),
