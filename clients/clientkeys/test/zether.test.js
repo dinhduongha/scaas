@@ -11,10 +11,12 @@ import {
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
 import { fromHex, hex, abiEncode } from '../src/bytes.js';
-import { uaMessage, purposeTag, popDigest } from '../src/ua.js';
+import { uaMessage, purposeTag, holderPopMessage, portablePopDigest, registrationDigest, POP_V2_TAG } from '../src/ua.js';
+import { dir } from './ua-vectors-dir.js';
 
 const vec = (f) => JSON.parse(readFileSync(new URL(`./vectors/${f}`, import.meta.url)));
 const R33 = vec('r33_keys.json');
+const S = JSON.parse(readFileSync(new URL('structures.json', dir)));
 
 test('EIP-2333 published test cases (BLS12-381)', () => {
   const cases = [
@@ -61,30 +63,29 @@ test('conf/disclosure keys from the mnemonic == S3 (x, Y, UA, path) on both curv
   }
 });
 
-test('S3 PoP vectors (the UA registry PoP, CTR-UA-07) verify here; ours has the same digest and verifies', () => {
+test('the Zether PoP is portable (UA-8 P1): no chain field, over registrationDigest(portablePopDigest(UA, 0, 0), 0)', () => {
   for (const curve of ['bls12381']) {
     for (const k of R33[curve].keys.filter((x) => x.pop)) {
-      const { chainId, chainUid, registry } = k.pop;
-      assert.equal(k.pop.pqzKeyHash, '0x' + '00'.repeat(32), 'a Zether UA holds no PQZ key');
       assert.equal(zetherKind(curve), k.pop.kind);
-      const mine = zetherPop(curve, fromHex(k.x), { chainId, chainUid, registry });
-      assert.deepEqual([mine.UA, mine.popDigest, mine.uaMsg], [k.UA, k.pop.popDigest, k.pop.uaMsg]);
-      assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path}`);
-      assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)));
-      assert.notEqual(mine.pop, k.pop.pop, 'hedged nonce');
-      // bound to chain, chainUid, registry and the PQZ keyHash word: each changed field moves the message
-      const moved = [
-        { chainId: chainId + 1, chainUid, registry },
-        { chainId, chainUid: '0x' + '25'.repeat(32), registry },
-        { chainId, chainUid, registry: '0x' + 'ab'.repeat(20) },
-        { chainId, chainUid, registry, pqzKeyHash: '0x' + '01'.repeat(32) },
-      ];
-      for (const ctx of moved) {
-        const m = uaMessage(k.pop.kind, purposeTag('pop'), popDigest({ ...ctx, ua: k.UA }));
-        assert.equal(schnorrVerify(curve, fromHex(k.Y), m, fromHex(k.pop.pop)), false);
-      }
+      const mine = zetherPop(curve, fromHex(k.x));
+      const hp = holderPopMessage(0x0141, { ua: k.UA });
+      assert.deepEqual([mine.UA, mine.popDigest, mine.registrationDigest, mine.uaMsg],
+        [k.UA, hex(hp.portablePopDigest), hex(hp.registrationDigest), hex(hp.message)]);
+      assert.equal(hex(hp.message), hex(uaMessage(0x0141, POP_V2_TAG, registrationDigest(portablePopDigest({ ua: k.UA })))));
+      assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)), `${curve} ${k.path}`);
+      // the S3 vector's PoP (r33_keys.json; the prover moves to the portable PoP in UA-8 A3) verifies over its own message
+      assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path} S3`);
+      // chain fields are not inputs any more: the same message whatever is passed
+      const ctx = { chainId: 7622, chainUid: '0x' + '25'.repeat(32), registry: '0x' + 'ab'.repeat(20) };
+      assert.equal(zetherPop(curve, fromHex(k.x), ctx).uaMsg, mine.uaMsg);
+      assert.notEqual(zetherPop(curve, fromHex(k.x)).pop, mine.pop, 'hedged nonce');
+      // the v1 purpose does not verify the portable PoP
+      assert.equal(schnorrVerify(curve, fromHex(k.Y), uaMessage(0x0141, purposeTag('pop'), fromHex(mine.registrationDigest)),
+        fromHex(mine.pop)), false);
     }
   }
+  const z = S.pop.find((p) => p.kind === 0x0141);
+  assert.equal(hex(portablePopDigest({ ua: z.ua })), z.portablePopDigest, 'structures.json: the Zether row');
 });
 
 test('owner op: abi.encode(bytes(""), Schnorr over uaMessage(kind, zether-owner, digest))', () => {

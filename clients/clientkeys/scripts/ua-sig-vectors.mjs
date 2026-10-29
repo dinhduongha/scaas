@@ -1,5 +1,5 @@
 // Generates smartcontracts/vectors/ua/signatures.json: UA-2a signatures (accounts.md §1.4, §1.8, §1.9) on deterministic
-// keys — per derived kind a key, its PoP in structures.json context A and B, signatures over ua_msg under metatx and member,
+// keys — per derived kind a key, its PoP (UA-8: portable, the same in context A and B), signatures over ua_msg under metatx and member,
 // and negatives a verifier must refuse; native EOA UAAuth signatures; an msig structure with member signature sets.
 // Secrets: keccak256("scaas.ua.vectors.sig.<name>") mod (n − 1) + 1 (ed25519: the 32-byte keccak itself, RFC 8032 seed).
 // Nonces: RFC 6979 (P-256, secp256k1 ECDSA), zero aux_rand (BIP-340), keccak256(secret ‖ message ‖ "scaas.ua.vectors.nonce")
@@ -29,88 +29,30 @@ import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { ed25519, ED25519_TORSION_SUBGROUP } from '@noble/curves/ed25519.js';
-import { sha256, sha512 } from '@noble/hashes/sha2.js';
-import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from '../src/bytes.js';
+import { sha512 } from '@noble/hashes/sha2.js';
+import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
-import { hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, receiverFeeTypedData,
-  unwrapToUACalldata, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, orderCancelTypedData } from '../src/evm.js';
-import { shake256 } from '@noble/hashes/sha3.js';
-import { seedFromWords } from '../src/seed.js';
-import { PQ_KINDS, pqKeygen, pqMessage } from '../src/pq.js';
-import { schnorrSign as zetherSchnorr } from '../src/zether.js';
+import {
+  hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData, receiverFeeTypedData,
+  unwrapToUACalldata, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, orderCancelTypedData,
+} from '../src/evm.js';
+import { PQ_KINDS, pqMessage } from '../src/pq.js';
+import { holderPopMessageV1 } from '../legacy/ua8/ua-pop-v1.js';
+import {
+  int, be, secretOf, SECP_N, BLS, secpHighS, withV, highS, CHROME_EXTRA, webauthnSign, webauthnHighS, blsG1enc, SCHEMES,
+  ecdsa, nativeSk, nativeAddr, nativeUa, encodeMemberSigs, PQ_MNEMONIC, pqSignMsg, pqKey, pqzKeyOf, pqzPopOf,
+} from './ua-signers.mjs';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/ua/', import.meta.url));
 const OUT = process.argv[2] ?? VECTORS;
 const { contexts } = JSON.parse(readFileSync(join(VECTORS, 'structures.json'), 'utf8'));
 
-const int = (b) => BigInt(hex(b));
-const be = (v, len) => fromHex(v.toString(16).padStart(2 * len, '0'));
-const secretOf = (name, n) => (int(keccak_256(utf8ToBytes(`scaas.ua.vectors.sig.${name}`))) % (n - 1n)) + 1n;
 const flip = (b, i) => { const c = Uint8Array.from(b); c[i] ^= 1; return c; };
 const tag = (p) => ua.purposeTag(p);
 const DIGEST = keccak_256(utf8ToBytes('scaas.ua.vectors.sig.digest'));
 const ZERO32 = new Uint8Array(32);
 
 // --- schemes: keyData(sk) and sign(sk, msg32, { pop }) ---
-const P256_N = p256.Point.Fn.ORDER;
-const SECP_N = secp256k1.Point.Fn.ORDER;
-const BN = bn254.fields;
-const BLS = bls12_381.fields;
-
-const p256Sign = (sk, h) => p256.sign(h, be(sk, 32), { prehash: false, lowS: true, format: 'compact' });
-const secpSign = (sk, h) => {
-  const rec = secp256k1.sign(h, be(sk, 32), { prehash: false, lowS: true, format: 'recovered' });
-  return concatBytes(rec.subarray(1), Uint8Array.of(27 + rec[0]));
-};
-/** The same ECDSA signature with s → n − s and v flipped: it recovers the same key, refused by the low-s rule. */
-const secpHighS = (sig) => concatBytes(sig.subarray(0, 32), be(SECP_N - int(sig.subarray(32, 64)), 32), Uint8Array.of(55 - sig[64]));
-const withV = (sig, v) => concatBytes(sig.subarray(0, 64), Uint8Array.of(v));
-const highS = (sig) => concatBytes(sig.subarray(0, 32), be(P256_N - int(sig.subarray(32, 64)), 32));
-
-const RP_ID = 'scaas.example';
-const ORIGIN = 'https://scaas.example';
-const CHROME_EXTRA = ',"other_keys_can_be_added_here":"do not compare clientDataJSON against a template. See https://goo.gl/yabPex"';
-/** WebAuthn assertion as `abi.encode(bytes authenticatorData, string clientDataJSON, uint256 r, uint256 s)`. */
-function webauthnSign(sk, msg, { flags = 0x05, rpId = RP_ID, type = 'webauthn.get', tail = '', counter = 1 } = {}) {
-  const authData = concatBytes(sha256(utf8ToBytes(rpId)), Uint8Array.of(flags), be(BigInt(counter), 4));
-  const cd = utf8ToBytes(`{"type":"${type}","challenge":"${b64url(msg)}","origin":"${ORIGIN}"${tail}}`);
-  const sig = p256Sign(sk, sha256(concatBytes(authData, sha256(cd))));
-  return abiEncode(['bytes', 'bytes', 'bytes32', 'bytes32'], [authData, cd, sig.subarray(0, 32), sig.subarray(32, 64)]);
-}
-const webauthnHighS = (blob) => { const c = Uint8Array.from(blob); c.set(be(P256_N - int(c.subarray(96, 128)), 32), 96); return c; };
-
-const hashToScalar = (seed, r) => ((int(keccak_256(concatBytes(seed, Uint8Array.of(2)))) << 256n)
-  + int(keccak_256(concatBytes(seed, Uint8Array.of(3))))) % r;
-const SCHNORR_TAG = utf8ToBytes('scaas.ua.schnorr.v1');
-const bnG1enc = (P) => { const { x, y } = P.toAffine(); return concatBytes(be(x, 32), be(y, 32)); };
-const blsG1enc = (P) => { const { x, y } = P.toAffine(); return concatBytes(be(x, 64), be(y, 64)); };
-/** scaas Schnorr (§1.9): R = kG, e = hashToScalar(keccak256(tag ‖ R ‖ Y ‖ m)), z = k + e·x. */
-const schnorrScheme = (G, r, enc) => ({
-  keyData: (sk) => enc(G.BASE.multiply(sk)),
-  sign(sk, msg) {
-    const k = (int(keccak_256(concatBytes(be(sk, 32), msg, utf8ToBytes('scaas.ua.vectors.nonce')))) % (r - 1n)) + 1n;
-    const R = enc(G.BASE.multiply(k));
-    const e = hashToScalar(keccak_256(concatBytes(SCHNORR_TAG, R, enc(G.BASE.multiply(sk)), msg)), r);
-    if (e === 0n) throw new Error('e = 0');
-    return concatBytes(R, be((k + e * sk) % r, 32));
-  },
-});
-
-/** Port of ZetherCurves.sol `G1Bn254.mapToG1`: try-and-increment over keccak256(prefix ‖ uint32 ctr), even y. */
-function mapToG1Bn254(prefix) {
-  const { Fp } = BN;
-  for (let ctr = 0; ; ctr++) {
-    const x = int(keccak_256(concatBytes(prefix, be(BigInt(ctr), 4)))) % Fp.ORDER;
-    const rhs = Fp.add(Fp.mul(Fp.sqr(x), x), 3n);
-    let y = Fp.pow(rhs, (Fp.ORDER + 1n) / 4n);
-    if (Fp.eql(Fp.sqr(y), rhs)) {
-      if (y & 1n) y = Fp.ORDER - y;
-      return bn254.G1.Point.fromAffine({ x, y });
-    }
-  }
-}
-const BN_LABEL = { sig: utf8ToBytes('SCAAS-UA-BLS-BN254-SIG-V1'), pop: utf8ToBytes('SCAAS-UA-BLS-BN254-POP-V1') };
-const BLS_DST = { sig: 'SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_', pop: 'SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_' };
 // --- ed25519 (UA-2b): strict = ed25519-dalek verify_strict ---
 const ED_L = ed25519.Point.Fn.ORDER;
 const ED_P = ed25519.Point.Fp.ORDER;
@@ -144,37 +86,7 @@ const edSignRaw = (a, A, M, r, T = ED_ID) => {
   return concatBytes(Rb, le((r + edK(Rb, A, M) * a) % ED_L));
 };
 
-const bnG2enc = (P) => { const { x, y } = P.toAffine(); return concatBytes(be(x.c1, 32), be(x.c0, 32), be(y.c1, 32), be(y.c0, 32)); };
-const blsG2enc = (P) => { const { x, y } = P.toAffine(); return concatBytes(be(x.c0, 64), be(x.c1, 64), be(y.c0, 64), be(y.c1, 64)); };
 
-const SCHEMES = {
-  'webauthn-p256': { kind: 0x0100, n: P256_N,
-    keyData: (sk) => concatBytes(p256.getPublicKey(be(sk, 32), false).subarray(1), sha256(utf8ToBytes(RP_ID))),
-    sign: (sk, m) => webauthnSign(sk, m) },
-  p256: { kind: 0x0101, n: P256_N, keyData: (sk) => p256.getPublicKey(be(sk, 32), false).subarray(1),
-    sign: (sk, m) => p256Sign(sk, sha256(m)) },
-  bip340: { kind: 0x0103, n: SECP_N, keyData: (sk) => schnorr.getPublicKey(be(sk, 32)),
-    sign: (sk, m) => schnorr.sign(m, be(sk, 32), ZERO32) },
-  'schnorr-bn254': { kind: 0x0104, n: BN.Fr.ORDER, ...schnorrScheme(bn254.G1.Point, BN.Fr.ORDER, bnG1enc) },
-  'schnorr-bls12381': { kind: 0x0105, n: BLS.Fr.ORDER, ...schnorrScheme(bls12_381.G1.Point, BLS.Fr.ORDER, blsG1enc) },
-  'bls12381-minsig': { kind: 0x0106, n: BLS.Fr.ORDER, keyData: (sk) => blsG2enc(bls12_381.G2.Point.BASE.multiply(sk)),
-    sign: (sk, m, { pop = false } = {}) => blsG1enc(bls12_381.G1.hashToCurve(m, { DST: pop ? BLS_DST.pop : BLS_DST.sig }).multiply(sk)) },
-  'bls-bn254-minsig': { kind: 0x0107, n: BN.Fr.ORDER, keyData: (sk) => bnG2enc(bn254.G2.Point.BASE.multiply(sk)),
-    sign: (sk, m, { pop = false } = {}) => bnG1enc(mapToG1Bn254(concatBytes(pop ? BN_LABEL.pop : BN_LABEL.sig, m)).multiply(sk)) },
-  // UA-2b, appended (signatures.json is append-only): the secret is the RFC 8032 seed
-  ed25519: { kind: 0x0102, seed: true, keyData: (sk) => ed25519.getPublicKey(be(sk, 32)), sign: (sk, m) => ed25519.sign(m, be(sk, 32)) },
-  // 2026-10-17, appended: ECDSA secp256k1 over the 32-byte ua_msg (no prehash), sig = r ‖ s ‖ v, low-s, v ∈ {27, 28}
-  secp256k1: { kind: 0x0108, n: SECP_N, keyData: (sk) => secp256k1.getPublicKey(be(sk, 32), false).subarray(1),
-    sign: (sk, m) => secpSign(sk, m) },
-  // UA-6, appended: the Zether key UA signs every UA-ledger write (SIGNING set) by the Zether Schnorr (tag SCAAS-ZETHER-SCHNORR-V1,
-  // clients/zether-prover/src/schnorr.rs); a stored kind, so its auth carries an empty keyData (the registry reads Y)
-  'zether-bls12381': { kind: 0x0141, n: BLS.Fr.ORDER, stored: true,
-    keyData: (sk) => blsG1enc(bls12_381.G1.Point.BASE.multiply(sk)),
-    sign(sk, m) {
-      const k = (int(keccak_256(concatBytes(be(sk, 32), m, utf8ToBytes('scaas.ua.vectors.nonce')))) % (BLS.Fr.ORDER - 1n)) + 1n;
-      return zetherSchnorr('bls12381', be(sk, 32), m, k);
-    } },
-};
 // a sibling kind whose tag a "wrong-kind-tag" negative signs under (same curve where one exists)
 const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0112, 0x0105: 0x0141, 0x0141: 0x0105, 0x0106: 0x0105, 0x0107: 0x0104, 0x0102: 0x0103, 0x0108: 0x0103 };
 
@@ -190,16 +102,20 @@ function blsG1OffSubgroup() {
 }
 
 // --- derived rows ---
-const popOf = (kind, uaId, ctx, pqzKeyHash) => {
-  const popDigest = ua.popDigest({ ...contexts[ctx], ua: uaId, pqzKeyHash });
-  return { popDigest, message: ua.uaMessage(kind, ua.POP_TAG, popDigest) };
-};
+/** The portable PoP (UA-8 P1): one per UA and attributes, the same in every context (`holderPopMessage`). */
+const popOf = (kind, uaId, attrs = {}) => ua.holderPopMessage(kind, { ua: uaId, ...attrs });
+/** A PoP row: popDigest = portablePopDigest, message = uaMessage(kind, pop v2, registrationDigest); the context is a label. */
+const popRow = (ctx, p, sig, extra = {}) => ({ context: ctx, ...extra, popDigest: hex(p.portablePopDigest),
+  registrationDigest: hex(p.registrationDigest), message: hex(p.message), sig: hex(sig) });
+/** The negatives a portable verifier refuses: a PoP over the chain-bound digest of context A, a PoP under the v1 purpose. */
+const chainBoundPop = (kind, uaId) => holderPopMessageV1(kind, { ...contexts.A, ua: uaId }).message;
+const popV1Purpose = (kind, uaId) => ua.uaMessage(kind, ua.POP_TAG, popOf(kind, uaId).registrationDigest);
 const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
   const sk = s.seed ? int(keccak_256(utf8ToBytes(`scaas.ua.vectors.sig.${name}`))) : secretOf(name, s.n);
   const keyData = s.keyData(sk);
   const id = ua.deriveUA(s.kind, keyData);
   const sign = (m, o) => s.sign(sk, m, o);
-  const pop = (ctx) => { const p = popOf(s.kind, id, ctx); return { context: ctx, popDigest: hex(p.popDigest), message: hex(p.message), sig: hex(sign(p.message, { pop: true })) }; };
+  const pop = (ctx) => { const p = popOf(s.kind, id); return popRow(ctx, p, sign(p.message, { pop: true })); };
   const metatx = ua.uaMessage(s.kind, tag('metatx'), DIGEST);
   const member = ua.uaMessage(s.kind, tag('member'), DIGEST);
   const metatxSig = sign(metatx);
@@ -207,14 +123,13 @@ const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
     { purpose: 'metatx', purposeTag: hex(tag('metatx')), digest: hex(DIGEST), message: hex(metatx), sig: hex(metatxSig) },
     { purpose: 'member', purposeTag: hex(tag('member')), digest: hex(DIGEST), message: hex(member), sig: hex(sign(member)) },
   ];
-  const popA = popOf(s.kind, id, 'A').message;
-  const popB = popOf(s.kind, id, 'B').message;
+  const popA = popOf(s.kind, id).message;
   const neg = (n, verifyPop, message, sig) => ({ name: n, verifyPop, message: hex(message), sig: hex(sig) });
   const negatives = [
     neg('wrong-purpose', false, member, metatxSig),
     neg('wrong-kind-tag', false, metatx, sign(ua.uaMessage(OTHER_KIND[s.kind], tag('metatx'), DIGEST))),
-    neg('other-chain-uid', true, popB, sign(popOf(s.kind, id, 'C').message, { pop: true })), // B and C: both evm:7622
-    neg('other-registry', true, popA, sign(popOf(s.kind, id, 'D').message, { pop: true })),
+    neg('chain-bound-pop', true, popA, sign(chainBoundPop(s.kind, id), { pop: true })), // UA-8: the pre-UA-8 PoP of context A
+    neg('pop-v1-purpose', true, popA, sign(popV1Purpose(s.kind, id), { pop: true })),
     neg('pop-as-sig', false, metatx, sign(popA, { pop: true })),
   ];
   if (s.kind === 0x0100) {
@@ -269,13 +184,6 @@ const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
 });
 
 // --- native EOA: UAAuth under the registry domain ---
-const ecdsa = (sk, h) => {
-  const rec = secp256k1.sign(h, be(sk, 32), { prehash: false, lowS: true, format: 'recovered' });
-  return concatBytes(rec.subarray(1), Uint8Array.of(27 + rec[0]));
-};
-const nativeSk = secretOf('native', SECP_N);
-const nativeAddr = keccak_256(secp256k1.getPublicKey(be(nativeSk, 32), false).subarray(1)).subarray(12);
-const nativeUa = ua.nativeId(0x0001, nativeAddr);
 const domain = (ctx, generation) => ({ generation, ...contexts[ctx] });
 const authDigest = (ctx, gen, id, p, d) => ua.uaAuthDigest(domain(ctx, gen), id, tag(p), d);
 const nativeSigs = [['A', 1, 'metatx'], ['A', 1, 'member'], ['A', 2, 'metatx'], ['B', 1, 'metatx']].map(([context, generation, purpose]) => {
@@ -315,14 +223,6 @@ function memberSig(name, { raw = false, secretName } = {}) {
   const s = SCHEMES[name];
   const sk = secretOf(secretName ?? name, s.n);
   return { index: m.index, keyData: s.keyData(sk), sig: s.sign(sk, ua.uaMessage(m.kind, tag('member'), memberDigest)) };
-}
-/** `abi.encode(MemberSig[])`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
-function encodeMemberSigs(list) {
-  const tuples = list.map(({ index, keyData, sig }) => abiEncode(['uint16', 'bytes', 'bytes'], [index, keyData, sig]));
-  const offsets = [];
-  let o = 32 * list.length;
-  for (const t of tuples) { offsets.push(word(o)); o += t.length; }
-  return concatBytes(word(32), word(list.length), ...offsets, ...tuples);
 }
 const byIndex = (list) => [...list].sort((a, b) => a.index - b.index);
 const set = (name, valid, list) => {
@@ -602,38 +502,34 @@ const m3Out = {
 };
 
 // --- pq_signatures.json (P6c): the PQ kinds on context A; stored kinds, so every auth carries an empty keyData ---
-const PQ_MNEMONIC = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
-  + 'capable act festival slice deposit sauce coconut afford frown better'; // pq_kat.json's
-const pqSeedBytes = seedFromWords(PQ_MNEMONIC);
-// Test vectors only: this fixed Falcon sampler stream repeats across messages; never copy it into a production signer.
-const pqFixed = (n) => shake256(utf8ToBytes('scaas p6a falcon randomness'), { dkLen: n });
-const pqOpts = (name) => (name === 'fndsa512' ? { random: pqFixed } : { extraEntropy: false });
-/** Signs a 32-byte ua_msg the kind's way: pq_msg with the empty context (ML-DSA, SLH-DSA), ua_msg itself (Falcon). */
-const pqSignMsg = (name, sk, uaMsg, opts = pqOpts(name)) =>
-  PQ_KINDS[name].alg.sign(PQ_KINDS[name].pq ? pqMessage(name, uaMsg) : uaMsg, sk, opts);
 const PQ_OTHER = { mldsa44: 'mldsa65', mldsa65: 'mldsa44', fndsa512: 'slhdsa128s', slhdsa128s: 'fndsa512' };
-const pqKey = (name, index) => pqKeygen(pqSeedBytes, name, 0, index);
-// UA-6: a PQ signer registers its PQZ key in the same call; its pop is over popDigest(ua, h) with h = keyHash(0x0142, pqzKey) != 0
-// (the same key as ua-vectors.mjs). `popPqz` rows: the digest and message move with h, so a pop for no key does not carry over.
-const PQZ_KEY = shake256(utf8ToBytes('scaas ua-1 vector pqz-mlwe key'), { dkLen: 16384 });
-const PQZ_H = ua.keyHashOf(0x0142, PQZ_KEY);
+// UA-6: a PQ signer registers its PQZ key in the same call; UA-8: its pop is over registrationDigest(portablePopDigest(ua, h, 0),
+// pqzPopHash) with h = keyHash(0x0142, pqzKey) != 0 (the same key as ua-vectors.mjs) and the hash of the R_REG proof
+// (portable.json's n2048-kmax1024 filler). `popPqz` rows: the digest and message move with h, so a pop for no key does not carry over.
+const PQZ_SET = 'n2048-kmax1024';
+const PQZ_KEY = pqzKeyOf(PQZ_SET);
+const PQZ_POP = pqzPopOf(PQZ_SET);
+const PQZ_ATTRS = { pqzKey: PQZ_KEY, pqzPop: PQZ_POP };
 const PQZ_HOLDERS = new Set(['mldsa44', 'mldsa65', 'fndsa512']);
 const pqAuth = (sig) => hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), sig]));
 const pqRows = Object.keys(PQ_KINDS).map((name) => {
   const { kind } = PQ_KINDS[name];
   const kp = pqKey(name, 0);
   const sign = (m) => pqSignMsg(name, kp.secretKey, m);
-  const pop = (ctx, h) => { const p = popOf(kind, kp.ua, ctx, h); return { context: ctx, ...(h ? { pqzKeyHash: hex(h) } : {}), popDigest: hex(p.popDigest), message: hex(p.message), sig: hex(sign(p.message)) }; };
+  const pop = (ctx, attrs) => {
+    const p = popOf(kind, kp.ua, attrs);
+    return popRow(ctx, p, sign(p.message), attrs ? { pqzKeyHash: hex(p.pqzKeyHash), pqzPopHash: hex(p.pqzPopHash) } : {});
+  };
   const metatx = ua.uaMessage(kind, tag('metatx'), DIGEST);
   const member = ua.uaMessage(kind, tag('member'), DIGEST);
   const metatxSig = sign(metatx);
-  const popA = popOf(kind, kp.ua, 'A').message;
+  const popA = popOf(kind, kp.ua).message;
   const neg = (n, verifyPop, message, sig) => ({ name: n, verifyPop, message: hex(message), sig: hex(sig) });
   const negatives = [
     neg('wrong-purpose', false, member, metatxSig),
     neg('wrong-kind-tag', false, metatx, sign(ua.uaMessage(PQ_KINDS[PQ_OTHER[name]].kind, tag('metatx'), DIGEST))),
-    neg('other-chain-uid', true, popOf(kind, kp.ua, 'B').message, sign(popOf(kind, kp.ua, 'C').message)),
-    neg('other-registry', true, popA, sign(popOf(kind, kp.ua, 'D').message)),
+    neg('chain-bound-pop', true, popA, sign(chainBoundPop(kind, kp.ua))), // UA-8: the pre-UA-8 PoP of context A
+    neg('pop-v1-purpose', true, popA, sign(popV1Purpose(kind, kp.ua))),
     neg('pop-as-sig', false, metatx, sign(popA)),
     neg('mutated', false, metatx, flip(metatxSig, metatxSig.length >> 1)),
   ];
@@ -643,11 +539,11 @@ const pqRows = Object.keys(PQ_KINDS).map((name) => {
   }
   if (PQZ_HOLDERS.has(name)) {
     // the pop without the key does not verify as the holder's pop with it, and the reverse
-    negatives.push(neg('pop-without-pqz-key', true, popOf(kind, kp.ua, 'A', PQZ_H).message, sign(popA)),
-      neg('pop-with-pqz-key-as-plain', true, popA, sign(popOf(kind, kp.ua, 'A', PQZ_H).message)));
+    negatives.push(neg('pop-without-pqz-key', true, popOf(kind, kp.ua, PQZ_ATTRS).message, sign(popA)),
+      neg('pop-with-pqz-key-as-plain', true, popA, sign(popOf(kind, kp.ua, PQZ_ATTRS).message)));
   }
   return { name, kind, keyData: hex(kp.publicKey), ua: hex(kp.ua), pop: pop('A'), popOther: pop('B'),
-    ...(PQZ_HOLDERS.has(name) ? { pqzKey: hex(PQZ_KEY), popPqz: pop('A', PQZ_H) } : {}),
+    ...(PQZ_HOLDERS.has(name) ? { pqzKey: hex(PQZ_KEY), popPqz: pop('A', PQZ_ATTRS) } : {}),
     sigs: [
       { purpose: 'metatx', purposeTag: hex(tag('metatx')), digest: hex(DIGEST), message: hex(metatx), sig: hex(metatxSig) },
       { purpose: 'member', purposeTag: hex(tag('member')), digest: hex(DIGEST), message: hex(member), sig: hex(sign(member)) },
@@ -657,9 +553,9 @@ const pqRows = Object.keys(PQ_KINDS).map((name) => {
 // msig over PQ members (accounts.md §1.6 "Which kind for whom", CTR-PQZ-12): mldsa65 keys 0–2, the p256 key of signatures.json
 const pqMembers = [0, 1, 2].map((i) => ({ i, kp: pqKey('mldsa65', i) }));
 const pqExtra = pqMembers.slice(1).map(({ i, kp }) => {
-  const p = popOf(0x0131, kp.ua, 'A');
+  const p = popOf(0x0131, kp.ua);
   return { name: 'mldsa65', index: i, kind: 0x0131, keyData: hex(kp.publicKey), ua: hex(kp.ua),
-    pop: { context: 'A', popDigest: hex(p.popDigest), message: hex(p.message), sig: hex(pqSignMsg('mldsa65', kp.secretKey, p.message)) } };
+    pop: popRow('A', p, pqSignMsg('mldsa65', kp.secretKey, p.message)) };
 });
 const p256Sk = secretOf('p256', SCHEMES.p256.n);
 function pqMsig(name, list, threshold) {
@@ -670,9 +566,9 @@ function pqMsig(name, list, threshold) {
   const sigOf = (m, mdv = md) => (m.kind === 0x0101
     ? { index: m.index, keyData: SCHEMES.p256.keyData(p256Sk), sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), mdv)) }
     : { index: m.index, keyData: new Uint8Array(0), sig: pqSignMsg('mldsa65', m.sk, ua.uaMessage(0x0131, tag('member'), mdv)) });
-  // UA-6 U5: a PQ-eligible msig registers with an m-of-n pop over popDigest(ua, h) (purpose pop, members under member)
-  const popD = ua.popDigest({ ...contexts.A, ua: id, pqzKeyHash: PQZ_H });
-  const popMd = ua.memberDigest(id, ua.uaMessage(0x0120, ua.POP_TAG, popD));
+  // UA-6 U5 / UA-8: a PQ-eligible msig registers with an m-of-n pop over the portable PoP (purpose pop v2, members under member)
+  const hp = popOf(0x0120, id, { keyData, ...PQZ_ATTRS });
+  const popMd = hp.memberDigest;
   const popList = ms.slice(0, threshold).map((m) => sigOf(m, popMd));
   const popBlob = encodeMemberSigs(popList);
   const set = (n, valid, picks) => {
@@ -687,7 +583,8 @@ function pqMsig(name, list, threshold) {
     : [set('both', true, [0, 1]), set('below-threshold', false, [0])];
   return { name, keyData: hex(keyData), ua: hex(id), threshold, purpose: 'metatx', digest: hex(DIGEST), memberDigest: hex(md),
     pqzEligible: ua.msigPqzEligible(keyData),
-    popPqz: { context: 'A', pqzKey: hex(PQZ_KEY), pqzKeyHash: hex(PQZ_H), popDigest: hex(popD), memberDigest: hex(popMd),
+    popPqz: { context: 'A', pqzKey: hex(PQZ_KEY), pqzKeyHash: hex(hp.pqzKeyHash), pqzPopHash: hex(hp.pqzPopHash),
+      popDigest: hex(hp.portablePopDigest), registrationDigest: hex(hp.registrationDigest), memberDigest: hex(popMd),
       pop: hex(popBlob), indices: ms.slice(0, threshold).map((m) => m.index) },
     members: ms.map((m) => ({ index: m.index, kind: m.kind, id: hex(m.id), weight: m.weight })), sets };
 }
@@ -779,6 +676,8 @@ const utOut = {
 
 const note = 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/ua.js on @noble/curves 2.4.0); never edit by hand. '
   + 'Every positive must verify and every negative must fail (verifyPop: which verifier entry point is asked). '
+  + 'PoPs are portable (UA-8 P1): popDigest = portablePopDigest(ua, 0, 0), message = ua_msg(kind, pop v2, registrationDigest), '
+  + 'the same in every context; chain-bound-pop / pop-v1-purpose: the pre-UA-8 PoP and the v1 purpose are refused. '
   + 'The scaas Schnorr transcript and the bn254 mapToG1 have no independent second implementation: clients/ua-rs agreeing '
   + 'on them is self-consistency only (accounts.md §1.16). msig auth = abi.encode(bytes keyData, bytes sig) (§1.9).';
 const out = {

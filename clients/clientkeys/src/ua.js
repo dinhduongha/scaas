@@ -1,8 +1,9 @@
 // UNAUDITED. UA identity layer (accounts.md §1.3–§1.6; CTR-UA-02…05, 07, 09, 11, 12): the kind table, ids, keyHash, purpose tags,
-// ua_msg, popDigest, the registry's UAAuth digest, member digests, canonical ids and key-data validation. The same rules
-// live in Solidity (src/ua/UAKinds.sol), Rust (clients/ua-rs), Python (clients/ua-py), Go (clients/ua-go) and C#
-// (clients/ua-cs); smartcontracts/vectors/ua/kinds.json and structures.json, written by scripts/ua-vectors.mjs from
-// this file, pin all six. No signing here (UAKey and the signers are UA F3).
+// ua_msg, the portable PoP and KEM record digests (UA-8 P1, P7), the registry's UAAuth digest, member digests, canonical ids
+// and key-data validation. The same rules live in Solidity (src/ua/UAKinds.sol), Rust (clients/ua-rs), Python (clients/ua-py),
+// Go (clients/ua-go) and C# (clients/ua-cs); smartcontracts/vectors/ua/kinds.json, structures.json and portable.json, written
+// by scripts/ua-vectors.mjs and scripts/ua-portable-vectors.mjs from this file, pin all six. No signing here (UAKey and the
+// signers are UA F3). The chain-bound PoP before UA-8 is in legacy/ua8/ua-pop-v1.js.
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { p256 } from '@noble/curves/nist.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
@@ -112,12 +113,22 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade']);
-export const purposeTag = (p) => {
-  if (!PURPOSES.includes(p)) fail('UAPurposeUnknown', p);
-  return tagHash(`scaas.ua.purpose.${p}.v1`);
+  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'kem']);
+/** `keccak256("scaas.ua.purpose.<p>.v<version>")`; every purpose has v1, `pop` also v2 (the portable PoP, UA-8 P1). */
+export const purposeTagString = (p, version = 1) => {
+  if (!PURPOSES.includes(p) || !(version === 1 || (version === 2 && p === 'pop'))) fail('UAPurposeUnknown', `${p} v${version}`);
+  return `scaas.ua.purpose.${p}.v${version}`;
 };
+export const purposeTag = (p, version = 1) => tagHash(purposeTagString(p, version));
+/** The chain-bound PoP's purpose before UA-8 (legacy/ua8); the registry accepts only `POP_V2_TAG`. */
 export const POP_TAG = purposeTag('pop');
+export const POP_V2_TAG = purposeTag('pop', 2);
+export const KEM_TAG = purposeTag('kem');
+export const KEM_RECORD_TAG = tagHash('scaas.ua.kem-record.v1');
+/** ML-KEM-1024 ek ‖ X25519 pk (X-Wing order): the only KEM key the registry stores (UA-8 P7). */
+export const KEM_PK_LENGTH = 1600;
+/** Who checked a part of a record (UA-8 P11.3); `relayer` comes with the relayer id. */
+export const CHECKED = Object.freeze({ none: 0, chain: 1, relayer: 2 });
 export const DOMAIN_TYPEHASH = tagHash('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)');
 export const UAAUTH_TYPEHASH = tagHash('UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)');
 export const NAME_HASH = tagHash('SCaaS UARegistry');
@@ -162,30 +173,73 @@ export const uaMessage = (kind, purpose, digest) =>
 export const chainKeyHash = (chainId) => tagHash(`evm:${BigInt(chainId).toString(10)}`);
 const addressWord = (a) => concatBytes(new Uint8Array(12), sized(a, 20, 'registry'));
 
-/** `pop_digest` (CTR-UA-07): `pqzKeyHash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`). */
-export function popDigest({ chainId, chainUid, registry, ua, pqzKeyHash = new Uint8Array(32) }) {
-  return keccak_256(concatBytes(POP_TAG, chainKeyHash(chainId), sized(chainUid, 32, 'chainUid'), addressWord(registry),
-    sized(ua, 32, 'ua'), sized(pqzKeyHash, 32, 'pqzKeyHash')));
+const Z32 = new Uint8Array(32);
+const present = (v) => v !== undefined && v !== null && bytes(v).length > 0;
+
+/** `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)` (UA-8 P1): no chain id, no chain uid, no registry. */
+export const portablePopDigest = ({ ua, pqzKeyHash = Z32, kemRecordHash = Z32 }) =>
+  keccak_256(concatBytes(POP_V2_TAG, sized(ua, 32, 'ua'), sized(pqzKeyHash, 32, 'pqzKeyHash'), sized(kemRecordHash, 32, 'kemRecordHash')));
+
+/** `keccak256(portablePopDigest ‖ pqzPopHash)`: what the signer's `pop` signs (under `uaMessage(kind, POP_V2, ·)`). */
+export const registrationDigest = (portable, pqzPopHash = Z32) =>
+  keccak_256(concatBytes(sized(portable, 32, 'portablePopDigest'), sized(pqzPopHash, 32, 'pqzPopHash')));
+
+/** `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))` (UA-8 P7): version 1 … 2^64 − 1, 1,600-byte key. */
+export function kemRecordDigest({ ua, version, kemPk }) {
+  let v;
+  try { v = BigInt(version); } catch { fail('UAKemVersion', String(version)); }
+  if (v < 1n || v >= 1n << 64n) fail('UAKemVersion', String(version));
+  const pk = bytes(kemPk);
+  if (pk.length !== KEM_PK_LENGTH) fail('UAKemKeyLength', String(pk.length));
+  return keccak_256(concatBytes(KEM_RECORD_TAG, sized(ua, 32, 'ua'), word(v), keccak_256(pk)));
 }
+
+/** What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`; an `msig`'s
+ *  members sign `memberDigest(ua, ·)` of it under `member`. */
+export const kemRecordMessage = (kind, record) => uaMessage(kind, KEM_TAG, kemRecordDigest(record));
+
+/** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, or an `msig` whose `keyData` is PQ-eligible. */
+const holds = (kind, keyData) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData));
 
 /**
- * What a PQ holder signs to register with a PQZ key (UA-6 U14): `{ pqzKeyHash, popDigest, message }` with
- * `message = uaMessage(kind, pop, popDigest(ua, h))`, `h = keyHash(0x0142, pqzKey)`; the same `h` goes to `pqzRegMessage`
- * for the native prover's `pqzPop`. Single-key holders only (`isPqzHolder`); a PQ-eligible `msig` (`msigPqzEligible`) uses
- * `popDigest` / `pqzKeyHash` and signs `memberDigest(ua, message)` with each member, not `message` itself. Without a key (`pqzKey` omitted) `h = 0`, the plain pop.
+ * The portable PoP of a registration (UA-8 P1, P2): `{ pqzKeyHash, pqzPopHash, kemRecordHash, portablePopDigest,
+ * registrationDigest, message }`, `message = uaMessage(kind, POP_V2, registrationDigest)` (every kind signs it; an `msig`
+ * also returns `memberDigest = memberDigest(ua, message)`, what each member signs under `member`, a native member by EIP-191
+ * `personal_sign`). The attributes: `pqzKey` with its proof `pqzPop` (or only its hash `pqzPopHash`), and the initial KEM record
+ * (`kemVersion` ≥ 1, `kemPk`); absent = omitted / empty / 0. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an
+ * `msig` needs `keyData` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
  */
-export function holderPopMessage(kind, { chainId, chainUid, registry, ua, pqzKey }) {
-  if (pqzKey && !isPqzHolder(kind)) fail('UAPqzHolder', `0x${Number(kind).toString(16)} may not hold a PQZ key`);
-  const pqzKeyHash = pqzKey ? keyHashOf(0x0142, pqzKey) : new Uint8Array(32);
-  const d = popDigest({ chainId, chainUid, registry, ua, pqzKeyHash });
-  return { pqzKeyHash, popDigest: d, message: uaMessage(kind, POP_TAG, d) };
+export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemVersion = 0, kemPk } = {}) {
+  const hasPqz = present(pqzKey);
+  const hasKem = Number(kemVersion) !== 0 || present(kemPk);
+  const k = `0x${Number(kind).toString(16).padStart(4, '0')}`;
+  if (hasPqz && !holds(kind, keyData)) fail('UAPqzHolder', `${k} may not hold a PQZ key`);
+  if (hasKem && !holds(kind, keyData)) fail('UAKemHolder', `${k} may not hold a KEM key`);
+  const proofHash = present(pqzPop) ? keccak_256(bytes(pqzPop)) : null;
+  const givenHash = pqzPopHash && sized(pqzPopHash, 32, 'pqzPopHash').some((b) => b !== 0) ? bytes(pqzPopHash) : null;
+  if (proofHash && givenHash && hex(proofHash) !== hex(givenHash)) fail('UAPqzPopHash', 'pqzPop does not hash to pqzPopHash');
+  const popHash = proofHash ?? givenHash ?? Z32;
+  if (hasPqz !== (popHash !== Z32)) fail('UAPqzPopHash', hasPqz ? 'a PQZ key needs its proof hash' : 'a proof hash without a PQZ key');
+  const pqzKeyHash = hasPqz ? keyHashOf(0x0142, pqzKey) : Z32;
+  const kemRecordHash = hasKem ? kemRecordDigest({ ua, version: kemVersion, kemPk }) : Z32;
+  const portable = portablePopDigest({ ua, pqzKeyHash, kemRecordHash });
+  const registration = registrationDigest(portable, popHash);
+  const message = uaMessage(kind, POP_V2_TAG, registration);
+  return { pqzKeyHash, pqzPopHash: popHash, kemRecordHash, portablePopDigest: portable, registrationDigest: registration, message,
+    ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
 }
 
-/** The message `R_REG` proves over: `uaMessage(0x0142, pop, popDigest(ua, keyHash(0x0142, pqzKey)))` (UA-6 U14). */
-export function pqzRegMessage({ chainId, chainUid, registry, ua, pqzKey }) {
-  const h = keyHashOf(0x0142, pqzKey);
-  return uaMessage(0x0142, POP_TAG, popDigest({ chainId, chainUid, registry, ua, pqzKeyHash: h }));
+/** The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))`. */
+export function pqzRegMessage({ ua, pqzKey, kemVersion = 0, kemPk }) {
+  const hasKem = Number(kemVersion) !== 0 || present(kemPk);
+  const kemRecordHash = hasKem ? kemRecordDigest({ ua, version: kemVersion, kemPk }) : Z32;
+  return uaMessage(0x0142, POP_V2_TAG, portablePopDigest({ ua, pqzKeyHash: keyHashOf(0x0142, pqzKey), kemRecordHash }));
 }
+
+/** EIP-191 `personal_sign` of a 32-byte digest: `keccak256("\x19Ethereum Signed Message:\n32" ‖ digest)`, what a native
+ *  (EOA) `msig` member signs for the portable PoP and KEM records (chain-free; UAAuth stays for chain-bound writes). */
+export const personalSignDigest = (digest) =>
+  keccak_256(concatBytes(utf8ToBytes('\x19Ethereum Signed Message:\n32'), sized(digest, 32, 'digest')));
 
 export function uaAuthDomainSeparator({ generation, chainId, registry, chainUid }) {
   if (!Number.isInteger(generation) || generation < 1) throw new Error('generation must be a positive integer');
