@@ -170,9 +170,11 @@ export function schnorrVerify(curve, Ybytes, msg, sig) {
  * The `pop` of `UARegistry.register(0x0141, Y, attrs = none, pop, "")` (UA-8 P1, the portable PoP): Schnorr by `x` under the
  * Zether tag over `uaMessage(0x0141, POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))` (a Zether UA holds no PQZ
  * key and no KEM key). No chain id, chain uid or registry: one PoP registers the UA on every chain, relayed by anyone.
- * The chain-bound form before UA-8 is `zetherPopV1` in legacy/ua8/ua-pop-v1.js.
+ * The chain-bound form before UA-8 is `zetherPopV1` in legacy/ua8/ua-pop-v1.js. Curve first, as every function of this
+ * module (`zetherSign(curve, x, …)`); an old caller still passing the chain context gets an error, not a silent drop.
  */
-export function zetherPop(curve, x) {
+export function zetherPop(curve, x, ...rest) {
+  if (rest.length) throw new Error('zetherPop takes no chain context since UA-8 (the PoP is portable): zetherPop(curve, x)');
   const kind = zetherKind(curve);
   const { Y, UA } = confPublic(curve, x);
   const p = holderPopMessage(kind, { ua: UA });

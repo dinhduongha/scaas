@@ -56,6 +56,8 @@ function msigOk(r, md, blob, keyOf) {
   }
   return weight >= r.threshold;
 }
+const rec = (name) => P.pqzKeyRecords.find((r) => r.name === name) ?? assert.fail(`no PQZ key record ${name}`);
+const regOf = (id) => P.registrations.find((x) => x.ua === id) ?? assert.fail(`no registration of ${id}`);
 const keyOf = (id) => P.registrations.find((x) => x.ua === id)?.keyData ?? assert.fail(`no registration for member ${id}`);
 
 test('portable.json reproduced byte for byte', () => {
@@ -67,9 +69,17 @@ test('portable PoP has no chain context', () => {
     PURPOSE_POP_V2: { tag: 'scaas.ua.purpose.pop.v2', hash: hex(h('scaas.ua.purpose.pop.v2')) },
     PURPOSE_KEM: { tag: 'scaas.ua.purpose.kem.v1', hash: hex(h('scaas.ua.purpose.kem.v1')) },
     KEM_RECORD_TAG: { tag: 'scaas.ua.kem-record.v1', hash: hex(h('scaas.ua.kem-record.v1')) },
+    PURPOSE_PQZ_KEY: { tag: 'scaas.ua.purpose.pqz-key.v1', hash: hex(h('scaas.ua.purpose.pqz-key.v1')) },
+    PQZ_KEY_RECORD_TAG: { tag: 'scaas.ua.pqz-key-record.v1', hash: hex(h('scaas.ua.pqz-key-record.v1')) },
+    PQZ_KEY_GROUP: { tag: 'scaas.ua.group.pqz-mlwe.v1', hash: hex(h('scaas.ua.group.pqz-mlwe.v1')) },
   });
   assert.deepEqual(P.checked, { none: 0, chain: 1, relayer: 2 });
-  assert.deepEqual([hex(ua.POP_V2_TAG), hex(ua.KEM_TAG), hex(ua.KEM_RECORD_TAG)], Object.values(P.tags).map((t) => t.hash));
+  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.KEM_RECORD_TAG, ua.PQZ_KEY_TAG, ua.PQZ_KEY_RECORD_TAG, ua.GROUP('pqz-mlwe')].map(hex),
+    Object.values(P.tags).map((t) => t.hash));
+  // pqzKeyHash = keyHash(0x0142, pqzKey) = keccak256(PQZ_KEY_GROUP ‖ pqzKey), not a plain keccak of the key
+  const k = row('mldsa65/n2048-kmax1024');
+  assert.equal(k.pqzKeyHash, hex(keccak_256(concatBytes(h('scaas.ua.group.pqz-mlwe.v1'), B(k.attrs.pqzKey)))));
+  assert.match(P.note, /pqzKeyHash = keccak256\(PQZ_KEY_GROUP \| pqzKey\)/);
   assert.deepEqual(ua.CHECKED, P.checked);
   assert.equal(ua.KEM_PK_LENGTH, P.kemPkLength);
   // one row by hand: keccak256 of the four words
@@ -78,11 +88,6 @@ test('portable PoP has no chain context', () => {
   assert.equal(hex(hand), r.portablePopDigest);
   assert.notEqual(r.pqzKeyHash, Z);
   assert.notEqual(r.kemRecordHash, Z);
-  // the function takes no chain field: any extra one is ignored, the digest is the same
-  const words = { ua: r.ua, pqzKeyHash: r.pqzKeyHash, kemRecordHash: r.kemRecordHash };
-  for (const ctx of [{ chainId: 1 }, { chainId: 7622, chainUid: `0x${'24'.repeat(32)}`, registry: `0x${'aa'.repeat(20)}` }]) {
-    assert.equal(hex(ua.portablePopDigest({ ...words, ...ctx })), r.portablePopDigest);
-  }
   for (const x of P.registrations) {
     assert.equal(hex(ua.portablePopDigest({ ua: x.ua, pqzKeyHash: x.pqzKeyHash, kemRecordHash: x.kemRecordHash })), x.portablePopDigest, x.name);
     assert.equal(x.pqzKeyHash, x.attrs.pqzKey === '0x' ? Z : hex(ua.keyHashOf(0x0142, B(x.attrs.pqzKey))), x.name);
@@ -161,32 +166,134 @@ test('holder refusals', () => {
   assert.throws(() => ua.kemRecordDigest({ ua: kem.ua, version: 2n ** 64n, kemPk: kem.kemPk }), code('UAKemVersion'));
   assert.throws(() => ua.purposeTag('metatx', 2), code('UAPurposeUnknown'));
   assert.equal(hex(ua.holderPopMessage(0x0131, withKem(row('mldsa65/n2048-kmax1024'))).kemRecordHash), kem.digest);
-  // every negative: register's attribute errors as holderPopMessage refusals, UAPoP as a moved digest the row's pop
-  // does not verify on, storePqzPop as other bytes than the stored hash
-  assert.deepEqual([...new Set(P.negatives.map((n) => n.error))].sort(),
-    ['UAKemHolder', 'UAKemKeyLength', 'UAKemVersion', 'UAPoP', 'UAPqzHolder', 'UAPqzPopHash']);
+  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: undefined }), code('UAKemKeyLength'), 'kemPk omitted = empty');
+  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzKey: new Uint8Array(32) }), code('UAKeyData'), 'no set has this key length');
+  assert.deepEqual(ua.PQZ_KEY_LENGTHS, SETS.map((x) => P.sets[x].pqzKeyLength));
+  // the PQZ key record (setPqzKey): the same holder rules, a key of a set's length, its proof hash
+  const fr = rec('fndsa512/n2048-kmax1024');
+  const recArgs = (r) => ({ ua: r.ua, pqzKey: r.pqzKey, pqzPopHash: r.pqzPopHash });
+  assert.throws(() => ua.pqzKeyRecordMessage(0x0133, { ...recArgs(fr), ua: row('slhdsa128s').ua }), code('UAPqzHolder'));
+  assert.throws(() => ua.pqzKeyRecordMessage(0x0108, { ...recArgs(fr), ua: row('secp256k1').ua }), code('UAPqzHolder'));
+  assert.throws(() => ua.pqzKeyRecordMessage(0x0120, { ...recArgs(fr), ua: row('msig-classical').ua, keyData: row('msig-classical').keyData }),
+    code('UAPqzHolder'));
+  assert.throws(() => ua.pqzKeyRecordMessage(0x0132, { ...recArgs(fr), pqzPopHash: undefined }), code('UAPqzPopHash'));
+  assert.throws(() => ua.pqzKeyRecordMessage(0x0132, { ...recArgs(fr), pqzKey: undefined }), code('UAKeyData'));
+  assert.throws(() => ua.pqzKeyRecordMessage(0x0132, { ...recArgs(fr), pqzKey: fr.pqzKey.slice(0, -2) }), code('UAKeyData'));
+  // every negative, by entry point (the note's table): register's attribute errors as holderPopMessage refusals, UAPoP as
+  // a pop that does not verify on the row's (moved) digest, storePqzPop / setPqzKey / setKemKey / requireAuthorized below
+  assert.deepEqual([...new Set(P.negatives.map((n) => n.error))].sort(), ['UAKemHolder', 'UAKemKeyLength', 'UAKemVersion', 'UAKeyData',
+    'UAPoP', 'UAPqzHolder', 'UAPqzKeySet', 'UAPqzPopHash', 'UAUnauthorized']);
+  assert.deepEqual([...new Set(P.negatives.map((n) => n.entry))].sort(), ['register', 'requireAuthorized', 'setKemKey', 'setPqzKey', 'storePqzPop']);
   for (const n of P.negatives) {
-    const r = row(n.mutation.row);
+    const set = n.mutation.set;
     if (n.entry === 'storePqzPop') {
+      const r = row(n.mutation.row);
       assert.equal(n.error, 'UAPqzPopHash', n.name);
-      assert.notEqual(hex(keccak_256(B(n.mutation.set.pqzPop))), r.attrs.pqzPopHash, n.name);
-      assert.equal(B(n.mutation.set.pqzPop).length, B(r.pqzPop).length, `${n.name}: same length, other bytes`);
-      continue;
-    }
-    assert.equal(n.entry, 'register', n.name);
-    const a = { ...args(r) };
-    for (const [path, v] of Object.entries(n.mutation.set)) {
-      assert.ok(path.startsWith('attrs.') || path === 'pqzPop', `${n.name}: ${path}`);
-      if (path.startsWith('attrs.')) a[path.slice(6)] = v;
-    }
-    if (n.error === 'UAPoP') {
+      assert.deepEqual(n.mutation.registerWith, { pqzPop: '0x' }, `${n.name}: registered without the proof bytes first`);
+      assert.notEqual(hex(keccak_256(B(set.pqzPop))), r.attrs.pqzPopHash, n.name);
+      assert.equal(B(set.pqzPop).length, B(r.pqzPop).length, `${n.name}: same length, other bytes`);
+    } else if (n.entry === 'register') {
+      const r = row(n.mutation.row);
+      const a = { ...args(r) };
+      for (const [path, v] of Object.entries(set)) {
+        assert.ok(path.startsWith('attrs.') || path === 'pqzPop' || path === 'pop', `${n.name}: ${path}`);
+        if (path.startsWith('attrs.')) a[path.slice(6)] = v;
+        if (path === 'pqzPop') a.pqzPop = v;
+      }
+      if (n.error !== 'UAPoP') {
+        assert.throws(() => ua.holderPopMessage(r.kind, a), code(n.error), n.name);
+        continue;
+      }
       const m = ua.holderPopMessage(r.kind, a);
-      assert.notEqual(hex(m.registrationDigest), r.registrationDigest, n.name);
-      assert.equal(sigOk(r.kind, r.keyData, hex(m.message), r.pop), false, n.name);
+      const pop = set.pop ?? r.pop;
+      if (!('pop' in set)) assert.notEqual(hex(m.registrationDigest), r.registrationDigest, n.name);
+      assert.equal(r.kind === 0x0120 ? msigOk(r, hex(m.memberDigest), pop, keyOf) : sigOk(r.kind, r.keyData, hex(m.message), pop), false, n.name);
+    } else if (n.entry === 'setKemKey') {
+      const k = P.kemRecords.find((x) => x.id === n.mutation.row);
+      const target = set.ua ?? k.ua;
+      const t = regOf(target);
+      const m = ua.kemRecordMessage(t.kind, { ua: target, version: set.version ?? k.version, kemPk: set.kemPk ?? k.kemPk });
+      assert.equal(n.error, 'UAUnauthorized', n.name);
+      assert.equal(sigOk(t.kind, t.keyData, hex(m), set.sig ?? k.sig), false, n.name);
+    } else if (n.entry === 'setPqzKey') {
+      const k = rec(n.mutation.row);
+      const target = set.ua ?? k.ua;
+      const t = regOf(target);
+      const a = { ua: target, keyData: t.keyData, pqzKey: set.pqzKey ?? k.pqzKey, pqzPopHash: set.pqzPopHash ?? k.pqzPopHash };
+      if (n.error === 'UAPqzHolder') {
+        assert.throws(() => ua.pqzKeyRecordMessage(t.kind, a), code('UAPqzHolder'), n.name);
+        continue;
+      }
+      const m = ua.pqzKeyRecordMessage(t.kind, a);
+      const ok = t.kind === 0x0120 ? msigOk(t, hex(m.memberDigest), set.sig ?? k.sig, keyOf) : sigOk(t.kind, t.keyData, hex(m.message), set.sig ?? k.sig);
+      if (n.error === 'UAPqzKeySet') {
+        // a valid record: the only fault is that the registration already carries a PQZ key (set once per chain)
+        assert.ok(ok, n.name);
+        assert.notEqual(t.attrs.pqzKey, '0x', n.name);
+      } else {
+        assert.equal(n.error, 'UAUnauthorized', n.name);
+        assert.equal(ok, false, n.name);
+      }
     } else {
-      assert.throws(() => ua.holderPopMessage(r.kind, a), code(n.error), n.name);
+      // requireAuthorized: a personal_sign member signature under a non-portable purpose (C7: UAAuth there)
+      const r = row(n.mutation.row);
+      assert.deepEqual([n.entry, n.error], ['requireAuthorized', 'UAUnauthorized'], n.name);
+      assert.equal(ua.isPortablePurpose(set.purposeTag), false, n.name);
+      const auth = B(set.auth);
+      assert.equal(hex(bytesAt(auth, 0, 0)), r.keyData, n.name);
+      const md = ua.memberDigest(B(r.ua), ua.uaMessage(0x0120, B(set.purposeTag), B(set.digest)));
+      assert.ok(msigOk(r, hex(md), hex(bytesAt(auth, 0, 32)), keyOf), `${n.name}: valid only if personal_sign were allowed here`);
     }
   }
+});
+
+test('pqz key record: signed, portable, write-once, only for a registration without a PQZ key (setPqzKey)', () => {
+  assert.deepEqual([...new Set(P.pqzKeyRecords.map((r) => r.name.split('/')[0]))], ['fndsa512', 'msig-pq-native']);
+  for (const base of ['fndsa512', 'msig-pq-native']) {
+    assert.deepEqual(P.pqzKeyRecords.filter((r) => r.name.startsWith(`${base}/`)).map((r) => r.set), SETS, base);
+  }
+  for (const r of P.pqzKeyRecords) {
+    const reg = regOf(r.ua);
+    assert.equal(reg.attrs.pqzKey, '0x', `${r.name}: registered without a PQZ key`);
+    assert.equal(B(r.pqzKey).length, P.sets[r.set].pqzKeyLength, r.name);
+    assert.equal(r.pqzKeyHash, hex(ua.keyHashOf(0x0142, B(r.pqzKey))), r.name);
+    assert.equal(r.pqzPopHash, hex(keccak_256(B(row(`mldsa65/${r.set}`).pqzPop))), `${r.name}: the set's proof filler`);
+    const kd = keccak_256(concatBytes(h('scaas.ua.pqz-key-record.v1'), B(r.ua), B(r.pqzKeyHash)));
+    assert.equal(hex(kd), r.pqzKeyDigest, r.name);
+    assert.equal(hex(keccak_256(concatBytes(kd, B(r.pqzPopHash)))), r.recordDigest, r.name);
+    assert.equal(hex(ua.uaMessage(r.kind, h('scaas.ua.purpose.pqz-key.v1'), B(r.recordDigest))), r.message, r.name);
+    assert.equal(hex(ua.uaMessage(0x0142, h('scaas.ua.purpose.pqz-key.v1'), kd)), r.pqzRegMessage, `${r.name}: R_REG, no proof hash`);
+    const m = ua.pqzKeyRecordMessage(r.kind, { ua: r.ua, keyData: reg.keyData, pqzKey: r.pqzKey, pqzPopHash: r.pqzPopHash });
+    assert.deepEqual([m.pqzKeyHash, m.pqzPopHash, m.pqzKeyDigest, m.recordDigest, m.message, m.pqzRegMessage].map(hex),
+      [r.pqzKeyHash, r.pqzPopHash, r.pqzKeyDigest, r.recordDigest, r.message, r.pqzRegMessage], r.name);
+    if (r.kind === 0x0120) {
+      assert.equal(hex(m.memberDigest), r.memberDigest);
+      assert.ok(msigOk(reg, r.memberDigest, r.sig, keyOf), r.name);
+    } else {
+      assert.ok(sigOk(r.kind, reg.keyData, r.message, r.sig), r.name);
+    }
+  }
+  // one UA per proven PQZ key: every UA of the vectors has its own key at a set
+  for (const set of SETS) {
+    const keys = [...P.registrations.filter((r) => r.set === set).map((r) => r.attrs.pqzKey),
+      ...P.pqzKeyRecords.filter((r) => r.set === set).map((r) => r.pqzKey)];
+    assert.equal(new Set(keys).size, keys.length, set);
+  }
+  assert.match(P.note, /one PQZ key per UA/);
+});
+
+test('C7 scope: personal_sign only for the portable records of code-less native msig members', () => {
+  for (const t of [ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG]) assert.ok(ua.isPortablePurpose(t));
+  for (const p of ['pop', 'metatx', 'member', 'keyop', 'trade']) assert.equal(ua.isPortablePurpose(ua.purposeTag(p)), false, p);
+  for (const phrase of [/personal_sign only for PURPOSE_POP_V2, PURPOSE_KEM and PURPOSE_PQZ_KEY/, /UAAuth .*CTR-MTX-14/,
+    /ERC-1271/, /65-byte r \| s \| v, low-s, v in \{27, 28\}/]) assert.match(P.note, phrase);
+  // the two negatives that pin it: a UAAuth-framed native signature inside a portable pop, personal_sign under metatx
+  const names = P.negatives.map((n) => n.name);
+  assert.ok(names.includes('native-uaauth-in-portable-pop') && names.includes('native-personal-sign-under-metatx'));
+  const n = P.negatives.find((x) => x.name === 'native-uaauth-in-portable-pop');
+  const r = row(n.mutation.row);
+  const s = memberSigs(n.mutation.set.pop).find((x) => ua.isNativeKind(r.members[x.index].kind));
+  assert.equal(nativeOk(`0x${r.members[s.index].id.slice(26)}`, ua.personalSignDigest(B(r.memberDigest)), hex(s.sig)), false);
 });
 
 test('every portable pop verifies', () => {

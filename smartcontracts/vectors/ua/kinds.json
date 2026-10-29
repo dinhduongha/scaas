@@ -502,7 +502,10 @@
       "kind": 322,
       "name": "pqz-mlwe",
       "lengths": [
-        16384
+        16384,
+        18432,
+        20480,
+        22528
       ],
       "group": "pqz-mlwe",
       "tag": "scaas.ua.pqz-mlwe.v1",
@@ -645,6 +648,12 @@
       "version": 1,
       "tag": "scaas.ua.purpose.kem.v1",
       "purposeTag": "0x99f2818f111f001f1f71ec2f8756cff7e9858c0fcb204b353c21f95b2ff3f2b8"
+    },
+    {
+      "purpose": "pqz-key",
+      "version": 1,
+      "tag": "scaas.ua.purpose.pqz-key.v1",
+      "purposeTag": "0x8f354ac3b315d85e2c32c80857a1600c5aebe8bbe14a265d56079725a6602330"
     },
     {
       "purpose": "pop",
@@ -2669,6 +2678,13 @@
       "purposeTag": "0x99f2818f111f001f1f71ec2f8756cff7e9858c0fcb204b353c21f95b2ff3f2b8",
       "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
       "uaMsg": "0x52760f994fda263a483aa31acbc802816c17f574b199ec34975935b030acb187"
+    },
+    {
+      "kind": 256,
+      "purpose": "pqz-key",
+      "purposeTag": "0x8f354ac3b315d85e2c32c80857a1600c5aebe8bbe14a265d56079725a6602330",
+      "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
+      "uaMsg": "0x671110e244039ae04b6be67ff88c7c9366b4b1f4ebc17007e0c887debc1bc8f0"
     }
   ],
   "canonicalIds": [

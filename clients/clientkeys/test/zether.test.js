@@ -75,9 +75,9 @@ test('the Zether PoP is portable (UA-8 P1): no chain field, over registrationDig
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)), `${curve} ${k.path}`);
       // the S3 vector's PoP (r33_keys.json; the prover moves to the portable PoP in UA-8 A3) verifies over its own message
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path} S3`);
-      // chain fields are not inputs any more: the same message whatever is passed
+      // chain fields are not inputs any more: a caller still passing the old context gets an error, not a silent drop
       const ctx = { chainId: 7622, chainUid: '0x' + '25'.repeat(32), registry: '0x' + 'ab'.repeat(20) };
-      assert.equal(zetherPop(curve, fromHex(k.x), ctx).uaMsg, mine.uaMsg);
+      assert.throws(() => zetherPop(curve, fromHex(k.x), ctx), /no chain context/);
       assert.notEqual(zetherPop(curve, fromHex(k.x)).pop, mine.pop, 'hedged nonce');
       // the v1 purpose does not verify the portable PoP
       assert.equal(schnorrVerify(curve, fromHex(k.Y), uaMessage(0x0141, purposeTag('pop'), fromHex(mine.registrationDigest)),
