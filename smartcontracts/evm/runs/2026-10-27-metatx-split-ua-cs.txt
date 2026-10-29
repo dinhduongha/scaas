@@ -1,0 +1,13 @@
+# ua-cs at commit e3e778c7
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
+  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
+Test run for /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.2 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:     6, Skipped:     0, Total:     6, Duration: 1 s - Scaas.Ua.Tests.dll (net10.0)
+rc=0

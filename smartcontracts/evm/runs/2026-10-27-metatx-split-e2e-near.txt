@@ -1,0 +1,26 @@
+# e2e-near at commit e3e778c7
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s
+     Running tests/e2e_near.rs (target/debug/deps/e2e_near-8fff549061f6767b)
+
+running 10 tests
+test deploy_gate_fails_with_a_key_left ... ok
+test deploy_resumes_after_an_interruption has been running for over 60 seconds
+test near_events_include_native_ft_transfer has been running for over 60 seconds
+test near_lanes_do_not_block_each_other has been running for over 60 seconds
+test near_pay_meta_job has been running for over 60 seconds
+test near_pay_relay_finalize has been running for over 60 seconds
+test near_relay_fee_wrapper_job has been running for over 60 seconds
+test near_router_refund has been running for over 60 seconds
+test near_pay_relay_finalize ... ok
+test near_lanes_do_not_block_each_other ... ok
+test near_pay_meta_job ... ok
+test near_router_refund ... ok
+test near_events_include_native_ft_transfer ... ok
+test deploy_resumes_after_an_interruption ... ok
+test near_router_timeout ... ok
+test near_router_release ... ok
+test near_relay_fee_wrapper_job ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 72.64s
+
+rc=0

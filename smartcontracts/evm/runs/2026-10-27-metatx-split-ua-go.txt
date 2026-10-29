@@ -1,0 +1,3 @@
+# ua-go at commit e3e778c7
+ok  	github.com/dinhduongha/scaas/clients/ua-go	(cached)
+rc=0

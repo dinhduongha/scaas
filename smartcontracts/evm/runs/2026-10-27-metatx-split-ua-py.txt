@@ -1,0 +1,14 @@
+# ua-py at commit e3e778c7
+test_invalid_rows (tests.test_vectors.Vectors.test_invalid_rows) ... ok
+test_messages (tests.test_vectors.Vectors.test_messages) ... ok
+test_natives_native_space_canonical_ids (tests.test_vectors.Vectors.test_natives_native_space_canonical_ids) ... ok
+test_non_bytes_key_data_raises_ua_key_data (tests.test_vectors.Vectors.test_non_bytes_key_data_raises_ua_key_data) ... ok
+test_structures (tests.test_vectors.Vectors.test_structures) ... ok
+test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_groups_purposes_constants) ... ok
+test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 0.147s
+
+OK
+rc=0
