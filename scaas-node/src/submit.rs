@@ -1550,6 +1550,42 @@ mod tests {
         assert!(outcomes(ok(), vec![other], |_| {}).await.0[0].1.contains("unknown job kind"), "one job-kind rule");
     }
 
+    /// UA8-D16 / A11: the UA-8 registry writes (`register` with `UAAttrs`, `setKemKey`, `storePqzPop`, `setPqzKey`) are
+    /// ordinary `call` jobs: `Work` carries the registry as the target and the calldata byte for byte, no meta-tx and no
+    /// fee, and an unknown kind is still refused. The `call` path itself is unchanged by UA-8; this pins the new
+    /// calldata shapes (selectors and the `UAAttrs` tuple) the scripts and the relayer send.
+    #[test]
+    fn ua8_registry_writes_are_call_jobs() {
+        use alloy::sol;
+        sol! {
+            struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }
+            function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) returns (bytes32);
+            function setKemKey(bytes32 ua, uint64 version, bytes kemPk, bytes sig);
+            function storePqzPop(bytes32 ua, bytes pqzPop);
+            function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, bytes sig);
+        }
+        assert_eq!(registerCall::SIGNATURE, "register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)");
+        let reg = Address::repeat_byte(0x5e);
+        let ua = B256::repeat_byte(0x11);
+        let b = |n: usize, v: u8| Bytes::from(vec![v; n]);
+        let writes: Vec<Vec<u8>> = vec![
+            registerCall { kind: 0x0141, keyData: b(96, 1), attrs: UAAttrs { pqzKey: b(1568, 2), pqzPopHash: B256::repeat_byte(3),
+                kemVersion: 1, kemPk: b(1600, 4) }, pop: b(65, 5), pqzPop: Bytes::new() }.abi_encode(),
+            setKemKeyCall { ua, version: 2, kemPk: b(1600, 6), sig: b(65, 7) }.abi_encode(),
+            storePqzPopCall { ua, pqzPop: b(4000, 8) }.abi_encode(),
+            setPqzKeyCall { ua, pqzKey: b(1568, 9), pqzPopHash: B256::repeat_byte(10), sig: b(65, 11) }.abi_encode(),
+        ];
+        for (i, data) in writes.into_iter().enumerate() {
+            let job: Job = serde_json::from_value(call_job(i as i64 + 1, reg, data.clone())).unwrap();
+            let w = work_from_job(&job, None).unwrap();
+            assert_eq!((w.to, w.data.to_vec(), w.meta.is_none(), w.entry), (reg, data, true, false), "write {i}");
+        }
+        let mut other = call_job(9, reg, vec![0; 4]);
+        other["kind"] = json!("registry");
+        let job: Job = serde_json::from_value(other).unwrap();
+        assert!(work_from_job(&job, None).unwrap_err().to_string().contains("unknown job kind"));
+    }
+
     /// `max_pay_meta_bytes` (default 2,048, spec §9) caps the `meta` a pay-meta job relays; the config raises it.
     #[tokio::test]
     async fn pay_meta_cap_refused() {

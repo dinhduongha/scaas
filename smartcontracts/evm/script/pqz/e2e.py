@@ -84,9 +84,37 @@ def kc(*parts):
     return keccak256(b"".join(p if isinstance(p, bytes) else p.encode() for p in parts))
 
 
-P_POP, P_METATX, P_ZAUTH = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("pop", "metatx", "zether-auth"))
+P_METATX, P_ZAUTH = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("metatx", "zether-auth"))
 MSG_TAG = kc("scaas.ua.msg.v1")
 TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), SECP256K1: kc("scaas.ua.secp256k1.v1"), PQZ_MLWE: kc("scaas.ua.pqz-mlwe.v1")}
+
+
+# ------------------------------------------------------------------ UA-8 registration (portable PoP, UAAttrs)
+REGISTER = "register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)"
+REGISTER_T = ["w", "b", ("t", ["b", "w", "w", "b"]), "b", "b"]  # kind, keyData, UAAttrs, pop, pqzPop
+NO_ATTRS = [b"", bytes(32), 0, b""]  # UAAttrs{pqzKey, pqzPopHash, kemVersion, kemPk}: all absent
+# The largest FULL registration measured (register with pqzPop in the call, msig-pq at n2816-kmax65536: 109.1 M,
+# runs/2026-10-30-ua8-gas.txt); below this block gas limit a PQZ holder registers WITHOUT the proof and storePqzPop follows
+FULL_REGISTER_GAS = 110_000_000
+CK = os.path.join(ROOT, "clients/clientkeys")
+_PORTABLE_JS = """
+const U = await import(process.argv[1] + '/src/ua.js'), B = await import(process.argv[1] + '/src/bytes.js');
+const a = JSON.parse(process.argv[2]), h = (k) => (a[k] === undefined ? undefined : B.fromHex(a[k]));
+const o = { ua: h('ua'), pqzKey: h('pqzKey'), kemVersion: a.kemVersion ?? 0, kemPk: h('kemPk') };
+console.log(B.hex(a.fn === 'reg' ? U.pqzRegMessage(o) : U.holderPopMessage(a.kind, { ...o, pqzPopHash: h('pqzPopHash') }).message));
+"""
+
+
+def portable(fn, **a):
+    """The portable message from clients/clientkeys (ua.js): fn 'pop' = `holderPopMessage(kind, ...).message` (what the
+    UA's `pop` signs, UA-8 P1), fn 'reg' = `pqzRegMessage` (what R_REG proves over). bytes arguments go as hex."""
+    a = {k: v.hex() if isinstance(v, bytes) else v for k, v in dict(a, fn=fn).items()}
+    out = subprocess.run(["node", "--input-type=module", "-e", _PORTABLE_JS, "--", CK, json.dumps(a)], check=True, capture_output=True, text=True)
+    return bytes.fromhex(out.stdout.strip()[2:])
+
+
+def full_register_fits():
+    return int(rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16) >= FULL_REGISTER_GAS
 
 
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
@@ -569,9 +597,8 @@ def run(kd, kr, ke):
         pk = pq.ml_pk(lvl, seed)
         ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], kind, pk)))[0]
         u = UA(name=name, kind=kind, seed=seed, pk=pk, ua=ua)
-        pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], ua, 0)))[0]
-        pop = pq.ml_sign(lvl, seed, kc(TAG[kind], ua_msg(kind, P_POP, pd)))
-        sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], kind, pk, pop, b"", b""),
+        pop = pq.ml_sign(lvl, seed, kc(TAG[kind], portable("pop", kind=kind, ua=ua)))
+        sd.send(reg, cd(REGISTER, REGISTER_T, kind, pk, NO_ATTRS, pop, b""),
                 f"register {name} (mldsa{lvl}, seed {seed.hex()[:8]}…)")
         return u
 
@@ -580,12 +607,17 @@ def run(kd, kr, ke):
         pk, s, e, _ = K.keygen(seed)
         mlpk = pq.ml_pk(65, mlseed)
         ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], MLDSA65, mlpk)))[0]
-        h = words(call(reg, cd("keyHashOf(uint16,bytes)", ["w", "b"], PQZ_MLWE, pk)))[0]
-        pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], ua, h)))[0]
-        pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], ua_msg(MLDSA65, P_POP, pd)))
-        proof = pq.prove(3, K.build_register(ua_msg(PQZ_MLWE, P_POP, pd), pk), K.i8(s) + K.i16(e))
-        sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], MLDSA65, mlpk, pop, pk, proof),
-                f"register {name} (mldsa65 + pqz-mlwe key, R_REG {len(proof):,} B, one call)")
+        kem = (kc("kem", mlseed) * 50)[:1600]  # the initial KEM record, version 1 (UA8-D3; any 1,600 bytes here)
+        proof = pq.prove(3, K.build_register(portable("reg", ua=ua, pqzKey=pk, kemVersion=1, kemPk=kem), pk), K.i8(s) + K.i16(e))
+        ph = kc(proof)
+        pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], portable("pop", kind=MLDSA65, ua=ua, pqzKey=pk, pqzPopHash=ph,
+                                                                  kemVersion=1, kemPk=kem)))
+        full = full_register_fits()  # a full registration (proof in the call) needs more than a 60 M block holds
+        sd.send(reg, cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 1, kem], pop, proof if full else b""),
+                f"register {name} (mldsa65 + pqz-mlwe key + KEM v1, R_REG {len(proof):,} B, "
+                f"{'one call' if full else 'proof by storePqzPop'})")
+        if not full:
+            sd.send(reg, cd("storePqzPop(bytes32,bytes)", ["w", "b"], ua, proof), f"storePqzPop {name}")
         rec = words(call(reg, cd("recordOf(bytes32)", ["w"], ua)))
         check(int.from_bytes(rec[-1], "big") != 0, f"{name} = {ua.hex()[:16]}… recordOf: PQZ key pointer set")
         check(int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], ua)))[0], "big") == MLDSA65, f"{name} kindOf 0x0131")
@@ -611,9 +643,8 @@ def run(kd, kr, ke):
     secd = x.to_bytes(32, "big") + y.to_bytes(32, "big")
     sec_ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], SECP256K1, secd)))[0]
     check(sec_ua == kc(TAG[SECP256K1], secd), "secp256k1 UA = keccak256(TAG ‖ x ‖ y)")
-    pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], sec_ua, b"\0" * 32)))[0]
-    sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], SECP256K1, secd,
-                    ecdsa(seck, ua_msg(SECP256K1, P_POP, pd)), b"", b""), "register secp256k1 (ECDSA PoP)")
+    sd.send(reg, cd(REGISTER, REGISTER_T, SECP256K1, secd, NO_ATTRS,
+                    ecdsa(seck, portable("pop", kind=SECP256K1, ua=sec_ua)), b""), "register secp256k1 (ECDSA PoP)")
     kind = int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], sec_ua)))[0], "big")
     check(kind == SECP256K1, f"secp256k1 UA {sec_ua.hex()[:16]}… kindOf 0x0108; the same key's EOA {address(seck)} is a "
                              f"separate native id")
