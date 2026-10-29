@@ -382,7 +382,8 @@ to its own lane or bound to the executor, and refuses to start when the DEX's `e
 <a id="NET-NEAR-32"></a>**NET-NEAR-32** — **Never pay a keyless SCaaS account.** The node refuses a job when any payee
 it carries is a configured token, the router, its executor or the DEX: the payment (outside its own open mode), a
 router target op's `to` on `mtx_pay` / `mtx_pay_meta` / `mtx_transfer` / `mtx_execute_transfer` / `mtx_mandate_pay`, and
-a wrapped or routed `mtx_mandate_open`'s `terms.payee`. The token itself refuses only itself: it does not know the
+a wrapped or routed `mtx_mandate_open`'s `terms.payee`; a router job never targets `token.mtx_trade` (through the
+router the leg's `to` = relayer = the executor). The token itself refuses only itself: it does not know the
 router or executor ids (spec row 12), so the rule is node-side. BUILT.
 
 ## 12. Deploy
@@ -461,7 +462,9 @@ Contract-test figures (sandbox): `transfer_to_ua` 2.40 Tgas to an existing UA, 3
   tokens to the executor (a wrapper's open-mode fee routed via the executor included; the node refuses every payee
   that is the executor, [NET-NEAR-32](#NET-NEAR-32)). Relayer-bound token ops through the router need `relayer = None`
   (the executor is the predecessor); a DEX order bound to a lane settles through the router in that lane's own relay
-  (the DEX checks the signer); a second payer for the same call and salt waits
+  (the DEX checks the signer, which means "inside a transaction the lane signed": an operator-listed third-party
+  target, or anything it calls, running inside the lane's transaction could relay a settle of an order bound to that
+  lane; the exposure is limited to operator-listed targets); a second payer for the same call and salt waits
   until the first settles (pending is keyed by `ref`).
 - **Events:** NEP-366 delegate actions and third-party contracts calling a token are not indexed; a busy chain needs
   NEAR Lake or an indexer feed.

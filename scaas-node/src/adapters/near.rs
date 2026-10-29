@@ -963,11 +963,12 @@ fn dex_pair(a: &SettleLeg, b: &SettleLeg) -> std::result::Result<(), &'static st
 const VALUE_ENTRIES: &[&str] = &["mtx_pay", "mtx_pay_meta", "mtx_transfer", "mtx_execute_transfer", "mtx_mandate_open"];
 
 /// The token entries a router job may target: each has a `<method>_check(caller, …same args)` view and takes
-/// `(op, auth, …)` first (token/src/{metatx,account,mandate,trade}.rs).
+/// `(op, auth, …)` first (token/src/{metatx,account,mandate,trade}.rs). Not `mtx_trade` (re-review N1: via the router its
+/// leg would pay the executor; legs go through the DEX's `settle`).
 const TOKEN_CHECKED: &[&str] = &[
     "mtx_pay", "mtx_pay_meta", "mtx_transfer", "mtx_execute_transfer", "mtx_add_key", "mtx_remove_key", "mtx_add_origin",
     "mtx_remove_origin", "mtx_set_guardian", "mtx_set_policy", "mtx_start_recovery", "mtx_finish_recovery",
-    "mtx_cancel_recovery", "mtx_mandate_open", "mtx_mandate_pay", "mtx_revoke", "mtx_trade", "mtx_cancel",
+    "mtx_cancel_recovery", "mtx_mandate_open", "mtx_mandate_pay", "mtx_revoke", "mtx_cancel",
     "mtx_invalidate_nonces",
 ];
 /// The DEX `settle` floor (dex/src/lib.rs `settle_gas`): `GAS_SETTLE_SELF` 9 + `GAS_ON_LEGS` 18 + per leg `GAS_LEG_BASE`
@@ -1054,6 +1055,10 @@ fn never_paid_payee(policy: &RelayFeePolicy, h: &Holder, what: &str) -> Result<(
 /// Final review node I1: a router target op on a configured token never pays a never-paid account: its `to` on a value
 /// entry or a mandate pay, `terms.payee` on a mandate open (the open's own `to` is the mandate id, a UA).
 fn target_payees(policy: &RelayFeePolicy, method: &str, args: &[u8]) -> Result<()> {
+    // re-review N1: through the router the token needs a leg's to = relayer = its predecessor, the executor
+    if method == "mtx_trade" {
+        bail!("never pay the executor: a router target token.mtx_trade would move the sell amount to Holder::Near(executor) (legs go through the DEX's settle)");
+    }
     if method == "mtx_mandate_open" {
         return never_paid_payee(policy, &mandate_terms(args).context("router target args of mtx_mandate_open")?.0, "the mandate's terms.payee");
     }
@@ -4307,6 +4312,15 @@ mod tests {
         }
         let (op, o) = router_op(TOKEN, "mtx_mandate_open", &[mop.borsh(), ma, terms_to(&bob)].concat(), bob.clone());
         assert!(entry(&p, &op, &o).is_ok(), "an honest routed mandate");
+        // re-review N1: through the router a token's mtx_trade needs to = relayer = its predecessor, the executor, so the
+        // sell amount would land at Holder::Near(executor): never a router target, whatever `to` says; the DEX's settle is
+        let trade = |to: &Holder| [MetaOp { op: 1, to: to.clone(), relayer: Some(EXECUTOR.into()), ..op_of("pay") }.borsh(), auth.clone()].concat();
+        for to in [Holder::Near(EXECUTOR.into()), bob.clone()] {
+            let (op, o) = router_op(TOKEN, "mtx_trade", &trade(&to), bob.clone());
+            refused(entry(&p, &op, &o), &format!("router target mtx_trade to {}", to.display()));
+        }
+        let (op, o) = router_op(DEX, "settle", &[1; 8], bob.clone());
+        assert!(entry(&p, &op, &o).is_ok(), "the DEX's settle via the router");
     }
 
     /// Final review I2: the DEX accepts an order bound to the relaying lane through its executor (signer = the lane), so

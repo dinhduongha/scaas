@@ -1,0 +1,24 @@
+# scaas-node re-review N1 RED at commit d0efa66c + the new test lines
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.56s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 1 test
+test adapters::near::tests::never_pay_any_carried_payee ... FAILED
+
+failures:
+
+---- adapters::near::tests::never_pay_any_carried_payee stdout ----
+
+thread 'adapters::near::tests::never_pay_any_carried_payee' (1797083) panicked at src/adapters/near.rs:4269:54:
+router target mtx_trade to relayexec.test.near: Ok(FeeRouter { target: "token.test.near", method: "mtx_trade", args: [76, 55, 240, 53, 226, 185, 199, 78, 133, 164, 142, 24, 224, 115, 186, 187, 207, 58, 154, 68, 204, 153, 130, 98, 161, 29, 177, 239, 64, 9, 107, 253, 15, 0, 0, 0, 116, 111, 107, 101, 110, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 1, 0, 15, 0, 0, 0, 97, 108, 105, 99, 101, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 0, 19, 0, 0, 0, 114, 101, 108, 97, 121, 101, 120, 101, 99, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 1, 19, 0, 0, 0, 114, 101, 108, 97, 121, 101, 120, 101, 99, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 161, 0, 0, 0, 0, 0, 0, 0, 0, 0, 87, 134, 244, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 213, 191, 74, 63, 204, 231, 23, 176, 56, 139, 204, 39, 73, 235, 193, 72, 173, 153, 105, 178, 63, 69, 238, 27, 96, 95, 213, 135, 120, 87, 106, 196, 49, 209, 251, 118, 59, 14, 126, 55, 165, 107, 111, 165, 254, 163, 42, 70, 124, 241, 53, 30, 162, 58, 240, 224, 136, 213, 23, 165, 152, 171, 43, 39, 126, 5, 249, 125, 203, 203, 135, 250, 82, 137, 208, 194, 58, 14, 229, 234, 156, 43, 160, 90, 144, 171, 123, 196, 109, 228, 8, 171, 222, 38, 28, 8], target_gas: 30000000000000, target_deposit: 0 })
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    adapters::near::tests::never_pay_any_carried_payee
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 428 filtered out; finished in 0.20s
+
+error: test failed, to rerun pass `--lib`
+rc=101

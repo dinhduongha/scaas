@@ -5900,7 +5900,10 @@ Status: BUILT (`3ab2c3e3`).
 observer could copy a taker's leg, pair it with its own counter-order and take the price improvement (the CTR-DEX-09
 threat), and T8-I1 griefing came back.
 **Cost if wrong.** A lane-bound order cannot be relayed by any other lane (intended); a relay through a contract that
-is not the DEX's executor fails; the signer check trusts the executor to call the DEX only from a router relay.
+is not the DEX's executor fails; the signer check trusts the executor to call the DEX only from a router relay. The
+signer check means "inside a transaction the lane signed", not "the lane chose this settle": an operator-listed
+third-party target (or anything it calls) running inside the lane's transaction could call `router.relay(dex.settle(an
+order bound to that lane, …))`; the exposure is limited to operator-listed targets (re-review N2).
 **Source.** near-algorand final review part 1 I2; `smartcontracts/near/runs/2026-10-29-near-final-fix.txt`.
 
 ### NET-NEAR-32 — NEAR node: never pay a keyless SCaaS account, on every payee a job carries
@@ -5910,7 +5913,8 @@ is not the DEX's executor fails; the signer check trusts the executor to call th
 the node refuses a job when any payee it carries is a configured token, the router, its executor or the DEX — the job's
 payment outside that payment's own open mode, a router target op's `to` on `mtx_pay` / `mtx_pay_meta` /
 `mtx_transfer` / `mtx_execute_transfer` / `mtx_mandate_pay`, and the `terms.payee` of a wrapped or routed
-`mtx_mandate_open`. The token contract is not changed: it knows neither the router nor the executor (spec row 12, the
+`mtx_mandate_open`; a router job never targets `token.mtx_trade` (through the router its leg pays the executor by
+construction, re-review N1). The token contract is not changed: it knows neither the router nor the executor (spec row 12, the
 token refuses only itself), so the rule cannot be enforced there. Status: BUILT (`3ab2c3e3`).
 **Why.** Funds paid to a keyless SCaaS account are stranded for good, and the executor's balance is public (any relay
 forwards `ft_transfer` as its predecessor).
