@@ -40,6 +40,22 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
+- **Work order from 2026-10-29 (owner, accepted 2026-10-29; supersedes the older "next" lines below where they
+  conflict):**
+  1. `near-algorand`: T17 review loop → T18 clients → T19 NEAR devnet / e2e → T20 Algorand devnet / e2e → T21 docs →
+     T22 gate + CI → whole-branch review → owner rulings → merge / push on the owner's go.
+  2. DEX (item "DEX: drop the 50 % minimum-fill floor + four matching modes" under "Recorded, not scheduled"): minFill
+     code → EVM contract spec + code (`mtxHybrid` / `Via`, `mtxExchangeBatch`, mode 3 / 4 tests, reference executor,
+     Uniswap fork test) → TradeEngine EVM ∥ non-EVM 1 × N.
+  3. Follow-ups of the two merged branches: EVM node UA job path (`ua_metatx`), metatx-split e2e owed on a real node
+     (with the T19 / T20 devnets where possible), TON passkey relays (P-256 in the node), relay-fee minimum before mainnet.
+  4. fs3 Task 12 (final gate + merge) → Task 6 (reproduction package).
+  5. UA-8 portable UA registrations (plan from the short design).
+  6. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) → Task 14 (wasm32 limb path).
+  7. Token-family rename → P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel with P6
+     (spec only, no core code): the governance matrix for factory-made contracts (§0).
+  8. Then UA-7 PQ chat sessions; Task 9 calibration whenever the owner gives the go (other heavy sessions stopped).
+
 - **Now (2026-10-26, owner order):** R0 fix part a **DONE**, merged into `pqz-16k` and pushed (`40366c76`). Part b
   (contracts, node, spec / docs) + its fix round **DONE** on `pqz-r01` `0d22e165` (review Approved with fixes; I-1 owner
   option (a): the start-up id check reads the schedule at the block-tree head + 1, not the wall clock; Nethermind 49 / 49
