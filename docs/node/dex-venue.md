@@ -112,12 +112,15 @@ does with it.
   order that rests may later be a maker. One settlement is atomic; one `mtxSettle` call carries one or more
   settlements, each tried on its own. The venue binds a settlement to its own lane: `relayer` of every leg is 0 or that
   lane (home-bound markets require the lane, [intake](#intake)).
-- **Effective minimum fill.** In a settlement every order — taker and each maker — fills at least `m = max(minFill,
-  ceil(amount / 2))` of its sold amount and receives at least half of its `receiveAmount` pro rata, unless the fill
-  closes the order's remainder. The matcher therefore adds a maker only with a fill ≥ that maker's `m` (or its whole
-  remainder), and emits a settlement only when the taker's total reaches the taker's `m`; otherwise an IOC taker is
-  cancelled and a GTC taker rests. A resting order fills in at most two settlements. The dust rule
-  ([NODE-DEX-05](#NODE-DEX-05)) still applies to remainders.
+- **Minimum fill** ([CTR-DEX-14](../contracts/dex.md#CTR-DEX-14), owner 2026-10-29: no protocol floor). Every order
+  in a settlement fills at least its signed `minFill` unless the fill closes its remainder (once every earlier fill is
+  mined): a maker joins only with a fill ≥ its `minFill` (or its whole remainder), else deeper makers are tried; a
+  settlement needs the taker's `minFill`, else an IOC taker is cancelled and a GTC taker rests. An order fills in any
+  number of settlements; the dust rule ([NODE-DEX-05](#NODE-DEX-05)) applies to remainders. **Junk fills are venue
+  policy:** no leg whose base-token amount is below the market's `min_base_amount` ([intake](#intake)) unless it closes
+  the order, no settlement worth less than its gas; `depth` / `ticker` keep an order whose minimum fill in base units
+  exceeds `min_base_amount` in a separate `min_fill` bucket, never in best bid / ask. Status **SPECIFIED**;
+  **Transitional (BUILT, P5):** `min_fill` still returns `max(minFill, ceil(amount / 2))`, as the built contracts.
 - **IOC, FOK, escrow.** `IOC` (flag 1): the token closes the order at its single pull, so nothing of it rests. FOK:
   `minFill = amount`. `ESCROW` (flag 2, implies IOC): the whole `amount` is pulled into the DEX and the unmatched part
   refunded in the same call; the DEX, not the token, enforces price, minimum and fee on it.

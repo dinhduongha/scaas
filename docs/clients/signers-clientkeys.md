@@ -243,8 +243,10 @@ the meta-transaction) and an order lane (`batch` of a trade order) are labelled 
 <a id="CLI-SGN-35"></a>**CLI-SGN-35** — **A trade order names a DEX on the chain profile's list, or the client refuses
 to build and sign it.** Status: clientkeys `checkTradeOrder` **BUILT** (P5: the `order` and `sellToken` the client built from the user's input must hash to the server's order, which adds only the nonce and an in-window `validUntil`; no ESCROW on an outside token; a cancel is the user's own `orderHash` or lane, `checkCancel`). Before signing a `TradeOrder` (in the app, clientkeys or a portal)
 the review shows `dex`, `relayer`, `destination`, the price limit both ways, the signed `fee` rate and the effective
-minimum fill per settlement (`max(minFill, ceil(amount / 2))`; a `minFill` below half is shown as half; `minFill =
-amount` as fill-or-kill). By default the client **refuses** to build or sign when `dex` is not on its pinned chain
+minimum fill per settlement (`minFill`, [CTR-DEX-14](../contracts/dex.md#CTR-DEX-14): no protocol floor, owner
+2026-10-29; the client defaults it to the market's minimum size; `minFill = amount` as fill-or-kill; SPECIFIED —
+Transitional (BUILT, P5): until the contracts drop the floor, a `minFill` below half is shown as half,
+`max(minFill, ceil(amount / 2))`). By default the client **refuses** to build or sign when `dex` is not on its pinned chain
 profile's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24); a listed DEX is `isDex` and of a non-deprecated version, [CTR-DEX-24](../contracts/dex.md#CTR-DEX-24)) — for a signature wrap, when `dex` is not a
 registered wrapper of that underlying — with a warning that a contract named there can take the signed amount;
 overriding needs an explicit expert setting and is never offered in a portal. It warns when `destination ≠ from`

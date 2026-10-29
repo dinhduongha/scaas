@@ -82,7 +82,7 @@ struct TradeOrder {
     address receiveToken;  // what the signer receives
     uint256 amount;        // at most this much of THIS token in total
     uint256 receiveAmount; // signed price limit: `amount` for at least `receiveAmount` (gross, before the DEX fee)
-    uint256 minFill;       // signer's minimum fill per settlement; effective = max(minFill, ceil(amount/2)); = amount ⇒ fill-or-kill
+    uint256 minFill;       // signer's minimum fill per settlement (CTR-DEX-14, no protocol floor); = amount ⇒ fill-or-kill
     uint256 fee;           // DEX fee rate in ppm the signer agrees to pay on what it receives; ≤ 10 000 (1 %)
     address relayer;       // the matching party allowed to submit the settlement (0 = anyone)
     address dex;           // the only contract that may pull this order's funds, and the only place they go; a contract
@@ -104,33 +104,41 @@ token, chain and contract need no fields of their own. It is a different struct 
 hash of it ([CTR-MTX-11](metatx.md#CTR-MTX-11)). The signer is an EOA (ECDSA low-s) or a contract (ERC-1271, e.g. a
 passkey `SmartKeyAccount`), told apart as in the token pipeline (an EIP-7702 designator is an EOA). `nonce` is not
 consumed per fill: it is the cancel handle of its lane. `relayer ≠ 0` means only that address may submit the
-settlement — the meaning of `MetaTransaction.relayer`. Clients show `dex`, `relayer`, `destination` and the effective
-minimum fill before signing, warn when `destination ≠ from`, default `relayer` to the venue node, and label the order
+settlement — the meaning of `MetaTransaction.relayer`. Clients show `dex`, `relayer`, `destination` and the
+minimum fill (`minFill`) before signing, warn when `destination ≠ from`, default `relayer` to the venue node, and label the order
 lane and the meta-tx lane (both called `batch`; they live in different maps). A UA signs the same order as
 `UATradeOrder` (`bytes32 from`, `bytes32 destination`, otherwise the same fields) in the sell token's domain under the
 UA purpose `trade` ([CTR-DEX-25](#CTR-DEX-25)).
 
-<a id="CTR-DEX-14"></a>**CTR-DEX-14** — **Minimum fill: the signer's `minFill` over a 50 % floor, for every order in a
-settlement** (owner). `MIN_FILL_PPM = 500_000`; the effective minimum is
+<a id="CTR-DEX-14"></a>**CTR-DEX-14** — **Minimum fill: the signer's `minFill`, for every order in a settlement; no
+protocol floor** (owner 2026-10-29; it replaces the 50 % floor `MIN_FILL_PPM` of 2026-10-08). In one settlement call
+**every** order — the taker and each maker alike — must satisfy
 
 ```text
-m = max(minFill, ceil(amount · MIN_FILL_PPM / 10⁶))          // = max(minFill, ceil(amount / 2))
+sellFill ≥ minFill   or   sellFill == amount − pulled[h]   (the remainder closes)
 ```
 
-and in one settlement call **every** order — the taker and each maker alike — must satisfy
+`minFill > amount` is refused (`BadMinFill`); `minFill = 0` is valid and accepts any fill above zero (`ZeroFill` still
+refuses 0). `minFill = amount` is fill-or-kill (with `pulled == 0` the remainder clause is the whole amount). There is
+no received-side line: the price limit with `sellFill > 0` already gives `receiveFill > 0`, and `receiveFill ≥
+minFill · receiveAmount / amount` follows from the sold side. The remainder clause stays: without it a remainder below
+`minFill` could never close. Consequences: an order fills in any number of settlements, each at least `minFill` except
+the one that closes it; the signer alone decides how small a fill it accepts.
 
-```text
-sellFill ≥ m                                       or  sellFill == amount − pulled[h]   (the remainder closes)
-receiveFill · 10⁶ ≥ receiveAmount · MIN_FILL_PPM   or  sellFill == amount − pulled[h]   (received side)
-```
+Why no floor ([decisions.md](../decisions.md#ctr-dex-14--minimum-fill-the-signers-minfill-for-every-order-in-a-settlement-no-protocol-floor)): the floor was a fixed
+number the signer could not lower. It let a large order at the best price show as liquidity that only takers of half
+its size could take (a cheap fake wall), pushed small takers to worse prices, made users split orders (more signatures
+and verifies, so more on-chain work), locked a Path A order to two fills, and ruled out partial coincidences of wants.
+Junk fills are the venue's policy, not the contract's ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)): a dust fill
+costs its submitter the gas, pays the maker its price, and its fee rounds up ([CTR-DEX-11](#CTR-DEX-11)). Clients
+default `minFill` to the market's minimum size ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35)). The
+non-EVM programs never had the floor ([section 11](#11-non-evm-dex-programs)).
 
-`minFill > amount` is refused (`BadMinFill`); an order signed with `minFill` below 50 % is **treated as 50 %**, not
-refused (clients show the effective value before signing, so orders built by outside tools still work).
-`minFill = amount` is fill-or-kill (with `pulled == 0` the remainder clause cannot apply). The received-side line
-follows from the sold-side line and the price limit and is asserted anyway. Purpose: no junk fills — a maker matched
-for 1 % would have to re-create its order. Consequences: a Path A order fills in at most two settlements, and an order
-can only be matched against counterparts that take at least half of it; the last remainder of a Path A order may close
-below the minimum.
+Status **SPECIFIED**. **Transitional (BUILT, P2a / P2b-1 / P5):** the built code still applies the 50 % floor —
+`TradeLib` (`MIN_FILL_PPM = 500_000`: sold side `max(minFill, ceil(amount / 2))`, received side `receiveFill · 10⁶ ≥
+receiveAmount · MIN_FILL_PPM`, both unless the fill closes the order), `SCaaSDex._calc` on Path B (the same two lines on
+the matched part), the node's `min_fill` (`scaas-node/src/dex.rs`) and `clientkeys` (shows a `minFill` below half as
+half). Until the rebuild an order signed with `minFill` below 50 % is treated as 50 %.
 
 ## 3. The token's side: `mtxTrade`
 
@@ -164,12 +172,12 @@ function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32)
    and `h` binds every field, so a Path A order's second fill needs no second check (for a PQ signer up to 5.95 M gas).
 5. With `p = pulled[h]`: `p < amount` (`OrderClosed` — covers filled, cancelled and already-pulled IOC orders).
 6. **Path A** (`ESCROW` clear) — the token enforces every bound the signer set, against the figures the DEX passes:
-   `f.sellFill > 0` (`ZeroFill`); `p + f.sellFill ≤ amount` (`Overfill`); the effective minimum and the received-side
-   floor of [CTR-DEX-14](#CTR-DEX-14) (`BelowMinFill`); price `f.sellFill · receiveAmount ≤ f.receiveFill · amount`,
+   `f.sellFill > 0` (`ZeroFill`); `p + f.sellFill ≤ amount` (`Overfill`); the minimum fill of
+   [CTR-DEX-14](#CTR-DEX-14) (`BelowMinFill`); price `f.sellFill · receiveAmount ≤ f.receiveFill · amount`,
    checked multiplication (`PriceLimit`); `f.dexFee ≤ ceil(f.receiveFill · fee / 10⁶)` (`FeeAboveSigned`). It moves
    exactly `f.sellFill` from `from` **to `o.dex`**.
 7. **Path B** (`ESCROW` set): `p == 0`; `f.sellFill == amount`; `f.receiveFill == 0` and `f.dexFee == 0`
-   (`EscrowFillShape`); it moves `amount` from `from` **to `o.dex`**. The DEX enforces price, the effective minimum and
+   (`EscrowFillShape`); it moves `amount` from `from` **to `o.dex`**. The DEX enforces price, the minimum fill and
    the fee on the matched part.
 8. Effects before the transfer: `pulled[h] = IOC ? amount : p + f.sellFill`. Emit `TradeFilled(h, from, sellFill,
    receiveFill, dexFee)` (a Path B leg shows `sellFill = amount`, `receiveFill = 0`; the DEX's `LegSettled` is the
@@ -231,8 +239,8 @@ short `validUntil` is the second layer. The Move and Solana DEX programs close I
 instead; the book handles that per family ([NODE-DEX-01](../node/dex-venue.md#NODE-DEX-01)).
 
 <a id="CTR-DEX-05"></a>**CTR-DEX-05** — **FOK is checked on chain** as `minFill = amount` with `pulled == 0`: the token
-(Path A) or the DEX (Path B, outside legs) refuses any smaller fill. Partial fills, each at least the effective minimum,
-are the default.
+(Path A) or the DEX (Path B, outside legs) refuses any smaller fill. Partial fills, each at least the signer's
+`minFill` ([CTR-DEX-14](#CTR-DEX-14)), are the default.
 
 ### 3.1 Cancel
 
@@ -267,7 +275,7 @@ reason)`); if none succeeds the whole call reverts, so the relayer's simulation 
    `receiveToken` and vice versa (`TokenMismatch`); no self-trade: a maker's `from` is not the taker's, compared as ids, makers may share a signer (`SelfTrade(bytes32)`); the market is listed
    (`MarketNotListed`).
 2. **Match first.** Fills at each maker's signed price, rounded in that maker's favour; **every** order meets its
-   effective minimum and the received-side floor ([CTR-DEX-14](#CTR-DEX-14), `BelowMinFill`); no order hash twice in one
+   minimum fill ([CTR-DEX-14](#CTR-DEX-14), `BelowMinFill`); no order hash twice in one
    settlement (`DuplicateOrder`; across settlements of one call the token's own fill accounting applies).
 3. **Pull** every leg into the DEX: SCaaS sell tokens through their `mtxTrade` (Path A with the exact fill and fee
    figures, Path B whole); outside sell tokens per [CTR-DEX-18](#CTR-DEX-18). The DEX decides which is which from its
@@ -309,7 +317,7 @@ clientkeys encode; the cap needs no wire change.
 
 | Leg | Pulled into the DEX | Bounds checked by |
 |---|---|---|
-| SCaaS token, Path A, any role | exactly `sellFill` | the signer's token, against the fill figures the DEX passes (amount, effective minimum, price, `fee`) |
+| SCaaS token, Path A, any role | exactly `sellFill` | the signer's token, against the fill figures the DEX passes (amount, minimum fill, price, `fee`) |
 | SCaaS token, Path B, any role | all of `amount`; the remainder refunded in the same call | the DEX, on the matched part, against the signed order |
 | outside token, any role | exactly the fill, by `DexPuller.pull` under the party's allowance to the puller ([CTR-DEX-22](#CTR-DEX-22)) | the DEX, against the `DexOrder` ([CTR-DEX-18](#CTR-DEX-18)) |
 
@@ -324,7 +332,7 @@ makers with one `destination`, a relayer or treasury that is also a `destination
 was told to move is caught by conservation plus listing only **exact-transfer** tokens: SCaaS tokens are exact by
 construction; fee-on-transfer and rebasing outside tokens are not listed (a hook (ERC-777) token may be: its calls are gas-capped, see above), and if one slips through the
 DEX's own balance moves and conservation reverts the settlement. `SCaaSDex` keeps its book semantics (price-time
-priority, limit + IOC/FOK, partial fills above the effective minimum); the execution price is each maker's signed
+priority, limit + IOC/FOK, partial fills of at least `minFill`); the execution price is each maker's signed
 price, rounded in the maker's favour, and the node only emits matches that pass the same checks as the contract.
 
 <a id="ua-legs"></a>
@@ -628,7 +636,7 @@ Accepted differences that the adapter, the matcher and clients must know:
 | One `fee_ppm`, no maker/taker split | Solana |
 | Minimum received computed **after** the DEX fee (EVM: `receiveAmount` gross) | Cosmos, GRAM |
 | No on-chain self-trade check (the node still skips them) | Cosmos, Soroban |
-| DEX-signed maker/taker orders over allowances or escrow, a separate relayer fee, no 50 % minimum fill | every non-EVM family |
+| DEX-signed maker/taker orders over allowances or escrow, a separate relayer fee | every non-EVM family |
 
 ## 12. Managed markets
 
@@ -666,7 +674,7 @@ of the signed DEX fee, and adds the exchange path ([CTR-DEX-20](#CTR-DEX-20)…[
 
 | Layer | Tests |
 |---|---|
-| forge | Path A and Path B, one taker × many makers; `mtxTrade` on a closed, cancelled or IOC-pulled order and with `sellFill = 0` reverts; Path B `sellFill ≠ amount` reverts; `dex` = EOA refused; caller ≠ `dex` refused; every `mtxTrade` error; effective minimum fill for taker and makers incl. the remainder close and `minFill > amount`; FOK via `minFill = amount`; taker fee charged once on the aggregate; split rounding; conservation (unit + invariant: the DEX holds 0 after every handler sequence; for the new DEX the unit tests are built in `test/v2/Dex.t.sol` (P2b-1: settle with two makers, maker rounding, aggregate fee, Path B fee, signed `minFill` and refund, Path A figures seen by the token, isolated failure, arrangement checks, `createDex` and the DEX catalogue, registry, fee split, salted domain) and `test/v2/DexOutside.t.sol` (P2b-2: outside legs through the puller, `DexOrder` digest, `ESCROW` refused, DEX cancels, the ERC-1271 cap by codehash, hostile 1271 signers in settle and cancel batches, the bounded `MatchFailed` reason, a starved check reverting the call, fee-on-transfer, rebasing and no-return tokens) and `test/v2/DexExchange.t.sol` (P2c: routes through mock routers, v2-style pairs and executors, cycles, Path B and outside legs, surplus and remainder, leftovers, `InsufficientOutput`, the interaction blocklist, `LISTED_POOLS` × `setListedOnly`, hostile targets and executors, allowances reset, a fee-on-transfer sell token; the Uniswap fork test is open), and the invariant suite is open); `DexOrder` legs incl. a fallback-only "token" classified outside and `ESCROW` refused; cancel per token and per DEX (signature, replay, lane cap); ERC-1271 maker under the 400 k cap; a 1271 maker that burns gas or returns a returndata bomb inside a multi-settlement call (the others still settle) and inside a cancel batch; replay of an order on another token, another DEX or another chain fails; salted-domain KATs for `TradeOrder`, `CancelOrder`, `InvalidateNonces` → `test/vectors/trade_kat.json` (built, P2a); `DexOrder`, the DEX cancels and the `mtxSettle` calldata → `test/vectors/dex_order_kat.json` (built, P5; read by the node and clientkeys); the fee round-up cases above; exchange path: an interaction calling `mtxTrade` of a resting order, targeting the DEX or the puller, or `transferFrom(victim, …)` (all refused or failing); surplus split over several legs receiving one token, remainder to the last; a sold-only or intermediate leftover reverts; `InsufficientOutput`; a profitable cycle X→X; multi-hop through mock Uniswap v2/v3 and a fork test with real Uniswap bytecode on anvil; `LISTED_POOLS` × `setListedOnly` on both entry points; an executor returning less (revert) or more (distributed), re-entering, calling `mtxTrade` or the puller; `receiveToken == this` on the token; a Path B leg; an outside leg through the puller in `mtxSettle` and `mtxExchange`; a reverting and a gas-burning target; invariant: between calls the DEX holds 0 of every token and residual allowances move nothing |
+| forge | Path A and Path B, one taker × many makers; `mtxTrade` on a closed, cancelled or IOC-pulled order and with `sellFill = 0` reverts; Path B `sellFill ≠ amount` reverts; `dex` = EOA refused; caller ≠ `dex` refused; every `mtxTrade` error; minimum fill (`minFill`) for taker and makers incl. the remainder close, `minFill = 0`, a fill below half of `amount` settling (no protocol floor, CTR-DEX-14) and `minFill > amount`; FOK via `minFill = amount`; taker fee charged once on the aggregate; split rounding; conservation (unit + invariant: the DEX holds 0 after every handler sequence; for the new DEX the unit tests are built in `test/v2/Dex.t.sol` (P2b-1: settle with two makers, maker rounding, aggregate fee, Path B fee, signed `minFill` and refund, Path A figures seen by the token, isolated failure, arrangement checks, `createDex` and the DEX catalogue, registry, fee split, salted domain) and `test/v2/DexOutside.t.sol` (P2b-2: outside legs through the puller, `DexOrder` digest, `ESCROW` refused, DEX cancels, the ERC-1271 cap by codehash, hostile 1271 signers in settle and cancel batches, the bounded `MatchFailed` reason, a starved check reverting the call, fee-on-transfer, rebasing and no-return tokens) and `test/v2/DexExchange.t.sol` (P2c: routes through mock routers, v2-style pairs and executors, cycles, Path B and outside legs, surplus and remainder, leftovers, `InsufficientOutput`, the interaction blocklist, `LISTED_POOLS` × `setListedOnly`, hostile targets and executors, allowances reset, a fee-on-transfer sell token; the Uniswap fork test is open), and the invariant suite is open); `DexOrder` legs incl. a fallback-only "token" classified outside and `ESCROW` refused; cancel per token and per DEX (signature, replay, lane cap); ERC-1271 maker under the 400 k cap; a 1271 maker that burns gas or returns a returndata bomb inside a multi-settlement call (the others still settle) and inside a cancel batch; replay of an order on another token, another DEX or another chain fails; salted-domain KATs for `TradeOrder`, `CancelOrder`, `InvalidateNonces` → `test/vectors/trade_kat.json` (built, P2a); `DexOrder`, the DEX cancels and the `mtxSettle` calldata → `test/vectors/dex_order_kat.json` (built, P5; read by the node and clientkeys); the fee round-up cases above; exchange path: an interaction calling `mtxTrade` of a resting order, targeting the DEX or the puller, or `transferFrom(victim, …)` (all refused or failing); surplus split over several legs receiving one token, remainder to the last; a sold-only or intermediate leftover reverts; `InsufficientOutput`; a profitable cycle X→X; multi-hop through mock Uniswap v2/v3 and a fork test with real Uniswap bytecode on anvil; `LISTED_POOLS` × `setListedOnly` on both entry points; an executor returning less (revert) or more (distributed), re-entering, calling `mtxTrade` or the puller; `receiveToken == this` on the token; a Path B leg; an outside leg through the puller in `mtxSettle` and `mtxExchange`; a reverting and a gas-burning target; invariant: between calls the DEX holds 0 of every token and residual allowances move nothing |
 | non-EVM | a third party settling on Cosmos/Soroban/TON fails; `min_nonce` above the cap refused; a dust fill pays fee 1 |
 | e2e (anvil 31950–31959, gateway 18650–18659) | two orders through the gateway → partial match → settle job → balances, no `approve` for SCaaS tokens; cancel ⇒ settle never runs; venue restart ⇒ book intact |
 | managed markets (forge) | one e2e with a regulated equity and an unregulated stablecoin: frozen maker, ineligible taker, ineligible fee recipient, an eligible pair settles |

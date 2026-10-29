@@ -196,8 +196,8 @@ sequenceDiagram
   call. **Outside tokens:** the same order signed in the DEX's domain as `DexOrder`, pulled by `DexPuller` under an
   allowance to the puller, never to the DEX; `ESCROW` refused ([CTR-DEX-18](dex.md#CTR-DEX-18),
   [CTR-DEX-22](dex.md#CTR-DEX-22)). The kind is the DEX's own listing, never the leg's claim.
-- **Minimum fill:** every order in a settlement fills at least `max(minFill, ceil(amount/2))` unless it closes its
-  remainder ([CTR-DEX-14](dex.md#CTR-DEX-14)); IOC is closed at its single pull, FOK is `minFill = amount`
+- **Minimum fill:** every order in a settlement fills at least its signed `minFill` unless it closes its remainder; no
+  protocol floor (owner 2026-10-29; the built code still applies 50 %, [CTR-DEX-14](dex.md#CTR-DEX-14)); IOC is closed at its single pull, FOK is `minFill = amount`
   ([CTR-DEX-04](dex.md#CTR-DEX-04), [CTR-DEX-05](dex.md#CTR-DEX-05)).
 - **Fee split and conservation:** [section 5](#5-fees); the DEX ends each settlement with every token balance
   unchanged, else `ConservationBroken` ([CTR-DEX-16](dex.md#CTR-DEX-16)).
