@@ -1,0 +1,940 @@
+# near-algorand T19 e2e: scaas-node NEAR adapter on near-sandbox 2.14.0 (protocol 88), started by the test (devnet.sh near, stopped with the process), keyless deploy by deploy.sh near; wasm from smartcontracts/scripts/build.sh near (unchanged since 32121167, dex has leg_settle)
+# cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored --nocapture
+# KNOWN (reported, contract fix needed): the three router tests fail at token.relay_hold 'Exceeded the prepaid gas' — the hold refunds its excess deposit to the relayer lane, an implicit account; a transfer to an implicit account costs 7.525 Tgas exec + 0.825 send, above GAS_HOLD 5 + 1 Tgas
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.39s
+     Running tests/e2e_near.rs (target/debug/deps/e2e_near-8fff549061f6767b)
+
+running 9 tests
+FEES max_gas_burnt_view = 300 Tgas (sandbox config.json)
+deploy on test-chain-MWIIe (genesis 5RYBhr9zV4SSTUA16E74HpKtHxLGv33AiMbny83pJwKM) from test.near: ['tka.test.near', 'tkb.test.near', 'dex.test.near', 'relayfee.test.near', 'relayexec.test.near']
+  create tka.test.near (scaas_near_token, 558831 B, 7.588 NEAR): ok, 71.675 Tgas
+  tka.test.near.new: ok, 3.916 Tgas
+  create tkb.test.near (scaas_near_token, 558831 B, 7.588 NEAR): ok, 71.675 Tgas
+  tkb.test.near.new: ok, 3.939 Tgas
+  create dex.test.near (scaas_near_dex, 148591 B, 3.486 NEAR): ok, 25.623 Tgas
+  dex.test.near.new: ok, 1.741 Tgas
+  create relayfee.test.near (scaas_near_relayfee, 108499 B, 3.085 NEAR): ok, 21.122 Tgas
+  relayfee.test.near.new: ok, 1.712 Tgas
+  create relayexec.test.near (scaas_near_relayexec, 39675 B, 2.397 NEAR): ok, 13.396 Tgas
+  relayexec.test.near.new: ok, 1.639 Tgas
+  tka.test.near.storage_deposit(c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6): ok, 2.463 Tgas
+  tka.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.467 Tgas
+  tka.test.near.storage_deposit(c62925591efe23a1b0e7ce522b930cd8eb43c554a52a28e17370cc045dca2e44): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(8657318d4f232e9e049fd2b0ef4aff0752663c159bdba21fce49089f5bf46bc9): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(05089cd0895236831cafbba2c14cede73ac6d7bc126f5eede7312abeb7c7832e): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(7dabe05c3379fe4d99a566f90c451f7ccf0d2cc6a3bf810a3ec9959e49a862c7): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(9aa873721b8f8fb826375f8bec0a62e3661c6a99209d56040ee501f88d75abd4): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(5c80d330783e706597fd5f8b62d300c30d4e31458e079bebbd576417d6d33617): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(bbf9c65a1caf9d1fa295abe520d4389c2fc6a16f22d4ef565b299704bb52adf1): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(641e69f8bb2e8a711d417b1a28476f0dba9df2ec4387600fecf110e60c9dcc0a): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(dcdba8770132a95b69ef7171c49679e35f374a95c5e665bf4ca51978a66db781): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(2279157d14a215633d49a92f9ef58f1bad894f70fca8eb37b9758a8bfb6a69dc): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(f855ebc1d3b5f79f63a4fcc2a104234c68bc60e2de1626bd664eed1a15bfe244): ok, 2.472 Tgas
+  tka.test.near.storage_deposit(8999627c73628f1c5273a8a6b4b61e255fb1ad5838dc49fbdb3b637e534daff8): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(98031f6ccad6174ee424bda11de3f7a8a62c153d1fff683fa241c9cc0d9cfbc6): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(da77767bd27907bc7cec33825c1b3b0d6ea3626d5d84024d8b1b48fdb7f7274b): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6): ok, 2.463 Tgas
+  tkb.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.467 Tgas
+  tkb.test.near.storage_deposit(c62925591efe23a1b0e7ce522b930cd8eb43c554a52a28e17370cc045dca2e44): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(8657318d4f232e9e049fd2b0ef4aff0752663c159bdba21fce49089f5bf46bc9): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(05089cd0895236831cafbba2c14cede73ac6d7bc126f5eede7312abeb7c7832e): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(7dabe05c3379fe4d99a566f90c451f7ccf0d2cc6a3bf810a3ec9959e49a862c7): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(9aa873721b8f8fb826375f8bec0a62e3661c6a99209d56040ee501f88d75abd4): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(5c80d330783e706597fd5f8b62d300c30d4e31458e079bebbd576417d6d33617): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(bbf9c65a1caf9d1fa295abe520d4389c2fc6a16f22d4ef565b299704bb52adf1): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(641e69f8bb2e8a711d417b1a28476f0dba9df2ec4387600fecf110e60c9dcc0a): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(dcdba8770132a95b69ef7171c49679e35f374a95c5e665bf4ca51978a66db781): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(2279157d14a215633d49a92f9ef58f1bad894f70fca8eb37b9758a8bfb6a69dc): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(f855ebc1d3b5f79f63a4fcc2a104234c68bc60e2de1626bd664eed1a15bfe244): ok, 2.472 Tgas
+  tkb.test.near.storage_deposit(8999627c73628f1c5273a8a6b4b61e255fb1ad5838dc49fbdb3b637e534daff8): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(98031f6ccad6174ee424bda11de3f7a8a62c153d1fff683fa241c9cc0d9cfbc6): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(da77767bd27907bc7cec33825c1b3b0d6ea3626d5d84024d8b1b48fdb7f7274b): ok, 2.474 Tgas
+  tka.test.near: delete its last access key: ok, 0.629 Tgas
+  tkb.test.near: delete its last access key: ok, 0.629 Tgas
+  dex.test.near: delete its last access key: ok, 0.629 Tgas
+  relayfee.test.near: delete its last access key: ok, 0.629 Tgas
+  relayexec.test.near: delete its last access key: ok, 0.629 Tgas
+deploy gate: 5 accounts keyless (view_access_key_list empty)
+wrote /tmp/scaas-near-e2e/deployments/5RYBhr9zV4SSTUA16E74HpKtHxLGv33AiMbny83pJwKM.json
+
+FEES sandbox protocol 88: receipt (108059500000, 108059500000), function call (200000000000, 780000000000), per byte (47683715, 2235934) (send_not_sir, execution); node pins 108059500000, 2319861500000, 2235934 each
+FEES a lane call with 321 B of args: node prices 4.857 Tgas of action fees, the sandbox charges 1.213
+FEES a lane call with 16384 B of args: node prices 4.929 Tgas of action fees, the sandbox charges 2.015
+FEES a lane call with 65536 B of args: node prices 5.149 Tgas of action fees, the sandbox charges 4.469
+FEES timeout resend priced at 34.856 Tgas
+test deploy_gate_fails_with_a_key_left ... ok
+job 1: [
+    Object {
+        "chain_state": String("signed"),
+        "job_id": Number(1),
+        "outer_nonce": Number(368000001),
+        "signer_address": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
+        "tx_hash": String("0xd05f07cb66737de760b1f09ae2f8bc885bfb48754a9f191300db0a9adcbe941d"),
+    },
+    Object {
+        "chain_state": String("broadcast"),
+        "job_id": Number(1),
+    },
+    Object {
+        "chain_state": String("reverted"),
+        "error": String("relay fee refunded: the call failed, the hold was refused or the relay timed out (the payer was not charged)"),
+        "job_id": Number(1),
+    },
+]
+  receipt "relayfee.test.near" 2.206 Tgas {"SuccessReceiptId":"8MZ2E7rhvniMKaS2kEcR6KaBusuRZd1ezWUGzeK8yJVh"} Array []
+  receipt "tka.test.near" 3.931 Tgas {"Failure":{"ActionError":{"index":0,"kind":{"FunctionCallError":{"ExecutionError":"Exceeded the prepaid gas."}}}}} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"relayer\":\"relayfee.test.near\",\"lane\":\"0xed6debd74fec31588f5491ffac2556bf7428a97ac140410e37599ba4104b85e1\",\"nonce\":0,\"digest\":\"0xe94c7e2cf71f328f9b7eac56e0df6135f723e09ae61b03a5113e87ac8f354dd3\"}}"), String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"to\":\"tka.test.near\",\"amount\":\"1000\"}}")]
+  receipt "relayfee.test.near" 0.223 Tgas {"SuccessValue":""} Array []
+  receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "relayfee.test.near" 2.242 Tgas {"SuccessValue":"AA=="} Array []
+  receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
+
+thread 'near_router_refund' (482211) panicked at tests/e2e_near.rs:839:5:
+hold ok, target failed: Array [
+    Object {
+        "block_hash": String("A4roGRExDbrrtKEBct3piLRpceWpy85HhksEGBDhsiq8"),
+        "id": String("7dS9w62pzPKeUkNGtMZNpwQL3RuGotLNBznxDpCxVaZp"),
+        "outcome": Object {
+            "executor_id": String("relayfee.test.near"),
+            "gas_burnt": Number(2205937367243),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Object {
+                        "local": String("CE6stX8Xd8H8yXx8K9SAomAAAWLxrM8VfikYejXGhRMU"),
+                    },
+                ],
+                "gas_profile": Array [
+                    Object {
+                        "cost": String("FUNCTION_CALL_BASE"),
+                        "cost_category": String("ACTION_COST"),
+                        "gas_used": String("400000000000"),
+                    },
+                    Object {
+                        "cost": String("FUNCTION_CALL_BYTE"),
+                        "cost_category": String("ACTION_COST"),
+                        "gas_used": String("20834137950"),
+                    },
+                    Object {
+                        "cost": String("NEW_ACTION_RECEIPT"),
+                        "cost_category": String("ACTION_COST"),
+                        "gas_used": String("289092464624"),
+                    },
+                    Object {
+                        "cost": String("BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("7678275219"),
+                    },
+                    Object {
+                        "cost": String("CONTRACT_LOADING_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("35445963"),
+                    },
+                    Object {
+                        "cost": String("CONTRACT_LOADING_BYTES"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("118187418205"),
+                    },
+                    Object {
+                        "cost": String("KECCAK256_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("17638473825"),
+                    },
+                    Object {
+                        "cost": String("KECCAK256_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("4229807685"),
+                    },
+                    Object {
+                        "cost": String("PROMISE_RETURN"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("560152386"),
+                    },
+                    Object {
+                        "cost": String("READ_CACHED_TRIE_NODE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("18240000000"),
+                    },
+                    Object {
+                        "cost": String("READ_MEMORY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("46977537600"),
+                    },
+                    Object {
+                        "cost": String("READ_MEMORY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("4238486295"),
+                    },
+                    Object {
+                        "cost": String("READ_REGISTER_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("17620156302"),
+                    },
+                    Object {
+                        "cost": String("READ_REGISTER_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("63276804"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_HAS_KEY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("54039896625"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_HAS_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1016097885"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("56356845749"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("154762665"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_VALUE_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("201996144"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("128393472000"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_EVICTED_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1156223052"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("2678348946"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_VALUE_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("7506486438"),
+                    },
+                    Object {
+                        "cost": String("TOUCHING_TRIE_NODE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("15960000000"),
+                    },
+                    Object {
+                        "cost": String("UTF8_DECODING_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("6223558122"),
+                    },
+                    Object {
+                        "cost": String("UTF8_DECODING_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("9038994849"),
+                    },
+                    Object {
+                        "cost": String("WASM_INSTRUCTION"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("40690220736"),
+                    },
+                    Object {
+                        "cost": String("WRITE_MEMORY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("22430358888"),
+                    },
+                    Object {
+                        "cost": String("WRITE_MEMORY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1792241976"),
+                    },
+                    Object {
+                        "cost": String("WRITE_REGISTER_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("22924179888"),
+                    },
+                    Object {
+                        "cost": String("WRITE_REGISTER_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("950391000"),
+                    },
+                ],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [
+                String("2zdoEKfYQzKXD2Q1A3qK4qPLNxsHGfUnXi4i8thrU5MS"),
+                String("8MZ2E7rhvniMKaS2kEcR6KaBusuRZd1ezWUGzeK8yJVh"),
+                String("2q1qNxKr3vKiWcKp5NTLcoKVLSoYfomMP5acGs3AoKuZ"),
+            ],
+            "status": Object {
+                "SuccessReceiptId": String("8MZ2E7rhvniMKaS2kEcR6KaBusuRZd1ezWUGzeK8yJVh"),
+            },
+            "tokens_burnt": String("220593736724300000000"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Right"),
+                "hash": String("HCD2U2QcQiXQAaU8SJ5AJ1YmdvdketheEu8WiuxPu1nU"),
+            },
+        ],
+    },
+    Object {
+        "block_hash": String("ASn2Thgop81YCTacR3hVX4UpcjKgCLWNc5usoC8qMAjT"),
+        "id": String("2zdoEKfYQzKXD2Q1A3qK4qPLNxsHGfUnXi4i8thrU5MS"),
+        "outcome": Object {
+            "executor_id": String("tka.test.near"),
+            "gas_burnt": Number(3930674691113),
+            "logs": Array [
+                String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"relayer\":\"relayfee.test.near\",\"lane\":\"0xed6debd74fec31588f5491ffac2556bf7428a97ac140410e37599ba4104b85e1\",\"nonce\":0,\"digest\":\"0xe94c7e2cf71f328f9b7eac56e0df6135f723e09ae61b03a5113e87ac8f354dd3\"}}"),
+                String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"to\":\"tka.test.near\",\"amount\":\"1000\"}}"),
+            ],
+            "metadata": Object {
+                "contracts": Array [
+                    Object {
+                        "local": String("HTgZk8UYZ5Wy4fUHumTLkEDUfPJo1zbEnQM6dncHPMUr"),
+                    },
+                ],
+                "gas_profile": Array [
+                    Object {
+                        "cost": String("NEW_ACTION_RECEIPT"),
+                        "cost_category": String("ACTION_COST"),
+                        "gas_used": String("108059500000"),
+                    },
+                    Object {
+                        "cost": String("TRANSFER"),
+                        "cost_category": String("ACTION_COST"),
+                        "gas_used": String("716888187500"),
+                    },
+                    Object {
+                        "cost": String("BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("12179333106"),
+                    },
+                    Object {
+                        "cost": String("CONTRACT_LOADING_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("35445963"),
+                    },
+                    Object {
+                        "cost": String("CONTRACT_LOADING_BYTES"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("608731814145"),
+                    },
+                    Object {
+                        "cost": String("ED25519_VERIFY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("210000000000"),
+                    },
+                    Object {
+                        "cost": String("ED25519_VERIFY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("288000000"),
+                    },
+                    Object {
+                        "cost": String("KECCAK256_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("29397456375"),
+                    },
+                    Object {
+                        "cost": String("KECCAK256_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("4551874260"),
+                    },
+                    Object {
+                        "cost": String("LOG_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("7086626100"),
+                    },
+                    Object {
+                        "cost": String("LOG_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("7364925378"),
+                    },
+                    Object {
+                        "cost": String("READ_CACHED_TRIE_NODE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("2280000000"),
+                    },
+                    Object {
+                        "cost": String("READ_MEMORY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("73076169600"),
+                    },
+                    Object {
+                        "cost": String("READ_MEMORY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("7963792635"),
+                    },
+                    Object {
+                        "cost": String("READ_REGISTER_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("42791808162"),
+                    },
+                    Object {
+                        "cost": String("READ_REGISTER_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("91859784"),
+                    },
+                    Object {
+                        "cost": String("SHA256_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("13622910750"),
+                    },
+                    Object {
+                        "cost": String("SHA256_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("16448033382"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_HAS_KEY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("162119689875"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_HAS_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("5942633085"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("338141074494"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("5385740742"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_VALUE_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1071701764"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("128393472000"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_EVICTED_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1027753824"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("2537383212"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_VALUE_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("992593248"),
+                    },
+                    Object {
+                        "cost": String("TOUCHING_TRIE_NODE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("27360000000"),
+                    },
+                    Object {
+                        "cost": String("UTF8_DECODING_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("9335337183"),
+                    },
+                    Object {
+                        "cost": String("UTF8_DECODING_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("181363057938"),
+                    },
+                    Object {
+                        "cost": String("WASM_INSTRUCTION"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("213417969864"),
+                    },
+                    Object {
+                        "cost": String("WRITE_MEMORY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("50468307498"),
+                    },
+                    Object {
+                        "cost": String("WRITE_MEMORY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("2582135856"),
+                    },
+                    Object {
+                        "cost": String("WRITE_REGISTER_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("48713882262"),
+                    },
+                    Object {
+                        "cost": String("WRITE_REGISTER_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1938797640"),
+                    },
+                ],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [
+                String("7rVcVe4TvfAu4XCNBgKzKeGej9t4BSbR3Gt6aggej2hZ"),
+                String("kGL4V2upLM7F5ZhraDho2676Kx5ysbm9hTuG1mj2euL"),
+            ],
+            "status": Object {
+                "Failure": Object {
+                    "ActionError": Object {
+                        "index": Number(0),
+                        "kind": Object {
+                            "FunctionCallError": Object {
+                                "ExecutionError": String("Exceeded the prepaid gas."),
+                            },
+                        },
+                    },
+                },
+            },
+            "tokens_burnt": String("393067469111300000000"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Right"),
+                "hash": String("7Rd7W9TmwHxMnfVxeURRMSegvksW2PuWHqAFM5HYiyBf"),
+            },
+            Object {
+                "direction": String("Right"),
+                "hash": String("2ToU9LkfdVUSTiJpQK3PaZRwYPiBBUeW5SPLaUDRkSWg"),
+            },
+        ],
+    },
+    Object {
+        "block_hash": String("6yjp5MH8MXetCdEgtkfmvMC7ySkjhSKATaREJCwCTvyu"),
+        "id": String("7rVcVe4TvfAu4XCNBgKzKeGej9t4BSbR3Gt6aggej2hZ"),
+        "outcome": Object {
+            "executor_id": String("relayfee.test.near"),
+            "gas_burnt": Number(223182562500),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Object {
+                        "local": String("CE6stX8Xd8H8yXx8K9SAomAAAWLxrM8VfikYejXGhRMU"),
+                    },
+                ],
+                "gas_profile": Array [],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [],
+            "status": Object {
+                "SuccessValue": String(""),
+            },
+            "tokens_burnt": String("0"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Right"),
+                "hash": String("5yd5PyVvJsgx1VEAS39ahqx9dR7WGiHG33rYvVHFqY9D"),
+            },
+            Object {
+                "direction": String("Right"),
+                "hash": String("GcviS8ooiG56oUu6NExneSQgBFfgPA5oSrSCgcQrU9Y3"),
+            },
+        ],
+    },
+    Object {
+        "block_hash": String("6yjp5MH8MXetCdEgtkfmvMC7ySkjhSKATaREJCwCTvyu"),
+        "id": String("kGL4V2upLM7F5ZhraDho2676Kx5ysbm9hTuG1mj2euL"),
+        "outcome": Object {
+            "executor_id": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
+            "gas_burnt": Number(7524947687500),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Null,
+                ],
+                "gas_profile": Array [],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [],
+            "status": Object {
+                "SuccessValue": String(""),
+            },
+            "tokens_burnt": String("0"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Left"),
+                "hash": String("CvS3jWLBYU8E5RLtyJt4tmhRfoWGbTb8o6RqR4Wbk4Yx"),
+            },
+            Object {
+                "direction": String("Right"),
+                "hash": String("GcviS8ooiG56oUu6NExneSQgBFfgPA5oSrSCgcQrU9Y3"),
+            },
+        ],
+    },
+    Object {
+        "block_hash": String("6yjp5MH8MXetCdEgtkfmvMC7ySkjhSKATaREJCwCTvyu"),
+        "id": String("8MZ2E7rhvniMKaS2kEcR6KaBusuRZd1ezWUGzeK8yJVh"),
+        "outcome": Object {
+            "executor_id": String("relayfee.test.near"),
+            "gas_burnt": Number(2241514730155),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Object {
+                        "local": String("CE6stX8Xd8H8yXx8K9SAomAAAWLxrM8VfikYejXGhRMU"),
+                    },
+                ],
+                "gas_profile": Array [
+                    Object {
+                        "cost": String("NEW_ACTION_RECEIPT"),
+                        "cost_category": String("ACTION_COST"),
+                        "gas_used": String("108059500000"),
+                    },
+                    Object {
+                        "cost": String("TRANSFER"),
+                        "cost_category": String("ACTION_COST"),
+                        "gas_used": String("716888187500"),
+                    },
+                    Object {
+                        "cost": String("BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("5824898442"),
+                    },
+                    Object {
+                        "cost": String("CONTRACT_LOADING_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("35445963"),
+                    },
+                    Object {
+                        "cost": String("CONTRACT_LOADING_BYTES"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("118187418205"),
+                    },
+                    Object {
+                        "cost": String("READ_CACHED_TRIE_NODE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("22800000000"),
+                    },
+                    Object {
+                        "cost": String("READ_MEMORY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("20878905600"),
+                    },
+                    Object {
+                        "cost": String("READ_MEMORY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("733657269"),
+                    },
+                    Object {
+                        "cost": String("READ_REGISTER_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("12585825930"),
+                    },
+                    Object {
+                        "cost": String("READ_REGISTER_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("37059312"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("112713691498"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1176196254"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_READ_VALUE_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1357862968"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_REMOVE_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("53473030500"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_REMOVE_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1261272672"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_REMOVE_RET_VALUE_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("2375500536"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("64196736000"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_EVICTED_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1156223052"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_KEY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("352414335"),
+                    },
+                    Object {
+                        "cost": String("STORAGE_WRITE_VALUE_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1116667404"),
+                    },
+                    Object {
+                        "cost": String("TOUCHING_TRIE_NODE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("22800000000"),
+                    },
+                    Object {
+                        "cost": String("UTF8_DECODING_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("3111779061"),
+                    },
+                    Object {
+                        "cost": String("UTF8_DECODING_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("18661150656"),
+                    },
+                    Object {
+                        "cost": String("WASM_INSTRUCTION"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("23511075456"),
+                    },
+                    Object {
+                        "cost": String("WRITE_MEMORY_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("16822769166"),
+                    },
+                    Object {
+                        "cost": String("WRITE_MEMORY_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1067718624"),
+                    },
+                    Object {
+                        "cost": String("WRITE_REGISTER_BASE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("20058657402"),
+                    },
+                    Object {
+                        "cost": String("WRITE_REGISTER_BYTE"),
+                        "cost_category": String("WASM_HOST_COST"),
+                        "gas_used": String("1976813280"),
+                    },
+                ],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [
+                String("7WCSgY6NfgForqHikPTLYetjVU87zNxAbsaFpuDb7grm"),
+                String("2Vo11eN9zozF2LzHD3xRGem79K3HHaxQWXw55vqWrLY6"),
+            ],
+            "status": Object {
+                "SuccessValue": String("AA=="),
+            },
+            "tokens_burnt": String("224151473015500000000"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Right"),
+                "hash": String("3QwRpRDXFF5MLd6aLVKrn9W438fB7bSgGDwKgU3Fprm1"),
+            },
+            Object {
+                "direction": String("Left"),
+                "hash": String("6Xun9s7qyoK37GGmACV2YWWCLbPFz1iS9Xgna2n9PWPg"),
+            },
+        ],
+    },
+    Object {
+        "block_hash": String("AXp98RuvuaWxSQdULVQmo7UvS9xzEL89brnkykVpAiCf"),
+        "id": String("7WCSgY6NfgForqHikPTLYetjVU87zNxAbsaFpuDb7grm"),
+        "outcome": Object {
+            "executor_id": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
+            "gas_burnt": Number(7524947687500),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Null,
+                ],
+                "gas_profile": Array [],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [
+                String("4bNg9tgT12ET75nKLd3qLBycGNZfkusGn5sheEjnoHTq"),
+            ],
+            "status": Object {
+                "SuccessValue": String(""),
+            },
+            "tokens_burnt": String("752494768750000000000"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Right"),
+                "hash": String("3VogMzmcjzgw9UZgJ6u9GN3KHTnfaVLTr8SfoF2SuqfZ"),
+            },
+        ],
+    },
+    Object {
+        "block_hash": String("3udspPBBECavCprEfk6hb7P1xFmWPYmRvkCFGHqAKa27"),
+        "id": String("4bNg9tgT12ET75nKLd3qLBycGNZfkusGn5sheEjnoHTq"),
+        "outcome": Object {
+            "executor_id": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
+            "gas_burnt": Number(7524947687500),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Null,
+                ],
+                "gas_profile": Array [],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [],
+            "status": Object {
+                "SuccessValue": String(""),
+            },
+            "tokens_burnt": String("0"),
+        },
+        "proof": Array [],
+    },
+    Object {
+        "block_hash": String("AXp98RuvuaWxSQdULVQmo7UvS9xzEL89brnkykVpAiCf"),
+        "id": String("2Vo11eN9zozF2LzHD3xRGem79K3HHaxQWXw55vqWrLY6"),
+        "outcome": Object {
+            "executor_id": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
+            "gas_burnt": Number(7524947687500),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Null,
+                ],
+                "gas_profile": Array [],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [],
+            "status": Object {
+                "SuccessValue": String(""),
+            },
+            "tokens_burnt": String("0"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Left"),
+                "hash": String("91DtBbKQXGf5iDbaJrqhxNexsZBz7FgTQ6kiXxaHoFnS"),
+            },
+        ],
+    },
+    Object {
+        "block_hash": String("ASn2Thgop81YCTacR3hVX4UpcjKgCLWNc5usoC8qMAjT"),
+        "id": String("2q1qNxKr3vKiWcKp5NTLcoKVLSoYfomMP5acGs3AoKuZ"),
+        "outcome": Object {
+            "executor_id": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
+            "gas_burnt": Number(7524947687500),
+            "logs": Array [],
+            "metadata": Object {
+                "contracts": Array [
+                    Null,
+                ],
+                "gas_profile": Array [],
+                "version": Number(4),
+            },
+            "receipt_ids": Array [],
+            "status": Object {
+                "SuccessValue": String(""),
+            },
+            "tokens_burnt": String("0"),
+        },
+        "proof": Array [
+            Object {
+                "direction": String("Left"),
+                "hash": String("C3c1iX9EEWNVqnfrD8Xpb8JGNzBVDBKfeomPsg5bn6zf"),
+            },
+            Object {
+                "direction": String("Right"),
+                "hash": String("2ToU9LkfdVUSTiJpQK3PaZRwYPiBBUeW5SPLaUDRkSWg"),
+            },
+        ],
+    },
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test near_router_refund ... FAILED
+job 2: [
+    Object {
+        "chain_state": String("dead"),
+        "error": String("simulation: bad payload: pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"),
+        "job_id": Number(2),
+    },
+]
+test near_pay_meta_job ... ok
+GAS mtx_pay (ed25519): 11.507 Tgas burnt in all, 3.657 in its receipt, 11 prepaid (pin 10 + 1)
+job 2: [
+    Object {
+        "chain_state": String("consumed"),
+        "error": String("unknown"),
+        "job_id": Number(2),
+    },
+]
+test near_pay_relay_finalize ... ok
+test near_events_include_native_ft_transfer has been running for over 60 seconds
+test near_lanes_do_not_block_each_other has been running for over 60 seconds
+test near_relay_fee_wrapper_job has been running for over 60 seconds
+test near_router_release has been running for over 60 seconds
+GAS relay_fee_add_origin (ed25519 entry + ed25519 payment): 12.509 Tgas burnt in all, 4.642 in its receipt, 12 prepaid (pin 10 + 1 + 1)
+test near_lanes_do_not_block_each_other ... ok
+job 1: [
+    Object {
+        "chain_state": String("signed"),
+        "job_id": Number(1),
+        "outer_nonce": Number(356000001),
+        "signer_address": String("b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72"),
+        "tx_hash": String("0x0dbae3008f9da7e140cfa6a3d36ac5c3f2d924e81f65f65a651df9a31de54067"),
+    },
+    Object {
+        "chain_state": String("broadcast"),
+        "job_id": Number(1),
+    },
+    Object {
+        "chain_state": String("reverted"),
+        "error": String("relay fee refunded: the call failed, the hold was refused or the relay timed out (the payer was not charged)"),
+        "job_id": Number(1),
+    },
+]
+  receipt "relayfee.test.near" 2.240 Tgas {"SuccessReceiptId":"HAsrMAG1wMcoKxdqxArxT7kFFnRrLktTSGqQkq5TTRow"} Array []
+  receipt "tka.test.near" 3.930 Tgas {"Failure":{"ActionError":{"index":0,"kind":{"FunctionCallError":{"ExecutionError":"Exceeded the prepaid gas."}}}}} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0x95d5fe3e9bd824481c15a7b04a7aa208f27b542332a6aa00c2f443c69c53a2d2\",\"relayer\":\"relayfee.test.near\",\"lane\":\"0x1eb8ec9d211bb568d039eb4450f6f9ee75f05e4eea25debb63dd636d00a6fb68\",\"nonce\":0,\"digest\":\"0xe8476c06e380b84dc1c6e730db7ed1c6e9aef81a07de465688cb8785556521e1\"}}"), String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0x95d5fe3e9bd824481c15a7b04a7aa208f27b542332a6aa00c2f443c69c53a2d2\",\"to\":\"tka.test.near\",\"amount\":\"1000\"}}")]
+  receipt "relayfee.test.near" 0.223 Tgas {"SuccessValue":""} Array []
+  receipt "b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "relayfee.test.near" 2.248 Tgas {"SuccessValue":"AA=="} Array []
+  receipt "b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72" 7.525 Tgas {"SuccessValue":""} Array []
+  receipt "b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72" 7.525 Tgas {"SuccessValue":""} Array []
+
+thread 'near_router_release' (482212) panicked at tests/e2e_near.rs:798:5:
+assertion `left == right` failed
+  left: ["signed", "broadcast", "reverted"]
+ right: ["signed", "broadcast", "mined"]
+test near_router_release ... FAILED
+test near_events_include_native_ft_transfer ... ok
+GAS relay_fee_mandate_open (12-passkey msig entry + passkey payment, 13 passkeys): 274.359 Tgas burnt in all, 266.281 in its receipt, 283 prepaid (pin 10 + 13 x 21 = 283), headroom 16.719 Tgas
+test near_relay_fee_wrapper_job ... ok
+
+thread 'near_router_timeout' (490794) panicked at tests/e2e_near.rs:888:5:
+the call never got in flight
+test near_router_timeout ... FAILED
+
+failures:
+
+failures:
+    near_router_refund
+    near_router_release
+    near_router_timeout
+
+test result: FAILED. 6 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 72.47s
+
+error: test failed, to rerun pass `--test e2e_near`
+rc=101

@@ -1,0 +1,35 @@
+# near-algorand T19 node fixes RED: the two new tests against the unchanged adapter (submit wait_until NONE; tx_status returns Pending for any non-FINAL relay)
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib -- adapters::near::tests::submit_waits_until_included adapters::near::tests::escrow_in_flight_times_out_after_deadline
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 2 tests
+test adapters::near::tests::submit_waits_until_included ... FAILED
+test adapters::near::tests::escrow_in_flight_times_out_after_deadline ... FAILED
+
+failures:
+
+---- adapters::near::tests::submit_waits_until_included stdout ----
+
+thread 'adapters::near::tests::submit_waits_until_included' (459765) panicked at src/adapters/near.rs:3068:9:
+assertion `left == right` failed
+  left: String("NONE")
+ right: "INCLUDED"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapters::near::tests::escrow_in_flight_times_out_after_deadline stdout ----
+
+thread 'adapters::near::tests::escrow_in_flight_times_out_after_deadline' (459764) panicked at src/adapters/near.rs:3093:9:
+assertion `left == right` failed: relay_timeout sent while the call is in flight
+  left: 0
+ right: 1
+
+
+failures:
+    adapters::near::tests::escrow_in_flight_times_out_after_deadline
+    adapters::near::tests::submit_waits_until_included
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 418 filtered out; finished in 0.09s
+
+error: test failed, to rerun pass `--lib`
+rc=101

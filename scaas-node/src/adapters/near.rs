@@ -1624,10 +1624,32 @@ impl NearAdapter {
         if entry.as_ref().is_some_and(|p| p.relayer != signer) {
             return Ok(TxStatus::Reverted { reason: format!("the escrow entry under {} was staked by another relayer; ours held nothing", hex0x(&r)) });
         }
-        let Some(PendingEntry { token, deadline, stage, .. }) = entry else {
+        let Some(p) = entry else {
             let why = value.err().map(|f| format!(" ({f})")).unwrap_or_default();
             return Ok(TxStatus::Reverted { reason: format!("relay fee refunded: the call failed, the hold was refused or the relay timed out (the payer was not charged){why}") });
         };
+        self.escrow_due(v, r, p).await
+    }
+
+    /// T19 (near-sandbox): a router call in flight (a target that yields, a callback chain still waiting) keeps its
+    /// transaction `INCLUDED_FINAL` / `Started`; past the deadline our entry is timed out here, as in `escrow_due`. No
+    /// entry yet, gone, or another relayer's: pending, the final outcome decides (`escrow_status`).
+    async fn escrow_in_flight(&self, v: &Value) -> Result<TxStatus> {
+        let router = self.relay_fee.router.as_deref().ok_or_else(|| anyhow!("no router configured"))?;
+        let Some(args) = v.pointer("/transaction/actions/0/FunctionCall/args").and_then(Value::as_str) else { return Ok(TxStatus::Pending) };
+        let r = relay_args_ref(&b64d(args)?)?;
+        let signer = v.pointer("/transaction/signer_id").and_then(Value::as_str).unwrap_or_default();
+        match decode_pending(&self.view(router, "pending", &r).await?)? {
+            Some(p) if p.relayer == signer => self.escrow_due(v, r, p).await,
+            _ => Ok(TxStatus::Pending),
+        }
+    }
+
+    /// Our entry `r` still pending: past its deadline (no settlement in flight) send `relay_timeout(ref)`, again after
+    /// `RELAY_TIMEOUT_RETRY_S`; `RELAY_STUCK_S` past it the job ends reverted so the lane moves on.
+    async fn escrow_due(&self, v: &Value, r: [u8; 32], p: PendingEntry) -> Result<TxStatus> {
+        let router = self.relay_fee.router.as_deref().ok_or_else(|| anyhow!("no router configured"))?;
+        let PendingEntry { token, deadline, stage, .. } = p;
         let now = now();
         if now > deadline.saturating_add(RELAY_STUCK_S) && stage == 2 {
             // fix 1 m2: on_settle failed after a token settle that may have been a release: ask the token
@@ -1953,8 +1975,10 @@ impl ChainAdapter for NearAdapter {
     }
 
     /// `INVALID_TRANSACTION` (nonce, balance, expired block hash, signature…): the same bytes never pass ⇒ `Rejected`.
+    /// T19: `wait_until = INCLUDED` (one block): with `NONE` the RPC accepts a stale nonce and drops the transaction
+    /// silently (near-sandbox 2.14), so `Rejected` never comes and the lane waits for the payload to expire.
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        match self.rpc("send_tx", json!({"signed_tx_base64": b64(&signed.raw), "wait_until": "NONE"})).await {
+        match self.rpc("send_tx", json!({"signed_tx_base64": b64(&signed.raw), "wait_until": "INCLUDED"})).await {
             Ok(_) => Ok(()),
             Err(e) if cause_of(&e) == Some("INVALID_TRANSACTION") => Err(Rejected(format!("{e:#}")).into()),
             Err(e) => Err(e),
@@ -1965,12 +1989,14 @@ impl ChainAdapter for NearAdapter {
     /// its reason, never retried (the lane nonce moved; the payer's op was not consumed).
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let Some(v) = self.find_tx(tx_id).await? else { return Ok(TxStatus::Unknown) };
+        let relay = v.pointer("/transaction/actions/0/FunctionCall/method_name").and_then(Value::as_str) == Some("relay");
+        let escrow = relay && self.relay_fee.router.is_some() && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref();
         if v["final_execution_status"].as_str() != Some("FINAL") {
-            return Ok(TxStatus::Pending);
+            // T19: a call in flight past its deadline keeps the transaction short of FINAL: its timeout is due now
+            return if escrow { self.escrow_in_flight(&v).await } else { Ok(TxStatus::Pending) };
         }
         let height = self.block_height_of(&v["transaction_outcome"]["block_hash"]).await?;
-        let relay = v.pointer("/transaction/actions/0/FunctionCall/method_name").and_then(Value::as_str) == Some("relay");
-        if relay && self.relay_fee.router.is_some() && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref() {
+        if escrow {
             return self.escrow_status(&v, height).await;
         }
         Ok(match outcome_status(&v["status"])? {
@@ -3053,6 +3079,56 @@ mod tests {
         w.lock().unwrap().send_err = Some(rpc_err("TIMEOUT_ERROR"));
         assert!(a.submit(&signed).await.unwrap_err().downcast_ref::<Rejected>().is_none(), "retry the same bytes");
         assert_eq!(a.sequence(0).await.unwrap(), 42, "the access key's nonce + 1");
+    }
+
+    /// T19 (near-sandbox 2.14): `send_tx` with `wait_until = NONE` answers `{"final_execution_status": "NONE"}` even for a
+    /// stale nonce (the transaction is then dropped, so the lane would wait until the payload expires); `INCLUDED`
+    /// returns `INVALID_TRANSACTION` (`InvalidNonce`, expired block hash, …) synchronously, which is `Rejected`.
+    #[tokio::test]
+    async fn submit_waits_until_included() {
+        let (a, w) = adapter(world(), "").await;
+        let signed = Signed { job_id: 1, tx_id: "0x00".into(), raw: vec![1, 2], valid_until: 0, sequence: 0 };
+        a.submit(&signed).await.unwrap();
+        let w = w.lock().unwrap();
+        let send = w.calls.iter().find(|c| c.0 == "send_tx").unwrap();
+        assert_eq!(send.1["wait_until"], "INCLUDED");
+    }
+
+    /// T19 (near-sandbox): a router call still in flight (a yielded target, a callback chain that waits) keeps its
+    /// transaction `INCLUDED_FINAL` / `Started`, never `FINAL`, so the timeout must be followed before finality: past the
+    /// deadline this node sends `relay_timeout(ref)`; before it, or once the entry is gone (or staked by another
+    /// relayer), the job stays pending until the transaction is final.
+    #[tokio::test]
+    async fn escrow_in_flight_times_out_after_deadline() {
+        let (rop, ro) = router_job("router_short", "30000000000000", "0");
+        let relay = call_of(&pol(), &entry(&pol(), &rop, &ro).unwrap(), &rop, &hx(&ro["signature"])).unwrap();
+        let hash = [0x34u8; 32];
+        let id = format!("0x{}", h(&hash));
+        let mut flying = outcome(ROUTER, fc("relay", &relay.args), json!("Started"), vec![]);
+        flying["final_execution_status"] = json!("INCLUDED_FINAL");
+        let now = crate::submit::now();
+        let mut w = world();
+        w.txs.insert(bs58::encode(hash).into_string(), flying);
+        w.views.insert((ROUTER.into(), "pending".into()), pending(now + 600, 1));
+        let (a, w) = adapter(w, &fee_cfg("1")).await;
+        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending, "before the deadline");
+        assert!(sent(&w).is_empty());
+        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), pending(now - 1, 1));
+        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
+        let s = sent(&w);
+        assert_eq!(s.len(), 1, "relay_timeout sent while the call is in flight");
+        assert!(contains(&s[0], &[&bstr("relay_timeout")[..], &bvec(&rop.pay_ref)].concat()));
+        // refunded meanwhile: still pending until the transaction is final (then `escrow_status` reverts it)
+        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), vec![0]);
+        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
+        // another relayer's entry under the same ref: never timed out by us
+        let mut other = pending(now - 1, 1);
+        let at = other.windows(4 + LANE0.len()).position(|x| x == bstr(LANE0)).unwrap();
+        other[at + 4] = b'b';
+        w.lock().unwrap().views.insert((ROUTER.into(), "pending".into()), other);
+        a.timeouts.lock().unwrap().clear();
+        assert_eq!(a.tx_status(&id).await.unwrap(), TxStatus::Pending);
+        assert_eq!(sent(&w).len(), 1);
     }
 
     // ------------------------------------------------------------------------------------------------ events

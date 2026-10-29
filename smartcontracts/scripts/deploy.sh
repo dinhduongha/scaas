@@ -25,6 +25,11 @@
 #                            object is gone afterwards; the script stops if it cannot find or destroy it
 #   soroban <network> <contract>   stellar contract deploy of scaas_<contract>.wasm (build.sh soroban first); STELLAR_BIN overrides the CLI
 #   solana  <cluster-url> <program-keypair> <upgrade-authority-keypair>   solana/scripts/deploy.sh
+#   near    <rpc-url> [gate <account…>]   near/scripts/deploy.sh: token(s), dex, relayfee, relayexec as sub-accounts of
+#                            the funding account, initialised, every lane registered on every token, then every access
+#                            key deleted (spec §3.9); fails unless view_access_key_list is empty for each; writes
+#                            near/deployments/<genesis-hash>.json. env NEAR_ACCOUNT_ID + NEAR_PRIVATE_KEY (or
+#                            NEAR_KEY_FILE), NEAR_TOKENS, NEAR_ADMIN, NEAR_LANES, NEAR_FUND (near/scripts/deploy.py)
 set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
@@ -50,6 +55,7 @@ case "$FAMILY" in
   soroban) C="${1:?contract (token|mandate|dex|smart_key_account)}"; shift
            exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/scaas_$C.wasm" "$@" ;;
   solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;
+  near)    exec "$SC/near/scripts/deploy.sh" "$NET" "$@" ;;
   cosmos|ton) echo "$FAMILY: no deploy tooling in this repo yet (build artifacts: build.sh $FAMILY)" >&2; exit 2 ;;
   *) echo "unknown family '$FAMILY'" >&2; exit 2 ;;
 esac

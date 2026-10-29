@@ -1,0 +1,25 @@
+# near-algorand T19: near-sandbox 2.14.0 facts behind the findings (smartcontracts/near/scripts/sandbox_probe.py)
+# scripts/capped bash -c 'devnet.sh near up H; python3 -I sandbox_probe.py <rpc> H; devnet.sh near down H'
+1. protocol 88 action_receipt_creation {'execution': 108059500000, 'send_not_sir': 108059500000, 'send_sir': 108059500000}
+   function_call_cost {"execution": 780000000000, "send_not_sir": 200000000000, "send_sir": 200000000000}
+   function_call_cost_per_byte {"execution": 2235934, "send_not_sir": 47683715, "send_sir": 2235934}
+   transfer_cost {"execution": 115123062500, "send_not_sir": 115123062500, "send_sir": 115123062500}
+   create_account_cost {"execution": 7200000000000, "send_not_sir": 500000000000, "send_sir": 500000000000}
+   add_key_cost {"full_access_cost": {"execution": 101765125000, "send_not_sir": 101765125000, "send_sir": 101765125000}, "function_call_cost": {"execution": 102217625000, "send_not_sir": 102217625000, "send_sir": 102217625000}, "function_call_cost_per_byte": {"execution": 1925331, "send_not_sir": 47683715, "send_sir": 1925331}}
+  2. transfer to a new implicit account: ok, 8.573 Tgas
+   [('test.near', 0.8249476875), ('cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 7.5249476875), ('test.near', 0.2231825625)]
+  2. transfer to an existing implicit account: ok, 8.573 Tgas
+   [('test.near', 0.8249476875), ('cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 7.5249476875), ('test.near', 0.2231825625)]
+  2. transfer to a named account (itself): ok, 0.670 Tgas
+   [('test.near', 0.2231825625), ('test.near', 0.2231825625), ('test.near', 0.2231825625)]
+3. stale nonce, wait_until NONE: {'final_execution_status': 'NONE'}
+3. stale nonce, wait_until INCLUDED: error send_tx: {"name": "HANDLER_ERROR", "cause": {"info": {}, "name": "INVALID_TRANSACTION"}, "code": -32000, "message": "Server error", "data": {"TxExecutionError": {"InvalidTxError": {"InvalidNonce": {"ak_nonce": 3, "tx_nonce": 3}}}}}
+  4. fixture: ok, 19.015 Tgas
+4. yielded call after 1 s: final_execution_status INCLUDED_FINAL, status Started
+4. yielded call after 2 s: final_execution_status INCLUDED_FINAL, status Started
+4. yielded call after 3 s: final_execution_status INCLUDED_FINAL, status Started
+4. yielded call after 4 s: final_execution_status INCLUDED_FINAL, status Started
+4. yielded call after 5 s: final_execution_status INCLUDED_FINAL, status Started
+  4. resume: ok, 2.888 Tgas
+4. after resume: FINAL {'SuccessValue': ''}
+rc=0
