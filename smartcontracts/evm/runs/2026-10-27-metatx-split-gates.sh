@@ -722,12 +722,17 @@ EOF
 named_tests() { # every new test passed; no family log with 0 passed, a skipped suite, or a new test ignored
   local D=${NAMED_TESTS_LOG_DIR:-$R} miss=0 step form name re f n
   norm() { sed -E 's/^[[:space:]]*([0-9]+: )?[[:space:]]*//; s/ \([0-9.]+ ?m?s\)$//' "$1"; }
+  # cargo --nocapture --test-threads=1 (the near step) prints "test <t> ... " + the test's output + "ok" on its own line:
+  # rejoin each result to its "test <t> ... " line
+  cnorm() { awk '/^test [^ ]+ \.\.\. / { i = index($0, " ... "); h = substr($0, 1, i + 4); r = substr($0, i + 5)
+      if (r ~ /^(ok|FAILED|ignored)/) print; else p = h; next }
+    p != "" && /^(ok|FAILED|ignored)/ { print p $0; p = "" }' "$1"; }
   while IFS='|' read -r step form name; do
     case $form in
       forge) cat "$D/$P"-forge-*.txt 2>/dev/null | grep -qF "[PASS] $name(" ;;
       cargo) re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}"
-        f=$D/$P-$step.txt
-        ! grep -qE "$re \.\.\. ignored$" "$f" 2>/dev/null && grep -qE "$re \.\.\. ok$" "$f" 2>/dev/null ;;
+        f=$(cnorm "$D/$P-$step.txt" 2>/dev/null)
+        ! grep -qE "$re \.\.\. ignored(, .*)?$" <<< "$f" && grep -qE "$re \.\.\. ok$" <<< "$f" ;;
       move) grep -qE "\[ PASS +\] [^ ]*::${name}\$" "$D/$P-$step.txt" 2>/dev/null ;;
       jest) norm "$D/$P-$step.txt" 2>/dev/null | grep -qxF "✓ $name" ;;
       node) norm "$D/$P-$step.txt" 2>/dev/null | grep -qxF "✔ $name" ;;
@@ -743,7 +748,7 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
     n=$(awk '/^ *Doc-tests /{d=1} /^ *Running /{d=0} /^running 0 tests$/{z=1}
              / 0 passed/{ if (!d && !z) c++; z=0 } END{print c+0}' "$f")
     [ "$n" -eq 0 ] || { echo "named-tests: $s reports 0 passed ($n)"; miss=$((miss + 1)); }
-    grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;|^=+ .*[0-9]+ (skipped|deselected|xfailed)' "$f" && { echo "named-tests: $s has a skipped / empty suite"; miss=$((miss + 1)); }
+    grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;|^(=+ )?([0-9]+ [a-z]+, )*[0-9]+ (skipped|deselected|xfailed)' "$f" && { echo "named-tests: $s has a skipped / empty suite"; miss=$((miss + 1)); }
   done
   echo "named-tests: $(grep -c . <<< "$NEW_TESTS") names, $miss problem(s)"
   [ $miss -eq 0 ]
