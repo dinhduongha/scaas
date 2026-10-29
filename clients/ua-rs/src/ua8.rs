@@ -5,8 +5,7 @@ use crate::*;
 
 /// ML-KEM-1024 ek ‖ X25519 pk (X-Wing order): the only KEM key the registry stores (UA-8 P7).
 pub const KEM_PK_LENGTH: usize = 1600;
-/// The key lengths of the PQZ parameter sets (PqzSet.PK).
-pub const PQZ_KEY_LENGTHS: [usize; 4] = [16384, 18432, 20480, 22528];
+pub use crate::PQZ_KEY_LENGTHS;
 
 /// Who checked a part of a record (UA-8 P11.3); `Relayer` comes with the relayer id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,8 +59,15 @@ pub fn kem_record_message(kind: u16, ua: &[u8; 32], version: u64, kem_pk: &[u8])
 }
 
 /// A PQZ / KEM holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (`key_data` shows it).
-fn holds(kind: u16, key_data: &[u8]) -> bool {
-    is_pqz_holder(kind) || (kind == 0x0120 && !key_data.is_empty() && msig_pqz_eligible(key_data).unwrap_or(false))
+/// Malformed `msig` key data is `UAKeyData` (as in the JS), not "not a holder".
+fn holds(kind: u16, key_data: &[u8]) -> Result<bool> {
+    if is_pqz_holder(kind) {
+        return Ok(true);
+    }
+    if kind == 0x0120 && !key_data.is_empty() {
+        return msig_pqz_eligible(key_data);
+    }
+    Ok(false)
 }
 /// `key_hash_of(0x0142, pqz_key)`; a key of no parameter set's length is `UAKeyData`.
 fn pqz_key_hash_of(pqz_key: &[u8]) -> Result<[u8; 32]> {
@@ -107,12 +113,14 @@ pub fn holder_pop_message(
 ) -> Result<HolderPop> {
     let pqz_key = pqz_key.filter(|k| !k.is_empty());
     let kem = kem.filter(|(v, pk)| *v != 0 || !pk.is_empty());
-    let holder = holds(kind, key_data);
-    if pqz_key.is_some() && !holder {
-        return Err(UAError::PqzHolder(kind));
-    }
-    if kem.is_some() && !holder {
-        return Err(UAError::KemHolder(kind));
+    if pqz_key.is_some() || kem.is_some() {
+        let holder = holds(kind, key_data)?;
+        if pqz_key.is_some() && !holder {
+            return Err(UAError::PqzHolder(kind));
+        }
+        if kem.is_some() && !holder {
+            return Err(UAError::KemHolder(kind));
+        }
     }
     let pop_hash = proof_hash_of(pqz_pop, pqz_pop_hash)?;
     if pqz_key.is_some() != (pop_hash != [0; 32]) {
@@ -171,7 +179,7 @@ pub fn pqz_key_record_message(
     kind: u16, ua: &[u8; 32], key_data: &[u8], pqz_key: &[u8], pqz_pop: Option<&[u8]>, pqz_pop_hash: Option<&[u8; 32]>,
     already_set: bool,
 ) -> Result<PqzKeyRecord> {
-    if !holds(kind, key_data) {
+    if !holds(kind, key_data)? {
         return Err(UAError::PqzHolder(kind));
     }
     if already_set {
@@ -202,4 +210,9 @@ pub fn pqz_key_record_message(
 /// every other purpose stays UAAuth (CTR-MTX-14).
 pub fn personal_sign_digest(digest: &[u8; 32]) -> [u8; 32] {
     keccak(&[b"\x19Ethereum Signed Message:\n32", digest])
+}
+
+/// The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less native msig member signs by `personal_sign`.
+pub fn is_portable_purpose(tag: &[u8; 32]) -> bool {
+    [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key")].contains(tag)
 }

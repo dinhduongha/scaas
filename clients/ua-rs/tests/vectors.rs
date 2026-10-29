@@ -54,6 +54,9 @@ fn table_groups_purposes_constants() {
         let n = kind(&r["kind"]);
         assert_eq!(n, PQZ_SCHEME);
         assert_eq!(SCHEMES[0].name, r["name"]);
+        let lengths: Vec<usize> = arr(r, "lengths").iter().map(|x| x.as_u64().unwrap() as usize).collect();
+        assert_eq!(SCHEMES[0].lengths, &lengths[..]);
+        assert_eq!(SCHEMES[0].lengths, &ua8::PQZ_KEY_LENGTHS[..]);
         assert_eq!(kind_tag_string(n).unwrap(), r["tag"]);
         assert_eq!(hx(&tag(n).unwrap()), r["TAG"]);
         assert_eq!(ua_of(n, &[]), Err(UAError::KindNotDerived(n)));

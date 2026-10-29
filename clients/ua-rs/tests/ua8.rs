@@ -205,40 +205,104 @@ fn negatives_refused() {
                 assert_eq!(got.err().map(|e| e.code()), Some(err), "{name}");
                 run += 1;
             }
-            _ => sig_level += 1, // UAUnauthorized / signature framing: verified by the signature vectors, not the digests
+            "setKemKey" if m["row"] == "fndsa512/v2" => {
+                // the record of one UA offered for another: the signed message differs, so the signature cannot verify
+                let k = find(&p, "kemRecords", "id", &m["row"]);
+                let t = find(&p, "registrations", "ua", &m["set"]["ua"]);
+                let msg = kem_record_message(num(&t["kind"]) as u16, &b32(&m["set"]["ua"]), num(&k["version"]), &bytes(&k["kemPk"])).unwrap();
+                assert_ne!(hx(&msg), k["message"], "{name}");
+                run += 1;
+            }
+            "register" if name == "native-uaauth-in-portable-pop" => {
+                // a UAAuth-framed native signature does not recover the member over personal_sign(memberDigest)
+                let r = &row;
+                let got = native_recovered(r, &bytes(&m["set"]["pop"]), &b32(&r["memberDigest"]));
+                assert!(!got.is_empty() && got.iter().all(|(i, a)| a.as_ref() != Some(&member_address(r, *i))), "{name}");
+                run += 1;
+            }
+            "requireAuthorized" => {
+                // valid personal_sign, but metatx is not a portable purpose: UAAuth there
+                let (tag, auth) = (b32(&m["set"]["purposeTag"]), bytes(&m["set"]["auth"]));
+                assert!(!is_portable_purpose(&tag), "{name}");
+                assert_eq!(hx(bytes_at(&auth, 0)), row["keyData"], "{name}");
+                let md = member_digest(&b32(&row["ua"]), &ua_message(0x0120, &tag, &b32(&m["set"]["digest"])).unwrap());
+                let got = native_recovered(&row, bytes_at(&auth, 32), &md);
+                assert!(!got.is_empty() && got.iter().all(|(i, a)| a.as_ref() == Some(&member_address(&row, *i))), "{name}");
+                run += 1;
+            }
+            _ => sig_level += 1, // PQ / classical signatures: verified by the signature vectors (no verifier in this crate)
         }
     }
-    assert_eq!((run, sig_level), (53, 8), "{} negatives", arr(&p, "negatives").len());
+    assert_eq!((run, sig_level), (56, 5), "{} negatives", arr(&p, "negatives").len());
     println!("{run} digest-layer negatives refused, {sig_level} signature-level");
+}
+
+fn word_at(b: &[u8], o: usize) -> usize {
+    usize::from_be_bytes(b[o + 24..o + 32].try_into().unwrap())
+}
+/// `bytes` at the head word `o` of an abi-encoded blob (offset word, then length and data).
+fn bytes_at(b: &[u8], o: usize) -> &[u8] {
+    let p = word_at(b, o);
+    &b[p + 32..p + 32 + word_at(b, p)]
+}
+/// The address each native (kind 0x0001) member's signature in a `MemberSig[]` blob recovers over `personal_sign(md)`
+/// (None: not a 65-byte signature, or no recovery), by member index.
+fn native_recovered(row: &Value, blob: &[u8], md: &[u8; 32]) -> Vec<(usize, Option<String>)> {
+    use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
+    let (list, count) = (word_at(blob, 0), word_at(blob, word_at(blob, 0)));
+    let mut out = vec![];
+    for i in 0..count {
+        let t = list + 32 + word_at(blob, list + 32 + 32 * i);
+        let idx = word_at(blob, t);
+        if num(&row["members"][idx]["kind"]) != 1 {
+            continue;
+        }
+        let sig_at = t + word_at(blob, t + 64);
+        let sig = &blob[sig_at + 32..sig_at + 32 + word_at(blob, sig_at)];
+        let addr = (sig.len() == 65)
+            .then(|| {
+                let s = Signature::from_slice(&sig[..64]).ok()?;
+                let v = RecoveryId::from_byte(sig[64].checked_sub(27)?)?;
+                let vk = VerifyingKey::recover_from_prehash(&personal_sign_digest(md), &s, v).ok()?;
+                Some(hx(&keccak256(&vk.to_encoded_point(false).as_bytes()[1..])[12..]))
+            })
+            .flatten();
+        out.push((idx, addr));
+    }
+    out
+}
+fn member_address(row: &Value, idx: usize) -> String {
+    format!("0x{}", &row["members"][idx]["id"].as_str().unwrap()[26..])
 }
 
 /// C7: the native msig member signs `personal_sign(memberDigest)`; the recovered address is the member's.
 #[test]
 fn native_member_personal_sign() {
-    use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
     let p = load("portable.json");
     let r = find(&p, "registrations", "name", &"msig-pq-native".into());
     let md = b32(&r["memberDigest"]);
-    let blob = bytes(&r["pop"]);
-    let word = |o: usize| usize::from_be_bytes(blob[o + 24..o + 32].try_into().unwrap());
-    let (list, count) = (word(0), word(word(0)));
-    let mut recovered = 0;
-    for i in 0..count {
-        let t = list + 32 + word(list + 32 + 32 * i);
-        let m = &r["members"][word(t)];
-        let sig_at = t + word(t + 64);
-        let sig = &blob[sig_at + 32..sig_at + 32 + word(sig_at)];
-        if num(&m["kind"]) != 1 {
-            continue;
-        }
-        assert_eq!(sig.len(), 65);
-        let s = Signature::from_slice(&sig[..64]).unwrap();
-        let vk = VerifyingKey::recover_from_prehash(&personal_sign_digest(&md), &s, RecoveryId::from_byte(sig[64] - 27).unwrap()).unwrap();
-        let addr = &keccak256(&vk.to_encoded_point(false).as_bytes()[1..])[12..];
-        assert_eq!(hx(addr), format!("0x{}", &m["id"].as_str().unwrap()[26..]));
-        recovered += 1;
-    }
-    assert_eq!(recovered, 1);
+    let got = native_recovered(r, &bytes(&r["pop"]), &md);
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].1, Some(member_address(r, got[0].0)));
     // the raw digest is not what it signs
     assert_ne!(personal_sign_digest(&md), md);
+    assert!(is_portable_purpose(&pop_v2_tag()) && is_portable_purpose(&purpose_tag("kem").unwrap()) && is_portable_purpose(&purpose_tag("pqz-key").unwrap()));
+    assert!(!is_portable_purpose(&purpose_tag("metatx").unwrap()) && !is_portable_purpose(&purpose_tag("pop").unwrap()));
+}
+
+/// UAKeyData, as in the JS: a malformed msig key data is not "not a holder".
+#[test]
+fn malformed_msig_key_data() {
+    let ua = [1u8; 32];
+    let pk = vec![0u8; 16384];
+    let proof = [7u8; 32];
+    for kd in [&[0u8, 2, 0][..], &[0, 2, 0, 2, 9, 9][..]] {
+        let want = Err(UAError::KeyData("length"));
+        assert_eq!(holder_pop_message(0x0120, &ua, kd, Some(&pk), None, Some(&proof), None).map(|_| ()), want);
+        assert_eq!(holder_pop_message(0x0120, &ua, kd, None, None, None, Some((1, &[0; 1600]))).map(|_| ()), want);
+        assert_eq!(pqz_key_record_message(0x0120, &ua, kd, &pk, None, Some(&proof), false).map(|_| ()), want);
+    }
+    // no attributes: key data is not consulted; an msig without key data is not a holder
+    assert!(holder_pop_message(0x0120, &ua, &[0, 2, 0], None, None, None, None).is_ok());
+    assert_eq!(holder_pop_message(0x0120, &ua, &[], Some(&pk), None, Some(&proof), None).map(|_| ()), Err(UAError::PqzHolder(0x0120)));
 }

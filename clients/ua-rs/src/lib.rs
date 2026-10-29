@@ -123,7 +123,9 @@ pub const KINDS: &[Kind] = &[
 ];
 
 /// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
-pub const SCHEMES: &[Kind] = &[derived(0x0142, "pqz-mlwe", &[16384], Some("pqz-mlwe"))];
+pub const SCHEMES: &[Kind] = &[derived(0x0142, "pqz-mlwe", &PQZ_KEY_LENGTHS, Some("pqz-mlwe"))];
+/// The key lengths of the PQZ parameter sets (PqzSet.PK).
+pub const PQZ_KEY_LENGTHS: [usize; 4] = [16384, 18432, 20480, 22528];
 /// The scheme number of the PQZ key attribute.
 pub const PQZ_SCHEME: u16 = 0x0142;
 
