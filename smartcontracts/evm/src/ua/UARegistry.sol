@@ -60,6 +60,7 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         anyone may copy a registration to any registry; every `register` field is stored (UA8-D7): `keyData` once
 ///         (the stored kinds' `keyPtr` prefix, the rest in the registration blob), `pop` and the initial KEM version in
 ///         the blob, `pqzPop` and each KEM record (`pk ‖ sig`) as their own blobs, each in `SSTORE2.writeChunks` pieces.
+///         Later KEM records come by the UA's signed portable record (`setKemKey`: once per version, any order).
 ///
 ///         Gen 2 (`predecessor ≠ 0`) reads gen 1 for `UAAlreadyRegistered` / `UAKeyInUse` / `kindOf` / `keyOwner` /
 ///         `recordOf` and hands records it does not hold, and members whose kind it does not enable, to gen 1's
@@ -759,11 +760,28 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         emit UAPqzKeyAdded(ua, h, pqzPopHash, pqzKey, sig);
     }
 
+    // ----- KEM records (P4, P5, P7; UA8-D3–D5, D11, D12) -----
+
+    function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external {
+        Record memory r = _records[ua];
+        // UA8-D11 before `_sigOk`: its gen-1 fallback would verify a gen-1 holder's record here (A6 re-review)
+        if (r.kind == 0) revert UAUnauthorized(ua);
+        (bytes memory d,,) = _registration(ua, r.keyPtr);
+        if (!_holder(r.kind, d)) revert UAKemHolder(ua);
+        if (version == 0 || _kem[ua][version].length != 0) revert UAKemVersion(ua, version);
+        if (kemPk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(kemPk.length);
+        bytes32 rd = UAKinds.kemRecordDigest(ua, version, kemPk);
+        if (!_sigOk(r.kind, d, ua, UAKinds.PURPOSE_KEM, rd, sig)) revert UAUnauthorized(ua);
+        _kem[ua][version] = SSTORE2.writeChunks(bytes.concat(kemPk, sig));
+        if (version > _kemMax[ua]) _kemMax[ua] = version;
+        emit UAKemKeySet(ua, version, keccak256(kemPk), kemPk, sig);
+    }
+
     function _isPq(uint16 kind) private pure returns (bool) {
         return kind >= UAKinds.MLDSA44 && kind <= UAKinds.SLHDSA128S;
     }
 
-    /// Step 6 (and A7's KEM record): a portable record's signature `sig` over `uaMessage(kind, purpose, digest)`.
+    /// Step 6 (and `setKemKey`, `setPqzKey`): a portable record's signature `sig` over `uaMessage(kind, purpose, digest)`.
     /// `msig`: `sig` empty unless PQ-eligible, then the m-of-n `MemberSig[]` (members under `member`, U5; a native member
     /// by `personal_sign` or ERC-1271, `_msig`'s `portable`); single keys: the kind's verifier (`verifyPop`). Only the
     /// portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3) reach this chain-free path; any other purpose

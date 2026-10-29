@@ -3,18 +3,6 @@ pragma solidity ^0.8.24;
 
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 
-/// @title The UA-8 members `UARegistry` does not implement yet (spec 2026-10-25-ua8-portable-registrations, P4, P7, P9).
-/// @notice UA-8 Task A5 folded the rest of the surface into `IUARegistry` (ruling C3), A6 `storePqzPop`, `setPqzKey` and
-///         `pqzKeySigOf`; A7 (`setKemKey`) moves the rest there as it implements it.
-interface IUARegistryUA8 {
-    /// A KEM record stored; `keyHash = keccak256(kemPk)`. Checked on chain (`CHECKED_CHAIN`) on EVM.
-    event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash);
-
-    /// Anyone; `sig` in the `pop` format over `uaMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`; each
-    /// `(ua, version)` once, any order (UA8-D5).
-    function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
-}
-
 /// @title The UA registry (accounts.md §1.8): monotonic, admin-free records of derived UAs and the one entry point
 ///        `requireAuthorized` that tokens call for every UA signature.
 /// @notice `eip712Domain()` (ERC-5267) comes from `IERC5267`: fields `0x1f`, name "SCaaS UARegistry", version = the
@@ -55,6 +43,10 @@ interface IUARegistry is IERC5267 {
     /// A PQZ key added by `setPqzKey` (`pqzKeyHash = keyHashOf(0x0142, pqzKey)`), with the call's bytes (spec P2: the
     /// record is copyable from the log); unproven (`CHECKED_NONE`) until its proof is stored (`UAPqzPopStored`).
     event UAPqzKeyAdded(bytes32 indexed ua, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);
+    /// A KEM record stored by `setKemKey` (`keyHash = keccak256(kemPk)`), with the call's bytes (spec P2, ruling A6-m
+    /// m3: the record is copyable from the log); checked on chain (`CHECKED_CHAIN`) on EVM. The initial record comes in
+    /// `UARegistered`.
+    event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, bytes kemPk, bytes sig);
     /// One part of an ML-DSA id's expanded key stored (P6c), at `ptr` (SSTORE2).
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);
 
@@ -135,6 +127,15 @@ interface IUARegistry is IERC5267 {
     /// `UAPoP` (`R_REG`) and `UAKeyInUse` (one UA per proven key) fire only where a proof is checked: `storePqzPop`,
     /// and `register` with a `pqzPop`. `UAPqzKeyAdded`.
     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, bytes calldata sig) external;
+    /// Anyone (P4, UA8-D5): the UA's KEM record `(version, kemPk)`; `sig` in the `pop` format (an msig: m-of-n
+    /// `MemberSig[]`, a code-less native member by `personal_sign`, one with code by ERC-1271) over `uaMessage(kind,
+    /// PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`. Each `(ua, version)` once, in any order; no owner check (two
+    /// UAs may list one key) and no revocation (P7). Stored `pk ‖ sig` (SSTORE2 chunks), `kemKeyOf` follows the highest
+    /// version, `UAKemKeySet` with the bytes. Check order: an id this registry does not hold (`UAUnauthorized`: an
+    /// unregistered id, and on gen 2 a gen-1 record, which goes to gen 1, UA8-D11) → holder (`UAKemHolder`: `mldsa44`,
+    /// `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA8-D12) → version 0 or stored, the initial record from `register`
+    /// included (`UAKemVersion`, UA8-D4) → `kemPk` of 1,600 B (`UAKemKeyLength`) → signature (`UAUnauthorized`).
+    function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
 
     /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, proven or not (UA8-D9: a directory), 0 = none (gen 2 forwards
     /// gen-1 records).

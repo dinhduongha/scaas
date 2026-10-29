@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {VmSafe} from "forge-std/Vm.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
@@ -229,7 +230,10 @@ contract UARegistryUA8Test is UARegistryBase {
             g.name = _js(j, string.concat(p, ".name"));
             g.entry = _js(j, string.concat(p, ".entry"));
             g.err = _js(j, string.concat(p, ".error"));
-            if (!_eq(g.entry, "register") && !_eq(g.entry, "storePqzPop") && !_eq(g.entry, "setPqzKey")) continue;
+            if (
+                !_eq(g.entry, "register") && !_eq(g.entry, "storePqzPop") && !_eq(g.entry, "setPqzKey")
+                    && !_eq(g.entry, "setKemKey")
+            ) continue;
             g.row = _js(j, string.concat(p, ".mutation.row"));
             g.keys = vm.parseJsonKeys(j, string.concat(p, ".mutation.set"));
             g.values = new bytes[](g.keys.length);
@@ -1539,6 +1543,22 @@ contract UARegistryUA8Test is UARegistryBase {
             (address p2,,) = g2.pqzKeyOf(k.ua);
             assertEq(t.keyPtr(address(g2), k.ua), p2);
             vm.revertToState(snap);
+            // A6 n1: gen 1's `setPqzKey` wrote the key; gen 2 proves it over the PURPOSE_PQZ_KEY message (the key's
+            // origin read from gen 1's `pqzKeySigOf`; the stand-in refuses the `register` message)
+            _reg(g1, base);
+            vm.prank(address(0xBEEF), address(0xBEEF));
+            g1.setPqzKey(k.ua, k.pqzKey, k.pqzPopHash, k.sig);
+            vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
+                abi.encode(uint256(1)));
+            vm.prank(address(0x7111D), address(0x7111D));
+            g2.storePqzPop(k.ua, proof);
+            _assertAdded(g2, base, k, proof, true);
+            (address q1,, bool v1) = g1.pqzKeyOf(k.ua);
+            (address q2,,) = g2.pqzKeyOf(k.ua);
+            assertEq(q2, q1, "gen 2 proves gen 1's key");
+            assertFalse(v1);
+            assertEq(t.keyPtr(address(g2), k.ua), q2);
+            vm.revertToState(snap);
         }
     }
 
@@ -1563,6 +1583,532 @@ contract UARegistryUA8Test is UARegistryBase {
         Row memory m = _find(rows, string.concat("msig-pq/", _setName()));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
         g2.register(m.kind, m.keyData, m.attrs, m.pop, m.pqzPop);
+    }
+
+    // ----- A7: KEM key records (P4, P5, P7, P9; UA8-D3–D5, D11, D12; rulings C2, C7, A6-m m3) -----
+
+    /// A `kemRecords` row of portable.json: `setKemKey(ua, version, kemPk, sig)`; `message` is what `sig` signs.
+    struct KemRec {
+        string id;
+        string name;
+        uint16 kind;
+        bytes32 ua;
+        uint64 version;
+        bytes kemPk;
+        bytes32 digest;
+        bytes32 message;
+        bytes sig;
+    }
+
+    function loadKemRecs() external view returns (KemRec[] memory recs) {
+        string memory j = vm.readFile(PJ);
+        uint256 n;
+        while (_jx(j, string.concat(".kemRecords[", vm.toString(n), "]"))) ++n;
+        recs = new KemRec[](n);
+        for (uint256 i; i < n; ++i) {
+            string memory p = string.concat(".kemRecords[", vm.toString(i), "]");
+            KemRec memory r = recs[i];
+            r.id = _js(j, string.concat(p, ".id"));
+            r.name = _js(j, string.concat(p, ".name"));
+            r.kind = uint16(_ju(j, string.concat(p, ".kind")));
+            r.ua = _jw(j, string.concat(p, ".ua"));
+            r.version = uint64(_ju(j, string.concat(p, ".version")));
+            r.kemPk = _jb(j, string.concat(p, ".kemPk"));
+            r.digest = _jw(j, string.concat(p, ".digest"));
+            r.message = _jw(j, string.concat(p, ".message"));
+            r.sig = _jb(j, string.concat(p, ".sig"));
+        }
+    }
+
+    function _kemRecs() internal view returns (KemRec[] memory recs) {
+        recs = this.loadKemRecs();
+        assertEq(recs.length, 9, "kemRecords: v1-v3 of mldsa65, fndsa512, msig-pq");
+        for (uint256 i; i < recs.length; ++i) {
+            KemRec memory k = recs[i];
+            assertEq(k.digest, UAKinds.kemRecordDigest(k.ua, k.version, k.kemPk), k.id);
+            assertEq(k.message, UAKinds.uaMessage(k.kind, UAKinds.PURPOSE_KEM, k.digest), k.id);
+        }
+    }
+
+    function _kemRec(KemRec[] memory ks, string memory id) internal pure returns (KemRec memory) {
+        for (uint256 i; i < ks.length; ++i) {
+            if (_eq(ks[i].id, id)) return ks[i];
+        }
+        revert(string.concat("no KEM record ", id));
+    }
+
+    /// The registration row of a KEM record's UA (this build's set for `mldsa65` / `msig-pq`; v1 is its initial record).
+    function _kemBase(Row[] memory rows, KemRec memory k) internal pure returns (Row memory) {
+        return _eq(k.name, "fndsa512") ? _find(rows, "fndsa512") : _find(rows, string.concat(k.name, "/", _setName()));
+    }
+
+    /// The mocked `mldsa65` precompile accepts the record's signature (`msig`: each `mldsa65` member's, under `member`).
+    function _allowKem(Row[] memory rows, Row memory base, KemRec memory k) internal {
+        if (k.kind == UAKinds.MLDSA65) _allowMl65(base.keyData, k.message, k.sig);
+        if (k.kind == UAKinds.MSIG) _allowMembers(rows, base.keyData, UAKinds.memberDigest(k.ua, k.message), k.sig);
+    }
+
+    /// The three KEM holders (msig members first) and every KEM record's signature allowed.
+    function _kemSetup(UARegistry r, Row[] memory rows, KemRec[] memory ks) internal {
+        _allowAll(rows);
+        _members(r, rows);
+        for (uint256 i; i < ks.length; ++i) {
+            Row memory base = _kemBase(rows, ks[i]);
+            _allowKem(rows, base, ks[i]);
+            if (r.kindOf(base.ua) == 0) _reg(r, base);
+        }
+    }
+
+    function _kemPk(uint256 seed) internal pure returns (bytes memory pk) {
+        pk = new bytes(UAKinds.KEM_PK_LENGTH);
+        for (uint256 o; o < pk.length; o += 32) {
+            bytes32 w = keccak256(abi.encode("kem", seed, o));
+            assembly {
+                mstore(add(add(pk, 32), o), w)
+            }
+        }
+    }
+
+    /// An `mldsa65` signature of `pk`'s key over `uaMsg`, accepted by the mocked precompile (that exact input only).
+    function _ml65Sig(bytes memory pk, bytes32 uaMsg) internal returns (bytes memory sig) {
+        sig = new bytes(3309);
+        bytes32 w = keccak256(abi.encode("sig", pk, uaMsg));
+        assembly {
+            mstore(add(sig, 32), w)
+        }
+        _allowMl65(pk, uaMsg, sig);
+    }
+
+    /// A KEM record of the single-key `mldsa65` row `r`, signed (mocked) over its `PURPOSE_KEM` message.
+    function _ml65Kem(Row memory r, uint64 v, bytes memory pk) internal returns (bytes memory) {
+        return _ml65Sig(r.keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(r.ua, v, pk)));
+    }
+
+    function _assertKemAt(UARegistry r, bytes32 ua, uint64 v, bytes memory pk, bytes memory sig) internal view {
+        (bytes memory p, bytes memory s) = r.kemKeyAt(ua, v);
+        assertEq(keccak256(abi.encode(p, s)), keccak256(abi.encode(pk, sig)), string.concat("kemKeyAt v", vm.toString(v)));
+    }
+
+    function _assertKemOf(UARegistry r, bytes32 ua, uint64 v, bytes memory pk, bytes memory sig) internal view {
+        (uint64 x, bytes memory p, bytes memory s) = r.kemKeyOf(ua);
+        assertEq(keccak256(abi.encode(x, p, s)), keccak256(abi.encode(v, pk, sig)), "kemKeyOf");
+    }
+
+    /// P4 / UA8-D5: anyone submits the UA's signed KEM record (fndsa512, its real verifier); `kemKeyAt` returns the
+    /// written bytes, `kemKeyOf` the highest version; the initial record (v1, from `register`) keeps its empty `sig`.
+    function test_ua8_setKemKeyByThirdParty() public {
+        Row[] memory rows = _rows();
+        KemRec[] memory ks = _kemRecs();
+        KemRec memory k1 = _kemRec(ks, "fndsa512/v1");
+        KemRec memory k2 = _kemRec(ks, "fndsa512/v2");
+        UARegistry a = _regA(false);
+        _reg(a, rows[FNDSA_ROW]);
+        vm.prank(address(0xBEEF), address(0xBEEF));
+        a.setKemKey(k2.ua, 2, k2.kemPk, k2.sig);
+        _assertKemAt(a, k2.ua, 2, k2.kemPk, k2.sig);
+        _assertKemAt(a, k2.ua, 1, k1.kemPk, "");
+        _assertKemAt(a, k2.ua, 3, "", "");
+        _assertKemOf(a, k2.ua, 2, k2.kemPk, k2.sig);
+        _checkedEq(a, k2.ua, 1, 0, 1);
+        assertEq(keccak256(_stored(a, k2.ua)), keccak256(_args(rows[FNDSA_ROW])), "registrationOf: the register args (C2)");
+    }
+
+    /// P1 / P10: every portable.json `kemRecords` row lands on two registries (other chain id, uid, address) with the
+    /// same bytes; v1 is each UA's initial record from `register`, so its `setKemKey` is `UAKemVersion` (UA8-D4).
+    function test_ua8_kemCopyBetweenRegistries() public {
+        Row[] memory rows = _rows();
+        KemRec[] memory ks = _kemRecs();
+        UARegistry a = _regA(false);
+        UARegistry b = _regB();
+        _kemSetup(a, rows, ks);
+        vm.chainId(7622);
+        _kemSetup(b, rows, ks);
+        uint256 written;
+        for (uint256 i; i < ks.length; ++i) {
+            KemRec memory k = ks[i];
+            UARegistry[2] memory rs = [a, b];
+            for (uint256 j; j < 2; ++j) {
+                vm.chainId(j == 0 ? 31337 : 7622);
+                if (k.version == _kemBase(rows, k).attrs.kemVersion) {
+                    vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, k.ua, k.version));
+                    rs[j].setKemKey(k.ua, k.version, k.kemPk, k.sig);
+                    _assertKemAt(rs[j], k.ua, k.version, k.kemPk, "");
+                    continue;
+                }
+                vm.prank(address(0xC0B1E5), address(0xC0B1E5));
+                rs[j].setKemKey(k.ua, k.version, k.kemPk, k.sig);
+                _assertKemAt(rs[j], k.ua, k.version, k.kemPk, k.sig);
+                ++written;
+            }
+        }
+        vm.chainId(31337);
+        assertEq(written, 12, "v2 and v3 of three UAs on two registries");
+        for (uint256 i; i < ks.length; ++i) {
+            (bytes memory pa, bytes memory sa) = a.kemKeyAt(ks[i].ua, ks[i].version);
+            (bytes memory pb, bytes memory sb) = b.kemKeyAt(ks[i].ua, ks[i].version);
+            assertEq(keccak256(abi.encode(pa, sa)), keccak256(abi.encode(pb, sb)), ks[i].id);
+            if (ks[i].version == 3) {
+                _assertKemOf(a, ks[i].ua, 3, ks[i].kemPk, ks[i].sig);
+                _assertKemOf(b, ks[i].ua, 3, ks[i].kemPk, ks[i].sig);
+            }
+        }
+    }
+
+    /// UA8-D5: any order — 3, then 1, then 2 on a UA registered without a KEM record: all stored, `kemKeyOf` stays 3.
+    function test_ua8_kemLowerVersionAfterHigher() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory x = rows[ML65_1];
+        assertEq(x.attrs.kemVersion, 0);
+        UARegistry a = _regA(false);
+        _reg(a, x);
+        _assertKemOf(a, x.ua, 0, "", "");
+        _checkedEq(a, x.ua, 1, 0, 0);
+        uint64[3] memory order = [uint64(3), 1, 2];
+        bytes[4] memory pks;
+        bytes[4] memory sigs;
+        for (uint256 i; i < 3; ++i) {
+            uint64 v = order[i];
+            pks[v] = _kemPk(v);
+            sigs[v] = _ml65Kem(x, v, pks[v]);
+            a.setKemKey(x.ua, v, pks[v], sigs[v]);
+            _assertKemOf(a, x.ua, 3, pks[3], sigs[3]);
+            _checkedEq(a, x.ua, 1, 0, 1);
+        }
+        for (uint64 v = 1; v <= 3; ++v) _assertKemAt(a, x.ua, v, pks[v], sigs[v]);
+    }
+
+    /// UA8-D5: write-once per `(ua, version)`: the same bytes again and other (validly signed) bytes are `UAKemVersion`.
+    function test_ua8_kemRepeatedVersionRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory x = rows[ML65_1];
+        UARegistry a = _regA(false);
+        _reg(a, x);
+        bytes memory pk = _kemPk(1);
+        bytes memory sig = _ml65Kem(x, 3, pk);
+        a.setKemKey(x.ua, 3, pk, sig);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 3));
+        a.setKemKey(x.ua, 3, pk, sig);
+        bytes memory other = _kemPk(2);
+        bytes memory otherSig = _ml65Kem(x, 3, other);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 3));
+        a.setKemKey(x.ua, 3, other, otherSig);
+        _assertKemAt(a, x.ua, 3, pk, sig);
+    }
+
+    /// UA8-D3: version 0 is never a record (`UAKemVersion(ua, 0)`), even validly signed.
+    function test_ua8_kemVersionZeroRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory x = rows[ML65_1];
+        UARegistry a = _regA(false);
+        _reg(a, x);
+        bytes memory pk = _kemPk(0);
+        bytes memory sig = _ml65Kem(x, 0, pk);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 0));
+        a.setKemKey(x.ua, 0, pk, sig);
+        _assertKemOf(a, x.ua, 0, "", "");
+    }
+
+    /// P7: the KEM key is 1,600 bytes (`UAKemKeyLength`, before the signature): 1,599, 1,601 and 0 are refused.
+    function test_ua8_kemLengthRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory x = rows[ML65_1];
+        UARegistry a = _regA(false);
+        _reg(a, x);
+        uint256[3] memory lens = [uint256(1599), 1601, 0];
+        for (uint256 i; i < 3; ++i) {
+            bytes memory pk = _slice(bytes.concat(_kemPk(7), hex"07"), 0, lens[i]);
+            bytes memory sig = _ml65Kem(x, 1, pk);
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemKeyLength.selector, lens[i]));
+            a.setKemKey(x.ua, 1, pk, sig);
+        }
+    }
+
+    /// P7 / UA8-D12: only the PQ holders (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`) hold KEM keys:
+    /// `secp256k1`, `slhdsa128s` and a classical `msig` are `UAKemHolder`; an unregistered id is `UAUnauthorized`.
+    function test_ua8_kemNonHolderRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        Row[3] memory xs = [rows[SECP_ROW], rows[SLH_ROW], _find(rows, "msig-classical")];
+        bytes memory pk = _kemPk(1);
+        for (uint256 i; i < 3; ++i) {
+            if (a.kindOf(xs[i].ua) == 0) _reg(a, xs[i]);
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, xs[i].ua));
+            a.setKemKey(xs[i].ua, 1, pk, "");
+        }
+        bytes32 none = keccak256("unregistered");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, none));
+        a.setKemKey(none, 1, pk, "");
+    }
+
+    /// The m-of-n record signature (U5; rulings C7, A1-I2): portable.json's `msig-pq` v2 (2-of-2 `mldsa65` members)
+    /// lands, one member alone does not. A 2-of-3 PQ-eligible `msig` (two `mldsa65` members, one code-less native
+    /// member signing by `personal_sign` under PURPOSE_KEM) takes every 2-member subset and refuses a single member,
+    /// out-of-order members and the native member's UAAuth (EIP-712) signature.
+    function test_ua8_kemMsigMofN() public {
+        Row[] memory rows = _rows();
+        KemRec[] memory ks = _kemRecs();
+        UARegistry a = _regA(false);
+        _kemSetup(a, rows, ks);
+        KemRec memory k = _kemRec(ks, "msig-pq/v2");
+        UARegistry.MemberSig[] memory s = abi.decode(k.sig, (UARegistry.MemberSig[]));
+        assertEq(s.length, 2);
+        UARegistry.MemberSig[] memory one = new UARegistry.MemberSig[](1);
+        one[0] = s[0];
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, k.ua));
+        a.setKemKey(k.ua, 2, k.kemPk, abi.encode(one));
+        a.setKemKey(k.ua, 2, k.kemPk, k.sig);
+        _assertKemAt(a, k.ua, 2, k.kemPk, k.sig);
+        // 2-of-3 with a native member
+        uint256 sk = _nativeSk();
+        (bytes memory d, bytes32 ua) = _msig2of3(a, rows, sk);
+        bytes memory pk = _kemPk(23);
+        _kemSubsets(a, rows, d, ua, pk, sk);
+        _kemNativeUAAuth(a, rows, d, ua, pk, sk);
+    }
+
+    /// A 2-of-3 PQ-eligible `msig` of `mldsa65#1`, `mldsa65#2` and the native `sk`, registered on `a`.
+    function _msig2of3(UARegistry a, Row[] memory rows, uint256 sk) internal returns (bytes memory d, bytes32 ua) {
+        Member[] memory mm = new Member[](3);
+        mm[0] = Member(UAKinds.MLDSA65, rows[ML65_1].ua, 1);
+        mm[1] = Member(UAKinds.MLDSA65, rows[ML65_1 + 1].ua, 1);
+        mm[2] = Member(UAKinds.EVM_EOA, _pad(vm.addr(sk)), 1);
+        d = _msigKey(2, mm);
+        ua = UAKinds.uaOf(UAKinds.MSIG, d);
+        bytes memory pop =
+            _msigSigs(rows, d, ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_POP_V2, _regDigest(ua, _none())), 0, 1, sk);
+        assertEq(a.register(UAKinds.MSIG, d, _none(), pop, ""), ua);
+    }
+
+    /// Versions 1–3 signed by each 2-member subset land; one member, and two out of order, are refused.
+    function _kemSubsets(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, bytes memory pk, uint256 sk)
+        internal
+    {
+        uint8[2][3] memory pairs = [[0, 1], [0, 2], [1, 2]];
+        for (uint64 v = 1; v <= 3; ++v) {
+            bytes32 m = UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, v, pk));
+            bytes memory sig = _msigSigs(rows, d, ua, m, pairs[v - 1][0], pairs[v - 1][1], sk);
+            UARegistry.MemberSig[] memory p = abi.decode(sig, (UARegistry.MemberSig[]));
+            UARegistry.MemberSig[] memory bad = new UARegistry.MemberSig[](1);
+            bad[0] = p[1];
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+            a.setKemKey(ua, v, pk, abi.encode(bad)); // one member: below the threshold
+            bad = new UARegistry.MemberSig[](2);
+            bad[0] = p[1];
+            bad[1] = p[0];
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+            a.setKemKey(ua, v, pk, abi.encode(bad)); // out of order
+            a.setKemKey(ua, v, pk, sig);
+            _assertKemAt(a, ua, v, pk, sig);
+        }
+    }
+
+    /// The native member's UAAuth signature instead of `personal_sign` is refused (chain-bound); its `personal_sign`
+    /// lands.
+    function _kemNativeUAAuth(UARegistry a, Row[] memory rows, bytes memory d, bytes32 ua, bytes memory pk, uint256 sk)
+        internal
+    {
+        uint256 ni;
+        for (uint256 i; i < 3; ++i) {
+            (uint16 kind,) = _member(d, i);
+            if (kind == UAKinds.EVM_EOA) ni = i;
+        }
+        bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM,
+            UAKinds.kemRecordDigest(ua, 4, pk)));
+        bytes32 m4 = UAKinds.uaMessage(UAKinds.MSIG, UAKinds.PURPOSE_KEM, UAKinds.kemRecordDigest(ua, 4, pk));
+        uint256 other = ni == 0 ? 1 : 0;
+        UARegistry.MemberSig[] memory q = abi.decode(
+            _msigSigs(rows, d, ua, m4, other < ni ? other : ni, other < ni ? ni : other, sk), (UARegistry.MemberSig[])
+        );
+        uint256 qn = q[0].index == ni ? 0 : 1;
+        q[qn].sig = _nativeSig(a, sk, UAKinds.PURPOSE_MEMBER, md);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        a.setKemKey(ua, 4, pk, abi.encode(q));
+        q[qn].sig = _ecdsa(sk, MessageHashUtils.toEthSignedMessageHash(md));
+        a.setKemKey(ua, 4, pk, abi.encode(q));
+        _assertKemOf(a, ua, 4, pk, abi.encode(q));
+    }
+
+    /// The `MemberSig[]` of members `i < j` of the `msig` `d` over `uaMsg` (portable): an `mldsa65` member under `member`
+    /// (mocked), a native member by `personal_sign` of `memberDigest` with `sk`.
+    function _msigSigs(Row[] memory rows, bytes memory d, bytes32 ua, bytes32 uaMsg, uint256 i, uint256 j, uint256 sk)
+        internal
+        returns (bytes memory)
+    {
+        bytes32 md = UAKinds.memberDigest(ua, uaMsg);
+        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
+        s[0] = UARegistry.MemberSig(uint16(i), "", _memberSig(rows, d, i, md, sk));
+        s[1] = UARegistry.MemberSig(uint16(j), "", _memberSig(rows, d, j, md, sk));
+        return abi.encode(s);
+    }
+
+    function _memberSig(Row[] memory rows, bytes memory d, uint256 index, bytes32 md, uint256 sk)
+        internal
+        returns (bytes memory)
+    {
+        (uint16 kind, bytes32 id) = _member(d, index);
+        if (kind == UAKinds.EVM_EOA) return _ecdsa(sk, MessageHashUtils.toEthSignedMessageHash(md));
+        return _ml65Sig(_byUa(rows, id).keyData, UAKinds.uaMessage(UAKinds.MLDSA65, UAKinds.PURPOSE_MEMBER, md));
+    }
+
+    /// The record's signature (`UAUnauthorized`): portable.json's `setKemKey` negatives (another version's signature,
+    /// another UA's record), and a flipped byte; each record with its own bytes then lands.
+    function test_ua8_kemBadSigRefused() public {
+        Row[] memory rows = _rows();
+        KemRec[] memory ks = _kemRecs();
+        Neg[] memory negs = this.loadNegs();
+        UARegistry a = _regA(false);
+        _kemSetup(a, rows, ks);
+        uint256 n;
+        for (uint256 i; i < negs.length; ++i) {
+            Neg memory g = negs[i];
+            if (!_eq(g.entry, "setKemKey")) continue;
+            assertEq(g.err, "UAUnauthorized");
+            KemRec memory k0 = _kemRec(ks, g.row);
+            (bytes32 ua, bytes memory sig) = (k0.ua, k0.sig);
+            for (uint256 f; f < g.keys.length; ++f) {
+                if (_eq(g.keys[f], "ua")) ua = bytes32(g.values[f]);
+                else if (_eq(g.keys[f], "sig")) sig = g.values[f];
+                else revert(string.concat(g.name, ": unknown mutation ", g.keys[f]));
+            }
+            assertTrue(a.kindOf(ua) != 0, "the target UA is registered (the signature is what fails)");
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+            a.setKemKey(ua, k0.version, k0.kemPk, sig);
+            _assertKemAt(a, ua, k0.version, "", "");
+            ++n;
+        }
+        assertEq(n, 2, "kem-sig-of-other-version, kem-record-of-other-ua");
+        KemRec memory k = _kemRec(ks, "fndsa512/v2");
+        bytes memory flipped = bytes.concat(k.sig);
+        flipped[flipped.length / 2] ^= 0x01;
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, k.ua));
+        a.setKemKey(k.ua, 2, k.kemPk, flipped);
+        string[2] memory ok = [string("fndsa512/v2"), "mldsa65/v3"];
+        for (uint256 i; i < 2; ++i) {
+            KemRec memory r = _kemRec(ks, ok[i]);
+            a.setKemKey(r.ua, r.version, r.kemPk, r.sig);
+            _assertKemAt(a, r.ua, r.version, r.kemPk, r.sig);
+        }
+    }
+
+    /// P7: no owner check — two UAs list the same KEM key, each under its own signature.
+    function test_ua8_kemNoOwnerCheck() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry a = _regA(false);
+        Row memory x = rows[ML65_1];
+        Row memory y = rows[ML65_1 + 1];
+        assertEq(y.name, "mldsa65#2");
+        _reg(a, x);
+        _reg(a, y);
+        bytes memory pk = _kemPk(42);
+        bytes memory sx = _ml65Kem(x, 1, pk);
+        bytes memory sy = _ml65Kem(y, 5, pk);
+        a.setKemKey(x.ua, 1, pk, sx);
+        a.setKemKey(y.ua, 5, pk, sy);
+        _assertKemOf(a, x.ua, 1, pk, sx);
+        _assertKemOf(a, y.ua, 5, pk, sy);
+    }
+
+    /// Ruling A6-m m3 (spec P2): `UAKemKeySet` carries the written bytes (`kemPk`, `sig`) with `keccak256(kemPk)`; the
+    /// only log of the call. The gas of each holder kind's record is logged (`mldsa65`: its precompile mocked).
+    function test_ua8_kemEvent() public {
+        Row[] memory rows = _rows();
+        KemRec[] memory ks = _kemRecs();
+        UARegistry a = _regA(false);
+        _kemSetup(a, rows, ks);
+        string[3] memory ids = [string("fndsa512/v2"), "mldsa65/v2", "msig-pq/v2"];
+        for (uint256 i; i < 3; ++i) {
+            KemRec memory k = _kemRec(ks, ids[i]);
+            vm.recordLogs();
+            vm.expectEmit(true, true, false, true, address(a));
+            emit IUARegistry.UAKemKeySet(k.ua, k.version, keccak256(k.kemPk), k.kemPk, k.sig);
+            uint256 g = gasleft();
+            a.setKemKey(k.ua, k.version, k.kemPk, k.sig);
+            g -= gasleft();
+            VmSafe.Log[] memory logs = vm.getRecordedLogs();
+            uint256 mine;
+            for (uint256 l; l < logs.length; ++l) {
+                if (logs[l].emitter == address(a)) ++mine;
+            }
+            assertEq(mine, 1, "one log");
+            uint256 data = abi.encode(keccak256(k.kemPk), k.kemPk, k.sig).length;
+            emit log_named_uint(string.concat("setKemKey gas, ", k.id, " (sig ", vm.toString(k.sig.length),
+                " B; event data B ", vm.toString(data), ")"), g);
+        }
+    }
+
+    /// UA8-D11 (A6 re-review note): gen 2 refuses a KEM record for a record gen 1 holds (`UAUnauthorized`: it goes to
+    /// gen 1), even where `_sigOk` could verify it — a holder kind gen 2 does not enable falls back to gen 1's
+    /// `requireAuthorized` (accepted here), an `msig` hands its members to gen 1 (the same bytes land on gen 2 for a
+    /// record gen 2 holds) — and even on a gen 2 that holds gen-1 records' PQZ attachments (ruling A6-I1). Gen 1 takes
+    /// the record; gen 2 forwards `kemKeyOf` / `kemKeyAt`.
+    function test_ua8_kemGen2RecordElsewhereRefused() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        KemRec[] memory ks = _kemRecs();
+        UARegistry g1 = _regA(false);
+        _members(g1, rows);
+        UARegistry g2 = _gen2Pqz(address(0x5cebe), g1);
+        string[2] memory ids = [string("fndsa512/v2"), "msig-pq/v2"];
+        for (uint256 i; i < 2; ++i) {
+            KemRec memory k = _kemRec(ks, ids[i]);
+            Row memory base = _kemBase(rows, k);
+            _allowKem(rows, base, k);
+            uint256 snap = vm.snapshotState();
+            _reg(g1, base);
+            if (k.kind == UAKinds.FNDSA512) {
+                assertFalse(g2.kindEnabled(UAKinds.FNDSA512));
+                g1.requireAuthorized(k.ua, UAKinds.PURPOSE_KEM, k.digest, abi.encode(bytes(""), k.sig)); // _sigOk's fallback
+            }
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, k.ua));
+            g2.setKemKey(k.ua, k.version, k.kemPk, k.sig);
+            _assertKemAt(g2, k.ua, k.version, "", "");
+            g1.setKemKey(k.ua, k.version, k.kemPk, k.sig);
+            _assertKemOf(g2, k.ua, k.version, k.kemPk, k.sig);
+            _assertKemAt(g2, k.ua, k.version, k.kemPk, k.sig);
+            _assertKemAt(g2, k.ua, 1, base.attrs.kemPk, "");
+            if (k.kind == UAKinds.MSIG) {
+                // a record gen 2 holds (members on gen 1): the same bytes land on gen 2
+                vm.revertToState(snap);
+                _allowPqz(base);
+                _reg(g2, base);
+                g2.setKemKey(k.ua, k.version, k.kemPk, k.sig);
+                _assertKemOf(g2, k.ua, k.version, k.kemPk, k.sig);
+                _assertKemOf(g1, k.ua, 0, "", "");
+            }
+            vm.revertToState(snap);
+        }
+    }
+
+    /// UA8-D4 / ruling C2: `register`'s initial KEM record occupies its version — `setKemKey` of it is `UAKemVersion`
+    /// (the vector's signed v1, and other bytes); `kemKeyAt` returns it with an empty `sig` (its consent is the pop),
+    /// and `registrationOf` keeps returning the `register` arguments after later records.
+    function test_ua8_kemInitialVersionFromRegister() public {
+        Row[] memory rows = _rows();
+        KemRec[] memory ks = _kemRecs();
+        Row memory x = rows[FNDSA_ROW];
+        KemRec memory k1 = _kemRec(ks, "fndsa512/v1");
+        KemRec memory k3 = _kemRec(ks, "fndsa512/v3");
+        assertEq(x.attrs.kemVersion, 1);
+        assertEq(x.attrs.kemPk, k1.kemPk);
+        UARegistry a = _regA(false);
+        _reg(a, x);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 1));
+        a.setKemKey(x.ua, 1, k1.kemPk, k1.sig);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemVersion.selector, x.ua, 1));
+        a.setKemKey(x.ua, 1, k3.kemPk, k3.sig);
+        _assertKemAt(a, x.ua, 1, k1.kemPk, "");
+        _assertKemOf(a, x.ua, 1, k1.kemPk, "");
+        a.setKemKey(x.ua, 3, k3.kemPk, k3.sig);
+        _assertKemOf(a, x.ua, 3, k3.kemPk, k3.sig);
+        _assertKemAt(a, x.ua, 1, k1.kemPk, "");
+        assertEq(keccak256(_stored(a, x.ua)), keccak256(_args(x)), "registrationOf: the register args (C2)");
     }
 
     // ----- helpers -----
