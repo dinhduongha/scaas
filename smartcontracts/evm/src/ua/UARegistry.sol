@@ -129,22 +129,23 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     mapping(bytes32 ua => Record) private _records;
     mapping(bytes32 keyHash => bytes32) private _keyOwner;
-    mapping(bytes32 ua => address) private _pqzKey; // UA-6: SSTORE2 pointer of the PQZ key, 0 = none; written once
+    /// UA-6 / UA-8: the PQZ key's SSTORE2 pointer (0 = none; written once) and, in the same slot, whether the
+    /// slot-0x0142 verifier checked its proof (UA8-D8, D9): `pqzKeyOf` costs a PQZ token's `_keyPtr` two SLOADs.
+    struct PqzKey {
+        address ptr;
+        bool proven;
+    }
+
+    mapping(bytes32 ua => PqzKey) private _pqzKey;
     mapping(bytes32 ua => address[2]) private _ekPtr; // ML-DSA expanded-key parts (SSTORE2), written once each
     mapping(uint16 kind => uint256) private _uaCount; // per-kind list length (single-key kinds)
     mapping(uint16 kind => mapping(uint256 i => bytes32 ua)) private _uaAt;
-
-    /// UA-8: the PQZ key's proof hash (from `attrs`) and whether the slot-0x0142 verifier checked the proof (UA8-D8, D9).
-    struct PqzAttr {
-        bytes32 popHash;
-        bool proven;
-    }
 
     /// The registration blob (UA8-D7): `abi.encode(bytes keyRest, bytes pop, uint64 kemVersion)`, `keyRest` = the key
     /// data after the stored kinds' `keyPtr` prefix (all of it for the other kinds), `kemVersion` the initial KEM
     /// version (0 = none; ruling C2). `keyData` = `SSTORE2.read(keyPtr) ‖ keyRest`: stored once.
     mapping(bytes32 ua => address[]) private _reg;
-    mapping(bytes32 ua => PqzAttr) private _pqz;
+    mapping(bytes32 ua => bytes32) private _pqzPopHash; // the PQZ key's proof hash (`attrs.pqzPopHash`)
     mapping(bytes32 ua => address[]) private _pqzPop; // the R_REG proof bytes, written once
     mapping(bytes32 ua => mapping(uint64 version => address[])) private _kem; // `pk ‖ sig` (initial record: `sig` = "")
     mapping(bytes32 ua => uint64) private _kemMax; // the highest stored KEM version, 0 = none
@@ -257,14 +258,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey) {
         r = _records[ua];
         if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).recordOf(ua);
-        pqzKey = _pqzKey[ua];
+        pqzKey = _pqzKey[ua].ptr;
     }
 
     // ----- UA-8 reads (gen 2 forwards a record it does not hold, UA8-D11) -----
 
-    /// A record gen 1 holds (this registry is gen 2 and has none of its own).
+    /// A record gen 1 holds (this registry is gen 2 and has none of its own). Gen 1 reads no storage here.
     function _elsewhere(bytes32 ua) private view returns (bool) {
-        return _records[ua].kind == 0 && predecessor != address(0);
+        return predecessor != address(0) && _records[ua].kind == 0;
     }
 
     function registrationOf(bytes32 ua)
@@ -281,7 +282,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (rest, pop, v) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
         keyData = bytes.concat(SSTORE2.read(r.keyPtr), rest);
         (bytes memory kemPk,) = _kemAt(ua, v);
-        attrs = UAAttrs(SSTORE2.read(_pqzKey[ua]), _pqz[ua].popHash, v, kemPk);
+        attrs = UAAttrs(SSTORE2.read(_pqzKey[ua].ptr), _pqzPopHash[ua], v, kemPk);
         pqzPop = SSTORE2.readChunks(_pqzPop[ua]);
     }
 
@@ -298,14 +299,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).pqzKeyOf(ua);
-        PqzAttr memory a = _pqz[ua];
-        return (_pqzKey[ua], a.popHash, a.proven);
+        PqzKey memory k = _pqzKey[ua];
+        return (k.ptr, _pqzPopHash[ua], k.proven);
     }
 
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).checkedOf(ua);
         if (_records[ua].kind == 0) return (pop, pqzPop, kem);
-        return (UAKinds.CHECKED_CHAIN, _checked(_pqz[ua].proven), _checked(_kemMax[ua] != 0));
+        return (UAKinds.CHECKED_CHAIN, _checked(_pqzKey[ua].proven), _checked(_kemMax[ua] != 0));
     }
 
     function kemKeyOf(bytes32 ua) external view returns (uint64 version, bytes memory pk, bytes memory sig) {
@@ -498,7 +499,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function _registered(bytes32 ua, uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) private
     {
-        (uint8 q, uint8 k) = (_checked(_pqz[ua].proven), _checked(_kemMax[ua] != 0));
+        (uint8 q, uint8 k) = (_checked(_pqzKey[ua].proven), _checked(_kemMax[ua] != 0));
         emit UARegistered(ua, kind, keyData, attrs, pop, pqzPop, UAKinds.CHECKED_CHAIN, q, k);
     }
 
@@ -602,8 +603,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// (`UAKeyInUse`, either generation), `keyOwner(h)`, the `0x0142` list.
     function _pqzAttach(bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop, bytes32 h, bytes32 portable) private {
         if (h == 0) return;
-        _pqzKey[ua] = SSTORE2.write(attrs.pqzKey);
-        _pqz[ua].popHash = attrs.pqzPopHash;
+        _pqzKey[ua].ptr = SSTORE2.write(attrs.pqzKey);
+        _pqzPopHash[ua] = attrs.pqzPopHash;
         if (pqzPop.length == 0) return;
         _pqzProof(ua, attrs.pqzKey, pqzPop, h, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable));
     }
@@ -622,7 +623,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             if (owner != 0) revert UAKeyInUse(h, owner);
             _keyOwner[h] = ua;
             _list(UAKinds.PQZ_MLWE, ua);
-            _pqz[ua].proven = proven = true;
+            _pqzKey[ua].proven = proven = true;
         }
         emit UAPqzPopStored(ua, _checked(proven));
     }

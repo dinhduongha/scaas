@@ -118,8 +118,8 @@ contract PqzGuardsTest is PqzFixture {
     // ------------------------------------------------------------------ C2-4: value-in checks use _keyPtr
 
     function test_valueIn_keyOfAnotherLengthRefused() public {
-        (IUARegistry.Record memory r,) = reg.recordOf(bob);
-        vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.recordOf.selector, bob), abi.encode(r, address(ct)));
+        (, bytes32 ph, bool proven) = reg.pqzKeyOf(bob);
+        vm.mockCall(address(reg), abi.encodeWithSelector(IUARegistry.pqzKeyOf.selector, bob), abi.encode(address(ct), ph, proven));
         bytes memory err = abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bob);
         _public(tok, address(this), SCALE);
         vm.expectRevert(err);
