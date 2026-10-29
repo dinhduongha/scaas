@@ -102,10 +102,10 @@ MBR (µALGO; box MBR = 2,500 + 400 per name and value byte):
 | order `o` | 16,100 | same |
 | subject record: 2,500 + 400 × (34 + 118 + 32 per key or origin); ed25519 UA 76,100, passkey UA + origin 88,900, +12,800 per key or origin; a native signer's key-op record 63,300 | as stated | `…/2026-10-28-algorand-account-fix2.txt` |
 | mandate box (41 B name + 204 B value) | 100,500 | `…/2026-10-29-algorand-mandate-fix1.txt` |
-| app minimum for the deployer (schema and pages): account 300,000; token 507,000; relayfee 128,500; mandate 228,500; dex 128,500; each app address funded to its 100,000 base | as stated | `…/2026-10-28-algorand-e2e.txt` |
+| an app address's base minimum (each app is funded to it at deploy); the deployer's own minimum grows by each app's schema and pages, read from algod (the e2e's partial deploy hit "below min 1035500") | 100,000 | `…/2026-10-29-algorand-relayfee-fix1.txt`; `…/2026-10-28-algorand-e2e.txt` |
 
 Approval programs (`smartcontracts/algorand/runs/2026-10-28-algorand-e2e.txt`): account 4,945 B (2 extra pages), token
-3,661 B (1), mandate 2,304 B (1), relayfee 857 B (0), dex 961 B (0); executor LogicSig 85 B; clear programs 4 B.
+3,661 B (1), mandate 2,304 B (1), relayfee 857 B (0), dex 961 B (0); clear programs 4 B; executor LogicSig 85 B (`…/2026-10-29-algorand-relayfee-fix1.txt`).
 
 ## 3. Keys
 
@@ -127,7 +127,8 @@ msig-rekeyed address can add keys natively but not remove them (NEAR parity). BU
 <a id="NET-ALG-09"></a>**NET-ALG-09** — **An msig has at most 3 members.** `MSIG_MAX_MEMBERS` is bound by the 2,048 B of
 app-call arguments, not by budget: with a Chrome-shaped `clientDataJSON` (286 B: a 64 B origin and Chrome's extra
 member) a passkey member costs 493 B, so 3 members take 1,823 B and 4 take 2,316 B (a 134 B `clientDataJSON` would
-allow 4 at 342 B each). A passkey field is ≤ 1 KiB. BUILT (`smartcontracts/algorand/runs/2026-10-28-algorand-account-fix2.txt`).
+allow 4 at 342 B each). A passkey field is ≤ 1 KiB. BUILT (493 / 2,316 B: `smartcontracts/algorand/runs/2026-10-28-algorand-limits.txt`;
+1,823 B: `…/2026-10-28-algorand-account-fix2.txt`).
 
 <a id="NET-ALG-08"></a>**NET-ALG-08** — **Apps raise their own opcode budget with relayer-paid inner budget calls.**
 Each account entry and signature check calls `ensure_budget(cost + 1,000)`: inner budget calls paid from the group's
@@ -450,5 +451,6 @@ goes through this one router; `target == relayfee` is refused. BUILT.
 executor program = PREFIX ‖ router app id ‖ SUFFIX ‖ `20 01 s` (an `intcblock 1 s`, dead code); the router stores `s`
 (uint8 < 128) at creation and derives `executor()` from it; the deployer picks the lowest `s` whose address is not an
 ed25519 point (go-algorand `IsEdwards25519Point`), so no private key can exist for the executor even in principle.
-Measured: the lowest off-curve salt is at most 9 over ids 1–1999; unsalted, 9 of ids 1000–1019 were on-curve. The
+Unsalted, 9 of router ids 1000–1019 were on-curve (`smartcontracts/algorand/runs/2026-10-28-algorand-limits.txt`); the
+lowest-salt search is `exec_salt` (`smartcontracts/algorand/tests/conftest.py:360`) and `deploy.py`. The
 router is no longer fully stateless (one global). BUILT.

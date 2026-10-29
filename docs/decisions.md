@@ -5467,7 +5467,7 @@ must read the params to tell set_policy from set_guardian under op 10.
 the full key-data grammar) and a non-native-space UA id, not for ed25519 small order / canonical `y` nor for P-256 /
 secp256k1 points on the curve (the EVM registry's key-validation rule). Accepted: a bad key never verifies, and only
 the subject's own already-authorised key op (or its guardian's recovery) can add one, so only that subject is
-affected; a lazily opened UA needs a valid signature by its key. Status: BUILT (near-algorand Task 5). Controller
+affected; a lazily opened UA needs a valid signature by its key. Status: BUILT (near-algorand Task 5, commit `fa81e0a2`). Controller
 call 2026-10-28, owner may override.
 **Why.** The curve checks cost wasm gas on every add and protect nobody but the adder.
 **Cost if wrong.** Add the checks in `KeyRecord::validate` (P-256 through the `p256` crate already linked).
@@ -5570,7 +5570,8 @@ tests pin each deviation).
 
 **Rule.** No TTL, no deletion, no refund of a balance or record; lanes are kept, so CTR-MTX-04 / NET-ALL-01 hold by
 construction; only the router's pending entries and the DEX's settle entries are pruned, each deposit returned to
-whoever staked it (controller call, accepted by the owner, wording 2026-10-28). Status: BUILT (T4–T10).
+whoever staked it (controller call, accepted by the owner, wording 2026-10-28). Status: BUILT (T4–T10, commits
+`54b1cf6d` … `e23f4390`; lanes `36582104`, DEX prune `69dd08bd`, router entries `1862c8b0`).
 **Why.** Pruning lanes would reopen pay-once after the horizon; escrow entries are working state with nothing left to
 protect once settled.
 **Cost if wrong.** Permanent lanes cost the relayer one lane record per payer and lane, for good (114 B for a UA
@@ -5945,7 +5946,7 @@ for tests; plain py-algorand-sdk harness. Status: BUILT (`b9e758d8`, `08184a1b`)
 
 **Rule.** No box deleted, no MBR refunded (a shrinking record keeps its MBR), lanes kept (non-pruning, so CTR-MTX-04 /
 NET-ALL-01 hold by construction), `OptIn` refused (controller call accepted by the owner, wording 2026-10-28). Status:
-BUILT (T11–T15).
+BUILT (T11–T15, commits `b9e758d8` … `23c8530a`).
 **Why.** One permanence rule with NEAR and the long-lived-balance families.
 **Cost if wrong.** The relayer's MBR stays locked for good (18,900 µALGO per lane box).
 **Source.** spec §0 row 5, §4.1.
@@ -6199,7 +6200,7 @@ placeholder app ids 1001–1003 replaced by the deploying tasks; salt = the paym
 - old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-22 · superseded-by: —
 
 **Rule.** Every `valid_until`, expiry and delay is compared with `Global.latest_timestamp` (the previous block's
-time). Status: BUILT (T11–T15).
+time). Status: BUILT (T11–T15, commits `b9e758d8`, `c9a0b197`, `bddf9110`, `22296ddc`).
 **Why.** It is the only chain time an app can read.
 **Cost if wrong.** An op is accepted up to one block past its stated validity.
 **Source.** near-algorand Task 13 report (concern 4).

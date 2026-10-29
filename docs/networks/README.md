@@ -45,7 +45,7 @@ Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([C
 | GRAM | -239 / -3 | custom jetton wallet verifies `SignedOp` | TON Connect `signData` (cell) / passkey | ed25519 `m/44'/607'/i'` (W5R1 lane wallets) | yes (`pay`) | BUILT; **blocked** for every path except the transitional ERP pull path until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)) |
 | Solana | `solana:<genesis hash>` | program-level, `SmartKeyAccount` PDA + `LanePda` | raw ed25519 / off-chain message / passkey, verified through the precompile instruction | ed25519 `m/44'/501'/i'/0'` | yes (`pay`) | BUILT |
 | EVM — TRON (planned) | TRON mainnet / Nile / Shasta | the EVM contracts on TRON's TVM (Solidity; TIP-712 typed data) | ECDSA secp256k1 | secp256k1 `m/44'/195'/0'/0/i` | — | PLANNED: energy / bandwidth fees, base58 addresses, TRC-20 |
-| NEAR | `near:<genesis hash, base58>` (near-sandbox built; testnet / mainnet not deployed) | contract-level `MetaOp` v1 in Borsh, verified by the NEP-141 token against SCaaS key records ([near.md](near.md)) | ed25519 (NEP-413 `signMessage`) / secp256k1 / WebAuthn P-256 (in wasm) / msig; never a NEAR access key | ed25519 `m/44'/397'/0'/0'/i'` (implicit account) | no (job API only) | BUILT (branch `near-algorand`) |
+| NEAR | `near:<genesis hash, base58>` (near-sandbox built; testnet / mainnet not deployed) | contract-level `MetaOp` v1 in Borsh, verified by the NEP-141 token against SCaaS key records ([near.md](near.md)) | ed25519 (NEP-413 `signMessage`) / secp256k1 / WebAuthn P-256 (in wasm) / msig; never a NEAR access key; a mandate's delegate is a `Holder` | ed25519 `m/44'/397'/0'/0'/i'` (implicit account) | no (job API only) | BUILT (branch `near-algorand`) |
 | Algorand | `algorand:<genesis hash, base64>` (localnet built; testnet / mainnet not deployed) | app-level `MetaOp` v1 in ARC-4, ARC-200 token in boxes, one shared `account` app ([algorand.md](algorand.md)) | ed25519 (`"MX"` sign-bytes, current authority) / secp256k1 / WebAuthn P-256 / msig | ed25519 `m/44'/283'/0'/0'/i'` | no (job API only) | BUILT (branch `near-algorand`) |
 
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
@@ -130,7 +130,9 @@ Three pieces, as on EVM:
    function, [NET-ALL-27](#NET-ALL-27)) check the subject's signature over the domain-separated payload, its lane/nonce, `validUntil` and the optional `relayer`
    binding. Where the chain has allowances, only a contract may be a spender.
 2. **Mandate.** As the EVM `MandateWallet`: funds sit in the contract, a delegate signs, limits per payment and per
-   period, a payee, an expiry, revocation, each `payRef` once.
+   period, a payee, an expiry, revocation, each `payRef` once. NEAR: the delegate is a `Holder` (`MandateTerms.delegate`, a NEAR
+   account or a UA id; [NET-NEAR-17](near.md#NET-NEAR-17)). Algorand: the delegate is a holder (kind u8 + 32-byte id;
+   [NET-ALG-10](algorand.md#NET-ALG-10)).
 3. **DEX.** Two signed legs, fill-or-kill per pair, no allowance to an ordinary account — except GRAM, which uses an
    escrow (actor model, no cross-contract atomicity; [GRAM DEX](ton.md#dex)). EVM and Hedera (SPECIFIED): one taker
    against one or more makers per settlement; each SCaaS leg is a role-free `TradeOrder` verified by its own sell token,
