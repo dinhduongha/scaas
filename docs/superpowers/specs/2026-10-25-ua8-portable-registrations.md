@@ -1,6 +1,6 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
-**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**; **PQ verification: on chain on EVM, added for Cosmos / Soroban / Sui (spikes first), relayer-checked elsewhere (owner 2026-10-29, P11)**. Nothing is built. Queued **after plan 5h,
+**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**; **PQ verification: on chain on EVM, added for Cosmos / Soroban / Sui (owner 2026-10-29), proposed additions NEAR `mldsa65` (host function) and Algorand `fndsa512` (after AVM v14), relayer-checked elsewhere (P11)**. Nothing is built. Queued **after plan 5h,
 before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P9) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
@@ -204,22 +204,20 @@ a task of the same plan or a follow-up plan; the vector file is the shared contr
 the UA's PQ signature cannot check `pop` or a KEM record on chain. State of each family (web check 2026-10-29; re-check
 before the plan, these move fast):
 
-| Family | What exists for PQ signatures | Fit with our kinds | UA-8 rule |
+| Family | What exists for PQ signatures (contract-callable) | Fit with our kinds | UA-8 rule |
 |---|---|---|---|
-| EVM, Hedera | our verifiers (`UAMldsaVerifier`, `UAFndsaVerifier`, `UASlhdsaVerifier`; EIP-8355 / -8051 precompiles where probed) | all PQ kinds | **(a)** on chain, P1–P9 |
-| Cosmos | SDK 0.55 adds `ml_dsa_65` for **account and validator keys** (native tx signing); no CosmWasm crypto API for it found | contract-level: none yet | **(b)** a verifier inside the `ua-registry` contract (Rust → Wasm: ML-DSA-44 / -65, FN-DSA-512, SLH-DSA-128s), gated by a measured spike against the chain's gas limits |
-| Soroban | no PQ host function (no CAP found); a community Falcon verify contract and an XMSS wallet over BN254 host functions are self-reported | contract-level: none from the protocol | **(b)** the same Rust verifiers inside the registry, gated by a spike against the CPU / memory budget per transaction |
-| Sui | Mysten plan: ML-DSA-65 as a native **account** scheme (Testnet end 2026, Mainnet Q1 2027 worst case), SLH-DSA-SHA2-128s through Move vault contracts (Mainnet 2026); no Move-callable verify function named yet | ML-DSA-65 = our `mldsa65`, SLH-DSA-SHA2-128s = our `slhdsa128s` | **(b)** use Sui's Move verifier when it is published; until then a spike decides whether a pure-Move verifier fits the computation budget |
-| Algorand | `falcon_verify` opcode since AVM v12 (go-algorand 4.3.0), deterministic Falcon with 1,793-byte public keys, i.e. **Falcon-1024**; stateless and stateful contracts | our `fndsa512` is Falcon-512: **not the same parameter set** | relayer-checked (below); a Falcon-1024 kind matching `falcon_verify` is a possible later kind, not in UA-8 |
-| NEAR | NEP-645 (draft) adds ML-DSA-65 **transaction** signatures; on-chain verification host functions are out of its scope | none for contracts | relayer-checked |
-| Aptos, Solana | none found for contracts | none | relayer-checked |
-| TON | no registry yet (P10) | — | after its registry design |
+| EVM, Hedera | our verifiers (`UAMldsaVerifier`, `UAFndsaVerifier`, `UASlhdsaVerifier`); EIP-8051 / -8052 / -8355 still drafts | all PQ kinds | **(a)** on chain, P1–P9 |
+| NEAR | **host function `ml_dsa_verify`** (nearcore 2.14.0, protocol 88): ML-DSA-65, empty context, message as-is, ≈ 0.54 Tgas | `mldsa65` exactly; others pure Wasm only | **(b), proposed addition**: `mldsa65` on chain through the host function in the NEAR `ua-registry`; other PQ kinds relayer-checked (or a pure-Wasm spike) |
+| Soroban | **CAP-0087** `verify_sig_ml_dsa_{44,65,87}` (Implemented, Protocol 30, not on mainnet yet); pure-Rust ML-DSA measured at 51 M / 77.5 M instructions (third party, testnet) | `mldsa44`, `mldsa65` exactly; `fndsa512` / `slhdsa128s` pure only | **(b)**: the host functions once Protocol 30 is live, pure Rust until then (spike against the network's budget) |
+| Cosmos | none (SDK 0.55 `ml_dsa_65` is for account / consensus keys only) | all four as pure Rust → Wasm (unmeasured) | **(b)**: our Wasm verifier in `ua-registry`, gated by a spike |
+| Sui | none callable from Move; ML-DSA-65 native accounts on devnet (mainnet Q1 2027); SLH-DSA-SHA2-128s Move vaults announced, code not published | `slhdsa128s` via Mysten's vault code; pure-Move ML-DSA / Falcon judged infeasible | **(b)**: `slhdsa128s` when Mysten publishes the Move code (or our own pure-Move spike), a Move ML-DSA function when Sui ships one; relayer-checked meanwhile |
+| Algorand | **opcode `falcon_verify`** (AVM v12+): deterministic Falcon-1024 only; AVM v14 (go-algorand master, unreleased) adds deterministic Falcon-512 | today none of ours; `fndsa512` after AVM v14 if the client signs deterministically (fixed salt; needs a test vector that the deterministic signature verifies under our standard verifiers) | **(b), proposed addition**: `fndsa512` on chain in the `account` app once AVM v14 is on mainnet; relayer-checked until then; a separate `fndsa1024-det` kind is not proposed |
+| Aptos | none callable from Move; AIP-137 (proposed) adds SLH-DSA-SHA2-128s account signatures | `slhdsa128s` pure Move plausible (estimate) | relayer-checked |
+| Solana | none; SIMD-0416 proposes a Falcon-512 verify syscall (not activated) | `fndsa512` if its encoding matches | relayer-checked; revisit when SIMD-0416 activates |
+| TON | nothing found; no registry yet (P10) | — | after its registry design |
 
-Sources (read 2026-10-29): Algorand cryptographic tools https://dev.algorand.co/concepts/smart-contracts/cryptographic-tools/
-and the Falcon brief https://algorand.co/blog/technical-brief-quantum-resistant-transactions-on-algorand-with-falcon-signatures;
-Sui https://www.sui.io/blog/suis-post-quantum-signature-schemes; Cosmos SDK
-https://docs.cosmos.network/sdk/next/keys/post-quantum-keys; NEAR NEP-645 https://github.com/near/neps/pull/645; Soroban:
-no CAP found (Stellar community fund submissions only).
+Facts, sources and read dates: [research/pq-signatures-per-family.md](../../research/pq-signatures-per-family.md)
+(web check 2026-10-29; the NEAR host function and CAP-0087 re-checked against their primary sources).
 
 Native PQ **accounts** (Cosmos `ml_dsa_65`, Sui ML-DSA-65, NEAR NEP-645) are not enough: they sign the chain's own
 transactions, while a UA registry must verify a UA's signature over the portable digest inside a contract. A family
