@@ -50,7 +50,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   3. Follow-ups of the two merged branches: EVM node UA job path (`ua_metatx`), metatx-split e2e owed on a real node
      (with the T19 / T20 devnets where possible), TON passkey relays (P-256 in the node), relay-fee minimum before mainnet.
   4. fs3 Task 12 (final gate + merge) → Task 6 (reproduction package).
-  5. UA-8 portable UA registrations (plan from the short design).
+  5. UA-8 portable UA registrations (plan from the short design; scope every family, owner 2026-10-29, design P10:
+     EVM → Cosmos / Soroban / Sui / Aptos / Solana → NEAR `ua-registry` + Algorand `account` → TON registry design).
   6. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) → Task 14 (wasm32 limb path).
   7. Token-family rename → P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel with P6
      (spec only, no core code): the governance matrix for factory-made contracts (§0).

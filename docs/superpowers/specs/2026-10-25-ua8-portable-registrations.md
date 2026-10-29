@@ -1,6 +1,6 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
-**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8). Nothing is built. Queued **after plan 5h,
+**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**. Nothing is built. Queued **after plan 5h,
 before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P9) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
@@ -163,6 +163,39 @@ by anyone (the submitter — the UA or a relayer — pays the gas), chain-indepe
 any chain. **There are no `mtx*` fee forms** (`mtxRegister` / `mtxSetKemKey` / `mtxStorePqzPop` dropped): these writes
 are not token operations, so there is no token to take a fee from; a relayer that wants payment arranges it off chain.
 
+**P10 — Every family (owner 2026-10-29: "UA-8 phủ tất cả family").** The portable registration is one record with
+the same bytes on every family, not an EVM feature. Common rules:
+
+- `portablePopDigest` (P1), `uaMessage(kind, POP_V2, …)` and the KEM record digest (P7) are byte-identical on every
+  family; one vector file (`smartcontracts/vectors/ua/`) is run by every family's tests. Every family has keccak256
+  (EVM opcode; Cosmos software keccak, already used; Soroban `crypto().keccak256`; Sui `sui::hash::keccak256`; Aptos
+  `aptos_hash::keccak256`; Solana `keccak` syscall; NEAR `env::keccak256`; Algorand `keccak256` opcode).
+- A family accepts a registration only for the kinds it verifies (P3); any other kind is refused there, the record
+  stays valid elsewhere.
+- PQZ exists only where its verifier exists (EVM today): elsewhere the record stores `pqzKeyHash` / `pqzPopHash` with
+  `proven = false` and never uses them (P8's "registry without the PQZ verifier").
+- Anyone may submit; the submitter pays gas and storage (the family's storage rule: deposit, MBR, rent or TTL), no fee
+  form (P9).
+- `keyHash` uniqueness (P6) per family as today.
+
+Where the record lives (controller proposals for the families without a registry; owner may override):
+
+| Family | Today | With UA-8 |
+|---|---|---|
+| EVM, Hedera | `UARegistry` | P1–P9 as written |
+| Cosmos | `ua-registry` CosmWasm contract | the same `register` / `setKemKey` / `storePqzPop` messages |
+| Soroban | persistent entries in the `SmartKeyAccount` factory (`UA(ua)`, `KEY(keyHash)`) | the same entries plus KEM records; TTL extended by the node like other persistent state |
+| Sui | `Registry<T>` (`key_owner` table) | the same functions; KEM records in a table keyed `(ua, version)` |
+| Aptos | registry resource under the package root | the same functions; KEM records in a table keyed `(ua, version)` |
+| Solana | PDAs `["ua", ua]`, `["ukey", keyHash]` | the same instructions; KEM record PDA `["ukem", ua, version]` |
+| NEAR | **no registry**: each token contract keeps its own subject records (`Holder` → keys, origins, guardian, policy; Aptos `Account` model), a `Ua` opened lazily by its first signed op (id checked against the key data, no PoP), key ops fanned out to every held token | **a new `ua-registry` contract per deployment** holding the portable record and the KEM / PQZ attributes (discovery, chat keys). Tokens keep their per-token key records and the lazy open: a cross-contract read is asynchronous on NEAR, so a token never waits on the registry |
+| Algorand | one `account` app per deployment holds the subject records shared by every token (tokens, mandate and DEX call its `verify` by inner app call), lazily opened, no PoP | the **`account` app gains** `register` (portable PoP), `set_kem_key`, `store_pqz_pop`, the record and KEM boxes; the lazy open stays |
+| TON (GRAM) | **no registry** (documented gap: wallet-bound keys, `set_key` with a key signature) | **a new `ua-registry` contract** (actor messages `Register`, `SetKemKey`, `StorePqzPop`; one child contract per UA if a single contract's state would grow without bound) — needs its own short design before the plan |
+
+Order: EVM first (P1–P9), then every family with a registry (Cosmos, Soroban, Sui, Aptos, Solana), then NEAR and
+Algorand (after the near-algorand merge), TON last (after its registry design). Each family is a task of the same
+plan or a follow-up plan; the vector file is the shared contract between them.
+
 ## 3. Work (for the plan after 5h)
 
 1. `UAKinds` (`PURPOSE_POP_V2`, `portablePopDigest`), `UARegistry.register` on the portable digest, `pop` / `pqzPop`
@@ -178,3 +211,8 @@ are not token operations, so there is no token to take a fee from; a relayer tha
 5. Clients (`ua-rs`, `ua-cs`, `ua-qt`, JS) and vectors (`smartcontracts/vectors/ua/`: portable PoP rows, KEM
    key record rows); accounts.md, decisions entry; `pqz_reg_message` in the clients and the PQZ e2e scripts on the new digest (the
    `R_REG` relation, statement and precompile do not change — only the 32-byte message's pre-image).
+6. P10, per family (order as P10): the same three writes and the reads on each family's registry; the shared vector
+   file run by every family's tests (copy a registration from the EVM registry to the family and back; a kind the
+   family does not verify is refused; PQZ attributes stored unproven where there is no verifier); the node relays the
+   writes as `call` jobs; NEAR `ua-registry` and Algorand `account` changes after the near-algorand merge; TON after its
+   registry design.
