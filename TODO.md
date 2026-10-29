@@ -51,14 +51,18 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      - **EVM contracts, two parallel tracks** (own worktrees; shared forge / size-gate slots; merge with care, the
        rename sweeps wide):
        - token-family rename (moved up from step 7, owner 2026-10-29: names only — enum numbers and ABI unchanged — so
-         the new EVM code is written with the final names);
+         the new EVM code is written with the final names). Owner 2026-10-30: option (a) — regenerate
+         `dex_order_kat.json` and `metatx-parity.json` (only CREATE2-derived fields move: addresses, domains, digests,
+         the calldata embedding them); also rename the deploy JSON keys `implementation_none` /
+         `implementation_{none,underlying}_zether_bls12381` (`deployments/<chainid>.json`, read by e2e and the node);
+         start after the `ua8` merge (rebase onto main then). Inventory: `scratchpad/token-rename-report.md`;
        - **UA-8 step 1 (EVM `UARegistry`)** as soon as the plan is written (owner 2026-10-29, moved up from step 3):
          portable PoP, optional `pqzPop`, KEM keys, relayable writes, `checked = chain`, clients and vectors
          (`UARegistry` / `UAKinds` / `IUARegistry`; overlap with the rename only where tokens read the PQZ key's
          `proven`). Must land before fs3 Task 13 (the SCaaS testnet redeploys the registry once).
-     - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`), TON passkey relays (P-256
-       in the node), relay-fee minimum before mainnet.
-     - **pqz-core:** fs3 Task 12 (final gate + merge) → Task 6 (reproduction package); its heavy gate interleaves with
+     - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`; merged 2026-10-30), TON
+       passkey relays (P-256 in the node), relay-fee minimum before mainnet.
+     - **pqz-core:** fs3 Task 12 (final gate; merged 2026-10-30) → Task 6 (reproduction package); its heavy gate interleaves with
        the forge runs for the `capped` slots.
      - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
        **4b spec for Soroban**, the governance matrix (§0).
@@ -294,7 +298,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   existing entry points, NODE-DEX-17 rewritten to one atomic plan per order (§1–§6); owner answers 2026-10-29 (§8): hybrid / CoW both via `mtxExchange` plans and a new `mtxHybrid` / `mtxHybridVia` entry (maker price on chain, surplus to the taker); CoW price = AMM marginal, else midpoint; `mtxExchangeBatch` now; TradeEngine EVM and non-EVM 1 × N in parallel. Order: after the near-algorand merge → minFill code → EVM contract spec + code (mtxHybrid, batch, mode 3 / 4 tests, executor, Uniswap fork test) → TradeEngine ∥ non-EVM 1 × N.
   Spec first, then code.
 - [x] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; owner ruling 2026-10-28: after the
-  metatx-split merge; a new feature, not T17): BUILT on branch `node-ua-jobs` (2026-10-30, `f0f8fd50`; not merged): the
+  metatx-split merge; a new feature, not T17): BUILT on branch `node-ua-jobs` (2026-10-30, `f0f8fd50`; merged into main 2026-10-30): the
   `ua_metatx` kind (`uaExecute`, `uaExecuteTransfer`, `uaPayMeta`), the call-table row `MtxRelayFee.uaRelay` priced at
   `params.relay_fee.min_wei_value` against the quote, `UAPaymentSettled` / `UAMetaTransactionExecuted` rows joined by
   `join_pay_events`; choices in decisions.md (CTR-MTX-27, Change 2026-10-30). Left for UA F5 below: gateway route, record
@@ -312,7 +316,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   the EVM indexer sends a derived UA as `UA_POOL` in `from` / `to` (the client's ingest takes 20-byte addresses only) with
   the bytes32 id in `from_ua` / `to_ua` (`relay_payee_ua`); `chain_event_ingest` should store the id so a UA's payments and
   executions are attributed to it, not to `UA_POOL`. Also: the client has no `near` / `algorand` family (`lib/addresses.py`),
-  so every row of those chains is refused today; their UA holders are `0x` + 64 hex.
+  so every row of those chains is refused today (separate item below: NEAR and Algorand chain families).
 - [ ] **Relay-fee minimum before mainnet** (owner ruling 2026-10-28, final review owner rulings item 7): the flat
   `params.relay_fee.min_amount` (one floor per chain, default 1 base unit, every token and call) stays until before mainnet;
   re-decide then between a per-token minimum and gas-proportional pricing (TON `min_ton_value` and Solana
