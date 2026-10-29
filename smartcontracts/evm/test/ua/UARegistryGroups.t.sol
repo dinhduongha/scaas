@@ -410,12 +410,14 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             );
             // UA-8 (UA8-D7): `register` also stores the key data past `vk` and the PoP, whose EIP-8037 state gas
             // (FROST(bn254) 16-of-16: 18 KB of key data) is logged apart; the regular gas stays well within the budget.
-            // A8 re-pins the UA-8 gas figures.
+            // A8: the state gas is pinned too: the largest group, FROST(bn254) 16-of-16, is 28,816,020 (+ 1,259,582 regular =
+            // 30.08 M, within a 60 M block); a regression guard, pinned from the first measured run.
             reg.register(g.kind, g.keyData, _none(), g.pop, "");
             Vm.Gas memory vg = vm.lastCallGas();
             assertLt(vg.gasTotalUsed, BUDGET / 4, "register (regular gas) well within the budget");
             emit log_named_uint(string.concat(label, " register"), vg.gasTotalUsed);
             emit log_named_int("  state gas (EIP-8037)", vg.gasStateUsed);
+            assertLe(vg.gasStateUsed, 28_816_020, "register (state gas) over the pinned maximum");
             bytes memory auth = _gauth(g, UAKinds.PURPOSE_METATX, DIGEST);
             (bool ok,, uint256 used) = meter.measure(
                 address(reg), abi.encodeCall(reg.requireAuthorized, (g.ua, UAKinds.PURPOSE_METATX, DIGEST, auth))

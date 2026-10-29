@@ -237,11 +237,11 @@ contract UAGasTest is UARegistryBase {
     /// of its own, all accounts and slots cold; its calldata is paid by that transaction, not by the frame).
     /// F185: EIP-8037 state gas of `register`'s new storage slots (the record), charged inside the call's gas: `gas used`
     /// of `register` 312,557 -> 658,937 (ed25519) and 346,533 -> 692,913 (bls-bn254-minsig) from Osaka to Amsterdam, +346 k.
-    uint256 internal constant REGISTER_STATE_GAS = 350_000;
-
-    function _registerLimit() internal view returns (uint256) {
-        return _cap(0x0102) + 100_000 + REGISTER_STATE_GAS;
-    }
+    /// A8 (UA-8, D7): `register` also writes the whole registration as SSTORE2 code (state gas 1,164,330 for ed25519,
+    /// 1,311,210 for bls-bn254-minsig), so the least call gas is 1,460,619 / 1,635,814. REGRESSION GUARDS ONLY: pinned
+    /// from the first measured run on this build ("/ 1.0"), not derived bounds. Full table: runs/2026-10-30-ua8-gas.txt.
+    uint256 internal constant HEADROOM_ED25519 = 1_460_619;
+    uint256 internal constant HEADROOM_BLS_BN254 = 1_635_814;
 
     function _leastGas(address r, bytes memory call, uint256 bound) internal returns (uint256 hi) {
         GasProbe p = new GasProbe();
@@ -526,7 +526,7 @@ contract UAGasTest is UARegistryBase {
             (0x0107, vm.parseJsonBytes(sj, ".derived[6].keyData"), _none(), vm.parseJsonBytes(sj, ".derived[6].pop.sig"), "")
         );
         uint256 lo = 100_000;
-        uint256 hi = 1_000_000;
+        uint256 hi = 4_000_000; // A8: the state gas of the record counts in the call gas (F185), so the least gas is > 1 M
         while (hi - lo > 500) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
@@ -540,7 +540,7 @@ contract UAGasTest is UARegistryBase {
         (bool ok2,) = address(r).call(call);
         assertTrue(ok2);
         emit log_named_uint("register bls-bn254-minsig: gas used", g - gasleft());
-        assertLt(hi, 500_000 + REGISTER_STATE_GAS); // F185: was 500,000 (452,440 on Osaka); 673,046 under Amsterdam
+        assertLe(hi, HEADROOM_BLS_BN254); // F185: was 500,000 (452,440 on Osaka); A8: the UA-8 record, 1,635,814
     }
 
     /// UA-2b `ed25519`: the least frame gas of the verifier on its most expensive accepted input (every Straus window
@@ -570,7 +570,7 @@ contract UAGasTest is UARegistryBase {
         bytes memory k = vm.parseJsonBytes(sj, ".derived[7].keyData");
         bytes memory call = abi.encodeCall(r.register, (0x0102, k, _none(), vm.parseJsonBytes(sj, ".derived[7].pop.sig"), ""));
         uint256 lo = 100_000;
-        uint256 hi = 1_000_000;
+        uint256 hi = 4_000_000; // A8: the state gas of the record counts in the call gas (F185), so the least gas is > 1 M
         while (hi - lo > 500) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
@@ -590,6 +590,6 @@ contract UAGasTest is UARegistryBase {
         g = gasleft();
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, auth);
         emit log_named_uint("requireAuthorized ed25519", g - gasleft());
-        assertLt(hi, _registerLimit()); // F185: was cap + 100,000 (288,524 on Osaka); 640,966 under Amsterdam
+        assertLe(hi, HEADROOM_ED25519); // F185: was cap + 100,000 (288,524 on Osaka); A8: the UA-8 record, 1,460,619
     }
 }
