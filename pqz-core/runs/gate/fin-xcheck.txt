@@ -1,4 +1,19 @@
-reg_stmt 16480 B c=191aaefa0841d7a0 rust=191aaefa0841d7a0 equal
-reg_wit 6144 B c=17c7a9f62fa77af1 rust=17c7a9f62fa77af1 equal
-tx_stmt 83072 B c=03730719ccfd29bf rust=03730719ccfd29bf equal
-tx_wit 12416 B c=258e15b72416daa6 rust=258e15b72416daa6 equal
+reg_stmt 18528 B c=b31e1e56a253386d rust=b31e1e56a253386d equal
+reg_wit 6912 B c=e667e44674d6563a rust=e667e44674d6563a equal
+tx_stmt 93312 B c=acb96a22cf6dfb1c rust=acb96a22cf6dfb1c equal
+tx_wit 13952 B c=f13072b4c106b1d9 rust=f13072b4c106b1d9 equal
+burn_stmt 56192 B c=4880056b99143dba rust=4880056b99143dba equal
+burn_wit 13872 B c=8450ed1f7c033bc3 rust=8450ed1f7c033bc3 equal
+ds_stmt 37280 B c=52c906d056758869 rust=52c906d056758869 equal
+ds_wit 6944 B c=9aede5431c93f29c rust=9aede5431c93f29c equal
+dr_stmt 37280 B c=7d9b71bcc3ecd964 rust=7d9b71bcc3ecd964 equal
+dr_wit 6912 B c=1dd08b8f22400aad rust=1dd08b8f22400aad equal
+tx0_stmt 74752 B c=3488859277f07f7d rust=3488859277f07f7d equal
+tx0_wit 13920 B c=71b5efe5079c7341 rust=71b5efe5079c7341 equal
+reg_stmt 18528 B REGISTER id=046859a8 as-PQZL=rejected rebuilt=equal ok
+tx_stmt 93312 B TRANSFER id=046859a8 as-PQZL=rejected rebuilt=equal ok
+burn_stmt 56192 B BURN id=046859a8 as-PQZL=rejected rebuilt=equal ok
+ds_stmt 37280 B DISCLOSE-SENDER id=046859a8 as-PQZL=rejected rebuilt=equal ok
+dr_stmt 37280 B DISCLOSE-RECEIVER id=046859a8 as-PQZL=rejected rebuilt=equal ok
+tx0_stmt 74752 B TRANSFER id=046859a8 as-PQZL=rejected rebuilt=equal ok
+kat_stmt: ok
