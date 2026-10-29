@@ -20,9 +20,11 @@ deleted) and the router is created again.
 
 Resumable (task 19 review lesson): the env is checked before any chain step; each create is signed and written to
 `<deployments>/<genesis>.<funder>.resume.json` (mode 0600, fsynced, git-ignored) before it is sent, and its app id
-after it lands, so a rerun after any failure finds it (algod's pending cache, else the blocks of its validity window),
-resends the same bytes while they are valid, or builds it anew once they can no longer land — never two apps for one
-role; a resume file holding apps outside this run's plan is refused; an app it holds (or the deployment file lists) is
+after it lands, so a rerun after any failure finds it (algod's pending cache, else the funder's created apps: this code,
+the create's arguments as globals, an id at or above the ledger's transaction counter when it was recorded), resends the
+same bytes while they are valid, or builds it anew once they can no longer land — never two apps for one role; a resume
+file holding apps outside this run's plan is refused; a create still pending is resent only when its recorded bytes
+carry this run's programs and parameters, and an app it holds, the deployment file lists or a create landed as is
 adopted only with this run's code and parameters (creator, a token's name / symbol / decimals / admin, every link);
 funding payments carry a lease (one per app per window); the resume file is removed after the gate.
 
@@ -45,7 +47,6 @@ import subprocess
 import sys
 import time
 
-import msgpack
 from algosdk import abi, account, encoding, logic, mnemonic, transaction
 from algosdk.atomic_transaction_composer import AccountTransactionSigner, AtomicTransactionComposer
 from algosdk.error import AlgodHTTPError
@@ -74,6 +75,7 @@ class Spec:
         s = json.load(open(os.path.join(OUT, f"{name}.arc56.json")))
         m = next(m for m in s["methods"] if m["name"] == "create")
         self.create = abi.Method.from_signature("create(%s)%s" % (",".join(a["type"] for a in m["args"]), m["returns"]["type"]))
+        self.arg_names = [a["name"] for a in m["args"]]
         g = s["state"]["schema"]["global"]
         self.schema = transaction.StateSchema(g["ints"], g["bytes"])
         self.extra_pages = (len(self.approval) + len(self.clear) - 1) // PAGE
@@ -141,10 +143,16 @@ def executor_view(c, router_id, sender):
 
 
 def gate(c, apps):
-    """R10: `apps` = [(kind, app id)]; exits unless every check holds."""
+    """R10: `apps` = [(kind, app id)]; exits unless every check holds. A token or the mandate is checked against the
+    account app named, the DEX against the relayfee named: both must be named (review M3)."""
     bad = []
     acct = [i for k, i in apps if k == "account"]
     rf = [i for k, i in apps if k == "relayfee"]
+    kinds = {k for k, _ in apps}
+    if kinds & {"token", "mandate"} and not acct:
+        bad.append("a token or the mandate is named without account=<the account app>: its account_app link is unchecked")
+    if "dex" in kinds and not rf:
+        bad.append("the dex is named without relayfee=<the router>: its router_app link is unchecked")
     for kind, i in apps:
         info = app_info(c, i)
         if info is None:
@@ -235,6 +243,21 @@ def keep_out_of_git(path):
 
 # ------------------------------------------------------------------ resumable state
 
+def write_atomic(path, text):
+    """tmp (0600), fsync, rename, directory fsync: the file is whole on disk or absent (review M1)."""
+    fd = os.open(path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(path + ".tmp", path)
+    dfd = os.open(os.path.dirname(path), os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
 class State:
     """Apps by role (the deployment file's, then the resume file's), the signed creates not yet landed, the orphans."""
 
@@ -248,21 +271,37 @@ class State:
         self.orphans = r.get("orphans", [])
 
     def save(self):
-        fd = os.open(self.path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as fh:
-            json.dump({"apps": self.apps, "pending": self.pending, "orphans": self.orphans}, fh)
-            fh.flush()
-            os.fsync(fh.fileno())  # on disk before the transaction is sent
-        os.replace(self.path + ".tmp", self.path)
-        dfd = os.open(os.path.dirname(self.path), os.O_RDONLY)
-        try:
-            os.fsync(dfd)
-        finally:
-            os.close(dfd)
+        write_atomic(self.path, json.dumps({"apps": self.apps, "pending": self.pending, "orphans": self.orphans}))  # before a send
 
 
-def landed(c, rec):
-    """The app id a recorded create got: algod's pending cache, else the blocks of its window; None = not on chain."""
+# The globals each app's create arguments set, in argument order (the contracts' `create`).
+CREATE_GLOBALS = {"account": [], "relayfee": ["salt"], "token": ["name", "symbol", "decimals", "admin", "account_app"],
+                  "mandate": ["account_app"], "dex": ["router_app"]}
+
+
+def recorded(rec):
+    """A recorded create as signed: (application arguments, approval, clear) decoded from its bytes."""
+    t = encoding.msgpack_decode(rec["stx"]).transaction
+    return [bytes(a) for a in (t.app_args or [])], t.approval_program, t.clear_program
+
+
+def create_globals(s, kind, app_args):
+    """The globals create arguments set (bytes / int, as `globals_of` reads them)."""
+    out = {}
+    for name, a, raw in zip(CREATE_GLOBALS[kind], s.create.args, app_args[1:]):
+        v = a.type.decode(raw)
+        out[name] = encoding.decode_address(v) if str(a.type) == "address" else bytes(v) if isinstance(v, list) else v
+    return out
+
+
+def encode_args(s, args):
+    return [s.create.get_selector()] + [a.type.encode(v) for a, v in zip(s.create.args, args)]
+
+
+def landed(c, f, role, rec, state):
+    """The app id a recorded create got: algod's pending cache, else the funder's created apps (review I2: what a default,
+    non-archival node always serves) — an app of this code whose globals are the create's arguments, at or above the id
+    predicted when it was recorded, not one of this state's apps or orphans; None = not on chain; two = refused."""
     try:
         info = c.pending_transaction_info(rec["txid"])
         if info.get("confirmed-round"):
@@ -270,13 +309,22 @@ def landed(c, rec):
     except AlgodHTTPError as e:
         if e.code != 404:
             raise
-    last = min(rec["last"], c.status()["last-round"])
-    for r in range(rec["first"], last + 1):
-        ids = c.algod_request("GET", f"/blocks/{r}/txids").get("blockTxids", [])
-        if rec["txid"] in ids:
-            b = msgpack.unpackb(c.block_info(round_num=r, response_format="msgpack"), raw=False, strict_map_key=False)
-            return b["block"]["txns"][ids.index(rec["txid"])]["apid"]
-    return None
+    kind = kind_of(role)
+    s = Spec(PROGRAM[kind])
+    args, _, _ = recorded(rec)
+    want = create_globals(s, kind, args)
+    known = set(state.apps.values()) | set(state.orphans)
+    found = []
+    for a in c.account_info(f.addr).get("created-apps", []):
+        p = a["params"]
+        if (a["id"] >= rec.get("min_id", 0) and a["id"] not in known
+                and h512(base64.b64decode(p["approval-program"])) == ARTIFACTS[kind]["approval_sha512_256"]
+                and all(globals_of(p).get(k) == v for k, v in want.items())):
+            found.append(a["id"])
+    if len(found) > 1:
+        sys.exit(f"{role}: apps {found} of the funding account all match its recorded create {rec['txid']}: decide which is "
+                 f"this deployment's and record it in {state.path}")
+    return found[0] if found else None
 
 
 def send_wait(c, stx_b64, txid, what, state):
@@ -288,33 +336,41 @@ def send_wait(c, stx_b64, txid, what, state):
     return transaction.wait_for_confirmation(c, txid, WINDOW)
 
 
-def create(c, f, role, args, state):
+def create(c, f, role, args, state, tokens, admin):
     """Creates `role`'s app (resuming its recorded create) and returns its id; the router's executor must be off-curve."""
     kind = kind_of(role)
     s = Spec(PROGRAM[kind])
     for _ in range(3):
         rec = state.pending.get(role)
-        app_id = landed(c, rec) if rec else None
+        app_id = landed(c, f, role, rec, state) if rec else None
         if app_id is None:
-            if rec is None or c.status()["last-round"] > rec["last"]:
+            # review M4: a create whose LastValid is the last round can no longer land (the next block is last + 1)
+            if rec is None or c.status()["last-round"] >= rec["last"]:
+                # app ids come from the ledger's transaction counter: this create lands at or above the last block's
+                min_id = c.block_info(round_num=c.status()["last-round"])["block"].get("tc", 0)
                 a = list(args)
                 if kind == "relayfee":
                     atc = AtomicTransactionComposer()
                     atc.add_method_call(0, s.create, f.addr, sp_window(c), f.signer, [0], approval_program=s.approval,
                                         clear_program=s.clear, global_schema=s.schema, local_schema=transaction.StateSchema(0, 0),
                                         extra_pages=s.extra_pages)
-                    predicted = atc.simulate(c, models.SimulateRequest(txn_groups=[])).simulate_response[
-                        "txn-groups"][0]["txn-results"][0]["txn-result"]["application-index"]
-                    a = [lowest_salt(predicted)]
+                    r = atc.simulate(c, models.SimulateRequest(txn_groups=[])).simulate_response["txn-groups"][0]
+                    if r.get("failure-message"):
+                        sys.exit(f"create {role}: its simulate fails, nothing sent: {r['failure-message'][:300]}")
+                    a = [lowest_salt(r["txn-results"][0]["txn-result"]["application-index"])]
                 atc = AtomicTransactionComposer()
                 sp = sp_window(c)
                 atc.add_method_call(0, s.create, f.addr, sp, f.signer, a, approval_program=s.approval, clear_program=s.clear,
                                     global_schema=s.schema, local_schema=transaction.StateSchema(0, 0), extra_pages=s.extra_pages)
                 stx = atc.gather_signatures()[0]
-                rec = {"txid": stx.get_txid(), "stx": encoding.msgpack_encode(stx), "first": sp.first, "last": sp.last}
+                rec = {"txid": stx.get_txid(), "stx": encoding.msgpack_encode(stx), "first": sp.first, "last": sp.last,
+                       "min_id": min_id}
                 state.pending[role] = rec
                 state.save()
             app_id = send_wait(c, rec["stx"], rec["txid"], f"create {role}", state)["application-index"]
+        why = adoptable(c, f, role, app_id, tokens, admin, state)
+        if why:
+            sys.exit(f"{role}: its create landed as {why}: not adopted")
         state.apps[role] = app_id
         del state.pending[role]
         state.save()
@@ -384,6 +440,15 @@ def adoptable(c, f, role, app_id, tokens, admin, state):
     return None
 
 
+def create_args(role, tokens, admin, state):
+    """`role`'s create arguments in this run (the router's salt is chosen at its create)."""
+    kind = kind_of(role)
+    if kind == "token":
+        t = next(t for t in tokens if role == "token:" + t["symbol"])
+        return [t["name"].encode().ljust(32, b"\0"), t["symbol"].encode().ljust(8, b"\0"), t["decimals"], admin, state.apps.get("account")]
+    return {"account": [], "relayfee": [], "mandate": [state.apps.get("account")], "dex": [state.apps.get("relayfee")]}[kind]
+
+
 def deploy(c):
     tokens = parse_tokens()
     f = Funder()
@@ -412,17 +477,25 @@ def deploy(c):
             if why:
                 sys.exit(f"{role}: {why}: not adopted (change ALGORAND_TOKENS / ALGORAND_ADMIN back, or use another funding account "
                          "or deployments directory)")
-    for role in plan:
+    # review I1: a create still pending is resent or adopted only when it was signed with this run's code and parameters
+    for role, rec in state.pending.items():
         kind = kind_of(role)
+        s = Spec(PROGRAM[kind])
+        args, approval, clear = recorded(rec)
+        if (approval, clear) != (s.approval, s.clear):
+            sys.exit(f"{role}: its recorded create {rec['txid']} carries other programs than out/: not resent (rebuild the same "
+                     "programs, or remove its pending entry once it can no longer land)")
+        if kind != "relayfee" and args != encode_args(s, create_args(role, tokens, admin, state)):
+            show = lambda raw: {k: (v.rstrip(b"\0").decode("latin1") if k in ("name", "symbol") else encoding.encode_address(v))
+                                if isinstance(v, bytes) else v for k, v in create_globals(s, kind, raw).items()}
+            sys.exit(f"{role}: its recorded create {rec['txid']} (not landed yet, or landed) has {show(args)}, not this run's "
+                     f"{show(encode_args(s, create_args(role, tokens, admin, state)))}: not resent, not adopted (change "
+                     "ALGORAND_TOKENS / ALGORAND_ADMIN back so that create finishes)")
+    for role in plan:
         if role in state.apps:
             print(f"  {role}: app {state.apps[role]} adopted")
         else:
-            if kind == "token":
-                t = next(t for t in tokens if role == "token:" + t["symbol"])
-                args = [t["name"].encode().ljust(32, b"\0"), t["symbol"].encode().ljust(8, b"\0"), t["decimals"], admin, state.apps["account"]]
-            else:
-                args = {"account": [], "relayfee": [], "mandate": [state.apps.get("account")], "dex": [state.apps.get("relayfee")]}[kind]
-            create(c, f, role, args, state)
+            create(c, f, role, create_args(role, tokens, admin, state), state, tokens, admin)
         fund(c, f, state.apps[role], state)
     apps = [(kind_of(r), state.apps[r]) for r in plan]
     gate(c, apps)
@@ -433,14 +506,12 @@ def deploy(c):
         "network": gh, "genesis_id": gen, "funder": f.addr, "admin": admin, "apps": {r: state.apps[r] for r in plan},
         "account": state.apps["account"], "relayfee": router, "mandate": state.apps["mandate"], "dex": state.apps["dex"],
         "tokens": [{"app": state.apps["token:" + t["symbol"]], **t} for t in tokens],
-        "executor": {"salt": salt, "address": encoding.encode_address(xaddr), "prefix": ARTIFACTS["relayfee"]["executor_prefix"],
+        "executor": {"salt": salt, "salt_lowest": salt == lowest_salt(router), "address": encoding.encode_address(xaddr), "prefix": ARTIFACTS["relayfee"]["executor_prefix"],
                      "suffix": ARTIFACTS["relayfee"]["executor_suffix"]},
         "approval_sha512_256": {str(i): ARTIFACTS[k]["approval_sha512_256"] for k, i in apps},
         "orphans": state.orphans, "deployed_at": int(time.time()),
     }
-    with open(dpath, "w") as fh:
-        json.dump(out, fh, indent=2)
-        fh.write("\n")
+    write_atomic(dpath, json.dumps(out, indent=2) + "\n")
     if os.path.exists(rpath):
         os.remove(rpath)
     print(f"wrote {dpath}")

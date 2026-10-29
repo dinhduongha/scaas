@@ -1,0 +1,5 @@
+# clippy (T20 fix 1) at commit 8df92966 + working tree
+# ../scripts/capped cargo clippy -j2 --all-targets -- -D warnings
+    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.41s
+rc=0

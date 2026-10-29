@@ -1579,16 +1579,6 @@ fn transport(e: anyhow::Error) -> SimError {
     SimError::Transport(format!("{e:#}"))
 }
 
-/// A failed simulate: the group's own failure kills the job, except a lane short of ALGO (`overspend`: the lane's
-/// balance, not the job — lesson 14, as NEAR's view gas cap: retried).
-fn sim_failed(m: &str) -> SimError {
-    if m.contains("overspend") {
-        SimError::Transport(format!("simulate: the lane cannot pay: {m}"))
-    } else {
-        SimError::Revert(format!("simulate: {m}"))
-    }
-}
-
 struct Params {
     min_fee: u64,
     fpb: u64,
@@ -1723,6 +1713,18 @@ impl AlgorandAdapter {
         }
     }
 
+    /// A failed simulate: the group's own failure kills the job, except a lane short of ALGO — `overspend`, or algod's
+    /// "account <lane> balance B below min M" (T20 fix 1, review I3: the message a lane holding its minimum gets first) —
+    /// the lane's balance, not the job (lesson 14, as NEAR's view gas cap): retried.
+    fn sim_failed(&self, m: &str) -> SimError {
+        let below = m.contains("below min") && self.lanes.iter().any(|l| m.contains(&format!("account {} balance", l.address)));
+        if m.contains("overspend") || below {
+            SimError::Transport(format!("simulate: the lane cannot pay: {m}"))
+        } else {
+            SimError::Revert(format!("simulate: {m}"))
+        }
+    }
+
     fn exec(&self) -> Option<Executor> {
         self.exec.lock().ok().and_then(|e| e.clone())
     }
@@ -1755,7 +1757,7 @@ impl AlgorandAdapter {
         let g = Group { txs: vec![Tx::call(app, args)], main: 0, fee: p.min_fee, mbr: 0 };
         let s = self.simulate(p, &g, lane, None, true, QUERY_BUDGET).await?;
         if let Some(f) = s.failure {
-            return Err(sim_failed(&f));
+            return Err(self.sim_failed(&f));
         }
         s.logs.first().and_then(|l| l.last()).and_then(|l| l.strip_prefix(&ABI_RETURN[..])).map(<[u8]>::to_vec)
             .ok_or_else(|| SimError::Transport(format!("app {app}: no ABI return")))
@@ -2059,7 +2061,7 @@ impl ChainAdapter for AlgorandAdapter {
         let room = (MAX_GROUP.saturating_sub(g.txs.len()) as u64).saturating_mul(BUDGET_PER_CALL);
         let d = self.simulate(&p, &g, &lane_pk, ex, true, room).await?;
         if let Some(f) = &d.failure {
-            return Err(sim_failed(f));
+            return Err(self.sim_failed(f));
         }
         for (t, u) in g.txs.iter_mut().zip(&d.per_txn) {
             add_own(t, u).map_err(revert)?;
@@ -2071,13 +2073,24 @@ impl ChainAdapter for AlgorandAdapter {
         // the first exact pass learns the inner count with the discovery credit (the apps' own budget calls depend on the
         // pool, which discovery's extra budget enlarged); then the fee is exact
         let mut inner = d.inner.max(DISCOVERY_CREDIT);
-        let mut settled = false;
-        for _ in 0..3 {
+        let (mut settled, mut passes) = (false, 0);
+        while passes < 3 {
             g.fee = Self::fee_of(&p, &g, inner, ex);
             let s = self.simulate(&p, &g, &lane_pk, ex, false, 0).await?;
             if let Some(f) = &s.failure {
-                return Err(sim_failed(f));
+                // spec §4.6 (T20 fix 1, review I4): the relayer adds budget calls as simulate reports — an app that does not
+                // raise its own budget (token.mtx_pay_meta's pre-work, the router's tail); refused once the group is full
+                // each one distinct (equal transactions of one group share a txid: algod refuses the second as "already
+                // in ledger"), by its count of empty box references (I/O quota only)
+                let more = (0..8).map(|i| Tx::Call { app: w.token, args: vec![], accounts: vec![], apps: vec![], boxes: vec![(0, vec![]); i],
+                                                     executor: false }).find(|t| !g.txs.contains(t));
+                if let (true, Some(t)) = (f.contains("dynamic cost budget exceeded") && g.txs.len() < MAX_GROUP, more) {
+                    g.txs.push(t);
+                    continue;
+                }
+                return Err(self.sim_failed(f));
             }
+            passes += 1;
             if s.inner == inner {
                 settled = true;
                 break;
@@ -2856,6 +2869,45 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         assert!(exact.iter().all(|s| s.get("extra-opcode-budget").is_none()), "the exact group runs on its own budget");
         let fee = |s: &Mp| txns_of(s)[1].get("txn").and_then(|t| t.get("fee")).and_then(Mp::u64);
         assert_eq!((fee(exact[0]), fee(exact.last().unwrap())), (Some(1_000 * (3 + DISCOVERY_CREDIT)), Some(7_000)), "learn the inner count, then exact");
+    }
+
+    /// T20 fix 1 (review I4, spec §4.6): when the exact group runs out of opcode budget (an app that does not raise its
+    /// own: real algod, token.mtx_pay_meta's pre-work and the router's tail) the node appends one bare budget call per
+    /// "dynamic cost budget exceeded" and re-prices; a group that is full (16 transactions) is refused.
+    #[tokio::test]
+    async fn budget_calls_added_as_simulate_reports() {
+        let mut w = world();
+        w.budget_calls_needed = 2;
+        let (a, _) = adapter(w).await;
+        let op = MetaOp { valid_until: far(), ..op_of("pay") };
+        let g = group(&a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap());
+        let bare = g.txs.iter().filter(|t| matches!(t, Tx::Call { args, accounts, boxes, .. } if args.is_empty() && accounts.is_empty() && boxes.is_empty())).count();
+        let bare = bare + g.txs.iter().filter(|t| matches!(t, Tx::Call { args, boxes, .. } if args.is_empty() && !boxes.is_empty()
+            && boxes.iter().all(|b| b.1.is_empty()))).count();
+        assert_eq!((g.txs.len(), bare), (4, 2), "[MBR][mtx_pay] + two budget calls");
+        assert_ne!(g.txs[2], g.txs[3], "distinct transactions (equal ones share a txid: \"already in ledger\")");
+        assert_eq!(g.fee, 1_000 * (4 + 4), "each priced as a transaction of the group");
+        let mut w = world();
+        w.budget_calls_needed = 20;
+        let (a, _) = adapter(w).await;
+        let e = a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap_err();
+        assert!(matches!(&e, SimError::Revert(m) if m.contains("dynamic cost budget exceeded")), "a full group is refused: {e:?}");
+    }
+
+    /// T20 fix 1 (review I3): algod's "account X balance B below min M" for a lane means the lane cannot pay the group (as
+    /// `overspend`): retried, never the job's death; the same message naming any other account (an app's) is the group's.
+    #[tokio::test]
+    async fn lane_below_min_balance_is_retried() {
+        let lane = algorand_address(&lane_pk());
+        let mut w = world();
+        w.fail = Some(format!("transaction ABC: account {lane} balance 95600 below min 100000 (0 assets)"));
+        let (a, ww) = adapter(w).await;
+        let op = MetaOp { valid_until: far(), ..op_of("pay") };
+        let j = job(o_op(&op, &auth_of("pay"), json!({})));
+        assert!(matches!(a.build(&j, 0).await.unwrap_err(), SimError::Transport(m) if m.contains("the lane cannot pay")));
+        let app = algorand_address(&app_address(TOKEN));
+        ww.lock().unwrap().fail = Some(format!("transaction ABC: account {app} balance 95600 below min 100000 (0 assets)"));
+        assert!(matches!(a.build(&j, 0).await.unwrap_err(), SimError::Revert(_)));
     }
 
     /// T15 fix 1 / note 1: program = prefix ‖ router id ‖ suffix ‖ 20 01 salt; its address equals the vector (the SDK's

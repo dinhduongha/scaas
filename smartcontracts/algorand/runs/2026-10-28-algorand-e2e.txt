@@ -1,10 +1,32 @@
-# e2e_algorand at commit 870caf05 + working tree (T20), on a fresh localnet (devnet.sh algorand up)
-# scripts/capped smartcontracts/scripts/devnet.sh algorand up && cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_algorand -- --ignored --nocapture
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+# e2e_algorand at commit 8df92966 + working tree (T20 fix 1), on a fresh localnet, torn down on exit
+# smartcontracts/algorand/scripts/e2e.sh
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Creating 
+ Network scaas-algorand_default Created 
+ Network scaas-algorand_default Created 
+ Container scaas-algorand-algod-1 Creating 
+ Container scaas-algorand-indexer-db-1 Creating 
+ Container scaas-algorand-algod-1 Created 
+ Container scaas-algorand-indexer-db-1 Created 
+ Container scaas-algorand-conduit-1 Creating 
+ Container scaas-algorand-conduit-1 Created 
+ Container scaas-algorand-indexer-1 Creating 
+ Container scaas-algorand-indexer-1 Created 
+ Container scaas-algorand-algod-1 Starting 
+ Container scaas-algorand-indexer-db-1 Starting 
+ Container scaas-algorand-algod-1 Started 
+ Container scaas-algorand-indexer-db-1 Started 
+ Container scaas-algorand-conduit-1 Starting 
+ Container scaas-algorand-conduit-1 Started 
+ Container scaas-algorand-indexer-1 Starting 
+ Container scaas-algorand-indexer-1 Started 
+algod up
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.70s
      Running tests/e2e_algorand.rs (target/debug/deps/e2e_algorand-9d4367e1b2442416)
 
 running 8 tests
-deploy on dockernet-v1 (genesis 4eUr8Egsq31K0WkbzMAs7VSPINFkJHd72p25aCRHxFI=) from C4A6U453ZLXHYXYALVIK2HASBWQLXOYNCGVIYLSRTPBMDH4EB7RVN5PJ2M: ['account', 'relayfee', 'token:TKA', 'token:TKB', 'mandate', 'dex']
+deploy on dockernet-v1 (genesis whm+Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq/974=) from AEH5W7SSRGFFOIDYQXKUDPTEEZUXENSRJZO2XLGNHVPN4TS4MN3SRY75YI: ['account', 'relayfee', 'token:TKA', 'token:TKB', 'mandate', 'dex']
   create account: app 1002 (4945 B approval, extra_pages 2)
   fund app 1002 (O3VYQKJ45XILV2GVDO44LM2IGPUD2QYRXNFX5K4ZDC2B4BD4ZZXU5AQG24): 100000 µALGO (its minimum balance)
   create relayfee: app 1004 (857 B approval, extra_pages 0)
@@ -19,23 +41,13 @@ deploy on dockernet-v1 (genesis 4eUr8Egsq31K0WkbzMAs7VSPINFkJHd72p25aCRHxFI=) fr
   create dex: app 1012 (961 B approval, extra_pages 0)
   fund app 1012 (3X4ABWUJOBYVXI6HC245NYWR5VYXDMFIAQDKQLNV5G3GQ7FRWZAUVAQ3YM): 100000 µALGO (its minimum balance)
 deploy gate: 6 apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked
-wrote /tmp/scaas-algorand-e2e/deployments/4eUr8Egsq31K0WkbzMAs7VSPINFkJHd72p25aCRHxFI=.json
+wrote /tmp/scaas-algorand-e2e/deployments/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.json
 
-ROUNDS 24 rounds in 3 s up to round 25 (dev mode: one block per group, the ticker one per second)
-test algorand_events_ingested ... ok
-QUOTE mtx_pay_meta (ed25519 UA payer, record opened): quote 132500 µALGO (fee 9000 = 3 txns + 6 inner, 0 of them budget-only calls; MBR 123500) >= the lane's ALGO decrease 132500
-GATE d box account record s ‖ kind ‖ id (34 B name) on app 1002: present
-job 2: [
-    Object {
-        "chain_state": String("dead"),
-        "error": String("simulation: bad payload: pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"),
-        "job_id": Number(2),
-    },
-]
 QUOTE mtx_pay (native payer): quote 54400 µALGO (fee 7000 = 3 txns + 4 inner, 0 of them budget-only calls; MBR 47400) >= the lane's ALGO decrease 54400
+ROUNDS 29 rounds in 4 s up to round 30 (dev mode: one block per group, the ticker one per second)
+test algorand_events_ingested ... ok
 GATE d box lane l ‖ sha256(holder ‖ lane) (33 B name) on app 1006: present
 GATE d box balance b ‖ address (33 B name) on app 1006: present
-QUOTE router -> mandate.mtx_mandate_open (native owner): quote 240800 µALGO (fee 17000 = 6 txns + 11 inner, 0 of them budget-only calls; MBR 223800) >= the lane's ALGO decrease 240800
 job 2: [
     Object {
         "chain_state": String("consumed"),
@@ -43,65 +55,79 @@ job 2: [
         "job_id": Number(2),
     },
 ]
+QUOTE router -> mandate.mtx_mandate_open (native owner): quote 240800 µALGO (fee 17000 = 6 txns + 11 inner, 0 of them budget-only calls; MBR 223800) >= the lane's ALGO decrease 240800
 GATE d box mandate m ‖ token ‖ id (41 B name) on app 1010: present
-GATE a under-fee (below one min fee per transaction): simulate refused: transaction MADBC5CRSY6EJIHMG7PTDWV7BKEUAOK4DSVR5ED4WIIFB5AEXTXQ: logic eval error: group fee 0.0A too small (needs 1mA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struct:struct {}{}, Sig:crypto.Signature{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0
-GATE a short of inner fee credit (one min fee less): simulate refused: transaction ZJ6Y56CVMROJLSOTFNFRHCH7ZAGUHXFSUC2EWB5FHPRLLEQ53XZA: logic eval error: inner tx 1 failed: logic eval error: inner tx 1 failed: logic eval error: group fee 0.0A too small (needs 1mA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struc
-GATE a a box reference missing: simulate refused: transaction M6BU43KX5IW7JWBPDKZ3X4GQEULBUSUNBIK57O7JTTTHVKEYT5UQ: logic eval error: inner tx 1 failed: logic eval error: invalid Box reference 0x7507933cc2ab045076dc18b7215ad688eec2b82901dfaeb568dd35ec35e5616cce. Details: app=1006, pc=3626, opcodes=bzero; dig 1; box_get. Details: app=1004, pc=658, opcodes=intc_1 // 0; 
+QUOTE mtx_pay_meta (ed25519 UA payer, record opened): quote 132500 µALGO (fee 9000 = 3 txns + 6 inner, 0 of them budget-only calls; MBR 123500) >= the lane's ALGO decrease 132500
+GATE d box account record s ‖ kind ‖ id (34 B name) on app 1002: present
+GATE a under-fee group submitted: rejected before mempool: algod 400: TransactionPool.Remember: transaction ODYZRZKXFNSU2CLAAUEPJQVSWQPJUKO6CKPJAEONWRIXFLFN6RMQ: logic eval error: group fee 0.0A too small (needs 1mA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struct:struct {}{
+job 2: [
+    Object {
+        "chain_state": String("dead"),
+        "error": String("simulation: bad payload: pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"),
+        "job_id": Number(2),
+    },
+]
+GATE a under-fee (below one min fee per transaction): simulate refused: transaction BCXFW2GVID24GV3J4AGGOCNL6ABTI3HF6EMHRLOT7G5WWS3LIRHQ: logic eval error: group fee 0.0A too small (needs 1mA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struct:struct {}{}, Sig:crypto.Signature{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0
+GATE a short of inner fee credit (one min fee less): simulate refused: transaction 4YJR43GHZVMCTS32Z2ZYTVG52KZGRA73GCZN2OEFMOKOTOE766OQ: logic eval error: inner tx 1 failed: logic eval error: inner tx 1 failed: logic eval error: group fee 0.0A too small (needs 1mA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struc
+GATE a a box reference missing: simulate refused: transaction R2Z4KSQ63E2J64LKABTZQJTZ56E5WJWMTGEMAOKN2HYK3E7LWNFQ: logic eval error: inner tx 1 failed: logic eval error: inner tx 1 failed: logic eval error: invalid Box reference 0x730107933cc2ab045076dc18b7215ad688eec2b82901dfaeb568dd35ec35e5616cce. Details: app=1002, pc=811, opcodes=frame_dig -3; concat; box_get. De
+GATE a an MBR payment 1 µALGO short: simulate refused: transaction T7LAUGXFIUNRPSOAHW57SBVFQPXDYT6TWPNVJQIPWYFHVO32KBDA: logic eval error: inner tx 1 failed: logic eval error: inner tx 1 failed: logic eval error: assert failed pc=530. Details: app=1002, pc=530, opcodes=+; ==; assert. Details: app=1006, pc=811, opcodes=intc_0 // 0; itxn_field Fee; itxn_submit. Details: app=
+test algorand_pay_relay_finalize ... ok
 test algorand_pay_meta_job ... ok
-GATE a an MBR payment 1 µALGO short: simulate refused: transaction TDOFJNVAYUJECCDJ46PDVPN66ZTBX52VSG76IRNWCXSPVFKFTMDQ: logic eval error: inner tx 1 failed: logic eval error: inner tx 1 failed: logic eval error: assert failed pc=530. Details: app=1002, pc=530, opcodes=+; ==; assert. Details: app=1006, pc=811, opcodes=intc_0 // 0; itxn_field Fee; itxn_submit. Details: app=
 GATE deploy gate on an update-accepting approval program: deploy gate FAILED (spec §4.9: every SCaaS app runs the reviewed, non-upgradable program of artifacts.json, linked and funded as deployed):
   token app 1066: approval-program sha512_256 2f84325e1433843b8564556689ba4feb25ad6120ed225c308f60abff27538816 is not artifacts.json 73e167d8513decfd32134d5c9a1c19a3f895c7b057922df3219c6c60ba627c79
   token app 1066: clear-state-program sha512_256 2f84325e1433843b8564556689ba4feb25ad6120ed225c308f60abff27538816 is not artifacts.json 87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4
   token app 1066: its account_app global None is not account=1002
   token app 1066: its address holds 0 µALGO, below its minimum balance 100000
-QUOTE router -> mandate.mtx_mandate_pay (ed25519 UA delegate, record opened): quote 129900 µALGO (fee 16000 = 6 txns + 10 inner, 0 of them budget-only calls; MBR 113900) >= the lane's ALGO decrease 129900
-GATE a under-fee group submitted: rejected before mempool: algod 400: TransactionPool.Remember: transaction GVPWFEUMB3DHEXAOQOKAICOQO4ZGPOQ7TAB6GVTNJFB526NWW7DQ: logic eval error: group fee 0.0A too small (needs 1mA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struct:struct {}{
-test algorand_pay_relay_finalize ... ok
 QUOTE router -> dex.settle (msig-3 passkey leg carried, native leg): quote 326500 µALGO (fee 44000 = 8 txns + 36 inner, 0 of them budget-only calls; MBR 282500) >= the lane's ALGO decrease 326500
 DEX settle group: 8 txns, MBR parts [133500, 44600, 28500, 28500], carry auth 1486 B
+QUOTE router -> mandate.mtx_mandate_pay (ed25519 UA delegate, record opened): quote 129900 µALGO (fee 16000 = 6 txns + 10 inner, 0 of them budget-only calls; MBR 113900) >= the lane's ALGO decrease 129900
+test algorand_router_dex_settle ... ok
 QUOTE router -> account.mtx_add_origin (ed25519 UA subject opened, UA payer): quote 228400 µALGO (fee 16000 = 5 txns + 11 inner, 0 of them budget-only calls; MBR 212400) >= the lane's ALGO decrease 228400
 GATE d box the subject's record s ‖ kind ‖ id (34 B name) on app 1002: present
-test algorand_router_dex_settle ... ok
-partial deploy: deploy on dockernet-v1 (genesis 4eUr8Egsq31K0WkbzMAs7VSPINFkJHd72p25aCRHxFI=) from TKPKJYMWQRGFGHAVNXJW6R23ATRAU6ZMSGBNPGUFVPMJEO7AEXJTOWQKHM: ['account', 'relayfee', 'token:TKA', 'mandate', 'dex']
-  create account: app 1110 (4945 B approval, extra_pages 2)
-  fund app 1110 (4PUC5TEX74CZTLNN3ZPM7OVCBNENGJBNAZ7BR3L3JJF46QN7XUDZU6NS5M): 100000 µALGO (its minimum balance)
-  create relayfee: app 1156 (857 B approval, extra_pages 0)
-  relayfee app 1156: salt 4 (the lowest for this id), executor QDVRLL6NX3AFBD4UEZX2KANPEVLRFE67GYMBAR6IBY3RA3MUN5LRB5MLTY off-curve
-  fund app 1156 (WCBR2EQVMT2C523GQ4IJPLJA27WW2MD2JLAX7JWMYRFC7J63UOB3AW3OY4): 100000 µALGO (its minimum balance)
-create token:TKA: algod refused it: TransactionPool.Remember: transaction YOQDGVHLS4V5RSFZQMOQP7FHMUUEVQDV7TSOJU5R4CV4WJYRTZSA: account TKPKJYMWQRGFGHAVNXJW6R23ATRAU6ZMSGBNPGUFVPMJEO7AEXJTOWQKHM balance 695000 below min 1035500 (0 assets) (the deployment so far is kept in /tmp/scaas-algorand-e2e/deploy2/4eUr8Egsq31K0WkbzMAs7VSPINFkJHd72p25aCRHxFI=.TKPKJYMWQRGFGHAVNXJW6R23ATRAU6ZMSGBNPGUFVPMJEO7AEXJTOWQKHM.resume.json: rerun to resume)
-
 QUOTE router -> mandate.mtx_revoke (native owner): quote 60400 µALGO (fee 13000 = 5 txns + 8 inner, 0 of them budget-only calls; MBR 47400) >= the lane's ALGO decrease 60400
-GATE d key_sets(subject) = [(1006, Some([[152, 45, 135, 108, 55, 195, 233, 242, 138, 207, 75, 60, 104, 95, 54, 122, 55, 167, 162, 46, 76, 26, 36, 29, 140, 44, 20, 154, 236, 169, 161, 72]])), (1008, Some([[152, 45, 135, 108, 55, 195, 233, 242, 138, 207, 75, 60, 104, 95, 54, 122, 55, 167, 162, 46, 76, 26, 36, 29, 140, 44, 20, 154, 236, 169, 161, 72]]))]
 test algorand_router_mandate ... ok
+partial deploy: deploy on dockernet-v1 (genesis whm+Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq/974=) from MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ: ['account', 'relayfee', 'token:TKA', 'mandate', 'dex']
+  create account: app 1170 (4945 B approval, extra_pages 2)
+  fund app 1170 (HYKX2IGSUYVUH7TND5BCFDPPU6I2ZZWGAJXCMJOESASUONRLXPP5KT6UPI): 100000 µALGO (its minimum balance)
+  create relayfee: app 1172 (857 B approval, extra_pages 0)
+  relayfee app 1172: salt 0 (the lowest for this id), executor V53MJOZNILUHSZFSQBDWBTSUG6K23QY45H6L25M3NKALXTFPSR2BTLYS2Q off-curve
+  fund app 1172 (RQX7I65SNIZXZAHGTCUFFPNICPYNWRBY44SRI7ZJTW22VBF3OBZPMKA2MM): 100000 µALGO (its minimum balance)
+create token:TKA: algod refused it: TransactionPool.Remember: transaction B2V52JGIUHPFFOBEIKO4VSKYYZSMX5ADFQZFB2RDLBIOJYY3YS4Q: account MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ balance 695000 below min 1035500 (0 assets) (the deployment so far is kept in /tmp/scaas-algorand-e2e/deploy2/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ.resume.json: rerun to resume)
+
+partial deploy: 0 orphan router(s) []
+GATE d key_sets(subject) = [(1006, Some([[152, 45, 135, 108, 55, 195, 233, 242, 138, 207, 75, 60, 104, 95, 54, 122, 55, 167, 162, 46, 76, 26, 36, 29, 140, 44, 20, 154, 236, 169, 161, 72]])), (1008, Some([[152, 45, 135, 108, 55, 195, 233, 242, 138, 207, 75, 60, 104, 95, 54, 122, 55, 167, 162, 46, 76, 26, 36, 29, 140, 44, 20, 154, 236, 169, 161, 72]]))]
 test deploy_gate_fails_on_hash_mismatch ... ok
 QUOTE router -> listed third party RelayTarget.ping (native payer): quote 27900 µALGO (fee 9000 = 4 txns + 5 inner, 0 of them budget-only calls; MBR 18900) >= the lane's ALGO decrease 27900
-QUOTE router -> RelayTarget.ping (msig-3 Chrome passkey payer): quote 163300 µALGO (fee 27000 = 4 txns + 23 inner, 0 of them budget-only calls; MBR 136300) >= the lane's ALGO decrease 163300
-deploy on dockernet-v1 (genesis 4eUr8Egsq31K0WkbzMAs7VSPINFkJHd72p25aCRHxFI=) from TKPKJYMWQRGFGHAVNXJW6R23ATRAU6ZMSGBNPGUFVPMJEO7AEXJTOWQKHM: ['account', 'relayfee', 'token:TKA', 'mandate', 'dex'] (resuming: ['account', 'relayfee'] created, ['token:TKA'] sent)
-  account: app 1110 adopted
-  relayfee: app 1156 adopted
-  create token:TKA: app 1229 (3661 B approval, extra_pages 1)
-  fund app 1229 (PR63VUPLJ745Y53L64VBHNKMECSKBTEIZFIWWHFI2BURHXCLSVOZ6BEUXM): 100000 µALGO (its minimum balance)
-  create mandate: app 1231 (2304 B approval, extra_pages 1)
-  fund app 1231 (TZYS5RU5QACONHBENK5V7CJJNM5TCSM5CYZDOY3OFQVWLA3PJM455D27RA): 100000 µALGO (its minimum balance)
-  create dex: app 1233 (961 B approval, extra_pages 0)
-  fund app 1233 (SS2FEVN4PVCV352OGPRAUEON5FGDXP7K44FCLESCYSKGUFJ4TR7L5VZT6M): 100000 µALGO (its minimum balance)
-deploy gate: 5 apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked
-wrote /tmp/scaas-algorand-e2e/deploy2/4eUr8Egsq31K0WkbzMAs7VSPINFkJHd72p25aCRHxFI=.json
+pending create, another admin: token:TKA: its recorded create B2V52JGIUHPFFOBEIKO4VSKYYZSMX5ADFQZFB2RDLBIOJYY3YS4Q (not landed yet, or landed) has {'name': 'Token A', 'symbol': 'TKA', 'decimals': 6, 'admin': 'MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ', 'account_app': 1170}, not this run's {'name': 'Token A', 'symbol': 'TKA', 'decimals': 6, 'admin': '3DCHXKKTAQWB2PRAPY3IIMQ23F4J4Y2M57UCRV4ZBXRATQNAIYR7CPOPG4', 'account_app': 1170}: not resent, not adopted (change ALGORAND_TOKENS / ALGORAND_ADMIN back so that create finishes)
 
-GATE b size fee: relay args 1791 B (payer auth 1486 B), 4 txns, network fee per byte 0 (algod `fee`), min fee 1000: the node quoted fee 27000 µALGO, algod charged it and accepts nothing less (fee - 1: transaction ABTP3XAEZR6ZCNLCD4ALYF7CXNW7RF2T2Z3VQ6C47XS6CCHOH5ZA: logic eval error: inner tx 1 failed: logic eval error: inner tx 1 failed: logic eval error: group fee 0.0A too small (needs 1uA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struc)
+QUOTE router -> account.mtx_set_guardian (msig-3 Chrome subject + msig-3 Chrome payer): quote 246700 µALGO (fee 50000 = 10 txns + 40 inner, 5 of them budget-only calls; MBR 196700) >= the lane's ALGO decrease 246700
+QUOTE router -> RelayTarget.ping (msig-3 Chrome passkey payer): quote 163300 µALGO (fee 27000 = 4 txns + 23 inner, 0 of them budget-only calls; MBR 136300) >= the lane's ALGO decrease 163300
+GATE b size fee: relay args 1791 B (payer auth 1486 B), 4 txns, network fee per byte 0 (algod `fee`), min fee 1000: the node quoted fee 27000 µALGO, algod charged it and accepts nothing less (fee - 1: transaction KD6EQN3FWCZICDG65FS3SXYUUJO2CPWLIFEUXD46YYHTQSJKY44Q: logic eval error: inner tx 1 failed: logic eval error: inner tx 1 failed: logic eval error: group fee 0.0A too small (needs 1uA more) []transactions.SignedTxnWithAD{transactions.SignedTxnWithAD{_struct:struct {}{}, SignedTxn:transactions.SignedTxn{_struc)
+deploy on dockernet-v1 (genesis whm+Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq/974=) from MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ: ['account', 'relayfee', 'token:TKA', 'mandate', 'dex'] (resuming: ['account', 'relayfee'] created, ['token:TKA'] sent)
+  account: app 1170 adopted
+  relayfee: app 1172 adopted
+  create token:TKA: app 1254 (3661 B approval, extra_pages 1)
+  fund app 1254 (2XZCT7Q6MLHX2XSQACXG62LEH7HWQIFAWQSBO3U5MUF5W7YZ4HVZDPJG3Q): 100000 µALGO (its minimum balance)
+  create mandate: app 1283 (2304 B approval, extra_pages 1)
+  fund app 1283 (E62RDF3VEETRFT43XPUI2D4AEK2S6KSEATRLAJUPXZJNBMKFPSNC7QV2ZA): 100000 µALGO (its minimum balance)
+  create dex: app 1285 (961 B approval, extra_pages 0)
+  fund app 1285 (7JFEE23ENOGHW3B6MGIG3KQIOREHEK54ET7WSOX47WN4HYOUZCGEXTNPJM): 100000 µALGO (its minimum balance)
+deploy gate: 5 apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked
+wrote /tmp/scaas-algorand-e2e/deploy2/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.json
+
 QUOTE router -> token.mtx_invalidate_nonces (native subject, min_nonce 5, box new): quote 51800 µALGO (fee 14000 = 5 txns + 9 inner, 0 of them budget-only calls; MBR 37800) >= the lane's ALGO decrease 51800
 QUOTE router -> token.mtx_invalidate_nonces (native subject, min_nonce 9, box exists): quote 31900 µALGO (fee 13000 = 4 txns + 9 inner, 0 of them budget-only calls; MBR 18900) >= the lane's ALGO decrease 31900
 GATE d box min_nonce n ‖ sha256(holder ‖ lane) (33 B name) on app 1006: present
 job 6: [
     Object {
         "chain_state": String("dead"),
-        "error": String("simulation: simulate: transaction JJXRD5EAIQE3KL3J4GNGCPCKQBVBMH4ESLQPICAUEUKU3EOGKVVA: logic eval error: err opcode executed. Details: app=1014, pc=67, opcodes=match label4 label5; err; label5:; err; label3:"),
+        "error": String("simulation: simulate: transaction N3P43FNU6AI7Y32P4JZ3G7LAJAAX6SRUXQPXQPRMQSHOY4PDDB5Q: logic eval error: err opcode executed. Details: app=1014, pc=67, opcodes=match label4 label5; err; label5:; err; label3:"),
         "job_id": Number(6),
     },
 ]
 test deploy_resumes_after_an_interruption ... ok
 test algorand_relay_fee_job ... ok
 
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.52s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.12s
 
 rc=0

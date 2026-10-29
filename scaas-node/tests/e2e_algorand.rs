@@ -1,5 +1,6 @@
-//! scripts/capped smartcontracts/scripts/devnet.sh algorand up && \
-//!   cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_algorand -- --ignored --nocapture
+//! smartcontracts/algorand/scripts/e2e.sh   (= scripts/capped devnet.sh algorand up, then
+//!   cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_algorand -- --ignored --nocapture; the localnet goes
+//!   down on exit, a failure included)
 //!
 //! near-algorand Task 20 (spec §4.9, §5, §7; R10, R11). Needs the localnet (`devnet.sh algorand up`: algod 4001, kmd 4002,
 //! dev mode) and `smartcontracts/scripts/build.sh algorand` (`out/`). The first test deploys with
@@ -397,7 +398,9 @@ struct Ms(Vec<Pk>);
 
 impl Ms {
     fn new(seeds: &[u8]) -> Self {
-        let mut m: Vec<Pk> = seeds.iter().map(|s| Pk::new(*s)).collect();
+        Ms::of(seeds.iter().map(|s| Pk::new(*s)).collect())
+    }
+    fn of(mut m: Vec<Pk>) -> Self {
         m.sort_by_key(Pk::id);
         Ms(m)
     }
@@ -807,8 +810,9 @@ async fn quoted(a: &dyn ChainAdapter, odoo: &Odoo, state: &Arc<Mutex<FakeOdoo>>,
     let spent = before - algo(addr).await;
     let quote = g.fee + g.mbr;
     let inner = (g.fee / 1000).saturating_sub(g.txs.len() as u64);
+    // budget-only: bare, no account / app reference, boxes only empty ones (the node's spec §4.6 calls, review I4)
     let budget_only = g.txs.iter().filter(|t| matches!(t, Tx::Call { args, accounts, apps, boxes, .. }
-        if args.is_empty() && accounts.is_empty() && apps.is_empty() && boxes.is_empty())).count();
+        if args.is_empty() && accounts.is_empty() && apps.is_empty() && boxes.iter().all(|b| b.1.is_empty()))).count();
     println!("QUOTE {what}: quote {quote} µALGO (fee {} = {} txns + {inner} inner, {budget_only} of them budget-only calls; MBR {}) >= the lane's \
               ALGO decrease {spent}", g.fee, g.txs.len(), g.mbr);
     assert!(quote >= spent, "{what}: the quote {quote} µALGO under-prices the lane's {spent} µALGO decrease");
@@ -858,12 +862,14 @@ async fn simulate_refusals(g: &Group, lane: &LocalSigner, exec: Option<&Executor
         _ => None,
     });
     assert!(paid.is_some(), "the group pays an MBR");
-    for (what, m) in [("under-fee (below one min fee per transaction)", &under), ("short of inner fee credit (one min fee less)", &credit),
-                      ("a box reference missing", &nobox), ("an MBR payment 1 µALGO short", &mbr)] {
+    // review M5: each refused for its own reason
+    for (what, m, why) in [("under-fee (below one min fee per transaction)", &under, "group fee"),
+                           ("short of inner fee credit (one min fee less)", &credit, "inner tx"),
+                           ("a box reference missing", &nobox, "invalid Box reference"), ("an MBR payment 1 µALGO short", &mbr, "assert failed")] {
         let s = simulate(m, lane, exec).await;
         let f = s["failure-message"].as_str().unwrap_or("").to_string();
         println!("GATE a {what}: simulate refused: {}", short(&f));
-        assert!(!f.is_empty(), "{what}: simulate passed it");
+        assert!(f.contains(why) && (why != "group fee" && why != "inner tx" || f.contains("too small")), "{what}: not refused for its reason: {f}");
     }
 }
 
@@ -967,7 +973,21 @@ async fn deploy_resumes_after_an_interruption() {
     let r: Value = serde_json::from_str(&std::fs::read_to_string(&resume).unwrap()).unwrap();
     assert!(r["apps"]["account"].is_u64() && r["apps"]["relayfee"].is_u64() && r["pending"]["token:TKA"].is_object(), "{r}");
     let half = created().await;
-    assert_eq!((count(&half, "account"), count(&half, "relayfee"), count(&half, "token")), (1, 1, 0), "{half:?}");
+    // a router that landed off its predicted id with an on-curve executor is recorded as an orphan (the salt race on a
+    // chain the other tests keep busy) and created again
+    let orphans = r["orphans"].as_array().map_or(0, Vec::len);
+    println!("partial deploy: {orphans} orphan router(s) {}", r["orphans"]);
+    assert_eq!((count(&half, "account"), count(&half, "relayfee"), count(&half, "token")), (1, 1 + orphans, 0), "{half:?}");
+    // review I1: the pending token create was signed with admin = the funding account; a rerun with another admin is
+    // refused before any transaction (never resent, never adopted), the resume file kept
+    let other_admin = lane_addr(0);
+    let mut admin_b = env("TKA:Token A:6", &dir);
+    admin_b.push(("ALGORAND_ADMIN", other_admin.clone()));
+    let o = script("smartcontracts/scripts/deploy.sh", &["algorand", ALGOD], &admin_b);
+    let e = String::from_utf8_lossy(&o.stderr);
+    println!("pending create, another admin: {e}");
+    assert!(!o.status.success() && e.contains("recorded create") && e.contains(&other_admin) && e.contains("not resent"), "{e}");
+    assert!(resume.exists() && created().await.len() == half.len(), "file kept, nothing new deployed");
     // another plan: refused before any transaction, the resume file kept
     let other = script("smartcontracts/scripts/deploy.sh", &["algorand", ALGOD], &env("TKB:Token B:6", &dir));
     let e = String::from_utf8_lossy(&other.stderr);
@@ -991,7 +1011,6 @@ async fn deploy_resumes_after_an_interruption() {
     assert!(again.contains("adopted") && !again.contains("create ") && again.contains("deploy gate: 5 apps"), "{again}");
     assert_eq!(created().await.len(), all.len());
     // an existing token is not adopted with another name or admin
-    let other_admin = lane_addr(0);
     let mut admin = env("TKA:Token A:6", &dir);
     admin.push(("ALGORAND_ADMIN", other_admin.clone()));
     for (e, what) in [(env("TKA:Other Name:6", &dir), "Other Name"), (admin, other_admin.as_str())] {
@@ -1123,6 +1142,16 @@ async fn algorand_relay_fee_job() {
     w.fund(w.tka, &ms.h(), 10_000).await;
     let (j, r3) = w.relay_job(3, &ms, w.target, &[selector("ping(uint64)void").to_vec(), 9u64.to_be_bytes().to_vec()], [0x5d; 32], json!({}));
     let auth_len = hex_len(&j["op"]["signature"]);
+    // review I4: T15's absolute worst (msig is capped at 3 members on Algorand): an msig-3 Chrome subject's key op (its
+    // record opened) paid by another msig-3 Chrome payer (its record opened too)
+    let (subj3, pay3) = (Ms::new(&[61, 62, 63]), Ms::new(&[64, 65, 66]));
+    w.fund(w.tka, &pay3.h(), 10_000).await;
+    let none = [0u8; 33];
+    let gop = MetaOp { extra: sha(&none), ..w.op(w.account, 10, subj3.h(), subj3.h()) };
+    let gargs = vec![selector(&format!("mtx_set_guardian({METAOP_ABI},byte[],(uint8,byte[32]))void")).to_vec(), gop.arc4(),
+                     abi_bytes(&subj3.auth(&gop.digest())), none.to_vec()];
+    let (j5, r5) = w.relay_job(7, &pay3, w.account, &gargs, [0x5a; 32], json!({}));
+    quoted(a.as_ref(), &odoo, &state, 0, &lane_addr(6), j5, "router -> account.mtx_set_guardian (msig-3 Chrome subject + msig-3 Chrome payer)").await;
     let g = quoted(a.as_ref(), &odoo, &state, 1, &lane_addr(7), j, "router -> RelayTarget.ping (msig-3 Chrome passkey payer)").await;
     let p = params().await;
     let relay_args: usize = g.txs.iter().find_map(|t| match t {
@@ -1158,7 +1187,7 @@ async fn algorand_relay_fee_job() {
     let b0 = algo(&lane_addr(7)).await;
     assert_eq!(run_job(a.as_ref(), &odoo, &state, 1, j).await, ["dead"]);
     assert_eq!(algo(&lane_addr(7)).await, b0, "a group bound to fail costs the lane nothing");
-    let rows = index_until(a.as_ref(), &odoo, &state, |rows| [r1, r2, r3].iter().all(|r| rows_of(rows, "PaymentSettled", r).iter().any(|p| p["relay_payee"].is_string()))).await;
+    let rows = index_until(a.as_ref(), &odoo, &state, |rows| [r1, r2, r3, r5].iter().all(|r| rows_of(rows, "PaymentSettled", r).iter().any(|p| p["relay_payee"].is_string()))).await;
     for (r, lane) in [(r1, 6), (r2, 6), (r3, 7)] {
         let p = rows_of(&rows, "PaymentSettled", &r)[0];
         assert_eq!((p["relay_payee"].as_str(), p["to"].as_str()), (Some(lane_addr(lane).as_str()), Some(lane_addr(lane).as_str())), "{p}");

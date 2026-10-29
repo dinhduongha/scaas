@@ -1,0 +1,23 @@
+# test_deploy.py (review I2) at commit 8df92966 + working tree
+# .venv/bin/python -I scripts/test_deploy.py
+test_found_among_the_funders_created_apps (__main__.Recovery.test_found_among_the_funders_created_apps) ... /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/deploy.py:73: ResourceWarning: unclosed file <_io.BufferedReader name='/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Token.approval.bin'>
+  self.approval = open(os.path.join(OUT, f"{name}.approval.bin"), "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/deploy.py:74: ResourceWarning: unclosed file <_io.BufferedReader name='/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Token.clear.bin'>
+  self.clear = open(os.path.join(OUT, f"{name}.clear.bin"), "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/deploy.py:75: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Token.arc56.json' mode='r' encoding='UTF-8'>
+  s = json.load(open(os.path.join(OUT, f"{name}.arc56.json")))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/test_deploy.py:48: DeprecationWarning: Use sign_transaction_with_signer(txn, AccountTransactionSigner(private_key)) instead. Will be removed in a future major release.
+  stx = t.sign(sk)
+ok
+test_not_on_chain (__main__.Recovery.test_not_on_chain) ... ok
+test_recorded_create_decodes_its_parameters (__main__.Recovery.test_recorded_create_decodes_its_parameters) ... ok
+test_two_matches_refused (__main__.Recovery.test_two_matches_refused) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.010s
+
+OK
+rc=0
