@@ -1,0 +1,24 @@
+[package]
+name = "scaas-near-integration"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dev-dependencies]
+near-workspaces = { version = "0.24.0", features = ["experimental"] }  # protocol_config (storage_amount_per_byte)
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+borsh = "1"
+serde_json = "1"
+hex = "0.4"
+sha2 = "0.10"
+p256 = { workspace = true }
+# Native use of the contract crates (PasskeyCase, b64url) only; no mocked chain.
+near-sdk = { workspace = true, features = ["non-contract-usage"] }
+scaas-near-common = { path = "../common" }
+scaas-near-spike-p256 = { path = "../spike-p256" }
+near-contract-standards = { workspace = true }
+near-crypto = "0.38.0"  # ed25519 / secp256k1 test signers (already in the lock through near-sdk)
+near-primitives = "0.38.0"  # Task 16: the node's hand-encoded transaction vector (node_tx_vector.rs; already in the lock through near-workspaces)
+scaas-near-token = { path = "../token" }
+scaas-near-dex = { path = "../dex" }
+scaas-near-relayfee = { path = "../relayfee" }

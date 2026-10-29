@@ -1,0 +1,34 @@
+# relay router mutation spot-checks at commit 91701fdf: each mutant built (its crate only), one test run, file restored byte-for-byte; KILLED = the test fails
+M1 relayfee/src/lib.rs: `if [target, token].iter().any(|a| **a == me || **a == self.executor) {` -> `if false {`; target_router_or_executor_refused: KILLED thread 'target_router_or_executor_refused' (3923747) panicked at integration/tests/relay_router.rs:203:9:
+M2 relayfee/src/lib.rs: `if op.to == Holder::Near(self.executor.clone()) {` -> `if false {`; payee_executor_refused: KILLED thread 'payee_executor_refused' (3929261) panicked at integration/tests/relay_router.rs:203:9:
+M3 relayfee/src/lib.rs: `require!(env::prepaid_gas() >= relay_gas(` -> `require!(true || env::prepaid_gas() >= relay_gas(`; short_prepaid_gas_refused: KILLED thread 'short_prepaid_gas_refused' (3934824) panicked at integration/tests/relay_router.rs:636:5:
+M4 relayfee/src/lib.rs: `require!(attached >= floor,` -> `require!(true || attached >= floor,`; short_deposit_refused: KILLED thread 'short_deposit_refused' (3940378) panicked at integration/tests/relay_router.rs:440:5:
+M5 relayfee/src/lib.rs: `require!(now_s() > p.deadline,` -> `require!(true || now_s() > p.deadline,`; timeout_refund_refused_before_deadline: KILLED thread 'timeout_refund_refused_before_deadline' (3945980) panicked at integration/tests/relay_router.rs:472:5:
+M7 relayfee/src/lib.rs: `if p.deposit > 0 {
+            Promise::new(p.relayer.clone())` -> `if false {
+            Promise::new(p.relayer.clon`; release_on_success: KILLED thread 'release_on_success' (3951636) panicked at integration/tests/relay_router.rs:263:9:
+M8 relayfee/src/lib.rs: `if self.pending.contains_key(&r) {` -> `if false {`; timeout_refund_refused_before_deadline: KILLED thread 'timeout_refund_refused_before_deadline' (3957372) panicked at integration/tests/relay_router.rs:475:5:
+M9 relayfee/src/lib.rs: `if args.len() > MAX_ARGS_BYTES {` -> `if false {`; relay_shape_and_salt_refused: KILLED thread 'relay_shape_and_salt_refused' (3963012) panicked at integration/tests/relay_router.rs:203:9:
+M10 relayfee/src/lib.rs: `|| op.relayer.as_ref() != Some(&me) {` -> `{`; relay_shape_and_salt_refused: KILLED thread 'relay_shape_and_salt_refused' (3969911) panicked at integration/tests/relay_router.rs:203:9:
+M11 relayfee/src/lib.rs: `let ok = !failed(0);` -> `let ok = true;`; refund_on_target_panic: KILLED thread 'refund_on_target_panic' (3975570) panicked at integration/tests/relay_router.rs:369:5:
+M12 relayexec/src/lib.rs: `require!(env::predecessor_account_id() == self.router,` -> `require!(true || env::predecessor_account_id() == `; target_deposit_forwarded_and_returned_on_failure: KILLED thread 'target_deposit_forwarded_and_returned_on_failure' (3981164) panicked at integration/tests/relay_router.rs:610:5:
+M13 relayexec/src/lib.rs: `.transfer(NearToken::from_yoctonear(0))` -> ``; target_success_with_failing_child_releases: SURVIVED 
+M14 token/src/escrow.rs: `self.unhold(&h, &h.payer);` -> `self.unhold(&h, &h.payee);`; refund_on_target_panic: KILLED thread 'refund_on_target_panic' (3992430) panicked at integration/tests/relay_router.rs:369:5:
+M15 token/src/escrow.rs: `.remove(&(env::predecessor_account_id(), pay_ref))
+            .unwrap` -> `.get(&(env::predecessor_account_id(), pay_ref)).cl`; release_on_success: KILLED thread 'release_on_success' (3998328) panicked at integration/tests/relay_router.rs:260:9:
+M16 token/src/escrow.rs: `let rt = self.routed_plan(router, router,` -> `let rt = self.routed_plan(router, &"x.near".parse(`; release_on_success: KILLED thread 'release_on_success' (4004157) panicked at integration/tests/relay_router.rs:183:9:
+U1 relayfee/src/lib.rs: `.filter(|p| p.stage == Stage::Call) else {` -> `.filter(|_| true) else {`; unit:late_callbacks_pay_nothing: KILLED thread 'tests::late_callbacks_pay_nothing' (4009376) panicked at relayfee/src/lib.rs:573:13:
+U2 relayfee/src/lib.rs: `if held {` -> `if false {`; unit:late_callbacks_pay_nothing: KILLED thread 'tests::late_callbacks_pay_nothing' (4009517) panicked at relayfee/src/lib.rs:583:9:
+U3 relayfee/src/lib.rs: `p.stage = Stage::Call;
+            p.owed &= !ret_ok;` -> `p.stage = Stage::Settle;
+            p.owed &= !re`; unit:failed_settle_kept_for_the_timeout: KILLED thread 'tests::failed_settle_kept_for_the_timeout' (4009746) panicked at relayfee/src/lib.rs:605:9:
+U4 relayfee/src/lib.rs: `p.stage = Stage::Owed;
+            return false;` -> `return false;`; unit:failed_settle_kept_for_the_timeout: KILLED thread 'tests::failed_settle_kept_for_the_timeout' (4009905) panicked at relayfee/src/lib.rs:612:9:
+U5 relayfee/src/lib.rs: `Stage::Settle => env::panic_str("a settlement is in flight"),` -> `Stage::Settle => true,`; unit:failed_settle_kept_for_the_timeout: KILLED thread 'tests::failed_settle_kept_for_the_timeout' (4010067) panicked at relayfee/src/lib.rs:390:9:
+rebuild relayfee: rc=0
+rebuild relayexec: rc=0
+rebuild token: rc=0
+# M13 re-run alone (the batch run reported SURVIVED; most likely the relayexec wasm was not rebuilt right after M12's restore of the same file): mutant built, receipts printed, then restored and rebuilt
+M13 relayexec/src/lib.rs: trailing `.transfer(NearToken::from_yoctonear(0))` removed; target_success_with_failing_child_releases: KILLED (return_fail: the returned failing child becomes the result, tx value false = refunded; spawn_fail still released) — the transfer action is what makes the router read the target's own receipt (ruling e)
+# U-mutants: relayfee unit tests (mocked promise results); the "already held" check in token hold_plan is unreachable through a router (pending blocks the same ref) and was not mutated
+rc=0

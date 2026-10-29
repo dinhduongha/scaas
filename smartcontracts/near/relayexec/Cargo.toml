@@ -1,0 +1,11 @@
+[package]
+name = "scaas-near-relayexec"
+version = "0.1.0"
+edition = "2021"
+description = "SCaaS NEAR relay executor (spec §3.8, §2 row 11): forwards the router's call so the target never sees the router; holds nothing"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }

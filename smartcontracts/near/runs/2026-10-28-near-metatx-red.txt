@@ -1,0 +1,25 @@
+# RED step 1 (unit): cargo test -p scaas-near-common --test vectors at commit b6b7e0e5 + Task 6 tests, before hash::meta_pay_id / pay_lane / relay_ref
+error[E0432]: unresolved imports `scaas_near_common::hash::meta_pay_id`, `scaas_near_common::hash::pay_lane`
+error[E0432]: unresolved imports `scaas_near_common::hash::pay_lane`, `scaas_near_common::hash::relay_ref`
+error: could not compile `scaas-near-common` (test "vectors") due to 2 previous errors
+rc=101
+
+# RED step 2 (sandbox): build.sh near + cargo test -p scaas-near-integration --test metatx; token wasm without the Task 6 entries (hash fns + lane_bytes only)
+(first attempt stopped at build.sh: a duplicated `pub use metatx` line, rc=1; fixed and rerun below)
+      8 called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: Metho
+      1 error: test failed, to rerun pass `-p scaas-near-integration --test metatx`
+      1 [ExecutionOutcome { transaction_hash: GXzo6qeNFq9gSBkgFLnuUNakg87idmopeJDJWvzMMirQ, block_hash: BpEAVkEGv5BFPJusZZsU6Vb666YXMEYQCLYGMAL1nttf, logs: [], receipt_ids: [9ZiyJTHW4mvFGJngztqVbjnuFtT9bvo31c
+      1 test batch_of_actions_atomic ... FAILED
+      1 test near_check_storage_needed_is_exact ... FAILED
+      1 test near_pay_meta_mismatch_and_replay ... FAILED
+      1 test near_valid_until_is_seconds ... FAILED
+      1 test near_wrapper_bound_pay_refused_direct ... FAILED
+      1 test pay_meta_emits_meta_then_settled ... FAILED
+      1 test pay_meta_size_bound_measured ... FAILED
+      1 test pay_once_per_lane ... FAILED
+      1 test pay_to_token_itself_refused ... FAILED
+      1 test policy_passkey_for_value ... FAILED
+      1 test relayer_bound_to_predecessor ... FAILED
+      1 test result: FAILED. 0 passed; 12 failed; 0 ignored; 0 measured; 0 filtered out; finished in 54.45s
+      1 test transfer_to_unregistered_native_registers_from_deposit ... FAILED
+rc=101

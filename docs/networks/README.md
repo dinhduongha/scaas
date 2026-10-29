@@ -27,10 +27,10 @@ specified in detail).
 ## <a id="families-and-chains"></a>1. Families and chains
 
 The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its own page), Cosmos (CosmWasm), Soroban
-(Stellar and Pi Network), Move (Sui and Aptos), GRAM (formerly TON), Solana. Planned (owner 2026-10-17): NEAR,
-Algorand, and TRON as an EVM profile (Base is already a draft EVM profile).
+(Stellar and Pi Network), Move (Sui and Aptos), GRAM (formerly TON), Solana, NEAR (owner 2026-10-17; built on branch `near-algorand`, [near.md](near.md)), Algorand (owner
+2026-10-17; built on the same branch, [algorand.md](algorand.md)). Planned: TRON as an EVM profile (Base is already a draft EVM profile).
 
-Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)) are built on the EVM, Hedera, Soroban, Solana, Cosmos, Sui, Aptos and GRAM families (see each family's "Pay-meta and relay fee" section). NEAR and Algorand carry the same two rules: they are brought up on their own branch from `metatx-split` (owner 2026-10-27; spec approved 2026-10-28), with their own spec and plan.
+Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)) are built on the EVM, Hedera, Soroban, Solana, Cosmos, Sui, Aptos and GRAM families (see each family's "Pay-meta and relay fee" section). NEAR carries the same two rules from its first build (wrappers and an escrow router, [near.md](near.md#paymeta-relayfee)); so does Algorand (one atomic group with an executor LogicSig, [algorand.md](algorand.md#paymeta-relayfee)). Work item owner 2026-10-27, spec approved 2026-10-28, branch `near-algorand`. The picture below predates the two.
 
 <p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the SCaaS testnet (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), GRAM (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built. Planned, no code yet: TRON (an EVM profile on TVM), NEAR and Algorand. GRAM is the former TON."></p>
 
@@ -45,8 +45,8 @@ Pay-meta ([CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)) and the relay fee ([C
 | GRAM | -239 / -3 | custom jetton wallet verifies `SignedOp` | TON Connect `signData` (cell) / passkey | ed25519 `m/44'/607'/i'` (W5R1 lane wallets) | yes (`pay`) | BUILT; **blocked** for every path except the transitional ERP pull path until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)) |
 | Solana | `solana:<genesis hash>` | program-level, `SmartKeyAccount` PDA + `LanePda` | raw ed25519 / off-chain message / passkey, verified through the precompile instruction | ed25519 `m/44'/501'/i'/0'` | yes (`pay`) | BUILT |
 | EVM — TRON (planned) | TRON mainnet / Nile / Shasta | the EVM contracts on TRON's TVM (Solidity; TIP-712 typed data) | ECDSA secp256k1 | secp256k1 `m/44'/195'/0'/0/i` | — | PLANNED: energy / bandwidth fees, base58 addresses, TRC-20 |
-| NEAR (planned) | mainnet / testnet | to be designed (a contract that checks the signed operation; NEP-141 token) | ed25519 / secp256k1 access keys | ed25519 `m/44'/397'/0'` | — | PLANNED |
-| Algorand (planned) | mainnet / testnet | to be designed (an app call that carries the signed operation; ASA or ARC-200 token) | ed25519 / logic signatures | ed25519 `m/44'/283'/0'/0/i` | — | PLANNED |
+| NEAR | `near:<genesis hash, base58>` (near-sandbox built; testnet / mainnet not deployed) | contract-level `MetaOp` v1 in Borsh, verified by the NEP-141 token against SCaaS key records ([near.md](near.md)) | ed25519 (NEP-413 `signMessage`) / secp256k1 / WebAuthn P-256 (in wasm) / msig; never a NEAR access key; a mandate's delegate is a `Holder` | ed25519 `m/44'/397'/0'/0'/i'` (implicit account) | no (job API only) | BUILT (branch `near-algorand`) |
+| Algorand | `algorand:<genesis hash, base64>` (localnet built; testnet / mainnet not deployed) | app-level `MetaOp` v1 in ARC-4, ARC-200 token in boxes, one shared `account` app ([algorand.md](algorand.md)) | ed25519 (`"MX"` sign-bytes, current authority) / secp256k1 / WebAuthn P-256 / msig | ed25519 `m/44'/283'/0'/0'/i'` | no (job API only) | BUILT (branch `near-algorand`) |
 
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
 `coin_type`)
@@ -130,7 +130,9 @@ Three pieces, as on EVM:
    function, [NET-ALL-27](#NET-ALL-27)) check the subject's signature over the domain-separated payload, its lane/nonce, `validUntil` and the optional `relayer`
    binding. Where the chain has allowances, only a contract may be a spender.
 2. **Mandate.** As the EVM `MandateWallet`: funds sit in the contract, a delegate signs, limits per payment and per
-   period, a payee, an expiry, revocation, each `payRef` once.
+   period, a payee, an expiry, revocation, each `payRef` once. NEAR: the delegate is a `Holder` (`MandateTerms.delegate`, a NEAR
+   account or a UA id; [NET-NEAR-17](near.md#NET-NEAR-17)). Algorand: the delegate is a holder (kind u8 + 32-byte id;
+   [NET-ALG-10](algorand.md#NET-ALG-10)).
 3. **DEX.** Two signed legs, fill-or-kill per pair, no allowance to an ordinary account — except GRAM, which uses an
    escrow (actor model, no cross-contract atomicity; [GRAM DEX](ton.md#dex)). EVM and Hedera (SPECIFIED): one taker
    against one or more makers per settlement; each SCaaS leg is a role-free `TradeOrder` verified by its own sell token,
@@ -249,6 +251,8 @@ Where the network identity in each family's signed payload comes from:
 | Cosmos | `env.block.chain_id` (runtime), `env.contract.address` | ADR-036 sign doc (`chain_id: ""`, domain inside the payload) |
 | GRAM | config 19 global id, master and wallet addresses | signData `domain`, checked on chain against the wallet's domain set ([NET-TON-02](ton.md#NET-TON-02)) |
 | Solana | the genesis hash fixed at build time ([NET-SOL-01](solana.md#NET-SOL-01)) | none ([NET-ALL-23](#NET-ALL-23)) |
+| NEAR | the genesis hash, passed at `new` and immutable; checked by the node at start | the token account id in the `MetaOp` and NEP-413 `recipient` |
+| Algorand | `global GenesisHash` (runtime) | the token app address in the `MetaOp` |
 
 Every signature also expires (`validUntil`, compared with chain time) and is bound to one contract and one lane
 nonce, so a signature from a test network or another chain is worthless elsewhere. Expiry is per chain
@@ -349,7 +353,7 @@ Chrome/Firefox Level 3 shapes; reject cases: `crossOrigin:true`, `topOrigin`, a 
 whitespace, an origin extended by a suffix, wrong rpIdHash, UV unset, high-s, the challenge of another digest) run in
 every family's test suite. Why: a page that can obtain an assertion for the rpId (sibling subdomain, related origin,
 delegated iframe) would otherwise sign any op; a cross-origin iframe yields assertions that carry the RP's origin.
-Status: BUILT on EVM and Aptos; SPECIFIED for the strict grammar and exact origin on Sui, Soroban, GRAM and Solana and
+Status: BUILT on EVM and Aptos, on NEAR and on Algorand; SPECIFIED for the strict grammar and exact origin on Sui, Soroban, GRAM and Solana and
 for rpIdHash/origin/UV/low-s on Cosmos ([NET-COS-03](cosmos.md#NET-COS-03)).
 
 Client side: WebAuthn returns a **DER** signature and authenticators do not enforce low-s, so the client decodes DER
@@ -364,7 +368,9 @@ Verifier primitive per family: EVM and Hedera OpenZeppelin 5.2 `P256.verify` (RI
 `0x100` when present — probed per chain as `has_p256_precompile` — else a Solidity verifier of ~200–330 k gas); Sui
 `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify` (CAP-51); Cosmos `secp256r1_verify` of
 cosmwasm-std 2.1+; GRAM `P256_CHKSIGNU/P256_CHKSIGNS` (TVM upgrades of 2023/2024, used through `asm` in Tact); Aptos a pure-Move verifier ([NET-APT-14](aptos.md#NET-APT-14)); Solana the
-secp256r1 precompile through instruction introspection ([NET-SOL-12](solana.md#NET-SOL-12)). Each family's subject
+secp256r1 precompile through instruction introspection ([NET-SOL-12](solana.md#NET-SOL-12)); NEAR RustCrypto `p256` in
+wasm, 20.005 Tgas per verify ([NET-NEAR-13](near.md#NET-NEAR-13)); Algorand `ecdsa_verify Secp256r1`
+([NET-ALG-06](algorand.md#NET-ALG-06)). Each family's subject
 account or contract stores the passkey; a passkey-signed op takes the same meta-transaction path as any other op of
 that family. Client rules for creating and using passkeys: [CLI-SGN-09](../clients/signers-clientkeys.md#CLI-SGN-09).
 
@@ -443,6 +449,8 @@ every gap is listed, never implied away.** The subject-account "equivalents per 
 | Cosmos | **none** (passkey owner = `webauthn-p256` UA id, [NET-ALL-21](#NET-ALL-21)) | **none** | passkey account contract with rotation (design first) |
 | GRAM | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation (SPECIFIED) |
 | Solana | key operations add/remove/policy | `start_recovery` / `finish_recovery` | — |
+| NEAR | key ops per token contract (a subject's key op fans out to every token it uses) | guardian-signed start and finish, `RECOVERY_DELAY` 2 days, recovery adds a key | — |
+| Algorand | key ops in the deployment's one `account` app | guardian-signed start and finish, `RECOVERY_DELAY` 2 days, recovery adds a key | — |
 
 The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN-12)) applies per family as follows:
 
@@ -452,6 +460,8 @@ The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN
 | Sui | `Account<T>` | 8 | yes | as EVM | no | no |
 | Aptos | `Account` object | 8 | yes | as EVM | no | no |
 | Solana | `SmartKeyAccount` PDA | 8 | yes | as EVM | opt-in (no de-duplication) | no |
+| NEAR | subject record in each token | 8 | yes | as EVM | opt-in (`POLICY_PASSKEY_FOR_VALUE`) | no |
+| Algorand | subject record in the `account` app | 8 | yes | as EVM | opt-in (`POLICY_PASSKEY_FOR_VALUE`) | no |
 | Soroban | `SmartKeyAccount` `C…` | multi | no | **≥ 2 distinct keys** (owner) | no | no |
 | GRAM | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
 | Cosmos | none (native; multi-key seam) | 1 | no | seed: native; passkey-only: **unsatisfiable** | no | no |
@@ -471,6 +481,8 @@ blocking, and every family passes the anti-lock test.**
 | Cosmos | lane account | account sequence per lane, one transaction in flight | the subject sends no transaction |
 | GRAM | lane wallet (W5) | seqno per lane, one transaction in flight | the subject sends no transaction; the subject's jetton wallet keeps its own lanes/nonces |
 | Solana | lane key with its own durable nonce account | one durable-nonce value per landed transaction | write-locks of two ops of one subject on different contracts are disjoint ([NET-SOL-04](solana.md#NET-SOL-04)) |
+| NEAR | lane implicit account | access-key nonce per lane, one transaction in flight; `submit` waits until `INCLUDED` | receipts are asynchronous and the subject sends no transaction; its lanes live in each token ([NET-NEAR-24](near.md#NET-NEAR-24)) |
+| Algorand | lane account | no sequence: replay protection is the txid within `FirstValid..LastValid` | nothing orders two groups of one lane or one subject ([NET-ALG-19](algorand.md#NET-ALG-19)) |
 
 ```mermaid
 sequenceDiagram
@@ -509,6 +521,8 @@ per-family inputs:
 | Aptos | committed block (AptosBFT), cursor bounded by the Indexer API's processed version | per-transaction agreement (BUILT) |
 | GRAM | masterchain block (`depth 0`) | `masterchainInfo` + the jetton wallets' transactions of the range |
 | Solana | commitment `finalized` | per-signature transaction agreement (`emit_cpi` inner data) |
+| NEAR | `final` block; transaction `final_execution_status == FINAL` | NEP-297 logs of successful receipts of transactions sent to a configured token, router or DEX |
+| Algorand | confirmed round (one-round finality) | ARC-28 logs of the round's block (msgpack) |
 
 Status: BUILT for Aptos and for EVM/Hedera head hashes; SPECIFIED for event-set agreement on the other families and
 for Cosmos and GRAM honouring a configured quorum (today a single endpoint).
@@ -585,11 +599,13 @@ Each family supplies a "settlement adapter" — a settlement contract that keeps
    SPECIFIED fix).
 4. Value moves person to person inside one transaction: Soroban two `require_auth`; Sui `Account<T>` two legs;
    Cosmos CW20 `TransferFrom` with the allowance to the DEX contract; GRAM escrow (the one exception that holds funds
-   briefly, since jettons have no `transferFrom`).
+   briefly, since jettons have no `transferFrom`); NEAR escrow too (two tokens are two contracts, receipts are
+   asynchronous); Algorand both legs inside one atomic `settle` call (EVM shape).
 5. Events equivalent to `OrderFilled/Matched/MatchFailed`, so the watcher and the client mirror work unchanged.
 6. Settlement is bound to the relayer ([CTR-DEX-09](../contracts/dex.md#CTR-DEX-09)): the order names a `relayer`
    (0 = open, except Soroban, which has no open form, [NET-SOR-10](soroban.md#NET-SOR-10)) and the contract checks
-   the submitter. BUILT on Sui (`dex.move:321`), Aptos (`dex.move:382`) and Solana (`dex.rs:187`); SPECIFIED for
+   the submitter. BUILT on Sui (`dex.move:321`), Aptos (`dex.move:382`), Solana (`dex.rs:187`), NEAR
+   ([NET-NEAR-16](near.md#NET-NEAR-16)) and Algorand ([NET-ALG-11](algorand.md#NET-ALG-11)); SPECIFIED for
    Cosmos (as built `Settle` does not check `info.sender` and `OrderParams` has no relayer,
    `cosmos/dex/src/lib.rs:29-34, 145`; fix: add `relayer` to `OrderParams`, `info.sender == relayer` when set),
    Soroban (as built `require_auth_for_args((order,))` binds only the order, not the counter-order, `maker_fill` or the
@@ -609,6 +625,8 @@ Accepted differences, which the adapter, matcher and client must know:
 | One `fee_ppm`, no maker/taker split (`dex.rs:74-97`) | Solana |
 | Minimum received measured **after** the DEX fee (EVM: `buyAmount`, target `receiveAmount`, gross) | Cosmos, GRAM |
 | No on-chain self-trade check (the node still skips self-trades) | Cosmos, Soroban |
+| No partial fill (fill-or-kill); a failed counter-leg **closes** the order (funds back), so clients bind orders to a relayer by default; no DEX fee | NEAR (escrow DEX) |
+| No partial fill (fill-or-kill), both legs in one atomic call: a failed leg closes nothing; no DEX fee; a passkey-msig leg's auth is carried in a separate `carry` call | Algorand (stateless DEX) |
 
 Non-EVM books are served after the venue moves into the node store ([CLI-APP-21](../clients/app.md#CLI-APP-21)).
 
@@ -625,25 +643,25 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
   the deposit token. Prerequisite EIP-1153 (`TLOAD`/`TSTORE`) for the reentrancy guard; it is not new, since every
   deposit token already needs it (`MetaTxCore.nonReentrant`, `MetaTxCore.sol:38-44`, inherited by the v2 tiers and
   the Hedera children; `ERC20MetaTx.sol:35-41` for v1); the deploy script probes `TSTORE` and refuses a chain without
-  it (no storage-guard fallback). Cosmos, Soroban, Sui, Aptos, GRAM and Solana are PLANNED with the notes below
+  it (no storage-guard fallback). Cosmos, Soroban, Sui, Aptos, GRAM, Solana, NEAR and Algorand are PLANNED with the notes below
   ([contracts/tender](../contracts/tender.md)).
 - <a id="NET-ALL-19"></a>**NET-ALL-19** — **Token wrappers v2 are EVM and Hedera only**; Move and Solana need no
-  wrapper for gaslessness; Cosmos, Soroban and GRAM wrappers are PLANNED
+  wrapper for gaslessness; Cosmos, Soroban, GRAM, NEAR and Algorand wrappers are PLANNED
   ([contracts/token-wrappers](../contracts/token-wrappers.md)).
 
-| Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | GRAM | Solana |
-|---|---|---|---|---|---|---|---|
-| Regulated module | SPECIFIED | SPECIFIED (HSCS contracts + HIP-632 + fail-closed HTS underlying checks; HTS-native tokens not used, owner) | PLANNED: CW20 variant with the same rules | PLANNED: SEP-41 variant; native flags (auth-required, clawback) to assess | PLANNED: native mechanisms to assess (Aptos FA `TransferRef` freeze/transfer; Sui regulated-coin deny list) | PLANNED: jetton master + wallet with order records | PLANNED: Token-2022 extensions to assess (permanent delegate, default frozen state, transfer hook) |
-| ComplianceRegistry | SPECIFIED | SPECIFIED | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |
-| VestingGrant, Distribution, ExchangeOffer | SPECIFIED | SPECIFIED | PLANNED | PLANNED | PLANNED (subject account holds any asset; contracts as Move modules) | PLANNED | PLANNED |
-| Snapshot builder | SPECIFIED | SPECIFIED (same indexer) | with each family's token | 〃 | 〃 | 〃 | 〃 |
-| Managed markets | SPECIFIED | SPECIFIED | where an order book exists | — | — | — | — |
-| Sealed-bid tender | SPECIFIED | SPECIFIED (same bytecode on HSCS; the tender checks no signature, so no Hedera child; deposit token = Hedera v2 meta token; tight gas limit since HSCS charges ≥ 80 % of it) | PLANNED: contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 | PLANNED: the bidder's `require_auth` entries for `commit_bid` (deposit = SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless | PLANNED: tender object / resource; deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` | PLANNED: async — deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds | PLANNED: program + PDA vault per tender; deposit through the token-program CPI under the bidder's precompile-verified op |
-| Receiver-pays | EVM v2 | Hedera v2 | — | — | — | — | — |
-| Gas sponsorship policy (node) | all | all | book and limit only | 〃 | 〃 | 〃 | 〃 |
-| Token wrappers v2 | SPECIFIED | SPECIFIED ([hedera wrappers](hedera.md#wrappers)) | today `scaas-token` (CW20 + meta-op, `minter`, `initial_balances`, tier 1): tier 1 unchanged (gets `Burn` and minter renounce with its next version); wrapper of a bank denom (`info.funds`) or a CW20 (`Receive`) with the same rate/reserve rules and `wrap_rate_vectors.json`: PLANNED | today SEP-41 token + `pay`, admin `mint`, `burn` (tier 1): unchanged; wrapper of a Stellar Asset Contract (e.g. USDC): PLANNED | none needed (the subject `Account` holds any FA / `Coin<T>`; gasless for every asset) | today Tact jetton + custom wallet + `SignedOp`, admin `Mint` (tier 1): unchanged; third-party jettons cannot carry `SignedOp`, so a wrapper minter (receive `transfer_notification`, mint; unwrap with bounce handling) is the only gasless route: PLANNED, highest value of the three | none needed (the `SmartKeyAccount` PDA owns SPL token accounts for any mint) |
-| Post-quantum Zether | SCaaS testnet only (precompile in our client); dev chains 31337/1337 tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a SCaaS testnet copy); other private EVM clients not in v1 (later via an attestation seam); public EVM never without an owner ruling | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no |
-| Crypto-shredding commitments | keccak256 | keccak256 | SHA-256, tag `scaas.commit.sha256.v1` | 〃 | 〃 | 〃 | 〃 |
+| Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | GRAM | Solana | NEAR | Algorand |
+|---|---|---|---|---|---|---|---|---|---|
+| Regulated module | SPECIFIED | SPECIFIED (HSCS contracts + HIP-632 + fail-closed HTS underlying checks; HTS-native tokens not used, owner) | PLANNED: CW20 variant with the same rules | PLANNED: SEP-41 variant; native flags (auth-required, clawback) to assess | PLANNED: native mechanisms to assess (Aptos FA `TransferRef` freeze/transfer; Sui regulated-coin deny list) | PLANNED: jetton master + wallet with order records | PLANNED: Token-2022 extensions to assess (permanent delegate, default frozen state, transfer hook) | PLANNED | PLANNED |
+| ComplianceRegistry | SPECIFIED | SPECIFIED | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |
+| VestingGrant, Distribution, ExchangeOffer | SPECIFIED | SPECIFIED | PLANNED | PLANNED | PLANNED (subject account holds any asset; contracts as Move modules) | PLANNED | PLANNED | PLANNED | PLANNED |
+| Snapshot builder | SPECIFIED | SPECIFIED (same indexer) | with each family's token | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
+| Managed markets | SPECIFIED | SPECIFIED | where an order book exists | — | — | — | — | — | — |
+| Sealed-bid tender | SPECIFIED | SPECIFIED (same bytecode on HSCS; the tender checks no signature, so no Hedera child; deposit token = Hedera v2 meta token; tight gas limit since HSCS charges ≥ 80 % of it) | PLANNED: contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 | PLANNED: the bidder's `require_auth` entries for `commit_bid` (deposit = SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless | PLANNED: tender object / resource; deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` | PLANNED: async — deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds | PLANNED: program + PDA vault per tender; deposit through the token-program CPI under the bidder's precompile-verified op | PLANNED | PLANNED |
+| Receiver-pays | EVM v2 | Hedera v2 | — | — | — | — | — | — | — |
+| Gas sponsorship policy (node) | all | all | book and limit only | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
+| Token wrappers v2 | SPECIFIED | SPECIFIED ([hedera wrappers](hedera.md#wrappers)) | today `scaas-token` (CW20 + meta-op, `minter`, `initial_balances`, tier 1): tier 1 unchanged (gets `Burn` and minter renounce with its next version); wrapper of a bank denom (`info.funds`) or a CW20 (`Receive`) with the same rate/reserve rules and `wrap_rate_vectors.json`: PLANNED | today SEP-41 token + `pay`, admin `mint`, `burn` (tier 1): unchanged; wrapper of a Stellar Asset Contract (e.g. USDC): PLANNED | none needed (the subject `Account` holds any FA / `Coin<T>`; gasless for every asset) | today Tact jetton + custom wallet + `SignedOp`, admin `Mint` (tier 1): unchanged; third-party jettons cannot carry `SignedOp`, so a wrapper minter (receive `transfer_notification`, mint; unwrap with bounce handling) is the only gasless route: PLANNED, highest value of the three | none needed (the `SmartKeyAccount` PDA owns SPL token accounts for any mint) | PLANNED (no NEP-141 wrapper yet) | PLANNED (no ASA / ARC-200 wrapper yet) |
+| Post-quantum Zether | SCaaS testnet only (precompile in our client); dev chains 31337/1337 tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a SCaaS testnet copy); other private EVM clients not in v1 (later via an attestation seam); public EVM never without an owner ruling | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no | no | no |
+| Crypto-shredding commitments | keccak256 | keccak256 | SHA-256, tag `scaas.commit.sha256.v1` | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
 
 Common to all wrappers: fees are `NONE` off EVM, so fee policies are EVM/Hedera only; named meta-tx functions are
 EVM/Hedera (non-EVM ops are already named — `pay`, `Relay{payload}`, `SignedOp`); a multi-underlying guardian and

@@ -1,0 +1,11 @@
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-rs)
+error[E0432]: unresolved imports `scaas_ua::algorand`, `scaas_ua::near`
+ --> tests/near_algorand.rs:2:16
+  |
+2 | use scaas_ua::{algorand, near, pay_lane, UAError};
+  |                ^^^^^^^^  ^^^^ no `near` in the root
+  |                |
+  |                no `algorand` in the root
+
+For more information about this error, try `rustc --explain E0432`.
+error: could not compile `scaas-ua` (test "near_algorand") due to 1 previous error

@@ -1,0 +1,89 @@
+# near-algorand T19 RED: e2e_near against the dispatchers without `near` (smartcontracts/scripts/{deploy,devnet}.sh at HEAD 1c7344b4)
+# cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.27s
+     Running tests/e2e_near.rs (target/debug/deps/e2e_near-8fff549061f6767b)
+
+running 9 tests
+test near_events_include_native_ft_transfer ... FAILED
+test deploy_gate_fails_with_a_key_left ... FAILED
+test near_pay_meta_job ... FAILED
+test near_pay_relay_finalize ... FAILED
+test near_relay_fee_wrapper_job ... FAILED
+test near_router_release ... FAILED
+test near_router_refund ... FAILED
+test near_lanes_do_not_block_each_other ... FAILED
+test near_router_timeout ... FAILED
+
+failures:
+
+---- near_events_include_native_ft_transfer stdout ----
+
+thread 'near_events_include_native_ft_transfer' (390018) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- deploy_gate_fails_with_a_key_left stdout ----
+
+thread 'deploy_gate_fails_with_a_key_left' (390017) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+---- near_pay_meta_job stdout ----
+
+thread 'near_pay_meta_job' (390020) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+---- near_pay_relay_finalize stdout ----
+
+thread 'near_pay_relay_finalize' (390021) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+---- near_relay_fee_wrapper_job stdout ----
+
+thread 'near_relay_fee_wrapper_job' (390022) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+---- near_router_release stdout ----
+
+thread 'near_router_release' (390024) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+---- near_router_refund stdout ----
+
+thread 'near_router_refund' (390023) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+---- near_lanes_do_not_block_each_other stdout ----
+
+thread 'near_lanes_do_not_block_each_other' (390019) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+---- near_router_timeout stdout ----
+
+thread 'near_router_timeout' (390028) panicked at tests/e2e_near.rs:216:5:
+devnet.sh near up failed: unknown family 'near'
+
+
+
+failures:
+    deploy_gate_fails_with_a_key_left
+    near_events_include_native_ft_transfer
+    near_lanes_do_not_block_each_other
+    near_pay_meta_job
+    near_pay_relay_finalize
+    near_relay_fee_wrapper_job
+    near_router_refund
+    near_router_release
+    near_router_timeout
+
+test result: FAILED. 0 passed; 9 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `--test e2e_near`
+rc=101

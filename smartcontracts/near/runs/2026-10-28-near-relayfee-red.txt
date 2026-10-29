@@ -1,0 +1,365 @@
+# relay_fee_wrappers RED at commit 194fe8e7 (tests only; token wasm without the wrappers)
+   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+   Compiling scaas-near-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/dex)
+   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
+   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:186:5
+    |
+186 |     t.relay(&t.relayer, &e, &pa, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+186 |     let _ = t.relay(&t.relayer, &e, &pa, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:199:5
+    |
+199 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+199 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:209:5
+    |
+209 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+209 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:221:5
+    |
+221 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+221 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:231:5
+    |
+231 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+231 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:241:5
+    |
+241 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+241 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:258:5
+    |
+258 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+258 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:276:5
+    |
+276 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+276 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:289:5
+    |
+289 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+289 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:308:5
+    |
+308 |     t.relay(&t.relayer, &e, &pa, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+308 |     let _ = t.relay(&t.relayer, &e, &pa, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:321:5
+    |
+321 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+321 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:333:5
+    |
+333 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+333 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:344:5
+    |
+344 |     t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+344 |     let _ = t.relay(&t.relayer, &e, &py, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:366:5
+    |
+366 |     t.relay(&t.bob, &invalidate(&t, &erin, 3), &carol, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+366 |     let _ = t.relay(&t.bob, &invalidate(&t, &erin, 3), &carol, &t.marker()).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:378:5
+    |
+378 |     t.relay(&t.relayer, &invalidate(&t, &erin, 3), &carol, &t.near(&t.alice)).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+378 |     let _ = t.relay(&t.relayer, &invalidate(&t, &erin, 3), &carol, &t.near(&t.alice)).await;
+    |     +++++++
+
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_fee_wrappers.rs:451:5
+    |
+451 |     t.relay_as(&t.relayer, &e, &pk, &h, &t.marker()).await;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+help: use `let _ = ...` to ignore the resulting value
+    |
+451 |     let _ = t.relay_as(&t.relayer, &e, &pk, &h, &t.marker()).await;
+    |     +++++++
+
+warning: `scaas-near-integration` (test "relay_fee_wrappers") generated 16 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.08s
+     Running tests/relay_fee_wrappers.rs (target/debug/deps/relay_fee_wrappers-724b5bc071105ab9)
+
+running 20 tests
+test near_relay_fee_two_passkey_within_300_tgas ... FAILED
+test pay_op_shape_enforced ... FAILED
+test refused_entry_pays_nothing ... FAILED
+test relay_fee_add_key_ok ... FAILED
+test relay_fee_add_origin_ok ... FAILED
+test relay_fee_cancel_ok ... FAILED
+test relay_fee_cancel_recovery_ok ... FAILED
+test relay_fee_finish_recovery_ok ... FAILED
+test relay_fee_invalidate_nonces_ok ... FAILED
+test relay_fee_mandate_open_ok ... FAILED
+test relay_fee_msig_cap_fits_300_tgas ... FAILED
+test relay_fee_remove_key_ok ... FAILED
+test relay_fee_remove_origin_ok ... FAILED
+test relay_fee_revoke_ok ... FAILED
+test relay_fee_set_guardian_ok ... FAILED
+test relay_fee_set_policy_ok ... FAILED
+test relay_fee_start_recovery_ok ... FAILED
+test wrapper_bound_payee_paid_directly ... FAILED
+test wrapper_open_mode_pays_predecessor ... FAILED
+test wrapper_payment_policy_passkey_for_value ... FAILED
+
+failures:
+
+---- near_relay_fee_two_passkey_within_300_tgas stdout ----
+
+thread 'near_relay_fee_two_passkey_within_300_tgas' (1422233) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 29, block_hash: zG1nF4feE5tJWtgrBCLKNuh7gBZDjramdq1Ugfaivj8 })) } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- pay_op_shape_enforced stdout ----
+shape case: pay_ref ≠ ref
+
+thread 'pay_op_shape_enforced' (1427138) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 25, block_hash: A3vsJPTv3Z57K3VSgTyeifXRoPKjr9KttBD9Z6aave7p })) } }
+
+---- refused_entry_pays_nothing stdout ----
+
+thread 'refused_entry_pays_nothing' (1432029) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 30, block_hash: FJF1AThKavmWnHUGDW2cdu9yogk4k7jHkzARgfYKGKDn })) } }
+
+---- relay_fee_add_key_ok stdout ----
+
+thread 'relay_fee_add_key_ok' (1436950) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 23, block_hash: 786Yay9Bo89WBVh4oWvKzfdHfhsUYuDKUn1qNKeHPZrH })) } }
+
+---- relay_fee_add_origin_ok stdout ----
+
+thread 'relay_fee_add_origin_ok' (1441761) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 24, block_hash: 7c4XU6HfMnCPoAbWF7eF2kEBiQUtch7CkXghzxgYdAg8 })) } }
+
+---- relay_fee_cancel_ok stdout ----
+
+thread 'relay_fee_cancel_ok' (1446618) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 27, block_hash: GL85rXfAs66mGDjXrBw4Ty9Jjc1j6vmigzA83YoL5sZN })) } }
+
+---- relay_fee_cancel_recovery_ok stdout ----
+mtx_set_guardian by dev-20261028115958-29861480463329.test.near: 22.307 Tgas, ok true
+mtx_start_recovery by dev-20261028115958-29861480463329.test.near: 22.540 Tgas, ok true
+
+thread 'relay_fee_cancel_recovery_ok' (1451533) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 34, block_hash: CokVmnGW7U2jJU1CqTXFax3WeeyUDgcxPjqqLjG5MHUf })) } }
+
+---- relay_fee_finish_recovery_ok stdout ----
+mtx_set_guardian by dev-20261028120003-14100127080531.test.near: 22.310 Tgas, ok true
+mtx_start_recovery by dev-20261028120003-14100127080531.test.near: 22.539 Tgas, ok true
+
+thread 'relay_fee_finish_recovery_ok' (1456481) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 32, block_hash: FmFmRcfKy5BGZNUFpYTcrpq9zgm7Pn5ALLNWWPVzghMn })) } }
+
+---- relay_fee_invalidate_nonces_ok stdout ----
+
+thread 'relay_fee_invalidate_nonces_ok' (1461413) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 24, block_hash: 3bH9fy5tRqN9i6X5WXv4RLcvwiXwK3zDEXLzDeRb9Fj5 })) } }
+
+---- relay_fee_mandate_open_ok stdout ----
+
+thread 'relay_fee_mandate_open_ok' (1466271) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 28, block_hash: H2nBFzGkwHuBB1pPk5XMffQ7aTFV6os8VP4qmNYftCLC })) } }
+
+---- relay_fee_msig_cap_fits_300_tgas stdout ----
+
+thread 'relay_fee_msig_cap_fits_300_tgas' (1471180) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 25, block_hash: ABW4aBJ3fkxvfgRuKHtiADbuDYR9iXH7tA4vqyV2fbei })) } }
+
+---- relay_fee_remove_key_ok stdout ----
+mtx_add_key by dev-20261028120018-19965099961047.test.near: 22.347 Tgas, ok true
+
+thread 'relay_fee_remove_key_ok' (1476092) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 28, block_hash: 57S46sz7xK1DjEqDWoip5ufCARqc9uBgTeVPtHCSK3s3 })) } }
+
+---- relay_fee_remove_origin_ok stdout ----
+mtx_add_origin by dev-20261028120022-46346584781053.test.near: 22.306 Tgas, ok true
+
+thread 'relay_fee_remove_origin_ok' (1481035) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 32, block_hash: 4E5hMtaFWc7NFaHmAdZqKZ1cKLmAi2Z4CWtHXfZLwGL5 })) } }
+
+---- relay_fee_revoke_ok stdout ----
+mtx_mandate_open by dev-20261028120026-71379335981849.test.near: 23.720 Tgas, ok true
+
+thread 'relay_fee_revoke_ok' (1485992) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 36, block_hash: 6HJsN6bSGP9aZgwUsYHSXjRjCmHSLxCbq7mkg2zypyJY })) } }
+
+---- relay_fee_set_guardian_ok stdout ----
+
+thread 'relay_fee_set_guardian_ok' (1490960) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 28, block_hash: E2Yxr5xK4sTFY5KigeAsMftDzcxhCExRMUCwZHeso1dU })) } }
+
+---- relay_fee_set_policy_ok stdout ----
+
+thread 'relay_fee_set_policy_ok' (1495935) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 24, block_hash: 9ZoY51UGUqMd4sduMBqaWAMA4djjwK7iamvwv69mdQoR })) } }
+
+---- relay_fee_start_recovery_ok stdout ----
+mtx_set_guardian by dev-20261028120038-10285376546487.test.near: 22.309 Tgas, ok true
+
+thread 'relay_fee_start_recovery_ok' (1500896) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 31, block_hash: 9Bao6GrmaWADy2Pc2wfBfsT3ukPpFDTt5zmYyUvVobK1 })) } }
+
+---- wrapper_bound_payee_paid_directly stdout ----
+
+thread 'wrapper_bound_payee_paid_directly' (1505779) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 25, block_hash: CSPLCyd5UFoFTWFQssaiaFcMqLHsLfEc4g75DEfxqs8N })) } }
+
+---- wrapper_open_mode_pays_predecessor stdout ----
+
+thread 'wrapper_open_mode_pays_predecessor' (1510671) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 28, block_hash: FAUURagxmjeBjyHAjpvc7jAVQvGncWoA4e8hBsi9Fepb })) } }
+
+---- wrapper_payment_policy_passkey_for_value stdout ----
+mtx_add_key by dev-20261028120050-91521087290339.test.near: 2.610 Tgas, ok true
+mtx_set_policy by dev-20261028120050-91521087290339.test.near: 2.516 Tgas, ok true
+
+thread 'wrapper_payment_policy_passkey_for_value' (1515529) panicked at integration/tests/relay_fee_wrappers.rs:75:82:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 33, block_hash: 8u5YQb9k4bcBwd8HkpZC71DQdzXt3BrkfC3CkbQykXLF })) } }
+
+
+failures:
+    near_relay_fee_two_passkey_within_300_tgas
+    pay_op_shape_enforced
+    refused_entry_pays_nothing
+    relay_fee_add_key_ok
+    relay_fee_add_origin_ok
+    relay_fee_cancel_ok
+    relay_fee_cancel_recovery_ok
+    relay_fee_finish_recovery_ok
+    relay_fee_invalidate_nonces_ok
+    relay_fee_mandate_open_ok
+    relay_fee_msig_cap_fits_300_tgas
+    relay_fee_remove_key_ok
+    relay_fee_remove_origin_ok
+    relay_fee_revoke_ok
+    relay_fee_set_guardian_ok
+    relay_fee_set_policy_ok
+    relay_fee_start_recovery_ok
+    wrapper_bound_payee_paid_directly
+    wrapper_open_mode_pays_predecessor
+    wrapper_payment_policy_passkey_for_value
+
+test result: FAILED. 0 passed; 20 failed; 0 ignored; 0 measured; 0 filtered out; finished in 78.24s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test relay_fee_wrappers`
+rc=101

@@ -1,0 +1,145 @@
+# algorand-limits (opcode budget and inner budget calls per entry and signer kind, MBR per box / record, MSIG_MAX_MEMBERS derivation, MAX_PAY_META_BYTES, program sizes) at commit 944ba770 + the T12 fix-2 tree
+# localnet: algod 5.0.5-stable (DevMode, consensus future), puyapy 5.10.1 AVM 11
+ok artifacts.json
+program out/Token: approval 2588 B, clear 4 B
+program out/Account: approval 4847 B, clear 4 B
+{
+ "token": {
+  "approval_sha512_256": "a50eff775568c82cc2b18f2c7e8038860a2ae365a7946d27cd4e9a33ed1f6a5c",
+  "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
+ },
+ "account": {
+  "approval_sha512_256": "994ba4373eaed2ea3fcf18d0f528d043c2f928b5c63c4992d0b58204ea963dfc",
+  "clear_sha512_256": "87e7087fdedde0a86b9da8aaa0356e8eba626022970ef2b799dc13aa57767fa4"
+ }
+}
+## MSIG_MAX_MEMBERS derivation (T12 fix 2; runs/measure_msig_cap.py 5: built with a cap of 5, every group shape, no bare budget calls)
+## every member signs a Chrome-shaped assertion: clientDataJSON = {"type":"webauthn.get","challenge":"<43>","origin":"https://checkout.payments.enterprise-wallet.scaas-example.com.vn","crossOrigin":false,"other_keys_can_be_added_here":"do not compare clientDataJSON against a template. See https://goo.gl/yabPex"} = 286 B (64 B origin, Chrome's random extra member); authenticatorData 37 B; member auth 456 B
+## S1 = lazily opening mtx_add_key, S2 = token mtx_pay, S3 = T15 relay shape (key-op call + router-like call whose inner token.mtx_pay the msig signs)
+## budget: 700 per app call, top-level or inner; inner txns pooled 256 per group -> not binding at the cap
+## args: 2,048 B per app call (current consensus; the localnet's future consensus accepts 4,096 B, so the encoded arguments are counted)
+## -> S1 args 1,823 B at 3, 2,316 B at 4: MSIG_MAX_MEMBERS = 3 (a registered msig signs at its full threshold with real browser assertions)
+msig 1 passkeys S1 add_key   consumed   5960 added   6300 args   837 ok
+msig 1 passkeys S2 mtx_pay   consumed   6035 added   6300 args   829 ok
+msig 1 passkeys S3 relay     consumed  11644 added  11900 args  None ok
+msig 2 passkeys S1 add_key   consumed  10845 added  11200 args  1330 ok
+msig 2 passkeys S2 mtx_pay   consumed  10911 added  11200 args  1322 ok
+msig 2 passkeys S3 relay     consumed  21396 added  21700 args  None ok
+msig 3 passkeys S1 add_key   consumed  15749 added  16100 args  1823 ok
+msig 3 passkeys S2 mtx_pay   consumed  15806 added  16100 args  1815 ok
+msig 3 passkeys S3 relay     consumed  31186 added  31500 args  None ok
+msig 4 passkeys S1 add_key   consumed  20672 added  21000 args  2316 ok
+msig 4 passkeys S2 mtx_pay   consumed  20720 added  21000 args  2308 ok
+msig 4 passkeys S3 relay     consumed  41014 added  41300 args  None ok
+msig 5 passkeys S1 add_key   consumed  25614 added  25900 args  2809 ok
+msig 5 passkeys S2 mtx_pay   consumed  25653 added  25900 args  2801 ok
+msig 5 passkeys S3 relay     consumed  40888 added  44800 args  None ils: app=3090, pc=2292, opcodes=intc_0 // 0; itxn_field Fee; itxn_submit. Details: app=3096, pc=1104, opcodes=intc_0 // 0; itxn_field Fee; itxn_submit; label25:
+account.py restored; rebuilt rc=0
+
+UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
+..msig 2 passkeys S1 add_key   consumed  10845 added  11200 args  1330 ok
+msig 2 passkeys S2 mtx_pay   consumed  10911 added  11200 args  1322 ok
+msig 2 passkeys S3 relay     consumed  21396 added  21700 args  None ok
+msig 3 passkeys S1 add_key   consumed  15749 added  16100 args  1823 ok
+msig 3 passkeys S2 mtx_pay   consumed  15806 added  16100 args  1815 ok
+msig 3 passkeys S3 relay     consumed  31186 added  31500 args  None ok
+budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ 256; arguments ≤ 2,048 B
+.
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 3 passkey': (11409, 18), 'token mtx_pay native': (2913, 5), 'token mtx_pay ed25519 UA': (3449, 4), 'token mtx_pay secp256k1 UA': (2891, 4), 'token mtx_pay passkey UA': (4233, 6), 'token mtx_pay msig 3 passkey UA': (11888, 17)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 3 passkey': (12000, 19), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 3 passkey UA': (12500, 18)}
+.
+inner budget calls of a msig-3 key op: 17 (created and deleted in one inner transaction each)
+.
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+
+MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
+.
+opcode budget used: {'mtx_pay': 2868, 'mtx_transfer': 2828, 'mtx_pay_meta': 3324, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2588, clear 4
+.
+7 passed, 45 deselected in 4.67s
+rc=0
+
+## T13 mandate app (tests/test_mandate.py: test_mandate_pay_within_limits MBR deltas, test_figures_pinned budgets in the minimal group without bare budget calls) at commit 9b41463e + the T13 tree
+mandate box: 41 B name + 204 B value, MBR 100500 µALGO; payee balance box forwarded to the token 28500 µALGO
+mtx_mandate_pay (first, delegate opened): lane box 18900 µALGO + record 76100 µALGO forwarded
+.
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (7184, 10, None), 'pay ed25519 (delegate opened)': (3951, 6, None), 'pay ed25519': (3817, 6, None), 'revoke ed25519': (3464, 6, None), 'open passkey': (8721, 14, None), 'pay passkey (delegate opened)': (4747, 8, None), 'pay passkey': (4601, 8, None), 'revoke passkey': (4248, 8, None), 'open native': (6077, 9, None), 'refund': (410, 1, None)}
+pins {'open ed25519': (7500, 11), 'open passkey': (9150, 15), 'open native': (6400, 10), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (450, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2324, clear 4
+.
+opcode budget used: {'mtx_pay': 2868, 'mtx_transfer': 2828, 'mtx_pay_meta': 3324, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2588, clear 4
+.
+3 passed, 66 deselected in 1.87s
+rc=0
+
+## T13 fix 1 mandate app (open = the owner's one funding op executed by the open: [MBR → mandate][mtx_mandate_open]; minimal groups without bare budget calls) at commit c9a0b197 + the fix-1 tree
+mandate box: 41 B name + 204 B value, MBR 100500 µALGO; payee balance box forwarded to the token 28500 µALGO
+mtx_mandate_pay (first, delegate opened): lane box 18900 µALGO + record 76100 µALGO forwarded
+.
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (4334, 6, None), 'pay ed25519 (delegate opened)': (3938, 6, None), 'pay ed25519': (3804, 6, None), 'revoke ed25519': (3450, 6, None), 'open passkey': (5108, 9, None), 'pay passkey (delegate opened)': (4734, 8, None), 'pay passkey': (4588, 8, None), 'revoke passkey': (4234, 8, None), 'open native': (3589, 6, None), 'refund': (443, 1, None)}
+pins {'open ed25519': (4550, 7), 'open passkey': (5350, 10), 'open native': (3800, 7), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (470, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2304, clear 4
+.
+2 passed, 67 deselected in 1.80s
+rc=0
+
+## T14 DEX app + trade legs (tests/test_dex.py::test_figures_pinned: settle budget per leg signer kind in the minimal group without bare budget calls, argument bytes, MBR; plus the token / mandate / account pins re-run on the new token) at commit d7d9d540 + the T14 tree
+
+DEX settle opcode budget, minimal group (consumed, inner app calls): {'settle native': (7306, 12), 'settle ed25519 UA': (8471, 13), 'settle passkey UA': (12661, 19), 'settle msig 3 passkey + passkey (carried)': (23059, 31)}
+pins {'settle native': (7700, 13), 'settle ed25519 UA': (8900, 14), 'settle passkey UA': (13300, 20), 'settle msig 3 passkey + passkey (carried)': (24000, 33)}
+settle argument bytes (inline, carried): {'native': (926, None), 'ed25519 UA': (992, None), 'passkey UA': (1706, None), 'msig 3 passkey + passkey (carried)': (2738, 798)}; msig-3 leg auth 1486 B, carry call 1492 B, inner mtx_trade 1871 B, inner account.verify 1557 B (limit 2048)
+MBR (µALGO): order box 16100 (name 33 B, value 1 B), min_nonce box 18900; per leg + the DEX balance box 28500 once per token, the payout receiver box 28500 when new; the DEX app: none
+program size (B): dex approval 866, clear 4; token approval 3661
+.
+opcode budget used: {'mtx_pay': 2871, 'mtx_transfer': 2831, 'mtx_pay_meta': 3327, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 3661, clear 4
+.
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (4367, 7, None), 'pay ed25519 (delegate opened)': (3938, 6, None), 'pay ed25519': (3804, 6, None), 'revoke ed25519': (3450, 6, None), 'open passkey': (5120, 9, None), 'pay passkey (delegate opened)': (4734, 8, None), 'pay passkey': (4588, 8, None), 'revoke passkey': (4234, 8, None), 'open native': (3592, 6, None), 'refund': (443, 1, None)}
+pins {'open ed25519': (4550, 7), 'open passkey': (5350, 10), 'open native': (3800, 7), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (470, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2304, clear 4
+.
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 3 passkey': (11409, 18), 'token mtx_pay native': (2916, 5), 'token mtx_pay ed25519 UA': (3461, 4), 'token mtx_pay secp256k1 UA': (2903, 4), 'token mtx_pay passkey UA': (4245, 6), 'token mtx_pay msig 3 passkey UA': (11900, 17)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 3 passkey': (12000, 19), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 3 passkey UA': (12500, 18)}
+.
+4 passed in 2.92s
+rc=0
+
+## T14 fix 1 (m1 carry scan after the settle; m2 the true worst case pinned: two 3-member Chrome-passkey msig legs, both carried) at commit bddf9110 + the fix-1 tree
+
+DEX settle opcode budget, minimal group (consumed, inner app calls): {'settle native': (7308, 12), 'settle ed25519 UA': (8473, 13), 'settle passkey UA': (12663, 19), 'settle msig 3 passkey + passkey (carried)': (23024, 31), 'settle msig 3 passkey x2 (carried)': (33337, 46)}
+pins {'settle native': (7700, 13), 'settle ed25519 UA': (8900, 14), 'settle passkey UA': (13300, 20), 'settle msig 3 passkey + passkey (carried)': (24000, 33), 'settle msig 3 passkey x2 (carried)': (35000, 49)}
+settle argument bytes (inline, carried): {'native': (926, None), 'ed25519 UA': (992, None), 'passkey UA': (1706, None), 'msig 3 passkey + passkey (carried)': (2738, 798), 'msig 3 passkey x2 (carried)': (3770, 798)}; msig-3 leg auth 1486 B, carry call 1492 B, inner mtx_trade 1871 B, inner account.verify 1557 B (limit 2048)
+MBR (µALGO): order box 16100 (name 33 B, value 1 B), min_nonce box 18900; per leg + the DEX balance box 28500 once per token, the payout receiver box 28500 when new; the DEX app: none
+program size (B): dex approval 863, clear 4; token approval 3661
+.
+1 passed in 2.38s
+rc=0
+
+## T15 relay-fee router + executor LogicSig (test_relayfee.py::test_figures_pinned; exec-trace and curve experiments) at commit a89df505 + the T15 tree
+group: [Payment -> router]? [Payment -> target]? [target, sender = executor, fee 0] [router.relay(token, op, auth)]; minimal groups, no bare budget calls
+relay group opcode budget (consumed, inner app calls): {'ping, native payer': (3729, 5), 'ping, ed25519 UA payer': (4402, 5), 'ping, passkey UA payer': (6497, 8), 'ed25519 UA transfer, passkey UA payer': (9749, 13), 'msig 3 passkey transfer, passkey UA payer': (22285, 31), 'msig 3 passkey transfer, msig 3 passkey payer': (32394, 45)}
+pins {'ping, native payer': (3950, 6), 'ping, ed25519 UA payer': (4650, 6), 'ping, passkey UA payer': (6850, 9), 'ed25519 UA transfer, passkey UA payer': (10250, 14), 'msig 3 passkey transfer, passkey UA payer': (23400, 32), 'msig 3 passkey transfer, msig 3 passkey payer': (35000, 47)}
+worst case (3-member Chrome-passkey msig target + msig-3 payer): 32,394 opcodes, 45 inner calls -> lane fee = 2 x 1,000 + FEE_CREDIT 64,000 covers it (47 + 2 <= 64)
+argument bytes (target call, relay call): {'ping, native payer': (12, 369), 'ping, ed25519 UA payer': (12, 402), 'ping, passkey UA payer': (12, 759), 'ed25519 UA transfer, passkey UA payer': (394, 759), 'msig 3 passkey transfer, passkey UA payer': (1783, 759), 'msig 3 passkey transfer, msig 3 passkey payer': (1783, 1791)} (limit 2,048)
+router's own work (exec trace, opcode-cost weighted, 2-argument target): 757 (326 ops: 3 keccak256, 1 sha512_256 executor derivation, call bytes, rule 13) + about 10 per further target argument (16 args about 900) -> RELAY_COST = 1,000 ensured by inner budget calls (Ruling T12-budget); without it the router ran out after an msig target used the pool (mutant R22 killed)
+program size (B): relayfee approval 818, clear 4; executor LogicSig 82 = prefix 8 + router id 8 + suffix 66; dex approval 961 (router app id global)
+MBR (uALGO): router none (stateless; its address must hold the 100,000 base: an account below it cannot receive the MBR payment it forwards); per relay the token part = lane box 18,900 + payee balance box 28,500 when new + a UA payer's record when it opens, forwarded whole
+executor salt: puyapy 5.10.1 salts LogicSigs off-curve by default with a trailing `intcblock 1 s` chosen per program hash, so s depends on the router id (measured: ids 1 and 0xabcdef salted, 1001 / 1234 / 7 not) -> built with autosalt=False (puyapy warns: the address may be on-curve). Experiment on this algod (future consensus): on-curve and off-curve LogicSigs at AVM 10 / 11 / 12 are both accepted as senders; an on-curve address has no known private key (sha512_256 output, discrete log)
+executor vector: router app 1002 -> GNXUIEQHOIGFOLL3CR273L374OJSO53CGASDNLEBANRGH6GHPYXWRPI24M (algorand-vectors.json "executor")
+rc=0
+
+## T15 fix 1 (Ruling T15-salt: creation-time executor salt) at commit 22296ddc + the fix-1 tree
+executor program = prefix 8 B ‖ router id 8 B ‖ suffix 66 B ‖ 20 01 salt (intcblock 1 salt, dead code after the final return) = 85 B; salt < 128 = the router's create argument (one global uint), the lowest that makes sha512_256("Program" ‖ program) off-curve (go-algorand IsEdwards25519Point / puya is_ed25519_point predicate; the test cross-checks the stdlib copy on 800 programs)
+22296ddc executor without a salt, router ids 1000..1019: on-curve for 1002, 1003, 1009, 1010, 1012, 1013, 1014, 1017, 1018 (fix-1 RED log)
+executor vector: router 1002 -> salt 2, PPJPQNRRHPOJNZGCPZ7YDIO55QC24JMPHPMZ3JUPMP43RIVNXERC4B7DLY (off-curve)
+relay group opcode budget (consumed, inner app calls): {'ping, native payer': (3738, 5), 'ping, ed25519 UA payer': (4411, 5), 'ping, passkey UA payer': (6506, 8), 'ed25519 UA transfer, passkey UA payer': (9758, 13), 'msig 3 passkey transfer, passkey UA payer': (22294, 31), 'msig 3 passkey transfer, msig 3 passkey payer': (32403, 45)} (+9 each: the salt global read; pins unchanged)
+program size (B): relayfee approval 857 (was 818), clear 4; executor 85 (the test's print still names the 82 B template parts); only the relayfee hash changed: 638272e9752afda65dd1b5ad67d6fa818fe140e437ae9713993a2c79f980bda5
+rc=0

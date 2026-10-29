@@ -1,0 +1,39 @@
+# Algorand localnet (near-algorand T11): AlgoKit localnet's services and config (algokit-cli sandbox), images pinned by
+# digest, a memory cap per service (oomd rule; AlgoKit's CLI takes none). Bound to 127.0.0.1. Driven by
+# smartcontracts/algorand/scripts/devnet.sh (up | down | status).
+name: scaas-algorand
+services:
+  algod:
+    image: algorand/algod@sha256:573b6e8e4ccc30a385609503535992450ae31e7a365253e0811593587855250b  # 5.0.5-stable
+    mem_limit: 2g
+    init: true
+    ports: ["127.0.0.1:4001:8080", "127.0.0.1:4002:7833"]
+    environment:
+      START_KMD: 1
+      KMD_TOKEN: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      TOKEN: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      ADMIN_TOKEN: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      GOSSIP_PORT: 10000
+    volumes:
+      - ./algod_config.json:/etc/algorand/config.json:ro
+      - ./algod_network_template.json:/etc/algorand/template.json:ro
+  conduit:
+    image: algorand/conduit@sha256:478efc28adf5b61b05c9b09f2040da34e9af5d35887e6b7786f0329d62566829  # 1.11.1
+    mem_limit: 512m
+    restart: unless-stopped
+    volumes: ["./conduit.yml:/etc/algorand/conduit.yml:ro"]
+    depends_on: [indexer-db, algod]
+  indexer-db:
+    image: postgres@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab  # 16-alpine
+    mem_limit: 512m
+    user: postgres
+    environment: {POSTGRES_USER: algorand, POSTGRES_PASSWORD: algorand, POSTGRES_DB: indexerdb}
+  indexer:
+    image: algorand/indexer@sha256:2ca6131f1200a229d3d7359d5ebb176a02fae9dd7e38ced571e60400f2327a4f  # 3.11.1
+    mem_limit: 512m
+    restart: unless-stopped
+    ports: ["127.0.0.1:8980:8980"]
+    command: daemon --enable-all-parameters
+    environment:
+      INDEXER_POSTGRES_CONNECTION_STRING: "host=indexer-db port=5432 user=algorand password=algorand dbname=indexerdb sslmode=disable"
+    depends_on: [conduit]

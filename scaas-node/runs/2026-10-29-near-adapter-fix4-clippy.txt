@@ -1,0 +1,3 @@
+    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.05s
+rc=0

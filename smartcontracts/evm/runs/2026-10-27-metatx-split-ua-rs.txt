@@ -1,61 +1,69 @@
-# ua-rs at commit 67fa7a45
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.00s
+# ua-rs at commit e3e778c7
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-7e1156df1164ba41)
 
 running 2 tests
 test verify::tests::base64url_unpadded ... ok
 test verify::tests::rfc9380_g1_ro_empty_message ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/ed25519_fuzz.rs (target/debug/deps/ed25519_fuzz-8e9a9420a16cfb50)
 
 running 1 test
 test dalek_verify_strict_matches_every_case ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
 
      Running tests/groups_verify.rs (target/debug/deps/groups_verify-b4c5ec9da21546d9)
 
 running 4 tests
-test t_frost_rows ... ok
 test official_sections ... ok
+test t_frost_rows ... ok
 test group_negatives_refused ... ok
 test groups_register_and_sign ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
 
      Running tests/metatx.rs (target/debug/deps/metatx-9e130c413230c9fb)
 
 running 2 tests
-test meta_pay_id_vectors ... ok
 test relay_ref_matches_vector ... ok
+test meta_pay_id_vectors ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/near_algorand.rs (target/debug/deps/near_algorand-b8602f7d4d1b810e)
+
+running 2 tests
+test algorand_vectors ... ok
+test near_vectors ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/signatures.rs (target/debug/deps/signatures-a1c2a7d311710f3d)
 
 running 6 tests
-test bip340_official_vectors ... ok
 test ed25519_rfc8032_section ... ok
+test bip340_official_vectors ... ok
 test native_uaauth ... ok
 test msig_sets ... ok
 test derived_positives_verify ... ok
 test derived_negatives_refused ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.68s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
 
      Running tests/vectors.rs (target/debug/deps/vectors-0191377074845c18)
 
 running 6 tests
-test messages ... ok
 test natives_native_space_canonical_ids ... ok
-test structures ... ok
+test messages ... ok
 test table_groups_purposes_constants ... ok
+test structures ... ok
 test valid_rows ... ok
 test invalid_rows ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
    Doc-tests scaas_ua
 

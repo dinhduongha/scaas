@@ -1,0 +1,12 @@
+[package]
+name = "scaas-near-test-receiver"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Test-only NEP-141 receiver (never deployed): ft_on_transfer returns msg as the unused amount; msg \"panic\" panics"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+near-sdk = { workspace = true }

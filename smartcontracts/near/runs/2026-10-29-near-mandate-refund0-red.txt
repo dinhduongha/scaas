@@ -1,0 +1,17 @@
+# near-mandate-refund0-red (the zero-refund cases added to revoked_refused_then_funds_back, mandate_refund unchanged) at commit c9a0b197 + the T13 fix-1 tree
+mandate_refund by dev-20261028183945-13114084613909.test.near: 2.153 Tgas, ok true
+
+thread 'revoked_refused_then_funds_back' (1957409) panicked at integration/tests/mandate.rs:321:5:
+[]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    revoked_refused_then_funds_back
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 5.83s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test mandate`
+rc=101

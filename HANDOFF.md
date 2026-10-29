@@ -1,3 +1,31 @@
+## Session 2026-10-29 (near-algorand merged + pushed) — resume here
+
+- `main` = the merge of `near-algorand` (owner 2026-10-29: "sửa N1 + N2 rồi merge và push"): NEAR + Algorand families,
+  Tasks 1–22, whole-branch review (3 parts) → one fix wave (`3ab2c3e3`, `bc10398d`) → re-review → owner-approved residual
+  fix N1 / N2 (`1736a60b`: the node never relays router → `token.mtx_trade`; NET-NEAR-31 signer-binding note). Gate runner
+  31 steps rc=0 (`e3e778c7`), affected steps rc=0 after each fix. Merge conflicts only in HANDOFF.md, TODO.md and
+  docs/contracts/dex.md (§11 table: NEAR / Algorand rows kept, the "no 50 % minimum fill" phrase dropped per CTR-DEX-14).
+- CI note: the `algorand` CI job runs no contract behaviour tests (localnet pytest and `e2e_algorand` only in the local
+  gate); the local gate stays mandatory for Algorand contract changes. The `near` job builds cargo-near from source.
+- Next: the work order in TODO.md "Now (order)" from step 2 (token-family rename first; node stream; fs3 Task 12 → 6;
+  specs incl. the UA-8 plan and the 4b Soroban spec). Ledger of the finished plan:
+  `.claude/worktrees/near-algorand/.superpowers/sdd/2026-10-28-near-algorand/progress.md` (git-ignored; every ruling is
+  in decisions.md NET-NEAR-* / NET-ALG-*).
+
+## Session 2026-10-29 (near-algorand T16–T21) — resume here
+
+- **`near-algorand`** (worktree `.claude/worktrees/near-algorand`): Tasks 1–21 complete and reviewed; not merged, not
+  pushed (owner's go only). NEAR: contracts, adapter, clients, near-sandbox e2e 10/10
+  (`smartcontracts/near/runs/2026-10-28-near-e2e.txt`). Algorand: apps, adapter, clients, localnet e2e 8/8
+  (`smartcontracts/algorand/runs/2026-10-28-algorand-e2e.txt`), quote = lane decrease for every job kind. Node 426 lib
+  tests + clippy. T21 wrote the docs: `docs/networks/near.md` (NET-NEAR-*), `docs/networks/algorand.md` (NET-ALG-*),
+  decisions.md §35 / §36 (every spec §0 row and every controller call, superseded quote rulings NET-NEAR-80 / -81),
+  README / metatx / accounts / dex / node tables with separate NEAR and Algorand rows.
+- **Next:** Task 22 (gate steps in metatx-split's resumable runner, CI jobs `near` / `algorand`); then the owner's
+  go for merge / push. Follow-ups: TODO.md item "NEAR and Algorand family bring-up". The SCaaS testnet `UARegistry`
+  needs its redeploy at the next reset (kinds `0x0017` / `0x0018`).
+- Ledger: `.claude/worktrees/near-algorand/.superpowers/sdd/2026-10-28-near-algorand/progress.md`.
+
 ## Session 2026-10-28 / 29 (metatx-split merged + pushed; near-algorand T7–T16) — resume here
 
 **State (owner paused 2026-10-29 to shut down):** nothing running (agents stopped, no capped jobs, no algorand containers).

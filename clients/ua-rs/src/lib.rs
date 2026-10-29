@@ -7,6 +7,8 @@
 use sha3::{Digest, Keccak256};
 
 mod keydata;
+pub mod near;
+pub mod algorand;
 pub use keydata::validate_key_data;
 pub mod verify;
 mod groups;
@@ -84,6 +86,8 @@ pub const KINDS: &[Kind] = &[
     native(0x0014, "sui-address", &[32]),
     native(0x0015, "cosmos-account", &[20, 32]),
     native(0x0016, "ton-wallet", &[32]),
+    native(0x0017, "near-account", &[32]),
+    native(0x0018, "algorand-address", &[32]),
     derived(0x0100, "webauthn-p256", &[96], Some("p256")),
     derived(0x0101, "p256", &[64], Some("p256")),
     derived(0x0102, "ed25519", &[32], Some("ed25519")),

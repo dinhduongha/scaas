@@ -1,0 +1,10 @@
+# relay router fix 1 mutation spot-checks at commit 7bbb0584 + fix 1 working tree: each mutant written (mtime bumped), its crate rebuilt, one test, file restored byte-for-byte; KILLED = the test fails
+F1 relayfee/src/lib.rs: `.filter(|p| p.id == id && p.stage == Stage::Call) else {` -> `.filter(|p| p.stage == Stage::Call) else {`; unit:stale_callback_leaves_a_newer_entry_alone: KILLED thread 'tests::stale_callback_leaves_a_newer_entry_alone' (155863) panicked at relayfee/src/lib.rs:620:13:
+F2 relayfee/src/lib.rs: `.filter(|p| p.id == id && p.stage == Stage::Hold) else {` -> `.filter(|p| p.stage == Stage::Hold) else {`; unit:stale_callback_leaves_a_newer_entry_alone: KILLED thread 'tests::stale_callback_leaves_a_newer_entry_alone' (156035) panicked at relayfee/src/lib.rs:628:9:
+F3 relayfee/src/lib.rs: `.filter(|p| p.id == id && p.stage == Stage::Settle) else { return fals` -> `.filter(|p| p.stage == Stage::Settle) else { retur`; unit:stale_callback_leaves_a_newer_entry_alone: KILLED thread 'tests::stale_callback_leaves_a_newer_entry_alone' (156178) panicked at relayfee/src/lib.rs:635:9:
+MB token/src/escrow.rs: `if attached > NearToken::from_yoctonear(0) {` -> `if false && attached > NearToken::from_yoctonear(0`; hold_failure_clears_pending: KILLED thread 'hold_failure_clears_pending' (157124) panicked at integration/tests/relay_router.rs:276:9:
+MB2 token/src/escrow.rs: `if attached > NearToken::from_yoctonear(0) {` -> `if false && attached > NearToken::from_yoctonear(0`; short_deposit_refused: KILLED thread 'short_deposit_refused' (162941) panicked at integration/tests/relay_router.rs:276:9:
+F4 relayfee/src/lib.rs: `passkey_fields(auth)?;` -> `let _ = passkey_fields(auth);`; relay_shape_and_salt_refused: KILLED thread 'relay_shape_and_salt_refused' (168712) panicked at integration/tests/relay_router.rs:204:9:
+rebuild relayfee: rc=0
+rebuild token: rc=0
+rc=0

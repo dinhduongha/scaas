@@ -1,0 +1,8 @@
+# T20 GATE c: test_vectors.py::test_origin_parity_vectors on the localnet at commit 870caf05
+# scripts/capped smartcontracts/algorand/scripts/localnet-pytest.sh -k test_origin_parity_vectors -rA
+.
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED tests/test_vectors.py::test_origin_parity_vectors
+1 passed, 109 deselected in 0.87s
+rc=0

@@ -41,3 +41,5 @@ store-sqlite = ["sqlx/sqlite"]
 
 [dev-dependencies]
 proptest = "1"
+# e2e_near only: P-256 passkey signers for the largest wrapper (13 passkeys) on near-sandbox
+p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }

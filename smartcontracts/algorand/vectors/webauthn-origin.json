@@ -1,0 +1,246 @@
+{
+ "note": "Passkey clientDataJSON origin parity rows for Algorand (near-algorand T17 fix 1, controller ruling (a)).",
+ "rows": [
+  {
+   "name": "chrome_published",
+   "challenge": "0xf631058a3ba1116acce12396fad0a125b5041c43f8e15723709f81aa8d5f4ccf",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"9jEFijuhEWrM4SOW-tChJbUEHEP44VcjcJ-Bqo1fTM8\",\"origin\":\"http://localhost:3005\",\"crossOrigin\":false}",
+   "origin": "http://localhost:3005"
+  },
+  {
+   "name": "safari_published",
+   "challenge": "0xf631058a3ba1116acce12396fad0a125b5041c43f8e15723709f81aa8d5f4ccf",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"9jEFijuhEWrM4SOW-tChJbUEHEP44VcjcJ-Bqo1fTM8\",\"origin\":\"http://localhost:3005\"}",
+   "origin": "http://localhost:3005"
+  },
+  {
+   "name": "chrome_extra_member",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":false,\"other_keys_can_be_added_here\":\"do not compare clientDataJSON against a template. See https://goo.gl/yabPex\"}",
+   "origin": "https://pay.scaas.test"
+  },
+  {
+   "name": "node_software_authenticator",
+   "challenge": "0x98c6e97e9c60cdf45328eda2c931769c9e47c0c430a1726369eea1ff011acac0",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"mMbpfpxgzfRTKO2iyTF2nJ5HwMQwoXJjae6h_wEaysA\",\"origin\":\"https://portal.scaas.test\",\"crossOrigin\":false}",
+   "origin": "https://portal.scaas.test"
+  },
+  {
+   "name": "near_vector_pay_ua_passkey",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":false}",
+   "origin": "https://pay.scaas.test"
+  },
+  {
+   "name": "unicode_origin",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://ví-dụ.test\"}",
+   "origin": "https://ví-dụ.test"
+  },
+  {
+   "name": "extended_origin",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test.evil\"}",
+   "origin": "https://pay.scaas.test.evil"
+  },
+  {
+   "name": "empty_member_list_tail",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":false,}",
+   "origin": null,
+   "near": "https://pay.scaas.test"
+  },
+  {
+   "name": "non_json_tail",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://b.test\",\"crossOrigin\":false,x}",
+   "origin": "https://b.test"
+  },
+  {
+   "name": "duplicate_origin_after",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://b.test\",\"crossOrigin\":false,\"origin\":\"https://a.test\"}",
+   "origin": "https://b.test"
+  },
+  {
+   "name": "duplicate_origin_after_non_json",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://b.test\",\"crossOrigin\":false,\"origin\":\"https://a.test\",x}",
+   "origin": "https://b.test"
+  },
+  {
+   "name": "cross_origin_true",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":true}",
+   "origin": null
+  },
+  {
+   "name": "top_origin_after",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":false,\"topOrigin\":\"https://evil.test\"}",
+   "origin": null
+  },
+  {
+   "name": "top_origin_before",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"topOrigin\":\"https://evil.test\",\"crossOrigin\":false}",
+   "origin": null
+  },
+  {
+   "name": "member_before_cross_origin",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"other\":\"x\",\"crossOrigin\":false}",
+   "origin": null
+  },
+  {
+   "name": "second_cross_origin",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":false,\"crossOrigin\":true}",
+   "origin": null
+  },
+  {
+   "name": "duplicate_origin_safari",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://b.test\",\"origin\":\"https://a.test\"}",
+   "origin": null
+  },
+  {
+   "name": "unclosed",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":false,",
+   "origin": null
+  },
+  {
+   "name": "no_tail",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\"",
+   "origin": null
+  },
+  {
+   "name": "origin_unterminated",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test",
+   "origin": null
+  },
+  {
+   "name": "after_close",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\",\"crossOrigin\":false}x",
+   "origin": null
+  },
+  {
+   "name": "trailing_space",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\"} ",
+   "origin": null
+  },
+  {
+   "name": "reordered",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"type\":\"webauthn.get\",\"origin\":\"https://pay.scaas.test\"}",
+   "origin": null
+  },
+  {
+   "name": "whitespace",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\": \"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\"}",
+   "origin": null
+  },
+  {
+   "name": "create",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.create\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https://pay.scaas.test\"}",
+   "origin": null
+  },
+  {
+   "name": "wrong_challenge",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"CAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg\",\"origin\":\"https://pay.scaas.test\"}",
+   "origin": null
+  },
+  {
+   "name": "padded_challenge",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc=\",\"origin\":\"https://pay.scaas.test\"}",
+   "origin": null
+  },
+  {
+   "name": "empty_origin",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"\"}",
+   "origin": null
+  },
+  {
+   "name": "escaped_origin",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"D_EDkMUUlj4khAbdlvRd95FYghKBvGK9kIevt_RGpIc\",\"origin\":\"https:\\/\\/pay.scaas.test\"}",
+   "origin": null
+  },
+  {
+   "name": "not_json",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "origin": null
+  },
+  {
+   "name": "empty",
+   "challenge": "0x0ff10390c514963e248406dd96f45df79158821281bc62bd9087afb7f446a487",
+   "clientDataJSON": "",
+   "origin": null
+  },
+  {
+   "name": "origin_128",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"crossOrigin\":false}",
+   "origin": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+   "name": "origin_129",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"crossOrigin\":false}",
+   "origin": null
+  },
+  {
+   "name": "origin_129_no_tail_member",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+   "origin": null
+  },
+  {
+   "name": "backslash_after_origin",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://a.test\",\"crossOrigin\":false,\"x\":\"\\\\\"}",
+   "origin": "https://a.test"
+  },
+  {
+   "name": "quote_word_boundary",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://abcdefgh\"}",
+   "origin": "https://abcdefgh"
+  },
+  {
+   "name": "top_origin_at_tail_end",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://a.test\",\"crossOrigin\":false,\"topOrigin\"}",
+   "origin": null
+  },
+  {
+   "name": "cross_origin_split_word",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://a.test\",\"crossOrigin\":false,\"aaaa\",\"crossOrigin\":false}",
+   "origin": null
+  },
+  {
+   "name": "short_tail_member",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8\",\"origin\":\"https://a.test\",\"crossOrigin\":false,x}",
+   "origin": "https://a.test"
+  },
+  {
+   "name": "non_canonical_challenge",
+   "challenge": "0x000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+   "clientDataJSON": "{\"type\":\"webauthn.get\",\"challenge\":\"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh9\",\"origin\":\"https://a.test\"}",
+   "origin": null
+  }
+ ]
+}

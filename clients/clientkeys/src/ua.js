@@ -62,7 +62,7 @@ const NATIVE = [
   [0x0001, 'evm-eoa', [20]], [0x0002, 'evm-contract', [20]], [0x0003, 'hedera-native', [20]],
   [0x0010, 'solana-ed25519', [32]], [0x0011, 'stellar-account', [32]], [0x0012, 'soroban-contract', [32]],
   [0x0013, 'aptos-account', [32]], [0x0014, 'sui-address', [32]], [0x0015, 'cosmos-account', [20, 32]],
-  [0x0016, 'ton-wallet', [32]],
+  [0x0016, 'ton-wallet', [32]], [0x0017, 'near-account', [32]], [0x0018, 'algorand-address', [32]],
 ];
 export const KINDS = Object.freeze([
   ...NATIVE.map(([kind, name, lengths]) => Object.freeze({ kind, name, native: true, lengths, group: null })),

@@ -1,0 +1,79 @@
+# near final-fix RED at commit be63179a + uncommitted tests (contracts unchanged but the two DEX constants)
+   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.48s
+     Running tests/dex.rs (target/debug/deps/dex-b86fb624492a65c3)
+
+running 4 tests
+test lane_bound_order_settles_through_router ... relay settle by dev-20261029152518-10730450962538.test.near: 23.931 Tgas, ok true
+
+thread 'lane_bound_order_settles_through_router' (780231) panicked at integration/tests/dex.rs:651:5:
+another lane's relay: [ExecutionOutcome { transaction_hash: 7nAYFweJRg35EQt33vJgGHXSnJYA535h2f18C8ZHk72m, block_hash: 8Eimv7R1MUC5PNbCYThR134w1qxrfwq6fpjpTMNzwVj1, logs: [], receipt_ids: [CFvrKh3V5kcVH7Dzur3seagUC2sjVTovhQBaiXCPrrQm, 21ecbHRUebEkssbn6zXf7dk2jtXtpVjKHYQLX8yiuSNv], gas_burnt: NearGas { inner: 1211176938449 }, tokens_burnt: NearToken { inner: 121117693844900000000 }, executor_id: AccountId("dev-20261029152521-30343616200555.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Smart contract panicked: order relayer is not the predecessor")) })) }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test settle_deposit_short_refused ... 
+thread 'settle_deposit_short_refused' (786645) panicked at integration/tests/dex.rs:553:5:
+[]
+FAILED
+test settle_near_expiry_refused ... settle by f9b4ee8de189ed2b63acd2901c4a0e38d677946297997b05ce21759237f08c7b: 80.055 Tgas, ok true
+
+thread 'settle_near_expiry_refused' (791724) panicked at integration/tests/dex.rs:628:9:
+order expiry: []
+FAILED
+test settle_worst_case_leg_storage_pin ... worst-case leg storage: 1988 B measured (mtx_trade_check), pin LEG_STORAGE_MAX_BYTES 2200 B
+settle_worst_case_leg_storage_pin: 240.837 Tgas, floor 51270000000000000000002 yocto
+ok
+
+failures:
+
+failures:
+    lane_bound_order_settles_through_router
+    settle_deposit_short_refused
+    settle_near_expiry_refused
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 15 filtered out; finished in 27.39s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test dex`
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running tests/account.rs (target/debug/deps/account-30519a0750b5001e)
+
+running 1 test
+test add_origin_present_refused ... mtx_set_guardian by 716ecc4003ad90d59145fdc2ddaa0e97c909e5cc228ca7d8c475003215323c15: 22.431 Tgas, ok true
+mtx_add_origin by 716ecc4003ad90d59145fdc2ddaa0e97c909e5cc228ca7d8c475003215323c15: 22.383 Tgas, ok true
+
+thread 'add_origin_present_refused' (801918) panicked at integration/tests/common/mod.rs:211:9:
+mtx_add_origin: check None, want origin already present
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    add_origin_present_refused
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 11 filtered out; finished in 3.07s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test account`
+rc=101
+# rerun lane_bound_order_settles_through_router (assertion on the failed DEX receipt, the relay tx itself succeeds)
+   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.99s
+     Running tests/dex.rs (target/debug/deps/dex-b86fb624492a65c3)
+
+running 1 test
+test lane_bound_order_settles_through_router ... relay settle by dev-20261029152605-49096524329879.test.near: 23.839 Tgas, ok true
+relay settle by c16923c9d60087ba7e265178954c34ad16596fe929baba1c56647b5ad31da4d9: 143.063 Tgas, ok true
+
+thread 'lane_bound_order_settles_through_router' (807596) panicked at integration/tests/dex.rs:656:5:
+[ExecutionOutcome { transaction_hash: 2kY2kwiFf8W9qMBWHiQYiGpR5ssaZ3ztynnd2jKaURZv, block_hash: 8rrxTC6cPb7sTYfeJj5XjjHdxetgZhCDVM1wGM32V9b3, logs: [], receipt_ids: [G8ssG44Xg2y4quA9wRNfBG59NGPVMLhjh78YQi68uXrU, 8Uo6x1mbndRTsYAsecYeofBWP3maRBsfB8bD7avjbMyr], gas_burnt: NearGas { inner: 1211176938449 }, tokens_burnt: NearToken { inner: 121117693844900000000 }, executor_id: AccountId("dev-20261029152607-36973697019874.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Smart contract panicked: order relayer is not the predecessor")) })) }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+
+failures:
+
+failures:
+    lane_bound_order_settles_through_router
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 18 filtered out; finished in 10.06s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test dex`
+rc=101

@@ -1,0 +1,60 @@
+# RED (Task 5 step 2) at commit 8c53d4ff + Task 5 tests, before the implementation
+## cargo test -j2 -p scaas-near-common (lib.rs not yet exporting auth / hash / metaop / ua)
+5 | use scaas_near_common::hash::nep413_hash;
+  |                        ^^^^ could not find `hash` in `scaas_near_common`
+
+error[E0432]: unresolved import `scaas_near_common::metaop`
+ --> common/tests/vectors.rs:6:24
+  |
+6 | use scaas_near_common::metaop::MetaOp;
+  |                        ^^^^^^ could not find `metaop` in `scaas_near_common`
+
+error[E0432]: unresolved import `scaas_near_common::ua`
+ --> common/tests/vectors.rs:7:24
+  |
+7 | use scaas_near_common::ua::{self, KeyRecord};
+  |                        ^^ could not find `ua` in `scaas_near_common`
+
+error[E0433]: cannot find `hash` in `scaas_near_common`
+   --> common/tests/vectors.rs:115:35
+    |
+115 |     assert_eq!(scaas_near_common::hash::signed_text(&digest), s["message"].as_str().unwrap());
+    |                                   ^^^^ could not find `hash` in `scaas_near_common`
+
+Some errors have detailed explanations: E0432, E0433.
+For more information about an error, try `rustc --explain E0432`.
+error: could not compile `scaas-near-common` (test "vectors") due to 5 previous errors
+warning: build failed, waiting for other jobs to finish...
+## cargo test -j2 -p scaas-near-integration --test account (token wasm of 8c53d4ff: no Task 5 entries)
+test access_key_signature_never_accepted ... FAILED
+test cancel_recovery_by_key ... FAILED
+test ed25519_secp256k1_passkey_each_accepted ... FAILED
+test msig_native_member_only_as_predecessor ... FAILED
+test ninth_key_refused ... FAILED
+test origin_and_rp_checked ... FAILED
+test recovery_after_delay_only ... FAILED
+test secp256k1_high_s_refused ... FAILED
+test ua_opened_lazily_relayer_pays_storage ... FAILED
+test wrong_network_or_contract_refused ... FAILED
+thread 'access_key_signature_never_accepted' (1414928) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 21,  })) } }
+thread 'cancel_recovery_by_key' (1420266) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 19,  })) } }
+thread 'ed25519_secp256k1_passkey_each_accepted' (1424999) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 20,  })) } }
+thread 'msig_native_member_only_as_predecessor' (1429888) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 21,  })) } }
+thread 'ninth_key_refused' (1434758) panicked at integration/tests/account.rs:310:9:
+[ExecutionOutcome { transaction_hash: 2FtAVLmHFUGCkvXBUCtXjPXNMpoKKpETQ2rfRj1fcA5J, , logs: [], receipt_ids: [75xRtMG1BdcUVz2xc1G4Ti4JYymkJCfdH1kMtv5zGMju, Gu59zp2BjcwgQiKhztYFWm3uYL969XBFE97GEzNp1Hs9], gas_burnt: NearGas { inner: 888178004502 }, tokens_burnt: NearToken { inner: 88817800450200000000 }, executor_id: AccountId("dev-20261027212950-62862898145501.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(MethodResolveError(MethodNotFound)) })) }]
+thread 'origin_and_rp_checked' (1439633) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 18,  })) } }
+thread 'recovery_after_delay_only' (1444392) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 20,  })) } }
+thread 'secp256k1_high_s_refused' (1449217) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 20,  })) } }
+thread 'ua_opened_lazily_relayer_pays_storage' (1454039) panicked at integration/tests/account.rs:195:53:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 17,  })) } }
+thread 'wrong_network_or_contract_refused' (1458844) panicked at integration/tests/account.rs:156:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 20,  })) } }
+test result: FAILED. 0 passed; 10 failed; 0 ignored; 0 measured; 0 filtered out; finished in 28.14s
+rc=101

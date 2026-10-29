@@ -1,0 +1,15 @@
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 28782.872603
+
+✖ failing tests:
+
+test at test/algorand.test.js:1:1
+✖ test/algorand.test.js (114.859803ms)
+  'test failed'
+
+test at test/near.test.js:1:1
+✖ test/near.test.js (89.264706ms)
+  'test failed'

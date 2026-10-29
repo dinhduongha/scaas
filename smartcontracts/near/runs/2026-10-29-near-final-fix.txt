@@ -1,0 +1,466 @@
+# near final-fix GREEN (contracts: DEX I1 / I2, token m1) at commit be63179a + uncommitted
+== build near
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.15s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_dex.wasm" = SystemTime { tv_sec: 1793287631, tv_nsec: 877488331 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_dex/scaas_near_dex.wasm" = SystemTime { tv_sec: 1793287632, tv_nsec: 77184378 }
+
+• Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_dex/scaas_near_dex.wasm
+     -                  Size: 150.8 KB (150780 bytes)
+     - SHA-256 checksum hex : c2857eae8ba44072e9b405e451db7d6ec490d7c247e5204146ccbb62ce14185e
+     - SHA-256 checksum bs58: E6LA6mqDsDUB39nfUofHuSUcmQPqVhQBGUw8wqzTeAvH
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.11s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_relayexec.wasm" = SystemTime { tv_sec: 1793269502, tv_nsec: 778359067 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_relayexec/scaas_near_relayexec.wasm" = SystemTime { tv_sec: 1793269502, tv_nsec: 857921226 }
+
+• Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_relayexec/scaas_near_relayexec.wasm
+     -                  Size: 39.7 KB (39699 bytes)
+     - SHA-256 checksum hex : a88ed0afb8efa3ef66537e8a7d1eb7380ee4b24b228cd6dba9ed00df1f7c76ea
+     - SHA-256 checksum bs58: CLyoPAwWMZEyUSgFiFAjt6GGAGKW4fAjKPUTJxZ1VVwX
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.13s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_relayfee.wasm" = SystemTime { tv_sec: 1793272206, tv_nsec: 352575004 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_relayfee/scaas_near_relayfee.wasm" = SystemTime { tv_sec: 1793272206, tv_nsec: 523294632 }
+
+• Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_relayfee/scaas_near_relayfee.wasm
+     -                  Size: 109.2 KB (109206 bytes)
+     - SHA-256 checksum hex : 49fc1a1c85e3e95a09f0c8ae684f7c00a62e4c89def5f40218977ad8e34b4d2a
+     - SHA-256 checksum bs58: 5yoitZ49V1DYk7STBt38inkb6z6BMEaLb3orzPnfBbUu
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.11s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793272207, tv_nsec: 321595899 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793140085, tv_nsec: 657054319 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 125ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                  Size: 84.5 KB (84487 bytes)
+     - SHA-256 checksum hex : e03e8eb54b787607dd4f3863cb8b5ed2b3c275c4e5a1d507f7e25f4a48ba9492
+     - SHA-256 checksum bs58: G6Mej3GrPyjrsHyDU9Yu2oerCcBKghtb4YLuEwafAxws
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.10s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793212770, tv_nsec: 360001044 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 857892155 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 145ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                  Size: 84.6 KB (84631 bytes)
+     - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
+     - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │    Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+ │     Finished `release` profile [optimized] target(s) in 6.45s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_token.wasm" = SystemTime { tv_sec: 1793287659, tv_nsec: 913118727 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm" = SystemTime { tv_sec: 1793273339, tv_nsec: 614164037 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 669ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                  Size: 559.3 KB (559333 bytes)
+     - SHA-256 checksum hex : 65dfd80474c2da121a6173987350e7b43f5f64fddf3a3dece032ba62040d1384
+     - SHA-256 checksum bs58: 7rg9URD7BAPQazk17Ej3JK7PNEonzmhy6fmaEJTDfna7
+    Finished cargo near build in 7s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.10s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_target_fixture.wasm" = SystemTime { tv_sec: 1793212780, tv_nsec: 218052730 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_target_fixture/scaas_near_target_fixture.wasm" = SystemTime { tv_sec: 1793194308, tv_nsec: 448770137 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 101ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_target_fixture/scaas_near_target_fixture.wasm
+     -                  Size: 91.5 KB (91542 bytes)
+     - SHA-256 checksum hex : 372e6dcd273474f67fce09a6ddf5a366b5d6e5cf828017ca9e20302bb97a2128
+     - SHA-256 checksum bs58: 4iQV9gzGSETTV6ZhDii1n4DpVGU8CLUyRtRDnz9qvuX5
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+   Compiling scaas-near-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/common)
+   Compiling scaas-near-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/dex)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.69s
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_dex-2e8e05541eced290)
+
+running 6 tests
+test tests::leg_gas_by_auth ... ok
+test tests::passkey_field_cap ... ok
+test tests::refund_only_own_leg ... ok
+test tests::on_refund_after_on_legs_pays_nothing ... ok
+test tests::late_on_legs_pays_nothing ... ok
+test tests::settle_vectors_match ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+   Doc-tests scaas_near_dex
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+   Compiling scaas-near-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/dex)
+   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.13s
+     Running tests/account.rs (target/debug/deps/account-30519a0750b5001e)
+
+running 12 tests
+test access_key_signature_never_accepted ... mtx_set_guardian by f04ac429fc959dd4fa39088acb45692354d6505e24d18856a525ed10fcd7899f: 2.091 Tgas, ok false
+mtx_set_guardian by 444110b8acfe8b3544bc3b4ef928c24f57b316e0967c9caada25d62ac6ec3afb: 2.091 Tgas, ok false
+mtx_set_guardian by f04ac429fc959dd4fa39088acb45692354d6505e24d18856a525ed10fcd7899f: 2.143 Tgas, ok false
+ok
+test add_origin_present_refused ... mtx_set_guardian by 03b4dbbbfe8693a3dcf71f986a865dd756692a0eda4e1c51901006fcda36c51a: 22.437 Tgas, ok true
+mtx_add_origin by 03b4dbbbfe8693a3dcf71f986a865dd756692a0eda4e1c51901006fcda36c51a: 22.092 Tgas, ok false
+mtx_add_origin by 03b4dbbbfe8693a3dcf71f986a865dd756692a0eda4e1c51901006fcda36c51a: 22.382 Tgas, ok true
+mtx_add_origin by 03b4dbbbfe8693a3dcf71f986a865dd756692a0eda4e1c51901006fcda36c51a: 22.093 Tgas, ok false
+ok
+test cancel_recovery_by_key ... mtx_set_guardian by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.687 Tgas, ok true
+mtx_start_recovery by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.494 Tgas, ok false
+mtx_start_recovery by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.909 Tgas, ok true
+mtx_cancel_recovery by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.643 Tgas, ok true
+mtx_finish_recovery by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.427 Tgas, ok false
+mtx_cancel_recovery by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.351 Tgas, ok false
+mtx_start_recovery by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.865 Tgas, ok true
+mtx_set_guardian by e924f9373f78538422e94699cbc98262b23ef2d13748172abbfe0f571e386c44: 2.646 Tgas, ok true
+ok
+test ed25519_secp256k1_passkey_each_accepted ... mtx_set_guardian by e11a1d2cf55ad03f48c006fc2b7713f8c369c1b121b0fa8db2652f53c326bb5a: 2.692 Tgas, ok true
+ed25519 UA opened by mtx_set_guardian: record 179 B, storage_needed 1790000000000000000000
+mtx_set_guardian by e11a1d2cf55ad03f48c006fc2b7713f8c369c1b121b0fa8db2652f53c326bb5a: 2.637 Tgas, ok true
+mtx_set_guardian by e11a1d2cf55ad03f48c006fc2b7713f8c369c1b121b0fa8db2652f53c326bb5a: 2.720 Tgas, ok true
+secp256k1 UA opened by mtx_set_guardian: record 211 B, storage_needed 2110000000000000000000
+mtx_set_guardian by e11a1d2cf55ad03f48c006fc2b7713f8c369c1b121b0fa8db2652f53c326bb5a: 2.668 Tgas, ok true
+mtx_set_guardian by e11a1d2cf55ad03f48c006fc2b7713f8c369c1b121b0fa8db2652f53c326bb5a: 22.443 Tgas, ok true
+passkey UA opened by mtx_set_guardian: record 269 B, storage_needed 2690000000000000000000
+mtx_set_guardian by e11a1d2cf55ad03f48c006fc2b7713f8c369c1b121b0fa8db2652f53c326bb5a: 22.379 Tgas, ok true
+ok
+test msig_native_member_only_as_predecessor ... mtx_set_guardian by f6ca217e56346ceff5428ba5909ed858fdc0ae62efeb7d66d474c7c1219d7877: 2.463 Tgas, ok false
+mtx_set_guardian by f6ca217e56346ceff5428ba5909ed858fdc0ae62efeb7d66d474c7c1219d7877: 2.480 Tgas, ok false
+mtx_set_guardian by dev-20261029152805-33622615294661.test.near: 2.750 Tgas, ok true
+msig UA (near-account + ed25519) opened: storage_needed 1750000000000000000000
+mtx_set_guardian by f6ca217e56346ceff5428ba5909ed858fdc0ae62efeb7d66d474c7c1219d7877: 2.401 Tgas, ok false
+mtx_set_guardian by dev-20261029152805-33622615294661.test.near: 2.698 Tgas, ok true
+mtx_set_guardian by f6ca217e56346ceff5428ba5909ed858fdc0ae62efeb7d66d474c7c1219d7877: 2.473 Tgas, ok false
+mtx_set_guardian by f6ca217e56346ceff5428ba5909ed858fdc0ae62efeb7d66d474c7c1219d7877: 2.473 Tgas, ok false
+mtx_set_guardian by f6ca217e56346ceff5428ba5909ed858fdc0ae62efeb7d66d474c7c1219d7877: 3.056 Tgas, ok true
+ok
+test ninth_key_refused ... add_key_native by dev-20261029152810-25417757615111.test.near: 2.967 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 2.992 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 2.997 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 3.002 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 3.007 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 3.012 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 3.017 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 3.021 Tgas, ok true
+add_key_native by dev-20261029152810-25417757615111.test.near: 2.492 Tgas, ok false
+mtx_add_key by 679aebc2951e0339e45f8eff1e52d5e303253a54ade13d3c918d5eea9c003154: 2.412 Tgas, ok false
+Near holder record, 8 ed25519 keys: 412 B
+mtx_set_guardian by 679aebc2951e0339e45f8eff1e52d5e303253a54ade13d3c918d5eea9c003154: 2.667 Tgas, ok true
+ok
+test origin_and_rp_checked ... mtx_set_guardian by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 22.441 Tgas, ok true
+mtx_set_guardian by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 2.110 Tgas, ok false
+mtx_add_origin by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 22.389 Tgas, ok true
+mtx_set_guardian by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 22.384 Tgas, ok true
+mtx_set_guardian by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 2.097 Tgas, ok false
+mtx_set_guardian by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 2.159 Tgas, ok false
+mtx_remove_origin by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 22.380 Tgas, ok true
+mtx_remove_origin by dbfae1446951d769dd4d1f3222ad9b935de8f74739b71d3d09ae0012973005f5: 22.094 Tgas, ok false
+ok
+test recovery_after_delay_only ... mtx_set_guardian by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.687 Tgas, ok true
+mtx_start_recovery by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.494 Tgas, ok false
+mtx_start_recovery by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.909 Tgas, ok true
+mtx_finish_recovery by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.434 Tgas, ok false
+mtx_finish_recovery by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.492 Tgas, ok false
+mtx_finish_recovery by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.863 Tgas, ok true
+mtx_set_guardian by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.643 Tgas, ok true
+mtx_set_guardian by 12a3cc21cd93ba9f07976069aef94724b4ca0e00a584d2276d2316f867b3f813: 2.641 Tgas, ok true
+ok
+test secp256k1_high_s_refused ... mtx_set_guardian by 0fe746d076442fe7935bd5bd9099b0ee2f43cf95c6204fade456cc972f49299b: 2.435 Tgas, ok false
+mtx_set_guardian by 0fe746d076442fe7935bd5bd9099b0ee2f43cf95c6204fade456cc972f49299b: 2.709 Tgas, ok true
+ok
+test set_policy_by_key_op ... mtx_set_policy by da31dd2191e5738e9a2c914b9b6353c5a9109f2f740e611234ef7772fb3d6d85: 2.682 Tgas, ok true
+mtx_set_guardian by da31dd2191e5738e9a2c914b9b6353c5a9109f2f740e611234ef7772fb3d6d85: 2.641 Tgas, ok true
+mtx_set_policy by da31dd2191e5738e9a2c914b9b6353c5a9109f2f740e611234ef7772fb3d6d85: 2.354 Tgas, ok false
+mtx_set_policy by da31dd2191e5738e9a2c914b9b6353c5a9109f2f740e611234ef7772fb3d6d85: 1.966 Tgas, ok false
+mtx_set_guardian by da31dd2191e5738e9a2c914b9b6353c5a9109f2f740e611234ef7772fb3d6d85: 1.882 Tgas, ok false
+mtx_set_guardian by da31dd2191e5738e9a2c914b9b6353c5a9109f2f740e611234ef7772fb3d6d85: 1.966 Tgas, ok false
+mtx_set_policy by da31dd2191e5738e9a2c914b9b6353c5a9109f2f740e611234ef7772fb3d6d85: 2.638 Tgas, ok true
+ok
+test ua_opened_lazily_relayer_pays_storage ... ed25519 UA opened by mtx_add_key, 2 keys: 169 B record = 1690000000000000000000 yocto
+mtx_add_key by 39979399c24513ef0d3194187f6d1de02684447c7b2c87c469b680e971a23265: 17.607 Tgas, ok false
+mtx_add_key by 39979399c24513ef0d3194187f6d1de02684447c7b2c87c469b680e971a23265: 18.628 Tgas, ok true
+mtx_add_key by 39979399c24513ef0d3194187f6d1de02684447c7b2c87c469b680e971a23265: 17.404 Tgas, ok false
+mtx_remove_key by 39979399c24513ef0d3194187f6d1de02684447c7b2c87c469b680e971a23265: 2.638 Tgas, ok true
+ok
+test wrong_network_or_contract_refused ... mtx_set_guardian by d8b48c116b6a7f0588ddb02f23465ef72bf6a2050d05d73ce439f8b381f09ebf: 1.971 Tgas, ok false
+mtx_set_guardian by d8b48c116b6a7f0588ddb02f23465ef72bf6a2050d05d73ce439f8b381f09ebf: 1.969 Tgas, ok false
+mtx_set_guardian by d8b48c116b6a7f0588ddb02f23465ef72bf6a2050d05d73ce439f8b381f09ebf: 1.970 Tgas, ok false
+mtx_set_guardian by d8b48c116b6a7f0588ddb02f23465ef72bf6a2050d05d73ce439f8b381f09ebf: 1.979 Tgas, ok false
+mtx_set_guardian by d8b48c116b6a7f0588ddb02f23465ef72bf6a2050d05d73ce439f8b381f09ebf: 1.966 Tgas, ok false
+mtx_set_guardian by d8b48c116b6a7f0588ddb02f23465ef72bf6a2050d05d73ce439f8b381f09ebf: 1.956 Tgas, ok false
+mtx_set_guardian by d8b48c116b6a7f0588ddb02f23465ef72bf6a2050d05d73ce439f8b381f09ebf: 2.693 Tgas, ok true
+ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 58.69s
+
+     Running tests/dex.rs (target/debug/deps/dex-b86fb624492a65c3)
+
+running 19 tests
+test cancel_filled_order_refused ... settle by fc700d2eac52521bc876e87576df40c80ca03c7adcf847a6a02da2ef78dfbdf9: 80.082 Tgas, ok true
+mtx_cancel by fc700d2eac52521bc876e87576df40c80ca03c7adcf847a6a02da2ef78dfbdf9: 2.042 Tgas, ok false
+mtx_cancel by fc700d2eac52521bc876e87576df40c80ca03c7adcf847a6a02da2ef78dfbdf9: 2.819 Tgas, ok true
+mtx_cancel: order record 115 B (UA, cancelled)
+mtx_cancel by fc700d2eac52521bc876e87576df40c80ca03c7adcf847a6a02da2ef78dfbdf9: 2.040 Tgas, ok false
+mtx_cancel by fc700d2eac52521bc876e87576df40c80ca03c7adcf847a6a02da2ef78dfbdf9: 1.969 Tgas, ok false
+mtx_cancel by fc700d2eac52521bc876e87576df40c80ca03c7adcf847a6a02da2ef78dfbdf9: 1.962 Tgas, ok false
+ok
+test lane_bound_order_settles_through_router ... relay settle by dev-20261029152854-33780213767776.test.near: 23.858 Tgas, ok true
+relay settle by 15c1d96c028581e64c6e5579d148c07daebe6ab76014cf76149fba4dda974ef5: 204.258 Tgas, ok true
+ok
+test leg_called_by_non_dex_refused ... mtx_set_policy by 943676f1787455d599eb8e1b3620a52038bf9d83ce98ae2f8814a3626e46bf3c: 2.691 Tgas, ok true
+ok
+test leg_settle_view_tracks_the_index ... settle by 5e5902da360d74a5114494d58224432b86365f3f6dcab17cc068945d00a9a5b1: 80.075 Tgas, ok true
+settle by 5e5902da360d74a5114494d58224432b86365f3f6dcab17cc068945d00a9a5b1: 16.823 Tgas, ok false
+refund_expired by dev-20261029152912-24011149484944.test.near: 10.637 Tgas, ok true
+ok
+test min_nonce_cap_refused ... mtx_invalidate_nonces by 115aa60f64e9e674a715815694b1479f9cd2df132810065d29cf0bd4be7fb750: 1.967 Tgas, ok false
+mtx_invalidate_nonces by 115aa60f64e9e674a715815694b1479f9cd2df132810065d29cf0bd4be7fb750: 1.967 Tgas, ok false
+mtx_invalidate_nonces by 115aa60f64e9e674a715815694b1479f9cd2df132810065d29cf0bd4be7fb750: 2.910 Tgas, ok true
+mtx_invalidate_nonces: min_nonce record 114 B (UA)
+mtx_invalidate_nonces by 115aa60f64e9e674a715815694b1479f9cd2df132810065d29cf0bd4be7fb750: 2.040 Tgas, ok false
+mtx_invalidate_nonces by 115aa60f64e9e674a715815694b1479f9cd2df132810065d29cf0bd4be7fb750: 2.040 Tgas, ok false
+mtx_invalidate_nonces by 115aa60f64e9e674a715815694b1479f9cd2df132810065d29cf0bd4be7fb750: 2.776 Tgas, ok true
+mtx_cancel by 115aa60f64e9e674a715815694b1479f9cd2df132810065d29cf0bd4be7fb750: 2.106 Tgas, ok false
+ok
+test no_partial_fill ... settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 16.642 Tgas, ok false
+settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 16.756 Tgas, ok false
+settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 16.756 Tgas, ok false
+settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 16.746 Tgas, ok false
+settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 16.748 Tgas, ok false
+settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 80.163 Tgas, ok true
+settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 16.823 Tgas, ok false
+settle by f803017303f1bb6e7d9893fc3f5ead83bb53df861afd16db43dbdb44786ea7c1: 16.883 Tgas, ok false
+ok
+test one_leg_fails_other_refunded ... settle by 4d94e845aa571f80b6d218ae992bc3e356dccde555db58d670aacb127b83f41b: 76.496 Tgas, ok true
+settle by 4d94e845aa571f80b6d218ae992bc3e356dccde555db58d670aacb127b83f41b: 75.488 Tgas, ok true
+ok
+test order_relayer_mismatch_refused ... settle by dev-20261029152945-51362600627898.test.near: 2.040 Tgas, ok false
+settle by dev-20261029152945-51362600627898.test.near: 2.094 Tgas, ok false
+settle by 90a7e9a91df7fc642b6bc512ad94b5da36605a89b92888ee705f2a0411207279: 80.178 Tgas, ok true
+ok
+test refund_before_expiry_refused ... settle by 2359bfa21e6a80b4e4eb1c8a1faf12217eba5e9ab129c990f13af2e2918e0fd5: 80.159 Tgas, ok true
+refund_expired by 2359bfa21e6a80b4e4eb1c8a1faf12217eba5e9ab129c990f13af2e2918e0fd5: 1.552 Tgas, ok false
+refund_expired by 2359bfa21e6a80b4e4eb1c8a1faf12217eba5e9ab129c990f13af2e2918e0fd5: 1.552 Tgas, ok false
+refund_expired by 2359bfa21e6a80b4e4eb1c8a1faf12217eba5e9ab129c990f13af2e2918e0fd5: 1.520 Tgas, ok false
+ok
+test refund_expired_after_lost_callback ... settle by e7aa3e5c89a4bd80e30c73c306759177b6fc05e342a7176120ddf57ffc2a908f: 79.590 Tgas, ok true
+refund_expired by dev-20261029153000-29092236564572.test.near: 22.759 Tgas, ok true
+  receipt dev-20261029153001-74067722591702.test.near 2.519 Tgas None
+  receipt dev-20261029152959-18685085011907.test.near 1.673 Tgas None
+  receipt dev-20261029153000-29092236564572.test.near 0.223 Tgas None
+  receipt dev-20261029153000-19209974249917.test.near 1.673 Tgas None
+  receipt dev-20261029153000-29092236564572.test.near 0.223 Tgas None
+  receipt dev-20261029153001-74067722591702.test.near 3.663 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"match_failed\",\"data\":{\"settle_id\":\"0xd3742d7275d78d8bf79b6fd719d9ff0f390034d91fe60ff5cd76710979fdfa2e\",\"legs\":[\"0xdb809b40e8947376287e680362173c6e26c2b66b43fd2ebaa5144cb9e27518b0\",\"0xbb2ccffa671a91ace80d9babaf5bd156528033b922846de5cdc1f453304408e7\"],\"refunded\":[\"0xdb809b40e8947376287e680362173c6e26c2b66b43fd2ebaa5144cb9e27518b0\",\"0xbb2ccffa671a91ace80d9babaf5bd156528033b922846de5cdc1f453304408e7\"]}}")
+  receipt dev-20261029152959-18685085011907.test.near 2.250 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029153001-74067722591702.test.near\",\"new_owner_id\":\"dev-20261029153000-59040834810642.test.near\",\"amount\":\"100\"}]}")
+  receipt dev-20261029153000-19209974249917.test.near 2.254 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029153001-74067722591702.test.near\",\"new_owner_id\":\"dev-20261029153000-29092236564572.test.near\",\"amount\":\"60\"}]}")
+  receipt e7aa3e5c89a4bd80e30c73c306759177b6fc05e342a7176120ddf57ffc2a908f 7.525 Tgas None
+  receipt dev-20261029153000-29092236564572.test.near 0.223 Tgas None
+  receipt dev-20261029153000-29092236564572.test.near 0.223 Tgas None
+pins: GAS_VIEW 3, GAS_ON_REFUND 29, GAS_PAYOUT 4 Tgas
+refund_expired by dev-20261029153000-29092236564572.test.near: 1.520 Tgas, ok false
+ok
+test settle_deposit_short_refused ... settle at the floor 51270000000000000000002 yocto (2200 B per leg pinned): the relayer spent 29109176362809200000002 yocto in all (entry 7270000000000000000000 yocto, token storage now 1120972 B)
+ok
+test settle_gas_pin ... settle by f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8: 120.277 Tgas, ok true
+  receipt dev-20261029153017-62933508105264.test.near 3.279 Tgas None
+  receipt dev-20261029153015-62446221222355.test.near 24.441 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0xe1942f44408ab0ae3f58968bbac3e4c0ac7450ed329e48f65a7a9a72ad836566\",\"dex\":\"dev-20261029153017-62933508105264.test.near\",\"lane\":\"0xa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0\",\"nonce\":0,\"amount\":\"100\",\"digest\":\"0xee84626c3719506d69806c77082fc6985f9653ae4236d4ab84ad4e8c51c485e4\"}}")
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+  receipt dev-20261029153017-45609861511754.test.near 24.472 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0x7dfa29c49e3677bab639fc36f9b4515d71c98173942468614353fd6ac57e1b6f\",\"dex\":\"dev-20261029153017-62933508105264.test.near\",\"lane\":\"0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0\",\"nonce\":0,\"amount\":\"60\",\"digest\":\"0xf40174375b634af055e4a9b779db2bb2dafc3ee152b0d960c9b88089e2818e2b\"}}")
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+  receipt dev-20261029153017-62933508105264.test.near 2.442 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"matched\",\"data\":{\"settle_id\":\"0x0111478424b3514631fdf5ba85a489fc1dbbd24c172debf185e44fe1c8acf8ea\",\"legs\":[\"0xee84626c3719506d69806c77082fc6985f9653ae4236d4ab84ad4e8c51c485e4\",\"0xf40174375b634af055e4a9b779db2bb2dafc3ee152b0d960c9b88089e2818e2b\"]}}")
+  receipt dev-20261029153015-62446221222355.test.near 2.517 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029153017-62933508105264.test.near\",\"new_owner_id\":\"dev-20261029153015-62446221222355.test.near\",\"amount\":\"100\"}]}")
+  receipt dev-20261029153017-45609861511754.test.near 2.543 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029153017-62933508105264.test.near\",\"new_owner_id\":\"dev-20261029153017-45609861511754.test.near\",\"amount\":\"60\"}]}")
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+  receipt f33adc54c6b4462f6c0f4bbd87b7b4bb701638097824ef8c01e8b72c1cafabd8 7.525 Tgas None
+settle_gas_pin: 8 receipts at the implicit relayer, [7.5249476875, 7.5249476875, 7.5249476875, 7.5249476875, 7.5249476875, 7.5249476875, 7.5249476875, 7.5249476875] Tgas
+settle_gas_pin: total 60.077 Tgas (pin 90, prepaid 111 Tgas); legs [24.44122309105, 24.472375461517]; on_legs 2.442; payouts [2.51657863229, 2.54326729092]
+ok
+test settle_leg_shape_refused ... settle by 2334d5a518321b971a89afd425bd4296f5f8ca1b06aa68b64bf5ef63cb14c291: 16.643 Tgas, ok false
+settle by 2334d5a518321b971a89afd425bd4296f5f8ca1b06aa68b64bf5ef63cb14c291: 16.646 Tgas, ok false
+settle by 2334d5a518321b971a89afd425bd4296f5f8ca1b06aa68b64bf5ef63cb14c291: 16.646 Tgas, ok false
+settle by 2334d5a518321b971a89afd425bd4296f5f8ca1b06aa68b64bf5ef63cb14c291: 16.660 Tgas, ok false
+settle by 2334d5a518321b971a89afd425bd4296f5f8ca1b06aa68b64bf5ef63cb14c291: 16.655 Tgas, ok false
+ok
+test settle_msig_leg_gas_limit ... settle by f7bec6e6101fceda64124a612e43c4f52a6d7cd502065c8038e455e69cdc56f4: 16.956 Tgas, ok false
+settle by f7bec6e6101fceda64124a612e43c4f52a6d7cd502065c8038e455e69cdc56f4: 260.716 Tgas, ok true
+  settle receipt 3.468 Tgas
+settle_msig_leg_gas_limit: 9-signature passkey msig leg 184.957 Tgas (leg_gas 242 Tgas), ed25519 leg 4.361 Tgas; total 260.716 Tgas at 300 prepaid; 10 signatures refused (settle_gas 312 Tgas)
+ok
+test settle_near_expiry_refused ... settle by 2b036afe13994bd57abebbd4cfe3a93dc12fe937d0af118f7d2ea50f901f2324: 16.754 Tgas, ok false
+settle by 2b036afe13994bd57abebbd4cfe3a93dc12fe937d0af118f7d2ea50f901f2324: 16.754 Tgas, ok false
+settle by 2b036afe13994bd57abebbd4cfe3a93dc12fe937d0af118f7d2ea50f901f2324: 16.754 Tgas, ok false
+settle by 2b036afe13994bd57abebbd4cfe3a93dc12fe937d0af118f7d2ea50f901f2324: 16.754 Tgas, ok false
+settle by 2b036afe13994bd57abebbd4cfe3a93dc12fe937d0af118f7d2ea50f901f2324: 80.081 Tgas, ok true
+ok
+test settle_passkey_field_cap_refused ... settle by b3dbfcb7d86825b980315803c6e7811bf225ced344789a0baaa7a25b49e8f5db: 16.815 Tgas, ok false
+settle by b3dbfcb7d86825b980315803c6e7811bf225ced344789a0baaa7a25b49e8f5db: 16.815 Tgas, ok false
+settle by b3dbfcb7d86825b980315803c6e7811bf225ced344789a0baaa7a25b49e8f5db: 16.820 Tgas, ok false
+settle by b3dbfcb7d86825b980315803c6e7811bf225ced344789a0baaa7a25b49e8f5db: 16.820 Tgas, ok false
+settle by b3dbfcb7d86825b980315803c6e7811bf225ced344789a0baaa7a25b49e8f5db: 16.816 Tgas, ok false
+settle by b3dbfcb7d86825b980315803c6e7811bf225ced344789a0baaa7a25b49e8f5db: 16.816 Tgas, ok false
+settle by b3dbfcb7d86825b980315803c6e7811bf225ced344789a0baaa7a25b49e8f5db: 99.921 Tgas, ok true
+ok
+test settle_pays_both_legs ... settle by 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66: 80.074 Tgas, ok true
+  receipt dev-20261029153118-25316808033634.test.near 3.241 Tgas None
+  receipt dev-20261029153114-56812103887665.test.near 4.765 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0x614856bc83c4a19363c308cacf34d87491e1444e7017129547626392bba51f53\",\"dex\":\"dev-20261029153118-25316808033634.test.near\",\"lane\":\"0xa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0\",\"nonce\":0,\"amount\":\"100\",\"digest\":\"0xc8d7c7d6433fc08ab97def4b39b973a7d077315f60b1834a8428cc66ccdf6378\"}}")
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+  receipt dev-20261029153117-93488724515637.test.near 4.334 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"dev-20261029153117-93520615130721.test.near\",\"dex\":\"dev-20261029153118-25316808033634.test.near\",\"lane\":\"0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0\",\"nonce\":0,\"amount\":\"60\",\"digest\":\"0xc04ff374aca0de272f5dc06088ec92a190a1ecb94cd65dcc737392992db1bcec\"}}")
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+  receipt dev-20261029153118-25316808033634.test.near 2.420 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"matched\",\"data\":{\"settle_id\":\"0x3fc220d2a2fc8b36f50dfb348a88d791719837f0ba910f182a71e5242f203590\",\"legs\":[\"0xc8d7c7d6433fc08ab97def4b39b973a7d077315f60b1834a8428cc66ccdf6378\",\"0xc04ff374aca0de272f5dc06088ec92a190a1ecb94cd65dcc737392992db1bcec\"]}}")
+  receipt dev-20261029153114-56812103887665.test.near 2.236 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029153118-25316808033634.test.near\",\"new_owner_id\":\"dev-20261029153117-93520615130721.test.near\",\"amount\":\"100\"}]}")
+  receipt dev-20261029153117-93488724515637.test.near 2.516 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029153118-25316808033634.test.near\",\"new_owner_id\":\"dev-20261029153117-93488724515637.test.near\",\"amount\":\"60\"}]}")
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+  receipt 5c91091d6f2fdb19c904e6e40651e7b7a9913cc851aca7c4df8e869edd7dbb66 7.525 Tgas None
+storage: token A +486 B, token B +355 B, dex entry +727 B (order record 147 B UA / 162 B native)
+refund_expired by dev-20261029153116-24899213690123.test.near: 1.552 Tgas, ok false
+refund_expired by dev-20261029153116-24899213690123.test.near: 10.637 Tgas, ok true
+ok
+test settle_short_gas_refused ... settle by e15a3817df08bf9f1ef9e58827c8a23810cf8361f21abfe4f592253990ef8aa2: 16.753 Tgas, ok false
+settle by e15a3817df08bf9f1ef9e58827c8a23810cf8361f21abfe4f592253990ef8aa2: 80.081 Tgas, ok true
+settle_short_gas_refused: ed25519 legs 4.768 Tgas (erin, UA opened lazily) / 4.334 Tgas (bob), leg_gas 18 Tgas
+ok
+test settle_worst_case_leg_storage_pin ... worst-case leg storage: 1988 B measured (mtx_trade_check), pin LEG_STORAGE_MAX_BYTES 2200 B
+settle_worst_case_leg_storage_pin: 240.757 Tgas, floor 51270000000000000000002 yocto
+ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 174.90s
+
+rc=0

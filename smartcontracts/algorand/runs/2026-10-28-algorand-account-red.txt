@@ -1,0 +1,248 @@
+# algorand-account-red at commit 08184a1b + T12 tests, account.py an ABI stub (bodies fail; create passes), token UA path wired
+== build algorand
+[32minfo: [0musing puyapy version 5.10.1[0m
+[33mwarning: [0mcannot determine package root for contracts/probe.py[0m
+[33mwarning: [0mcannot determine package root for contracts/token.py[0m
+[33mwarning: [0mcannot determine package root for contracts/common.py[0m
+[33mwarning: [0mcannot determine package root for contracts/account.py[0m
+[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0mWriting out/Token.arc56.json[0m
+[32minfo: [0mWriting out/Token.approval.bin[0m
+[32minfo: [0mWriting out/Token.clear.bin[0m
+[32minfo: [0mWriting out/Probe.arc56.json[0m
+[32minfo: [0mWriting out/Probe.approval.bin[0m
+[32minfo: [0mWriting out/Probe.clear.bin[0m
+[32minfo: [0mWriting out/Account.arc56.json[0m
+[32minfo: [0mWriting out/Account.approval.bin[0m
+[32minfo: [0mWriting out/Account.clear.bin[0m
+wrote artifacts.json
+ok smartcontracts/algorand/vectors/algorand-vectors.json
+FFFFFFFFFFFFFFFFFFF......
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+F.....F.........
+opcode budget used: {'mtx_pay': 2854, 'mtx_transfer': 2814, 'mtx_pay_meta': 3310, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 4 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2548, clear 4
+.....F
+=================================== FAILURES ===================================
+____________________ test_ua_opened_lazily_relayer_pays_mbr ____________________
+tests/test_account.py:58: in test_ua_opened_lazily_relayer_pays_mbr
+    assert account.record(h) is None and view(account, 'key_nonce', *h) == 0
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:271: in view
+    assert fail is None, fail
+E   AssertionError: T12: not implemented :: transaction NN64VMNGKIKYH5K7IGP2PXVTB4LVVS3ABVY5NY7G7HK4FFRUTMWQ: logic eval error: err opcode executed. Details: app=1491, pc=232, opcodes===; assert; err; label6:
+E   assert 'T12: not implemented :: transaction NN64VMNGKIKYH5K7IGP2PXVTB4LVVS3ABVY5NY7G7HK4FFRUTMWQ: logic eval error: err opcode executed. Details: app=1491, pc=232, opcodes===; assert; err; label6:' is None
+___________________________ test_each_kind_accepted ____________________________
+tests/test_account.py:91: in test_each_kind_accepted
+    account.key_op(relayer, 'mtx_set_guardian', k, [list(native(bob))], mbr=rec_mbr(1, origins))
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction 5GGJTHNRTMCFMB4L7NQ5DGMHP46E63YGW76LGTPWCRD6Q7AISXRA: logic eval error: err opcode executed. Details: app=1494, pc=430, opcodes===; assert; err; label11:
+_____________________________ test_high_s_refused ______________________________
+tests/test_account.py:117: in test_high_s_refused
+    with no('secp256k1 signature (low s)'):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'secp256k1\\ signature\\ \\(low\\ s\\)'
+E     Actual message: 'T12: not implemented :: TransactionPool.Remember: transaction 7WZ4S4QWEFMVOGM7RDG7OLOS7VI5XASXT4OF2LUC3JOR74VQWFFA: logic eval error: err opcode executed. Details: app=1497, pc=430, opcodes===; assert; err; label11:'
+____________________________ test_ninth_key_refused ____________________________
+tests/test_account.py:133: in test_ninth_key_refused
+    run(alice, account, 'add_key_native', [k.record(), b''], mbr=rec_mbr(1) if i == 0 else SLOT,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction 25RXSGD2NQOHNGPDODBCXS7MJHK4YLXH4ROAPTSVCGT56YO6UMNQ: logic eval error: err opcode executed. Details: app=1500, pc=596, opcodes===; assert; err
+__________________ test_add_key_native_sender_is_the_address ___________________
+tests/test_account.py:148: in test_add_key_native_sender_is_the_address
+    run(alice, account, 'add_key_native', [k.record(), ORIGIN.encode()], mbr=rec_mbr(1, 1),
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction HVRCMMID6UA4DGKH6Y2YHXHZGPVZRWQ2VPADNBS4VI7MUVA4XYBA: logic eval error: err opcode executed. Details: app=1504, pc=596, opcodes===; assert; err
+__________________________ test_origin_and_rp_checked __________________________
+tests/test_account.py:172: in test_origin_and_rp_checked
+    op('mtx_set_guardian', [NONE_HOLDER], mbr=rec_mbr(1, 1))                         # opened at ORIGIN
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_account.py:169: in op
+    r = account.key_op(relayer, method, dave, args, nonce=n[0], mbr=mbr, **kw)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction DHRL7DEYASB65XJC4E5NEOTIDQTB4GDZXGI6I6T65CGRAGUP4TBQ: logic eval error: err opcode executed. Details: app=1508, pc=430, opcodes===; assert; err; label11:
+________________________ test_recovery_after_delay_only ________________________
+tests/test_account.py:248: in test_recovery_after_delay_only
+    erin, g, frank, mallory = recovery_setup(account, relayer)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_account.py:238: in recovery_setup
+    account.key_op(relayer, 'mtx_set_guardian', erin, [list(g.ua())], mbr=rec_mbr(1))
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction AJBHFKTDWKDGUCFDM2RUK4MNCORHCZMANSJ3IKQAMBDPWSXTCOBA: logic eval error: err opcode executed. Details: app=1511, pc=430, opcodes===; assert; err; label11:
+__________________ test_recovery_of_a_passkey_with_its_origin __________________
+tests/test_account.py:286: in test_recovery_of_a_passkey_with_its_origin
+    account.key_op(relayer, 'mtx_set_guardian', erin, [list(native(alice))], mbr=rec_mbr(1))
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction YNRNQHWIILPVMV5T6TYXH54T27WGKE7RQ3BMY6VW5JZZ2AVUURNA: logic eval error: err opcode executed. Details: app=1514, pc=430, opcodes===; assert; err; label11:
+____________________ test_cancel_recovery_and_guardian_ops _____________________
+tests/test_account.py:299: in test_cancel_recovery_and_guardian_ops
+    erin, g, frank, _ = recovery_setup(account, relayer)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_account.py:238: in recovery_setup
+    account.key_op(relayer, 'mtx_set_guardian', erin, [list(g.ua())], mbr=rec_mbr(1))
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction EQXHJDQUQPAEF6SHIVZFJROAWXLKHLQMUECYOJ7MPH3QSBAZJQSA: logic eval error: err opcode executed. Details: app=1517, pc=430, opcodes===; assert; err; label11:
+_________________ test_msig_native_member_by_current_authority _________________
+tests/test_account.py:328: in test_msig_native_member_by_current_authority
+    with no('msig threshold not met'):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'msig\\ threshold\\ not\\ met'
+E     Actual message: 'T12: not implemented :: TransactionPool.Remember: transaction Z42H2A7UMEMEU3UDA4CP2XFKRRETC64XJX6CFTWHSKKWTOXCLTZA: logic eval error: err opcode executed. Details: app=1520, pc=430, opcodes===; assert; err; label11:'
+_______________________________ test_msig_rules ________________________________
+tests/test_account.py:351: in test_msig_rules
+    with no(msg):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'not\\ in\\ member\\ order'
+E     Actual message: 'T12: not implemented :: TransactionPool.Remember: transaction FTAY45CVYMN4XHYSPBZVE5J45M7NHOO54W6LZPT2DT6AM3THXJYA: logic eval error: err opcode executed. Details: app=1524, pc=430, opcodes===; assert; err; label11:'
+__________________________ test_msig_cap_fits_limits ___________________________
+tests/test_account.py:382: in test_msig_cap_fits_limits
+    assert fail is None, fail
+E   AssertionError: T12: not implemented :: transaction EY4YEFNNN43554WSTJU6SSG3K5HPZBPH3NQ6BEBDD42PNJTHM2NQ: logic eval error: err opcode executed. Details: app=1527, pc=291, opcodes===; assert; err; label7:
+E   assert 'T12: not implemented :: transaction EY4YEFNNN43554WSTJU6SSG3K5HPZBPH3NQ6BEBDD42PNJTHM2NQ: logic eval error: err opcode executed. Details: app=1527, pc=291, opcodes===; assert; err; label7:' is None
+_________________________ test_budget_per_kind_pinned __________________________
+tests/test_account.py:405: in test_budget_per_kind_pinned
+    account.key_op(relayer, 'mtx_set_guardian', k, [NONE_HOLDER], mbr=rec_mbr(0 if name == 'native' else 1, pk))
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction W43ABLOW76ZKHXRIYCA4ZE27J4DHHSOHYESC24AUAOK72C6Y5OCQ: logic eval error: err opcode executed. Details: app=1530, pc=430, opcodes===; assert; err; label11:
+_____________________ test_token_ua_pay_via_account_verify _____________________
+tests/test_account.py:440: in test_token_ua_pay_via_account_verify
+    assert view(token, 'mbr_needed', o) == own and view(account, 'verify_mbr', 1, dave.id, digest(o), a) == rec
+                                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:271: in view
+    assert fail is None, fail
+E   AssertionError: T12: not implemented :: transaction 32PSSJEDZ5O5NAD4ZZZSS2M6HVGOQ56FQNACZUPSCY273IBNQPVA: logic eval error: err opcode executed. Details: app=1539, pc=216, opcodes===; assert; err; label5:
+E   assert 'T12: not implemented :: transaction 32PSSJEDZ5O5NAD4ZZZSS2M6HVGOQ56FQNACZUPSCY273IBNQPVA: logic eval error: err opcode executed. Details: app=1539, pc=216, opcodes===; assert; err; label5:' is None
+________________________ test_keys_shared_by_two_tokens ________________________
+tests/test_account.py:477: in test_keys_shared_by_two_tokens
+    account.key_op(relayer, 'mtx_add_key', erin, [k2.record(), b''], mbr=rec_mbr(2))   # one key op, both tokens
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction 6NTLTVJL35NPWR2VLKP4UQ427R3GYHYLXOCHBUYFINAA54LK5S4A: logic eval error: err opcode executed. Details: app=1551, pc=291, opcodes===; assert; err; label7:
+______________ test_rekeyed_address_signs_through_account_record _______________
+tests/test_account.py:498: in test_rekeyed_address_signs_through_account_record
+    run(alice, account, 'add_key_native', [k.record(), b''], mbr=rec_mbr(1), boxes=[account.name(native(alice))],
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction HUJJBTPGMNSCKGBTXJRP4GFGA66NLOSEDTAJ4A4G3W5T7G2KVFOQ: logic eval error: err opcode executed. Details: app=1572, pc=596, opcodes===; assert; err
+________________________ test_policy_passkey_for_value _________________________
+tests/test_account.py:527: in test_policy_passkey_for_value
+    account.key_op(relayer, 'mtx_add_key', erin, [dave.record(), ORIGIN.encode()], mbr=rec_mbr(2, 1))
+tests/conftest.py:581: in key_op
+    return self.call(relayer, method, o, auth, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:573: in call
+    return run(relayer, self, method, [o, auth, *args], mbr=mbr, budget=budget, boxes=names,
+tests/conftest.py:249: in run
+    raise Refused(explain(str(e))) from None
+E   conftest.Refused: T12: not implemented :: TransactionPool.Remember: transaction JHRM2U5N4PYNPSOQUOXUZINYRUIYQ3Q3LJWLOPOYBFLQTGDN56HA: logic eval error: err opcode executed. Details: app=1582, pc=291, opcodes===; assert; err; label7:
+_________________________ test_key_op_envelope_refused _________________________
+tests/test_account.py:561: in test_key_op_envelope_refused
+    with no(msg):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'wrong\\ network'
+E     Actual message: 'T12: not implemented :: TransactionPool.Remember: transaction ENX5QIOUASCDMLBM2M4NVCK5SNX5O4KRXNZGQLAX7A34HEYOYBUQ: logic eval error: err opcode executed. Details: app=1594, pc=430, opcodes===; assert; err; label11:'
+___________________ test_account_update_delete_optin_refused ___________________
+tests/test_account.py:574: in test_account_update_delete_optin_refused
+    refused_actions(account, dispenser, ['update', 'delete'])        # the creator included
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:307: in refused_actions
+    with pytest.raises(E, match='rejected by ApprovalProgram'):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'rejected by ApprovalProgram'
+E     Actual message: 'TransactionPool.Remember: transaction WZG6YGT47NRHYOXBNT3EKHZ3KYDOOE3LHK6F2NPA7MFYVCUW57UA: logic eval error: assert failed pc=143. Details: app=1598, pc=143, opcodes=txn ApplicationID; &&; assert'
+__________________________ test_pay_meta_cap_measured __________________________
+tests/test_token.py:197: in test_pay_meta_cap_measured
+    r = token.mtx(relayer, 'mtx_pay_meta', o, a, salt, meta)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:360: in mtx
+    view(self.account, 'verify_mbr', o[3][0], bytes(o[3][1]), digest(o), auth) if via else 0) or None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:271: in view
+    assert fail is None, fail
+E   AssertionError: T12: not implemented :: transaction F5A2NRFKQBWVARGVQEEGDWS6SMIJVR3MOBE7D6UY3GVV6BMDJMKA: logic eval error: err opcode executed. Details: app=1689, pc=216, opcodes===; assert; err; label5:
+E   assert 'T12: not implemented :: transaction F5A2NRFKQBWVARGVQEEGDWS6SMIJVR3MOBE7D6UY3GVV6BMDJMKA: logic eval error: err opcode executed. Details: app=1689, pc=216, opcodes===; assert; err; label5:' is None
+_________________ test_ua_signer_goes_through_the_account_app __________________
+tests/test_token.py:277: in test_ua_signer_goes_through_the_account_app
+    with no('unknown auth tag'):                     # a 64-byte "wallet signature" for a UA: no such key kind
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'unknown\\ auth\\ tag'
+E     Actual message: 'T12: not implemented :: TransactionPool.Remember: transaction CCH66KBLPAG47ROHYW57IIVINT222Z6JEUJTCJEBLLNDWVT4U4KQ: logic eval error: inner tx 0 failed: logic eval error: err opcode executed. Details: app=1793, pc=180, opcodes===; assert; err; label4:. Details: app=1795, pc=2252, opcodes=intc_1 // 0; itxn_field Fee; itxn_submit'
+_____________________________ test_key_op_vectors ______________________________
+tests/test_vectors.py:85: in test_key_op_vectors
+    need = view(account, 'verify_mbr', frm['kind'], unhx(frm['id']), unhx(r['digest']), unhx(r['authBytes']))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:271: in view
+    assert fail is None, fail
+E   AssertionError: T12: not implemented :: transaction KLLAQO6OAF264BN6DDKAWSZFXE2EWM43EGDHYNGSQP5UM6GQ67AQ: logic eval error: err opcode executed. Details: app=1986, pc=216, opcodes===; assert; err; label5:
+E   assert 'T12: not implemented :: transaction KLLAQO6OAF264BN6DDKAWSZFXE2EWM43EGDHYNGSQP5UM6GQ67AQ: logic eval error: err opcode executed. Details: app=1986, pc=216, opcodes===; assert; err; label5:' is None
+=========================== short test summary info ============================
+FAILED tests/test_account.py::test_ua_opened_lazily_relayer_pays_mbr - Assert...
+FAILED tests/test_account.py::test_each_kind_accepted - conftest.Refused: T12...
+FAILED tests/test_account.py::test_high_s_refused - AssertionError: Regex pat...
+FAILED tests/test_account.py::test_ninth_key_refused - conftest.Refused: T12:...
+FAILED tests/test_account.py::test_add_key_native_sender_is_the_address - con...
+FAILED tests/test_account.py::test_origin_and_rp_checked - conftest.Refused: ...
+FAILED tests/test_account.py::test_recovery_after_delay_only - conftest.Refus...
+FAILED tests/test_account.py::test_recovery_of_a_passkey_with_its_origin - co...
+FAILED tests/test_account.py::test_cancel_recovery_and_guardian_ops - conftes...
+FAILED tests/test_account.py::test_msig_native_member_by_current_authority - ...
+FAILED tests/test_account.py::test_msig_rules - AssertionError: Regex pattern...
+FAILED tests/test_account.py::test_msig_cap_fits_limits - AssertionError: T12...
+FAILED tests/test_account.py::test_budget_per_kind_pinned - conftest.Refused:...
+FAILED tests/test_account.py::test_token_ua_pay_via_account_verify - Assertio...
+FAILED tests/test_account.py::test_keys_shared_by_two_tokens - conftest.Refus...
+FAILED tests/test_account.py::test_rekeyed_address_signs_through_account_record
+FAILED tests/test_account.py::test_policy_passkey_for_value - conftest.Refuse...
+FAILED tests/test_account.py::test_key_op_envelope_refused - AssertionError: ...
+FAILED tests/test_account.py::test_account_update_delete_optin_refused - Asse...
+FAILED tests/test_token.py::test_pay_meta_cap_measured - AssertionError: T12:...
+FAILED tests/test_token.py::test_ua_signer_goes_through_the_account_app - Ass...
+FAILED tests/test_vectors.py::test_key_op_vectors - AssertionError: T12: not ...
+22 failed, 25 passed in 5.88s
+rc=1

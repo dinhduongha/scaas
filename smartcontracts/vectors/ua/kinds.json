@@ -171,6 +171,38 @@
       "memberHedera": false
     },
     {
+      "kind": 23,
+      "name": "near-account",
+      "native": true,
+      "lengths": [
+        32
+      ],
+      "tag": null,
+      "TAG": null,
+      "group": null,
+      "signing": false,
+      "zether": false,
+      "pqzHolder": false,
+      "member": false,
+      "memberHedera": false
+    },
+    {
+      "kind": 24,
+      "name": "algorand-address",
+      "native": true,
+      "lengths": [
+        32
+      ],
+      "tag": null,
+      "TAG": null,
+      "group": null,
+      "signing": false,
+      "zether": false,
+      "pqzHolder": false,
+      "member": false,
+      "memberHedera": false
+    },
+    {
       "kind": 256,
       "name": "webauthn-p256",
       "native": false,
@@ -2333,6 +2365,18 @@
       "raw": "0x21efa40a5b95369e8330b186c4cf7d8bc716a97d39fdac8c086ae2c3d07932c9",
       "id": "0x21efa40a5b95369e8330b186c4cf7d8bc716a97d39fdac8c086ae2c3d07932c9",
       "canonical": "0x21efa40a5b95369e8330b186c4cf7d8bc716a97d39fdac8c086ae2c3d07932c9"
+    },
+    {
+      "kind": 23,
+      "raw": "0xf790947ccbdb1d8fcfe837a808e58553a3f68890057d505a13fef7302cedf1d7",
+      "id": "0xf790947ccbdb1d8fcfe837a808e58553a3f68890057d505a13fef7302cedf1d7",
+      "canonical": "0xf790947ccbdb1d8fcfe837a808e58553a3f68890057d505a13fef7302cedf1d7"
+    },
+    {
+      "kind": 24,
+      "raw": "0x5d4306db8e8175d9aa2b5a81cdf511a94c46f2837a51708a9591ee893f1f5feb",
+      "id": "0x5d4306db8e8175d9aa2b5a81cdf511a94c46f2837a51708a9591ee893f1f5feb",
+      "canonical": "0x5d4306db8e8175d9aa2b5a81cdf511a94c46f2837a51708a9591ee893f1f5feb"
     }
   ],
   "nativeInvalid": [
@@ -2344,6 +2388,16 @@
     {
       "kind": 16,
       "raw": "0x00000000000000000000000000000000000000000000000000000000000000",
+      "error": "UAKeyData"
+    },
+    {
+      "kind": 23,
+      "raw": "0x00000000000000000000000000000000000000000000000000000000000000",
+      "error": "UAKeyData"
+    },
+    {
+      "kind": 24,
+      "raw": "0x000000000000000000000000000000000000000000000000000000000000000000",
       "error": "UAKeyData"
     },
     {

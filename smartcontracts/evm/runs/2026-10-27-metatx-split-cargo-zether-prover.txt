@@ -1,4 +1,88 @@
-# cargo-zether-prover at commit 67fa7a45
+# cargo-zether-prover at commit e3e778c7
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling version_check v0.9.5
+   Compiling syn v2.0.119
+   Compiling generic-array v0.14.9
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling cfg-if v1.0.5
+   Compiling libc v0.2.190
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling syn v3.0.6
+   Compiling zerocopy v0.8.59
+   Compiling autocfg v1.5.1
+   Compiling num-traits v0.2.19
+   Compiling ppv-lite86 v0.2.21
+   Compiling arrayvec v0.7.8
+   Compiling rand_chacha v0.3.1
+   Compiling num-integer v0.1.47
+   Compiling num-bigint v0.4.8
+   Compiling zeroize_derive v1.5.0
+   Compiling rand v0.8.8
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling zeroize v1.9.0
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling digest v0.10.7
+   Compiling hmac v0.12.1
+   Compiling paste v1.0.15
+   Compiling ark-std v0.5.0
+   Compiling enum-ordinalize v4.4.2
+   Compiling ark-serialize-derive v0.5.0
+   Compiling ahash v0.8.12
+   Compiling once_cell v1.21.4
+   Compiling serde_core v1.0.229
+   Compiling either v1.18.0
+   Compiling itertools v0.13.0
+   Compiling educe v0.6.0
+   Compiling ark-serialize v0.5.0
+   Compiling ark-ff-macros v0.5.0
+   Compiling ark-ff-asm v0.5.0
+   Compiling allocator-api2 v0.2.21
+   Compiling cpufeatures v0.2.17
+   Compiling sha2 v0.10.9
+   Compiling hashbrown v0.15.5
+   Compiling serde v1.0.229
+   Compiling zmij v1.0.23
+   Compiling der v0.7.10
+   Compiling ark-ff v0.5.0
+   Compiling hex-conservative v0.2.3
+   Compiling serde_derive v1.0.229
+   Compiling ark-poly v0.5.0
+   Compiling ff v0.13.1
+   Compiling base16ct v0.2.0
+   Compiling thiserror v2.0.21
+   Compiling serde_json v1.0.151
+   Compiling tinyvec v1.13.3
+   Compiling unicode-normalization v0.1.25
+   Compiling sec1 v0.7.3
+   Compiling group v0.13.0
+   Compiling ark-ec v0.5.0
+   Compiling bitcoin_hashes v0.14.101
+   Compiling crypto-bigint v0.5.5
+   Compiling thiserror-impl v2.0.21
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling keccak v0.1.6
+   Compiling sha3 v0.10.9
+   Compiling bip39 v2.2.2
+   Compiling elliptic-curve v0.13.8
+   Compiling ark-bls12-381 v0.5.0
+   Compiling hkdf v0.12.4
+   Compiling rfc6979 v0.4.0
+   Compiling signature v2.2.0
+   Compiling hex v0.4.3
+   Compiling ecdsa v0.16.9
+   Compiling k256 v0.13.4
+   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/zether-prover)
+   Compiling bs58 v0.5.1
+   Compiling pbkdf2 v0.12.2
+   Compiling ripemd v0.1.3
+   Compiling bip32 v0.5.3
 warning: unused import: `self`
  --> tests/recover.rs:6:26
   |
@@ -14,26 +98,26 @@ warning: unused import: `Bls12381`
   |                                       ^^^^^^^^
 
 warning: `zether-prover` (test "recover") generated 2 warnings (run `cargo fix --test "recover" -p zether-prover` to apply 2 suggestions)
-    Finished `test` profile [optimized + debuginfo] target(s) in 0.32s
+    Finished `test` profile [optimized + debuginfo] target(s) in 1m 35s
      Running unittests src/lib.rs (target/debug/deps/zether_prover-37c2c4055440f752)
 
 running 14 tests
-test abi::tests::matches_solidity_layout ... ok
 test abi::tests::account_state_roundtrip ... ok
-test curve::tests::rfc9380_bls12_381_g1_vectors ... ok
-test curve::tests::point_roundtrip_bls ... ok
+test abi::tests::matches_solidity_layout ... ok
 test elgamal::tests::knobs ... ok
-test keys::tests::eip2333_published_vectors ... ok
-test curve::tests::bls_rejects_point_outside_subgroup ... ok
-test transcript::tests::layout_matches_spec_by_hand ... ok
 test keys::tests::short_seed_rejected ... ok
+test curve::tests::bls_rejects_point_outside_subgroup ... ok
+test curve::tests::rfc9380_bls12_381_g1_vectors ... ok
+test keys::tests::eip2333_published_vectors ... ok
+test transcript::tests::layout_matches_spec_by_hand ... ok
 test schnorr::tests::cp_challenge_binds_statement_points ... ok
+test curve::tests::point_roundtrip_bls ... ok
 test schnorr::tests::schnorr_pop_bls12_381 ... ok
-test elgamal::tests::table_save_load_verify ... ok
 test elgamal::tests::elgamal_bls12_381 ... ok
+test elgamal::tests::table_save_load_verify ... ok
 test bulletproofs::tests::bulletproofs_bls12_381 ... ok
 
-test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.15s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
 
      Running unittests src/bin/zether-cli.rs (target/debug/deps/zether_cli-d36c08a55a2b18b4)
 
@@ -56,28 +140,27 @@ test envelope_matches_cast ... ok
 test relayed_and_disclosure_bls12_381 ... ok
 test burn_recipient_address_or_ua ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
 
      Running tests/r33_keys.rs (target/debug/deps/r33_keys-f7d5c2145f5c3697)
 
 running 7 tests
+test conf_key_pinned_for_abandon_art ... ok
 test ua_identity_matches_ua_vectors ... ok
 test bip39_seed_and_24_word_rule ... ok
 test ua_pubkey_roundtrip ... ok
-test conf_key_pinned_for_abandon_art ... ok
+test bip39_passphrase_is_nfkd_normalized ... ok
 test keys_independent_across_paths_curves_seeds ... ok
 test conf_key_never_equals_a_signing_key ... ok
-test bip39_passphrase_is_nfkd_normalized ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running tests/read_balance.rs (target/debug/deps/read_balance-f6796c76492b9434)
 
 running 1 test
-test big_balance_cache_spend_and_cli_recovery_bls12_381 has been running for over 60 seconds
 test big_balance_cache_spend_and_cli_recovery_bls12_381 ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 65.14s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 44.45s
 
      Running tests/recover.rs (target/debug/deps/recover-bc4e83aca7ce59f9)
 
@@ -92,17 +175,17 @@ test recover_a_record_and_calldata ... ok
 test modes_in_the_request ... ok
 test a_relayed_build_names_its_signer_kind ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.73s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.92s
 
      Running tests/s2_crosscheck.rs (target/debug/deps/s2_crosscheck-f688f2c6aeb6c77f)
 
 running 4 tests
-test bls_non_subgroup_rejected ... ok
 test transcript_matches_s2 ... ok
+test bls_non_subgroup_rejected ... ok
 test schnorr_matches_s2 ... ok
 test generators_match_s2 ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
      Running tests/vectors.rs (target/debug/deps/vectors-efea20ec1717d06f)
 
@@ -110,7 +193,7 @@ running 2 tests
 test api_roundtrip_mnemonic_keygen_prove_decrypt ... ok
 test committed_vectors_are_current_and_verify ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.01s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.42s
 
      Running tests/zether_proofs.rs (target/debug/deps/zether_proofs-b073c1bff4c5a0aa)
 
@@ -118,22 +201,22 @@ running 17 tests
 test memo_roundtrip ... ok
 test s_inputs ... ok
 test single_has_no_memo_hash ... ok
-test transfer_header_binding_bls12_381 ... ok
 test multi_audited_roundtrip ... ok
-test transfer_prover_refuses_bad_requests ... ok
 test burn_bls12_381 ... ok
+test transfer_prover_refuses_bad_requests ... ok
+test transfer_header_binding_bls12_381 ... ok
 test transfer_large_values_bls12_381 ... ok
+test multi_decoy_fee_bls12_381 ... ok
 test multi_tampered_d_aud_rejected ... ok
 test transfer_valid_bls12_381 ... ok
-test multi_decoy_fee_bls12_381 ... ok
-test transfer_sigma_negatives_bls12_381 ... ok
-test v2_vectors_refused ... ok
 test multi_valid_bls12_381 ... ok
+test v2_vectors_refused ... ok
+test transfer_sigma_negatives_bls12_381 ... ok
 test ua_execute_adds_the_signer_kinds_verify_cap ... ok
 test multi_negatives_bls12_381 ... ok
 test gas_table_edges_bls12_381 ... ok
 
-test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.19s
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.33s
 
    Doc-tests zether_prover
 

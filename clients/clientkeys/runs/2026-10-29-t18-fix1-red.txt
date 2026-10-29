@@ -1,0 +1,245 @@
+
+> @scaas/clientkeys@1.0.0 test
+> node --test 'test/*.test.js'
+
+✔ algorand vectors (141.618386ms)
+✔ algorand addresses and app addresses (5.310364ms)
+✔ algorand relay refs, lanes and router call (3.908112ms)
+✔ algorand passkey assertion (1.112045ms)
+✔ refuses pay-meta mismatch (0.771563ms)
+✔ relay fee prompt carries both intents (1.506558ms)
+✖ pay-meta and relay-fee payments need nonce 0 (1.307954ms)
+✖ passkeyAssertion refuses a wrong challenge (0.731699ms)
+✔ refuses native send to a UA id (1.643125ms)
+﹣ committed bundle == fresh esbuild output (0.983893ms) # no vendored bundle next to this checkout
+﹣ bundles load and work (0.22294ms) # no vendored bundle next to this checkout
+✔ MetaTransfer payment = forge KAT (TokenKat.t.sol, metatransfer_kat.json) (3.086464ms)
+✔ TradeOrder, CancelOrder, InvalidateNonces in the token domain = forge KAT (TradeKat.t.sol, trade_kat.json) (1.981934ms)
+✔ DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge KAT (DexKat.t.sol, dex_order_kat.json) (8.571757ms)
+✔ SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_account_kat.json) (30.426536ms)
+✔ MandateWallet pay and revoke = forge KATs (mandate_pay_kat.json, mandate_revoke_kat.json) (7.838907ms)
+✔ metaTxTypedData zeroes relayer / feeRecipient by mode, as the contract hashes them = metatx_kat.json (1.105473ms)
+✔ metaTxTypedData keeps chainId exact (number, decimal or hex string, BigInt) and needs a 32-byte chainUid (4.123247ms)
+✔ passkey keyId = keccak(abi.encode(SubjectKey)) as cast computes it (1.401019ms)
+✔ SmartKeyAccount CREATE2: salt and clone address match the forge-pinned vector (171.826431ms)
+✔ ABI encodings match `cast abi-encode` (foundry 1.3.5) (1.887376ms)
+✔ Merkle batch: every digest proves to the root; foreign digest does not (12.404938ms)
+✔ owner call: the client signs only addKey(the key it just made) as its own account, on its chain (25.955495ms)
+✔ payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes with its fee named (2.377269ms)
+✔ payment: only the payment the user was shown (payee, token, reference, amount, lane, fee), CLI-SGN-05/08 (12.907996ms)
+✔ self-call: exactly the call the client built, on its contract, with the fee the user allows (CLI-SGN-34) (4.95271ms)
+✔ trade order: exactly the order the client built, on a pinned DEX or wrapper (CLI-SGN-35, CLI-SGN-36) (15.444073ms)
+✔ cancel: only the order hash or the lane the user chose, from the account, in the order's domain (5.941813ms)
+✔ key proof message = keccak256("scaas-subject-key-proof-v1" ‖ challenge) (pinned with Odoo) (0.263877ms)
+✔ UA-5a: ReceiverFee typed data and the receivers' calldata (`cast calldata`, foundry 1.3.5); checkCall (5.922587ms)
+✔ receiver-pays, address path: the payee co-signs ReceiverFee only over the payment it expects, within its own bounds (11.894997ms)
+✔ near vectors (182.712317ms)
+✔ near relay refs, lanes and call forms (6.446474ms)
+✔ near native ids (1.012758ms)
+✔ near passkey assertion: low-s normalised, challenge = digest (1.614361ms)
+✔ refuses pay-meta mismatch (9.628268ms)
+✔ relay fee prompt carries both intents (1.400038ms)
+✔ refuses native send to a UA id (3.751867ms)
+✖ near key op fans out to every held token, each at its own nonce (3.330564ms)
+✖ pay-meta and relay-fee payments need nonce 0 (2.921203ms)
+✖ passkeyAssertion refuses a wrong challenge, type or invalid UTF-8 (6.133564ms)
+✔ passkeyAssertion output verifies as P-256 over authenticatorData || sha256(clientDataJSON) (13.862183ms)
+✔ paymeta vectors (8.759961ms)
+✔ decodeMeta refuses a non-canonical envelope or an unknown schema (1.101124ms)
+✔ refuses a payId that does not commit to meta (3.33338ms)
+✔ mtxPayMeta: the payment is mtxPay with payId = metaPayId(salt, meta), lane payLane, nonce 0 (6.629669ms)
+✔ uaPayMeta: UAMetaTransfer between ids, uaPayMeta / uaPay calldata (4.645541ms)
+✔ checkPayMeta: server typed data for the committed payId passes and returns the decoded meta (3.794789ms)
+✔ keys and ids: pq_kat.json's keys, ids from the kind table, PoP digests of contexts A and B (46.264933ms)
+✔ every PoP and signature verifies with noble; every negative is refused (297.641317ms)
+✔ UA-6: a holder registers its PQZ key in the same call: pop over popDigest(ua, h), h = keyHash(0x0142, pqzKey) != 0 (20.539632ms)
+✔ msig structures: key data, id, member digest; every member signature verifies; auth = abi.encode(keyData, sig) (20.616186ms)
+✔ metatx3 rows: typed data → digest, one call and one transfer per PQ kind, auth with empty key data (3.096574ms)
+✔ metatx3 receiverFee (UA-5a): an mldsa65 payer and an mldsa65 payee, both signatures verify with noble (18.718321ms)
+✔ purpose tag and digest of the vectors (1.821061ms)
+✔ mldsa44: seed → key, UA id, ua_msg, signed message = vectors (24.131458ms)
+✔ mldsa44: deterministic signature = vector; verifies; tampering fails (38.601977ms)
+✔ mldsa65: seed → key, UA id, ua_msg, signed message = vectors (7.800465ms)
+✔ mldsa65: deterministic signature = vector; verifies; tampering fails (40.687005ms)
+✔ fndsa512: seed → key, UA id, ua_msg, signed message = vectors (314.736581ms)
+✔ fndsa512: deterministic signature = vector; verifies; tampering fails (292.438566ms)
+✔ slhdsa128s: seed → key, UA id, ua_msg, signed message = vectors (426.474909ms)
+✔ slhdsa128s: deterministic signature = vector; verifies; tampering fails (4592.648569ms)
+✔ PQ seeds: HKDF per kind, account and index; lengths per scheme (1.451474ms)
+✔ pq-external.mjs refuses a download whose SHA-256 is not the pinned one, before writing anything (98.262102ms)
+✔ EIP-8051 expanded key = vectors (the forge suite derives the same bytes on chain) (8.35526ms)
+✔ no raw-digest signing: purpose and digest must be 32 bytes (2.271479ms)
+✔ relayRef matches the contract vector (2.620536ms)
+✔ buildRelayFee: open mode by default, one prompt with both intents, the router-bound payment (4.51206ms)
+✔ buildRelayFee: an open inner envelope stays open; a bound payee; the UA path (2.105045ms)
+✔ mtxExecuteCalldata: the signed call the payment commits to (1.420816ms)
+✔ buildRelayFee refuses to pay the executor, an inner envelope bound elsewhere or on another contract (1.044828ms)
+✔ buildRelayFee refuses an inner call on another chain or outliving its payment, a zero or token payee (0.810958ms)
+✔ BIP-39 Trezor vectors (passphrase TREZOR): words, checksum import, seed, BIP-32 root (486.471589ms)
+✔ BIP-39 import refuses a bad checksum and tolerates spacing/case (2.663648ms)
+✔ generated phrases are 24 words (0.556378ms)
+✔ BIP-32 test vector 1 (published, bip-0032.mediawiki) (10.780608ms)
+✔ SLIP-10 ed25519 test vector 1 (published, slip-0010.md) (43.208294ms)
+✔ SEP-0005 (published): seed, m/44'/148' key, Stellar G/S keys (28.561423ms)
+✔ Pi Network: Stellar keys at the chain's SLIP-44 coin type 314159 (24.135626ms)
+✔ per-network keys match reference tooling (119.39898ms)
+✔ signing: secp256k1 r‖s‖v recovers the EVM address; ed25519 verifies (51.463755ms)
+✔ secp256k1 groups: ids, KeyAgg / DKG recomputed, PoP and signatures verify (618.668878ms)
+✔ secp256k1 negatives refused for their stated reason (249.56345ms)
+✔ BIP-327 KeyAgg rows (official, incl. duplicate and unsorted lists) (40.748701ms)
+✔ RFC 9591 E.5, the ZF DKG vector, T-FROST (42.080841ms)
+✔ every row: typed data → digest, and the builder rebuilds the typed data from its message (20.931971ms)
+✔ typehashes and the signer set match signatures.json (0.523696ms)
+✔ the native rows are ECDSA over the v3 digest itself (CTR-UA-24), not the UAAuth wrapper (18.549793ms)
+✔ burn and unwrapToUA rows: one per signer of call, the same envelope, data the new call (126.349643ms)
+✔ receiverFee rows: native payer x every derived payee and p256 x bip340; payer under metatx, payee under receiver-fee (82.699747ms)
+✔ receiver-pays, UA path: checkReceiverFee accepts every receiverFee row for its payee id and refuses another payee (15.553379ms)
+✔ the generator reproduces signatures.json, ed25519_fuzz.json, metatx3.json and pq_signatures.json byte for byte (25039.140961ms)
+✔ derived kinds: key data, ids, PoP messages, every signature verifies (504.300783ms)
+✔ derived kinds: every negative fails (424.373049ms)
+✔ native EOA: UAAuth signatures verify, negatives fail (14.808115ms)
+✔ msig: structure id, members, every set gives its verdict (91.762046ms)
+✔ BIP-340 official vectors (32-byte messages) give their verdict (11.885629ms)
+✔ ed25519: the strict-only negatives are the ones noble zip215:false alone accepts (11.078479ms)
+✔ ed25519Rfc8032: RFC 8032 §7.1 TEST 1, 2, 3, 1024, SHA(abc) verify; the A-side cases give their verdict (20.302735ms)
+✔ ed25519_fuzz.json: every case gives its strict verdict; noble zip215:false alone differs only in the listed classes (3080.427736ms)
+✔ typehashes, the purpose tag and the signer set (2.475854ms)
+✔ every row: order, cancel and invalidate digests; the builders rebuild the typed data (263.738462ms)
+✔ mldsa65 orders for the caps verify with noble under trade (48.094248ms)
+✔ checkTradeOrder({ ua }) accepts the order built from the input and refuses any other; checkCancel UA invalidate (6.329153ms)
+✔ the generator reproduces kinds.json and structures.json byte for byte (1480.576601ms)
+✔ valid rows derive, invalid rows fail with their code (63.612421ms)
+✔ digests: popDigest, UAAuth, member (1.623168ms)
+✔ pq.js and ua.js agree on the PQ kinds (0.819283ms)
+✔ key data that is neither bytes nor a hex string is UAKeyData type (0.705579ms)
+✔ UA-6: 0x0142 is a scheme, not a kind; 0x0140 is gone; Zether is 0x0141 alone and signs (2.364113ms)
+✔ UA-6: PQZ holders, msig eligibility, pop digest and R_REG message (4.453209ms)
+✔ UA-6 vectors: schemes, holder flags, pqz_reg_message and msig eligibility rows (4.690887ms)
+✔ vault: passphrase via scrypt N=2^17 r=8 p=1, AES-GCM, fresh IV and salt, parameters recorded (3063.819398ms)
+✔ vault: a new passphrase needs 8+ characters and not only digits (769.293958ms)
+✔ vault: an old N=2^15 / 6-digit vault still opens, then is re-wrapped with the new parameters (3499.803726ms)
+✔ vault: tampering and label swap are detected (AAD) (1633.964916ms)
+✔ vault: passkey PRF envelope opens without the PIN; PIN envelope always stays (2185.72223ms)
+✔ backup: shown once, verify 3 random words, only then usable (2.283893ms)
+✔ DER decode, low-s normalisation and strictness (2.210755ms)
+✔ options builders: ES256, user verification required, challenge = 32-byte digest, PRF opt-in (1.625883ms)
+✔ software authenticator: SPKI → (x,y), assertion verifies over sha256(authData ‖ sha256(cdj)) after low-s (163.344443ms)
+✔ clientDataJSON shape is what SmartKeyAccount checks (RS4-2) (10.329308ms)
+✔ creationOptions: random 16-byte user handle per credential, account passkeys excluded (7.794052ms)
+✔ EIP-2333 published test cases (BLS12-381) (41.093942ms)
+✔ bn254 is gone since UA-6 (kept in legacy/ua6/zether.js) (1.356856ms)
+✔ conf/disclosure keys from the mnemonic == S3 (x, Y, UA, path) on both curves (115.376773ms)
+✔ S3 PoP vectors (the UA registry PoP, CTR-UA-07) verify here; ours has the same digest and verifies (112.280069ms)
+✔ owner op: abi.encode(bytes(""), Schnorr over uaMessage(kind, zether-owner, digest)) (21.591543ms)
+✔ every UA-ledger write: Schnorr by x over uaMessage(0x0141, purpose, digest); no raw digest, no other purpose (118.284701ms)
+✔ Schnorr with S3 fixed nonce is byte-identical; tampering fails (28.727747ms)
+✔ conf key is apart from signing keys: other path/curve/account ⇒ other x; never a signing scalar (156.156973ms)
+✔ x is sealed at rest like the seed; only Y/UA come back (2254.5695ms)
+✔ path-index rule == S3 prover (r33_inputs.json) (71.076131ms)
+✔ bls12381: checkBalance — one comparison, any size, exact (33.24737ms)
+✔ bls12381: cache box opens only with x, BigInt survives (13.669471ms)
+✔ bls12381: balance > 2^44 — device refuses, CLI value validated, debit and rollOver tracked (90.305775ms)
+✔ bls12381: cached balance > 2^44 survives third-party rollOver griefing and unrecorded debits (280.074894ms)
+✔ bls12381: accSeq is monotonic — a forged lower-seq acc does not move the anchor (26.615708ms)
+✔ bls12381: big anchor, balance spent down elsewhere — full device BSGS still recovers it (123.751368ms)
+✔ bls12381: small balance — cache miss falls back to device BSGS and fills the cache (16.800759ms)
+ℹ tests 141
+ℹ suites 0
+ℹ pass 134
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 29840.148201
+
+✖ failing tests:
+
+test at test/algorand.test.js:82:1
+✖ pay-meta and relay-fee payments need nonce 0 (1.307954ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/algorand.test.js:84:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /nonce/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at test/algorand.test.js:92:1
+✖ passkeyAssertion refuses a wrong challenge (0.731699ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/algorand.test.js:98:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /challenge/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
+
+test at test/near.test.js:109:1
+✖ near key op fans out to every held token, each at its own nonce (3.330564ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    [
+      0,
+  +   0
+  -   5
+    ]
+  
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/near.test.js:115:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [ 0, 0 ],
+    expected: [ 0, 5 ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at test/near.test.js:123:1
+✖ pay-meta and relay-fee payments need nonce 0 (2.921203ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/near.test.js:125:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /nonce/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at test/near.test.js:131:1
+✖ passkeyAssertion refuses a wrong challenge, type or invalid UTF-8 (6.133564ms)
+  AssertionError [ERR_ASSERTION]: Missing expected rejection.
+      at async TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/clientkeys/test/near.test.js:137:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /challenge/,
+    operator: 'rejects',
+    diff: 'simple'
+  }

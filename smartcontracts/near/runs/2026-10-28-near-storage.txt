@@ -1,0 +1,8 @@
+# near-sandbox storage per record kind (Task 4 token) at commit ba82133c + uncommitted T4 tree; full run: runs/2026-10-28-near-token.txt
+# rustc 1.97.1, cargo-near 0.22.0, near-sdk 5.30.0, near-workspaces 0.24.0, near-sandbox crate 0.4.0 -> neard (release 2.14.0) (build 2.14.0) (commit bc4e9e8cfb03d9e82f027883055624e18576993e) (rustc 1.95.0) (min_protocol 84) (protocol 88) (db 51), p256 0.13.2
+# test storage_bounds_min_equals_max_equals_measured: contract storage_usage delta (view_account) per new record
+storage_byte_cost 10000000000000000000 yocto/byte (protocol config)
+record account (NEP-145 registration, 64-char id): 125 B, deposit 1250000000000000000000 yocto
+record ua_balance (UA ledger entry): 89 B, deposit 890000000000000000000 yocto
+# pinned: token ACCOUNT_STORAGE_BYTES = 125, UA_STORAGE_BYTES = 89; near-vectors.json storage.records.{account,uaBalance}.bytes
+rc=0

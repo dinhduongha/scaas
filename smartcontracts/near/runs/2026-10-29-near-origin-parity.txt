@@ -1,0 +1,16 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.81s
+     Running tests/vectors.rs (target/debug/deps/vectors-a4ff0ab29d5c4249)
+
+running 8 tests
+test origin_of_parity_vectors ... ok
+test native_id_forms ... ok
+test ua_of_matches_kinds_json_valid_rows ... ok
+test nep413_vectors_match ... ok
+test pay_meta_vectors_match ... ok
+test relay_ref_vectors_match ... ok
+test webauthn_grammar_net_all_04 ... ok
+test metaop_vectors_match ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+rc=0

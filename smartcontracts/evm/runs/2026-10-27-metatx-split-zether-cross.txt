@@ -1,19 +1,19 @@
-# zether-cross at commit 67fa7a45
+# zether-cross at commit e3e778c7
    Compiling proc-macro2 v1.0.107
-   Compiling unicode-ident v1.0.26
    Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
    Compiling version_check v0.9.5
    Compiling autocfg v1.5.1
    Compiling num-traits v0.2.19
    Compiling generic-array v0.14.9
    Compiling typenum v1.20.1
    Compiling syn v3.0.6
+   Compiling cfg-if v1.0.5
    Compiling libc v0.2.190
    Compiling zerocopy v0.8.59
-   Compiling cfg-if v1.0.5
    Compiling syn v2.0.119
-   Compiling crypto-common v0.1.6
    Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
    Compiling subtle v2.6.1
    Compiling digest v0.10.7
    Compiling getrandom v0.2.17
@@ -26,16 +26,16 @@
    Compiling enum-ordinalize-derive v4.4.2
    Compiling paste v1.0.15
    Compiling ark-std v0.5.0
-   Compiling enum-ordinalize v4.4.2
    Compiling num-bigint v0.4.8
-   Compiling ark-serialize-derive v0.5.0
+   Compiling enum-ordinalize v4.4.2
    Compiling zeroize_derive v1.5.0
+   Compiling ark-serialize-derive v0.5.0
    Compiling ahash v0.8.12
-   Compiling serde_core v1.0.229
    Compiling either v1.18.0
+   Compiling serde_core v1.0.229
    Compiling itertools v0.13.0
-   Compiling zeroize v1.9.0
    Compiling ark-serialize v0.5.0
+   Compiling zeroize v1.9.0
    Compiling ark-ff-macros v0.5.0
    Compiling educe v0.6.0
    Compiling ark-ff-asm v0.5.0
@@ -43,41 +43,41 @@
    Compiling once_cell v1.21.4
    Compiling hashbrown v0.15.5
    Compiling ark-ff v0.5.0
-   Compiling serde v1.0.229
    Compiling zmij v1.0.23
+   Compiling serde v1.0.229
    Compiling hex-conservative v0.2.3
    Compiling serde_derive v1.0.229
-   Compiling ark-poly v0.5.0
    Compiling serde_json v1.0.151
+   Compiling ark-poly v0.5.0
    Compiling tinyvec v1.13.3
    Compiling thiserror v2.0.21
-   Compiling ark-ec v0.5.0
    Compiling unicode-normalization v0.1.25
+   Compiling ark-ec v0.5.0
    Compiling bitcoin_hashes v0.14.101
    Compiling hmac v0.12.1
    Compiling thiserror-impl v2.0.21
-   Compiling cpufeatures v0.2.17
    Compiling itoa v1.0.18
    Compiling keccak v0.1.6
    Compiling memchr v2.8.3
-   Compiling sha3 v0.10.9
+   Compiling cpufeatures v0.2.17
    Compiling sha2 v0.10.9
-   Compiling bip39 v2.2.2
+   Compiling sha3 v0.10.9
    Compiling hkdf v0.12.4
    Compiling ark-bls12-381 v0.5.0
+   Compiling bip39 v2.2.2
    Compiling hex v0.4.3
-   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/zether-prover)
-    Finished `release` profile [optimized] target(s) in 1m 39s
+   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/zether-prover)
+    Finished `release` profile [optimized] target(s) in 33.97s
 No files changed, compilation skipped
 
 Ran 6 tests for test/zether/ZetherProverCross.t.sol:ZetherProverCrossBls12381Test
-[PASS] test_bundleFull_compact() (gas: 20537318)
-[PASS] test_bundleNone_auditorOff() (gas: 19924590)
-[PASS] test_bundleOptional_decoyFee() (gas: 24101981)
-[PASS] test_bundleOptional_default() (gas: 23427018)
-[PASS] test_compactOptional_relayed_optOut() (gas: 20745225)
-[PASS] test_single_bundleFull() (gas: 12263662)
-Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 1.11s (5.35s CPU time)
+[PASS] test_bundleFull_compact() (gas: 20537510)
+[PASS] test_bundleNone_auditorOff() (gas: 19924542)
+[PASS] test_bundleOptional_decoyFee() (gas: 24101837)
+[PASS] test_bundleOptional_default() (gas: 23427030)
+[PASS] test_compactOptional_relayed_optOut() (gas: 20745201)
+[PASS] test_single_bundleFull() (gas: 12263602)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 878.33ms (3.92s CPU time)
 
-Ran 1 test suite in 1.11s (1.11s CPU time): 6 tests passed, 0 failed, 0 skipped (6 total tests)
+Ran 1 test suite in 879.29ms (878.33ms CPU time): 6 tests passed, 0 failed, 0 skipped (6 total tests)
 rc=0

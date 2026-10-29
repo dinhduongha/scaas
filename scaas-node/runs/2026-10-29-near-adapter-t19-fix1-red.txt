@@ -1,0 +1,73 @@
+# near-algorand T19 fix 1 node RED: action_fees_read_from_the_rpc against the T19 adapter (HEAD 43782d33; no ActionFees / fees() / no_fees: does not compile)
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib -- adapters::near::tests::action_fees_read_from_the_rpc
+error[E0422]: cannot find struct, variant or union type `ActionFees` in this scope
+    --> src/adapters/near.rs:3095:23
+     |
+3095 |         assert_eq!(f, ActionFees { receipt: 108_059_500_000, function_call: 780_000_000_000, per_byte: 47_683_715 });
+     |                       ^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find value `PINNED` in this scope
+    --> src/adapters/near.rs:3104:45
+     |
+3104 |         assert_eq!(a.fees().await.unwrap(), PINNED);
+     |                                             ^^^^^^ not found in this scope
+
+error[E0433]: cannot find type `ActionFees` in this scope
+    --> src/adapters/near.rs:3094:17
+     |
+3094 |         let f = ActionFees::from_protocol_config(&p88).unwrap();
+     |                 ^^^^^^^^^^ use of undeclared type `ActionFees`
+
+error[E0061]: this function takes 1 argument but 2 arguments were supplied
+    --> src/adapters/near.rs:3097:20
+     |
+3097 |         assert_eq!(action_fees(&f, &c), 2 * (108_059_500_000 + 780_000_000_000 + 47_683_715 * 107));
+     |                    ^^^^^^^^^^^ -- unexpected argument #1
+     |
+note: function defined here
+    --> src/adapters/near.rs:1039:8
+     |
+1039 | pub fn action_fees(call: &Call) -> u64 {
+     |        ^^^^^^^^^^^
+help: remove the extra argument
+     |
+3097 -         assert_eq!(action_fees(&f, &c), 2 * (108_059_500_000 + 780_000_000_000 + 47_683_715 * 107));
+3097 +         assert_eq!(action_fees(&c), 2 * (108_059_500_000 + 780_000_000_000 + 47_683_715 * 107));
+     |
+
+error[E0433]: cannot find type `ActionFees` in this scope
+    --> src/adapters/near.rs:3100:33
+     |
+3100 |         assert!(format!("{:#}", ActionFees::from_protocol_config(&gap).unwrap_err()).contains("function_call_cost.execution"));
+     |                                 ^^^^^^^^^^ use of undeclared type `ActionFees`
+
+error[E0599]: no method named `fees` found for struct `near::NearAdapter` in the current scope
+    --> src/adapters/near.rs:3104:22
+     |
+1424 | pub struct NearAdapter {
+     | ---------------------- method `fees` not found for this struct
+...
+3104 |         assert_eq!(a.fees().await.unwrap(), PINNED);
+     |                      ^^^^ method not found in `near::NearAdapter`
+
+error[E0599]: no method named `fees` found for struct `near::NearAdapter` in the current scope
+    --> src/adapters/near.rs:3106:11
+     |
+1424 | pub struct NearAdapter {
+     | ---------------------- method `fees` not found for this struct
+...
+3106 |         a.fees().await.unwrap();
+     |           ^^^^ method not found in `near::NearAdapter`
+
+error[E0560]: struct `near::tests::World` has no field named `no_fees`
+    --> src/adapters/near.rs:3109:38
+     |
+3109 |         let (a, _) = adapter(World { no_fees: true, ..world() }, &fee_cfg("1")).await;
+     |                                      ^^^^^^^ `near::tests::World` does not have this field
+     |
+     = note: available fields are: `genesis`, `views`, `code`, `plain`, `keyed` ... and 11 others
+
+Some errors have detailed explanations: E0061, E0422, E0425, E0433, E0560, E0599.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `scaas-node` (lib test) due to 8 previous errors
+rc=101

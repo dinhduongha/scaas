@@ -1,0 +1,55 @@
+# test.sh algorand at commit 08184a1b + the T12 tree
+== test algorand
+== build algorand
+[32minfo: [0musing puyapy version 5.10.1[0m
+[33mwarning: [0mcannot determine package root for contracts/probe.py[0m
+[33mwarning: [0mcannot determine package root for contracts/token.py[0m
+[33mwarning: [0mcannot determine package root for contracts/common.py[0m
+[33mwarning: [0mcannot determine package root for contracts/account.py[0m
+[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0mWriting out/Token.arc56.json[0m
+[32minfo: [0mWriting out/Token.approval.bin[0m
+[32minfo: [0mWriting out/Token.clear.bin[0m
+[32minfo: [0mWriting out/Probe.arc56.json[0m
+[32minfo: [0mWriting out/Probe.approval.bin[0m
+[32minfo: [0mWriting out/Probe.clear.bin[0m
+[32minfo: [0mWriting out/Account.arc56.json[0m
+[32minfo: [0mWriting out/Account.approval.bin[0m
+[32minfo: [0mWriting out/Account.clear.bin[0m
+ok artifacts.json
+ok smartcontracts/algorand/vectors/algorand-vectors.json
+
+UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
+.....UP only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+UV only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+short authData                   refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+crossOrigin true                 refused: passkey clientDataJSON (members after origin)
+topOrigin                        refused: passkey clientDataJSON (topOrigin)
+second crossOrigin               refused: passkey clientDataJSON (crossOrigin)
+member before crossOrigin        refused: passkey clientDataJSON (members after origin)
+whitespace                       refused: passkey clientDataJSON (type, challenge or origin)
+no closing brace                 refused: passkey clientDataJSON (members after origin)
+no closing brace after a member  refused: passkey clientDataJSON (members after origin)
+type create                      refused: passkey clientDataJSON (type, challenge or origin)
+type of the same length          refused: passkey clientDataJSON (type, challenge or origin)
+origin extended                  refused: passkey origin not listed
+origin prefix                    refused: passkey origin not listed
+empty origin                     refused: passkey clientDataJSON (type, challenge or origin)
+backslash in origin              refused: passkey clientDataJSON (type, challenge or origin)
+challenge of another digest      refused: passkey clientDataJSON (type, challenge or origin)
+.......
+msig mtx_add_key all-passkey n-of-n: {1: (4563, 686), 2: (7951, 1028)} (budget, args); +1 member ≈ 11339 budget > pool 10500 or args
+.
+opcode budget per signer kind (simulate): {'account mtx_set_guardian native': 2759, 'account mtx_set_guardian ed25519': 2970, 'account mtx_set_guardian secp256k1': 2412, 'account mtx_set_guardian passkey': 3702, 'account mtx_set_guardian msig 2 ed25519': 6089, 'account mtx_set_guardian msig 2 passkey': 7545, 'token mtx_pay native': 2944, 'token mtx_pay ed25519 UA': 3471, 'token mtx_pay secp256k1 UA': 2913, 'token mtx_pay passkey UA': 4207, 'token mtx_pay msig 2 passkey UA': 8050}
+pins {'account mtx_set_guardian native': 2900, 'account mtx_set_guardian ed25519': 3100, 'account mtx_set_guardian secp256k1': 2600, 'account mtx_set_guardian passkey': 3900, 'account mtx_set_guardian msig 2 ed25519': 6400, 'account mtx_set_guardian msig 2 passkey': 8000, 'token mtx_pay native': 3100, 'token mtx_pay ed25519 UA': 3700, 'token mtx_pay secp256k1 UA': 3100, 'token mtx_pay passkey UA': 4500, 'token mtx_pay msig 2 passkey UA': 8500}
+..............
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+
+MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
+................
+opcode budget used: {'mtx_pay': 2854, 'mtx_transfer': 2814, 'mtx_pay_meta': 3310, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 4 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2548, clear 4
+......
+49 passed in 20.36s
+rc=0

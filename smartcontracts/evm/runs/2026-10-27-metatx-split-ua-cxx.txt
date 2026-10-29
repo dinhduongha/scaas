@@ -1,0 +1,27 @@
+# ua-cxx at commit e3e778c7
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+-- Using the multi-header code from /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-cxx/build/_deps/json-src/include/
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-cxx/build
+[0/2] Re-checking globbed directories...
+ninja: no work to do.
+Internal ctest changing into directory: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-cxx/build
+Test project /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/ua-cxx/build
+    Start 1: table_groups_purposes_constants
+1/6 Test #1: table_groups_purposes_constants ......   Passed    0.01 sec
+    Start 2: valid_rows
+2/6 Test #2: valid_rows ...........................   Passed    0.01 sec
+    Start 3: invalid_rows
+3/6 Test #3: invalid_rows .........................   Passed    0.01 sec
+    Start 4: natives_native_space_canonical_ids
+4/6 Test #4: natives_native_space_canonical_ids ...   Passed    0.00 sec
+    Start 5: messages
+5/6 Test #5: messages .............................   Passed    0.00 sec
+    Start 6: structures
+6/6 Test #6: structures ...........................   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Total Test time (real) =   0.04 sec
+rc=0

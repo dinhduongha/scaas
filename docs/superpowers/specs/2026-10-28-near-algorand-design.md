@@ -361,6 +361,11 @@ lanes); `TODO.md`; `HANDOFF.md`.
 
 ## 11. Open items left to the builder
 
+Fixed by the vector generators (near-algorand Task 3, controller call 2026-10-28): the NEAR escrow router's `ref`
+target is `u8 len ‖ account_id bytes` (the wrapper form of §3.8); every Algorand `u16` length in `call` (§4.8) is
+big-endian. Placeholders in the generated vectors (Algorand app ids 1001–1003, `*.test.near` names, the Algorand
+method signature) are replaced by the tasks that deploy those contracts.
+
 - Exact Borsh / ARC-4 layouts within §2, private helper names, event field order, Algorand box naming (§4.1).
 - SLIP-10 paths of the lane keys — controller call 2026-10-28: fully hardened (ed25519 SLIP-10 has no
   non-hardened derivation): NEAR `m/44'/397'/0'/0'/i'`, Algorand `m/44'/283'/0'/0'/i'`; README's

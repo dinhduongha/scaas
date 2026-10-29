@@ -425,6 +425,7 @@ const natives = ua.KINDS.filter((k) => k.native).flatMap((k) => k.lengths.map((n
   return { kind: k.kind, raw: hex(raw), id: hex(nid), canonical: ua.canonicalId(hex(nid)) };
 }));
 const nativeInvalid = [[0x0001, new Uint8Array(19), 'UAKeyData'], [0x0010, new Uint8Array(31), 'UAKeyData'],
+  [0x0017, new Uint8Array(31), 'UAKeyData'], [0x0018, new Uint8Array(33), 'UAKeyData'],
   [0x0101, new Uint8Array(32), 'UAKindNotNative'], [0x0109, new Uint8Array(32), 'UAKindUnknown']].map(([kind, raw, error]) => {
   try { ua.nativeId(kind, raw); } catch (e) { assert(e.code === error, `nativeId 0x${kind.toString(16)}: ${e.message}`); return { kind, raw: hex(raw), error }; }
   throw new Error(`nativeId 0x${kind.toString(16)} accepted`);

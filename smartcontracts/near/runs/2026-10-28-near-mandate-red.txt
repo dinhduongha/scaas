@@ -1,0 +1,76 @@
+# cargo test -p scaas-near-integration --test mandate (Task 7 RED: types only, no entries) at commit 25f98847 + the Task 7 tests
+   Compiling scaas-near-common v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/common)
+   Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+   Compiling scaas-near-spike-p256 v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/spike-p256)
+   Compiling scaas-near-integration v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/integration)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.93s
+     Running tests/mandate.rs (target/debug/deps/mandate-a504f182bf5ef0bc)
+
+running 8 tests
+test revoked_refused_then_funds_back ... FAILED
+test per_payment_and_per_period_exceeded_refused ... FAILED
+test expired_refused ... FAILED
+test mandate_has_no_pay_meta_entry ... FAILED
+test wrong_payee_refused ... FAILED
+test mandate_pay_within_limits ... FAILED
+test open_funding_equals_op_amount ... FAILED
+test pay_ref_once_per_mandate ... FAILED
+
+failures:
+
+---- revoked_refused_then_funds_back stdout ----
+
+thread 'revoked_refused_then_funds_back' (632019) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 29, block_hash: VgscrgBL6pdaZLTmrn9ZACRkuEJAXaLCnTpvuaNNVVf })) } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- per_payment_and_per_period_exceeded_refused stdout ----
+
+thread 'per_payment_and_per_period_exceeded_refused' (632018) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 30, block_hash: 7Abnc3TjqfkiAX55cpXZVcGFiwan9UZ6HyPJuknvxWXJ })) } }
+
+---- expired_refused stdout ----
+
+thread 'expired_refused' (632013) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 30, block_hash: 38GpWBAd6NrxS4x9Br8mer4y3BzCdRSZj1VDTPStW5wP })) } }
+
+---- mandate_has_no_pay_meta_entry stdout ----
+
+thread 'mandate_has_no_pay_meta_entry' (632014) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 32, block_hash: GN4VaLrpv2D7jFJr6v3SGofYRjQpBm2rS19vGJ7i4eCV })) } }
+
+---- wrong_payee_refused stdout ----
+
+thread 'wrong_payee_refused' (632020) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 32, block_hash: J4pXqZJzYWot6W2pGbHknaMng3jW5PZCEzts6LzBDTQG })) } }
+
+---- mandate_pay_within_limits stdout ----
+
+thread 'mandate_pay_within_limits' (632015) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 35, block_hash: AWNDcWxE8KUty34ajUyLWnctAZF2tHpa6TKhGK5eBTPs })) } }
+
+---- open_funding_equals_op_amount stdout ----
+
+thread 'open_funding_equals_op_amount' (632016) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 39, block_hash: 37aq13KL398Ffy1skP3V2v3dKYeCe4aiA7u6xjLudSiq })) } }
+
+---- pay_ref_once_per_mandate stdout ----
+
+thread 'pay_ref_once_per_mandate' (632017) panicked at integration/tests/common/mod.rs:160:69:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 45, block_hash: HVdPsQDwVnQA6Tq4j43aTsRqw5UAxh58LdY55gNyqEZB })) } }
+
+
+failures:
+    expired_refused
+    mandate_has_no_pay_meta_entry
+    mandate_pay_within_limits
+    open_funding_equals_op_amount
+    pay_ref_once_per_mandate
+    per_payment_and_per_period_exceeded_refused
+    revoked_refused_then_funds_back
+    wrong_payee_refused
+
+test result: FAILED. 0 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.30s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test mandate`
+rc=101

@@ -1,0 +1,47 @@
+# scaas-node final-fix RED: near.rs at be63179a + the new / updated tests only
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.90s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 4 tests
+test adapters::near::tests::never_pay_any_carried_payee ... FAILED
+test adapters::near::tests::start_check_dex_executor_mismatch_errors ... FAILED
+test adapters::near::tests::dex_lane_bound_order_via_router ... FAILED
+test adapters::near::tests::dex_deposit_floor_covers_the_larger_leg_twice ... FAILED
+
+failures:
+
+---- adapters::near::tests::never_pay_any_carried_payee stdout ----
+
+thread 'adapters::near::tests::never_pay_any_carried_payee' (948362) panicked at src/adapters/near.rs:4217:54:
+plain pay to dex.test.near: Ok(Pay)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapters::near::tests::start_check_dex_executor_mismatch_errors stdout ----
+
+thread 'adapters::near::tests::start_check_dex_executor_mismatch_errors' (948363) panicked at src/adapters/near.rs:4279:55:
+called `Result::unwrap_err()` on an `Ok` value: ()
+
+---- adapters::near::tests::dex_lane_bound_order_via_router stdout ----
+
+thread 'adapters::near::tests::dex_lane_bound_order_via_router' (948361) panicked at src/adapters/near.rs:4266:9:
+bound to this lane
+
+---- adapters::near::tests::dex_deposit_floor_covers_the_larger_leg_twice stdout ----
+
+thread 'adapters::near::tests::dex_deposit_floor_covers_the_larger_leg_twice' (948360) panicked at src/adapters/near.rs:3903:13:
+assertion `left == right` failed: 50120000000000000000002
+  left: 6120000000000000000102
+ right: 50120000000000000000002
+
+
+failures:
+    adapters::near::tests::dex_deposit_floor_covers_the_larger_leg_twice
+    adapters::near::tests::dex_lane_bound_order_via_router
+    adapters::near::tests::never_pay_any_carried_payee
+    adapters::near::tests::start_check_dex_executor_mismatch_errors
+
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 425 filtered out; finished in 0.07s
+
+error: test failed, to rerun pass `--lib`
+rc=101

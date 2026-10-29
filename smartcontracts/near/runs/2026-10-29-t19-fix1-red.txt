@@ -1,0 +1,301 @@
+# near-algorand T19 fix 1 RED: setup()'s relayer is an implicit account, IMPLICIT_TRANSFER_GAS a 0 Tgas placeholder, contract pins unchanged (wasm = HEAD 43782d33)
+# cd smartcontracts/near && ../../scripts/capped cargo test -j2 --no-fail-fast -p scaas-near-integration --test relay_router --test dex --test metatx -- --test-threads=1
+warning: unused `near_workspaces::result::ExecutionFinalResult` that must be used
+   --> integration/tests/relay_router.rs:855:5
+    |
+855 |     st.await.unwrap();
+    |     ^^^^^^^^^^^^^^^^^
+    |
+    = note: use `into_result()` to handle potential execution errors
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+855 |     let _ = st.await.unwrap();
+    |     +++++++
+
+warning: `scaas-near-integration` (test "relay_router") generated 1 warning
+warning: unused import: `json`
+  --> integration/tests/metatx.rs:10:18
+   |
+10 | use serde_json::{json, Value};
+   |                  ^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `scaas-near-integration` (test "metatx") generated 1 warning (run `cargo fix --test "metatx" -p scaas-near-integration` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running tests/dex.rs (target/debug/deps/dex-b86fb624492a65c3)
+
+running 16 tests
+test cancel_filled_order_refused ... ok
+test leg_called_by_non_dex_refused ... ok
+test leg_settle_view_tracks_the_index ... ok
+test min_nonce_cap_refused ... ok
+test no_partial_fill ... ok
+test one_leg_fails_other_refunded ... ok
+test order_relayer_mismatch_refused ... ok
+test refund_before_expiry_refused ... ok
+test refund_expired_after_lost_callback ... FAILED
+test settle_deposit_short_refused ... ok
+test settle_gas_pin ... FAILED
+test settle_leg_shape_refused ... ok
+test settle_msig_leg_gas_limit ... ok
+test settle_passkey_field_cap_refused ... ok
+test settle_pays_both_legs ... ok
+test settle_short_gas_refused ... FAILED
+
+failures:
+
+---- refund_expired_after_lost_callback stdout ----
+settle by 6e4d287f327b9903d9214a182f6476f42405d5c9e7b00b818d7f4748dd175078: 79.474 Tgas, ok true
+refund_expired by dev-20261029101832-72699623157336.test.near: 10.122 Tgas, ok true
+  receipt dev-20261029101833-53049033425325.test.near 2.508 Tgas None
+  receipt dev-20261029101830-91540227226294.test.near 1.672 Tgas None
+  receipt dev-20261029101832-72699623157336.test.near 0.223 Tgas None
+  receipt dev-20261029101832-14162887912084.test.near 1.672 Tgas None
+  receipt dev-20261029101832-72699623157336.test.near 0.223 Tgas None
+  receipt dev-20261029101833-53049033425325.test.near 3.289 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"match_failed\",\"data\":{\"settle_id\":\"0x5c1783467b33bd181b197de8d3fdf2f0eef8b11f6ba5686636d16d5447a43e84\",\"legs\":[\"0x260b63cac026aa1b804ff508c04d5e710993deeb0c61584aed12ee3cf8f26fb0\",\"0xac8fc0c3ed58f3347ea11bcbf1dfeb5fcede562068f9a4d02d955e1d7d84de2e\"],\"refunded\":[\"0x260b63cac026aa1b804ff508c04d5e710993deeb0c61584aed12ee3cf8f26fb0\",\"0xac8fc0c3ed58f3347ea11bcbf1dfeb5fcede562068f9a4d02d955e1d7d84de2e\"]}}")
+  receipt dev-20261029101832-72699623157336.test.near 0.223 Tgas None
+
+thread 'refund_expired_after_lost_callback' (648740) panicked at integration/tests/dex.rs:515:5:
+assertion `left == right` failed: both sellers refunded
+  left: (0, 0)
+ right: (100, 60)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- settle_gas_pin stdout ----
+settle by 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f: 120.177 Tgas, ok true
+  receipt dev-20261029101847-35256445727321.test.near 3.242 Tgas None
+  receipt dev-20261029101845-79487411212522.test.near 24.449 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0xe1942f44408ab0ae3f58968bbac3e4c0ac7450ed329e48f65a7a9a72ad836566\",\"dex\":\"dev-20261029101847-35256445727321.test.near\",\"lane\":\"0xa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0\",\"nonce\":0,\"amount\":\"100\",\"digest\":\"0x9d38988f0bb242229a65ff0726b0ffdb7e3ccf16d5229aca0c4e89295a02875c\"}}")
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+  receipt dev-20261029101846-61111515885110.test.near 24.441 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0x7dfa29c49e3677bab639fc36f9b4515d71c98173942468614353fd6ac57e1b6f\",\"dex\":\"dev-20261029101847-35256445727321.test.near\",\"lane\":\"0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0\",\"nonce\":0,\"amount\":\"60\",\"digest\":\"0xb16729f66d6b9e315ca8eed49bb845b526aa1ff81bff75e738bffb29f4947e86\"}}")
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+  receipt dev-20261029101847-35256445727321.test.near 2.427 Tgas Some("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"matched\",\"data\":{\"settle_id\":\"0x9c5b175668008139ef9de69bd5ad523a9da39e79024dab965cc1657e6f735ca1\",\"legs\":[\"0x9d38988f0bb242229a65ff0726b0ffdb7e3ccf16d5229aca0c4e89295a02875c\",\"0xb16729f66d6b9e315ca8eed49bb845b526aa1ff81bff75e738bffb29f4947e86\"]}}")
+  receipt dev-20261029101845-79487411212522.test.near 2.516 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029101847-35256445727321.test.near\",\"new_owner_id\":\"dev-20261029101845-79487411212522.test.near\",\"amount\":\"100\"}]}")
+  receipt dev-20261029101846-61111515885110.test.near 2.520 Tgas Some("EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029101847-35256445727321.test.near\",\"new_owner_id\":\"dev-20261029101846-61111515885110.test.near\",\"amount\":\"60\"}]}")
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+  receipt 1a03b65e23c9eeb729341e25fa7d43471663eb643767b484d31838eb8723e35f 7.525 Tgas None
+settle_gas_pin: total 120.177 Tgas (pin 90, prepaid 89 Tgas); legs [24.449112804984, 24.441028120095]; on_legs 2.427; payouts [2.5160318062, 2.519848062302]
+
+thread 'settle_gas_pin' (659180) panicked at integration/tests/dex.rs:734:5:
+settle 120.17733696055 Tgas > pin 90 / 1.2
+
+---- settle_short_gas_refused stdout ----
+settle by a3786e3d2110c0993e248965402df7d393873e587af97c9535b0673263028bb8: 16.736 Tgas, ok false
+settle by a3786e3d2110c0993e248965402df7d393873e587af97c9535b0673263028bb8: 36.700 Tgas, ok true
+
+thread 'settle_short_gas_refused' (685970) panicked at integration/tests/dex.rs:694:5:
+[ExecutionOutcome { transaction_hash: 3DcWqE7ML171FYV6iBiNgG68zSLgt5sZZ7twzKTnEDdg, block_hash: Ecd5ct7iBjGvM7KTfiffBnhFRZZbRFeFGSsy8UMSWNb3, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"0x614856bc83c4a19363c308cacf34d87491e1444e7017129547626392bba51f53\",\"dex\":\"dev-20261029101924-76765249981801.test.near\",\"lane\":\"0xa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0\",\"nonce\":0,\"amount\":\"100\",\"digest\":\"0xc21d029c8318d300c91dfbcc17ce23f5a2a58346399295ce151530116651f55a\"}}", "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029101922-19033670202733.test.near\",\"new_owner_id\":\"dev-20261029101924-76765249981801.test.near\",\"amount\":\"100\"}]}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0x614856bc83c4a19363c308cacf34d87491e1444e7017129547626392bba51f53\",\"to\":\"dev-20261029101924-76765249981801.test.near\",\"amount\":\"100\"}}"], receipt_ids: [4YGUc2x57rRHtHZJng9gftWoQ4uUiJ5QKL5WewbW48Kq, EBqXtZKfqmciEYFsAmCipjo8o9ncoC39sdBSWJipPajZ], gas_burnt: NearGas { inner: 4372172314070 }, tokens_burnt: NearToken { inner: 437217231407000000000 }, executor_id: AccountId("dev-20261029101922-19033670202733.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }, ExecutionOutcome { transaction_hash: CSA7n9cNQ7mUgJMWZLrsNFMZAtz4Va7nw7ohiJ624jKP, block_hash: Ecd5ct7iBjGvM7KTfiffBnhFRZZbRFeFGSsy8UMSWNb3, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"order_filled\",\"data\":{\"from\":\"dev-20261029101923-60484817894400.test.near\",\"dex\":\"dev-20261029101924-76765249981801.test.near\",\"lane\":\"0xb0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0\",\"nonce\":0,\"amount\":\"60\",\"digest\":\"0xa3aa5527322374a38e78de615d09eeeb591f3b882964c3fae78a9970c32a90a3\"}}", "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029101923-60484817894400.test.near\",\"new_owner_id\":\"dev-20261029101924-76765249981801.test.near\",\"amount\":\"60\"}]}"], receipt_ids: [D2uWjaXjYQc8ySuyY3kXBwAVDeq7tYFCHWUowh7hmBi8, GXkGccCYaKiCBiouF2VHVseK2Bd5rYmZUE2pM2p1XyDv], gas_burnt: NearGas { inner: 4037485967783 }, tokens_burnt: NearToken { inner: 403748596778300000000 }, executor_id: AccountId("dev-20261029101923-50661507799634.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+
+
+failures:
+    refund_expired_after_lost_callback
+    settle_gas_pin
+    settle_short_gas_refused
+
+test result: FAILED. 13 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 123.60s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test dex`
+     Running tests/metatx.rs (target/debug/deps/metatx-bfd6c309da566217)
+
+running 13 tests
+test batch_of_actions_atomic ... ok
+test implicit_relayer_refund_within_job_gas ... FAILED
+test near_check_storage_needed_is_exact ... ok
+test near_pay_meta_mismatch_and_replay ... ok
+test near_valid_until_is_seconds ... ok
+test near_wrapper_bound_pay_refused_direct ... ok
+test pay_meta_emits_meta_then_settled ... ok
+test pay_meta_size_bound_measured ... FAILED
+test pay_once_per_lane ... ok
+test pay_to_token_itself_refused ... ok
+test policy_passkey_for_value ... ok
+test relayer_bound_to_predecessor ... ok
+test transfer_to_unregistered_native_registers_from_deposit ... ok
+
+failures:
+
+---- implicit_relayer_refund_within_job_gas stdout ----
+  receipt dev-20261029101932-49829185856879.test.near 4.372 Tgas false
+  receipt 8a2de037f3828d7297e0dc1813415fcecf97b8712a65ecaaf02993ccbcefb760 7.525 Tgas true
+  receipt 8a2de037f3828d7297e0dc1813415fcecf97b8712a65ecaaf02993ccbcefb760 7.525 Tgas true
+
+thread 'implicit_relayer_refund_within_job_gas' (695938) panicked at integration/tests/metatx.rs:461:5:
+[ExecutionOutcome { transaction_hash: 3KPN8GQW19hq6gzDUsFjqjkwVswejdLmPdvrYxRKKBwX, block_hash: E5NQckt9ThS9k7gUv4muGS3NpR9q6TQx39Y6pih1ceAo, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xf2dc8514d352fa55c62159b6ba07f1911635f15bfb76a1caffb7c2b25d3025c9\",\"relayer\":\"8a2de037f3828d7297e0dc1813415fcecf97b8712a65ecaaf02993ccbcefb760\",\"lane\":\"0xa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5\",\"nonce\":0,\"digest\":\"0xabb714c1ea84de0b10a53107c6dd99d91a48df33037cc2557eb494fbe368a7b3\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xf2dc8514d352fa55c62159b6ba07f1911635f15bfb76a1caffb7c2b25d3025c9\",\"to\":\"0x6a5b0b88bdd63108b6dfeb11bbe15b85e34aeb386e619d5585061db4d0d0459e\",\"amount\":\"10\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"payment_settled\",\"data\":{\"from\":\"0xf2dc8514d352fa55c62159b6ba07f1911635f15bfb76a1caffb7c2b25d3025c9\",\"to\":\"0x6a5b0b88bdd63108b6dfeb11bbe15b85e34aeb386e619d5585061db4d0d0459e\",\"amount\":\"10\",\"pay_ref\":\"0x0101010101010101010101010101010101010101010101010101010101010101\"}}"], receipt_ids: [8a11CWE2i4SYMVK2Mid8FFahpAeDQUsX9Uv1TKCJ1TY3, ELA8Z4R9WTrCotTC6PSSafo4hopzRaTanHiF5Zopwv5p], gas_burnt: NearGas { inner: 4371656068124 }, tokens_burnt: NearToken { inner: 437165606812400000000 }, executor_id: AccountId("dev-20261029101932-49829185856879.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- pay_meta_size_bound_measured stdout ----
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 28.535 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 16.263 Tgas, ok true
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 26.872 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 31.241 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 31.228 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 16.358 Tgas, ok true
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 16.518 Tgas, ok true
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 31.148 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 31.218 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 31.199 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 31.188 Tgas, ok false
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 16.524 Tgas, ok true
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 16.525 Tgas, ok true
+mtx_pay_meta by a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6: 16.527 Tgas, ok true
+largest meta that settles: 7530 B; 7531 B fails: [ExecutionOutcome { transaction_hash: 3d5TstNaCRaSSz54oVXDwEEaTGRrizAdAH7DKnihFf5r, block_hash: 6HiTyzntd1aRpJfCD1ixxasJ3dJzqvTqoA95yKQ3ptwG, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"payment_meta\",\"data\":{\"pay_ref\":\"0x4557af7e4bbbc658734e34a2e050d8248fa458b7315abb52bc4e3684e2f0abf0\",\"meta\":\"0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0x614856bc83c4a19363c308cacf34d87491e1444e7017129547626392bba51f53\",\"relayer\":\"a80c742bb378457ecf597f3d6e3f78586f04e332a9e4890c96d98fe2bd863ef6\",\"lane\":\"0xced05c696e3e3da308c4eca9c1ac3e95810264449231edb7a89b5322147cc2fc\",\"nonce\":0,\"digest\":\"0xe9ffe8c086abbe1adaa9570c705be4c3b467365175f66ee0784dfef44a91e6a6\"}}", "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261029102015-26585650684015.test.near\",\"new_owner_id\":\"dev-20261029102017-15716153266426.test.near\",\"amount\":\"1\"}]}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0x614856bc83c4a19363c308cacf34d87491e1444e7017129547626392bba51f53\",\"to\":\"dev-20261029102017-15716153266426.test.near\",\"amount\":\"1\"}}"], receipt_ids: [5Fr1xwtDWuLFDRmpSHdUKQerHgbLH8SimDvuA4WmcvPz, RtUb82sVUBf6KsqRVxXXRFXAswuxDsw64hLxdjULs4M], gas_burnt: NearGas { inner: 15450193559666 }, tokens_burnt: NearToken { inner: 1545019355966600000000 }, executor_id: AccountId("dev-20261029102015-26585650684015.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("The length of a log message 16386 exceeds the limit 16384")) })) }]
+
+thread 'pay_meta_size_bound_measured' (731146) panicked at integration/tests/metatx.rs:432:5:
+assertion `left == right` failed
+  left: 7530
+ right: 7540
+
+
+failures:
+    implicit_relayer_refund_within_job_gas
+    pay_meta_size_bound_measured
+
+test result: FAILED. 11 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 87.56s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test metatx`
+     Running tests/relay_router.rs (target/debug/deps/relay_router-e10e18e86f2ded48)
+
+running 20 tests
+test executor_holds_only_its_stake_after_each_branch ... FAILED
+test forwarded_call_cannot_spend_router_bound_payment ... FAILED
+test gas_pins_hold ... FAILED
+test hold_failure_clears_pending ... FAILED
+test near_router_bound_pay_refused_direct ... ok
+test near_router_release_to_unregistered_payee ... FAILED
+test payee_executor_refused ... ok
+test pending_empty_and_router_balance_unchanged_after_each_branch ... FAILED
+test refund_on_missing_code ... FAILED
+test refund_on_target_panic ... FAILED
+test relay_shape_and_salt_refused ... ok
+test release_and_refund_exclusive ... FAILED
+test release_on_success ... FAILED
+test short_deposit_refused ... FAILED
+test short_prepaid_gas_refused ... ok
+test target_deposit_forwarded_and_returned_on_failure ... FAILED
+test target_router_or_executor_refused ... ok
+test target_success_with_failing_child_releases ... FAILED
+test timeout_refund_refused_before_deadline ... FAILED
+test timeout_refunds_after_deadline ... FAILED
+
+failures:
+
+---- executor_holds_only_its_stake_after_each_branch stdout ----
+relay ok by 4c6cb53e0df9270e153d24fd4406ef499d806d892abb9a81e970f24910e35e13: 39.214 Tgas, ok true
+
+thread 'executor_holds_only_its_stake_after_each_branch' (762458) panicked at integration/tests/relay_router.rs:599:9:
+ok: [ExecutionOutcome { transaction_hash: HmtuaFuoejDzt3Gc5Ae4e83sbjmSiq8Fz1h2BRx5wVWn, block_hash: FPw7j8iRBwdK7hUWkyj4ZKKs8HWMe1dKiXF7kwsHzSRU, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xf27e1420509aaf339278e73d7df48a588e9a3860999374c2e78bce4b4b18cfaf\",\"relayer\":\"dev-20261029102058-64180048994241.test.near\",\"lane\":\"0x8ed8aade03dbe215bf286c915d5de7c81f822bd11c7c870b9abdac2d880c578c\",\"nonce\":0,\"digest\":\"0xe55bab22381abfbbff53ba862f41162605c81812ec4ee097788f3d40bd6e3ed5\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xf27e1420509aaf339278e73d7df48a588e9a3860999374c2e78bce4b4b18cfaf\",\"to\":\"dev-20261029102056-73904695058158.test.near\",\"amount\":\"10\"}}"], receipt_ids: [GfxkqedWboppKZfnsnZzPoR5HtuHyQAtQhe7vcSeYbU8, 9VfVUtu8p32njyhHDoojSviqn97gx2tFuuahSm1F2kk4], gas_burnt: NearGas { inner: 4057890911409 }, tokens_burnt: NearToken { inner: 405789091140900000000 }, executor_id: AccountId("dev-20261029102056-73904695058158.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- forwarded_call_cannot_spend_router_bound_payment stdout ----
+relay relay_hold by 27aec5166a8b3cd847541219c80dea539283d2bb77cd6bc6e7acf0fb17533d4b: 39.245 Tgas, ok true
+
+thread 'forwarded_call_cannot_spend_router_bound_payment' (767512) panicked at integration/tests/relay_router.rs:748:5:
+["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"relayer\":\"dev-20261029102104-85821868833749.test.near\",\"lane\":\"0x2371720a812f423dcaf183ba2d98bbb55b0b9b0d228de5dda2dcacdb16560d79\",\"nonce\":0,\"digest\":\"0xcc2b2c00c973bcac25b5ee45766e74c012299d7b0cc084a5f34b1135ac723cda\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"to\":\"dev-20261029102101-78543344175906.test.near\",\"amount\":\"10\"}}"]
+
+---- gas_pins_hold stdout ----
+relay ok by 1de72170b5c6ed4a726de4850b3f90df9824ebada585744f8f635750c89eb1b6: 39.214 Tgas, ok true
+
+thread 'gas_pins_hold' (772570) panicked at integration/tests/relay_router.rs:825:9:
+[ExecutionOutcome { transaction_hash: 8cMJSLceupjTzHxSK6Thjq4AEJ67TT41cQgQwagHCvC5, block_hash: FoZSdT611aPZtnefSCDxnDnsZdQHXkuub3Ce9Vq9oUnz, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xb36df29a6c8484efb2f8ec9d4367d10bcae9e23e44c642bb09a1785241edda90\",\"relayer\":\"dev-20261029102110-53908143065430.test.near\",\"lane\":\"0x004e2f60e17b1aa265485cb2f52d141ac34ec83c34f264bc5ac0e9babb9d2ad6\",\"nonce\":0,\"digest\":\"0x2f7e59ba0e34bb65e804a8e321fae49fde6dc0d8a429f5efbc82968a641a50e7\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xb36df29a6c8484efb2f8ec9d4367d10bcae9e23e44c642bb09a1785241edda90\",\"to\":\"dev-20261029102108-43207811097174.test.near\",\"amount\":\"10\"}}"], receipt_ids: [AHLkg3Bid1C7dJt6yugBM3pH76BAxny3vohtWzXWbTCA, 5Tw9Npruc8sTZo9fMBT8edMc62yLNkV9U5hHAf2YPBhu], gas_burnt: NearGas { inner: 4058132801673 }, tokens_burnt: NearToken { inner: 405813280167300000000 }, executor_id: AccountId("dev-20261029102108-43207811097174.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+
+---- hold_failure_clears_pending stdout ----
+relay ok by 9b9cbb1919fa64dc60840fc2879095183dee7fe0fddc803624ba39e270f50024: 38.247 Tgas, ok true
+
+thread 'hold_failure_clears_pending' (777609) panicked at integration/tests/relay_router.rs:264:9:
+router balance moved 11250000000000000000002 yocto (gas reward ≤ 134384616350220000000)
+
+---- near_router_release_to_unregistered_payee stdout ----
+relay ok by 41a90d94414ba49ccae2e9893f80311c62c9752eb98bf9a18f512386f849f900: 39.204 Tgas, ok true
+
+thread 'near_router_release_to_unregistered_payee' (787649) panicked at integration/tests/relay_router.rs:781:5:
+[ExecutionOutcome { transaction_hash: 6u67kqtS5Y58vWhXJKHRm8EWBfauMxVp4dyqrchYud2X, block_hash: B2ZucCphKEBsSMtsi695PAhB5j7x7dnCZhcNHyd4xbhn, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"relayer\":\"dev-20261029102129-65301898131845.test.near\",\"lane\":\"0x5be05b046b625855be0624d09f49d205f96051251dc650bd76c3875fb38a088a\",\"nonce\":0,\"digest\":\"0x071d557c09aea1659da9fcb58db197fcf32e26f2bc4a4293551052770f9149b1\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"to\":\"dev-20261029102126-52779582787200.test.near\",\"amount\":\"10\"}}"], receipt_ids: [DnGHAy2QizRFmuoZ69bCqpTkMeKJAa24khySSX92mSLV, EUsrSeggRRc9w9ne6UcGpzWnMnxNKZDRPjAXypLNhoXF], gas_burnt: NearGas { inner: 4060237790565 }, tokens_burnt: NearToken { inner: 406023779056500000000 }, executor_id: AccountId("dev-20261029102126-52779582787200.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+
+---- pending_empty_and_router_balance_unchanged_after_each_branch stdout ----
+relay ok by dee766435762b729b5d54f2b885e46693e86f58d11162e9d72ee2cf002bb3c02: 39.204 Tgas, ok true
+
+thread 'pending_empty_and_router_balance_unchanged_after_each_branch' (797625) panicked at integration/tests/relay_router.rs:599:9:
+ok: [ExecutionOutcome { transaction_hash: HUwfTUtc5voK8PBKpfwd1hpZUcpk9fdrnmGa2quxam6r, block_hash: 9HWvcVppkN7wsYHiF48rfxGUxFBmurf9SNMAwqoyfvC7, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xf27e1420509aaf339278e73d7df48a588e9a3860999374c2e78bce4b4b18cfaf\",\"relayer\":\"dev-20261029102140-89305124279442.test.near\",\"lane\":\"0x13e75269b111785e2b42c57b8d3867d7725e1c2fcfdf0e1fda1b1a1cb5e16be3\",\"nonce\":0,\"digest\":\"0xd1ff17c6e52a10b89b1d9c6d67ba7513e9a737235f2fb1885f894879dd2c447a\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xf27e1420509aaf339278e73d7df48a588e9a3860999374c2e78bce4b4b18cfaf\",\"to\":\"dev-20261029102137-59287325762089.test.near\",\"amount\":\"10\"}}"], receipt_ids: [EP2fn5GTww77zoocpWCHSCW9Fr1PJCUqskJkCLmsc5C1, EZqtj1Nw8uKKYAubfJviNme6Nj2f2qZC3SXsr2EgJ8hQ], gas_burnt: NearGas { inner: 4066770666657 }, tokens_burnt: NearToken { inner: 406677066665700000000 }, executor_id: AccountId("dev-20261029102137-59287325762089.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+
+---- refund_on_missing_code stdout ----
+relay anything by a6fc1a1e0109ba5d195fa99c46df2345d84c11f348ac041ab7de0ccef1b0fd3e: 39.214 Tgas, ok true
+
+thread 'refund_on_missing_code' (802633) panicked at integration/tests/relay_router.rs:264:9:
+router balance moved 8170000000000000000002 yocto (gas reward ≤ 134939914823280000000)
+
+---- refund_on_target_panic stdout ----
+relay fail by 6471a762813881ad440a84796d127138c0c061e3ba3531abcac882faa666d0ec: 39.214 Tgas, ok true
+
+thread 'refund_on_target_panic' (807667) panicked at integration/tests/relay_router.rs:385:5:
+the target failed: [ExecutionOutcome { transaction_hash: 22dE5i1Yz7CYL5X8cQ81sadNpWsRgJA9LYHgfZVFDLgv, block_hash: 6vLSeizB4TRxX6Zqa1E4LWKskcRGosmcTTq9XWjiPij6, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"relayer\":\"dev-20261029102151-53172918470081.test.near\",\"lane\":\"0xdfa57b2a43a5eb734b51f4787f50dad7422af97cb5cf9652f7eaa22523598956\",\"nonce\":0,\"digest\":\"0x463d64aade8b6c3c529e2d8d74d9fdfd4dec9125fdf25b35e52747d33984de2f\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"to\":\"dev-20261029102148-39079414091836.test.near\",\"amount\":\"10\"}}"], receipt_ids: [4F5FP5f63UH98mYPR1o31v7fxguUD7SoF9Faj4rjXvCy, HM8Dhi4mad1wHjaATcEu4Dw3Z7sZHrKGxuBMcaK9cWo7], gas_burnt: NearGas { inner: 4057712373357 }, tokens_burnt: NearToken { inner: 405771237335700000000 }, executor_id: AccountId("dev-20261029102148-39079414091836.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+
+---- release_and_refund_exclusive stdout ----
+
+thread 'release_and_refund_exclusive' (819287) panicked at integration/tests/relay_router.rs:302:9:
+the call never got in flight
+
+---- release_on_success stdout ----
+relay ok by dff6ce4f04b1b298c7960c7a922c3b2b2bf3488489830608123e421954692f0e: 39.214 Tgas, ok true
+
+thread 'release_on_success' (832734) panicked at integration/tests/relay_router.rs:347:5:
+[ExecutionOutcome { transaction_hash: CWsEFNGQwMuQ4vAgapppxzSL33wKJpMxmnhywfP11n57, block_hash: 6dDBpzJXrsSvpEhddnDGf4Zpheaf5ovMkxEk3zohGawA, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"relayer\":\"dev-20261029102244-70478308976812.test.near\",\"lane\":\"0xa8970f29c27de348d5ecfdc4cf57584c08f309a048b0692b8b58721c9dc393a7\",\"nonce\":0,\"digest\":\"0xc65d5564534378ae2d0a43c7eec07ffe31848ccb3ed2d7dbd1214ae0a99670ac\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"to\":\"dev-20261029102242-27709835693958.test.near\",\"amount\":\"10\"}}"], receipt_ids: [DTE8HBFGqpeva2Tnz66d2quzL43KQ2uGvRCTahaJxciH, 59XQ3tiZRkV1Xk6aibUQMXEhibteXMEj3JoVpi3YZeFo], gas_burnt: NearGas { inner: 4058012679297 }, tokens_burnt: NearToken { inner: 405801267929700000000 }, executor_id: AccountId("dev-20261029102242-27709835693958.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+
+---- short_deposit_refused stdout ----
+relay ok by 8ac2a8932b1f01addcded512dac3227ee59513501b89551fd7645dc5d1ecf1d7: 16.682 Tgas, ok false
+relay ok by 8ac2a8932b1f01addcded512dac3227ee59513501b89551fd7645dc5d1ecf1d7: 38.381 Tgas, ok true
+
+thread 'short_deposit_refused' (837656) panicked at integration/tests/relay_router.rs:264:9:
+router balance moved 1250000000000000000002 yocto (gas reward ≤ 134382987293340000000)
+
+---- target_deposit_forwarded_and_returned_on_failure stdout ----
+relay ok by 4c2fbb77a87335b815ad770855c1f479e057c540c3e34263585a4d921cf9be85: 39.214 Tgas, ok true
+
+thread 'target_deposit_forwarded_and_returned_on_failure' (847789) panicked at integration/tests/relay_router.rs:630:5:
+assertion failed: out.is_success() && final_bool(&out)
+
+---- target_success_with_failing_child_releases stdout ----
+relay spawn_fail by f5719368dd90436bb37ddf744339ccd338631c702448eb05de2a218a8f3aa634: 39.196 Tgas, ok true
+
+thread 'target_success_with_failing_child_releases' (856709) panicked at integration/tests/relay_router.rs:415:9:
+spawn_fail: [ExecutionOutcome { transaction_hash: DBnyftiApa4igAqbewkp5Tx4C78N2d1s1kv3ofT57iBD, block_hash: 94MoaLENtEqf6LnxHQK8Nsd8kXkfs9eRna8qRqmRLCxc, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"relayer\":\"dev-20261029102318-40937597274222.test.near\",\"lane\":\"0x59dea7f962d4ff08d285d78fe02d74968ba142d139dfcaa4d79c852a5f5b0e6c\",\"nonce\":0,\"digest\":\"0xb076b12f8e9ee5fb21cac45255ee89c80872d48b91874c41fbde39f9e5908b7e\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xcd72ddbe70d2126f432e7f897dbf305b9c2087f115de29103c6fa7970aa84de5\",\"to\":\"dev-20261029102313-76288643298595.test.near\",\"amount\":\"10\"}}"], receipt_ids: [8UrE8bVspA3ZAtPEwdbsPmLZC19AxEcNqugPDKya2Cuu, w9bSdwuRknBuMYstKo8MrASjRuDDYBtoHGasrLwX82q], gas_burnt: NearGas { inner: 4057952618109 }, tokens_burnt: NearToken { inner: 405795261810900000000 }, executor_id: AccountId("dev-20261029102313-76288643298595.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("Exceeded the prepaid gas.")) })) }]
+
+---- timeout_refund_refused_before_deadline stdout ----
+
+thread 'timeout_refund_refused_before_deadline' (860670) panicked at integration/tests/relay_router.rs:302:9:
+the call never got in flight
+
+---- timeout_refunds_after_deadline stdout ----
+
+thread 'timeout_refunds_after_deadline' (874234) panicked at integration/tests/relay_router.rs:302:9:
+the call never got in flight
+
+
+failures:
+    executor_holds_only_its_stake_after_each_branch
+    forwarded_call_cannot_spend_router_bound_payment
+    gas_pins_hold
+    hold_failure_clears_pending
+    near_router_release_to_unregistered_payee
+    pending_empty_and_router_balance_unchanged_after_each_branch
+    refund_on_missing_code
+    refund_on_target_panic
+    release_and_refund_exclusive
+    release_on_success
+    short_deposit_refused
+    target_deposit_forwarded_and_returned_on_failure
+    target_success_with_failing_child_releases
+    timeout_refund_refused_before_deadline
+    timeout_refunds_after_deadline
+
+test result: FAILED. 5 passed; 15 failed; 0 ignored; 0 measured; 0 filtered out; finished in 219.56s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test relay_router`
+error: 3 targets failed:
+    `-p scaas-near-integration --test dex`
+    `-p scaas-near-integration --test metatx`
+    `-p scaas-near-integration --test relay_router`
+rc=101

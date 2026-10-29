@@ -1,0 +1,33 @@
+# algorand adapter T20 fix 1 RED (budget_calls_added_as_simulate_reports, lane_below_min_balance_is_retried against the T20 adapter) at commit 8df92966
+# ../scripts/capped cargo test -j2 --lib adapters::algorand::tests::budget_calls_added_as_simulate_reports adapters::algorand::tests::lane_below_min_balance_is_retried
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.60s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 2 tests
+test adapters::algorand::tests::lane_below_min_balance_is_retried ... FAILED
+test adapters::algorand::tests::budget_calls_added_as_simulate_reports ... FAILED
+
+failures:
+
+---- adapters::algorand::tests::lane_below_min_balance_is_retried stdout ----
+
+thread 'adapters::algorand::tests::lane_below_min_balance_is_retried' (3456392) panicked at src/adapters/algorand.rs:2891:9:
+assertion failed: matches!(a.build(&j, 0).await.unwrap_err(), SimError::Transport(m) if
+    m.contains("the lane cannot pay"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapters::algorand::tests::budget_calls_added_as_simulate_reports stdout ----
+
+thread 'adapters::algorand::tests::budget_calls_added_as_simulate_reports' (3456391) panicked at src/adapters/algorand.rs:2870:86:
+called `Result::unwrap()` on an `Err` value: Revert("simulate: transaction X: logic eval error: dynamic cost budget exceeded, executing swap: local program cost was 700")
+
+
+failures:
+    adapters::algorand::tests::budget_calls_added_as_simulate_reports
+    adapters::algorand::tests::lane_below_min_balance_is_retried
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 424 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--lib`
+rc=101

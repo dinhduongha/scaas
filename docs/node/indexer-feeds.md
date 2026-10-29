@@ -321,3 +321,11 @@ trusted for the root: the review window and independent recomputation are the co
 source.** The event-set quorum bounds what one dishonest RPC provider can inject; it does not bound a compromised node,
 which can lie on `/v1/events`. A second event source (another node or an independent indexer) and client-side
 agreement before booking are PLANNED; signed feed pages make sense only with such a second verifier.
+
+**NEAR feed stall (accepted risk until fixed).** The NEAR adapter reads transactions sent directly to a watched token,
+router or DEX and refuses a range that holds one not yet `FINAL`, retrying it on the next poll: one such transaction
+stops the chain's feed (the client cursor does not move). A NEP-519 yield keeps a transaction non-final for about 200
+blocks and can yield again, so anyone can stall the feed cheaply; payments made through third-party contracts or
+NEP-366 delegate actions are not seen at all. Relaying is not affected and no funds are lost. Both are one TODO item:
+index the watched receipts themselves, with non-final transactions parked
+([near.md limitations](../networks/near.md#limitations)).

@@ -1,0 +1,57 @@
+# test_deploy.py (review I2: created-apps recovery) against the T20 deploy.py at commit 8df92966
+# .venv/bin/python -I scripts/test_deploy.py
+test_found_among_the_funders_created_apps (__main__.Recovery.test_found_among_the_funders_created_apps) ... /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/deploy.py:72: ResourceWarning: unclosed file <_io.BufferedReader name='/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Token.approval.bin'>
+  self.approval = open(os.path.join(OUT, f"{name}.approval.bin"), "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/deploy.py:73: ResourceWarning: unclosed file <_io.BufferedReader name='/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Token.clear.bin'>
+  self.clear = open(os.path.join(OUT, f"{name}.clear.bin"), "rb").read()
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/deploy.py:74: ResourceWarning: unclosed file <_io.TextIOWrapper name='/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Token.arc56.json' mode='r' encoding='UTF-8'>
+  s = json.load(open(os.path.join(OUT, f"{name}.arc56.json")))
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ERROR
+test_not_on_chain (__main__.Recovery.test_not_on_chain) ... ERROR
+test_recorded_create_decodes_its_parameters (__main__.Recovery.test_recorded_create_decodes_its_parameters) ... ERROR
+test_two_matches_refused (__main__.Recovery.test_two_matches_refused) ... ERROR
+
+======================================================================
+ERROR: test_found_among_the_funders_created_apps (__main__.Recovery.test_found_among_the_funders_created_apps)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/test_deploy.py", line 46, in setUp
+    transaction.StateSchema(0, 0), app_args=D.encode_args(self.s, args),
+                                            ^^^^^^^^^^^^^
+AttributeError: module 'deploy' has no attribute 'encode_args'
+
+======================================================================
+ERROR: test_not_on_chain (__main__.Recovery.test_not_on_chain)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/test_deploy.py", line 46, in setUp
+    transaction.StateSchema(0, 0), app_args=D.encode_args(self.s, args),
+                                            ^^^^^^^^^^^^^
+AttributeError: module 'deploy' has no attribute 'encode_args'
+
+======================================================================
+ERROR: test_recorded_create_decodes_its_parameters (__main__.Recovery.test_recorded_create_decodes_its_parameters)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/test_deploy.py", line 46, in setUp
+    transaction.StateSchema(0, 0), app_args=D.encode_args(self.s, args),
+                                            ^^^^^^^^^^^^^
+AttributeError: module 'deploy' has no attribute 'encode_args'
+
+======================================================================
+ERROR: test_two_matches_refused (__main__.Recovery.test_two_matches_refused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/test_deploy.py", line 46, in setUp
+    transaction.StateSchema(0, 0), app_args=D.encode_args(self.s, args),
+                                            ^^^^^^^^^^^^^
+AttributeError: module 'deploy' has no attribute 'encode_args'
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.016s
+
+FAILED (errors=4)
+rc=1

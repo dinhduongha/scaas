@@ -1,0 +1,30 @@
+# near-algorand T19 fix 3 node RED: quote_is_prepaid_fees_and_resend + implicit_transfer_pin_checked against the fix 2 adapter (HEAD c2160b43: quote_gas takes the lane-receipt term, no implicit_transfer / pin check; does not compile)
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib -- adapters::near::tests::quote_is_prepaid_fees_and_resend adapters::near::tests::implicit_transfer_pin_checked
+error[E0061]: this function takes 4 arguments but 3 arguments were supplied
+    --> src/adapters/near.rs:3262:24
+     |
+3262 |             assert_eq!(quote_gas(&PINNED, &e, &c), base + resend, "{e:?}");
+     |                        ^^^^^^^^^ ------- argument #1 of type `&near::RelayFeePolicy` is missing
+     |
+note: function defined here
+    --> src/adapters/near.rs:1122:8
+     |
+1122 | pub fn quote_gas(policy: &RelayFeePolicy, fees: &ActionFees, entry: &Entry, call: &Call) -> u64 {
+     |        ^^^^^^^^^ -----------------------
+help: provide the argument
+     |
+3262 |             assert_eq!(quote_gas(/* &RelayFeePolicy */, &PINNED, &e, &c), base + resend, "{e:?}");
+     |                                  ++++++++++++++++++++++
+
+error[E0560]: struct `near::tests::World` has no field named `create_exec`
+    --> src/adapters/near.rs:3272:38
+     |
+3272 |         let (a, _) = adapter(World { create_exec: 12 * TGAS, ..world() }, &fee_cfg("1")).await;
+     |                                      ^^^^^^^^^^^ `near::tests::World` does not have this field
+     |
+     = note: available fields are: `genesis`, `views`, `code`, `plain`, `keyed` ... and 12 others
+
+Some errors have detailed explanations: E0061, E0560.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `scaas-node` (lib test) due to 2 previous errors
+rc=101

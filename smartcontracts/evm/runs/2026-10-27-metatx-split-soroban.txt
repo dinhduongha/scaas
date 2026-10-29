@@ -1,20 +1,173 @@
-# soroban at commit 67fa7a45
+# soroban at commit e3e778c7
 == test soroban
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling syn v2.0.119
+   Compiling syn v3.0.6
+   Compiling cfg-if v1.0.5
+   Compiling serde_core v1.0.229
+   Compiling zeroize_derive v1.5.0
+   Compiling serde v1.0.229
+   Compiling zmij v1.0.23
+   Compiling zeroize v1.9.0
+   Compiling serde_derive v1.0.229
+   Compiling serde_json v1.0.151
+   Compiling memchr v2.8.3
+   Compiling itoa v1.0.18
+   Compiling generic-array v0.14.9
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling crate-git-revision v0.0.6
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.190
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling digest v0.10.7
+   Compiling ident_case v1.0.1
+   Compiling strsim v0.11.1
+   Compiling num-traits v0.2.19
+   Compiling cpufeatures v0.2.17
+   Compiling darling_core v0.24.1
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling zerocopy v0.8.59
+   Compiling schemars v0.8.22
+   Compiling semver v1.0.28
+   Compiling darling_macro v0.24.1
+   Compiling darling v0.24.1
+   Compiling dyn-clone v1.0.20
+   Compiling serde_with_macros v3.24.0
+   Compiling stellar-strkey v0.0.13
+   Compiling base64ct v1.8.3
+   Compiling paste v1.0.15
+   Compiling data-encoding v2.11.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling pem-rfc7468 v0.7.0
+   Compiling hex v0.4.3
+   Compiling der v0.7.10
+   Compiling rand_chacha v0.3.1
+   Compiling num-integer v0.1.47
+   Compiling stellar-xdr v26.0.1
+   Compiling cfg_eval v0.1.2
+   Compiling ethnum v1.5.3
+   Compiling escape-bytes v0.1.1
+   Compiling num-bigint v0.4.8
+   Compiling spki v0.7.3
+   Compiling rand v0.8.8
+   Compiling sha2 v0.10.9
+   Compiling serde_with v3.24.0
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling enum-ordinalize v4.4.2
+   Compiling ark-std v0.5.0
+   Compiling pkcs8 v0.10.2
+   Compiling rustc_version v0.4.1
+   Compiling ff v0.13.1
+   Compiling ark-serialize-derive v0.5.0
+   Compiling ahash v0.8.12
+   Compiling equivalent v1.0.2
+   Compiling base16ct v0.2.0
+   Compiling either v1.18.0
+   Compiling hashbrown v0.17.1
+   Compiling arrayvec v0.7.8
+   Compiling itertools v0.13.0
+   Compiling ark-serialize v0.5.0
+   Compiling indexmap v2.14.2
+   Compiling sec1 v0.7.3
+   Compiling group v0.13.0
+   Compiling educe v0.6.0
+   Compiling ark-ff-macros v0.5.0
+   Compiling signature v2.2.0
+   Compiling crypto-bigint v0.5.5
+   Compiling ark-ff-asm v0.5.0
+   Compiling allocator-api2 v0.2.21
+   Compiling libm v0.2.16
+   Compiling once_cell v1.21.4
+   Compiling base64 v0.22.1
+   Compiling hashbrown v0.15.5
+   Compiling ark-ff v0.5.0
+   Compiling elliptic-curve v0.13.8
+   Compiling wasmparser v0.116.1
+   Compiling hmac v0.12.1
+   Compiling thiserror v1.0.69
+   Compiling rfc6979 v0.4.0
+   Compiling soroban-env-macros v26.1.4
+   Compiling ark-poly v0.5.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling derive_arbitrary v1.3.2
+   Compiling num-derive v0.4.2
+   Compiling thiserror-impl v1.0.69
+   Compiling indexmap-nostd v0.4.0
+   Compiling downcast-rs v1.2.1
+   Compiling static_assertions v1.1.0
+   Compiling wasmi_core v0.13.0
+   Compiling wasmparser-nostd v0.100.2
+   Compiling arbitrary v1.3.2
+   Compiling ark-ec v0.5.0
+   Compiling ecdsa v0.16.9
+   Compiling soroban-env-common v26.1.4
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling prettyplease v0.2.37
+   Compiling fnv v1.0.7
+   Compiling spin v0.9.9
+   Compiling smallvec v1.16.2
+   Compiling wasmi_arena v0.4.1
+   Compiling soroban-wasmi v0.31.1-soroban.20.0.1
+   Compiling darling_core v0.20.11
+   Compiling primeorder v0.13.6
+   Compiling ed25519 v2.2.3
+   Compiling keccak v0.1.6
+   Compiling heapless v0.8.0
+   Compiling byteorder v1.5.0
+   Compiling soroban-env-host v26.1.4
+   Compiling hash32 v0.3.1
+   Compiling sha3 v0.10.9
+   Compiling ed25519-dalek v2.2.0
+   Compiling p256 v0.13.2
+   Compiling darling_macro v0.20.11
+   Compiling k256 v0.13.4
+   Compiling ark-bls12-381 v0.5.0
+   Compiling ark-bn254 v0.5.0
+   Compiling soroban-spec v26.1.1
+   Compiling soroban-builtin-sdk-macros v26.1.4
+   Compiling stellar-strkey v0.0.16
+   Compiling hex-literal v0.4.1
+   Compiling stable_deref_trait v1.2.1
+   Compiling dtor-proc-macro v0.0.6
+   Compiling dtor v0.1.1
+   Compiling soroban-spec-rust v26.1.1
+   Compiling darling v0.20.11
+   Compiling soroban-sdk v26.1.1
+   Compiling macro-string v0.1.4
+   Compiling ctor-proc-macro v0.0.6
+   Compiling heck v0.5.0
+   Compiling soroban-sdk-macros v26.1.1
+   Compiling ctor v0.5.0
+   Compiling bytes-lit v0.0.5
+   Compiling visibility v0.1.1
+   Compiling soroban-ledger-snapshot v26.1.1
+   Compiling scaas-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/token)
+   Compiling scaas-mandate v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/mandate)
+   Compiling scaas-dex v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/dex)
+   Compiling scaas-relay-fee v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/relay-fee)
+   Compiling scaas-smart-key-account v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/soroban/contracts/smart-key-account)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 16s
      Running unittests src/lib.rs (target/debug/deps/scaas_dex-dfb6714ca5930530)
 
 running 9 tests
-test test::cancelled_order_never_settles ... ok
 test test::taker_must_name_a_positive_price ... ok
 test test::same_token_order_cannot_match_itself ... ok
+test test::cancelled_order_never_settles ... ok
 test test::price_limits_and_expiry ... ok
+test test::partial_fills_never_overfill ... ok
+test test::eighteen_decimal_amounts_do_not_overflow ... ok
 test test::unknown_market_is_refused ... ok
 test test::fee_inside_signed_max_and_under_cap ... ok
-test test::eighteen_decimal_amounts_do_not_overflow ... ok
-test test::partial_fills_never_overfill ... ok
 test test::settles_both_signed_orders_with_fees ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
      Running unittests src/lib.rs (target/debug/deps/scaas_mandate-ff202451b142ece5)
 
@@ -24,52 +177,52 @@ test test::bad_mandates_are_refused_and_owner_withdraws ... ok
 test test::unbounded_period_never_overflows ... ok
 test test::delegate_pays_within_caps_and_period_resets ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running unittests src/lib.rs (target/debug/deps/scaas_relay_fee-c4a4336e9575f09d)
 
 running 9 tests
+test test::relay_ref_vectors ... ok
 test test::relay_refuses_target_without_contract ... ok
 test test::relay_bound_payee ... ok
-test test::relay_open_mode_pays_relayer ... ok
-test test::relay_same_call_with_different_salts_and_replay ... ok
-test test::soroban_router_bound_pay_refused_direct ... ok
-test test::relay_ref_vectors ... ok
-test test::relay_attacker_cannot_pre_burn_the_ref ... ok
 test test::relay_target_failure_reverts_all ... ok
+test test::relay_attacker_cannot_pre_burn_the_ref ... ok
+test test::relay_open_mode_pays_relayer ... ok
+test test::soroban_router_bound_pay_refused_direct ... ok
+test test::relay_same_call_with_different_salts_and_replay ... ok
 test test::relay_g_account_payer_real_signed_entries ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
      Running unittests src/lib.rs (target/debug/deps/scaas_smart_key_account-6de4ce6878267dd6)
 
 running 10 tests
 test test::expired_signature_ledger_is_refused ... ok
 test test::last_key_cannot_be_removed ... ok
+test test::adding_a_key_needs_an_existing_key ... ok
 test test::anti_lock_withheld_op_does_not_block_another_contract ... ok
 test test::passkey_challenge_must_be_this_payload ... ok
-test test::adding_a_key_needs_an_existing_key ... ok
-test test::signature_for_token_1_does_not_open_token_2 ... ok
-test test::passkey_pays_and_bad_assertions_are_refused ... ok
 test test::ed25519_key_pays_and_nonce_cannot_replay ... ok
+test test::signature_for_token_1_does_not_open_token_2 ... ok
 test test::passkey_batch_merkle ... ok
+test test::passkey_pays_and_bad_assertions_are_refused ... ok
 test test::dex_settles_on_real_signatures_once_per_signature ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
      Running unittests src/lib.rs (target/debug/deps/scaas_token-4b80acc13777ab4b)
 
 running 9 tests
 test test::pay_meta_vectors_match ... ok
-test test::pay_requires_the_payer ... ok
-test test::cross_implementation_vector ... ok
 test test::sep41_basics ... ok
+test test::pay_requires_the_payer ... ok
+test test::pay_meta_settles_and_emits_meta_first ... ok
 test test::approve_only_to_contracts ... ok
 test test::pay_moves_funds_once_per_ref_and_respects_expiry ... ok
-test test::pay_meta_settles_and_emits_meta_first ... ok
-test test::pay_ref_is_per_payer_nobody_can_pre_burn_it ... ok
+test test::cross_implementation_vector ... ok
 test test::soroban_pay_meta_mismatch_and_replay ... ok
+test test::pay_ref_is_per_payer_nobody_can_pre_burn_it ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
 rc=0

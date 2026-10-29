@@ -1,0 +1,17 @@
+[package]
+name = "scaas-near-token"
+version = "0.1.0"
+edition = "2021"
+description = "SCaaS NEAR token: NEP-141 / NEP-145 / NEP-148 ledger of native holders, UA ledger, relayer-paid storage (spec §3.2)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+near-contract-standards = { workspace = true }
+scaas-near-common = { path = "../common" }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
+near-crypto = "0.38.0"  # ed25519 test signer (already in the lock)

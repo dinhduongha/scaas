@@ -1,0 +1,11 @@
+[package]
+name = "scaas-near-common"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+near-sdk = { workspace = true, features = ["unstable"] }  # env::ecrecover
+p256 = { workspace = true }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

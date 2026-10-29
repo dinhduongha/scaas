@@ -1,0 +1,55 @@
+# T15 RED at commit a89df505 (pre-T15 contracts + the T15 tests: test_relayfee.py, conftest.py, test_dex.py)
+== build algorand
+wrote artifacts.json
+ImportError while loading conftest '/tmp/claude-1000/-home-ha-work-ainative-scaas/7b777ca4-c4b0-490e-9266-d55ae8d02d4a/scratchpad/red/smartcontracts/algorand/tests/conftest.py'.
+tests/conftest.py:339: in <module>
+    EXEC_PREFIX = open(os.path.join(OUT, 'Executor.prefix.bin'), 'rb').read()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/claude-1000/-home-ha-work-ainative-scaas/7b777ca4-c4b0-490e-9266-d55ae8d02d4a/scratchpad/red/smartcontracts/algorand/out/Executor.prefix.bin'
+rc=4
+# T15 RED at commit a89df505 (T15 executor + router, pre-T15 dex.py (no router app id): the DEX relay rule missing)
+== build algorand
+[34mcontracts/executor.py:19:2 [0m[33mwarning: [0mautosalt=False leaves this LogicSig's address on-curve, i.e. potentially decodable as a public key[0m
+[34mcontracts/executor.py:19:2 [0m[33mwarning: [0mautosalt=False leaves this LogicSig's address on-curve, i.e. potentially decodable as a public key[0m
+wrote artifacts.json
+_______________ ERROR at setup of test_one_leg_fails_group_fails _______________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+____________ ERROR at setup of test_order_relayer_mismatch_refused _____________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+________________ ERROR at setup of test_leg_by_non_dex_refused _________________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+_________________ ERROR at setup of test_cancel_filled_refused _________________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+_________________ ERROR at setup of test_min_nonce_cap_refused _________________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+____________________ ERROR at setup of test_no_partial_fill ____________________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+__________ ERROR at setup of test_replay_across_dexes_tokens_networks __________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+________________ ERROR at setup of test_trade_leg_is_a_value_op ________________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+_____________ ERROR at setup of test_carried_auth_after_the_settle _____________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+____________ ERROR at setup of test_dex_update_delete_optin_refused ____________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+____________________ ERROR at setup of test_figures_pinned _____________________
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+=================================== FAILURES ===================================
+E   algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+/tmp/claude-1000/-home-ha-work-ainative-scaas/7b777ca4-c4b0-490e-9266-d55ae8d02d4a/scratchpad/red/smartcontracts/algorand/.venv/lib/python3.12/site-packages/algosdk/atomic_transaction_composer.py:562: algosdk.error.AtomicTransactionComposerError: number of method arguments do not match the method signature
+=========================== short test summary info ============================
+FAILED tests/test_relayfee.py::test_dex_bound_order_via_router - algosdk.erro...
+ERROR tests/test_dex.py::test_settle_both_legs_atomic - algosdk.error.AtomicT...
+ERROR tests/test_dex.py::test_one_leg_fails_group_fails - algosdk.error.Atomi...
+ERROR tests/test_dex.py::test_order_relayer_mismatch_refused - algosdk.error....
+ERROR tests/test_dex.py::test_leg_by_non_dex_refused - algosdk.error.AtomicTr...
+ERROR tests/test_dex.py::test_cancel_filled_refused - algosdk.error.AtomicTra...
+ERROR tests/test_dex.py::test_min_nonce_cap_refused - algosdk.error.AtomicTra...
+ERROR tests/test_dex.py::test_no_partial_fill - algosdk.error.AtomicTransacti...
+ERROR tests/test_dex.py::test_replay_across_dexes_tokens_networks - algosdk.e...
+ERROR tests/test_dex.py::test_trade_leg_is_a_value_op - algosdk.error.AtomicT...
+ERROR tests/test_dex.py::test_carried_auth_after_the_settle - algosdk.error.A...
+ERROR tests/test_dex.py::test_dex_update_delete_optin_refused - algosdk.error...
+ERROR tests/test_dex.py::test_figures_pinned - algosdk.error.AtomicTransactio...
+1 failed, 25 passed, 12 errors in 4.67s
+rc=1

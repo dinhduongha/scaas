@@ -1,0 +1,5 @@
+# near-sdk 5.30 needs rustc >= 1.95; cargo-near 0.22 caps rustc by near-sdk's min protocol version. Same channel as soroban.
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"
+targets = ["wasm32-unknown-unknown"]

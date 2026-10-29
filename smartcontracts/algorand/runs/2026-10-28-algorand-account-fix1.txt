@@ -1,0 +1,62 @@
+# test.sh algorand at commit 70d34e8b + the T12 fix-1 tree
+== test algorand
+== build algorand
+[32minfo: [0musing puyapy version 5.10.1[0m
+[33mwarning: [0mcannot determine package root for contracts/probe.py[0m
+[33mwarning: [0mcannot determine package root for contracts/token.py[0m
+[33mwarning: [0mcannot determine package root for contracts/common.py[0m
+[33mwarning: [0mcannot determine package root for contracts/account.py[0m
+[32minfo: [0musing python search path: ['/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/.venv/lib/python3.12/site-packages'][0m
+[32minfo: [0mWriting out/Token.arc56.json[0m
+[32minfo: [0mWriting out/Token.approval.bin[0m
+[32minfo: [0mWriting out/Token.clear.bin[0m
+[32minfo: [0mWriting out/Probe.arc56.json[0m
+[32minfo: [0mWriting out/Probe.approval.bin[0m
+[32minfo: [0mWriting out/Probe.clear.bin[0m
+[32minfo: [0mWriting out/Account.arc56.json[0m
+[32minfo: [0mWriting out/Account.approval.bin[0m
+[32minfo: [0mWriting out/Account.clear.bin[0m
+ok artifacts.json
+ok smartcontracts/algorand/vectors/algorand-vectors.json
+
+UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
+.....UP only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+UV only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+short authData                   refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+crossOrigin true                 refused: passkey clientDataJSON (members after origin)
+topOrigin                        refused: passkey clientDataJSON (topOrigin)
+second crossOrigin               refused: passkey clientDataJSON (crossOrigin)
+member before crossOrigin        refused: passkey clientDataJSON (members after origin)
+whitespace                       refused: passkey clientDataJSON (type, challenge or origin)
+no closing brace                 refused: passkey clientDataJSON (members after origin)
+no closing brace after a member  refused: passkey clientDataJSON (members after origin)
+type create                      refused: passkey clientDataJSON (type, challenge or origin)
+type of the same length          refused: passkey clientDataJSON (type, challenge or origin)
+origin extended                  refused: passkey origin not listed
+origin prefix                    refused: passkey origin not listed
+empty origin                     refused: passkey clientDataJSON (type, challenge or origin)
+backslash in origin              refused: passkey clientDataJSON (type, challenge or origin)
+challenge of another digest      refused: passkey clientDataJSON (type, challenge or origin)
+........msig 3 passkeys S1 add_key   consumed  11831 added  13300 args  1370 ok
+msig 3 passkeys S2 mtx_pay   consumed  11888 added  13300 args  1362 ok
+msig 3 passkeys S3 relay     consumed  23308 added  24500 args  None ok
+msig 4 passkeys S1 add_key   consumed  15434 added  16800 args  1712 ok
+msig 4 passkeys S2 mtx_pay   consumed  15482 added  16800 args  1704 ok
+msig 4 passkeys S3 relay     consumed  30496 added  31500 args  None ok
+budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ 256; arguments ≤ 2,048 B
+.
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 4 passkey': (15003, 23), 'token mtx_pay native': (2913, 5), 'token mtx_pay ed25519 UA': (3449, 4), 'token mtx_pay secp256k1 UA': (2891, 4), 'token mtx_pay passkey UA': (4233, 6), 'token mtx_pay msig 4 passkey UA': (15482, 22)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 4 passkey': (15800, 24), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 4 passkey UA': (16300, 23)}
+.
+inner budget calls of a msig-4 key op: 22 (created and deleted in one inner transaction each)
+...............
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+
+MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
+................
+opcode budget used: {'mtx_pay': 2868, 'mtx_transfer': 2828, 'mtx_pay_meta': 3324, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2588, clear 4
+......
+52 passed in 15.65s
+rc=0

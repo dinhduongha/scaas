@@ -1,0 +1,4 @@
+# RED (T6 fix 1, I1): cargo test -p scaas-near-token --lib at commit da6ce448 + the routed_plan test, before routed_plan
+      1 error: could not compile `scaas-near-token` (lib test) due to 6 previous errors
+      6 error[E0599]: no method named `routed_plan` found for struct `Token` in the current scope
+rc=101

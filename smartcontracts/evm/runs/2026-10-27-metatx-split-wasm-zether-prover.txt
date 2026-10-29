@@ -1,5 +1,5 @@
-# wasm-zether-prover at commit 67fa7a45
-    Finished `release` profile [optimized] target(s) in 0.07s
+# wasm-zether-prover at commit e3e778c7
+    Finished `release` profile [optimized] target(s) in 0.03s
    Compiling wasm-bindgen-shared v0.2.129
    Compiling syn v3.0.6
    Compiling rustversion v1.0.23
@@ -36,25 +36,25 @@
    Compiling ahash v0.8.12
    Compiling zeroize v1.9.0
    Compiling educe v0.6.0
+   Compiling allocator-api2 v0.2.21
    Compiling getrandom v0.2.17
    Compiling rand_core v0.6.4
    Compiling rand_chacha v0.3.1
    Compiling rand v0.8.8
-   Compiling allocator-api2 v0.2.21
+   Compiling hashbrown v0.15.5
    Compiling ark-std v0.5.0
    Compiling ark-serialize v0.5.0
-   Compiling hashbrown v0.15.5
    Compiling ark-ff v0.5.0
    Compiling zmij v1.0.23
    Compiling serde v1.0.229
    Compiling hex-conservative v0.2.3
    Compiling serde_derive v1.0.229
-   Compiling ark-poly v0.5.0
    Compiling tinyvec v1.13.3
-   Compiling unicode-normalization v0.1.25
-   Compiling ark-ec v0.5.0
+   Compiling ark-poly v0.5.0
    Compiling thiserror v2.0.21
+   Compiling unicode-normalization v0.1.25
    Compiling serde_json v1.0.151
+   Compiling ark-ec v0.5.0
    Compiling bitcoin_hashes v0.14.101
    Compiling hmac v0.12.1
    Compiling thiserror-impl v2.0.21
@@ -67,8 +67,8 @@
    Compiling bip39 v2.2.2
    Compiling sha2 v0.10.9
    Compiling hex v0.4.3
-   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/metatx-split/clients/zether-prover)
-    Finished `release` profile [optimized] target(s) in 46.82s
-bls12381: proveTransfer 718 ms in wasm
+   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/clients/zether-prover)
+    Finished `release` profile [optimized] target(s) in 29.61s
+bls12381: proveTransfer 590 ms in wasm
 wasm smoke: 9 checks passed
 rc=0

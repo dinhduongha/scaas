@@ -1,0 +1,161 @@
+"""R5: the generator's vectors (`vectors/algorand-vectors.json`, `smartcontracts/vectors/metatx/paymeta.json`) against
+the apps' own derivations (`contracts/common.py`) run on the AVM (the probe app, simulate)."""
+import base64
+import json
+import os
+
+from algosdk import abi, encoding
+
+from conftest import LABEL, METAOP_T, REPO, ROOT, Acct, sha256, view
+
+V = json.load(open(os.path.join(ROOT, 'vectors', 'algorand-vectors.json')))
+PAYMETA = json.load(open(os.path.join(REPO, 'smartcontracts', 'vectors', 'metatx', 'paymeta.json')))
+
+
+def unhx(s):
+    return bytes.fromhex(s[2:])
+
+
+def op_of(f):
+    h = lambda x: [x['kind'], unhx(x['id'])]  # noqa: E731
+    return [unhx(f['network']), unhx(f['contract']), f['op'], h(f['from']), h(f['to']), unhx(f['relayer']),
+            int(f['amount']), unhx(f['pay_ref']), unhx(f['lane']), f['nonce'], f['valid_until'], unhx(f['extra'])]
+
+
+def test_metaop_vectors(probe):
+    rows = V['metaops']['vectors']
+    assert {r['fields']['op'] for r in rows} >= {0, 4, 5}
+    for r in rows:
+        o = op_of(r['fields'])
+        assert LABEL + METAOP_T.encode(o) == unhx(r['encoding']), r['name']   # the ARC-4 layout of the ABI type
+        assert bytes(view(probe, 'op_digest', o)) == unhx(r['digest']), r['name']
+
+
+def test_sign_bytes_vectors(probe):
+    s = V['signing']
+    d = unhx(next(r for r in V['metaops']['vectors'] if r['name'] == s['metaop'])['digest'])
+    assert bytes(view(probe, 'op_sign_bytes', d)) == unhx(s['signBytes'])
+    assert unhx(s['signBytes'])[:2] == b'MX' and unhx(s['signBytes'])[2:] == s['text'].encode()
+    # the same bytes a wallet signs through py-algorand-sdk's util.sign_bytes (deterministic ed25519)
+    alice = Acct(base64.b64encode(sha256(b'alice') + unhx(s['key'])).decode())
+    assert alice.addr == s['address'] and alice.sign_op(d) == unhx(s['sig'])
+    # the AVM check by the address's current authority (an address never seen on chain: itself)
+    assert view(probe, 'native_ok', s['address'], d, unhx(s['sig'])) is True
+    bad = bytearray(unhx(s['sig']))
+    bad[0] ^= 1
+    assert view(probe, 'native_ok', s['address'], d, bytes(bad)) is False
+    assert view(probe, 'native_ok', V['keys']['bob']['address'], d, unhx(s['sig'])) is False
+
+
+def test_pay_meta_vectors(probe):
+    fit = [r for r in PAYMETA if len(r['meta']) // 2 - 1 <= 1900]
+    # long_body_4096 (4,192 B) cannot reach the AVM: above the 2,048 B app-call argument limit and the 4,096 B
+    # stack-value limit, so no Algorand pay-meta can carry it (the node's cap is far below, test_pay_meta_cap_measured)
+    assert [r['name'] for r in PAYMETA if r not in fit] == ['long_body_4096'] and len(fit) == 5
+    for r in fit:
+        pid = bytes(view(probe, 'pay_id', unhx(r['salt']), unhx(r['meta'])))
+        assert pid.hex() == r['payId'][2:], r['name']
+        assert bytes(view(probe, 'lane_of', pid)).hex() == r['payLane'][2:], r['name']
+    net = unhx(V['network'])
+    for r in V['relayRefs']:
+        if r['callLength'] > 1900:      # above the 2,048 B argument limit: a hash vector only
+            continue
+        ref = view(probe, 'ref_of', net, unhx(r['target']), unhx(r['call']), unhx(r['salt']))
+        assert bytes(ref) == unhx(r['ref']), r['name']
+
+
+def test_native_ids_are_the_address_keys():
+    for r in V['nativeIds']['rows']:
+        assert encoding.encode_address(unhx(r['key'])) == r['address']
+
+
+def test_key_op_vectors(account):
+    """T12 (R5): every key-op row's `extra` is sha256 of its parameters, which are the ARC-4 encoding of the entry's
+    argument types (the encoding the account app hashes); its `authBytes` verify on the AVM for its signer
+    (`verify_mbr`: a lazily opened UA needs its record's MBR, a native wallet signature none)."""
+    rows = [r for r in V['metaops']['vectors'] if 6 <= r['fields']['op'] <= 12]
+    assert {r['fields']['op'] for r in rows} == set(range(6, 13))
+    for r in rows:
+        p, t = unhx(r['params']), r['paramsType']
+        assert sha256(p) == unhx(r['fields']['extra']), r['name']
+        if t != 'action':
+            typ = abi.ABIType.from_string(t) if t != '()' else None
+            assert typ is None and p == b'' or typ.encode(typ.decode(p)) == p, r['name']
+        frm = r['fields']['from']
+        need = view(account, 'verify_mbr', frm['kind'], unhx(frm['id']), unhx(r['digest']), unhx(r['authBytes']))
+        assert (need == 0) == (r['auth']['kind'] == 'native'), r['name']
+
+
+def test_mandate_vectors(probe):
+    """T13 (R5, R9, Ruling T13-open): the mandate rows — open = the owner's one signed op, a token mtx_pay (op 0) with
+    relayer = to = the mandate app address, amount = funding, pay_ref = id = sha256(ARC-4(from, terms, lane, nonce))
+    from its own lane / nonce, extra = sha256(token id ‖ id ‖ terms); pay (op 2: from = Ua(id), lane = payLane(pay_ref)
+    on the AVM, nonce 0, extra = sha256(token id)) and revoke (op 3) — recomputed with the harness encodings the
+    mandate app accepts (test_mandate.py); the pay lane is byte-for-byte the NEAR vector's (the EVM payLane)."""
+    from test_mandate import TERMS_T, mandate_id
+    rows = {r['name']: r for r in V['metaops']['vectors'] if r['name'].startswith('mandate_')}
+    assert set(rows) == {'mandate_open', 'mandate_pay', 'mandate_revoke'}
+    op_, pay, rev = (rows[n] for n in ('mandate_open', 'mandate_pay', 'mandate_revoke'))
+    terms = TERMS_T.decode(unhx(op_['terms']))
+    assert TERMS_T.encode(terms) == unhx(op_['terms'])
+    f = op_['fields']
+    frm = (f['from']['kind'], unhx(f['from']['id']))
+    mid = mandate_id(frm, terms, unhx(f['lane']), f['nonce'])
+    tok = V['apps']['token']['id'].to_bytes(8, 'big')
+    man = V['apps']['mandate']['key']
+    assert mid == unhx(op_['mandateId']) == unhx(f['pay_ref']) and f['op'] == 0
+    assert (f['to'], f['relayer'], f['contract']) == ({'kind': 0, 'id': man, 'address': V['apps']['mandate']['address']},
+                                                     man, V['apps']['token']['key'])
+    assert int(f['amount']) == terms[6] and sha256(tok, mid, unhx(op_['terms'])) == unhx(f['extra'])
+    for r, code in ((pay, 2), (rev, 3)):
+        assert r['fields']['op'] == code and unhx(r['fields']['extra']) == sha256(tok), r['name']
+        assert r['fields']['contract'] == man, r['name']
+    pf = pay['fields']
+    assert unhx(pf['from']['id']) == mid and pf['nonce'] == 0
+    assert bytes(view(probe, 'lane_of', unhx(pf['pay_ref']))) == unhx(pf['lane'])
+    near = json.load(open(os.path.join(REPO, 'smartcontracts', 'near', 'vectors', 'near-vectors.json')))
+    npay = next(r for r in near['metaops']['vectors'] if r['name'] == 'mandate_pay')['fields']
+    assert (npay['pay_ref'], npay['lane']) == (pf['pay_ref'], pf['lane'])
+    assert unhx(rev['fields']['to']['id']) == mid and rev['fields']['amount'] == '0'
+
+
+def test_dex_vectors():
+    """T14 (R5): the DEX rows — legs = op 1 (to = relayer = the DEX app address, amount = sell_amount, pay_ref zero,
+    extra = sha256(ARC-4(Order)), contract = the order's sell token); cancel (op 14) / invalidate_nonces (op 15) with
+    to = from, extra = sha256(ARC-4(lane, nonce)); settle_id = sha256(digest(op_a) ‖ digest(op_b)) — recomputed with
+    the harness encodings the token and the DEX accept (test_dex.py). Values as the NEAR rows (Borsh there, ARC-4 here)."""
+    from test_dex import ORDER_T
+    rows = {r['name']: r for r in V['metaops']['vectors']}
+    dex, apps = V['apps']['dex'], V['apps']
+    a, b = rows['trade_a'], rows['trade_b']
+    for r, sell, buy in ((a, 'token', 'tokenB'), (b, 'tokenB', 'token')):
+        f, order = r['fields'], ORDER_T.decode(unhx(r['order']))
+        assert ORDER_T.encode(order) == unhx(r['order']) and len(unhx(r['order'])) == 88, r['name']
+        assert (order[0], order[1]) == (apps[sell]['id'], apps[buy]['id']), r['name']
+        assert f['op'] == 1 and sha256(unhx(r['order'])) == unhx(f['extra']) and int(f['amount']) == order[2]
+        assert (f['to']['id'], f['relayer'], f['contract'], f['pay_ref']) == (
+            dex['key'], dex['key'], apps[sell]['key'], '0x' + '00' * 32), r['name']
+    s = V['dexSettle']
+    assert s['legs'] == ['trade_a', 'trade_b']
+    assert sha256(unhx(a['digest']), unhx(b['digest'])) == unhx(s['settleId'])
+    oa, ob = ORDER_T.decode(unhx(a['order'])), ORDER_T.decode(unhx(b['order']))
+    assert oa[2] >= ob[3] and ob[2] >= oa[3]                    # the pair crosses, fill-or-kill
+    assert bytes(oa[4]) == unhx(V['keys']['relayer']['ed25519']) and bytes(ob[4]) == bytes(32)
+    for name, code in (('cancel', 14), ('invalidate_nonces', 15)):
+        f = rows[name]['fields']
+        p = unhx(rows[name]['params'])
+        assert f['op'] == code and sha256(p) == unhx(f['extra']) and len(p) == 40, name
+        assert abi.ABIType.from_string('(byte[32],uint64)').decode(p)[1] < 2**63
+        assert f['to'] == f['from'] and f['amount'] == '0' and f['lane'] == '0x' + '00' * 32 and f['nonce'] == 0
+
+
+def test_origin_parity_vectors(probe):
+    """T17 fix 1 (ruling (a)): every row of vectors/webauthn-origin.json through the account app's `client_origin` on the
+    AVM: its `origin`, or refused (null). scaas-node's port runs the same file (adapters::algorand origin_parity_vectors)."""
+    rows = json.load(open(os.path.join(ROOT, 'vectors', 'webauthn-origin.json')))['rows']
+    assert len(rows) >= 40
+    from conftest import VIEWER, sim
+    for r in rows:
+        v, _, fail, _ = sim(VIEWER, probe, 'origin_of', [r['clientDataJSON'].encode(), unhx(r['challenge'])], extra_budget=20_000)
+        got = None if fail else bytes(v).decode()
+        assert got == r['origin'], (r['name'], got, fail)

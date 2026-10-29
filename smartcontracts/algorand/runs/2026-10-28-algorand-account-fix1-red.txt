@@ -1,0 +1,85 @@
+# algorand-account-fix1-red at commit 70d34e8b + the fix-1 tests (contracts unchanged)
+
+UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
+F....UP only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+UV only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+short authData                   refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+crossOrigin true                 refused: passkey clientDataJSON (members after origin)
+topOrigin                        refused: passkey clientDataJSON (topOrigin)
+second crossOrigin               refused: passkey clientDataJSON (crossOrigin)
+member before crossOrigin        refused: passkey clientDataJSON (members after origin)
+whitespace                       refused: passkey clientDataJSON (type, challenge or origin)
+no closing brace                 refused: passkey clientDataJSON (members after origin)
+no closing brace after a member  refused: passkey clientDataJSON (members after origin)
+type create                      refused: passkey clientDataJSON (type, challenge or origin)
+type of the same length          refused: passkey clientDataJSON (type, challenge or origin)
+origin extended                  refused: passkey origin not listed
+origin prefix                    refused: passkey origin not listed
+empty origin                     refused: passkey clientDataJSON (type, challenge or origin)
+backslash in origin              refused: passkey clientDataJSON (type, challenge or origin)
+challenge of another digest      refused: passkey clientDataJSON (type, challenge or origin)
+..F.F.F.msig 1 passkeys S1 add_key   consumed    700 added    700 args   686  :: transaction KMJSKCN4IUT7266MAKCRBUO5UETVNUVM36IDZQ5LVNZQ5LFOGBCA: logic eval error: dynamic cost budget exceeded, executing extract3: local program cost was
+msig 2 passkeys S1 add_key   consumed    700 added    700 args  1028  :: transaction PUCMM64DTRQCBFIXSAHNDPEF3WCJOXJGFEXBM255TEL34JWN6VWQ: logic eval error: dynamic cost budget exceeded, executing dup: local program cost was 700.
+S3_MAX (T15 shape pool) = 23100
+F
+opcode budget per signer kind (simulate): {'account mtx_set_guardian native': 2759, 'account mtx_set_guardian ed25519': 2970, 'account mtx_set_guardian secp256k1': 2412, 'account mtx_set_guardian passkey': 3702, 'account mtx_set_guardian msig 2 ed25519': 6089, 'account mtx_set_guardian msig 2 passkey': 7545, 'token mtx_pay native': 2944, 'token mtx_pay ed25519 UA': 3471, 'token mtx_pay secp256k1 UA': 2913, 'token mtx_pay passkey UA': 4207, 'token mtx_pay msig 2 passkey UA': 8050}
+pins {'account mtx_set_guardian native': 2900, 'account mtx_set_guardian ed25519': 3100, 'account mtx_set_guardian secp256k1': 2600, 'account mtx_set_guardian passkey': 3900, 'account mtx_set_guardian msig 2 ed25519': 6400, 'account mtx_set_guardian msig 2 passkey': 8000, 'token mtx_pay native': 3100, 'token mtx_pay ed25519 UA': 3700, 'token mtx_pay secp256k1 UA': 3100, 'token mtx_pay passkey UA': 4500, 'token mtx_pay msig 2 passkey UA': 8500}
+...............
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+
+MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
+................
+opcode budget used: {'mtx_pay': 2854, 'mtx_transfer': 2814, 'mtx_pay_meta': 3310, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 4 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 2548, clear 4
+......
+=================================== FAILURES ===================================
+____________________ test_ua_opened_lazily_relayer_pays_mbr ____________________
+tests/test_account.py:71: in test_ua_opened_lazily_relayer_pays_mbr
+    assert events(account, r) == [('KeyOp', [[1, list(erin.id)], 'open']), ('KeyOp', [[1, list(erin.id)], 'add_key'])]
+E   AssertionError: assert [('KeyOp', [[..., 'add_key'])] == [('KeyOp', [[..., 'add_key'])]
+E     
+E     At index 0 diff: ('KeyOp', [[1, [2, 161, 46, 208, 43, 127, 196, 189, 101, 101, 71, 185, 153, 82, 25, 22, 116, 188, 74, 72, 172, 159, 61, 241, 82, 216, 243, 54, 72, 169, 67, 248]], 'add_key']) != ('KeyOp', [[1, [2, 161, 46, 208, 43, 127, 196, 189, 101, 101, 71, 185, 153, 82, 25, 22, 116, 188, 74, 72, 172, 159, 61, 241, 82, 216, 243, 54, 72, 169, 67, 248]], 'open'])
+E     Right contains one more item: ('KeyOp', [[1, [2, 161, 46, 208, 43, 127, ...]], 'add_key'])
+E     Use -v to get more diff
+________________________ test_recovery_after_delay_only ________________________
+tests/test_account.py:275: in test_recovery_after_delay_only
+    erin, g, frank, mallory = recovery_setup(account, relayer)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_account.py:270: in recovery_setup
+    assert [e[1][1] for e in events(account, r)] == ['open', 'start_recovery']      # the guardian's record opened
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert ['start_recovery'] == ['open', 'start_recovery']
+E     
+E     At index 0 diff: 'start_recovery' != 'open'
+E     Right contains one more item: 'start_recovery'
+E     Use -v to get more diff
+____________________ test_cancel_recovery_and_guardian_ops _____________________
+tests/test_account.py:326: in test_cancel_recovery_and_guardian_ops
+    erin, g, frank, _ = recovery_setup(account, relayer)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_account.py:270: in recovery_setup
+    assert [e[1][1] for e in events(account, r)] == ['open', 'start_recovery']      # the guardian's record opened
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: assert ['start_recovery'] == ['open', 'start_recovery']
+E     
+E     At index 0 diff: 'start_recovery' != 'open'
+E     Right contains one more item: 'start_recovery'
+E     Use -v to get more diff
+________________________ test_msig_one_key_counts_once _________________________
+tests/test_account.py:377: in test_msig_one_key_counts_once
+    with no('msig member key repeated'):
+E   Failed: DID NOT RAISE Refused
+__________________________ test_msig_cap_fits_limits ___________________________
+tests/test_account.py:489: in test_msig_cap_fits_limits
+    assert fail is None and (args is None or args <= 2048), (n, k, fail, args)
+E   AssertionError: (1, 'S1 add_key', ' :: transaction KMJSKCN4IUT7266MAKCRBUO5UETVNUVM36IDZQ5LVNZQ5LFOGBCA: logic eval error: dynamic cost budget exceeded, executing extract3: local program cost was', 686)
+E   assert (' :: transaction KMJSKCN4IUT7266MAKCRBUO5UETVNUVM36IDZQ5LVNZQ5LFOGBCA: logic eval error: dynamic cost budget exceeded, executing extract3: local program cost was' is None)
+=========================== short test summary info ============================
+FAILED tests/test_account.py::test_ua_opened_lazily_relayer_pays_mbr - Assert...
+FAILED tests/test_account.py::test_recovery_after_delay_only - AssertionError...
+FAILED tests/test_account.py::test_cancel_recovery_and_guardian_ops - Asserti...
+FAILED tests/test_account.py::test_msig_one_key_counts_once - Failed: DID NOT...
+FAILED tests/test_account.py::test_msig_cap_fits_limits - AssertionError: (1,...
+5 failed, 46 passed in 14.41s
+rc=1

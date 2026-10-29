@@ -263,6 +263,35 @@ before calling `ft_transfer` and treat a failed transfer in the callback (no rol
 `msig` is bounded by gas, not size: `p256_verify` costs 1.3 Tgas + 13 Mgas per byte, so 16 passkey members are
 ≈ 21 Tgas plus parsing, well under 1 PGas; a 1.5 MiB transaction holds any 16-member assertion set [estimate].
 
+### 3.8 P-256 spike, 2026-10-28
+
+Plan Task 1, the hard gate of spec §3.5 / R8: does a two-passkey `relay_fee_<entry>` fit one transaction's 300 Tgas
+with P-256 verified in wasm (RustCrypto `p256` 0.13.2, `ecdsa` verify; NEP-635 `p256_verify` not used)?
+**Verdict: PASS** — 42.27 Tgas burnt of 300 (run log `smartcontracts/near/runs/2026-10-28-p256-spike.txt`).
+
+**Harness.** `smartcontracts/near/spike-p256` `two_passkey(a, b, call)` (Borsh) runs
+`scaas_near_common::webauthn::verify` (NET-ALL-04: `type == "webauthn.get"`, challenge = b64url, origin ∈ origins,
+rpIdHash, UP flag, low-s, sha256 via the host) twice, then the largest wrapper's work (§3.8): `env::keccak256` over a
+4,096 B `call`, one 8-key account record (≈ 1.2 KB Borsh), one lane, two balances read + written, two NEP-297 logs.
+Passkey a = the repo's soft vector (`evm/test/vectors/webauthn_soft.json`, low-s form); passkey b = a fixed key
+signed in the test. `env::used_gas()` deltas give the cost of each verify. Measured on near-sandbox (neard 2.14.0,
+protocol 88) through `near-workspaces` 0.24.0, 300 Tgas attached; wasm built by `cargo near build
+non-reproducible-wasm --no-abi` (cargo-near 0.22.0, rustc 1.97.1, near-sdk 5.30.0, `wasm-opt -O` post-step).
+`webauthn_vector_accepted` runs the on-chain `check` view: the vector and b pass; a flipped bit in r, in
+clientDataJSON or in authenticatorData, the high-s form, another challenge / origin / rpIdHash and UP off all fail.
+
+| Build (release, LTO, codegen-units 1) | wasm | one verify | two-passkey call (total burnt) |
+|---|---|---|---|
+| `opt-level = 3` (pinned) | 84,274 B | **19.99 / 20.01 Tgas** (19,990,656,891,759 / 20,005,484,600,391 gas) | **42.27 Tgas** (42,271,489,823,347 gas) |
+| `opt-level = 3` on the p256 crates only, `"z"` elsewhere | 84,937 B | 22.91 / 22.92 Tgas | 48.13 Tgas |
+| `opt-level = "z"` | 73,023 B | 28.92 / 29.02 Tgas | 60.23 Tgas |
+
+Breakdown of the pinned run: function-call receipt 41.95 Tgas, transaction-to-receipt conversion 0.32 Tgas; the
+work besides the two verifies (contract load of 84 KB, keccak, storage, logs, conversion) ≈ 2.27 Tgas. At ≈ 20 Tgas
+per verify, ≈ 24 × 10^6 wasm ops at 822,756 gas per op [inference]. Derived (not pinned, later tasks measure their own
+contracts, whose larger wasm raises the load cost): the 300 Tgas budget holds about 14 P-256 verifies plus this
+overhead [inference]. Every relayed passkey op pays ≈ 20 Tgas ≈ 0.002 NEAR at the 10^8 gas price.
+
 ## 4. Algorand
 
 Mainnet consensus **v42, AVM v13** (algod v5.0.0-stable, 2026-08-12), which added native Falcon-1024 accounts, 4 KB

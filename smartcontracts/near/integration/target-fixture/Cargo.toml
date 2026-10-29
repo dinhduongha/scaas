@@ -1,0 +1,12 @@
+[package]
+name = "scaas-near-target-fixture"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Test-only relay target (never deployed): succeeds, panics, spawns a failing child, or waits (yield) for a resume"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+near-sdk = { workspace = true }

@@ -1,0 +1,44 @@
+# algorand-dex RED (tests first: tests/test_dex.py + test_vectors.py::test_dex_vectors against the T13 apps, no DEX / mtx_trade yet) at commit d7d9d540 + the T14 test tree
+[32minfo: [0mWriting out/Account.clear.bin[0m
+wrote artifacts.json
+    self.spec = json.load(open(os.path.join(OUT, name + '.arc56.json')))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Dex.arc56.json'
+____________________ ERROR at setup of test_figures_pinned _____________________
+tests/test_dex.py:154: in dex
+    return deploy_dex(dispenser)
+           ^^^^^^^^^^^^^^^^^^^^^
+tests/test_dex.py:158: in deploy_dex
+    d = deploy(dispenser, 'Dex', [])
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/conftest.py:281: in deploy
+    a = spec(name)
+        ^^^^^^^^^^
+tests/conftest.py:167: in spec
+    APPS[name] = App(name)
+                 ^^^^^^^^^
+tests/conftest.py:142: in __init__
+    self.spec = json.load(open(os.path.join(OUT, name + '.arc56.json')))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/out/Dex.arc56.json'
+=================================== FAILURES ===================================
+_______________________________ test_dex_vectors _______________________________
+tests/test_vectors.py:129: in test_dex_vectors
+    dex, apps = V['apps']['dex'], V['apps']
+                ^^^^^^^^^^^^^^^^
+E   KeyError: 'dex'
+=========================== short test summary info ============================
+FAILED tests/test_vectors.py::test_dex_vectors - KeyError: 'dex'
+ERROR tests/test_dex.py::test_settle_both_legs_atomic - FileNotFoundError: [E...
+ERROR tests/test_dex.py::test_one_leg_fails_group_fails - FileNotFoundError: ...
+ERROR tests/test_dex.py::test_order_relayer_mismatch_refused - FileNotFoundEr...
+ERROR tests/test_dex.py::test_leg_by_non_dex_refused - FileNotFoundError: [Er...
+ERROR tests/test_dex.py::test_cancel_filled_refused - FileNotFoundError: [Err...
+ERROR tests/test_dex.py::test_min_nonce_cap_refused - FileNotFoundError: [Err...
+ERROR tests/test_dex.py::test_no_partial_fill - FileNotFoundError: [Errno 2] ...
+ERROR tests/test_dex.py::test_replay_across_dexes_tokens_networks - FileNotFo...
+ERROR tests/test_dex.py::test_trade_leg_is_a_value_op - FileNotFoundError: [E...
+ERROR tests/test_dex.py::test_dex_update_delete_optin_refused - FileNotFoundE...
+ERROR tests/test_dex.py::test_figures_pinned - FileNotFoundError: [Errno 2] N...
+1 failed, 69 passed, 11 errors in 32.70s
+rc=1

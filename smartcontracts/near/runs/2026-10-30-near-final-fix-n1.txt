@@ -1,0 +1,13 @@
+# scaas-node re-review N1 GREEN (router never targets token.mtx_trade) at commit d0efa66c + uncommitted
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.02s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 3 tests
+test adapters::near::tests::never_pay_any_carried_payee ... ok
+test adapters::near::tests::dex_lane_bound_order_via_router ... ok
+test adapters::near::tests::router_target_bound_to_fail_refused ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 426 filtered out; finished in 1.07s
+
+rc=0

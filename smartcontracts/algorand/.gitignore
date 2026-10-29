@@ -1,0 +1,4 @@
+.venv/
+out/
+deployments/*.resume.json
+deployments/*.resume.json.tmp

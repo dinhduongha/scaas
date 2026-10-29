@@ -1,0 +1,5 @@
+# algorand adapter clippy at commit 8f2d2ac6 + the T17 tree
+# cd scaas-node && ../scripts/capped cargo clippy -j2 --all-targets -- -D warnings
+    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.21s
+rc=0

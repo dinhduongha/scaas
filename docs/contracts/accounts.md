@@ -158,10 +158,11 @@ the same key is a native account** (owner; the last clause owner 2026-10-17: kin
 chain never refuses a kind because its own accounts use that key type). A native key that registers gets the derived id
 `keccak256(TAG(kind) ‖ key_data)`, which differs from its native id and is the same on every chain: a Phantom ed25519
 key registers `ed25519` (0x0102) on Solana as on EVM, a MetaMask secp256k1 key registers `secp256k1` (0x0108) on EVM as on
-Solana; the native id keeps working without a record (the native kinds 0x0001–0x0016 have no record and are not in the
+Solana; the native id keeps working without a record (the native kinds 0x0001–0x0018 have no record and are not in the
 per-kind list, CTR-UA-29), and the two ids are separate accounts. Native = an EVM EOA and any EVM contract account (ERC-1271), Hedera native accounts,
 Solana ed25519, Stellar/Pi `G…`, Soroban `C…` contract accounts, Aptos native accounts (any native auth key incl.
-MultiKey), Sui native addresses (incl. native multisig, passkey flag 6, zkLogin), Cosmos native accounts. **GRAM is the
+MultiKey), Sui native addresses (incl. native multisig, passkey flag 6, zkLogin), Cosmos native accounts, NEAR accounts (named
+and implicit), Algorand addresses. **GRAM is the
 exception:** a GRAM wallet is a contract, so the native GRAM account is the wallet contract address (registration-free
 like ERC-1271). Every derived kind registers on each chain where it is used. Registration is where PoP and
 one-key-one-purpose are enforced; receiving to an unregistered derived id is refused, so a typo reverts instead of
@@ -330,6 +331,13 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 | `0x0014` | `sui-address` | 32-byte address | Sui | native flags 0/1/2/6, native multisig, zkLogin |
 | `0x0015` | `cosmos-account` | 20- or 32-byte account | Cosmos | ADR-036 secp256k1; native multisig |
 | `0x0016` | `ton-wallet` | 32-byte account id (workchain from chain config) | GRAM | wallet contract (W5R1/V4R2/V3R2), TON Connect |
+| `0x0017` | `near-account` | 32 bytes: an implicit account (64 lower-case hex) is its raw 32 bytes, any other account id (named, ETH-implicit) `sha256(account_id bytes)`; told apart by the account-id string, which travels with the member | NEAR | the member is the call's predecessor (access keys are not readable on chain) |
+| `0x0018` | `algorand-address` | 32-byte address public key | Algorand | `ed25519verify_bare` by the current authority (`AcctAuthAddr` if set, else the address); rekeyed to a LogicSig or multisig: through an account record |
+
+`near-account` forms cannot collide: a 64-lower-case-hex account id is always an implicit account (raw bytes), so a
+named or ETH-implicit id meets one only through a sha256 preimage; upper-case ids are not NEAR account ids and are
+refused; like the other 32-byte natives the id is kind-free, so records dispatch by kind ([CTR-UA-03](#CTR-UA-03);
+vectors `smartcontracts/near/vectors/near-vectors.json` `nativeIds`).
 
 Derived kinds (registered; `d` = key data):
 
@@ -806,6 +814,8 @@ Non-EVM families ([NET-ALL-20](../networks/README.md#NET-ALL-20)):
 | Solana | `owner: [u8;32]`; passkey owner `sha256("scaas.owner.p256" ‖ pk33)` | passkey owner = `webauthn-p256` UA id, stored with `owner_kind`, shown only as URN; PDA `["acct", ua]`; PDA `["ukey", keyHash]` enforces keyHash uniqueness |
 | Cosmos | bech32 `from`; passkey address 20-byte truncation | passkey owner = 32-byte UA id, a ledger key in our contracts, shown only as URN; `bip340`/MuSig2/`frost-secp256k1` via an `ua-registry` contract |
 | GRAM | `MetaOp.from` wallet; jetton-wallet `passkey` bound by `set_key` | native `ton-wallet`; no registry |
+| NEAR | `Holder::Near(account)` or `Holder::Ua(id)` | native `near-account`; UA ids opened lazily in each token |
+| Algorand | holder kind 0 (address) or 1 (UA id) | native `algorand-address`; UA ids opened lazily in the `account` app |
 
 Families keep their entry points (`mtx_pay`, `MtxExecute`…, [NET-ALL-28](../networks/README.md#NET-ALL-28)); UA changes the owner ids and adds
 the registry check where an account opens for a derived owner. Every non-EVM owner field gains an explicit
@@ -1048,6 +1058,8 @@ Other families:
 | Aptos | resource under the package root: `Table<vector<u8>, address>` | yes | pure-Move P-256 (UNAUDITED) |
 | Solana | PDAs `["ua", ua]` (record) and `["ukey", keyHash]` (claim) | yes | precompile-instruction verification |
 | GRAM | none; wallet-bound keys with a key signature in `set_key` | no (documented gap) | async actor model |
+| NEAR | no registry: subject records per `Holder` in each token contract (keys, origins, guardian, key nonce, policy), opened lazily; `near-account` (`0x0017`) members count only as the predecessor | no (per token, not chain-wide) | a key op fans out to every token the subject uses; P-256 in wasm ([NET-NEAR-03](../networks/near.md#NET-NEAR-03)) |
+| Algorand | no registry: subject records `"s" ‖ kind ‖ id` in the deployment's one `account` app, shared by every token, opened lazily; `algorand-address` (`0x0018`) members sign by their current authority | no (per deployment) | tokens, mandate and DEX verify by inner app call ([NET-ALG-07](../networks/algorand.md#NET-ALG-07)) |
 
 On every family, records, account owners and subject accounts store an explicit **`owner_kind`** next to the id and
 dispatch verification by that kind; id shape (`>> 160`) is an EVM/Cosmos-20-byte rule only.
@@ -1774,6 +1786,8 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 | Cosmos | **none** (passkey address = hash of key + rp + origin) | **none** | passkey account contract with rotation planned |
 | GRAM | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation planned |
 | Solana | KeyOp add/remove/policy | `start_recovery` / `finish_recovery` | — |
+| NEAR | key ops per token contract | guardian-signed start / finish, adds a key | — |
+| Algorand | key ops in the `account` app | guardian-signed start / finish, adds a key | — |
 
 ### <a id="smart-account-limitations"></a>3.1 Smart-account limitations
 

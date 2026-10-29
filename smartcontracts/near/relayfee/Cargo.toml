@@ -1,0 +1,15 @@
+[package]
+name = "scaas-near-relayfee"
+version = "0.1.0"
+edition = "2021"
+description = "SCaaS NEAR escrow relay-fee router (spec §3.8, CTR-MTX-27): payment held at the token, the call through the executor, release on success, refund otherwise"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+scaas-near-common = { path = "../common" }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

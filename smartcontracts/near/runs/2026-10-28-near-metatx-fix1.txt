@@ -1,0 +1,435 @@
+# smartcontracts/scripts/test.sh near (Task 6 fix 1: routed_plan + value_policy, success-only log rule, robust tests) at commit da6ce448 + the fix 1 tree
+== test near
+check_no_authority: clean (3 paths)
+== build near
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.12s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793140108, tv_nsec: 229107800 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm" = SystemTime { tv_sec: 1793140085, tv_nsec: 657054319 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 140ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_spike_p256/scaas_near_spike_p256.wasm
+     -                  Size: 84.5 KB (84487 bytes)
+     - SHA-256 checksum hex : e03e8eb54b787607dd4f3863cb8b5ed2b3c275c4e5a1d507f7e25f4a48ba9492
+     - SHA-256 checksum bs58: G6Mej3GrPyjrsHyDU9Yu2oerCcBKghtb4YLuEwafAxws
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │     Finished `release` profile [optimized] target(s) in 0.12s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 666366610 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm" = SystemTime { tv_sec: 1793133937, tv_nsec: 857892155 }
+
+• Skipped running wasm-opt as final target exists and is newer than wasm produced by cargo
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_test_receiver/scaas_near_test_receiver.wasm
+     -                  Size: 84.6 KB (84631 bytes)
+     - SHA-256 checksum hex : e5b40e085ce6c09b48b95b7e4a6437b4f9083d87fbd8f2cc6d58602c544a9844
+     - SHA-256 checksum bs58: GTfc3TVQgTG6cH4s1FkMqFrhfqNiNimnz3Lv5wQ7o8ps
+    Finished cargo near build in 0s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+• Collecting cargo project metadata...
+• done
+
+• Checking rustc version...
+INFO: contract's near-sdk targets protocol version 88; rustc 1.97.1 accepted (bulk-memory opcodes supported by nearcore VM)
+• done
+
+• Checking the host environment...
+• done
+
+• Building contract
+ │    Compiling scaas-near-token v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/token)
+ │     Finished `release` profile [optimized] target(s) in 4.33s
+
+Modification timestamps of:
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/wasm32-unknown-unknown/release/scaas_near_token.wasm" = SystemTime { tv_sec: 1793141481, tv_nsec: 340394626 }
+ |    "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm" = SystemTime { tv_sec: 1793140328, tv_nsec: 405942113 }
+
+• Running an optimize for size post-step with wasm-opt --enable-nontrapping-float-to-int --enable-bulk-memory...
+    Finished wasm-opt -O in 550ms
+• done
+
+✓ Contract successfully built! (in CARGO_NEAR_BUILD_ENVIRONMENT=host)
+     -                Binary: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/near/target/near/scaas_near_token/scaas_near_token.wasm
+     -                  Size: 356.0 KB (356028 bytes)
+     - SHA-256 checksum hex : c439386e30d838fbcd3a5815c46ebfb72cbbb199d2f1eb6a7c899b6d4978183b
+     - SHA-256 checksum bs58: ECyWrnp47j5ep4b6taJi632Py7ScbtW4zwqxc3QsBhGe
+    Finished cargo near build in 5s
+Here is the console command if you ever need to re-run it again:
+cargo near build non-reproducible-wasm --no-abi
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.64s
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_common-335f21f109829737)
+
+running 1 test
+test holder::tests::borsh_and_display_match_the_vectors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/vectors.rs (target/debug/deps/vectors-ff83db571f5de39b)
+
+running 7 tests
+test metaop_vectors_match ... ok
+test native_id_forms ... ok
+test nep413_vectors_match ... ok
+test pay_meta_vectors_match ... ok
+test relay_ref_vectors_match ... ok
+test ua_of_matches_kinds_json_valid_rows ... ok
+test webauthn_grammar_net_all_04 ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+     Running tests/account.rs (target/debug/deps/account-94ef48b1242c1030)
+
+running 11 tests
+test access_key_signature_never_accepted ... mtx_set_guardian by f04ac429fc959dd4fa39088acb45692354d6505e24d18856a525ed10fcd7899f: 1.867 Tgas, ok false
+mtx_set_guardian by dev-20261027225130-49001178870715.test.near: 1.867 Tgas, ok false
+mtx_set_guardian by f04ac429fc959dd4fa39088acb45692354d6505e24d18856a525ed10fcd7899f: 1.919 Tgas, ok false
+ok
+test cancel_recovery_by_key ... mtx_set_guardian by dev-20261027225134-69865997950559.test.near: 2.460 Tgas, ok true
+mtx_start_recovery by dev-20261027225134-69865997950559.test.near: 2.270 Tgas, ok false
+mtx_start_recovery by dev-20261027225134-69865997950559.test.near: 2.682 Tgas, ok true
+mtx_cancel_recovery by dev-20261027225134-69865997950559.test.near: 2.416 Tgas, ok true
+mtx_finish_recovery by dev-20261027225134-69865997950559.test.near: 2.203 Tgas, ok false
+mtx_cancel_recovery by dev-20261027225134-69865997950559.test.near: 2.126 Tgas, ok false
+mtx_start_recovery by dev-20261027225134-69865997950559.test.near: 2.638 Tgas, ok true
+mtx_set_guardian by dev-20261027225134-69865997950559.test.near: 2.419 Tgas, ok true
+ok
+test ed25519_secp256k1_passkey_each_accepted ... mtx_set_guardian by dev-20261027225139-36959718279274.test.near: 2.465 Tgas, ok true
+ed25519 UA opened by mtx_set_guardian: record 179 B, storage_needed 1790000000000000000000
+mtx_set_guardian by dev-20261027225139-36959718279274.test.near: 2.409 Tgas, ok true
+mtx_set_guardian by dev-20261027225139-36959718279274.test.near: 2.493 Tgas, ok true
+secp256k1 UA opened by mtx_set_guardian: record 211 B, storage_needed 2110000000000000000000
+mtx_set_guardian by dev-20261027225139-36959718279274.test.near: 2.441 Tgas, ok true
+mtx_set_guardian by dev-20261027225139-36959718279274.test.near: 22.218 Tgas, ok true
+passkey UA opened by mtx_set_guardian: record 269 B, storage_needed 2690000000000000000000
+mtx_set_guardian by dev-20261027225139-36959718279274.test.near: 22.166 Tgas, ok true
+ok
+test msig_native_member_only_as_predecessor ... mtx_set_guardian by dev-20261027225144-69444748353599.test.near: 2.252 Tgas, ok false
+mtx_set_guardian by dev-20261027225144-69444748353599.test.near: 2.269 Tgas, ok false
+mtx_set_guardian by dev-20261027225144-92089469188461.test.near: 2.524 Tgas, ok true
+msig UA (near-account + ed25519) opened: storage_needed 1750000000000000000000
+mtx_set_guardian by dev-20261027225144-69444748353599.test.near: 2.190 Tgas, ok false
+mtx_set_guardian by dev-20261027225144-92089469188461.test.near: 2.472 Tgas, ok true
+mtx_set_guardian by dev-20261027225144-69444748353599.test.near: 2.262 Tgas, ok false
+mtx_set_guardian by dev-20261027225144-69444748353599.test.near: 2.262 Tgas, ok false
+mtx_set_guardian by dev-20261027225144-69444748353599.test.near: 2.842 Tgas, ok true
+ok
+test ninth_key_refused ... add_key_native by dev-20261027225149-12561444582187.test.near: 2.741 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.766 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.770 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.776 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.781 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.786 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.790 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.795 Tgas, ok true
+add_key_native by dev-20261027225149-12561444582187.test.near: 2.268 Tgas, ok false
+mtx_add_key by dev-20261027225149-15042033473006.test.near: 2.187 Tgas, ok false
+Near holder record, 8 ed25519 keys: 412 B
+mtx_set_guardian by dev-20261027225149-15042033473006.test.near: 2.440 Tgas, ok true
+ok
+test origin_and_rp_checked ... mtx_set_guardian by dev-20261027225157-90513275870363.test.near: 22.202 Tgas, ok true
+mtx_set_guardian by dev-20261027225157-90513275870363.test.near: 1.886 Tgas, ok false
+mtx_add_origin by dev-20261027225157-90513275870363.test.near: 22.161 Tgas, ok true
+mtx_set_guardian by dev-20261027225157-90513275870363.test.near: 22.154 Tgas, ok true
+mtx_set_guardian by dev-20261027225157-90513275870363.test.near: 1.873 Tgas, ok false
+mtx_set_guardian by dev-20261027225157-90513275870363.test.near: 1.934 Tgas, ok false
+mtx_remove_origin by dev-20261027225157-90513275870363.test.near: 22.159 Tgas, ok true
+mtx_remove_origin by dev-20261027225157-90513275870363.test.near: 21.875 Tgas, ok false
+ok
+test recovery_after_delay_only ... mtx_set_guardian by dev-20261027225203-80361893671084.test.near: 2.460 Tgas, ok true
+mtx_start_recovery by dev-20261027225203-80361893671084.test.near: 2.270 Tgas, ok false
+mtx_start_recovery by dev-20261027225203-80361893671084.test.near: 2.682 Tgas, ok true
+mtx_finish_recovery by dev-20261027225203-80361893671084.test.near: 2.209 Tgas, ok false
+mtx_finish_recovery by dev-20261027225203-80361893671084.test.near: 2.268 Tgas, ok false
+mtx_finish_recovery by dev-20261027225203-80361893671084.test.near: 2.636 Tgas, ok true
+mtx_set_guardian by dev-20261027225203-80361893671084.test.near: 2.416 Tgas, ok true
+mtx_set_guardian by dev-20261027225203-80361893671084.test.near: 2.414 Tgas, ok true
+ok
+test secp256k1_high_s_refused ... mtx_set_guardian by dev-20261027225211-13605080551519.test.near: 2.211 Tgas, ok false
+mtx_set_guardian by dev-20261027225211-13605080551519.test.near: 2.481 Tgas, ok true
+ok
+test set_policy_by_key_op ... mtx_set_policy by dev-20261027225215-65727264847421.test.near: 2.454 Tgas, ok true
+mtx_set_guardian by dev-20261027225215-65727264847421.test.near: 2.414 Tgas, ok true
+mtx_set_policy by dev-20261027225215-65727264847421.test.near: 2.130 Tgas, ok false
+mtx_set_policy by dev-20261027225215-65727264847421.test.near: 1.741 Tgas, ok false
+mtx_set_guardian by dev-20261027225215-65727264847421.test.near: 1.660 Tgas, ok false
+mtx_set_guardian by dev-20261027225215-65727264847421.test.near: 1.742 Tgas, ok false
+mtx_set_policy by dev-20261027225215-65727264847421.test.near: 2.411 Tgas, ok true
+ok
+test ua_opened_lazily_relayer_pays_storage ... ed25519 UA opened by mtx_add_key, 2 keys: 169 B record = 1690000000000000000000 yocto
+mtx_add_key by dev-20261027225220-61359266200430.test.near: 2.779 Tgas, ok false
+mtx_add_key by dev-20261027225220-61359266200430.test.near: 3.190 Tgas, ok true
+mtx_add_key by dev-20261027225220-61359266200430.test.near: 2.576 Tgas, ok false
+mtx_remove_key by dev-20261027225220-61359266200430.test.near: 2.411 Tgas, ok true
+ok
+test wrong_network_or_contract_refused ... mtx_set_guardian by dev-20261027225225-59369450938670.test.near: 1.747 Tgas, ok false
+mtx_set_guardian by dev-20261027225225-59369450938670.test.near: 1.744 Tgas, ok false
+mtx_set_guardian by dev-20261027225225-59369450938670.test.near: 1.746 Tgas, ok false
+mtx_set_guardian by dev-20261027225225-59369450938670.test.near: 1.755 Tgas, ok false
+mtx_set_guardian by dev-20261027225225-59369450938670.test.near: 1.742 Tgas, ok false
+mtx_set_guardian by dev-20261027225225-59369450938670.test.near: 1.731 Tgas, ok false
+mtx_set_guardian by dev-20261027225225-59369450938670.test.near: 2.463 Tgas, ok true
+ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 59.92s
+
+     Running tests/metatx.rs (target/debug/deps/metatx-18fff3ce4191ff0d)
+
+running 12 tests
+test batch_of_actions_atomic ... batch of two mtx_pay: 8.279 Tgas
+ok
+test near_check_storage_needed_is_exact ... mtx_pay by dev-20261027225234-26122298924657.test.near: 3.723 Tgas, ok false
+mtx_pay by dev-20261027225234-26122298924657.test.near: 4.401 Tgas, ok true
+mtx_pay: first op 334 B charged (334 B measured), 3340000000000000000000 yocto
+mtx_pay by dev-20261027225234-26122298924657.test.near: 3.852 Tgas, ok true
+mtx_pay by dev-20261027225234-26122298924657.test.near: 3.716 Tgas, ok true
+mtx_pay_meta by dev-20261027225234-26122298924657.test.near: 4.630 Tgas, ok false
+mtx_pay_meta by dev-20261027225234-26122298924657.test.near: 5.231 Tgas, ok true
+mtx_pay_meta: first op 370 B charged (349 B measured), 3700000000000000000000 yocto
+mtx_pay_meta by dev-20261027225234-26122298924657.test.near: 4.469 Tgas, ok true
+mtx_transfer by dev-20261027225234-26122298924657.test.near: 3.544 Tgas, ok false
+mtx_transfer by dev-20261027225234-26122298924657.test.near: 4.234 Tgas, ok true
+mtx_transfer: first op 334 B charged (334 B measured), 3340000000000000000000 yocto
+mtx_transfer by dev-20261027225234-26122298924657.test.near: 3.679 Tgas, ok true
+mtx_transfer by dev-20261027225234-26122298924657.test.near: 3.538 Tgas, ok true
+mtx_execute_transfer by dev-20261027225234-26122298924657.test.near: 3.919 Tgas, ok false
+mtx_execute_transfer by dev-20261027225234-26122298924657.test.near: 4.527 Tgas, ok true
+mtx_execute_transfer: first op 370 B charged (349 B measured), 3700000000000000000000 yocto
+mtx_execute_transfer by dev-20261027225234-26122298924657.test.near: 3.764 Tgas, ok true
+mtx_execute_transfer by dev-20261027225234-26122298924657.test.near: 3.623 Tgas, ok true
+ok
+test near_pay_meta_mismatch_and_replay ... mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 1.782 Tgas, ok false
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 1.782 Tgas, ok false
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 1.801 Tgas, ok false
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 1.801 Tgas, ok false
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 4.249 Tgas, ok true
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 4.191 Tgas, ok true
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 2.258 Tgas, ok false
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 2.258 Tgas, ok false
+mtx_pay by dev-20261027225251-87570061978276.test.near: 2.186 Tgas, ok false
+mtx_pay by dev-20261027225251-87570061978276.test.near: 3.759 Tgas, ok true
+mtx_pay_meta by dev-20261027225251-87570061978276.test.near: 2.258 Tgas, ok false
+ok
+test near_valid_until_is_seconds ... block timestamp 1793141581851209532 ns = 1793141581 s
+mtx_pay by dev-20261027225259-49067768086755.test.near: 1.733 Tgas, ok false
+mtx_pay by dev-20261027225259-49067768086755.test.near: 3.813 Tgas, ok true
+ok
+test near_wrapper_bound_pay_refused_direct ... mtx_pay by dev-20261027225303-58086443513093.test.near: 1.745 Tgas, ok false
+mtx_pay_meta by dev-20261027225303-58086443513093.test.near: 1.817 Tgas, ok false
+ok
+test pay_meta_emits_meta_then_settled ... mtx_pay_meta by dev-20261027225307-75386311369761.test.near: 4.245 Tgas, ok true
+mtx_pay_meta note_utf8: meta 160 B, 4.245 Tgas
+mtx_pay_meta by dev-20261027225307-75386311369761.test.near: 4.304 Tgas, ok true
+mtx_pay_meta structured_reference: meta 320 B, 4.304 Tgas
+mtx_pay_meta by dev-20261027225307-75386311369761.test.near: 4.086 Tgas, ok true
+mtx_pay_meta bound_call: meta 192 B, 4.086 Tgas
+mtx_pay_meta by dev-20261027225307-75386311369761.test.near: 4.084 Tgas, ok true
+mtx_pay_meta encrypted_illustrative: meta 192 B, 4.084 Tgas
+mtx_pay_meta by dev-20261027225307-75386311369761.test.near: 3.921 Tgas, ok true
+mtx_pay_meta empty_body: meta 96 B, 3.921 Tgas
+mtx_pay_meta by dev-20261027225307-75386311369761.test.near: 10.769 Tgas, ok true
+mtx_pay_meta long_body_4096: meta 4192 B, 10.769 Tgas
+ok
+test pay_meta_size_bound_measured ... mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 13.708 Tgas, ok false
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.031 Tgas, ok true
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 12.044 Tgas, ok false
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.412 Tgas, ok false
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.508 Tgas, ok false
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.129 Tgas, ok true
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.179 Tgas, ok true
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.373 Tgas, ok false
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.278 Tgas, ok false
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.200 Tgas, ok true
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.269 Tgas, ok false
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.205 Tgas, ok true
+mtx_pay_meta by dev-20261027225313-51346917820005.test.near: 16.265 Tgas, ok false
+largest meta that settles: 7540 B; 7541 B fails: [ExecutionOutcome { transaction_hash: APep5q6ccPZpNDivDuKz14Jk9JSeR3KQQBWHKrqJsKqt, block_hash: 8ywzw3y4jUjXkiLnbahcwRg8vhqFFgR6wzSM5XZ7ZLyp, logs: ["EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"payment_meta\",\"data\":{\"pay_ref\":\"0x77747a55c57aa4f5d745b844c876b257bfebf0736027d200123d9120b239157d\",\"meta\":\"0x5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a\"}}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0x614856bc83c4a19363c308cacf34d87491e1444e7017129547626392bba51f53\",\"relayer\":\"dev-20261027225313-51346917820005.test.near\",\"lane\":\"0x118ed655299b41283fd897f5c06632c0cff0fa053cddb1e1447ffe67f690c80f\",\"nonce\":0,\"digest\":\"0xb60530936db61415ed313641acacaf19954710cd74916ff00596b6a22a3ab9d7\"}}", "EVENT_JSON:{\"standard\":\"nep141\",\"version\":\"1.0.0\",\"event\":\"ft_transfer\",\"data\":[{\"old_owner_id\":\"dev-20261027225312-13504383278357.test.near\",\"new_owner_id\":\"dev-20261027225313-60492694254082.test.near\",\"amount\":\"1\"}]}", "EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0x614856bc83c4a19363c308cacf34d87491e1444e7017129547626392bba51f53\",\"to\":\"dev-20261027225313-60492694254082.test.near\",\"amount\":\"1\"}}"], receipt_ids: [6BJ556MSYQds7zfbMX3s3sh4re3Rr2sF5QkZTZ2wgG31, v2MN8TS3sEVcT28wyHDLy92BxPJRfduGbUWaEGTqivz], gas_burnt: NearGas { inner: 15130272830648 }, tokens_burnt: NearToken { inner: 1513027283064800000000 }, executor_id: AccountId("dev-20261027225312-13504383278357.test.near"), status: Failure(ActionError(ActionError { index: Some(0), kind: FunctionCallError(ExecutionError("The length of a log message 16385 exceeds the limit 16384")) })) }]
+ok
+test pay_once_per_lane ... mtx_pay by dev-20261027225322-68926404738856.test.near: 3.814 Tgas, ok true
+mtx_pay by dev-20261027225322-68926404738856.test.near: 2.186 Tgas, ok false
+mtx_pay by dev-20261027225322-68926404738856.test.near: 2.186 Tgas, ok false
+mtx_pay by dev-20261027225322-68926404738856.test.near: 3.611 Tgas, ok true
+mtx_pay by dev-20261027225322-68926404738856.test.near: 3.752 Tgas, ok true
+mtx_execute_transfer by dev-20261027225322-68926404738856.test.near: 2.187 Tgas, ok false
+ok
+test pay_to_token_itself_refused ... mtx_pay by dev-20261027225328-99758624037788.test.near: 1.742 Tgas, ok false
+mtx_transfer by dev-20261027225328-99758624037788.test.near: 1.743 Tgas, ok false
+mtx_execute_transfer by dev-20261027225328-99758624037788.test.near: 1.743 Tgas, ok false
+mtx_pay_meta by dev-20261027225328-99758624037788.test.near: 1.814 Tgas, ok false
+ok
+test policy_passkey_for_value ... mtx_add_key by dev-20261027225333-48599902646662.test.near: 2.512 Tgas, ok true
+mtx_set_policy by dev-20261027225333-48599902646662.test.near: 2.419 Tgas, ok true
+mtx_pay by dev-20261027225333-48599902646662.test.near: 2.130 Tgas, ok false
+mtx_transfer by dev-20261027225333-48599902646662.test.near: 2.131 Tgas, ok false
+mtx_execute_transfer by dev-20261027225333-48599902646662.test.near: 2.131 Tgas, ok false
+mtx_pay_meta by dev-20261027225333-48599902646662.test.near: 2.202 Tgas, ok false
+mtx_pay by dev-20261027225333-48599902646662.test.near: 23.414 Tgas, ok true
+mtx_transfer by dev-20261027225333-48599902646662.test.near: 23.184 Tgas, ok true
+mtx_execute_transfer by dev-20261027225333-48599902646662.test.near: 23.337 Tgas, ok true
+mtx_pay_meta by dev-20261027225333-48599902646662.test.near: 23.771 Tgas, ok true
+mtx_set_guardian by dev-20261027225333-48599902646662.test.near: 2.429 Tgas, ok true
+ok
+test relayer_bound_to_predecessor ... mtx_pay by dev-20261027225341-45071116573165.test.near: 1.745 Tgas, ok false
+mtx_pay by dev-20261027225340-82682313292911.test.near: 3.820 Tgas, ok true
+ok
+test transfer_to_unregistered_native_registers_from_deposit ... mtx_transfer by dev-20261027225344-80904364163411.test.near: 3.649 Tgas, ok true
+mtx_transfer by dev-20261027225344-80904364163411.test.near: 1.726 Tgas, ok false
+mtx_execute_transfer by dev-20261027225344-80904364163411.test.near: 3.606 Tgas, ok true
+mtx_execute_transfer by dev-20261027225344-80904364163411.test.near: 3.446 Tgas, ok true
+mtx_execute_transfer by dev-20261027225344-80904364163411.test.near: 1.721 Tgas, ok false
+mtx_pay by dev-20261027225344-80904364163411.test.near: 1.724 Tgas, ok false
+ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 79.50s
+
+     Running tests/p256_spike.rs (target/debug/deps/p256_spike-7b8ac62e93a6eb78)
+
+running 2 tests
+test p256_two_passkey_relay_fee_fits_300_tgas ... wasm 84487 B
+success true
+total_gas_burnt 42263843131726 gas = 42.264 Tgas (limit 300 Tgas)
+receipt 0 (function call) burnt 41944767184908 gas
+tx -> receipt conversion burnt 319075946818 gas
+verify a (vector): 19986682980279 gas = 19.987 Tgas
+verify b (generated): 20001499170327 gas = 20.001 Tgas
+ok
+test webauthn_vector_accepted ... wasm 84487 B
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.09s
+
+     Running tests/token.rs (target/debug/deps/token-c7f9bc9147ffacdc)
+
+running 10 tests
+test check_no_authority_finds_forbidden_api ... ok
+test ft_transfer_call_resolves_as_nep141 ... storage_deposit by dev-20261027225353-67615858968372.test.near: 1993384527986 = 1.993 Tgas, ok true
+mint by dev-20261027225352-87788950834102.test.near: 2104256512680 = 2.104 Tgas, ok true
+ft_transfer_call by dev-20261027225353-67615858968372.test.near: 6691246640728 = 6.691 Tgas, ok true
+ft_transfer_call by dev-20261027225353-67615858968372.test.near: 1789484897585 = 1.789 Tgas, ok false
+ft_transfer_call by dev-20261027225353-67615858968372.test.near: 6563619554515 = 6.564 Tgas, ok true
+ok
+test ft_transfer_registered_needs_one_yocto ... storage_deposit by dev-20261027225358-99489968411693.test.near: 1993384527986 = 1.993 Tgas, ok true
+mint by dev-20261027225357-47539371967022.test.near: 2104256512680 = 2.104 Tgas, ok true
+storage_deposit by dev-20261027225358-99489968411693.test.near: 1997944527986 = 1.998 Tgas, ok true
+ft_transfer by dev-20261027225358-99489968411693.test.near: 1775162768678 = 1.775 Tgas, ok false
+ft_transfer by dev-20261027225358-99489968411693.test.near: 2221527893678 = 2.222 Tgas, ok false
+ft_transfer by dev-20261027225358-99489968411693.test.near: 2312747576608 = 2.313 Tgas, ok true
+ok
+test ft_transfer_unregistered_auto_registers ... storage_deposit by dev-20261027225403-77994444734193.test.near: 1993384527986 = 1.993 Tgas, ok true
+mint by dev-20261027225402-91938001320638.test.near: 2104256512680 = 2.104 Tgas, ok true
+ft_transfer by dev-20261027225403-77994444734193.test.near: 2318671430465 = 2.319 Tgas, ok false
+ft_transfer by dev-20261027225403-77994444734193.test.near: 3069000605878 = 3.069 Tgas, ok true
+auto-register: alice spent 1735446110587800000000 yocto (min 1250000000000000000000 + fees)
+ok
+test mint_admin_only ... storage_deposit by dev-20261027225407-21947242940035.test.near: 1993384527986 = 1.993 Tgas, ok true
+mint by dev-20261027225407-21947242940035.test.near: 2148329507744 = 2.148 Tgas, ok false
+mint by dev-20261027225406-29175317969905.test.near: 2103719943066 = 2.104 Tgas, ok true
+ok
+test storage_bounds_min_equals_max_equals_measured ... storage_deposit by dev-20261027225413-85321088921166.test.near: 1998455232485 = 1.998 Tgas, ok true
+storage_deposit by dev-20261027225413-85321088921166.test.near: 1997944527986 = 1.998 Tgas, ok true
+mint by dev-20261027225412-87873429379956.test.near: 2108816512680 = 2.109 Tgas, ok true
+transfer_to_ua by dev-20261027225413-85321088921166.test.near: 3198709084276 = 3.199 Tgas, ok true
+storage_byte_cost 10000000000000000000 yocto/byte (protocol config)
+record account (NEP-145 registration, 64-char id): 125 B, deposit 1250000000000000000000 yocto
+record ua_balance (UA ledger entry): 89 B, deposit 890000000000000000000 yocto
+ok
+test storage_unregister_registered_panics_force_included ... storage_deposit by dev-20261027225418-10984404235915.test.near: 1993384527986 = 1.993 Tgas, ok true
+mint by dev-20261027225417-18262302162124.test.near: 2103199005816 = 2.103 Tgas, ok true
+storage_unregister by dev-20261027225418-10984404235915.test.near: 2218566307394 = 2.219 Tgas, ok false
+storage_unregister by dev-20261027225418-10984404235915.test.near: 2219906866949 = 2.220 Tgas, ok false
+storage_unregister by dev-20261027225418-10984404235915.test.near: 2219843429138 = 2.220 Tgas, ok false
+storage_unregister by dev-20261027225418-34740794556457.test.near: 1851099713591 = 1.851 Tgas, ok true
+ok
+test storage_withdraw_positive_panics ... storage_deposit by dev-20261027225423-11182331041637.test.near: 1993384527986 = 1.993 Tgas, ok true
+storage_withdraw by dev-20261027225423-11182331041637.test.near: 2217343474100 = 2.217 Tgas, ok false
+storage_withdraw by dev-20261027225423-11182331041637.test.near: 1852704347030 = 1.853 Tgas, ok true
+ok
+test token_refuses_transfer_to_self ... storage_deposit by dev-20261027225427-22340892512445.test.near: 1993384527986 = 1.993 Tgas, ok true
+mint by dev-20261027225426-21795072574192.test.near: 2104256512680 = 2.104 Tgas, ok true
+ft_transfer by dev-20261027225427-22340892512445.test.near: 2157824910443 = 2.158 Tgas, ok false
+ft_transfer by dev-20261027225427-22340892512445.test.near: 2157824910443 = 2.158 Tgas, ok false
+ft_transfer_call by dev-20261027225427-22340892512445.test.near: 2171823353846 = 2.172 Tgas, ok false
+ft_transfer_call by dev-20261027225427-22340892512445.test.near: 2171823353846 = 2.172 Tgas, ok false
+mint by dev-20261027225426-21795072574192.test.near: 2169565661093 = 2.170 Tgas, ok false
+ok
+test transfer_to_ua_credits_ua_ledger ... storage_deposit by dev-20261027225433-70698156090474.test.near: 1993384527986 = 1.993 Tgas, ok true
+mint by dev-20261027225432-93937723829537.test.near: 2104256512680 = 2.104 Tgas, ok true
+transfer_to_ua by dev-20261027225433-70698156090474.test.near: 2228031329552 = 2.228 Tgas, ok false
+transfer_to_ua by dev-20261027225433-70698156090474.test.near: 3190447398589 = 3.190 Tgas, ok true
+transfer_to_ua new record: alice spent 1387590789858900000000 yocto (UA record 890000000000000000000 + fees)
+transfer_to_ua by dev-20261027225433-70698156090474.test.near: 1774693922048 = 1.775 Tgas, ok false
+transfer_to_ua by dev-20261027225433-70698156090474.test.near: 2221059047048 = 2.221 Tgas, ok false
+transfer_to_ua by dev-20261027225433-70698156090474.test.near: 2575807382621 = 2.576 Tgas, ok true
+ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 46.06s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_spike_p256-36c86ba7437a8ac4)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_test_receiver-7a629df9825137bc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_token-b5244af93ca57687)
+
+running 1 test
+test metatx::tests::routed_plan_shape_payee_and_policy ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+   Doc-tests scaas_near_common
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_spike_p256
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests scaas_near_token
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0

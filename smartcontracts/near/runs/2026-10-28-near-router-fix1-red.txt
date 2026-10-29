@@ -1,0 +1,30 @@
+# relayfee unit RED for review m1 at commit 7bbb0584 + test stale_callback_leaves_a_newer_entry_alone (callbacks carry no entry identity yet)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.71s
+     Running unittests src/lib.rs (target/debug/deps/scaas_near_relayfee-44e964d2086127e2)
+
+running 6 tests
+test tests::relay_ref_vectors ... ok
+test tests::stale_callback_leaves_a_newer_entry_alone ... FAILED
+test tests::hold_refused_returns_deposits ... ok
+test tests::timeout_during_hold_returns_target_deposit ... ok
+test tests::failed_settle_kept_for_the_timeout ... ok
+test tests::late_callbacks_pay_nothing ... ok
+
+failures:
+
+---- tests::stale_callback_leaves_a_newer_entry_alone stdout ----
+
+thread 'tests::stale_callback_leaves_a_newer_entry_alone' (28550) panicked at relayfee/src/lib.rs:599:13:
+assertion `left == right` failed: relay 1's late callback acts on relay 1 only
+  left: [("token2.near", "relay_release", 0), ("router.near", "on_settle", 0)]
+ right: []
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::stale_callback_leaves_a_newer_entry_alone
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+error: test failed, to rerun pass `-p scaas-near-relayfee --lib`
+rc=101
