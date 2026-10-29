@@ -23,6 +23,7 @@ import {ZetherProver} from "./ZetherProver.sol";
 import {ZetherKeys} from "./ZetherKeys.sol";
 import {Catalogue, zetherEnv} from "../../helpers/Catalogue.sol";
 import {ZetherVerifierBase} from "../../../src/zether/ZetherVerifier.sol";
+import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -153,17 +154,17 @@ abstract contract ZetherFixture is Test {
         u.evm = evm;
         bytes memory pop = ZetherKeys.schnorr(x, _popMsg(u.y), bls);
         vm.prank(evm);
-        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, pop, "", ""));
+        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, IUARegistry.UAAttrs("", 0, 0, ""), pop, ""));
     }
 
     function _zkind() internal pure returns (uint16) {
         return UAKinds.ZETHER_BLS12381;
     }
 
-    /// `uaMessage(kind, POP, popDigest(UA(Y), 0))`, what the Zether key signs to register (CTR-UA-07).
+    /// the portable `uaMessage(kind, POP_V2, registrationDigest(portablePopDigest(UA(Y), 0, 0), 0))` (UA-8), what the Zether key signs to register (CTR-UA-07).
     function _popMsg(bytes memory y) internal view returns (bytes32) {
         bytes32 ua = ZetherTypes.UA.unwrap(ZetherTypes.toUA(y));
-        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP, reg.popDigest(ua, 0));
+        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0));
     }
 
     /// An owner op (roll-over, mode; `requireAuthorized` under `zether-owner`, UA-6 U9):

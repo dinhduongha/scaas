@@ -1,0 +1,42 @@
+# A5 RED: forge test --match-path 'test/ua/UARegistry*.t.sol' at commit e8a6a711 (src at HEAD, the new UARegistryUA8.t.sol added)
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:220:26:
+    |
+220 |     function _registerAt(address at, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d, uint256 bound)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistryGroups.t.sol:434:56:
+    |
+434 |     function _memberBound(uint16 kind, uint256 sigLen, address at) internal {
+    |                                                        ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistryUA8.t.sol:445:40:
+    |
+445 |             (uint16 k, bytes memory d, IUARegistry.UAAttrs memory at, bytes memory p, bytes memory z) = a.registrationOf(ua);
+    |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Error (7920): Identifier not found or not unique.
+  --> test/ua/UARegistryUA8.t.sol:62:9:
+   |
+62 |         IUARegistry.UAAttrs attrs;
+   |         ^^^^^^^^^^^^^^^^^^^
+rc=1

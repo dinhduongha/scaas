@@ -213,20 +213,53 @@ abstract contract UARegistryBase is Test {
         return abi.encodePacked(keccak256(abi.encode(keyData, message)));
     }
 
-    function _pop(UARegistry r, uint16 kind, bytes memory keyData) internal view returns (bytes memory) {
-        bytes32 ua = r.uaOf(kind, keyData);
-        return _sig(keyData, r.uaMessage(kind, UAKinds.PURPOSE_POP, r.popDigest(ua, 0)));
+    /// No attributes (UA-8 `UAAttrs`: empty / 0 = absent).
+    function _none() internal pure returns (IUARegistry.UAAttrs memory) {}
+
+    /// The UA-8 registration digest (portable, no chain context): `registrationDigest(portablePopDigest(ua, pqzKeyHash,
+    /// kemRecordHash), pqzPopHash)` of `a`.
+    function _regDigest(bytes32 ua, IUARegistry.UAAttrs memory a) internal pure returns (bytes32) {
+        bytes32 h = a.pqzKey.length == 0 ? bytes32(0) : UAKinds.keyHashOf(UAKinds.PQZ_MLWE, a.pqzKey);
+        bytes32 k = a.kemVersion == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, a.kemVersion, a.kemPk);
+        return UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, h, k), a.pqzPopHash);
+    }
+
+    /// The stand-in PoP of `keyData` (no attributes) on any registry: the same bytes everywhere (UA-8 P1).
+    function _pop(UARegistry r, uint16 kind, bytes memory keyData) internal pure returns (bytes memory) {
+        return _pop(r, kind, keyData, _none());
+    }
+
+    function _pop(UARegistry r, uint16 kind, bytes memory keyData, IUARegistry.UAAttrs memory a)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        bytes32 ua = UAKinds.uaOf(kind, keyData);
+        r; // the PoP has no registry context (UA-8 P1); the parameter keeps the call sites
+        return _sig(keyData, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, a)));
     }
 
     function _register(UARegistry r, uint16 kind, bytes memory keyData) internal returns (bytes32) {
-        return r.register(kind, keyData, _pop(r, kind, keyData), "", "");
+        return r.register(kind, keyData, _none(), _pop(r, kind, keyData), "");
+    }
+
+    /// The UA-8 `register` with every argument.
+    function _register(
+        UARegistry r,
+        uint16 kind,
+        bytes memory keyData,
+        IUARegistry.UAAttrs memory attrs,
+        bytes memory pop,
+        bytes memory pqzPop
+    ) internal returns (bytes32) {
+        return r.register(kind, keyData, attrs, pop, pqzPop);
     }
 
     /// The PoP is computed first: `vm.expectRevert` applies to the next external call.
     function _registerReverts(UARegistry r, uint16 kind, bytes memory keyData, bytes memory err) internal {
         bytes memory pop = _pop(r, kind, keyData);
         vm.expectRevert(err);
-        r.register(kind, keyData, pop, "", "");
+        r.register(kind, keyData, _none(), pop, "");
     }
 
     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)

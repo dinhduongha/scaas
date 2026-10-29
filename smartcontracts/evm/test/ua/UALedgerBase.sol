@@ -59,8 +59,13 @@ abstract contract UALedgerBase is UARegistryBase {
         uaB = _register(lreg, UAKinds.BIP340, _key(UAKinds.BIP340));
         bytes memory y = ZetherKeys.pub(ZX, true);
         bytes32 z = lreg.uaOf(UAKinds.ZETHER_BLS12381, y);
-        uaZ = lreg.register(UAKinds.ZETHER_BLS12381, y,
-            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP, lreg.popDigest(z, 0)), true), "", "");
+        uaZ = lreg.register(
+            UAKinds.ZETHER_BLS12381,
+            y,
+            _none(),
+            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(z, 0, 0), 0)), true),
+            ""
+        );
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
         tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));

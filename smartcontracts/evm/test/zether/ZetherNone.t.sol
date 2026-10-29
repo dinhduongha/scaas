@@ -664,11 +664,14 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         uint256 x = 0xBEEF1;
         bytes memory y = ZetherKeys.pub(x, false);
         bytes32 other = reg.uaOf(UAKinds.SCHNORR_BN254, y);
-        bytes32 pd = reg.popDigest(other, 0);
+        bytes32 pd = UAKinds.registrationDigest(UAKinds.portablePopDigest(other, 0, 0), 0); // UA-8: portable
         vm.prank(address(0xB0B));
         reg.register(
-            UAKinds.SCHNORR_BN254, y,
-            ZetherKeys.sign("scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP, pd), false), "", ""
+            UAKinds.SCHNORR_BN254,
+            y,
+            IUARegistry.UAAttrs("", 0, 0, ""),
+            ZetherKeys.sign("scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP_V2, pd), false),
+            ""
         );
         _refusedOwnerOps(other, x);
         _refusedOwnerOps(keccak256("unregistered"), x);

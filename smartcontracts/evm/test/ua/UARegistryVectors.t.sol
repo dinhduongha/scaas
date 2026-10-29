@@ -19,7 +19,7 @@ import {
 import {UARegistryBase} from "./UARegistryBase.sol";
 
 /// The registry with the real UA-2a/UA-2b verifiers on smartcontracts/vectors/ua/signatures.json (context A, generation 1):
-/// T-REG-1/T-REG-2/T-AUTH-1/T-AUTH-2/T-AUTH-3/T-CHAIN on the published rows. Gas of every call is logged (`-vv`).
+/// T-REG-1/T-REG-2/T-AUTH-1/T-AUTH-2/T-AUTH-3/T-CHAIN on the published rows (UA-8: the PoPs are portable). Gas of every call is logged (`-vv`).
 contract UARegistryVectorsTest is UARegistryBase {
     string internal sj;
     bytes32 internal digest;
@@ -76,9 +76,11 @@ contract UARegistryVectorsTest is UARegistryBase {
         uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
         bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
         bytes32 ua = vm.parseJsonBytes32(sj, _d(i, "ua"));
-        assertEq(reg.popDigest(ua, 0), vm.parseJsonBytes32(sj, _d(i, "pop.popDigest")));
-        // PoPs for another chain / registry and SIG-DST signatures offered as PoP: refused before the record exists
-        _popRefused(kind, k, vm.parseJsonBytes(sj, _d(i, "popOther.sig")));
+        // UA-8: the portable PoP (`pop.popDigest` = portablePopDigest), the same under context B (`popOther`); the
+        // pre-UA-8 chain-bound PoP, the v1 purpose and SIG-DST signatures offered as PoP: refused (negatives)
+        assertEq(reg.portablePopDigest(ua, 0, 0), vm.parseJsonBytes32(sj, _d(i, "pop.popDigest")));
+        assertEq(reg.registrationDigest(reg.portablePopDigest(ua, 0, 0), 0), vm.parseJsonBytes32(sj, _d(i, "pop.registrationDigest")));
+        assertEq(vm.parseJsonBytes(sj, _d(i, "popOther.sig")), vm.parseJsonBytes(sj, _d(i, "pop.sig")), "portable");
         for (uint256 n; _hasNeg(i, n); ++n) {
             if (vm.parseJsonBool(sj, _neg(i, n, "verifyPop"))) {
                 _popRefused(kind, k, vm.parseJsonBytes(sj, _neg(i, n, "sig")));
@@ -86,7 +88,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         }
         bytes memory pop = vm.parseJsonBytes(sj, _d(i, "pop.sig"));
         uint256 g = gasleft();
-        reg.register(kind, k, pop, "", "");
+        reg.register(kind, k, _none(), pop, "");
         g -= gasleft();
         emit log_named_uint(string.concat("register ", vm.parseJsonString(sj, _d(i, "name"))), g);
         assertEq(reg.kindOf(ua), kind);
@@ -138,7 +140,7 @@ contract UARegistryVectorsTest is UARegistryBase {
 
     function _popRefused(uint16 kind, bytes memory k, bytes memory sig) internal {
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        reg.register(kind, k, sig, "", "");
+        reg.register(kind, k, _none(), sig, "");
     }
 
     function test_vectors_native() public {
@@ -204,14 +206,14 @@ contract UARegistryVectorsTest is UARegistryBase {
             reg.register(
                 uint16(vm.parseJsonUint(sj, _d(i, "kind"))),
                 vm.parseJsonBytes(sj, _d(i, "keyData")),
+                _none(),
                 vm.parseJsonBytes(sj, _d(i, "pop.sig")),
-                "",
                 ""
             );
         }
         bytes memory d = vm.parseJsonBytes(sj, ".msig.keyData");
         uint256 g = gasleft();
-        bytes32 ua = reg.register(UAKinds.MSIG, d, "", "", "");
+        bytes32 ua = reg.register(UAKinds.MSIG, d, _none(), "", "");
         emit log_named_uint("register msig (4 members)", g - gasleft());
         assertEq(ua, vm.parseJsonBytes32(sj, ".msig.ua"));
         uint256 valid;

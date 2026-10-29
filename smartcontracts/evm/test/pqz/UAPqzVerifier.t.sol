@@ -101,7 +101,8 @@ contract UAPqzVerifierTest is PqzRegistryBase {
     }
 
     /// UA-6: an `mldsa65` holder registers with its PQZ key in one call; `R_REG` reaches the precompile over
-    /// `uaMessage(0x0142, POP, popDigest(signerUA, h))`; the signer signs for its PQZ account (purpose `zether-auth`).
+    /// the portable `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(signerUA, h, 0))` (UA-8 P1); proven, the key
+    /// is the UA's (`keyOwner`); the signer signs for its PQZ account (purpose `zether-auth`).
     function test_registerPqzKey() public {
         _registryStack();
         assertTrue(reg.kindEnabled(UAKinds.PQZ_MLWE));
@@ -109,7 +110,7 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         bytes memory pk = _slice(regStmt, 96, PqzCt.PK);
         bytes32 ua = reg.uaOf(UAKinds.MLDSA65, _mlPk(1));
         bytes32 h = reg.keyHashOf(UAKinds.PQZ_MLWE, pk);
-        bytes32 msg_ = reg.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP, reg.popDigest(ua, h));
+        bytes32 msg_ = _pqzRegMessage(ua, pk);
         bytes memory input = abi.encodePacked(uint8(3), uint32(ST_REG), _slice(regStmt, 0, 32), PQZL_ID, msg_, pk, hex"aa");
         vm.mockCall(PQZ, input, abi.encode(uint256(1)));
         vm.expectCall(PQZ, input);
@@ -120,6 +121,8 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         (, address ptr) = reg.recordOf(ua);
         assertEq(ptr.code, bytes.concat(hex"00", pk));
         assertEq(reg.keyOwner(h), ua);
+        (,, bool proven) = reg.pqzKeyOf(ua);
+        assertTrue(proven);
         reg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_AUTH, keccak256("d"), _mlAuth());
     }
 
@@ -132,13 +135,14 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
         // 0x0142 is not a kind (UA-6)
         vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, UAKinds.PQZ_MLWE));
-        reg.register(UAKinds.PQZ_MLWE, pk, hex"aa", "", "");
-        // non-canonical key or wrong length: the verifier refuses before the precompile ⇒ UAPoP
+        reg.register(UAKinds.PQZ_MLWE, pk, IUARegistry.UAAttrs("", 0, 0, ""), hex"aa", "");
+        // non-canonical key: the verifier refuses before the precompile ⇒ UAPoP; a key of no set's length: the registry
+        // refuses it first (UA-8: a key may be stored unproven, so its length is checked without the verifier)
         bytes memory bad = bytes.concat(pk);
         bad[0] = 0xff;
         vm.expectRevert(IUARegistry.UAPoP.selector);
         _pqzUA(bad, 1);
-        vm.expectRevert(IUARegistry.UAPoP.selector);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.PQZ_MLWE));
         _pqzUA(_slice(pk, 0, 100), 1);
         bytes32 ua = _pqzUA(pk, 1);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, ua));

@@ -55,8 +55,8 @@ library UAKinds {
     /// @notice `UATradeOrder`, `CancelOrder` over a UA order hash, `UAInvalidateNonces` (dex.md CTR-DEX-25; UA-5b).
     bytes32 internal constant PURPOSE_TRADE = keccak256("scaas.ua.purpose.trade.v1");
     /// UA-8 portable registrations (P1, P7; UA8-D1): the PoP purpose v2 (no chain context), the KEM record's purpose and
-    /// tag, the later PQZ key record's (`setPqzKey`, ruling A1-I1) purpose and tag. `PURPOSE_POP` (v1) is the chain-bound
-    /// PoP of `popDigest`.
+    /// tag, the later PQZ key record's (`setPqzKey`, ruling A1-I1) purpose and tag. `PURPOSE_POP` (v1) was the chain-bound
+    /// PoP's (`popDigest`, in `legacy/ua8/` since UA-8 Task A5); `register` refuses it.
     bytes32 internal constant PURPOSE_POP_V2 = keccak256("scaas.ua.purpose.pop.v2");
     bytes32 internal constant PURPOSE_KEM = keccak256("scaas.ua.purpose.kem.v1");
     bytes32 internal constant KEM_RECORD_TAG = keccak256("scaas.ua.kem-record.v1");
@@ -230,15 +230,6 @@ library UAKinds {
     /// `keccak256("evm:" ‖ decimal(chainId))` (the registry computes it in its constructor from `block.chainid`).
     function chainKeyHash(uint256 chainId) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked("evm:", Strings.toString(chainId)));
-    }
-
-    /// Pre-UA-8, chain-bound (the registry's `register` until UA-8 Task A5 moves it to `legacy/ua8/`):
-    /// `pop_digest = keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ pqzKeyHash)` (CTR-UA-07; UA-6 U4:
-    /// the last word is the PQZ keyHash, 0 for every UA without a PQZ key — the bytes of the former `authRef = 0`).
-    function popDigest(bytes32 chainKeyHash_, bytes32 chainUid, address registry, bytes32 ua, bytes32 pqzKeyHash)
-        internal pure returns (bytes32)
-    {
-        return keccak256(abi.encode(PURPOSE_POP, chainKeyHash_, chainUid, registry, ua, pqzKeyHash));
     }
 
     // UA-8 digests (UA8-D1): keccak256 of 32-byte words, no chain id, no chain uid, no registry; each hash 0 when absent.

@@ -9,7 +9,7 @@ interface IUAKindVerifier {
 }
 
 /// @title Per-kind UA verifier with the proof of possession (accounts.md §1.4, CTR-UA-07).
-/// @notice `message` is `uaMessage(kind, PURPOSE_POP, popDigest(...))`. A kind whose PoP needs its own domain (the BLS
+/// @notice `message` is the portable `uaMessage(kind, PURPOSE_POP_V2, registrationDigest(...))` (UA-8). A kind whose PoP needs its own domain (the BLS
 ///         min-sig kinds: `DST_POP` / the POP label) checks it here; the group kinds (MuSig2/FROST, accounts.md §1.6.1)
 ///         take the full key data and run the whole group check (KeyAgg with hints / DKG PoKs) before the group
 ///         signature, while their `verify` takes the stored `vk`; for every other kind `verifyPop == verify`.

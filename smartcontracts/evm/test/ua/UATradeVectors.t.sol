@@ -65,8 +65,13 @@ contract UATradeVectorsTest is UARegistryBase {
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realCfgs());
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             string memory d = string.concat(".derived[", vm.toString(i), "].");
-            reg.register(uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
-                vm.parseJsonBytes(sj, string.concat(d, "keyData")), vm.parseJsonBytes(sj, string.concat(d, "pop.sig")), "", "");
+            reg.register(
+                uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
+                vm.parseJsonBytes(sj, string.concat(d, "keyData")),
+                _none(),
+                vm.parseJsonBytes(sj, string.concat(d, "pop.sig")),
+                ""
+            );
         }
         for (uint256 i; i < 4; ++i) {
             string memory k = string.concat(".kinds[", vm.toString(i), "].");
@@ -90,7 +95,7 @@ contract UATradeVectorsTest is UARegistryBase {
     function _registerMldsa65(string memory pj, string memory k) internal {
         bytes memory pk = vm.parseJsonBytes(pj, string.concat(k, "keyData"));
         for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk, p);
-        reg.register(0x0131, pk, vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "", "");
+        reg.register(0x0131, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
     }
 
     function _token(address at) internal returns (NoUnderlyingToken t) {

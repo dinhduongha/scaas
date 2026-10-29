@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
@@ -33,10 +34,10 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         record's `keyPtr`; an `msig` member of a stored kind is checked the same way through the member's own record.
 ///
 ///         Zether kinds (UA-3; CTR-UA-16, UA-6): the Zether key is the UA (no `authRef`); the PoP is a Zether Schnorr
-///         by `x` over `popDigest(ua, 0)`; `Y` is stored with SSTORE2 like a group key, so `keyOf` serves a sender's
-///         storage-only recovery (zether.md CTR-ZTH-50). `zether-bls12381` is in SIGNING (UA-6 U8): `requireAuthorized`
-///         verifies its Schnorr on `Y` under any purpose (the token's owner ops under `zether-owner`; spends are
-///         authorized by the proof alone, U9). `zether-bn254` (0x0140, slot 12) and `requireZetherAuthorized` are in
+///         by `x` over the portable registration message (UA-8); `Y` is stored with SSTORE2 like a group key, so
+///         `keyOf` serves a sender's storage-only recovery (zether.md CTR-ZTH-50). `zether-bls12381` is in SIGNING
+///         (UA-6 U8): `requireAuthorized` verifies its Schnorr on `Y` under any purpose (the token's owner ops under
+///         `zether-owner`; spends are authorized by the proof alone, U9). `zether-bn254` (0x0140, slot 12) and `requireZetherAuthorized` are in
 ///         `legacy/ua6/` (U10).
 ///
 ///         PQ kinds (P6c; CTR-UA-17, CTR-UA-23): `pk` stored with SSTORE2 like a group key, `auth.keyData` empty. ML-DSA
@@ -47,10 +48,16 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         pointers. Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
 ///         PQZ key (UA-6, CTR-UA-30, CTR-PQZ-12/13): an attribute of a holder — `mldsa44`, `mldsa65`, `fndsa512`, or an
 ///         `msig` whose members of kinds outside 0x0130–0x0133 weigh less than its threshold (PQ-eligible) — given in
-///         its `register` with the `R_REG` proof, both over `popDigest(ua, h)` with `h` its keyHash (group
-///         `pqz-mlwe`), checked by `UAPqzVerifier` in slot 0x0142; stored with SSTORE2 (`recordOf`), immutable, one UA
-///         per key (`keyOwner(h)`), the holder also appended to the `0x0142` list. A PQ-eligible `msig` always
-///         registers with an m-of-n PoP (U5).
+///         its `register` (`attrs.pqzKey`, `attrs.pqzPopHash`) with the optional `R_REG` proof over the portable digest
+///         (UA-8 P1, P8), checked by `UAPqzVerifier` in slot 0x0142; stored with SSTORE2 (`recordOf`, `pqzKeyOf`),
+///         immutable. Only a proven key (proof checked by that verifier) is one UA per key (`keyOwner(h)`) and appended
+///         to the `0x0142` list (UA8-D8); a key without its proof, or where the slot is empty, is stored unproven. A
+///         PQ-eligible `msig` always registers with an m-of-n PoP (U5).
+///
+///         UA-8 (portable registrations, spec 2026-10-25-ua8-portable-registrations): the PoP has no chain context, so
+///         anyone may copy a registration to any registry; every `register` field is stored (UA8-D7): `keyData` once
+///         (the stored kinds' `keyPtr` prefix, the rest in the registration blob), `pop` and the initial KEM version in
+///         the blob, `pqzPop` and each KEM record (`pk ‖ sig`) as their own blobs, each in `SSTORE2.writeChunks` pieces.
 ///
 ///         Gen 2 (`predecessor ≠ 0`) reads gen 1 for `UAAlreadyRegistered` / `UAKeyInUse` / `kindOf` / `keyOwner` /
 ///         `recordOf` and hands records it does not hold, and members whose kind it does not enable, to gen 1's
@@ -77,7 +84,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     error UAConfig(uint16 kind);
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
-    /// @notice EIP-7825 per-transaction gas cap, the bound of a PQZ `msig` holder (`_pqzAttr`).
+    /// @notice EIP-7825 per-transaction gas cap, the bound of a PQZ `msig` holder (`_attrs`).
     uint256 internal constant TX_GAS_CAP = 1 << 24;
     /// @notice Registration bound for `msig` (register step 4): gas per member beyond its cap — MemberSig decoding,
     ///         `uaOf`, `uaMessage`, the call or the gen-1 hand-off, cold accounts (measured worst, cold under
@@ -126,6 +133,21 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     mapping(bytes32 ua => address[2]) private _ekPtr; // ML-DSA expanded-key parts (SSTORE2), written once each
     mapping(uint16 kind => uint256) private _uaCount; // per-kind list length (single-key kinds)
     mapping(uint16 kind => mapping(uint256 i => bytes32 ua)) private _uaAt;
+
+    /// UA-8: the PQZ key's proof hash (from `attrs`) and whether the slot-0x0142 verifier checked the proof (UA8-D8, D9).
+    struct PqzAttr {
+        bytes32 popHash;
+        bool proven;
+    }
+
+    /// The registration blob (UA8-D7): `abi.encode(bytes keyRest, bytes pop, uint64 kemVersion)`, `keyRest` = the key
+    /// data after the stored kinds' `keyPtr` prefix (all of it for the other kinds), `kemVersion` the initial KEM
+    /// version (0 = none; ruling C2). `keyData` = `SSTORE2.read(keyPtr) ‖ keyRest`: stored once.
+    mapping(bytes32 ua => address[]) private _reg;
+    mapping(bytes32 ua => PqzAttr) private _pqz;
+    mapping(bytes32 ua => address[]) private _pqzPop; // the R_REG proof bytes, written once
+    mapping(bytes32 ua => mapping(uint64 version => address[])) private _kem; // `pk ‖ sig` (initial record: `sig` = "")
+    mapping(bytes32 ua => uint64) private _kemMax; // the highest stored KEM version, 0 = none
 
     /// @param chainUid_ the chain's genesis hash (≠ 0, `SaltedEIP712.ChainUidZero`).
     /// @param predecessor_ 0 for generation 1, else the chain's gen-1 registry.
@@ -203,8 +225,24 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.keyHashOf(kind, keyData);
     }
 
-    function popDigest(bytes32 ua, bytes32 pqzKeyHash) public view returns (bytes32) {
-        return UAKinds.popDigest(chainKeyHash, CHAIN_UID, address(this), ua, pqzKeyHash);
+    function portablePopDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 kemRecordHash) external pure returns (bytes32) {
+        return UAKinds.portablePopDigest(ua, pqzKeyHash, kemRecordHash);
+    }
+
+    function registrationDigest(bytes32 portable, bytes32 pqzPopHash) external pure returns (bytes32) {
+        return UAKinds.registrationDigest(portable, pqzPopHash);
+    }
+
+    function kemRecordDigest(bytes32 ua, uint64 version, bytes calldata kemPk) external pure returns (bytes32) {
+        return UAKinds.kemRecordDigest(ua, version, kemPk);
+    }
+
+    function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32) {
+        return UAKinds.pqzKeyDigest(ua, pqzKeyHash);
+    }
+
+    function pqzKeyRecordDigest(bytes32 keyDigest, bytes32 pqzPopHash) external pure returns (bytes32) {
+        return UAKinds.pqzKeyRecordDigest(keyDigest, pqzPopHash);
     }
 
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32) {
@@ -215,11 +253,87 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.uaAuthDigest(_domainSeparatorV4(), ua, purposeTag, digest);
     }
 
-    /// `r.keyPtr ≠ 0` only for stored kinds; `pqzKey ≠ 0` only for PQZ holders registered with a key.
+    /// `r.keyPtr ≠ 0` only for stored kinds; `pqzKey ≠ 0` only for PQZ holders registered with a key (proven or not).
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey) {
         r = _records[ua];
         if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).recordOf(ua);
         pqzKey = _pqzKey[ua];
+    }
+
+    // ----- UA-8 reads (gen 2 forwards a record it does not hold, UA8-D11) -----
+
+    /// A record gen 1 holds (this registry is gen 2 and has none of its own).
+    function _elsewhere(bytes32 ua) private view returns (bool) {
+        return _records[ua].kind == 0 && predecessor != address(0);
+    }
+
+    function registrationOf(bytes32 ua)
+        external
+        view
+        returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
+    {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).registrationOf(ua);
+        Record memory r = _records[ua];
+        kind = r.kind;
+        if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
+        bytes memory rest;
+        uint64 v;
+        (rest, pop, v) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
+        keyData = bytes.concat(SSTORE2.read(r.keyPtr), rest);
+        (bytes memory kemPk,) = _kemAt(ua, v);
+        attrs = UAAttrs(SSTORE2.read(_pqzKey[ua]), _pqz[ua].popHash, v, kemPk);
+        pqzPop = SSTORE2.readChunks(_pqzPop[ua]);
+    }
+
+    function popOf(bytes32 ua) external view returns (bytes memory pop) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).popOf(ua);
+        if (_records[ua].kind == 0) return pop;
+        (, pop,) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
+    }
+
+    function pqzPopOf(bytes32 ua) external view returns (bytes memory) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).pqzPopOf(ua);
+        return SSTORE2.readChunks(_pqzPop[ua]);
+    }
+
+    function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).pqzKeyOf(ua);
+        PqzAttr memory a = _pqz[ua];
+        return (_pqzKey[ua], a.popHash, a.proven);
+    }
+
+    function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).checkedOf(ua);
+        if (_records[ua].kind == 0) return (pop, pqzPop, kem);
+        return (UAKinds.CHECKED_CHAIN, _checked(_pqz[ua].proven), _checked(_kemMax[ua] != 0));
+    }
+
+    function kemKeyOf(bytes32 ua) external view returns (uint64 version, bytes memory pk, bytes memory sig) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).kemKeyOf(ua);
+        version = _kemMax[ua];
+        (pk, sig) = _kemAt(ua, version);
+    }
+
+    function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memory pk, bytes memory sig) {
+        if (_elsewhere(ua)) return IUARegistry(predecessor).kemKeyAt(ua, version);
+        return _kemAt(ua, version);
+    }
+
+    /// The stored record `pk ‖ sig` of `(ua, version)` split at the 1,600-byte key; ("", "") when not stored.
+    function _kemAt(bytes32 ua, uint64 version) private view returns (bytes memory pk, bytes memory sig) {
+        bytes memory b = SSTORE2.readChunks(_kem[ua][version]);
+        if (b.length == 0) return (pk, sig);
+        uint256 n = UAKinds.KEM_PK_LENGTH;
+        pk = new bytes(n);
+        sig = new bytes(b.length - n);
+        assembly ("memory-safe") {
+            mcopy(add(pk, 32), add(b, 32), n)
+            mcopy(add(sig, 32), add(add(b, 32), n), mload(sig))
+        }
+    }
+
+    function _checked(bool chain) private pure returns (uint8) {
+        return chain ? UAKinds.CHECKED_CHAIN : UAKinds.CHECKED_NONE;
     }
 
     /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`, PQ `pk`), empty for every other id.
@@ -331,28 +445,61 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return kind == UAKinds.MLDSA44 ? 1 : 2;
     }
 
-    // ----- register (accounts.md §1.8 steps 1–8) -----
+    // ----- register (accounts.md §1.8 steps 1–8, UA-8) -----
 
-    /// Registers `keyData` of `kind` (accounts.md §1.8). `UAPoP` when the PoP fails, except one case: the `pop` of a
-    /// PQ-eligible `msig` that does not decode as `MemberSig[]` reverts with empty data (the ABI decoder), not `UAPoP`.
-    function register(uint16 kind, bytes calldata keyData, bytes calldata pop, bytes calldata pqzKey,
+    /// Registers `keyData` of `kind` with its attributes (accounts.md §1.8, UA-8 P2). `UAPoP` when the PoP fails, except
+    /// one case: the `pop` of a PQ-eligible `msig` that does not decode as `MemberSig[]` reverts with empty data (the ABI
+    /// decoder), not `UAPoP`.
+    function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
         bytes memory d;
         bytes32 kh;
         (ua, d, kh) = _identify(kind, keyData); // 1–4
-        bytes32 h = _pqzAttr(kind, d, ua, pqzKey, pqzPop.length); // 5
-        if (!_popOk(kind, d, ua, h, pop)) revert UAPoP(); // 6
-        if (h != 0) _pqzRegister(ua, h, pqzKey, pqzPop); // 7, and 8 for the PQZ key
-        _record(ua, kind, keyData, kh); // 8
+        _consent(kind, d, ua, attrs, pop, pqzPop); // 5–7
+        _record(ua, kind, keyData, kh, attrs, pop); // 8
+        _registered(ua, kind, keyData, attrs, pop, pqzPop);
     }
 
-    /// Step 8: the record, `keyPtr` (stored kinds), the keyHash (single keys), the kind's list, the event (the PQZ
-    /// pointer read back: one SLOAD, the stack of `register` has no room for it).
-    function _record(bytes32 ua, uint16 kind, bytes calldata keyData, bytes32 kh) private {
-        _records[ua] = Record(kind, uint40(block.timestamp), _keyPtr(kind, keyData), _list(kind, ua));
+    /// Steps 5–7: the attributes, the PoP over the registration digest (`UAPoP`), the PQZ key (and its proof).
+    function _consent(
+        uint16 kind,
+        bytes memory d,
+        bytes32 ua,
+        UAAttrs calldata attrs,
+        bytes calldata pop,
+        bytes calldata pqzPop
+    ) private {
+        (bytes32 portable, bytes32 h) = _attrs(kind, d, ua, attrs, pqzPop); // 5
+        bytes32 rd = UAKinds.registrationDigest(portable, attrs.pqzPopHash);
+        if (!_sigOk(kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, pop)) revert UAPoP(); // 6
+        _pqzAttach(ua, attrs, pqzPop, h, portable); // 7
+    }
+
+    /// Step 8: the record, `keyPtr` (stored kinds), the keyHash (single keys), the kind's list, the initial KEM record
+    /// (UA8-D4), the registration blob (UA8-D7).
+    function _record(bytes32 ua, uint16 kind, bytes calldata keyData, bytes32 kh, UAAttrs calldata attrs,
+        bytes calldata pop) private
+    {
+        uint256 vl = _vkLength(kind);
+        address ptr = vl == 0 ? address(0) : SSTORE2.write(keyData[0:vl]);
+        _records[ua] = Record(kind, uint40(block.timestamp), ptr, _list(kind, ua));
         if (kh != 0) _keyOwner[kh] = ua; // msig: none
-        emit UARegistered(ua, kind, keyData, _pqzKey[ua]);
+        uint64 v = attrs.kemVersion;
+        if (v != 0) {
+            _kem[ua][v] = SSTORE2.writeChunks(attrs.kemPk);
+            _kemMax[ua] = v;
+        }
+        _reg[ua] = SSTORE2.writeChunks(abi.encode(keyData[vl:], pop, v));
+    }
+
+    /// Step 8, the event: every argument and the three `checkedOf` values (read back from storage: `register`'s stack
+    /// has no room for them).
+    function _registered(bytes32 ua, uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
+        bytes calldata pqzPop) private
+    {
+        (uint8 q, uint8 k) = (_checked(_pqz[ua].proven), _checked(_kemMax[ua] != 0));
+        emit UARegistered(ua, kind, keyData, attrs, pop, pqzPop, UAKinds.CHECKED_CHAIN, q, k);
     }
 
     /// Steps 1–4: kind enabled, key data canonical, the id (not native-space, not registered here or in gen 1), the
@@ -384,36 +531,51 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (owner != 0) revert UAKeyInUse(kh, owner);
     }
 
-    /// Step 5 (UA-6 U3): the PQZ key attribute. Returns its keyHash `h` (group `pqz-mlwe`), 0 without a key.
-    /// `UAKindDisabled(0x0142)` where this generation has no PQZ key verifier; `UAPqzHolder` for a kind (or an `msig`
-    /// that is not PQ-eligible, or whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds 2^24) that may not hold one; `UAKeyInUse` for a key another UA holds (any kind, either
-    /// generation); `UAPoP` unless `pqzPop` is empty exactly when `pqzKey` is.
-    function _pqzAttr(uint16 kind, bytes memory d, bytes32 ua, bytes calldata pqzKey, uint256 pqzPopLength)
+    /// Step 5 (UA-6 U3, UA-8 P2 / P7 / P8): the attributes, checked before the PoP in portable.json's order. Returns the
+    /// portable PoP digest and the PQZ keyHash `h` (group `pqz-mlwe`, 0 without a key). `UAPqzHolder` / `UAKemHolder` for
+    /// a kind (or an `msig` that is not PQ-eligible) that may not hold the key, and `UAPqzHolder` for an `msig` PQZ holder
+    /// whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds
+    /// 2^24; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
+    /// `UAKeyData(0x0142)` for a PQZ key of no parameter set's length; `UAKemVersion` for version 0 with a key,
+    /// `UAKemKeyLength` for a KEM key other than 1,600 B. The PQZ key's owner (`UAKeyInUse`) is step 7, for a proven key.
+    function _attrs(uint16 kind, bytes memory d, bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop)
         private
         view
-        returns (bytes32 h)
+        returns (bytes32 portable, bytes32 h)
     {
-        if (pqzKey.length == 0) {
-            if (pqzPopLength != 0) revert UAPoP();
-            return 0;
+        bool pqz = attrs.pqzKey.length != 0;
+        uint64 v = attrs.kemVersion;
+        bool kem = v != 0 || attrs.kemPk.length != 0;
+        if (pqz || kem) {
+            bool holder = kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512
+                || (kind == UAKinds.MSIG && _pqEligible(d));
+            if (pqz && !holder) revert UAPqzHolder(ua);
+            if (kem && !holder) revert UAKemHolder(ua);
         }
-        if (uint160(_cfg(UAKinds.PQZ_MLWE)) == 0) revert UAKindDisabled(UAKinds.PQZ_MLWE);
-        bool holder = kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512
-            || (kind == UAKinds.MSIG && _pqEligible(d));
-        if (!holder) revert UAPqzHolder(ua);
         // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
         // authorization plus the set's cheapest PQZL debit (its full relayed transaction, fee signer included) must fit
         // one transaction at the EIP-7825 cap 2^24, else every credit to it could be locked. Not the chain's own limit.
-        if (kind == UAKinds.MSIG) {
-            // a gen-2 registry in front forwards the whole authorization to this one (`_viaPredecessor`) and holds 1/63 of
-            // it again plus the margin: counted here, since the holder is registered in the only generation with 0x0142
+        // UA8-D12: the PQZ key only, not the KEM record.
+        if (pqz && kind == UAKinds.MSIG) {
+            // a gen-2 registry in front forwards the whole authorization to the one that holds the record
+            // (`_viaPredecessor`) and holds 1/63 of it again plus the margin: counted here
             uint256 w = _membersWorst(d);
             if (w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS > TX_GAS_CAP) revert UAPqzHolder(ua);
         }
-        h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqzKey);
-        bytes32 owner = keyOwner(h);
-        if (owner != 0) revert UAKeyInUse(h, owner);
-        if (pqzPopLength == 0) revert UAPoP();
+        if (pqz != (attrs.pqzPopHash != 0)) revert UAPqzPopHash(ua);
+        if (pqzPop.length != 0 && keccak256(pqzPop) != attrs.pqzPopHash) revert UAPqzPopHash(ua);
+        if (pqz) {
+            uint256 n = attrs.pqzKey.length; // PqzSet.PK of the four sets: 2,048 B per 256 of n, n 2,048 … 2,816
+            if (n < 16_384 || n > 22_528 || n % 2_048 != 0) revert UAKeyData(UAKinds.PQZ_MLWE);
+            h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, attrs.pqzKey);
+        }
+        bytes32 kemHash;
+        if (kem) {
+            if (v == 0) revert UAKemVersion(ua, 0);
+            if (attrs.kemPk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(attrs.kemPk.length);
+            kemHash = UAKinds.kemRecordDigest(ua, v, attrs.kemPk);
+        }
+        portable = UAKinds.portablePopDigest(ua, h, kemHash);
     }
 
     /// An `msig` whose members of kinds outside 0x0130–0x0133 weigh less than its threshold (CTR-PQZ-12): it may hold
@@ -428,43 +590,59 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return classical < threshold;
     }
 
-    /// Steps 7–8 for the PQZ key: `R_REG` by the slot-0x0142 verifier (it refuses a key of the wrong length or with a
-    /// coefficient `≥ q`) over `uaMessage(0x0142, POP, popDigest(ua, h))`, capped with the hold; then the key
-    /// (SSTORE2), its keyHash and the `0x0142` list.
-    function _pqzRegister(bytes32 ua, bytes32 h, bytes calldata pqzKey, bytes calldata pqzPop) private {
+    /// Step 7, the PQZ key (UA8-D8): the key (SSTORE2) and its proof hash; with `pqzPop`, the proof bytes, and where
+    /// slot 0x0142 has a verifier `R_REG` over `uaMessage(0x0142, PURPOSE_POP_V2, portable)` (it refuses a key of
+    /// another set's length or with a coefficient `≥ q`; `UAPoP`), capped with the hold, then the proven key's owner
+    /// (`UAKeyInUse`, either generation), `keyOwner(h)`, the `0x0142` list.
+    function _pqzAttach(bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop, bytes32 h, bytes32 portable) private {
+        if (h == 0) return;
+        _pqzKey[ua] = SSTORE2.write(attrs.pqzKey);
+        _pqz[ua].popHash = attrs.pqzPopHash;
+        if (pqzPop.length == 0) return;
+        _pqzProof(ua, attrs.pqzKey, pqzPop, h, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable));
+    }
+
+    /// The proof bytes stored; proven where slot 0x0142 has a verifier and it accepts `pqzPop` over `message`.
+    function _pqzProof(bytes32 ua, bytes calldata pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message)
+        private
+        returns (bool proven)
+    {
+        _pqzPop[ua] = SSTORE2.writeChunks(pqzPop);
         uint256 cfg = _cfg(UAKinds.PQZ_MLWE);
-        bytes32 m = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP, popDigest(ua, h));
-        bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, pqzKey, m, pqzPop);
-        if (!_capped(address(uint160(cfg)), cfg >> 160, data, 1, true)) revert UAPoP();
-        _pqzKey[ua] = SSTORE2.write(pqzKey);
-        _keyOwner[h] = ua;
-        _list(UAKinds.PQZ_MLWE, ua);
+        if (uint160(cfg) != 0) {
+            bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, pqzKey, message, pqzPop);
+            if (!_capped(address(uint160(cfg)), cfg >> 160, data, 1, true)) revert UAPoP();
+            bytes32 owner = keyOwner(h);
+            if (owner != 0) revert UAKeyInUse(h, owner);
+            _keyOwner[h] = ua;
+            _list(UAKinds.PQZ_MLWE, ua);
+            _pqz[ua].proven = proven = true;
+        }
+        emit UAPqzPopStored(ua, _checked(proven));
     }
 
     function _isPq(uint16 kind) private pure returns (bool) {
         return kind >= UAKinds.MLDSA44 && kind <= UAKinds.SLHDSA128S;
     }
 
-    /// Stored kinds keep `vk` (`Q` / `Y`, the first bytes of the key data; Zether and PQ: all of it) as SSTORE2 code
-    /// (CTR-UA-17); others: 0.
-    function _keyPtr(uint16 kind, bytes calldata keyData) private returns (address) {
-        uint256 len = _vkLength(kind);
-        return len == 0 ? address(0) : SSTORE2.write(keyData[0:len]);
-    }
-
-    /// Step 6, over `popDigest(ua, h)`. `msig`: `pop` empty unless PQ-eligible, then the m-of-n `MemberSig[]` over the
-    /// PoP digest (purpose `pop`, members under `member`; U5); single keys: the kind's verifier.
-    function _popOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 h, bytes calldata pop) private view returns (bool) {
+    /// Step 6 (and A7's KEM record): a portable record's signature `sig` over `uaMessage(kind, purpose, digest)`.
+    /// `msig`: `sig` empty unless PQ-eligible, then the m-of-n `MemberSig[]` (members under `member`, U5; a native member
+    /// by `personal_sign` or ERC-1271, `_msig`'s `portable`); single keys: the kind's verifier (`verifyPop`).
+    function _sigOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes calldata sig)
+        private
+        view
+        returns (bool)
+    {
         if (kind == UAKinds.MSIG) {
-            if (!_pqEligible(d)) return pop.length == 0;
-            return pop.length != 0 && _msig(ua, UAKinds.PURPOSE_POP, popDigest(ua, h), d, pop);
+            if (!_pqEligible(d)) return sig.length == 0;
+            return sig.length != 0 && _msig(ua, purpose, digest, d, sig, true);
         }
         uint256 cfg = _cfg(kind);
-        bytes32 message = UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP, popDigest(ua, h));
+        bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = _expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
         bytes memory data = ek.length != 0
-            ? abi.encodeWithSelector(UAMldsaVerifier.verifyCached.selector, ek, message, pop)
-            : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, pop);
+            ? abi.encodeWithSelector(UAMldsaVerifier.verifyCached.selector, ek, message, sig)
+            : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);
         // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold
         if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) {
             return _capped(address(uint160(cfg)), verifyBudget, data, 1, false);
@@ -564,7 +742,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         } else if (UAKinds.uaOf(kind, keyData) != id) {
             return false;
         }
-        if (kind == UAKinds.MSIG) return _msig(id, purposeTag, digest, keyData, sig);
+        if (kind == UAKinds.MSIG) return _msig(id, purposeTag, digest, keyData, sig, false);
         if (uint160(cfg) == 0) return _viaPredecessor(id, purposeTag, digest, abi.encode(keyData, sig));
         return _verifierCall(
             cfg, IUAKindVerifier.verify.selector, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig
@@ -572,8 +750,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// accounts.md §1.9 `msig` row: strictly increasing member indexes, stop at the threshold (a MemberSig after it
-    /// fails, which keeps the registration bound sound), `member_digest = keccak256(ua ‖ ua_msg)`.
-    function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, bytes memory blob)
+    /// fails, which keeps the registration bound sound), `member_digest = keccak256(ua ‖ ua_msg)`. `portable` (a portable
+    /// record's signature, `_sigOk` only — never `requireAuthorized`; rulings C7 / A1-I2 / A1-f1): a code-less native
+    /// member signs `member_digest` by EIP-191 `personal_sign`, one with code answers ERC-1271 over `member_digest`;
+    /// otherwise native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14).
+    function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, bytes memory blob, bool portable)
         private
         view
         returns (bool)
@@ -588,15 +769,22 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             if (acc >= threshold || s.index < next || s.index >= count) return false;
             next = uint256(s.index) + 1;
             uint256 o = 4 + 36 * uint256(s.index);
-            uint16 kind = uint16(_u16(d, o));
-            bytes32 id = bytes32(_word(d, o + 2));
-            bool ok = UAKinds.isNative(kind)
-                ? s.keyData.length == 0 && _native(id, UAKinds.PURPOSE_MEMBER, md, s.sig) // native: no key data
-                : _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, s.keyData, s.sig);
-            if (!ok) return false;
+            if (!_memberOk(uint16(_u16(d, o)), bytes32(_word(d, o + 2)), md, s, portable)) return false;
             acc += _u16(d, o + 34);
         }
         return acc >= threshold;
+    }
+
+    /// One `msig` member's signature over `md` under `member` (a native one without key data; `portable`: `_msig`).
+    function _memberOk(uint16 kind, bytes32 id, bytes32 md, MemberSig memory s, bool portable)
+        private
+        view
+        returns (bool)
+    {
+        if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, s.keyData, s.sig);
+        if (s.keyData.length != 0) return false;
+        if (portable) return _nativePortable(address(uint160(uint256(id))), md, s.sig);
+        return _native(id, UAKinds.PURPOSE_MEMBER, md, s.sig);
     }
 
     /// CTR-UA-24: by code at call time. Empty ⇒ ECDSA; the 23-byte EIP-7702 designator ⇒ ECDSA, else ERC-1271 through
@@ -612,6 +800,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             if (err == ECDSA.RecoverError.NoError && rec == a) return true;
             if (len == 0) return false;
         }
+        return _1271(a, h, sig);
+    }
+
+    /// ERC-1271 at 50 k, 400 k for a `SmartKeyAccount` clone (by its immutable codehash).
+    function _1271(address a, bytes32 h, bytes memory sig) private view returns (bool) {
         uint256 cap = _SMART_KEY_CLONE_CODEHASH != 0 && a.codehash == _SMART_KEY_CLONE_CODEHASH
             ? SMART_KEY_1271_GAS
             : SigCheck.ERC1271_GAS;
@@ -622,6 +815,17 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             uint256(bytes32(IERC1271.isValidSignature.selector)),
             true
         );
+    }
+
+    /// A native `msig` member of a portable record (no chain context): code-less ⇒ ECDSA (65-byte r ‖ s ‖ v, low s,
+    /// v 27 / 28: OZ `tryRecover`) over the EIP-191 `personal_sign` hash of `md`; any code (an EIP-7702 delegate, a
+    /// contract wallet) ⇒ ERC-1271 `isValidSignature(md, sig)` only, at the same caps as `_native`.
+    function _nativePortable(address a, bytes32 md, bytes memory sig) private view returns (bool) {
+        if (a.code.length == 0) {
+            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(MessageHashUtils.toEthSignedMessageHash(md), sig);
+            return err == ECDSA.RecoverError.NoError && rec == a;
+        }
+        return _1271(a, md, sig);
     }
 
     function _verifierCall(uint256 cfg, bytes4 selector, bytes memory keyData, bytes32 message, bytes memory sig)
@@ -703,7 +907,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// Length of the stored `vk` of a stored kind (CTR-UA-17), 0 otherwise: `Q` / `Y` SEC1 compressed (secp256k1) or
     /// EIP-196 uncompressed (bn254), the first bytes of the key data; Zether `Y` (128) and the PQ `pk` (ML-DSA
-    /// 1,312 / 1,952, FN-DSA 897, SLH-DSA 32), the whole key data. (The PQZ key has its own pointer, `_pqzKey`.)
+    /// 1,312 / 1,952, FN-DSA 897, SLH-DSA 32), the whole key data. (The PQZ key has its own pointer, `_pqzKey`.) The
+    /// rest of the key data is in the registration blob (`_reg`), so `keyData` is stored once (UA8-D7).
     function _vkLength(uint16 kind) private pure returns (uint256) {
         if (kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.FROST_SECP256K1) return 33;
         if (kind == UAKinds.MUSIG2_BN254 || kind == UAKinds.FROST_BN254) return 64;

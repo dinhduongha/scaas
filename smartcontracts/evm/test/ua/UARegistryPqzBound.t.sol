@@ -56,22 +56,32 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         ua = r.uaOf(UAKinds.MSIG, d);
     }
 
-    /// The m-of-n PoP (every member signs, stored kinds: no key data) and the `R_REG` stand-in, then `register`.
+    /// The m-of-n PoP (every member signs, stored kinds: no key data) and the `R_REG` stand-in, then `register`. UA-8:
+    /// R_REG over the portable digest, the members over the registration digest (it covers the proof hash).
     function _holder(UARegistry r, bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) internal {
         bytes memory pqz = _pk(0x0142, ++n);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
-        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP, r.popDigest(ua, h));
+        bytes memory rReg = _sig(pqz, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portablePopDigest(ua, h, 0)));
+        IUARegistry.UAAttrs memory a = IUARegistry.UAAttrs(pqz, keccak256(rReg), 0, "");
+        r.register(UAKinds.MSIG, d, a, _memberSigs(d, ua, a, keys, ks), rReg);
+        assertEq(r.uaCount(UAKinds.PQZ_MLWE), 1);
+    }
+
+    function _memberSigs(bytes memory d, bytes32 ua, IUARegistry.UAAttrs memory a, bytes[] memory keys, uint16[] memory ks)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_POP_V2, _regDigest(ua, a));
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](ks.length);
         for (uint256 i; i < ks.length; ++i) {
-            bytes32 id = r.uaOf(ks[i], keys[i]);
-            s[i] = UARegistry.MemberSig(_indexOf(d, id), "", _sig(keys[i], r.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
+            bytes32 id = UAKinds.uaOf(ks[i], keys[i]);
+            s[i] = UARegistry.MemberSig(_indexOf(d, id), "", _sig(keys[i], UAKinds.uaMessage(ks[i], UAKinds.PURPOSE_MEMBER, md)));
         }
-        bytes memory rReg = _sig(pqz, r.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP, r.popDigest(ua, h)));
         for (uint256 i = 1; i < s.length; ++i) {
             for (uint256 j = i; j > 0 && s[j - 1].index > s[j].index; --j) (s[j - 1], s[j]) = (s[j], s[j - 1]);
         }
-        r.register(UAKinds.MSIG, d, abi.encode(s), pqz, rReg);
-        assertEq(r.uaCount(UAKinds.PQZ_MLWE), 1);
+        return abi.encode(s);
     }
 
     /// `{fndsa512 x 4, slhdsa128s}, t = 5` (worst case about 11.6 M, over the 12 M budget minus nothing: it registers
@@ -80,10 +90,10 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r = _regs(address(0x5CA7001), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua,,) = _members(r, 0x0132, 4, true, 5);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        r.register(UAKinds.MSIG, d, hex"01", _pk(0x0142, 900), hex"01");
+        r.register(UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 900)), hex"01", hex"01");
         (d, ua,,) = _members(r, 0x0132, 4, false, 4);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        r.register(UAKinds.MSIG, d, hex"01", _pk(0x0142, 901), hex"01");
+        r.register(UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 901)), hex"01", hex"01");
     }
 
     /// 2-of-2 `mldsa65` registers at PQZL with a PQZ key.
@@ -91,6 +101,11 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r = _regs(address(0x5CA7002), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0131, 2, false, 2);
         _holder(r, d, ua, keys, ks);
+    }
+
+    /// A PQZ key with the proof hash of the filler proof `0x01` (the holder check comes before the PoP).
+    function _pqzOnly(bytes memory pqz) internal pure returns (IUARegistry.UAAttrs memory) {
+        return IUARegistry.UAAttrs(pqz, keccak256(hex"01"), 0, "");
     }
 
     /// 2-of-2 worst case at cap `c`, the gen-2 forwarding hold (w / 63 + margin) and the cheapest debit.
@@ -115,6 +130,6 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         UARegistry r2 = _regs(address(0x5CA7004), [uint16(0x0131), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
         (d, ua, keys, ks) = _members(r2, 0x0131, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        r2.register(UAKinds.MSIG, d, hex"01", _pk(0x0142, 902), hex"01");
+        r2.register(UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 902)), hex"01", hex"01");
     }
 }

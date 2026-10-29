@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Sha512} from "../../../src/common/Sha512.sol";
 import {Ed25519} from "../../../src/common/Ed25519.sol";
 import {Ed25519Verifier} from "../../../src/ua/verifiers/Ed25519Verifier.sol";
+import {UAKinds} from "../../../src/ua/UAKinds.sol";
 
 /// UA-2b `ed25519` (0x0102, accounts.md §1.9): SHA-512 known answers (FIPS 180-4 examples, padding boundaries, long
 /// input); RFC 8032 §7.1 and the strict-rule cases of signatures.json `ed25519Rfc8032` (any message length, via
@@ -189,6 +190,9 @@ contract Ed25519VerifierTest is Test {
         for (uint256 i; i < 2; ++i) {
             string memory p = string.concat(d, pops[i]);
             bytes32 m = vm.parseJsonBytes32(sj, string.concat(p, ".message"));
+            // UA-8: the portable PoP message, the same in both contexts
+            bytes32 ua = vm.parseJsonBytes32(sj, string.concat(d, ".ua"));
+            assertEq(m, UAKinds.uaMessage(0x0102, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0)));
             assertTrue(v.verifyPop(k, m, vm.parseJsonBytes(sj, string.concat(p, ".sig"))), pops[i]);
         }
         uint256 n;
