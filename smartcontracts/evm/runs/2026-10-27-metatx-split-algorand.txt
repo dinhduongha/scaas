@@ -1,4 +1,4 @@
-# algorand at commit e3e778c7
+# algorand at commit bc10398d
 == test algorand
 == build algorand
 [32minfo: [0musing puyapy version 5.10.1[0m
@@ -43,13 +43,15 @@
 [32minfo: [0mWriting out/Probe.clear.bin[0m
 ok artifacts.json
 ok smartcontracts/algorand/vectors/algorand-vectors.json
+test_txn_counter_missing_fails_hard (__main__.Counter.test_txn_counter_missing_fails_hard) ... ok
+test_txn_counter_read (__main__.Counter.test_txn_counter_read) ... ok
 test_found_among_the_funders_created_apps (__main__.Recovery.test_found_among_the_funders_created_apps) ... ok
 test_not_on_chain (__main__.Recovery.test_not_on_chain) ... ok
 test_recorded_create_decodes_its_parameters (__main__.Recovery.test_recorded_create_decodes_its_parameters) ... ok
 test_two_matches_refused (__main__.Recovery.test_two_matches_refused) ... ok
 
 ----------------------------------------------------------------------
-Ran 4 tests in 0.008s
+Ran 6 tests in 0.017s
 
 OK
  Network scaas-algorand_default Creating 
@@ -245,5 +247,5 @@ PASSED tests/test_vectors.py::test_key_op_vectors
 PASSED tests/test_vectors.py::test_mandate_vectors
 PASSED tests/test_vectors.py::test_dex_vectors
 PASSED tests/test_vectors.py::test_origin_parity_vectors
-110 passed in 45.47s
+110 passed in 152.68s (0:02:32)
 rc=0
