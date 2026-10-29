@@ -1,11 +1,11 @@
-# near-algorand T19 fix 1 e2e: scaas-node NEAR adapter on near-sandbox 2.14.0 (protocol 88), started by the test (devnet.sh near, stopped with the process), keyless deploy by deploy.sh near; wasm from build.sh near at T19 fix 1 (IMPLICIT_TRANSFER_GAS 10 Tgas in the router / DEX pins; node pins follow; action fees read from the RPC)
+# near-algorand T19 fix 2 e2e: scaas-node NEAR adapter on near-sandbox 2.14.0 (protocol 88), started by the test (devnet.sh near, stopped with the process), keyless deploy by deploy.sh near; wasm from build.sh near at T19 fix 1; QUOTE lines: the node's quote (incl. the receipts at the implicit lane) >= the gas each job burnt
 # cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored --nocapture
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
      Running tests/e2e_near.rs (target/debug/deps/e2e_near-8fff549061f6767b)
 
 running 9 tests
 FEES max_gas_burnt_view = 300 Tgas (sandbox config.json)
-deploy on test-chain-xW5J9 (genesis 45HhvnghdAPuU4qnFN4SCchtDQWJNnLrW7eqPQV7Ywav) from test.near: ['tka.test.near', 'tkb.test.near', 'dex.test.near', 'relayfee.test.near', 'relayexec.test.near']
+deploy on test-chain-K8Z3m (genesis BvQrC9ftWZBei5zjoGxQJ8SvNjVL5XzTWA1jyYRv1pF5) from test.near: ['tka.test.near', 'tkb.test.near', 'dex.test.near', 'relayfee.test.near', 'relayexec.test.near']
   create tka.test.near (scaas_near_token, 558831 B, 7.588 NEAR): ok, 71.675 Tgas
   tka.test.near.new: ok, 3.916 Tgas
   create tkb.test.near (scaas_near_token, 558831 B, 7.588 NEAR): ok, 71.675 Tgas
@@ -58,14 +58,14 @@ deploy on test-chain-xW5J9 (genesis 45HhvnghdAPuU4qnFN4SCchtDQWJNnLrW7eqPQV7Ywav
   relayfee.test.near: delete its last access key: ok, 0.629 Tgas
   relayexec.test.near: delete its last access key: ok, 0.629 Tgas
 deploy gate: 5 accounts keyless (view_access_key_list empty)
-wrote /tmp/scaas-near-e2e/deployments/45HhvnghdAPuU4qnFN4SCchtDQWJNnLrW7eqPQV7Ywav.json
+wrote /tmp/scaas-near-e2e/deployments/BvQrC9ftWZBei5zjoGxQJ8SvNjVL5XzTWA1jyYRv1pF5.json
 
 FEES sandbox protocol 88: receipt (108059500000, 108059500000), function call (200000000000, 780000000000), per byte (47683715, 2235934) (send_not_sir, execution); node pins 108059500000, 2319861500000, 2235934 each
-FEES the node's (read from the RPC): ActionFees { receipt: 108059500000, function_call: 780000000000, per_byte: 47683715 }
+FEES the node's (read from the RPC): ActionFees { receipt: 108059500000, function_call: 780000000000, per_byte: 47683715, implicit_receive: 7524947687500 }
 FEES a lane call with 321 B of args: node prices 1.809 Tgas of action fees, the sandbox charges 1.213
 FEES a lane call with 16384 B of args: node prices 3.341 Tgas of action fees, the sandbox charges 2.015
 FEES a lane call with 65536 B of args: node prices 8.028 Tgas of action fees, the sandbox charges 4.469
-FEES timeout resend priced at 71.780 Tgas
+FEES timeout resend priced at 162.080 Tgas
 test deploy_gate_fails_with_a_key_left ... ok
 test near_events_include_native_ft_transfer has been running for over 60 seconds
 test near_lanes_do_not_block_each_other has been running for over 60 seconds
@@ -74,22 +74,22 @@ test near_pay_relay_finalize has been running for over 60 seconds
 test near_relay_fee_wrapper_job has been running for over 60 seconds
 test near_router_refund has been running for over 60 seconds
 test near_router_release has been running for over 60 seconds
-GAS mtx_pay (ed25519): 11.495 Tgas burnt in all, 3.646 in its receipt, 21 prepaid (pin 20 + 1: GAS_JOB_BASE = 10 + IMPLICIT_TRANSFER_GAS 10)
+QUOTE mtx_pay_meta: quote 45.390 Tgas >= burnt 11.701 Tgas (1 receipts at the lane, 3 counted)
 job 2: [
     Object {
-        "chain_state": String("consumed"),
-        "error": String("unknown"),
+        "chain_state": String("dead"),
+        "error": String("simulation: bad payload: pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"),
         "job_id": Number(2),
     },
 ]
-test near_pay_relay_finalize ... ok
+test near_pay_meta_job ... ok
 job 1: [
     Object {
         "chain_state": String("signed"),
         "job_id": Number(1),
         "outer_nonce": Number(367000001),
         "signer_address": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
-        "tx_hash": String("0xb6321e34a5ba384ef473046c06bae7e16bb3da990864dd94bab989bdc50b3904"),
+        "tx_hash": String("0x5a36886df9817395064246ccc0d5f14c9080f6f2725e148c58c4ac70dddaf024"),
     },
     Object {
         "chain_state": String("broadcast"),
@@ -101,17 +101,17 @@ job 1: [
         "job_id": Number(1),
     },
 ]
-  receipt "relayfee.test.near" 2.211 Tgas {"SuccessReceiptId":"rGCMeT4F6mqLcZojopt144zGfdgmHj27DwraAL1DiCM"} Array []
-  receipt "tka.test.near" 4.453 Tgas {"SuccessValue":"AQ=="} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"relayer\":\"relayfee.test.near\",\"lane\":\"0xde07f24dfabbc3b7d4be82f12b8aca2bb4a9515468ab8435a522b9090f43d027\",\"nonce\":0,\"digest\":\"0x1ea59f443d0955a15807a2041c0e8ee132b4c60d5bd6b0ccff08b28ca24d6ced\"}}"), String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"to\":\"tka.test.near\",\"amount\":\"1000\"}}")]
+  receipt "relayfee.test.near" 2.211 Tgas {"SuccessReceiptId":"LPZ5XQ6GxkPTwoHa5wZCJw8Ncu9H6C248gpr92SU8Un"} Array []
+  receipt "tka.test.near" 4.448 Tgas {"SuccessValue":"AQ=="} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"relayer\":\"relayfee.test.near\",\"lane\":\"0xaa2759ceda217f889ea0818cf21173bdb10b9b7b883fc63560aa2a0a6657b207\",\"nonce\":0,\"digest\":\"0x88b8cd135145d490ac008f8067783855e1647bf3a65b2230c91230a3dc237746\"}}"), String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"to\":\"tka.test.near\",\"amount\":\"1000\"}}")]
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
-  receipt "relayfee.test.near" 2.168 Tgas {"SuccessReceiptId":"7YyVvt6YTh2XhmhPwNFhfRLjCHcnJMYACDgiYeJnZNdH"} Array []
-  receipt "relayexec.test.near" 1.574 Tgas {"SuccessReceiptId":"C8FinB4Ju1eHqpaPn76oX6NTLkUxGkyLWW5cEJzJHkjU"} Array []
+  receipt "relayfee.test.near" 2.168 Tgas {"SuccessReceiptId":"46FDnpnz8KcuzoVW7zfFvQDQaYdb3tfrhZDKZULDWdgy"} Array []
+  receipt "relayexec.test.near" 1.574 Tgas {"SuccessReceiptId":"2JPCrjtkGTmUvmK5L9Bcq6qP7gRFAMzxd6vqhuQXfmaT"} Array []
   receipt "fixture.test.near" 1.057 Tgas {"Failure":{"ActionError":{"index":0,"kind":{"FunctionCallError":{"ExecutionError":"Smart contract panicked: fixture fail"}}}}} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
-  receipt "relayfee.test.near" 2.157 Tgas {"SuccessReceiptId":"E5ewxUjFdzPc8ET596nvChPt452E8ZJUT35HsqnHYLnh"} Array []
+  receipt "relayfee.test.near" 2.157 Tgas {"SuccessReceiptId":"F3Yp5hrHAukixtPnyhxDNnjG6g4n77cXf6MrDXqE6QK7"} Array []
   receipt "tka.test.near" 3.352 Tgas {"SuccessValue":"AQ=="} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"tka.test.near\",\"to\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"amount\":\"1000\"}}")]
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
@@ -123,24 +123,31 @@ job 1: [
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
+QUOTE router -> listed target fail (refunded): quote 393.821 Tgas >= burnt 124.889 Tgas (14 receipts at the lane, 17 counted)
 test near_router_refund ... ok
+QUOTE mtx_pay: quote 45.384 Tgas >= burnt 11.512 Tgas (1 receipts at the lane, 3 counted)
+GAS mtx_pay (ed25519): 11.512 Tgas burnt in all, 3.662 in its receipt, 21 prepaid (pin 20 + 1: GAS_JOB_BASE = 10 + IMPLICIT_TRANSFER_GAS 10)
 job 2: [
     Object {
-        "chain_state": String("dead"),
-        "error": String("simulation: bad payload: pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"),
+        "chain_state": String("consumed"),
+        "error": String("unknown"),
         "job_id": Number(2),
     },
 ]
-test near_pay_meta_job ... ok
+test near_pay_relay_finalize ... ok
 test near_lanes_do_not_block_each_other ... ok
+QUOTE relay_fee_add_origin (ed25519): quote 46.421 Tgas >= burnt 12.510 Tgas (1 receipts at the lane, 3 counted)
 GAS relay_fee_add_origin (ed25519 entry + ed25519 payment): 12.510 Tgas burnt in all, 4.642 in its receipt, 22 prepaid (pin 20 + 1 + 1)
+QUOTE router -> dex.settle (released): quote 517.628 Tgas >= burnt 180.144 Tgas (19 receipts at the lane, 26 counted)
+GAS router relay -> dex.settle (ed25519 payment, two ed25519 legs): 180.144 Tgas burnt in all, 2.245 in relay, 158 prepaid (96 + 1 + settle 27 + 2 x 17)
 test near_events_include_native_ft_transfer ... ok
+QUOTE router in flight, timed out (refunded) + relay_timeout: quote 418.821 Tgas >= burnt 134.247 Tgas (15 receipts at the lane, 17 counted)
 test near_router_timeout ... ok
-GAS router relay -> dex.settle (ed25519 payment, two ed25519 legs): 180.088 Tgas burnt in all, 2.245 in relay, 158 prepaid (96 + 1 + settle 27 + 2 x 17)
 test near_router_release ... ok
-GAS relay_fee_mandate_open (12-passkey msig entry + passkey payment, 13 passkeys): 274.333 Tgas burnt in all, 266.256 in its receipt, 293 prepaid (pin 20 + 13 x 21 = 293), headroom 26.744 Tgas
+QUOTE relay_fee_mandate_open (13 passkeys): quote 317.839 Tgas >= burnt 274.316 Tgas (1 receipts at the lane, 3 counted)
+GAS relay_fee_mandate_open (12-passkey msig entry + passkey payment, 13 passkeys): 274.316 Tgas burnt in all, 266.239 in its receipt, 293 prepaid (pin 20 + 13 x 21 = 293), headroom 26.761 Tgas
 test near_relay_fee_wrapper_job ... ok
 
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 73.27s
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 73.08s
 
 rc=0

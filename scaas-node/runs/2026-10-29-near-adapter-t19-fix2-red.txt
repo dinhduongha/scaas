@@ -1,0 +1,34 @@
+# near-algorand T19 fix 2 node RED: quote_counts_lane_receipts against the fix 1 adapter (HEAD b7ed5556: no lane_receipts / quote_gas / implicit_receive; the quote omits the lane's receipts)
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib -- adapters::near::tests::quote_counts_lane_receipts
+error[E0425]: cannot find function `lane_receipts` in this scope
+    --> src/adapters/near.rs:3189:24
+     |
+3189 |             assert_eq!(lane_receipts(&p, &e), n, "{e:?}");
+     |                        ^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `quote_gas` in this scope
+    --> src/adapters/near.rs:3190:24
+     |
+3190 |             assert_eq!(quote_gas(&p, &PINNED, &e, &c), base + n * PINNED.implicit_receive + resend, "{e:?}");
+     |                        ^^^^^^^^^ not found in this scope
+
+error[E0609]: no field `implicit_receive` on type `near::ActionFees`
+    --> src/adapters/near.rs:3190:74
+     |
+3190 |             assert_eq!(quote_gas(&p, &PINNED, &e, &c), base + n * PINNED.implicit_receive + resend, "{e:?}");
+     |                                                                          ^^^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `receipt`, `function_call`, `per_byte`
+
+error[E0609]: no field `implicit_receive` on type `near::ActionFees`
+    --> src/adapters/near.rs:3193:101
+     |
+3193 |         assert_eq!(timeout_gas(&PINNED), GAS_RELAY_TIMEOUT + action_fees(&PINNED, &t) + 12 * PINNED.implicit_receive);
+     |                                                                                                     ^^^^^^^^^^^^^^^^ unknown field
+     |
+     = note: available fields are: `receipt`, `function_call`, `per_byte`
+
+Some errors have detailed explanations: E0425, E0609.
+For more information about an error, try `rustc --explain E0425`.
+error: could not compile `scaas-node` (lib test) due to 4 previous errors
+rc=101

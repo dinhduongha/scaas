@@ -1046,6 +1046,10 @@ pub struct ActionFees {
     pub receipt: u64,
     pub function_call: u64,
     pub per_byte: u64,
+    /// T19 fix 2: one receipt received by an implicit account (every lane): a receipt plus a transfer, which nearcore
+    /// charges with an account creation and a full-access key (7.525 Tgas on protocol 88). Every system gas refund and
+    /// every contract deposit return to the lane is such a receipt.
+    pub implicit_receive: u64,
 }
 
 impl ActionFees {
@@ -1061,6 +1065,12 @@ impl ActionFees {
             receipt: item(&tc["action_receipt_creation_config"], "action_receipt_creation_config")?,
             function_call: item(&tc["action_creation_config"]["function_call_cost"], "function_call_cost")?,
             per_byte: item(&tc["action_creation_config"]["function_call_cost_per_byte"], "function_call_cost_per_byte")?,
+            implicit_receive: [
+                item(&tc["action_receipt_creation_config"], "action_receipt_creation_config")?,
+                item(&tc["action_creation_config"]["transfer_cost"], "transfer_cost")?,
+                item(&tc["action_creation_config"]["create_account_cost"], "create_account_cost")?,
+                item(&tc["action_creation_config"]["add_key_cost"]["full_access_cost"], "add_key_cost.full_access_cost")?,
+            ].iter().fold(0u64, |a, b| a.saturating_add(*b)),
         })
     }
 }
@@ -1071,10 +1081,48 @@ pub fn action_fees(fees: &ActionFees, call: &Call) -> u64 {
     2u64.saturating_mul(fees.receipt.saturating_add(fees.function_call).saturating_add(fees.per_byte.saturating_mul(bytes)))
 }
 
-/// Fix 1 m5: one `relay_timeout(ref)` transaction (prepaid + action fees), which a router job may have to send.
+// T19 fix 2 (ruling: the fee covers every known relayer cost): the receipts a job lands at its lane, an implicit
+// account. Every receipt of the transaction not at the lane (R) and every contract transfer to the lane (C) brings one
+// system gas-price refund to the signer, so the lane receives R + 2C (measured on near-sandbox: a plain pay 1, a router
+// refund 14, a router DEX release 19, an in-flight relay 8). Counted per job kind at its largest branch:
+/// a token entry (pay, pay-meta, wrapper): its receipt, and a deposit excess refunded to the lane (R 1, C 1).
+const LANE_RX_ENTRY: u64 = 3;
+/// the router itself: relay, hold, on_hold, exec, on_call, a settlement, return_deposit, on_settle (R 8) and the hold's
+/// excess, the held record's deposit, `target_deposit`, the entry's deposit back to the relayer (C 4).
+const LANE_RX_ROUTER: u64 = 16;
+/// a token target: its receipt and a deposit excess (refunded to the executor, a receipt not at the lane) (R 2).
+const LANE_RX_TOKEN_TARGET: u64 = 2;
+/// the DEX target: settle, two legs, on_legs, two payouts (R 6) and both legs' excess deposit to the signer (C 2).
+const LANE_RX_DEX_TARGET: u64 = 10;
+/// a listed third-party target: its own receipt (its children are the operator's to vouch for).
+const LANE_RX_LISTED_TARGET: u64 = 1;
+/// `relay_timeout`: itself, the token settlement, return_deposit, on_settle (R 4) and the `target_deposit`, held and
+/// entry deposits back (C 4).
+const LANE_RX_TIMEOUT: u64 = 12;
+
+/// The receipts a job lands at its (implicit) lane, counted per job kind.
+pub fn lane_receipts(policy: &RelayFeePolicy, entry: &Entry) -> u64 {
+    match entry {
+        Entry::FeeRouter { target, .. } if policy.tokens.contains(target) => LANE_RX_ROUTER + LANE_RX_TOKEN_TARGET,
+        Entry::FeeRouter { target, .. } if policy.dex.as_ref() == Some(target) => LANE_RX_ROUTER + LANE_RX_DEX_TARGET,
+        Entry::FeeRouter { .. } => LANE_RX_ROUTER + LANE_RX_LISTED_TARGET,
+        _ => LANE_RX_ENTRY,
+    }
+}
+
+/// Fix 1 m5: one `relay_timeout(ref)` transaction (prepaid + action fees + the receipts it lands at the lane), which a
+/// router job may have to send.
 pub fn timeout_gas(fees: &ActionFees) -> u64 {
     let c = Call { receiver: String::new(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
-    GAS_RELAY_TIMEOUT + action_fees(fees, &c)
+    GAS_RELAY_TIMEOUT + action_fees(fees, &c) + LANE_RX_TIMEOUT * fees.implicit_receive
+}
+
+/// The gas a job's fee must cover (priced at the node's gas price, plus the attached deposit): the prepaid gas, the
+/// action fees, every receipt it lands at the lane (T19 fix 2) and, for a router job, one `relay_timeout`.
+pub fn quote_gas(policy: &RelayFeePolicy, fees: &ActionFees, entry: &Entry, call: &Call) -> u64 {
+    let resend = if matches!(entry, Entry::FeeRouter { .. }) { timeout_gas(fees) } else { 0 };
+    call.gas.saturating_add(action_fees(fees, call)).saturating_add(lane_receipts(policy, entry).saturating_mul(fees.implicit_receive))
+        .saturating_add(resend)
 }
 
 /// A subject's keys on one token: `(kind, key_data)`.
@@ -1989,9 +2037,8 @@ impl ChainAdapter for NearAdapter {
         if fee.as_ref().is_some_and(|m| pays(&w.op, Some(m)) || w.op.to == Holder::Near(lane_id.clone())) {
             let price = self.gas_price().await.map_err(transport)?;
             let fees = self.fees().await.map_err(transport)?;
-            // fix 1 m5: the transaction's action fees, and a router job's possible relay_timeout transaction
-            let resend = if matches!(w.entry, Entry::FeeRouter { .. }) { timeout_gas(&fees) } else { 0 };
-            let gas = call.gas.saturating_add(action_fees(&fees, &call)).saturating_add(resend);
+            // fix 1 m5 / T19 fix 2: action fees, the lane's receipts, a router job's possible relay_timeout
+            let gas = quote_gas(&self.relay_fee, &fees, &entry, &call);
             let quote = u128::from(gas).saturating_mul(price).saturating_add(call.deposit);
             fee_covers(&self.relay_fee, &w.op, quote).map_err(revert)?;
         }
@@ -2214,7 +2261,12 @@ mod tests {
     const DEX: &str = "dex.test.near";
     const NO_CODE: &str = "11111111111111111111111111111111";
     /// The nearcore genesis `RuntimeFeesConfig` figures (send = exec), a fixture only: the node reads the chain's (ruling B).
-    const PINNED: ActionFees = ActionFees { receipt: 108_059_500_000, function_call: 2_319_861_500_000, per_byte: 2_235_934 };
+    const PINNED: ActionFees = ActionFees {
+        receipt: 108_059_500_000,
+        function_call: 2_319_861_500_000,
+        per_byte: 2_235_934,
+        implicit_receive: 108_059_500_000 + 115_123_062_500 + 7_200_000_000_000 + 101_765_125_000,
+    };
 
     fn fee_item(g: u64) -> Value {
         json!({"send_sir": g, "send_not_sir": g, "execution": g})
@@ -2424,7 +2476,9 @@ mod tests {
             "EXPERIMENTAL_protocol_config" => Ok(json!({"runtime_config": {"storage_amount_per_byte": w.byte_cost.to_string(),
                 "transaction_costs": {"action_receipt_creation_config": fee_item(PINNED.receipt),
                     "action_creation_config": {"function_call_cost": fee_item(PINNED.function_call),
-                        "function_call_cost_per_byte": fee_item(PINNED.per_byte)}}}})),
+                        "function_call_cost_per_byte": fee_item(PINNED.per_byte), "transfer_cost": fee_item(115_123_062_500),
+                        "create_account_cost": {"send_sir": 500_000_000_000u64, "send_not_sir": 500_000_000_000u64, "execution": 7_200_000_000_000u64},
+                        "add_key_cost": {"full_access_cost": fee_item(101_765_125_000)}}}}})),
             "gas_price" => Ok(json!({"gas_price": w.gas_price.to_string()})),
             "block" => {
                 let b = match (&p["finality"], &p["block_id"]) {
@@ -2884,7 +2938,7 @@ mod tests {
         let (wop, wo) = wrapper_job("wrapper_add_key_real");
         let storage = 1_160 * 10u128.pow(19);
         let wcall = call_of(&pol(), &entry(&pol(), &wop, &wo).unwrap(), &wop, &hx(&wo["signature"])).unwrap();
-        let quote = (wcall.gas + action_fees(&PINNED, &wcall)) as u128 * 100_000_000 + storage;
+        let quote = (wcall.gas + action_fees(&PINNED, &wcall) + 3 * PINNED.implicit_receive) as u128 * 100_000_000 + storage;
         for (price, ok) in [(quote.div_ceil(wop.amount), true), ((quote - 1) / wop.amount, false)] {
             let mut w = world();
             w.views.insert((TOKEN.into(), "relay_fee_add_key_check".into()), check_ok(storage));
@@ -2905,7 +2959,7 @@ mod tests {
         let g = job_gas(&set, &Auth::decode(&hx(&ro["signature"]), &rop.digest()).unwrap()).unwrap();
         let (entry_dep, hold) = (3_140 * 10u128.pow(18) + 1_250 * 10u128.pow(18) + 2 + td, 2_800 * 10u128.pow(18));
         let rcall = call_of(&pol(), &set, &rop, &hx(&ro["signature"])).unwrap();
-        let quote = (g + action_fees(&PINNED, &rcall) + timeout_gas(&PINNED)) as u128 * 100_000_000 + entry_dep + hold;
+        let quote = (g + action_fees(&PINNED, &rcall) + 18 * PINNED.implicit_receive + timeout_gas(&PINNED)) as u128 * 100_000_000 + entry_dep + hold;
         for (price, ok) in [(quote.div_ceil(rop.amount), true), ((quote - 1) / rop.amount, false)] {
             let mut w = world();
             w.views.insert((ROUTER.into(), "relay_check".into()), router_check(3_140 * 10u128.pow(18), entry_dep, g));
@@ -2949,7 +3003,7 @@ mod tests {
         let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 1, deposit: 0 };
         assert_eq!(action_fees(&PINNED, &c), 2 * 108_059_500_000 + 2 * 2_319_861_500_000 + 2 * 2_235_934 * 107);
         let t = Call { receiver: ROUTER.into(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
-        assert_eq!(timeout_gas(&PINNED), (30 + 40) * TGAS + action_fees(&PINNED, &t));
+        assert_eq!(timeout_gas(&PINNED), (30 + 40) * TGAS + action_fees(&PINNED, &t) + 12 * PINNED.implicit_receive);
     }
 
     /// §5 Submit: the attached deposit is exactly the check view's `storage_needed` (+ 0 yoctoNEAR: no `mtx_*` /
@@ -3148,9 +3202,13 @@ mod tests {
             "action_receipt_creation_config": {"send_sir": 108_059_500_000u64, "send_not_sir": 108_059_500_000u64, "execution": 108_059_500_000u64},
             "action_creation_config": {
                 "function_call_cost": {"send_sir": 200_000_000_000u64, "send_not_sir": 200_000_000_000u64, "execution": 780_000_000_000u64},
-                "function_call_cost_per_byte": {"send_sir": 2_235_934u64, "send_not_sir": 47_683_715u64, "execution": 2_235_934u64}}}}});
+                "function_call_cost_per_byte": {"send_sir": 2_235_934u64, "send_not_sir": 47_683_715u64, "execution": 2_235_934u64},
+                "transfer_cost": {"send_sir": 115_123_062_500u64, "send_not_sir": 115_123_062_500u64, "execution": 115_123_062_500u64},
+                "create_account_cost": {"send_sir": 500_000_000_000u64, "send_not_sir": 500_000_000_000u64, "execution": 7_200_000_000_000u64},
+                "add_key_cost": {"full_access_cost": {"send_sir": 101_765_125_000u64, "send_not_sir": 101_765_125_000u64, "execution": 101_765_125_000u64}}}}}});
         let f = ActionFees::from_protocol_config(&p88).unwrap();
-        assert_eq!(f, ActionFees { receipt: 108_059_500_000, function_call: 780_000_000_000, per_byte: 47_683_715 });
+        // the implicit receive = 7.525 Tgas, the receipt every refund to a lane burns on near-sandbox (T19 fix 2)
+        assert_eq!(f, ActionFees { receipt: 108_059_500_000, function_call: 780_000_000_000, per_byte: 47_683_715, implicit_receive: 7_524_947_687_500 });
         let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 0, deposit: 0 };
         assert_eq!(action_fees(&f, &c), 2 * (108_059_500_000 + 780_000_000_000 + 47_683_715 * 107));
         let mut gap = p88.clone();
@@ -3167,6 +3225,30 @@ mod tests {
         let (a, _) = adapter(World { no_fees: true, ..world() }, &fee_cfg("1")).await;
         let e = format!("{:#}", a.start_check().await.unwrap_err());
         assert!(e.contains("EXPERIMENTAL_protocol_config") && e.contains("transaction_costs"), "{e}");
+    }
+
+    /// T19 fix 2: the quote adds every receipt a job lands at its implicit lane (system gas refunds, deposit returns),
+    /// counted per job kind and priced at the chain's implicit-receive cost; a router job also its `relay_timeout`.
+    #[test]
+    fn quote_counts_lane_receipts() {
+        let p = pol();
+        let c = Call { receiver: TOKEN.into(), method: "mtx_pay".into(), args: vec![0; 100], gas: 11 * TGAS, deposit: 0 };
+        let base = c.gas + action_fees(&PINNED, &c);
+        let router = |target: &str| Entry::FeeRouter { target: target.into(), method: "m".into(), args: vec![], target_gas: 0, target_deposit: 0 };
+        let listed = "other.test.near";
+        for (e, n, resend) in [
+            (Entry::Pay, 3, 0),
+            (Entry::PayMeta { salt: [0; 32], meta: vec![] }, 3, 0),
+            (Entry::FeeWrapper { entry: "mtx_add_origin".into(), args: vec![] }, 3, 0),
+            (router(TOKEN), 18, timeout_gas(&PINNED)),
+            (router(DEX), 26, timeout_gas(&PINNED)),
+            (router(listed), 17, timeout_gas(&PINNED)),
+        ] {
+            assert_eq!(lane_receipts(&p, &e), n, "{e:?}");
+            assert_eq!(quote_gas(&p, &PINNED, &e, &c), base + n * PINNED.implicit_receive + resend, "{e:?}");
+        }
+        let t = Call { receiver: ROUTER.into(), method: "relay_timeout".into(), args: vec![0; 32], gas: GAS_RELAY_TIMEOUT, deposit: 0 };
+        assert_eq!(timeout_gas(&PINNED), GAS_RELAY_TIMEOUT + action_fees(&PINNED, &t) + 12 * PINNED.implicit_receive);
     }
 
     /// T19 (near-sandbox 2.14): `send_tx` with `wait_until = NONE` answers `{"final_execution_status": "NONE"}` even for a
@@ -3893,7 +3975,7 @@ mod tests {
         let (rop, ro) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near(ROUTER.into()), "1", "0");
         let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: GAS_JOB_BASE + GAS_KEY_SIG, target_deposit: 7 };
         let call = call_of(&pol(), &set, &rop, &hx(&ro["signature"])).unwrap();
-        let quote = u128::from(call.gas + action_fees(&PINNED, &call) + timeout_gas(&PINNED)) * 100_000_000 + 1 + 1;
+        let quote = u128::from(call.gas + action_fees(&PINNED, &call) + 18 * PINNED.implicit_receive + timeout_gas(&PINNED)) * 100_000_000 + 1 + 1;
         for (price, ok) in [(quote.div_ceil(rop.amount), true), ((quote - 1) / rop.amount, false)] {
             let mut w = router_world(0);
             w.views.insert((TOKEN.into(), "relay_hold_check".into()), check_ok(1));
