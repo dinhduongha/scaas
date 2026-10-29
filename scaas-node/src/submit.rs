@@ -21,7 +21,7 @@ use crate::abi::IToken;
 use crate::config::ChainCfg;
 use crate::guard::{self, Guard, Refusal};
 use crate::metatx::{addr, uint, Mtx, UaMtx};
-use crate::nonce::{bump, plan, Inflight};
+use crate::nonce::{bump, plan, replaceable, Inflight};
 use crate::odoo::{Job, Odoo, Report};
 
 /// A 0-value self-transfer: 21,000 before Amsterdam, 12,000 under EIP-2780 (no recipient charge for the sender
@@ -733,9 +733,9 @@ impl Submitter {
                 None => cap,
             };
             let fees = (bump(s.fees.0, cap), bump(s.fees.1, cap));
-            if fees.0 <= s.fees.0 {
-                // Ở trần phí: một bản thay thế cùng giá bị node từ chối (underpriced). Chờ,
-                // không spam RPC; vẫn không bỏ nonce (review I10).
+            if !replaceable(s.fees, fees) {
+                // Ở trần phí: một bản thay thế cùng giá (or a clamped step under +10 %, fix 2) bị node từ chối
+                // (underpriced). Chờ, không spam RPC; vẫn không bỏ nonce (review I10).
                 warn!(nonce = n, "stuck at the fee cap; waiting");
                 if let Some(s) = self.inflight.get_mut(&n) {
                     s.at = Instant::now();
@@ -2128,8 +2128,11 @@ mod tests {
         let ceiling = guard::fee_ceiling(first);
         assert!(fees.len() >= 3, "replaced while stuck: {fees:?}");
         assert!(fees.iter().all(|f| *f <= ceiling), "every send under the ceiling {ceiling}: {fees:?}");
-        assert_eq!(*fees.last().unwrap(), ceiling, "bumped up to the ceiling, then it waits: {fees:?}");
-        assert_eq!(fees.iter().filter(|f| **f == ceiling).count(), 1, "no resend at the ceiling: {fees:?}");
+        // fix 2: the clamped last step (5.86 -> 6 gwei, +2.4 %) is no replacement a mempool takes, so the lane waits
+        // below the ceiling; every send is +10 % over the one it replaces
+        let last = *fees.last().unwrap();
+        assert!(last < ceiling && last * 11 > ceiling * 10, "waits one step under the ceiling: {fees:?}");
+        assert!(fees.windows(2).all(|w| w[1] * 10 >= w[0] * 11), "each replacement is +10 %: {fees:?}");
         assert_eq!(s.inflight.get(&0).unwrap().ceiling, Some(ceiling));
         // a metatx job (no quote) keeps the operator's cap
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;

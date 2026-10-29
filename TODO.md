@@ -299,6 +299,15 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   `params.relay_fee.min_wei_value` against the quote, `UAPaymentSettled` / `UAMetaTransactionExecuted` rows joined by
   `join_pay_events`; choices in decisions.md (CTR-MTX-27, Change 2026-10-30). Left for UA F5 below: gateway route, record
   cache, mesh, the other `ua*` jobs.
+  - [ ] Restart fee basis (node-ua-jobs fix 1 re-review minor 2): a tracked job's `Sent.fees` is the current `chain.fees()`,
+    not the tracked tx's, so a priced job's replacements after a restart are refused by the mempool every stuck period
+    (churn, no loss); seed `fees` from `tx_fees` (+ `maxPriorityFeePerGas`) for a priced job.
+  - [ ] Forgotten tx after a restart (re-review minor 3): a priced job whose tracked tx the RPC no longer knows is only
+    gap-filled (the payer re-signs; liveness only) and takes no subject hold while the old tx may still land (a small I2
+    window); re-price and re-send it, and hold its payer.
+  - [ ] Relay-fee starvation (re-review minor 4): a subject that keeps other jobs in flight keeps its own relay-fee job
+    `SUBJECT_HELD` until it expires (hurts that subject only); if it shows up, refuse new non-relay holds while a relay-fee
+    job of the subject waits.
 - [ ] **bamboo-dms: read `from_ua` / `to_ua` of EVM rows** (controller ruling 2026-10-30, node-ua-jobs fix 1, review C1):
   the EVM indexer sends a derived UA as `UA_POOL` in `from` / `to` (the client's ingest takes 20-byte addresses only) with
   the bytes32 id in `from_ua` / `to_ua` (`relay_payee_ua`); `chain_event_ingest` should store the id so a UA's payments and
