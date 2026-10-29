@@ -6,13 +6,22 @@
 //! (anyone, after both expiries) covers a lost callback; refund wins. One sandbox per test.
 mod common;
 use common::*;
+use near_sdk::json_types::U128;
 use near_workspaces::types::Gas;
-use scaas_near_common::hash::hex;
+use scaas_near_common::hash::{hex, pay_lane};
 use scaas_near_common::Order;
-use scaas_near_dex::{leg_gas, settle_gas, Settle, GAS_ON_LEGS, GAS_ON_REFUND, GAS_PAYOUT, GAS_SETTLE_SELF, GAS_VIEW};
-use scaas_near_token::{order_bytes, OrderClose, ACCOUNT_STORAGE_BYTES, TRADE_RECORD_OVERHEAD};
+use scaas_near_dex::{
+    leg_gas, settle_gas, Settle, GAS_ON_LEGS, GAS_ON_REFUND, GAS_PAYOUT, GAS_SETTLE_SELF, GAS_VIEW, LEG_STORAGE_MAX_BYTES,
+    SETTLE_MARGIN_S,
+};
+use scaas_near_relayfee::{call_ref, relay_gas, Check as RCheck};
+use scaas_near_token::{order_bytes, OrderClose, ACCOUNT_STORAGE_BYTES, MAX_ORIGINS, MAX_ORIGIN_LEN, TRADE_RECORD_OVERHEAD};
 
 const DEX_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_dex/scaas_near_dex.wasm");
+const ROUTER_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_relayfee/scaas_near_relayfee.wasm");
+const EXEC_WASM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../target/near/scaas_near_relayexec/scaas_near_relayexec.wasm");
+/// The executor a DEX without a router is created with (no such account: only direct settles).
+const NO_EXECUTOR: &str = "no-executor.test.near";
 /// What the relayer attaches to `settle`: the escrow entry plus both legs' storage; each token returns its leg's excess
 /// to the transaction signer (the relayer).
 const DEPOSIT: u128 = 100_000_000_000_000_000_000_000; // 0.1 NEAR
@@ -30,6 +39,10 @@ const MIN_CAP: &str = "min_nonce must be below 2^63";
 const MIN_UP: &str = "min_nonce only increases";
 const BEFORE_EXPIRY: &str = "refund before expiry";
 const SHORT_GAS: &str = "prepaid gas below the settle minimum (legs + callback)";
+const LEG_SHARE: &str = "a leg's deposit share is below the worst-case leg storage (LEG_STORAGE_MAX_BYTES)";
+const EXPIRES_SOON: &str = "an order or a leg op expires within SETTLE_MARGIN_S (60 s)";
+/// The router payment's fee (token A units) in the routed settles.
+const FEE: u128 = 10;
 /// `settle_gas_pin`: two passkey legs, both paid out, every receipt of the transaction (measured 2026-10-28, see
 /// `runs/2026-10-28-near-gas.txt`); the test fails when a measurement exceeds `pin / 1.2`.
 const SETTLE_TGAS_PIN: f64 = 90.0;
@@ -51,9 +64,80 @@ struct L {
 async fn setup_dex() -> D {
     let t = setup().await;
     let b = deploy_token(&t.w).await;
-    let dex = t.w.dev_deploy(&std::fs::read(DEX_WASM).expect("run build.sh near first")).await.unwrap();
-    dex.call("new").transact().await.unwrap().into_result().unwrap();
+    let dex = deploy_dex(&t.w, NO_EXECUTOR).await;
     D { t, b, dex }
+}
+
+/// A DEX whose router executor is `executor` (`Dex::new(executor)`, Borsh).
+async fn deploy_dex(w: &Worker<Sandbox>, executor: &str) -> Contract {
+    let dex = w.dev_deploy(&std::fs::read(DEX_WASM).expect("run build.sh near first")).await.unwrap();
+    let e: near_sdk::AccountId = executor.parse().unwrap();
+    dex.call("new").args(b(&e)).transact().await.unwrap().into_result().unwrap();
+    dex
+}
+
+/// The DEX behind the relay-fee router: router + executor deployed first, the DEX created with that executor.
+struct DR {
+    d: D,
+    router: Contract,
+    exec: Contract,
+}
+
+async fn setup_routed() -> DR {
+    let t = setup().await;
+    let tb = deploy_token(&t.w).await;
+    let read = |p: &str| std::fs::read(p).expect("run build.sh near first");
+    let exec = t.w.dev_deploy(&read(EXEC_WASM)).await.unwrap();
+    let router = t.w.dev_deploy(&read(ROUTER_WASM)).await.unwrap();
+    router.call("new").args(b(&acc(exec.id()))).transact().await.unwrap().into_result().unwrap();
+    exec.call("new").args(b(&acc(router.id()))).transact().await.unwrap().into_result().unwrap();
+    let dex = deploy_dex(&t.w, exec.id().as_str()).await;
+    DR { d: D { t, b: tb, dex }, router, exec }
+}
+
+impl DR {
+    /// `who` relays `dex.settle(a, bl)` through the router, paid by `payer` (FEE of token A, open mode, salt `salt`):
+    /// `target_gas` = `settle_gas`, `target_deposit` = `DEPOSIT`, the quoted relay deposit and exactly `relay_gas`.
+    async fn relay_settle(&self, who: &Account, payer: &Signer, a: &L, bl: &L, salt: [u8; 32]) -> ExecutionFinalResult {
+        let d = &self.d;
+        let (target, router) = (acc(d.dex.id()), acc(self.router.id()));
+        let args = b(&(&a.order, &a.op, &a.auth, &bl.order, &bl.op, &bl.auth));
+        let r = call_ref(&NETWORK, &target, "settle", &args, &salt);
+        let op = MetaOp {
+            amount: FEE,
+            pay_ref: r,
+            lane: pay_lane(&r),
+            relayer: Some(router.clone()),
+            extra: salt,
+            ..d.t.op(OP_PAY, &payer.ua(), &Holder::Near(router.clone()), 0, &[])
+        };
+        let auth = payer.sign(&op, ORIGIN);
+        let tg = settle_gas(&a.auth, &bl.auth);
+        let rargs = b(&(&target, "settle", &args, tg, U128(DEPOSIT), acc(d.t.token.id()), &op, &auth));
+        let rc: RCheck = self.router.view("relay_check").args(rargs.clone()).await.unwrap().borsh().unwrap();
+        let hold = b(&(&router, acc(who.id()), &op, &auth));
+        let hc: Check = d.t.token.view("relay_hold_check").args(hold).await.unwrap().borsh().unwrap();
+        assert_eq!((rc.error.clone(), hc.error.clone()), (None, None), "relay quote");
+        let out = who.call(self.router.id(), "relay").args(rargs).deposit(NearToken::from_yoctonear(rc.deposit_needed.0 + hc.storage_needed.0))
+            .gas(relay_gas(&auth, tg)).transact().await.unwrap();
+        println!("relay settle by {}: {:.3} Tgas, ok {}", who.id(), tgas(&out), out.is_success());
+        out
+    }
+}
+
+/// Bytes of the escrow entry of `settle(a, bl)` submitted by `relayer`: the entry record (key `s` ‖ id) + two index
+/// records (key `l` ‖ digest → id), 40 B overhead each.
+fn entry_bytes(a: &L, bl: &L, relayer: &AccountId) -> u128 {
+    let leg = |l: &L| scaas_near_dex::Leg {
+        token: l.order.sell_token.clone(),
+        seller: l.op.from.clone(),
+        lane: l.op.lane,
+        nonce: l.op.nonce,
+        digest: l.op.digest(),
+        amount: l.op.amount,
+    };
+    let s = Settle { legs: [leg(a), leg(bl)], relayer: acc(relayer), deposit: 0, expiry: VU, done: false };
+    (40 + 33 + b(&s).len() as u128) + 2 * (40 + 33 + 32)
 }
 
 fn acc(a: &AccountId) -> near_sdk::AccountId {
@@ -147,6 +231,18 @@ impl D {
 
     async fn settle(&self, who: &Account, a: &L, bl: &L) -> ExecutionFinalResult {
         self.settle_gas(who, a, bl, Gas::from_tgas(300)).await
+    }
+
+    /// `settle` with `deposit` attached, 300 Tgas.
+    async fn settle_dep(&self, who: &Account, a: &L, bl: &L, deposit: u128) -> ExecutionFinalResult {
+        let args = b(&(&a.order, &a.op, &a.auth, &bl.order, &bl.op, &bl.auth));
+        who.call(self.dex.id(), "settle").args(args).deposit(NearToken::from_yoctonear(deposit)).max_gas().transact().await.unwrap()
+    }
+
+    /// The smallest deposit `settle(a, bl)` by `who` accepts: the entry, 2 yoctoNEAR, and twice the worst-case leg.
+    async fn floor(&self, who: &Account, a: &L, bl: &L) -> u128 {
+        let cost = self.t.byte_cost().await;
+        entry_bytes(a, bl, who.id()) * cost + 2 + 2 * LEG_STORAGE_MAX_BYTES as u128 * cost
     }
 
     async fn pending(&self, id: [u8; 32]) -> Option<Settle> {
@@ -439,39 +535,132 @@ async fn settle_leg_shape_refused() {
     assert_eq!(d.bal(&d.t.token, &e).await, 100, "nothing moved");
 }
 
-/// The relayer pays every record: the escrow entry from `settle`'s deposit (else refused); a leg short of its storage
-/// is refused by its token (`false`, nothing written), and its deposit goes to the signer, never stays with the DEX.
+/// The relayer pays every record: the escrow entry from `settle`'s deposit (else refused). Final review I1 (no fee for a
+/// no-op): `settle` also refuses a leg share below the pinned worst-case leg storage (`LEG_STORAGE_MAX_BYTES`), so no
+/// submitter, a router-paid one included, can make both legs return `false` for want of deposit; each token returns
+/// its leg's excess to the signer.
 #[tokio::test]
 async fn settle_deposit_short_refused() {
     let d = setup_dex().await;
     let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
     let (a, bl) = d.pair(&erin, &bobk).await;
     let cost = d.t.byte_cost().await;
-    let leg = |l: &L| scaas_near_dex::Leg {
-        token: l.order.sell_token.clone(),
-        seller: l.op.from.clone(),
-        lane: l.op.lane,
-        nonce: l.op.nonce,
-        digest: l.op.digest(),
-        amount: l.op.amount,
-    };
-    let s = Settle { legs: [leg(&a), leg(&bl)], relayer: acc(d.t.relayer.id()), deposit: 0, expiry: VU, done: false };
-    // entry record (key `s` ‖ id) + two index records (key `l` ‖ digest → id), 40 B overhead each
-    let entry = (40 + 33 + b(&s).len() as u128) + 2 * (40 + 33 + 32);
-    let call = |dep: u128| {
-        let args = b(&(&a.order, &a.op, &a.auth, &bl.order, &bl.op, &bl.auth));
-        d.t.relayer.call(d.dex.id(), "settle").args(args).deposit(NearToken::from_yoctonear(dep)).max_gas().transact()
-    };
-    let out = call(entry * cost + 1).await.unwrap();
+    let entry = entry_bytes(&a, &bl, d.t.relayer.id());
+    let out = d.settle_dep(&d.t.relayer, &a, &bl, entry * cost + 1).await;
     assert!(failed_with(&out, "attached deposit below the escrow entry storage"), "{:?}", out.failures());
-    let out = call(entry * cost + 2).await.unwrap();
-    assert!(out.is_success(), "{:?}", out.failures());
-    let short = "mtx_trade refused: the attached deposit is short of the leg's storage";
-    assert_eq!(out.logs().iter().filter(|l| l.contains(short)).count(), 2, "{:?}", out.logs());
-    assert!(has(&out, r#""event":"match_failed""#));
+    // the entry + 2 yoctoNEAR used to settle with both legs refused ("short of the leg's storage"): now refused at settle
+    let out = d.settle_dep(&d.t.relayer, &a, &bl, entry * cost + 2).await;
+    assert!(failed_with(&out, LEG_SHARE), "{:?}", out.failures());
+    let floor = d.floor(&d.t.relayer, &a, &bl).await;
+    let out = d.settle_dep(&d.t.relayer, &a, &bl, floor - 1).await;
+    assert!(failed_with(&out, LEG_SHARE), "one yoctoNEAR under the floor: {:?}", out.failures());
     assert_eq!((d.bal(&d.t.token, &erin.ua()).await, d.filled(&a).await, d.filled(&bl).await), (100, false, false));
+    assert_eq!(d.pending(settle_id(&a.op, &bl.op)).await, None, "nothing held");
+    let r0 = d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    let out = d.settle_dep(&d.t.relayer, &a, &bl, floor).await;
+    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
     let id = settle_id(&a.op, &bl.op);
     assert_eq!(d.pending(id).await.unwrap().deposit, entry * cost, "measured = formula ({entry} B)");
+    // what the relayer kept paying: the entry deposit and the legs' real storage; each leg's excess came back
+    let spent = r0 - d.t.relayer.view_account().await.unwrap().balance.as_yoctonear();
+    let legs = d.usage(&d.t.token).await + d.usage(&d.b).await;
+    println!("settle at the floor {floor} yocto ({} B per leg pinned): the relayer spent {spent} yocto in all (entry {} yocto, token storage now {legs} B)",
+        LEG_STORAGE_MAX_BYTES, entry * cost);
+    assert!(spent < floor, "the legs' excess went back to the signer");
+}
+
+/// Final review I1: the measured worst-case leg storage within the pin. The largest record a leg can open lazily is a
+/// 12-member msig (`MSIG_MAX_MEMBERS`) whose signing members bring 8 origins (`MAX_ORIGINS`) of 128 bytes
+/// (`MAX_ORIGIN_LEN`); plus the order record, the DEX's and the receiver's registrations. `mtx_trade_check` quotes it,
+/// the formula from the token's own figures agrees, it is within `LEG_STORAGE_MAX_BYTES`, and that leg settles at
+/// exactly the floor deposit.
+#[tokio::test]
+async fn settle_worst_case_leg_storage_pin() {
+    let d = setup_dex().await;
+    let bobk = Signer::ed("bobk");
+    let bob = d.t.near(&d.t.bob);
+    let mut ms: Vec<Signer> = (40..52).map(|i| Signer::pk(i, RP)).collect();
+    ms.sort_by_key(|s| s.key().id());
+    let body: Vec<u8> = ms.iter().flat_map(|s| [&ua::KIND_WEBAUTHN_P256.to_be_bytes()[..], &s.key().id(), &[0, 1]].concat()).collect();
+    let kd = [&[0u8, MAX_ORIGINS as u8, 0, 12][..], &body].concat();
+    let m = Holder::Ua(ua::ua_of(KIND_MSIG, &kd));
+    d.fund(&d.t.token, &m, 100).await;
+    d.fund(&d.b, &bob, 60).await;
+    d.native_key(&d.b, &d.t.bob, &bobk).await;
+    let origins: Vec<String> =
+        (0..MAX_ORIGINS).map(|i| format!("https://{}{}", (b'a' + i as u8) as char, "x".repeat(MAX_ORIGIN_LEN - 9))).collect();
+    assert!(origins.iter().all(|o| o.len() == MAX_ORIGIN_LEN));
+    let one = d.leg(&ms[0], &m, d.order(true, 100, 50), [0xa0; 32], 0);
+    let sigs = ms[..MAX_ORIGINS].iter().zip(&origins).enumerate().map(|(i, (s, o))| (i as u8, s.sign(&one.op, o))).collect();
+    let a = L { auth: Auth::Msig { key_data: kd.clone(), sigs }, ..one };
+    let bl = d.leg(&bobk, &bob, d.order(false, 60, 100), [0xb0; 32], 0);
+    let cost = d.t.byte_cost().await;
+    let c = d.trade_check(d.dex.id(), &a, &bob).await;
+    assert_eq!(c.error, None);
+    let subject = Subject { keys: vec![KeyRecord { kind: KIND_MSIG, key_data: kd }], origins, ..Default::default() };
+    let worst = record_bytes(&m, &subject) + order_bytes(&m, &OrderClose::Filled([0; 32])) + 2 * ACCOUNT_STORAGE_BYTES;
+    assert_eq!(c.storage_needed.0, worst as u128 * cost, "measured = the token's formula");
+    println!("worst-case leg storage: {worst} B measured (mtx_trade_check), pin LEG_STORAGE_MAX_BYTES {LEG_STORAGE_MAX_BYTES} B");
+    assert!(worst <= LEG_STORAGE_MAX_BYTES, "{worst} B over the pin");
+    let floor = d.floor(&d.t.relayer, &a, &bl).await;
+    let out = d.settle_dep(&d.t.relayer, &a, &bl, floor).await;
+    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(out.receipt_outcomes().iter().all(|o| o.is_success()), "{:?}", out.failures());
+    assert_eq!((d.bal(&d.t.token, &bob).await, d.bal(&d.b, &m).await), (100, 60));
+    println!("settle_worst_case_leg_storage_pin: {:.3} Tgas, floor {floor} yocto", tgas(&out));
+}
+
+/// Final review I1 (b): a leg landing after its order's expiry (or its op's `valid_until`) is refused at the token and
+/// would make a router-paid settle a no-op, so `settle` refuses a submit within `SETTLE_MARGIN_S` of the earliest
+/// expiry; a later expiry settles.
+#[tokio::test]
+async fn settle_near_expiry_refused() {
+    let d = setup_dex().await;
+    let (erin, bobk) = (Signer::ed("erin"), Signer::ed("bobk"));
+    let (a, bl) = d.pair(&erin, &bobk).await;
+    let e = erin.ua();
+    let now = d.t.now_s().await;
+    let soon = now + SETTLE_MARGIN_S / 2;
+    let order_soon = d.leg(&erin, &e, Order { expiry: soon, ..a.order.clone() }, [0xa0; 32], 0);
+    let op_soon = d.resign(&erin, a.clone(), |l| l.op.valid_until = soon);
+    for (name, l) in [("order expiry", &order_soon), ("leg op valid_until", &op_soon)] {
+        let out = d.settle(&d.t.relayer, l, &bl).await;
+        assert!(failed_with(&out, EXPIRES_SOON), "{name}: {:?}", out.failures());
+        let out = d.settle(&d.t.relayer, &bl, l).await;
+        assert!(failed_with(&out, EXPIRES_SOON), "{name}, either side: {:?}", out.failures());
+    }
+    assert_eq!((d.bal(&d.t.token, &e).await, d.filled(&a).await), (100, false), "nothing moved");
+    let later = d.leg(&erin, &e, Order { expiry: now + 10 * SETTLE_MARGIN_S, ..a.order.clone() }, [0xa0; 32], 0);
+    let out = d.settle(&d.t.relayer, &later, &bl).await;
+    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+}
+
+/// Final review I2 (CTR-DEX-09 on the paid path): an order bound to relayer R settles through the router only in R's
+/// own relay transaction (the predecessor is the DEX's executor and the signer is R); another lane's relay of the same
+/// settle is refused at the DEX and the router refunds the payer.
+#[tokio::test]
+async fn lane_bound_order_settles_through_router() {
+    let dr = setup_routed().await;
+    let d = &dr.d;
+    let (erin, bobk, payer) = (Signer::ed("erin"), Signer::ed("bobk"), Signer::ed("payer"));
+    let (a, bl) = d.pair(&erin, &bobk).await;
+    let e = erin.ua();
+    d.fund(&d.t.token, &payer.ua(), 100).await;
+    let a = d.leg(&erin, &e, Order { relayer: Some(acc(d.t.relayer.id())), ..a.order }, [0xa0; 32], 0);
+    let out = dr.relay_settle(&d.t.alice, &payer, &a, &bl, [1; 32]).await;
+    // the relay transaction succeeds (the router refunds); the DEX's receipt is the one that failed
+    assert!(format!("{:?}", out.failures()).contains(ORDER_RELAYER), "another lane's relay: {:?}", out.failures());
+    assert!(!has(&out, "relay_fee_paid"), "{:?}", out.logs());
+    assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.t.token, &payer.ua()).await), (100, 100), "nothing moved, refunded");
+    let out = dr.relay_settle(&d.t.relayer, &payer, &a, &bl, [2; 32]).await;
+    assert!(out.is_success() && has(&out, r#""event":"matched""#), "{:?}", out.failures());
+    assert!(has(&out, "relay_fee_paid"), "{:?}", out.logs());
+    assert_eq!(d.bal(&d.t.token, &payer.ua()).await, 100 - FEE, "the lane's fee");
+    assert_eq!(d.bal(&d.t.token, &d.t.near(&d.t.relayer)).await, FEE, "open mode: the relaying lane is paid");
+    assert_eq!((d.bal(&d.t.token, &e).await, d.bal(&d.b, &e).await), (0, 60), "erin's order filled");
+    // the executor the DEX accepts relayer-bound orders through (the node compares it with the router's at start)
+    let got: String = d.dex.view("executor").await.unwrap().json().unwrap();
+    assert_eq!(got, dr.exec.id().as_str(), "executor() view");
 }
 
 /// A lost callback (`on_legs` never resolved the entry; staged by putting the escrow back and patching `done`): after

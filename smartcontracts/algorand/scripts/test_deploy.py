@@ -82,5 +82,27 @@ class Recovery(unittest.TestCase):
         self.assertIn("all match its recorded create", str(e.exception))
 
 
+
+class Counter(unittest.TestCase):
+    """T20 N2 / final fix: the create's `min_id` is the last block's transaction counter `tc`, read strictly."""
+
+    class Blocks:
+        def __init__(self, block):
+            self.block = block
+
+        def status(self):
+            return {"last-round": 7}
+
+        def block_info(self, round_num):
+            return {"block": self.block}
+
+    def test_txn_counter_read(self):
+        self.assertEqual(D.txn_counter(self.Blocks({"rnd": 7, "tc": 1012})), 1012)
+
+    def test_txn_counter_missing_fails_hard(self):
+        with self.assertRaises(SystemExit) as e:
+            D.txn_counter(self.Blocks({"rnd": 7}))
+        self.assertIn("no transaction counter", str(e.exception))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

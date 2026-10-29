@@ -145,6 +145,28 @@ async fn origin_and_rp_checked() {
     t.refused(&t.relayer, "mtx_remove_origin", &rm, &dave.sign(&rm, other), &pr, "a passkey needs an origin").await;
 }
 
+/// Final review m1 (as Aptos `EKEY_OP`): `mtx_add_origin` of an origin the subject already holds is refused (no charged
+/// no-op); a new origin is added once, and adding it again is refused too.
+#[tokio::test]
+async fn add_origin_present_refused() {
+    let t = setup().await;
+    let dave = Signer::pk(4, RP);
+    let h = dave.ua();
+    t.set_guardian(&t.relayer, &dave, &h, 0, None).await; // opened at ORIGIN
+    let present = "origin already present";
+    let po = b(&ORIGIN.to_string());
+    let add = t.op(OP_ADD_ORIGIN, &h, &h, 1, &po);
+    t.refused(&t.relayer, "mtx_add_origin", &add, &dave.sign(&add, ORIGIN), &po, present).await;
+    let other = "https://app.scaas.test";
+    let po = b(&other.to_string());
+    let add = t.op(OP_ADD_ORIGIN, &h, &h, 1, &po);
+    t.ok(&t.relayer, "mtx_add_origin", &add, &dave.sign(&add, ORIGIN), &po).await;
+    let add = t.op(OP_ADD_ORIGIN, &h, &h, 2, &po);
+    t.refused(&t.relayer, "mtx_add_origin", &add, &dave.sign(&add, ORIGIN), &po, present).await;
+    assert_eq!(t.subject(&h).await.unwrap().origins, vec![ORIGIN.to_string(), other.to_string()]);
+    assert_eq!(t.subject(&h).await.unwrap().key_nonce, 2, "the refused ops consumed no key nonce");
+}
+
 /// `erin` (key nonce 1 after this) with guardian `g` (a UA, key nonce 1 after this); `g` starts recovery to
 /// `frank` (a stranger cannot).
 async fn recovery_setup() -> (T, Signer, Signer, Signer) {

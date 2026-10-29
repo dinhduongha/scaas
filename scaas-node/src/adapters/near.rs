@@ -680,6 +680,14 @@ impl RelayFeePolicy {
         }
         Ok(Self { router, executor, tokens, params, min_yocto_value, dex, targets })
     }
+
+    /// Final review node I1 (Algorand's `never_paid`): a configured token, the router, its executor or the DEX is never a
+    /// payee of anything a job carries (its payment outside that payment's own open mode, a router target op's `to`, a
+    /// mandate's `terms.payee`): keyless, each strands what it gets, and the executor's balance anyone can move.
+    pub fn never_paid(&self, h: &Holder) -> bool {
+        let Holder::Near(a) = h else { return false };
+        self.tokens.contains(a) || [&self.router, &self.executor, &self.dex].iter().any(|x| x.as_ref() == Some(a))
+    }
 }
 
 /// The entry a job runs.
@@ -732,10 +740,8 @@ fn pays(op: &MetaOp, who: Option<&String>) -> bool {
 /// the token itself (the wrapper marker) outside the route whose open mode it is (CTR-MTX-27 step 2).
 pub fn entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
     let kind = crate::adapter::op_kind(o, &crate::adapter::PAY_KINDS)?;
-    if kind != Some("relay_fee")
-        && (op.to == Holder::Near(op.contract.clone()) || pays(op, policy.router.as_ref()) || pays(op, policy.executor.as_ref()))
-    {
-        bail!("never pay {} (the token itself, the relay-fee router or its executor): the funds would be stranded", op.to.display());
+    if kind != Some("relay_fee") && (op.to == Holder::Near(op.contract.clone()) || policy.never_paid(&op.to)) {
+        bail!("never pay {} (the token itself, a configured token, the relay-fee router, its executor or the DEX): the funds would be stranded", op.to.display());
     }
     match kind {
         Some("pay_meta") => {
@@ -767,10 +773,14 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
                 bail!("the payment's relayer {:?} is not the wrapper marker (the token {})", op.relayer, op.contract);
             }
             bound(op, &relay_ref(&op.network, &len8(&op.contract), &call, &op.extra), o)?;
-            if pays(op, policy.router.as_ref()) || pays(op, policy.executor.as_ref()) {
-                bail!("never pay the relay-fee router or its executor");
+            // open mode pays the token (the marker); any other keyless SCaaS account strands the fee
+            if op.to != Holder::Near(op.contract.clone()) && policy.never_paid(&op.to) {
+                bail!("never pay {} (a configured token, the relay-fee router, its executor or the DEX)", op.to.display());
             }
             let (entry, args) = parse_wrapper_call(&call)?;
+            if entry == "mtx_mandate_open" {
+                never_paid_payee(policy, &mandate_terms(&args)?.0, "the wrapped mandate's terms.payee")?;
+            }
             Ok(Entry::FeeWrapper { entry, args })
         }
         "router" => {
@@ -797,11 +807,15 @@ fn fee_entry(policy: &RelayFeePolicy, op: &MetaOp, o: &Value) -> Result<Entry> {
             if policy.targets.get(&target).is_some_and(|ms| !ms.contains(&method)) {
                 bail!("{method} is not a listed method of router target {target} (params.relay_fee.targets)");
             }
-            if pays(op, Some(executor)) {
-                bail!("the executor is never paid");
-            }
+            // open mode pays the router (the marker); the token itself and every other keyless SCaaS account strand it
             if op.to == Holder::Near(op.contract.clone()) {
                 bail!("never pay the token itself");
+            }
+            if !pays(op, Some(router)) && policy.never_paid(&op.to) {
+                bail!("never pay {} (a configured token, the router's executor or the DEX)", op.to.display());
+            }
+            if policy.tokens.contains(&target) {
+                target_payees(policy, &method, &args)?;
             }
             if args.len() > MAX_ARGS_BYTES {
                 bail!("router args are {} B, above {MAX_ARGS_BYTES}", args.len());
@@ -964,6 +978,9 @@ const DEX_LEG_GAS: u64 = 6 * TGAS + IMPLICIT_TRANSFER_GAS;
 /// `s` ‖ id 33 + 40, two leg-index records 105 each).
 const DEX_PAYOUT_YOCTO: u128 = 2;
 const DEX_ENTRY_FIXED_BYTES: u64 = 283;
+/// dex `LEG_STORAGE_MAX_BYTES` (final review I1): `settle` refuses a leg share below it (worst case 1,988 B measured,
+/// `smartcontracts/near/runs/2026-10-29-near-final-fix.txt`).
+const DEX_LEG_STORAGE_MAX_BYTES: u64 = 2_200;
 /// The `target_gas` floor of a listed third-party target (`params.relay_fee.targets`): the node cannot read its call,
 /// so only an empty budget is refused; the operator vouches for the target.
 pub const GAS_TARGET_MIN: u64 = 5 * TGAS;
@@ -1010,17 +1027,41 @@ pub fn wrapper_conflicts(entry: &Entry, op: &MetaOp, auth: &Auth) -> Result<()> 
     Ok(())
 }
 
-/// Fix 3 N2: the `expiry` of a `mtx_mandate_open(op, auth, terms)` call's `MandateTerms`.
-fn mandate_expiry(args: &[u8]) -> Result<u64> {
+/// Fix 3 N2 / final review node I1: `(payee, expiry)` of a `mtx_mandate_open(op, auth, terms)` call's `MandateTerms`.
+fn mandate_terms(args: &[u8]) -> Result<(Holder, u64)> {
     let mut r = Reader::new(args);
     let op = MetaOp::read(&mut r)?;
     Auth::read(&mut r, true, &op.digest())?;
     r.holder()?;
-    r.holder()?;
+    let payee = r.holder()?;
     r.u128()?;
     r.u128()?;
     r.u64()?;
-    r.u64()
+    Ok((payee, r.u64()?))
+}
+
+fn mandate_expiry(args: &[u8]) -> Result<u64> {
+    Ok(mandate_terms(args)?.1)
+}
+
+fn never_paid_payee(policy: &RelayFeePolicy, h: &Holder, what: &str) -> Result<()> {
+    if policy.never_paid(h) {
+        bail!("never pay {} ({what}: a configured token, the relay-fee router, its executor or the DEX)", h.display());
+    }
+    Ok(())
+}
+
+/// Final review node I1: a router target op on a configured token never pays a never-paid account: its `to` on a value
+/// entry or a mandate pay, `terms.payee` on a mandate open (the open's own `to` is the mandate id, a UA).
+fn target_payees(policy: &RelayFeePolicy, method: &str, args: &[u8]) -> Result<()> {
+    if method == "mtx_mandate_open" {
+        return never_paid_payee(policy, &mandate_terms(args).context("router target args of mtx_mandate_open")?.0, "the mandate's terms.payee");
+    }
+    if VALUE_ENTRIES.contains(&method) || method == "mtx_mandate_pay" {
+        let top = MetaOp::read(&mut Reader::new(args)).with_context(|| format!("router target args of {method}"))?;
+        return never_paid_payee(policy, &top.to, &format!("the router target {method}'s to"));
+    }
+    Ok(())
 }
 
 /// Fix 3 N1: a wrapped key entry's subject and the passkey origins the subject holds right after the entry when it
@@ -1772,11 +1813,13 @@ impl NearAdapter {
     /// Fix 1 I2 (the TON I1 rule on every family: the relayer never pays for a call bound to fail): the router target's
     /// call as far as the node can see it. A configured token: a relayable entry (`TOKEN_CHECKED`) whose `<method>_check`
     /// passes with the executor as caller (the target sees the executor), `target_gas` ≥ the entry's pinned job gas,
-    /// `target_deposit` ≥ what it stores. The DEX's `settle`: canonical legs, each order open or bound to the executor,
+    /// `target_deposit` ≥ what it stores. The DEX's `settle`: canonical legs, each order open or bound to this lane (the
+    /// DEX accepts it through its executor in the bound lane's own transaction, final review I2) or to the executor,
     /// each leg's `mtx_trade_check` on its (configured) sell token as the DEX, `target_gas` ≥ `settle_gas`,
-    /// `target_deposit` ≥ the settle entry + 2 yoctoNEAR + both legs' storage. A listed third-party target:
-    /// `target_gas` ≥ `GAS_TARGET_MIN` only (the operator vouches for it).
-    async fn target_check(&self, pay: &MetaOp, target: &str, method: &str, args: &[u8], gas: u64, deposit: u128) -> std::result::Result<(u64, u128), SimError> {
+    /// `target_deposit` = the settle entry + 2 yoctoNEAR + 2 × max(the larger leg, the DEX's worst-case leg pin). A
+    /// listed third-party target: `target_gas` ≥ `GAS_TARGET_MIN` only (the operator vouches for it).
+    #[allow(clippy::too_many_arguments)]
+    async fn target_check(&self, pay: &MetaOp, lane: &str, target: &str, method: &str, args: &[u8], gas: u64, deposit: u128) -> std::result::Result<(u64, u128), SimError> {
         let rv = |m: String| SimError::Revert(m);
         let executor = self.relay_fee.executor.as_deref().ok_or_else(|| rv("no executor configured".into()))?;
         let check = |b: Vec<u8>, what: &str| -> std::result::Result<u128, SimError> {
@@ -1816,8 +1859,8 @@ impl NearAdapter {
                 return Err(rv(format!("router target {target}: {method} is not the DEX's settle")));
             }
             let legs = settle_legs(args).map_err(|e| rv(format!("router target args of settle: {e:#}")))?;
-            if let Some(l) = legs.iter().find(|l| l.relayer.as_deref().is_some_and(|x| x != executor)) {
-                return Err(rv(format!("order relayer {:?} is not the executor: the DEX refuses it via the router", l.relayer)));
+            if let Some(l) = legs.iter().find(|l| l.relayer.as_deref().is_some_and(|x| x != executor && x != lane)) {
+                return Err(rv(format!("order relayer {:?} is neither this lane nor the executor: the DEX refuses it via this relay", l.relayer)));
             }
             if let Some(l) = legs.iter().find(|l| !self.relay_fee.tokens.contains(&l.sell_token)) {
                 return Err(rv(format!("a settle leg sells {}, not a configured token", l.sell_token)));
@@ -1853,7 +1896,9 @@ impl NearAdapter {
                 + 4 + executor.len() as u64 + 25;
             let pc = self.rpc("EXPERIMENTAL_protocol_config", json!({"finality": "final"})).await.map_err(transport)?;
             let cost = dec_u128(&pc["runtime_config"]["storage_amount_per_byte"], "storage_amount_per_byte").map_err(transport)?;
-            // fix 2 f3: settle splits the rest evenly between the legs: 2 × the larger leg
+            // fix 2 f3: settle splits the rest evenly between the legs: 2 × the larger leg; final review I1: settle refuses a
+            // share below its worst-case leg pin (the excess comes back to the lane, the signer)
+            let larger = larger.max(cost.saturating_mul(u128::from(DEX_LEG_STORAGE_MAX_BYTES)));
             let need = cost.saturating_mul(u128::from(DEX_ENTRY_FIXED_BYTES + settle))
                 .saturating_add(DEX_PAYOUT_YOCTO).saturating_add(larger.saturating_mul(2));
             // fix 3 g1: settle_gas and the floor, set by the node
@@ -1996,7 +2041,7 @@ impl ChainAdapter for NearAdapter {
                     Some(false) => return Err(SimError::Revert(format!("relay-fee target {target} has no code"))),
                     Some(true) => {}
                 }
-                let (tg, td) = self.target_check(&w.op, target, method, args, *target_gas, *target_deposit).await?;
+                let (tg, td) = self.target_check(&w.op, &lane_id, target, method, args, *target_gas, *target_deposit).await?;
                 Entry::FeeRouter { target: target.clone(), method: method.clone(), args: args.clone(), target_gas: tg, target_deposit: td }
             }
             e => e.clone(),
@@ -2227,6 +2272,13 @@ impl ChainAdapter for NearAdapter {
             let x = Reader::new(&self.view(r, "executor", &[]).await?).account()?;
             if x != *e {
                 bail!("router {r} executor() is {x}, not params.relay_fee.executor {e}");
+            }
+            // final review I2: the DEX lets a lane-bound order through this executor only
+            if let Some(d) = &self.relay_fee.dex {
+                let x: String = serde_json::from_slice(&self.view(d, "executor", &[]).await?).context("dex executor()")?;
+                if x != *e {
+                    bail!("dex {d} executor() is {x}, not params.relay_fee.executor {e}");
+                }
             }
         }
         // review I2: the router's / DEX's own transfer pin is the node's (its static gas figures follow it)
@@ -2568,6 +2620,7 @@ mod tests {
         let net: Vec<u8> = serde_json::to_vec(&b32(&nv()["network"]).to_vec()).unwrap();
         w.views.insert((TOKEN.into(), "network".into()), net);
         w.views.insert((ROUTER.into(), "executor".into()), bstr(EXECUTOR));
+        w.views.insert((DEX.into(), "executor".into()), serde_json::to_vec(EXECUTOR).unwrap());
         w.views.insert((TOKEN.into(), "storage_balance_of".into()), br#"{"total":"1250000000000000000000","available":"0"}"#.to_vec());
         w.views.insert((TOKEN.into(), "ft_balance_of".into()), br#""1000000000000""#.to_vec());
         w.views.insert((DEX.into(), "leg_settle".into()), vec![0]);
@@ -3882,7 +3935,8 @@ mod tests {
 
     /// f3: `settle` splits the rest of its deposit evenly between the legs, so the floor is the entry + 2 yoctoNEAR +
     /// 2 × the larger leg's storage (a + b would leave the bigger leg short: settle's own receipt succeeds, the fee is
-    /// released, the trade fails).
+    /// released, the trade fails). Final review I1: `settle` refuses a share below its worst-case leg pin
+    /// (`DEX_LEG_STORAGE_MAX_BYTES` 2,200 B), so the larger leg counts as at least the pin.
     #[tokio::test]
     async fn dex_deposit_floor_covers_the_larger_leg_twice() {
         let mut w = router_world(0);
@@ -3891,7 +3945,8 @@ mod tests {
         let (a, b) = (leg_op("trade_a", &oa), leg_op("trade_b", &ob));
         let settle = [(TOKEN, &a), (TOKENB, &b)].iter().map(|(t, l)| 4 + t.len() as u64 + holder_len(&l.from) + 88).sum::<u64>() + 4 + EXECUTOR.len() as u64 + 25;
         let entry = 10u128.pow(19) * u128::from(283 + settle) + 2;
-        let floor = entry + 2 * 50;
+        let pin = 10u128.pow(19) * 2_200;
+        let floor = entry + 2 * pin;
         // fix 3 g1: the node attaches exactly this floor, whatever the job quoted
         for td in [floor, floor - 1, entry + 5 + 50, 0] {
             let mut w2 = router_world(0);
@@ -3899,6 +3954,11 @@ mod tests {
             let (r, _) = build_router(w2, &sponsored_cfg(), DEX, "settle", &settle_args(None, None), "200000000000000", &td.to_string()).await;
             assert_eq!(relay_figures(&r.unwrap().body).1, floor, "{td}");
         }
+        // a leg above the pin (the contract's pin must then be raised; the node still covers it twice)
+        let mut w2 = router_world(0);
+        w2.views.insert((TOKENB.into(), "mtx_trade_check".into()), check_ok(pin + 7));
+        let (r, _) = build_router(w2, &sponsored_cfg(), DEX, "settle", &settle_args(None, None), "200000000000000", "0").await;
+        assert_eq!(relay_figures(&r.unwrap().body).1, entry + 2 * (pin + 7));
         drop(w);
     }
 
@@ -4186,5 +4246,91 @@ mod tests {
                 let _ = tx_events(&ids(), &json!({"receipts_outcome": [v.clone()], "transaction": v}), n, &s, &s);
             }
         }
+    }
+    // ------------------------------------------------------------------------------------------------ final fix wave
+
+    /// `terms(FAR)` with the payee `payee`.
+    fn terms_to(payee: &Holder) -> Vec<u8> {
+        let mut p = Vec::new();
+        payee.write(&mut p);
+        let delegate = [vec![1], vec![0x10; 32]].concat();
+        [delegate, p, 100u128.to_le_bytes().to_vec(), 250u128.to_le_bytes().to_vec(), 86_400u64.to_le_bytes().to_vec(),
+         FAR.to_le_bytes().to_vec(), 1_000u128.to_le_bytes().to_vec()].concat()
+    }
+
+    /// Final review node I1 (Algorand's never-pay rule, one rule): a configured token, the router, its executor and the
+    /// DEX are never paid by anything a job carries: a plain / pay-meta payment, a wrapper or router payment outside its
+    /// own open mode, a wrapped or routed mandate's `terms.payee`, a router target op's `to` (value entries, mandate pay).
+    #[test]
+    fn never_pay_any_carried_payee() {
+        let p = RelayFeePolicy { tokens: vec![TOKEN.into(), TOKENB.into()], ..pol() };
+        let never = [TOKEN, TOKENB, ROUTER, EXECUTOR, DEX];
+        let bob = Holder::Near("bob.test.near".into());
+        let refused = |r: Result<Entry>, what: &str| assert!(r.as_ref().is_err_and(|e| format!("{e:#}").contains("never pay")), "{what}: {r:?}");
+        // the job's own payment: plain, wrapper (open mode = the token), router (open mode = the router)
+        for to in [DEX, TOKENB] {
+            refused(entry(&p, &MetaOp { to: Holder::Near(to.into()), ..op_of("pay") }, &json!({})), &format!("plain pay to {to}"));
+            let (wop, wo) = wrapper_job("wrapper_add_key_real");
+            assert!(entry(&p, &MetaOp { to: Holder::Near(to.into()), ..wop }, &wo).is_err(), "wrapper payment to {to}");
+            let (op, o) = router_op(TOKEN, "mtx_pay", &[0; 8], Holder::Near(to.into()));
+            refused(entry(&p, &op, &o), &format!("router payment to {to}"));
+        }
+        let (wop, wo) = wrapper_job("wrapper_add_key_real");
+        assert!(entry(&p, &wop, &wo).is_ok(), "wrapper open mode pays the token");
+        // a wrapped mandate open's payee
+        let mop = op_of("mandate_open");
+        let ma = auth_bytes(&row("mandate_open")["auth"]);
+        let pay_auth = |_: &[u8; 32]| auth_bytes(&row("pay")["auth"]);
+        let alice = Holder::Near("alice.test.near".into());
+        for x in never {
+            let o = wrapper_for("mtx_mandate_open", mop.clone(), &ma, &terms_to(&Holder::Near(x.into())), alice.clone(), pay_auth);
+            let op = MetaOp::decode(&hx(&o["payload"])).unwrap();
+            refused(entry(&p, &op, &o), &format!("wrapped mandate payee {x}"));
+        }
+        let o = wrapper_for("mtx_mandate_open", mop.clone(), &ma, &terms_to(&bob), alice.clone(), pay_auth);
+        assert!(entry(&p, &MetaOp::decode(&hx(&o["payload"])).unwrap(), &o).is_ok(), "an honest wrapped mandate");
+        // a router target op on a configured token
+        let auth = auth_bytes(&row("pay")["auth"]);
+        let target_op = |to: &Holder| [MetaOp { to: to.clone(), ..op_of("pay") }.borsh(), auth.clone()].concat();
+        for x in never {
+            let h = Holder::Near(x.into());
+            for m in ["mtx_pay", "mtx_transfer", "mtx_execute_transfer", "mtx_mandate_pay"] {
+                let (op, o) = router_op(TOKEN, m, &target_op(&h), bob.clone());
+                refused(entry(&p, &op, &o), &format!("router target {m} to {x}"));
+            }
+            let (op, o) = router_op(TOKENB, "mtx_mandate_open", &[mop.borsh(), ma.clone(), terms_to(&h)].concat(), bob.clone());
+            refused(entry(&p, &op, &o), &format!("router target mandate payee {x}"));
+        }
+        for m in ["mtx_transfer", "mtx_mandate_pay"] {
+            let (op, o) = router_op(TOKEN, m, &target_op(&bob), bob.clone());
+            assert!(entry(&p, &op, &o).is_ok(), "{m} to bob");
+        }
+        let (op, o) = router_op(TOKEN, "mtx_mandate_open", &[mop.borsh(), ma, terms_to(&bob)].concat(), bob.clone());
+        assert!(entry(&p, &op, &o).is_ok(), "an honest routed mandate");
+    }
+
+    /// Final review I2: the DEX accepts an order bound to the relaying lane through its executor (signer = the lane), so
+    /// the node relays such a settle; an order bound to another lane is refused before sending (the DEX would refuse it).
+    #[tokio::test]
+    async fn dex_lane_bound_order_via_router() {
+        let big = "100000000000000000000000";
+        let go = |args: Vec<u8>| async move { build_router(router_world(0), &sponsored_cfg(), DEX, "settle", &args, "200000000000000", big).await.0 };
+        assert!(go(settle_args(Some(LANE0), None)).await.is_ok(), "bound to this lane");
+        assert!(go(settle_args(None, Some(LANE0))).await.is_ok(), "either side");
+        assert!(go(settle_args(Some(EXECUTOR), None)).await.is_ok(), "bound to the executor");
+        let r = go(settle_args(Some("other-lane.test.near"), None)).await;
+        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("neither this lane nor the executor")), "{r:?}");
+    }
+
+    /// Final review I2: the DEX's `executor()` must be the router's executor (else every lane-bound router settle fails).
+    #[tokio::test]
+    async fn start_check_dex_executor_mismatch_errors() {
+        let mut w = world();
+        w.views.insert((DEX.into(), "executor".into()), serde_json::to_vec("other.near").unwrap());
+        let (a, _) = adapter(w, &fee_cfg("1")).await;
+        let e = format!("{:#}", a.start_check().await.unwrap_err());
+        assert!(e.contains("dex") && e.contains("executor"), "{e}");
+        let (a, _) = adapter(world(), &fee_cfg("1")).await;
+        a.start_check().await.unwrap();
     }
 }

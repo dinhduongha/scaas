@@ -25,7 +25,7 @@ mod storage;
 mod trade;
 pub use escrow::{held_bytes, Held, HELD_RECORD_OVERHEAD};
 pub use account::{
-    record_bytes, Check, Recovery, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, POLICY_PASSKEY_FOR_VALUE,
+    record_bytes, Check, Recovery, Subject, KEYOP_FINISH_RECOVERY, KEYOP_SET_POLICY, MAX_KEYS, MAX_ORIGINS, MAX_ORIGIN_LEN, POLICY_PASSKEY_FOR_VALUE,
     RECOVERY_DELAY_S, SUBJECT_RECORD_OVERHEAD,
 };
 pub use mandate::{mandate_bytes, Mandate, MandateTerms, MANDATE_RECORD_OVERHEAD};

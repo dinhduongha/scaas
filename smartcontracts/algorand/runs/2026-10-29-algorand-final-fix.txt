@@ -1,0 +1,13 @@
+# algorand final-fix GREEN (deploy.py tc) at commit be63179a + uncommitted
+test_txn_counter_missing_fails_hard (__main__.Counter.test_txn_counter_missing_fails_hard) ... ok
+test_txn_counter_read (__main__.Counter.test_txn_counter_read) ... ok
+test_found_among_the_funders_created_apps (__main__.Recovery.test_found_among_the_funders_created_apps) ... ok
+test_not_on_chain (__main__.Recovery.test_not_on_chain) ... ok
+test_recorded_create_decodes_its_parameters (__main__.Recovery.test_recorded_create_decodes_its_parameters) ... ok
+test_two_matches_refused (__main__.Recovery.test_two_matches_refused) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.008s
+
+OK
+rc=0

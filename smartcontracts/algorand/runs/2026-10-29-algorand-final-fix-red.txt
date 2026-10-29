@@ -1,0 +1,31 @@
+# algorand final-fix RED (deploy.py tc) at commit be63179a + the new test
+test_txn_counter_missing_fails_hard (__main__.Counter.test_txn_counter_missing_fails_hard) ... ERROR
+test_txn_counter_read (__main__.Counter.test_txn_counter_read) ... ERROR
+test_found_among_the_funders_created_apps (__main__.Recovery.test_found_among_the_funders_created_apps) ... ok
+test_not_on_chain (__main__.Recovery.test_not_on_chain) ... ok
+test_recorded_create_decodes_its_parameters (__main__.Recovery.test_recorded_create_decodes_its_parameters) ... ok
+test_two_matches_refused (__main__.Recovery.test_two_matches_refused) ... ok
+
+======================================================================
+ERROR: test_txn_counter_missing_fails_hard (__main__.Counter.test_txn_counter_missing_fails_hard)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/test_deploy.py", line 104, in test_txn_counter_missing_fails_hard
+    D.txn_counter(self.Blocks({"rnd": 7}))
+    ^^^^^^^^^^^^^
+AttributeError: module 'deploy' has no attribute 'txn_counter'
+
+======================================================================
+ERROR: test_txn_counter_read (__main__.Counter.test_txn_counter_read)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/scripts/test_deploy.py", line 100, in test_txn_counter_read
+    self.assertEqual(D.txn_counter(self.Blocks({"rnd": 7, "tc": 1012})), 1012)
+                     ^^^^^^^^^^^^^
+AttributeError: module 'deploy' has no attribute 'txn_counter'
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.013s
+
+FAILED (errors=2)
+rc=1

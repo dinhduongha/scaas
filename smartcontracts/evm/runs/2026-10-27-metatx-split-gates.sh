@@ -76,7 +76,8 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 #   jest   "✓ <name>"     node "✔ <name>"     qt "PASS   : <TestCase>::<name>()"
 #   pytest "PASSED tests/<file>::<name>[<id>]" (-rA summary)   unittest "<name> (<class>) ... ok"
 # (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19;
-#  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name)
+#  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name; final fix wave: its new
+#  tests)
 NEW_TESTS=$(cat <<'EOF'
 forge|forge|test_parity
 forge|forge|test_isValid_7702_ctrUa24
@@ -447,6 +448,9 @@ cargo-scaas-node|cargo|near::origin_of_parity_vectors
 cargo-scaas-node|cargo|near::passkey_origin_shapes_as_on_chain
 cargo-scaas-node|cargo|near::router_job_gas_on_node_figures
 cargo-scaas-node|cargo|near::near_jobs_never_panic
+cargo-scaas-node|cargo|near::never_pay_any_carried_payee
+cargo-scaas-node|cargo|near::dex_lane_bound_order_via_router
+cargo-scaas-node|cargo|near::start_check_dex_executor_mismatch_errors
 cargo-scaas-node|cargo|addresses::near_account_ids
 cargo-scaas-node|cargo|addresses::algorand_addresses_and_app_ids
 cargo-scaas-node|cargo|keys::lane_path_near
@@ -469,10 +473,14 @@ e2e-near|cargo|near_router_refund
 e2e-near|cargo|near_router_timeout
 e2e-near|cargo|near_events_include_native_ft_transfer
 e2e-near|cargo|near_lanes_do_not_block_each_other
+e2e-near|cargo|near_router_token_target
+e2e-near|cargo|near_router_listed_target_ok
 algorand|unittest|test_recorded_create_decodes_its_parameters
 algorand|unittest|test_found_among_the_funders_created_apps
 algorand|unittest|test_not_on_chain
 algorand|unittest|test_two_matches_refused
+algorand|unittest|test_txn_counter_read
+algorand|unittest|test_txn_counter_missing_fails_hard
 algorand|pytest|test_account.py::test_ua_opened_lazily_relayer_pays_mbr
 algorand|pytest|test_account.py::test_each_kind_accepted
 algorand|pytest|test_account.py::test_high_s_refused
@@ -712,6 +720,10 @@ near|cargo|mandate_vectors_match
 near|cargo|pay_at_expiry_second_allowed
 near|cargo|routed_plan_shape_payee_and_policy
 near|cargo|dex_vectors_match
+near|cargo|settle_worst_case_leg_storage_pin
+near|cargo|settle_near_expiry_refused
+near|cargo|lane_bound_order_settles_through_router
+near|cargo|add_origin_present_refused
 forge|forge|test_kindTable
 ua-rs|cargo|table_groups_purposes_constants
 ua-rs|cargo|natives_native_space_canonical_ids

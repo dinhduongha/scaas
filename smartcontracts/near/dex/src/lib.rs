@@ -2,8 +2,12 @@
 //! a settlement cannot move both legs in one receipt; each leg moves into this account's NEP-141 balance at its token,
 //! and the join callback pays both out or refunds.
 //!
-//! - `settle(order_a, op_a, auth_a, order_b, op_b, auth_b)`, payable, any caller: each order's `relayer` is `None` or
-//!   the predecessor (CTR-DEX-09); the leg ops are op 1 for the order's sell token with `to = relayer = this DEX`,
+//! - `new(executor)`: the relay-fee router's executor (keyless, `relayexec`), fixed for good.
+//! - `settle(order_a, op_a, auth_a, order_b, op_b, auth_b)`, payable, any caller: each order's `relayer` is `None`, the
+//!   predecessor, or — when the predecessor is the executor (a router-paid settle) — the transaction signer, the lane
+//!   whose relay this is (CTR-DEX-09 on the paid path, final review I2); no order or leg op expires within
+//!   `SETTLE_MARGIN_S`, and each leg's deposit share covers `LEG_STORAGE_MAX_BYTES` (final review I1: no submitter can
+//!   make a settle a no-op that a router releases the fee for); the leg ops are op 1 for the order's sell token with `to = relayer = this DEX`,
 //!   `amount = sell_amount`, `extra = sha256(Borsh(order))`; the pair crosses (each buys what the other sells) and is
 //!   fill-or-kill (`a.sell_amount ≥ b.min_buy`, `b.sell_amount ≥ a.min_buy`: each side receives the other's whole
 //!   `sell_amount`); no leg is in another settle. Stores the escrow entry under `settle_id = sha256(digest(op_a) ‖
@@ -50,6 +54,14 @@ pub const GAS_ON_REFUND: Gas = scaas_near_common::with_transfer(10 + 2 * 4);
 pub const GAS_SETTLE_SELF: Gas = Gas::from_tgas(9);
 /// Kept per settle for the two payouts / refunds (1 yoctoNEAR each, NEP-141).
 const PAYOUT_YOCTO: u128 = 2;
+/// Final review I1: the most storage one leg can need at its token, with margin (bytes). The largest lazy open: a UA
+/// record of a 12-member msig (key data 436 B) holding 8 origins of 128 B = 41 + 33 + 1,517 = 1,591; the order record
+/// (UA) 147; the DEX's and the receiver's NEP-145 registrations 2 × 125: 1,988 B, measured by
+/// `settle_worst_case_leg_storage_pin` (`runs/2026-10-29-near-final-fix.txt`); pinned +10 %.
+pub const LEG_STORAGE_MAX_BYTES: u64 = 2_200;
+/// Final review I1: `settle` refuses a submit this close (seconds) to the earliest order expiry or leg op `valid_until`
+/// (a leg landing after it is refused at its token; the node keeps 120 s).
+pub const SETTLE_MARGIN_S: u64 = 60;
 
 type R<T> = Result<T, &'static str>;
 
@@ -100,6 +112,8 @@ pub struct Dex {
     settles: LookupMap<[u8; 32], Settle>,
     /// Leg digest → its settle, while the entry exists.
     legs: LookupMap<[u8; 32], [u8; 32]>,
+    /// The relay-fee router's executor: a relayer-bound order settles through it in the bound lane's own transaction.
+    executor: AccountId,
 }
 
 fn x(b: &[u8]) -> String {
@@ -114,9 +128,10 @@ fn now_s() -> u64 {
     env::block_timestamp() / 1_000_000_000
 }
 
-/// One leg's shape against its order (the token checks the same, and the signature).
-fn leg(order: &Order, op: &MetaOp, me: &AccountId, caller: &AccountId) -> R<Leg> {
-    if order.relayer.as_ref().is_some_and(|r| r != caller) {
+/// One leg's shape against its order (the token checks the same, and the signature). `via`: the transaction signer
+/// when the predecessor is the router's executor (the lane that relays), else `None`.
+fn leg(order: &Order, op: &MetaOp, me: &AccountId, caller: &AccountId, via: Option<&AccountId>) -> R<Leg> {
+    if order.relayer.as_ref().is_some_and(|r| r != caller && Some(r) != via) {
         return Err("order relayer is not the predecessor");
     }
     if op.op != OP_TRADE || op.contract != order.sell_token || op.to != Holder::Near(me.clone()) || op.relayer.as_ref() != Some(me) {
@@ -189,8 +204,8 @@ fn pay(token: &AccountId, to: &Holder, amount: u128) {
 impl Dex {
     #[init]
     #[private]
-    pub fn new() -> Self {
-        Self { settles: LookupMap::new(b"s"), legs: LookupMap::new(b"l") }
+    pub fn new(#[serializer(borsh)] executor: AccountId) -> Self {
+        Self { settles: LookupMap::new(b"s"), legs: LookupMap::new(b"l"), executor }
     }
 
     #[payable]
@@ -204,11 +219,15 @@ impl Dex {
         #[serializer(borsh)] auth_b: Auth,
     ) -> Promise {
         let (me, caller) = (env::current_account_id(), env::predecessor_account_id());
-        let legs = leg(&order_a, &op_a, &me, &caller)
-            .and_then(|a| Ok([a, leg(&order_b, &op_b, &me, &caller)?]))
+        let signer = env::signer_account_id();
+        let via = (caller == self.executor).then_some(&signer);
+        let legs = leg(&order_a, &op_a, &me, &caller, via)
+            .and_then(|a| Ok([a, leg(&order_b, &op_b, &me, &caller, via)?]))
             .and_then(|l| pair(&order_a, &order_b).map(|_| l))
             .and_then(|l| passkey_fields(&auth_a).and(passkey_fields(&auth_b)).map(|_| l))
             .unwrap_or_else(|e| env::panic_str(e));
+        let first = [order_a.expiry, order_b.expiry, op_a.valid_until, op_b.valid_until].into_iter().min().unwrap();
+        require!(now_s().saturating_add(SETTLE_MARGIN_S) <= first, "an order or a leg op expires within SETTLE_MARGIN_S (60 s)");
         // Ruling T8-I2: refused before any write or promise (nothing held, no leg can run out of gas).
         require!(env::prepaid_gas() >= settle_gas(&auth_a, &auth_b), "prepaid gas below the settle minimum (legs + callback)");
         let id = settle_id(&legs[0].digest, &legs[1].digest);
@@ -227,6 +246,11 @@ impl Dex {
             .as_yoctonear()
             .checked_sub(deposit + PAYOUT_YOCTO)
             .unwrap_or_else(|| env::panic_str("attached deposit below the escrow entry storage"));
+        // final review I1: each share (the smaller is rest / 2) covers the worst-case leg; the excess goes to the signer
+        require!(
+            rest / 2 >= env::storage_byte_cost().as_yoctonear() * LEG_STORAGE_MAX_BYTES as u128,
+            "a leg's deposit share is below the worst-case leg storage (LEG_STORAGE_MAX_BYTES)"
+        );
         let call = |order: Order, op: MetaOp, auth: Auth, receiver: &Holder, d: u128| {
             let gas = leg_gas(&auth);
             let args = borsh::to_vec(&(op, auth, &order, receiver)).unwrap();
@@ -329,6 +353,11 @@ impl Dex {
     pub fn implicit_transfer_gas(&self) -> u64 {
         scaas_near_common::IMPLICIT_TRANSFER_GAS.as_gas()
     }
+
+    /// The executor `new` fixed (the relayer checks it equals its router's at start).
+    pub fn executor(&self) -> AccountId {
+        self.executor.clone()
+    }
 }
 
 impl Dex {
@@ -376,13 +405,18 @@ mod tests {
             (order, op)
         };
         let ((oa, opa), (ob, opb)) = (leg_of("trade_a"), leg_of("trade_b"));
-        let (la, lb) = (leg(&oa, &opa, &me, &relayer).unwrap(), leg(&ob, &opb, &me, &relayer).unwrap());
+        let (la, lb) = (leg(&oa, &opa, &me, &relayer, None).unwrap(), leg(&ob, &opb, &me, &relayer, None).unwrap());
         pair(&oa, &ob).unwrap();
         assert_eq!(settle_id(&la.digest, &lb.digest).to_vec(), hx(&d["dexSettle"]["settleId"]));
         // order A is bound to RELAYER: another submitter is refused (CTR-DEX-09)
         let other: AccountId = "mallory.test.near".parse().unwrap();
-        assert_eq!(leg(&oa, &opa, &me, &other).err(), Some("order relayer is not the predecessor"));
-        assert!(leg(&ob, &opb, &me, &other).is_ok(), "order B is open");
+        assert_eq!(leg(&oa, &opa, &me, &other, None).err(), Some("order relayer is not the predecessor"));
+        assert!(leg(&ob, &opb, &me, &other, None).is_ok(), "order B is open");
+        // final review I2: through the executor, the relaying lane (signer) is the one bound; another lane is refused
+        let exec: AccountId = "exec.test.near".parse().unwrap();
+        assert!(leg(&oa, &opa, &me, &exec, Some(&relayer)).is_ok(), "bound lane's relay through the executor");
+        assert_eq!(leg(&oa, &opa, &me, &exec, Some(&other)).err(), Some("order relayer is not the predecessor"));
+        assert_eq!(leg(&oa, &opa, &me, &exec, None).err(), Some("order relayer is not the predecessor"));
     }
 
     /// Refund wins: a late `on_legs` on a resolved (or pruned) entry creates no payout.
@@ -394,7 +428,7 @@ mod tests {
         let ctx = VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(me.clone()).build();
         let ok = vec![PromiseResult::Successful(vec![1]), PromiseResult::Successful(vec![1])];
         testing_env!(ctx.clone(), near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), ok);
-        let mut dex = Dex::new();
+        let mut dex = Dex::new("exec.test.near".parse().unwrap());
         let l = |t: &str| Leg { token: t.parse().unwrap(), seller: Holder::Ua([1; 32]), lane: [0; 32], nonce: 0, digest: [2; 32], amount: 5 };
         let s = Settle { legs: [l("a.near"), l("b.near")], relayer: me.clone(), deposit: 0, expiry: 0, done: true };
         dex.settles.insert([7; 32], s.clone());
@@ -417,7 +451,7 @@ mod tests {
         let ctx = VMContextBuilder::new().current_account_id(me.clone()).predecessor_account_id(me.clone()).build();
         let r = |d: [u8; 32]| PromiseResult::Successful(borsh::to_vec(&Some(OrderClose::Filled(d))).unwrap());
         testing_env!(ctx, near_sdk::test_vm_config(), near_sdk::RuntimeFeesConfig::test(), Default::default(), vec![r([2; 32]), r([3; 32])]);
-        let mut dex = Dex::new();
+        let mut dex = Dex::new("exec.test.near".parse().unwrap());
         let l = |t: &str, d: u8| Leg { token: t.parse().unwrap(), seller: Holder::Ua([1; 32]), lane: [0; 32], nonce: 0, digest: [d; 32], amount: 5 };
         dex.settles.insert([7; 32], Settle { legs: [l("a.near", 2), l("b.near", 3)], relayer: me, deposit: 0, expiry: 0, done: true });
         dex.on_refund([7; 32]);

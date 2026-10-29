@@ -327,6 +327,15 @@ def landed(c, f, role, rec, state):
     return found[0] if found else None
 
 
+def txn_counter(c):
+    """The last block's transaction counter `tc` (T20 N2: no default; a block without it cannot bound the app id)."""
+    rnd = c.status()["last-round"]
+    block = c.block_info(round_num=rnd)["block"]
+    if "tc" not in block:
+        sys.exit(f"block {rnd} has no transaction counter (tc): cannot bound the new app's id; retry after a round")
+    return block["tc"]
+
+
 def send_wait(c, stx_b64, txid, what, state):
     try:
         c.send_raw_transaction(stx_b64)
@@ -347,7 +356,7 @@ def create(c, f, role, args, state, tokens, admin):
             # review M4: a create whose LastValid is the last round can no longer land (the next block is last + 1)
             if rec is None or c.status()["last-round"] >= rec["last"]:
                 # app ids come from the ledger's transaction counter: this create lands at or above the last block's
-                min_id = c.block_info(round_num=c.status()["last-round"])["block"].get("tc", 0)
+                min_id = txn_counter(c)
                 a = list(args)
                 if kind == "relayfee":
                     atc = AtomicTransactionComposer()

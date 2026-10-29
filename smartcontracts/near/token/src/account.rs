@@ -288,6 +288,8 @@ impl Token {
                 let i = s.keys.iter().position(|x| x == k).ok_or("unknown key")?;
                 s.keys.remove(i);
             }
+            // final review m1 (as Aptos EKEY_OP): no charged no-op
+            Action::AddOrigin(o) if s.origins.iter().any(|x| x == o) => return Err("origin already present"),
             Action::AddOrigin(o) => s.add_origin(o)?,
             Action::RemoveOrigin(o) => {
                 let i = s.origins.iter().position(|x| x == o).ok_or("unknown origin")?;

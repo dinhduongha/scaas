@@ -13,6 +13,8 @@
 //! 3. pay-meta (`PaymentMeta`), a relay-fee wrapper (ed25519, and the largest shape: a 12-passkey msig
 //!    `relay_fee_mandate_open` + a passkey payment), the escrow router to a real DEX settle (released), to a failing
 //!    target (refunded) and to a target still in flight past its deadline (the node's `relay_timeout`, refund wins);
+//!    final fix wave (review node I3): the router to a token target (`mtx_transfer`, the node's own `target_gas` and
+//!    exact `target_deposit`) and to a listed third-party target that succeeds, each with its QUOTE line;
 //! 4. native NEP-141 `ft_transfer` / `transfer_to_ua` moves are indexed, an unregistered token's are not;
 //! 5. two lanes do not block each other (a held signed transaction on one, the other runs to `mined`).
 //!
@@ -42,7 +44,7 @@ use sha2::{Digest, Sha256};
 const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
                         abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 /// Lanes 2k, 2k + 1 belong to test k.
-const LANES: u32 = 18;
+const LANES: u32 = 22;
 const NEAR: u128 = 1_000_000_000_000_000_000_000_000;
 /// yoctoNEAR per base unit of TKA / TKB: a fee of `FEE` = 1 NEAR covers any job here.
 const PRICE: &str = "1000000000000000000000";
@@ -960,8 +962,8 @@ async fn near_relay_fee_wrapper_job() {
     assert!(state.lock().unwrap().refused.is_empty(), "{:#?}", state.lock().unwrap().refused);
 }
 
-/// Two crossing orders (one bound to the executor, one open), each leg's extra = sha256(order); `settle` relayed through
-/// the router: released (`on_settle` true), the fee to the lane, both legs paid out, the trade rows carry `leg_digest`
+/// Two crossing orders (one bound to the relaying lane — final review I2: the DEX accepts it through its executor in that
+/// lane's own transaction — one open), each leg's extra = sha256(order); `settle` relayed through the router: released (`on_settle` true), the fee to the lane, both legs paid out, the trade rows carry `leg_digest`
 /// and `settle_id`, `RelayFeePaid` from the router.
 #[tokio::test]
 #[ignore]
@@ -986,7 +988,7 @@ async fn near_router_release() {
             ..w.op(token, 1, &s.h(), &Holder::Near(w.dex.clone())) };
         [o.to_vec(), op.borsh(), s.auth(&op)].concat()
     };
-    let (oa, ob) = (order(&w.tka, &w.tkb, 500, 300, Some(&w.exec)), order(&w.tkb, &w.tka, 300, 500, None));
+    let (oa, ob) = (order(&w.tka, &w.tkb, 500, 300, Some(&lane)), order(&w.tkb, &w.tka, 300, 500, None));
     let args = [leg(&s1, &w.tka, 500, &oa, 0xc1), leg(&s2, &w.tkb, 300, &ob, 0xc2)].concat();
     let call = router_call(&w.dex, "settle", &args);
     let salt = [0x6a; 32];
@@ -1063,6 +1065,7 @@ async fn near_router_timeout() {
     let rf = c.params.get_mut("relay_fee").and_then(|v| v.as_table_mut()).unwrap();
     rf.insert("router".into(), toml::Value::String(w.slow_router.clone()));
     rf.insert("executor".into(), toml::Value::String(w.slow_exec.clone()));
+    c.params.remove("dex"); // the DEX's executor is the real router's (start_check compares them)
     let a = scaas_node::adapters::build(&c, &[lane_signer(12), lane_signer(13)]).unwrap();
     a.start_check().await.unwrap();
     let lane = lane_id(12);
@@ -1239,4 +1242,71 @@ async fn near_lanes_do_not_block_each_other() {
     let back = t["receipts"].as_array().unwrap().iter()
         .any(|r| r["predecessor_id"] == w.tka.as_str() && r["receiver_id"] == lane_id(16).as_str());
     assert!(back, "X's excess deposit refunded to the lane: {:#?}", t["receipts"]);
+}
+
+/// Final review node I3: the router to a token target, the only route where the node sets `target_gas` (`GAS_JOB_BASE`
+/// + the target op's signature gas) and the exact `target_deposit` (the target's `storage_needed` with the executor as
+/// caller) itself: a UA's `mtx_transfer` to a new UA (a new record) is released, the fee to the lane, and the quote
+/// covers the lane's real NEAR decrease.
+#[tokio::test]
+#[ignore]
+async fn near_router_token_target() {
+    let w = world().await;
+    let a = w.adapter(9).await;
+    let lane = lane_id(18);
+    let (odoo, state) = odoo(w, &[&w.tka]).await;
+    let (payer, from, to) = (Ed::new("tt-payer"), Ed::new("tt-from"), Ed::new("tt-to").h());
+    w.fund(&w.tka, &payer.h(), 10_000).await;
+    w.fund(&w.tka, &from.h(), 500).await;
+    let top = MetaOp { amount: 100, lane: [0x71; 32], ..w.op(&w.tka, 4, &from.h(), &to) };
+    let args = [top.borsh(), from.auth(&top)].concat();
+    let call = router_call(&w.tka, "mtx_transfer", &args);
+    let salt = [0x6d; 32];
+    let r = relay_ref(&w.net, &len8(&w.tka), &call, &salt);
+    let pay = w.fee_op(&w.tka, &payer.h(), &Holder::Near(w.router.clone()), &w.router, r, salt);
+    let kind = json!({"kind": "relay_fee", "extra": {"route": "router", "call": hex(&call), "target_gas": "0", "target_deposit": "0"}});
+    let lane_h = Holder::Near(lane.clone());
+    let l0 = w.balance(&w.tka, &lane_h).await;
+    let j = job(1, &pay, &payer.auth(&pay), kind);
+    let b0 = w.near(&lane).await;
+    assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, j.clone()).await, ["signed", "broadcast", "mined"]);
+    let hash = report(&state, 1, "signed")["tx_hash"].as_str().unwrap().to_string();
+    quote_covers(w, &w.cfg(9), &j, &hash, &lane, &[], b0, "router -> token.mtx_transfer (released, new UA record)").await;
+    assert_eq!((w.balance(&w.tka, &from.h()).await, w.balance(&w.tka, &to).await), (400, 100), "the target ran");
+    assert_eq!(w.balance(&w.tka, &lane_h).await - l0, FEE, "open mode: the router pays the relaying lane");
+    assert_eq!(w.view(&w.router, "pending", &r).await, vec![0], "the escrow holds nothing");
+    let t = w.tx(&hash, &lane).await;
+    let fc = &t["transaction"]["actions"][0]["FunctionCall"];
+    let (burnt, first, prepaid) = gas_of(w, &hash, &lane).await;
+    println!("GAS router relay -> token.mtx_transfer (ed25519 payment, ed25519 target op): {burnt:.3} Tgas burnt in all, {first:.3} in relay, {prepaid:.0} prepaid; deposit {} yocto",
+        fc["deposit"].as_str().unwrap());
+}
+
+/// Final review node I3: the router to a listed third-party target that succeeds (fixture `ok`): released, the fee to
+/// the lane, the quote covers the lane's NEAR decrease.
+#[tokio::test]
+#[ignore]
+async fn near_router_listed_target_ok() {
+    let w = world().await;
+    let a = w.adapter(10).await;
+    let lane = lane_id(20);
+    let (odoo, state) = odoo(w, &[&w.tka]).await;
+    let payer = Ed::new("ok-payer");
+    w.fund(&w.tka, &payer.h(), 10_000).await;
+    let call = router_call(FIXTURE, "ok", &[]);
+    let salt = [0x6e; 32];
+    let r = relay_ref(&w.net, &len8(FIXTURE), &call, &salt);
+    let pay = w.fee_op(&w.tka, &payer.h(), &Holder::Near(w.router.clone()), &w.router, r, salt);
+    let kind = json!({"kind": "relay_fee", "extra": {"route": "router", "call": hex(&call), "target_gas": "5000000000000", "target_deposit": "0"}});
+    let lane_h = Holder::Near(lane.clone());
+    let l0 = w.balance(&w.tka, &lane_h).await;
+    let j = job(1, &pay, &payer.auth(&pay), kind);
+    let b0 = w.near(&lane).await;
+    assert_eq!(run_job(a.as_ref(), &odoo, &state, 0, j.clone()).await, ["signed", "broadcast", "mined"]);
+    let hash = report(&state, 1, "signed")["tx_hash"].as_str().unwrap().to_string();
+    quote_covers(w, &w.cfg(10), &j, &hash, &lane, &[], b0, "router -> listed target ok (released)").await;
+    assert_eq!(w.balance(&w.tka, &lane_h).await - l0, FEE, "released to the relaying lane");
+    assert_eq!((w.balance(&w.tka, &payer.h()).await, w.view(&w.router, "pending", &r).await), (10_000 - FEE, vec![0]));
+    let (burnt, first, prepaid) = gas_of(w, &hash, &lane).await;
+    println!("GAS router relay -> fixture.ok (ed25519 payment, 5 Tgas target): {burnt:.3} Tgas burnt in all, {first:.3} in relay, {prepaid:.0} prepaid");
 }

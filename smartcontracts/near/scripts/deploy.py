@@ -300,7 +300,7 @@ def deploy(rpc):
     dex, router, executor = (f"{n}.{f.account}" for n in ("dex", "relayfee", "relayexec"))
     plan = [(t["account"], "scaas_near_token", network + bstr(admin) + token_metadata(t["name"], t["symbol"], t["decimals"]))
             for t in tokens]
-    plan += [(dex, "scaas_near_dex", b""), (router, "scaas_near_relayfee", bstr(executor)), (executor, "scaas_near_relayexec", bstr(router))]
+    plan += [(dex, "scaas_near_dex", bstr(executor)), (router, "scaas_near_relayfee", bstr(executor)), (executor, "scaas_near_relayexec", bstr(router))]
     d = os.path.abspath(os.environ.get("NEAR_DEPLOYMENTS_DIR") or os.path.join(NEAR_DIR, "deployments"))
     rpath = os.path.join(d, f"{genesis}.{f.account}.resume.json")
     keep_out_of_git(rpath)
