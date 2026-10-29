@@ -236,7 +236,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   [docs/research/dex-matching-modes.md](docs/research/dex-matching-modes.md)): (a) owner decision: `MIN_FILL_PPM` goes,
   the per-fill minimum is the signer's `minFill` only (§6.3: new CTR-DEX-14 text, then `TradeLib`, `SCaaSDex` Path B,
   node `min_fill`, clientkeys, tests; non-EVM unchanged; spec DONE 2026-10-29: CTR-DEX-14 / NODE-DEX-15 / CLI-SGN-35 SPECIFIED; code after the near-algorand merge, owner 2026-10-29); (b) four modes book / outside / hybrid / CoW-ring on the two
-  existing entry points, NODE-DEX-17 rewritten to one atomic plan per order (§1–§6); open owner questions §8 (1–4).
+  existing entry points, NODE-DEX-17 rewritten to one atomic plan per order (§1–§6); owner answers 2026-10-29 (§8): hybrid / CoW both via `mtxExchange` plans and a new `mtxHybrid` / `mtxHybridVia` entry (maker price on chain, surplus to the taker); CoW price = AMM marginal, else midpoint; `mtxExchangeBatch` now; TradeEngine EVM and non-EVM 1 × N in parallel. Order: after the near-algorand merge → minFill code → EVM contract spec + code (mtxHybrid, batch, mode 3 / 4 tests, executor, Uniswap fork test) → TradeEngine ∥ non-EVM 1 × N.
   Spec first, then code.
 - [ ] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; owner ruling 2026-10-28: after the
   metatx-split merge; a new feature, not T17):

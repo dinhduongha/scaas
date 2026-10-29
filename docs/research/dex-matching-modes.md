@@ -371,12 +371,25 @@ plan, không phải `mtxSettle` rồi AMM ở giao dịch sau (mục 4).
    - CoW một phần: hai lệnh lệch khối lượng, phần lệch qua AMM, cả hai fill đủ;
    - ring 3 token không interaction; phần lẻ làm tròn về leg cuối; token trung gian dư → `ConservationBroken`.
    Đây là bằng chứng chế độ 3 và 4 đã có trên chain mà không đổi ABI.
-2. **Batch plan có cô lập lỗi**: `mtxExchangeBatch(ExchangePlan[] + interactions[])`, mỗi plan một self-call, lỗi thì
-   `ExchangeFailed(ref, reason)`, re-raise lỗi thiếu gas như `mtxSettle`. Thêm entry, không sửa entry cũ.
+2. **Batch plan có cô lập lỗi** (owner 2026-10-29: thêm ngay): `mtxExchangeBatch(ExchangePlan[] + interactions[])`,
+   mỗi plan một self-call, lỗi thì `ExchangeFailed(ref, reason)`, re-raise lỗi thiếu gas như `mtxSettle`. Thêm entry,
+   không sửa entry cũ.
+2b. **Entry `mtxHybrid` / `mtxHybridVia`** (owner 2026-10-29: làm cả hai đường, plan `mtxExchange` **và** entry riêng).
+   Phác thảo, chốt khi viết spec:
+   ```solidity
+   struct HybridPlan { bytes32 ref; Leg taker; Leg[] makers; uint256 outsideSell; uint256 outsideFloor; }
+   function mtxHybrid(HybridPlan calldata p, Interaction[] calldata xs) external;          // (a) interactions
+   function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata data) external; // (b) executor
+   ```
+   Khác plan `mtxExchange` ở chỗ contract tự giữ luật book: market phải listed; mỗi maker nhận đúng
+   `⌈fill · receiveAmount / amount⌉` như `mtxSettle`, không nhận surplus; taker bán `Σ maker nhận + outsideSell`;
+   phần `outsideSell` đi interactions / executor, phải về ít nhất `outsideFloor`; giới hạn giá của taker kiểm trên tổng
+   `Σ maker bán + outsideFloor`; toàn bộ phần vượt `outsideFloor` về taker; conservation như cũ; event maker là
+   `LegSettled`. Plan `mtxExchange` vẫn là đường cho CoW / ring và mọi hình dạng khác.
 3. **Executor tham chiếu** (Uniswap v3 callback, v4 unlock, flash swap; gánh phần lẻ của token trung gian) và fork test
    bytecode Uniswap thật.
-4. Giữ nguyên: không có `value` (dùng WETH), chặn Permit2 trên đường (a), không thêm entry `mtxHybrid` / `mtxCow` (mọi
-   thứ chúng làm, một plan `mtxExchange` đã làm được).
+4. Giữ nguyên: không có `value` (dùng WETH), chặn Permit2 trên đường (a), không thêm entry `mtxCow` (CoW / ring đi plan
+   `mtxExchange`).
 
 **Node.**
 5. **Sửa NODE-DEX-17** theo mục 6: bốn chế độ, mỗi plan một giao dịch nguyên tử.
@@ -392,9 +405,17 @@ plan, không phải `mtxSettle` rồi AMM ở giao dịch sau (mục 4).
 9. **Đường exchange non-EVM** (chế độ 2–4: DeepBook / Cetus, Jupiter CPI, Ref, Tinyman, Osmosis, STON.fi / DeDust…):
    chưa có spec. Mỗi family khác hẳn nhau (CPI, PTB, inner group, async receipt), cần spec riêng trước khi làm.
 
-## 8. Câu hỏi cho owner (chỉ những câu chặn việc)
+## 8. Owner trả lời (2026-10-29)
 
-1. Chế độ 3 và 4 đi bằng plan `mtxExchange` hiện có (không đổi ABI, chỉ thêm test và sửa NODE-DEX-17)? Đề xuất: có.
-2. Giá thanh toán của CoW (mục 5.3): giá biên AMM khi có pool, điểm giữa hai giới hạn khi không có? Đề xuất: có.
-3. Thêm `mtxExchangeBatch` (mục 7.2) ngay, hay đợi TradeEngine chạy rồi đo tỷ lệ plan hỏng vì maker stale?
-4. Thứ tự ưu tiên: TradeEngine node EVM (mục 7.5–7.6) trước, hay 1 × N non-EVM (mục 7.8) trước?
+1. **Hybrid / CoW: cả hai đường.** Plan `mtxExchange` hiện có (test hybrid, CoW một phần, ring; NODE-DEX-17 thành một
+   plan nguyên tử) **và** entry riêng `mtxHybrid` / `mtxHybridVia` trong đó contract tự tính giá maker như `mtxSettle`
+   và surplus chỉ về taker (mục 7.2b). Planner dùng `mtxHybrid` cho chế độ 3 trên market listed; plan `mtxExchange` cho
+   chế độ 4 và các hình dạng khác.
+2. **Giá CoW:** giá biên AMM khi có pool, điểm giữa hai giới hạn khi không có (mục 5.3).
+3. **`mtxExchangeBatch`: thêm ngay**, cùng đợt contract với `mtxHybrid` và các test chế độ 3 / 4 (mục 7.2).
+4. **Ưu tiên: song song** TradeEngine node EVM (mục 7.5–7.6) và 1 × N non-EVM (mục 7.8), trong giới hạn 3 agent /
+   2 slot `capped`.
+
+Thứ tự làm: sau khi merge near-algorand → code bỏ sàn minFill 50 % (mục 6.3) → spec rồi code contract EVM
+(`mtxHybrid` / `Via`, `mtxExchangeBatch`, test chế độ 3 / 4, executor tham chiếu, fork test Uniswap) → song song:
+TradeEngine node EVM và 1 × N non-EVM (mỗi phần spec trước). Đường exchange non-EVM (mục 7.9) chưa xếp lịch.
