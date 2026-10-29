@@ -1,0 +1,29 @@
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+     Running tests/ua8.rs (target/debug/deps/ua8-21f28f2691dd2c04)
+
+running 6 tests
+test tags ... ok
+test native_member_personal_sign ... ok
+test kem_record_vectors ... ok
+test pqz_key_record_vectors ... ok
+test portable_vectors ... ok
+test negatives_refused ... FAILED
+
+failures:
+
+---- negatives_refused stdout ----
+
+thread 'negatives_refused' (2151635) panicked at tests/ua8.rs:211:5:
+assertion `left == right` failed: 53 run
+  left: (61, 8)
+ right: (61, 14)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    negatives_refused
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+error: test failed, to rerun pass `--test ua8`

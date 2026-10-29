@@ -20,11 +20,11 @@ fn b32(v: &Value) -> [u8; 32] {
 fn arr(v: &Value) -> &Vec<Value> {
     v.as_array().unwrap()
 }
-fn pop_message(v: &Value, kind: u16, kd: &[u8]) -> ([u8; 32], [u8; 32]) {
-    let c = &v["contexts"]["A"];
+/// `(portablePopDigest, message)` of a group key (UA-8: no chain context).
+fn pop_message(_v: &Value, kind: u16, kd: &[u8]) -> ([u8; 32], [u8; 32]) {
     let ua = ua_of(kind, kd).unwrap();
-    let pd = pop_digest(c["chainId"].as_u64().unwrap(), &b32(&c["chainUid"]), &bytes(&c["registry"]).try_into().unwrap(), &ua, &[0; 32]);
-    (pd, ua_message(kind, &purpose_tag("pop").unwrap(), &pd).unwrap())
+    let pd = ua8::portable_pop_digest(&ua, &[0; 32], &[0; 32]);
+    (pd, ua_message(kind, &ua8::pop_v2_tag(), &ua8::registration_digest(&pd, &[0; 32])).unwrap())
 }
 
 #[test]

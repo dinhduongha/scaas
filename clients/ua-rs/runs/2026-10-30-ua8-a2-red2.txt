@@ -1,0 +1,50 @@
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.62s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua-7e1156df1164ba41)
+
+running 2 tests
+test verify::tests::base64url_unpadded ... ok
+test verify::tests::rfc9380_g1_ro_empty_message ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ed25519_fuzz.rs (target/debug/deps/ed25519_fuzz-8e9a9420a16cfb50)
+
+running 1 test
+test dalek_verify_strict_matches_every_case ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/groups_verify.rs (target/debug/deps/groups_verify-b4c5ec9da21546d9)
+
+running 4 tests
+test groups_register_and_sign ... FAILED
+test official_sections ... ok
+test group_negatives_refused ... FAILED
+test t_frost_rows ... ok
+
+failures:
+
+---- groups_register_and_sign stdout ----
+
+thread 'groups_register_and_sign' (2161861) panicked at tests/groups_verify.rs:42:9:
+assertion `left == right` failed: musig2-secp256k1 n=3
+  left: ([211, 65, 212, 87, 193, 203, 67, 63, 48, 96, 125, 93, 236, 101, 88, 62, 25, 172, 254, 131, 100, 63, 89, 193, 125, 130, 205, 253, 90, 46, 60, 106], [160, 99, 228, 247, 198, 184, 160, 69, 121, 125, 44, 230, 26, 253, 34, 128, 99, 75, 66, 242, 210, 1, 16, 161, 93, 176, 155, 137, 119, 241, 7, 122])
+ right: ([211, 85, 126, 13, 159, 112, 255, 174, 108, 44, 207, 41, 154, 27, 135, 87, 209, 143, 80, 104, 58, 118, 124, 8, 146, 251, 145, 250, 13, 10, 37, 0], [94, 0, 23, 40, 102, 191, 31, 21, 223, 114, 65, 74, 73, 135, 13, 244, 161, 178, 143, 250, 251, 54, 181, 230, 160, 148, 253, 69, 57, 152, 154, 83])
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- group_negatives_refused stdout ----
+
+thread 'group_negatives_refused' (2161860) panicked at tests/groups_verify.rs:70:17:
+assertion `left == right` failed: "musig2-secp256k1 n=3" "wrong-q-own-key"
+  left: [203, 49, 87, 14, 26, 92, 54, 227, 7, 172, 57, 199, 13, 136, 7, 192, 12, 24, 223, 16, 77, 57, 102, 247, 44, 188, 30, 71, 10, 209, 57, 146]
+ right: [253, 175, 61, 12, 224, 230, 111, 69, 182, 154, 179, 253, 9, 178, 30, 237, 133, 48, 112, 7, 150, 103, 186, 172, 0, 157, 4, 180, 178, 227, 243, 186]
+
+
+failures:
+    group_negatives_refused
+    groups_register_and_sign
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--test groups_verify`

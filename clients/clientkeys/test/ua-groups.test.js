@@ -11,7 +11,6 @@ import { dir } from './ua-vectors-dir.js';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { hash_to_field } from '@noble/curves/abstract/hash-to-curve.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { popDigestV1 } from '../legacy/ua8/ua-pop-v1.js';
 import * as ua from '../src/ua.js';
 import { hex, fromHex, concatBytes, utf8ToBytes, word } from '../src/bytes.js';
 
@@ -87,12 +86,11 @@ const verifyPop = (kind, kd, msg, pop) => valid(kind, kd) && attempt(() =>
   (kind === 0x0110 ? musigPop(kd, msg, pop) : frostDkg(kd) && frostVerify(kd.subarray(0, 33), msg, pop)));
 const verify = (kind, vk, msg, sig) => attempt(() =>
   (kind === 0x0110 ? sig.length === 64 && schnorr.verify(sig, msg, point(vk).toBytes(true).subarray(1)) : frostVerify(vk, msg, sig)));
-const A = V.contexts.A;
-// groups.json is written by clients/ua-rs (tests/groups.rs) and moves to the portable PoP in UA-8 A2; until then its PoPs
-// are the chain-bound ones of context A (legacy/ua8/ua-pop-v1.js, the pre-UA-8 popDigest)
+// groups.json is written by clients/ua-rs (tests/groups.rs): the PoPs are portable (UA-8 P1): popDigest = portablePopDigest,
+// message = uaMessage(kind, POP_V2, registrationDigest); contexts.A only serves the chain-bound negative (pop-chain-bound)
 const popMsg = (kind, kd) => {
-  const d = popDigestV1({ chainId: A.chainId, chainUid: B(A.chainUid), registry: B(A.registry), ua: ua.uaOf(kind, kd) });
-  return [d, ua.uaMessage(kind, ua.purposeTag('pop'), d)];
+  const d = ua.portablePopDigest({ ua: ua.uaOf(kind, kd) });
+  return [d, ua.uaMessage(kind, ua.POP_V2_TAG, ua.registrationDigest(d))];
 };
 const secpGroups = V.groups.filter((g) => SECP.includes(g.kind));
 

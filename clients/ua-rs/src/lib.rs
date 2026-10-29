@@ -11,6 +11,8 @@ pub mod near;
 pub mod algorand;
 pub use keydata::validate_key_data;
 pub mod verify;
+pub mod ua8;
+pub use ua8::{holder_pop_message, pqz_reg_message, personal_sign_digest};
 mod groups;
 #[cfg(feature = "signers")]
 pub mod musig2;
@@ -28,6 +30,12 @@ pub enum UAError {
     IdFormat,
     PurposeUnknown,
     PqzHolder(u16),
+    KemHolder(u16),
+    KemVersion,
+    KemKeyLength,
+    PqzPopHash,
+    /// `setPqzKey` on a registration that already has a PQZ key (write-once).
+    PqzKeySet,
 }
 
 impl UAError {
@@ -41,6 +49,11 @@ impl UAError {
             UAError::IdFormat => "UAIdFormat",
             UAError::PurposeUnknown => "UAPurposeUnknown",
             UAError::PqzHolder(_) => "UAPqzHolder",
+            UAError::KemHolder(_) => "UAKemHolder",
+            UAError::KemVersion => "UAKemVersion",
+            UAError::KemKeyLength => "UAKemKeyLength",
+            UAError::PqzPopHash => "UAPqzPopHash",
+            UAError::PqzKeySet => "UAPqzKeySet",
         }
     }
 }
@@ -121,7 +134,7 @@ pub const GROUPS: &[&str] = &[
 
 pub const PURPOSES: &[&str] = &[
     "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-    "vc-anchor", "trade",
+    "vc-anchor", "trade", "kem", "pqz-key",
 ];
 
 pub const DOMAIN_TYPE: &str =
@@ -234,6 +247,15 @@ pub fn purpose_tag(purpose: &str) -> Result<[u8; 32]> {
     Ok(keccak256(format!("scaas.ua.purpose.{purpose}.v1").as_bytes()))
 }
 
+/// The tag of a purpose version: every purpose is v1, `pop` is also v2 (UA-8: the portable PoP).
+pub fn purpose_tag_v(purpose: &str, version: u32) -> Result<[u8; 32]> {
+    match (purpose, version) {
+        (_, 1) => purpose_tag(purpose),
+        ("pop", 2) => Ok(keccak256(b"scaas.ua.purpose.pop.v2")),
+        _ => Err(UAError::PurposeUnknown),
+    }
+}
+
 /// `keccak256(TAG(kind) ‖ keyData)`; no validation (see [`derive_ua`]).
 pub fn ua_of(kind: u16, key_data: &[u8]) -> Result<[u8; 32]> {
     derived_kind(kind)?; // a scheme (0x0142) or a native kind has no derived id
@@ -294,15 +316,15 @@ fn address_word(a: &[u8; 20]) -> [u8; 32] {
     w[12..].copy_from_slice(a);
     w
 }
-/// `pop_digest` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
-pub fn pop_digest(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
+/// LEGACY (pre-UA-8, chain-bound; the registry accepts only [`ua8::portable_pop_digest`]). `pop_digest_v1` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
+pub fn pop_digest_v1(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
     keccak(&[&purpose_tag("pop").expect("pop"), &chain_key_hash(chain_id), chain_uid, &address_word(registry), ua, pqz_key_hash])
 }
 
-/// What a PQ holder signs to register (UA-6 U14): `(pqzKeyHash, popDigest, message)`, `message = ua_message(kind, pop,
+/// LEGACY (pre-UA-8): what a PQ holder signed to register (UA-6 U14): `(pqzKeyHash, popDigest, message)`, `message = ua_message(kind, pop,
 /// pop_digest(ua, h))`, `h = key_hash_of(0x0142, pqz_key)`, 0 without a key. A key needs a single-key holder ([`is_pqz_holder`]);
 /// a PQ-eligible `msig` uses `pop_digest` / `key_hash_of` and signs `member_digest(ua, message)` per member.
-pub fn holder_pop_message(
+pub fn holder_pop_message_v1(
     kind: u16, chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: Option<&[u8]>,
 ) -> Result<([u8; 32], [u8; 32], [u8; 32])> {
     let h = match pqz_key {
@@ -314,14 +336,14 @@ pub fn holder_pop_message(
         }
         None => [0u8; 32],
     };
-    let d = pop_digest(chain_id, chain_uid, registry, ua, &h);
+    let d = pop_digest_v1(chain_id, chain_uid, registry, ua, &h);
     Ok((h, d, ua_message(kind, &purpose_tag("pop")?, &d)?))
 }
 
-/// The message `R_REG` proves over: `ua_message(0x0142, pop, pop_digest(ua, key_hash_of(0x0142, pqz_key)))`.
-pub fn pqz_reg_message(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: &[u8]) -> Result<[u8; 32]> {
+/// LEGACY (pre-UA-8): the message `R_REG` proved over: `ua_message(0x0142, pop, pop_digest(ua, key_hash_of(0x0142, pqz_key)))`.
+pub fn pqz_reg_message_v1(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: &[u8]) -> Result<[u8; 32]> {
     let h = key_hash_of(PQZ_SCHEME, pqz_key)?.expect("scheme group");
-    ua_message(PQZ_SCHEME, &purpose_tag("pop")?, &pop_digest(chain_id, chain_uid, registry, ua, &h))
+    ua_message(PQZ_SCHEME, &purpose_tag("pop")?, &pop_digest_v1(chain_id, chain_uid, registry, ua, &h))
 }
 
 /// The registry's EIP-712 domain: `("SCaaS UARegistry", "<generation>", chainId, registry, salt = chainUid)`.
