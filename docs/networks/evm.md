@@ -315,5 +315,6 @@ sequenceDiagram
   (`runs/2026-10-27-metatx-split-overhead.txt`). Node: `guard::erc1271_floor(len)` for a contract signer.
 - **UA payers in the node** (BUILT, node-ua-jobs 2026-10-30): the `ua_metatx` job kind relays `uaExecute`,
   `uaExecuteTransfer` and `uaPayMeta`; `MtxRelayFee.uaRelay` is a `call` job with its own call-table row, priced at
-  `params.relay_fee.min_wei_value` against the quote (gas limit × max fee per gas); the indexer reads `UAPaymentSettled`
-  as a `PaymentSettled` row with ids ([job-api.md](../node/job-api.md#paymeta-relayfee-jobs)).
+  `params.relay_fee.min_wei_value` against the quote (gas limit × 2 × the first max fee per gas, + the L1 data fee on an
+  OP-stack chain with `params.l1_fee = "op-stack"`, e.g. Base and Celo); the indexer reads `UAPaymentSettled` as a
+  `PaymentSettled` row, a derived UA as `UA_POOL` + `from_ua` / `to_ua` ([job-api.md](../node/job-api.md#paymeta-relayfee-jobs)).

@@ -1,0 +1,53 @@
+# node ua_metatx jobs fix 1 e2e at aa03298c: every EVM e2e on anvil (the UA one prints its QUOTE lines: one priced uaRelay, one replaced while stuck), then the Hedera e2e (lane runner hold, EvmAdapter::build); smartcontracts/evm/lib linked from the main checkout, test/hedera/HederaMocks.sol built
+# cd scaas-node && ../scripts/capped cargo test -j2 --test e2e -- --ignored --nocapture --test-threads=1
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.25s
+     Running tests/e2e.rs (target/debug/deps/e2e-f5e08e3069fb3f57)
+running 5 tests
+test a_peer_landing_our_intent_makes_the_job_consumed_never_dead ... ok
+test dex_order_book_settles_partial_fills_persists_and_cancels ... No files changed, compilation skipped
+[2m2026-10-29T17:55:55.137270Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31950 [3mchain_uid[0m[2m=[0m0x58bba0455337fbc5add1e0092f49064548771cdae2b851b2a516db0669c9c18e [3mnext[0m[2m=[0m0 [3mtracked[0m[2m=[0m0
+[2m2026-10-29T17:55:55.144850Z[0m [32m INFO[0m [2mscaas_node::dex::venue[0m[2m:[0m dex book loaded [3mchain[0m[2m=[0m31950 [3morders[0m[2m=[0m0
+[2m2026-10-29T17:55:55.489021Z[0m [32m INFO[0m [2mscaas_node::dex::venue[0m[2m:[0m dex book loaded [3mchain[0m[2m=[0m31950 [3morders[0m[2m=[0m1
+[2m2026-10-29T17:55:55.505728Z[0m [33m WARN[0m [2mscaas_node::dex::venue[0m[2m:[0m dex_book_commit: blockchain.dex.order.dex_book_commit: HTTP 500 Internal Server Error: {"error":"db down"}; reloading the book from the client [3mchain[0m[2m=[0m31950
+[2m2026-10-29T17:55:55.849419Z[0m [32m INFO[0m [2mscaas_node::dex::venue[0m[2m:[0m dex book loaded [3mchain[0m[2m=[0m31950 [3morders[0m[2m=[0m1
+ok
+test evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes ... ok
+test outbox_payment_reaches_chain_and_comes_back_final ... [2m2026-10-29T17:56:14.551829Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31901 [3mchain_uid[0m[2m=[0m0xea99c1f12492045cda3733ddecdfbb212218f0f7eb218e710cf484512a246cac [3mnext[0m[2m=[0m0 [3mtracked[0m[2m=[0m0
+[2m2026-10-29T17:56:14.671016Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31901 [3mfrom[0m[2m=[0m1 [3mto[0m[2m=[0m31 [3mcreated[0m[2m=[0m0
+[2m2026-10-29T17:56:14.673217Z[0m [32m INFO[0m [2mscaas_node::drift[0m[2m:[0m balance drift reported [3mchain[0m[2m=[0m31901 [3mheight[0m[2m=[0m31 [3mmismatch[0m[2m=[0m0
+[2m2026-10-29T17:56:14.675994Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31901 [3mchain_uid[0m[2m=[0m0xea99c1f12492045cda3733ddecdfbb212218f0f7eb218e710cf484512a246cac [3mnext[0m[2m=[0m1 [3mtracked[0m[2m=[0m0
+[2m2026-10-29T17:56:14.677476Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m circuit breaker open: new work paused [3mchain[0m[2m=[0m31901 [3mlane[0m[2m=[0me2e-2 [3mbreaker[0m[2m=[0m"balance_floor"
+[2m2026-10-29T17:56:14.683898Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m meta-tx nonce consumed [3mjob[0m[2m=[0mSome(2) [3mfrom[0m[2m=[0m0x000000000000000000000000e05fcc23807536bee418f142d19fa0d21bb0cff7 [3mnonce[0m[2m=[0m0 [3mkind[0m[2m=[0m"landed"
+[2m2026-10-29T17:56:14.687697Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m simulation refused: CALL_TARGET_REFUSED: 0xa9059cbb is not in the call table [3mjob[0m[2m=[0mSome(3)
+[2m2026-10-29T17:56:14.688691Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m simulation refused: TOKEN_NOT_SERVED: 0x9999999999999999999999999999999999999999 is not a registered token of this chain [3mjob[0m[2m=[0mSome(4)
+[2m2026-10-29T17:56:14.695049Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m simulation refused: SELECTOR_NOT_ALLOWED: 0xa9059cbb is not on the contract's allowlist [3mjob[0m[2m=[0mSome(5)
+[2m2026-10-29T17:56:14.929096Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31901 [3mfrom[0m[2m=[0m32 [3mto[0m[2m=[0m33 [3mcreated[0m[2m=[0m0
+[2m2026-10-29T17:56:14.938124Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31901 [3mchain_uid[0m[2m=[0m0xea99c1f12492045cda3733ddecdfbb212218f0f7eb218e710cf484512a246cac [3mnext[0m[2m=[0m3 [3mtracked[0m[2m=[0m0
+[2m2026-10-29T17:56:15.061135Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31901 [3mfrom[0m[2m=[0m34 [3mto[0m[2m=[0m34 [3mcreated[0m[2m=[0m0
+ok
+test ua_pay_meta_and_relay_fee_jobs_on_anvil ... [2m2026-10-29T17:56:24.836872Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31905 [3mchain_uid[0m[2m=[0m0xfd618f75811656e74adf96055547f92922360b574ad949506eb6bdb6cd7c555d [3mnext[0m[2m=[0m0 [3mtracked[0m[2m=[0m0
+[2m2026-10-29T17:56:24.981786Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m transient, requeue: RELAY_FEE_REFUSED: fee 1 x min_wei_value 100000000000/1 wei is below the quote 19153229976088 wei (gas limit 294412 x fee ceiling 65055874 + 2 x L1 fee 0) [3mjob[0m[2m=[0mSome(2)
+QUOTE uaRelay (secp256k1 UA payer, open mode): quote 19156677937410 wei (gas limit 294465 x ceiling 65055874 = 2 x first max fee 32527937); sends' max fees [32527937]; the lane's ETH decrease 3210135559296
+[2m2026-10-29T17:56:25.118036Z[0m [32m INFO[0m [2mscaas_node::indexer[0m[2m:[0m ingested [3mchain[0m[2m=[0m31905 [3mfrom[0m[2m=[0m1 [3mto[0m[2m=[0m34 [3mcreated[0m[2m=[0m0
+[2m2026-10-29T17:56:25.124125Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m submit ready [3mchain[0m[2m=[0m31905 [3mchain_uid[0m[2m=[0m0xfd618f75811656e74adf96055547f92922360b574ad949506eb6bdb6cd7c555d [3mnext[0m[2m=[0m2 [3mtracked[0m[2m=[0m0
+[2m2026-10-29T17:56:26.250158Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m replaced [3mnonce[0m[2m=[0m2
+[2m2026-10-29T17:56:27.357570Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m replaced [3mnonce[0m[2m=[0m2
+[2m2026-10-29T17:56:28.466342Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m replaced [3mnonce[0m[2m=[0m2
+[2m2026-10-29T17:56:29.573906Z[0m [32m INFO[0m [2mscaas_node::submit[0m[2m:[0m replaced [3mnonce[0m[2m=[0m2
+[2m2026-10-29T17:56:30.678925Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m stuck at the fee cap; waiting [3mnonce[0m[2m=[0m2
+[2m2026-10-29T17:56:31.783894Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m stuck at the fee cap; waiting [3mnonce[0m[2m=[0m2
+[2m2026-10-29T17:56:32.889245Z[0m [33m WARN[0m [2mscaas_node::submit[0m[2m:[0m stuck at the fee cap; waiting [3mnonce[0m[2m=[0m2
+QUOTE uaRelay replaced while stuck: quote 15597789146362 wei (gas limit 273907 x ceiling 56945566 = 2 x first max fee 28472783); sends' max fees [28472783, 35590978, 44488722, 55610902, 56945566]; the lane's ETH decrease 2597131078788
+ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 55.48s
+rc=0
+# cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_hedera -- --ignored
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running tests/e2e_hedera.rs (target/debug/deps/e2e_hedera-ebfbe2f9f86cc8a6)
+
+running 1 test
+test hedera_native_account_pays_through_two_lanes_and_never_locks_itself ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.51s
+
+rc=0

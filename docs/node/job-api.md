@@ -157,15 +157,29 @@ Payload by kind:
   is a `call` job with selector `uaRelay` (call-table row `MtxRelayFee.uaRelay`, the router's shape on ids: the payee never
   `pad(executor)`, open mode `t.to = pad(router)`).
 - *EVM, the fee covers the quote.* After the simulation, a relay fee that reaches this lane (open mode or bound to it) must be
-  worth, at `params.relay_fee.min_wei_value[token]` (wei per base unit), at least the quote = the gas limit × the max fee per
-  gas the lane signs with; else `RELAY_FEE_REFUSED`, nothing signed. Required for `uaRelay` (a UA's verify gas depends on its
-  kind, millions for a Solidity PQ verify; no price ⇒ refused); for `relay` only when the token has a price (else T17's
-  `min_amount`, owner ruling 2026-10-28 item 7). A sponsored fee (bound elsewhere) is not priced.
+  worth, at `params.relay_fee.min_wei_value[token]`, at least the quote: the gas limit × the job's **fee ceiling**
+  (`FEE_HEADROOM` = 2 × the max fee per gas of its first send) + 2 × the L1 data fee on an OP-stack chain
+  (`params.l1_fee = "op-stack"`: `GasPriceOracle.getL1Fee` of the signed transaction at `0x420…0F`; an oracle that does not
+  answer refuses the job). Below the quote ⇒ `RELAY_FEE_REFUSED`, nothing sent, the job `queued` (the quote follows the fees
+  of the moment: a retry, never a kill). Every replacement of a stuck send stays at or under the ceiling; at it the lane
+  waits, and an expired job's nonce is gap-filled at the operator's cap (the gap-fill runs no job). After a restart a tracked
+  priced job is re-checked at its tracked transaction's max fee (now its ceiling) before it is ever re-signed; uncovered,
+  unknown, or on an OP-stack chain ⇒ gap-fill only. Required for `uaRelay` (a UA's verify gas depends on its kind,
+  millions for a Solidity PQ verify; no price ⇒ refused, terminal); for `relay` only when the token has a price (else T17's
+  `min_amount`, owner ruling 2026-10-28 item 7). A sponsored fee (bound elsewhere) is not priced. The generic lane runner
+  (Hedera) refuses a priced job on an OP-stack chain (it signs once and does not price the L1 fee).
+- *EVM, the payer is held* (review I2). While a relay-fee job of payer S (`relay`: its address, `uaRelay`: its id) is in
+  flight on a token, no lane signs another job of S on that token (`ua_metatx`, `metatx`, another relay-fee job of S), and
+  a relay-fee job of S waits while any job of S is in flight: `queued` with `SUBJECT_HELD`, retried later. Other ways to
+  lower S's balance (a DEX leg, `mtxWrap`, a plain ERC-20 transfer, another relayer's send) are the recorded residual.
 - *Other families.* The same `signed_op` job; `op.kind` is absent (a plain pay), `"pay_meta"` (`op.salt`, `op.meta` hex) or
   `"relay_fee"` (per-family fields, `op.extra`). Any other `op.kind`, including a non-string, is refused; a plain pay that carries
   `salt` / `meta` is refused; a plain pay or pay-meta whose recipient is the router, marker or executor is refused.
 - *Config* (`[chains.params]`): `relay_fee = { router, min_amount (default 1), relay_bound_payee (default false) }` (EVM adds
-  `min_wei_value = { "<token address>" = wei per base unit }`, an integer or a decimal string),
+  `min_wei_value = { "<token address>" = price }`, the price an integer or decimal string of wei per base unit, or
+  `"<wei>/<10^k>"` for wei per 10^k base units (an 18-decimal token below 1 wei per unit); the fee covers the quote when
+  `floor(fee × wei / 10^k) >= quote`, so round a price down; 0 refuses every priced job; set without `router`, or one
+  token under two spellings, is a startup error; and `l1_fee = "op-stack"`, any other value a startup error),
   `max_pay_meta_bytes`; TON adds `relay_fee.min_ton_value = { "<master>" = nanoton }`, Solana `min_lamports_value` (first-use lane
   rent). An unparsable `router`, `min_amount` or key is a startup error. A bound-payee fee (not the node's lane) is refused unless
   `relay_bound_payee = true`, then relayed as a sponsored job.
@@ -196,7 +210,8 @@ Payload by kind:
   resend term; a refused group costs nothing. There is no refund, so `op_consumed` answers for every job kind.
 - *Job errors:* `CALL_TARGET_REFUSED` (not the configured router), `TOKEN_NOT_SERVED`, `RELAY_FEE_SHAPE` (ref, lane, nonce, relayer,
   fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere; EVM: below the quote at
-  `min_wei_value`, or a `uaRelay` on a token without one), `PAYEE_REFUSED` (EVM: a `MetaTransfer` / `UAMetaTransfer` to the
+  `min_wei_value` (retried), or a `uaRelay` on a token without one, or an OP-stack chain whose oracle does not answer),
+  `SUBJECT_HELD` (EVM: retried), `PAYEE_REFUSED` (EVM: a `MetaTransfer` / `UAMetaTransfer` to the
   relay-fee router or its executor), `PAY_META_TOO_LONG` (EVM: `mtxPayMeta` / `uaPayMeta`'s `meta` above `max_pay_meta_bytes`),
   `FEATURE_UNSUPPORTED` (EVM `ua_metatx`: the token's UA ledger is off), `BAD_PAYLOAD`; TON also
   `RELAY_CALL_REFUSED` (the relayed call would fail on its target by the getters: envelope, owner, deadline, relayer,
@@ -206,9 +221,10 @@ Payload by kind:
 - *Indexer:* `PaymentMeta` and `RelayFeePaid` are never rows of their own; they enrich the `PaymentSettled` of the expected token
   in the same transaction with the same `(from, entry_ref)` (TON: `from` via the message's `MetaTransactionExecuted`) and
   `amount`; without a settlement they prove nothing. A `PaymentMeta` with more than one ref is rejected. EVM: the UA ledger's
-  `UAPaymentSettled` / `UAMetaTransactionExecuted` are `PaymentSettled` / `MetaTransactionExecuted` rows with ids (a native id
-  as its address, a derived UA as bytes32, as the NEAR and Algorand holders), and join the same way (a UA payer's
-  `RelayFeePaid.payer` is its id).
+  `UAPaymentSettled` / `UAMetaTransactionExecuted` are `PaymentSettled` / `MetaTransactionExecuted` rows: a native id is its
+  address; a derived UA is `UA_POOL` (the ERC-20 holder of every UA balance, as the chain's own `Transfer`s show it) with the
+  bytes32 id in `from_ua` / `to_ua` (`relay_payee_ua` for a derived payee), because the client's ingest takes 20-byte
+  addresses only on EVM (fix 1, review C1). Joins compare the ids (`*_ua` when present), never `UA_POOL`.
 
 `payload` is exactly what every adapter `build` consumes today; `work_from_job` and the family adapters are
 unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-OPS-09](ops.md#NODE-OPS-09)).

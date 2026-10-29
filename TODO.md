@@ -299,6 +299,11 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   `params.relay_fee.min_wei_value` against the quote, `UAPaymentSettled` / `UAMetaTransactionExecuted` rows joined by
   `join_pay_events`; choices in decisions.md (CTR-MTX-27, Change 2026-10-30). Left for UA F5 below: gateway route, record
   cache, mesh, the other `ua*` jobs.
+- [ ] **bamboo-dms: read `from_ua` / `to_ua` of EVM rows** (controller ruling 2026-10-30, node-ua-jobs fix 1, review C1):
+  the EVM indexer sends a derived UA as `UA_POOL` in `from` / `to` (the client's ingest takes 20-byte addresses only) with
+  the bytes32 id in `from_ua` / `to_ua` (`relay_payee_ua`); `chain_event_ingest` should store the id so a UA's payments and
+  executions are attributed to it, not to `UA_POOL`. Also: the client has no `near` / `algorand` family (`lib/addresses.py`),
+  so every row of those chains is refused today; their UA holders are `0x` + 64 hex.
 - [ ] **Relay-fee minimum before mainnet** (owner ruling 2026-10-28, final review owner rulings item 7): the flat
   `params.relay_fee.min_amount` (one floor per chain, default 1 base unit, every token and call) stays until before mainnet;
   re-decide then between a per-token minimum and gas-proportional pricing (TON `min_ton_value` and Solana
