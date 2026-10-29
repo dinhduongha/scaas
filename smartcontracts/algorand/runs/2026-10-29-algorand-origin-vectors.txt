@@ -1,0 +1,5 @@
+# algorand passkey origin parity rows (account.py client_origin transcription) check at commit b35de637 + the fix-1 tree
+# cd smartcontracts/algorand && ../../scripts/capped .venv/bin/python -I scripts/gen_origin_vectors.py
+ok /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/vectors/webauthn-origin.json
+rc=0
+# the AVM run of the same rows (tests/test_vectors.py::test_origin_parity_vectors) needs the localnet (docker): not run in this task

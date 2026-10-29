@@ -147,3 +147,15 @@ def test_dex_vectors():
         assert f['op'] == code and sha256(p) == unhx(f['extra']) and len(p) == 40, name
         assert abi.ABIType.from_string('(byte[32],uint64)').decode(p)[1] < 2**63
         assert f['to'] == f['from'] and f['amount'] == '0' and f['lane'] == '0x' + '00' * 32 and f['nonce'] == 0
+
+
+def test_origin_parity_vectors(probe):
+    """T17 fix 1 (ruling (a)): every row of vectors/webauthn-origin.json through the account app's `client_origin` on the
+    AVM: its `origin`, or refused (null). scaas-node's port runs the same file (adapters::algorand origin_parity_vectors)."""
+    rows = json.load(open(os.path.join(ROOT, 'vectors', 'webauthn-origin.json')))['rows']
+    assert len(rows) >= 40
+    from conftest import VIEWER, sim
+    for r in rows:
+        v, _, fail, _ = sim(VIEWER, probe, 'origin_of', [r['clientDataJSON'].encode(), unhx(r['challenge'])], extra_budget=20_000)
+        got = None if fail else bytes(v).decode()
+        assert got == r['origin'], (r['name'], got, fail)

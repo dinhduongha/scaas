@@ -1,0 +1,96 @@
+# algorand adapter fix 1 RED (new / changed tests against the T17 code; stubs: MP_MAX_DEPTH = 32, client_origin = the NEAR port) at commit b35de637 + the fix-1 tree
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib adapters::algorand
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.76s
+
+running 28 tests
+test adapters::algorand::tests::algorand_last_valid_within_valid_until ... FAILED
+test adapters::algorand::tests::deep_inner_block_decodes_at_protocol_depth ... FAILED
+test adapters::algorand::tests::algorand_events_book_configured_only_and_join ... ok
+test adapters::algorand::tests::msgpack_depth_bound ... FAILED
+test adapters::algorand::tests::algorand_metaop_decode_vectors ... ok
+test adapters::algorand::tests::algorand_pay_meta_job_checks_commitment ... ok
+test adapters::algorand::tests::origin_parity_vectors ... FAILED
+test adapters::algorand::tests::events_scan_blocks_and_pruned_rounds_error ... ok
+test adapters::algorand::tests::no_measured_round_time_refuses ... FAILED
+test adapters::algorand::tests::op_consumed_reads_the_lane_box ... ok
+test adapters::algorand::tests::executor_address_matches_contract ... ok
+test adapters::algorand::tests::same_box_is_paid_once ... FAILED
+test adapters::algorand::tests::relay_fee_target_app_missing_or_clearstate_refused ... ok
+test adapters::algorand::tests::algorand_relay_fee_job_checks_ref ... ok
+test adapters::algorand::tests::spent_entries_end_with_the_group ... FAILED
+test adapters::algorand::tests::relay_fee_config_must_parse ... ok
+test adapters::algorand::tests::group_has_exact_mbr_payment_and_budget_calls ... ok
+test adapters::algorand::tests::sponsored_bound_payee_is_built_unpriced ... ok
+test adapters::algorand::tests::start_check_genesis_mismatch_errors ... ok
+test adapters::algorand::tests::submit_and_status_are_classified ... ok
+test adapters::algorand::tests::tx_matches_algosdk ... ok
+test adapters::algorand::tests::unknown_job_kind_is_refused ... ok
+test adapters::algorand::tests::start_check_approval_hash_mismatch_halts ... ok
+test adapters::algorand::tests::quote_covers_fees_and_mbr ... ok
+test adapters::algorand::tests::relay_fee_target_static_checks ... FAILED
+test adapters::algorand::tests::start_check_lane_below_min_balance_errors ... ok
+test adapters::algorand::tests::target_mbr_per_entry ... ok
+test adapters::algorand::tests::algorand_jobs_never_panic ... ok
+
+failures:
+
+---- adapters::algorand::tests::algorand_last_valid_within_valid_until stdout ----
+
+thread 'adapters::algorand::tests::algorand_last_valid_within_valid_until' (246366) panicked at src/adapters/algorand.rs:2852:9:
+fix 1 (b): no measured round time, never assumed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapters::algorand::tests::deep_inner_block_decodes_at_protocol_depth stdout ----
+
+thread 'adapters::algorand::tests::deep_inner_block_decodes_at_protocol_depth' (246370) panicked at src/adapters/algorand.rs:3071:25:
+called `Result::unwrap()` on an `Err` value: msgpack nested too deep
+
+---- adapters::algorand::tests::msgpack_depth_bound stdout ----
+
+thread 'adapters::algorand::tests::msgpack_depth_bound' (246374) panicked at src/adapters/algorand.rs:3083:9:
+assertion failed: MP_MAX_DEPTH >= 64
+
+---- adapters::algorand::tests::origin_parity_vectors stdout ----
+
+thread 'adapters::algorand::tests::origin_parity_vectors' (246377) panicked at src/adapters/algorand.rs:3103:13:
+assertion `left == right` failed: "empty_member_list_tail"
+  left: Some("https://pay.scaas.test")
+ right: None
+
+---- adapters::algorand::tests::no_measured_round_time_refuses stdout ----
+
+thread 'adapters::algorand::tests::no_measured_round_time_refuses' (246375) panicked at src/adapters/algorand.rs:3121:79:
+called `Result::unwrap_err()` on an `Ok` value: Built { job_id: 7, body: [], valid_until: 1793350821, meta: Object {"fee": Number(6000), "main": Number(1), "mbr": Number(47400), "txs": Array [Object {"Pay": Object {"amount": Number(47400), "to": Array [Number(114), Number(164), Number(55), Number(9), Number(215), Number(169), Number(152), Number(27), Number(195), Number(179), Number(127), Number(112), Number(14), Number(86), Number(211), Number(205), Number(178), Number(149), Number(165), Number(251), Number(115), Number(16), Number(133), Number(188), Number(236), Number(57), Number(143), Number(72), Number(208), Number(164), Number(212), Number(54)]}}, Object {"Call": Object {"accounts": Array [], "app": Number(1001), "apps": Array [], "args": Array [Array [Number(70), Number(156), Number(91), Number(32)], Array [Number(192), Number(26), Number(54), Number(13), Number(39), Number(195), Number(128), Number(114), Number(54), Number(119), Number(85), Number(15), Number(242), Number(46), Number(233), Number(215), Number(79), Number(145), Number(164), Number(77), Number(102), Number(11), Number(151), Number(208), Number(201), Number(144), Number(239), Number(158), Number(88), Number(126), Number(42), Number(6), Number(114), Number(164), Number(55), Number(9), Number(215), Number(169), Number(152), Number(27), Number(195), Number(179), Number(127), Number(112), Number(14), Number(86), Number(211), Number(205), Number(178), Number(149), Number(165), Number(251), Number(115), Number(16), Number(133), Number(188), Number(236), Number(57), Number(143), Number(72), Number(208), Number(164), Number(212), Number(54), Number(0), Number(0), Number(213), Number(191), Number(74), Number(63), Number(204), Number(231), Number(23), Number(176), Number(56), Number(139), Number(204), Number(39), Number(73), Number(235), Number(193), Number(72), Number(173), Number(153), Number(105), Number(178), Number(63), Number(69), Number(238), Number(27), Number(96), Number(95), Number(213), Number(135), Number(120), Number(87), Number(106), Number(196), Number(0), Number(236), Number(193), Number(181), Number(135), Number(39), Number(243), Number(241), Number(43), Number(49), Number(148), Number(136), Number(26), Number(158), Number(203), Number(157), Number(224), Number(178), Number(140), Number(231), Number(178), Number(7), Number(35), Number(13), Number(142), Number(147), Number(15), Number(225), Number(188), Number(231), Number(94), Number(37), Number(108), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(100), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(1), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(161), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(106), Number(228), Number(92), Number(165), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0), Number(0)], Array [Number(0), Number(64), Number(166), Number(98), Number(17), Number(204), Number(199), Number(93), Number(180), Number(113), Number(238), Number(34), Number(90), Number(185), Number(193), Number(116), Number(71), Number(37), Number(1), Number(107), Number(197), Number(101), Number(248), Number(67), Number(124), Number(53), Number(244), Number(239), Number(173), Number(36), Number(110), Number(46), Number(114), Number(167), Number(227), Number(230), Number(151), Number(3), Number(187), Number(155), Number(112), Number(59), Number(130), Number(210), Number(91), Number(106), Number(63), Number(204), Number(147), Number(137), Number(245), Number(90), Number(133), Number(86), Number(8), Number(112), Number(44), Number(150), Number(205), Number(127), Number(115), Number(2), Number(64), Number(133), Number(64), Number(7)], Array [Number(234), Number(74), Number(108), Number(99), Number(226), Number(156), Number(82), Number(10), Number(190), Number(245), Number(80), Number(123), Number(19), Number(46), Number(197), Number(249), Number(149), Number(71), Number(118), Number(174), Number(190), Number(190), Number(123), Number(146), Number(66), Number(30), Number(234), Number(105), Number(20), Number(70), Number(210), Number(44)]], "boxes": Array [], "executor": Bool(false)}}]} }
+
+---- adapters::algorand::tests::same_box_is_paid_once stdout ----
+
+thread 'adapters::algorand::tests::same_box_is_paid_once' (246382) panicked at src/adapters/algorand.rs:3156:9:
+assertion `left == right` failed
+  left: Pay { to: [118, 235, 136, 41, 60, 237, 208, 186, 232, 213, 27, 185, 197, 179, 72, 51, 232, 61, 67, 17, 187, 75, 126, 171, 153, 24, 180, 30, 4, 124, 206, 111], amount: 47400 }
+ right: Pay { to: [118, 235, 136, 41, 60, 237, 208, 186, 232, 213, 27, 185, 197, 179, 72, 51, 232, 61, 67, 17, 187, 75, 126, 171, 153, 24, 180, 30, 4, 124, 206, 111], amount: 18900 }
+
+---- adapters::algorand::tests::spent_entries_end_with_the_group stdout ----
+
+thread 'adapters::algorand::tests::spent_entries_end_with_the_group' (246383) panicked at src/adapters/algorand.rs:3131:43:
+called `Result::unwrap()` on an `Err` value: valid_until 1793350821 is before the last block's time 1800015000
+
+---- adapters::algorand::tests::relay_fee_target_static_checks stdout ----
+
+thread 'adapters::algorand::tests::relay_fee_target_static_checks' (246381) panicked at src/adapters/algorand.rs:3031:56:
+called `Result::unwrap_err()` on an `Ok` value: TargetInfo { app: Some(Mandate), method: "mtx_mandate_open", ops: [(MetaOp { network: [192, 26, 54, 13, 39, 195, 128, 114, 54, 119, 85, 15, 242, 46, 233, 215, 79, 145, 164, 77, 102, 11, 151, 208, 201, 144, 239, 158, 88, 126, 42, 6], contract: [114, 164, 55, 9, 215, 169, 152, 27, 195, 179, 127, 112, 14, 86, 211, 205, 178, 149, 165, 251, 115, 16, 133, 188, 236, 57, 143, 72, 208, 164, 212, 54], op: 0, from: Holder { kind: 1, id: [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7] }, to: Holder { kind: 0, id: [215, 63, 183, 72, 55, 223, 205, 3, 110, 53, 4, 190, 41, 252, 183, 51, 157, 246, 79, 61, 165, 148, 190, 79, 39, 92, 40, 215, 103, 35, 24, 14] }, relayer: [215, 63, 183, 72, 55, 223, 205, 3, 110, 53, 4, 190, 41, 252, 183, 51, 157, 246, 79, 61, 165, 148, 190, 79, 39, 92, 40, 215, 103, 35, 24, 14], amount: 5, pay_ref: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], lane: [51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51, 51], nonce: 0, valid_until: 1793350821, extra: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])], signers: [Holder { kind: 1, id: [7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7] }], dex_mbr: 0 }
+
+
+failures:
+    adapters::algorand::tests::algorand_last_valid_within_valid_until
+    adapters::algorand::tests::deep_inner_block_decodes_at_protocol_depth
+    adapters::algorand::tests::msgpack_depth_bound
+    adapters::algorand::tests::no_measured_round_time_refuses
+    adapters::algorand::tests::origin_parity_vectors
+    adapters::algorand::tests::relay_fee_target_static_checks
+    adapters::algorand::tests::same_box_is_paid_once
+    adapters::algorand::tests::spent_entries_end_with_the_group
+
+test result: FAILED. 20 passed; 8 failed; 0 ignored; 0 measured; 390 filtered out; finished in 1.10s
+
+error: test failed, to rerun pass `--lib`
+rc=101

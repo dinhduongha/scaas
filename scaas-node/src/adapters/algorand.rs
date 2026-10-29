@@ -68,7 +68,11 @@ pub const MBR_MANDATE_BOX: u64 = BOX_FLAT + BOX_BYTE * (41 + 204);
 /// account.py record: header, then keys and origins (32 B each); name `"s"` ‖ kind ‖ id (34 B).
 const REC_HEADER: usize = 118;
 const MAX_ORIGIN_LEN: usize = 128;
+/// account.py `PASSKEY_FIELD_MAX`.
+const PASSKEY_FIELD_MAX: usize = 1024;
 const ABI_RETURN: [u8; 4] = [0x15, 0x1f, 0x7c, 0x75];
+/// How long `tx_fee` remembers a signed group (≫ MaxTxnLife rounds; unread entries after it are dropped).
+const SPENT_KEEP: Duration = Duration::from_secs(3_600);
 
 pub const METAOP_ABI: &str = "(byte[32],byte[32],uint8,(uint8,byte[32]),(uint8,byte[32]),byte[32],uint128,byte[32],byte[32],uint64,uint64,byte[32])";
 pub const ORDER_ABI: &str = "(uint64,uint64,uint128,uint128,byte[32],uint64)";
@@ -682,11 +686,16 @@ pub fn target_check(policy: &RelayFeePolicy, exec: &Executor, pay: &MetaOp, targ
                 let terms = &args[4];
                 ensure!(terms.len() == 130, "mtx_mandate_open: terms are 130 bytes");
                 margin(be_u64(&terms[106..114])?, now, "the mandate")?;
+                // fix 1 (c): the mandate's payee is held to the never-pay rule
+                value(&MetaOp { to: Holder::read(&terms[33..66])?, ..op.clone() })?;
                 be_u64(&args[5])?;
                 info.signers.push(op.from);
                 info.ops.push((op, auth));
             } else {
                 let (op, auth) = signed(2, mandate, [0; 32])?;
+                if m.name == "mtx_mandate_pay" {
+                    value(&op)?;
+                }
                 if m.name == "mtx_revoke" {
                     info.signers.push(op.from);
                 }
@@ -722,15 +731,37 @@ pub fn target_check(policy: &RelayFeePolicy, exec: &Executor, pay: &MetaOp, targ
     Ok(info)
 }
 
-/// Passkey origins (sha256) of an auth, as the account app reads them (`client_origin` = NEAR `origin_of`, ≤ 128 B):
-/// a passkey's, or an msig's passkey members'. Other tags have none.
+/// account.py `client_origin` (NET-ALL-04 item 4), byte for byte (fix 1, ruling (a); `vectors/webauthn-origin.json`
+/// runs against both): `{"type":"webauthn.get","challenge":"` b64url(d) (canonical) `","origin":"` origin `"` — the
+/// origin up to the first `"`, 1 to 128 bytes, no `\` — then `}`, or `,"crossOrigin":false}`, or `,"crossOrigin":false,`
+/// ‖ at least one byte ‖ `}` with no `"topOrigin"` / `"crossOrigin"` after crossOrigin. Unlike NEAR, the tail
+/// `,"crossOrigin":false,}` is refused.
+pub fn client_origin<'a>(cd: &'a [u8], d: &[u8; 32]) -> Option<&'a [u8]> {
+    const CROSS: &[u8] = br#","crossOrigin":false"#;
+    let has = |hay: &[u8], pat: &[u8]| hay.windows(pat.len()).any(|w| w == pat);
+    let c = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(d);
+    let prefix = format!(r#"{{"type":"webauthn.get","challenge":"{c}","origin":""#);
+    let rest = cd.strip_prefix(prefix.as_bytes())?;
+    let q = rest.iter().position(|b| *b == b'"')?;
+    let (origin, t) = (&rest[..q], &rest[q + 1..]);
+    if origin.is_empty() || origin.len() > MAX_ORIGIN_LEN || origin.contains(&b'\\') {
+        return None;
+    }
+    let ok = t == b"}" || t == [CROSS, b"}"].concat()
+        || (t.len() > 22 && t.starts_with(&[CROSS, b","].concat()) && t.ends_with(b"}")
+            && !has(&t[20..], br#""topOrigin""#) && !has(&t[20..], br#""crossOrigin""#));
+    ok.then_some(origin)
+}
+
+/// Passkey origins (sha256) of an auth, as the account app reads them (`client_origin`; authenticatorData and
+/// clientDataJSON ≤ 1,024 B): a passkey's, or an msig's passkey members'. Other tags have none.
 pub fn auth_origins(auth: &[u8], digest: &[u8; 32]) -> Result<Vec<[u8; 32]>> {
     let passkey = |a: &[u8]| -> Result<[u8; 32]> {
         ensure!(a.len() >= 131, "passkey auth length");
         let n = u16::from_be_bytes([a[129], a[130]]) as usize;
         let cd = a.get(131 + n..).ok_or_else(|| anyhow!("passkey authenticatorData truncated"))?;
-        let o = super::near::origin_of(cd, digest).filter(|o| o.len() <= MAX_ORIGIN_LEN)
-            .ok_or_else(|| anyhow!("passkey clientDataJSON is not in the account app's grammar for this op"))?;
+        ensure!(n <= PASSKEY_FIELD_MAX && cd.len() <= PASSKEY_FIELD_MAX, "passkey clientDataJSON / authenticatorData over 1024 bytes");
+        let o = client_origin(cd, digest).ok_or_else(|| anyhow!("passkey clientDataJSON is not in the account app's grammar for this op"))?;
         Ok(sha256(o))
     };
     Ok(match auth.first() {
@@ -787,14 +818,13 @@ fn box_delta(old: Option<usize>, new: usize) -> i64 {
 
 /// Review Focus 1: the LastValid of a group first valid at `first`: at most MaxTxnLife rounds, and no round whose
 /// estimated time (`ts_last` at `last_round`, then `secs` per `rounds` as measured from algod's block timestamps) is
-/// past `valid_until` (seconds). No measured time (`secs` 0): no time bound.
+/// past `valid_until` (seconds). Fix 1 (b): no measured round time (fewer than two sampled rounds, or equal timestamps)
+/// is an error, never an assumed figure.
 pub fn last_valid(first: u64, last_round: u64, ts_last: u64, rounds: u64, secs: u64, valid_until: u64) -> Result<u64> {
     ensure!(valid_until >= ts_last, "valid_until {valid_until} is before the last block's time {ts_last}");
-    let mut lv = first.saturating_add(MAX_TXN_LIFE);
-    if secs > 0 && rounds > 0 {
-        let ahead = u128::from(valid_until - ts_last) * u128::from(rounds) / u128::from(secs);
-        lv = lv.min(last_round.saturating_add(u64::try_from(ahead).unwrap_or(u64::MAX)));
-    }
+    ensure!(secs > 0 && rounds > 0, "no measured round time ({rounds} rounds in {secs} s): never assumed");
+    let ahead = u128::from(valid_until - ts_last) * u128::from(rounds) / u128::from(secs);
+    let lv = first.saturating_add(MAX_TXN_LIFE).min(last_round.saturating_add(u64::try_from(ahead).unwrap_or(u64::MAX)));
     ensure!(lv >= first, "the payload expires before round {first}");
     Ok(lv)
 }
@@ -935,6 +965,10 @@ pub fn mp_encode(v: &Mp) -> Vec<u8> {
     out
 }
 
+/// Fix 1 I1: algod blocks nest to ≈ 36 (root, block, txns, then 3 per inner level: inner app calls go 8 deep, an app
+/// at level 8 may still pay at level 9 or write local state); the bound only stops a stack overflow on hostile input.
+pub const MP_MAX_DEPTH: u32 = 64;
+
 struct MpReader<'a> {
     b: &'a [u8],
     at: usize,
@@ -952,7 +986,7 @@ impl<'a> MpReader<'a> {
     }
 
     fn read(&mut self, depth: u32) -> Result<Mp> {
-        ensure!(depth < 32, "msgpack nested too deep");
+        ensure!(depth < MP_MAX_DEPTH, "msgpack nested too deep");
         let t = self.take(1)?[0];
         let n = |r: &mut Self, k: usize| r.uint(k).map(|x| x as usize);
         Ok(match t {
@@ -1574,7 +1608,7 @@ pub struct AlgorandAdapter {
     /// Derived at `start_check` from the router's salt global.
     exec: Mutex<Option<Executor>>,
     /// tx id ⇒ what the lane paid (fee + MBR payments), for `tx_fee`.
-    spent: Mutex<HashMap<String, u128>>,
+    spent: Mutex<HashMap<String, (u128, std::time::Instant)>>,
 }
 
 struct Work {
@@ -1936,6 +1970,10 @@ impl ChainAdapter for AlgorandAdapter {
         margin(w.op.valid_until, now, "the payment").map_err(revert)?;
         let lane_pk = *self.pks.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?;
         let p = self.params().await.map_err(transport)?;
+        // fix 1 (b): the round time is read now, as sign will; none measured = retried, never assumed
+        let (ts, rounds, secs) = self.round_time(p.last_round).await.map_err(transport)?;
+        last_valid(p.last_round, p.last_round, ts, rounds, secs, w.op.valid_until)
+            .map_err(|e| SimError::Transport(format!("round time: {e:#}")))?;
         let digest = w.op.digest();
         let token_addr = app_address(w.token);
         let mut fee_ours = false;
@@ -1985,7 +2023,17 @@ impl ChainAdapter for AlgorandAdapter {
                 } else {
                     self.record_mbr(&p, &lane_pk, &w.op.from, &digest, &w.auth).await?
                 };
-                let pr = self.token_mbr(&p, &lane_pk, w.token, &MetaOp { to: payee, ..w.op.clone() }).await? + rec;
+                let mut pr = self.token_mbr(&p, &lane_pk, w.token, &MetaOp { to: payee, ..w.op.clone() }).await? + rec;
+                // fix 1 minor 4: a same-token value target paying the fee's payee creates its balance box first: paid once
+                let pays_payee = *target_app == w.token && info.app == Some(App::Token)
+                    && matches!(info.method, "mtx_pay" | "mtx_pay_meta" | "mtx_transfer" | "mtx_execute_transfer")
+                    && info.ops.first().is_some_and(|(o, _)| o.to == payee);
+                if pays_payee {
+                    let name = [if payee.kind == KIND_ADDRESS { &b"b"[..] } else { &b"u"[..] }, &payee.id].concat();
+                    if self.box_value(w.token, &name).await.map_err(transport)?.is_none() {
+                        pr = pr.saturating_sub(MBR_AMOUNT_BOX);
+                    }
+                }
                 let mut txs = Vec::new();
                 if pr > 0 {
                     txs.push(Tx::Pay { to: app_address(router), amount: pr });
@@ -2060,7 +2108,9 @@ impl ChainAdapter for AlgorandAdapter {
         let (raw, ids) = sign_group(&g, &p.chain, sequence, lv, &|m| s.sign(m), &self.pks[lane], exec.as_ref())?;
         let tx_id = hex0x(ids.get(g.main).ok_or_else(|| anyhow!("group without its main transaction"))?);
         if let Ok(mut m) = self.spent.lock() {
-            m.insert(tx_id.clone(), u128::from(g.fee) + u128::from(g.mbr));
+            // fix 1 minor 1: a group is final or dead within MaxTxnLife rounds; older entries are never read
+            m.retain(|_, (_, at)| at.elapsed() < SPENT_KEEP);
+            m.insert(tx_id.clone(), (u128::from(g.fee) + u128::from(g.mbr), std::time::Instant::now()));
         }
         Ok(Signed { job_id: built.job_id, tx_id, raw, valid_until: built.valid_until, sequence })
     }
@@ -2089,7 +2139,12 @@ impl ChainAdapter for AlgorandAdapter {
             return Ok(TxStatus::Mined { height: h, tx_hash: None });
         }
         match v["pool-error"].as_str().filter(|s| !s.is_empty()) {
-            Some(e) => Ok(TxStatus::Reverted { reason: e.to_string() }),
+            Some(e) => {
+                if let Ok(mut m) = self.spent.lock() {
+                    m.remove(tx_id);
+                }
+                Ok(TxStatus::Reverted { reason: e.to_string() })
+            }
             None => Ok(TxStatus::Pending),
         }
     }
@@ -2106,7 +2161,7 @@ impl ChainAdapter for AlgorandAdapter {
 
     /// What the lane paid for its group: the pooled fee + its MBR payments (known since `sign`; read once, at mined).
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
-        Ok(self.spent.lock().ok().and_then(|mut m| m.remove(tx_id)))
+        Ok(self.spent.lock().ok().and_then(|mut m| m.remove(tx_id)).map(|(n, _)| n))
     }
 
     /// The last round (one-round finality); with `quorum > 1` further endpoints must agree on its hash.
@@ -2390,12 +2445,18 @@ mod tests {
         w.views.insert(selector("executor()address"), exec().address.to_vec());
         w.views.insert(selector(&format!("mbr_needed({METAOP_ABI})uint64")), 47_400u64.to_be_bytes().to_vec());
         w.views.insert(selector("verify_mbr(uint8,byte[32],byte[32],byte[])uint64"), 76_100u64.to_be_bytes().to_vec());
-        let ts = |r: u64| 1_800_000_000 + r * 3;
+        let ts = ts_of;
         for r in [4_900u64, 5_000] {
             let b = Mp::Map(vec![(Mp::str("block"), Mp::Map(vec![(Mp::str("rnd"), Mp::Int(r as i128)), (Mp::str("ts"), Mp::Int(ts(r) as i128))]))]);
             w.blocks.insert(r, (mp_encode(&b), [r as u8; 32]));
         }
         w
+    }
+
+    /// The mocked blocks' timestamps: 3 s per round, round 5,000 = the tests' start (fix 1 (b) reads them in build).
+    fn ts_of(r: u64) -> u64 {
+        static BASE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+        *BASE.get_or_init(|| now() - 15_000) + r * 3
     }
 
     fn txns_of(req: &Mp) -> Vec<Mp> {
@@ -2742,7 +2803,7 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         assert!(matches!(&g3.txs[2], Tx::Call { app: TOKEN, executor: true, .. }));
         assert!(matches!(&g3.txs[3], Tx::Call { app: ROUTER, executor: false, .. }) && g3.main == 3);
         let Tx::Call { args, .. } = &g3.txs[3] else { panic!() };
-        assert_eq!(args[0], h2(&selector(&format!("relay(uint64,{METAOP_ABI},byte[])void"))));
+        assert_eq!(args[0], selector(&format!("relay(uint64,{METAOP_ABI},byte[])void")).to_vec());
         assert_eq!((args[1].clone(), args[2].clone()), (TOKEN.to_be_bytes().to_vec(), op3.arc4()));
         assert_eq!(g3.fee, 1_000 * (4 + 4));
         // the router's MBR query asked for the open payee: the lane
@@ -2758,9 +2819,6 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let (a4, _) = adapter(w4).await;
         let e = a4.build(&job(o_op(&op, &auth, json!({}))), 0).await.unwrap_err();
         assert!(matches!(&e, SimError::Revert(m) if m.contains("16")), "{e:?}");
-    }
-    fn h2(b: &[u8]) -> Vec<u8> {
-        b.to_vec()
     }
 
     /// T15 fix 1 / note 1: program = prefix ‖ router id ‖ suffix ‖ 20 01 salt; its address equals the vector (the SDK's
@@ -2846,12 +2904,13 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         assert_eq!(last_valid(1_000, 1_000, ts, 100, 280, ts + 27).unwrap(), 1_009);
         assert_eq!(last_valid(1_000, 1_000, ts, 100, 280, ts + 1).unwrap(), 1_000);
         assert_eq!(last_valid(1_000, 1_000, ts, 100, 280, ts + 10_000_000).unwrap(), 2_000, "MaxTxnLife");
-        assert_eq!(last_valid(1_000, 1_000, ts, 100, 0, ts + 5).unwrap(), 2_000, "rounds without time: no time bound");
+        assert!(last_valid(1_000, 1_000, ts, 100, 0, ts + 5).is_err(), "fix 1 (b): no measured round time, never assumed");
+        assert!(last_valid(1_000, 1_000, ts, 0, 0, ts + 5).is_err(), "fewer than two sampled rounds");
         assert!(last_valid(1_000, 1_000, ts, 100, 280, ts - 1).is_err(), "already past");
         assert!(last_valid(1_002, 1_000, ts, 100, 280, ts + 3).is_err(), "expires before the first valid round");
         // through sign(): the mocked blocks 4,900 / 5,000 are 300 s apart (3 s per round)
         let (a, _) = adapter(world()).await;
-        let op = MetaOp { valid_until: 1_800_000_000 + 5_000 * 3 + 400, ..op_of("pay") };
+        let op = MetaOp { valid_until: ts_of(5_000) + 400, ..op_of("pay") };
         let b = Built { job_id: 1, body: vec![], valid_until: op.valid_until,
                         meta: serde_json::to_value(Group { txs: vec![Tx::Pay { to: [5; 32], amount: 1 }], main: 0, fee: 1_000, mbr: 1 }).unwrap() };
         let s = a.sign(b, 0, 5_000).await.unwrap();
@@ -3017,11 +3076,198 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         // mandate open: the terms' expiry gets the margin too
         let osel = selector(&format!("mtx_mandate_open(uint64,{METAOP_ABI},byte[],{TERMS_ABI},uint64)void")).to_vec();
         let fund = MetaOp { relayer: app_address(MANDATE), to: holder(0, app_address(MANDATE)), ..target_op(app_address(TOKEN), 0, holder(1, [7; 32]), holder(0, [0; 32])) };
-        let terms = |expiry: u64| [vec![1u8], vec![8; 32], vec![0], vec![9; 32], 100u128.to_be_bytes().to_vec(), 250u128.to_be_bytes().to_vec(),
-                                    86_400u64.to_be_bytes().to_vec(), expiry.to_be_bytes().to_vec(), 5u128.to_be_bytes().to_vec()].concat();
-        let open = |e: u64| vec![osel.clone(), TOKEN.to_be_bytes().to_vec(), fund.arc4(), abi_bytes(&[1; 70]), terms(e), 0u64.to_be_bytes().to_vec()];
+        let open_to = |payee: Holder, e: u64| vec![osel.clone(), TOKEN.to_be_bytes().to_vec(), fund.arc4(), abi_bytes(&[1; 70]), terms(payee, e),
+                                                  0u64.to_be_bytes().to_vec()];
+        let open = |e: u64| open_to(holder(0, [9; 32]), e);
         assert!(tc(MANDATE, &open(far()), 0).is_ok());
         assert!(tc(MANDATE, &open(now + 100), 0).unwrap_err().to_string().contains("mandate"));
+        // fix 1 (c): the mandate's payee is held to the never-pay rule (router, a token, the executor, any deployment app)
+        for p in [holder(0, app_address(ROUTER)), holder(0, app_address(TOKEN)), holder(0, exec().address), holder(0, app_address(DEX))] {
+            assert!(tc(MANDATE, &open_to(p, far()), 0).unwrap_err().to_string().contains("never pay"), "{}", p.display());
+        }
+        let psel = selector(&format!("mtx_mandate_pay(uint64,{METAOP_ABI},byte[])void")).to_vec();
+        let mpay = |to: Holder| vec![psel.clone(), TOKEN.to_be_bytes().to_vec(),
+                                     MetaOp { to, ..target_op(app_address(MANDATE), 2, holder(1, [3; 32]), holder(0, [0; 32])) }.arc4(), abi_bytes(&[1; 70])];
+        assert!(tc(MANDATE, &mpay(holder(0, [9; 32])), 0).is_ok());
+        assert!(tc(MANDATE, &mpay(holder(0, app_address(TOKEN))), 0).unwrap_err().to_string().contains("never pay"));
+    }
+
+    fn terms(payee: Holder, expiry: u64) -> Vec<u8> {
+        [vec![1u8], vec![8; 32], vec![payee.kind], payee.id.to_vec(), 100u128.to_be_bytes().to_vec(), 250u128.to_be_bytes().to_vec(),
+         86_400u64.to_be_bytes().to_vec(), expiry.to_be_bytes().to_vec(), 5u128.to_be_bytes().to_vec()].concat()
+    }
+
+    fn stib(app: u64, logs: Vec<Vec<u8>>, inner: Vec<Mp>, extra_dt: Vec<(Mp, Mp)>) -> Mp {
+        let mut dt = vec![(Mp::str("lg"), Mp::Arr(logs.into_iter().map(Mp::Str).collect()))];
+        if !inner.is_empty() {
+            dt.push((Mp::str("itx"), Mp::Arr(inner)));
+        }
+        dt.extend(extra_dt);
+        Mp::Map(vec![(Mp::str("dt"), Mp::Map(dt)), (Mp::str("txn"), Mp::Map(vec![(Mp::str("apid"), Mp::Int(app as i128)), (Mp::str("type"), Mp::str("appl"))]))])
+    }
+
+    /// Fix 1 I1: go-algorand nests inner app calls 8 deep (maxAppCallDepth) and an app at level 8 may still pay (level
+    /// 9) and write local state; such a block (its deepest fields at msgpack depth 32–33) decodes, and the configured
+    /// token's logs at the top are still booked, so no third party can stall the indexer.
+    #[tokio::test]
+    async fn deep_inner_block_decodes_at_protocol_depth() {
+        let settled = [selector(EV_SETTLED).to_vec(), vec![0], vec![0xa1; 32], vec![0], vec![0xb0; 32], vec![0; 31], vec![5], vec![0x77; 32]].concat();
+        let pay = Mp::Map(vec![(Mp::str("txn"), Mp::Map(vec![(Mp::str("amt"), Mp::Int(0)), (Mp::str("rcv"), Mp::Bin(vec![1; 32])),
+                                                            (Mp::str("type"), Mp::str("pay"))]))]);
+        let ld = (Mp::str("ld"), Mp::Map(vec![(Mp::Int(1), Mp::Map(vec![(Mp::str("k"), Mp::Map(vec![(Mp::str("at"), Mp::Int(1)), (Mp::str("ui"), Mp::Int(5))]))]))]));
+        let mut n = stib(9008, vec![], vec![pay], vec![ld]);
+        for app in (9001..9008).rev() {
+            n = stib(app, vec![], vec![n], vec![]);
+        }
+        let top = stib(TOKEN, vec![settled], vec![n], vec![]);
+        let block = Mp::Map(vec![(Mp::str("gh"), Mp::Bin(network().to_vec())), (Mp::str("rnd"), Mp::Int(4_950)), (Mp::str("ts"), Mp::Int(1)),
+                                 (Mp::str("txns"), Mp::Arr(vec![top]))]);
+        let raw = mp_encode(&Mp::Map(vec![(Mp::str("block"), block)]));
+        mp_decode(&raw).unwrap();
+        let mut w = world();
+        w.blocks.insert(4_950, (raw, [0x49; 32]));
+        let (a, _) = adapter(w).await;
+        let rows = a.events(4_950, 4_950, &["1001".into()]).await.unwrap();
+        assert_eq!(rows.iter().filter(|r| r["event"] == "PaymentSettled").count(), 1, "{rows:#?}");
+    }
+
+    /// Fix 1 I1: the reader's bound is far above what algod produces (≈ 36): a value nested at MP_MAX_DEPTH − 1 reads, one
+    /// level more is refused (untrusted input never overflows the stack).
+    #[test]
+    fn msgpack_depth_bound() {
+        const { assert!(MP_MAX_DEPTH >= 64) };
+        let nest = |n: u32| (0..n).fold(Mp::Int(1), |v, _| Mp::Arr(vec![v]));
+        assert!(mp_decode(&mp_encode(&nest(MP_MAX_DEPTH - 1))).is_ok());
+        assert!(mp_decode(&mp_encode(&nest(MP_MAX_DEPTH))).unwrap_err().to_string().contains("deep"));
+    }
+
+    /// Fix 1 (a): the account app's `client_origin` grammar byte for byte: every row of the Algorand parity file (the NEAR
+    /// rows with Algorand's answers, e.g. `,"crossOrigin":false,}` refused, plus the 128 B origin cap); the AVM side runs
+    /// the same file (smartcontracts/algorand tests/test_vectors.py::test_origin_parity_vectors). A passkey auth gets
+    /// exactly that origin's hash, or is refused.
+    #[test]
+    fn origin_parity_vectors() {
+        let f: Value = serde_json::from_str(include_str!("../../../smartcontracts/algorand/vectors/webauthn-origin.json")).unwrap();
+        let rows = f["rows"].as_array().unwrap();
+        assert!(rows.len() >= 40);
+        assert!(rows.iter().any(|r| r["near"].is_string() && r["origin"].is_null()), "a row where NEAR accepts and Algorand refuses");
+        for r in rows {
+            let d = b32(&r["challenge"]);
+            let cd = r["clientDataJSON"].as_str().unwrap().as_bytes();
+            let got = client_origin(cd, &d).map(|o| String::from_utf8(o.to_vec()).unwrap());
+            assert_eq!(got.as_deref(), r["origin"].as_str(), "{}", r["name"]);
+            let ad = [vec![0x11; 32], vec![5, 0, 0, 0, 0]].concat();
+            let auth = [vec![3], vec![2; 64], vec![4; 64], (ad.len() as u16).to_be_bytes().to_vec(), ad, cd.to_vec()].concat();
+            match r["origin"].as_str() {
+                Some(o) if cd.len() <= 1024 => assert_eq!(auth_origins(&auth, &d).unwrap(), vec![sha256(o.as_bytes())], "{}", r["name"]),
+                _ => assert!(auth_origins(&auth, &d).is_err(), "{}", r["name"]),
+            }
+        }
+    }
+
+    /// Fix 1 (b): without a measured round time (equal timestamps) the job is not built (retried), never assumed.
+    #[tokio::test]
+    async fn no_measured_round_time_refuses() {
+        let mut w = world();
+        let b = mp_encode(&Mp::Map(vec![(Mp::str("block"), Mp::Map(vec![(Mp::str("rnd"), Mp::Int(4_900)), (Mp::str("ts"), Mp::Int(ts_of(5_000) as i128))]))]));
+        w.blocks.insert(4_900, (b, [0x10; 32]));
+        let (a, _) = adapter(w).await;
+        let op = MetaOp { valid_until: far(), ..op_of("pay") };
+        let e = a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap_err();
+        assert!(matches!(&e, SimError::Transport(m) if m.contains("round time")), "{e:?}");
+    }
+
+    /// Fix 1 minor 1: what a signed group cost is dropped once it ends (mined or reverted), and stale entries age out.
+    #[tokio::test]
+    async fn spent_entries_end_with_the_group() {
+        let (a, w) = adapter(world()).await;
+        let b = Built { job_id: 1, body: vec![], valid_until: far(),
+                        meta: serde_json::to_value(Group { txs: vec![Tx::Pay { to: [5; 32], amount: 1 }], main: 0, fee: 1_000, mbr: 1 }).unwrap() };
+        let s = a.sign(b, 0, 5_000).await.unwrap();
+        let id = crate::addresses::b32encode(&b32(&json!(s.tx_id)));
+        w.lock().unwrap().pending.insert(id, json!({"pool-error": "txn dead", "confirmed-round": 0}));
+        assert!(matches!(a.tx_status(&s.tx_id).await.unwrap(), TxStatus::Reverted { .. }));
+        assert_eq!(a.tx_fee(&s.tx_id).await.unwrap(), None, "a reverted group leaves nothing behind");
+    }
+
+    async fn router_build(w: World, target: u64, args: Vec<Vec<u8>>, relay_fee: &str) -> std::result::Result<Group, SimError> {
+        let w = Arc::new(M::new(w));
+        let url = serve(w.clone()).await;
+        let a = AlgorandAdapter::new(&cfg(&url, relay_fee), &[lane0()]).unwrap();
+        a.start_check().await.unwrap();
+        let call = router_call(target, &args);
+        let op = fee_op(&call, [5; 32], None);
+        a.build(&job(fee_job(&call, &op, json!({}))), 0).await.map(|b| group(&b))
+    }
+
+    /// Fix 1 minor 4: a same-token target paying the lane and the open-mode fee both create the lane's balance box: it is
+    /// paid once (the target's part), not twice.
+    #[tokio::test]
+    async fn same_box_is_paid_once() {
+        let t = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, lane_pk()));
+        let tsel = selector(&format!("mtx_transfer({METAOP_ABI},byte[])void")).to_vec();
+        let args = vec![tsel, t.arc4(), abi_bytes(&[0xbb; 70])];
+        let g = router_build(world(), TOKEN, args.clone(), FEE_CFG).await.unwrap();
+        assert_eq!(g.txs[0], Tx::Pay { to: app_address(ROUTER), amount: 47_400 - MBR_AMOUNT_BOX });
+        assert_eq!(g.txs[1], Tx::Pay { to: app_address(TOKEN), amount: 47_400 + 76_100 });
+        let mut w = world();
+        w.boxes.insert((TOKEN, [&b"b"[..], &lane_pk()].concat()), vec![0; 32]);
+        let g = router_build(w, TOKEN, args, FEE_CFG).await.unwrap();
+        assert_eq!(g.txs[0], Tx::Pay { to: app_address(ROUTER), amount: 47_400 }, "the box exists: nothing overlaps");
+    }
+
+    /// Fix 1 minor 5: the target's own MBR per entry — invalidate (the `n` box new or not), mandate open (the payee's
+    /// token box new or not), and the key-op record growth (`key_op_delta`, `box_delta`).
+    #[tokio::test]
+    async fn target_mbr_per_entry() {
+        let from = holder(1, [0x11; 32]);
+        let isel = selector(&format!("mtx_invalidate_nonces({METAOP_ABI},byte[],byte[32],uint64)void")).to_vec();
+        let lane = [0x6c; 32];
+        let inv = vec![isel, target_op(app_address(TOKEN), 15, from, from).arc4(), abi_bytes(&[0xbb; 70]), lane.to_vec(), 9u64.to_be_bytes().to_vec()];
+        let g = router_build(world(), TOKEN, inv.clone(), FEE_CFG).await.unwrap();
+        assert_eq!(g.txs[1], Tx::Pay { to: app_address(TOKEN), amount: MBR_LANE_BOX + 76_100 }, "a new min_nonce box + the record");
+        let mut w = world();
+        w.boxes.insert((TOKEN, [&b"n"[..], &sha256(&[&[from.kind][..], &from.id, &lane].concat())].concat()), 1u64.to_be_bytes().to_vec());
+        let g = router_build(w, TOKEN, inv, FEE_CFG).await.unwrap();
+        assert_eq!(g.txs[1], Tx::Pay { to: app_address(TOKEN), amount: 76_100 }, "the min_nonce box exists");
+        let osel = selector(&format!("mtx_mandate_open(uint64,{METAOP_ABI},byte[],{TERMS_ABI},uint64)void")).to_vec();
+        let fund = MetaOp { relayer: app_address(MANDATE), to: holder(0, app_address(MANDATE)), ..target_op(app_address(TOKEN), 0, holder(1, [7; 32]), holder(0, [0; 32])) };
+        let open = vec![osel, TOKEN.to_be_bytes().to_vec(), fund.arc4(), abi_bytes(&[1; 70]), terms(holder(0, [9; 32]), far()), 30_000u64.to_be_bytes().to_vec()];
+        let g = router_build(world(), MANDATE, open.clone(), FEE_CFG).await.unwrap();
+        assert_eq!(g.txs[1], Tx::Pay { to: app_address(MANDATE), amount: MBR_MANDATE_BOX + 30_000 + MBR_AMOUNT_BOX });
+        let mut w = world();
+        w.boxes.insert((TOKEN, [&b"b"[..], &[9; 32]].concat()), vec![0; 32]);
+        let g = router_build(w, MANDATE, open, FEE_CFG).await.unwrap();
+        assert_eq!(g.txs[1], Tx::Pay { to: app_address(MANDATE), amount: MBR_MANDATE_BOX + 30_000 }, "the payee's token box exists");
+        // key ops: a lazily opened passkey record (118 + key + its origin) adding a key with that origin / another one
+        let ksel = selector(&format!("mtx_add_key({METAOP_ABI},byte[],(uint16,byte[]),byte[])void")).to_vec();
+        let keyrec = [0x01u8, 0x08, 0, 4, 0, 64].iter().copied().chain([1u8; 64]).collect::<Vec<u8>>();
+        let add = |o: &[u8]| vec![ksel.clone(), vec![0; METAOP_LEN], vec![0, 0], keyrec.clone(), abi_bytes(o)];
+        let listed = sha256(b"https://pay.scaas.test");
+        let rec = |n: u64| (BOX_FLAT + BOX_BYTE * (34 + n)) as i64;
+        assert_eq!(key_op_delta(&add(b"https://pay.scaas.test"), None, 182, &[listed]).unwrap(), rec(214), "origin already listed");
+        assert_eq!(key_op_delta(&add(b"https://other.test"), None, 182, &[listed]).unwrap(), rec(246));
+        assert_eq!(key_op_delta(&add(b""), Some(150), 150, &[]).unwrap(), 12_800, "an existing record grows by one key");
+        let rsel = selector(&format!("mtx_remove_key({METAOP_ABI},byte[],(uint16,byte[]))void")).to_vec();
+        assert_eq!(key_op_delta(&[rsel, vec![], vec![], keyrec.clone()], Some(182), 182, &[]).unwrap(), -12_800, "a shrink refunds nothing (clamped by the caller)");
+        let gsel = selector(&format!("mtx_set_guardian({METAOP_ABI},byte[],(uint8,byte[32]))void")).to_vec();
+        assert_eq!(key_op_delta(&[gsel.clone(), vec![], vec![], vec![0; 33]], Some(150), 150, &[]).unwrap(), 0);
+        assert_eq!(key_op_delta(&[gsel, vec![], vec![], vec![0; 33]], None, 118, &[]).unwrap(), rec(118), "a native address's first record");
+    }
+
+    /// Fix 1 minor 8: with `relay_bound_payee = true` a fee bound to another payee is relayed as a sponsored job: built,
+    /// not priced (amount 1 would not cover the group).
+    #[tokio::test]
+    async fn sponsored_bound_payee_is_built_unpriced() {
+        let sponsored = ", relay_fee = { min_amount = 1, relay_bound_payee = true, min_microalgo_value = { \"1001\" = 1000 } }";
+        let w = Arc::new(M::new(world()));
+        let url = serve(w.clone()).await;
+        let a = AlgorandAdapter::new(&cfg(&url, sponsored), &[lane0()]).unwrap();
+        a.start_check().await.unwrap();
+        let t = target_op(app_address(TOKEN), 4, holder(1, [0x11; 32]), holder(0, [0x44; 32]));
+        let call = transfer_call(&t);
+        let op = MetaOp { amount: 1, ..fee_op(&call, [5; 32], Some(holder(0, [0x55; 32]))) };
+        a.build(&job(fee_job(&call, &op, json!({}))), 0).await.unwrap();
     }
 
     /// Spec §5: ARC-28 logs of configured apps only (a block holds only successful groups); joins by ids: PaymentMeta

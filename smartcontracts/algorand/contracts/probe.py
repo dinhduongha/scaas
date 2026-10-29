@@ -4,6 +4,7 @@ payee of `mtx_pay`). Inner fees are 0 (the outer group pays by fee pooling); MBR
 """
 from algopy import Account, Application, Bytes, UInt64, arc4, itxn
 
+from account import client_origin
 from common import Bytes32, MetaOp, Order, digest, meta_pay_id, pay_lane, relay_ref, sign_bytes, verify_native
 
 
@@ -31,6 +32,11 @@ class Probe(arc4.ARC4Contract):
     @arc4.abimethod(readonly=True)
     def ref_of(self, network: Bytes32, target: Bytes32, call: Bytes, salt: Bytes32) -> Bytes32:
         return relay_ref(network, target, call, salt)
+
+    @arc4.abimethod(readonly=True)
+    def origin_of(self, cd: Bytes, d: Bytes32) -> Bytes:
+        """The account app's passkey origin parser (T17 fix 1 parity rows, vectors/webauthn-origin.json)."""
+        return client_origin(cd, d)
 
     @arc4.abimethod
     def verify(self, holder_kind: arc4.UInt8, holder: Bytes32, digest: Bytes32, auth: Bytes) -> bool:
