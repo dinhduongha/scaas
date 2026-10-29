@@ -55,13 +55,16 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          the calldata embedding them); also rename the deploy JSON keys `implementation_none` /
          `implementation_{none,underlying}_zether_bls12381` (`deployments/<chainid>.json`, read by e2e and the node);
          start after the `ua8` merge (rebase onto main then). Inventory: `scratchpad/token-rename-report.md`;
-       - **UA-8 step 1 (EVM `UARegistry`)** as soon as the plan is written (owner 2026-10-29, moved up from step 3):
+       - **UA-8 step 1 (EVM `UARegistry`)** — IN PROGRESS on branch `ua8` (worktree `.claude/worktrees/ua8`; plan
+         `docs/superpowers/plans/2026-10-30-ua8-portable-registrations.md`): A1–A10 complete and reviewed, A11 paused
+         at WIP `6dd00de7` (2026-10-30), then A12, A13, final review, owner go to merge. As soon as the plan is written (owner 2026-10-29, moved up from step 3):
          portable PoP, optional `pqzPop`, KEM keys, relayable writes, `checked = chain`, clients and vectors
          (`UARegistry` / `UAKinds` / `IUARegistry`; overlap with the rename only where tokens read the PQZ key's
          `proven`). Must land before fs3 Task 13 (the SCaaS testnet redeploys the registry once).
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`; merged 2026-10-30), TON
        passkey relays (P-256 in the node), relay-fee minimum before mainnet.
-     - **pqz-core:** fs3 Task 12 (final gate; merged 2026-10-30) → Task 6 (reproduction package); its heavy gate interleaves with
+     - **pqz-core:** fs3 Task 12 (final gate; merged 2026-10-30) → Task 6 (reproduction package; IN PROGRESS on
+       `fs3-t12`, paused at WIP `ea044220` 2026-10-30: one Docker quick run done 04:48, the second stopped mid-way); its heavy gate interleaves with
        the forge runs for the `capped` slots.
      - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
        **4b spec for Soroban**, the governance matrix (§0).

@@ -1,3 +1,53 @@
+## Session 2026-10-30 (UA-8 A1–A10; node-ua-jobs + fs3 Task 12 merged) — resume here
+
+**State (owner paused 2026-10-30 to shut down):** nothing running — agents stopped, Docker container `pqz-t6` stopped,
+no `capped` jobs.
+
+- **`main`** = `769b3b42` (local). `origin/main` = `30dd93b0`, which holds:
+  - the merges of `node-ua-jobs` (`c14b105c`: EVM node `ua_metatx` jobs) and `fs3-t12` (`a3ec5f72`: fs3 Task 12,
+    `gate.sh` fin PASS);
+  - the TODO update (`30dd93b0`).
+  Not pushed yet: `769b3b42` — every bamboo-dms / Odoo-side item dropped from TODO (owner 2026-10-30: scaas is separate
+  from bamboo-dms). The removed text is verbatim in `scratchpad/bamboo-dms-followups.md` (git-ignored).
+- **UA-8 step 1** — branch `ua8`, worktree `.claude/worktrees/ua8`, tag `ref/pre-ua8`; not merged.
+  - A1–A10 complete, each reviewed clean (commits `6f72d0ba..317ef775`).
+  - Gas log `smartcontracts/evm/runs/2026-10-30-ua8-gas.txt`. A full registration with the PQZ proof exceeds a 60 M
+    block at every set, so registrations use `register` + `storePqzPop`.
+  - All nine client reproducers (clientkeys, ua-rs, ua-cs, ua-qt, ua-py, ua-go, ua-c, ua-cxx, ua-dart, ua-dart-frb)
+    are on the portable digests and the PQZ key record, with the personal_sign KAT pinned.
+  - **A11 paused**: WIP commit `6dd00de7` (node test in `scaas-node/src/submit.rs`, never run). The scripts
+    (`script/pqz/e2e.py`, `scripts/e2e-zether.sh`) are not started.
+  - Ledger with every ruling: `.superpowers/sdd/2026-10-30-ua8-portable-registrations/progress.md` (git-ignored).
+    Briefs `task-*-brief.md` there; the A10 / A12 briefs carry controller additions.
+- **fs3 Task 6** — branch `fs3-t12`, worktree `.claude/worktrees/fs3-t12`.
+  - WIP commit `ea044220`: reproduction package edits (`pqz-core/artifact/*`) plus the completed Docker quick run
+    `runs/fs3-t6-docker-quick` (2026-10-30 04:48, about 54 min).
+  - A second quick run was stopped mid-way; restart it, the image is `pqz-core-artifact:t6`.
+  - No report written yet. Check the run against `expected-results.json`, then commit and review.
+- **Owner decisions 2026-10-30:**
+  - merge `node-ua-jobs` and `fs3-t12` + push: done.
+  - token-family rename: option (a), regenerate `dex_order_kat.json` and `metatx-parity.json` (CREATE2-derived fields
+    only), and rename the deploy JSON keys `implementation_none…` as well. Start after the `ua8` merge, rebased onto
+    main. Inventory: `scratchpad/token-rename-report.md`; worktree `.claude/worktrees/token-rename` (no commits, at
+    `c016f971`).
+  - no bamboo-dms / Odoo items in scaas (memory `bamboo-dms-separate`).
+
+**Next (in order, subagent-driven):**
+1. UA-8 A11: re-dispatch from `6dd00de7` with `task-A11-brief.md`. Rules:
+   - the node test asserts the new writes (`register` with UAAttrs, `setKemKey`, `storePqzPop`, `setPqzKey`) as
+     `call` jobs, per the ledger l.115 ruling;
+   - the scripts choose `storePqzPop` from the chain's real block gas limit;
+   - syntax checks only.
+   Then the review.
+2. UA-8 A12 (docs, decisions, TODO; plus `docs/clients/ua-libraries.md`, `app.md`, `signers-clientkeys.md`; the
+   deferred minors in the ledger: A7 m1 / m3, A8 N1, A6 n3, gen-1/gen-2 "one PQZ key per UA" note), then A13 (gate
+   runner + CI; it must catch a client that stops building, as ua-qt did from A2 to A9), then the whole-branch review,
+   then the owner's go to merge / push.
+3. fs3 Task 6: restart the quick run in `fs3-t12`, write the report, then the review.
+4. After the `ua8` merge: the token-family rename (a).
+5. Then TODO "Now (order)" steps 3 onward: DEX round, 4b Soroban + UA-8 step 2, fs3 Task 13 + Task 9 calibration
+   (ask the owner to stop other sessions before measuring).
+
 ## Session 2026-10-29 (near-algorand merged + pushed) — resume here
 
 - `main` = the merge of `near-algorand` (owner 2026-10-29: "sửa N1 + N2 rồi merge và push"): NEAR + Algorand families,
