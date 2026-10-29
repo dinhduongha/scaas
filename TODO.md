@@ -50,11 +50,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   3. Follow-ups of the two merged branches: EVM node UA job path (`ua_metatx`), metatx-split e2e owed on a real node
      (with the T19 / T20 devnets where possible), TON passkey relays (P-256 in the node), relay-fee minimum before mainnet.
   4. fs3 Task 12 (final gate + merge) → Task 6 (reproduction package).
-  5. UA-8 portable UA registrations (plan from the short design; scope every family, owner 2026-10-29, design P10:
-     EVM → Cosmos / Soroban / Sui / Aptos / Solana → Algorand (`account` app gains the writes) → NEAR (new
-     `ua-registry` contract) → TON registry design; Algorand and NEAR are separate tasks; PQ verification P11: on chain on
-     EVM; (b) Cosmos / Soroban / Sui after spikes, NEAR `mldsa65` (host function `ml_dsa_verify`), Algorand `fndsa512`
-     (after AVM v14, deterministic signing; owner 2026-10-29); relayer-checked mode elsewhere).
+  5. UA-8 portable UA registrations (plan from the short design; scope every family, owner 2026-10-29, design P10 /
+     P11). Order (owner 2026-10-29): EVM → **NEAR** (new `ua-registry`, `mldsa65` via the `ml_dsa_verify` host
+     function) and **Soroban** (`mldsa44` / `mldsa65` via the CAP-0087 host functions, Protocol 30: testnet vote
+     2026-11-03, mainnet 2026-11-23; local network until then) → Cosmos / Sui / Aptos / Solana → Algorand (`account` app;
+     `fndsa512` after AVM v14) → TON registry design; relayer-checked mode wherever a kind has no on-chain verifier.
   6. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) → Task 14 (wasm32 limb path).
   7. Token-family rename → P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel with P6
      (spec only, no core code): the governance matrix for factory-made contracts (§0).

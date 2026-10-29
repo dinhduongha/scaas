@@ -192,9 +192,14 @@ Where the record lives (controller proposals for the families without a registry
 | Algorand | one `account` app per deployment holds the subject records shared by every token (tokens, mandate and DEX call its `verify` by inner app call), lazily opened, no PoP | the **`account` app gains** `register` (portable PoP), `set_kem_key`, `store_pqz_pop`, the record and KEM boxes; the lazy open stays |
 | TON (GRAM) | **no registry** (documented gap: wallet-bound keys, `set_key` with a key signature) | **a new `ua-registry` contract** (actor messages `Register`, `SetKemKey`, `StorePqzPop`; one child contract per UA if a single contract's state would grow without bound) — needs its own short design before the plan |
 
-Order: EVM first (P1–P9), then every family with a registry (Cosmos, Soroban, Sui, Aptos, Solana), then Algorand (the
-`account` app gains the writes; after the near-algorand merge), then NEAR (a new `ua-registry` contract; after the
-near-algorand merge), TON last (after its registry design). NEAR and Algorand are separate tasks: different storage
+Order (owner 2026-10-29: NEAR and Soroban first, native host functions where they exist): EVM first (P1–P9), then
+**NEAR** (a new `ua-registry` contract; `mldsa65` verified on chain by the `ml_dsa_verify` host function; after the
+near-algorand merge) and **Soroban** (the factory entries; `mldsa44` / `mldsa65` verified by the CAP-0087 host
+functions of Protocol 30), then Cosmos, Sui, Aptos, Solana, then Algorand (the `account` app gains the writes;
+`fndsa512` on chain after AVM v14), TON last (after its registry design). Testnets (checked 2026-10-29, re-check before
+starting): NEAR testnet voted protocol 88 from 2026-10-21 (read `protocol_version` from the RPC before relying on it);
+Stellar testnet votes Protocol 30 on 2026-11-03 and mainnet on 2026-11-23 (secondary sources) — until then Soroban work
+runs on a local network / quickstart at Protocol 30. NEAR and Algorand are separate tasks: different storage
 (per-token records vs one `account` app), different execution (asynchronous receipts vs atomic groups) and different
 storage payment (NEAR storage staking by attached deposit vs Algorand box MBR by a payment transaction). Each family is
 a task of the same plan or a follow-up plan; the vector file is the shared contract between them.
