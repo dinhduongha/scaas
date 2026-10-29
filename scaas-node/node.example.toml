@@ -216,3 +216,23 @@ finality = { mode = "instant", quorum = 1 }      # the adapter reads `final` blo
 # A view stopped by the RPC's max_gas_burnt_view is retried, never fatal.
 tokens = [{ address = "token.test.near", decimals = 6 }]
 params = { dex = "dex.test.near", relay_fee = { router = "relayfee.test.near", executor = "relayexec.test.near", min_amount = 1, min_yocto_value = { "token.test.near" = "1000000000000000000" } } }
+
+[[chains]]                                       # Algorand (the repo's localnet; no public network yet)
+family = "algorand"
+network = "wBo2DSfDgHI2d1UP8i7p10+RpE1mC5fQyZDvnlh+KgY="  # the genesis hash (algod `genesis-hash`, base64): every MetaOp's network
+rpc_urls = ["http://127.0.0.1:4001"]            # algod REST (simulate enabled); params.algod_token_env names the env var
+                                                 # holding its X-Algo-API-Token (optional)
+lanes = [0, 1]                                   # ed25519 accounts (m/44'/283'/0'/0'/i'): fund each above its minimum balance
+finality = { mode = "instant", quorum = 1 }      # one-round finality: a block is final
+# tokens: the SCaaS token apps (app ids). account_app / mandate_app / dex_app / relayfee_app: the deployment's apps
+# (account_app required). At start every app must exist with the approval / clear program hashes of artifacts.json
+# (else the chain is halted), each token's and the mandate's account_app and the DEX's router_app must match, the
+# router's executor (rebuilt from its salt) must equal executor() and be off-curve, and every lane must hold its
+# minimum balance. Each job is one atomic group checked by algod simulate (the exact group); the node sets every MBR
+# payment and the pooled fee itself and adds bare budget calls for the resources simulate reports. relay_fee:
+# min_microalgo_value = µALGO per base unit of each fee token: a fee that is the node's must cover the group's fee + its
+# MBR payments. Router targets: the tokens', account app's, mandate's and DEX's relayable entries, plus `targets =
+# { "<app id>" = ["method(args)ret", …] }` the operator vouches for (only those methods). Every job's payment, a target
+# op, a mandate's expiry and DEX orders must stay valid >= 120 s. A pay-meta `meta` is at most 507 B (the log limit).
+tokens = [{ address = "1001", decimals = 6 }]
+params = { account_app = 1004, mandate_app = 1005, dex_app = 1006, relayfee_app = 1002, relay_fee = { min_amount = 1, min_microalgo_value = { "1001" = 1000 } } }

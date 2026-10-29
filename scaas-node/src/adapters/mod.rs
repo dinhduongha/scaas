@@ -7,6 +7,7 @@ use crate::adapter::ChainAdapter;
 use crate::config::ChainCfg;
 use crate::signer::LocalSigner;
 
+pub mod algorand;
 pub mod aptos;
 pub mod cosmos;
 pub mod evm;
@@ -36,6 +37,7 @@ pub fn build(cfg: &ChainCfg, signers: &[LocalSigner]) -> Result<Arc<dyn ChainAda
         "solana" => Ok(Arc::new(solana::SolanaAdapter::new(cfg, signers)?)),
         "aptos" => Ok(Arc::new(aptos::AptosAdapter::new(cfg, signers)?)),
         "near" => Ok(Arc::new(near::NearAdapter::new(cfg, signers)?)),
+        "algorand" => Ok(Arc::new(algorand::AlgorandAdapter::new(cfg, signers)?)),
         other => bail!("chain {}: no adapter for family {other} in this build", cfg.chain_key()),
     }
 }
@@ -60,7 +62,7 @@ mod tests {
         let want = uids["chains"].as_array().unwrap().iter().find(|c| c["chainId"] == 7622).unwrap()["chainUid"].as_str().unwrap();
         assert_eq!(cfg.chains.iter().find(|c| c.family == "evm").unwrap().chain_uid, Some(want.parse().unwrap()));
         let families: BTreeSet<&str> = cfg.chains.iter().map(|c| c.family.as_str()).collect();
-        assert_eq!(families, BTreeSet::from(["aptos", "cosmos", "evm", "hedera", "near", "solana", "soroban", "sui", "ton"]));
+        assert_eq!(families, BTreeSet::from(["algorand", "aptos", "cosmos", "evm", "hedera", "near", "solana", "soroban", "sui", "ton"]));
         let words = format!("{}art", "abandon ".repeat(23));
         let seed = Seed::from_words(&words, None).unwrap();
         let dir = std::env::temp_dir().join(format!("example-journal-{}", std::process::id()));

@@ -165,6 +165,8 @@ pub fn lane_path(family: &str, i: u32) -> Result<(Curve, String)> {
         "aptos" => (Curve::Ed25519, format!("m/44'/637'/{i}'/0'/0'")),
         // near-algorand spec §11 (controller call 2026-10-28): fully hardened, lane = the last level.
         "near" => (Curve::Ed25519, format!("m/44'/397'/0'/0'/{i}'")),
+        // near-algorand spec §11 (controller call 2026-10-28): fully hardened, lane = the last level.
+        "algorand" => (Curve::Ed25519, format!("m/44'/283'/0'/0'/{i}'")),
         other => bail!("unknown family {other}"),
     })
 }
@@ -318,6 +320,24 @@ mod tests {
         assert_eq!(hexs(k.as_slice()), "1b46248b085a906e6c934d1056e0778a7b0af8ebb72a1dd8a6cc882e3b0cf977");
         assert_eq!(hexs(&LocalSigner::new(c, &k).unwrap().public_key()), "c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6");
         assert_ne!(lane_secret(&s, "near", 1).unwrap().1.as_slice(), k.as_slice());
+    }
+
+    /// Task 17: `m/44'/283'/0'/0'/i'`, every level hardened (SLIP-10 ed25519); lane 0 / 1 of ART24 checked against an
+    /// independent SLIP-10 (Python hmac + PyNaCl, the key's address by py-algorand-sdk 2.12.0).
+    #[test]
+    fn lane_path_algorand() {
+        assert_eq!(lane_path("algorand", 0).unwrap(), (Curve::Ed25519, "m/44'/283'/0'/0'/0'".to_string()));
+        assert_eq!(lane_path("algorand", 7).unwrap(), (Curve::Ed25519, "m/44'/283'/0'/0'/7'".to_string()));
+        let s = Seed::from_phrase(ART24.as_bytes(), None).unwrap();
+        for (i, sk, addr) in [
+            (0, "0e70a2e0d9c3bd9152af7cfbca08517757a3d4fa1bf054dee27787ea9ac12363", "3DCHXKKTAQWB2PRAPY3IIMQ23F4J4Y2M57UCRV4ZBXRATQNAIYR7CPOPG4"),
+            (1, "9a4c8326fc41f4a86a48aeb1d457efd9f7de939cd6563ba8a7b3ae512225a909", "UE5TU7OVFSZI5O2P3BDB4RHEQIIO3RKR7X3JUCRKQN7FH6ZV6JY2JFEHNU"),
+        ] {
+            let (c, k) = lane_secret(&s, "algorand", i).unwrap();
+            assert_eq!(hexs(k.as_slice()), sk);
+            let pk: [u8; 32] = LocalSigner::new(c, &k).unwrap().public_key().try_into().unwrap();
+            assert_eq!(crate::addresses::algorand_address(&pk), addr);
+        }
     }
 
     #[test]

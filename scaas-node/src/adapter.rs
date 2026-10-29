@@ -27,6 +27,7 @@ pub enum Family {
     Solana,
     Aptos,
     Near,
+    Algorand,
 }
 
 impl Family {
@@ -41,6 +42,7 @@ impl Family {
             "solana" => Self::Solana,
             "aptos" => Self::Aptos,
             "near" => Self::Near,
+            "algorand" => Self::Algorand,
             _ => return None,
         })
     }
@@ -573,6 +575,7 @@ pub(crate) mod tests {
         assert_eq!(Family::parse("solana"), Some(Family::Solana));
         assert_eq!(Family::parse("aptos"), Some(Family::Aptos));
         assert_eq!(Family::parse("near"), Some(Family::Near));
+        assert_eq!(Family::parse("algorand"), Some(Family::Algorand));
     }
 
     /// Adapter giả: lane luôn bị CheckTx từ chối, indexer ghi lại tập contract được đưa vào; `.1` đếm `refresh_tokens`.

@@ -1,0 +1,4 @@
+# algorand tx vector (py-algorand-sdk 2.12.0) check at commit 8f2d2ac6 + the T17 tree
+# cd smartcontracts/algorand && ../../scripts/capped .venv/bin/python -I scripts/gen_tx_vector.py
+ok /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand/vectors/algorand-tx.json
+rc=0

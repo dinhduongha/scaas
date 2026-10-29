@@ -47,6 +47,7 @@ pub fn canonical(family: &str, value: &str, bech32_prefix: Option<&str>, ton_tes
             Ok(v.to_string())
         }
         "near" => near(v),
+        "algorand" => algorand(v),
         other => bail!("unknown network family {other:?}"),
     }
 }
@@ -61,6 +62,38 @@ pub fn near(v: &str) -> Result<String> {
     ensure!(b.iter().all(|&c| c.is_ascii_lowercase() || c.is_ascii_digit() || sep(c)), "not a NEAR account id: {v:?}");
     ensure!(!sep(b[0]) && !sep(b[b.len() - 1]) && !b.windows(2).any(|w| sep(w[0]) && sep(w[1])), "not a NEAR account id: {v:?}");
     Ok(v.to_string())
+}
+
+/// Algorand (near-algorand T17): a 58-character address (RFC 4648 base32 without padding of key ‖ the last 4 bytes of
+/// `sha512_256(key)`, checksum verified) or an app id (a token is its app id: decimal, 1 ..= 2^64 − 1, no leading zero).
+pub fn algorand(v: &str) -> Result<String> {
+    if v.bytes().all(|c| c.is_ascii_digit()) {
+        ensure!(!v.starts_with('0') && v.parse::<u64>().is_ok(), "not an Algorand app id: {v:?}");
+        return Ok(v.to_string());
+    }
+    algorand_key(v)?;
+    Ok(v.to_string())
+}
+
+/// The 32-byte key of an Algorand address (58 characters, checksum verified).
+pub fn algorand_key(v: &str) -> Result<[u8; 32]> {
+    ensure!(v.len() == 58, "an Algorand address is 58 characters: {v:?}");
+    let raw = b32decode(v)?;
+    ensure!(raw.len() == 36, "Algorand address length");
+    let key: [u8; 32] = raw[..32].try_into()?;
+    ensure!(raw[32..] == algorand_checksum(&key), "Algorand address checksum");
+    Ok(key)
+}
+
+/// The address of a 32-byte key.
+pub fn algorand_address(key: &[u8; 32]) -> String {
+    b32encode(&[&key[..], &algorand_checksum(key)].concat())
+}
+
+fn algorand_checksum(key: &[u8; 32]) -> [u8; 4] {
+    use sha2::Digest;
+    let h = sha2::Sha512_256::digest(key);
+    h[28..].try_into().expect("4 bytes")
 }
 
 /// `eip712.parse_address`: `0x` + 40 hex; trộn hoa-thường thì phải đúng EIP-55. Trả chữ thường.
@@ -92,8 +125,26 @@ fn ton(v: &str, testnet: Option<bool>) -> Result<String> {
     Ok(format!("{}:{}", raw[1] as i8, alloy::hex::encode(&raw[2..34])))
 }
 
+/// RFC 4648 base32, upper case, no padding (Algorand addresses and transaction ids).
+pub fn b32encode(raw: &[u8]) -> String {
+    const A: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let (mut acc, mut bits, mut out) = (0u32, 0u32, String::with_capacity(raw.len() * 8 / 5 + 1));
+    for &b in raw {
+        acc = (acc << 8 | b as u32) & 0xfff;
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            out.push(A[(acc >> bits) as usize & 31] as char);
+        }
+    }
+    if bits > 0 {
+        out.push(A[(acc << (5 - bits)) as usize & 31] as char);
+    }
+    out
+}
+
 /// RFC 4648 base32 chữ hoa, không padding, bit thừa phải bằng 0 (`addresses._b32decode`).
-fn b32decode(s: &str) -> Result<Vec<u8>> {
+pub fn b32decode(s: &str) -> Result<Vec<u8>> {
     const A: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     let (mut acc, mut bits, mut out) = (0u64, 0u32, Vec::new());
     for c in s.bytes() {
@@ -171,5 +222,26 @@ mod tests {
         for bad in [&imp.to_ascii_uppercase()[..], "Token.near", "a", ".near", "near.", "a..b", "a-.b", "a b", "a@b", &"a".repeat(65)] {
             assert!(canonical("near", bad, None, None).is_err(), "{bad}");
         }
+    }
+
+    /// Task 17: Algorand addresses (algorand-vectors.json `nativeIds`, checksum verified) and app ids (tokens).
+    #[test]
+    fn algorand_addresses_and_app_ids() {
+        let v: serde_json::Value = serde_json::from_str(include_str!("../../smartcontracts/algorand/vectors/algorand-vectors.json")).unwrap();
+        for r in v["nativeIds"]["rows"].as_array().unwrap() {
+            let (a, k) = (r["address"].as_str().unwrap(), r["key"].as_str().unwrap());
+            assert_eq!(canonical("algorand", a, None, None).unwrap(), a);
+            let key = algorand_key(a).unwrap();
+            assert_eq!(format!("0x{}", alloy::hex::encode(key)), k);
+            assert_eq!(algorand_address(&key), a);
+        }
+        let a = v["keys"]["alice"]["address"].as_str().unwrap();
+        let mut bad = a.to_string();
+        bad.replace_range(57..58, if a.ends_with('A') { "B" } else { "A" });
+        for x in [&bad[..], &a[..57], &a.to_ascii_lowercase()[..], "0", "01001", "18446744073709551616", "-1"] {
+            assert!(canonical("algorand", x, None, None).is_err(), "{x}");
+        }
+        assert_eq!(canonical("algorand", "1001", None, None).unwrap(), "1001");
+        assert_eq!(canonical("algorand", "18446744073709551615", None, None).unwrap(), "18446744073709551615");
     }
 }

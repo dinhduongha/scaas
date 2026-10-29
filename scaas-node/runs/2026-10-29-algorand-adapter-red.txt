@@ -1,0 +1,1337 @@
+# algorand adapter RED (tests against the stubbed API skeleton: types + signatures, stub bodies) at commit 8f2d2ac6 + the T17 tree
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib adapters::algorand  (+ keys::lane_path_algorand, addresses::algorand_addresses_and_app_ids)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.58s
+
+running 24 tests
+test adapter::tests::families_parse ... ok
+test adapters::algorand::tests::algorand_last_valid_within_valid_until ... FAILED
+test adapters::algorand::tests::algorand_relay_fee_job_checks_ref ... FAILED
+test adapters::algorand::tests::algorand_pay_meta_job_checks_commitment ... FAILED
+test adapters::algorand::tests::algorand_metaop_decode_vectors ... FAILED
+test adapters::algorand::tests::algorand_events_book_configured_only_and_join ... FAILED
+test adapters::algorand::tests::group_has_exact_mbr_payment_and_budget_calls ... FAILED
+test adapters::algorand::tests::events_scan_blocks_and_pruned_rounds_error ... FAILED
+test adapters::algorand::tests::op_consumed_reads_the_lane_box ... FAILED
+test adapters::algorand::tests::executor_address_matches_contract ... FAILED
+test adapters::algorand::tests::relay_fee_config_must_parse ... FAILED
+test adapters::algorand::tests::relay_fee_target_app_missing_or_clearstate_refused ... FAILED
+test adapters::algorand::tests::quote_covers_fees_and_mbr ... FAILED
+test adapters::algorand::tests::relay_fee_target_static_checks ... FAILED
+test adapters::algorand::tests::tx_matches_algosdk ... FAILED
+test adapters::algorand::tests::start_check_approval_hash_mismatch_halts ... FAILED
+test adapters::algorand::tests::start_check_lane_below_min_balance_errors ... FAILED
+test adapters::algorand::tests::start_check_genesis_mismatch_errors ... FAILED
+test adapters::algorand::tests::submit_and_status_are_classified ... FAILED
+test adapters::algorand::tests::unknown_job_kind_is_refused ... FAILED
+test addresses::tests::algorand_addresses_and_app_ids ... ok
+test adapters::tests::example_config_builds_every_family ... FAILED
+test keys::tests::lane_path_algorand ... ok
+test adapters::algorand::tests::algorand_jobs_never_panic ... FAILED
+
+failures:
+
+---- adapters::algorand::tests::algorand_last_valid_within_valid_until stdout ----
+
+thread 'adapters::algorand::tests::algorand_last_valid_within_valid_until' (130895) panicked at src/adapters/algorand.rs:743:68:
+called `Result::unwrap()` on an `Err` value: todo
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapters::algorand::tests::algorand_relay_fee_job_checks_ref stdout ----
+
+thread 'adapters::algorand::tests::algorand_relay_fee_job_checks_ref' (130898) panicked at src/adapters/algorand.rs:510:54:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::algorand_pay_meta_job_checks_commitment stdout ----
+
+thread 'adapters::algorand::tests::algorand_pay_meta_job_checks_commitment' (130897) panicked at src/adapters/algorand.rs:466:58:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::algorand_metaop_decode_vectors stdout ----
+
+thread 'adapters::algorand::tests::algorand_metaop_decode_vectors' (130896) panicked at src/adapters/algorand.rs:426:62:
+"pay": todo
+
+---- adapters::algorand::tests::algorand_events_book_configured_only_and_join stdout ----
+
+thread 'adapters::algorand::tests::algorand_events_book_configured_only_and_join' (130893) panicked at src/adapters/algorand.rs:983:55:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::group_has_exact_mbr_payment_and_budget_calls stdout ----
+
+thread 'adapters::algorand::tests::group_has_exact_mbr_payment_and_budget_calls' (130901) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::events_scan_blocks_and_pruned_rounds_error stdout ----
+
+thread 'adapters::algorand::tests::events_scan_blocks_and_pruned_rounds_error' (130899) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::op_consumed_reads_the_lane_box stdout ----
+
+thread 'adapters::algorand::tests::op_consumed_reads_the_lane_box' (130902) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::executor_address_matches_contract stdout ----
+
+thread 'adapters::algorand::tests::executor_address_matches_contract' (130900) panicked at src/adapters/algorand.rs:674:42:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::relay_fee_config_must_parse stdout ----
+
+thread 'adapters::algorand::tests::relay_fee_config_must_parse' (130904) panicked at src/adapters/algorand.rs:814:47:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::relay_fee_target_app_missing_or_clearstate_refused stdout ----
+
+thread 'adapters::algorand::tests::relay_fee_target_app_missing_or_clearstate_refused' (130905) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::quote_covers_fees_and_mbr stdout ----
+
+thread 'adapters::algorand::tests::quote_covers_fees_and_mbr' (130903) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::relay_fee_target_static_checks stdout ----
+
+thread 'adapters::algorand::tests::relay_fee_target_static_checks' (130906) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::tx_matches_algosdk stdout ----
+
+thread 'adapters::algorand::tests::tx_matches_algosdk' (130911) panicked at src/adapters/algorand.rs:779:65:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::start_check_approval_hash_mismatch_halts stdout ----
+
+thread 'adapters::algorand::tests::start_check_approval_hash_mismatch_halts' (130907) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::start_check_lane_below_min_balance_errors stdout ----
+
+thread 'adapters::algorand::tests::start_check_lane_below_min_balance_errors' (130909) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::start_check_genesis_mismatch_errors stdout ----
+
+thread 'adapters::algorand::tests::start_check_genesis_mismatch_errors' (130908) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::submit_and_status_are_classified stdout ----
+
+thread 'adapters::algorand::tests::submit_and_status_are_classified' (130910) panicked at src/adapters/algorand.rs:197:34:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::algorand::tests::unknown_job_kind_is_refused stdout ----
+
+thread 'adapters::algorand::tests::unknown_job_kind_is_refused' (130912) panicked at src/adapters/algorand.rs:166:53:
+called `Result::unwrap()` on an `Err` value: todo
+
+---- adapters::tests::example_config_builds_every_family stdout ----
+
+thread 'adapters::tests::example_config_builds_every_family' (130913) panicked at src/adapters/mod.rs:65:9:
+assertion `left == right` failed
+  left: {"aptos", "cosmos", "evm", "hedera", "near", "solana", "soroban", "sui", "ton"}
+ right: {"algorand", "aptos", "cosmos", "evm", "hedera", "near", "solana", "soroban", "sui", "ton"}
+
+---- adapters::algorand::tests::algorand_jobs_never_panic stdout ----
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:229:76:
+called `Result::unwrap()` on an `Err` value: todo
+proptest: Saving this and future failures in /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node/proptest-regressions/adapters/algorand.txt
+proptest: If this test was run on a CI system, you may wish to add the following line to your copy of the file. (You may need to create it.)
+cc 9d6da93d81bbdbe1821ee947ec6a0d38e20c1186359a00a144b1903dc2c41dd5
+
+thread 'adapters::algorand::tests::algorand_jobs_never_panic' (130894) panicked at src/adapters/algorand.rs:1064:5:
+Test failed: called `Result::unwrap()` on an `Err` value: todo.
+minimal failing input: bytes = [], cut = 0, kind = 0, pick = 0
+	successes: 0
+	local rejects: 0
+	global rejects: 0
+
+
+
+failures:
+    adapters::algorand::tests::algorand_events_book_configured_only_and_join
+    adapters::algorand::tests::algorand_jobs_never_panic
+    adapters::algorand::tests::algorand_last_valid_within_valid_until
+    adapters::algorand::tests::algorand_metaop_decode_vectors
+    adapters::algorand::tests::algorand_pay_meta_job_checks_commitment
+    adapters::algorand::tests::algorand_relay_fee_job_checks_ref
+    adapters::algorand::tests::events_scan_blocks_and_pruned_rounds_error
+    adapters::algorand::tests::executor_address_matches_contract
+    adapters::algorand::tests::group_has_exact_mbr_payment_and_budget_calls
+    adapters::algorand::tests::op_consumed_reads_the_lane_box
+    adapters::algorand::tests::quote_covers_fees_and_mbr
+    adapters::algorand::tests::relay_fee_config_must_parse
+    adapters::algorand::tests::relay_fee_target_app_missing_or_clearstate_refused
+    adapters::algorand::tests::relay_fee_target_static_checks
+    adapters::algorand::tests::start_check_approval_hash_mismatch_halts
+    adapters::algorand::tests::start_check_genesis_mismatch_errors
+    adapters::algorand::tests::start_check_lane_below_min_balance_errors
+    adapters::algorand::tests::submit_and_status_are_classified
+    adapters::algorand::tests::tx_matches_algosdk
+    adapters::algorand::tests::unknown_job_kind_is_refused
+    adapters::tests::example_config_builds_every_family
+
+test result: FAILED. 3 passed; 21 failed; 0 ignored; 0 measured; 386 filtered out; finished in 0.62s
+
+error: test failed, to rerun pass `--lib`
+rc=101
