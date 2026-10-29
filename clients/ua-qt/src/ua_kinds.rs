@@ -22,6 +22,8 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "groupTagString"] fn group_tag_string(self: Pin<&mut Self>, group: &QString) -> QString;
         #[qinvokable] #[cxx_name = "msgTag"] fn msg_tag(self: Pin<&mut Self>) -> QString;
         #[qinvokable] #[cxx_name = "purposeTag"] fn purpose_tag(self: Pin<&mut Self>, purpose: &QString) -> QString;
+        /// A purpose tag of a version: every purpose is 1, `pop` is also 2 (the portable PoP).
+        #[qinvokable] #[cxx_name = "purposeTagV"] fn purpose_tag_v(self: Pin<&mut Self>, purpose: &QString, version: i32) -> QString;
         #[qinvokable] #[cxx_name = "uaOf"] fn ua_of(self: Pin<&mut Self>, kind: i32, key_data: &QString) -> QString;
         #[qinvokable] #[cxx_name = "deriveUA"]
         fn derive_ua(self: Pin<&mut Self>, kind: i32, key_data: &QString, hedera_native: bool) -> QString;
@@ -43,13 +45,22 @@ pub mod qobject {
         fn ua_message(self: Pin<&mut Self>, kind: i32, purpose: &QString, digest: &QString) -> QString;
         /// `chain_id` is a JS number: exact up to 2^53.
         #[qinvokable] #[cxx_name = "chainKeyHash"] fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString;
-        #[qinvokable] #[cxx_name = "popDigest"]
-        fn pop_digest(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key_hash: &QString) -> QString;
-        /// JSON `{pqzKeyHash, popDigest, message}`; `pqz_key` "" = no key (hash 0). A key for a non-holder kind is `UAPqzHolder`.
+        /// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`; a hash is 32 zero bytes when absent.
+        #[qinvokable] #[cxx_name = "portablePopDigest"]
+        fn portable_pop_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, kem_record_hash: &QString) -> QString;
+        #[qinvokable] #[cxx_name = "registrationDigest"]
+        fn registration_digest(self: Pin<&mut Self>, portable: &QString, pqz_pop_hash: &QString) -> QString;
+        /// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))`; `version` is a JS number (exact up to 2^53).
+        #[qinvokable] #[cxx_name = "kemRecordDigest"]
+        fn kem_record_digest(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString;
+        /// JSON `{pqzKeyHash, pqzPopHash, kemRecordHash, portablePopDigest, registrationDigest, message[, memberDigest]}`.
+        /// `key_data` is needed for an `msig` ("0x" otherwise); `pqz_key` / `pqz_pop` "" or "0x" = absent; `kem_version` 0 with
+        /// an empty `kem_pk` = no KEM record. A key for a non-holder is `UAPqzHolder` / `UAKemHolder`.
         #[qinvokable] #[cxx_name = "holderPopMessage"]
-        fn holder_pop_message(self: Pin<&mut Self>, kind: i32, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString;
+        fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_version: f64, kem_pk: &QString) -> QString;
+        /// What the PQZ key's `R_REG` proves over.
         #[qinvokable] #[cxx_name = "pqzRegMessage"]
-        fn pqz_reg_message(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString;
+        fn pqz_reg_message(self: Pin<&mut Self>, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString;
         #[qinvokable] #[cxx_name = "uaAuthDomainSeparator"]
         fn ua_auth_domain_separator(self: Pin<&mut Self>, generation: i32, chain_id: f64, registry: &QString, chain_uid: &QString) -> QString;
         #[qinvokable] #[cxx_name = "uaAuthDigest"]
@@ -180,6 +191,9 @@ impl qobject::UaKinds {
     pub fn purpose_tag(self: Pin<&mut Self>, purpose: &QString) -> QString {
         self.hex(|| Ok(from_ua(ua::purpose_tag(&s(purpose)))?.to_vec()))
     }
+    pub fn purpose_tag_v(self: Pin<&mut Self>, purpose: &QString, version: i32) -> QString {
+        self.hex(|| Ok(from_ua(ua::purpose_tag_v(&s(purpose), u32::try_from(version).map_err(|_| ARG)?))?.to_vec()))
+    }
     pub fn ua_of(self: Pin<&mut Self>, kind: i32, key_data: &QString) -> QString {
         self.hex(|| Ok(from_ua(ua::ua_of(k(kind)?, &key(key_data)?))?.to_vec()))
     }
@@ -222,18 +236,38 @@ impl qobject::UaKinds {
     pub fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString {
         self.hex(|| Ok(ua::chain_key_hash(id(chain_id)?).to_vec()))
     }
-    pub fn pop_digest(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key_hash: &QString) -> QString {
-        self.hex(|| Ok(ua::pop_digest(id(chain_id)?, &fixed(chain_uid)?, &fixed(registry)?, &fixed(ua)?, &fixed(pqz_key_hash)?).to_vec()))
+    pub fn portable_pop_digest(self: Pin<&mut Self>, ua: &QString, pqz_key_hash: &QString, kem_record_hash: &QString) -> QString {
+        self.hex(|| Ok(ua::ua8::portable_pop_digest(&fixed(ua)?, &fixed(pqz_key_hash)?, &fixed(kem_record_hash)?).to_vec()))
     }
-    pub fn holder_pop_message(self: Pin<&mut Self>, kind: i32, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString {
+    pub fn registration_digest(self: Pin<&mut Self>, portable: &QString, pqz_pop_hash: &QString) -> QString {
+        self.hex(|| Ok(ua::ua8::registration_digest(&fixed(portable)?, &fixed(pqz_pop_hash)?).to_vec()))
+    }
+    pub fn kem_record_digest(self: Pin<&mut Self>, ua: &QString, version: f64, kem_pk: &QString) -> QString {
+        self.hex(|| Ok(from_ua(ua::ua8::kem_record_digest(&fixed(ua)?, id(version)?, &bytes(kem_pk)?))?.to_vec()))
+    }
+    pub fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_version: f64, kem_pk: &QString) -> QString {
         QString::from(&self.run(|| {
-            let pk = if s(pqz_key).is_empty() { None } else { Some(key(pqz_key)?) };
-            let (h, d, m) = from_ua(ua::holder_pop_message(k(kind)?, id(chain_id)?, &fixed(chain_uid)?, &fixed(registry)?, &fixed(ua)?, pk.as_deref()))?;
-            Ok(serde_json::json!({"pqzKeyHash": hx(&h), "popDigest": hx(&d), "message": hx(&m)}).to_string())
+            let (pk, pop, kpk) = (key(pqz_key)?, bytes(pqz_pop)?, bytes(kem_pk)?);
+            let kem = (id(kem_version)? != 0 || !kpk.is_empty()).then(|| (id(kem_version).unwrap_or(0), kpk));
+            let h = from_ua(ua::ua8::holder_pop_message(
+                k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), None, kem.as_ref().map(|(v, p)| (*v, &p[..])),
+            ))?;
+            let mut o = serde_json::json!({
+                "pqzKeyHash": hx(&h.pqz_key_hash), "pqzPopHash": hx(&h.pqz_pop_hash), "kemRecordHash": hx(&h.kem_record_hash),
+                "portablePopDigest": hx(&h.portable_pop_digest), "registrationDigest": hx(&h.registration_digest), "message": hx(&h.message),
+            });
+            if let Some(m) = h.member_digest {
+                o["memberDigest"] = hx(&m).into();
+            }
+            Ok(o.to_string())
         }))
     }
-    pub fn pqz_reg_message(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString {
-        self.hex(|| Ok(from_ua(ua::pqz_reg_message(id(chain_id)?, &fixed(chain_uid)?, &fixed(registry)?, &fixed(ua)?, &key(pqz_key)?))?.to_vec()))
+    pub fn pqz_reg_message(self: Pin<&mut Self>, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString {
+        self.hex(|| {
+            let kpk = bytes(kem_pk)?;
+            let kem = (id(kem_version)? != 0 || !kpk.is_empty()).then(|| (id(kem_version).unwrap_or(0), kpk));
+            Ok(from_ua(ua::ua8::pqz_reg_message(&fixed(ua)?, &key(pqz_key)?, kem.as_ref().map(|(v, p)| (*v, &p[..]))))?.to_vec())
+        })
     }
     pub fn ua_auth_domain_separator(self: Pin<&mut Self>, generation: i32, chain_id: f64, registry: &QString, chain_uid: &QString) -> QString {
         self.hex(|| Ok(ua::ua_auth_domain_separator(&domain(generation, chain_id, registry, chain_uid)?).to_vec()))

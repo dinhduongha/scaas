@@ -51,7 +51,8 @@ TestCase {
             compare(UaKinds.groupTag(r.group), r.GROUP)
         }
         for (const r of k.purposes)
-            compare(UaKinds.purposeTag(r.purpose), r.purposeTag)
+            compare(UaKinds.purposeTagV(r.purpose, r.version), r.purposeTag, r.purpose)
+        compare(UaKinds.purposeTag("kem"), k.purposes.find(r => r.purpose === "kem").purposeTag)
         compare(UaKinds.msgTag(), k.constants.MSG_TAG)
         compare(UaKinds.purposeTag("pop"), k.constants.POP_TAG)
     }
@@ -99,30 +100,85 @@ TestCase {
 
     function test_messages() {
         for (const r of k.messages) {
-            const p = UaKinds.purposeTag(r.purpose)
+            const p = UaKinds.purposeTagV(r.purpose, r.version ?? 1)
             compare(p, r.purposeTag)
             compare(UaKinds.uaMessage(r.kind, p, r.digest), r.uaMsg)
         }
     }
 
+    function test_portable() {
+        const pp = vectors.load("portable.json")
+        compare(UaKinds.purposeTagV("pop", 2), pp.tags.PURPOSE_POP_V2.hash)
+        compare(UaKinds.purposeTag("kem"), pp.tags.PURPOSE_KEM.hash)
+        compare(UaKinds.purposeTag("pqz-key"), pp.tags.PURPOSE_PQZ_KEY.hash)
+        compare(pp.registrations.length, 25)
+        let withPqz = 0
+        for (const r of pp.registrations) {
+            const a = r.attrs
+            const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, a.pqzKey, r.pqzPop, Number(a.kemVersion), a.kemPk))
+            compare(UaKinds.lastError, "", r.name)
+            compare(h.pqzKeyHash, r.pqzKeyHash, r.name)
+            compare(h.pqzPopHash, a.pqzPopHash, r.name)
+            compare(h.kemRecordHash, r.kemRecordHash, r.name)
+            compare(h.portablePopDigest, r.portablePopDigest, r.name)
+            compare(h.registrationDigest, r.registrationDigest, r.name)
+            compare(h.message, r.popMessage, r.name)
+            compare(h.memberDigest ?? "", r.memberDigest ?? "", r.name)
+            compare(UaKinds.portablePopDigest(r.ua, h.pqzKeyHash, h.kemRecordHash), r.portablePopDigest)
+            compare(UaKinds.registrationDigest(r.portablePopDigest, h.pqzPopHash), r.registrationDigest)
+            if (a.pqzKey !== "0x") {
+                withPqz++
+                compare(UaKinds.pqzRegMessage(r.ua, a.pqzKey, Number(a.kemVersion), a.kemPk), r.pqzRegMessage, r.name)
+            }
+        }
+        compare(withPqz, 8)
+        // refusals
+        const proof = "0x" + "07".repeat(32), ua = "0x" + "01".repeat(32)
+        UaKinds.holderPopMessage(0x0130, ua, "0x", k.pqzKey, "0x", 0, "")
+        compare(UaKinds.lastError, "UAPqzPopHash")  // a PQZ key without its proof
+        UaKinds.holderPopMessage(0x0120, ua, "0x000200", k.pqzKey, proof, 0, "")
+        compare(UaKinds.lastError, "UAKeyData")
+        UaKinds.holderPopMessage(0x0120, ua, "0x", k.pqzKey, proof, 0, "")
+        compare(UaKinds.lastError, "UAPqzHolder")
+        UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", 1, "0x" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAKemHolder")
+    }
+
+    function test_kemRecord() {
+        const pp = vectors.load("portable.json")
+        compare(pp.kemRecords.length, 9)
+        for (const r of pp.kemRecords) {
+            const d = UaKinds.kemRecordDigest(r.ua, Number(r.version), r.kemPk)
+            compare(d, r.digest, r.id)
+            compare(UaKinds.uaMessage(r.kind, UaKinds.purposeTag("kem"), d), r.message, r.id)
+            if (r.kind === 0x0120)
+                compare(UaKinds.memberDigest(r.ua, r.message), r.memberDigest, r.id)
+        }
+        const ua = "0x" + "01".repeat(32)
+        UaKinds.kemRecordDigest(ua, 0, "0x" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAKemVersion")
+        UaKinds.kemRecordDigest(ua, 1, "0x" + "00".repeat(1599))
+        compare(UaKinds.lastError, "UAKemKeyLength")
+        UaKinds.kemRecordDigest(ua, 1, "0x" + "00".repeat(1601))
+        compare(UaKinds.lastError, "UAKemKeyLength")
+    }
+
     function test_structures() {
         for (const p of s.pop) {
-            const c = s.contexts[p.context]
-            compare(UaKinds.chainKeyHash(c.chainId), p.chainKeyHash)
-            compare(UaKinds.popDigest(c.chainId, c.chainUid, c.registry, p.ua, p.pqzKeyHash), p.popDigest)
+            const portable = UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash)
+            compare(portable, p.portablePopDigest)
+            compare(UaKinds.registrationDigest(portable, p.pqzPopHash), p.registrationDigest)
         }
         for (const p of s.pqzReg) {
-            const c = s.contexts[p.context]
-            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey))
+            compare(UaKinds.keyHashOf(0x0142, k.pqzKey), p.pqzKeyHash)
+            compare(UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash), p.portablePopDigest)
+            compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), p.portablePopDigest), p.pqzRegMessage)
+            if (p.kemRecordHash !== "0x" + "00".repeat(32))
+                continue  // an opaque label; the real records are in portable.json
+            compare(UaKinds.pqzRegMessage(p.ua, k.pqzKey, 0, ""), p.pqzRegMessage)
+            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, p.ua, "0x", k.pqzKey, "0x" + "07".repeat(32), 0, ""))
             compare(h.pqzKeyHash, p.pqzKeyHash)
-            compare(h.popDigest, p.popDigest)
-            compare(UaKinds.pqzRegMessage(c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey), p.pqzRegMessage)
-            for (const bad of [0x0101, 0x0133]) {
-                UaKinds.holderPopMessage(bad, c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey)
-                compare(UaKinds.lastError, "UAPqzHolder")
-            }
-            compare(JSON.parse(UaKinds.holderPopMessage(p.kind, c.chainId, c.chainUid, c.registry, p.ua, "")).pqzKeyHash,
-                    "0x" + "00".repeat(32))
+            compare(h.portablePopDigest, p.portablePopDigest)
         }
         for (const p of s.pqzMsig)
             compare(UaKinds.msigPqzEligible(p.keyData), p.eligible, p.reason)
