@@ -82,7 +82,8 @@ nhận ít nhất giới hạn của mình và DEX không giữ lại gì. Contr
 | Soroban | `settle(maker, taker, maker_fill)` | không có `minNonce` |
 | Cosmos | `Settle { maker, taker }` | chỉ FOK |
 | TON | `receive(Match)` | chỉ FOK, escrow |
-| NEAR / Algorand (nhánh `near-algorand`) | `settle(order_a, op_a, auth_a, order_b, op_b, auth_b)` | một cặp; nhiều cặp = nhiều receipt / nhiều group |
+| NEAR (nhánh `near-algorand`) | `settle(order_a, op_a, auth_a, order_b, op_b, auth_b)` một cặp | escrow DEX: hai token là hai contract, một receipt không chuyển được cả hai leg, nên mỗi leg vào escrow (mục `pending` theo `settle_id`), fill-or-kill, hoàn tiền sau hạn; nhiều cặp = nhiều receipt bất đồng bộ |
+| Algorand (nhánh `near-algorand`) | DEX stateless, `settle` một cặp | dạng EVM: mỗi leg là `mtx_trade` của sell token, tiền chỉ vào DEX, cả hai leg trong **một atomic group**; nhiều cặp = nhiều group (hoặc carry khi args lớn) |
 
 Node có thể giả lập 1 × N bằng nhiều cặp trong một giao dịch (khi family cho phép batch). Nhưng mỗi cặp phải tự đứng
 được: taker IOC chỉ khớp một maker, FOK không gom được nhiều maker.

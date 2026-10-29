@@ -192,9 +192,12 @@ Where the record lives (controller proposals for the families without a registry
 | Algorand | one `account` app per deployment holds the subject records shared by every token (tokens, mandate and DEX call its `verify` by inner app call), lazily opened, no PoP | the **`account` app gains** `register` (portable PoP), `set_kem_key`, `store_pqz_pop`, the record and KEM boxes; the lazy open stays |
 | TON (GRAM) | **no registry** (documented gap: wallet-bound keys, `set_key` with a key signature) | **a new `ua-registry` contract** (actor messages `Register`, `SetKemKey`, `StorePqzPop`; one child contract per UA if a single contract's state would grow without bound) — needs its own short design before the plan |
 
-Order: EVM first (P1–P9), then every family with a registry (Cosmos, Soroban, Sui, Aptos, Solana), then NEAR and
-Algorand (after the near-algorand merge), TON last (after its registry design). Each family is a task of the same
-plan or a follow-up plan; the vector file is the shared contract between them.
+Order: EVM first (P1–P9), then every family with a registry (Cosmos, Soroban, Sui, Aptos, Solana), then Algorand (the
+`account` app gains the writes; after the near-algorand merge), then NEAR (a new `ua-registry` contract; after the
+near-algorand merge), TON last (after its registry design). NEAR and Algorand are separate tasks: different storage
+(per-token records vs one `account` app), different execution (asynchronous receipts vs atomic groups) and different
+storage payment (NEAR storage staking by attached deposit vs Algorand box MBR by a payment transaction). Each family is
+a task of the same plan or a follow-up plan; the vector file is the shared contract between them.
 
 ## 3. Work (for the plan after 5h)
 
@@ -214,5 +217,5 @@ plan or a follow-up plan; the vector file is the shared contract between them.
 6. P10, per family (order as P10): the same three writes and the reads on each family's registry; the shared vector
    file run by every family's tests (copy a registration from the EVM registry to the family and back; a kind the
    family does not verify is refused; PQZ attributes stored unproven where there is no verifier); the node relays the
-   writes as `call` jobs; NEAR `ua-registry` and Algorand `account` changes after the near-algorand merge; TON after its
-   registry design.
+   writes as `call` jobs; Algorand `account` changes, then the NEAR `ua-registry` contract, each its own task, after the near-algorand merge;
+   TON after its registry design.
