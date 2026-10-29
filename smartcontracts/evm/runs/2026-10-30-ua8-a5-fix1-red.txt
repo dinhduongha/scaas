@@ -1,0 +1,62 @@
+# A5 fix 1 RED at e1b33079 + new tests (src unchanged)
+Error: Compiler run failed:
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+  --> src/common/Bls12381.sol:60:28:
+   --> test/ua/UAGas.t.sol:220:26:
+Error (7576): Undeclared identifier. Did you mean "sigOk"?
+  --> test/ua/UARegistryUA8.t.sol:41:16:
+rc=1
+
+# A5 fix 1 RED, behaviour: _sigOk made internal only (no other src change)
+rc=1
+
+# A5 fix 1 RED, behaviour (retry after a test stack fix): _sigOk made internal only
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+[PASS] test_UA6_frontRun() (gas: 88471680)
+[FAIL: next call did not revert as expected] test_UA6_gen2GrieferRefused() (gas: 10746004)
+[FAIL: next call did not revert as expected] test_UA6_generations() (gas: 22091758)
+[PASS] test_UA6_holderWithKey() (gas: 116529673)
+[PASS] test_UA6_holderWithoutKey() (gas: 4041571)
+[PASS] test_UA6_keyUniqueAcrossKinds() (gas: 71449172)
+[PASS] test_UA6_msigSquatting() (gas: 50893058)
+[PASS] test_UA6_nonHolders() (gas: 13820719)
+[PASS] test_UA6_pqzDisabled() (gas: 47461924)
+[PASS] test_UA6_pqzListOrder() (gas: 116719479)
+[PASS] test_UA6_pqzNotAKind() (gas: 7920483)
+[PASS] test_UA6_zetherRequireAuthorized() (gas: 2439918)
+[PASS] test_UA6_zetherSets() (gas: 1976400)
+Suite result: FAILED. 11 passed; 2 failed; 0 skipped; finished in 557.26ms (543.57ms CPU time)
+[PASS] test_ua8_attrsShapeRefused() (gas: 704270179)
+[PASS] test_ua8_blobChunksRoundTrip() (gas: 341066983)
+[PASS] test_ua8_checkedIsChain() (gas: 444406717)
+[PASS] test_ua8_copyBetweenRegistries() (gas: 900843900)
+[PASS] test_ua8_copyFromState() (gas: 796370188)
+[PASS] test_ua8_disabledKindReverts() (gas: 216010845)
+[PASS] test_ua8_everyKindFromVectors() (gas: 1139616262)
+[PASS] test_ua8_frontRunnerDropsPqzPop() (gas: 259203683)
+[PASS] test_ua8_frontRunnerGetsIdenticalRecord() (gas: 318726105)
+[PASS] test_ua8_gen2ForwardsReads() (gas: 322873092)
+[PASS] test_ua8_largestMsigPopStored() (gas: 330014750)
+[PASS] test_ua8_msigNativeMember7702Portable() (gas: 250918029)
+[PASS] test_ua8_msigNativeMemberPersonalSignPortable() (gas: 643327608)
+[PASS] test_ua8_msigNativeMemberWithCode1271() (gas: 248200369)
+[PASS] test_ua8_msigPqEligibleCopy() (gas: 459357830)
+[PASS] test_ua8_nonHolderAttrsRefused() (gas: 686012187)
+[PASS] test_ua8_popCoversAttrs() (gas: 489589043)
+[FAIL: next call did not revert as expected] test_ua8_sigOkPortablePurposesOnly() (gas: 2611386)
+[PASS] test_ua8_storesEveryField() (gas: 310050812)
+Suite result: FAILED. 18 passed; 1 failed; 0 skipped; finished in 11.64s (73.15s CPU time)
+[FAIL: next call did not revert as expected] test_UA6_gen2GrieferRefused() (gas: 10746004)
+[FAIL: next call did not revert as expected] test_UA6_generations() (gas: 22091758)
+[FAIL: next call did not revert as expected] test_ua8_sigOkPortablePurposesOnly() (gas: 2611386)
+rc=1

@@ -287,9 +287,9 @@ contract UARegistryUA6Test is UARegistryBase {
         r.register(0x0131, pk, mA, mPop, mReg);
     }
 
-    /// 0x0142 lives in one generation: gen 2 may not enable it when gen 1 does; a gen 2 without it stores a key
-    /// unproven (UA8-D8: no `keyOwner`, not listed); gen 2 forwards `recordOf` (the pointer included) and the `0x0142`
-    /// list to gen 1.
+    /// 0x0142 lives in one generation: gen 2 may not enable it when gen 1 does, and refuses a PQZ key then
+    /// (`UAKindDisabled(0x0142)`, ruling A5-I1); gen 2 forwards `recordOf` (the pointer included) and the `0x0142` list
+    /// to gen 1.
     function test_UA6_generations() public {
         bytes32 holder = _holder(0x0130, _pk(0x0130, 9), _pk(0x0142, 9));
         (, address ptr) = r.recordOf(holder);
@@ -305,17 +305,36 @@ contract UARegistryUA6Test is UARegistryBase {
         assertEq(g2.uaCount(UAKinds.PQZ_MLWE), 1);
         assertEq(g2.uaAt(UAKinds.PQZ_MLWE, 0), holder);
         assertFalse(g2.kindEnabled(UAKinds.PQZ_MLWE));
-        // a gen-2 msig with a key and its proof: 0x0142 is not enabled here, so the key is stored unproven
+        // a gen-2 msig with a key and its proof: 0x0142 lives in gen 1 only (ruling A5-I1), so gen 2 refuses the key
         (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
         bytes memory key = _pk(0x0142, 10);
         IUARegistry.UAAttrs memory a = _a(msUa, key);
-        assertEq(g2.register(UAKinds.MSIG, d, a, _msigPop(d, msUa, a, true), _rReg(msUa, key)), msUa);
-        (address p, bytes32 ph, bool proven) = g2.pqzKeyOf(msUa);
-        assertEq(p.code, bytes.concat(hex"00", key));
-        assertEq(ph, a.pqzPopHash);
-        assertFalse(proven);
-        assertEq(g2.keyOwner(_h(key)), bytes32(0));
-        assertEq(g2.uaCount(UAKinds.PQZ_MLWE), 1, "gen 1's list, unchanged");
+        bytes memory pop = _msigPop(d, msUa, a, true);
+        bytes memory rReg = _rReg(msUa, key);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
+        g2.register(UAKinds.MSIG, d, a, pop, rReg);
+        // without the key the structure registers in gen 2 as before
+        assertEq(g2.register(UAKinds.MSIG, d, _none(), _msigPop(d, msUa, _none(), true), ""), msUa);
+    }
+
+    /// Ruling A5-I1: the portable PoP lets anyone pick the generation, so a griefer who submits a PQ-eligible msig's
+    /// registration (PQZ key and proof) to gen 2 first must be refused, else the key would stay unproven in gen 2 for
+    /// good; the same bytes then register in gen 1, proven.
+    function test_UA6_gen2GrieferRefused() public {
+        UARegistry g2 = new UARegistry(chainUidA, address(r), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        (bytes memory d, bytes32 msUa) = _msig(2, 1, 1);
+        bytes memory key = _pk(0x0142, 20);
+        IUARegistry.UAAttrs memory a = _a(msUa, key);
+        bytes memory pop = _msigPop(d, msUa, a, true);
+        bytes memory rReg = _rReg(msUa, key);
+        vm.prank(address(0x6219EF), address(0x6219EF));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
+        g2.register(UAKinds.MSIG, d, a, pop, rReg);
+        assertEq(g2.kindOf(msUa), 0);
+        assertEq(r.register(UAKinds.MSIG, d, a, pop, rReg), msUa);
+        (,, bool proven) = g2.pqzKeyOf(msUa); // gen 2 forwards gen 1's record
+        assertTrue(proven);
+        assertEq(g2.keyOwner(_h(key)), msUa);
     }
 
     /// UA8-D8: where 0x0142 has no verifier (every chain but 7622; formerly `UAKindDisabled(0x0142)`) a holder's key and

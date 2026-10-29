@@ -537,7 +537,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds
     /// 2^24; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
     /// `UAKeyData(0x0142)` for a PQZ key of no parameter set's length; `UAKemVersion` for version 0 with a key,
-    /// `UAKemKeyLength` for a KEM key other than 1,600 B. The PQZ key's owner (`UAKeyInUse`) is step 7, for a proven key.
+    /// `UAKemKeyLength` for a KEM key other than 1,600 B; `UAKindDisabled(0x0142)` for a PQZ key on a gen 2 whose gen 1
+    /// enables 0x0142 (ruling A5-I1). The PQZ key's owner (`UAKeyInUse`) is step 7, for a proven key.
     function _attrs(uint16 kind, bytes memory d, bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop)
         private
         view
@@ -546,6 +547,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bool pqz = attrs.pqzKey.length != 0;
         uint64 v = attrs.kemVersion;
         bool kem = v != 0 || attrs.kemPk.length != 0;
+        // ruling A5-I1: 0x0142 lives in one generation; a gen 2 in front of a gen 1 that holds it refuses a PQZ key (the
+        // portable PoP lets anyone choose the registry: a key placed here could never be proven on this chain)
+        if (pqz && predecessor != address(0) && IUARegistry(predecessor).kindEnabled(UAKinds.PQZ_MLWE)) {
+            revert UAKindDisabled(UAKinds.PQZ_MLWE);
+        }
         if (pqz || kem) {
             bool holder = kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512
                 || (kind == UAKinds.MSIG && _pqEligible(d));
@@ -627,12 +633,17 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// Step 6 (and A7's KEM record): a portable record's signature `sig` over `uaMessage(kind, purpose, digest)`.
     /// `msig`: `sig` empty unless PQ-eligible, then the m-of-n `MemberSig[]` (members under `member`, U5; a native member
-    /// by `personal_sign` or ERC-1271, `_msig`'s `portable`); single keys: the kind's verifier (`verifyPop`).
+    /// by `personal_sign` or ERC-1271, `_msig`'s `portable`); single keys: the kind's verifier (`verifyPop`). Only the
+    /// portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3) reach this chain-free path; any other purpose
+    /// reverts `UAUnauthorized` (writes stay on `requireAuthorized`, UAAuth for native members).
     function _sigOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes calldata sig)
-        private
+        internal
         view
         returns (bool)
     {
+        if (purpose != UAKinds.PURPOSE_POP_V2 && purpose != UAKinds.PURPOSE_KEM && purpose != UAKinds.PURPOSE_PQZ_KEY) {
+            revert UAUnauthorized(ua);
+        }
         if (kind == UAKinds.MSIG) {
             if (!_pqEligible(d)) return sig.length == 0;
             return sig.length != 0 && _msig(ua, purpose, digest, d, sig, true);

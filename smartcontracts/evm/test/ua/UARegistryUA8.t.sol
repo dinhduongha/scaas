@@ -27,6 +27,21 @@ import {
 import {UARegistryBase, MockWallet} from "./UARegistryBase.sol";
 import {AcceptAll, BurnAll} from "./UAGas.t.sol";
 
+/// `UARegistry._sigOk` exposed (ruling A5-m3: the portable-purpose guard).
+contract SigOkHarness is UARegistry {
+    constructor(bytes32 uid, uint64 budget, KindConfig[] memory k)
+        UARegistry(uid, address(0), false, budget, address(0), true, k)
+    {}
+
+    function sigOk(uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes calldata sig)
+        external
+        view
+        returns (bool)
+    {
+        return _sigOk(kind, d, ua, purpose, digest, sig);
+    }
+}
+
 /// `SSTORE2.writeChunks` / `readChunks` behind a storage array.
 contract ChunkHarness {
     address[] internal ptrs;
@@ -819,6 +834,95 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(p, pop);
         emit log_named_uint(string.concat("msig pop stored, members ", vm.toString(n), ", bytes"), pop.length);
         assertGt(pop.length, n == 12 ? 65_536 : 32_768);
+    }
+
+    // ----- fix round 1 (review A5: m1, m2, m3) -----
+
+    /// m1: a front-runner may drop the optional `pqzPop` (P8): on a registry with the verifier the record is the UA's
+    /// signed one with the key unproven (no owner, not listed) until `storePqzPop` (A6) adds the proof that hashes to
+    /// the signed `pqzPopHash`; the UA's full submission is then `UAAlreadyRegistered`.
+    function test_ua8_frontRunnerDropsPqzPop() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory x = _find(rows, string.concat("mldsa65/", _setName()));
+        _allowPqz(x);
+        UARegistry p = _regA(true);
+        vm.prank(address(0xBAD), address(0xBAD));
+        p.register(x.kind, x.keyData, x.attrs, x.pop, "");
+        Row memory dropped = _apply(x, Neg("", "", "", "", new string[](0), new bytes[](0)));
+        dropped.pqzPop = "";
+        _assertRecord(p, dropped);
+        (,, bool proven) = p.pqzKeyOf(x.ua);
+        assertFalse(proven);
+        assertEq(p.keyOwner(UAKinds.keyHashOf(UAKinds.PQZ_MLWE, x.attrs.pqzKey)), bytes32(0));
+        assertEq(p.uaCount(UAKinds.PQZ_MLWE), 0);
+        (, bytes32 ph,) = p.pqzKeyOf(x.ua);
+        assertEq(ph, keccak256(x.pqzPop), "the signed proof hash: storePqzPop can only add these bytes");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, x.ua));
+        p.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
+    }
+
+    /// m2: a native member with an EIP-7702 designator (an EOA delegated to a wallet) answers ERC-1271 over
+    /// `memberDigest` in a portable pop: its own key's `personal_sign` is refused, the delegate's 1271 accepted.
+    function test_ua8_msigNativeMember7702Portable() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory m = rows[MSIG_NATIVE_ROW];
+        UARegistry a = _regA(false);
+        _members(a, rows);
+        uint256 sk = _nativeSk();
+        _delegate(m, sk, 0x5E55);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        a.register(m.kind, m.keyData, m.attrs, m.pop, m.pqzPop); // the EOA's personal_sign: not asked with code
+        UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
+        bytes32 md = UAKinds.memberDigest(m.ua, m.popMessage);
+        s[0].sig = _ecdsa(sk, md); // the EOA's own key over the raw digest: the delegate's owner is the session key
+        bytes memory own = abi.encode(s);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        a.register(m.kind, m.keyData, m.attrs, own, m.pqzPop);
+        s[0].sig = _ecdsa(0x5E55, md);
+        bytes memory viaDelegate = abi.encode(s);
+        assertEq(a.register(m.kind, m.keyData, m.attrs, viaDelegate, m.pqzPop), m.ua);
+    }
+
+    /// The native member of `m` (secret `sk`) delegates by EIP-7702 to a wallet owned by `sessionSk`.
+    function _delegate(Row memory m, uint256 sk, uint256 sessionSk) internal {
+        (, bytes32 id) = _member(m.keyData, 0);
+        address eoa = address(uint160(uint256(id)));
+        assertEq(vm.addr(sk), eoa);
+        MockWallet w = new MockWallet(vm.addr(sessionSk), 0, 0, address(0));
+        vm.signAndAttachDelegation(address(w), sk);
+        assertEq(eoa.code.length, 23);
+        assertEq(bytes3(eoa.code), bytes3(0xef0100));
+    }
+
+    /// m3: `_sigOk`, the chain-free signature path (personal_sign native members), accepts only the portable purposes
+    /// POP_V2, KEM and PQZ_KEY; any other purpose reverts `UAUnauthorized`, for every kind.
+    function test_ua8_sigOkPortablePurposesOnly() public {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
+        k[0] = UARegistry.KindConfig(0x0101, address(mock), 400_000);
+        SigOkHarness h = new SigOkHarness(chainUidA, BUDGET, k);
+        bytes memory p = _key(0x0101);
+        bytes32 ua = UAKinds.uaOf(0x0101, p);
+        bytes32[3] memory ok = [UAKinds.PURPOSE_POP_V2, UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY];
+        for (uint256 i; i < 3; ++i) {
+            assertTrue(h.sigOk(0x0101, p, ua, ok[i], DIGEST, _sig(p, UAKinds.uaMessage(0x0101, ok[i], DIGEST))));
+        }
+        bytes32[4] memory no =
+            [UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_POP, UAKinds.PURPOSE_TRADE];
+        for (uint256 i; i < 4; ++i) {
+            bytes memory sig = _sig(p, UAKinds.uaMessage(0x0101, no[i], DIGEST)); // a valid signature under that purpose
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+            h.sigOk(0x0101, p, ua, no[i], DIGEST, sig);
+        }
+        // a classical msig (empty sig is its answer under a portable purpose) is refused under metatx too
+        Member[] memory mm = new Member[](1);
+        mm[0] = Member(UAKinds.EVM_EOA, _pad(address(0xA11CE)), 1);
+        bytes memory d = _msigKey(1, mm);
+        bytes32 mua = UAKinds.uaOf(UAKinds.MSIG, d);
+        assertTrue(h.sigOk(UAKinds.MSIG, d, mua, UAKinds.PURPOSE_POP_V2, DIGEST, ""));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, mua));
+        h.sigOk(UAKinds.MSIG, d, mua, UAKinds.PURPOSE_METATX, DIGEST, "");
     }
 
     // ----- helpers -----
