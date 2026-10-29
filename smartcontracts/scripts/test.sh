@@ -19,10 +19,12 @@ run() {
     solana)  "$SC/scripts/build.sh" solana && (cd "$SC/solana" && cargo test) ;;
     near)    "$SC/near/scripts/check_no_authority.sh" && "$SC/scripts/build.sh" near \
                && (cd "$SC/near" && cargo test -j2 -- --nocapture --test-threads=1) ;;  # figures in the log; one sandbox at a time
-    # build + artifacts.json --check (ruling b) + vectors --check, then pytest on the localnet (started and stopped
-    # here unless it already runs); figures printed (-s)
+    # build + artifacts.json --check (ruling b) + vectors --check + deploy.py's offline recovery tests (warnings off:
+    # one "<test> ... ok" line each), then pytest on the localnet (started and stopped here unless it already runs);
+    # figures printed (-s)
     algorand) ALGORAND_ARTIFACTS_CHECK=1 "$SC/scripts/build.sh" algorand \
                && "$SC/algorand/.venv/bin/python" -I "$SC/algorand/scripts/gen_vectors.py" --check \
+               && "$SC/algorand/.venv/bin/python" -I -W ignore "$SC/algorand/scripts/test_deploy.py" \
                && "$SC/algorand/scripts/localnet-pytest.sh" ;;
     *) echo "unknown family '$1' (one of: $FAMILIES all)" >&2; exit 2 ;;
   esac

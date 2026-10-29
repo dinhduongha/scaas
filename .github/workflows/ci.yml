@@ -15,6 +15,9 @@
 #   clients/ua-qt:         cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
+#   smartcontracts/near:   smartcontracts/scripts/test.sh near (check_no_authority.sh, cargo near build, cargo test: unit + near-sandbox)
+#   smartcontracts/algorand: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand; gen_vectors.py --check;
+#                  scripts/test_deploy.py (pytest on the localnet and the node e2e of both: local only, the gate runner)
 name: scaas-ci
 
 on:
@@ -353,3 +356,34 @@ jobs:
       # asserts are off here (plain `dart run`), like a release build
       - run: dart run test/vectors_test.dart
         working-directory: clients/ua-dart
+
+  near:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1 # smartcontracts/near/rust-toolchain.toml
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: smartcontracts/near
+      - name: cargo-near
+        run: cargo install cargo-near --version 0.22.0 --locked
+      # build + unit + near-workspaces tests on near-sandbox (fetched by near-workspaces; one sandbox at a time)
+      - name: test.sh near
+        run: smartcontracts/scripts/test.sh near
+
+  algorand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: build (puyapy, artifacts.json --check)
+        run: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand
+      - name: vectors --check
+        run: smartcontracts/algorand/.venv/bin/python -I smartcontracts/algorand/scripts/gen_vectors.py --check
+      - name: deploy.py unit
+        run: smartcontracts/algorand/.venv/bin/python -I -W ignore smartcontracts/algorand/scripts/test_deploy.py

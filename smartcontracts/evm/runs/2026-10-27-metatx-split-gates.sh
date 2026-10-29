@@ -11,8 +11,8 @@ W=$(cd "$(dirname "$0")/../../.." && pwd)
 cd "$W" || exit 2
 R=smartcontracts/evm/runs
 P=2026-10-27-metatx-split
-STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 sizes gen-set docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-qt soroban solana cosmos sui aptos ton named-tests"
-FAMILIES="soroban solana cosmos sui aptos ton"
+STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 sizes gen-set docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand named-tests"
+FAMILIES="soroban solana cosmos sui aptos ton near algorand e2e-near e2e-algorand"
 QT=/home/ha/usr/Qt/6.12.0/gcc_64
 export CAPPED_SLOTS=${CAPPED_SLOTS:-2} CAPPED_MEM=${CAPPED_MEM:-3G}
 
@@ -44,7 +44,26 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
       QMAKE=$QT/bin/qmake6 LD_LIBRARY_PATH=$QT/lib QT_QPA_PLATFORM=offscreen scripts/capped sh -c \
         "cmake -S clients/ua-qt -B clients/ua-qt/build -DCMAKE_PREFIX_PATH=$QT && cmake --build clients/ua-qt/build -j2 &&
          cd clients/ua-qt/build && ctest -V --output-on-failure" ;;
-    soroban|solana|cosmos|sui|aptos|ton) CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh "$1" ;;
+    # near-algorand T22: the UA reproducers of Task 2 (commands: the ci.yml header), NEAR / Algorand, their node e2e
+    ua-py) cd clients/ua-py && python3 -m unittest -v tests.test_vectors ;;
+    ua-go) cd clients/ua-go && ../../scripts/capped sh -c 'go vet ./... && go test ./...' ;;
+    ua-cs) cd clients/ua-cs && ../../scripts/capped dotnet test Scaas.Ua.Tests; rc=$?
+      dotnet build-server shutdown >/dev/null 2>&1; return $rc ;; # VBCSCompiler would keep the capped slot
+    ua-c) cd clients/ua-c && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
+        cargo build -j2 --locked && cargo test -j2 --locked &&
+        cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/smoke.c target/debug/libscaas_ua_c.a -lpthread -ldl -lm -o target/smoke &&
+        target/smoke && c++ -fsyntax-only -x c++ include/scaas_ua.h' && python3 -m unittest -v tests.test_vectors ;;
+    ua-cxx) cd clients/ua-cxx && ../../scripts/capped sh -c 'cargo clippy -j2 --locked --all-targets -- -D warnings &&
+        cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCAAS_UA_CARGO_TARGET_DIR=$PWD/target &&
+        cmake --build build -j2 && ctest --test-dir build --output-on-failure' ;;
+    ua-dart) cd clients/ua-dart && ../../scripts/capped sh -c 'dart pub get && dart analyze && dart test && dart test -p node &&
+        dart run test/vectors_test.dart' ;;
+    soroban|solana|cosmos|sui|aptos|ton|near) CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh "$1" ;;
+    # -rA: pytest's summary lists every "PASSED tests/<file>::<test>" for named-tests (the suite runs -q -s)
+    algorand) PYTEST_ADDOPTS=-rA scripts/capped smartcontracts/scripts/test.sh algorand ;;
+    # starts near-sandbox itself (the binary near-workspaces fetched for the near step) and stops it with the test
+    e2e-near) cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored ;;
+    e2e-algorand) smartcontracts/algorand/scripts/e2e.sh ;; # a fresh localnet up (capped), e2e, down on any exit
     named-tests) named_tests ;;
     *) echo "unknown step $1"; return 2 ;;
   esac
@@ -55,7 +74,9 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 #   cargo  "test [<path>::]<name> ... ok"; a "::" in <name> may span module path segments
 #   move   "[ PASS    ] <addr>::<module>::<name>"
 #   jest   "✓ <name>"     node "✔ <name>"     qt "PASS   : <TestCase>::<name>()"
-# (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19)
+#   pytest "PASSED tests/<file>::<name>[<id>]" (-rA summary)   unittest "<name> (<class>) ... ok"
+# (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19;
+#  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name)
 NEW_TESTS=$(cat <<'EOF'
 forge|forge|test_parity
 forge|forge|test_isValid_7702_ctrUa24
@@ -326,6 +347,375 @@ ua-rs|cargo|meta_pay_id_vectors
 ua-rs|cargo|relay_ref_matches_vector
 ua-qt|qt|test_meta_pay_id_vectors
 ua-qt|qt|test_relay_ref_matches_vector
+clientkeys|node|algorand vectors
+clientkeys|node|algorand addresses and app addresses
+clientkeys|node|algorand relay refs, lanes and router call
+clientkeys|node|algorand passkey assertion
+clientkeys|node|refuses pay-meta mismatch
+clientkeys|node|relay fee prompt carries both intents
+clientkeys|node|pay-meta and relay-fee payments need nonce 0
+clientkeys|node|passkeyAssertion refuses a wrong challenge
+clientkeys|node|refuses native send to a UA id
+clientkeys|node|near vectors
+clientkeys|node|near relay refs, lanes and call forms
+clientkeys|node|near native ids
+clientkeys|node|near passkey assertion: low-s normalised, challenge = digest
+clientkeys|node|near key op fans out to every held token, each at its own nonce
+clientkeys|node|passkeyAssertion refuses a wrong challenge, type or invalid UTF-8
+clientkeys|node|passkeyAssertion output verifies as P-256 over authenticatorData || sha256(clientDataJSON)
+ua-qt|qt|test_near_digest_and_relay_ref
+ua-qt|qt|test_algorand_digest_and_relay_ref
+ua-rs|cargo|near_vectors
+ua-rs|cargo|algorand_vectors
+cargo-scaas-node|cargo|algorand::algorand_metaop_decode_vectors
+cargo-scaas-node|cargo|algorand::algorand_pay_meta_job_checks_commitment
+cargo-scaas-node|cargo|algorand::algorand_relay_fee_job_checks_ref
+cargo-scaas-node|cargo|algorand::relay_fee_target_app_missing_or_clearstate_refused
+cargo-scaas-node|cargo|algorand::group_has_exact_mbr_payment_and_budget_calls
+cargo-scaas-node|cargo|algorand::discovery_simulate_has_the_budget_the_group_can_gain
+cargo-scaas-node|cargo|algorand::budget_calls_added_as_simulate_reports
+cargo-scaas-node|cargo|algorand::lane_below_min_balance_is_retried
+cargo-scaas-node|cargo|algorand::executor_address_matches_contract
+cargo-scaas-node|cargo|algorand::start_check_approval_hash_mismatch_halts
+cargo-scaas-node|cargo|algorand::start_check_genesis_mismatch_errors
+cargo-scaas-node|cargo|algorand::start_check_lane_below_min_balance_errors
+cargo-scaas-node|cargo|algorand::algorand_last_valid_within_valid_until
+cargo-scaas-node|cargo|algorand::unknown_job_kind_is_refused
+cargo-scaas-node|cargo|algorand::tx_matches_algosdk
+cargo-scaas-node|cargo|algorand::relay_fee_config_must_parse
+cargo-scaas-node|cargo|algorand::quote_covers_fees_and_mbr
+cargo-scaas-node|cargo|algorand::relay_fee_target_static_checks
+cargo-scaas-node|cargo|algorand::deep_inner_block_decodes_at_protocol_depth
+cargo-scaas-node|cargo|algorand::msgpack_depth_bound
+cargo-scaas-node|cargo|algorand::origin_parity_vectors
+cargo-scaas-node|cargo|algorand::no_measured_round_time_refuses
+cargo-scaas-node|cargo|algorand::spent_entries_end_with_the_group
+cargo-scaas-node|cargo|algorand::same_box_is_paid_once
+cargo-scaas-node|cargo|algorand::target_mbr_per_entry
+cargo-scaas-node|cargo|algorand::sponsored_bound_payee_is_built_unpriced
+cargo-scaas-node|cargo|algorand::algorand_events_book_configured_only_and_join
+cargo-scaas-node|cargo|algorand::events_scan_blocks_and_pruned_rounds_error
+cargo-scaas-node|cargo|algorand::submit_and_status_are_classified
+cargo-scaas-node|cargo|algorand::op_consumed_reads_the_lane_box
+cargo-scaas-node|cargo|algorand::algorand_jobs_never_panic
+cargo-scaas-node|cargo|near::near_metaop_decode_vectors
+cargo-scaas-node|cargo|near::tx_matches_near_primitives
+cargo-scaas-node|cargo|near::near_pay_meta_job_checks_commitment
+cargo-scaas-node|cargo|near::near_relay_fee_job_checks_ref
+cargo-scaas-node|cargo|near::relay_fee_target_router_or_executor_refused
+cargo-scaas-node|cargo|near::unknown_job_kind_is_refused
+cargo-scaas-node|cargo|near::signature_budgets
+cargo-scaas-node|cargo|near::relay_fee_config_must_parse
+cargo-scaas-node|cargo|near::relay_fee_target_without_code_refused
+cargo-scaas-node|cargo|near::quote_covers_gas_and_storage_needed
+cargo-scaas-node|cargo|near::action_fees_and_timeout_are_priced
+cargo-scaas-node|cargo|near::deposit_equals_storage_needed_plus_nep_yocto
+cargo-scaas-node|cargo|near::near_amount_above_2_pow_53_round_trips
+cargo-scaas-node|cargo|near::start_check_genesis_mismatch_errors
+cargo-scaas-node|cargo|near::start_check_access_key_present_halts
+cargo-scaas-node|cargo|near::start_check_lane_unregistered_errors
+cargo-scaas-node|cargo|near::escrow_tracking_times_out_after_deadline
+cargo-scaas-node|cargo|near::submit_errors_are_classified
+cargo-scaas-node|cargo|near::action_fees_read_from_the_rpc
+cargo-scaas-node|cargo|near::quote_is_prepaid_fees_and_resend
+cargo-scaas-node|cargo|near::implicit_transfer_pin_checked
+cargo-scaas-node|cargo|near::submit_waits_until_included
+cargo-scaas-node|cargo|near::escrow_in_flight_times_out_after_deadline
+cargo-scaas-node|cargo|near::near_events_success_only_configured
+cargo-scaas-node|cargo|near::near_events_join_meta_relay_fee_and_mandate
+cargo-scaas-node|cargo|near::near_events_trades_from_transfers
+cargo-scaas-node|cargo|near::events_scan_blocks
+cargo-scaas-node|cargo|near::key_sets_per_token
+cargo-scaas-node|cargo|near::refunded_router_job_is_not_consumed
+cargo-scaas-node|cargo|near::router_target_bound_to_fail_refused
+cargo-scaas-node|cargo|near::pruned_heights_error
+cargo-scaas-node|cargo|near::escrow_foreign_entry_not_followed
+cargo-scaas-node|cargo|near::stuck_settle_checks_relay_held
+cargo-scaas-node|cargo|near::wrapper_conflicts_refused
+cargo-scaas-node|cargo|near::key_sets_shown_for_key_op_jobs
+cargo-scaas-node|cargo|near::view_over_gas_cap_is_transport
+cargo-scaas-node|cargo|near::same_token_value_target_needs_balance
+cargo-scaas-node|cargo|near::dex_pair_and_index_replicated
+cargo-scaas-node|cargo|near::expiry_margin_refused
+cargo-scaas-node|cargo|near::third_party_methods_listed
+cargo-scaas-node|cargo|near::dex_deposit_floor_covers_the_larger_leg_twice
+cargo-scaas-node|cargo|near::unopened_subject_origins
+cargo-scaas-node|cargo|near::mandate_terms_expiry_margin
+cargo-scaas-node|cargo|near::node_target_figures_are_priced
+cargo-scaas-node|cargo|near::plain_pay_expiry_margin
+cargo-scaas-node|cargo|near::origin_of_parity_vectors
+cargo-scaas-node|cargo|near::passkey_origin_shapes_as_on_chain
+cargo-scaas-node|cargo|near::router_job_gas_on_node_figures
+cargo-scaas-node|cargo|near::near_jobs_never_panic
+cargo-scaas-node|cargo|addresses::near_account_ids
+cargo-scaas-node|cargo|addresses::algorand_addresses_and_app_ids
+cargo-scaas-node|cargo|keys::lane_path_near
+cargo-scaas-node|cargo|keys::lane_path_algorand
+e2e-algorand|cargo|deploy_gate_fails_on_hash_mismatch
+e2e-algorand|cargo|deploy_resumes_after_an_interruption
+e2e-algorand|cargo|algorand_pay_relay_finalize
+e2e-algorand|cargo|algorand_pay_meta_job
+e2e-algorand|cargo|algorand_relay_fee_job
+e2e-algorand|cargo|algorand_router_mandate
+e2e-algorand|cargo|algorand_router_dex_settle
+e2e-algorand|cargo|algorand_events_ingested
+e2e-near|cargo|deploy_gate_fails_with_a_key_left
+e2e-near|cargo|deploy_resumes_after_an_interruption
+e2e-near|cargo|near_pay_relay_finalize
+e2e-near|cargo|near_pay_meta_job
+e2e-near|cargo|near_relay_fee_wrapper_job
+e2e-near|cargo|near_router_release
+e2e-near|cargo|near_router_refund
+e2e-near|cargo|near_router_timeout
+e2e-near|cargo|near_events_include_native_ft_transfer
+e2e-near|cargo|near_lanes_do_not_block_each_other
+algorand|unittest|test_recorded_create_decodes_its_parameters
+algorand|unittest|test_found_among_the_funders_created_apps
+algorand|unittest|test_not_on_chain
+algorand|unittest|test_two_matches_refused
+algorand|pytest|test_account.py::test_ua_opened_lazily_relayer_pays_mbr
+algorand|pytest|test_account.py::test_each_kind_accepted
+algorand|pytest|test_account.py::test_high_s_refused
+algorand|pytest|test_account.py::test_ninth_key_refused
+algorand|pytest|test_account.py::test_add_key_native_sender_is_the_address
+algorand|pytest|test_account.py::test_origin_and_rp_checked
+algorand|pytest|test_account.py::test_origin_cap
+algorand|pytest|test_account.py::test_recovery_after_delay_only
+algorand|pytest|test_account.py::test_recovery_of_a_passkey_with_its_origin
+algorand|pytest|test_account.py::test_cancel_recovery_and_guardian_ops
+algorand|pytest|test_account.py::test_msig_native_member_by_current_authority
+algorand|pytest|test_account.py::test_msig_one_key_counts_once
+algorand|pytest|test_account.py::test_msig_rules
+algorand|pytest|test_account.py::test_msig_cap_fits_limits
+algorand|pytest|test_account.py::test_budget_per_kind_pinned
+algorand|pytest|test_account.py::test_inner_budget_calls_fee_pooled_no_residue
+algorand|pytest|test_account.py::test_token_ua_pay_via_account_verify
+algorand|pytest|test_account.py::test_token_takes_only_a_true_verify
+algorand|pytest|test_account.py::test_token_msig_with_address_member
+algorand|pytest|test_account.py::test_keys_shared_by_two_tokens
+algorand|pytest|test_account.py::test_rekeyed_address_signs_through_account_record
+algorand|pytest|test_account.py::test_policy_passkey_for_value
+algorand|pytest|test_account.py::test_key_op_envelope_refused
+algorand|pytest|test_account.py::test_account_update_delete_optin_refused
+algorand|pytest|test_dex.py::test_settle_both_legs_atomic
+algorand|pytest|test_dex.py::test_one_leg_fails_group_fails
+algorand|pytest|test_dex.py::test_order_relayer_mismatch_refused
+algorand|pytest|test_dex.py::test_leg_by_non_dex_refused
+algorand|pytest|test_dex.py::test_cancel_filled_refused
+algorand|pytest|test_dex.py::test_min_nonce_cap_refused
+algorand|pytest|test_dex.py::test_no_partial_fill
+algorand|pytest|test_dex.py::test_replay_across_dexes_tokens_networks
+algorand|pytest|test_dex.py::test_trade_leg_is_a_value_op
+algorand|pytest|test_dex.py::test_carried_auth_after_the_settle
+algorand|pytest|test_dex.py::test_dex_update_delete_optin_refused
+algorand|pytest|test_dex.py::test_figures_pinned
+algorand|pytest|test_mandate.py::test_mandate_pay_within_limits
+algorand|pytest|test_mandate.py::test_open_terms_bound_by_the_funding_op
+algorand|pytest|test_mandate.py::test_funding_only_through_the_open
+algorand|pytest|test_mandate.py::test_limits_exceeded_refused
+algorand|pytest|test_mandate.py::test_wrong_payee_refused
+algorand|pytest|test_mandate.py::test_expired_refused
+algorand|pytest|test_mandate.py::test_delegate_policy_passkey_for_value
+algorand|pytest|test_mandate.py::test_revoked_refused_then_funds_back
+algorand|pytest|test_mandate.py::test_pay_ref_once
+algorand|pytest|test_mandate.py::test_no_pay_meta_entry
+algorand|pytest|test_mandate.py::test_native_owner_ua_payee
+algorand|pytest|test_mandate.py::test_msig_delegate
+algorand|pytest|test_mandate.py::test_replay_across_tokens_networks_apps
+algorand|pytest|test_mandate.py::test_fake_token_cannot_touch_other_funds
+algorand|pytest|test_mandate.py::test_mandate_update_delete_optin_refused
+algorand|pytest|test_mandate.py::test_figures_pinned
+algorand|pytest|test_relayfee.py::test_relay_open_mode_pays_lane
+algorand|pytest|test_relayfee.py::test_relay_bound_payee
+algorand|pytest|test_relayfee.py::test_target_failure_rejects_group
+algorand|pytest|test_relayfee.py::test_algorand_router_bound_pay_refused_direct
+algorand|pytest|test_relayfee.py::test_target_not_by_executor_refused
+algorand|pytest|test_relayfee.py::test_clearstate_target_refused
+algorand|pytest|test_relayfee.py::test_missing_app_refused
+algorand|pytest|test_relayfee.py::test_target_relayfee_refused
+algorand|pytest|test_relayfee.py::test_payee_executor_refused
+algorand|pytest|test_relayfee.py::test_add_key_native_target_refused
+algorand|pytest|test_relayfee.py::test_payment_shape_refused
+algorand|pytest|test_relayfee.py::test_executor_rejects_rekey_close_fee
+algorand|pytest|test_relayfee.py::test_executor_without_relay_next_rejected
+algorand|pytest|test_relayfee.py::test_target_pay_naming_router_fails
+algorand|pytest|test_relayfee.py::test_lane_transfer_as_target_refused
+algorand|pytest|test_relayfee.py::test_executor_transfer_moves_nothing
+algorand|pytest|test_relayfee.py::test_executor_address_matches_offchain_derivation
+algorand|pytest|test_relayfee.py::test_router_salt_below_128
+algorand|pytest|test_relayfee.py::test_relay_ref_vectors
+algorand|pytest|test_relayfee.py::test_router_holds_nothing_after_relay
+algorand|pytest|test_relayfee.py::test_router_mbr_forward_exact
+algorand|pytest|test_relayfee.py::test_relayed_noop_refused
+algorand|pytest|test_relayfee.py::test_relay_every_target_kind
+algorand|pytest|test_relayfee.py::test_dex_bound_order_via_router
+algorand|pytest|test_relayfee.py::test_router_update_delete_optin_refused
+algorand|pytest|test_relayfee.py::test_inner_txns_never_rekey_or_close
+algorand|pytest|test_relayfee.py::test_figures_pinned
+algorand|pytest|test_token.py::test_arc200_getters
+algorand|pytest|test_token.py::test_mint_admin_only
+algorand|pytest|test_token.py::test_arc200_transfer_new_receiver_needs_exact_mbr
+algorand|pytest|test_token.py::test_mbr_payment_exact
+algorand|pytest|test_token.py::test_pay_meta_emits_meta_then_settled
+algorand|pytest|test_token.py::test_algorand_pay_meta_mismatch_and_replay
+algorand|pytest|test_token.py::test_pay_meta_cap_measured
+algorand|pytest|test_token.py::test_rekeyed_address_signs_with_auth_addr
+algorand|pytest|test_token.py::test_rekeyed_to_logicsig_refused_natively
+algorand|pytest|test_token.py::test_wrong_network_refused
+algorand|pytest|test_token.py::test_valid_until_seconds
+algorand|pytest|test_token.py::test_relayer_bound_to_sender
+algorand|pytest|test_token.py::test_ua_signer_goes_through_the_account_app
+algorand|pytest|test_token.py::test_pay_to_token_app_refused
+algorand|pytest|test_token.py::test_transfer_and_execute_transfer
+algorand|pytest|test_token.py::test_transfer_to_ua_and_ua_balance_of
+algorand|pytest|test_token.py::test_open_payee_only_in_open_mode
+algorand|pytest|test_token.py::test_approve_only_app_to_app
+algorand|pytest|test_token.py::test_amount_u128_max_and_supply_cap
+algorand|pytest|test_token.py::test_box_prefixes_disjoint
+algorand|pytest|test_token.py::test_update_and_delete_refused
+algorand|pytest|test_token.py::test_optin_refused
+algorand|pytest|test_token.py::test_figures_pinned
+algorand|pytest|test_vectors.py::test_metaop_vectors
+algorand|pytest|test_vectors.py::test_sign_bytes_vectors
+algorand|pytest|test_vectors.py::test_pay_meta_vectors
+algorand|pytest|test_vectors.py::test_native_ids_are_the_address_keys
+algorand|pytest|test_vectors.py::test_key_op_vectors
+algorand|pytest|test_vectors.py::test_mandate_vectors
+algorand|pytest|test_vectors.py::test_dex_vectors
+algorand|pytest|test_vectors.py::test_origin_parity_vectors
+forge|forge|test_nearAlgorandNatives
+near|cargo|borsh_and_display_match_the_vectors
+near|cargo|metaop_vectors_match
+near|cargo|nep413_vectors_match
+near|cargo|ua_of_matches_kinds_json_valid_rows
+near|cargo|native_id_forms
+near|cargo|webauthn_grammar_net_all_04
+near|cargo|origin_of_parity_vectors
+near|cargo|pay_meta_vectors_match
+near|cargo|relay_ref_vectors_match
+near|cargo|settle_vectors_match
+near|cargo|late_on_legs_pays_nothing
+near|cargo|on_refund_after_on_legs_pays_nothing
+near|cargo|passkey_field_cap
+near|cargo|leg_gas_by_auth
+near|cargo|refund_only_own_leg
+near|cargo|ua_opened_lazily_relayer_pays_storage
+near|cargo|ed25519_secp256k1_passkey_each_accepted
+near|cargo|secp256k1_high_s_refused
+near|cargo|ninth_key_refused
+near|cargo|origin_and_rp_checked
+near|cargo|recovery_after_delay_only
+near|cargo|cancel_recovery_by_key
+near|cargo|msig_native_member_only_as_predecessor
+near|cargo|access_key_signature_never_accepted
+near|cargo|wrong_network_or_contract_refused
+near|cargo|set_policy_by_key_op
+near|cargo|settle_pays_both_legs
+near|cargo|leg_settle_view_tracks_the_index
+near|cargo|one_leg_fails_other_refunded
+near|cargo|order_relayer_mismatch_refused
+near|cargo|leg_called_by_non_dex_refused
+near|cargo|settle_leg_shape_refused
+near|cargo|settle_deposit_short_refused
+near|cargo|refund_expired_after_lost_callback
+near|cargo|refund_before_expiry_refused
+near|cargo|cancel_filled_order_refused
+near|cargo|min_nonce_cap_refused
+near|cargo|no_partial_fill
+near|cargo|settle_short_gas_refused
+near|cargo|settle_gas_pin
+near|cargo|settle_msig_leg_gas_limit
+near|cargo|settle_passkey_field_cap_refused
+near|cargo|mandate_pay_within_limits
+near|cargo|open_funding_equals_op_amount
+near|cargo|per_payment_and_per_period_exceeded_refused
+near|cargo|wrong_payee_refused
+near|cargo|expired_refused
+near|cargo|delegate_policy_passkey_for_value
+near|cargo|revoked_refused_then_funds_back
+near|cargo|pay_ref_once_per_mandate
+near|cargo|mandate_has_no_pay_meta_entry
+near|cargo|pay_meta_emits_meta_then_settled
+near|cargo|near_pay_meta_mismatch_and_replay
+near|cargo|pay_once_per_lane
+near|cargo|relayer_bound_to_predecessor
+near|cargo|near_wrapper_bound_pay_refused_direct
+near|cargo|pay_to_token_itself_refused
+near|cargo|transfer_to_unregistered_native_registers_from_deposit
+near|cargo|near_valid_until_is_seconds
+near|cargo|near_check_storage_needed_is_exact
+near|cargo|batch_of_actions_atomic
+near|cargo|policy_passkey_for_value
+near|cargo|pay_meta_size_bound_measured
+near|cargo|implicit_relayer_refund_within_job_gas
+near|cargo|node_tx_vector
+near|cargo|webauthn_vector_accepted
+near|cargo|p256_two_passkey_relay_fee_fits_300_tgas
+near|cargo|relay_fee_add_key_ok
+near|cargo|relay_fee_remove_key_ok
+near|cargo|relay_fee_add_origin_ok
+near|cargo|relay_fee_remove_origin_ok
+near|cargo|relay_fee_set_guardian_ok
+near|cargo|relay_fee_set_policy_ok
+near|cargo|relay_fee_start_recovery_ok
+near|cargo|relay_fee_cancel_recovery_ok
+near|cargo|relay_fee_finish_recovery_ok
+near|cargo|relay_fee_mandate_open_ok
+near|cargo|relay_fee_revoke_ok
+near|cargo|relay_fee_cancel_ok
+near|cargo|relay_fee_invalidate_nonces_ok
+near|cargo|wrapper_open_mode_pays_predecessor
+near|cargo|wrapper_bound_payee_paid_directly
+near|cargo|refused_entry_pays_nothing
+near|cargo|pay_op_shape_enforced
+near|cargo|wrapper_payment_policy_passkey_for_value
+near|cargo|near_relay_fee_two_passkey_within_300_tgas
+near|cargo|relay_fee_msig_cap_fits_300_tgas
+near|cargo|release_on_success
+near|cargo|refund_on_target_panic
+near|cargo|refund_on_missing_code
+near|cargo|target_success_with_failing_child_releases
+near|cargo|hold_failure_clears_pending
+near|cargo|short_deposit_refused
+near|cargo|timeout_refund_refused_before_deadline
+near|cargo|timeout_refunds_after_deadline
+near|cargo|release_and_refund_exclusive
+near|cargo|pending_empty_and_router_balance_unchanged_after_each_branch
+near|cargo|executor_holds_only_its_stake_after_each_branch
+near|cargo|target_deposit_forwarded_and_returned_on_failure
+near|cargo|short_prepaid_gas_refused
+near|cargo|near_router_bound_pay_refused_direct
+near|cargo|target_router_or_executor_refused
+near|cargo|payee_executor_refused
+near|cargo|relay_shape_and_salt_refused
+near|cargo|forwarded_call_cannot_spend_router_bound_payment
+near|cargo|near_router_release_to_unregistered_payee
+near|cargo|gas_pins_hold
+near|cargo|ft_transfer_registered_needs_one_yocto
+near|cargo|ft_transfer_unregistered_auto_registers
+near|cargo|storage_bounds_min_equals_max_equals_measured
+near|cargo|storage_withdraw_positive_panics
+near|cargo|storage_unregister_registered_panics_force_included
+near|cargo|ft_transfer_call_resolves_as_nep141
+near|cargo|transfer_to_ua_credits_ua_ledger
+near|cargo|mint_admin_only
+near|cargo|token_refuses_transfer_to_self
+near|cargo|check_no_authority_finds_forbidden_api
+near|cargo|admin_view_is_the_mint_admin
+near|cargo|relay_ref_vectors
+near|cargo|late_callbacks_pay_nothing
+near|cargo|stale_callback_leaves_a_newer_entry_alone
+near|cargo|hold_refused_returns_deposits
+near|cargo|failed_settle_kept_for_the_timeout
+near|cargo|timeout_during_hold_returns_target_deposit
+near|cargo|mandate_vectors_match
+near|cargo|pay_at_expiry_second_allowed
+near|cargo|routed_plan_shape_payee_and_policy
+near|cargo|dex_vectors_match
+forge|forge|test_kindTable
+ua-rs|cargo|table_groups_purposes_constants
+ua-rs|cargo|natives_native_space_canonical_ids
+cargo-scaas-node|cargo|adapters::example_config_builds_every_family
 EOF
 )
 
@@ -342,6 +732,8 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
       jest) norm "$D/$P-$step.txt" 2>/dev/null | grep -qxF "✓ $name" ;;
       node) norm "$D/$P-$step.txt" 2>/dev/null | grep -qxF "✔ $name" ;;
       qt) grep -qE "PASS +: ([A-Za-z_]+::)+${name}\(\)" "$D/$P-$step.txt" 2>/dev/null ;;
+      pytest) grep -qE "^PASSED tests/${name}(\[[^ ]*\])?\$" "$D/$P-$step.txt" 2>/dev/null ;;
+      unittest) grep -qE "^${name} \(.*\) \.\.\. ok\$" "$D/$P-$step.txt" 2>/dev/null ;;
     esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
   done <<< "$NEW_TESTS"
   for s in $FAMILIES; do
@@ -351,7 +743,7 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
     n=$(awk '/^ *Doc-tests /{d=1} /^ *Running /{d=0} /^running 0 tests$/{z=1}
              / 0 passed/{ if (!d && !z) c++; z=0 } END{print c+0}' "$f")
     [ "$n" -eq 0 ] || { echo "named-tests: $s reports 0 passed ($n)"; miss=$((miss + 1)); }
-    grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;' "$f" && { echo "named-tests: $s has a skipped / empty suite"; miss=$((miss + 1)); }
+    grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;|^=+ .*[0-9]+ (skipped|deselected|xfailed)' "$f" && { echo "named-tests: $s has a skipped / empty suite"; miss=$((miss + 1)); }
   done
   echo "named-tests: $(grep -c . <<< "$NEW_TESTS") names, $miss problem(s)"
   [ $miss -eq 0 ]
