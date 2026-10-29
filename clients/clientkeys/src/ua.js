@@ -188,12 +188,16 @@ function pqzKeyHashOf(pqzKey) {
   if (!PQZ_KEY_LENGTHS.includes(k.length)) fail('UAKeyData', `PQZ key length ${k.length}`);
   return keyHashOf(0x0142, k);
 }
-/** The proof hash from the proof bytes or the hash alone (0 = absent); both given and different is `UAPqzPopHash`. */
+const EMPTY_PROOF_HASH = hex(keccak_256(new Uint8Array(0)));
+/** The proof hash from the proof bytes or the hash alone (0 = absent); both given and different is `UAPqzPopHash`, and so is
+ *  `keccak256("")` (an empty proof is no proof: ruling A6-m). */
 function proofHashOf(pqzPop, pqzPopHash) {
   const proofHash = present(pqzPop) ? keccak_256(bytes(pqzPop)) : null;
   const givenHash = pqzPopHash && sized(pqzPopHash, 32, 'pqzPopHash').some((b) => b !== 0) ? bytes(pqzPopHash) : null;
   if (proofHash && givenHash && hex(proofHash) !== hex(givenHash)) fail('UAPqzPopHash', 'pqzPop does not hash to pqzPopHash');
-  return proofHash ?? givenHash ?? Z32;
+  const h = proofHash ?? givenHash ?? Z32;
+  if (hex(h) === EMPTY_PROOF_HASH) fail('UAPqzPopHash', 'the hash of an empty proof');
+  return h;
 }
 
 /** `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)` (UA-8 P1): no chain id, no chain uid, no registry. */

@@ -193,12 +193,12 @@ fn negatives_refused() {
                 }
                 run += 1;
             }
-            "setPqzKey" if err == "UAPqzKeySet" || err == "UAPqzHolder" => {
+            "setPqzKey" if err == "UAPqzKeySet" || err == "UAPqzHolder" || err == "UAPqzPopHash" => {
                 let rec = find(&p, "pqzKeyRecords", "name", &m["row"]);
                 let ua = m["set"].get("ua").unwrap_or(&rec["ua"]);
                 let holder_row = find(&p, "registrations", "ua", ua);
                 let (kind, kd) = (num(&holder_row["kind"]) as u16, bytes(&holder_row["keyData"]));
-                let h = b32(&rec["pqzPopHash"]);
+                let h = b32(m["set"].get("pqzPopHash").unwrap_or(&rec["pqzPopHash"]));
                 let already = err == "UAPqzKeySet";
                 // already-set rows keep the holder (same kind as the record's); wrong-holder rows name a UA that is none
                 let got = pqz_key_record_message(kind, &b32(ua), &kd, &bytes(&rec["pqzKey"]), None, Some(&h), already);
@@ -233,7 +233,7 @@ fn negatives_refused() {
             _ => sig_level += 1, // PQ / classical signatures: verified by the signature vectors (no verifier in this crate)
         }
     }
-    assert_eq!((run, sig_level), (56, 5), "{} negatives", arr(&p, "negatives").len());
+    assert_eq!((run, sig_level), (58, 5), "{} negatives", arr(&p, "negatives").len());
     println!("{run} digest-layer negatives refused, {sig_level} signature-level");
 }
 

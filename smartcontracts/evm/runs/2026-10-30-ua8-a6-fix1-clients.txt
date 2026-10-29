@@ -1,0 +1,24 @@
+# A6 fix 1 (m1): clientkeys + ua-rs on the regenerated portable.json (2 new negatives: pqz-pop-hash-of-empty, pqz-key-record-hash-of-empty)
+## RED: clientkeys ua8.test.js with the old src/ua.js (stash-free: git show HEAD:src/ua.js)
+  AssertionError [ERR_ASSERTION]: Missing expected exception: pqz-pop-hash-of-empty
+## GREEN: clientkeys whole suite
+rc=0
+ℹ tests 150
+ℹ pass 148
+ℹ fail 0
+ℹ skipped 2
+## RED: ua-rs tests/ua8.rs negatives_refused, src unchanged
+thread 'negatives_refused' (2688880) panicked at tests/ua8.rs:192:21:
+assertion `left == right` failed: pqz-pop-hash-of-empty
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.14s
+## GREEN: ua-rs cargo test (all)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.61s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+rc=0

@@ -26,6 +26,15 @@ import {
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {UARegistryBase, MockWallet} from "./UARegistryBase.sol";
 import {AcceptAll, BurnAll} from "./UAGas.t.sol";
+import {PqzCore} from "../../src/pqz/PqzCore.sol";
+import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
+
+/// The PQZ tokens' key gate (`PqzCore._keyPtr`) against a given registry.
+contract KeyPtrHarness {
+    function keyPtr(address registry, bytes32 ua) external view returns (address) {
+        return PqzCore._keyPtr(registry, ua);
+    }
+}
 
 /// `UARegistry._sigOk` exposed (ruling A5-m3: the portable-purpose guard).
 contract SigOkHarness is UARegistry {
@@ -630,7 +639,7 @@ contract UARegistryUA8Test is UARegistryBase {
     /// The attribute shape: a PQZ key with its proof hash and only with it, proof bytes hashing to it, a PQZ key of a
     /// set's length, a KEM version ≥ 1 with a 1,600-byte key — before the PoP. Also: proof bytes without a key.
     function test_ua8_attrsShapeRefused() public {
-        assertEq(_runNegatives(_errs("UAPqzPopHash", "UAKeyData", "UAKemKeyLength", "UAKemVersion")), 16);
+        assertEq(_runNegatives(_errs("UAPqzPopHash", "UAKeyData", "UAKemKeyLength", "UAKemVersion")), 17);
         Row[] memory rows = _rows();
         UARegistry a = _deploy(address(0x5ce60), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, false));
         Row memory p = rows[P256_ROW];
@@ -735,7 +744,7 @@ contract UARegistryUA8Test is UARegistryBase {
         // proven: R_REG accepted over the row's portable message
         _allowPqz(x);
         vm.expectEmit(true, false, false, true, address(p));
-        emit IUARegistry.UAPqzPopStored(x.ua, UAKinds.CHECKED_CHAIN);
+        emit IUARegistry.UAPqzPopStored(x.ua, UAKinds.CHECKED_CHAIN, ""); // the bytes: in UARegistered
         vm.expectEmit(true, true, false, true, address(p));
         emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop, 1, 1, 1);
         p.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
@@ -1022,7 +1031,7 @@ contract UARegistryUA8Test is UARegistryBase {
         Row memory x = _pqzRow(rows);
         UARegistry a = _regA(false);
         vm.expectEmit(true, false, false, true, address(a));
-        emit IUARegistry.UAPqzPopStored(x.ua, UAKinds.CHECKED_NONE);
+        emit IUARegistry.UAPqzPopStored(x.ua, UAKinds.CHECKED_NONE, "");
         _reg(a, x);
         assertFalse(_proven(a, x.ua));
         assertEq(a.pqzPopOf(x.ua), x.pqzPop);
@@ -1050,7 +1059,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(p.keyOwner(h), bytes32(0));
         assertEq(p.uaCount(UAKinds.PQZ_MLWE), 0);
         vm.expectEmit(true, false, false, true, address(p));
-        emit IUARegistry.UAPqzPopStored(x.ua, UAKinds.CHECKED_CHAIN);
+        emit IUARegistry.UAPqzPopStored(x.ua, UAKinds.CHECKED_CHAIN, x.pqzPop);
         vm.prank(address(0x7111D), address(0x7111D));
         p.storePqzPop(x.ua, a.pqzPopOf(x.ua));
         _checkedEq(p, x.ua, 1, 1, 1);
@@ -1100,6 +1109,11 @@ contract UARegistryUA8Test is UARegistryBase {
             ++n;
         }
         assertEq(n, 4, "one per set");
+        // A6-m: an empty proof is refused (its hash is refused wherever one is signed)
+        Row memory x0 = _pqzRow(rows);
+        p.register(x0.kind, x0.keyData, x0.attrs, x0.pop, "");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzPopHash.selector, x0.ua));
+        p.storePqzPop(x0.ua, "");
         Row memory s = rows[P256_ROW];
         _reg(p, s);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzPopHash.selector, s.ua));
@@ -1123,7 +1137,7 @@ contract UARegistryUA8Test is UARegistryBase {
             UARegistry r = rs[i];
             r.register(x.kind, x.keyData, x.attrs, x.pop, "");
             vm.expectEmit(true, false, false, true, address(r));
-            emit IUARegistry.UAPqzPopStored(x.ua, i == 0 ? UAKinds.CHECKED_CHAIN : UAKinds.CHECKED_NONE);
+            emit IUARegistry.UAPqzPopStored(x.ua, i == 0 ? UAKinds.CHECKED_CHAIN : UAKinds.CHECKED_NONE, x.pqzPop);
             r.storePqzPop(x.ua, x.pqzPop);
             _noOp(r, x.ua, x.pqzPop);
             _assertRecord(r, x);
@@ -1270,7 +1284,7 @@ contract UARegistryUA8Test is UARegistryBase {
         assertEq(UAKinds.uaMessage(k.kind, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyRecordDigest(kd, k.pqzPopHash)), k.message);
         assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, kd), k.pqzRegMessage);
         vm.expectEmit(true, false, false, true, address(r));
-        emit IUARegistry.UAPqzKeyAdded(k.ua, h, k.pqzPopHash);
+        emit IUARegistry.UAPqzKeyAdded(k.ua, h, k.pqzPopHash, k.pqzKey, k.sig);
         vm.prank(address(0xBEEF), address(0xBEEF));
         r.setPqzKey(k.ua, k.pqzKey, k.pqzPopHash, k.sig);
         _assertAdded(r, base, k, "", false);
@@ -1314,14 +1328,14 @@ contract UARegistryUA8Test is UARegistryBase {
             uint256 snap = vm.snapshotState();
             _addKey(a, base, k);
             vm.expectEmit(true, false, false, true, address(a));
-            emit IUARegistry.UAPqzPopStored(k.ua, UAKinds.CHECKED_NONE);
+            emit IUARegistry.UAPqzPopStored(k.ua, UAKinds.CHECKED_NONE, proof);
             a.storePqzPop(k.ua, proof);
             _assertAdded(a, base, k, proof, false);
             _addKey(p, base, k);
             vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
                 abi.encode(uint256(1)));
             vm.expectEmit(true, false, false, true, address(p));
-            emit IUARegistry.UAPqzPopStored(k.ua, UAKinds.CHECKED_CHAIN);
+            emit IUARegistry.UAPqzPopStored(k.ua, UAKinds.CHECKED_CHAIN, proof);
             vm.prank(address(0x7111D), address(0x7111D));
             p.storePqzPop(k.ua, proof);
             _assertAdded(p, base, k, proof, true);
@@ -1355,18 +1369,22 @@ contract UARegistryUA8Test is UARegistryBase {
             for (uint256 f; f < g.keys.length; ++f) {
                 if (_eq(g.keys[f], "ua")) k.ua = bytes32(g.values[f]);
                 else if (_eq(g.keys[f], "sig")) k.sig = g.values[f];
+                else if (_eq(g.keys[f], "pqzPopHash")) k.pqzPopHash = bytes32(g.values[f]);
                 else revert(string.concat(g.name, ": unknown mutation ", g.keys[f]));
             }
             bytes4 sel = _eq(g.err, "UAPqzKeySet")
                 ? IUARegistry.UAPqzKeySet.selector
-                : _eq(g.err, "UAPqzHolder") ? IUARegistry.UAPqzHolder.selector : IUARegistry.UAUnauthorized.selector;
-            assertTrue(_eq(g.err, "UAPqzKeySet") || _eq(g.err, "UAPqzHolder") || _eq(g.err, "UAUnauthorized"), g.err);
+                : _eq(g.err, "UAPqzHolder")
+                    ? IUARegistry.UAPqzHolder.selector
+                    : _eq(g.err, "UAPqzPopHash") ? IUARegistry.UAPqzPopHash.selector : IUARegistry.UAUnauthorized.selector;
+            assertTrue(_eq(g.err, "UAPqzKeySet") || _eq(g.err, "UAPqzHolder") || _eq(g.err, "UAUnauthorized")
+                || _eq(g.err, "UAPqzPopHash"), g.err);
             vm.expectRevert(abi.encodeWithSelector(sel, k.ua));
             a.setPqzKey(k.ua, k.pqzKey, k.pqzPopHash, k.sig);
             vm.revertToState(snap);
             ++n;
         }
-        assertEq(n, 12, "three per set");
+        assertEq(n, 13, "three per set + the empty proof hash (A6-m)");
         KeyRec memory r = _keyRec(ks, string.concat("fndsa512/", _setName()));
         bytes32 none = keccak256("unregistered");
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, none));
@@ -1411,6 +1429,140 @@ contract UARegistryUA8Test is UARegistryBase {
         vm.prank(address(0xC0B1E5), address(0xC0B1E5));
         p.storePqzPop(k.ua, a.pqzPopOf(k.ua));
         _assertAdded(p, base, k, proof, true);
+    }
+
+    // ----- A6 fix 1 (review A6: I1 → ruling A6-I1; m2) -----
+
+    /// m2: `storePqzPop` for a key from `register` without a KEM record proves over exactly
+    /// `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, keyHash, 0))` (the stand-in accepts only that input).
+    function test_ua8_storePqzPopNoKemExactMessage() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory s = _squatter(rows, _pqzRow(rows));
+        assertEq(s.attrs.kemVersion, 0);
+        assertEq(s.pqzRegMessage, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
+            UAKinds.portablePopDigest(s.ua, _h(s.attrs.pqzKey), 0)));
+        UARegistry p = _regA(true);
+        p.register(s.kind, s.keyData, s.attrs, s.pop, "");
+        _allowPqz(s);
+        p.storePqzPop(s.ua, s.pqzPop);
+        assertTrue(_proven(p, s.ua));
+        _checkedEq(p, s.ua, 1, 1, 0);
+    }
+
+    /// Gen 2 enabling 0x0142 in front of `g1` (which does not).
+    function _gen2Pqz(address where, UARegistry g1) internal returns (UARegistry) {
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
+        c[0] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, rreg, 1_000_000);
+        return _deploy(where, chainUidA, address(g1), false, BUDGET, address(0), true, c);
+    }
+
+    /// Ruling A6-I1, the griefer (review I1): a PQ-eligible `msig`'s registration is copied to a gen 1 without 0x0142
+    /// first, its key unproven there and the record final there (gen 2's `register` is `UAAlreadyRegistered`). Gen 2,
+    /// the oldest generation enabling 0x0142, proves the gen-1 key by `storePqzPop` (over the `register` message, the
+    /// KEM record read from gen 1) and holds the attachment: owner, list, `proven`, the proof. A PQZ token bound to gen 2
+    /// (`PqzCore._keyPtr`) takes the UA; gen 1 still reads it unproven.
+    function test_ua8_gen2ProvesGen1RegisterKey() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        UARegistry g1 = _regA(false);
+        _members(g1, rows);
+        UARegistry g2 = _gen2Pqz(address(0x5cebb), g1);
+        Row memory m = _find(rows, string.concat("msig-pq/", _setName()));
+        bytes32 h = _h(m.attrs.pqzKey);
+        vm.prank(address(0xBAD), address(0xBAD));
+        g1.register(m.kind, m.keyData, m.attrs, m.pop, "");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, m.ua));
+        g2.register(m.kind, m.keyData, m.attrs, m.pop, m.pqzPop);
+        KeyPtrHarness t = new KeyPtrHarness();
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, m.ua));
+        t.keyPtr(address(g2), m.ua);
+        _allowPqz(m);
+        vm.expectEmit(true, false, false, true, address(g2));
+        emit IUARegistry.UAPqzPopStored(m.ua, UAKinds.CHECKED_CHAIN, m.pqzPop);
+        vm.prank(address(0x7111D), address(0x7111D));
+        g2.storePqzPop(m.ua, m.pqzPop);
+        (address p1, bytes32 h1, bool v1) = g1.pqzKeyOf(m.ua);
+        (address p2, bytes32 h2, bool v2) = g2.pqzKeyOf(m.ua);
+        assertEq(abi.encode(p1, h1, v1), abi.encode(p2, h2, false), "gen 2 proves gen 1's key and hash");
+        assertTrue(v2);
+        assertEq(g2.keyOwner(h), m.ua);
+        assertEq(g1.keyOwner(h), bytes32(0));
+        assertEq(g2.uaAt(UAKinds.PQZ_MLWE, 0), m.ua);
+        _checkedEq(g2, m.ua, 1, 1, m.attrs.kemVersion != 0 ? 1 : 0);
+        _checkedEq(g1, m.ua, 1, 0, m.attrs.kemVersion != 0 ? 1 : 0);
+        assertEq(g2.pqzPopOf(m.ua), m.pqzPop);
+        assertEq(g1.pqzPopOf(m.ua), "");
+        assertEq(keccak256(_stored(g2, m.ua)), keccak256(_args(m)), "gen 2's registrationOf: gen 1's record + its proof");
+        (, address zp) = g2.recordOf(m.ua);
+        assertEq(zp, p2);
+        assertEq(t.keyPtr(address(g2), m.ua), p2);
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, m.ua));
+        t.keyPtr(address(g1), m.ua);
+        _noOp(g2, m.ua, m.pqzPop);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzKeySet.selector, m.ua));
+        g2.setPqzKey(m.ua, m.attrs.pqzKey, m.attrs.pqzPopHash, hex"01"); // the gen-1 key counts
+    }
+
+    /// Ruling A6-I1, the other key origin: `setPqzKey` on gen 2 for a gen-1 record without a PQZ key (fndsa512: the
+    /// signature checked by gen 1; msig-pq-native: members on gen 1, the native one by personal_sign), then its proof
+    /// over the PURPOSE_PQZ_KEY message; the attachment is gen 2's, gen 1 has no key. A token bound to gen 2 takes it.
+    function test_ua8_gen2SetPqzKeyForGen1Record() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        KeyRec[] memory ks = _keyRecs();
+        UARegistry g1 = _regA(false);
+        _members(g1, rows);
+        UARegistry g2 = _gen2Pqz(address(0x5cebc), g1);
+        KeyPtrHarness t = new KeyPtrHarness();
+        bytes memory proof = _pqzRow(rows).pqzPop;
+        string[2] memory names = [string("fndsa512/"), "msig-pq-native/"];
+        for (uint256 i; i < 2; ++i) {
+            KeyRec memory k = _keyRec(ks, string.concat(names[i], _setName()));
+            Row memory base = _byUa(rows, k.ua);
+            _allowRecord(rows, base, k);
+            uint256 snap = vm.snapshotState();
+            _reg(g1, base);
+            vm.expectEmit(true, false, false, true, address(g2));
+            emit IUARegistry.UAPqzKeyAdded(k.ua, _h(k.pqzKey), k.pqzPopHash, k.pqzKey, k.sig);
+            vm.prank(address(0xBEEF), address(0xBEEF));
+            g2.setPqzKey(k.ua, k.pqzKey, k.pqzPopHash, k.sig);
+            _assertAdded(g2, base, k, "", false);
+            (address p1,,) = g1.pqzKeyOf(k.ua);
+            assertEq(p1, address(0), "gen 1 untouched");
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzKeySet.selector, k.ua));
+            g2.setPqzKey(k.ua, k.pqzKey, k.pqzPopHash, k.sig);
+            vm.mockCall(rreg, abi.encodeCall(IUAPopVerifier.verifyPop, (k.pqzKey, k.pqzRegMessage, proof)),
+                abi.encode(uint256(1)));
+            g2.storePqzPop(k.ua, proof);
+            _assertAdded(g2, base, k, proof, true);
+            (address p2,,) = g2.pqzKeyOf(k.ua);
+            assertEq(t.keyPtr(address(g2), k.ua), p2);
+            vm.revertToState(snap);
+        }
+    }
+
+    /// Ruling A6-I1 from the other side (A5-I1): where gen 1 enables 0x0142, gen 2 holds no PQZ attachment —
+    /// `storePqzPop` / `setPqzKey` for gen-1 records stay `UAUnauthorized` (D11), a PQZ key in gen 2's `register` is
+    /// `UAKindDisabled(0x0142)`.
+    function test_ua8_gen2RefusesWhenGen1HasPqz() public {
+        Row[] memory rows = _rows();
+        _allowAll(rows);
+        Row memory x = _pqzRow(rows);
+        KeyRec memory k = _keyRec(_keyRecs(), string.concat("fndsa512/", _setName()));
+        UARegistry g1 = _regA(true);
+        _members(g1, rows);
+        UARegistry g2 = _deploy(address(0x5cebd), chainUidA, address(g1), false, BUDGET, address(0), true,
+            new UARegistry.KindConfig[](0));
+        g1.register(x.kind, x.keyData, x.attrs, x.pop, "");
+        _reg(g1, rows[FNDSA_ROW]);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, x.ua));
+        g2.storePqzPop(x.ua, x.pqzPop);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, k.ua));
+        g2.setPqzKey(k.ua, k.pqzKey, k.pqzPopHash, k.sig);
+        Row memory m = _find(rows, string.concat("msig-pq/", _setName()));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.PQZ_MLWE));
+        g2.register(m.kind, m.keyData, m.attrs, m.pop, m.pqzPop);
     }
 
     // ----- helpers -----

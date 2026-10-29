@@ -1,0 +1,28 @@
+# A6 fix 1 RED: test/{ua/UARegistryUA8,pqz/PqzUA8}.t.sol against b7ba0284 + the regenerated portable.json, set n2304-kmax4096
+Error: Compiler run failed:
+Error (6160): Wrong argument count for function call: 3 arguments given but expected 2.
+Error (6160): Wrong argument count for function call: 3 arguments given but expected 2.
+Error (6160): Wrong argument count for function call: 3 arguments given but expected 2.
+Error (6160): Wrong argument count for function call: 3 arguments given but expected 2.
+Error (6160): Wrong argument count for function call: 5 arguments given but expected 3.
+Error (6160): Wrong argument count for function call: 3 arguments given but expected 2.
+Error (6160): Wrong argument count for function call: 3 arguments given but expected 2.
+Error (6160): Wrong argument count for function call: 3 arguments given but expected 2.
+Error (6160): Wrong argument count for function call: 5 arguments given but expected 3.
+rc=1
+
+# RED 2: the m3 event shapes added (IUARegistry + emits), the rest of fix 1 not yet
+Ran 3 tests for test/pqz/PqzUA8.t.sol:PqzUA8Test
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 477.57ms (253.02ms CPU time)
+Ran 36 tests for test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+[FAIL: Error != expected error: UAPoP() != UAPqzPopHash(0xf0a55b694ab3f58dd5ac8f8508dd1d7699c67fbefd731a22df21326126a8c3c7)] test_ua8_attrsShapeRefused() (gas: 489571875)
+[FAIL: UAUnauthorized(0xa8bef7f236ab68b1a7d5e0b27d60a0543b48cfaf5bb02a8070e5ea75ddeda4ee)] test_ua8_gen2ProvesGen1RegisterKey() (gas: 223590747)
+[FAIL: UAUnauthorized(0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936)] test_ua8_gen2SetPqzKeyForGen1Record() (gas: 354659749)
+[FAIL: Error != expected error: UAUnauthorized(0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936) != UAPqzPopHash(0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936)] test_ua8_setPqzKeyRefused() (gas: 761801490)
+Suite result: FAILED. 32 passed; 4 failed; 0 skipped; finished in 24.94s (173.02s CPU time)
+Ran 2 test suites in 24.94s (25.42s CPU time): 35 tests passed, 4 failed, 0 skipped (39 total tests)
+[FAIL: Error != expected error: UAPoP() != UAPqzPopHash(0xf0a55b694ab3f58dd5ac8f8508dd1d7699c67fbefd731a22df21326126a8c3c7)] test_ua8_attrsShapeRefused() (gas: 489571875)
+[FAIL: UAUnauthorized(0xa8bef7f236ab68b1a7d5e0b27d60a0543b48cfaf5bb02a8070e5ea75ddeda4ee)] test_ua8_gen2ProvesGen1RegisterKey() (gas: 223590747)
+[FAIL: UAUnauthorized(0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936)] test_ua8_gen2SetPqzKeyForGen1Record() (gas: 354659749)
+[FAIL: Error != expected error: UAUnauthorized(0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936) != UAPqzPopHash(0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936)] test_ua8_setPqzKeyRefused() (gas: 761801490)
+rc=1

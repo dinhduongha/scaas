@@ -220,8 +220,8 @@ test('holder refusals', () => {
       const target = set.ua ?? k.ua;
       const t = regOf(target);
       const a = { ua: target, keyData: t.keyData, pqzKey: set.pqzKey ?? k.pqzKey, pqzPopHash: set.pqzPopHash ?? k.pqzPopHash };
-      if (n.error === 'UAPqzHolder') {
-        assert.throws(() => ua.pqzKeyRecordMessage(t.kind, a), code('UAPqzHolder'), n.name);
+      if (n.error === 'UAPqzHolder' || n.error === 'UAPqzPopHash') {
+        assert.throws(() => ua.pqzKeyRecordMessage(t.kind, a), code(n.error), n.name);
         continue;
       }
       const m = ua.pqzKeyRecordMessage(t.kind, a);

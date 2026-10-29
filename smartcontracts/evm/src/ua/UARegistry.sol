@@ -63,7 +63,9 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///
 ///         Gen 2 (`predecessor ≠ 0`) reads gen 1 for `UAAlreadyRegistered` / `UAKeyInUse` / `kindOf` / `keyOwner` /
 ///         `recordOf` and hands records it does not hold, and members whose kind it does not enable, to gen 1's
-///         `requireAuthorized`. Its constructor refuses every single-key kind whose keyHash group gen 1 enables.
+///         `requireAuthorized`. Its constructor refuses every single-key kind whose keyHash group gen 1 enables. A gen 2
+///         that enables 0x0142 (so gen 1 does not) holds the PQZ attachment of gen-1 records — `setPqzKey`,
+///         `storePqzPop`, `proven`, the owner and list entry of a proven key — and its PQZ reads prefer it (ruling A6-I1).
 ///
 ///         Open in UA-2a: HIP-632 (`hedera-native` members' 64-byte ed25519 signatures) needs a non-static CALL, which a
 ///         `view` `requireAuthorized` cannot make; such members verify as ECDSA/1271 only.
@@ -99,6 +101,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     ///         (8 x `slhdsa128s`, 7,856 B each, + 1 clone, exactly at the bound 11,930,873; least frame gas 11,873,766, 57 k
     ///         spare): no per-kind size term (review2 C4-2).
     uint256 internal constant MSIG_MEMBER_GAS = 35_000;
+    /// `keccak256("")`: the hash of an empty proof, refused as a `pqzPopHash` (ruling A6-m).
+    bytes32 internal constant EMPTY_PROOF_HASH = keccak256("");
 
     uint8 public immutable generation;
     address public immutable predecessor;
@@ -259,11 +263,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.uaAuthDigest(_domainSeparatorV4(), ua, purposeTag, digest);
     }
 
-    /// `r.keyPtr ≠ 0` only for stored kinds; `pqzKey ≠ 0` only for PQZ holders registered with a key (proven or not).
+    /// `r.keyPtr ≠ 0` only for stored kinds; `pqzKey ≠ 0` only for PQZ holders with a key (proven or not). Gen 2: a
+    /// gen-1 record with this generation's PQZ attachment, if any (ruling A6-I1).
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey) {
         r = _records[ua];
-        if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).recordOf(ua);
         pqzKey = _pqzKey[ua].ptr;
+        if (r.kind == 0 && predecessor != address(0)) {
+            (Record memory g, address p) = IUARegistry(predecessor).recordOf(ua);
+            return (g, pqzKey != address(0) ? pqzKey : p);
+        }
     }
 
     // ----- UA-8 reads (gen 2 forwards a record it does not hold, UA8-D11) -----
@@ -273,12 +281,25 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return predecessor != address(0) && _records[ua].kind == 0;
     }
 
+    /// Ruling A6-I1: a UA's PQZ attachment (the key from `setPqzKey`, the proof, `proven`, the owner of a proven key, the
+    /// `0x0142` list entry) lives in the oldest generation that enables 0x0142; the record stays where it was
+    /// registered. The PQZ reads of a gen-1 record on gen 2 take gen 2's own attachment (its `_pqzKey` slot, written
+    /// only by this generation) when there is one, else gen 1's.
+    function _pqzElsewhere(bytes32 ua) private view returns (bool) {
+        return _pqzKey[ua].ptr == address(0) && _elsewhere(ua);
+    }
+
     function registrationOf(bytes32 ua)
         external
         view
         returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
     {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).registrationOf(ua);
+        if (_elsewhere(ua)) {
+            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(predecessor).registrationOf(ua);
+            // A5-c2 / A6-I1: gen 1's key proven here, its proof stored here
+            if (attrs.pqzKey.length != 0 && pqzPop.length == 0) pqzPop = SSTORE2.readChunks(_pqzPop[ua]);
+            return (kind, keyData, attrs, pop, pqzPop);
+        }
         Record memory r = _records[ua];
         kind = r.kind;
         if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
@@ -309,23 +330,28 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function pqzPopOf(bytes32 ua) external view returns (bytes memory) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).pqzPopOf(ua);
+        if (_pqzElsewhere(ua)) return IUARegistry(predecessor).pqzPopOf(ua);
         return SSTORE2.readChunks(_pqzPop[ua]);
     }
 
     function pqzKeySigOf(bytes32 ua) external view returns (bytes memory) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).pqzKeySigOf(ua);
+        // gen 2 proving gen 1's `setPqzKey` key keeps no copy of the signature: gen 1 has it
+        if (_pqzKeySig[ua].length == 0 && _elsewhere(ua)) return IUARegistry(predecessor).pqzKeySigOf(ua);
         return SSTORE2.readChunks(_pqzKeySig[ua]);
     }
 
     function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).pqzKeyOf(ua);
         PqzKey memory k = _pqzKey[ua];
+        if (k.ptr == address(0) && _elsewhere(ua)) return IUARegistry(predecessor).pqzKeyOf(ua);
         return (k.ptr, _pqzPopHash[ua], k.proven);
     }
 
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).checkedOf(ua);
+        if (_elsewhere(ua)) {
+            (pop, pqzPop, kem) = IUARegistry(predecessor).checkedOf(ua);
+            if (_pqzKey[ua].proven) pqzPop = UAKinds.CHECKED_CHAIN; // A6-I1: proven here
+            return (pop, pqzPop, kem);
+        }
         if (_records[ua].kind == 0) return (pop, pqzPop, kem);
         return (UAKinds.CHECKED_CHAIN, _checked(_pqzKey[ua].proven), _checked(_kemMax[ua] != 0));
     }
@@ -571,7 +597,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bool kem = v != 0 || attrs.kemPk.length != 0;
         if (pqz) _pqzHolder(kind, d, ua);
         if (kem && !_holder(kind, d)) revert UAKemHolder(ua);
-        if (pqz != (attrs.pqzPopHash != 0)) revert UAPqzPopHash(ua);
+        if (pqz != (attrs.pqzPopHash != 0) || attrs.pqzPopHash == EMPTY_PROOF_HASH) revert UAPqzPopHash(ua);
         if (pqzPop.length != 0 && keccak256(pqzPop) != attrs.pqzPopHash) revert UAPqzPopHash(ua);
         if (pqz) h = _pqzKeyHash(attrs.pqzKey);
         bytes32 kemHash;
@@ -584,7 +610,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// A PQZ / KEM holder (UA-6 U3, UA8-D12): `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`.
-    function _holder(uint16 kind, bytes memory d) private view returns (bool) {
+    function _holder(uint16 kind, bytes memory d) private pure returns (bool) {
         return kind == UAKinds.MLDSA44 || kind == UAKinds.MLDSA65 || kind == UAKinds.FNDSA512
             || (kind == UAKinds.MSIG && _pqEligible(d));
     }
@@ -638,13 +664,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _pqzKey[ua].ptr = SSTORE2.write(attrs.pqzKey);
         _pqzPopHash[ua] = attrs.pqzPopHash;
         if (pqzPop.length == 0) return;
-        _pqzProof(ua, attrs.pqzKey, pqzPop, h, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable));
+        _pqzProof(ua, attrs.pqzKey, pqzPop, h, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, portable), pqzPop[0:0]);
     }
 
     /// The proof bytes stored; proven where slot 0x0142 has a verifier and it accepts `pqzPop` over `message`.
-    function _pqzProof(bytes32 ua, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message)
-        private
-        returns (bool proven)
+    function _pqzProof(bytes32 ua, bytes memory pqzKey, bytes calldata pqzPop, bytes32 h, bytes32 message,
+        bytes calldata logged) private returns (bool proven)
     {
         _pqzPop[ua] = SSTORE2.writeChunks(pqzPop);
         uint256 cfg = _cfg(UAKinds.PQZ_MLWE);
@@ -657,45 +682,81 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             _list(UAKinds.PQZ_MLWE, ua);
             _pqzKey[ua].proven = proven = true;
         }
-        emit UAPqzPopStored(ua, _checked(proven));
+        emit UAPqzPopStored(ua, _checked(proven), logged);
     }
 
     // ----- the PQZ proof later (UA8-D8, P8) and the PQZ key later (ruling A1-I1) -----
 
     function storePqzPop(bytes32 ua, bytes calldata pqzPop) external {
-        if (_records[ua].kind == 0) revert UAUnauthorized(ua); // UA8-D11: a gen-1 record's proof goes to gen 1
-        if (keccak256(pqzPop) != _pqzPopHash[ua]) revert UAPqzPopHash(ua); // no PQZ key: the hash is 0
-        if (_pqzPop[ua].length != 0) return; // stored: proven, or never provable here (no verifier)
+        bool host = _host(ua);
+        if (pqzPop.length == 0) revert UAPqzPopHash(ua); // an empty proof is no proof (ruling A6-m)
         PqzKey memory k = _pqzKey[ua];
+        bytes32 ph = _pqzPopHash[ua];
+        if (host && k.ptr == address(0)) {
+            // gen 1's key (from its `register` or `setPqzKey`), proven in this generation (ruling A6-I1)
+            (k.ptr, ph,) = IUARegistry(predecessor).pqzKeyOf(ua);
+            k.added = IUARegistry(predecessor).pqzKeySigOf(ua).length != 0;
+        }
+        if (keccak256(pqzPop) != ph) revert UAPqzPopHash(ua); // no PQZ key: the hash is 0
+        if (_pqzPop[ua].length != 0) return; // stored: proven, or never provable here (no verifier)
         bytes memory key = SSTORE2.read(k.ptr);
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
-        bytes32 message;
-        if (k.added) {
-            message = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h));
-        } else {
-            // the portable digest `register`'s PoP signed: the initial KEM record from the blob
-            (,, uint64 v) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
-            (bytes memory kemPk,) = _kemAt(ua, v);
-            bytes32 kemHash = v == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, v, kemPk);
-            message = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portablePopDigest(ua, h, kemHash));
+        bytes32 message = k.added
+            ? UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, UAKinds.pqzKeyDigest(ua, h))
+            : UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, UAKinds.portablePopDigest(ua, h, _kemHash(ua, host)));
+        if (host) {
+            _pqzKey[ua] = k;
+            _pqzPopHash[ua] = ph;
         }
-        _pqzProof(ua, key, pqzPop, h, message);
+        _pqzProof(ua, key, pqzPop, h, message, pqzPop);
+    }
+
+    /// The initial KEM record's digest (0 = none) that `register`'s PoP signed: from the blob, or gen 1's record.
+    function _kemHash(bytes32 ua, bool host) private view returns (bytes32) {
+        uint64 v;
+        bytes memory kemPk;
+        if (host) {
+            (,, UAAttrs memory a,,) = IUARegistry(predecessor).registrationOf(ua);
+            (v, kemPk) = (a.kemVersion, a.kemPk);
+        } else {
+            (,, v) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
+            (kemPk,) = _kemAt(ua, v);
+        }
+        return v == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, v, kemPk);
+    }
+
+    /// Where `storePqzPop` / `setPqzKey` write (ruling A6-I1): false = the record is here; true = gen 1 holds it and this
+    /// gen 2 enables 0x0142 (its constructor refuses 0x0142 when gen 1 enables it, so this is the oldest generation
+    /// with the verifier); else `UAUnauthorized` (unregistered, or a gen-1 record on a gen 2 without 0x0142: UA8-D11).
+    function _host(bytes32 ua) private view returns (bool) {
+        if (_records[ua].kind != 0) return false;
+        if (predecessor != address(0) && uint160(_cfg(UAKinds.PQZ_MLWE)) != 0 && kindOf(ua) != 0) return true;
+        revert UAUnauthorized(ua);
     }
 
     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, bytes calldata sig) external {
-        Record memory r = _records[ua];
-        if (r.kind == 0) revert UAUnauthorized(ua); // unregistered, or gen 1's record (UA8-D11)
-        (bytes memory d,,) = _registration(ua, r.keyPtr);
-        _pqzHolder(r.kind, d, ua);
-        if (_pqzKey[ua].ptr != address(0)) revert UAPqzKeySet(ua);
+        bool host = _host(ua);
+        uint16 kind;
+        bytes memory d;
+        if (host) {
+            (kind, d,,,) = IUARegistry(predecessor).registrationOf(ua);
+        } else {
+            Record memory r = _records[ua];
+            kind = r.kind;
+            (d,,) = _registration(ua, r.keyPtr);
+        }
+        _pqzHolder(kind, d, ua);
+        address pk = _pqzKey[ua].ptr;
+        if (host && pk == address(0)) (pk,,) = IUARegistry(predecessor).pqzKeyOf(ua); // gen 1's key counts
+        if (pk != address(0)) revert UAPqzKeySet(ua);
         bytes32 h = _pqzKeyHash(pqzKey);
-        if (pqzPopHash == 0) revert UAPqzPopHash(ua);
+        if (pqzPopHash == 0 || pqzPopHash == EMPTY_PROOF_HASH) revert UAPqzPopHash(ua);
         bytes32 rd = UAKinds.pqzKeyRecordDigest(UAKinds.pqzKeyDigest(ua, h), pqzPopHash);
-        if (!_sigOk(r.kind, d, ua, UAKinds.PURPOSE_PQZ_KEY, rd, sig)) revert UAUnauthorized(ua);
+        if (!_sigOk(kind, d, ua, UAKinds.PURPOSE_PQZ_KEY, rd, sig)) revert UAUnauthorized(ua);
         _pqzKey[ua] = PqzKey(SSTORE2.write(pqzKey), false, true);
         _pqzPopHash[ua] = pqzPopHash;
         _pqzKeySig[ua] = SSTORE2.writeChunks(sig);
-        emit UAPqzKeyAdded(ua, h, pqzPopHash);
+        emit UAPqzKeyAdded(ua, h, pqzPopHash, pqzKey, sig);
     }
 
     function _isPq(uint16 kind) private pure returns (bool) {
@@ -720,6 +781,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             return sig.length != 0 && _msig(ua, purpose, digest, d, sig, true);
         }
         uint256 cfg = _cfg(kind);
+        // A6-I1: a gen-1 holder's PQZ key record on gen 2 (the PQ holder kinds are stored: no key data in `auth`); the
+        // PQ verifiers' `verify` is their `verifyPop`
+        if (uint160(cfg) == 0) return _viaPredecessor(ua, purpose, digest, abi.encode(bytes(""), sig));
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = _expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
         bytes memory data = ek.length != 0

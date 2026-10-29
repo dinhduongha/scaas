@@ -76,7 +76,8 @@ fn pqz_key_hash_of(pqz_key: &[u8]) -> Result<[u8; 32]> {
     }
     Ok(key_hash_of(PQZ_SCHEME, pqz_key)?.expect("scheme group"))
 }
-/// The proof hash from the proof bytes and / or the hash (absent = 0); both given and different is `UAPqzPopHash`.
+/// The proof hash from the proof bytes and / or the hash (absent = 0); both given and different is `UAPqzPopHash`, and so
+/// is `keccak256("")` (an empty proof is no proof: ruling A6-m).
 fn proof_hash_of(pqz_pop: Option<&[u8]>, pqz_pop_hash: Option<&[u8; 32]>) -> Result<[u8; 32]> {
     let proof = pqz_pop.filter(|p| !p.is_empty()).map(keccak256);
     let given = pqz_pop_hash.filter(|h| !h.iter().all(|b| *b == 0));
@@ -85,7 +86,11 @@ fn proof_hash_of(pqz_pop: Option<&[u8]>, pqz_pop_hash: Option<&[u8; 32]>) -> Res
             return Err(UAError::PqzPopHash);
         }
     }
-    Ok(proof.or(given.copied()).unwrap_or([0; 32]))
+    let h = proof.or(given.copied()).unwrap_or([0; 32]);
+    if h == keccak256(&[]) {
+        return Err(UAError::PqzPopHash);
+    }
+    Ok(h)
 }
 
 /// The portable PoP of a registration (UA-8 P1, P2), as [`holder_pop_message`] returns it.

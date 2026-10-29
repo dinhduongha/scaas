@@ -162,6 +162,10 @@ const negatives = [
   neg('kem-version-without-pk', 'register', 'fndsa512', { 'attrs.kemPk': '0x' }, 'UAKemKeyLength'),
   neg('kem-version-0', 'register', 'fndsa512', { 'attrs.kemVersion': 0 }, 'UAKemVersion'),
   neg('proof-hash-without-pqz-key', 'register', 'fndsa512', { 'attrs.pqzPopHash': hex(keccak_256(pqzPopOf(SETS[0]))) }, 'UAPqzPopHash'),
+  // ruling A6-m: an empty proof is no proof; its hash is refused wherever a proof hash is signed
+  neg('pqz-pop-hash-of-empty', 'register', `mldsa65/${SETS[0]}`, { 'attrs.pqzPopHash': hex(keccak_256(new Uint8Array(0))), pqzPop: '0x' },
+    'UAPqzPopHash'),
+  neg('pqz-key-record-hash-of-empty', 'setPqzKey', `fndsa512/${SETS[0]}`, { pqzPopHash: hex(keccak_256(new Uint8Array(0))) }, 'UAPqzPopHash'),
   neg('non-holder-with-kem', 'register', 'secp256k1', { 'attrs.kemVersion': 1, 'attrs.kemPk': hex(KEM.fndsa512[0]) }, 'UAKemHolder'),
   neg('classical-msig-with-kem', 'register', 'msig-classical', { 'attrs.kemVersion': 1, 'attrs.kemPk': hex(KEM.fndsa512[0]) },
     'UAKemHolder'),
@@ -204,9 +208,10 @@ const note = [
   + 'for a UA registered without a PQZ key (its proof bytes for storePqzPop: the set\'s filler, registrations '
   + '"mldsa65/<set>".pqzPop). pqzPop rows are filler of a real R_REG proof\'s length per set, not proofs.',
   'negatives: mutation.row names a row of registrations (entry register, storePqzPop, requireAuthorized), kemRecords by id '
-  + '(setKemKey) or pqzKeyRecords (setPqzKey); mutation.set replaces fields (attrs.<field>, pqzPop, pop, ua, sig, purposeTag, '
-  + 'digest, auth); mutation.registerWith gives the register call that precedes a storePqzPop row. Attribute checks run '
-  + 'before the PoP; error is the registry\'s.',
+  + '(setKemKey) or pqzKeyRecords (setPqzKey); mutation.set replaces fields (attrs.<field>, pqzPop, pop, ua, sig, pqzPopHash, '
+  + 'purposeTag, digest, auth); mutation.registerWith gives the register call that precedes a storePqzPop row. Attribute checks run '
+  + 'before the PoP; error is the registry\'s. A proof hash of keccak256("") (an empty proof) is UAPqzPopHash wherever a proof hash is '
+  + 'signed, and storePqzPop refuses empty proof bytes.',
 ].join(' ');
 const build = () => ({
   note, version: 1,
