@@ -1,0 +1,4 @@
+# node-ua-jobs fix 1: per-feature copy of smartcontracts/evm/runs/2026-10-27-metatx-split-named-tests.txt (the gate's fixed step log, review minor 7)
+# named-tests at commit 59240c47
+named-tests: 662 names, 0 problem(s)
+rc=0
