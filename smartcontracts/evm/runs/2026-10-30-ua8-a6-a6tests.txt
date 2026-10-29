@@ -1,0 +1,17 @@
+# A6: test/{ua/UARegistryUA8,pqz/PqzUA8}.t.sol with storePqzPop / setPqzKey / pqzKeySigOf, set n2304-kmax4096
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+  --> src/common/Bls12381.sol:60:28:
+  --> src/zether/ZetherVerifier.sol:89:28:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+  --> test/zether/helpers/ZetherFixture.sol:63:5:
+  --> test/zether/helpers/ZetherFixture.sol:63:5:
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+  --> test/helpers/Catalogue.sol:47:1:
+Ran 3 tests for test/pqz/PqzUA8.t.sol:PqzUA8Test
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 319.54ms (165.94ms CPU time)
+Ran 32 tests for test/ua/UARegistryUA8.t.sol:UARegistryUA8Test
+Suite result: ok. 32 passed; 0 failed; 0 skipped; finished in 22.51s (156.86s CPU time)
+Ran 2 test suites in 22.51s (22.83s CPU time): 35 tests passed, 0 failed, 0 skipped (35 total tests)
+rc=0

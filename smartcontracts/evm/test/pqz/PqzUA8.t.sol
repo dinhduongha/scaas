@@ -40,4 +40,34 @@ contract PqzUA8Test is PqzFixture {
     function test_ua8_pqzTokenRefusesUnproven() public {
         _assertNoAccount(_unproven(30));
     }
+
+    /// `u` is a PQZ account: a shield and a credit land as pending entries.
+    function _assertAccount(bytes32 u) internal {
+        _fund(tok, u, 5);
+        _transfer(tok, carol, u, bytes32(0), 101, false);
+        assertEq(tok.pqzAccount(u).pendingCount, 2, "a shield and a credit");
+    }
+
+    /// The proof stored later by a third party (`storePqzPop`, `R_REG` accepted by the verifier) makes the key proven:
+    /// the token takes it.
+    function test_ua8_pqzTokenAcceptsAfterStorePqzPop() public {
+        bytes32 u = _unproven(31);
+        vm.prank(address(0x7111D), address(0x7111D));
+        reg.storePqzPop(u, hex"aa");
+        (,, bool proven) = reg.pqzKeyOf(u);
+        assertTrue(proven);
+        _assertAccount(u);
+    }
+
+    /// Ruling A1-I1: a key added after `register` by `setPqzKey` is unproven (no PQZ account) until its proof, over
+    /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, keyHash))`, is stored by `storePqzPop`.
+    function test_ua8_pqzTokenSetPqzKeyThenProve() public {
+        bytes32 u = _mldsaUA(32);
+        reg.setPqzKey(u, _pk(32), keccak256(hex"bb"), new bytes(ML65_SIG));
+        _assertNoAccount(u);
+        reg.storePqzPop(u, hex"bb");
+        (,, bool proven) = reg.pqzKeyOf(u);
+        assertTrue(proven);
+        _assertAccount(u);
+    }
 }

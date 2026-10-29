@@ -4,32 +4,15 @@ pragma solidity ^0.8.24;
 import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 
 /// @title The UA-8 members `UARegistry` does not implement yet (spec 2026-10-25-ua8-portable-registrations, P4, P7, P9).
-/// @notice UA-8 Task A5 folded the rest of the surface into `IUARegistry` (ruling C3); A6 (`storePqzPop`, `setPqzKey`,
-///         `pqzKeySigOf`) and A7 (`setKemKey`) move each member there as they implement it.
+/// @notice UA-8 Task A5 folded the rest of the surface into `IUARegistry` (ruling C3), A6 `storePqzPop`, `setPqzKey` and
+///         `pqzKeySigOf`; A7 (`setKemKey`) moves the rest there as it implements it.
 interface IUARegistryUA8 {
     /// A KEM record stored; `keyHash = keccak256(kemPk)`. Checked on chain (`CHECKED_CHAIN`) on EVM.
     event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash);
-    /// A PQZ key added by `setPqzKey` (`pqzKeyHash = keyHashOf(0x0142, pqzKey)`); unproven (`CHECKED_NONE`) until its proof
-    /// is stored (`UAPqzPopStored`).
-    event UAPqzKeyAdded(bytes32 indexed ua, bytes32 pqzKeyHash, bytes32 pqzPopHash);
 
-    error UAPqzKeySet(bytes32 ua); // setPqzKey on a record that already has a PQZ key
-
-    /// Anyone; `UAPqzPopHash` unless `keccak256(pqzPop)` is the stored `pqzPopHash`; a no-op once stored.
-    function storePqzPop(bytes32 ua, bytes calldata pqzPop) external;
     /// Anyone; `sig` in the `pop` format over `uaMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`; each
     /// `(ua, version)` once, any order (UA8-D5).
     function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
-    /// Anyone; adds the PQZ key to a record registered without one (ruling A1-I1: set once per chain, portable). `sig` in
-    /// the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(pqzKeyDigest(ua, pqzKeyHash), pqzPopHash))`;
-    /// the key's `R_REG` proves over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))` and comes by
-    /// `storePqzPop`. The call carries no proof, so its check order (ruling A4-c2) is: holder / kind (`UAPqzHolder`) → the
-    /// record has a PQZ key (`UAPqzKeySet`) → the key's length (`UAKeyData`) / a zero `pqzPopHash` (`UAPqzPopHash`) →
-    /// signature (`UAUnauthorized`). `UAPoP` (`R_REG`) and `UAKeyInUse` (one UA per proven key) fire only where a proof is
-    /// checked: `storePqzPop`, and `register` with a `pqzPop`.
-    function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, bytes calldata sig) external;
-    /// `setPqzKey`'s signature; empty when the key came with `register` (its consent is the `pop`) or there is none.
-    function pqzKeySigOf(bytes32 ua) external view returns (bytes memory);
 }
 
 /// @title The UA registry (accounts.md §1.8): monotonic, admin-free records of derived UAs and the one entry point
@@ -68,6 +51,9 @@ interface IUARegistry is IERC5267 {
     /// The PQZ proof stored (`register` with a `pqzPop`, or `storePqzPop`); `checkedPqzPop` = `CHECKED_CHAIN` iff the
     /// verifier checked it.
     event UAPqzPopStored(bytes32 indexed ua, uint8 checkedPqzPop);
+    /// A PQZ key added by `setPqzKey` (`pqzKeyHash = keyHashOf(0x0142, pqzKey)`); unproven (`CHECKED_NONE`) until its proof
+    /// is stored (`UAPqzPopStored`).
+    event UAPqzKeyAdded(bytes32 indexed ua, bytes32 pqzKeyHash, bytes32 pqzPopHash);
     /// One part of an ML-DSA id's expanded key stored (P6c), at `ptr` (SSTORE2).
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);
 
@@ -89,6 +75,7 @@ interface IUARegistry is IERC5267 {
     /// A PQZ key without its proof hash or a proof hash without a key (`register`; a zero hash in `setPqzKey`), or proof
     /// bytes that do not hash to the (stored) `pqzPopHash`.
     error UAPqzPopHash(bytes32 ua);
+    error UAPqzKeySet(bytes32 ua); // setPqzKey on a record that already has a PQZ key
 
     function generation() external view returns (uint8); // 1 or 2
     function predecessor() external view returns (address);
@@ -122,15 +109,37 @@ interface IUARegistry is IERC5267 {
     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua);
 
+    /// Anyone (UA8-D8, P8): the `R_REG` proof of the UA's PQZ key, given later (or again) — `UAPqzPopHash` unless
+    /// `keccak256(pqzPop)` is the stored `pqzPopHash` (so also for a UA without a PQZ key); a no-op (no event) once proof
+    /// bytes are stored. Else the bytes are stored and, where slot `0x0142` has a verifier, checked over the key's `R_REG`
+    /// message — `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(...))` for a key from `register`,
+    /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))` for one from `setPqzKey` — (`UAPoP` on failure),
+    /// then the key's owner (`UAKeyInUse`), `keyOwner`, the `0x0142` list, `proven`; `UAPqzPopStored`. `UAUnauthorized`
+    /// for an id this registry does not hold (gen 2: a gen-1 record goes to gen 1, UA8-D11).
+    function storePqzPop(bytes32 ua, bytes calldata pqzPop) external;
+    /// Anyone; adds the PQZ key to a record registered without one (ruling A1-I1: set once per chain, portable). `sig` in
+    /// the `pop` format over `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(pqzKeyDigest(ua, pqzKeyHash), pqzPopHash))`;
+    /// the key is stored unproven, and its `R_REG` (over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, pqzKeyHash))`)
+    /// comes by `storePqzPop`. Check order (ruling A4-c2): an id this registry does not hold (`UAUnauthorized`, as
+    /// `storePqzPop`), a gen 2 whose gen 1 enables 0x0142 (`UAKindDisabled(0x0142)`, as `register`) → holder
+    /// (`UAPqzHolder`, with the `msig` debit bound) → the record has a PQZ key (`UAPqzKeySet`) → the key's length
+    /// (`UAKeyData(0x0142)`) / a zero `pqzPopHash` (`UAPqzPopHash`) → signature (`UAUnauthorized`). `UAPoP` (`R_REG`) and
+    /// `UAKeyInUse` (one UA per proven key) fire only where a proof is checked: `storePqzPop`, and `register` with a
+    /// `pqzPop`. `UAPqzKeyAdded`.
+    function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, bytes calldata sig) external;
+
     /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, proven or not (UA8-D9: a directory), 0 = none (gen 2 forwards
     /// gen-1 records).
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey);
-    /// Exactly the `register` arguments (a PQZ key added later by `setPqzKey` is read with `pqzKeyOf` / `pqzKeySigOf`).
-    /// `pqzPop` is the stored proof (given in `register` or by `storePqzPop`; it hashes to `attrs.pqzPopHash`).
+    /// Exactly the `register` arguments: a PQZ key added later by `setPqzKey` is not in `attrs` (read it, its proof and
+    /// its signature with `pqzKeyOf`, `pqzPopOf`, `pqzKeySigOf`; ruling A4-c3). For a key from `register`, `pqzPop` is the
+    /// stored proof (given in `register` or by `storePqzPop`; it hashes to `attrs.pqzPopHash`; ruling A5-c2).
     function registrationOf(bytes32 ua) external view returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs,
         bytes memory pop, bytes memory pqzPop);
     function popOf(bytes32 ua) external view returns (bytes memory);
     function pqzPopOf(bytes32 ua) external view returns (bytes memory);
+    /// `setPqzKey`'s signature; empty when the key came with `register` (its consent is the `pop`) or there is none.
+    function pqzKeySigOf(bytes32 ua) external view returns (bytes memory);
     /// The PQZ key pointer, its proof hash and whether the slot-0x0142 verifier checked the proof (UA8-D9).
     function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
     /// The three parts (P11.3, ruling C8), `UAKinds.CHECKED_*`: `pop` = CHAIN; `pqzPop` = CHAIN iff proven, else NONE (no

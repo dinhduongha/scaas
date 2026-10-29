@@ -1,0 +1,12 @@
+# A6 RED 2: test/{ua/UARegistryUA8,pqz/PqzUA8}.t.sol against da0529a9 (no storePqzPop / setPqzKey / pqzKeySigOf yet), set n2304-kmax4096
+Error: Compiler run failed:
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+  --> src/common/Bls12381.sol:60:28:
+   --> src/factory/OpenFactory.sol:282:26:
+   --> test/ua/UAGas.t.sol:220:26:
+Error (9582): Member "storePqzPop" not found or not visible after argument-dependent lookup in contract UARegistry.
+  --> test/pqz/PqzUA8.t.sol:56:9:
+rc=1
