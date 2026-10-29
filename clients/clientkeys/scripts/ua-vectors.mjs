@@ -451,9 +451,10 @@ const canonicalIds = [
 
 // --- messages ---
 const digest = label('digest');
-const messages = [...[...key.keys(), 0x0120, 0x0142].map((kind) => [kind, 'pop']), ...ua.PURPOSES.map((p) => [0x0100, p])]
-  .map(([kind, purpose]) => ({ kind, purpose, purposeTag: hex(ua.purposeTag(purpose)), digest: hex(digest),
-    uaMsg: hex(ua.uaMessage(kind, ua.purposeTag(purpose), digest)) }));
+// per kind: the portable PoP's purpose (pop v2, UA-8 P1); then every purpose at v1 under webauthn-p256
+const messages = [...[...key.keys(), 0x0120, 0x0142].map((kind) => [kind, 'pop', 2]), ...ua.PURPOSES.map((p) => [0x0100, p, 1])]
+  .map(([kind, purpose, version]) => ({ kind, purpose, version, purposeTag: hex(ua.purposeTag(purpose, version)),
+    digest: hex(digest), uaMsg: hex(ua.uaMessage(kind, ua.purposeTag(purpose, version), digest)) }));
 
 // --- structures.json: the portable pop (UA-8), UAAuth, member ---
 const registry = '0x5ca0000000000000000000000000000000000001';

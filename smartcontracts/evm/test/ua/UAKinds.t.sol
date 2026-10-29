@@ -29,6 +29,10 @@ contract UAKindsTest is Test {
         return vm.readFile("../vectors/ua/structures.json");
     }
 
+    function _p() internal view returns (string memory) {
+        return vm.readFile("../vectors/ua/portable.json");
+    }
+
     function _at(string memory arr, uint256 i, string memory field) internal pure returns (string memory) {
         return string.concat(".", arr, "[", vm.toString(i), "].", field);
     }
@@ -84,13 +88,15 @@ contract UAKindsTest is Test {
                 vm.parseJsonBytes32(j, _at("groups", i, "GROUP"))
             );
         }
-        bytes32[11] memory p = [
+        // every purpose at v1 (kem, pqz-key: UA-8), then pop v2 (UA-8 P1)
+        bytes32[14] memory p = [
             UAKinds.PURPOSE_POP, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
             UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_ZETHER_AUTH, UAKinds.PURPOSE_ZETHER_OWNER, UAKinds.PURPOSE_KEYOP,
-            UAKinds.PURPOSE_RECEIVER_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE
+            UAKinds.PURPOSE_RECEIVER_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE,
+            UAKinds.PURPOSE_KEM, UAKinds.PURPOSE_PQZ_KEY, UAKinds.PURPOSE_POP_V2
         ];
-        assertEq(_count(j, "purposes"), 11);
-        for (uint256 i; i < 11; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
+        assertEq(_count(j, "purposes"), 14);
+        for (uint256 i; i < 14; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
         assertEq(UAKinds.MSG_TAG, vm.parseJsonBytes32(j, ".constants.MSG_TAG"));
         assertEq(UAKinds.PURPOSE_POP, vm.parseJsonBytes32(j, ".constants.POP_TAG"));
         assertEq(UAKinds.DOMAIN_TYPEHASH, vm.parseJsonBytes32(j, ".constants.DOMAIN_TYPEHASH"));
@@ -161,21 +167,45 @@ contract UAKindsTest is Test {
         }
     }
 
+    /// structures.json v2: the portable PoP rows (no chain context, UA-8 P1), R_REG's message, the msig PQZ rows.
     function test_structures() public view {
         string memory s = _s();
         uint256 np = _count(s, "pop");
+        assertEq(np, 7);
         for (uint256 i; i < np; ++i) {
-            string memory c = string.concat(".contexts.", vm.parseJsonString(s, _at("pop", i, "context")));
-            bytes32 ckh = UAKinds.chainKeyHash(vm.parseJsonUint(s, string.concat(c, ".chainId")));
-            assertEq(ckh, vm.parseJsonBytes32(s, _at("pop", i, "chainKeyHash")));
-            bytes32 got = UAKinds.popDigest(
-                ckh,
-                vm.parseJsonBytes32(s, string.concat(c, ".chainUid")),
-                vm.parseJsonAddress(s, string.concat(c, ".registry")),
+            bytes32 d = UAKinds.portablePopDigest(
                 vm.parseJsonBytes32(s, _at("pop", i, "ua")),
-                vm.parseJsonBytes32(s, _at("pop", i, "pqzKeyHash"))
+                vm.parseJsonBytes32(s, _at("pop", i, "pqzKeyHash")),
+                vm.parseJsonBytes32(s, _at("pop", i, "kemRecordHash"))
             );
-            assertEq(got, vm.parseJsonBytes32(s, _at("pop", i, "popDigest")));
+            assertEq(d, vm.parseJsonBytes32(s, _at("pop", i, "portablePopDigest")));
+            assertEq(
+                UAKinds.registrationDigest(d, vm.parseJsonBytes32(s, _at("pop", i, "pqzPopHash"))),
+                vm.parseJsonBytes32(s, _at("pop", i, "registrationDigest"))
+            );
+        }
+        uint256 nr = _count(s, "pqzReg");
+        assertEq(nr, 3);
+        for (uint256 i; i < nr; ++i) {
+            bytes32 d = UAKinds.portablePopDigest(
+                vm.parseJsonBytes32(s, _at("pqzReg", i, "ua")),
+                vm.parseJsonBytes32(s, _at("pqzReg", i, "pqzKeyHash")),
+                vm.parseJsonBytes32(s, _at("pqzReg", i, "kemRecordHash"))
+            );
+            assertEq(d, vm.parseJsonBytes32(s, _at("pqzReg", i, "portablePopDigest")));
+            assertEq(
+                UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, d),
+                vm.parseJsonBytes32(s, _at("pqzReg", i, "pqzRegMessage"))
+            );
+        }
+        bytes32 pqzH = vm.parseJsonBytes32(_k(), ".pqzKeyHash");
+        uint256 nq = _count(s, "pqzMsig");
+        for (uint256 i; i < nq; ++i) {
+            bytes32 h = vm.parseJsonBool(s, _at("pqzMsig", i, "eligible")) ? pqzH : bytes32(0);
+            assertEq(
+                UAKinds.portablePopDigest(vm.parseJsonBytes32(s, _at("pqzMsig", i, "ua")), h, 0),
+                vm.parseJsonBytes32(s, _at("pqzMsig", i, "portablePopDigest"))
+            );
         }
         uint256 nu = _count(s, "uaAuth");
         for (uint256 i; i < nu; ++i) {
@@ -261,5 +291,141 @@ contract UAKindsTest is Test {
     /// P6a's PqUA keeps its own tags (ruling U8): they must equal the table's.
     function test_pqTagsMatchPqUA() public pure {
         for (uint16 k = UAKinds.MLDSA44; k <= UAKinds.SLHDSA128S; ++k) assertEq(UAKinds.tag(k), PqUA.tag(k));
+    }
+
+    // ----- UA-8 portable registrations (portable.json, generated by clientkeys scripts/ua-portable-vectors.mjs) -----
+
+    function _row(string memory arr, uint256 i) internal pure returns (string memory) {
+        return string.concat(".", arr, "[", vm.toString(i), "]");
+    }
+
+    /// `keyHash(0x0142, pqzKey)`, 0 without a key; a key has its set's length.
+    function _pqzKeyHash(string memory j, string memory r, bytes memory pqzKey) internal view returns (bytes32) {
+        if (pqzKey.length == 0) return 0;
+        string memory set = vm.parseJsonString(j, string.concat(r, ".set"));
+        assertEq(pqzKey.length, vm.parseJsonUint(j, string.concat(".sets.", set, ".pqzKeyLength")), set);
+        return UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqzKey);
+    }
+
+    /// Every `registrations[]` row (all four PQZ sets): the attribute hashes, `portablePopDigest` and R_REG's message.
+    function test_portablePopDigestVectors() public {
+        vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
+        string memory j = _p();
+        uint256 n = _count(j, "registrations");
+        assertEq(n, 25);
+        uint256 pqzRows;
+        for (uint256 i; i < n; ++i) {
+            string memory r = _row("registrations", i);
+            string memory name_ = vm.parseJsonString(j, string.concat(r, ".name"));
+            bytes32 ua = vm.parseJsonBytes32(j, string.concat(r, ".ua"));
+            bytes32 h = _pqzKeyHash(j, r, vm.parseJsonBytes(j, string.concat(r, ".attrs.pqzKey")));
+            assertEq(h, vm.parseJsonBytes32(j, string.concat(r, ".pqzKeyHash")), name_);
+            uint64 v = uint64(vm.parseJsonUint(j, string.concat(r, ".attrs.kemVersion")));
+            bytes32 kh = v == 0 ? bytes32(0) : UAKinds.kemRecordDigest(ua, v, vm.parseJsonBytes(j, string.concat(r, ".attrs.kemPk")));
+            assertEq(kh, vm.parseJsonBytes32(j, string.concat(r, ".kemRecordHash")), name_);
+            bytes32 d = UAKinds.portablePopDigest(ua, h, kh);
+            assertEq(d, vm.parseJsonBytes32(j, string.concat(r, ".portablePopDigest")), name_);
+            bytes32 rReg = h == 0 ? bytes32(0) : UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2, d);
+            assertEq(rReg, vm.parseJsonBytes32(j, string.concat(r, ".pqzRegMessage")), name_);
+            if (h != 0) ++pqzRows;
+        }
+        assertEq(pqzRows, 8); // mldsa65 and msig-pq at each of the four sets
+    }
+
+    /// Every `registrations[]` row: `pqzPopHash = keccak256(pqzPop)`, `registrationDigest` and the signed `popMessage`.
+    function test_registrationDigestVectors() public {
+        vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
+        string memory j = _p();
+        uint256 n = _count(j, "registrations");
+        assertEq(n, 25);
+        for (uint256 i; i < n; ++i) {
+            string memory r = _row("registrations", i);
+            string memory name_ = vm.parseJsonString(j, string.concat(r, ".name"));
+            bytes32 popHash = vm.parseJsonBytes32(j, string.concat(r, ".attrs.pqzPopHash"));
+            bytes memory pqzPop = vm.parseJsonBytes(j, string.concat(r, ".pqzPop"));
+            assertEq(pqzPop.length == 0 ? bytes32(0) : keccak256(pqzPop), popHash, name_);
+            bytes32 d = UAKinds.registrationDigest(vm.parseJsonBytes32(j, string.concat(r, ".portablePopDigest")), popHash);
+            assertEq(d, vm.parseJsonBytes32(j, string.concat(r, ".registrationDigest")), name_);
+            uint16 kind = uint16(vm.parseJsonUint(j, string.concat(r, ".kind")));
+            bytes32 m = UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, d);
+            assertEq(m, vm.parseJsonBytes32(j, string.concat(r, ".popMessage")), name_);
+            if (kind == UAKinds.MSIG) {
+                assertEq(UAKinds.memberDigest(vm.parseJsonBytes32(j, string.concat(r, ".ua")), m),
+                    vm.parseJsonBytes32(j, string.concat(r, ".memberDigest")), name_);
+            }
+        }
+    }
+
+    /// Every `kemRecords[]` row: `kemRecordDigest` and the signed message (`memberDigest` of it for an msig).
+    function test_kemRecordDigestVectors() public {
+        vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
+        string memory j = _p();
+        uint256 n = _count(j, "kemRecords");
+        assertEq(n, 9);
+        for (uint256 i; i < n; ++i) {
+            string memory r = _row("kemRecords", i);
+            string memory id = vm.parseJsonString(j, string.concat(r, ".id"));
+            bytes32 ua = vm.parseJsonBytes32(j, string.concat(r, ".ua"));
+            bytes memory pk = vm.parseJsonBytes(j, string.concat(r, ".kemPk"));
+            assertEq(pk.length, UAKinds.KEM_PK_LENGTH, id);
+            bytes32 d = UAKinds.kemRecordDigest(ua, uint64(vm.parseJsonUint(j, string.concat(r, ".version"))), pk);
+            assertEq(d, vm.parseJsonBytes32(j, string.concat(r, ".digest")), id);
+            uint16 kind = uint16(vm.parseJsonUint(j, string.concat(r, ".kind")));
+            bytes32 m = UAKinds.uaMessage(kind, UAKinds.PURPOSE_KEM, d);
+            assertEq(m, vm.parseJsonBytes32(j, string.concat(r, ".message")), id);
+            if (kind == UAKinds.MSIG) {
+                assertEq(UAKinds.memberDigest(ua, m), vm.parseJsonBytes32(j, string.concat(r, ".memberDigest")), id);
+            }
+        }
+    }
+
+    /// Every `pqzKeyRecords[]` row (`setPqzKey`, all four sets): `pqzKeyDigest`, `pqzKeyRecordDigest`, the signed message
+    /// and the later key's R_REG message.
+    function test_pqzKeyRecordDigestVectors() public {
+        vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
+        string memory j = _p();
+        uint256 n = _count(j, "pqzKeyRecords");
+        assertEq(n, 8);
+        for (uint256 i; i < n; ++i) {
+            string memory r = _row("pqzKeyRecords", i);
+            string memory name_ = vm.parseJsonString(j, string.concat(r, ".name"));
+            bytes32 ua = vm.parseJsonBytes32(j, string.concat(r, ".ua"));
+            bytes32 h = _pqzKeyHash(j, r, vm.parseJsonBytes(j, string.concat(r, ".pqzKey")));
+            assertEq(h, vm.parseJsonBytes32(j, string.concat(r, ".pqzKeyHash")), name_);
+            bytes32 kd = UAKinds.pqzKeyDigest(ua, h);
+            assertEq(kd, vm.parseJsonBytes32(j, string.concat(r, ".pqzKeyDigest")), name_);
+            bytes32 rd = UAKinds.pqzKeyRecordDigest(kd, vm.parseJsonBytes32(j, string.concat(r, ".pqzPopHash")));
+            assertEq(rd, vm.parseJsonBytes32(j, string.concat(r, ".recordDigest")), name_);
+            uint16 kind = uint16(vm.parseJsonUint(j, string.concat(r, ".kind")));
+            bytes32 m = UAKinds.uaMessage(kind, UAKinds.PURPOSE_PQZ_KEY, rd);
+            assertEq(m, vm.parseJsonBytes32(j, string.concat(r, ".message")), name_);
+            assertEq(UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_KEY, kd),
+                vm.parseJsonBytes32(j, string.concat(r, ".pqzRegMessage")), name_);
+            if (kind == UAKinds.MSIG) {
+                assertEq(UAKinds.memberDigest(ua, m), vm.parseJsonBytes32(j, string.concat(r, ".memberDigest")), name_);
+            }
+        }
+    }
+
+    /// portable.json `tags` (and kinds.json's v2 / UA-8 purpose rows, in test_groupsPurposesConstants).
+    function test_purposeTagsV2() public {
+        vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
+        string memory j = _p();
+        assertEq(UAKinds.PURPOSE_POP_V2, vm.parseJsonBytes32(j, ".tags.PURPOSE_POP_V2.hash"));
+        assertEq(UAKinds.PURPOSE_KEM, vm.parseJsonBytes32(j, ".tags.PURPOSE_KEM.hash"));
+        assertEq(UAKinds.KEM_RECORD_TAG, vm.parseJsonBytes32(j, ".tags.KEM_RECORD_TAG.hash"));
+        assertEq(UAKinds.PURPOSE_PQZ_KEY, vm.parseJsonBytes32(j, ".tags.PURPOSE_PQZ_KEY.hash"));
+        assertEq(UAKinds.PQZ_KEY_RECORD_TAG, vm.parseJsonBytes32(j, ".tags.PQZ_KEY_RECORD_TAG.hash"));
+        assertEq(UAKinds.groupTag(UAKinds.groupName(UAKinds.PQZ_MLWE)), vm.parseJsonBytes32(j, ".tags.PQZ_KEY_GROUP.hash"));
+    }
+
+    /// portable.json `checked` and `kemPkLength` (UA-8 P7, P11.3).
+    function test_checkedCodePoints() public {
+        vm.pauseGasMetering(); // a 2.5 MB JSON string per cheatcode call; correctness test, not a gas test
+        string memory j = _p();
+        assertEq(UAKinds.CHECKED_NONE, vm.parseJsonUint(j, ".checked.none"));
+        assertEq(UAKinds.CHECKED_CHAIN, vm.parseJsonUint(j, ".checked.chain"));
+        assertEq(UAKinds.CHECKED_RELAYER, vm.parseJsonUint(j, ".checked.relayer"));
+        assertEq(UAKinds.KEM_PK_LENGTH, vm.parseJsonUint(j, ".kemPkLength"));
     }
 }

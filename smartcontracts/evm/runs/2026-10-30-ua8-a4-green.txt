@@ -1,0 +1,27 @@
+# A4 GREEN at commit f0796dba (+ uncommitted A4 changes, kinds.json regenerated)
+No files changed, compilation skipped
+
+Ran 16 tests for test/ua/UAKinds.t.sol:UAKindsTest
+[PASS] test_checkedCodePoints() (gas: 3592)
+[PASS] test_gasShortIsNotKeyData() (gas: 2310877)
+[PASS] test_groupsPurposesConstants() (gas: 3018057)
+[PASS] test_invalidPrecompileKeyGasBounded() (gas: 13367765)
+[PASS] test_invalidRows() (gas: 3549)
+[PASS] test_kemRecordDigestVectors() (gas: 3571)
+[PASS] test_kindTable() (gas: 8881679)
+[PASS] test_nativeSpaceAndMessages() (gas: 3549)
+[PASS] test_nearAlgorandNatives() (gas: 37370)
+[PASS] test_portablePopDigestVectors() (gas: 3547)
+[PASS] test_pqTagsMatchPqUA() (gas: 8440)
+[PASS] test_pqzKeyRecordDigestVectors() (gas: 3569)
+[PASS] test_purposeTagsV2() (gas: 3570)
+[PASS] test_registrationDigestVectors() (gas: 3592)
+[PASS] test_structures() (gas: 1881439)
+[PASS] test_validRows() (gas: 3571)
+Suite result: ok. 16 passed; 0 failed; 0 skipped; finished in 1.80s (9.10s CPU time)
+
+Ran 1 test suite in 1.80s (1.80s CPU time): 16 tests passed, 0 failed, 0 skipped (16 total tests)
+rc=0
+# size gate (forge build src --sizes --json; scripts/size_gate.py): 0 error(s), 45 contracts; UARegistry runtime 25542 B = baseline (no deployed-bytecode change)
+# clientkeys npm test 148/150 pass (2 skipped bundle); ua-rs --test vectors 6/6; zether-prover --test r33_keys 8/8 (kinds.json messages v2)
+rc=0
