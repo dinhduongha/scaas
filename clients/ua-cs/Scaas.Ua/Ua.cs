@@ -317,7 +317,7 @@ public static partial class UA
     /// <summary>EIP-191 <c>personal_sign</c> of a 32-byte digest. What a code-less native (EOA) <c>msig</c> member signs over the
     /// <c>MemberDigest</c> of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7).</summary>
     public static byte[] PersonalSignDigest(byte[] digest) =>
-        Keccak256(Utf8("\x19Ethereum Signed Message:\n32"), Sized(digest, 32, "digest"));
+        Keccak256(Utf8("\u0019Ethereum Signed Message:\n32"), Sized(digest, 32, "digest"));
 
     /// <summary>The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less native msig member signs by <c>personal_sign</c>.</summary>
     public static bool IsPortablePurpose(byte[] tag) =>

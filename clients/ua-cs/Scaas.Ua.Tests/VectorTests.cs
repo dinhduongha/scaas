@@ -313,7 +313,13 @@ public class VectorTests
         var r = p.GetProperty("registrations").EnumerateArray().First(x => x.GetProperty("name").GetString() == "msig-pq-native");
         var md = B(r.GetProperty("memberDigest"));
         Assert.NotEqual(Hx(md), Hx(UA.PersonalSignDigest(md)));
-        Assert.Equal(Hx(UA.Keccak256(System.Text.Encoding.UTF8.GetBytes("\x19Ethereum Signed Message:\n32"), md)), Hx(UA.PersonalSignDigest(md)));
+        // known answer from the JS reference; the prefix is 0x19 'E'... (28 bytes), not a C# "\x19E" escape (= U+019E)
+        var prefix = System.Text.Encoding.UTF8.GetBytes("\u0019Ethereum Signed Message:\n32");
+        Assert.Equal(28, prefix.Length);
+        Assert.Equal((byte)0x19, prefix[0]);
+        Assert.Equal((byte)0x45, prefix[1]);
+        Assert.Equal("0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c", Hx(md));
+        Assert.Equal("0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8", Hx(UA.PersonalSignDigest(md)));
         // native-personal-sign-under-metatx: valid personal_sign, but metatx is not a portable purpose (UAAuth there)
         var n = p.GetProperty("negatives").EnumerateArray().First(x => x.GetProperty("name").GetString() == "native-personal-sign-under-metatx");
         Assert.False(UA.IsPortablePurpose(B(n.GetProperty("mutation").GetProperty("set").GetProperty("purposeTag"))));
