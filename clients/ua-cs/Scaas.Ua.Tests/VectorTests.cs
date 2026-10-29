@@ -365,7 +365,7 @@ public class VectorTests
                 var ph = set.FirstOrDefault(o => o.Name == "pqzPopHash").Value;
                 var hash = B(ph.ValueKind == JsonValueKind.String ? ph : rec.GetProperty("pqzPopHash"));
                 Assert.Equal(err, Assert.Throws<UAException>(() => UA.PqzKeyRecordMessage(Kind(holder), Convert.FromHexString(uaHex![2..]),
-                    B(holder.GetProperty("keyData")), B(rec.GetProperty("pqzKey")), null, hash, err == "UAPqzKeySet")).Code);
+                    B(holder.GetProperty("keyData")), B(rec.GetProperty("pqzKey")), null, hash, holder.GetProperty("attrs").GetProperty("pqzKey").GetString() != "0x")).Code);
                 run++;
             }
             else if (entry == "setKemKey" && name == "kem-record-of-other-ua")

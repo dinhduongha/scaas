@@ -199,7 +199,7 @@ fn negatives_refused() {
                 let holder_row = find(&p, "registrations", "ua", ua);
                 let (kind, kd) = (num(&holder_row["kind"]) as u16, bytes(&holder_row["keyData"]));
                 let h = b32(m["set"].get("pqzPopHash").unwrap_or(&rec["pqzPopHash"]));
-                let already = err == "UAPqzKeySet";
+                let already = holder_row["attrs"]["pqzKey"] != "0x"; // the state, not the expected error
                 // already-set rows keep the holder (same kind as the record's); wrong-holder rows name a UA that is none
                 let got = pqz_key_record_message(kind, &b32(ua), &kd, &bytes(&rec["pqzKey"]), None, Some(&h), already);
                 assert_eq!(got.err().map(|e| e.code()), Some(err), "{name}");

@@ -199,7 +199,8 @@ class Vectors(unittest.TestCase):
             with self.assertRaises(ua.UAError) as e:
                 ua.kem_record_digest(*args)
             self.assertEqual(e.exception.code, code)
-        self.assertEqual(len(ua.kem_record_digest(u, 2**64 - 1, bytes(1600))), 32)
+        self.assertEqual(hx(ua.kem_record_digest(u, 2**64 - 1, bytes(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31')  # pins the 8-byte version word
+        self.assertEqual(hx(ua.chain_key_hash(2**40 + 7)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950')  # keccak256("evm:1099511627783")
 
     def test_pqz_key_record(self):
         regs = P['registrations']
@@ -268,7 +269,7 @@ class Vectors(unittest.TestCase):
                 holder = next(x for x in regs if x['ua'] == ua_hex)
                 with self.assertRaises(ua.UAError, msg=n['name']) as e:
                     ua.pqz_key_record_message(holder['kind'], b(ua_hex), b(holder['keyData']), b(rec['pqzKey']), None,
-                                              b(s.get('pqzPopHash', rec['pqzPopHash'])), err == 'UAPqzKeySet')
+                                              b(s.get('pqzPopHash', rec['pqzPopHash'])), holder['attrs']['pqzKey'] != '0x')
                 self.assertEqual(e.exception.code, err, n['name'])
                 run += 1
             elif n['entry'] == 'setKemKey' and n['name'] == 'kem-record-of-other-ua':

@@ -221,6 +221,10 @@ def ua_message(kind, purpose, digest):
     return keccak256(MSG_TAG, tag(kind), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
 
 
+def chain_key_hash(chain_id):
+    return keccak256(f'evm:{int(chain_id)}'.encode())
+
+
 def _word(n):
     return int(n).to_bytes(32, 'big')
 
@@ -374,7 +378,9 @@ def ua_auth_domain_separator(generation, chain_id, registry, chain_uid):
 
 
 def ua_auth_digest(generation, chain_id, registry, chain_uid, ua, purpose, digest):
-    """EIP-712 digest of ``UAAuth(ua, purpose, digest)`` under the registry's domain: what native signers sign."""
+    """EIP-712 digest of ``UAAuth(ua, purpose, digest)`` under the registry's domain: what native signers sign,
+    except that under the three portable purposes (``is_portable_purpose``) a code-less native msig member signs
+    ``personal_sign_digest(member_digest)`` instead (CTR-MTX-14, ruling C7)."""
     s = keccak256(UAAUTH_TYPEHASH, _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest'))
     return keccak256(b'\x19\x01', ua_auth_domain_separator(generation, chain_id, registry, chain_uid), s)
 

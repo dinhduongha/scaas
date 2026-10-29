@@ -397,8 +397,11 @@ func TestKemRecord(t *testing.T) {
 			t.Fatalf("kem %v: %v", c.code, err)
 		}
 	}
-	if _, err := KemRecordDigest(ua, ^uint64(0), make([]byte, 1600)); err != nil {
-		t.Fatal("max version")
+	if d, err := KemRecordDigest(ua, ^uint64(0), make([]byte, 1600)); err != nil || hx(d[:]) != "0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31" {
+		t.Fatal("max version") // pins the 8-byte version word
+	}
+	if c := ChainKeyHash(1<<40 + 7); hx(c[:]) != "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950" { // keccak256("evm:1099511627783")
+		t.Fatal("chain key hash")
 	}
 }
 
@@ -528,7 +531,7 @@ func TestHolderRefusals(t *testing.T) {
 				hashV = v
 			}
 			holder := find(regs, "ua", uaHex)
-			_, err := PqzKeyRecordMessage(kind(holder["kind"]), b32(uaHex), bs(holder["keyData"]), bs(rec["pqzKey"]), nil, bs(hashV), want == "UAPqzKeySet")
+			_, err := PqzKeyRecordMessage(kind(holder["kind"]), b32(uaHex), bs(holder["keyData"]), bs(rec["pqzKey"]), nil, bs(hashV), holder["attrs"].(obj)["pqzKey"] != "0x")
 			if err == nil || code(err) != want {
 				t.Fatalf("%v: want %v got %v", name, want, err)
 			}

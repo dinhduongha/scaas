@@ -277,7 +277,8 @@ void main() {
     expect(_err(() => kemRecordDigest(u, BigInt.one << 64, Uint8List(1600))).code, 'UAKemVersion');
     expect(_err(() => kemRecordDigest(u, BigInt.one, Uint8List(1599))).code, 'UAKemKeyLength');
     expect(_err(() => kemRecordDigest(u, BigInt.one, Uint8List(1601))).code, 'UAKemKeyLength');
-    expect(kemRecordDigest(u, (BigInt.one << 64) - BigInt.one, Uint8List(1600)).length, 32);
+    expect(_hx(kemRecordDigest(u, (BigInt.one << 64) - BigInt.one, Uint8List(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31'); // pins the 8-byte version word
+    expect(_hx(chainKeyHash(0x10000000007)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950'); // keccak256("evm:1099511627783")
   });
 
   test('pqz key record', () {
@@ -351,7 +352,7 @@ void main() {
         final uaHex = (set['ua'] ?? rec['ua']) as String, holder = byKey(regs, 'ua', uaHex);
         final hash = _b(set['pqzPopHash'] ?? rec['pqzPopHash']);
         final e = _err(() => pqzKeyRecordMessage(_kind(holder), _b(uaHex), _b(holder['keyData']), _b(rec['pqzKey']),
-            pqzPopHash: hash, alreadySet: err == 'UAPqzKeySet'));
+            pqzPopHash: hash, alreadySet: (holder['attrs'] as Map)['pqzKey'] != '0x'));
         expect(e.code, err, reason: '$name');
         run++;
       } else if (entry == 'setKemKey' && name == 'kem-record-of-other-ua') {

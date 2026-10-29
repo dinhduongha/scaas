@@ -280,8 +280,7 @@ class Vectors(unittest.TestCase):
                 d = out32(L.portable_pop_digest, b(p['ua']), b(p['pqzKeyHash']), b(p['kemRecordHash']))
                 self.assertEqual(hx(d), p['portablePopDigest'])
                 self.assertEqual(hx(out32(L.registration_digest, d, b(p['pqzPopHash']))), p['registrationDigest'])
-        c = S['contexts']['E']  # the chain key hash stays (context E is 2^40+7)
-        self.assertEqual(len(hx(out32(L.chain_key_hash, c['chainId']))), 66)
+        self.assertEqual(hx(out32(L.chain_key_hash, 2**40 + 7)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950')  # keccak256("evm:1099511627783")
         pk, proof = b(K['pqzKey']), bytes([7]) * 32
         for p in S['pqzReg']:
             ua, kem = b(p['ua']), b(p['kemRecordHash'])
@@ -376,7 +375,7 @@ class Vectors(unittest.TestCase):
         for v, pk, code in ((0, bytes(KEM_PK), 'UAKemVersion'), (1, bytes(KEM_PK - 1), 'UAKemKeyLength'),
                             (1, bytes(KEM_PK + 1), 'UAKemKeyLength'), (1, b'', 'UAKemKeyLength')):
             self.assertEqual(code_of(lambda: out32(L.kem_record_digest, u, v, pk, len(pk))), code)
-        self.assertEqual(len(out32(L.kem_record_digest, u, 2**64 - 1, bytes(KEM_PK), KEM_PK)), 32)
+        self.assertEqual(hx(out32(L.kem_record_digest, u, 2**64 - 1, bytes(KEM_PK), KEM_PK)), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31')  # pins the 8-byte version word
 
     def test_pqz_key_record(self):
         regs = PV['registrations']
@@ -444,7 +443,7 @@ class Vectors(unittest.TestCase):
                 ua_hex = s.get('ua', rec['ua'])
                 holder_row = next(x for x in regs if x['ua'] == ua_hex)
                 self.assertEqual(code_of(lambda: key_record(holder_row['kind'], b(ua_hex), b(holder_row['keyData']), b(rec['pqzKey']), b'',
-                                                            b(s.get('pqzPopHash', rec['pqzPopHash'])), err == 'UAPqzKeySet')), err, n['name'])
+                                                            b(s.get('pqzPopHash', rec['pqzPopHash'])), holder_row['attrs']['pqzKey'] != '0x')), err, n['name'])
                 run += 1
             elif n['entry'] == 'setKemKey' and n['name'] == 'kem-record-of-other-ua':
                 # the record of one UA offered for another: the signed message differs, so the signature cannot verify
@@ -521,6 +520,8 @@ class Abi(unittest.TestCase):
             'in_native_space id NULL': L.in_native_space(None, C.byref(bl())),
             'in_native_space out NULL': L.in_native_space(bytes(32), None),
             'ua_message digest NULL': L.ua_message(0x0102, bytes(32), None, o),
+            'holder_pop_message pqz_pop_hash NULL len 32': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, None, 32, 0, b'', 0, C.byref(HolderPop())),
+            'pqz_key_record_message out NULL': L.pqz_key_record_message(0x0130, bytes(32), b'', 0, bytes(16384), 16384, b'', 0, bytes([7]) * 32, 32, False, None),
             'portable_pop_digest ua NULL': L.portable_pop_digest(None, bytes(32), bytes(32), o),
             'holder_pop_message out NULL': L.holder_pop_message(0x0130, bytes(32), b'', 0, b'', 0, b'', 0, b'', 0, 0, b'', 0, None),
             'domain separator chain_uid NULL': L.ua_auth_domain_separator(1, 1, bytes(20), None, o),

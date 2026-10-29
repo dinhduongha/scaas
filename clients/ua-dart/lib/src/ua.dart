@@ -120,6 +120,9 @@ BigInt _id(int v) {
   return BigInt.from(v);
 }
 
+/// [chainId] is a Dart int: exact up to 2^63-1 on the VM, up to 2^53 when compiled to JS.
+Uint8List chainKeyHash(int chainId) => _k([_utf8('evm:${_id(chainId)}')]);
+
 Uint8List _word(int v) {
   var x = _id(v);
   final w = Uint8List(32);
@@ -254,8 +257,10 @@ HolderPop holderPopMessage(int kind, Uint8List ua,
 }
 
 /// The message `R_REG` proves over: `uaMessage(0x0142, POP_V2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))`.
-Uint8List pqzRegMessage(Uint8List ua, Object? pqzKey, [Kem? kem]) =>
-    uaMessage(0x0142, popV2Tag, portablePopDigest(ua, _pqzKeyHashOf(pqzKey), _kemHash(ua, kem)));
+Uint8List pqzRegMessage(Uint8List ua, Object? pqzKey, [Kem? kem]) {
+  final kr = _kemHash(ua, kem); // the KEM record first, as ua-rs and the JS
+  return uaMessage(0x0142, popV2Tag, portablePopDigest(ua, _pqzKeyHashOf(pqzKey), kr));
+}
 
 /// `keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)`: what a later PQZ key's `R_REG` proves over (no proof hash: no cycle).
 Uint8List pqzKeyDigest(Uint8List ua, Uint8List pqzKeyHash) =>
@@ -339,7 +344,9 @@ Uint8List uaAuthDomainSeparator(Domain d) => _k([
       _sized(d.chainUid, 32, 'chainUid'),
     ]);
 
-/// EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign.
+/// EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except that
+/// under the three portable purposes ([isPortablePurpose]) a code-less native msig member signs [personalSignDigest] of the
+/// [memberDigest] instead (CTR-MTX-14, ruling C7).
 Uint8List uaAuthDigest(Domain d, Uint8List ua, Uint8List purpose, Uint8List digest) => _k([
       Uint8List.fromList([0x19, 0x01]),
       uaAuthDomainSeparator(d),

@@ -281,6 +281,10 @@ func UAMessage(kind uint16, purpose, digest [32]byte) ([32]byte, error) {
 	return Keccak256(MsgTag[:], t[:], purpose[:], digest[:]), nil
 }
 
+func ChainKeyHash(chainID uint64) [32]byte {
+	return Keccak256([]byte("evm:" + strconv.FormatUint(chainID, 10)))
+}
+
 func word(v uint64) []byte {
 	w := make([]byte, 32)
 	for i := 0; i < 8; i++ {
@@ -463,13 +467,13 @@ func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopH
 
 // PqzRegMessage is the message R_REG proves over: UAMessage(0x0142, POP_V2, PortablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash)).
 func PqzRegMessage(ua [32]byte, pqzKey []byte, kem *Kem) ([32]byte, error) {
+	kr, err := kem.hash(ua) // the KEM record first, as ua-rs and the JS
+	if err != nil {
+		return kr, err
+	}
 	h, err := pqzKeyHashOf(pqzKey)
 	if err != nil {
 		return h, err
-	}
-	kr, err := kem.hash(ua)
-	if err != nil {
-		return kr, err
 	}
 	return UAMessage(0x0142, PopV2Tag, PortablePopDigest(ua, h, kr))
 }
@@ -554,7 +558,9 @@ func UAAuthDomainSeparator(d Domain) [32]byte {
 	return Keccak256(t[:], n[:], v[:], word(d.ChainID), addressWord(d.Registry), d.ChainUID[:])
 }
 
-// UAAuthDigest is the EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign.
+// UAAuthDigest is the EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign, except
+// that under the three portable purposes (IsPortablePurpose) a code-less native msig member signs PersonalSignDigest of the
+// MemberDigest instead (CTR-MTX-14, ruling C7).
 func UAAuthDigest(d Domain, ua, purpose, digest [32]byte) [32]byte {
 	t := Keccak256([]byte(UAAuthType))
 	s := Keccak256(t[:], ua[:], purpose[:], digest[:])

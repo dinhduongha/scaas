@@ -165,7 +165,7 @@ static void structures() {
         CHECK(hx(portable) == p["portablePopDigest"].get<std::string>(), "portablePopDigest");
         CHECK(hx(registrationDigest(portable, bytes(p["pqzPopHash"]))) == p["registrationDigest"].get<std::string>(), "registrationDigest");
     }
-    CHECK(hx(chainKeyHash(0x10000000007ULL)).size() == 66, "chainKeyHash stays");  // 2^40+7
+    CHECK(hx(chainKeyHash(0x10000000007ULL)) == "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950", "chainKeyHash");  // keccak256("evm:1099511627783")
     for (auto& p : s["pqzReg"]) {
         Bytes ua = bytes(p["ua"]), kem = bytes(p["kemRecordHash"]), h = *keyHashOf(0x0142, pk);
         CHECK(hx(h) == p["pqzKeyHash"].get<std::string>(), "pqzReg keyHash");
@@ -285,7 +285,7 @@ static void kem_record() {
     CHECK(code_of([&] { kemRecordDigest(u, 0, Bytes(kKemPkLength)); }) == "UAKemVersion", "version 0");
     CHECK(code_of([&] { kemRecordDigest(u, 1, Bytes(kKemPkLength - 1)); }) == "UAKemKeyLength", "short key");
     CHECK(code_of([&] { kemRecordDigest(u, 1, Bytes(kKemPkLength + 1)); }) == "UAKemKeyLength", "long key");
-    CHECK(kemRecordDigest(u, UINT64_MAX, Bytes(kKemPkLength)).size() == 32, "max version");
+    CHECK(hx(kemRecordDigest(u, UINT64_MAX, Bytes(kKemPkLength))) == "0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31", "max version");  // pins the 8-byte version word
 }
 
 static void pqz_key_record() {
@@ -364,7 +364,7 @@ static void holder_refusals() {
             Bytes hash = bytes(set.contains("pqzPopHash") ? set["pqzPopHash"] : rec["pqzPopHash"]);
             CHECK(code_of([&] {
                       pqzKeyRecordMessage(kind(holder["kind"]), bytes(json(uaHex)), bytes(holder["keyData"]), bytes(rec["pqzKey"]),
-                                          std::nullopt, hash, err == "UAPqzKeySet");
+                                          std::nullopt, hash, holder["attrs"]["pqzKey"].get<std::string>() != "0x");
                   }) == err, name);
             ++run;
         } else if (entry == "setKemKey" && name == "kem-record-of-other-ua") {
