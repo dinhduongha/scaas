@@ -3,7 +3,7 @@
 //! Bất biến: không bao giờ bỏ một nonce (R18) — tx kẹt được thay thế với phí cao hơn; job phải
 //! bỏ thì nonce của nó được lấp bằng tx 0-value tự chuyển. `final` của job KHÔNG đến từ đây mà từ
 //! indexer (`MetaTransactionExecuted`), nên một meta-tx được người khác thực thi vẫn thành `final`.
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -74,30 +74,76 @@ impl MetaRef {
 }
 
 /// G2 (§8.4): digest đang có tx vỏ sống trên MỘT chain, chung cho mọi lane `Submitter` (gateway đi qua lane 0) và
-/// mọi `lane_runner`. Giữ bằng guard RAII nên mọi lối ra không để lại `Sent` đều nhả digest (review N2).
+/// mọi `lane_runner`. Giữ bằng guard RAII nên mọi lối ra không để lại `Sent` đều nhả digest (review N2). Fix 1 (review
+/// I2): the same set holds subjects: `(relay-fee jobs, other jobs)` in flight per [`crate::guard::subject_key`].
 #[derive(Clone, Default)]
-pub struct InflightSet(Arc<Mutex<HashSet<B256>>>);
+pub struct InflightSet(Arc<Mutex<HashSet<B256>>>, Arc<Mutex<HashMap<B256, (u32, u32)>>>);
 
 impl InflightSet {
     /// `None` = digest đã có đường khác giữ.
     pub fn try_acquire(&self, d: B256) -> Option<InflightGuard> {
-        self.0.lock().ok()?.insert(d).then(|| InflightGuard { set: self.clone(), d })
+        self.0.lock().ok()?.insert(d).then(|| InflightGuard { set: self.clone(), d: Some(d), _hold: None })
     }
 
     pub fn contains(&self, d: &B256) -> bool {
         self.0.lock().is_ok_and(|s| s.contains(d))
     }
+
+    /// Review I2: a relay-fee job of a subject runs alone (no other job of it in flight); any other job of the subject
+    /// waits while a relay-fee job of it is in flight. `None` = held.
+    pub fn hold_subject(&self, key: B256, relay: bool) -> Option<SubjectHold> {
+        let mut m = self.1.lock().ok()?;
+        let e = m.entry(key).or_default();
+        let free = if relay { *e == (0, 0) } else { e.0 == 0 };
+        if !free {
+            return None;
+        }
+        if relay { e.0 += 1 } else { e.1 += 1 }
+        Some(SubjectHold { set: self.clone(), key, relay })
+    }
+
+    /// `g` (if any) carrying the subject hold `h` too, so both end with the job.
+    pub fn with_hold(&self, g: Option<InflightGuard>, h: Option<SubjectHold>) -> Option<InflightGuard> {
+        match (g, h) {
+            (g, None) => g,
+            (Some(mut g), h) => {
+                g._hold = h;
+                Some(g)
+            }
+            (None, h) => Some(InflightGuard { set: self.clone(), d: None, _hold: h }),
+        }
+    }
 }
 
 pub struct InflightGuard {
     set: InflightSet,
-    d: B256,
+    d: Option<B256>,
+    _hold: Option<SubjectHold>,
 }
 
 impl Drop for InflightGuard {
     fn drop(&mut self) {
-        if let Ok(mut s) = self.set.0.lock() {
-            s.remove(&self.d);
+        if let (Some(d), Ok(mut s)) = (self.d, self.set.0.lock()) {
+            s.remove(&d);
+        }
+    }
+}
+
+pub struct SubjectHold {
+    set: InflightSet,
+    key: B256,
+    relay: bool,
+}
+
+impl Drop for SubjectHold {
+    fn drop(&mut self) {
+        if let Ok(mut m) = self.set.1.lock() {
+            if let Some(e) = m.get_mut(&self.key) {
+                if self.relay { e.0 -= 1 } else { e.1 -= 1 }
+                if *e == (0, 0) {
+                    m.remove(&self.key);
+                }
+            }
         }
     }
 }
@@ -118,6 +164,8 @@ struct Sent {
     /// A job tracked after a restart whose payload is not re-signed (refused by the guard, or unreadable): reported
     /// from its own hash (`hashes[0]`) or from the gap-fill that takes its nonce (review P5 m7).
     orphan: Option<i64>,
+    /// A priced relay-fee job's fee ceiling (review I1): replacements never sign a max fee above it.
+    ceiling: Option<u128>,
 }
 
 /// NODE-LANE-10 (R84) for the outbox: the unbound `relayer`/`feeRecipient` are normalized here as the gateway does
@@ -314,14 +362,38 @@ impl Submitter {
             };
             // its replacements reuse the original transaction's gas limit (review M3); only when the RPC cannot tell,
             // the cap: the operator's, never past what the chain's blocks take (an unreadable block fails the start)
-            let gas = match me.chain.tx_gas(hash).await {
-                Ok(Some(g)) => g,
-                _ => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
+            let sent = me.chain.tx_fees(hash).await.ok().flatten();
+            let gas = match sent {
+                Some((g, _)) => g,
+                None => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
+            };
+            // review I1: a priced relay-fee job is re-checked before it is ever re-signed: its ceiling is now the tracked
+            // transaction's max fee (the first send's ceiling is not journaled, and this one was signed under it); a
+            // fee that does not cover gas x that fee, an unknown fee, or an OP-stack chain (the L1 fee of the tracked
+            // bytes is not re-read) leaves the nonce to the gap-fill
+            let (work, ceiling) = match work {
+                Some(w) => match me.guard.relay_priced(me.chain.address(), &w) {
+                    Ok(false) => (Some(w), None),
+                    priced => {
+                        let covered = match (priced, sent.and_then(|s| s.1)) {
+                            (Ok(true), Some(max_fee)) if !me.guard.op_stack() =>
+                                me.guard.relay_covers(me.chain.address(), &w, gas, max_fee, 0).is_ok().then_some(max_fee),
+                            _ => None,
+                        };
+                        if covered.is_none() {
+                            warn!(job = j.job_id, nonce = n, "tracked relay-fee job not covered at its signed fee; its nonce is only gap-filled");
+                        }
+                        (covered.map(|_| w), covered)
+                    }
+                },
+                None => (None, None),
             };
             // Tập in-flight dựng lại từ việc đang theo dõi (§8.6).
             let guard = work.as_ref().and_then(|w| w.meta?.digest).and_then(|d| me.digests.try_acquire(d));
+            let hold = work.as_ref().and_then(|w| me.guard.subject(w)).and_then(|(k, relay)| me.digests.hold_subject(k, relay));
+            let guard = me.digests.with_hold(guard, hold);
             let orphan = work.is_none().then_some(j.job_id);
-            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan });
+            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan, ceiling });
         }
         info!(chain = me.cfg.evm_chain_number, chain_uid = %uid, next = me.next, tracked = me.inflight.len(), "submit ready");
         Ok(me)
@@ -413,7 +485,7 @@ impl Submitter {
         if let Err(e) = self.chain.send_raw(&raw).await {
             warn!(nonce, "gap-fill send: {e:#}");
         }
-        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None });
+        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None, ceiling: None });
         warn!(nonce, "gap-filled");
         Ok(())
     }
@@ -451,6 +523,16 @@ impl Submitter {
                 None => return self.requeue(&w, "in flight on another path".into()).await,
             },
         };
+        // review I2: a relay-fee job of a subject and the jobs that can lower its balance never fly together
+        let hold = match self.guard.subject(&w) {
+            None => None,
+            Some((key, relay)) => match self.digests.hold_subject(key, relay) {
+                Some(h) => Some(h),
+                None => return self.requeue(&w, "SUBJECT_HELD: a relay-fee job and another job of its payer are never in \
+                                                 flight together".into()).await,
+            },
+        };
+        let guard = self.digests.with_hold(guard, hold);
         self.send(w, guard).await
     }
 
@@ -471,15 +553,31 @@ impl Submitter {
             Ok(f) => f,
             Err(e) => return self.requeue(&w, format!("fees: {e:#}")).await,
         };
-        // a relay fee covers the gas this lane signs for (the fees it signs with)
-        if let Err(Refusal::Policy(r) | Refusal::Transport(r)) = self.guard.relay_covers(self.chain.address(), &w, gas, fees.0) {
-            return self.fail(&w, r).await;
-        }
+        let priced = match self.guard.relay_priced(self.chain.address(), &w) {
+            Ok(p) => p,
+            Err(Refusal::Policy(r)) => return self.fail(&w, r).await,
+            Err(Refusal::Transport(r)) => return self.requeue(&w, r).await,
+        };
         let nonce = self.next;
         let (raw, hash) = match self.chain.sign(nonce, w.to, w.data.clone(), gas, fees).await {
             Ok(x) => x,
             Err(e) => return self.requeue(&w, format!("{e:#}")).await,
         };
+        // review I1 / I3: a priced relay fee covers the quote at the job's fee ceiling (FEE_HEADROOM x this max fee,
+        // which every replacement stays under) plus the L1 data fee of this very transaction; nothing is sent otherwise
+        let ceiling = guard::fee_ceiling(fees.0);
+        if priced {
+            let covered = match self.guard.l1_fee(&self.chain, &raw).await {
+                Ok(l1) => self.guard.relay_covers(self.chain.address(), &w, gas, ceiling, l1),
+                Err(e) => Err(e),
+            };
+            match covered {
+                Ok(()) => {}
+                Err(Refusal::Policy(r)) => return self.fail(&w, r).await,
+                Err(Refusal::Transport(r)) => return self.requeue(&w, r).await,
+            }
+        }
+        let ceiling = priced.then_some(ceiling);
         // Journal TRƯỚC khi gửi (review F5): crash giữa hai bước không dẫn tới ký lại. Không ghi
         // được journal thì KHÔNG gửi, không tiêu nonce: thử lại vòng sau (review I5).
         if let Some(id) = w.job_id {
@@ -498,7 +596,7 @@ impl Submitter {
             // Không trả nonce lại: tx đã ký nằm trong journal; vòng `track` sẽ thay thế nó.
             Err(e) => warn!(nonce, "send failed, will replace: {e:#}"),
         }
-        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None });
+        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
     }
 
     /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
@@ -626,7 +724,14 @@ impl Submitter {
                 }
             }
             let Some(s) = self.inflight.get(&n) else { continue };
+            // review I1: a live priced relay-fee job never signs above its fee ceiling (at it, it waits and expires; the
+            // gap-fill that then takes the nonce is the operator's cap, it runs no job)
+            let live_now = s.work.as_ref().is_some_and(|w| w.valid_until > now());
             let cap = u128::from(self.cfg.max_fee_cap_gwei) * 1_000_000_000;
+            let cap = match s.ceiling.filter(|_| live_now) {
+                Some(c) => cap.min(c),
+                None => cap,
+            };
             let fees = (bump(s.fees.0, cap), bump(s.fees.1, cap));
             if fees.0 <= s.fees.0 {
                 // Ở trần phí: một bản thay thế cùng giá bị node từ chối (underpriced). Chờ,
@@ -841,6 +946,10 @@ mod tests {
         ua_off: bool,
         /// The `maxFeePerGas` of each sent tx.
         fees: Vec<u128>,
+        /// `GasPriceOracle.getL1Fee` answers this (`None`: it reverts, no oracle).
+        l1_fee: Option<u64>,
+        /// `eth_getTransactionByHash` also answers this `maxFeePerGas`.
+        tx_max_fee: Option<u128>,
     }
     type Rpc = Arc<Mutex<Evm>>;
 
@@ -861,7 +970,13 @@ mod tests {
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
-                "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| json!({"gas": format!("{g:#x}")}))),
+                "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| {
+                    let mut t = json!({"gas": format!("{g:#x}")});
+                    if let Some(f) = e.tx_max_fee {
+                        t["maxFeePerGas"] = json!(format!("{f:#x}"));
+                    }
+                    t
+                })),
                 "eth_getBlockByNumber" if p[0] == "latest" && e.block_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
@@ -908,6 +1023,9 @@ mod tests {
                         Ok(json!(format!("0x{}", alloy::hex::encode(<Vec<bool> as SolValue>::abi_encode(&ok)))))
                     } else if sel == IToken::mtxTransferDigestCall::SELECTOR || sel == IToken::mtxDigestCall::SELECTOR {
                         Ok(json!(D))
+                    } else if sel == crate::abi::IGasPriceOracle::getL1FeeCall::SELECTOR {
+                        assert_eq!(p[0]["to"].as_str().map(str::to_lowercase), Some(format!("{:#x}", guard::GAS_PRICE_ORACLE)));
+                        e.l1_fee.map(|f| word(U256::from(f))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
                     } else if sel == crate::abi::IUALedger::registryCall::SELECTOR {
                         Ok(word(U256::from(if e.ua_off { 0 } else { 0x5ca0_0001u64 })))
                     } else if sel == crate::abi::IUALedger::uaNonceCall::SELECTOR {
@@ -1921,18 +2039,20 @@ mod tests {
             (e.gas[0], e.fees[0], e.sent[0].2[..4].to_vec())
         };
         assert_eq!(sel, guard::CALL_TABLE[11].0);
-        let quote = u128::from(gas) * fee;
-        assert_eq!(guard::relay_quote(gas, fee), quote);
+        // fix 1 (I1): the quote is taken at the job's fee ceiling, FEE_HEADROOM x the first max fee
+        let quote = u128::from(gas) * guard::FEE_HEADROOM * fee;
+        assert_eq!(guard::relay_quote(gas, guard::fee_ceiling(fee), 0), quote);
         let (r, _) = go(ua_relay_data(open, 1_000, |_| {}), price(quote.div_ceil(1_000))).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "fee x price = the quote: {r:?}");
         let (r, rpc) = go(ua_relay_data(open, 1_000, |_| {}), price((quote - 1) / 1_000)).await;
-        assert!(r[0].0 == "dead" && r[0].1.starts_with("RELAY_FEE_REFUSED") && r[0].1.contains("quote"), "{r:?}");
-        assert!(rpc.lock().unwrap().sent.is_empty(), "nothing signed below the quote");
+        // fix 1 (minor 3): the quote follows the current fees, so below it is a retry, never a kill
+        assert!(r[0].0 == "queued" && r[0].1.starts_with("RELAY_FEE_REFUSED") && r[0].1.contains("quote"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty(), "nothing sent below the quote");
         // an address payer: priced only when its token has a price (T17's min_amount rule otherwise)
         let (r, _) = go(relay_data(ROUTER, 1_000, |_| {}), vec![]).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let (r, _) = go(relay_data(ROUTER, 1_000, |_| {}), price((quote - 1) / 1_000)).await;
-        assert!(r[0].0 == "dead" && r[0].1.starts_with("RELAY_FEE_REFUSED"), "{r:?}");
+        assert!(r[0].0 == "queued" && r[0].1.starts_with("RELAY_FEE_REFUSED"), "{r:?}");
     }
 
     /// `relay_fee.min_wei_value = { "<token>" = wei per base unit }` (EVM only): an integer or a decimal string per token
@@ -1946,12 +2066,29 @@ mod tests {
             relay_params(&mut c, &[("min_wei_value", toml::Value::Table(t))]);
             guard::RelayFee::from_cfg(&c)
         };
-        assert_eq!(with(7.into()).unwrap().unwrap().min_wei_value.get(&TOKEN), Some(&7));
+        let p = |wei: u128, per: u128| guard::Price { wei, per };
+        assert_eq!(with(7.into()).unwrap().unwrap().min_wei_value.get(&TOKEN), Some(&p(7, 1)));
         let big = (1u128 << 127).to_string();
-        assert_eq!(with(big.clone().into()).unwrap().unwrap().min_wei_value[&TOKEN], 1u128 << 127);
-        for bad in [toml::Value::from(-1), toml::Value::from("1e3"), toml::Value::from(1.5)] {
-            assert!(with(bad).is_err());
+        assert_eq!(with(big.clone().into()).unwrap().unwrap().min_wei_value[&TOKEN], p(1 << 127, 1));
+        // fix 1 (minor 1): wei per 10^k base units, so an 18-decimal token below 1 wei per unit is priced exactly
+        assert_eq!(with("3/1000000000000000000".into()).unwrap().unwrap().min_wei_value[&TOKEN], p(3, 1_000_000_000_000_000_000));
+        for bad in [toml::Value::from(-1), toml::Value::from("1e3"), toml::Value::from(1.5), toml::Value::from("3/7"),
+                    toml::Value::from("3/0"), toml::Value::from("/10"), toml::Value::from("3/10/10")] {
+            assert!(with(bad.clone()).is_err(), "{bad}");
         }
+        assert!(guard::price_covers(&p(3, 1_000), 1_000, 3), "1,000 units x 3 wei / 1,000 = 3 wei");
+        assert!(!guard::price_covers(&p(3, 1_000), 999, 3), "floor(999 x 3 / 1,000) = 2 wei");
+        assert!(guard::price_covers(&p(u128::MAX, 1), u128::MAX, u128::MAX), "exact, no overflow");
+        // fix 1 (minor 2): set-but-unusable is a startup error: no router, or one token twice (case only)
+        let mut c = test_cfg("http://127.0.0.1:9");
+        let mut t = toml::Table::new();
+        t.insert(format!("{TOKEN:#x}"), 1.into());
+        c.params.insert("relay_fee".into(), toml::Value::Table([("min_wei_value".to_string(), toml::Value::Table(t.clone()))].into_iter().collect()));
+        assert!(guard::RelayFee::from_cfg(&c).is_err(), "min_wei_value without a router");
+        t.insert(format!("{TOKEN:#x}").replace("cd", "CD"), 2.into());
+        let mut c = test_cfg("http://127.0.0.1:9");
+        relay_params(&mut c, &[("min_wei_value", toml::Value::Table(t))]);
+        assert!(guard::RelayFee::from_cfg(&c).is_err(), "one token under two spellings");
         let mut c = test_cfg("http://127.0.0.1:9");
         let mut t = toml::Table::new();
         t.insert("not-an-address".into(), 1.into());
@@ -1959,5 +2096,153 @@ mod tests {
         assert!(guard::RelayFee::from_cfg(&c).is_err());
         let near = ChainCfg { family: "near".into(), params: toml::from_str("relay_fee = { min_wei_value = {} }").unwrap(), ..Default::default() };
         assert!(near.relay_params().is_err(), "an EVM key only");
+    }
+
+    // ------------------------------------------------------------------ fix 1 (review C1 / I1 / I2 / I3)
+
+    fn priced(price: u128) -> impl FnOnce(&mut ChainCfg) {
+        move |c| {
+            let mut t = toml::Table::new();
+            t.insert(format!("{TOKEN:#x}"), price.to_string().into());
+            relay_params(c, &[("min_wei_value", toml::Value::Table(t))]);
+        }
+    }
+
+    /// I1: a priced relay-fee job is quoted at its fee ceiling (`FEE_HEADROOM` x the first max fee) and every
+    /// replacement of a stuck send stays at or under it: the lane waits at the ceiling (the job then expires and its
+    /// nonce is gap-filled), it never bumps past what the payer's fee covers. An unpriced job still bumps to the cap.
+    #[tokio::test]
+    async fn priced_relay_fee_replacements_stay_under_the_job_ceiling() {
+        let (url, rpc) = fake_evm(Evm::default()).await;
+        let (odoo, _o) = fake_odoo(Fake { jobs: vec![call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000, |_| {}))],
+            tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
+        s.poll_outbox().await;
+        for _ in 0..8 {
+            s.track().await;
+        }
+        let (fees, first) = {
+            let e = rpc.lock().unwrap();
+            (e.fees.clone(), e.fees[0])
+        };
+        let ceiling = guard::fee_ceiling(first);
+        assert!(fees.len() >= 3, "replaced while stuck: {fees:?}");
+        assert!(fees.iter().all(|f| *f <= ceiling), "every send under the ceiling {ceiling}: {fees:?}");
+        assert_eq!(*fees.last().unwrap(), ceiling, "bumped up to the ceiling, then it waits: {fees:?}");
+        assert_eq!(fees.iter().filter(|f| **f == ceiling).count(), 1, "no resend at the ceiling: {fees:?}");
+        assert_eq!(s.inflight.get(&0).unwrap().ceiling, Some(ceiling));
+        // a metatx job (no quote) keeps the operator's cap
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, _o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        s.poll_outbox().await;
+        for _ in 0..8 {
+            s.track().await;
+        }
+        let fees = rpc.lock().unwrap().fees.clone();
+        assert!(*fees.last().unwrap() > guard::fee_ceiling(fees[0]), "unpriced: bumped past 2x: {fees:?}");
+        assert_eq!(s.inflight.get(&0).unwrap().ceiling, None);
+    }
+
+    /// I1 after a restart: a tracked priced relay-fee job is re-checked before it is ever re-signed: its ceiling is
+    /// the tracked transaction's max fee, and a fee that does not cover gas x that fee (or an unknown fee) leaves the
+    /// nonce to the gap-fill only.
+    #[tokio::test]
+    async fn a_tracked_priced_relay_job_is_rechecked_after_a_restart() {
+        let tracked = json!([{"job_id": 9, "nonce": 0, "state": "broadcast", "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)),
+            "payload": call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000, |_| {}))}]);
+        let (gas, max_fee) = (300_000u64, 3_000_000_000u128);
+        let quote = u128::from(gas) * max_fee;
+        for (tx_max_fee, price, kept) in [(Some(max_fee), quote.div_ceil(1_000), true), (Some(max_fee), (quote - 1) / 1_000, false),
+                                          (None, u128::MAX / 1_000, false)] {
+            let (url, _) = fake_evm(Evm { count: 1, tx_gas: Some(gas), tx_max_fee, ..Default::default() }).await;
+            let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
+            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(price)).await.unwrap();
+            let sent = s.inflight.get(&0).expect("tracked");
+            assert_eq!((sent.work.is_some(), sent.ceiling), (kept, kept.then_some(max_fee)), "{tx_max_fee:?} {price}");
+        }
+    }
+
+    /// I2: while a relay-fee job of subject S (its payer) is in flight, no other job that can lower S's balance on that
+    /// token is signed (requeued `SUBJECT_HELD`), nor a relay-fee job of S while another job of S is in flight; other
+    /// subjects run, and the hold ends with the job. One key for both payer forms (`relay`'s address is its padded id).
+    #[tokio::test]
+    async fn a_relay_fee_job_holds_its_payer() {
+        let (url, rpc) = fake_evm(Evm { ua_nonce: Some(0), mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
+        let last = |o: &Shared, id: i64| o.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
+        o.lock().unwrap().jobs = vec![call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000, |_| {}))];
+        s.poll_outbox().await;
+        assert_eq!(last(&o, 9)["chain_state"], "broadcast");
+        let other = { let crate::metatx::UaMtx::Transfer(mut t) = ua_meta(8) else { unreachable!() }; t.from = B256::repeat_byte(0xbb);
+            crate::metatx::UaMtx::Transfer(t) };
+        o.lock().unwrap().jobs = vec![ua_job(10, &ua_meta(7)), ua_job(11, &other)];
+        s.poll_outbox().await;
+        let held = last(&o, 10);
+        assert!(held["chain_state"] == "queued" && held["error"].as_str().unwrap().starts_with("SUBJECT_HELD"), "{held}");
+        assert_eq!(last(&o, 11)["chain_state"], "broadcast", "another subject runs");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+        // the hold ends with the relay job; then S's job runs and, in flight, holds S against a new relay-fee job
+        {
+            // both jobs land (the fake answers one UA digest for every job, so job 11 would also keep job 10 out)
+            let mut e = rpc.lock().unwrap();
+            let (a, b) = (e.sent[0].0, e.sent[1].0);
+            e.receipts.insert(a, true);
+            e.receipts.insert(b, true);
+        }
+        s.track().await;
+        o.lock().unwrap().jobs = vec![ua_job(10, &ua_meta(7))];
+        s.poll_outbox().await;
+        assert_eq!(last(&o, 10)["chain_state"], "broadcast");
+        o.lock().unwrap().jobs = vec![call_job(12, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000, |_| {}))];
+        s.poll_outbox().await;
+        let held = last(&o, 12);
+        assert!(held["chain_state"] == "queued" && held["error"].as_str().unwrap().starts_with("SUBJECT_HELD"), "{held}");
+        // the key: the payer id on the fee token, the same for relay (address payer) and that address's own jobs
+        let mut cfg = test_cfg("http://127.0.0.1:9");
+        relay_params(&mut cfg, &[]);
+        let g = guard::Guard::new(&cfg, Default::default()).unwrap();
+        let w = |j: Value| work(j).unwrap();
+        let payer = Address::repeat_byte(0xab).into_word();
+        let addr_relay = g.subject(&w(call_job(9, ROUTER, relay_data(ROUTER, 100, |_| {})))).unwrap();
+        assert_eq!(addr_relay, (guard::subject_key(TOKEN, payer), true));
+        assert_eq!(g.subject(&w(job(7))), Some((guard::subject_key(TOKEN, payer), false)), "the payer's own metatx");
+        assert_eq!(g.subject(&w(ua_job(7, &ua_meta(7)))), Some((guard::subject_key(TOKEN, UA), false)));
+        assert_ne!(guard::subject_key(TOKEN, UA), guard::subject_key(Address::repeat_byte(0x99), UA), "per token");
+        assert_eq!(g.subject(&w(call_job(9, TARGET, vec![1, 2, 3, 4]))), None, "a plain call has no subject");
+    }
+
+    /// I3: on an OP-stack chain (`params.l1_fee = "op-stack"`) a priced relay-fee job's quote adds the L1 data fee of
+    /// the signed transaction (`GasPriceOracle.getL1Fee` at 0x420…0F, x FEE_HEADROOM); an oracle that does not answer
+    /// refuses the job; any other value of `l1_fee` is a startup error.
+    #[tokio::test]
+    async fn op_stack_l1_fee_is_in_the_quote() {
+        let op = |price: u128| move |c: &mut ChainCfg| {
+            priced(price)(c);
+            c.params.insert("l1_fee".into(), "op-stack".into());
+        };
+        let data = || ua_relay_data(ROUTER.into_word(), 1_000, |_| {});
+        let (r, rpc) = outcomes(Evm { l1_fee: Some(5_000_000_000_000), ..Default::default() }, vec![call_job(9, ROUTER, data())], op(u128::MAX / 1_000)).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        let (gas, fee) = { let e = rpc.lock().unwrap(); (e.gas[0], e.fees[0]) };
+        let quote = guard::relay_quote(gas, guard::fee_ceiling(fee), 5_000_000_000_000);
+        assert_eq!(quote, u128::from(gas) * 2 * fee + 2 * 5_000_000_000_000);
+        let go = |price: u128, l1_fee: Option<u64>| async move {
+            outcomes(Evm { l1_fee, ..Default::default() }, vec![call_job(9, ROUTER, data())], op(price)).await
+        };
+        assert_eq!(states_of(&go(quote.div_ceil(1_000), Some(5_000_000_000_000)).await.0), ["signed", "broadcast"]);
+        let (r, rpc) = go((quote - 1) / 1_000, Some(5_000_000_000_000)).await;
+        assert!(r[0].0 == "queued" && r[0].1.contains("quote"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let (r, rpc) = go(u128::MAX / 1_000, None).await;
+        assert!(r[0].0 == "dead" && r[0].1.contains("getL1Fee"), "no oracle: refused: {r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // not an OP-stack chain: the oracle is never asked (the fake asserts its address when asked)
+        assert_eq!(states_of(&outcomes(Evm::default(), vec![call_job(9, ROUTER, data())], priced(u128::MAX / 1_000)).await.0),
+            ["signed", "broadcast"]);
+        let mut c = test_cfg("http://127.0.0.1:9");
+        c.params.insert("l1_fee".into(), "arbitrum".into());
+        assert!(guard::Guard::new(&c, Default::default()).is_err());
     }
 }

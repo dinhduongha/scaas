@@ -98,8 +98,10 @@ chain_uid = "0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2"
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
 # params = { relay_fee = { router = "0x...", min_amount = 1, min_wei_value = { "0x<token>" = "100000000000" } } }
 #                                                # MtxRelayFee ("mtx_relay_fee" in deployments/<id>.json); min_wei_value:
-#                                                # wei per token base unit, the floor price a relay fee must reach the
-#                                                # quote at (gas limit x max fee per gas); required for a UA payer (uaRelay)
+#                                                # wei per token base unit (or "<wei>/<10^k>" per 10^k units), the floor
+#                                                # price a relay fee must reach the quote at (gas limit x 2 x first max fee
+#                                                # per gas); required for a UA payer (uaRelay). Rollups: l1_fee = "op-stack"
+#                                                # adds GasPriceOracle.getL1Fee (Base, Celo)
 # profile = "private"                            # public | private (MESH R76); a private chain never gossips
 # gossip = false                                 # open-mesh gossip for this chain (public only)
 # exclusive_ms = 7000

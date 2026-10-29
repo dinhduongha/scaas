@@ -21,7 +21,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 
-use alloy::primitives::{Address, Bytes};
+use alloy::primitives::{Address, Bytes, B256};
 use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
@@ -149,30 +149,54 @@ pub struct RelayFee {
     pub executor: Address,
     pub params: crate::config::RelayParams,
     /// `relay_fee.min_wei_value = { "<token>" = wei per base unit }`: the node's floor price of a fee token.
-    pub min_wei_value: HashMap<Address, u128>,
+    pub min_wei_value: HashMap<Address, Price>,
 }
 
 impl RelayFee {
     /// `None` without `params.relay_fee.router`; a router that is not an address is a startup error.
     pub fn from_cfg(cfg: &ChainCfg) -> anyhow::Result<Option<Self>> {
         let params = cfg.relay_params()?;
-        let Some(r) = params.router.as_deref() else { return Ok(None) };
+        let prices = cfg.params.get("relay_fee").and_then(|t| t.get("min_wei_value"));
+        let Some(r) = params.router.as_deref() else {
+            // fix 1 (review minor 2): set but unusable is a startup error
+            if prices.is_some() {
+                anyhow::bail!("params.relay_fee.min_wei_value is set without params.relay_fee.router");
+            }
+            return Ok(None);
+        };
         let router = crate::metatx::addr(r).map_err(|e| anyhow::anyhow!("params.relay_fee.router: {e:#}"))?;
         let mut min_wei_value = HashMap::new();
-        if let Some(v) = cfg.params.get("relay_fee").and_then(|t| t.get("min_wei_value")) {
+        if let Some(v) = prices {
             let table = v.as_table().ok_or_else(|| anyhow::anyhow!("params.relay_fee.min_wei_value must be a table of token = wei"))?;
             for (k, n) in table {
                 let token = crate::metatx::addr(k).map_err(|e| anyhow::anyhow!("params.relay_fee.min_wei_value.{k}: {e:#}"))?;
-                let price = match n {
-                    toml::Value::Integer(i) => u128::try_from(*i).ok(),
-                    toml::Value::String(s) if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) => s.parse().ok(),
-                    _ => None,
-                };
-                let price = price.ok_or_else(|| anyhow::anyhow!("params.relay_fee.min_wei_value.{k} must be a non-negative integer, not {n}"))?;
-                min_wei_value.insert(token, price);
+                let price = parse_price(n).ok_or_else(|| anyhow::anyhow!(
+                    "params.relay_fee.min_wei_value.{k} must be a non-negative integer (wei per base unit) or \"<wei>/<10^k>\" \
+                     (wei per 10^k base units), not {n}"))?;
+                if min_wei_value.insert(token, price).is_some() {
+                    anyhow::bail!("params.relay_fee.min_wei_value names token {token:#x} twice");
+                }
             }
         }
         Ok(Some(Self { router, executor: router.create(1), params, min_wei_value }))
+    }
+}
+
+/// `min_wei_value`'s value: an integer or decimal string (wei per base unit), or `"<wei>/<per>"` with `per` a power of
+/// ten (wei per `per` base units).
+fn parse_price(n: &toml::Value) -> Option<Price> {
+    let dec = |s: &str| (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())).then(|| s.parse::<u128>().ok()).flatten();
+    match n {
+        toml::Value::Integer(i) => Some(Price { wei: u128::try_from(*i).ok()?, per: 1 }),
+        toml::Value::String(s) => match s.split_once('/') {
+            None => Some(Price { wei: dec(s)?, per: 1 }),
+            Some((w, p)) => {
+                let per = dec(p)?;
+                let t = per.to_string();
+                (t.starts_with('1') && t[1..].bytes().all(|b| b == b'0')).then_some(Price { wei: dec(w)?, per })
+            }
+        },
+        _ => None,
     }
 }
 
@@ -235,30 +259,66 @@ pub fn relay_call_ok(rf: &RelayFee, chain_id: u64, lane: Address, to: Address, d
 /// token has no price is refused; an address payer's `relay` keeps T17's `min_amount` rule (owner ruling 2026-10-28,
 /// item 7) unless its token has a price. A sponsored fee (bound elsewhere, `relay_bound_payee`) is not priced. Any other
 /// call passes.
-pub fn relay_fee_covers(rf: &RelayFee, lane: Address, data: &[u8], gas: u64, max_fee: u128) -> Result<(), String> {
-    let Some(c) = relay_call(data) else { return Ok(()) };
-    if c.t.to != rf.router.into_word() && c.t.to != lane.into_word() {
-        return Ok(());
-    }
-    let Some(price) = rf.min_wei_value.get(&c.token) else {
-        return match c.ua {
-            true => Err(format!("RELAY_FEE_REFUSED: params.relay_fee.min_wei_value has no price for token {:#x} \
-                                 (a UA payer's verify gas depends on its kind)", c.token)),
-            false => Ok(()),
-        };
-    };
-    let quote = relay_quote(gas, max_fee);
-    let value = u128::try_from(c.t.value).unwrap_or(u128::MAX).saturating_mul(*price);
-    if value < quote {
-        return Err(format!("RELAY_FEE_REFUSED: fee {} x min_wei_value {price} = {value} wei is below the quote {quote} wei \
-                            (gas limit {gas} x max fee per gas {max_fee})", c.t.value));
+pub fn relay_fee_covers(rf: &RelayFee, lane: Address, data: &[u8], gas: u64, ceiling: u128, l1_fee: u128) -> Result<(), Refusal> {
+    let Some((c, price)) = relay_price(rf, lane, data)? else { return Ok(()) };
+    let quote = relay_quote(gas, ceiling, l1_fee);
+    let amount = u128::try_from(c.t.value).unwrap_or(u128::MAX);
+    if !price_covers(&price, amount, quote) {
+        // the quote follows the fees of the moment (review minor 3): a retry, never a kill
+        return Err(Refusal::Transport(format!("RELAY_FEE_REFUSED: fee {amount} x min_wei_value {}/{} wei is below the quote \
+            {quote} wei (gas limit {gas} x fee ceiling {ceiling} + {FEE_HEADROOM} x L1 fee {l1_fee})", price.wei, price.per)));
     }
     Ok(())
 }
 
-/// The lane's cost of a relay-fee job at most: its gas limit × the max fee per gas it signs with.
-pub fn relay_quote(gas: u64, max_fee: u128) -> u128 {
-    u128::from(gas).saturating_mul(max_fee)
+/// The relay-fee call and its token's price when the job is priced (the fee reaches this lane); `None` when it is not
+/// (not a relay-fee call, a sponsored fee, an address payer on an unpriced token); a UA payer on an unpriced token is
+/// refused.
+fn relay_price(rf: &RelayFee, lane: Address, data: &[u8]) -> Result<Option<(RelayCall, Price)>, Refusal> {
+    let Some(c) = relay_call(data) else { return Ok(None) };
+    if c.t.to != rf.router.into_word() && c.t.to != lane.into_word() {
+        return Ok(None);
+    }
+    match rf.min_wei_value.get(&c.token).copied() {
+        Some(p) => Ok(Some((c, p))),
+        None if c.ua => Err(Refusal::Policy(format!("RELAY_FEE_REFUSED: params.relay_fee.min_wei_value has no price for token \
+            {:#x} (a UA payer's verify gas depends on its kind)", c.token))),
+        None => Ok(None),
+    }
+}
+
+/// Fix 1 (review I1): a priced relay-fee job's fee ceiling is `FEE_HEADROOM` x the max fee per gas of its first send.
+pub const FEE_HEADROOM: u128 = 2;
+
+/// The OP-stack `GasPriceOracle` predeploy.
+pub const GAS_PRICE_ORACLE: Address = alloy::primitives::address!("420000000000000000000000000000000000000F");
+
+pub fn fee_ceiling(max_fee: u128) -> u128 {
+    max_fee.saturating_mul(FEE_HEADROOM)
+}
+
+/// The lane's cost of a relay-fee job at most: its gas limit × its fee ceiling, plus `FEE_HEADROOM` × the L1 data fee
+/// of an OP-stack chain (0 elsewhere; the L1 base fee moves as the L2 one does).
+pub fn relay_quote(gas: u64, ceiling: u128, l1_fee: u128) -> u128 {
+    u128::from(gas).saturating_mul(ceiling).saturating_add(l1_fee.saturating_mul(FEE_HEADROOM))
+}
+
+/// `relay_fee.min_wei_value`: `wei` per `per` base units (`per` a power of ten).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Price {
+    pub wei: u128,
+    pub per: u128,
+}
+
+/// `floor(amount × wei / per) >= quote`, exact (`amount × wei >= quote × per` in 256 bits).
+pub fn price_covers(p: &Price, amount: u128, quote: u128) -> bool {
+    use alloy::primitives::U256;
+    U256::from(amount) * U256::from(p.wei) >= U256::from(quote) * U256::from(p.per)
+}
+
+/// The in-flight hold key of subject `id` on `token` (review I2).
+pub fn subject_key(token: Address, id: B256) -> B256 {
+    alloy::primitives::keccak256([&b"scaas.node.subject"[..], token.as_slice(), id.as_slice()].concat())
 }
 
 /// A contract's published allowlist: `(selector, fee class, amount argument)` and `supportedModes()`.
@@ -343,6 +403,8 @@ pub struct Guard {
     tables: Mutex<HashMap<Address, Arc<Table>>>,
     /// Tokens whose UA ledger is on (`registry() ≠ 0`).
     ua_ledger: Mutex<HashSet<Address>>,
+    /// `params.l1_fee = "op-stack"`: relay-fee quotes add `GasPriceOracle.getL1Fee`.
+    op_stack: bool,
 }
 
 impl Guard {
@@ -357,6 +419,11 @@ impl Guard {
             bound: Default::default(),
             tables: Default::default(),
             ua_ledger: Default::default(),
+            op_stack: match cfg.params.get("l1_fee") {
+                None => false,
+                Some(v) if v.as_str() == Some("op-stack") => true,
+                Some(v) => anyhow::bail!("params.l1_fee must be \"op-stack\" (the chain charges an OP-stack L1 data fee), not {v}"),
+            },
         })
     }
 
@@ -448,16 +515,56 @@ impl Guard {
         }
     }
 
+    /// The subject a job can lower the balance of, as its hold key, and whether the job is a relay-fee job.
+    /// A meta-transaction lowers its signer's balance on its token; a relay-fee job its payer's on the fee token. Other
+    /// ways to lower it (DEX legs, `mtxWrap`, a plain ERC-20 transfer, another relayer) are the recorded residual.
+    pub fn subject(&self, w: &Work) -> Option<(B256, bool)> {
+        if let Some(r) = &w.meta {
+            return Some((subject_key(r.token, r.from), false));
+        }
+        if !self.is_relay(w) {
+            return None;
+        }
+        relay_call(&w.data).map(|c| (subject_key(c.token, c.t.from), true))
+    }
+
     /// `w` is a call on this chain's relay-fee router: its fee side is [`Guard::relay_covers`].
     pub fn is_relay(&self, w: &Work) -> bool {
         self.relay_fee.as_ref().is_some_and(|rf| !w.entry && w.meta.is_none() && w.to == rf.router)
     }
 
-    /// The fee side of a relay-fee job ([`relay_fee_covers`]) once its gas and the lane's max fee per gas are known.
-    pub fn relay_covers(&self, lane: Address, w: &Work, gas: u64, max_fee: u128) -> Result<(), Refusal> {
+    /// `w` is a priced relay-fee job (its fee must cover the quote); a UA payer without a price is refused.
+    pub fn relay_priced(&self, lane: Address, w: &Work) -> Result<bool, Refusal> {
         match &self.relay_fee {
-            Some(rf) if self.is_relay(w) => relay_fee_covers(rf, lane, &w.data, gas, max_fee).map_err(Refusal::Policy),
+            Some(rf) if self.is_relay(w) => Ok(relay_price(rf, lane, &w.data)?.is_some()),
+            _ => Ok(false),
+        }
+    }
+
+    /// The fee side of a priced relay-fee job ([`relay_fee_covers`]) at its fee ceiling and L1 data fee.
+    pub fn relay_covers(&self, lane: Address, w: &Work, gas: u64, ceiling: u128, l1_fee: u128) -> Result<(), Refusal> {
+        match &self.relay_fee {
+            Some(rf) if self.is_relay(w) => relay_fee_covers(rf, lane, &w.data, gas, ceiling, l1_fee),
             _ => Ok(()),
+        }
+    }
+
+    /// This chain charges an OP-stack L1 data fee (`params.l1_fee = "op-stack"`).
+    pub fn op_stack(&self) -> bool {
+        self.op_stack
+    }
+
+    /// The L1 data fee of the signed transaction `raw` (review I3): `GasPriceOracle.getL1Fee` on an OP-stack chain, 0
+    /// elsewhere. An oracle that does not answer refuses the job (its cost is unknown).
+    pub async fn l1_fee(&self, chain: &Chain, raw: &[u8]) -> Result<u128, Refusal> {
+        if !self.op_stack {
+            return Ok(0);
+        }
+        match chain.call_view(GAS_PRICE_ORACLE, crate::abi::IGasPriceOracle::getL1FeeCall { _data: raw.to_vec().into() }).await {
+            Ok(f) => Ok(u128::try_from(f).unwrap_or(u128::MAX)),
+            Err(SimError::Revert(e)) => Err(Refusal::Policy(format!(
+                "RELAY_FEE_REFUSED: an OP-stack chain whose GasPriceOracle.getL1Fee does not answer ({e}): the L1 data fee is unknown"))),
+            Err(SimError::Transport(e)) => Err(Refusal::Transport(format!("getL1Fee: {e}"))),
         }
     }
 

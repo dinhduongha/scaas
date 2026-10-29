@@ -77,7 +77,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 #   pytest "PASSED tests/<file>::<name>[<id>]" (-rA summary)   unittest "<name> (<class>) ... ok"
 # (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19;
 #  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name; final fix wave: its new
-#  tests; node-ua-jobs (EVM `ua_metatx` jobs, 2026-10-30): its unit tests, last block)
+#  tests; node-ua-jobs (EVM `ua_metatx` jobs, 2026-10-30) and its fix 1: their unit tests, last block)
 NEW_TESTS=$(cat <<'EOF'
 forge|forge|test_parity
 forge|forge|test_isValid_7702_ctrUa24
@@ -736,6 +736,11 @@ cargo-scaas-node|cargo|submit::ua_metatx_job_relays_and_a_spent_ua_nonce_is_cons
 cargo-scaas-node|cargo|submit::ua_relay_fee_needs_a_price_and_covers_the_quote
 cargo-scaas-node|cargo|submit::min_wei_value_is_parsed_or_refused
 cargo-scaas-node|cargo|indexer::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee
+cargo-scaas-node|cargo|submit::priced_relay_fee_replacements_stay_under_the_job_ceiling
+cargo-scaas-node|cargo|submit::a_tracked_priced_relay_job_is_rechecked_after_a_restart
+cargo-scaas-node|cargo|submit::a_relay_fee_job_holds_its_payer
+cargo-scaas-node|cargo|submit::op_stack_l1_fee_is_in_the_quote
+cargo-scaas-node|cargo|chain::a_native_ua_subject_is_classified_on_both_paths
 EOF
 )
 

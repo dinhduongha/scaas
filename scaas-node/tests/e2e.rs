@@ -178,6 +178,14 @@ async fn fake(
             json!({"ok": true})
         }
         ("blockchain.chain.event", "chain_event_ingest") => {
+            // the client's `_decode` (bamboo-dms 81cea08, review C1): an EVM row's addresses are 0x + 40 hex, or the
+            // whole range is refused
+            let addr = |v: &Value| v.as_str().is_some_and(|s| s.len() == 42 && s.starts_with("0x") && s[2..].bytes().all(|b| b.is_ascii_hexdigit()));
+            if let Some(bad) = body["events"].as_array().unwrap().iter()
+                .find(|e| ["contract", "from", "to", "fee_recipient", "relayer"].iter().any(|k| !e[*k].is_null() && !addr(&e[*k]))) {
+                o.refused.push(bad.clone());
+                return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error": format!("not an EVM address in {bad}")})));
+            }
             o.indexed_block = body["to_block"].as_u64().unwrap();
             o.ingested.extend(body["events"].as_array().unwrap().iter().cloned());
             json!({"indexed_block": o.indexed_block, "created": 0})
@@ -1022,6 +1030,14 @@ alloy::sol! {
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
 }
 
+/// `(gas limit, max fee per gas)` of transaction `hash` (a replaced one is gone once its replacement lands).
+async fn tx_fees(rpc: &str, hash: &str) -> (u64, u128) {
+    use alloy::consensus::Transaction as _;
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let tx = p.get_transaction_by_hash(hash.parse().unwrap()).await.unwrap().expect("a signed tx");
+    (tx.gas_limit(), tx.max_fee_per_gas())
+}
+
 /// One outbox poll, then track until every sent job settles.
 async fn run_outbox(s: &mut Submitter) {
     s.poll_outbox().await;
@@ -1051,16 +1067,19 @@ async fn ua_auth(rpc: &str, registry: Address, owner: &PrivateKeySigner, purpose
     (alloy::primitives::Bytes::from(owner.public_key().to_vec()), alloy::primitives::Bytes::from(sig)).abi_encode_params().into()
 }
 
-/// The lane's actual cost of the job's transaction (`spent`, its ETH decrease) is covered by the node's quote: the
-/// gas limit × the max fee per gas it signed. Prints a QUOTE line.
-async fn quote_covers(rpc: &str, tx_hash: &str, spent: U256, what: &str) -> u128 {
-    use alloy::consensus::Transaction as _;
-    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
-    let tx = p.get_transaction_by_hash(tx_hash.parse().unwrap()).await.unwrap().expect("the signed tx");
-    let quote = scaas_node::guard::relay_quote(tx.gas_limit(), tx.max_fee_per_gas());
-    let rc = p.get_transaction_receipt(tx_hash.parse().unwrap()).await.unwrap().unwrap();
-    println!("QUOTE {what}: quote {quote} wei (gas limit {} x max fee {}) >= the lane's ETH decrease {spent} (gas used {})",
-        tx.gas_limit(), tx.max_fee_per_gas(), rc.gas_used);
+/// Review I1 / minor 4: every transaction the lane signed for a priced relay-fee job (`hashes`: the first and each
+/// replacement, `(gas limit, max fee)` read while each was known to the node) stays at or under the job's fee ceiling
+/// (`FEE_HEADROOM` x the first max fee), and the lane's actual ETH cost (`spent`) is covered by the quote at that
+/// ceiling. Prints a QUOTE line; returns the quote.
+fn quote_covers(sent: &[(u64, u128)], spent: U256, what: &str) -> u128 {
+    let (gas, first) = sent[0];
+    let ceiling = scaas_node::guard::fee_ceiling(first);
+    let quote = scaas_node::guard::relay_quote(gas, ceiling, 0);
+    let fees: Vec<u128> = sent.iter().map(|s| s.1).collect();
+    println!("QUOTE {what}: quote {quote} wei (gas limit {gas} x ceiling {ceiling} = 2 x first max fee {first}); sends' max fees \
+              {fees:?}; the lane's ETH decrease {spent}");
+    assert!(fees.iter().all(|f| *f <= ceiling), "{what}: a send above the fee ceiling {ceiling}: {fees:?}");
+    assert!(sent.iter().all(|s| s.0 == gas), "{what}: replacements keep the gas limit");
     assert!(U256::from(quote) >= spent, "{what}: the quote {quote} under-prices the lane's {spent} wei");
     quote
 }
@@ -1132,10 +1151,8 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     let mut j = ua_job(1, &m, &ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", m.digest(&d)).await);
     (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
     state.lock().unwrap().jobs.push(j);
-    let b0 = eth().await;
     run_outbox(&mut s).await;
     assert_eq!(last(1)["chain_state"], "mined", "{}", last(1));
-    quote_covers(&rpc, &signed(1), b0 - eth().await, "ua_metatx uaPayMeta (secp256k1 UA)").await;
     assert_eq!(balance(&rpc, token, shop).await, U256::from(1_000u64), "the UA paid the shop");
 
     // (2) UA relay fee for the payer's fee-less cancelNonce(55) (address path), open mode
@@ -1144,11 +1161,12 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
         validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO });
     let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
     let r = relay_ref(chain_id, token, &call_data);
-    let relay_job = |id: i64, value: u64| {
+    let relay_job = |id: i64, value: u64, call_data: alloy::primitives::Bytes| {
+        let r = relay_ref(chain_id, token, &call_data);
         let t = UAMetaTransfer { from: ua, to: router.into_word(), value: U256::from(value), entryRef: r, batch: pay_lane(&r),
             nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: router,
             fee: U256::ZERO, feeRecipient: Address::ZERO };
-        let (rpc, owner, call_data, d) = (rpc.clone(), owner.clone(), call_data.clone(), d.clone());
+        let (rpc, owner, d) = (rpc.clone(), owner.clone(), d.clone());
         async move {
             let auth = ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", UaMtx::Transfer(t.clone()).digest(&d)).await;
             let data = IMtxRelayFee::uaRelayCall { target: token, callData: call_data, token, t, auth }.abi_encode();
@@ -1156,21 +1174,21 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
                 "calldata": format!("0x{}", alloy::hex::encode(data)), "validUntil": (now() + 300).to_string()}})
         }
     };
-    // a fee of 1 is worth 10^11 wei, under the quote: refused, nothing signed
+    // a fee of 1 is worth 10^11 wei, under the quote: nothing signed, retried later (the quote follows the fees)
     let n0 = p.get_transaction_count(relayer.address()).await.unwrap();
-    let j = relay_job(2, 1).await;
+    let j = relay_job(2, 1, call_data.clone()).await;
     state.lock().unwrap().jobs.push(j);
     run_outbox(&mut s).await;
     let l = last(2);
-    assert!(l["chain_state"] == "dead" && l["error"].as_str().unwrap().starts_with("RELAY_FEE_REFUSED"), "{l}");
+    assert!(l["chain_state"] == "queued" && l["error"].as_str().unwrap().starts_with("RELAY_FEE_REFUSED"), "{l}");
     assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), n0, "nothing signed or sent");
     // a fee of 1,000 (10^14 wei at the price) covers it
-    let j = relay_job(3, 1_000).await;
+    let j = relay_job(3, 1_000, call_data.clone()).await;
     state.lock().unwrap().jobs.push(j);
     let (b0, f0) = (eth().await, balance(&rpc, token, relayer.address()).await);
     run_outbox(&mut s).await;
     assert_eq!(last(3)["chain_state"], "mined", "{}", last(3));
-    let quote = quote_covers(&rpc, &signed(3), b0 - eth().await, "uaRelay (secp256k1 UA payer, open mode)").await;
+    let quote = quote_covers(&[tx_fees(&rpc, &signed(3)).await], b0 - eth().await, "uaRelay (secp256k1 UA payer, open mode)");
     assert!(1_000 * price >= quote, "the fee at min_wei_value covers the quote");
     assert_eq!(balance(&rpc, token, relayer.address()).await, f0 + U256::from(1_000u64), "the fee reached the lane");
     let lane12 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(12) };
@@ -1182,13 +1200,59 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
     let ingested = state.lock().unwrap().ingested.clone();
     assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta" && e["event"] != "RelayFeePaid"), "never rows");
+    // review C1: the client's ingest (mirrored by the fake) takes every row; a derived UA is UA_POOL + its id
+    assert!(state.lock().unwrap().refused.is_empty(), "{:?}", state.lock().unwrap().refused);
+    let (pool, uid) = (format!("{:#x}", scaas_node::metatx::ua_pool()), format!("{ua:#x}"));
     let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("UA pay-meta settled");
-    assert_eq!((paid["from"].as_str(), paid["to"].as_str(), paid["amount"].as_str()),
-        (Some(format!("{ua:#x}").as_str()), Some(format!("{shop:#x}").as_str()), Some("1000")));
+    assert_eq!((paid["from"].as_str(), paid["from_ua"].as_str(), paid["to"].as_str(), paid["amount"].as_str()),
+        (Some(pool.as_str()), Some(uid.as_str()), Some(format!("{shop:#x}").as_str()), Some("1000")));
     assert_eq!(paid["meta"], format!("0x{}", alloy::hex::encode(&meta)));
     let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("UA relay fee settled");
-    assert_eq!((fee["from"].as_str(), fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
-        (Some(format!("{ua:#x}").as_str()), Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
-    let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted" && e["from"] == format!("{ua:#x}")).expect("UA executed");
-    assert_eq!(exe["digest"], format!("{:#x}", m.digest(&d)));
+    assert_eq!((fee["from_ua"].as_str(), fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
+        (Some(uid.as_str()), Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
+    let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted" && e["from_ua"] == uid.as_str()).expect("UA executed");
+    assert_eq!((exe["from"].as_str(), exe["digest"].clone()), (Some(pool.as_str()), json!(format!("{:#x}", m.digest(&d)))));
+
+    // review I1 / minor 4: a priced uaRelay whose send is stuck (no blocks) is replaced, every replacement at or under
+    // the job's fee ceiling (2 x the first max fee; unclamped, 25 % bumps pass it on the fourth); once mined, the lane's
+    // cost is inside the quote. A second lane runner (stuck after 1 s) on the same key, the first one idle.
+    let inner = Mtx::Call(scaas_node::abi::MetaTransaction { from: payer.address(),
+        data: alloy::hex::decode(format!("cfdd7aea{:064x}", 56)).unwrap().into(), batch: U256::from(13), nonce: U256::ZERO,
+        validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO });
+    let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
+    let mut cfg2 = cfg.clone();
+    cfg2.stuck_after_secs = 1;
+    let mut s2 = Submitter::start(Chain::with_signer(&cfg2, relayer.clone()).unwrap(), odoo.clone(), cfg2, "e2e-ua-2".into(), Default::default())
+        .await
+        .unwrap();
+    let _: Value = p.raw_request("evm_setAutomine".into(), (false,)).await.unwrap();
+    let j = relay_job(4, 1_000, call_data).await;
+    state.lock().unwrap().jobs.push(j);
+    let b0 = eth().await;
+    s2.poll_outbox().await;
+    assert_eq!(last(4)["chain_state"], "broadcast", "{}", last(4));
+    let hashes = || -> Vec<String> { state.lock().unwrap().reports.iter()
+        .filter(|r| r["job_id"] == 4 && r["tx_hash"].is_string()).map(|r| r["tx_hash"].as_str().unwrap().to_string()).collect() };
+    let mut sent = vec![tx_fees(&rpc, &hashes()[0]).await];
+    for _ in 0..7 {
+        tokio::time::sleep(Duration::from_millis(1_100)).await;
+        s2.track().await;
+        let h = hashes();
+        if h.len() > sent.len() {
+            sent.push(tx_fees(&rpc, h.last().unwrap()).await);
+        }
+    }
+    assert!(sent.len() >= 3, "replaced while stuck: {sent:?}");
+    let _: Value = p.raw_request("evm_mine".into(), ()).await.unwrap();
+    let _: Value = p.raw_request("evm_setAutomine".into(), (true,)).await.unwrap();
+    for _ in 0..30 {
+        s2.track().await;
+        if s2.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(last(4)["chain_state"], "mined", "{}", last(4));
+    quote_covers(&sent, b0 - eth().await, "uaRelay replaced while stuck");
+    assert_eq!(view(&rpc, token, IToken::mtxNonceCall { from: payer.address(), batch: U256::from(13) }).await, U256::from(1u64));
 }

@@ -110,10 +110,15 @@ impl ChainAdapter for EvmAdapter {
         self.guard.check(chain, &w).await?;
         let gas = guard::gas(chain, &w, self.max_gas).await?;
         let mut meta = json!({"to": format!("{:#x}", w.to), "gas": gas});
-        if self.guard.is_relay(&w) {
-            // a relay fee covers the quote at the fees the lane then signs with
+        if self.guard.relay_priced(chain.address(), &w)? {
+            // this runner signs once and never replaces, so the quote at the fee ceiling covers the one send; the
+            // build-time fees are frozen in `meta` for `sign` (a runner that replaces must clamp at `fee_ceiling`)
+            if self.guard.op_stack() {
+                return Err(SimError::Revert("RELAY_FEE_REFUSED: the generic lane runner does not price an OP-stack L1 data fee \
+                                             (the EVM submitter does)".into()));
+            }
             let fees = chain.fees().await.map_err(|e| SimError::Transport(format!("fees: {e:#}")))?;
-            self.guard.relay_covers(chain.address(), &w, gas, fees.0)?;
+            self.guard.relay_covers(chain.address(), &w, gas, guard::fee_ceiling(fees.0), 0)?;
             meta["fees"] = json!([fees.0.to_string(), fees.1.to_string()]);
         }
         Ok(Built { job_id: job.id, body: w.data.to_vec(), valid_until: w.valid_until, meta })
@@ -146,6 +151,10 @@ impl ChainAdapter for EvmAdapter {
                 None => TxStatus::Unknown,
             },
         })
+    }
+
+    fn subject(&self, job: &Job) -> Option<(B256, bool)> {
+        self.guard.subject(&work_from_job(job, self.fee_recipient).ok()?)
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {

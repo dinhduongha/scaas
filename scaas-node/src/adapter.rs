@@ -136,6 +136,10 @@ pub trait ChainAdapter: Send + Sync {
     async fn digest(&self, job: &Job) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
         Ok(job_digest(job))
     }
+    /// Review I2: the subject hold key of a claimed job and whether it is a relay-fee job (EVM / Hedera). Default: none.
+    fn subject(&self, _job: &Job) -> Option<(alloy::primitives::B256, bool)> {
+        None
+    }
     /// NODE-GW-07 at lane start: an EVM chain whose RPC's block 0 is not the configured `chain_uid` never runs a
     /// lane (review T4 I2). Default: nothing to check.
     async fn start_check(&self) -> Result<()> {
@@ -473,6 +477,18 @@ async fn step_once(
         Some(g) => g,
         None => None,
     };
+    let hold = match adapter.subject(&job) {
+        None => None,
+        Some((key, relay)) => match inflight.hold_subject(key, relay) {
+            Some(h) => Some(h),
+            None => {
+                report(odoo, Report { error: Some("SUBJECT_HELD: a relay-fee job and another job of its payer are never in flight \
+                    together".into()), ..rep(job.id, "queued") }).await;
+                return Ok(Step::Done);
+            }
+        },
+    };
+    let _guard = inflight.with_hold(_guard, hold);
     let built = match adapter.build(&job, lane).await {
         Ok(b) => b,
         Err(SimError::Revert(r)) if adapter.already_done(&job, &r) => {

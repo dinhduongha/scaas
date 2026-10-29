@@ -247,6 +247,12 @@ sol! {
         error RelayTargetNoCode(address target);
     }
 
+    /// The OP-stack `GasPriceOracle` predeploy (`0x420…0F`): the L1 data fee of a transaction's bytes.
+    #[derive(Debug)]
+    interface IGasPriceOracle {
+        function getL1Fee(bytes _data) external view returns (uint256);
+    }
+
     /// `MandateWallet` errors (CTR-ACC-06/07): a `call` job's revert reason names them, so the client re-reads
     /// `epoch(token)` and re-signs on `StaleEpoch`.
     #[derive(Debug)]

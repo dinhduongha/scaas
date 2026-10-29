@@ -158,6 +158,10 @@ impl ChainAdapter for HederaAdapter {
         self.inner.digest(job).await
     }
 
+    fn subject(&self, job: &Job) -> Option<(B256, bool)> {
+        self.inner.subject(job)
+    }
+
     async fn start_check(&self) -> Result<()> {
         self.inner.start_check().await
     }

@@ -370,6 +370,11 @@ fn pay_meta_shape(entry_ref: B256, batch: U256, nonce: U256, salt: &B256, meta: 
     Ok(())
 }
 
+/// `MetaTxLib.UA_POOL`: the one ERC-20 holder of every derived UA's balance.
+pub fn ua_pool() -> Address {
+    Address::from_word(keccak256("scaas.ua.pool.v1"))
+}
+
 /// A native id (accounts.md §1.3: the top 96 bits zero) as its address; `None` for a derived UA.
 pub fn native(id: &B256) -> Option<Address> {
     (id[..12] == [0; 12]).then(|| Address::from_word(*id))

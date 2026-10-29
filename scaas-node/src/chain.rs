@@ -140,11 +140,13 @@ impl Chain {
         Ok(BlockGas { limit: u64::from_str_radix(g.trim_start_matches("0x"), 16)?, amsterdam: b.get("blockAccessListHash").is_some() })
     }
 
-    /// The gas limit of the transaction `hash` as it was sent (`eth_getTransactionByHash`); `None` if the RPC does not
-    /// know it.
-    pub async fn tx_gas(&self, hash: B256) -> Result<Option<u64>> {
+    /// The gas limit and max fee per gas of the transaction `hash` as it was sent (`eth_getTransactionByHash`); `None`
+    /// if the RPC does not know it (the fee: if it gives none, e.g. a legacy transaction).
+    pub async fn tx_fees(&self, hash: B256) -> Result<Option<(u64, Option<u128>)>> {
         let t: serde_json::Value = self.primary().raw_request("eth_getTransactionByHash".into(), (hash,)).await?;
-        t["gas"].as_str().map(|g| Ok(u64::from_str_radix(g.trim_start_matches("0x"), 16)?)).transpose()
+        let hex = |k: &str| t[k].as_str().map(|g| u128::from_str_radix(g.trim_start_matches("0x"), 16));
+        let Some(gas) = hex("gas") else { return Ok(None) };
+        Ok(Some((u64::try_from(gas?)?, hex("maxFeePerGas").transpose()?)))
     }
 
     /// This chain's `chain_uid`: the RPC's block 0 hash, which must equal the configured `chain_uid` when one is set
@@ -236,20 +238,19 @@ impl Chain {
         Some(self.ua_digest(token, UaMtx::from_calldata(data)?.0).await)
     }
 
-    /// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
+/// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
     /// khối gần nhất ⇒ `(digest, relayer)` (§8.5). Both events index `from`, `relayer`, `batch` alike.
     pub async fn meta_executed(&self, m: &MetaRef, lookback: u64) -> Result<Option<(B256, Address)>> {
         let latest = self.primary().get_block_number().await?;
-        let sig = if m.ua { IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH } else { IToken::MetaTransactionExecuted::SIGNATURE_HASH };
         let filter = Filter::new()
             .address(m.token)
-            .event_signature(sig)
+            .event_signature(executed_events(m))
             .topic1(m.from)
             .topic3(B256::from(m.batch))
             .from_block(latest.saturating_sub(lookback))
             .to_block(latest);
         for log in self.primary().get_logs(&filter).await? {
-            let e = match m.ua {
+            let e = match log.topic0() == Some(&IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH) {
                 true => log.log_decode::<IUALedger::UAMetaTransactionExecuted>().ok().map(|l| (l.inner.data.nonce, l.inner.data.digest, l.inner.data.relayer)),
                 false => log.log_decode::<IToken::MetaTransactionExecuted>().ok().map(|l| (l.inner.data.nonce, l.inner.data.digest, l.inner.data.relayer)),
             };
@@ -293,6 +294,17 @@ impl Chain {
 
     pub async fn block_hash(p: &DynProvider, n: u64) -> Option<B256> {
         p.get_block_by_number(BlockNumberOrTag::Number(n)).await.ok().flatten().map(|b| b.header.hash)
+    }
+}
+
+/// The executions that spend `m`'s nonce: the address path's, the UA ledger's, or both for a native-id UA (one nonce
+/// map, `uaNonce(pad(a), b) == mtxNonce(a, b)`).
+pub fn executed_events(m: &MetaRef) -> Vec<B256> {
+    let (ua, mtx) = (IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH, IToken::MetaTransactionExecuted::SIGNATURE_HASH);
+    match (m.ua, crate::metatx::native(&m.from).is_some()) {
+        (true, true) => vec![ua, mtx],
+        (true, false) => vec![ua],
+        (false, _) => vec![mtx],
     }
 }
 
@@ -340,5 +352,17 @@ mod tests {
         let c = chain("http://127.0.0.1:9", Some(genesis));
         assert!(c.uid().await.is_err() && c.uid().await.is_err());
         assert!(c.uid.get().is_none());
+    }
+
+    /// Fix 1 (review minor 5): a native-id UA job shares its nonce map with the address path, so its classification
+    /// reads both executions; a derived UA's only the UA one; an address job only the address one.
+    #[test]
+    fn a_native_ua_subject_is_classified_on_both_paths() {
+        let m = |from: B256, ua: bool| MetaRef { token: Address::ZERO, from, batch: U256::ZERO, nonce: U256::ZERO, digest: None, ua };
+        let (ua_ev, mtx_ev) = (IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH, IToken::MetaTransactionExecuted::SIGNATURE_HASH);
+        let native = Address::repeat_byte(1).into_word();
+        assert_eq!(executed_events(&m(native, true)), vec![ua_ev, mtx_ev]);
+        assert_eq!(executed_events(&m(B256::repeat_byte(1), true)), vec![ua_ev]);
+        assert_eq!(executed_events(&m(native, false)), vec![mtx_ev]);
     }
 }
