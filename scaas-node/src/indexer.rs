@@ -9,12 +9,20 @@ use alloy::sol_types::SolEvent;
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
-use crate::abi::{IMtxRelayFee, IToken};
+use crate::abi::{IMtxRelayFee, IToken, IUALedger};
 use crate::chain::Chain;
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
 
 const MAX_SPAN: u64 = 1000;
+
+/// An id as Odoo reads it: a native id (top 96 bits zero) as its address, a derived UA as bytes32.
+fn id(w: B256) -> String {
+    match crate::metatx::native(&w) {
+        Some(a) => format!("{a:#x}"),
+        None => format!("{w:#x}"),
+    }
+}
 
 /// Log đã giải mã theo đúng khoá Odoo đọc (`dms_blockchain` `_decode`). None = không phải
 /// event ta theo dõi, hoặc log thiếu vị trí (log pending) — loại.
@@ -48,10 +56,28 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["event"] = json!("PaymentMeta");
         v["entry_ref"] = json!(format!("{:#x}", e.payId));
         v["meta"] = json!(format!("0x{}", alloy::hex::encode(&e.meta)));
+    } else if topic0 == IUALedger::UAPaymentSettled::SIGNATURE_HASH {
+        // the UA ledger's payment is a `PaymentSettled` row with ids, as on NEAR and Algorand
+        let e = log.log_decode::<IUALedger::UAPaymentSettled>().ok()?.inner.data;
+        v["event"] = json!("PaymentSettled");
+        v["from"] = json!(id(e.from));
+        v["to"] = json!(id(e.to));
+        v["amount"] = json!(e.amount.to_string());
+        v["fee"] = json!(e.feeAmount.to_string());
+        v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
+        v["entry_ref"] = json!(format!("{:#x}", e.entryRef));
+    } else if topic0 == IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH {
+        let e = log.log_decode::<IUALedger::UAMetaTransactionExecuted>().ok()?.inner.data;
+        v["event"] = json!("MetaTransactionExecuted");
+        v["from"] = json!(id(e.from));
+        v["relayer"] = json!(format!("{:#x}", e.relayer));
+        v["batch"] = json!(e.batch.to_string());
+        v["nonce"] = json!(e.nonce.to_string());
+        v["digest"] = json!(format!("{:#x}", e.digest));
+        v["fee_recipient"] = json!(format!("{:#x}", e.feeRecipient));
+        v["fee"] = json!(e.fee.to_string());
     } else if topic0 == IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH {
         let e = log.log_decode::<IMtxRelayFee::RelayFeePaid>().ok()?.inner.data;
-        // ids: a zero-padded address, else a UA id (the node indexes no UA payment on EVM: it then joins nothing)
-        let id = |w: B256| if w[..12] == [0; 12] { format!("{:#x}", Address::from_word(w)) } else { format!("{w:#x}") };
         v["event"] = json!("RelayFeePaid");
         v["entry_ref"] = json!(format!("{:#x}", e.r#ref));
         v["target"] = json!(format!("{:#x}", e.target));
@@ -124,7 +150,8 @@ pub fn join_pay_events(mut events: Vec<Value>) -> Vec<Value> {
     events
 }
 
-/// The token events the indexer reads (and, with a router, its `RelayFeePaid`), decoded and joined.
+/// The token events the indexer reads (the UA ledger's `UAPaymentSettled` / `UAMetaTransactionExecuted` too; with a
+/// router, its `RelayFeePaid`), decoded and joined.
 pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Address>) -> Filter {
     addrs.extend(router);
     Filter::new().from_block(from).to_block(to).address(addrs).event_signature(vec![
@@ -132,6 +159,8 @@ pub fn pay_filter(from: u64, to: u64, mut addrs: Vec<Address>, router: Option<Ad
         IToken::MetaTransactionExecuted::SIGNATURE_HASH,
         IToken::PaymentMeta::SIGNATURE_HASH,
         IMtxRelayFee::RelayFeePaid::SIGNATURE_HASH,
+        IUALedger::UAPaymentSettled::SIGNATURE_HASH,
+        IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH,
     ])
 }
 
@@ -373,6 +402,47 @@ mod tests {
         assert_eq!((j["relay_target"].as_str(), j["relay_payee"].as_str()),
             (Some(format!("{shop:#x}").as_str()), Some(format!("{:#x}", Address::repeat_byte(0x1a)).as_str())));
         assert!(pay_events(&logs, None).iter().all(|v| v["relay_payee"].is_null()), "no router: no relay fee joins");
+    }
+
+    /// The UA ledger's payment (`UAPaymentSettled`) and execution (`UAMetaTransactionExecuted`) are the same Odoo rows
+    /// as the address path's, with ids (a native id as its address, a derived one as bytes32), as on NEAR and
+    /// Algorand; a UA payer's `PaymentMeta` and `RelayFeePaid` join them by `(from, entry_ref)` like any payment.
+    #[test]
+    fn ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee() {
+        use crate::abi::IUALedger;
+        let (token, router, lane) = (Address::repeat_byte(9), Address::repeat_byte(0x7f), Address::repeat_byte(0x1a));
+        let (ua, shop) = (B256::repeat_byte(0xaa), B256::repeat_byte(0xbb));
+        let (p, r) = (B256::repeat_byte(4), B256::repeat_byte(5));
+        let settled = |from: B256, to: B256, amount: u64, entry_ref: B256| IUALedger::UAPaymentSettled { from, to,
+            amount: U256::from(amount), feeAmount: U256::from(1u64), feeRecipient: lane, entryRef: entry_ref }.encode_log_data();
+        let meta = IToken::PaymentMeta { payId: p, meta: vec![0xab].into() }.encode_log_data();
+        let fee = |payer: B256| IMtxRelayFee::RelayFeePaid { r#ref: r, target: token, token, payer, payee: lane.into_word(),
+            amount: U256::from(5u64) }.encode_log_data();
+        let exec = IUALedger::UAMetaTransactionExecuted { from: ua, relayer: lane, batch: U256::from(7u64), nonce: U256::ZERO,
+            digest: B256::repeat_byte(0xd1), feeRecipient: lane, fee: U256::from(1u64) }.encode_log_data();
+        let logs = vec![
+            log_at(token, 1, 0, meta.clone()),
+            log_at(token, 1, 1, settled(ua, shop, 100, p)),
+            log_at(token, 1, 2, exec),
+            // a UA payer's open-mode relay fee: paid to pad(router), forwarded to the lane
+            log_at(token, 2, 0, settled(ua, router.into_word(), 5, r)),
+            log_at(router, 2, 1, fee(ua)),
+            // another payer's RelayFeePaid joins nothing
+            log_at(token, 3, 0, settled(ua, router.into_word(), 5, r)),
+            log_at(router, 3, 1, fee(shop)),
+        ];
+        assert!(pay_filter(0, 1, vec![token], Some(router)).topics[0].matches(&IUALedger::UAPaymentSettled::SIGNATURE_HASH));
+        assert!(pay_filter(0, 1, vec![token], None).topics[0].matches(&IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH));
+        let out = pay_events(&logs, Some(router));
+        let names: Vec<&str> = out.iter().map(|v| v["event"].as_str().unwrap()).collect();
+        assert_eq!(names, ["PaymentSettled", "MetaTransactionExecuted", "PaymentSettled", "PaymentSettled"]);
+        let id = |b: B256| format!("{b:#x}");
+        assert_eq!((out[0]["from"].as_str(), out[0]["to"].as_str()), (Some(id(ua).as_str()), Some(id(shop).as_str())));
+        assert_eq!((out[0]["amount"].as_str(), out[0]["fee"].as_str(), out[0]["meta"].as_str()), (Some("100"), Some("1"), Some("0xab")));
+        assert_eq!((out[1]["from"].as_str(), out[1]["digest"].as_str()), (Some(id(ua).as_str()), Some(id(B256::repeat_byte(0xd1)).as_str())));
+        assert_eq!(out[2]["to"], format!("{router:#x}"), "a native id is shown as its address");
+        assert_eq!(out[2]["relay_payee"], format!("{lane:#x}"), "the UA payer's relay fee joins");
+        assert!(out[3]["relay_payee"].is_null(), "by (from, ref), never by ref alone");
     }
 
     /// Merge TODO a (recipe M1 on the EVM indexer): no registered token ⇒ nobody can filter this range, so the

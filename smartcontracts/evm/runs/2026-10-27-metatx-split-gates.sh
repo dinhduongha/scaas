@@ -77,7 +77,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 #   pytest "PASSED tests/<file>::<name>[<id>]" (-rA summary)   unittest "<name> (<class>) ... ok"
 # (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19;
 #  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name; final fix wave: its new
-#  tests)
+#  tests; node-ua-jobs (EVM `ua_metatx` jobs, 2026-10-30): its unit tests, last block)
 NEW_TESTS=$(cat <<'EOF'
 forge|forge|test_parity
 forge|forge|test_isValid_7702_ctrUa24
@@ -728,6 +728,14 @@ forge|forge|test_kindTable
 ua-rs|cargo|table_groups_purposes_constants
 ua-rs|cargo|natives_native_space_canonical_ids
 cargo-scaas-node|cargo|adapters::example_config_builds_every_family
+cargo-scaas-node|cargo|metatx::ua_digests_match_the_metatx3_vectors
+cargo-scaas-node|cargo|metatx::ua_wire_needs_bytes32_ids_and_normalizes
+cargo-scaas-node|cargo|metatx::ua_pay_meta_calldata_checks_the_payment
+cargo-scaas-node|cargo|submit::ua_metatx_jobs_build_the_ua_entry_points
+cargo-scaas-node|cargo|submit::ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed
+cargo-scaas-node|cargo|submit::ua_relay_fee_needs_a_price_and_covers_the_quote
+cargo-scaas-node|cargo|submit::min_wei_value_is_parsed_or_refused
+cargo-scaas-node|cargo|indexer::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee
 EOF
 )
 

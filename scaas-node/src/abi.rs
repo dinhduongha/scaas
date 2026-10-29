@@ -22,6 +22,21 @@ sol! {
         uint32 mode; address relayer; uint256 fee; address feeRecipient;
     }
 
+    /// `MetaTxLib.UAMetaTransaction` (CTR-UA-19/26): `MetaTransaction` with `from` as an id (a native address
+    /// zero-padded, or a registered SIGNING UA), signed under the UA purpose `metatx`.
+    #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+    struct UAMetaTransaction {
+        bytes32 from; bytes data; uint256 batch; uint256 nonce; uint256 validUntil; uint32 mode;
+        address relayer; uint256 fee; address feeRecipient;
+    }
+
+    /// `MetaTxLib.UAMetaTransfer` (CTR-UA-26): `MetaTransfer` on the UA ledger, `from` and `to` ids.
+    #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+    struct UAMetaTransfer {
+        bytes32 from; bytes32 to; uint256 value; bytes32 entryRef; uint256 batch; uint256 nonce; uint256 validUntil;
+        uint32 mode; address relayer; uint256 fee; address feeRecipient;
+    }
+
     /// `ITradeToken.TradeOrder` (CTR-DEX-13): signed in the sell token's domain (a `DexOrder` for an outside token).
     #[derive(Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
     struct TradeOrder {
@@ -189,11 +204,41 @@ sol! {
         error MinNonceAboveCap(uint256 requested);
     }
 
-    /// `MtxRelayFee` (CTR-MTX-27): a token fee to the relayer for a fee-less call. `uaRelay` is not served (the node
-    /// has no UA path on EVM).
+    /// `IUALedger` (CTR-UA-18/19/26): the UA ledger of every SCaaS token, off while `registry()` is 0; `uaNonce(pad(a),
+    /// b) == mtxNonce(a, b)` (one nonce map).
+    #[derive(Debug)]
+    interface IUALedger {
+        function registry() external view returns (address);
+        function uaNonce(bytes32 ua, uint256 batch) external view returns (uint256);
+        function uaDigest(UAMetaTransaction m) external view returns (bytes32);
+        function uaTransferDigest(UAMetaTransfer t) external view returns (bytes32);
+        function uaExecute(UAMetaTransaction m, bytes auth) external returns (bytes);
+        function uaExecuteTransfer(UAMetaTransfer t, bytes auth) external returns (bool);
+        /// CTR-MTX-26 (`IMetaTokenV2`): `uaPay` with `payId = metaPayId(salt, meta)`; `PaymentMeta` first.
+        function uaPayMeta(bytes32 from, bytes32 to, uint256 amount, bytes32 salt, bytes meta, uint256 validUntil,
+            uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes auth) external returns (bool);
+        function transferToUA(bytes32 to, uint256 amount) external returns (bool);
+        function balanceOfUA(bytes32 ua) external view returns (uint256);
+        event UAMetaTransactionExecuted(bytes32 indexed from, address indexed relayer, uint256 indexed batch,
+            uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
+        event UAPaymentSettled(bytes32 indexed from, bytes32 indexed to, uint256 amount, uint256 feeAmount,
+            address feeRecipient, bytes32 indexed entryRef);
+        error UALedgerOff();
+        error UAPoolNotPayable();
+        error UANotRegistered(bytes32 ua);
+        error UAKindNotAccepted(bytes32 ua, uint16 kind);
+        error UAInsufficientBalance(bytes32 ua, uint256 balance, uint256 needed);
+        error MetaTxUnknownOp(bytes4 selector);
+        /// `UAKinds` / `IUARegistry`: a starved verify, a refused signature.
+        error UAVerifyGas();
+        error UAUnauthorized(bytes32 ua);
+    }
+
+    /// `MtxRelayFee` (CTR-MTX-27): a token fee to the relayer for a fee-less call; `uaRelay` for a UA payer.
     #[derive(Debug)]
     interface IMtxRelayFee {
         function relay(address target, bytes callData, address token, MetaTransfer t, bytes sig) external;
+        function uaRelay(address target, bytes callData, address token, UAMetaTransfer t, bytes auth) external;
         function relayRef(address target, bytes callData) external view returns (bytes32);
         function EXECUTOR() external view returns (address);
         event RelayFeePaid(bytes32 indexed ref, address indexed target, address indexed token, bytes32 payer,
@@ -232,6 +277,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IMtxRelayFee::IMtxRelayFeeErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IUALedger::IUALedgerErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     format!("revert 0x{}", alloy::hex::encode(data))

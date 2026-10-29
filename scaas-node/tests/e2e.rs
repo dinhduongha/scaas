@@ -1014,3 +1014,181 @@ async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
     let settled = state.lock().unwrap().ingested.iter().filter(|e| e["event"] == "PaymentSettled").count();
     assert_eq!(settled, 2);
 }
+
+alloy::sol! {
+    function register(uint16 kind, bytes keyData, bytes pop, bytes pqzKey, bytes pqzPop) external returns (bytes32 ua);
+    function uaOf(uint16 kind, bytes keyData) external pure returns (bytes32);
+    function popDigest(bytes32 ua, bytes32 pqzKeyHash) external view returns (bytes32);
+    function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
+}
+
+/// One outbox poll, then track until every sent job settles.
+async fn run_outbox(s: &mut Submitter) {
+    s.poll_outbox().await;
+    for _ in 0..50 {
+        s.track().await;
+        if s.inflight_count() == 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(s.inflight_count(), 0);
+}
+
+/// `UAKinds.SECP256K1`: a derived UA over a secp256k1 key (`keyData = x ‖ y`, ECDSA over `ua_msg`).
+const UA_SECP256K1: u16 = 0x0108;
+
+async fn view<C: SolCall>(rpc: &str, to: Address, c: C) -> C::Return {
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    C::abi_decode_returns(&p.call(TransactionRequest::default().to(to).input(c.abi_encode().into())).await.unwrap()).unwrap()
+}
+
+/// `requireAuthorized`'s derived auth: `abi.encode(bytes keyData, bytes sig)`, the signature over the registry's
+/// `uaMessage(kind, purpose, digest)`.
+async fn ua_auth(rpc: &str, registry: Address, owner: &PrivateKeySigner, purpose: &[u8], digest: B256) -> alloy::primitives::Bytes {
+    let msg = view(rpc, registry, uaMessageCall { kind: UA_SECP256K1, purposeTag: keccak256(purpose), digest }).await;
+    let sig = owner.sign_hash_sync(&msg).unwrap().as_bytes().to_vec();
+    (alloy::primitives::Bytes::from(owner.public_key().to_vec()), alloy::primitives::Bytes::from(sig)).abi_encode_params().into()
+}
+
+/// The lane's actual cost of the job's transaction (`spent`, its ETH decrease) is covered by the node's quote: the
+/// gas limit × the max fee per gas it signed. Prints a QUOTE line.
+async fn quote_covers(rpc: &str, tx_hash: &str, spent: U256, what: &str) -> u128 {
+    use alloy::consensus::Transaction as _;
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let tx = p.get_transaction_by_hash(tx_hash.parse().unwrap()).await.unwrap().expect("the signed tx");
+    let quote = scaas_node::guard::relay_quote(tx.gas_limit(), tx.max_fee_per_gas());
+    let rc = p.get_transaction_receipt(tx_hash.parse().unwrap()).await.unwrap().unwrap();
+    println!("QUOTE {what}: quote {quote} wei (gas limit {} x max fee {}) >= the lane's ETH decrease {spent} (gas used {})",
+        tx.gas_limit(), tx.max_fee_per_gas(), rc.gas_used);
+    assert!(U256::from(quote) >= spent, "{what}: the quote {quote} under-prices the lane's {spent} wei");
+    quote
+}
+
+/// `ua_metatx` (job-api.md) on the real token: a derived secp256k1 UA, registered and funded on the UA ledger, pays
+/// (1) a pay-meta job (`uaPayMeta`), and (2) a relay fee for a fee-less call through `MtxRelayFee.uaRelay` (open
+/// mode: the fee reaches the lane); the node's quote covers the lane's real ETH cost of each, a fee worth less than
+/// the quote at `min_wei_value` is refused before any signature, and the indexer gives the UA payments (ids) their meta
+/// and relay fee.
+#[tokio::test]
+#[ignore]
+async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
+    use scaas_node::abi::{IMtxRelayFee, IUALedger, UAMetaTransfer};
+    use scaas_node::metatx::{meta_pay_id, pay_lane, relay_ref, UaMtx};
+    let chain_id = 31905;
+    let (_anvil, rpc) = start_anvil(chain_id, 31905).await;
+    let payer = small_key(0xA11CE);
+    let dep = deploy(&rpc, chain_id, payer.address());
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let registry: Address = dep["ua_registry"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["mtx_relay_fee"].as_str().unwrap().parse().unwrap();
+    let (relayer, deployer) = (key(RELAYER), key(DEPLOYER));
+    let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+
+    // a derived secp256k1 UA: registered (its PoP), then funded on the token's UA ledger
+    let owner = small_key(0x05ec);
+    let key_data = alloy::primitives::Bytes::from(owner.public_key().to_vec());
+    let ua = view(&rpc, registry, uaOfCall { kind: UA_SECP256K1, keyData: key_data.clone() }).await;
+    let pd = view(&rpc, registry, popDigestCall { ua, pqzKeyHash: B256::ZERO }).await;
+    let pm = view(&rpc, registry, uaMessageCall { kind: UA_SECP256K1, purposeTag: keccak256(b"scaas.ua.purpose.pop.v1"), digest: pd }).await;
+    let pop = owner.sign_hash_sync(&pm).unwrap().as_bytes().to_vec();
+    send(&rpc, &deployer, registry, registerCall { kind: UA_SECP256K1, keyData: key_data, pop: pop.into(),
+        pqzKey: Default::default(), pqzPop: Default::default() }.abi_encode()).await;
+    send(&rpc, &deployer, token, IUALedger::transferToUACall { to: ua, amount: U256::from(1_000_000u64) }.abi_encode()).await;
+    assert_eq!(view(&rpc, token, IUALedger::balanceOfUACall { ua }).await, U256::from(1_000_000u64));
+
+    // wei per base unit: a fee of 1 is worth 10^11 wei, of 1,000 10^14 (anvil's quotes here are ~10^13)
+    let price: u128 = 100_000_000_000;
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let mut cfg = chain_cfg(chain_id, &rpc, None);
+    cfg.params = toml::toml! { relay_fee = { min_amount = 1 } };
+    let rf = cfg.params["relay_fee"].as_table_mut().unwrap();
+    rf.insert("router".into(), format!("{router:#x}").into());
+    rf.insert("min_wei_value".into(), toml::Value::Table([(format!("{token:#x}"), toml::Value::from(price.to_string()))].into_iter().collect()));
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e-ua".into(), Default::default())
+        .await
+        .unwrap();
+    let d = token_domain(&dep, chain_id, token);
+    let ua_job = |id: i64, m: &UaMtx, auth: &alloy::primitives::Bytes| {
+        let (kind, wire) = m.to_wire();
+        json!({"id": id, "kind": "ua_metatx", "token": format!("{token:#x}"), "digest": format!("{:#x}", m.digest(&d)),
+               "struct": kind, "m": wire, "auth": format!("0x{}", alloy::hex::encode(auth))})
+    };
+    let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
+    let signed = |id: i64| state.lock().unwrap().reports.iter().find(|r| r["job_id"] == id && r["chain_state"] == "signed")
+        .map(|r| r["tx_hash"].as_str().unwrap().to_string()).unwrap();
+    let eth = || async { p.get_balance(relayer.address()).await.unwrap() };
+
+    // (1) UA pay-meta: uaPayMeta, the node's digest is the token's
+    let shop = Address::repeat_byte(0x5e);
+    let (salt, meta) = (B256::repeat_byte(0x52), b"invoice 77".to_vec());
+    let pid = meta_pay_id(&salt, &meta);
+    let t = UAMetaTransfer { from: ua, to: shop.into_word(), value: U256::from(1_000u64), entryRef: pid, batch: pay_lane(&pid),
+        nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: relayer.address(),
+        fee: U256::ZERO, feeRecipient: Address::ZERO };
+    let m = UaMtx::Transfer(t.clone());
+    assert_eq!(view(&rpc, token, IUALedger::uaTransferDigestCall { t }).await, m.digest(&d), "uaTransferDigest");
+    let mut j = ua_job(1, &m, &ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", m.digest(&d)).await);
+    (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&meta))));
+    state.lock().unwrap().jobs.push(j);
+    let b0 = eth().await;
+    run_outbox(&mut s).await;
+    assert_eq!(last(1)["chain_state"], "mined", "{}", last(1));
+    quote_covers(&rpc, &signed(1), b0 - eth().await, "ua_metatx uaPayMeta (secp256k1 UA)").await;
+    assert_eq!(balance(&rpc, token, shop).await, U256::from(1_000u64), "the UA paid the shop");
+
+    // (2) UA relay fee for the payer's fee-less cancelNonce(55) (address path), open mode
+    let inner = Mtx::Call(scaas_node::abi::MetaTransaction { from: payer.address(),
+        data: alloy::hex::decode(format!("cfdd7aea{:064x}", 55)).unwrap().into(), batch: U256::from(12), nonce: U256::ZERO,
+        validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO });
+    let call_data = inner.calldata(alloy::hex::decode(&sign(&payer, &d, &inner)[2..]).unwrap().into());
+    let r = relay_ref(chain_id, token, &call_data);
+    let relay_job = |id: i64, value: u64| {
+        let t = UAMetaTransfer { from: ua, to: router.into_word(), value: U256::from(value), entryRef: r, batch: pay_lane(&r),
+            nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: MODE_RESTRICT_RELAYER, relayer: router,
+            fee: U256::ZERO, feeRecipient: Address::ZERO };
+        let (rpc, owner, call_data, d) = (rpc.clone(), owner.clone(), call_data.clone(), d.clone());
+        async move {
+            let auth = ua_auth(&rpc, registry, &owner, b"scaas.ua.purpose.metatx.v1", UaMtx::Transfer(t.clone()).digest(&d)).await;
+            let data = IMtxRelayFee::uaRelayCall { target: token, callData: call_data, token, t, auth }.abi_encode();
+            json!({"id": id, "kind": "call", "call": {"target": format!("{router:#x}"),
+                "calldata": format!("0x{}", alloy::hex::encode(data)), "validUntil": (now() + 300).to_string()}})
+        }
+    };
+    // a fee of 1 is worth 10^11 wei, under the quote: refused, nothing signed
+    let n0 = p.get_transaction_count(relayer.address()).await.unwrap();
+    let j = relay_job(2, 1).await;
+    state.lock().unwrap().jobs.push(j);
+    run_outbox(&mut s).await;
+    let l = last(2);
+    assert!(l["chain_state"] == "dead" && l["error"].as_str().unwrap().starts_with("RELAY_FEE_REFUSED"), "{l}");
+    assert_eq!(p.get_transaction_count(relayer.address()).await.unwrap(), n0, "nothing signed or sent");
+    // a fee of 1,000 (10^14 wei at the price) covers it
+    let j = relay_job(3, 1_000).await;
+    state.lock().unwrap().jobs.push(j);
+    let (b0, f0) = (eth().await, balance(&rpc, token, relayer.address()).await);
+    run_outbox(&mut s).await;
+    assert_eq!(last(3)["chain_state"], "mined", "{}", last(3));
+    let quote = quote_covers(&rpc, &signed(3), b0 - eth().await, "uaRelay (secp256k1 UA payer, open mode)").await;
+    assert!(1_000 * price >= quote, "the fee at min_wei_value covers the quote");
+    assert_eq!(balance(&rpc, token, relayer.address()).await, f0 + U256::from(1_000u64), "the fee reached the lane");
+    let lane12 = IToken::mtxNonceCall { from: payer.address(), batch: U256::from(12) };
+    assert_eq!(view(&rpc, token, lane12).await, U256::from(1u64), "the inner call ran");
+    assert_eq!(view(&rpc, token, IUALedger::balanceOfUACall { ua }).await, U256::from(1_000_000u64 - 2_000));
+
+    // the indexer: the UA payments are PaymentSettled rows of the id, with their meta and relay fee
+    let ichain = Chain::with_signer(&cfg, relayer.clone()).unwrap();
+    while scaas_node::indexer::step(&ichain, &odoo, Some(router)).await.unwrap() {}
+    let ingested = state.lock().unwrap().ingested.clone();
+    assert!(ingested.iter().all(|e| e["event"] != "PaymentMeta" && e["event"] != "RelayFeePaid"), "never rows");
+    let paid = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{pid:#x}")).expect("UA pay-meta settled");
+    assert_eq!((paid["from"].as_str(), paid["to"].as_str(), paid["amount"].as_str()),
+        (Some(format!("{ua:#x}").as_str()), Some(format!("{shop:#x}").as_str()), Some("1000")));
+    assert_eq!(paid["meta"], format!("0x{}", alloy::hex::encode(&meta)));
+    let fee = ingested.iter().find(|e| e["event"] == "PaymentSettled" && e["entry_ref"] == format!("{r:#x}")).expect("UA relay fee settled");
+    assert_eq!((fee["from"].as_str(), fee["relay_target"].as_str(), fee["relay_payee"].as_str()),
+        (Some(format!("{ua:#x}").as_str()), Some(format!("{token:#x}").as_str()), Some(format!("{:#x}", relayer.address()).as_str())));
+    let exe = ingested.iter().find(|e| e["event"] == "MetaTransactionExecuted" && e["from"] == format!("{ua:#x}")).expect("UA executed");
+    assert_eq!(exe["digest"], format!("{:#x}", m.digest(&d)));
+}

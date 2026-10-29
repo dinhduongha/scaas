@@ -1,0 +1,75 @@
+# node ua_metatx jobs RED: the new tests against the API skeleton (MetaRef id + ua, the uaRelay call-table row, RelayFee.min_wei_value unparsed, relay_quote = 0, work_from_job without ua_metatx, UaMtx digest / from_calldata stubbed), at c016f971 + work tree
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib -- metatx::tests::ua_ submit::tests::ua_ submit::tests::min_wei_value_is_parsed_or_refused indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.49s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 8 tests
+test submit::tests::min_wei_value_is_parsed_or_refused ... FAILED
+test indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee ... FAILED
+test submit::tests::ua_metatx_jobs_build_the_ua_entry_points ... FAILED
+test metatx::tests::ua_pay_meta_calldata_checks_the_payment ... FAILED
+test submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote ... FAILED
+test metatx::tests::ua_wire_needs_bytes32_ids_and_normalizes ... ok
+test submit::tests::ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed ... FAILED
+test metatx::tests::ua_digests_match_the_metatx3_vectors ... FAILED
+
+failures:
+
+---- submit::tests::min_wei_value_is_parsed_or_refused stdout ----
+
+thread 'submit::tests::min_wei_value_is_parsed_or_refused' (1905648) panicked at src/submit.rs:1908:35:
+called `Result::unwrap()` on an `Err` value: params.relay_fee.min_wei_value is not a key of the evm family (router, min_amount, relay_bound_payee)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee stdout ----
+
+thread 'indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee' (1905644) panicked at src/indexer.rs:405:9:
+assertion failed: pay_filter(0, 1, vec![token],
+                Some(router)).topics[0].matches(&IUALedger::UAPaymentSettled::SIGNATURE_HASH)
+
+---- submit::tests::ua_metatx_jobs_build_the_ua_entry_points stdout ----
+
+thread 'submit::tests::ua_metatx_jobs_build_the_ua_entry_points' (1905650) panicked at src/submit.rs:1732:46:
+called `Result::unwrap()` on an `Err` value: unknown job kind "ua_metatx" (metatx | call)
+
+---- metatx::tests::ua_pay_meta_calldata_checks_the_payment stdout ----
+
+thread 'metatx::tests::ua_pay_meta_calldata_checks_the_payment' (1905646) panicked at src/metatx.rs:725:9:
+assertion `left == right` failed: uaPayMeta is its UAMetaTransfer
+  left: None
+ right: Some((Transfer(UAMetaTransfer { from: 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, to: 0x5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e, value: 10, entryRef: 0xe919e8dc54d5e2456d95f0e89520812b9ec0901cc7784bc16be1904c9d510117, batch: 101697277867398829609514016325680294476776114000023500573456244575759176090924, nonce: 0, validUntil: 1800000300, mode: 1, relayer: 0x0202020202020202020202020202020202020202, fee: 0, feeRecipient: 0x0000000000000000000000000000000000000000 }), 0x0707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707))
+
+---- submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote stdout ----
+
+thread 'submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote' (1905651) panicked at src/submit.rs:1847:9:
+assertion `left == right` failed
+  left: Err("BAD_PAYLOAD: relay: type check failed for \"relay\" with data: b045716d")
+ right: Ok(0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a)
+
+---- submit::tests::ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed stdout ----
+
+thread 'submit::tests::ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed' (1905649) panicked at src/submit.rs:1784:9:
+assertion `left == right` failed: [("dead", "bad payload: unknown job kind \"ua_metatx\" (metatx | call)")]
+  left: ["dead"]
+ right: ["signed", "broadcast"]
+
+---- metatx::tests::ua_digests_match_the_metatx3_vectors stdout ----
+
+thread 'metatx::tests::ua_digests_match_the_metatx3_vectors' (1905645) panicked at src/metatx.rs:677:17:
+assertion `left == right` failed: call "native"
+  left: "0x0000000000000000000000000000000000000000000000000000000000000000"
+ right: "0x4d68bee7fb290833ee8065cb9b12079a24e5a00c7d25613d6c86c169772f160e"
+
+
+failures:
+    indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee
+    metatx::tests::ua_digests_match_the_metatx3_vectors
+    metatx::tests::ua_pay_meta_calldata_checks_the_payment
+    submit::tests::min_wei_value_is_parsed_or_refused
+    submit::tests::ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed
+    submit::tests::ua_metatx_jobs_build_the_ua_entry_points
+    submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote
+
+test result: FAILED. 1 passed; 7 failed; 0 ignored; 0 measured; 429 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--lib`

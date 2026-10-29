@@ -22,13 +22,13 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 
 use alloy::primitives::{Address, Bytes};
-use alloy::sol_types::SolValue;
+use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
-use crate::abi::IToken;
+use crate::abi::{IToken, IUALedger};
 use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
-use crate::metatx::{Mtx, MODE_FEE_MASK};
+use crate::metatx::{Mtx, UaMtx, MODE_FEE_MASK};
 use crate::submit::Work;
 
 pub const SEL_MTX_SETTLE: [u8; 4] = [0x04, 0x03, 0xb1, 0x3c];
@@ -55,7 +55,7 @@ pub enum Rule {
 /// The call table as built in P5: the rows whose contracts exist (`cast sig` of the Solidity signatures; pinned
 /// against the KAT calldata). `mtxExecuteAsOwner` is one selector on `SmartKeyAccount` and `MandateWallet`, so it takes
 /// the wallet's rule. Every other selector is refused.
-pub const CALL_TABLE: [([u8; 4], &str, Rule); 11] = [
+pub const CALL_TABLE: [([u8; 4], &str, Rule); 12] = [
     ([0x45, 0x9b, 0x5b, 0x50], "SmartKeyAccountFactory.deploy", Rule::AccountFactory),
     ([0xfd, 0xf2, 0xd3, 0x38], "mtxExecuteAsOwner", Rule::SelfAuth),
     ([0x3a, 0x5b, 0x07, 0x08], "HederaMandateWallet.mtxExecuteAsOwnerRaw", Rule::SelfAuth),
@@ -67,6 +67,7 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 11] = [
     ([0x2d, 0xe6, 0x21, 0xd2], "SCaaSDex.mtxCancelOrders", Rule::Dex),
     (SEL_MTX_INVALIDATE_NONCES, "SCaaSDex.mtxInvalidateNonces", Rule::Dex),
     (<crate::abi::IMtxRelayFee::relayCall as alloy::sol_types::SolCall>::SELECTOR, "MtxRelayFee.relay", Rule::RelayFee),
+    (<crate::abi::IMtxRelayFee::uaRelayCall as alloy::sol_types::SolCall>::SELECTOR, "MtxRelayFee.uaRelay", Rule::RelayFee),
 ];
 
 /// The token entries a `metatx` job may name (job-api.md, order and wrap entries).
@@ -147,6 +148,8 @@ pub struct RelayFee {
     /// `MtxRelayExecutor`: the router's first `CREATE` (constructor, nonce 1), so derived, never configured.
     pub executor: Address,
     pub params: crate::config::RelayParams,
+    /// `relay_fee.min_wei_value = { "<token>" = wei per base unit }`: the node's floor price of a fee token.
+    pub min_wei_value: HashMap<Address, u128>,
 }
 
 impl RelayFee {
@@ -155,39 +158,107 @@ impl RelayFee {
         let params = cfg.relay_params()?;
         let Some(r) = params.router.as_deref() else { return Ok(None) };
         let router = crate::metatx::addr(r).map_err(|e| anyhow::anyhow!("params.relay_fee.router: {e:#}"))?;
-        Ok(Some(Self { router, executor: router.create(1), params }))
+        let mut min_wei_value = HashMap::new();
+        if let Some(v) = cfg.params.get("relay_fee").and_then(|t| t.get("min_wei_value")) {
+            let table = v.as_table().ok_or_else(|| anyhow::anyhow!("params.relay_fee.min_wei_value must be a table of token = wei"))?;
+            for (k, n) in table {
+                let token = crate::metatx::addr(k).map_err(|e| anyhow::anyhow!("params.relay_fee.min_wei_value.{k}: {e:#}"))?;
+                let price = match n {
+                    toml::Value::Integer(i) => u128::try_from(*i).ok(),
+                    toml::Value::String(s) if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) => s.parse().ok(),
+                    _ => None,
+                };
+                let price = price.ok_or_else(|| anyhow::anyhow!("params.relay_fee.min_wei_value.{k} must be a non-negative integer, not {n}"))?;
+                min_wei_value.insert(token, price);
+            }
+        }
+        Ok(Some(Self { router, executor: router.create(1), params, min_wei_value }))
     }
 }
 
-/// NODE-LANE (CTR-MTX-27) intake of a `relay` call before any simulation: the target is the router; the payment is
-/// a registered token's `MetaTransfer` bound to exactly this call (`entryRef = relayRef(target, callData)`, lane
-/// `payLane(ref)`, nonce 0, `RESTRICT_RELAYER` to the router, fee `NONE` and 0, never to the executor — the router's
-/// own shape, refused here before gas is spent); the fee reaches this lane (open mode or bound to it) and is at least
-/// `min_amount`, else the job is refused unless `relay_bound_payee` (a sponsored job). Returns the inner target, which
-/// must be bound to this chain. "The fee covers the gas" is the operator's `min_amount` (no token price feed; no gas
-/// price or limit assumed).
+/// A relay-fee call (`relay` or `uaRelay`, CTR-MTX-27) with its payment on ids.
+struct RelayCall {
+    target: Address,
+    call_data: Bytes,
+    token: Address,
+    t: crate::abi::UAMetaTransfer,
+    ua: bool,
+}
+
+fn relay_call(data: &[u8]) -> Option<RelayCall> {
+    use crate::abi::IMtxRelayFee::{relayCall, uaRelayCall};
+    if let Ok(c) = relayCall::abi_decode(data) {
+        let t = c.t;
+        let t = crate::abi::UAMetaTransfer { from: t.from.into_word(), to: t.to.into_word(), value: t.value, entryRef: t.entryRef,
+            batch: t.batch, nonce: t.nonce, validUntil: t.validUntil, mode: t.mode, relayer: t.relayer, fee: t.fee,
+            feeRecipient: t.feeRecipient };
+        return Some(RelayCall { target: c.target, call_data: c.callData, token: c.token, t, ua: false });
+    }
+    let c = uaRelayCall::abi_decode(data).ok()?;
+    Some(RelayCall { target: c.target, call_data: c.callData, token: c.token, t: c.t, ua: true })
+}
+
+/// NODE-LANE (CTR-MTX-27) intake of a `relay` / `uaRelay` call before any simulation: the target is the router; the
+/// payment is a registered token's `MetaTransfer` (`UAMetaTransfer` for a UA payer) bound to exactly this call
+/// (`entryRef = relayRef(target, callData)`, lane `payLane(ref)`, nonce 0, `RESTRICT_RELAYER` to the router, fee `NONE`
+/// and 0, never to the executor — the router's own shape on ids, refused here before gas is spent); the fee reaches
+/// this lane (open mode or bound to it) and is at least `min_amount`, else the job is refused unless
+/// `relay_bound_payee` (a sponsored job). Returns the inner target, which must be bound to this chain. The gas side
+/// is [`relay_fee_covers`], after the simulation.
 pub fn relay_call_ok(rf: &RelayFee, chain_id: u64, lane: Address, to: Address, data: &[u8], registered: impl Fn(Address) -> bool)
     -> Result<Address, String>
 {
-    use alloy::sol_types::SolCall;
     if to != rf.router {
         return Err(format!("CALL_TARGET_REFUSED: MtxRelayFee.relay on {to:#x}, not params.relay_fee.router"));
     }
-    let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(data).map_err(|e| format!("BAD_PAYLOAD: relay: {e}"))?;
+    let c = relay_call(data).ok_or_else(|| "BAD_PAYLOAD: not a relay / uaRelay call".to_string())?;
     if !registered(c.token) {
         return Err(format!("TOKEN_NOT_SERVED: {:#x} is not a registered token of this chain", c.token));
     }
-    let (t, r) = (&c.t, crate::metatx::relay_ref(chain_id, c.target, &c.callData));
+    let (t, r) = (&c.t, crate::metatx::relay_ref(chain_id, c.target, &c.call_data));
     let shape = t.entryRef == r && t.batch == crate::metatx::pay_lane(&r) && t.nonce.is_zero()
         && t.mode & crate::metatx::MODE_RESTRICT_RELAYER != 0 && t.relayer == rf.router
-        && t.mode & MODE_FEE_MASK == 0 && t.fee.is_zero() && t.to != rf.executor;
+        && t.mode & MODE_FEE_MASK == 0 && t.fee.is_zero() && t.to != rf.executor.into_word();
     if !shape {
         return Err("RELAY_FEE_SHAPE: the payment is not bound to this call (ref, payLane(ref), nonce 0, relayer = router, \
                     fee NONE, never the executor)".into());
     }
     let amount = u128::try_from(t.value).unwrap_or(u128::MAX);
-    crate::adapter::relay_fee_ours(t.to == rf.router, t.to == lane, amount, &rf.params).map_err(|e| format!("RELAY_FEE_REFUSED: {e}"))?;
+    crate::adapter::relay_fee_ours(t.to == rf.router.into_word(), t.to == lane.into_word(), amount, &rf.params)
+        .map_err(|e| format!("RELAY_FEE_REFUSED: {e}"))?;
     Ok(c.target)
+}
+
+/// The fee covers the lane's known cost (owner rule: the relayer never loses): a relay fee that reaches this lane must
+/// be worth, at the token's `relay_fee.min_wei_value`, at least [`relay_quote`] of the simulated call. A UA payer's
+/// verify costs what its kind costs (a P-256 passkey cap 0.4 M gas, a Solidity PQ verify 1.4–6 M), so a `uaRelay` whose
+/// token has no price is refused; an address payer's `relay` keeps T17's `min_amount` rule (owner ruling 2026-10-28,
+/// item 7) unless its token has a price. A sponsored fee (bound elsewhere, `relay_bound_payee`) is not priced. Any other
+/// call passes.
+pub fn relay_fee_covers(rf: &RelayFee, lane: Address, data: &[u8], gas: u64, max_fee: u128) -> Result<(), String> {
+    let Some(c) = relay_call(data) else { return Ok(()) };
+    if c.t.to != rf.router.into_word() && c.t.to != lane.into_word() {
+        return Ok(());
+    }
+    let Some(price) = rf.min_wei_value.get(&c.token) else {
+        return match c.ua {
+            true => Err(format!("RELAY_FEE_REFUSED: params.relay_fee.min_wei_value has no price for token {:#x} \
+                                 (a UA payer's verify gas depends on its kind)", c.token)),
+            false => Ok(()),
+        };
+    };
+    let quote = relay_quote(gas, max_fee);
+    let value = u128::try_from(c.t.value).unwrap_or(u128::MAX).saturating_mul(*price);
+    if value < quote {
+        return Err(format!("RELAY_FEE_REFUSED: fee {} x min_wei_value {price} = {value} wei is below the quote {quote} wei \
+                            (gas limit {gas} x max fee per gas {max_fee})", c.t.value));
+    }
+    Ok(())
+}
+
+/// The lane's cost of a relay-fee job at most: its gas limit × the max fee per gas it signs with.
+pub fn relay_quote(gas: u64, max_fee: u128) -> u128 {
+    u128::from(gas).saturating_mul(max_fee)
 }
 
 /// A contract's published allowlist: `(selector, fee class, amount argument)` and `supportedModes()`.
@@ -270,6 +341,8 @@ pub struct Guard {
     dexes: Vec<Address>,
     bound: Mutex<HashSet<Address>>,
     tables: Mutex<HashMap<Address, Arc<Table>>>,
+    /// Tokens whose UA ledger is on (`registry() ≠ 0`).
+    ua_ledger: Mutex<HashSet<Address>>,
 }
 
 impl Guard {
@@ -283,6 +356,7 @@ impl Guard {
             dexes: cfg.dex.into_iter().collect(),
             bound: Default::default(),
             tables: Default::default(),
+            ua_ledger: Default::default(),
         })
     }
 
@@ -298,25 +372,39 @@ impl Guard {
 
     pub async fn check(&self, chain: &Chain, w: &Work) -> Result<(), Refusal> {
         let not_served = |to: Address| Refusal::Policy(format!("TOKEN_NOT_SERVED: {to:#x} is not a registered token of this chain"));
-        if w.meta.is_some() {
-            // review T4 I1: a transfer or payment only on a registered token
-            if !matches!(Mtx::from_calldata(&w.data), Some((Mtx::Call(_), _))) && !self.registered(w.to) {
-                return Err(not_served(w.to));
-            }
-            if let Some((Mtx::Transfer(t), _)) = Mtx::from_calldata(&w.data) {
-                // CTR-MTX-27: never pay the router or its executor outside a relay (the coins would sit where any relay
-                // can move them, or nowhere)
-                if self.relay_fee.as_ref().is_some_and(|r| t.to == r.router || t.to == r.executor) {
-                    return Err(Refusal::Policy(format!("PAYEE_REFUSED: a plain pay to the relay-fee router / executor {:#x}", t.to)));
+        if let Some(r) = &w.meta {
+            // review T4 I1: a transfer or payment only on a registered token; a UA envelope too (`ua*` is the token's
+            // UA ledger, there is no UA pipeline on any other contract yet)
+            let (payee, pay_meta) = if r.ua {
+                if !self.registered(w.to) {
+                    return Err(not_served(w.to));
+                }
+                (match UaMtx::from_calldata(&w.data) { Some((UaMtx::Transfer(t), _)) => Some(t.to), _ => None },
+                 IUALedger::uaPayMetaCall::abi_decode(&w.data).ok().map(|c| c.meta.len()))
+            } else {
+                let m = Mtx::from_calldata(&w.data);
+                if !matches!(m, Some((Mtx::Call(_), _))) && !self.registered(w.to) {
+                    return Err(not_served(w.to));
+                }
+                (match m { Some((Mtx::Transfer(t), _)) => Some(t.to.into_word()), _ => None },
+                 IToken::mtxPayMetaCall::abi_decode(&w.data).ok().map(|c| c.meta.len()))
+            };
+            // CTR-MTX-27: never pay the router or its executor outside a relay (the coins would sit where any relay
+            // can move them, or nowhere)
+            if let (Some(to), Some(rf)) = (payee, &self.relay_fee) {
+                if to == rf.router.into_word() || to == rf.executor.into_word() {
+                    return Err(Refusal::Policy(format!("PAYEE_REFUSED: a plain pay to the relay-fee router / executor {to:#x}")));
                 }
             }
-            if let Ok(c) = <IToken::mtxPayMetaCall as alloy::sol_types::SolCall>::abi_decode(&w.data) {
-                if c.meta.len() > self.max_pay_meta_bytes {
-                    return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: meta is {} B, above max_pay_meta_bytes {}",
-                        c.meta.len(), self.max_pay_meta_bytes)));
-                }
+            if let Some(n) = pay_meta.filter(|n| *n > self.max_pay_meta_bytes) {
+                return Err(Refusal::Policy(format!("PAY_META_TOO_LONG: meta is {n} B, above max_pay_meta_bytes {}",
+                    self.max_pay_meta_bytes)));
             }
             self.require_bound(chain, w.to).await?;
+            if r.ua {
+                // no published UA allowlist to read: the UA path's selector, fee class and kind are the simulation's
+                return self.require_ua_ledger(chain, w.to).await;
+            }
             if let Some((Mtx::Call(m), _)) = Mtx::from_calldata(&w.data) {
                 let t = self.table(chain, w.to).await?;
                 self_call_ok(&t, &m.data, m.mode).map_err(Refusal::Policy)?;
@@ -357,6 +445,39 @@ impl Guard {
             Ok(())
         } else {
             Err(Refusal::Policy(format!("CALL_TARGET_REFUSED: {name} on {:#x}", w.to)))
+        }
+    }
+
+    /// `w` is a call on this chain's relay-fee router: its fee side is [`Guard::relay_covers`].
+    pub fn is_relay(&self, w: &Work) -> bool {
+        self.relay_fee.as_ref().is_some_and(|rf| !w.entry && w.meta.is_none() && w.to == rf.router)
+    }
+
+    /// The fee side of a relay-fee job ([`relay_fee_covers`]) once its gas and the lane's max fee per gas are known.
+    pub fn relay_covers(&self, lane: Address, w: &Work, gas: u64, max_fee: u128) -> Result<(), Refusal> {
+        match &self.relay_fee {
+            Some(rf) if self.is_relay(w) => relay_fee_covers(rf, lane, &w.data, gas, max_fee).map_err(Refusal::Policy),
+            _ => Ok(()),
+        }
+    }
+
+    /// `ua_metatx` needs the token's UA ledger on (`registry() ≠ 0`, CTR-UA-18; job-api.md `token.features ∋ ua`);
+    /// the registry is an immutable of the implementation, so a yes is cached.
+    async fn require_ua_ledger(&self, chain: &Chain, to: Address) -> Result<(), Refusal> {
+        if self.ua_ledger.lock().is_ok_and(|b| b.contains(&to)) {
+            return Ok(());
+        }
+        let off = |why: String| Refusal::Policy(format!("FEATURE_UNSUPPORTED: {to:#x} has no UA ledger ({why})"));
+        match chain.call_view(to, IUALedger::registryCall {}).await {
+            Ok(r) if r != Address::ZERO => {
+                if let Ok(mut b) = self.ua_ledger.lock() {
+                    b.insert(to);
+                }
+                Ok(())
+            }
+            Ok(_) => Err(off("registry() = 0".into())),
+            Err(SimError::Revert(e)) => Err(off(format!("registry(): {e}"))),
+            Err(SimError::Transport(e)) => Err(Refusal::Transport(format!("registry(): {e}"))),
         }
     }
 
@@ -433,7 +554,12 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
         settle_gas(chain, w.to, &w.data, est, max).await?
     } else {
         let contract_signer = match &w.meta {
-            Some(m) => chain.has_code(m.from).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
+            // a derived UA has no code: its verify is held by the registry (`UAVerifyGas` when starved), so the
+            // estimate already covers it; a native id that is a contract gets the ERC-1271 floor on either path
+            Some(m) => match crate::metatx::native(&m.from) {
+                Some(a) => chain.has_code(a).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
+                None => false,
+            },
             None => false,
         };
         gas_limit(est, if contract_signer { erc1271_floor(w.data.len()) } else { 0 }, max)
@@ -515,7 +641,7 @@ mod tests {
         // and each row keeps its rule
         let rules: Vec<Rule> = CALL_TABLE.iter().map(|r| r.2).collect();
         assert_eq!(rules, [Rule::AccountFactory, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth,
-            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee]);
+            Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee, Rule::RelayFee]);
         assert!(!allowed(Rule::RelayFee, &Facts { bound: true, ..Default::default() }), "never by facts");
     }
 

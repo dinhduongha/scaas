@@ -11,8 +11,9 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportError;
 use anyhow::{anyhow, Result};
 
-use crate::abi::{decode_revert, IToken};
-use crate::metatx::Mtx;
+use crate::abi::{decode_revert, IToken, IUALedger};
+use crate::metatx::{Mtx, UaMtx};
+use crate::submit::MetaRef;
 use crate::config::ChainCfg;
 
 /// Simulation fail vì hợp đồng revert (vĩnh viễn với state này) hay vì đường truyền (tạm thời).
@@ -201,9 +202,13 @@ impl Chain {
         Ok(C::abi_decode_returns(&self.primary().call(tx).await?)?)
     }
 
-    /// `mtxNonce(from, batch)`: the subject's next nonce on that lane, shared by both structs (R80, CTR-MTX-15).
-    pub async fn mtx_nonce(&self, token: Address, from: Address, batch: U256) -> Result<U256> {
-        self.view(token, IToken::mtxNonceCall { from, batch }).await
+    /// The subject's next nonce on its lane (R80): `mtxNonce(from, batch)`, shared by both structs (CTR-MTX-15), or
+    /// for a `ua_metatx` job `uaNonce(id, batch)` (the one nonce map, CTR-UA-26).
+    pub async fn subject_nonce(&self, m: &MetaRef) -> Result<U256> {
+        if m.ua {
+            return self.view(m.token, IUALedger::uaNonceCall { ua: m.from, batch: m.batch }).await;
+        }
+        self.view(m.token, IToken::mtxNonceCall { from: Address::from_word(m.from), batch: m.batch }).await
     }
 
     /// `mtxDigest(m)` / `mtxTransferDigest(t)`: exactly the digest the contract emits in `MetaTransactionExecuted` (R78).
@@ -214,20 +219,42 @@ impl Chain {
         }
     }
 
-    /// `MetaTransactionExecuted` của `(from, batch, nonce)` trong `lookback` khối gần nhất ⇒ `(digest, relayer)` (§8.5).
-    pub async fn meta_executed(&self, token: Address, from: Address, batch: U256, nonce: U256, lookback: u64) -> Result<Option<(B256, Address)>> {
+    /// `uaDigest(m)` / `uaTransferDigest(t)`: the digest of `UAMetaTransactionExecuted`.
+    pub async fn ua_digest(&self, token: Address, m: UaMtx) -> std::result::Result<B256, SimError> {
+        match m {
+            UaMtx::Call(m) => self.call_view(token, IUALedger::uaDigestCall { m }).await,
+            UaMtx::Transfer(t) => self.call_view(token, IUALedger::uaTransferDigestCall { t }).await,
+        }
+    }
+
+    /// The token's digest of a relayed `mtxExecute*` / `mtxPayMeta` or `uaExecute*` / `uaPayMeta` calldata; `None` for
+    /// any other call.
+    pub async fn digest_of(&self, token: Address, data: &[u8]) -> Option<std::result::Result<B256, SimError>> {
+        if let Some((m, _)) = Mtx::from_calldata(data) {
+            return Some(self.mtx_digest(token, m).await);
+        }
+        Some(self.ua_digest(token, UaMtx::from_calldata(data)?.0).await)
+    }
+
+    /// `MetaTransactionExecuted` (a UA subject: `UAMetaTransactionExecuted`) of `(from, batch, nonce)` trong `lookback`
+    /// khối gần nhất ⇒ `(digest, relayer)` (§8.5). Both events index `from`, `relayer`, `batch` alike.
+    pub async fn meta_executed(&self, m: &MetaRef, lookback: u64) -> Result<Option<(B256, Address)>> {
         let latest = self.primary().get_block_number().await?;
+        let sig = if m.ua { IUALedger::UAMetaTransactionExecuted::SIGNATURE_HASH } else { IToken::MetaTransactionExecuted::SIGNATURE_HASH };
         let filter = Filter::new()
-            .address(token)
-            .event_signature(IToken::MetaTransactionExecuted::SIGNATURE_HASH)
-            .topic1(from.into_word())
-            .topic3(B256::from(batch))
+            .address(m.token)
+            .event_signature(sig)
+            .topic1(m.from)
+            .topic3(B256::from(m.batch))
             .from_block(latest.saturating_sub(lookback))
             .to_block(latest);
         for log in self.primary().get_logs(&filter).await? {
-            let Ok(e) = log.log_decode::<IToken::MetaTransactionExecuted>().map(|l| l.inner.data) else { continue };
-            if e.nonce == nonce {
-                return Ok(Some((e.digest, e.relayer)));
+            let e = match m.ua {
+                true => log.log_decode::<IUALedger::UAMetaTransactionExecuted>().ok().map(|l| (l.inner.data.nonce, l.inner.data.digest, l.inner.data.relayer)),
+                false => log.log_decode::<IToken::MetaTransactionExecuted>().ok().map(|l| (l.inner.data.nonce, l.inner.data.digest, l.inner.data.relayer)),
+            };
+            if let Some((_, digest, relayer)) = e.filter(|e| e.0 == m.nonce) {
+                return Ok(Some((digest, relayer)));
             }
         }
         Ok(None)

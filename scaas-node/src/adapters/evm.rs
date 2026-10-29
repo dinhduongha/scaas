@@ -97,9 +97,11 @@ impl ChainAdapter for EvmAdapter {
 
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
         let Ok(w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
-        let Some((m, _)) = crate::metatx::Mtx::from_calldata(&w.data) else { return Ok(job_digest(job)) };
         let chain = self.lane(0).map_err(|e| SimError::Transport(e.to_string()))?;
-        chain.mtx_digest(w.to, m).await.map(Some)
+        match chain.digest_of(w.to, &w.data).await {
+            None => Ok(job_digest(job)),
+            Some(d) => d.map(Some),
+        }
     }
 
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
@@ -107,19 +109,25 @@ impl ChainAdapter for EvmAdapter {
         let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
         self.guard.check(chain, &w).await?;
         let gas = guard::gas(chain, &w, self.max_gas).await?;
-        Ok(Built {
-            job_id: job.id,
-            body: w.data.to_vec(),
-            valid_until: w.valid_until,
-            meta: json!({"to": format!("{:#x}", w.to), "gas": gas}),
-        })
+        let mut meta = json!({"to": format!("{:#x}", w.to), "gas": gas});
+        if self.guard.is_relay(&w) {
+            // a relay fee covers the quote at the fees the lane then signs with
+            let fees = chain.fees().await.map_err(|e| SimError::Transport(format!("fees: {e:#}")))?;
+            self.guard.relay_covers(chain.address(), &w, gas, fees.0)?;
+            meta["fees"] = json!([fees.0.to_string(), fees.1.to_string()]);
+        }
+        Ok(Built { job_id: job.id, body: w.data.to_vec(), valid_until: w.valid_until, meta })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
         let chain = self.lane(lane)?;
         let to: Address = built.meta["to"].as_str().unwrap_or_default().parse()?;
         let gas = built.meta["gas"].as_u64().unwrap_or(self.max_gas);
-        let fees = chain.fees().await?;
+        let fee = |i: usize| built.meta["fees"][i].as_str().and_then(|f| f.parse::<u128>().ok());
+        let fees = match (fee(0), fee(1)) {
+            (Some(max), Some(tip)) => (max, tip),
+            _ => chain.fees().await?,
+        };
         let (raw, hash) = chain.sign(sequence, to, Bytes::from(built.body), gas, fees).await?;
         Ok(Signed { job_id: built.job_id, tx_id: format!("{hash:#x}"), raw: raw.to_vec(), valid_until: built.valid_until, sequence })
     }

@@ -72,7 +72,7 @@ impl NodeConfig {
     }
 }
 
-/// Một job outbox. `kind = "metatx"`: `token`/`signature`/`metatx` có mặt, `struct` names the signed struct
+/// Một job outbox. `kind = "ua_metatx"`: `token`/`auth`/`m` (UA structs, CTR-UA-26). `kind = "metatx"`: `token`/`signature`/`metatx` có mặt, `struct` names the signed struct
 /// (`call` = `MetaTransaction`, `transfer` = `MetaTransfer`; absent = `transfer`, CTR-MTX-15). `kind = "call"`:
 /// chỉ `call` — calldata Odoo đã dựng (MandateWallet, R25), node chỉ gửi.
 #[derive(Debug, Clone, Deserialize)]
@@ -119,6 +119,12 @@ pub struct Job {
     pub meta: Option<String>,
     #[serde(default)]
     pub meta_offchain: Option<bool>,
+    /// A `ua_metatx` job (job-api.md): `m` = `WireUAMetaTransaction` | `WireUAMetaTransfer` (`struct`), `auth` its UA
+    /// authorization (`requireAuthorized` bytes); never `metatx` / `signature`.
+    #[serde(default)]
+    pub m: Option<Value>,
+    #[serde(default)]
+    pub auth: Option<String>,
     /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
     #[serde(default)]
     pub kind: Option<String>,
