@@ -192,14 +192,14 @@ Where the record lives (controller proposals for the families without a registry
 | Algorand | one `account` app per deployment holds the subject records shared by every token (tokens, mandate and DEX call its `verify` by inner app call), lazily opened, no PoP | the **`account` app gains** `register` (portable PoP), `set_kem_key`, `store_pqz_pop`, the record and KEM boxes; the lazy open stays |
 | TON (GRAM) | **no registry** (documented gap: wallet-bound keys, `set_key` with a key signature) | **a new `ua-registry` contract** (actor messages `Register`, `SetKemKey`, `StorePqzPop`; one child contract per UA if a single contract's state would grow without bound) — needs its own short design before the plan |
 
-Order (owner 2026-10-29: NEAR and Soroban first, native host functions where they exist): EVM first (P1–P9), then
-**NEAR** (a new `ua-registry` contract; `mldsa65` verified on chain by the `ml_dsa_verify` host function; after the
-near-algorand merge) and **Soroban** (the factory entries; `mldsa44` / `mldsa65` verified by the CAP-0087 host
-functions of Protocol 30), then Cosmos, Sui, Aptos, Solana, then Algorand (the `account` app gains the writes;
-`fndsa512` on chain after AVM v14), TON last (after its registry design). Testnets (checked 2026-10-29, re-check before
-starting): NEAR testnet voted protocol 88 from 2026-10-21 (read `protocol_version` from the RPC before relying on it);
-Stellar testnet votes Protocol 30 on 2026-11-03 and mainnet on 2026-11-23 (secondary sources) — until then Soroban work
-runs on a local network / quickstart at Protocol 30. NEAR and Algorand are separate tasks: different storage
+Order (owner 2026-10-29, final): **1. EVM** (P1–P9); **2. Soroban** (the factory entries; `mldsa44` / `mldsa65`
+verified by the CAP-0087 host functions of Protocol 30); **3. NEAR** (a new `ua-registry` contract; `mldsa65` verified
+by the `ml_dsa_verify` host function; after the near-algorand merge); **4.** Cosmos, Sui, Aptos, Solana; **5.** Algorand
+(the `account` app gains the writes; `fndsa512` on chain once AVM v14 ships); **6.** TON (after its registry design).
+**The UA-8 plan covers steps 1–2 only** (owner: "Làm 1-2 trước"); steps 3–6 are later plans. Testnets (checked
+2026-10-29, re-check before starting): Stellar testnet votes Protocol 30 on 2026-11-03 and mainnet on 2026-11-23
+(secondary sources) — until then the Soroban step runs on a local network / quickstart at Protocol 30; NEAR testnet
+voted protocol 88 from 2026-10-21 (read `protocol_version` from the RPC before relying on it). NEAR and Algorand are separate tasks: different storage
 (per-token records vs one `account` app), different execution (asynchronous receipts vs atomic groups) and different
 storage payment (NEAR storage staking by attached deposit vs Algorand box MBR by a payment transaction). Each family is
 a task of the same plan or a follow-up plan; the vector file is the shared contract between them.
