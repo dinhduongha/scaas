@@ -395,6 +395,32 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
 
     // ----- T-GAS -----
 
+    /// A8 fix 1: per-row state-gas pins (first measured run, regression guards only); an unpinned label fails (0).
+    function _statePin(string memory label) internal pure returns (uint256) {
+        bytes32 h = keccak256(bytes(label));
+        if (h == keccak256("musig2-secp256k1 t=3 n=3")) return 1840590;
+        if (h == keccak256("musig2-secp256k1 t=2 n=2")) return 1595790;
+        if (h == keccak256("musig2-secp256k1 t=8 n=8")) return 2477070;
+        if (h == keccak256("musig2-secp256k1 t=16 n=16")) return 3652110;
+        if (h == keccak256("frost-secp256k1 t=2 n=3")) return 2036430;
+        if (h == keccak256("frost-secp256k1 t=2 n=2")) return 1742670;
+        if (h == keccak256("frost-secp256k1 t=2 n=8")) return 2917710;
+        if (h == keccak256("frost-secp256k1 t=8 n=8")) return 5365710;
+        if (h == keccak256("frost-secp256k1 t=2 n=16")) return 4533390;
+        if (h == keccak256("frost-secp256k1 t=16 n=16")) return 15843150;
+        if (h == keccak256("musig2-bn254 t=3 n=3")) return 1790100;
+        if (h == keccak256("musig2-bn254 t=2 n=2")) return 1594260;
+        if (h == keccak256("musig2-bn254 t=8 n=8")) return 2181780;
+        if (h == keccak256("musig2-bn254 t=16 n=16")) return 2965140;
+        if (h == keccak256("frost-bn254 t=2 n=3")) return 2524500;
+        if (h == keccak256("frost-bn254 t=2 n=2")) return 2083860;
+        if (h == keccak256("frost-bn254 t=2 n=8")) return 4140180;
+        if (h == keccak256("frost-bn254 t=8 n=8")) return 8840340;
+        if (h == keccak256("frost-bn254 t=2 n=16")) return 6881940;
+        if (h == keccak256("frost-bn254 t=16 n=16")) return 28816020;
+        return 0;
+    }
+
     /// register and requireAuthorized (frame gas of the registry call, real verifiers) for every groups.json group:
     /// MuSig2 n = 2, 3, 8, 16; FROST (t, n) = (2, 2), (2, 3), (2, 8), (8, 8), (2, 16), (16, 16). `--isolate`: cold.
     function test_T_GAS_groups() public {
@@ -410,14 +436,14 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             );
             // UA-8 (UA8-D7): `register` also stores the key data past `vk` and the PoP, whose EIP-8037 state gas
             // (FROST(bn254) 16-of-16: 18 KB of key data) is logged apart; the regular gas stays well within the budget.
-            // A8: the state gas is pinned too: the largest group, FROST(bn254) 16-of-16, is 28,816,020 (+ 1,259,582 regular =
+            // A8: the state gas is pinned per row (`_statePin`); the largest group, FROST(bn254) 16-of-16, is 28,816,020 (+ 1,259,582 regular =
             // 30.08 M, within a 60 M block); a regression guard, pinned from the first measured run.
             reg.register(g.kind, g.keyData, _none(), g.pop, "");
             Vm.Gas memory vg = vm.lastCallGas();
             assertLt(vg.gasTotalUsed, BUDGET / 4, "register (regular gas) well within the budget");
             emit log_named_uint(string.concat(label, " register"), vg.gasTotalUsed);
             emit log_named_int("  state gas (EIP-8037)", vg.gasStateUsed);
-            assertLe(vg.gasStateUsed, 28_816_020, "register (state gas) over the pinned maximum");
+            assertLe(vg.gasStateUsed, int256(_statePin(label)), string.concat(label, ": register state gas over its pin"));
             bytes memory auth = _gauth(g, UAKinds.PURPOSE_METATX, DIGEST);
             (bool ok,, uint256 used) = meter.measure(
                 address(reg), abi.encodeCall(reg.requireAuthorized, (g.ua, UAKinds.PURPOSE_METATX, DIGEST, auth))

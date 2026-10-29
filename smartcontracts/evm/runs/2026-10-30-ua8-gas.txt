@@ -16,17 +16,20 @@ NOTES
   (register mldsa65*, setKemKey mldsa65, mldsa65 members of msig-pq*) is the mock's, not a real precompile's.
 - 0x0142 (PQZ R_REG): the verifier is the `rreg` stand-in answering a mocked verifyPop, so the R_REG verify gas is not in
   the PQZ rows; the registry-side cost (calldata, hash, SSTORE2 of the key and the 28-35 KB proof, the log) is.
-- Calldata floor: Amsterdam (EIP-7976) charges at least 64 gas per calldata byte. storePqzPop(ua, proof) carries the whole
-  proof, so its regular gas is ~64 x R_REG bytes + 21,000 (n2304-kmax4096: 30,381 B -> 1,967,000 = the floor; the
-  no-op repeat call costs the same, 1,967,000: its execution is below the floor). Log data (8 gas/byte) of the proof is
-  243,048 of it at n2304-kmax4096 (30,381 x 8).
+- Calldata floor: Amsterdam (EIP-7976) prices calldata at a floor of 16 gas per token (zero byte = 1 token, other byte = 4
+  tokens) over the whole ABI calldata, i.e. 21,000 + 16 x tokens. storePqzPop(ua, proof) at n2304-kmax4096 has 30,500 B of
+  calldata (selector, 3 head words, the 30,381 B proof padded to 30,400) of which 125 are zero: 21,000 + 16 x
+  (4 x 30,500 - 3 x 125) = 1,967,000, which is the regular gas reported. The execution (hashing, SSTORE2 writes, and the
+  243,048 gas of the proof as log data in UAPqzPopStored) sits under that floor, so the proof bytes in the event cost NO
+  extra regular gas in storePqzPop; the no-op repeat call costs the same 1,967,000 (floor again).
 - No gas price and no block limit is assumed by any figure or pin. Against a 60 M block (P2), regular + state of ONE transaction:
     * FULL registrations that exceed 60 M (register with pqzPop in the call, so they must use `register` without the proof
       and `storePqzPop` afterwards): the PQZ-carrying rows `mldsa65/<set>` and `msig-pq/<set>` at all four sets:
       84.7 M / 87.4 M (n2048-kmax1024), 91.5 M / 94.1 M (n2304-kmax4096), 98.2 M / 100.8 M (n2560-kmax16384),
       106.4 M / 109.1 M (n2816-kmax65536).
-    * `register` without pqzPop: 39.2 M (n2048-kmax1024), 42.5 M (n2304-kmax4096), 45.7 M (n2560-kmax16384), 49.0 M
-      (n2816-kmax65536): fits.
+    * `register` without pqzPop, mldsa65/<set>: 39.2 M (n2048-kmax1024), 42.5 M (n2304-kmax4096), 45.7 M (n2560-kmax16384),
+      49.0 M (n2816-kmax65536): fits. msig-pq/<set> (measured, Table 2): 42.0 M, 45.2 M, 48.5 M, 51.8 M: fits (n2816:
+      8.2 M, 14 %, of a 60 M block left).
     * `storePqzPop`: 45.6 M, 49.1 M, 52.6 M, 57.5 M: fits at every set, but n2816-kmax65536 leaves only 2.5 M (4 %) of a 60 M
       block; the gen-2-over-gen-1 variant is 57.7 M there.
     * Every other single-key / msig row fits (largest: slhdsa128s 14.4 M; mldsa44 11.3 M; mldsa65#1 9.7 M).
@@ -64,13 +67,14 @@ register msig-pq/n2560-kmax16384                                4,000,664   96,8
 register mldsa65/n2816-kmax65536                                4,197,272  102,199,410  106,396,682
 register msig-pq/n2816-kmax65536                                4,320,152  104,756,040  109,076,192
 
-== Table 2: PQZ attachment, mldsa65 row of each set (R_REG proof bytes: n2048-kmax1024 28,191; n2304-kmax4096 30,381; n2560-kmax16384 32,539; n2816-kmax65536 35,479)
+== Table 2: PQZ attachment (R_REG proof bytes: n2048-kmax1024 28,191; n2304-kmax4096 30,381; n2560-kmax16384 32,539; n2816-kmax65536 35,479)
 row                                                               regular        state          sum
 register mldsa65 with pqzPop n2048-kmax1024                     3,337,112   81,463,320   84,800,432
 register mldsa65 without pqzPop n2048-kmax1024                  1,532,824   37,656,360   39,189,184
 storePqzPop mldsa65 n2048-kmax1024                              1,825,688   43,806,960   45,632,648
 storePqzPop again (no-op) n2048-kmax1024                        1,825,688            0    1,825,688
 storePqzPop msig-pq on gen 2 (gen 1 record) n2048-kmax1024      1,825,688   44,002,800   45,828,488
+register msig-pq without pqzPop n2048-kmax1024                  1,655,704   40,310,910   41,966,614
 storePqzPop msig-pq on gen 1 n2048-kmax1024                     1,825,688   43,806,960   45,632,648
 registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024     136,098            0      136,098
 registrationOf msig-pq on gen 1 n2048-kmax1024                     94,633            0       94,633
@@ -79,6 +83,7 @@ register mldsa65 without pqzPop n2304-kmax4096                  1,663,896   40,7
 storePqzPop mldsa65 n2304-kmax4096                              1,967,000   47,157,660   49,124,660
 storePqzPop again (no-op) n2304-kmax4096                        1,967,000            0    1,967,000
 storePqzPop msig-pq on gen 2 (gen 1 record) n2304-kmax4096      1,967,000   47,353,500   49,320,500
+register msig-pq without pqzPop n2304-kmax4096                  1,786,776   43,444,350   45,231,126
 storePqzPop msig-pq on gen 1 n2304-kmax4096                     1,967,000   47,157,660   49,124,660
 registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096     145,813            0      145,813
 registrationOf msig-pq on gen 1 n2304-kmax4096                    100,549            0      100,549
@@ -87,6 +92,7 @@ register mldsa65 without pqzPop n2560-kmax16384                 1,794,968   43,9
 storePqzPop mldsa65 n2560-kmax16384                             2,104,216   50,459,400   52,563,616
 storePqzPop again (no-op) n2560-kmax16384                       2,104,216            0    2,104,216
 storePqzPop msig-pq on gen 2 (gen 1 record) n2560-kmax16384     2,104,216   50,655,240   52,759,456
+register msig-pq without pqzPop n2560-kmax16384                 1,917,848   46,577,790   48,495,638
 storePqzPop msig-pq on gen 1 n2560-kmax16384                    2,104,216   50,459,400   52,563,616
 registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384    155,912            0      155,912
 registrationOf msig-pq on gen 1 n2560-kmax16384                   106,682            0      106,682
@@ -95,38 +101,42 @@ register mldsa65 without pqzPop n2816-kmax65536                 1,926,040   47,0
 storePqzPop mldsa65 n2816-kmax65536                             2,292,632   55,240,650   57,533,282
 storePqzPop again (no-op) n2816-kmax65536                       2,292,632            0    2,292,632
 storePqzPop msig-pq on gen 2 (gen 1 record) n2816-kmax65536     2,292,632   55,436,490   57,729,122
+register msig-pq without pqzPop n2816-kmax65536                 2,048,920   49,711,230   51,760,150
 storePqzPop msig-pq on gen 1 n2816-kmax65536                    2,292,632   55,240,650   57,533,282
 registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536    174,433            0      174,433
 registrationOf msig-pq on gen 1 n2816-kmax65536                   120,870            0      120,870
 
-== Table 3: setKemKey (version 2), registrationOf of the same UA = the blob read alone (an upper bound of the share: it also ABI-encodes the return)
+== Table 3: setKemKey (version 2). popOf = the `_reg` blob decode that setKemKey does (and nothing else: setKemKey does not read the PQZ proof, KEM record or key);
+   'popOf unregistered' is the view's own baseline (2,860), subtracted for the net read. A view's lastCallGas has no intrinsic gas.
 row                                                               regular        state          sum
 setKemKey mldsa65/v2 n2048-kmax1024                               342,936    7,891,740    8,234,676
-registrationOf (blob read alone) mldsa65/v2 n2048-kmax1024         94,172            0       94,172
+popOf (the blob setKemKey decodes) mldsa65/v2 n2048-kmax1024       15,404            0       15,404
 setKemKey fndsa512/v2 n2048-kmax1024                            2,422,866    3,847,950    6,270,816
-registrationOf (blob read alone) fndsa512/v2 n2048-kmax1024        37,555            0       37,555
+popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024      13,464            0       13,464
 setKemKey msig-pq/v2 n2048-kmax1024                               584,600   13,698,090   14,282,690
-registrationOf (blob read alone) msig-pq/v2 n2048-kmax1024         94,633            0       94,633
+popOf (the blob setKemKey decodes) msig-pq/v2 n2048-kmax1024       18,640            0       18,640
 setKemKey msig-12-slhdsa128s (96,832 B pop)                     6,327,192  151,929,000  158,256,192
-registrationOf (blob read alone) msig-12-slhdsa128s (96,832 B pop)    266,248            0      266,248
+popOf (the blob setKemKey decodes) msig-12-slhdsa128s (96,832 B pop)    252,365            0      252,365
+popOf unregistered (view baseline)                                  2,860            0        2,860
 setKemKey mldsa65/v2 n2304-kmax4096                               342,936    7,891,740    8,234,676
-registrationOf (blob read alone) mldsa65/v2 n2304-kmax4096         99,917            0       99,917
+popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096       15,404            0       15,404
 setKemKey fndsa512/v2 n2304-kmax4096                            2,422,866    3,847,950    6,270,816
-registrationOf (blob read alone) fndsa512/v2 n2304-kmax4096        37,555            0       37,555
+popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096      13,464            0       13,464
 setKemKey msig-pq/v2 n2304-kmax4096                               584,600   13,698,090   14,282,690
-registrationOf (blob read alone) msig-pq/v2 n2304-kmax4096        100,549            0      100,549
+popOf (the blob setKemKey decodes) msig-pq/v2 n2304-kmax4096       18,640            0       18,640
 setKemKey mldsa65/v2 n2560-kmax16384                              342,936    7,891,740    8,234,676
-registrationOf (blob read alone) mldsa65/v2 n2560-kmax16384       105,846            0      105,846
+popOf (the blob setKemKey decodes) mldsa65/v2 n2560-kmax16384      15,404            0       15,404
 setKemKey fndsa512/v2 n2560-kmax16384                           2,422,866    3,847,950    6,270,816
-registrationOf (blob read alone) fndsa512/v2 n2560-kmax16384       37,555            0       37,555
+popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384     13,464            0       13,464
 setKemKey msig-pq/v2 n2560-kmax16384                              584,600   13,698,090   14,282,690
-registrationOf (blob read alone) msig-pq/v2 n2560-kmax16384       106,682            0      106,682
+popOf (the blob setKemKey decodes) msig-pq/v2 n2560-kmax16384      18,640            0       18,640
 setKemKey mldsa65/v2 n2816-kmax65536                              342,936    7,891,740    8,234,676
-registrationOf (blob read alone) mldsa65/v2 n2816-kmax65536       119,812            0      119,812
+popOf (the blob setKemKey decodes) mldsa65/v2 n2816-kmax65536      15,404            0       15,404
 setKemKey fndsa512/v2 n2816-kmax65536                           2,422,866    3,847,950    6,270,816
-registrationOf (blob read alone) fndsa512/v2 n2816-kmax65536       37,555            0       37,555
+popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536     13,464            0       13,464
 setKemKey msig-pq/v2 n2816-kmax65536                              584,600   13,698,090   14,282,690
-registrationOf (blob read alone) msig-pq/v2 n2816-kmax65536       120,870            0      120,870
+popOf (the blob setKemKey decodes) msig-pq/v2 n2816-kmax65536      18,640            0       18,640
+
 == Table 4: groups (test_T_GAS_groups, set-free): register regular / state (rows from UARegistryGroups, -vv)
   musig2-secp256k1 t=3 n=3 register: 231788
     state gas (EIP-8037): 1840590
@@ -197,13 +207,15 @@ The two bounds (HEADROOM_ED25519 / HEADROOM_BLS_BN254 in UAGas.t.sol) replace ca
 500 k + REGISTER_STATE_GAS, which the UA-8 record (SSTORE2 of the whole registration, state gas ~1.2-1.3 M) exceeded.
 
 == Notes by item
-A6 n2 (PQZ proof 30,381 B at n2304-kmax4096): storePqzPop mldsa65 = 1,967,000 regular (= 64 gas/B calldata floor + 21,000;
-  of it 243,048 is the proof's log data at 8 gas/B) + 47,157,660 state = 49,124,660. 28,191 / 32,539 / 35,479 B at the other sets.
+A6 n2 (PQZ proof 30,381 B at n2304-kmax4096): storePqzPop mldsa65 = 1,967,000 regular (the calldata floor, see NOTES; the
+  proof as log data, 243,048, is under the floor) + 47,157,660 state = 49,124,660. 28,191 / 32,539 / 35,479 B at the other sets:
+  1,825,688 / 2,104,216 / 2,292,632 regular, the same formula.
 A6 note, gen 2's gen-1 path (gen 2 reads gen 1's whole registrationOf, here the msig-pq/<set> record + KEM): registrationOf on gen 2
   145,813 vs 100,549 on gen 1 at n2304-kmax4096 (+45 k, +45 %); storePqzPop msig-pq on gen 2 over a gen-1 record: state gas
   47,353,500 vs 47,157,660 (+195,840 for the extra gen-2 record), regular unchanged (the floor).
-A7 m2, setKemKey decodes the whole registration blob: registrationOf (the blob read alone, an upper bound) is 99,917 (mldsa65, 29 %
-  of setKemKey's 342,936 regular), 37,555 (fndsa512, 1.5 % of 2,422,866: the FN-DSA verify dominates), 100,549 (msig-pq, 17 % of
-  584,600) at n2304-kmax4096; at the other sets 94,172-119,812 / 94,633-120,870 (the blob carries the PQZ proof 28-35 KB).
-  12 x slhdsa128s msig (96,832 B pop): blob read 266,248 of 6,327,192 regular (4 %; the 12 x 7,856 B signature's calldata
-  floor, 6.2 M, dominates). State gas is the KEM record write (pk + sig), not the read.
+A7 m2, setKemKey decodes the whole registration blob: setKemKey reads only the `_reg` blob (keyData rest, pop, kem version),
+  which popOf decodes alike; net of the view baseline (2,860) it costs 12,544 (mldsa65: 3.7 % of setKemKey's 342,936 regular),
+  10,604 (fndsa512: 0.4 % of 2,422,866), 15,780 (msig-pq: 2.7 % of 584,600); the blob does not carry the PQZ proof (that is
+  separate), so these do not move with the set. 12 x slhdsa128s msig (96,832 B pop): 249,505 net of 6,327,192 (3.9 %; the
+  calldata floor of the 12 x 7,856 B signature, ~6.2 M, dominates). A blob-read split would save at most ~3-4 % here.
+  State gas of setKemKey is the KEM record write (pk + sig), not the read.
