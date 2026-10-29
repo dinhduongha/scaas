@@ -57,11 +57,12 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
 33. [Networks — Solana](#33-networks--solana)
 34. [Networks — GRAM](#34-networks--gram)
 35. [Networks — NEAR](#35-networks--near)
-36. [Clients — signers and clientkeys](#36-clients--signers-and-clientkeys)
-37. [Clients — SCaaS app](#37-clients--scaas-app)
-38. [Integration — ERP](#38-integration--erp)
-39. [Integration — example connector](#39-integration--example-connector)
-40. [Alias index](#alias-index)
+36. [Networks — Algorand](#36-networks--algorand)
+37. [Clients — signers and clientkeys](#37-clients--signers-and-clientkeys)
+38. [Clients — SCaaS app](#38-clients--scaas-app)
+39. [Integration — ERP](#39-integration--erp)
+40. [Integration — example connector](#40-integration--example-connector)
+41. [Alias index](#alias-index)
 
 ## 1. Architecture and register policy
 
@@ -5360,16 +5361,15 @@ It said: Bounced payouts via admin RefundBounced; replaced by NET-TON-03.
 
 ## 35. Networks — NEAR
 
-<a id="NET-NEAR-01"></a>
 ### NET-NEAR-01 — NEAR token: UA balances pooled in the token's own NEP-141 account
-- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-01 · superseded-by: —
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-01 · superseded-by: —
 
 **Rule.** The NEAR token keeps every UA balance in its UA ledger (`Ua` id → balance) and also, in sum, as the
 NEP-141 balance of the token's own account (the UA pool, registered at `new`), as EVM's `UA_POOL`:
 `ft_balance_of(token)` = the UA total, `ft_total_supply` = the sum of `ft_balance_of` over native accounts, the pool
 included. A move with a UA side emits NEP-141 `ft_transfer` from / to the token account plus `"scaas"` `ua_transfer`;
 a UA → UA move emits only `ua_transfer`. The token still refuses to be a payee or a native debit source (spec §2
-row 12). Status: BUILT (near-algorand Task 4, commits 42cc7a96 and the Task 4 fix 1 commit). Controller call
+row 12). Status: BUILT (near-algorand Task 4, commits `54b1cf6d` and `839142fc`). Controller call
 2026-10-28, owner may override.
 **Why.** NEP-141 indexers and wallets reconcile balances from `nep141` events and `ft_total_supply`; without the pool,
 a native → UA move would look like a burn or leave the supply unbalanced (spec R6).
@@ -5377,16 +5377,15 @@ a native → UA move would look like a burn or leave the supply unbalanced (spec
 **Source.** near-algorand Task 4 report (`.superpowers/sdd/2026-10-28-near-algorand/task-4-report.md`); spec
 [2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §3.2, R6.
 
-<a id="NET-NEAR-02"></a>
 ### NET-NEAR-02 — NEAR token: a new record's storage from the attached deposit in transfer_to_ua and mint
-- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-02 · superseded-by: —
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-02 · superseded-by: —
 
 **Rule.** `ft_transfer`, `ft_transfer_call`, `transfer_to_ua` and the admin `mint` take exactly 1 yoctoNEAR when the
 receiver's record exists (a registered account, an existing UA record); when it does not, the attached deposit must
 cover the new record (registration 125 B, UA record 89 B, × `env::storage_byte_cost()`), the record is created and
 the excess is refunded to the predecessor in the same receipt; less panics. Spec §3.2's "1 yoctoNEAR" for
 `transfer_to_ua` is thus refined by §2 row 15 (the caller pays every record it creates); `mint` follows the same rule.
-Status: BUILT (near-algorand Task 4, commits 42cc7a96 and the Task 4 fix 1 commit). Controller call 2026-10-28,
+Status: BUILT (near-algorand Task 4, commits `54b1cf6d` and `839142fc`). Controller call 2026-10-28,
 owner may override.
 **Why.** A new UA record or registration costs storage stake that someone must pay; users hold no NEAR (spec §0), so
 the caller (relayer or native sender) pays, as for the NEP-145 auto-registration deviation.
@@ -5394,9 +5393,8 @@ the caller (relayer or native sender) pays, as for the NEP-145 auto-registration
 storage call; the entry signatures stay, only the deposit check changes.
 **Source.** near-algorand Task 4 report; spec §2 row 15, §3.2.
 
-<a id="NET-NEAR-03"></a>
 ### NET-NEAR-03 — NEAR subject accounts: SCaaS key records per holder in the token, key ops by key nonce
-- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-03 · superseded-by: —
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-03 · superseded-by: —
 
 **Rule.** Each NEAR token keeps one subject record per `Holder` (prefix `a`): `keys` (≤ 8 `KeyRecord { kind u16,
 key_data }` = the key's UA kind and canonical key data: ed25519 `0x0102` 32 B, secp256k1 `0x0108` 64 B,
@@ -5418,7 +5416,7 @@ nonce; any current key cancels during the delay, and `mtx_set_guardian` cancels 
 permissionless finish replacing every key). Storage: the
 record's growth × `env::storage_byte_cost()` from the attached deposit, the excess refunded; a record = 41 B +
 Borsh(holder) + Borsh(subject), measured in `new` (one ed25519 UA key: 131 B with the `policy` byte, NET-NEAR-05). `*_check(caller, op, auth, params…)`
-takes the predecessor explicitly (a view has none). Status: BUILT (near-algorand Task 5). Controller call 2026-10-28,
+takes the predecessor explicitly (a view has none). Status: BUILT (near-algorand Task 5, commits `fa81e0a2`, `6c9e1453`, `6da4e0bb`). Controller call 2026-10-28,
 owner may override.
 **Why.** Reading keys from another contract is asynchronous (spec §3.1), and access keys are unreadable and rotatable
 (spec §3.3); a key nonce in the record gives key ops replay protection without a lane record of their own.
@@ -5427,9 +5425,8 @@ op fields.
 **Source.** near-algorand Task 5 report (`.superpowers/sdd/2026-10-28-near-algorand/task-5-report.md`); spec
 [2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §3.3, §3.5, R7.
 
-<a id="NET-NEAR-04"></a>
 ### NET-NEAR-04 — NEAR msig: at most 12 members; a near-account member counts only as the predecessor
-- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-04 · superseded-by: —
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-04 · superseded-by: —
 
 **Rule.** `msig` (kind 288) is verified in the token from its key data (`u16 threshold ‖ u16 count ‖ count × (u16
 kind ‖ id ‖ u16 weight)`, big-endian, ids strictly increasing, weights > 0, 0 < threshold ≤ total weight). Members:
@@ -5438,7 +5435,7 @@ kind ‖ id ‖ u16 weight)`, big-endian, ids strictly increasing, weights > 0, 
 member is refused. `MSIG_MAX_MEMBERS` = floor(250 Tgas / 20.005 Tgas per P-256 verify, Task 1 log) = 12: the worst
 call, a `relay_fee_<entry>` with a 12-passkey msig entry auth and a passkey payment, is 12 × 20.005 + 20.005 + 2.3
 (the rest of Task 1's two-passkey wrapper model, 42.271 − 2 × 20.0) ≈ 262 Tgas < 300 Tgas (ruling R1; Task 9 measures
-it). The spec names `near.md` for this cap; that page is written in Task 21. Status: BUILT (near-algorand Task 5).
+it: 266.826 Tgas, `smartcontracts/near/runs/2026-10-29-t19-fix4.txt`). The cap is stated in near.md §3. Status: BUILT (near-algorand Task 5, commit `fa81e0a2`).
 Controller call 2026-10-28, owner may override.
 **Why.** The contract cannot read access keys (spec §3.3); 12 keeps the costliest relayed msig call inside one
 transaction's 300 Tgas without assuming a chain's own higher limit (spec §3.5).
@@ -5446,9 +5443,8 @@ transaction's 300 Tgas without assuming a chain's own higher limit (spec §3.5).
 change.
 **Source.** near-algorand Task 5 report; `smartcontracts/near/runs/2026-10-28-p256-spike.txt`; spec §3.3, §3.5.
 
-<a id="NET-NEAR-05"></a>
 ### NET-NEAR-05 — NEAR POLICY_PASSKEY_FOR_VALUE set by a set_policy key-op action
-- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-05 · superseded-by: —
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-05 · superseded-by: —
 
 **Rule.** The subject record carries `policy: u8`; bit `POLICY_PASSKEY_FOR_VALUE` = 1 (NET-ALL-23 item 3). It is set
 or cleared by the key-op action `set_policy`, entry `mtx_set_policy(op, auth, policy)` (+ `mtx_set_policy_check`): no
@@ -5456,7 +5452,7 @@ new op code — op code 10 (`OP_SET_GUARDIAN`, the account-settings key op), sig
 policy]` (action byte ‖ policy byte, bound by `extra = sha256(…)`, as Solana's `SET_POLICY` key op), the signer's key
 nonce consumed. Any current key may sign it, a wallet key included; unknown bits are refused. Enforcement on value ops
 (pay, trade, mandate setup) is Task 6 (ruling R8); key ops stay open to wallet keys. Status: BUILT (near-algorand
-Task 5 fix 1). Controller call 2026-10-28, owner may override.
+Task 5 fix 1, commit `b9b5420e`). Controller call 2026-10-28, owner may override.
 **Why.** NET-ALL-23 sets the bit "by a key operation" (Solana `SmartKeyAccount.policy`, Sui `Keys.policy`); the op
 codes 0–15 are fixed for both families. The preimages cannot collide: Borsh `Option<Holder>` (set_guardian) starts
 with 0 or 1, set_policy params start with 6; each entry checks its own preimage. The readable-text renderer (Task 21)
@@ -5464,9 +5460,8 @@ must read the params to tell set_policy from set_guardian under op 10.
 **Cost if wrong.** A dedicated op code: a vector regeneration and one entry's op check.
 **Source.** near-algorand Task 5 report (fix 1); docs/networks/README.md NET-ALL-23.
 
-<a id="NET-NEAR-06"></a>
 ### NET-NEAR-06 — NEAR key records: lengths checked, no on-curve or small-order check (accepted)
-- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-06 · superseded-by: —
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-06 · superseded-by: —
 
 **Rule.** A `KeyRecord` added by `mtx_add_key`, `add_key_native` or recovery is checked for its kind's length (msig:
 the full key-data grammar) and a non-native-space UA id, not for ed25519 small order / canonical `y` nor for P-256 /
@@ -5478,9 +5473,8 @@ call 2026-10-28, owner may override.
 **Cost if wrong.** Add the checks in `KeyRecord::validate` (P-256 through the `p256` crate already linked).
 **Source.** near-algorand Task 5 report, concern 3.
 
-<a id="NET-NEAR-07"></a>
 ### NET-NEAR-07 — NEAR value entries: lanes per payer, mtx_pay on any lane, storage charged once, no meta cap
-- old: — · status: current · owner: no · date: 2026-10-28 · normative: decisions.md#NET-NEAR-07 · superseded-by: —
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-07 · superseded-by: —
 
 **Rule.** The token's value entries (spec §3.4) take a whole `MetaOp` and its `Auth` (Borsh), each with a
 `*_check(caller, op, auth, …)` view: `mtx_pay` (op 0, `pay_ref ≠ 0`), `mtx_pay_meta(op, auth, salt, meta)` (op 0,
@@ -5511,12 +5505,12 @@ authorisation): op 0, `pay_ref = ref`, `lane = payLane(ref)`, nonce 0, `signed` 
 = `open_payee` (the submitting relayer) when `op.to` is the marker else `op.to` (ruling R2), then the same
 `pay_checks` as the plain entries — `payee ≠ token`, amount, the **value policy (R8)**, the lane, the balance — so a
 wallet-key signature under `POLICY_PASSKEY_FOR_VALUE` never pays a routed fee either (fix 1). (6) **No contract cap on
-`meta`** (metatx-split §6.2): measured on near-sandbox, 7,540 B settles and 7,541 B exceeds NEAR's 16,384 B log limit
+`meta`** (metatx-split §6.2): measured on near-sandbox, 7,530 B settles with a 64-character (implicit) relayer (7,540 B with a dev-account relayer, Task 6) and one byte more exceeds NEAR's 16,384 B log limit
 (the hex `payment_meta` log; the call fails whole, nothing moves); the `*_check` view does not predict that limit (a
 view emits no logs), so the node's `max_pay_meta_bytes` (2,048 B) is the operative cap. `payment_meta` is best-effort
 for a third-party relayer: the same signed op settles through plain `mtx_pay` (one digest, CTR-MTX-26), without
 `payment_meta`; the node always submits `mtx_pay_meta` when it holds `(salt, meta)`. Status: BUILT (near-algorand Task
-6, fix 1). Controller call 2026-10-28, owner may override.
+6, fix 1; commits `36582104`, `ceef9112`; the 7,530 B bound `smartcontracts/near/runs/2026-10-29-t19-fix4.txt`). Controller call 2026-10-28, owner may override.
 **Why.** One rule with the built families for plain pay and pay-meta; one storage charge per call keeps the refund
 correct when a call opens a UA, a lane and a receiver at once (Task 5 concern 2); a shared pay body keeps Tasks 9–10
 from re-implementing settlement.
@@ -5526,7 +5520,702 @@ pay rows' lanes regenerated.
 [2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §2 rows 4–7, 10, 12, 15,
 §3.4, §3.7; `smartcontracts/near/runs/2026-10-28-near-metatx.txt`.
 
-## 36. Clients — signers and clientkeys
+### NET-NEAR-08 — NEAR: the full SCaaS feature set from the start; scope
+- old: — · status: current · owner: yes · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-08 · superseded-by: —
+
+**Rule.** NEAR is a full SCaaS family: token with `mtx_pay`, the relayed pay, `mtx_pay_meta` (CTR-MTX-26); mandate;
+DEX; smart-key / passkey UA accounts; the relay-fee router (CTR-MTX-27) from the start; the `scaas-node` adapter;
+`clientkeys`, `ua-rs`, `ua-qt` signing; a near-sandbox devnet run through `scripts/capped`; tests and shared vectors;
+`docs/networks/near.md` (owner 2026-10-28, spec §0 row 1). Out of scope (spec §0 / §1, controller call accepted by the
+owner): Zether and PQZ (EVM precompile families only, as on Soroban / Aptos), PQ signers, the asset suite, token
+wrappers, the tender, the mesh (job API only), NET-ALL-26 `MetaCall` / `MetaTransfer` (NEAR signs the built `MetaOp`
+v1), public testnets and mainnet, receiver-pays. The spec is kept short: decisions and rule tables, ids cited, no code
+(owner). Status: BUILT, near-algorand Tasks 1–21 (first commit `a2a64668`, last code commit `870caf05`).
+**Why.** NEAR keeps balances for good at a one-time storage deposit (research note §1, §8); the owner wants the
+metatx-split semantics from day one, not a later migration.
+**Cost if wrong.** A narrower family would need the missing parts later on a deployed contract set: a redeploy (all
+chains are test-only today).
+**Source.** spec [2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §0, §1; [research/near-algorand.md](research/near-algorand.md).
+
+### NET-NEAR-09 — NEAR: the relayer pays every storage stake; users hold no NEAR
+- old: — · status: current · owner: yes · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-09 · superseded-by: —
+
+**Rule.** NEAR storage staking is paid by the relayer through the attached deposit of every call that creates a
+record, exact, the excess refunded in the same receipt (spec §2 row 15); users, UA users included, hold no NEAR (owner
+2026-10-28). The relayer is reimbursed through the fee: the node's fee floor covers first-use storage, as the Solana
+lane-PDA rent (controller call, accepted by the owner). Status:
+BUILT (token T4–T7, DEX T8, wrappers T9, router T10, node T16; commits `54b1cf6d` … `8f2d2ac6`).
+**Why.** A user who must buy NEAR to receive or pay is the friction SCaaS exists to remove.
+**Cost if wrong.** A storage griefing path costs the relayer stake; the node quotes storage per job
+(`storage_needed`) and refuses a fee below its floor (spec R5).
+**Source.** spec §0, §2 row 15, R5; near-algorand Task 4 and 16 reports.
+
+### NET-NEAR-10 — NEAR: full NEP-141 / NEP-145 / NEP-148 interface with stated deviations
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-10 · superseded-by: —
+
+**Rule.** Standard-compatible where possible (owner 2026-10-28: NEP-141 + NEP-145 + NEP-148). Deviations (controller
+call, accepted by the owner, refined in Task 4): an unregistered receiver of `ft_transfer` / `ft_transfer_call` is
+auto-registered from the attached deposit (≥ `storage_balance_bounds().min`, excess refunded); `min == max`;
+`storage_withdraw` has `available` 0 and panics on any amount; `storage_unregister` panics when registered, `force`
+included; a transfer to the token itself is refused everywhere; UA receivers use `transfer_to_ua`. Status: BUILT
+(Task 4, commits `54b1cf6d`, `839142fc`).
+**Why.** Records are permanent and the stake was usually the relayer's, so a holder cannot withdraw or unregister it;
+auto-registration lets a relayer pay a first transfer in one call.
+**Cost if wrong.** Wallets or DEXs that assume `storage_unregister` / `storage_withdraw` work fail closed (spec R6;
+tests pin each deviation).
+**Source.** spec §0, §3.2, R6; near-algorand Task 4 report (NEP deviations 1–5).
+
+### NET-NEAR-11 — NEAR: balances and records permanent, lanes non-pruning, only escrow entries pruned
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-11 · superseded-by: —
+
+**Rule.** No TTL, no deletion, no refund of a balance or record; lanes are kept, so CTR-MTX-04 / NET-ALL-01 hold by
+construction; only the router's pending entries and the DEX's settle entries are pruned, each deposit returned to
+whoever staked it (controller call, accepted by the owner, wording 2026-10-28). Status: BUILT (T4–T10).
+**Why.** Pruning lanes would reopen pay-once after the horizon; escrow entries are working state with nothing left to
+protect once settled.
+**Cost if wrong.** Permanent lanes cost the relayer one lane record per payer and lane, for good (114 B for a UA
+payer).
+**Source.** spec §0 row 5; near-algorand Tasks 6, 8, 10 reports.
+
+### NET-NEAR-12 — NEAR: Rust on near-sdk, contracts built with opt-level 3
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-12 · superseded-by: —
+
+**Rule.** NEAR contracts are Rust with `near-sdk` 5.30.0 (controller call, accepted by the owner), built by cargo-near
+0.22.0 into `target/near/<crate>/<crate>.wasm`, with `opt-level = 3`, not `"z"` (controller call 2026-10-28 after
+Task 1, owner may override). Status: BUILT (`a2a64668`).
+**Why.** At `"z"` a P-256 verify costs 29.0 Tgas, at 3 it costs 20.005 (31 % less) for about 11 KB more wasm; every
+later msig bound uses 20 Tgas per verify.
+**Cost if wrong.** A larger wasm storage stake per deployed account (token 559,120 B today).
+**Source.** near-algorand Task 1 report, concern 1; `smartcontracts/near/runs/2026-10-28-p256-spike.txt`.
+
+### NET-NEAR-13 — NEAR: ed25519 via NEP-413, secp256k1 via ecrecover, P-256 in wasm behind a spike gate
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-13 · superseded-by: —
+
+**Rule.** Signatures (controller call, accepted by the owner): `env::ed25519_verify` over the NEP-413 hash of
+`"scaas.metaop.v1:" ‖ hex(digest)` (recipient = the token, nonce = the digest), `env::ecrecover` over the digest, P-256
+passkeys verified in wasm (RustCrypto `p256`) per NET-ALL-04 (UP and UV, the bounded grammar with its closing `}`,
+exact origin, low-s); NEP-635 `p256_verify` is not used. The plan's first task was a spike and a hard gate (controller
+call, owner "choose yourself"): a two-passkey `relay_fee_<entry>` must fit 300 Tgas per transaction (not nearcore 2.11's
+1 PGas: no chain's own limit is assumed). Result: 42.271 Tgas modelled, 19.991 / 20.005 Tgas per verify (GATE PASS,
+`a2a64668`). Wallet support checked 2026-10-29: NEP-413 is Final, wallets expose `signMessage` through Wallet Selector
+and sign with a full-access key; SCaaS registers that key as its own record key. Status: BUILT (T1, T5 `fa81e0a2` /
+`6c9e1453` / `6da4e0bb`).
+**Why.** NEP-635 is a draft and chain-specific; customer chains may not have it. NEAR access keys cannot be read on
+chain, so the wallet's key must be a SCaaS record key.
+**Cost if wrong.** A cheaper host P-256 would raise the msig caps; the verifier is one module.
+**Source.** spec §0, §3.5, §11; near-algorand Task 1 and 5 reports; NEP-413.
+
+### NET-NEAR-14 — NEAR: static relay_fee_<entry> wrappers for the token's fee-less entries
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-14 · superseded-by: —
+
+**Rule.** NEAR atomicity (owner "choose the best option yourself" → controller call): the fee-less signed entries the
+router must serve live in the token and are fee-paid by static in-contract wrappers `relay_fee_<entry>` (entry, then
+pay, one receipt). Task 9 choices (controller calls 2026-10-28, owner may override): 13 wrappers (12 entries +
+`relay_fee_set_policy`); the pay runs through `routed_plan` with the token's id as marker (`relayer == Some(marker)`,
+which closes a bound-payee settle through plain `mtx_pay`) and an explicit payee (open → predecessor, bound → `op.to`;
+pre-flight ruling 2); `call = u8 len ‖ full method name ‖ Borsh(args)` (pre-flight ruling 6, as Sui / Aptos); salt =
+`pay_op.extra`; each wrapper has a `relay_fee_<entry>_check` view returning `Check { error, storage_needed }` that
+removes a double-counted lazy open and requires balance ≥ entry amount + pay amount; `relay_fee_paid {ref, target,
+token, payer, payee, amount}` emitted last; no on-chain `relay_fee_ref` view; tests assert burnt ≤ 300 Tgas (pre-flight
+ruling 1: the node's gas margin is config). No-op wrappers (a second cancel or revoke, cancel recovery without one, an
+unknown key, a non-increasing invalidate) are refused: no fee for a no-op (owner rule 2026-10-28, metatx-split item 6);
+revoking an expired unrevoked mandate and setting the same policy are state changes and are charged. A 12-member +
+12-member msig wrapper (about 490 Tgas) cannot fit; it fails atomically and the node refuses more than 13 passkey
+signatures per wrapper job; an up-front gas refusal in the contract is not built. Status: BUILT (`877fd95a`,
+`a6433c0c`).
+**Why.** Reading keys or settling a payment across contracts is asynchronous on NEAR; inside one receipt the entry and
+its fee are atomic with no residual.
+**Cost if wrong.** A missing wrapper means that entry is relayed without a fee (sponsored).
+**Source.** spec §0, §3.8; near-algorand Task 9 report (choices 1–7) and review; `smartcontracts/near/runs/2026-10-28-near-relayfee-fix1.txt`.
+
+### NET-NEAR-15 — NEAR: escrow relay-fee router with an executor and a callback; refund wins
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-15 · superseded-by: —
+
+**Rule.** Cross-contract targets go through an escrow router with a callback (the TON pattern; owner "choose the best
+option yourself" → controller call); refund wins whenever success is not provable; the router forwards a
+relayer-attached `target_deposit` and the executor holds nothing after settlement (controller call, owner "choose
+yourself"); `RELAY_TIMEOUT_S` = 3,600. Task 10 choices (controller calls 2026-10-28, owner may override): `relay_hold`
+reuses `routed_plan` with the router as marker and takes the relayer explicitly; the Rust parameter is `pay_ref`
+(pre-flight ruling 10); the attached deposit = entry storage + payee registration + 2 yocto + `target_deposit`
+(a short deposit is refused, nothing held); `relay_release(pay_ref)` pays the payee stored at hold; `held` keyed
+(router, pay_ref); the router's `ref` uses `op.network`; the executor appends a trailing 0-yocto transfer so the router
+reads the target's own receipt (success = the target's receipt succeeded, child-promise failures included, tested); no
+NEP-616 `refund_to` is assumed; `Pending` holds id, target, amount, deposit, stage (Hold / Call / Settle / Owed) and
+owed; every callback checks the entry's id and stage (first fix: a late callback pays nothing; entry 306 → 314 B);
+`relay_gas` = the fixed part + signature gas + `target_gas`; args ≤ 16,384 B; `relay_check` quotes for a 64-character
+relayer; `pending` is keyed by `ref`; no admin, no access key. Status: BUILT (`1862c8b0`, `e23f4390`; pins raised by
+T19, NET-NEAR-21).
+**Why.** NEAR has no cross-contract atomicity (spec §10 R1, one rule with TON): only the target's own result can
+release the fee, and a lost callback must never charge the payer.
+**Cost if wrong.** The recorded residual: a target that succeeds and whose callback is lost is refunded at timeout (the
+relayer worked unpaid).
+**Source.** spec §0, §3.8; near-algorand Task 10 report (choices 1–12), review m1–m6;
+`smartcontracts/near/runs/2026-10-28-near-router-fix1.txt`.
+
+### NET-NEAR-16 — NEAR: escrow DEX, relayer-bound, fill-or-kill; a failed counter-leg closes the order
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-16 · superseded-by: —
+
+**Rule.** The NEAR DEX is an escrow (NET-TON-09 class), settlement relayer-bound (CTR-DEX-09, README §11 item 6, no
+exception): order-level `relayer`; the lane calls the DEX, which calls each `token.mtx_trade` (Cosmos pattern) (controller
+call, owner "choose yourself"). Task 8 choices and rulings (controller calls 2026-10-28, owner may override):
+`settle_id = sha256(digest(op_a) ‖ digest(op_b))`; `mtx_trade`'s fourth argument `receiver: Holder` registers the
+payout receiver and cannot redirect it; leg deposit refunds go to the signer; a refused leg returns false; orders keyed
+(holder, lane, nonce), any nonce ≥ `min_nonce`, close once, order lanes separate from payment lanes; cancel (op 14) and
+invalidate (op 15) shaped as revoke; one settle per leg digest; settle keeps 2 yocto and splits the deposit equally;
+views `order_closed`, `min_nonce`, `*_check`, DEX `pending(settle_id)`; `refund_expired` on a done entry prunes it;
+events carry the leg digests. Ruling T8-I1: a failed counter-leg **closes** the order (funds come back), recorded in
+README §11; clients bind orders to a relayer by default. Ruling T8-I2: the DEX derives each leg's static gas from its
+auth (`leg_gas` = base + 25 Tgas per passkey signature + 1 per ed25519 / secp256k1; base 6, 16 after T19 fix 1, 17
+after fix 3) and refuses `settle` below 9 + 18 + both legs; a backstop that forwards a panicked leg's share at prune is
+not built. Ruling M4: a passkey field above 1 KiB is refused on a leg. Never add a contract account (the DEX, the
+router) as a `near-account` msig member. Status: BUILT (`69dd08bd`, `85f9060e`, `c5aa5614`; `leg_settle` view
+`32121167`).
+**Why.** Two tokens are two contracts: one receipt cannot move both legs; binding to a relayer stops a copier from
+inserting its own pair.
+**Cost if wrong.** Griefers can cancel open (unbound) orders for gas; re-opening an order on refund would be a
+redesign; an authenticator with a `clientDataJSON` above 1 KiB cannot trade on NEAR.
+**Source.** spec §0, §3.6; near-algorand Task 8 report (choices 1–9), review, rulings T8-I1 / I2 / M4;
+`smartcontracts/near/runs/2026-10-28-near-dex-fix2.txt`.
+
+### NET-NEAR-17 — NEAR: mandate in the token, one-shot, delegate Holder
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-17 · superseded-by: —
+
+**Rule.** Task 7 choices (controller calls 2026-10-28, owner may override): (1) `MandateTerms` gains `delegate: Holder`
+as its first field (README §3 item 2: the delegate is a Holder); (2) funds are held under `Holder::Ua(mandate id)`,
+anyone may top the id up; (3) pay via `payLane(pay_ref)` nonce 0, `payment_settled.from` = the mandate id; (4) the
+delegate's own passkey policy applies on pay, the owner's on open; (5) revoke once, by owner or delegate, no nonce; (6)
+`mandate_refund(id)` permissionless after revocation or expiry, no `mtx` prefix; (7) one-shot, no epoch; (8) `extra` of
+pay / revoke = `sha256([])`. Pre-flight ruling 9: the mandate id is inside `op.extra` = sha256 of the terms incl. the
+id, the funded amount is `op.amount` and `terms.funding` must equal it. Ruling m3 (2026-10-29): a revoke is not a value
+op, so the passkey policy never blocks it. Ruling parity (2026-10-29): a refund that would move 0 is refused, as on
+Algorand. The same mandate id on two tokens is two mandates (the node keys by (token, id)). Status: BUILT
+(`ea94accf`, `ead91409`, `d7d9d540`).
+**Why.** A mandate in the token runs in the same receipt as its pay; a delegate `Holder` lets a UA or a native account
+spend.
+**Cost if wrong.** A different term layout is a token redeploy plus a vector regeneration.
+**Source.** near-algorand Task 7 report (choices), review; Task 13 rulings m3, parity;
+`smartcontracts/near/runs/2026-10-28-near-mandate-fix1.txt`, `smartcontracts/near/runs/2026-10-29-near-mandate-refund0.txt`.
+
+### NET-NEAR-18 — NEAR: native UA kind 0x0017 near-account
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-18 · superseded-by: —
+
+**Rule.** Native kind `0x0017 near-account` in `kinds.json` and every reproducer (Solidity `UAKinds`, `ua.js`, `ua-rs`,
+`ua-py`, `ua-go`, `ua-cs`), member flag false; `msig` (kind 288) on NEAR (controller call, owner "choose yourself").
+The `UAKinds` change alters EVM bytecode, so it ran forge at the four sets, the size gate and `docs_check` (not the
+full pqz-core gate): 1482 / 1482 / 1480 / 1473 passed, then 1484 / 1484 / 1482 / 1475 after the rebase; `UARegistry`
++108 B. Named and implicit ids cannot collide (a 64-hex id is always implicit; a collision needs a sha256 preimage);
+like the other 32-byte natives the id is kind-free. The deployed SCaaS testnet `UARegistry` (7622) learns the kind at
+its next reset. Status: BUILT (`824e97af`, `8c7ce176`; the OZ nested `lib/` remap fix `a01357a9` cherry-picked first).
+**Why.** A NEAR account as holder or msig member needs a kind; the contract cannot read access keys, so the member
+counts as the predecessor.
+**Cost if wrong.** A kind renumbering regenerates `kinds.json` and every reproducer.
+**Source.** spec §0, §3.3, §8; near-algorand Task 2 report.
+
+### NET-NEAR-19 — NEAR: every SCaaS account keyless, no upgrade path
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-19 · superseded-by: —
+
+**Rule.** No admin on the router; no contract upgradeable: NEAR accounts keep no access key (controller call, accepted
+by the owner). Deploy deletes every key after `new` and lane registration; the gate fails when `view_access_key_list`
+is not empty; the node halts the chain on a keyed account. `check_no_authority.sh` scans every near-sdk 5.30.0
+authority API (incl. `promise_batch_action_add_key`) by an explicit list, so `mtx_add_key` is not flagged; `new` is
+`#[private]`; a whole-balance transfer action cannot be caught by the scan and stays a review item. Status: BUILT
+(`839142fc`, deploy gate `43782d33`).
+**Why.** An upgradeable router would be the bound relayer of every payment signed to it (CTR-MTX-13).
+**Cost if wrong.** A contract fix is a new deployment with new tokens (all chains are test-only).
+**Source.** spec §0, §3.9, R10; near-algorand Task 4 and 19 reports.
+
+### NET-NEAR-20 — NEAR: resumable keyless deploy, foreign accounts not adopted
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-20 · superseded-by: —
+
+**Rule.** `deploy.sh near <rpc>` (Python, stdlib + `cryptography`): sub-accounts of the funder, temporary keys in a
+git-ignored 0600 resume file (fsynced with its directory) before use, idempotent steps, keys deleted and the gate last,
+`deployments/<genesis>.json` after the gate (ruling I3, controller 2026-10-29); a resume file holding accounts outside
+the plan is refused and kept; an existing token is adopted only when `ft_metadata` and the new `admin()` view match; a
+deployments directory in the checkout that git does not ignore is refused (rulings N1–N3). An existing account with
+the same wasm under the same funder and symbols is still taken as part of the deployment (only metadata and admin are
+compared). Status: BUILT (`43782d33`, `8c58cf8a`, `870caf05`).
+**Why.** A failed step used to leave accounts with a full-access key whose secret lived only in memory (about 7.6 NEAR
+per token unrecoverable).
+**Cost if wrong.** A refused adoption needs an operator decision; a fully foreign same-code deployment is still adopted
+(TODO.md).
+**Source.** near-algorand Task 19 report (fix 3 I3, fix 4 N1–N3), review.
+
+### NET-NEAR-21 — NEAR: every transfer to an uncontrolled account budgeted as an implicit-account transfer
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-21 · superseded-by: —
+
+**Rule.** Ruling A (controller 2026-10-29; test-only chains, contract change allowed): no zero-amount refund or
+return; every transfer a contract makes to an account it does not control (lanes, relayers, payers, the executor) is
+budgeted for the implicit case by the common constant `IMPLICIT_TRANSFER_GAS`, measured 8.35 Tgas, pinned 10 (fix 1),
+then 11 (fix 3, ≥ 1.2 × measured), added to `relay_hold`, `relay_release`, `relay_refund`, `on_hold`, `on_settle`, the
+executor, DEX leg refunds and prune; the node's pins follow. Ruling I2: the node refuses to start when the chain's send
++ exec cost of that transfer (protocol config) exceeds the pin or the router / DEX `implicit_transfer_gas()` view
+reports another pin. Findings behind it (T19): A — a transfer to a 64-hex account is charged as an account creation, so
+every router job died "Exceeded the prepaid gas" in `relay_hold`; C — the node's 10 Tgas base did not cover a deposit
+refund to the lane after a race (closed by the base 21). Status: BUILT (`b7ed5556`, `8c58cf8a`).
+**Why.** Relayer lanes are implicit accounts by design (spec §3.7); the contract tests had used named relayers.
+**Cost if wrong.** About 0.001 NEAR more prepaid per job, refunded when unused; a missed path would show in the e2e.
+**Source.** near-algorand Task 19 report (findings A–C, fix 1, fix 3 I2); ledger ruling A;
+`smartcontracts/near/runs/2026-10-29-near-sandbox-probes.txt`.
+
+### NET-NEAR-22 — NEAR: action fees read from the chain's protocol config
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-22 · superseded-by: —
+
+**Rule.** Ruling B (controller 2026-10-29): the node reads the action fees from `EXPERIMENTAL_protocol_config`
+(`runtime_config.transaction_costs`) at start, prices max(send, exec) per item, refuses to start without them, re-reads
+after 3,600 s; pinned constants stay only as test fixtures. Status: BUILT (`b7ed5556`, `8c58cf8a`). Supersedes
+NET-NEAR-82.
+**Why.** Protocol 88's fees differed from the pinned nearcore defaults (function call 0.2 / 0.78 vs 2.32 Tgas); customer
+chains may differ again (owner rule: no assumed chain figures).
+**Cost if wrong.** A startup dependency on one RPC method, which every nearcore RPC serves.
+**Source.** near-algorand Task 19 report (finding B, fix 1); `smartcontracts/near/runs/2026-10-28-near-e2e.txt`.
+
+### NET-NEAR-23 — NEAR: the quote is prepaid gas plus deposits
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-23 · superseded-by: —
+
+**Rule.** Final quote ruling (controller 2026-10-29, superseding its two earlier quote rulings NET-NEAR-80 and -81):
+no lane-receipt term; quote = prepaid gas (its static gas already holds `IMPLICIT_TRANSFER_GAS`) × the node's gas price
++ the attached deposits, + one `relay_timeout` for a router job; the e2e invariant is quote ≥ the lane's NEAR balance
+decrease per job kind. Owner precedent 2026-10-28: the fee covers the relayer's known costs. Status: BUILT
+(`8c58cf8a`).
+**Why.** A contract transfer to the lane is paid from the lane's own prepaid gas (already quoted) and system gas
+refunds cost the lane nothing; counting receipts over-priced router jobs about 3× and refused honest payers.
+**Cost if wrong.** A missed paid receipt; the balance-delta assertion catches it.
+**Source.** near-algorand Task 19 report (fix 2, fix 3 I1), review I1; `smartcontracts/near/runs/2026-10-28-near-e2e.txt`.
+
+### NET-NEAR-24 — NEAR: implicit ed25519 lanes at m/44'/397'/0'/0'/i', submit until INCLUDED
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-24 · superseded-by: —
+
+**Rule.** Lane keys fully hardened (controller call 2026-10-28: ed25519 SLIP-10 has no non-hardened derivation), lane
+= the implicit account of the key, registered on every token at deploy; one transaction in flight per lane; `submit`
+and `relay_timeout` use `wait_until = INCLUDED` (T19 node fix 1 and ruling m3). Status: BUILT (`3a53404e`,
+`43782d33`, `8c58cf8a`).
+**Why.** A `NONE` send of a stale-nonce transaction is answered as success and dropped, so `Rejected` never came and the
+job died at expiry.
+**Cost if wrong.** One block of latency per submit.
+**Source.** spec §3.7, §11; near-algorand Task 16 and 19 reports.
+
+### NET-NEAR-25 — NEAR adapter: job fields, ids, statuses
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-25 · superseded-by: —
+
+**Rule.** Task 16 plan-open choices (controller calls 2026-10-29, owner may override): payload = hex of label ‖ Borsh
+`MetaOp`, signature = hex Borsh(`Auth`); network = base58 genesis, chain key `near:<b58>`; tx ids `0x` + 64 hex;
+sequence = access-key nonce + 1 (optimistic); price key `min_yocto_value`; jobs on configured tokens only; mined /
+reverted only at FINAL, a failed receipt `Reverted` with no requeue; a router job past its deadline gets
+`relay_timeout` every 120 s and is reported reverted 3,600 s past the deadline (also while in flight: T19 node fix 2);
+events with inclusion block and outcome-order `log_index`; Transfer rows per holder move; the block hash of a skipped
+height = the last earlier block; the tx vector from near-primitives 0.38.0 (deposit 2^127 + 1); per-token key sets
+logged (pre-flight ruling 11). Status: BUILT (`3a53404e` … `8f2d2ac6`, `43782d33`).
+**Why.** One shape with the other families' adapters; NEAR has no write simulation, so the views and FINAL decide.
+**Cost if wrong.** A field rename is a client and ERP connector change.
+**Source.** near-algorand Task 16 report (plan-open choices 1–11), Task 19 report.
+
+### NET-NEAR-26 — NEAR adapter: relay-fee pre-checks close the known relayer-loss paths
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-26 · superseded-by: —
+
+**Rule.** Rulings on the Task 16 review (controller 2026-10-29; owner precedent 2026-10-28: fix relayer-loss paths when
+solvable): I1 `op_consumed` None for router jobs; I2 router targets allowlisted (configured tokens, `params.dex`, strict
+`params.relay_fee.targets` per method; a listed third-party target is vouched for by the operator), token targets
+through `<method>_check` with the executor as caller, gas and deposit floors; I3 `earliest_block_height` bail; second
+fix: a same-token value target needs balance ≥ amount + fee, the DEX's pair check replicated off chain and refused when
+`pending(settle_id)` exists, `RELAY_EXPIRY_MARGIN_S` = 120 on payment / wrapped op / target op / DEX orders and legs, a
+DEX `leg_settle(digest)` view (contract change `32121167`), deposit floor entry + 2 + 2 × the larger leg (the RPC's
+`storage_amount_per_byte`), a token target's deposit == its `storage_needed`; the DEX has no `settle_check` (leg checks
+and floors stand in); third fix: an unopened subject's payment passkey origins ⊆ those the entry opens it with, the
+margin on `MandateTerms.expiry`, the node sets `target_deposit` / `target_gas` itself, the margin on plain pay jobs;
+fourth fix: passkey origins parsed byte for byte as the contract's `origin_of` (31 parity rows), refusing what it would
+not parse (cost: an honest odd-shaped `clientDataJSON` is refused; Chrome and Safari tested). Status: BUILT
+(`a36dafa1`, `8bde594c`, `8cc5efbc`, `8f2d2ac6`).
+**Why.** Each check closes a path where the relayer pays gas or stake for a call that fails or pays nothing.
+**Cost if wrong.** A refused honest job (the payer re-signs with a longer validity or another target).
+**Source.** near-algorand Task 16 report (fixes 1–4), reviews.
+
+### NET-NEAR-27 — NEAR adapter: gas pinned per job from the contracts' figures
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-27 · superseded-by: —
+
+**Rule.** Node pins (Tgas): `GAS_JOB_BASE` 21 (+ 21 per passkey, + 1 per key), `ROUTER_FIXED_GAS` 102, `DEX_LEG_GAS` 17,
+`GAS_RELAY_TIMEOUT` 74, `MAX_WRAPPER_PASSKEYS` 13 (294 prepaid); contract static gas = measured maximum × 1.5, tests
+fail above pin / 1.2 (spec §3.8 gas sizing, controller call). The relayer's RPC needs `max_gas_burnt_view` ≥ 300 Tgas
+(a stated requirement: the RPC cannot report it). Status: BUILT (`8c58cf8a`). Supersedes NET-NEAR-83.
+**Why.** NEAR has no gas estimate RPC; unused prepaid gas is refunded, so a pin only has to be large enough.
+**Cost if wrong.** A pin below a real cost makes a job revert at the relayer's cost; the e2e asserts burnt < prepaid
+per job kind.
+**Source.** near-algorand Task 19 report (fix 1, fix 3 pins table); `smartcontracts/near/runs/2026-10-28-near-e2e.txt`.
+
+### NET-NEAR-28 — NEAR: encodings fixed by the vector generator
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/near.md#NET-NEAR-28 · superseded-by: —
+
+**Rule.** Signed op = `MetaOp` v1 in Borsh, names `mtx_*`, digest `sha256` (controller call, spec §2 row 1); salt =
+the payment op's payer-signed `extra`, always (controller call, spec §2 row 8); generator choices (Task 3, controller
+2026-10-28, recorded in spec §11): the router's `ref` target is `u8 len ‖ account id`; op codes 0–3 as Solana; keccak
+checked against `cast keccak`; the passkey vector is RFC 6979 A.2.5 with `s ≤ n/2` asserted after low-s
+normalisation; pre-flight ruling 5: Task 4 defines `Holder` (in `common/src/holder.rs`, Borsh `Near` 0 / `Ua` 1), Task
+3 pins op codes 0–15 and the pay-op vectors, each later task adds its own `extra` vectors. Status: BUILT (`ed837c6b`,
+`302a33d7`).
+**Why.** One vector file is the contract between the contracts, the adapter and every client.
+**Cost if wrong.** A vector regeneration and every reader's test.
+**Source.** spec §2, §11; near-algorand Task 3 report.
+
+### NET-NEAR-29 — NEAR clients: per-token key-op fan-out, nonce 0, strict passkey assertion
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-29 · superseded-by: —
+
+**Rule.** Task 18 choices and its quick ruling (controller 2026-10-29): digest = sha256 of the full labelled encoding
+(Rust and QML take the encoded op); `relay_ref` target = `u8 len ‖ account id`; `keyOpFanOut(keyOp, tokens, nonces)`
+per-token nonces (a missing one refused), ops 6–12 only; nonce 0 enforced in `buildPayMeta` and the relay-fee
+builders; `passkeyAssertion` checks challenge, strict UTF-8 and `webauthn.get`, low-s, `clientDataJSON` verbatim, one
+P-256 verify test; router / executor / `add_key_native` refusals stay node-side. Status: BUILT (`3ec86cfe`,
+`1c7344b4`).
+**Why.** Keys live per token on NEAR (spec R9), so a client that rotates a key must rotate it on every token.
+**Cost if wrong.** A key left on one token keeps authority there until removed.
+**Source.** near-algorand Task 18 report and review.
+
+### NET-NEAR-80 — NEAR quote counted implicit-lane receipts
+- old: — · status: superseded · owner: no · date: 2026-10-29 · normative: — · superseded-by: NET-NEAR-23
+
+It said: the quote adds every refund / return receipt the job lands at an implicit lane × the chain's implicit-receive
+cost (built `c2160b43`); replaced by NET-NEAR-23.
+**Source.** near-algorand ledger, Task 19 quote ruling 1.
+
+### NET-NEAR-81 — NEAR quote counted only receipts the lane pays
+- old: — · status: superseded · owner: no · date: 2026-10-29 · normative: — · superseded-by: NET-NEAR-23
+
+It said: count only receipts with `tokens_burnt > 0` and assert quote ≥ the lane's NEAR decrease; never built,
+replaced by NET-NEAR-23 before the fix round.
+**Source.** near-algorand ledger, Task 19 quote ruling 2.
+
+### NET-NEAR-82 — NEAR node pinned the nearcore default action fees
+- old: — · status: superseded · owner: no · date: 2026-10-29 · normative: — · superseded-by: NET-NEAR-22
+
+It said: the node prices action fees from pinned nearcore defaults (Task 16 fix choice d); replaced by NET-NEAR-22.
+**Source.** near-algorand Task 16 report (fix 1 choice d).
+
+### NET-NEAR-83 — NEAR node gas base 10 Tgas
+- old: — · status: superseded · owner: no · date: 2026-10-29 · normative: — · superseded-by: NET-NEAR-27
+
+It said: `GAS_JOB_BASE` 10 Tgas + 21 per passkey + 1 per key, the router at its Task 10 formula (Task 16 choice 5);
+replaced by NET-NEAR-27.
+**Source.** near-algorand Task 16 report (plan-open choice 5).
+
+## 36. Networks — Algorand
+
+### NET-ALG-01 — Algorand: the full SCaaS feature set from the start; scope
+- old: — · status: current · owner: yes · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-01 · superseded-by: —
+
+**Rule.** Algorand is a full SCaaS family: token with `mtx_pay`, the relayed pay, `mtx_pay_meta` (CTR-MTX-26);
+mandate; DEX; smart-key / passkey UA accounts; the relay-fee router (CTR-MTX-27) from the start; the `scaas-node`
+adapter; `clientkeys`, `ua-rs`, `ua-qt` signing; an Algorand localnet run through `scripts/capped` and docker with
+`--memory`; tests and shared vectors; `docs/networks/algorand.md` (owner 2026-10-28, spec §0 row 1). Out of scope
+(controller call accepted by the owner): Zether and PQZ, PQ signers, the asset suite, token wrappers, the tender, the
+mesh (job API only), NET-ALL-26 `MetaCall` / `MetaTransfer`, public testnets and mainnet, receiver-pays. Status:
+BUILT, near-algorand Tasks 11–21 (first commit `b9e758d8`, last code commit `98ada747`).
+**Why.** Algorand keeps balances for good at a one-time MBR (research note §1, §8); the owner wants the metatx-split
+semantics from day one.
+**Cost if wrong.** Missing parts later mean a redeploy (all chains are test-only).
+**Source.** spec [2026-10-28-near-algorand-design.md](superpowers/specs/2026-10-28-near-algorand-design.md) §0, §1; [research/near-algorand.md](research/near-algorand.md).
+
+### NET-ALG-02 — Algorand: the relayer pays every MBR, exactly; users hold no ALGO
+- old: — · status: current · owner: yes · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-02 · superseded-by: —
+
+**Rule.** The relayer pays the MBR of every box a call creates by a payment to the app address in the same atomic
+group, exactly (0 ⇒ no payment), users hold no ALGO (owner 2026-10-28); the relayer is reimbursed through the fee and
+the node's fee floor covers first-use MBR (controller call, accepted by the owner). Ruling m4 (Task 11): an MBR payment
+with `close_remainder_to` or `rekey_to` is refused. An app that creates boxes in another forwards that part by an inner
+payment (paid − its own need). Status: BUILT (`b9e758d8`, `08184a1b`, `70d34e8b`).
+**Why.** Exactness makes the MBR unspoofable: a short or long payment fails the group.
+**Cost if wrong.** A relayer quote must match to the µALGO; the node reads every MBR from the apps' views and simulate.
+**Source.** spec §0, §2 row 15; near-algorand Task 11 and 12 reports.
+
+### NET-ALG-03 — Algorand token: an app-held ARC-200 ledger in boxes, not an ASA
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-03 · superseded-by: —
+
+**Rule.** The token is an app-held ledger in boxes, not an ASA; ARC-200 through ARC-4 (owner 2026-10-28 for ARC-200;
+the app-ledger form a controller call accepted by the owner). Task 11 choices (controller calls 2026-10-28, owner may
+override): ARC-200 amounts uint256, `MetaOp` amount uint128, supply ≤ 2^128 − 1; the UA pool = `arc200_balanceOf(app
+address)` = the UA total (beyond spec §4.2's "native holders only") and a seventh event `UaTransfer`; event order
+[`PaymentMeta`], `MetaTransactionExecuted`, `arc200_Transfer` / `UaTransfer`, [`PaymentSettled`] (only in successful
+groups, by construction); `approve` spender = the first foreign app whose address equals it; sender-is-app =
+`caller_application_id ≠ 0` and `Txn.sender` = the caller's address; ARC-200 zero and self transfers allowed, `mtx_*`
+refuse them; a zero-address receiver accepted (a burn-like lock); a bare `budget` method; a never-deployed probe app
+for tests; plain py-algorand-sdk harness. Status: BUILT (`b9e758d8`, `08184a1b`).
+**Why.** An ASA needs the receiver's opt-in, which a UA id cannot give.
+**Cost if wrong.** ASA-only wallets do not show the token; a token redeploy to change the ledger.
+**Source.** spec §0, §4.2; near-algorand Task 11 report (choices 1–12), review.
+
+### NET-ALG-04 — Algorand: balances and records permanent, no local state
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-04 · superseded-by: —
+
+**Rule.** No box deleted, no MBR refunded (a shrinking record keeps its MBR), lanes kept (non-pruning, so CTR-MTX-04 /
+NET-ALL-01 hold by construction), `OptIn` refused (controller call accepted by the owner, wording 2026-10-28). Status:
+BUILT (T11–T15).
+**Why.** One permanence rule with NEAR and the long-lived-balance families.
+**Cost if wrong.** The relayer's MBR stays locked for good (18,900 µALGO per lane box).
+**Source.** spec §0 row 5, §4.1.
+
+### NET-ALG-05 — Algorand: Puya apps pinned by artifacts.json; localnet on future consensus
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-05 · superseded-by: —
+
+**Rule.** Apps in Algorand Python (Puya; controller call accepted by the owner): puyapy 5.10.1, algorand-python 4.0.0,
+py-algorand-sdk 2.12.0, algod 5.0.5. Pre-flight ruling 7 (with the Task 11 pre-flight): `artifacts.json` maps each
+program to `{approval_sha512_256, clear_sha512_256}`, the router entry adding the executor prefix and suffix; `test.sh
+algorand` fails when the committed file differs from a fresh build; `devnet.sh algorand up|down` (algod 2 GB, other
+containers 512 MB, pinned digests); the localnet runs `future` consensus (AlgoKit parity). Status: BUILT
+(`b9e758d8`; artifacts updated by each app task).
+**Why.** The deploy gate and the node compare deployed programs with the built ones (spec §4.9).
+**Cost if wrong.** A consensus change on a customer chain (args, logs, budget) moves the measured caps.
+**Source.** spec §0, §7; near-algorand Task 11 report; ledger pre-flight ruling 7.
+
+### NET-ALG-06 — Algorand signatures: "MX" sign-bytes for natives, tagged auth for records
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-06 · superseded-by: —
+
+**Rule.** `ed25519verify_bare` over the wallet's sign-bytes form `"MX" ‖ text` (not `ed25519verify`, controller call
+refining spec §0), `ecdsa_verify Secp256k1 / Secp256r1` (controller call, accepted by the owner). A native address
+signs with its current authority; an address rekeyed to a LogicSig or msig signs through an account record. Task 12
+choices (controller 2026-10-28): auth tagged 1 ed25519 / 2 secp256k1 / 3 passkey / 4 msig, a native signature untagged
+64 B; passkey per NET-ALL-04, fields ≤ 1 KiB; secp256k1 high-s refused by the opcode. Wallet support checked
+2026-10-29: ARC-60 is a Draft with another signing form; algosdk `signBytes` / Pera Connect `signData` sign `"MX"` ‖
+bytes, which SCaaS checks; the form may move to ARC-60's (spec §11). Status: BUILT (`70d34e8b`, `944ba770`).
+**Why.** A wallet cannot sign `"ProgData"`-prefixed bytes; `"MX"` is what Algorand wallets sign for arbitrary data.
+**Cost if wrong.** A wallet API change means a new signed form and vectors.
+**Source.** spec §0, §4.3, §4.6, §11; near-algorand Task 12 report; ARC-60.
+
+### NET-ALG-07 — Algorand: one account app per deployment; recovery adds a key
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-07 · superseded-by: —
+
+**Rule.** Task 12 pre-flight and choices (controller 2026-10-28, owner may override): the `account` app is deployed
+first and shared by every token (inner calls are synchronous); parity with NEAR: key ops 6–12, guardian-signed
+`mtx_finish_recovery` (op 11), recovery **adds** a key; start and finish refuse a key already present or a full 8-key
+set (owner ruling, metatx-split item 2: fail fast, docs say keep a slot free); records hold key ids and origin hashes;
+`verify` is the value-op check (policy applies, fails rather than false; a native wallet signature is outside
+`POLICY_PASSKEY_FOR_VALUE`); natives may sign key ops (record opened for the nonce, MBR 63,300 µALGO); guardian none
+= the zero holder, checked before the signature; key-op `extra = sha256(ARC-4 tuple)`; records shrink with no refund;
+`add_origin` idempotent; rulings m1 (an msig refuses a repeated signing key), m5 (the node refuses `add_key_native` for
+the executor), m6 (a LogicSig- or msig-rekeyed address can add keys natively but not remove: NEAR parity, a known
+limit), m8 (one `open` event). Status: BUILT (`70d34e8b`, `944ba770`, `9b41463e`).
+**Why.** Keys shared by every token mean one key op, not one per token (unlike NEAR).
+**Cost if wrong.** The account app is a single dependency of every token in the deployment.
+**Source.** near-algorand Task 12 report (choices 1–9), ledger rulings T12.
+
+### NET-ALG-08 — Algorand: apps raise their own opcode budget with relayer-paid inner calls
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-08 · superseded-by: —
+
+**Rule.** Ruling T12-budget (controller 2026-10-28; **deviates** from spec §4.6's top-level-only model): every account
+entry and signature check calls `ensure_budget(cost + 1,000, GroupCredit)`, inner budget calls paid by fee pooling,
+never from an app's account; the relayer's fee per inner call is in the quote. On algod 5.0.5 inner transactions pool
+256 per group, so the ceiling (about 180,000) never binds. Observation (Task 20, recorded by the controller):
+`token.mtx_pay_meta`'s pre-work and the router's tail after its inner pay do not raise their own budget; they pass
+because the node's group carries resource budget calls and one appended bare call per "dynamic cost budget exceeded"
+(NET-ALG-17); contracts unchanged, an `ensure_budget` there is left to the owner (TODO.md). Status: BUILT (`944ba770`;
+node `98ada747`).
+**Why.** A relayer that does not know an app's cost still gets a group that runs; the fee counts each inner call.
+**Cost if wrong.** Higher relayer fees per msig op; a third-party relayer without budget calls is refused by simulate
+on the two paths (no loss).
+**Source.** near-algorand Task 12 report (fix 1), Task 20 report (concern 1, fix 1); ledger rulings T12-budget, T20.
+
+### NET-ALG-09 — Algorand: msig at most 3 members, bound by the argument limit
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-09 · superseded-by: —
+
+**Rule.** `MSIG_MAX_MEMBERS` = 3, measured with a realistic Chrome-shaped `clientDataJSON` (286 B): 3 passkey members
+take 1,823 B of the 2,048 B of arguments, 4 take 2,316 B (controller ruling 2026-10-28, owner may override). Status:
+BUILT (`9b41463e`).
+**Why.** The binding limit is the app-call argument size, not budget; a 134 B `clientDataJSON` would fit 4, but real
+browsers send more.
+**Cost if wrong.** A 4-member passkey msig is unavailable on Algorand (TODO.md: revisit if the args limit rises).
+**Source.** near-algorand Task 12 report (fix 2); `smartcontracts/algorand/runs/2026-10-28-algorand-account-fix2.txt`.
+
+### NET-ALG-10 — Algorand mandate: own app, the owner's funding pay is the open
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-10 · superseded-by: —
+
+**Rule.** Pre-flight ruling 4: the mandate app holds the funded amount as its own token balance under its app address
+and moves it by inner `arc200_transfer`; no new token entry. Task 13 pre-flight (controller 2026-10-28): delegate
+Holder first; one-shot; `payLane(pay_ref)` nonce 0; revoke by owner or delegate, no nonce; permissionless
+`mandate_refund` after revocation or expiry; no pay-meta entry; no-op refused; exact MBR; verify by inner call to the
+account app fixed at creation. Ruling T13-open: one owner signature — the funding `mtx_pay` is the open (`to` = the
+mandate app, `pay_ref` = the mandate id, `extra = sha256(token ‖ id ‖ terms)`); op 13 is dropped on Algorand, NEAR keeps
+it (a recorded cross-family difference). Ruling C1: the owner signs the funding op with `relayer = to` = the mandate app
+address and `mtx_mandate_open(token, op, auth, terms, fund_mbr)` runs it as an inner group; rule 7 refuses it elsewhere
+(`test_funding_only_through_the_open`). Ruling I1: every mandate event carries the token app id. Ruling m3: revoke is not
+a value op (`verify_key`). Ruling parity: a refund of 0 is refused on both families. Choices: state box keyed (token,
+id) with no SCaaS-token check (a fake token reaches only its own mandates); the payee's token box is created at open by
+a 0-amount inner transfer; no owner lane; refund only after expiry or revocation, closes the mandate; pay logs
+`MandatePaymentSettled(token, Ua(id), pay_ref)`. Status: BUILT (`c9a0b197`, `e734340e`, `d7d9d540`).
+**Why.** One signature opens and funds; the app, not the token, holds the mandate.
+**Cost if wrong.** A client builds an Algorand open as the funding pay, a NEAR open as op 13: two code paths.
+**Source.** near-algorand Task 13 report (choices 3–10), review; ledger rulings T13-open, C1, I1, m3, parity.
+
+### NET-ALG-11 — Algorand DEX: stateless and atomic, carried auths
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-11 · superseded-by: —
+
+**Rule.** Pre-flight ruling 3: the DEX app is the caller of the token legs via inner calls from `settle` (CTR-DEX-09
+needs the DEX as caller); "one group" = the relayer's outer group. Task 14 pre-flight and choices (controller
+2026-10-29): inner `mtx_trade` calls inside `settle` (no escrow, pending or refund: NEAR's failed-counter-leg issue does
+not exist here); Order parity (relayer-bound, fill-or-kill, the full `sell_amount` each side), keyed (holder, lane,
+nonce), ARC-4 88 B; `mtx_trade` only when the caller app address == `op.to` == `op.relayer` (no open mode) and takes
+no receiver argument (four inner token calls per settle; a permanent 0-balance DEX box per token, 28,500 µALGO);
+`settle`'s seventh argument `mbr: uint64[4]`; an empty auth = the next `carry(byte[])` call (needed for a 3-member
+passkey msig leg, 2,738 B > 2,048); cancel op 14 / invalidate op 15 via `verify_key`, value legs via `verify`; events
+`Matched(settle_id, token_a, token_b, leg_a, leg_b)` + token `OrderFilled` / `OrderCancelled` / `NoncesInvalidated`;
+the DEX does not re-check what the token checks; update / delete / opt-in refused. Rulings m1 (the carry scan starts
+at `Txn.group_index + 1`), m2 (two carried msig-3 legs pinned 35,000 / 49), n1 (`filled` cannot tell open from
+cancelled: read the `o` box), n2 (the node books `Matched` only from the configured DEX). Status: BUILT (`bddf9110`,
+`a89df505`; router id check `23c8530a`).
+**Why.** Algorand settles both legs synchronously in one call: the EVM shape (README §11 item 1).
+**Cost if wrong.** A passkey-msig leg needs a carry call per leg (group size).
+**Source.** near-algorand Task 14 report (choices 1–12), review; ledger rulings T14.
+
+### NET-ALG-12 — Algorand router: one atomic group, target sent by a keyless executor LogicSig
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-12 · superseded-by: —
+
+**Rule.** Atomicity: an atomic group, no escrow (owner "choose the best option yourself" → controller call); the target
+call is sent by a keyless executor LogicSig, never the lane (controller call, owner "choose yourself"). Task 15
+pre-flight and choices (controller 2026-10-29): group `[MBR → router]? … [MBR → target]? [target, sender = executor]
+[router.relay] [carries…]`; relayer-bound DEX orders through the router are checked against the sender of `relay` at
+`group_index + 1` (router id fixed at DEX creation); the executor approves only an `ApplicationCall` NoOp followed by
+`relay` on its router; the router refuses the `add_key_native` selector and checks exists, NoOp, ≠ router, sender ==
+executor, payee ≠ executor; salt = `op.extra`; `RelayFeePaid` carries the token and target app ids; `RELAY_COST`
+1,000 via `ensure_budget`; a static proof that no approval sets `RekeyTo` / `CloseRemainderTo` / `AssetCloseTo` in an
+inner transaction; a test-only RelayTarget fixture. Ruling m1: the relay-sender rule is on the DEX only; token,
+account and mandate ops via the router need relayer zero (NEAR parity; front-runnable by direct submission, a
+relayer-only grief); the token has no router id though spec §4.1 says so. m3: the OnCompletion NoOp check stays (the
+sole guard if the executor ever had a key). m2: surviving mutants accepted as defence in depth. Status: BUILT
+(`22296ddc`, `23c8530a`).
+**Why.** A failing target, router or pay rejects the whole group: CTR-MTX-16 with no residual.
+**Cost if wrong.** A router id in every app would close the grief (an optional later design, TODO.md).
+**Source.** spec §0, §4.8; near-algorand Task 15 report (choices 1–11), review.
+
+### NET-ALG-13 — Algorand router: creation-time salt keeps the executor off-curve
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-13 · superseded-by: —
+
+**Rule.** Ruling T15-salt (controller 2026-10-29): do not depend on on-curve LogicSigs; the router takes a
+creation-time salt (uint8 < 128) in a global; `executor()` = PREFIX ‖ router id ‖ SUFFIX ‖ `20 01 s` (dead code); the
+deployer picks the lowest off-curve `s` (go-algorand `IsEdwards25519Point`); the executor is built with
+`autosalt=False` (puyapy warns, intended). Status: BUILT (`23c8530a`).
+**Why.** An on-curve executor address could in principle have a private key (a post-quantum DoS risk); off-curve, it
+cannot.
+**Cost if wrong.** The router is no longer fully stateless (spec §4.1 said so); a deploy race can orphan a router
+(NET-ALG-15).
+**Source.** near-algorand Task 15 report (fix 1); ledger ruling T15-salt.
+
+### NET-ALG-14 — Algorand: approval programs reject update and delete
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-14 · superseded-by: —
+
+**Rule.** No admin on the router; no app upgradeable: every approval program rejects `UpdateApplication` and
+`DeleteApplication` (controller call, accepted by the owner); pre-flight ruling 11: the refusal is tested for every app;
+deploy gate and node compare the approval and clear hashes with `artifacts.json`. Status: BUILT (T11–T15, gate
+`8df92966`).
+**Why.** An updatable router would be the bound relayer of every payment signed to it.
+**Cost if wrong.** A fix is a new deployment (all chains are test-only).
+**Source.** spec §0, §4.9, R10.
+
+### NET-ALG-15 — Algorand: resumable gated deploy, pending creates checked, orphan routers recorded
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-15 · superseded-by: —
+
+**Rule.** Task 20 (controller 2026-10-29): order account → relayfee → tokens → mandate → dex; the lowest off-curve
+router salt for the predicted id; every app address funded to its minimum; gate = hashes + account / router links +
+executor + funding; the deployment file after the gate; resumable via a 0600 fsynced git-ignored resume file recording
+each create before it is sent. Rulings on its review: I1 a pending create's parameters (decoded from its signed bytes)
+must match the env before resend or adoption; I2 recovery via the funder's `created-apps`, no block scan (non-archival
+algod); M1 the deployment file atomic and fsynced; M2 `executor.salt_lowest` recorded; M3 gate-only mode refuses a
+token / mandate without `account=`, a dex without `relayfee=`; M4 rebuild once last-round ≥ LastValid; M5 GATE (a)
+asserts reasons; M6 `scripts/e2e.sh` tears the localnet down on any exit. A router landing off its predicted id with an
+on-curve executor is an orphan (128,500 µALGO locked each), recreated up to 3 times; it happened once on the localnet.
+Status: BUILT (`8df92966`, `98ada747`).
+**Why.** Algorand creates are signed by the funder and final, so the resume file guarantees one app per role.
+**Cost if wrong.** A concurrent deploy by the same funder can be refused rather than resolved (N1–N4, TODO.md).
+**Source.** near-algorand Task 20 report (fix 1); ledger rulings T20.
+
+### NET-ALG-16 — Algorand adapter: job fields, ids, quote
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-16 · superseded-by: —
+
+**Rule.** Task 17 implementer choices (recorded, controller 2026-10-29, owner may override): no refund on Algorand ⇒
+`op_consumed` for every job kind; the DEX pair / leg checks are not replicated (atomic settle + exact simulate); the MBR
+parts are signed settle arguments; no escrow; resend term 0; NEAR's lessons on same-token balance, unopened origins
+and failing wrappers covered by the exact-group simulate; router config `params.relayfee_app` (`relay_fee.router`
+refused); `relay_fee.min_microalgo_value`; `relay_fee.targets = { app id = [method sigs] }` by ARC-4 selector (an app
+of the deployment or `add_key_native` is a startup error); network = genesis hash base64, chain key
+`algorand:<b64>`; `params.algod_token_env`; addresses (58-char) or decimal app ids; job fields as algorand.md §8; tx id
+`0x` + hex txid; `log_index` depth first; fee per byte max(min fee, `fee` × the widest signed size); the lane funding
+rule; `key_sets` one record per token. Status: BUILT (`b35de637`, `b872a831`).
+**Why.** One shape with the other adapters; algod simulate is exact, so the node checks only what simulate cannot.
+**Cost if wrong.** A field rename is a client and ERP connector change.
+**Source.** near-algorand Task 17 report (choices 1–16).
+
+### NET-ALG-17 — Algorand adapter: discovery simulate with extra budget, budget calls as simulate reports
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-17 · superseded-by: —
+
+**Rule.** Discovery simulate gets the extra opcode budget the group can still gain (700 × (16 − len)); the exact group
+runs on its own (Task 20 node fix, test `discovery_simulate_has_the_budget_the_group_can_gain`); ruling I4: the exact
+loop appends one bare budget call per "dynamic cost budget exceeded", each distinct by its empty box references, bounded
+by the 16-transaction group, refused when full (spec §4.6); ruling I3: "balance B below min M" naming a lane is
+retried, naming an app is a refusal; first Task 17 fix: msgpack depth 64 (real blocks about 35; 63 ok, 64 refused), no
+measured round time ⇒ retried (Transport). Status: BUILT (`b872a831`, `8df92966`, `98ada747`).
+**Why.** Found on real algod: discovery without the final group's budget calls refused valid UA pay-meta and msig relay
+jobs.
+**Cost if wrong.** A short group is refused, never landed: no loss.
+**Source.** near-algorand Task 17 report (fix 1), Task 20 report (node fix, fix 1 I3 / I4).
+
+### NET-ALG-18 — Algorand adapter: static checks before simulate
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-18 · superseded-by: —
+
+**Rule.** NEAR's Task 16 review lessons applied by parity (ruling, Task 17 pre-flight); first Task 17 fix: the passkey
+origin grammar byte-identical with `account.py` (40 parity rows: NEAR's 31 + 9 Algorand edges, `gen_origin_vectors.py`;
+run on the AVM in Task 20), `terms.payee` and a mandate pay's `op.to` held to the never-pay rule, 120 s margins on the
+payment, target ops, mandate expiry, orders and legs. Status: BUILT (`b35de637`, `b872a831`).
+**Why.** Each check closes a relayer-loss or grief path simulate alone would not.
+**Cost if wrong.** An honest odd-shaped `clientDataJSON` is refused.
+**Source.** near-algorand Task 17 report and review; `smartcontracts/algorand/runs/2026-10-29-algorand-origin-parity-localnet.txt`.
+
+### NET-ALG-19 — Algorand: ed25519 lanes at m/44'/283'/0'/0'/i', no head-of-line
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-19 · superseded-by: —
+
+**Rule.** Lane keys fully hardened (controller call 2026-10-28, spec §11; README's `m/44'/283'/0'/0/i` corrected);
+no account sequence, so no head-of-line; `LastValid` within the op's `valid_until` from the measured round time; lanes
+funded to at least `min-balance`; the breaker keeps spent txids 1 h (`SPENT_KEEP`; deriving it from `MaxTxnLife` ×
+round time is a follow-up). Status: BUILT (`b35de637`).
+**Why.** ed25519 SLIP-10 has no non-hardened derivation.
+**Cost if wrong.** On a chain slower than 3.6 s per round the breaker can miss a fee mined after pruning.
+**Source.** spec §4.5, §11; near-algorand Task 17 report and review.
+
+### NET-ALG-20 — Algorand: native UA kind 0x0018 algorand-address
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-20 · superseded-by: —
+
+**Rule.** Native kind `0x0018 algorand-address` (id = the address public key, member flag false) in `kinds.json` and
+every reproducer (controller call, owner "choose yourself"); signature by the current authority; ruling m7: an
+`algorand-address` msig member pays only if the relayer lists it in `accounts`. Status: BUILT (`824e97af`).
+**Why.** A rekey is readable on chain, so the current authority can be checked, unlike NEAR access keys.
+**Cost if wrong.** A kind renumbering regenerates `kinds.json` and every reproducer.
+**Source.** spec §0, §4.3, §8; near-algorand Task 2 and 12 reports.
+
+### NET-ALG-21 — Algorand: encodings fixed by the vector generator
+- old: — · status: current · owner: no · date: 2026-10-28 · normative: networks/algorand.md#NET-ALG-21 · superseded-by: —
+
+**Rule.** `MetaOp` v1 as an ARC-4 static tuple, digest `sha256` (controller call); generator choices (Task 3,
+controller 2026-10-28, recorded in spec §11): every `u16` length in `call` big-endian, box value widths 32 B, fixed
+placeholder app ids 1001–1003 replaced by the deploying tasks; salt = the payment op's `extra`. Status: BUILT
+(`ed837c6b`, `302a33d7`).
+**Why.** One vector file for the apps, the adapter and the clients.
+**Cost if wrong.** A vector regeneration.
+**Source.** spec §2, §11; near-algorand Task 3 report.
+
+### NET-ALG-22 — Algorand: time checks against Global.latest_timestamp
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-22 · superseded-by: —
+
+**Rule.** Every `valid_until`, expiry and delay is compared with `Global.latest_timestamp` (the previous block's
+time). Status: BUILT (T11–T15).
+**Why.** It is the only chain time an app can read.
+**Cost if wrong.** An op is accepted up to one block past its stated validity.
+**Source.** near-algorand Task 13 report (concern 4).
+
+### NET-ALG-23 — Algorand clients: relay_ref target is the app address
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/algorand.md#NET-ALG-23 · superseded-by: —
+
+**Rule.** Task 18 (controller 2026-10-29): digest = sha256 of the full labelled encoding; `relay_ref` target = the
+target app's address bytes; `buildRelayFee` needs the target app; nonce 0 enforced; the passkey assertion checks as
+NEAR's. An Algorand-side P-256 verify test of `passkeyAssertion` is missing (shared code, NEAR's test covers it).
+Status: BUILT (`3ec86cfe`, `1c7344b4`).
+**Why.** The router's `ref` names the target by its app address (spec §4.8).
+**Cost if wrong.** A client and vector change.
+**Source.** near-algorand Task 18 report and review.
+
+## 37. Clients — signers and clientkeys
 
 ### CLI-SGN-01 — Ephemeral agent session keys (1-8 h)
 - old: req:blockchain.md:session-keys · status: open · owner: yes · date: 2026-10-07 · normative: clients/signers-clientkeys.md#CLI-SGN-01 · superseded-by: —
@@ -5852,7 +6541,7 @@ It said: Seed vault scrypt N=2^15 with PIN; replaced by CLI-SGN-21.
 It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 861.
 
-## 37. Clients — SCaaS app
+## 38. Clients — SCaaS app
 
 ### CLI-APP-01 — One SPA, two halves, one build
 - old: R150 · status: current · owner: no · date: 2026-10-06 · normative: clients/app.md#CLI-APP-01 · superseded-by: —
@@ -6035,7 +6724,7 @@ Change: the app never offers `approve` on a SCaaS token; spenders on outside tok
 **Why.** With an open factory anyone can deploy "USDC".
 **Source.** [history/specs/2026-10-06-scaas-app-design.md](history/specs/2026-10-06-scaas-app-design.md) line 133.
 
-## 38. Integration — ERP
+## 39. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets
 - old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
@@ -6228,7 +6917,7 @@ Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; th
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
 
 <!-- example:odoo -->
-## 39. Integration — example connector
+## 40. Integration — example connector
 
 ### INT-ODOO-01 — Deploy job precedes pay via prerequisite
 - old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
@@ -6338,7 +7027,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 
 <!-- /example -->
 
-## <a id="alias-index"></a>40. Alias index
+## <a id="alias-index"></a>41. Alias index
 
 <!-- BEGIN alias-index (generated by scripts/docs_check.py --write) -->
 | Old id | New id(s) | Status |

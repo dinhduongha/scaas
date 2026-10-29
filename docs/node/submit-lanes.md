@@ -130,6 +130,8 @@ lanes = [0, 1, 2, 3]                            # lanes = [account indexes] per 
 | Stellar | 148 | ed25519 SLIP-10 | `m/44'/148'/i'` | SEP-0005 |
 | Cosmos | 118 | secp256k1 BIP-32 | `m/44'/118'/0'/0/i` | |
 | GRAM | 607 | ed25519 SLIP-10 | `m/44'/607'/i'` | **not** the native GRAM mnemonic (PBKDF2 salt "TON default seed", a protocol constant kept by GRAM); a GRAM wallet imports it through its "BIP-39 /Ledger path" option |
+| NEAR | 397 | ed25519 SLIP-10 | `m/44'/397'/0'/0'/i'` | every level hardened; the lane is the implicit account (64-hex public key), registered on every token at deploy ([NET-NEAR-24](../networks/near.md#NET-NEAR-24)) |
+| Algorand | 283 | ed25519 SLIP-10 | `m/44'/283'/0'/0'/i'` | every level hardened; funded to at least algod's `min-balance` ([NET-ALG-19](../networks/algorand.md#NET-ALG-19)) |
 
 Aptos and Solana lane paths are in [networks/aptos.md](../networks/aptos.md) and
 [networks/solana.md](../networks/solana.md).
@@ -295,7 +297,8 @@ node's own RPC endpoints (no third-party simulation service). EVM: `eth_estimate
 `pending` (gas limit = estimate + 20 %; a contract signer's meta-tx at least 21 000 + 400 k·64/63 + 5 000 for its
 ERC-1271 check; `mtxSettle` raised ×1.5 until an `eth_call` at that gas settles every settlement); non-EVM: `ChainAdapter::build` = build + family simulation (Soroban
 `simulateTransaction`, Sui dry-run/dev-inspect (`sui_dryRun`), Cosmos `tx/simulate`, Aptos simulate, GRAM emulation, Solana
-`simulateTransaction`; per-family details in [networks/](../networks/README.md)). Simulation narrows but cannot rule out
+`simulateTransaction`, NEAR the entry's `*_check` view (no write simulation; gas pinned per job), Algorand algod `simulate`
+(a discovery run, then the exact group); per-family details in [networks/](../networks/README.md)). Simulation narrows but cannot rule out
 a revert: state can change between simulation and inclusion (a race, an allowance spent, a pause switched on, a
 confidential `zetherNonce` used first, or the subject moving its own funds), so the node
 measures post-simulation reverts ([NODE-OPS-06](ops.md#NODE-OPS-06)) and handles lost races as consumption
@@ -376,7 +379,7 @@ what succeeds.** Every included outer tx of ours (mined, reverted, or failed and
 `fee + value_out + deposits`: `fee` = the fee the chain charged, failures included; `value_out` = native value the tx
 moved out of the lane beyond fees, net of excess observed coming back (GRAM forward and attached GRAM, EVM `value`);
 `deposits` = rent or storage the lane funded (Solana account rent, Sui storage net of rebate, Aptos storage fee,
-Soroban rent). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
+Soroban rent, NEAR storage stake attached as deposit, Algorand MBR payments). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
 (`tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>`) for every landed
 terminal status; the three are `outer_tx` cost fields. Status: the EVM path meters every receipt (**BUILT**); the
 generic runner metering every terminal status is **SPECIFIED**. Under attack the hourly budget trips earlier, as
@@ -617,3 +620,11 @@ of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64
 CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,594 at zero calldata;
 an anvil run sends exactly that gas and it settles. A TON relay-fee job tracks the escrow (pending, funded, released or refunded)
 by the router's own events naming the lane, never by absence, and sends `RelayRefund` after the deadline.
+
+NEAR (near-algorand T16–T19): a wrapper job runs the token's `relay_fee_<entry>` (one receipt); a router job is tracked
+through the router's `pending(ref)` while in flight, and the lane sends `relay_timeout` past the deadline. `submit` and
+`relay_timeout` wait for `wait_until = INCLUDED`: a `NONE` send of a stale-nonce transaction is answered as success and
+dropped, so `Rejected` would never come. Fees come from the chain's protocol config at start, never from pins
+([NET-NEAR-22](../networks/near.md#NET-NEAR-22)). Algorand (T17–T20): one atomic group with the exact MBR payments; a lane
+"balance B below min M" is retried (the lane cannot pay), naming an app it is a refusal; a pool error is `reverted`,
+never requeued ([NET-ALG-17](../networks/algorand.md#NET-ALG-17)).

@@ -1,3 +1,17 @@
+## Session 2026-10-29 (near-algorand T16–T21) — resume here
+
+- **`near-algorand`** (worktree `.claude/worktrees/near-algorand`): Tasks 1–21 complete and reviewed; not merged, not
+  pushed (owner's go only). NEAR: contracts, adapter, clients, near-sandbox e2e 10/10
+  (`smartcontracts/near/runs/2026-10-28-near-e2e.txt`). Algorand: apps, adapter, clients, localnet e2e 8/8
+  (`smartcontracts/algorand/runs/2026-10-28-algorand-e2e.txt`), quote = lane decrease for every job kind. Node 426 lib
+  tests + clippy. T21 wrote the docs: `docs/networks/near.md` (NET-NEAR-*), `docs/networks/algorand.md` (NET-ALG-*),
+  decisions.md §35 / §36 (every spec §0 row and every controller call, superseded quote rulings NET-NEAR-80 / -81),
+  README / metatx / accounts / dex / node tables with separate NEAR and Algorand rows.
+- **Next:** Task 22 (gate steps in metatx-split's resumable runner, CI jobs `near` / `algorand`); then the owner's
+  go for merge / push. Follow-ups: TODO.md item "NEAR and Algorand family bring-up". The SCaaS testnet `UARegistry`
+  needs its redeploy at the next reset (kinds `0x0017` / `0x0018`).
+- Ledger: `.claude/worktrees/near-algorand/.superpowers/sdd/2026-10-28-near-algorand/progress.md`.
+
 ## Session 2026-10-28 evening (metatx-split T20 + final review, near-algorand T7 + T8 WIP) — resume here
 
 **State (owner paused 2026-10-28 evening to shut down):** nothing running (agents stopped, no capped jobs).

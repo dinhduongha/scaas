@@ -600,7 +600,7 @@ jettons have no `transferFrom`); events equivalent to `OrderFilled/Matched/Match
 
 <a id="bound-settler"></a>
 <a id="CTR-DEX-09"></a>**CTR-DEX-09** — **Non-EVM settlement is bound to the relayer.** An order carries `relayer`
-(0 = open) and the program checks the submitter. Sui, Aptos and Solana already do; **Cosmos** (`Settle` does not check
+(0 = open) and the program checks the submitter. Sui, Aptos, Solana, NEAR and Algorand already do; **Cosmos** (`Settle` does not check
 `info.sender`, `OrderParams` has no relayer), **Soroban** (`require_auth_for_args((order,))` binds only the order, not
 the counterparty, `maker_fill` or the submitter) and **GRAM** (`receive(Match)` is open) do not, so a mempool observer
 can copy an auth entry, insert its own pair and take the taker's price improvement. Fix: Cosmos adds `relayer` to
@@ -628,6 +628,8 @@ Accepted differences that the adapter, the matcher and clients must know:
 | One `fee_ppm`, no maker/taker split | Solana |
 | Minimum received computed **after** the DEX fee (EVM: `receiveAmount` gross) | Cosmos, GRAM |
 | No on-chain self-trade check (the node still skips them) | Cosmos, Soroban |
+| No partial fills (FOK only); a failed counter-leg closes the maker's order (funds back), so clients bind orders to a relayer by default; no DEX fee | NEAR ([NET-NEAR-16](../networks/near.md#NET-NEAR-16)) |
+| No partial fills (FOK only), both legs atomic in one `settle`; no DEX fee; a passkey-msig leg's auth carried by `carry` | Algorand ([NET-ALG-11](../networks/algorand.md#NET-ALG-11)) |
 | DEX-signed maker/taker orders over allowances or escrow, a separate relayer fee, no 50 % minimum fill | every non-EVM family |
 
 ## 12. Managed markets

@@ -206,7 +206,7 @@ rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` objec
 | Cosmos, GRAM, Hedera ED25519 | the payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
 
 NEAR secp256k1 (kind `0x0108`, raw op digest): the token's `env::ecrecover` takes the recovery id, so the client sends
-`v ∈ {0, 1}` (a wallet's 27 / 28 minus 27; accounts.md §1.6 writes 27 / 28 for the EVM form) ([NET-NEAR-03](../decisions.md#NET-NEAR-03)).
+`v ∈ {0, 1}` (a wallet's 27 / 28 minus 27; accounts.md §1.6 writes 27 / 28 for the EVM form) ([NET-NEAR-03](../networks/near.md#NET-NEAR-03)).
 
 When a family's signed text becomes the readable message of [NET-ALL-23](../networks/README.md#NET-ALL-23), its
 encoder renders the same text and `checkTerms` compares it byte for byte. The rows above check the built `MetaOp`; the

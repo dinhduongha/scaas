@@ -160,6 +160,29 @@ Payload by kind:
   `max_pay_meta_bytes`; TON adds `relay_fee.min_ton_value = { "<master>" = nanoton }`, Solana `min_lamports_value` (first-use lane
   rent). An unparsable `router`, `min_amount` or key is a startup error. A bound-payee fee (not the node's lane) is refused unless
   `relay_bound_payee = true`, then relayed as a sponsored job.
+- *NEAR* ([near.md](../networks/near.md#relayer)). `network` = the genesis hash in base58; `payload` = hex of label ‖ Borsh
+  `MetaOp`, `signature` = hex Borsh(`Auth`); a relay fee adds `op.extra.call`, `op.extra.route` (`wrapper` | `router`); the
+  node sets `target_gas` / `target_deposit` from the target's view. Keys `relay_fee.min_yocto_value = { "<token>" = "<yocto
+  per base unit>" }`, `relay_fee.targets = { "<account>" = ["method", …] }` (strict, per method) and `params.dex`. Every
+  payment, wrapped op, target op, DEX order and leg and mandate expiry must be valid ≥ 120 s ([NET-NEAR-26](../networks/near.md#NET-NEAR-26)).
+  A router job is followed while in flight: past the entry's deadline the relaying lane sends `relay_timeout` (`wait_until
+  = INCLUDED`, retried every 120 s) and the job is reported `reverted` ("refunded", the payer not charged) 3,600 s past the
+  deadline even while anyone's later `relay_timeout` can still refund the entry. The node reads the action fees from
+  `EXPERIMENTAL_protocol_config` at start and refuses to start without them, refuses a chain whose implicit-account
+  transfer costs more than the contracts' `IMPLICIT_TRANSFER_GAS` (11 Tgas, read back from the router's and the DEX's
+  `implicit_transfer_gas()`), and needs an RPC with `max_gas_burnt_view` ≥ 300 Tgas ([NET-NEAR-21](../networks/near.md#NET-NEAR-21),
+  [NET-NEAR-22](../networks/near.md#NET-NEAR-22)). Quote = prepaid gas × the node's gas price + deposits (+ one
+  `relay_timeout` for a router job, [NET-NEAR-23](../networks/near.md#NET-NEAR-23)). The adapter logs a subject's key set
+  per token for key-op jobs.
+- *Algorand* ([algorand.md](../networks/algorand.md#relayer)). `network` = the genesis hash in base64; `payload` = hex of
+  label ‖ ARC-4 `MetaOp`, `signature` = hex of the entry's `auth`; a relay fee adds `op.extra.call` and the target's
+  `accounts`, `apps`, `boxes`, `carries` (other keys refused). Keys `params.account_app` (required), `mandate_app`,
+  `dex_app`, `relayfee_app` (`relay_fee.router` is refused with a pointer to it), `algod_token_env`,
+  `relay_fee.min_microalgo_value = { "<token app id>" = µALGO }` and `relay_fee.targets = { "<app id>" = ["method(args)ret",
+  …] }` (ARC-4 selectors). The check is algod `simulate`: a discovery run with the extra opcode budget the group can still
+  gain, then the exact group on its own budget, one bare budget call appended per "dynamic cost budget exceeded" up to 16
+  transactions ([NET-ALG-17](../networks/algorand.md#NET-ALG-17)). Quote = the group's fee + its exact MBR payments, no
+  resend term; a refused group costs nothing. There is no refund, so `op_consumed` answers for every job kind.
 - *Job errors:* `CALL_TARGET_REFUSED` (not the configured router), `TOKEN_NOT_SERVED`, `RELAY_FEE_SHAPE` (ref, lane, nonce, relayer,
   fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere), `PAYEE_REFUSED` (EVM: a `MetaTransfer` to the
   relay-fee router or its executor), `PAY_META_TOO_LONG` (EVM: `mtxPayMeta`'s `meta` above `max_pay_meta_bytes`), `BAD_PAYLOAD`; TON also
