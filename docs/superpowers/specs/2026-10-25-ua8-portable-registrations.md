@@ -1,6 +1,6 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
-**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**; **PQ verification: on chain on EVM, added for Cosmos / Soroban / Sui (owner 2026-10-29), proposed additions NEAR `mldsa65` (host function) and Algorand `fndsa512` (after AVM v14), relayer-checked elsewhere (P11)**. Nothing is built. Queued **after plan 5h,
+**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**; **PQ verification: on chain on EVM, added for Cosmos / Soroban / Sui (owner 2026-10-29), NEAR `mldsa65` (host function) and Algorand `fndsa512` (after AVM v14) added by the owner the same day, relayer-checked elsewhere (P11)**. Nothing is built. Queued **after plan 5h,
 before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P9) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
@@ -207,11 +207,11 @@ before the plan, these move fast):
 | Family | What exists for PQ signatures (contract-callable) | Fit with our kinds | UA-8 rule |
 |---|---|---|---|
 | EVM, Hedera | our verifiers (`UAMldsaVerifier`, `UAFndsaVerifier`, `UASlhdsaVerifier`); EIP-8051 / -8052 / -8355 still drafts | all PQ kinds | **(a)** on chain, P1–P9 |
-| NEAR | **host function `ml_dsa_verify`** (nearcore 2.14.0, protocol 88): ML-DSA-65, empty context, message as-is, ≈ 0.54 Tgas | `mldsa65` exactly; others pure Wasm only | **(b), proposed addition**: `mldsa65` on chain through the host function in the NEAR `ua-registry`; other PQ kinds relayer-checked (or a pure-Wasm spike) |
+| NEAR | **host function `ml_dsa_verify`** (nearcore 2.14.0, protocol 88): ML-DSA-65, empty context, message as-is, ≈ 0.54 Tgas | `mldsa65` exactly; others pure Wasm only | **(b) (owner 2026-10-29)**: `mldsa65` on chain through the host function in the NEAR `ua-registry`; other PQ kinds relayer-checked (or a pure-Wasm spike) |
 | Soroban | **CAP-0087** `verify_sig_ml_dsa_{44,65,87}` (Implemented, Protocol 30, not on mainnet yet); pure-Rust ML-DSA measured at 51 M / 77.5 M instructions (third party, testnet) | `mldsa44`, `mldsa65` exactly; `fndsa512` / `slhdsa128s` pure only | **(b)**: the host functions once Protocol 30 is live, pure Rust until then (spike against the network's budget) |
 | Cosmos | none (SDK 0.55 `ml_dsa_65` is for account / consensus keys only) | all four as pure Rust → Wasm (unmeasured) | **(b)**: our Wasm verifier in `ua-registry`, gated by a spike |
 | Sui | none callable from Move; ML-DSA-65 native accounts on devnet (mainnet Q1 2027); SLH-DSA-SHA2-128s Move vaults announced, code not published | `slhdsa128s` via Mysten's vault code; pure-Move ML-DSA / Falcon judged infeasible | **(b)**: `slhdsa128s` when Mysten publishes the Move code (or our own pure-Move spike), a Move ML-DSA function when Sui ships one; relayer-checked meanwhile |
-| Algorand | **opcode `falcon_verify`** (AVM v12+): deterministic Falcon-1024 only; AVM v14 (go-algorand master, unreleased) adds deterministic Falcon-512 | today none of ours; `fndsa512` after AVM v14 if the client signs deterministically (fixed salt; needs a test vector that the deterministic signature verifies under our standard verifiers) | **(b), proposed addition**: `fndsa512` on chain in the `account` app once AVM v14 is on mainnet; relayer-checked until then; a separate `fndsa1024-det` kind is not proposed |
+| Algorand | **opcode `falcon_verify`** (AVM v12+): deterministic Falcon-1024 only; AVM v14 (go-algorand master, unreleased) adds deterministic Falcon-512 | today none of ours; `fndsa512` after AVM v14 if the client signs deterministically (fixed salt; needs a test vector that the deterministic signature verifies under our standard verifiers) | **(b) (owner 2026-10-29)**: `fndsa512` on chain in the `account` app once AVM v14 is on mainnet; relayer-checked until then; a separate `fndsa1024-det` kind is not proposed |
 | Aptos | none callable from Move; AIP-137 (proposed) adds SLH-DSA-SHA2-128s account signatures | `slhdsa128s` pure Move plausible (estimate) | relayer-checked |
 | Solana | none; SIMD-0416 proposes a Falcon-512 verify syscall (not activated) | `fndsa512` if its encoding matches | relayer-checked; revisit when SIMD-0416 activates |
 | TON | nothing found; no registry yet (P10) | — | after its registry design |
@@ -272,4 +272,7 @@ keep their `checked` value (re-checking on chain is a later, optional call).
    events); the node's off-chain verifier for every kind (reuse `ua-rs` / the clients' verifiers); client re-check
    before use. Spikes first for Cosmos (CosmWasm gas), Soroban (CPU / memory budget) and Sui (Move computation budget,
    or Sui's own verifier when published): each a pass / fail gate like the NEAR P-256 spike; a family that fails its
-   spike stays relayer-checked.
+   spike stays relayer-checked. NEAR: `mldsa65` through `ml_dsa_verify` in the `ua-registry` (sandbox protocol 88 already
+   has it). Algorand: `fndsa512` in the `account` app once AVM v14 is on mainnet — first a test vector showing that a
+   deterministic Falcon-512 signature (fixed salt) verifies under our standard `UAFndsaVerifier` and the off-chain
+   verifiers, and the client signing deterministically for this kind.

@@ -53,7 +53,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   5. UA-8 portable UA registrations (plan from the short design; scope every family, owner 2026-10-29, design P10:
      EVM → Cosmos / Soroban / Sui / Aptos / Solana → Algorand (`account` app gains the writes) → NEAR (new
      `ua-registry` contract) → TON registry design; Algorand and NEAR are separate tasks; PQ verification P11: on chain on
-     EVM, added for Cosmos / Soroban / Sui after spikes, relayer-checked mode elsewhere).
+     EVM; (b) Cosmos / Soroban / Sui after spikes, NEAR `mldsa65` (host function `ml_dsa_verify`), Algorand `fndsa512`
+     (after AVM v14, deterministic signing; owner 2026-10-29); relayer-checked mode elsewhere).
   6. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) → Task 14 (wasm32 limb path).
   7. Token-family rename → P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel with P6
      (spec only, no core code): the governance matrix for factory-made contracts (§0).
