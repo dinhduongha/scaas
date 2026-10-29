@@ -5869,6 +5869,54 @@ P-256 verify test; router / executor / `add_key_native` refusals stay node-side.
 **Cost if wrong.** A key left on one token keeps authority there until removed.
 **Source.** near-algorand Task 18 report and review.
 
+### NET-NEAR-30 — NEAR DEX: a router-paid settle never releases the fee for a no-op
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-30 · superseded-by: —
+
+**Rule.** Final review ruling 1 (controller call 2026-10-29, owner may override): `settle` refuses (panics, so a router
+refunds the payer) (a) a leg deposit share below `LEG_STORAGE_MAX_BYTES` × the byte cost — 2,200 B, the worst case
+(a lazily opened 12-member msig record holding 8 origins of 128 B 1,591 B + the order record 147 B + the DEX's and the
+receiver's registrations 2 × 125 B) measured at 1,988 B and pinned +10 % — and (b) a submit within `SETTLE_MARGIN_S` =
+60 s of the earliest order expiry or leg op `valid_until` (both are refused at the token after them). Each token
+returns its leg's excess to the transaction signer; the node attaches entry + 2 yocto + 2 × max(the larger leg, the
+pin). Status: BUILT (`3ab2c3e3`).
+**Why.** `target_deposit` is relayer-chosen and outside `ref`, and the router releases the fee on the settle receipt's
+own success: any relayer could relay a settle whose legs both return `false` (or land after expiry) and collect the
+open-mode fee for a no-op (owner rule "no fee for a no-op", CTR-MTX-16).
+**Cost if wrong.** An honest settle attaches ≈ 0.044 NEAR more (refunded to the lane); a leg larger than the pin
+(only if the token's caps rise) would be refused until the pin is raised.
+**Source.** near-algorand final review part 1 I1; `smartcontracts/near/runs/2026-10-29-near-final-fix-red.txt`,
+`…/2026-10-29-near-final-fix.txt`.
+
+### NET-NEAR-31 — NEAR DEX: relayer binding (CTR-DEX-09) on the router path via the transaction signer
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-31 · superseded-by: —
+
+**Rule.** Final review ruling 2 (controller call 2026-10-29, owner may override): `Dex::new(executor)` fixes the
+router's executor; an order bound to relayer R is satisfied when the predecessor is R, or when the predecessor is that
+executor and `env::signer_account_id()` is R (R's own relay transaction). The node relays settles whose orders are
+open, bound to its own lane or bound to the executor, and refuses to start when the DEX's `executor()` is not the
+router's. near.md and dex.md state the rule (the old "router ops need `relayer = None`" now applies to token ops only).
+Status: BUILT (`3ab2c3e3`).
+**Why.** On the only paid path the predecessor is the shared keyless executor, so binding to it bound to anyone: an
+observer could copy a taker's leg, pair it with its own counter-order and take the price improvement (the CTR-DEX-09
+threat), and T8-I1 griefing came back.
+**Cost if wrong.** A lane-bound order cannot be relayed by any other lane (intended); a relay through a contract that
+is not the DEX's executor fails; the signer check trusts the executor to call the DEX only from a router relay.
+**Source.** near-algorand final review part 1 I2; `smartcontracts/near/runs/2026-10-29-near-final-fix.txt`.
+
+### NET-NEAR-32 — NEAR node: never pay a keyless SCaaS account, on every payee a job carries
+- old: — · status: current · owner: no · date: 2026-10-29 · normative: networks/near.md#NET-NEAR-32 · superseded-by: —
+
+**Rule.** Final review ruling 3 (controller call 2026-10-29, owner may override; one rule with Algorand's adapter):
+the node refuses a job when any payee it carries is a configured token, the router, its executor or the DEX — the job's
+payment outside that payment's own open mode, a router target op's `to` on `mtx_pay` / `mtx_pay_meta` /
+`mtx_transfer` / `mtx_execute_transfer` / `mtx_mandate_pay`, and the `terms.payee` of a wrapped or routed
+`mtx_mandate_open`. The token contract is not changed: it knows neither the router nor the executor (spec row 12, the
+token refuses only itself), so the rule cannot be enforced there. Status: BUILT (`3ab2c3e3`).
+**Why.** Funds paid to a keyless SCaaS account are stranded for good, and the executor's balance is public (any relay
+forwards `ft_transfer` as its predecessor).
+**Cost if wrong.** A client paying one of these accounts on purpose is refused (none should).
+**Source.** near-algorand final review part 3 I1, part 1 m5; `smartcontracts/near/runs/2026-10-29-near-final-fix-node-red.txt`.
+
 ### NET-NEAR-80 — NEAR quote counted implicit-lane receipts
 - old: — · status: superseded · owner: no · date: 2026-10-29 · normative: — · superseded-by: NET-NEAR-23
 

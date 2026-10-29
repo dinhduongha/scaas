@@ -412,7 +412,8 @@ passkey payer 22,294 / 31, msig-3 + msig-3 32,403 / 45 (pin 35,000 / 47).
 - **Third-party targets** are operator-vouched per method; their ARC-4 reference-type arguments are not covered by
   `ref`; assets, holdings and locals reported unnamed are refused.
 - A replayed passkey assertion can lazily open a record pinned to its origin (a recoverable grief). The contract's
-  passkey grammar accepts the tail `,"crossOrigin":false,}` edge as the node does. puyapy 5.10.1 drops events from
+  passkey grammar refuses the tail `,"crossOrigin":false,}` edge, as the node does (NEAR's `origin_of` accepts it;
+  pinned by `vectors/webauthn-origin.json` row `empty_member_list_tail`). puyapy 5.10.1 drops events from
   ARC-56 when the emitting subroutine is called as a function argument. Event discovery on a busy chain needs an
   indexer feed. No public-network deployment exists.
 
@@ -452,5 +453,5 @@ executor program = PREFIX ‖ router app id ‖ SUFFIX ‖ `20 01 s` (an `intcbl
 (uint8 < 128) at creation and derives `executor()` from it; the deployer picks the lowest `s` whose address is not an
 ed25519 point (go-algorand `IsEdwards25519Point`), so no private key can exist for the executor even in principle.
 Unsalted, 9 of router ids 1000–1019 were on-curve (`smartcontracts/algorand/runs/2026-10-28-algorand-limits.txt`); the
-lowest-salt search is `exec_salt` (`smartcontracts/algorand/tests/conftest.py:360`) and `deploy.py`. The
+lowest-salt search is `exec_salt` (`smartcontracts/algorand/tests/conftest.py:362`) and `deploy.py`. The
 router is no longer fully stateless (one global). BUILT.

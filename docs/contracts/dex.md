@@ -628,7 +628,7 @@ Accepted differences that the adapter, the matcher and clients must know:
 | One `fee_ppm`, no maker/taker split | Solana |
 | Minimum received computed **after** the DEX fee (EVM: `receiveAmount` gross) | Cosmos, GRAM |
 | No on-chain self-trade check (the node still skips them) | Cosmos, Soroban |
-| No partial fills (FOK only); a failed counter-leg closes the maker's order (funds back), so clients bind orders to a relayer by default; no DEX fee | NEAR ([NET-NEAR-16](../networks/near.md#NET-NEAR-16)) |
+| No partial fills (FOK only); a failed counter-leg closes the maker's order (funds back), so clients bind orders to a relayer by default (through the router: the bound lane's own relay, the DEX checks the signer); no DEX fee | NEAR ([NET-NEAR-16](../networks/near.md#NET-NEAR-16)) |
 | No partial fills (FOK only), both legs atomic in one `settle`; no DEX fee; a passkey-msig leg's auth carried by `carry` | Algorand ([NET-ALG-11](../networks/algorand.md#NET-ALG-11)) |
 | DEX-signed maker/taker orders over allowances or escrow, a separate relayer fee, no 50 % minimum fill | every non-EVM family |
 

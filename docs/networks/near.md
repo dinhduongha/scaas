@@ -267,13 +267,18 @@ deadline the job is reported reverted to free the lane. Price key `params.relay_
 <a id="NET-NEAR-26"></a>**NET-NEAR-26** — **Relay-fee jobs are checked against every known relayer-loss path before
 the call.** Fee shape (ref from the call bytes, lane, nonce 0, relayer = the marker, payee ≠ executor); router target ∈
 the allowlist above, token targets through `<method>_check` with the executor as caller; deposit floor = entry storage
-+ 2 yocto + 2 × the larger leg, a token target's deposit == its `storage_needed`; a same-token value target needs
++ 2 yocto + 2 × max(the larger leg, the DEX's 2,200 B worst-case leg pin, [NET-NEAR-30](#NET-NEAR-30)), a token
+target's deposit == its `storage_needed`; a same-token value target needs
 balance ≥ amount + fee; DEX targets: the node rebuilds the DEX's pair check and refuses when `pending(settle_id)` or
 `leg_settle(digest)` already holds a leg; `RELAY_EXPIRY_MARGIN_S` = 120 on the payment, the wrapped op, the target op,
 DEX orders and legs and `MandateTerms.expiry` (clients sign longer); an unopened subject's payment passkey origins must
 be among those the entry opens it with; the node parses a passkey origin byte for byte as the contract's
 `common/src/webauthn.rs` `origin_of` (31 parity rows in `vectors/webauthn-origin.json`) and refuses what it would not
-parse. `op_consumed` is never asked for a router job (a refunded hold leaves the lane unused). BUILT.
+parse. `op_consumed` is never asked for a router job (the escrow decides the outcome; a refunded hold still spends the
+payment lane, so the payer re-signs with a new salt). Never-pay rule (final review node I1, as Algorand): a configured
+token, the router, its executor and the DEX are never the payee of anything the job carries — its payment outside that
+payment's own open mode, a router target op's `to` (value entries, mandate pay), a wrapped or routed mandate's
+`terms.payee` ([NET-NEAR-32](#NET-NEAR-32)). BUILT.
 
 <a id="NET-NEAR-27"></a>**NET-NEAR-27** — **Gas is pinned per job, from the contracts' measured figures.** Node
 constants (Tgas): `GAS_JOB_BASE` 21 (10 + one `IMPLICIT_TRANSFER_GAS`), + 21 per passkey signature (20.005 × 1.05),
@@ -325,7 +330,8 @@ side); `ft_mint` / `ft_burn` are not rows. `payment_meta` and `relay_fee_paid` e
 configured token with the same `pay_ref` (a `relay_fee_paid` from an unconfigured token proves nothing: it is
 forgeable). DEX trades are booked from the token transfer events and the DEX's `matched` (emitted before the payouts).
 Scope: only transactions sent directly to a configured token, router or DEX are read (one RPC per block, per chunk and
-per watched transaction).
+per watched transaction); a range holding a non-final transaction to one of them is retried as a whole, so one such
+transaction stalls the chain's feed ([limitations](#limitations), accepted risk until fixed).
 
 ## 10. Mandate
 
@@ -343,19 +349,41 @@ pay-meta entry; pay and revoke sign `extra = sha256([])`. Measured: open 3.918, 
 ## <a id="dex"></a>11. DEX
 
 <a id="NET-NEAR-16"></a>**NET-NEAR-16** — **The NEAR DEX is an escrow, relayer-bound and fill-or-kill.** The relayer lane
-calls `dex.settle(order_a, auth_a, order_b, auth_b)`; each order's `relayer` is None or the predecessor
-([CTR-DEX-09](../contracts/dex.md#CTR-DEX-09)); the DEX calls `token_a.mtx_trade` and `token_b.mtx_trade` (leg op 1,
+calls `dex.settle(order_a, auth_a, order_b, auth_b)`; each order's `relayer` is None, the predecessor, or — through
+the router's executor (fixed in `Dex::new(executor)`) — the transaction signer, i.e. the bound lane's own relay
+([CTR-DEX-09](../contracts/dex.md#CTR-DEX-09), [NET-NEAR-31](#NET-NEAR-31)); the DEX calls `token_a.mtx_trade` and `token_b.mtx_trade` (leg op 1,
 `relayer = to = dex`, `extra = sha256(Borsh(Order))`, a fourth argument `receiver: Holder` registers the payout receiver
 and cannot redirect it); each leg moves into the escrow, the join callback pays both out when both arrived, else refunds
 the one that did; `refund_expired` (permissionless, after expiry) covers a lost callback. Orders are keyed (holder,
 lane, nonce), any nonce ≥ `min_nonce`, each closes once; one settle per leg digest; `settle_id = sha256(digest(op_a) ‖
 digest(op_b))`. A failed counter-leg **closes** the maker's order (its funds come back); clients therefore bind orders
-to a relayer by default (`Order.relayer = Some`). The DEX derives each leg's static gas from its auth (`leg_gas` = 17
+to a relayer by default (`Order.relayer = Some(lane)`): only that lane settles them, directly or through the router in
+its own relay transaction. `settle` refuses a leg deposit share below `LEG_STORAGE_MAX_BYTES` (2,200 B; the worst
+case, a lazily opened 12-member msig with 8 origins of 128 B, measures 1,988 B) and a submit within `SETTLE_MARGIN_S`
+(60 s) of the earliest order expiry or leg op `valid_until`, so no submitter can make a settle a no-op whose router fee
+is released ([NET-NEAR-30](#NET-NEAR-30)). The DEX derives each leg's static gas from its auth (`leg_gas` = 17
 Tgas + 25 per passkey signature + 1 per ed25519 / secp256k1) and refuses `settle` unless prepaid ≥ 9 + 18 +
 `leg_gas(a)` + `leg_gas(b)`; a passkey field above 1 KiB is refused on a leg. Events carry the leg digests
 (`matched`, `match_failed`, `refunded`; token `order_filled`, `order_cancelled`, `nonces_invalidated`). No DEX fee, no
 partial fill. Measured at Task 8: a settle of two passkey legs 59.965 Tgas (`smartcontracts/near/runs/2026-10-28-near-dex.txt`),
 an ed25519 settle 19.896 (`…/2026-10-28-near-dex-fix2.txt`). BUILT.
+
+<a id="NET-NEAR-30"></a>**NET-NEAR-30** — **A router-paid settle never releases the fee for a no-op.** `settle`
+refuses (panics, so the router refunds) a leg deposit share below `LEG_STORAGE_MAX_BYTES` × the byte cost (2,200 B:
+worst case 1,988 B measured, `smartcontracts/near/runs/2026-10-29-near-final-fix.txt`) and a submit within
+`SETTLE_MARGIN_S` = 60 s of `min(order expiries, leg op valid_until)`; each token returns its leg's excess to the
+signer, and the node attaches entry + 2 + 2 × max(the larger leg, the pin). BUILT.
+
+<a id="NET-NEAR-31"></a>**NET-NEAR-31** — **CTR-DEX-09 holds on the paid path.** `Dex::new(executor)` fixes the
+router's executor; an order bound to lane R passes when the predecessor is R, or when the predecessor is that executor
+and the transaction signer is R (the lane whose `relay` carries the settle). The node relays orders that are open, bound
+to its own lane or bound to the executor, and refuses to start when the DEX's `executor()` is not the router's. BUILT.
+
+<a id="NET-NEAR-32"></a>**NET-NEAR-32** — **Never pay a keyless SCaaS account.** The node refuses a job when any payee
+it carries is a configured token, the router, its executor or the DEX: the payment (outside its own open mode), a
+router target op's `to` on `mtx_pay` / `mtx_pay_meta` / `mtx_transfer` / `mtx_execute_transfer` / `mtx_mandate_pay`, and
+a wrapped or routed `mtx_mandate_open`'s `terms.payee`. The token itself refuses only itself: it does not know the
+router or executor ids (spec row 12), so the rule is node-side. BUILT.
 
 ## 12. Deploy
 
@@ -430,11 +458,23 @@ Contract-test figures (sandbox): `transfer_to_ua` 2.40 Tgas to an existing UA, 3
 - **Stale sequence after a timeout:** the escrow's `relay_timeout` is sent from the relaying lane while the job holds
   it, so the next job's first sequence read may be stale: at worst one `Rejected` requeue.
 - **Executor balances are public:** any relay can forward `ft_transfer` with the executor as predecessor, so never send
-  tokens to the executor (a wrapper's open-mode fee routed via the executor included). Relayer-bound ops through the
-  router need `relayer = None` (the executor is the predecessor); a second payer for the same call and salt waits
+  tokens to the executor (a wrapper's open-mode fee routed via the executor included; the node refuses every payee
+  that is the executor, [NET-NEAR-32](#NET-NEAR-32)). Relayer-bound token ops through the router need `relayer = None`
+  (the executor is the predecessor); a DEX order bound to a lane settles through the router in that lane's own relay
+  (the DEX checks the signer); a second payer for the same call and salt waits
   until the first settles (pending is keyed by `ref`).
 - **Events:** NEP-366 delegate actions and third-party contracts calling a token are not indexed; a busy chain needs
   NEAR Lake or an indexer feed.
+- **Indexer stall (accepted risk until fixed, final review node I2):** one non-final transaction sent to a watched
+  contract (a token, the router or the DEX) stops NEAR indexing for the whole chain: `events()` refuses the range and
+  the next poll retries it, so the client cursor does not move. A NEP-519 yield keeps a transaction short of `FINAL` for
+  about 200 blocks and can yield again, so anyone holding one token unit (`ft_transfer_call` to a yielding receiver) or
+  calling the router's `relay` with a yielding target stalls the event feed cheaply (≈ 0.0005 NEAR per resend). No funds
+  are lost and relaying is not affected (job status is read per transaction). The fix (index each watched receipt by its
+  own final outcome, park non-final transactions) is a TODO item.
+- **A router-bound payment can be burnt:** a refunded hold spends the payment lane, so any relayer can void a router
+  payment op by relaying it with a `target_gas` the target cannot run on; the payer is refunded and re-signs with a new
+  salt; no funds move.
 - The whole-balance transfer action cannot be caught by the source scan; every NEAR change is reviewed for it. The test
   fixtures build into `target/near`, so deploys name their crates explicitly. The node's passkey origin parser must
   follow every change to `origin_of` (vectors guard it; a non-UTF-8 origin is covered by reasoning only).

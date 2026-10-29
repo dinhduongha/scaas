@@ -173,7 +173,9 @@ Payload by kind:
   `implicit_transfer_gas()`), and needs an RPC with `max_gas_burnt_view` ≥ 300 Tgas ([NET-NEAR-21](../networks/near.md#NET-NEAR-21),
   [NET-NEAR-22](../networks/near.md#NET-NEAR-22)). Quote = prepaid gas × the node's gas price + deposits (+ one
   `relay_timeout` for a router job, [NET-NEAR-23](../networks/near.md#NET-NEAR-23)). The adapter logs a subject's key set
-  per token for key-op jobs.
+  per token for key-op jobs. Events: one non-final transaction to a watched token, router or DEX stops the chain's
+  NEAR event feed until it is final (a NEP-519 yield holds it ≈ 200 blocks, re-yieldable): an accepted risk until the
+  indexer fix ([near.md limitations](../networks/near.md#limitations)).
 - *Algorand* ([algorand.md](../networks/algorand.md#relayer)). `network` = the genesis hash in base64; `payload` = hex of
   label ‖ ARC-4 `MetaOp`, `signature` = hex of the entry's `auth`; a relay fee adds `op.extra.call` and the target's
   `accounts`, `apps`, `boxes`, `carries` (other keys refused). Keys `params.account_app` (required), `mandate_app`,
