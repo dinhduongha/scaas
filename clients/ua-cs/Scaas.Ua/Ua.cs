@@ -215,6 +215,7 @@ public static partial class UA
     static byte[] ProofHashOf(byte[]? pop, byte[]? hash)
     {
         var proof = pop is { Length: > 0 } ? Keccak256(pop) : null;
+        if (hash is { Length: 0 }) hash = null; // absent
         if (hash is { Length: not 32 }) throw new UAException("UAPqzPopHash", "hash must be 32 bytes");
         var given = hash is not null && hash.Any(b => b != 0) ? hash : null;
         if (proof is not null && given is not null && !proof.AsSpan().SequenceEqual(given)) throw new UAException("UAPqzPopHash", "mismatch");
@@ -313,7 +314,18 @@ public static partial class UA
             Keccak256(Utf8(d.Generation.ToString(CultureInfo.InvariantCulture))), Word(d.ChainId), AddressWord(d.Registry),
             Sized(d.ChainUid, 32, "chainUid"));
 
-    /// <summary>EIP-712 digest of <c>UAAuth(ua, purpose, digest)</c>: what native signers behind the registry sign.</summary>
+    /// <summary>EIP-191 <c>personal_sign</c> of a 32-byte digest. What a code-less native (EOA) <c>msig</c> member signs over the
+    /// <c>MemberDigest</c> of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7).</summary>
+    public static byte[] PersonalSignDigest(byte[] digest) =>
+        Keccak256(Utf8("\x19Ethereum Signed Message:\n32"), Sized(digest, 32, "digest"));
+
+    /// <summary>The portable purposes (POP_V2, KEM, PQZ_KEY): the only ones a code-less native msig member signs by <c>personal_sign</c>.</summary>
+    public static bool IsPortablePurpose(byte[] tag) =>
+        new[] { PopV2Tag, PurposeTag("kem"), PurposeTag("pqz-key") }.Any(t => t.AsSpan().SequenceEqual(tag));
+
+    /// <summary>EIP-712 digest of <c>UAAuth(ua, purpose, digest)</c>: what native signers behind the registry sign, except that
+    /// under the three portable purposes (<see cref="IsPortablePurpose"/>) a code-less native msig member signs
+    /// <see cref="PersonalSignDigest"/> of the <see cref="MemberDigest"/> instead (CTR-MTX-14, ruling C7).</summary>
     public static byte[] UAAuthDigest(Domain d, byte[] ua, byte[] purpose, byte[] digest) =>
         Keccak256(new byte[] { 0x19, 0x01 }, UAAuthDomainSeparator(d),
             Keccak256(Keccak256(Utf8(UAAuthType)), Sized(ua, 32, "ua"), Sized(purpose, 32, "purposeTag"), Sized(digest, 32, "digest")));

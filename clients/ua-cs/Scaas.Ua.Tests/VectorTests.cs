@@ -274,6 +274,7 @@ public class VectorTests
         Assert.Equal(PqzKeyDigestHex(p, "PQZ_KEY_RECORD_TAG"), Hx(UA.PqzKeyRecordTag));
         var regs = p.GetProperty("registrations").EnumerateArray().ToList();
         var n = 0;
+        var msigRows = 0;
         foreach (var r in p.GetProperty("pqzKeyRecords").EnumerateArray())
         {
             byte[] ua = B(r.GetProperty("ua")), key = B(r.GetProperty("pqzKey")), hash = B(r.GetProperty("pqzPopHash"));
@@ -292,12 +293,30 @@ public class VectorTests
                 Assert.Equal(Hx(UA.PqzKeyDigest(ua, g.PqzKeyHash)), Hx(g.PqzKeyDigest));
                 Assert.Equal(Hx(UA.PqzKeyRecordDigest(g.PqzKeyDigest, g.PqzPopHash)), Hx(g.RecordDigest));
                 Assert.Equal(kind == 0x0120, g.MemberDigest is not null);
+                Assert.Equal(r.TryGetProperty("memberDigest", out var md) ? md.GetString() : "", g.MemberDigest is null ? "" : Hx(g.MemberDigest));
+                if (kind == 0x0120) { msigRows++; Assert.Equal(Hx(UA.MemberDigest(ua, g.Message)), Hx(g.MemberDigest!)); }
             }
             // write-once: a key already set refuses
             Assert.Equal("UAPqzKeySet", Assert.Throws<UAException>(() => UA.PqzKeyRecordMessage(kind, ua, kd, key, null, hash, true)).Code);
             n++;
         }
         Assert.Equal(8, n);
+        Assert.Equal(8, msigRows); // 4 msig rows, each run with the proof bytes and hash-only
+    }
+
+    [Fact]
+    public void PersonalSignPortablePurposes()
+    {
+        var p = Load("portable.json");
+        Assert.True(UA.IsPortablePurpose(UA.PopV2Tag) && UA.IsPortablePurpose(UA.PurposeTag("kem")) && UA.IsPortablePurpose(UA.PurposeTag("pqz-key")));
+        Assert.False(UA.IsPortablePurpose(UA.PurposeTag("metatx")) || UA.IsPortablePurpose(UA.PurposeTag("pop")));
+        var r = p.GetProperty("registrations").EnumerateArray().First(x => x.GetProperty("name").GetString() == "msig-pq-native");
+        var md = B(r.GetProperty("memberDigest"));
+        Assert.NotEqual(Hx(md), Hx(UA.PersonalSignDigest(md)));
+        Assert.Equal(Hx(UA.Keccak256(System.Text.Encoding.UTF8.GetBytes("\x19Ethereum Signed Message:\n32"), md)), Hx(UA.PersonalSignDigest(md)));
+        // native-personal-sign-under-metatx: valid personal_sign, but metatx is not a portable purpose (UAAuth there)
+        var n = p.GetProperty("negatives").EnumerateArray().First(x => x.GetProperty("name").GetString() == "native-personal-sign-under-metatx");
+        Assert.False(UA.IsPortablePurpose(B(n.GetProperty("mutation").GetProperty("set").GetProperty("purposeTag"))));
     }
 
     static string PqzKeyDigestHex(JsonElement p, string tag) => p.GetProperty("tags").GetProperty(tag).GetProperty("hash").GetString()!;
@@ -365,6 +384,8 @@ public class VectorTests
         Assert.Equal("UAPqzHolder", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0120, u, [], key, pqzPopHash: proof)).Code);
         // malformed inputs are UAException, not ArgumentException / NullReferenceException
         Assert.Equal("UAPqzPopHash", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], key, pqzPopHash: new byte[31])).Code);
+        // n3: a zero-length proof hash is absent (same as no hash)
+        Assert.Equal(Hx(UA.HolderPopMessage(0x0130, u, []).Message), Hx(UA.HolderPopMessage(0x0130, u, [], null, null, []).Message));
         Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], kem: (1, null!))).Code);
     }
 }

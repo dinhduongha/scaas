@@ -197,6 +197,7 @@ TestCase {
     function test_pqzKeyRecord() {
         const pp = vectors.load("portable.json")
         compare(pp.pqzKeyRecords.length, 8)
+        let msigRows = 0
         for (const r of pp.pqzKeyRecords) {
             const reg = pp.registrations.find(x => x.ua === r.ua)
             const pop = pp.registrations.find(x => x.set === r.set).pqzPop
@@ -210,10 +211,16 @@ TestCase {
                 compare(g.message, r.message, r.name)
                 compare(g.pqzRegMessage, r.pqzRegMessage, r.name)
                 compare(g.memberDigest !== undefined, r.kind === 0x0120, r.name)
+                compare(g.memberDigest ?? "", r.memberDigest ?? "", r.name)
+                if (r.kind === 0x0120) {
+                    compare(g.memberDigest, UaKinds.memberDigest(r.ua, g.message), r.name)
+                    msigRows++
+                }
             }
             UaKinds.pqzKeyRecordMessage(r.kind, r.ua, reg.keyData, r.pqzKey, "0x", r.pqzPopHash, true)
             compare(UaKinds.lastError, "UAPqzKeySet", r.name)
         }
+        compare(msigRows, 8)  // 4 msig rows, each with the proof bytes and hash-only
     }
 
     function test_kemRecord() {
