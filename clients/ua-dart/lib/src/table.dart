@@ -53,7 +53,9 @@ const kinds = <Kind>[
 ];
 
 /// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
-const schemes = <Kind>[Kind(0x0142, 'pqz-mlwe', false, [16384], 'pqz-mlwe')];
+/// The public key lengths of the PQZ parameter sets (PqzSet.PK).
+const pqzKeyLengths = <int>[16384, 18432, 20480, 22528];
+const schemes = <Kind>[Kind(0x0142, 'pqz-mlwe', false, pqzKeyLengths, 'pqz-mlwe')];
 
 const groups = <String>[
   'p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
@@ -62,7 +64,7 @@ const groups = <String>[
 
 const purposes = <String>[
   'pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee', 'vp',
-  'vc-anchor', 'trade',
+  'vc-anchor', 'trade', 'kem', 'pqz-key',
 ];
 
 /// Throws UAKindUnknown. [kind] must be 0..0xffff to match (a wider int is simply unknown).
