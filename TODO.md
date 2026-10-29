@@ -50,6 +50,16 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   3. Follow-ups of the two merged branches: EVM node UA job path (`ua_metatx`), metatx-split e2e owed on a real node
      (with the T19 / T20 devnets where possible), TON passkey relays (P-256 in the node), relay-fee minimum before mainnet.
   4. fs3 Task 12 (final gate + merge) → Task 6 (reproduction package).
+  4b. **UA on non-EVM families — every kind, not only PQ** (owner 2026-10-29; rules NET-ALL-20 / NET-ALL-21,
+     accounts.md "Where the records live"; today only EVM is built, NEAR / Algorand have a lazy-opened `Ua` on the
+     `near-algorand` branch with classical / native / `msig` kinds): per family the UA id space (`webauthn-p256` owner
+     ids per NET-ALL-21, URN display), the registry or lazy open, the UA ledger in the tokens, the mtx entries and
+     account / mandate / DEX paths accepting UA holders, and the kinds the family verifies — classical first
+     (`webauthn-p256`, `ed25519`, `secp256k1`, `msig`, native), then PQ where an on-chain verifier exists (Soroban
+     `mldsa44` / `mldsa65` via CAP-0087, NEAR `mldsa65` via `ml_dsa_verify`, Algorand `fndsa512` after AVM v14). Same
+     family order as UA-8: 1. EVM (done), 2. Soroban, 3. NEAR, 4. Cosmos / Sui / Aptos / Solana, 5. Algorand, 6. TON.
+     Soroban's UA base and UA-8 step 2 go in one round (shared verifier + vectors). Supersedes the 2026-10-19 "Family
+     priority for UA" order (EVM, Cosmos, Sui, Aptos, Solana first; Soroban / NEAR / Algorand assessed later).
   5. UA-8 portable UA registrations, **steps 1–2 only** (owner 2026-10-29): 1. EVM (P1–P9), 2. Soroban (`mldsa44` /
      `mldsa65` via the CAP-0087 host functions, Protocol 30: testnet vote 2026-11-03, mainnet 2026-11-23; local network
      until then). Later plans, in this order: 3. NEAR (new `ua-registry`, `mldsa65` via `ml_dsa_verify`), 4. Cosmos /
@@ -322,7 +332,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   bn254 stays Solidity-only. Controller notes in COMPLETED.md.
 - [ ] **NEAR and Algorand family bring-up — owner 2026-10-27: build right after the metatx split** (own item: family spec → plan → build; contracts, `scaas-node` adapters, clients, devnets, tests), with `mtxPayMeta` / `uaPayMeta` (CTR-MTX-26) and `MtxRelayFee` (CTR-MTX-27) from the start; the long-lived-balance assessment below (NEAR storage staking, Algorand minimum balance / boxes) is part of its family spec.
   Status 2026-10-29 (pause): branch `near-algorand` `8cc5efbc` (41 commits on `main` `f6d5d7d7`, rebased after the metatx-split merge); Tasks 1–15 done and reviewed (contracts: NEAR token / account / mandate / DEX / 13 relay-fee wrappers / escrow router + executor; Algorand token / account / mandate / DEX / router + executor LogicSig); Task 16 (scaas-node NEAR adapter) built + fix rounds 1–3, its round-3 re-review not finished; next T16 re-review → T17 (Algorand adapter) → T18–T22. Merge / push need the owner's go. Ledger `.claude/worktrees/near-algorand/.superpowers/sdd/2026-10-28-near-algorand/progress.md`.
-- [ ] **Family priority for UA and long-lived balances (owner 2026-10-19, late):** first EVM, Cosmos, Sui, Aptos and Solana (balances and records stay in state for good: no TTL, a one-time deposit or fee); then assess each of Soroban, NEAR and Algorand separately — whether balances can be kept long-term there and at what cost (Soroban: TTL / archival and restore fees; NEAR: storage staking by attached deposit, records per token contract; Algorand: minimum balance and box MBR, records in the shared `account` app). The UA F phases on non-EVM follow this order.
+- [ ] **Family priority for UA and long-lived balances (owner 2026-10-19, late; order superseded 2026-10-29 by work order item 4b, the long-term-balance assessment stays):** first EVM, Cosmos, Sui, Aptos and Solana (balances and records stay in state for good: no TTL, a one-time deposit or fee); then assess each of Soroban, NEAR and Algorand separately — whether balances can be kept long-term there and at what cost (Soroban: TTL / archival and restore fees; NEAR: storage staking by attached deposit, records per token contract; Algorand: minimum balance and box MBR, records in the shared `account` app). The UA F phases on non-EVM follow this order.
 - [ ] **`secp256k1` UA kind: EIP-191 `personal_sign` variant (owner 2026-10-19, on-chain review W-J; after P6)**: today the kind 0x0108 verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (residual risk recorded in accounts.md S23). Add a verifier for the `personal_sign` form, new vectors, the six clients.
 - [ ] **ERC-7674 temporary approvals on SCaaS tokens (owner 2026-10-18; after P6)**: `temporaryApprove(spender, value)`
   (EIP-1153 transient allowance, contract callers only) in the token base, read first by `transferFrom`; SCaaS contracts

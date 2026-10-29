@@ -178,16 +178,21 @@ the same bytes on every family, not an EVM feature. Common rules:
   form (P9).
 - `keyHash` uniqueness (P6) per family as today.
 
+**Prerequisite (owner 2026-10-29): UA-8 on a family needs that family's UA base first** — UA ids, the registry (or
+the lazy open), the UA ledger and the kinds the family verifies — which is the separate TODO item "UA on non-EVM
+families" (same family order). Today only EVM has it (`UARegistry`); NEAR and Algorand have a lazy-opened `Ua` holder
+on the `near-algorand` branch (classical, native and `msig` kinds, no PQ); every other family has only the spec.
+
 Where the record lives (controller proposals for the families without a registry; owner may override):
 
 | Family | Today | With UA-8 |
 |---|---|---|
 | EVM, Hedera | `UARegistry` | P1–P9 as written |
-| Cosmos | `ua-registry` CosmWasm contract | the same `register` / `setKemKey` / `storePqzPop` messages |
-| Soroban | persistent entries in the `SmartKeyAccount` factory (`UA(ua)`, `KEY(keyHash)`) | the same entries plus KEM records; TTL extended by the node like other persistent state |
-| Sui | `Registry<T>` (`key_owner` table) | the same functions; KEM records in a table keyed `(ua, version)` |
-| Aptos | registry resource under the package root | the same functions; KEM records in a table keyed `(ua, version)` |
-| Solana | PDAs `["ua", ua]`, `["ukey", keyHash]` | the same instructions; KEM record PDA `["ukem", ua, version]` |
+| Cosmos | **not built**: `ua-registry` CosmWasm contract SPECIFIED (accounts.md, NET-ALL-20); today subject accounts with native / passkey keys, no UA ids | the same `register` / `setKemKey` / `storePqzPop` messages |
+| Soroban | **not built**: persistent entries in the `SmartKeyAccount` factory (`UA(ua)`, `KEY(keyHash)`) SPECIFIED; today passkey subject accounts, no UA ids | the same entries plus KEM records; TTL extended by the node like other persistent state |
+| Sui | **not built**: `Registry<T>` (`key_owner` table) SPECIFIED; today `Account<T>` subject accounts | the same functions; KEM records in a table keyed `(ua, version)` |
+| Aptos | **not built**: registry resource under the package root SPECIFIED; today `Account` subject accounts | the same functions; KEM records in a table keyed `(ua, version)` |
+| Solana | **not built**: PDAs `["ua", ua]`, `["ukey", keyHash]` SPECIFIED; today passkey owners as `sha256("scaas.owner.p256" ‖ pk33)` (NET-ALL-21 changes it) | the same instructions; KEM record PDA `["ukem", ua, version]` |
 | NEAR | **no registry**: each token contract keeps its own subject records (`Holder` → keys, origins, guardian, policy; Aptos `Account` model), a `Ua` opened lazily by its first signed op (id checked against the key data, no PoP), key ops fanned out to every held token | **a new `ua-registry` contract per deployment** holding the portable record and the KEM / PQZ attributes (discovery, chat keys). Tokens keep their per-token key records and the lazy open: a cross-contract read is asynchronous on NEAR, so a token never waits on the registry |
 | Algorand | one `account` app per deployment holds the subject records shared by every token (tokens, mandate and DEX call its `verify` by inner app call), lazily opened, no PoP | the **`account` app gains** `register` (portable PoP), `set_kem_key`, `store_pqz_pop`, the record and KEM boxes; the lazy open stays |
 | TON (GRAM) | **no registry** (documented gap: wallet-bound keys, `set_key` with a key signature) | **a new `ua-registry` contract** (actor messages `Register`, `SetKemKey`, `StorePqzPop`; one child contract per UA if a single contract's state would grow without bound) — needs its own short design before the plan |
