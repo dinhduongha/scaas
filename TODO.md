@@ -40,35 +40,52 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Work order from 2026-10-29 (owner, accepted 2026-10-29; supersedes the older "next" lines below where they
-  conflict):**
+- **Work order (owner 2026-10-29, optimised the same day; supersedes the earlier 2026-10-29 order and the older "next"
+  lines below where they conflict).** Streams run in parallel within the limits (3 agents, 2 `capped` slots); each
+  stream keeps its order:
   1. `near-algorand`: T17 review loop → T18 clients → T19 NEAR devnet / e2e → T20 Algorand devnet / e2e → T21 docs →
      T22 gate + CI → whole-branch review → owner rulings → merge / push on the owner's go.
-  2. DEX (item "DEX: drop the 50 % minimum-fill floor + four matching modes" under "Recorded, not scheduled"): minFill
-     code → EVM contract spec + code (`mtxHybrid` / `Via`, `mtxExchangeBatch`, mode 3 / 4 tests, reference executor,
-     Uniswap fork test) → TradeEngine EVM ∥ non-EVM 1 × N.
-  3. Follow-ups of the two merged branches: EVM node UA job path (`ua_metatx`), metatx-split e2e owed on a real node
-     (with the T19 / T20 devnets where possible), TON passkey relays (P-256 in the node), relay-fee minimum before mainnet.
-  4. fs3 Task 12 (final gate + merge) → Task 6 (reproduction package).
-  4b. **UA on non-EVM families — every kind, not only PQ** (owner 2026-10-29; rules NET-ALL-20 / NET-ALL-21,
-     accounts.md "Where the records live"; today only EVM is built, NEAR / Algorand have a lazy-opened `Ua` on the
-     `near-algorand` branch with classical / native / `msig` kinds): per family the UA id space (`webauthn-p256` owner
-     ids per NET-ALL-21, URN display), the registry or lazy open, the UA ledger in the tokens, the mtx entries and
-     account / mandate / DEX paths accepting UA holders, and the kinds the family verifies — classical first
-     (`webauthn-p256`, `ed25519`, `secp256k1`, `msig`, native), then PQ where an on-chain verifier exists (Soroban
-     `mldsa44` / `mldsa65` via CAP-0087, NEAR `mldsa65` via `ml_dsa_verify`, Algorand `fndsa512` after AVM v14). Same
-     family order as UA-8: 1. EVM (done), 2. Soroban, 3. NEAR, 4. Cosmos / Sui / Aptos / Solana, 5. Algorand, 6. TON.
-     Soroban's UA base and UA-8 step 2 go in one round (shared verifier + vectors). Supersedes the 2026-10-19 "Family
-     priority for UA" order (EVM, Cosmos, Sui, Aptos, Solana first; Soroban / NEAR / Algorand assessed later).
-  5. UA-8 portable UA registrations, **steps 1–2 only** (owner 2026-10-29): 1. EVM (P1–P9), 2. Soroban (`mldsa44` /
-     `mldsa65` via the CAP-0087 host functions, Protocol 30: testnet vote 2026-11-03, mainnet 2026-11-23; local network
-     until then). Later plans, in this order: 3. NEAR (new `ua-registry`, `mldsa65` via `ml_dsa_verify`), 4. Cosmos /
-     Sui / Aptos / Solana, 5. Algorand (`account` app; `fndsa512` once AVM v14 ships), 6. TON (registry design first);
-     relayer-checked mode wherever a kind has no on-chain verifier (design P10 / P11).
-  6. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) → Task 14 (wasm32 limb path).
-  7. Token-family rename → P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel with P6
-     (spec only, no core code): the governance matrix for factory-made contracts (§0).
-  8. Then UA-7 PQ chat sessions; Task 9 calibration whenever the owner gives the go (other heavy sessions stopped).
+  2. Right after the merge, in parallel:
+     - **EVM contracts:** token-family rename first (moved up from step 7, owner 2026-10-29: names only — enum numbers
+       and ABI unchanged — so the new EVM code below is written with the final names).
+     - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`), TON passkey relays (P-256
+       in the node), relay-fee minimum before mainnet.
+     - **pqz-core:** fs3 Task 12 (final gate + merge) → Task 6 (reproduction package); its heavy gate interleaves with
+       the forge runs for the `capped` slots.
+     - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
+       **UA-8 plan** (steps 1–2: EVM + Soroban), the **4b spec for Soroban**, the governance matrix (§0).
+  3. EVM contracts, two parallel tracks (different files, shared forge / size gates):
+     - **DEX, one round:** the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` + `mtxExchangeBatch` + mode 3 /
+       4 tests + reference executor + Uniswap fork test (item "DEX: drop the 50 % minimum-fill floor + four matching
+       modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
+     - **UA-8 step 1 (EVM `UARegistry`):** portable PoP, optional `pqzPop`, KEM keys, relayable writes, `checked =
+       chain`, clients and vectors. Must land before fs3 Task 13 (the SCaaS testnet redeploys the registry once).
+  4. **After 2026-11-03** (Stellar testnet votes Protocol 30): **4b Soroban (UA base) + UA-8 step 2 (Soroban
+     registry)** in one round — shared ML-DSA verifier (CAP-0087 host functions) and vectors, tested on the real
+     testnet.
+  5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
+     (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
+     and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
+  6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N
+     (DEX).
+  7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next 4b / UA-8 plans in the family order
+     NEAR → Cosmos / Sui / Aptos / Solana → Algorand (`fndsa512` once AVM v14 ships) → TON (registry design first).
+  Details of the registration items:
+     - **UA on non-EVM families — every kind, not only PQ** (owner 2026-10-29; rules NET-ALL-20 / NET-ALL-21,
+       accounts.md "Where the records live"; today only EVM is built, NEAR / Algorand have a lazy-opened `Ua` on the
+       `near-algorand` branch with classical / native / `msig` kinds): per family the UA id space (`webauthn-p256` owner
+       ids per NET-ALL-21, URN display), the registry or lazy open, the UA ledger in the tokens, the mtx entries and
+       account / mandate / DEX paths accepting UA holders, and the kinds the family verifies — classical first
+       (`webauthn-p256`, `ed25519`, `secp256k1`, `msig`, native), then PQ where an on-chain verifier exists (Soroban
+       `mldsa44` / `mldsa65` via CAP-0087, NEAR `mldsa65` via `ml_dsa_verify`, Algorand `fndsa512` after AVM v14). Same
+       family order as UA-8: 1. EVM (done), 2. Soroban, 3. NEAR, 4. Cosmos / Sui / Aptos / Solana, 5. Algorand, 6. TON.
+       Soroban's UA base and UA-8 step 2 go in one round (shared verifier + vectors). Supersedes the 2026-10-19 "Family
+       priority for UA" order (EVM, Cosmos, Sui, Aptos, Solana first; Soroban / NEAR / Algorand assessed later).
+     - UA-8 portable UA registrations, **steps 1–2 only** (owner 2026-10-29): 1. EVM (P1–P9), 2. Soroban (`mldsa44` /
+       `mldsa65` via the CAP-0087 host functions, Protocol 30: testnet vote 2026-11-03, mainnet 2026-11-23; local network
+       until then). Later plans, in this order: 3. NEAR (new `ua-registry`, `mldsa65` via `ml_dsa_verify`), 4. Cosmos /
+       Sui / Aptos / Solana, 5. Algorand (`account` app; `fndsa512` once AVM v14 ships), 6. TON (registry design first);
+       relayer-checked mode wherever a kind has no on-chain verifier (design P10 / P11).
 
 - **Now (2026-10-26, owner order):** R0 fix part a **DONE**, merged into `pqz-16k` and pushed (`40366c76`). Part b
   (contracts, node, spec / docs) + its fix round **DONE** on `pqz-r01` `0d22e165` (review Approved with fixes; I-1 owner
