@@ -164,7 +164,7 @@ TestCase {
                 const rec = pp.pqzKeyRecords.find(r => r.name === m.row)
                 const ua = set.ua ?? rec.ua
                 const holder = pp.registrations.find(r => r.ua === ua)
-                UaKinds.pqzKeyRecordMessage(holder.kind, ua, holder.keyData, rec.pqzKey, "0x", set.pqzPopHash ?? rec.pqzPopHash, n.error === "UAPqzKeySet")
+                UaKinds.pqzKeyRecordMessage(holder.kind, ua, holder.keyData, rec.pqzKey, "0x", set.pqzPopHash ?? rec.pqzPopHash, holder.attrs.pqzKey !== "0x")
                 compare(UaKinds.lastError, n.error, n.name)
                 run++
             } else if (n.entry === "setKemKey" && n.name === "kem-record-of-other-ua") {
