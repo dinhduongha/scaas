@@ -151,11 +151,15 @@ impl ChainAdapter for HederaAdapter {
     /// R80: meta-tx ⇒ `mtxNonce(from, batch)` (both structs share the lane); job `call` ⇒ không biết.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Some(m) = work_from_job(job, self.inner.fee_recipient).ok().and_then(|w| w.meta) else { return Ok(None) };
-        Ok(Some(self.inner.lane(0)?.mtx_nonce(m.token, m.from, m.batch).await? > m.nonce))
+        Ok(Some(self.inner.lane(0)?.subject_nonce(&m).await? > m.nonce))
     }
 
     async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
         self.inner.digest(job).await
+    }
+
+    fn subject(&self, job: &Job) -> Option<(B256, bool)> {
+        self.inner.subject(job)
     }
 
     async fn start_check(&self) -> Result<()> {

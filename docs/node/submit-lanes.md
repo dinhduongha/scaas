@@ -618,7 +618,13 @@ covers a first-use lane PDA's rent). The router, the registered token, the shape
 simulation; a refusal is terminal. The gas floor
 of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,904 (forge's least relayer
 CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,594 at zero calldata;
-an anvil run sends exactly that gas and it settles. A TON relay-fee job tracks the escrow (pending, funded, released or refunded)
+an anvil run sends exactly that gas and it settles. EVM UA payers (node-ua-jobs 2026-10-30): `uaRelay` takes the same
+checks on ids, and after the simulation the fee × `params.relay_fee.min_wei_value[token]` must reach the quote (the gas limit
+× the job's fee ceiling, 2 × its first max fee per gas, + 2 × the OP-stack L1 data fee; required for a UA payer, whose verify
+gas depends on its kind; for `relay` only when the token has a price; below it the job is requeued). A priced job's
+replacements never sign above its ceiling (fix 1, review I1), a restart re-checks it at its tracked max fee, and while a
+relay-fee job of a payer is in flight no other job of that payer on that token is signed, nor the reverse (`SUBJECT_HELD`,
+review I2); `ua_metatx` jobs run as `metatx` jobs on the UA ledger (`uaNonce`, the UA digests). A TON relay-fee job tracks the escrow (pending, funded, released or refunded)
 by the router's own events naming the lane, never by absence, and sends `RelayRefund` after the deadline.
 
 NEAR (near-algorand T16–T19): a wrapper job runs the token's `relay_fee_<entry>` (one receipt); a router job is tracked

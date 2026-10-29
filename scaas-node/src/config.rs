@@ -851,6 +851,7 @@ impl ChainCfg {
         for k in t.into_iter().flat_map(|t| t.keys()) {
             let ok = match k.as_str() {
                 "router" | "min_amount" | "relay_bound_payee" => true,
+                "min_wei_value" => self.family == "evm",
                 "min_ton_value" => self.family == "ton",
                 "min_lamports_value" => self.family == "solana",
                 "executor" | "min_yocto_value" => self.family == "near",
@@ -865,6 +866,7 @@ impl ChainCfg {
                         "solana" => ", min_lamports_value",
                         "near" => ", executor, min_yocto_value, targets",
                         "algorand" => ", min_microalgo_value, targets",
+                        "evm" => ", min_wei_value",
                         _ => "",
                     });
             }

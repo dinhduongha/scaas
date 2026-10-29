@@ -1,0 +1,83 @@
+# node ua_metatx jobs fix 1 RED: the new and changed tests against the fix-1 API skeleton (fee_ceiling = 1x, relay_quote without L1 fee, price_covers unscaled, subject_key / Guard::subject stubs, no ceiling in track, ua_pool = 0, executed_events single), at 83189951 + work tree
+# cd scaas-node && ../scripts/capped cargo test -j2 --lib -- submit::tests::priced_relay_fee_replacements_stay_under_the_job_ceiling submit::tests::a_tracked_priced_relay_job_is_rechecked_after_a_restart submit::tests::a_relay_fee_job_holds_its_payer submit::tests::op_stack_l1_fee_is_in_the_quote submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote submit::tests::min_wei_value_is_parsed_or_refused indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee indexer::tests::indexer_joins_payment_meta chain::tests::a_native_ua_subject_is_classified_on_both_paths
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 9 tests
+test chain::tests::a_native_ua_subject_is_classified_on_both_paths ... FAILED
+test indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee ... FAILED
+test submit::tests::min_wei_value_is_parsed_or_refused ... FAILED
+test indexer::tests::indexer_joins_payment_meta ... ok
+test submit::tests::a_tracked_priced_relay_job_is_rechecked_after_a_restart ... FAILED
+test submit::tests::op_stack_l1_fee_is_in_the_quote ... FAILED
+test submit::tests::a_relay_fee_job_holds_its_payer ... FAILED
+test submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote ... FAILED
+test submit::tests::priced_relay_fee_replacements_stay_under_the_job_ceiling ... FAILED
+
+failures:
+
+---- chain::tests::a_native_ua_subject_is_classified_on_both_paths stdout ----
+
+thread 'chain::tests::a_native_ua_subject_is_classified_on_both_paths' (2073970) panicked at src/chain.rs:356:9:
+assertion `left == right` failed
+  left: [0xdcd9140684b0bd5bf7941d33ca6f0cdc91a47466af81c08e157fbd733324d29b]
+ right: [0xdcd9140684b0bd5bf7941d33ca6f0cdc91a47466af81c08e157fbd733324d29b, 0x3322e91d27e6ca4abb7ce1d7dcfd4da619b3475313849f14048e826021f8a0bb]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee stdout ----
+
+thread 'indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee' (2073972) panicked at src/indexer.rs:427:9:
+assertion `left == right` failed: MetaTxLib.UA_POOL
+  left: 0x0000000000000000000000000000000000000000
+ right: 0x41a67ed99b9dc0332eecb4d680667ccfc17a5c56
+
+---- submit::tests::min_wei_value_is_parsed_or_refused stdout ----
+
+thread 'submit::tests::min_wei_value_is_parsed_or_refused' (2073975) panicked at src/submit.rs:1971:57:
+called `Result::unwrap()` on an `Err` value: params.relay_fee.min_wei_value.0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd must be a non-negative integer, not "3/1000000000000000000"
+
+---- submit::tests::a_tracked_priced_relay_job_is_rechecked_after_a_restart stdout ----
+
+thread 'submit::tests::a_tracked_priced_relay_job_is_rechecked_after_a_restart' (2073974) panicked at src/submit.rs:2059:13:
+assertion `left == right` failed: Some(3000000000) 900000000000
+  left: (true, None)
+ right: (true, Some(3000000000))
+
+---- submit::tests::op_stack_l1_fee_is_in_the_quote stdout ----
+
+thread 'submit::tests::op_stack_l1_fee_is_in_the_quote' (2073976) panicked at src/submit.rs:2127:9:
+assertion `left == right` failed
+  left: 707787000000000
+ right: 1425574000000000
+
+---- submit::tests::a_relay_fee_job_holds_its_payer stdout ----
+
+thread 'submit::tests::a_relay_fee_job_holds_its_payer' (2073973) panicked at src/submit.rs:2080:9:
+{"chain_state":"broadcast","job_id":10}
+
+---- submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote stdout ----
+
+thread 'submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote' (2073978) panicked at src/submit.rs:1941:9:
+assertion `left == right` failed
+  left: 707787000000000
+ right: 1415574000000000
+
+---- submit::tests::priced_relay_fee_replacements_stay_under_the_job_ceiling stdout ----
+
+thread 'submit::tests::priced_relay_fee_replacements_stay_under_the_job_ceiling' (2073977) panicked at src/submit.rs:2027:9:
+every send under the ceiling 3000000000: [3000000000, 3750000000, 4687500000, 5859375000, 7324218750, 9155273437, 11444091796, 14305114745, 17881393431]
+
+
+failures:
+    chain::tests::a_native_ua_subject_is_classified_on_both_paths
+    indexer::tests::ua_payments_are_payment_rows_and_join_their_meta_and_relay_fee
+    submit::tests::a_relay_fee_job_holds_its_payer
+    submit::tests::a_tracked_priced_relay_job_is_rechecked_after_a_restart
+    submit::tests::min_wei_value_is_parsed_or_refused
+    submit::tests::op_stack_l1_fee_is_in_the_quote
+    submit::tests::priced_relay_fee_replacements_stay_under_the_job_ceiling
+    submit::tests::ua_relay_fee_needs_a_price_and_covers_the_quote
+
+test result: FAILED. 1 passed; 8 failed; 0 ignored; 0 measured; 433 filtered out; finished in 0.06s
+
+error: test failed, to rerun pass `--lib`

@@ -37,6 +37,15 @@ pub fn bump(fee: u128, cap: u128) -> u128 {
     (fee + fee / 4).max(fee + 1).min(cap)
 }
 
+/// Fix 2 (re-review minor 1): geth and Nethermind take a same-nonce replacement only when both its max fee and its
+/// (effective) priority fee are at least 10 % above the pending one's; a clamped step below that would be refused, so it
+/// counts as already at the cap. `(max fee, priority fee)`.
+pub fn replaceable(old: (u128, u128), new: (u128, u128)) -> bool {
+    let tip = |f: (u128, u128)| f.1.min(f.0);
+    let up = |o: u128, n: u128| n.saturating_mul(10) >= o.saturating_mul(11);
+    up(old.0, new.0) && up(tip(old), tip(new))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,5 +81,17 @@ mod tests {
         assert_eq!(bump(100, 1_000), 125);
         assert_eq!(bump(900, 1_000), 1_000);
         assert_eq!(bump(0, 1_000), 1);
+    }
+
+    /// Fix 2 (re-review minor 1): a step under +10 % on either field is no replacement a mempool takes.
+    #[test]
+    fn a_replacement_below_ten_percent_is_not_one() {
+        assert!(replaceable((100, 10), (125, 12)), "+25 % and +20 %");
+        assert!(replaceable((100, 10), (110, 11)), "exactly +10 %");
+        assert!(!replaceable((100, 10), (109, 12)), "max fee +9 %");
+        assert!(!replaceable((100, 10), (125, 10)), "priority unchanged");
+        assert!(!replaceable((100, 10), (100, 10)), "at the cap");
+        assert!(replaceable((10, 50), (11, 60)), "the effective tip is min(tip, max fee)");
+        assert!(!replaceable((585, 146), (600, 183)), "the clamped last step to a ceiling of 600");
     }
 }
