@@ -2,7 +2,6 @@
 
 Open work only, ordered by what blocks what. Finished items, superseded "Next" lines and the full history of the
 items compacted below were moved verbatim to [COMPLETED.md](COMPLETED.md) (2026-10-20). Resume notes: [HANDOFF.md](HANDOFF.md).
-The Odoo side lives in bamboo-dms (`dms_blockchain*`).
 
 ## Standing rules
 
@@ -240,7 +239,6 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   library pins = registrar list checked by code hash, not compared with the init code's link references — **OK**;
   `initialize` without Env — **answered**: keep the split explicit — the implementation carries what never changes for it (Env: verifier addresses, registry, chain, libraries; fixed in its constructor), the contract instance carries its own configuration from `initArgs` (e.g. a wrapped USDC → VND token at 1 : 25,000 and a USDC → RUB token at another rate; mint / burn / blacklist / … allowed or not), and both feed the governance matrix item; `deployImplementation` binds the kind's latest Env
   — **No**: to be discussed together with smart-contract governance and token governance.
-- [ ] **bamboo-dms: follow the generic factory API (owner 2026-10-20, plan Task 5g-Z)** — `createToken(kind, version, bytes initArgs, salt)` / `createDex(version, bytes initArgs, salt)` replace the typed `TokenConfig` path; the confidential verifier set comes from the factory (no creator-supplied verifier); `createTokenUnregistered` is refused for confidential kinds; version 0 tokens are unvetted (`isRegisteredToken`). Encoders (plan 5g-Z2, merged 2026-10-20): `initArgs = abi.encode(TokenConfig)` with `ConfidentialConfig` **without** the `verifier` field (7 fields: auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode, multiLegFee), `createDex` `initArgs = abi.encode(DexConfig)`; a release may not be usable yet (`VersionNotYetUsable`: 10 minutes after its deployment on the SCaaS testnet, 3 days minimum on every mainnet) and a kind may be disabled (`KindDisabled`); factory events `EnvPublished`, `ImplementationDeployed`, `KindEnabled` replace `ImplementationRegistered` and the Zether / PQZ flags. 5g-Z2 merged 2026-10-20: update the Odoo connector encoders now.
 - [ ] **PQZL Rust port follow-ups** (port merged `5952951`; placed in the fs3 plan 2026-10-19; full text in
   COMPLETED.md): (1) roll-out on the SCaaS testnet — Rust-backed `Nethermind.Pqz` image (pqz-ffi default `pqzl-rust`), RUNBOOK steps
   as P6f, PQZ gas rows re-calibrated on the chain host before or with the image switch (CTR-PQZ-09 controller proposal)
@@ -312,11 +310,6 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   - [ ] Relay-fee starvation (re-review minor 4): a subject that keeps other jobs in flight keeps its own relay-fee job
     `SUBJECT_HELD` until it expires (hurts that subject only); if it shows up, refuse new non-relay holds while a relay-fee
     job of the subject waits.
-- [ ] **bamboo-dms: read `from_ua` / `to_ua` of EVM rows** (controller ruling 2026-10-30, node-ua-jobs fix 1, review C1):
-  the EVM indexer sends a derived UA as `UA_POOL` in `from` / `to` (the client's ingest takes 20-byte addresses only) with
-  the bytes32 id in `from_ua` / `to_ua` (`relay_payee_ua`); `chain_event_ingest` should store the id so a UA's payments and
-  executions are attributed to it, not to `UA_POOL`. Also: the client has no `near` / `algorand` family (`lib/addresses.py`),
-  so every row of those chains is refused today (separate item below: NEAR and Algorand chain families).
 - [ ] **Relay-fee minimum before mainnet** (owner ruling 2026-10-28, final review owner rulings item 7): the flat
   `params.relay_fee.min_amount` (one floor per chain, default 1 base unit, every token and call) stays until before mainnet;
   re-decide then between a per-token minimum and gas-proportional pricing (TON `min_ton_value` and Solana
@@ -324,13 +317,6 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 - [ ] **TON passkey relays need P-256 in the node** (owner ruling 2026-10-28 on the final review residuals): the node refuses a
   passkey-signed relayed call until it verifies P-256 (`get_passkey` + the WebAuthn check; a `p256` dependency); passkey
   users send revoke / set_key directly meanwhile.
-- [ ] **bamboo-dms: NEAR and Algorand chain families** (found 2026-10-30 by the node-ua-jobs fix round): the client's
-  ingest (`dms_blockchain`, `blockchain_chain_event.py` / `eip712.py`) knows no `near` or `algorand` family, so it refuses
-  every feed row from those chains today, UA or not; add both families (address formats: NEAR account ids, Algorand
-  58-char addresses; the URN form for derived UA ids, NET-ALL-21) before a NEAR / Algorand chain feeds an ERP.
-- [ ] **bamboo-dms portal bundle rebuild (metatx split)**: `dms_blockchain_bridge`'s vendored clientkeys bundle lacks the new
-  exports (`metaPayId`, `payLane`, `relayRef`, the pay-meta / relay-fee builders, T18); rebuild it with `npm run build` and copy
-  it (the build writes outside the repo; combine with the stale-bundle item under the P5 leftovers).
 - [ ] **metatx split — e2e still owed on a real node** (no network operations were run in Tasks 1-19): (a) Soroban `relay_fee`
   simulate + submit on a testnet or the quickstart localnet, proving the explicit `SourceAccount` auth entry (the Rust test
   environment has no transaction source); (b) Cosmos gas of `Relay` and the executor on a wasmd localnet (cw-multi-test has no
@@ -423,10 +409,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   (zether.md gas tables re-measured on the new kinds), client Zether encoders, the disclosure questions (P3 plan header).
 - [ ] **MT-8 node:** breaker per `(from, selector)` and batching (NODE-LANE-11/25), TradeEngine (NODE-DEX-17/18, P7),
   NODE-IDX-06 `repeat_of`, `ua_metatx` (UA F1), per-poll venue check (NODE-DEX-08); review leftovers (gateway guard
-  order, config docs, `settle` refusal reason, padded gas above the maximum, entry 1271 floor, no Odoo report for a
+  order, config docs, `settle` refusal reason, padded gas above the maximum, entry 1271 floor, no client report for a
   guard-refused job rebuilt after a restart).
-- [ ] **MT-9 clientkeys:** the app bundle rebuild and the reference ERP's `lib/eip712.py` (bamboo-dms item below).
-  - bamboo-dms: the vendored clientkeys bundle in `dms_blockchain_bridge` is stale (`zetherSign` added, bn254 gone, new register shape with the PQZ key attribute); `npm run build` writes outside the repo (UA-6, Task 6a).
+- [ ] **MT-9 clientkeys:** the app bundle rebuild.
 - [ ] **Controller rulings pending the owner:** pay inline behind `PAYABLE`, no `PayLib` (P1); `increaseAllowance` and
   Permit2 `approve` refused with `ForbiddenSelector` (P2c); P4 mandate rulings (a revoke or any `setMandate` voids queued
   delegate pays; `setMandate` keeps the running period when delegate and period are unchanged; CTR-ACC-07).
@@ -438,19 +423,8 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   guardian revoke); a native 4th leg in the `WrapperInvariant` handler + §12 row for CTR-TOK-26; deploy scripts deploy
   `UnderlyingToken` once it fits EIP-170; the size ratchet is lowered by hand; `deploy.sh` needs `PRIVATE_KEY` (KMS /
   hardware wallet needs a change); libraries placed from the sender's nonce (E7). Full notes in COMPLETED.md.
-- [ ] bamboo-dms (P4 follow-up; before P4 contracts reach a chain Odoo uses): the owner call becomes the account's salted
-  `MetaTransaction` with `chainUid`; mandate digests / calldata move to `mtxPayUnderMandate` / `mtxRevoke` (read
-  `epoch(token)` per pay, re-sign on `StaleEpoch`); the relay job drops pre-P4 names (`revokeWithSig`); `_predict` reads
-  `smart_key_account_create2.json`, deploy seeding `smart_key_account_factory`, wallets deployed with
-  `<owner> <chain_uid>`. Full list in COMPLETED.md.
 - [ ] Mandate epoch-bound pay and period-keeping `setMandate` (M1/M2) are EVM-only in P4; the other families keep their rules. One follow-up per family, owner decision first: Solana (generation binding), Sui, Aptos, Soroban, Cosmos, TON (one-shot or own pay binding).
 - [ ] Agent mandates (research `docs/research/node-ai-agents.md` row c, not accepted): several delegates per token, per-payee caps, a co-sign threshold, a gateway route for mandate payments — owner decision.
-- [ ] bamboo-dms (P5 follow-up; before the P5 node reaches a chain Odoo uses): jobs carry `struct` and the v3 digests
-  (`lib/eip712.py` on `metatransfer_kat.json` / `metatx_kat.json`), the new DEX rows / events / relay jobs, `dead` with
-  `TOKEN_NOT_SERVED` and for `receiver_fee`, regenerated mesh vectors, new deploy JSON keys, the portal's clientkeys
-  bundle and its new required parameters (`checkPayment`, `checkCall`, `checkTradeOrder`, `checkCancel`). Full list in
-  COMPLETED.md.
-- [ ] **bamboo-dms (other repo): the `UAWrapped` field rename (plan Task 5g, review W-Q(e), 2026-10-19).** `uaWrap` now emits `UAWrapped(to, …, minted − fee)`: the first field is renamed `from` → `to` (same topic0) and carries the credited UA; `mtxWrap`'s `Wrapped` names the destination and the net amount. If bamboo-dms indexes wrap events, it must follow the rename and the net amount. No consumer in this repo.
 
 **Non-EVM families (NM-*)** (full stream text in COMPLETED.md)
 - [ ] Per-family meta-call streams, new immutable deployments each: **NM-APT** (`MetaCall`/`MetaTransfer` in BCS,
@@ -500,7 +474,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 **Fix first (bugs found in BUILT code by the 2026-10-07 reviews):**
 1. **NET-TON-FIX1** (BLOCK: unbounded forward TON drains a lane — no job API/mesh/gateway path may reach a TON lane until the node half lands), NET-TON-FIX2…4.
 2. Node money safety: **NR1** breaker meters fees/value/deposits + attempt cap + grief score (R340–R342), **NR2** payload-sourced fields, value-out cap, deposit rule (R344–R346), NR3 mesh sig verify (R343, before S5), NR4 journals → `outer_tx` (R347), NR5 immutable-program check + one custody key per family (R348–R349).
-3. **PAY-FIX1** Odoo outbox ACL + immutable job fields, **PAY-FIX2** node `call` target/selector table, PAY-FIX3 event-set quorum, PAY-FIX4 gateway intake, PAY-FIX5 idempotent signed report; ADW-FIX1–4.
+3. **PAY-FIX2** node `call` target/selector table, PAY-FIX3 event-set quorum, PAY-FIX4 gateway intake, PAY-FIX5 idempotent signed report; ADW-FIX1–4.
 4. DEX: DX-FIX1–5 (dust maker freeze, poison fee token, 1271 gas cap, non-EVM relayer binding).
 5. Per family: R3-FIX1–15 (Cosmos passkey v2, WebAuthn vectors, event quorum, Soroban `pay_ref`, Solana build-time network, Sui `Keys`, guardians, TON domain, **R3-FIX15 immutable deploy + gate + redeploy**), WSF-FIX1–2, NET-{COSMOS,SUI,HEDERA,SOROBAN,APTOS,SOLANA}-FIXn (code-stream tables of the frozen `docs/history/specs/net-*`), ZF-FIX1–3.
 
@@ -511,10 +485,9 @@ stream definition (scope, gate, depends) in `docs/history/specs/` — section nu
 
 | Area | Streams (spec) | Doc | Scope |
 |---|---|---|---|
-| Node | P2 job API + client API keys + built-in admin/CLI → P3 submit/lanes from store → P4 indexer + `/v1/events` → P5 Odoo client (bamboo-dms) → P6 push e2e + cutover runbook → [owner cutover] → P2b OIDC + admin routes + CORS → P1b PostgreSQL/MySQL → P7 DEX in store → S1b′ → S5 mTLS bus → S6′ → G1 libp2p/QUIC-PQ → G2 announce/exclusivity/hints → G3 DEX book gossip (home-bound + unbound) → S7″ → P9 remove pull path → S8″ docs. Plus N1/N2/N4 (app §9.6), N3 non-EVM DEX books, OPS OP1–OP8, SP1 sponsorship · DX-FIX1 dust maker skip, DX-FIX2 fee-token allowlist + pair-failure attribution, DX-FIX5 pending commitment + market re-check + IOC single-maker + late-Matched debit (DEX spec rev 1.1; fold into P7 if P7 starts first) · ZF-FIX3 Zether verifier/registry pin (gateway + clientkeys), cache key chain id, `schnorrSign` k test-only (Zether rev 1.1) | [node/](docs/node/README.md): [store](docs/node/store.md), [job-api](docs/node/job-api.md), [submit-lanes](docs/node/submit-lanes.md), [indexer-feeds](docs/node/indexer-feeds.md), [admin-auth](docs/node/admin-auth.md), [dex-venue](docs/node/dex-venue.md), [mesh](docs/node/mesh.md), [gossip](docs/node/gossip.md), [ops](docs/node/ops.md), [runbooks](docs/node/runbooks.md#cutover), [sponsorship](docs/node/sponsorship.md) | P*: `2026-10-06-node-independence-design.md` §17; S*: `2026-10-05-relayer-mesh-design.md` §14 + NI §13.2; G*/S6′/S7″/S8″: `2026-10-06-mesh-gossip-amendment.md` §17; OP*: `2026-10-06-operations-design.md` §13; SP1: `2026-10-06-tender-sponsorship-shredding.md` §8; N1–N4: `2026-10-06-scaas-app-design.md` §9.6; DX-FIX: `2026-10-03-dex-design.md` §8 (Claude review disposition); ZF-FIX: `2026-10-03-zether-design.md` (Claude review disposition) |
-| Contracts | TW2 T7 (node/Odoo/SDK follow-ups) · AS1–AS9 asset suite · TB1–TB3 tender, RP1–RP2 receiver-pays (RP1 before production registration O3), CS1–CS2 shredding, PL1 pool (later) · UA F0–F10 · PQZ E-S0…E-S9 (spikes first; licence gate G-LIC before production) · DX-FIX3 `SCaaSDex` 1271 gas cap + bounded returndata (redeploy), DX-FIX4 non-EVM DEX relayer binding (Cosmos/Soroban/TON) + `min_nonce` caps (Sui/Aptos/Solana) · ZF-FIX1 `ZetherMetaTx` 1271 400k/50k + FeeWouldStick + disclosure NatSpec, ZF-FIX2 Zether invariant/subgroup/`D_out = O` tests | [contracts/](docs/contracts/README.md): [token-wrappers](docs/contracts/token-wrappers.md), [asset-suite](docs/contracts/asset-suite.md), [tender](docs/contracts/tender.md), [universal-account](docs/contracts/accounts.md), [pq-zether](docs/contracts/pq-zero-knowledge.md), [dex](docs/contracts/dex.md), [zether](docs/contracts/zether.md); [networks/](docs/networks/README.md) for non-EVM | T7: `2026-10-06-token-wrappers-v2.md` §15; AS*: `2026-10-06-asset-suite-design.md` §13; TB/RP/CS/PL: `2026-10-06-tender-sponsorship-shredding.md` §8; F*: `2026-10-06-universal-account-design.md` §16; E-S*: `2026-10-06-pq-zether-design.md` §16; DX-FIX/ZF-FIX: as above |
+| Node | P2 job API + client API keys + built-in admin/CLI → P3 submit/lanes from store → P4 indexer + `/v1/events` → P6 push e2e + cutover runbook → [owner cutover] → P2b OIDC + admin routes + CORS → P1b PostgreSQL/MySQL → P7 DEX in store → S1b′ → S5 mTLS bus → S6′ → G1 libp2p/QUIC-PQ → G2 announce/exclusivity/hints → G3 DEX book gossip (home-bound + unbound) → S7″ → P9 remove pull path → S8″ docs. Plus N1/N2/N4 (app §9.6), N3 non-EVM DEX books, OPS OP1–OP8, SP1 sponsorship · DX-FIX1 dust maker skip, DX-FIX2 fee-token allowlist + pair-failure attribution, DX-FIX5 pending commitment + market re-check + IOC single-maker + late-Matched debit (DEX spec rev 1.1; fold into P7 if P7 starts first) · ZF-FIX3 Zether verifier/registry pin (gateway + clientkeys), cache key chain id, `schnorrSign` k test-only (Zether rev 1.1) | [node/](docs/node/README.md): [store](docs/node/store.md), [job-api](docs/node/job-api.md), [submit-lanes](docs/node/submit-lanes.md), [indexer-feeds](docs/node/indexer-feeds.md), [admin-auth](docs/node/admin-auth.md), [dex-venue](docs/node/dex-venue.md), [mesh](docs/node/mesh.md), [gossip](docs/node/gossip.md), [ops](docs/node/ops.md), [runbooks](docs/node/runbooks.md#cutover), [sponsorship](docs/node/sponsorship.md) | P*: `2026-10-06-node-independence-design.md` §17; S*: `2026-10-05-relayer-mesh-design.md` §14 + NI §13.2; G*/S6′/S7″/S8″: `2026-10-06-mesh-gossip-amendment.md` §17; OP*: `2026-10-06-operations-design.md` §13; SP1: `2026-10-06-tender-sponsorship-shredding.md` §8; N1–N4: `2026-10-06-scaas-app-design.md` §9.6; DX-FIX: `2026-10-03-dex-design.md` §8 (Claude review disposition); ZF-FIX: `2026-10-03-zether-design.md` (Claude review disposition) |
+| Contracts | TW2 T7 (node/SDK follow-ups) · AS1–AS9 asset suite · TB1–TB3 tender, RP1–RP2 receiver-pays (RP1 before production registration O3), CS1–CS2 shredding, PL1 pool (later) · UA F0–F10 · PQZ E-S0…E-S9 (spikes first; licence gate G-LIC before production) · DX-FIX3 `SCaaSDex` 1271 gas cap + bounded returndata (redeploy), DX-FIX4 non-EVM DEX relayer binding (Cosmos/Soroban/TON) + `min_nonce` caps (Sui/Aptos/Solana) · ZF-FIX1 `ZetherMetaTx` 1271 400k/50k + FeeWouldStick + disclosure NatSpec, ZF-FIX2 Zether invariant/subgroup/`D_out = O` tests | [contracts/](docs/contracts/README.md): [token-wrappers](docs/contracts/token-wrappers.md), [asset-suite](docs/contracts/asset-suite.md), [tender](docs/contracts/tender.md), [universal-account](docs/contracts/accounts.md), [pq-zether](docs/contracts/pq-zero-knowledge.md), [dex](docs/contracts/dex.md), [zether](docs/contracts/zether.md); [networks/](docs/networks/README.md) for non-EVM | T7: `2026-10-06-token-wrappers-v2.md` §15; AS*: `2026-10-06-asset-suite-design.md` §13; TB/RP/CS/PL: `2026-10-06-tender-sponsorship-shredding.md` §8; F*: `2026-10-06-universal-account-design.md` §16; E-S*: `2026-10-06-pq-zether-design.md` §16; DX-FIX/ZF-FIX: as above |
 | Clients | S4F D1–D7 · app A0–A18 (order in app spec §15) | [clients/signers-clientkeys](docs/clients/signers-clientkeys.md), [clients/app](docs/clients/app.md) | D*: `2026-10-06-signers-followups.md` §10; A*: `2026-10-06-scaas-app-design.md` §15 |
-| Odoo (bamboo-dms) | P5, UA F6, AS/TB/SP Odoo parts, connectors wiring (S4F finding: non-EVM portal connectors not wired) | [integration.md](docs/integration.md), [integration-odoo-example.md](docs/integration-odoo-example.md) | P5: NI §17; F6: UA §16; AS: `2026-10-06-asset-suite-design.md` §9.2; TB/SP: TSS §8; connectors: S4F §10 |
 
 ## 2. Ops / housekeeping
 
@@ -528,8 +501,8 @@ stream definition (scope, gate, depends) in `docs/history/specs/` — section nu
 - [ ] Residual TON: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational).
 - [ ] Queued research: none open beyond the specs above.
 - [ ] **scaas-node docker-compose** (owner 2026-10-12: after node streams P2 + P3 + P4 + P6): standalone, not tied to an
-  Odoo docker — multi-stage Dockerfile (Rust 1.90), `scaas-node` + one-shot `store-init`, store volume, `.env` for
-  secrets / chain RPC / chain_uid; default gateway-only config, a second sample with submit + indexer for an Odoo by URL
+  ERP's docker — multi-stage Dockerfile (Rust 1.90), `scaas-node` + one-shot `store-init`, store volume, `.env` for
+  secrets / chain RPC / chain_uid; default gateway-only config, a second sample with submit + indexer for an ERP by URL
   (legacy pull path until the push cutover). Full note in COMPLETED.md.
 
 Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are standing rules in
