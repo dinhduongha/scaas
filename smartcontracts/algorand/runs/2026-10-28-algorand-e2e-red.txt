@@ -1,0 +1,65 @@
+# e2e_algorand RED (smartcontracts/scripts/deploy.sh without an algorand case) at commit 870caf05
+# cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_algorand -- --ignored --nocapture
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.32s
+     Running tests/e2e_algorand.rs (target/debug/deps/e2e_algorand-9d4367e1b2442416)
+
+running 8 tests
+
+thread 'algorand_relay_fee_job' (3364885) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test algorand_relay_fee_job ... FAILED
+
+thread 'algorand_events_ingested' (3364882) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+test algorand_events_ingested ... FAILED
+
+thread 'algorand_pay_relay_finalize' (3364884) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+test algorand_pay_relay_finalize ... FAILED
+
+thread 'algorand_pay_meta_job' (3364883) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+test algorand_pay_meta_job ... FAILED
+
+thread 'algorand_router_mandate' (3364887) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+test algorand_router_mandate ... FAILED
+
+thread 'deploy_gate_fails_on_hash_mismatch' (3364888) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+test deploy_gate_fails_on_hash_mismatch ... FAILED
+
+thread 'algorand_router_dex_settle' (3364886) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+test algorand_router_dex_settle ... FAILED
+
+thread 'deploy_resumes_after_an_interruption' (3364889) panicked at tests/e2e_algorand.rs:475:5:
+deploy.sh algorand failed: unknown family 'algorand'
+
+test deploy_resumes_after_an_interruption ... FAILED
+
+failures:
+
+failures:
+    algorand_events_ingested
+    algorand_pay_meta_job
+    algorand_pay_relay_finalize
+    algorand_relay_fee_job
+    algorand_router_dex_settle
+    algorand_router_mandate
+    deploy_gate_fails_on_hash_mismatch
+    deploy_resumes_after_an_interruption
+
+test result: FAILED. 0 passed; 8 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.90s
+
+error: test failed, to rerun pass `--test e2e_algorand`
+rc=101

@@ -1,0 +1,75 @@
+# T20 GATE c: the whole contract suite on the localnet (localnet-pytest.sh always passes tests/; the extra arg repeats test_vectors.py), incl. test_vectors.py::test_origin_parity_vectors (AVM side, Probe origin_of), at commit 870caf05
+# scripts/capped smartcontracts/algorand/scripts/localnet-pytest.sh tests/test_vectors.py -v
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/smartcontracts/algorand
+collected 110 items
+
+tests/test_account.py 
+UA record (ed25519, 2 keys): 182 B, MBR 88900 µALGO; one more key or origin 12800 µALGO
+.....UP only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+UV only                          refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+short authData                   refused: passkey authenticatorData (rpIdHash or UP / UV flags)
+crossOrigin true                 refused: passkey clientDataJSON (members after origin)
+topOrigin                        refused: passkey clientDataJSON (topOrigin)
+second crossOrigin               refused: passkey clientDataJSON (crossOrigin)
+member before crossOrigin        refused: passkey clientDataJSON (members after origin)
+whitespace                       refused: passkey clientDataJSON (type, challenge or origin)
+no closing brace                 refused: passkey clientDataJSON (members after origin)
+no closing brace after a member  refused: passkey clientDataJSON (members after origin)
+type create                      refused: passkey clientDataJSON (type, challenge or origin)
+type of the same length          refused: passkey clientDataJSON (type, challenge or origin)
+origin extended                  refused: passkey origin not listed
+origin prefix                    refused: passkey origin not listed
+empty origin                     refused: passkey clientDataJSON (type, challenge or origin)
+backslash in origin              refused: passkey clientDataJSON (type, challenge or origin)
+challenge of another digest      refused: passkey clientDataJSON (type, challenge or origin)
+........msig 2 passkeys S1 add_key   consumed  10845 added  11200 args  1330 ok
+msig 2 passkeys S2 mtx_pay   consumed  10923 added  11200 args  1322 ok
+msig 2 passkeys S3 relay     consumed  21408 added  21700 args  None ok
+msig 3 passkeys S1 add_key   consumed  15749 added  16100 args  1823 ok
+msig 3 passkeys S2 mtx_pay   consumed  15818 added  16100 args  1815 ok
+msig 3 passkeys S3 relay     consumed  31198 added  31500 args  None ok
+budget pool of a group: 700 × (top-level app calls + inner app calls), inner ≤ 256; arguments ≤ 2,048 B
+.
+opcode budget per signer kind, minimal group (consumed, inner budget calls): {'account mtx_set_guardian native': (2770, 5), 'account mtx_set_guardian ed25519': (2974, 5), 'account mtx_set_guardian secp256k1': (2395, 4), 'account mtx_set_guardian passkey': (3754, 7), 'account mtx_set_guardian msig 2 ed25519': (6282, 9), 'account mtx_set_guardian msig 3 passkey': (11409, 18), 'token mtx_pay native': (2916, 5), 'token mtx_pay ed25519 UA': (3461, 4), 'token mtx_pay secp256k1 UA': (2903, 4), 'token mtx_pay passkey UA': (4245, 6), 'token mtx_pay msig 3 passkey UA': (11900, 17)}
+pins {'account mtx_set_guardian native': (2900, 6), 'account mtx_set_guardian ed25519': (3100, 6), 'account mtx_set_guardian secp256k1': (2550, 5), 'account mtx_set_guardian passkey': (3950, 8), 'account mtx_set_guardian msig 2 ed25519': (6600, 10), 'account mtx_set_guardian msig 3 passkey': (12000, 19), 'token mtx_pay native': (3050, 6), 'token mtx_pay ed25519 UA': (3650, 5), 'token mtx_pay secp256k1 UA': (3050, 5), 'token mtx_pay passkey UA': (4450, 7), 'token mtx_pay msig 3 passkey UA': (12500, 18)}
+.
+inner budget calls of a msig-3 key op: 17 (created and deleted in one inner transaction each)
+.........
+tests/test_dex.py ...........
+DEX settle opcode budget, minimal group (consumed, inner app calls): {'settle native': (7328, 12), 'settle ed25519 UA': (8493, 13), 'settle passkey UA': (12683, 19), 'settle msig 3 passkey + passkey (carried)': (23054, 31), 'settle msig 3 passkey x2 (carried)': (33367, 46)}
+pins {'settle native': (7700, 13), 'settle ed25519 UA': (8900, 14), 'settle passkey UA': (13300, 20), 'settle msig 3 passkey + passkey (carried)': (24000, 33), 'settle msig 3 passkey x2 (carried)': (35000, 49)}
+settle argument bytes (inline, carried): {'native': (926, None), 'ed25519 UA': (992, None), 'passkey UA': (1706, None), 'msig 3 passkey + passkey (carried)': (2738, 798), 'msig 3 passkey x2 (carried)': (3770, 798)}; msig-3 leg auth 1486 B, carry call 1492 B, inner mtx_trade 1871 B, inner account.verify 1557 B (limit 2048)
+MBR (µALGO): order box 16100 (name 33 B, value 1 B), min_nonce box 18900; per leg + the DEX balance box 28500 once per token, the payout receiver box 28500 when new; the DEX app: none
+program size (B): dex approval 961, clear 4; token approval 3661
+.
+tests/test_mandate.py 
+mandate box: 41 B name + 204 B value, MBR 100500 µALGO; payee balance box forwarded to the token 28500 µALGO
+mtx_mandate_pay (first, delegate opened): lane box 18900 µALGO + record 76100 µALGO forwarded
+...............
+mandate opcode budget, minimal group (consumed, inner app calls, failure): {'open ed25519': (4367, 7, None), 'pay ed25519 (delegate opened)': (3938, 6, None), 'pay ed25519': (3804, 6, None), 'revoke ed25519': (3450, 6, None), 'open passkey': (5120, 9, None), 'pay passkey (delegate opened)': (4734, 8, None), 'pay passkey': (4588, 8, None), 'revoke passkey': (4234, 8, None), 'open native': (3592, 6, None), 'refund': (443, 1, None)}
+pins {'open ed25519': (4550, 7), 'open passkey': (5350, 10), 'open native': (3800, 7), 'pay ed25519 (delegate opened)': (4150, 7), 'pay ed25519': (4000, 7), 'pay passkey (delegate opened)': (5000, 9), 'pay passkey': (4850, 9), 'revoke ed25519': (3650, 7), 'revoke passkey': (4450, 9), 'refund': (470, 1)}
+MBR (µALGO): mandate box 100500 (name 41 B, value 204 B), mandate lane box 18900; open forwards the payee box 28500 when new
+program size (B): approval 2304, clear 4
+.
+tests/test_relayfee.py ..........................
+relay group opcode budget, minimal group (consumed, inner app calls): {'ping, native payer': (3738, 5), 'ping, ed25519 UA payer': (4411, 5), 'ping, passkey UA payer': (6506, 8), 'ed25519 UA transfer, passkey UA payer': (9758, 13), 'msig 3 passkey transfer, passkey UA payer': (22294, 31), 'msig 3 passkey transfer, msig 3 passkey payer': (32403, 45)}
+pins {'ping, native payer': (3950, 6), 'ping, ed25519 UA payer': (4650, 6), 'ping, passkey UA payer': (6850, 9), 'ed25519 UA transfer, passkey UA payer': (10250, 14), 'msig 3 passkey transfer, passkey UA payer': (23400, 32), 'msig 3 passkey transfer, msig 3 passkey payer': (35000, 47)}
+argument bytes (target call, relay call): {'ping, native payer': (12, 369), 'ping, ed25519 UA payer': (12, 402), 'ping, passkey UA payer': (12, 759), 'ed25519 UA transfer, passkey UA payer': (394, 759), 'msig 3 passkey transfer, passkey UA payer': (1783, 759), 'msig 3 passkey transfer, msig 3 passkey payer': (1783, 1791)} (limit 2,048)
+program size (B): relayfee approval 857, clear 4; executor 85 (template 8 + 8 + 66); dex 961
+MBR (µALGO): router none (stateless; its address keeps the 100,000 base); per relay the token part (lane box 18900 + payee balance box 28500 when new + a UA payer record when it opens) forwarded whole
+.
+tests/test_token.py ......
+MAX_PAY_META_BYTES = 507, native payer (logs 1024 / 1024 B, app args 902 / 2048 B)
+
+MAX_PAY_META_BYTES = 507, passkey UA payer (logs 1024 / 1024 B, app args 1141 / 2048 B)
+................
+opcode budget used: {'mtx_pay': 2871, 'mtx_transfer': 2831, 'mtx_pay_meta': 3327, 'arc200_transfer': 272} (pins {'mtx_pay': 2900, 'mtx_pay_meta': 3400, 'mtx_transfer': 2900, 'arc200_transfer': 300}; pooled 700 per app call, BUDGET = 5 bare calls per mtx_*)
+MBR per box (µALGO): balance 28500, ua 28500, lane 18900, allowance 28500
+program sizes (B): approval 3661, clear 4
+.
+tests/test_vectors.py ........
+
+============================= 110 passed in 51.16s =============================
+rc=0

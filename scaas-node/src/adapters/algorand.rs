@@ -53,6 +53,8 @@ pub const RELAY_EXPIRY_MARGIN_S: u64 = 120;
 /// Protocol: LastValid − FirstValid ≤ MaxTxnLife (1,000 rounds in every consensus version).
 pub const MAX_TXN_LIFE: u64 = 1000;
 const MAX_GROUP: usize = 16;
+/// Opcode budget each app call adds to the group's pool (protocol `MaxAppProgramCost`).
+const BUDGET_PER_CALL: u64 = 700;
 /// Inner-fee credit of the discovery simulate (T15 `FEE_CREDIT`: the worst measured relay group takes 45–49 inner calls).
 pub const DISCOVERY_CREDIT: u64 = 64;
 /// Rounds sampled for the round time (two block timestamps).
@@ -2053,7 +2055,9 @@ impl ChainAdapter for AlgorandAdapter {
         };
         let ex = exec.as_ref();
         g.fee = p.min_fee.saturating_mul(g.txs.len() as u64 + DISCOVERY_CREDIT);
-        let d = self.simulate(&p, &g, &lane_pk, ex, true, 0).await?;
+        // T20 (real algod): discovery runs with the opcode budget the group could still gain, so it only finds resources
+        let room = (MAX_GROUP.saturating_sub(g.txs.len()) as u64).saturating_mul(BUDGET_PER_CALL);
+        let d = self.simulate(&p, &g, &lane_pk, ex, true, room).await?;
         if let Some(f) = &d.failure {
             return Err(sim_failed(f));
         }
@@ -2064,7 +2068,9 @@ impl ChainAdapter for AlgorandAdapter {
         if g.txs.len() > MAX_GROUP {
             return Err(SimError::Revert(format!("the group needs {} transactions, above {MAX_GROUP}", g.txs.len())));
         }
-        let mut inner = d.inner;
+        // the first exact pass learns the inner count with the discovery credit (the apps' own budget calls depend on the
+        // pool, which discovery's extra budget enlarged); then the fee is exact
+        let mut inner = d.inner.max(DISCOVERY_CREDIT);
         let mut settled = false;
         for _ in 0..3 {
             g.fee = Self::fee_of(&p, &g, inner, ex);
@@ -2420,6 +2426,9 @@ mod tests {
         submitted: Vec<Vec<u8>>,
         submit_err: Option<String>,
         pending: HashMap<String, Value>,
+        /// T20: the bare (budget) calls a group's apps need: below them real algod answers "dynamic cost budget exceeded",
+        /// unless the simulate grants extra opcode budget
+        budget_calls_needed: usize,
     }
 
     fn app_json(program: &str, globals: Value) -> Value {
@@ -2475,6 +2484,11 @@ mod tests {
         }
         if let Some(f) = &w.fail {
             return json!({"txn-groups": [{"failure-message": f, "failed-at": [0], "txn-results": []}]});
+        }
+        let bare = txns.iter().filter(|t| t.get("txn").is_some_and(|x| x.get("type").and_then(Mp::bytes) == Some(b"appl") && x.get("apaa").is_none())).count();
+        if bare < w.budget_calls_needed && req.get("extra-opcode-budget").is_none() {
+            return json!({"txn-groups": [{"failure-message": "transaction X: logic eval error: dynamic cost budget exceeded, executing swap: local program cost was 700",
+                                          "failed-at": [1], "txn-results": []}]});
         }
         let mut results: Vec<Value> = txns.iter().map(|_| json!({"txn-result": {}})).collect();
         let inner: Vec<Value> = (0..w.inner).map(|_| json!({"txn": {}})).collect();
@@ -2819,6 +2833,29 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let (a4, _) = adapter(w4).await;
         let e = a4.build(&job(o_op(&op, &auth, json!({}))), 0).await.unwrap_err();
         assert!(matches!(&e, SimError::Revert(m) if m.contains("16")), "{e:?}");
+    }
+
+    /// T20 (real algod, e2e_algorand: a UA pay-meta and an msig-3 passkey relay were refused in discovery): the
+    /// discovery simulate lacks the budget calls the exact group gets, so it grants the opcode budget the group could still
+    /// gain (700 per further transaction) and only discovers resources; the exact group runs on its own budget, its first
+    /// pass with the discovery credit (the apps' own budget calls depend on the pool), then at the exact fee.
+    #[tokio::test]
+    async fn discovery_simulate_has_the_budget_the_group_can_gain() {
+        let mut w = world();
+        w.budget_calls_needed = 1;
+        w.unnamed = json!({"boxes": [{"app": TOKEN, "name": base64::engine::general_purpose::STANDARD.encode(b"l-lane-box")}]});
+        let (a, w) = adapter(w).await;
+        let op = MetaOp { valid_until: far(), ..op_of("pay") };
+        let g = group(&a.build(&job(o_op(&op, &auth_of("pay"), json!({}))), 0).await.unwrap());
+        assert_eq!(g.txs.len(), 3, "[MBR][mtx_pay][the budget call carrying the box]");
+        assert_eq!(g.fee, 1_000 * (3 + 4), "3 transactions + 4 inner");
+        let sims = w.lock().unwrap().sims.clone();
+        let disc = sims.iter().find(|s| matches!(s.get("allow-unnamed-resources"), Some(Mp::Bool(true))) && txns_of(s).len() == 2).unwrap();
+        assert_eq!(disc.get("extra-opcode-budget").and_then(Mp::u64), Some(700 * 14), "discovery: the budget 14 more calls could add");
+        let exact: Vec<&Mp> = sims.iter().filter(|s| txns_of(s).len() == 3).collect();
+        assert!(exact.iter().all(|s| s.get("extra-opcode-budget").is_none()), "the exact group runs on its own budget");
+        let fee = |s: &Mp| txns_of(s)[1].get("txn").and_then(|t| t.get("fee")).and_then(Mp::u64);
+        assert_eq!((fee(exact[0]), fee(exact.last().unwrap())), (Some(1_000 * (3 + DISCOVERY_CREDIT)), Some(7_000)), "learn the inner count, then exact");
     }
 
     /// T15 fix 1 / note 1: program = prefix ‖ router id ‖ suffix ‖ 20 01 salt; its address equals the vector (the SDK's

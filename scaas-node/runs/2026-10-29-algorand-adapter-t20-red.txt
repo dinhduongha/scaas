@@ -1,0 +1,25 @@
+# algorand adapter T20 RED (discovery_simulate_has_the_budget_the_group_can_gain against the T17 build loop) at commit 870caf05
+# ../scripts/capped cargo test -j2 --lib adapters::algorand::tests::discovery_simulate_has_the_budget_the_group_can_gain
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.68s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-7ea8f2ba056438ed)
+
+running 1 test
+test adapters::algorand::tests::discovery_simulate_has_the_budget_the_group_can_gain ... FAILED
+
+failures:
+
+---- adapters::algorand::tests::discovery_simulate_has_the_budget_the_group_can_gain stdout ----
+
+thread 'adapters::algorand::tests::discovery_simulate_has_the_budget_the_group_can_gain' (3389483) panicked at src/adapters/algorand.rs:2843:86:
+called `Result::unwrap()` on an `Err` value: Revert("simulate: transaction X: logic eval error: dynamic cost budget exceeded, executing swap: local program cost was 700")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    adapters::algorand::tests::discovery_simulate_has_the_budget_the_group_can_gain
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 423 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--lib`
+rc=101

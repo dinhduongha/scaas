@@ -30,6 +30,12 @@
 #                            key deleted (spec §3.9); fails unless view_access_key_list is empty for each; writes
 #                            near/deployments/<genesis-hash>.json. env NEAR_ACCOUNT_ID + NEAR_PRIVATE_KEY (or
 #                            NEAR_KEY_FILE), NEAR_TOKENS, NEAR_ADMIN, NEAR_LANES, NEAR_FUND (near/scripts/deploy.py)
+#   algorand <algod-url> [gate <role>=<app id>…]   algorand/scripts/deploy.sh: account, relayfee (its off-curve executor
+#                            salt), token(s), mandate, dex in that order, each app address funded with its base minimum;
+#                            fails unless each app's approval / clear sha512_256 equals artifacts.json (programs that reject
+#                            update and delete), the links (account_app, router_app) and the executor hold; resumable;
+#                            writes algorand/deployments/<genesis-hash, URL-safe base64>.json. env ALGORAND_MNEMONIC (or
+#                            ALGORAND_PRIVATE_KEY), ALGOD_TOKEN, ALGORAND_TOKENS, ALGORAND_ADMIN (algorand/scripts/deploy.py)
 set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
@@ -56,6 +62,7 @@ case "$FAMILY" in
            exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/scaas_$C.wasm" "$@" ;;
   solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;
   near)    exec "$SC/near/scripts/deploy.sh" "$NET" "$@" ;;
+  algorand) exec "$SC/algorand/scripts/deploy.sh" "$NET" "$@" ;;
   cosmos|ton) echo "$FAMILY: no deploy tooling in this repo yet (build artifacts: build.sh $FAMILY)" >&2; exit 2 ;;
   *) echo "unknown family '$FAMILY'" >&2; exit 2 ;;
 esac
