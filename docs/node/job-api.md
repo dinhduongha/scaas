@@ -142,7 +142,7 @@ Payload by kind:
 | `metatx` | `{token, signature, struct: "call"\|"transfer", metatx: {…}}`: `struct = call` carries the 9 fields of `MetaTransaction` (`data` = an allowlisted self-call, [NODE-JOB-20](#NODE-JOB-20)), `struct = transfer` the 11 fields of `MetaTransfer` (`entryRef = 0` transfer, else payment) ([CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)); `uint256` as decimal strings; addresses lowercase; `token` is any registered SCaaS contract on `MetaTxBase` for `call` (tokens, `MandateWallet`, `SmartKeyAccount`, contracts built on SCaaS), a token for `transfer`. Idempotency and the mesh `intent_id` are the struct's digest; one `(from, batch, nonce)` lane space spans both structs. The token's other signed entry points travel as `metatx` jobs too, with `entry` naming them ([order and wrap entries](#metatx-entries)). May carry `receiver_fee: {fee, feeRecipient, validUntil, signature}` ([sponsorship.md#receiver-pays](sponsorship.md#receiver-pays); not built in the node: such a job is `dead`, never relayed without it); incl. v1 envelopes of a `PqzToken` |
 | `signed_op` | `{op: {op_kind: "call"\|"transfer", function?, payload: "0x<exact signed bytes>", signature, public_key, auth_kind: "wallet"\|"passkey", extra: {…native params}}}`; `from`, lane, nonce, `valid_until`, relayer are decoded from `payload` (non-EVM `MetaCall`/`MetaTransfer`, [NET-ALL-26](../networks/README.md#NET-ALL-26), or Soroban auth payload); as built `op_kind: "pay"` over `MetaOp` v1 |
 | `call` | `{call: {target, calldata, validUntil}}` — e.g. `MandateWallet.mtxPayUnderMandate(...)`, `SmartKeyAccountFactory.deploy(...)`; the signature lives inside the calldata; selector and target must match a row of the [call table](#call-table); no native value |
-| `ua_metatx` (SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` ([CTR-UA-26](../contracts/accounts.md#CTR-UA-26)) with `from: bytes32` and its `auth`: `{token, struct: "call"\|"transfer", m: WireUAMetaTransaction\|WireUAMetaTransfer, auth}`; same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` (incl. v3 envelopes of a `PqzToken`) |
+| `ua_metatx` (EVM outbox path **BUILT**, node-ua-jobs 2026-10-30; the rest SPECIFIED; `kind = ua_metatx`) | MetaToken v3 `UAMetaTransaction` or `UAMetaTransfer` ([CTR-UA-26](../contracts/accounts.md#CTR-UA-26)) with `from: bytes32` and its `auth`: `{token, struct: "call"\|"transfer", m: WireUAMetaTransaction\|WireUAMetaTransfer, auth}` (the address structs' wire fields, `from` / `to` as bytes32; `metatx`, `signature`, `entry`, `call` refused); same lifecycle as `metatx`; idempotency on `(chain, token, from, batch, nonce)`; digest = `uaDigest` / `uaTransferDigest` (incl. v3 envelopes of a `PqzToken`). Built: relayed as `uaExecute` / `uaExecuteTransfer` (or `uaPayMeta`, [pay-meta](#paymeta-relayfee-jobs)) on a registered token whose UA ledger is on (`registry() ≠ 0`, else `FEATURE_UNSUPPORTED`); the selector, kind and registration are the exact call's simulation (tokens publish no UA allowlist); a refused simulation is `consumed` when `uaNonce(from, batch)` has passed the nonce, the in-flight key is the token's UA digest. Not built: the gateway route and record cache ([gateway.md](gateway.md#ua-cache)), mesh `evm.ua_meta_tx`, `uaBatch*` / `uaCancelNonce` / `uaPayReceiverFee` jobs |
 | `pqz_call` (SPECIFIED; private chain only) | **Direct open calls only**: `{chain, contract, selector ∈ {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` to a configured PQZ token (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying: neither is a node job; `mtxRollOver` and `mtxPrepareAcc` are allowlisted self-calls too, so a keeper may call them directly or relay them as ordinary `metatx` jobs, owner 2026-10-20); stored like `call`: `digest` NULL, `call_hash` set |
 | PQZ envelopes (SPECIFIED) | **No new kind** ([CTR-PQZ-15](../contracts/pq-zero-knowledge.md#CTR-PQZ-15)): a `PqzToken` is an `IERC20MetaTx` token, so its envelope ops travel as ordinary `metatx` or `ua_metatx` jobs with `struct = call` (domain `("SCaaS PqzToken", "1", chainId, token, chainUid)`), `m.data` = the direct calldata of `mtxConfidentialTransfer`/`mtxUnshield`/`mtxShield` (opaque to the client) ([CTR-PQZ-21](../contracts/pq-zero-knowledge.md#CTR-PQZ-21)); outer fee `NONE`/`FIXED` only; never batched, never on the mesh; 1 MiB job body on the `pqz` profile; a gasless exit is the envelope `mtxUnshield` paying the underlying to `recipient` |
 
@@ -152,11 +152,20 @@ Payload by kind:
   and `len(meta) <= max_pay_meta_bytes` (chain `params`, default 2,048), then relays `mtxPayMeta` (on-chain meta) or the plain
   `mtxExecuteTransfer` (off-chain meta). A relay-fee job is a `call` job to the configured `MtxRelayFee`
   (`params.relay_fee.router`) with selector `relay`; it has its own call-table row ([call table](#call-table)).
-  UA payers (`uaPayMeta`, `uaRelay`) are not served until the `ua_metatx` kind is built (TODO.md).
+  *EVM, UA payers* (BUILT, node-ua-jobs 2026-10-30): a UA pay-meta job is a `ua_metatx` job with `struct = transfer`,
+  `salt` and `meta`, the same checks on ids, relayed as `uaPayMeta` (off-chain meta: `uaExecuteTransfer`); a UA relay-fee job
+  is a `call` job with selector `uaRelay` (call-table row `MtxRelayFee.uaRelay`, the router's shape on ids: the payee never
+  `pad(executor)`, open mode `t.to = pad(router)`).
+- *EVM, the fee covers the quote.* After the simulation, a relay fee that reaches this lane (open mode or bound to it) must be
+  worth, at `params.relay_fee.min_wei_value[token]` (wei per base unit), at least the quote = the gas limit × the max fee per
+  gas the lane signs with; else `RELAY_FEE_REFUSED`, nothing signed. Required for `uaRelay` (a UA's verify gas depends on its
+  kind, millions for a Solidity PQ verify; no price ⇒ refused); for `relay` only when the token has a price (else T17's
+  `min_amount`, owner ruling 2026-10-28 item 7). A sponsored fee (bound elsewhere) is not priced.
 - *Other families.* The same `signed_op` job; `op.kind` is absent (a plain pay), `"pay_meta"` (`op.salt`, `op.meta` hex) or
   `"relay_fee"` (per-family fields, `op.extra`). Any other `op.kind`, including a non-string, is refused; a plain pay that carries
   `salt` / `meta` is refused; a plain pay or pay-meta whose recipient is the router, marker or executor is refused.
-- *Config* (`[chains.params]`): `relay_fee = { router, min_amount (default 1), relay_bound_payee (default false) }`,
+- *Config* (`[chains.params]`): `relay_fee = { router, min_amount (default 1), relay_bound_payee (default false) }` (EVM adds
+  `min_wei_value = { "<token address>" = wei per base unit }`, an integer or a decimal string),
   `max_pay_meta_bytes`; TON adds `relay_fee.min_ton_value = { "<master>" = nanoton }`, Solana `min_lamports_value` (first-use lane
   rent). An unparsable `router`, `min_amount` or key is a startup error. A bound-payee fee (not the node's lane) is refused unless
   `relay_bound_payee = true`, then relayed as a sponsored job.
@@ -186,15 +195,20 @@ Payload by kind:
   transactions ([NET-ALG-17](../networks/algorand.md#NET-ALG-17)). Quote = the group's fee + its exact MBR payments, no
   resend term; a refused group costs nothing. There is no refund, so `op_consumed` answers for every job kind.
 - *Job errors:* `CALL_TARGET_REFUSED` (not the configured router), `TOKEN_NOT_SERVED`, `RELAY_FEE_SHAPE` (ref, lane, nonce, relayer,
-  fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere), `PAYEE_REFUSED` (EVM: a `MetaTransfer` to the
-  relay-fee router or its executor), `PAY_META_TOO_LONG` (EVM: `mtxPayMeta`'s `meta` above `max_pay_meta_bytes`), `BAD_PAYLOAD`; TON also
+  fee NONE, payee not the executor), `RELAY_FEE_REFUSED` (fee below `min_amount` or bound elsewhere; EVM: below the quote at
+  `min_wei_value`, or a `uaRelay` on a token without one), `PAYEE_REFUSED` (EVM: a `MetaTransfer` / `UAMetaTransfer` to the
+  relay-fee router or its executor), `PAY_META_TOO_LONG` (EVM: `mtxPayMeta` / `uaPayMeta`'s `meta` above `max_pay_meta_bytes`),
+  `FEATURE_UNSUPPORTED` (EVM `ua_metatx`: the token's UA ledger is off), `BAD_PAYLOAD`; TON also
   `RELAY_CALL_REFUSED` (the relayed call would fail on its target by the getters: envelope, owner, deadline, relayer,
   executor, target code, lane nonce, signature, set_key record, a passkey signature (not relayed until the node checks
   P-256); or it is a no-op: a revoke of an already revoked Mandate, refused so the payer does not pay for nothing, owner
   rulings list item 6; reported as `simulation: RELAY_CALL_REFUSED: …`, [ton.md](../networks/ton.md#paymeta-relayfee)).
 - *Indexer:* `PaymentMeta` and `RelayFeePaid` are never rows of their own; they enrich the `PaymentSettled` of the expected token
   in the same transaction with the same `(from, entry_ref)` (TON: `from` via the message's `MetaTransactionExecuted`) and
-  `amount`; without a settlement they prove nothing. A `PaymentMeta` with more than one ref is rejected.
+  `amount`; without a settlement they prove nothing. A `PaymentMeta` with more than one ref is rejected. EVM: the UA ledger's
+  `UAPaymentSettled` / `UAMetaTransactionExecuted` are `PaymentSettled` / `MetaTransactionExecuted` rows with ids (a native id
+  as its address, a derived UA as bytes32, as the NEAR and Algorand holders), and join the same way (a UA payer's
+  `RelayFeePaid.payer` is its id).
 
 `payload` is exactly what every adapter `build` consumes today; `work_from_job` and the family adapters are
 unchanged. A W3C `traceparent` header applies to every item of the batch ([NODE-OPS-09](ops.md#NODE-OPS-09)).

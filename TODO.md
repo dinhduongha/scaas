@@ -293,11 +293,12 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   node `min_fill`, clientkeys, tests; non-EVM unchanged; spec DONE 2026-10-29: CTR-DEX-14 / NODE-DEX-15 / CLI-SGN-35 SPECIFIED; code after the near-algorand merge, owner 2026-10-29); (b) four modes book / outside / hybrid / CoW-ring on the two
   existing entry points, NODE-DEX-17 rewritten to one atomic plan per order (§1–§6); owner answers 2026-10-29 (§8): hybrid / CoW both via `mtxExchange` plans and a new `mtxHybrid` / `mtxHybridVia` entry (maker price on chain, surplus to the taker); CoW price = AMM marginal, else midpoint; `mtxExchangeBatch` now; TradeEngine EVM and non-EVM 1 × N in parallel. Order: after the near-algorand merge → minFill code → EVM contract spec + code (mtxHybrid, batch, mode 3 / 4 tests, executor, Uniswap fork test) → TradeEngine ∥ non-EVM 1 × N.
   Spec first, then code.
-- [ ] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; owner ruling 2026-10-28: after the
-  metatx-split merge; a new feature, not T17):
-  `scaas-node` relays no `ua_metatx` job today, so `uaPayMeta`, `MtxRelayFee.uaRelay` and the `UAPaymentSettled` join
-  (`indexer::join_pay_events`, a UA payer's `RelayFeePaid` id) are not served; build the `ua_metatx` kind
-  (job-api.md, SPECIFIED) with them.
+- [x] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; owner ruling 2026-10-28: after the
+  metatx-split merge; a new feature, not T17): BUILT on branch `node-ua-jobs` (2026-10-30, `f0f8fd50`; not merged): the
+  `ua_metatx` kind (`uaExecute`, `uaExecuteTransfer`, `uaPayMeta`), the call-table row `MtxRelayFee.uaRelay` priced at
+  `params.relay_fee.min_wei_value` against the quote, `UAPaymentSettled` / `UAMetaTransactionExecuted` rows joined by
+  `join_pay_events`; choices in decisions.md (CTR-MTX-27, Change 2026-10-30). Left for UA F5 below: gateway route, record
+  cache, mesh, the other `ua*` jobs.
 - [ ] **Relay-fee minimum before mainnet** (owner ruling 2026-10-28, final review owner rulings item 7): the flat
   `params.relay_fee.min_amount` (one floor per chain, default 1 base unit, every token and call) stays until before mainnet;
   re-decide then between a per-token minimum and gas-proportional pricing (TON `min_ton_value` and Solana
@@ -525,7 +526,8 @@ Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are 
   Glamsterdam (owner; real chains at 24,576 cannot take any token implementation until then); `metatx3.json` rows for
   the group kinds and `msig` (UA F3). Local Qt builds of `clients/ua-qt` need
   `QMAKE=~/usr/Qt/6.8.2/gcc_64/bin/qmake6`.
-- [ ] **UA F5 (node UA jobs; paused by the priority rule):** node `ua_metatx` jobs, mesh `evm.ua_meta_tx`, indexing
+- [ ] **UA F5 (node UA jobs; paused by the priority rule):** node `ua_metatx` jobs (EVM outbox path, `uaPayMeta`, `uaRelay` and
+  the `UAPaymentSettled` join BUILT on `node-ua-jobs` 2026-10-30; left: gateway `/v1/ua-metatx` and the record cache), mesh `evm.ua_meta_tx`, indexing
   (`Transfer` to/from `UA_POOL` with `UATransfer`, `UnwrappedToUA`, `UAReceiverFeePaid`, `UAPaymentSettled`); relaying
   `ua*` jobs (burn, `unwrapToUA`, `uaWrap`, `uaCancelOrder`, `uaInvalidateNonces`), a receiver-fee job with a `bytes32`
   payee; UA order intake, `bytes32` book / TradeEngine on `balanceOfUA`, settlement packing by the kinds' caps, PQ order

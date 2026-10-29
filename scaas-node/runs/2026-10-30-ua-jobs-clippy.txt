@@ -1,0 +1,5 @@
+# node ua_metatx jobs clippy at f0f8fd50
+# cd scaas-node && ../scripts/capped cargo clippy -j2 --all-targets -- -D warnings
+    Checking scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/node-ua-jobs/scaas-node)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.32s
+rc=0

@@ -313,5 +313,7 @@ sequenceDiagram
   Measured cost, execution gas, `runs/2026-10-27-metatx-split-overhead-final.txt`: +7.4 k to +7.6 k on the warm/cold
   `MetaTxGasV2` rows (+8.9 k `unwrap`; cancel 0), data-size bound 7.9-9.1 k small and 8.9-11.5 k largest envelope
   (`runs/2026-10-27-metatx-split-overhead.txt`). Node: `guard::erc1271_floor(len)` for a contract signer.
-- **Owed.** The EVM node serves address payers only: `uaPayMeta`, `MtxRelayFee.uaRelay` and the `UAPaymentSettled` join need
-  the `ua_metatx` job kind (TODO.md, "EVM node: the UA job path").
+- **UA payers in the node** (BUILT, node-ua-jobs 2026-10-30): the `ua_metatx` job kind relays `uaExecute`,
+  `uaExecuteTransfer` and `uaPayMeta`; `MtxRelayFee.uaRelay` is a `call` job with its own call-table row, priced at
+  `params.relay_fee.min_wei_value` against the quote (gas limit × max fee per gas); the indexer reads `UAPaymentSettled`
+  as a `PaymentSettled` row with ids ([job-api.md](../node/job-api.md#paymeta-relayfee-jobs)).
