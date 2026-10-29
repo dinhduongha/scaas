@@ -1,5 +1,5 @@
 // Shared by the NEAR and Algorand clients (near-algorand T18): the scaas.metaop.v1 envelope parts both families use.
-import { keccak_256, sha256, concatBytes, utf8ToBytes, hex, fromHex } from './bytes.js';
+import { keccak_256, concatBytes, utf8ToBytes, hex, fromHex, b64url } from './bytes.js';
 import { metaPayId, payLane } from './evm.js';
 
 export const LABEL = utf8ToBytes('scaas.metaop.v1');
@@ -25,18 +25,29 @@ export function relayRef(network, target, call, salt) {
   return keccak_256(concatBytes(utf8ToBytes('scaas.relayfee'), b32(network, 'network'), u(target), keccak_256(u(call)), b32(salt, 'salt')));
 }
 
+/** The node requires nonce 0 on pay-meta and relay-fee payments (their lane is derived from the ref). */
+export function needNonce0(op) {
+  if (Number(op.nonce) !== 0) throw new Error('nonce must be 0 for this payment (the lane is payLane(pay_ref))');
+}
+
 /** CTR-MTX-26: the op's pay_ref must be metaPayId(salt, meta) and its lane payLane(pay_ref). */
 export function checkPayMeta(op, salt, meta) {
+  needNonce0(op);
   const id = metaPayId(salt, meta);
   if (hex(u(op.pay_ref)) !== id) throw new PayMetaMismatch('pay_ref does not commit to the metadata (metaPayId(salt, meta))');
   if (hex(u(op.lane)) !== lane32(id)) throw new PayMetaMismatch('lane is not payLane(pay_ref)');
 }
 
-export const sha256d = (b) => sha256(b);
-
-/** WebAuthn: the authenticator signs `challenge = digest`; the chains take low-s r‖s (a high-s signature is refused). */
+/** WebAuthn: the authenticator signs `challenge = digest`; the chains take low-s r‖s (a high-s signature is refused). The
+ *  returned clientDataJSON must be valid UTF-8, type webauthn.get, challenge b64url(digest). */
 export async function passkeyAssertion(digest, cred, derToRS) {
   const a = await cred.get(digest);
+  let cdj;
+  try { cdj = new TextDecoder('utf-8', { fatal: true }).decode(a.clientDataJSON); } catch { throw new Error('clientDataJSON is not UTF-8 encoded'); }
+  let c;
+  try { c = JSON.parse(cdj); } catch { throw new Error('clientDataJSON is not JSON'); }
+  if (c.type !== 'webauthn.get') throw new Error('clientDataJSON type is not webauthn.get');
+  if (c.challenge !== b64url(u(digest))) throw new Error('clientDataJSON challenge is not the operation digest');
   const { r, s } = derToRS(a.signature);
-  return { authenticatorData: a.authenticatorData, clientDataJSON: new TextDecoder().decode(a.clientDataJSON), signature: concatBytes(r, s) };
+  return { authenticatorData: a.authenticatorData, clientDataJSON: cdj, signature: concatBytes(r, s) };
 }

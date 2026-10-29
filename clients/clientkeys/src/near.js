@@ -3,7 +3,7 @@
 import { sha256, concatBytes, utf8ToBytes, hex, fromHex } from './bytes.js';
 import { derToRS } from './webauthn.js';
 import {
-  LABEL, PayMetaMismatch, NativeToUa, b32, le, lane32, signText, relayRef, checkPayMeta,
+  LABEL, PayMetaMismatch, NativeToUa, b32, le, lane32, signText, relayRef, checkPayMeta, needNonce0,
   passkeyAssertion as assertion,
 } from './metaop.js';
 
@@ -48,6 +48,7 @@ export function nativeId(accountId) {
  * `payOp` = the payment's fields without pay_ref / lane / extra / to / relayer (these are derived).
  */
 export function buildRelayFee(entry, payOp) {
+  needNonce0(payOp);
   const wrapper = entry.route === 'wrapper';
   const payee = wrapper ? payOp.contract : entry.router;
   const call = wrapper ? wrapperCall(entry.entry, entry.args) : routerCall(entry.target, entry.method, entry.args);
@@ -76,9 +77,13 @@ export function send(op, { native = false } = {}) {
   return { op, digest: digest(op), text: signText(digest(op)) };
 }
 
-/** A key op is per token contract: one op for every held token (each its own digest and nonce). Codes 6-12 are key ops. */
-export function keyOpFanOut(keyOp, tokens) {
+/** A key op is per token contract: one op per held token, each at that token's own lane counter (`nonces`: token -> nonce;
+ *  a missing one is refused). Codes 6-12 are key ops. */
+export function keyOpFanOut(keyOp, tokens, nonces) {
   if (!(keyOp.op >= 6 && keyOp.op <= 12)) throw new Error('not a key op (add/remove key, origin, guardian, recovery)');
   if (!tokens.length) throw new Error('no token held');
-  return tokens.map((t) => ({ ...keyOp, contract: t }));
+  return tokens.map((t) => {
+    if (nonces?.[t] === undefined) throw new Error(`no nonce for token ${t}`);
+    return { ...keyOp, contract: t, nonce: nonces[t] };
+  });
 }

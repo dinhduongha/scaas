@@ -79,6 +79,25 @@ test('relay fee prompt carries both intents', () => {
   assert.deepEqual(plan.prompt.payment, { token: pay.fields.contractApp, amount: 10n, payee: null, open: true });
 });
 
+test('pay-meta and relay-fee payments need nonce 0', () => {
+  const r = row('pay_meta_note_utf8'), m = P.find((x) => x.name === 'note_utf8');
+  assert.throws(() => buildPayMeta({ ...r.fields, nonce: 1 }, m.salt, m.meta), /nonce/);
+  const rf = V.relayRefs[0], pay = row('relay_fee_pay_router_short');
+  assert.throws(() => buildRelayFee({ router: V.apps.router.key, targetApp: rf.targetApp, args: rf.args.map(fromHex),
+    salt: rf.salt }, { ...pay.fields, nonce: 2 }), /nonce/);
+  assert.throws(() => buildRelayFee({ router: V.apps.router.key, targetApp: rf.targetApp, args: rf.args.map(fromHex),
+    salt: rf.salt }, { ...pay.fields, contractApp: undefined }), /contractApp/);
+});
+
+test('passkeyAssertion refuses a wrong challenge', async () => {
+  const p = V.passkey;
+  const cred = { async get() {
+    return { authenticatorData: fromHex(p.authenticatorData),
+      clientDataJSON: new TextEncoder().encode(p.clientDataJSON.replace(p.challenge, 'AAAA')), signature: p1363ToDer(fromHex(p.sig)) };
+  } };
+  await assert.rejects(passkeyAssertion(fromHex(row('pay_ua_passkey').digest), cred), /challenge/);
+});
+
 test('refuses native send to a UA id', () => {
   const ua = row('pay_ua_secp256k1').fields;
   assert.throws(() => send({ ...ua, to: ua.from }, { native: true }), NativeToUa);

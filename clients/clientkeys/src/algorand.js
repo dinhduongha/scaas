@@ -5,7 +5,7 @@ import { sha512_256 } from '@noble/hashes/sha2.js';
 import { base32nopad } from '@scure/base';
 import { derToRS } from './webauthn.js';
 import {
-  LABEL, PayMetaMismatch, NativeToUa, b32, be, lane32, signText, relayRef, checkPayMeta, passkeyAssertion as assertion,
+  LABEL, PayMetaMismatch, NativeToUa, b32, be, lane32, signText, relayRef, checkPayMeta, needNonce0, passkeyAssertion as assertion,
 } from './metaop.js';
 
 export { PayMetaMismatch, NativeToUa, signText, relayRef };
@@ -46,6 +46,8 @@ export const routerCall = (app, args) =>
  * targetApp, args (bytes[], arg 0 the selector), salt}`; `payOp` = the payment fields without pay_ref / lane / extra / to / relayer.
  */
 export function buildRelayFee(entry, payOp) {
+  needNonce0(payOp);
+  if (payOp.contractApp === undefined) throw new Error('payOp.contractApp (the token app id) is required for the prompt');
   const call = routerCall(entry.targetApp, entry.args);
   const ref = hex(relayRef(payOp.network, appAddress(entry.targetApp), call, entry.salt));
   const op = { ...payOp, op: 0, pay_ref: ref, lane: lane32(ref), extra: entry.salt, to: { kind: 0, id: entry.router }, relayer: entry.router };

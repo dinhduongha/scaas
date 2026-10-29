@@ -3,11 +3,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ed25519 } from '@noble/curves/ed25519.js';
+import { p256 } from '@noble/curves/nist.js';
 import {
   encodeMetaOp, digest, signText, nep413Hash, relayRef, routerCall, wrapperCall, targetBytes, buildPayMeta,
   buildRelayFee, nativeId, keyOpFanOut, send, passkeyAssertion, PayMetaMismatch, NativeToUa,
 } from '../src/near.js';
-import { hex, fromHex, sha256 } from '../src/bytes.js';
+import { hex, fromHex, sha256, b64url, concatBytes } from '../src/bytes.js';
 import { payLane } from '../src/evm.js';
 import { p1363ToDer } from './softauthn.js';
 
@@ -105,13 +106,48 @@ test('refuses native send to a UA id', () => {
   assert.equal(hex(send(ua).digest), row('pay_ua_secp256k1').digest, 'a token send to a UA id is the normal path');
 });
 
-test('near key op fans out to every held token', () => {
+test('near key op fans out to every held token, each at its own nonce', () => {
   const k = row('add_key_secp256k1').fields;
-  const ops = keyOpFanOut(k, [V.accounts.token, V.accounts.tokenB]);
+  const T = [V.accounts.token, V.accounts.tokenB];
+  const ops = keyOpFanOut(k, T, { [T[0]]: 0, [T[1]]: 5 });
   assert.equal(ops.length, 2);
-  assert.deepEqual(ops.map((o) => o.contract), [V.accounts.token, V.accounts.tokenB]);
+  assert.deepEqual(ops.map((o) => o.contract), T);
+  assert.deepEqual(ops.map((o) => o.nonce), [0, 5]);
   assert.equal(hex(digest(ops[0])), row('add_key_secp256k1').digest);
   assert.notEqual(hex(digest(ops[1])), hex(digest(ops[0])));
-  assert.throws(() => keyOpFanOut(row('pay').fields, [V.accounts.token]), /key op/);
-  assert.throws(() => keyOpFanOut(k, []), /no token/);
+  assert.throws(() => keyOpFanOut(k, T, { [T[0]]: 0 }), /nonce/);
+  assert.throws(() => keyOpFanOut(row('pay').fields, [T[0]], { [T[0]]: 0 }), /key op/);
+  assert.throws(() => keyOpFanOut(k, [], {}), /no token/);
 });
+
+test('pay-meta and relay-fee payments need nonce 0', () => {
+  const r = row('pay_meta_note_utf8'), m = P.find((x) => x.name === 'note_utf8');
+  assert.throws(() => buildPayMeta({ ...r.fields, nonce: 1 }, m.salt, m.meta), /nonce/);
+  const rf = V.relayRefs.find((x) => x.name === 'router_short'), pay = row('relay_fee_pay_router_short');
+  assert.throws(() => buildRelayFee({ route: 'router', router: V.accounts.router, target: rf.target, method: rf.method,
+    args: fromHex(rf.args), salt: rf.salt }, { ...pay.fields, nonce: 2 }), /nonce/);
+});
+
+test('passkeyAssertion refuses a wrong challenge, type or invalid UTF-8', async () => {
+  const p = V.passkey, d = fromHex(row('pay_ua_passkey').digest);
+  const mk = (cdj) => ({ async get() {
+    return { authenticatorData: fromHex(p.authenticatorData), clientDataJSON: cdj, signature: p1363ToDer(fromHex(p.sig)) };
+  } });
+  const enc = (s) => new TextEncoder().encode(s);
+  await assert.rejects(passkeyAssertion(d, mk(enc(p.clientDataJSON.replace(p.challenge, 'AAAA')))), /challenge/);
+  await assert.rejects(passkeyAssertion(d, mk(enc(p.clientDataJSON.replace('webauthn.get', 'webauthn.create')))), /type/);
+  await assert.rejects(passkeyAssertion(d, mk(Uint8Array.of(0x7b, 0xff, 0x7d))), /UTF-8|encoded/);
+});
+
+test('passkeyAssertion output verifies as P-256 over authenticatorData || sha256(clientDataJSON)', async () => {
+  const p = V.passkey, d = fromHex(row('pay_ua_passkey').digest);
+  const cred = { async get() {
+    return { authenticatorData: fromHex(p.authenticatorData), clientDataJSON: enc(p.clientDataJSON),
+      signature: p1363ToDer(fromHex(p.sigHighS)) };
+  } };
+  const a = await passkeyAssertion(d, cred);
+  const msg = concatBytes(a.authenticatorData, sha256(enc(a.clientDataJSON)));
+  assert.ok(p256.verify(a.signature, msg, concatBytes(Uint8Array.of(4), fromHex(p.key)), { lowS: true }));
+  assert.equal(JSON.parse(a.clientDataJSON).challenge, b64url(d));
+});
+function enc(s) { return new TextEncoder().encode(s); }
