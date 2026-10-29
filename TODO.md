@@ -305,6 +305,10 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 - [ ] **TON passkey relays need P-256 in the node** (owner ruling 2026-10-28 on the final review residuals): the node refuses a
   passkey-signed relayed call until it verifies P-256 (`get_passkey` + the WebAuthn check; a `p256` dependency); passkey
   users send revoke / set_key directly meanwhile.
+- [ ] **bamboo-dms: NEAR and Algorand chain families** (found 2026-10-30 by the node-ua-jobs fix round): the client's
+  ingest (`dms_blockchain`, `blockchain_chain_event.py` / `eip712.py`) knows no `near` or `algorand` family, so it refuses
+  every feed row from those chains today, UA or not; add both families (address formats: NEAR account ids, Algorand
+  58-char addresses; the URN form for derived UA ids, NET-ALL-21) before a NEAR / Algorand chain feeds an ERP.
 - [ ] **bamboo-dms portal bundle rebuild (metatx split)**: `dms_blockchain_bridge`'s vendored clientkeys bundle lacks the new
   exports (`metaPayId`, `payLane`, `relayRef`, the pay-meta / relay-fee builders, T18); rebuild it with `npm run build` and copy
   it (the build writes outside the repo; combine with the stale-bundle item under the P5 leftovers).
