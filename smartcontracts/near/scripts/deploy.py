@@ -35,6 +35,7 @@ import json
 import os
 import re
 import struct
+import subprocess
 import sys
 import time
 import urllib.request
@@ -258,8 +259,29 @@ class Resume:
             fd = os.open(self.path + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as fh:
                 json.dump(self.keys, fh)
+                fh.flush()
+                os.fsync(fh.fileno())  # review N3: on disk before the key is used on chain
             os.replace(self.path + ".tmp", self.path)
+            dfd = os.open(os.path.dirname(self.path), os.O_RDONLY)
+            try:
+                os.fsync(dfd)  # and the rename
+            finally:
+                os.close(dfd)
         return Key.parse(account, self.keys[account])
+
+
+def keep_out_of_git(path):
+    """Review N3: a resume file inside the repository must be one git ignores (the default directory's
+    `deployments/*.resume.json` is); refused before anything is written or sent."""
+    try:
+        top = subprocess.run(["git", "-C", NEAR_DIR, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return  # not in a git checkout
+    if os.path.commonpath([os.path.realpath(top), os.path.realpath(os.path.dirname(path))]) != os.path.realpath(top):
+        return
+    if subprocess.run(["git", "-C", top, "check-ignore", "-q", path]).returncode != 0:
+        sys.exit(f"NEAR_DEPLOYMENTS_DIR {os.path.dirname(path)} is inside the repository and git does not ignore "
+                 f"{os.path.basename(path)} (the temporary keys): use smartcontracts/near/deployments or a directory outside it")
 
 
 def deploy(rpc):
@@ -279,11 +301,33 @@ def deploy(rpc):
     plan = [(t["account"], "scaas_near_token", network + bstr(admin) + token_metadata(t["name"], t["symbol"], t["decimals"]))
             for t in tokens]
     plan += [(dex, "scaas_near_dex", b""), (router, "scaas_near_relayfee", bstr(executor)), (executor, "scaas_near_relayexec", bstr(router))]
-    d = os.environ.get("NEAR_DEPLOYMENTS_DIR") or os.path.join(NEAR_DIR, "deployments")
+    d = os.path.abspath(os.environ.get("NEAR_DEPLOYMENTS_DIR") or os.path.join(NEAR_DIR, "deployments"))
+    rpath = os.path.join(d, f"{genesis}.{f.account}.resume.json")
+    keep_out_of_git(rpath)
     os.makedirs(d, exist_ok=True)
-    resume = Resume(os.path.join(d, f"{genesis}.{f.account}.resume.json"))
+    resume = Resume(rpath)
+    # review N2: keys of accounts outside this plan stay with their file (never removed, never orphaned)
+    stray = sorted(set(resume.keys) - {p[0] for p in plan})
+    if stray:
+        sys.exit(f"{rpath} holds the temporary keys of {stray}, which this run's plan (NEAR_TOKENS) does not include: "
+                 "rerun with the original NEAR_TOKENS / NEAR_ADMIN so the interrupted deployment finishes")
     print(f"deploy on {status['chain_id']} (genesis {genesis}) from {f.account}: {[p[0] for p in plan]}"
           + (f" (resuming: {sorted(resume.keys)})" if resume.keys else ""))
+    # review N1: an existing account is adopted only with this code and, for a token, these parameters (before any send)
+    meta = {t["account"]: t for t in tokens}
+    for account, crate, _ in plan:
+        acct = view_account(rpc, account)
+        if acct is None:
+            continue
+        if acct["code_hash"] != b58e(hashlib.sha256(wasm(crate)).digest()):
+            sys.exit(f"{account} exists with other code: not this deployment's (another funding account or NEAR_TOKENS)")
+        if account in meta and initialised(rpc, account, crate):
+            t, m = meta[account], json.loads(rpc.view(account, "ft_metadata"))
+            have = (m["name"], m["symbol"], m["decimals"], json.loads(rpc.view(account, "admin")))
+            want = (t["name"], t["symbol"], t["decimals"], admin)
+            if have != want:
+                sys.exit(f"{account} exists with (name, symbol, decimals, admin) {have}, not this run's {want}: "
+                         "not adopted (change NEAR_TOKENS / NEAR_ADMIN back, or use another funding account)")
     for account, crate, init in plan:
         code = wasm(crate)
         acct = view_account(rpc, account)

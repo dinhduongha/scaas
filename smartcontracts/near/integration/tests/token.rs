@@ -343,3 +343,11 @@ fn check_no_authority_finds_forbidden_api() {
         assert!(!out.status.success(), "not caught: {line}");
     }
 }
+
+/// T19 review N1: `admin()` reports `new`'s admin (deploy.sh compares it before adopting an existing token).
+#[tokio::test]
+async fn admin_view_is_the_mint_admin() {
+    let t = setup().await;
+    let admin: String = t.token.view("admin").await.unwrap().json().unwrap();
+    assert_eq!(admin, t.admin.id().as_str());
+}

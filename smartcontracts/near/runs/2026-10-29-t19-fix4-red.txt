@@ -1,0 +1,24 @@
+# near-algorand T19 fix 4 contract RED: admin_view_is_the_mint_admin against the fix 3 token wasm (no admin view)
+# cd smartcontracts/near && ../../scripts/capped cargo test -j2 -p scaas-near-integration --test token -- --test-threads=1 admin_view_is_the_mint_admin
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.75s
+     Running tests/token.rs (target/debug/deps/token-0efc4f14f899b0d9)
+
+running 1 test
+test admin_view_is_the_mint_admin ... FAILED
+
+failures:
+
+---- admin_view_is_the_mint_admin stdout ----
+
+thread 'admin_view_is_the_mint_admin' (2252213) panicked at integration/tests/token.rs:351:53:
+called `Result::unwrap()` on an `Err` value: Error { repr: Custom { kind: Rpc(QueryFailure), error: ServerError(HandlerError(ContractExecutionError { vm_error: "wasm execution failed with error: MethodResolveError(MethodNotFound)", error: ExecutionError("wasm execution failed with error: MethodResolveError(MethodNotFound)"), block_height: 22, block_hash: 2CHE2tePX68DaGXoYz6UVKA7erZakByNaUMvcheaRRVd })) } }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    admin_view_is_the_mint_admin
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 10 filtered out; finished in 3.15s
+
+error: test failed, to rerun pass `-p scaas-near-integration --test token`
+rc=101

@@ -1,14 +1,14 @@
-# near-algorand T19 fix 3 e2e: scaas-node NEAR adapter on near-sandbox 2.14.0 (protocol 88), started by the test (devnet.sh near, stopped with the process), keyless deploy by deploy.sh near (resumable); wasm from build.sh near at T19 fix 3 (IMPLICIT_TRANSFER_GAS 11, implicit_transfer_gas views); QUOTE lines: the node's quote >= the lane's NEAR decrease per job kind
+# near-algorand T19 fix 4 e2e: scaas-node NEAR adapter on near-sandbox 2.14.0 (protocol 88), started by the test (devnet.sh near, stopped with the process), keyless deploy by deploy.sh near (resumable; plan / adoption / repo-path guards); wasm from build.sh near at T19 fix 4 (token admin view); QUOTE lines: the node's quote >= the lane's NEAR decrease per job kind
 # cd scaas-node && ../scripts/capped cargo test -j2 --test e2e_near -- --ignored --nocapture
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s
      Running tests/e2e_near.rs (target/debug/deps/e2e_near-8fff549061f6767b)
 
 running 10 tests
 FEES max_gas_burnt_view = 300 Tgas (sandbox config.json)
-deploy on test-chain-KcnTR (genesis 8Tha4rPTHAqCvaoVCAPvS5mb2Bv8dzAQJrmJsE8AFnAj) from test.near: ['tka.test.near', 'tkb.test.near', 'dex.test.near', 'relayfee.test.near', 'relayexec.test.near']
-  create tka.test.near (scaas_near_token, 558831 B, 7.588 NEAR): ok, 71.675 Tgas
+deploy on test-chain-7J25Q (genesis 9UbXDNwZ4uQ1LV12PgWFqTzUop68qcgXNq24tdzN9QMX) from test.near: ['tka.test.near', 'tkb.test.near', 'dex.test.near', 'relayfee.test.near', 'relayexec.test.near']
+  create tka.test.near (scaas_near_token, 559120 B, 7.591 NEAR): ok, 71.708 Tgas
   tka.test.near.new: ok, 3.916 Tgas
-  create tkb.test.near (scaas_near_token, 558831 B, 7.588 NEAR): ok, 71.675 Tgas
+  create tkb.test.near (scaas_near_token, 559120 B, 7.591 NEAR): ok, 71.708 Tgas
   tkb.test.near.new: ok, 3.939 Tgas
   create dex.test.near (scaas_near_dex, 148797 B, 3.488 NEAR): ok, 25.646 Tgas
   dex.test.near.new: ok, 1.742 Tgas
@@ -17,48 +17,48 @@ deploy on test-chain-KcnTR (genesis 8Tha4rPTHAqCvaoVCAPvS5mb2Bv8dzAQJrmJsE8AFnAj
   create relayexec.test.near (scaas_near_relayexec, 39699 B, 2.397 NEAR): ok, 13.399 Tgas
   relayexec.test.near.new: ok, 1.639 Tgas
   tka.test.near.storage_deposit(c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6): ok, 2.463 Tgas
-  tka.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.467 Tgas
+  tka.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.468 Tgas
   tka.test.near.storage_deposit(c62925591efe23a1b0e7ce522b930cd8eb43c554a52a28e17370cc045dca2e44): ok, 2.472 Tgas
   tka.test.near.storage_deposit(8657318d4f232e9e049fd2b0ef4aff0752663c159bdba21fce49089f5bf46bc9): ok, 2.472 Tgas
-  tka.test.near.storage_deposit(05089cd0895236831cafbba2c14cede73ac6d7bc126f5eede7312abeb7c7832e): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(05089cd0895236831cafbba2c14cede73ac6d7bc126f5eede7312abeb7c7832e): ok, 2.475 Tgas
   tka.test.near.storage_deposit(7dabe05c3379fe4d99a566f90c451f7ccf0d2cc6a3bf810a3ec9959e49a862c7): ok, 2.472 Tgas
   tka.test.near.storage_deposit(9aa873721b8f8fb826375f8bec0a62e3661c6a99209d56040ee501f88d75abd4): ok, 2.472 Tgas
   tka.test.near.storage_deposit(5c80d330783e706597fd5f8b62d300c30d4e31458e079bebbd576417d6d33617): ok, 2.472 Tgas
   tka.test.near.storage_deposit(b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72): ok, 2.472 Tgas
-  tka.test.near.storage_deposit(bbf9c65a1caf9d1fa295abe520d4389c2fc6a16f22d4ef565b299704bb52adf1): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(bbf9c65a1caf9d1fa295abe520d4389c2fc6a16f22d4ef565b299704bb52adf1): ok, 2.475 Tgas
   tka.test.near.storage_deposit(645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65): ok, 2.472 Tgas
-  tka.test.near.storage_deposit(641e69f8bb2e8a711d417b1a28476f0dba9df2ec4387600fecf110e60c9dcc0a): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(641e69f8bb2e8a711d417b1a28476f0dba9df2ec4387600fecf110e60c9dcc0a): ok, 2.475 Tgas
   tka.test.near.storage_deposit(dcdba8770132a95b69ef7171c49679e35f374a95c5e665bf4ca51978a66db781): ok, 2.472 Tgas
   tka.test.near.storage_deposit(2279157d14a215633d49a92f9ef58f1bad894f70fca8eb37b9758a8bfb6a69dc): ok, 2.472 Tgas
   tka.test.near.storage_deposit(f855ebc1d3b5f79f63a4fcc2a104234c68bc60e2de1626bd664eed1a15bfe244): ok, 2.472 Tgas
-  tka.test.near.storage_deposit(8999627c73628f1c5273a8a6b4b61e255fb1ad5838dc49fbdb3b637e534daff8): ok, 2.474 Tgas
-  tka.test.near.storage_deposit(98031f6ccad6174ee424bda11de3f7a8a62c153d1fff683fa241c9cc0d9cfbc6): ok, 2.474 Tgas
-  tka.test.near.storage_deposit(da77767bd27907bc7cec33825c1b3b0d6ea3626d5d84024d8b1b48fdb7f7274b): ok, 2.474 Tgas
+  tka.test.near.storage_deposit(8999627c73628f1c5273a8a6b4b61e255fb1ad5838dc49fbdb3b637e534daff8): ok, 2.475 Tgas
+  tka.test.near.storage_deposit(98031f6ccad6174ee424bda11de3f7a8a62c153d1fff683fa241c9cc0d9cfbc6): ok, 2.475 Tgas
+  tka.test.near.storage_deposit(da77767bd27907bc7cec33825c1b3b0d6ea3626d5d84024d8b1b48fdb7f7274b): ok, 2.475 Tgas
   tkb.test.near.storage_deposit(c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6): ok, 2.463 Tgas
-  tkb.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.467 Tgas
+  tkb.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.468 Tgas
   tkb.test.near.storage_deposit(c62925591efe23a1b0e7ce522b930cd8eb43c554a52a28e17370cc045dca2e44): ok, 2.472 Tgas
   tkb.test.near.storage_deposit(8657318d4f232e9e049fd2b0ef4aff0752663c159bdba21fce49089f5bf46bc9): ok, 2.472 Tgas
-  tkb.test.near.storage_deposit(05089cd0895236831cafbba2c14cede73ac6d7bc126f5eede7312abeb7c7832e): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(05089cd0895236831cafbba2c14cede73ac6d7bc126f5eede7312abeb7c7832e): ok, 2.475 Tgas
   tkb.test.near.storage_deposit(7dabe05c3379fe4d99a566f90c451f7ccf0d2cc6a3bf810a3ec9959e49a862c7): ok, 2.472 Tgas
   tkb.test.near.storage_deposit(9aa873721b8f8fb826375f8bec0a62e3661c6a99209d56040ee501f88d75abd4): ok, 2.472 Tgas
   tkb.test.near.storage_deposit(5c80d330783e706597fd5f8b62d300c30d4e31458e079bebbd576417d6d33617): ok, 2.472 Tgas
   tkb.test.near.storage_deposit(b23051247f82f45ce8c7cf38ed6ecb7e5f15d36e0f114991322c8658063def72): ok, 2.472 Tgas
-  tkb.test.near.storage_deposit(bbf9c65a1caf9d1fa295abe520d4389c2fc6a16f22d4ef565b299704bb52adf1): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(bbf9c65a1caf9d1fa295abe520d4389c2fc6a16f22d4ef565b299704bb52adf1): ok, 2.475 Tgas
   tkb.test.near.storage_deposit(645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65): ok, 2.472 Tgas
-  tkb.test.near.storage_deposit(641e69f8bb2e8a711d417b1a28476f0dba9df2ec4387600fecf110e60c9dcc0a): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(641e69f8bb2e8a711d417b1a28476f0dba9df2ec4387600fecf110e60c9dcc0a): ok, 2.475 Tgas
   tkb.test.near.storage_deposit(dcdba8770132a95b69ef7171c49679e35f374a95c5e665bf4ca51978a66db781): ok, 2.472 Tgas
   tkb.test.near.storage_deposit(2279157d14a215633d49a92f9ef58f1bad894f70fca8eb37b9758a8bfb6a69dc): ok, 2.472 Tgas
   tkb.test.near.storage_deposit(f855ebc1d3b5f79f63a4fcc2a104234c68bc60e2de1626bd664eed1a15bfe244): ok, 2.472 Tgas
-  tkb.test.near.storage_deposit(8999627c73628f1c5273a8a6b4b61e255fb1ad5838dc49fbdb3b637e534daff8): ok, 2.474 Tgas
-  tkb.test.near.storage_deposit(98031f6ccad6174ee424bda11de3f7a8a62c153d1fff683fa241c9cc0d9cfbc6): ok, 2.474 Tgas
-  tkb.test.near.storage_deposit(da77767bd27907bc7cec33825c1b3b0d6ea3626d5d84024d8b1b48fdb7f7274b): ok, 2.474 Tgas
+  tkb.test.near.storage_deposit(8999627c73628f1c5273a8a6b4b61e255fb1ad5838dc49fbdb3b637e534daff8): ok, 2.475 Tgas
+  tkb.test.near.storage_deposit(98031f6ccad6174ee424bda11de3f7a8a62c153d1fff683fa241c9cc0d9cfbc6): ok, 2.475 Tgas
+  tkb.test.near.storage_deposit(da77767bd27907bc7cec33825c1b3b0d6ea3626d5d84024d8b1b48fdb7f7274b): ok, 2.475 Tgas
   tka.test.near: delete its last access key: ok, 0.629 Tgas
   tkb.test.near: delete its last access key: ok, 0.629 Tgas
   dex.test.near: delete its last access key: ok, 0.629 Tgas
   relayfee.test.near: delete its last access key: ok, 0.629 Tgas
   relayexec.test.near: delete its last access key: ok, 0.629 Tgas
 deploy gate: 5 accounts keyless (view_access_key_list empty)
-wrote /tmp/scaas-near-e2e/deployments/8Tha4rPTHAqCvaoVCAPvS5mb2Bv8dzAQJrmJsE8AFnAj.json
+wrote /tmp/scaas-near-e2e/deployments/9UbXDNwZ4uQ1LV12PgWFqTzUop68qcgXNq24tdzN9QMX.json
 
 FEES sandbox protocol 88: receipt (108059500000, 108059500000), function call (200000000000, 780000000000), per byte (47683715, 2235934) (send_not_sir, execution); node pins 108059500000, 2319861500000, 2235934 each
 FEES the node's (read from the RPC): ActionFees { receipt: 108059500000, function_call: 780000000000, per_byte: 47683715, implicit_transfer: 8349895375000 }
@@ -74,24 +74,15 @@ test near_pay_meta_job has been running for over 60 seconds
 test near_pay_relay_finalize has been running for over 60 seconds
 test near_relay_fee_wrapper_job has been running for over 60 seconds
 test near_router_refund has been running for over 60 seconds
-QUOTE mtx_pay_meta: quote 0.005722 NEAR >= the lane's NEAR decrease 0.003751 (deposit 0.003340, gas price 100000000)
-job 2: [
-    Object {
-        "chain_state": String("dead"),
-        "error": String("simulation: bad payload: pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"),
-        "job_id": Number(2),
-    },
-]
-test near_pay_meta_job ... ok
 test near_lanes_do_not_block_each_other ... ok
-QUOTE mtx_pay: quote 0.005721 NEAR >= the lane's NEAR decrease 0.003739 (deposit 0.003340, gas price 100000000)
+QUOTE mtx_pay: quote 0.005721 NEAR >= the lane's NEAR decrease 0.003735 (deposit 0.003340, gas price 100000000)
 job 1: [
     Object {
         "chain_state": String("signed"),
         "job_id": Number(1),
         "outer_nonce": Number(367000001),
         "signer_address": String("645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65"),
-        "tx_hash": String("0x2be1dddd9dfcecbb490bad29850d7fcb421f72c297a646f43f7967d26459fdb2"),
+        "tx_hash": String("0x83bbc5a9dcfdcbe8e8578f63ab2dbbcceb03625d607a555eb2a278d44309e84a"),
     },
     Object {
         "chain_state": String("broadcast"),
@@ -103,18 +94,18 @@ job 1: [
         "job_id": Number(1),
     },
 ]
-  receipt "relayfee.test.near" 2.211 Tgas {"SuccessReceiptId":"7DerBydTEiamPKgcjPQme2rdLsd9LJyJx8XnNd6tnJnt"} Array []
-  receipt "tka.test.near" 4.484 Tgas {"SuccessValue":"AQ=="} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"relayer\":\"relayfee.test.near\",\"lane\":\"0x696faa5cedb9594c656f91e1c0ba03984dbeb8a42437041b3facdcc111b6294c\",\"nonce\":0,\"digest\":\"0xa805c6c027cffdfb3c07551b6dd8a95a7f994f6ace7e87889f8dea54a6bb2053\"}}"), String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"to\":\"tka.test.near\",\"amount\":\"1000\"}}")]
+  receipt "relayfee.test.near" 2.211 Tgas {"SuccessReceiptId":"6dZMebVs7oXLeLa4WYgUg6wKTEVLwxDCQsNWB7erLjzc"} Array []
+  receipt "tka.test.near" 4.480 Tgas {"SuccessValue":"AQ=="} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"meta_transaction_executed\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"relayer\":\"relayfee.test.near\",\"lane\":\"0x5d23100af37d9fbf36c1482f78e4bac0dfd1aec7484a9cdf435fd057e7f0e30d\",\"nonce\":0,\"digest\":\"0x6e3ec379b859d4c576513874a880e58ed75f140c91a661675648fc48d790f65f\"}}"), String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"to\":\"tka.test.near\",\"amount\":\"1000\"}}")]
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
-  receipt "relayfee.test.near" 2.168 Tgas {"SuccessReceiptId":"FHB34rMwDaD24w5ATEjfhdr7zm3Da9uKAutN7TbKM3eJ"} Array []
-  receipt "relayexec.test.near" 1.574 Tgas {"SuccessReceiptId":"4yKEjiSDSvJ6n5pAvepY6jwUb4ZibA18MkCDgQCSJxLB"} Array []
+  receipt "relayfee.test.near" 2.168 Tgas {"SuccessReceiptId":"Ewhe2YQ8qGZ3nMAdZ5tbbNuWoJ4V2zodsKKK5ApVGSUU"} Array []
+  receipt "relayexec.test.near" 1.574 Tgas {"SuccessReceiptId":"CqNLZVcwEofFkPCRNSVANRquaW22TkGHaJnhUvotuvNv"} Array []
   receipt "fixture.test.near" 1.057 Tgas {"Failure":{"ActionError":{"index":0,"kind":{"FunctionCallError":{"ExecutionError":"Smart contract panicked: fixture fail"}}}}} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
-  receipt "relayfee.test.near" 2.158 Tgas {"SuccessReceiptId":"5kW8LfeoaSSQvKak9G4udJcfjX38WKUQPF2neMCMJuMo"} Array []
-  receipt "tka.test.near" 3.370 Tgas {"SuccessValue":"AQ=="} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"tka.test.near\",\"to\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"amount\":\"1000\"}}")]
+  receipt "relayfee.test.near" 2.158 Tgas {"SuccessReceiptId":"4xQK267h7kRBZVP57na6UiepjYhDRAmSNt53zbjUeWUd"} Array []
+  receipt "tka.test.near" 3.371 Tgas {"SuccessValue":"AQ=="} Array [String("EVENT_JSON:{\"standard\":\"scaas\",\"version\":\"1.0.0\",\"event\":\"ua_transfer\",\"data\":{\"from\":\"tka.test.near\",\"to\":\"0xc1ccd414b1f3030c06df3e90e1fa35b44fb64dc303bc2ba3fae11d23e90f8a8f\",\"amount\":\"1000\"}}")]
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
@@ -125,8 +116,7 @@ job 1: [
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
   receipt "645755aa5f5b9346ef2e14922911f9b10abf753aaaec5779828018a733ecde65" 7.525 Tgas {"SuccessValue":""} Array []
-QUOTE router -> listed target fail (refunded): quote 0.028020 NEAR >= the lane's NEAR decrease 0.006667 (deposit 0.009460, gas price 100000000)
-GAS mtx_pay (ed25519): 11.511 Tgas burnt in all, 3.662 in its receipt, 22 prepaid (pin 21 + 1: GAS_JOB_BASE = 10 + IMPLICIT_TRANSFER_GAS 11)
+GAS mtx_pay (ed25519): 11.477 Tgas burnt in all, 3.628 in its receipt, 22 prepaid (pin 21 + 1: GAS_JOB_BASE = 10 + IMPLICIT_TRANSFER_GAS 11)
 job 2: [
     Object {
         "chain_state": String("consumed"),
@@ -134,11 +124,21 @@ job 2: [
         "job_id": Number(2),
     },
 ]
+QUOTE router -> listed target fail (refunded): quote 0.028020 NEAR >= the lane's NEAR decrease 0.006667 (deposit 0.009460, gas price 100000000)
 test near_pay_relay_finalize ... ok
 test near_router_refund ... ok
+QUOTE mtx_pay_meta: quote 0.005722 NEAR >= the lane's NEAR decrease 0.003758 (deposit 0.003340, gas price 100000000)
+job 2: [
+    Object {
+        "chain_state": String("dead"),
+        "error": String("simulation: bad payload: pay-meta: pay_ref / lane / nonce are not metaPayId(salt, meta) / payLane / 0"),
+        "job_id": Number(2),
+    },
+]
+test near_pay_meta_job ... ok
 QUOTE relay_fee_add_origin (ed25519): quote 0.006505 NEAR >= the lane's NEAR decrease 0.004516 (deposit 0.004020, gas price 100000000)
 GAS relay_fee_add_origin (ed25519 entry + ed25519 payment): 12.480 Tgas burnt in all, 4.612 in its receipt, 23 prepaid (pin 21 + 1 + 1)
-deploy on test-chain-KcnTR (genesis 8Tha4rPTHAqCvaoVCAPvS5mb2Bv8dzAQJrmJsE8AFnAj) from dep2.test.near: ['tka.dep2.test.near', 'dex.dep2.test.near', 'relayfee.dep2.test.near', 'relayexec.dep2.test.near'] (resuming: ['tka.dep2.test.near'])
+deploy on test-chain-7J25Q (genesis 9UbXDNwZ4uQ1LV12PgWFqTzUop68qcgXNq24tdzN9QMX) from dep2.test.near: ['tka.dep2.test.near', 'dex.dep2.test.near', 'relayfee.dep2.test.near', 'relayexec.dep2.test.near'] (resuming: ['tka.dep2.test.near'])
   tka.dep2.test.near.new: ok, 4.033 Tgas
   create dex.dep2.test.near (scaas_near_dex, 148797 B, 3.488 NEAR): ok, 25.646 Tgas
   dex.dep2.test.near.new: ok, 1.744 Tgas
@@ -147,25 +147,25 @@ deploy on test-chain-KcnTR (genesis 8Tha4rPTHAqCvaoVCAPvS5mb2Bv8dzAQJrmJsE8AFnAj
   create relayexec.dep2.test.near (scaas_near_relayexec, 39699 B, 2.397 NEAR): ok, 13.399 Tgas
   relayexec.dep2.test.near.new: ok, 1.647 Tgas
   tka.dep2.test.near.storage_deposit(c5f869f1fa4165f42f2a837376db218644cf0b97dd818b834297e693144695c6): ok, 2.473 Tgas
-  tka.dep2.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.477 Tgas
+  tka.dep2.test.near.storage_deposit(0850c84e6e17ad459638314971fd89611bf245c4f245ad766afdcc8c06434236): ok, 2.478 Tgas
   tka.dep2.test.near: delete its last access key: ok, 0.629 Tgas
   dex.dep2.test.near: delete its last access key: ok, 0.629 Tgas
   relayfee.dep2.test.near: delete its last access key: ok, 0.629 Tgas
   relayexec.dep2.test.near: delete its last access key: ok, 0.629 Tgas
 deploy gate: 4 accounts keyless (view_access_key_list empty)
-wrote /tmp/scaas-near-e2e/deploy2/8Tha4rPTHAqCvaoVCAPvS5mb2Bv8dzAQJrmJsE8AFnAj.json
+wrote /tmp/scaas-near-e2e/deploy2/9UbXDNwZ4uQ1LV12PgWFqTzUop68qcgXNq24tdzN9QMX.json
 
-test deploy_resumes_after_an_interruption ... ok
 test near_events_include_native_ft_transfer ... ok
+test deploy_resumes_after_an_interruption ... ok
 QUOTE router in flight, timed out (refunded) + relay_timeout: quote 0.030530 NEAR >= the lane's NEAR decrease 0.006849 (deposit 0.009470, gas price 100000000)
 test near_router_timeout ... ok
 QUOTE router -> dex.settle (released): quote 0.049698 NEAR >= the lane's NEAR decrease 0.024345 (deposit 0.025330, gas price 100000000)
-GAS router relay -> dex.settle (ed25519 payment, two ed25519 legs): 180.246 Tgas burnt in all, 2.255 in relay, 166 prepaid (102 + 1 + settle 27 + 2 x 18)
+GAS router relay -> dex.settle (ed25519 payment, two ed25519 legs): 180.248 Tgas burnt in all, 2.255 in relay, 166 prepaid (102 + 1 + settle 27 + 2 x 18)
 test near_router_release ... ok
-QUOTE relay_fee_mandate_open (13 passkeys): quote 0.043226 NEAR >= the lane's NEAR decrease 0.040286 (deposit 0.013600, gas price 100000000)
-GAS relay_fee_mandate_open (12-passkey msig entry + passkey payment, 13 passkeys): 274.389 Tgas burnt in all, 266.312 in its receipt, 294 prepaid (pin 21 + 13 x 21 = 294), headroom 27.688 Tgas
+QUOTE relay_fee_mandate_open (13 passkeys): quote 0.043226 NEAR >= the lane's NEAR decrease 0.040284 (deposit 0.013600, gas price 100000000)
+GAS relay_fee_mandate_open (12-passkey msig entry + passkey payment, 13 passkeys): 274.368 Tgas burnt in all, 266.291 in its receipt, 294 prepaid (pin 21 + 13 x 21 = 294), headroom 27.709 Tgas
 test near_relay_fee_wrapper_job ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 73.35s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 73.54s
 
 rc=0

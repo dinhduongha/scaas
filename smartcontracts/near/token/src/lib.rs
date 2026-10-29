@@ -183,6 +183,11 @@ impl Token {
         self.network
     }
 
+    /// The mint admin (`new`'s `admin`): deploy.sh compares it before adopting an existing token (T19 review N1).
+    pub fn admin(&self) -> AccountId {
+        self.admin.clone()
+    }
+
     pub fn ua_balance_of(&self, id: [u8; 32]) -> U128 {
         U128(self.ua.get(&id).copied().unwrap_or(0))
     }

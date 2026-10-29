@@ -703,6 +703,9 @@ async fn deploy_gate_fails_with_a_key_left() {
 /// Review I3: `deploy.sh near` checks NEAR_LANES before any chain step; a deploy killed once its first account exists
 /// leaves its temporary key in the 0600 resume file (that account fails the gate); a rerun resumes and ends keyless, the
 /// gate passing, the deployment written and the resume file gone; a third run does nothing new and passes again.
+/// Re-review N2: a rerun whose plan drops an account the resume file holds a key for is refused, the file kept; N3: a
+/// deployments directory inside the repository that git does not ignore is refused; N1: an existing token is adopted
+/// only with the run's name, symbol, decimals and admin.
 #[tokio::test]
 #[ignore]
 async fn deploy_resumes_after_an_interruption() {
@@ -716,12 +719,14 @@ async fn deploy_resumes_after_an_interruption() {
     let key = dir.join("key.json");
     let secret = format!("ed25519:{}", b58(&[w.funder.to_bytes(), pk].concat()));
     std::fs::write(&key, json!({"account_id": f, "secret_key": secret}).to_string()).unwrap();
-    let env = |lanes: String| vec![
+    let env_with = |lanes: String, tokens: &str, d: &std::path::Path, admin: &str| vec![
         ("NEAR_KEY_FILE", key.to_str().unwrap().to_string()),
-        ("NEAR_TOKENS", "TKA:Token A:6".to_string()),
+        ("NEAR_TOKENS", tokens.to_string()),
         ("NEAR_LANES", lanes),
-        ("NEAR_DEPLOYMENTS_DIR", dir.to_str().unwrap().to_string()),
+        ("NEAR_DEPLOYMENTS_DIR", d.to_str().unwrap().to_string()),
+        ("NEAR_ADMIN", admin.to_string()),
     ];
+    let env = |lanes: String| env_with(lanes, "TKA:Token A:6", &dir, f);
     let lanes = format!("{},{}", lane_id(0), lane_id(1));
     let token = format!("tka.{f}");
     let exists = |a: String| async move { rpc_try(&w.rpc, "query", json!({"request_type": "view_account", "finality": "final", "account_id": a})).await.is_ok() };
@@ -729,6 +734,11 @@ async fn deploy_resumes_after_an_interruption() {
     let bad = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env(format!("{},XYZ", lane_id(0))));
     assert!(!bad.status.success() && String::from_utf8_lossy(&bad.stderr).contains("NEAR_LANES"), "{bad:?}");
     assert!(!exists(token.clone()).await, "nothing deployed");
+    // N3: a deployments directory inside the repository that git does not ignore
+    let inside = root().join("smartcontracts/near/scripts");
+    let refused = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env_with(lane_id(0), "TKA:Token A:6", &inside, f));
+    assert!(!refused.status.success() && String::from_utf8_lossy(&refused.stderr).contains("git does not ignore"), "{refused:?}");
+    assert!(!exists(token.clone()).await && std::fs::read_dir(&inside).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().contains("resume")));
     // interrupted: killed once the first account exists
     let mut c = Command::new(root().join("smartcontracts/scripts/deploy.sh"));
     c.args(["near", &w.rpc]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
@@ -751,6 +761,11 @@ async fn deploy_resumes_after_an_interruption() {
     assert_eq!(std::fs::metadata(&resume).expect("resume file kept").permissions().mode() & 0o777, 0o600);
     let half = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc, "gate", &token], &[]);
     assert!(!half.status.success(), "the interrupted account still holds its temporary key");
+    // N2: a rerun with another plan is refused before any transaction, and the resume file is kept
+    let other = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env_with(lanes.clone(), "TKB:Token B:6", &dir, f));
+    let e = String::from_utf8_lossy(&other.stderr);
+    assert!(!other.status.success() && e.contains(&token) && e.contains("original"), "{e}");
+    assert!(resume.exists() && !exists(format!("tkb.{f}")).await, "file kept, nothing new deployed");
     // the rerun resumes and finishes
     let out = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env(lanes.clone()));
     let log = ok_out("deploy.sh near (resumed)", &out);
@@ -766,6 +781,12 @@ async fn deploy_resumes_after_an_interruption() {
     // a third run: every step already done
     let again = ok_out("deploy.sh near (again)", &script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env(lanes)));
     assert!(again.contains("deployed and initialised") && !again.contains("create ") && again.contains("4 accounts keyless"), "{again}");
+    // N1: the existing token is not adopted with another name or admin
+    for (tokens, admin, what) in [("TKA:Other Name:6", f, "Other Name"), ("TKA:Token A:6", "test.near", "test.near")] {
+        let o = script("smartcontracts/scripts/deploy.sh", &["near", &w.rpc], &env_with(lane_id(0), tokens, &dir, admin));
+        let e = String::from_utf8_lossy(&o.stderr);
+        assert!(!o.status.success() && e.contains("not adopted") && e.contains(what), "{e}");
+    }
 }
 
 /// A plain `mtx_pay` relayed to `mined`; its hash = the RPC's; a replay is `consumed`; a stale nonce is `Rejected` before
