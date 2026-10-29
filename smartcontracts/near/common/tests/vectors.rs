@@ -235,6 +235,22 @@ fn webauthn_grammar_net_all_04() {
     assert_eq!(webauthn::origin(format!("{pre}}}").as_bytes(), &ch).as_deref(), Some(origin));
 }
 
+/// T16 fix 4: `webauthn-origin.json`, also run against the scaas-node port (`adapters::near::origin_of`): `origin_of`
+/// gives every row's `origin` (null = refused), incl. the shapes it accepts beyond JSON (a non-JSON tail, a duplicate
+/// `origin` after `crossOrigin`).
+#[test]
+fn origin_of_parity_vectors() {
+    use scaas_near_common::webauthn;
+    let v = load(concat!(env!("CARGO_MANIFEST_DIR"), "/../vectors/webauthn-origin.json"));
+    let rows = v["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 31);
+    for r in rows {
+        let cd = r["clientDataJSON"].as_str().unwrap().as_bytes();
+        let got = webauthn::origin_of(cd, &b32(&r["challenge"])).map(|o| std::str::from_utf8(o).unwrap());
+        assert_eq!(got, r["origin"].as_str(), "{}", r["name"]);
+    }
+}
+
 const PAYMETA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/metatx/paymeta.json");
 
 /// Spec §2 rows 3, 16 (R16): every `paymeta.json` row's `payId` / `payLane` through `env::keccak256`.

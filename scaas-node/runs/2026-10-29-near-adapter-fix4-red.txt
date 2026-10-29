@@ -1,0 +1,80 @@
+   Compiling scaas-node v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/near-algorand/scaas-node)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 9.11s
+     Running unittests src/lib.rs (target/debug/deps/scaas_node-dbe39b21340e8e02)
+
+running 44 tests
+test adapters::near::tests::action_fees_and_timeout_are_priced ... ok
+test adapters::near::tests::key_sets_per_token ... ok
+test adapters::near::tests::deposit_equals_storage_needed_plus_nep_yocto ... ok
+test adapters::near::tests::events_scan_blocks ... ok
+test adapters::near::tests::escrow_foreign_entry_not_followed ... ok
+test adapters::near::tests::near_events_join_meta_relay_fee_and_mandate ... ok
+test adapters::near::tests::near_events_success_only_configured ... ok
+test adapters::near::tests::near_events_trades_from_transfers ... ok
+test adapters::near::tests::escrow_tracking_times_out_after_deadline ... ok
+test adapters::near::tests::near_metaop_decode_vectors ... ok
+test adapters::near::tests::near_pay_meta_job_checks_commitment ... ok
+test adapters::near::tests::near_amount_above_2_pow_53_round_trips ... ok
+test adapters::near::tests::key_sets_shown_for_key_op_jobs ... ok
+test adapters::near::tests::origin_of_parity_vectors ... FAILED
+test adapters::near::tests::near_relay_fee_job_checks_ref ... ok
+test adapters::near::tests::plain_pay_expiry_margin ... ok
+test adapters::near::tests::node_target_figures_are_priced ... ok
+test adapters::near::tests::dex_deposit_floor_covers_the_larger_leg_twice ... ok
+test adapters::near::tests::mandate_terms_expiry_margin ... ok
+test adapters::near::tests::pruned_heights_error ... ok
+test adapters::near::tests::relay_fee_config_must_parse ... ok
+test adapters::near::tests::refunded_router_job_is_not_consumed ... ok
+test adapters::near::tests::relay_fee_target_router_or_executor_refused ... ok
+test adapters::near::tests::router_job_gas_on_node_figures ... FAILED
+test adapters::near::tests::expiry_margin_refused ... ok
+test adapters::near::tests::relay_fee_target_without_code_refused ... ok
+test adapters::near::tests::signature_budgets ... ok
+test adapters::near::tests::same_token_value_target_needs_balance ... ok
+test adapters::near::tests::dex_pair_and_index_replicated ... ok
+test adapters::near::tests::start_check_genesis_mismatch_errors ... ok
+test adapters::near::tests::quote_covers_gas_and_storage_needed ... ok
+test adapters::near::tests::start_check_lane_unregistered_errors ... ok
+test adapters::near::tests::stuck_settle_checks_relay_held ... ok
+test adapters::near::tests::unknown_job_kind_is_refused ... ok
+test adapters::near::tests::submit_errors_are_classified ... ok
+test adapters::near::tests::tx_matches_near_primitives ... ok
+test adapters::near::tests::passkey_origin_shapes_as_on_chain ... FAILED
+test adapters::near::tests::third_party_methods_listed ... ok
+test adapters::near::tests::view_over_gas_cap_is_transport ... ok
+test adapters::near::tests::wrapper_conflicts_refused ... ok
+test adapters::near::tests::start_check_access_key_present_halts ... ok
+test adapters::near::tests::unopened_subject_origins ... ok
+test adapters::near::tests::router_target_bound_to_fail_refused ... ok
+test adapters::near::tests::near_jobs_never_panic ... ok
+
+failures:
+
+---- adapters::near::tests::origin_of_parity_vectors stdout ----
+
+thread 'adapters::near::tests::origin_of_parity_vectors' (19191) panicked at src/adapters/near.rs:3751:13:
+assertion `left == right` failed: "chrome_published"
+  left: None
+ right: Some("http://localhost:3005")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- adapters::near::tests::router_job_gas_on_node_figures stdout ----
+
+thread 'adapters::near::tests::router_job_gas_on_node_figures' (19249) panicked at src/adapters/near.rs:3844:42:
+264000000000000: Revert("bad payload: the job needs 301 Tgas, above the 300 Tgas one transaction may prepay")
+
+---- adapters::near::tests::passkey_origin_shapes_as_on_chain stdout ----
+
+thread 'adapters::near::tests::passkey_origin_shapes_as_on_chain' (19192) panicked at src/adapters/near.rs:3804:9:
+non-JSON tail: Ok(Built { job_id: 1, body: [76, 55, 240, 53, 226, 185, 199, 78, 133, 164, 142, 24, 224, 115, 186, 187, 207, 58, 154, 68, 204, 153, 130, 98, 161, 29, 177, 239, 64, 9, 107, 253, 15, 0, 0, 0, 116, 111, 107, 101, 110, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 12, 1, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 1, 2, 161, 46, 208, 43, 127, 196, 189, 101, 101, 71, 185, 153, 82, 25, 22, 116, 188, 74, 72, 172, 159, 61, 241, 82, 216, 243, 54, 72, 169, 67, 248, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 87, 134, 244, 0, 0, 0, 0, 227, 176, 196, 66, 152, 252, 28, 20, 154, 251, 244, 200, 153, 111, 185, 36, 39, 174, 65, 228, 100, 155, 147, 76, 164, 149, 153, 27, 120, 82, 184, 85, 2, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 37, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 127, 0, 0, 0, 123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110, 46, 103, 101, 116, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110, 103, 101, 34, 58, 34, 83, 74, 79, 104, 49, 86, 83, 84, 83, 105, 57, 75, 75, 79, 78, 50, 55, 108, 122, 103, 69, 48, 49, 81, 109, 121, 69, 68, 97, 51, 99, 52, 105, 56, 104, 54, 103, 54, 118, 95, 95, 112, 115, 34, 44, 34, 111, 114, 105, 103, 105, 110, 34, 58, 34, 104, 116, 116, 112, 115, 58, 47, 47, 97, 46, 116, 101, 115, 116, 34, 44, 34, 99, 114, 111, 115, 115, 79, 114, 105, 103, 105, 110, 34, 58, 102, 97, 108, 115, 101, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 76, 55, 240, 53, 226, 185, 199, 78, 133, 164, 142, 24, 224, 115, 186, 187, 207, 58, 154, 68, 204, 153, 130, 98, 161, 29, 177, 239, 64, 9, 107, 253, 15, 0, 0, 0, 116, 111, 107, 101, 110, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 0, 1, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 238, 0, 15, 0, 0, 0, 116, 111, 107, 101, 110, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 1, 15, 0, 0, 0, 116, 111, 107, 101, 110, 46, 116, 101, 115, 116, 46, 110, 101, 97, 114, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 213, 78, 62, 137, 161, 244, 183, 137, 147, 198, 184, 56, 173, 183, 101, 248, 138, 198, 219, 209, 32, 127, 48, 217, 222, 53, 34, 127, 116, 166, 76, 63, 202, 18, 94, 95, 169, 28, 133, 132, 75, 34, 77, 89, 102, 155, 87, 157, 66, 137, 37, 125, 13, 96, 121, 107, 134, 45, 136, 182, 177, 101, 252, 208, 0, 0, 0, 0, 0, 0, 0, 0, 0, 87, 134, 244, 0, 0, 0, 0, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 81, 2, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 37, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 129, 0, 0, 0, 123, 34, 116, 121, 112, 101, 34, 58, 34, 119, 101, 98, 97, 117, 116, 104, 110, 46, 103, 101, 116, 34, 44, 34, 99, 104, 97, 108, 108, 101, 110, 103, 101, 34, 58, 34, 101, 53, 71, 121, 90, 45, 88, 82, 109, 52, 75, 83, 68, 57, 69, 69, 120, 51, 55, 112, 90, 103, 48, 48, 74, 98, 97, 49, 83, 117, 101, 74, 49, 50, 68, 73, 51, 89, 111, 50, 72, 112, 81, 34, 44, 34, 111, 114, 105, 103, 105, 110, 34, 58, 34, 104, 116, 116, 112, 115, 58, 47, 47, 98, 46, 116, 101, 115, 116, 34, 44, 34, 99, 114, 111, 115, 115, 79, 114, 105, 103, 105, 110, 34, 58, 102, 97, 108, 115, 101, 44, 120, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], valid_until: 4102444800, meta: Object {"deposit": String("1"), "gas": Number(52000000000000), "method": String("relay_fee_cancel_recovery"), "receiver": String("token.test.near")} })
+
+
+failures:
+    adapters::near::tests::origin_of_parity_vectors
+    adapters::near::tests::passkey_origin_shapes_as_on_chain
+    adapters::near::tests::router_job_gas_on_node_figures
+
+test result: FAILED. 41 passed; 3 failed; 0 ignored; 0 measured; 344 filtered out; finished in 4.39s
+
+error: test failed, to rerun pass `--lib`
+rc=101

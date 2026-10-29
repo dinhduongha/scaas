@@ -316,14 +316,36 @@ impl MetaOp {
 }
 
 /// A Borsh `Auth` (common/src/auth.rs: 0 ed25519, 1 secp256k1, 2 passkey, 3 msig), read off chain for its size, its
-/// signature budget and the key record / passkey origin it signs with; the job forwards the bytes as signed.
+/// signature budget and the key record / passkey origin it signs with; the job forwards the bytes as signed. Read with
+/// the challenge it signs (the token's `op.digest()` of its op, every msig member alike).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Auth {
     Ed25519([u8; 32]),
     Secp256k1([u8; 64]),
-    /// `rp` = the authenticatorData's rpIdHash (its first 32 bytes), `origin` = clientDataJSON's `origin`.
-    Passkey { key: [u8; 64], rp: Option<[u8; 32]>, origin: Option<String> },
+    /// `rp` = the authenticatorData's rpIdHash (its first 32 bytes), `origin` = clientDataJSON's origin as the token
+    /// reads it (`origin_of`).
+    Passkey { key: [u8; 64], rp: Option<[u8; 32]>, origin: String },
     Msig { key_data: Vec<u8>, sigs: Vec<Auth> },
+}
+
+/// common/src/webauthn.rs `origin_of`, ported byte for byte (fix 4 N1; `smartcontracts/near/vectors/webauthn-origin.json`
+/// runs against both): clientDataJSON is exactly `{"type":"webauthn.get","challenge":"<b64url(challenge)>","origin":"`
+/// ‖ origin ‖ `"`, then `}` (end), or `,"crossOrigin":false` then `}` (end) or `,` … `}` without `"topOrigin"` /
+/// `"crossOrigin"`. That tail need not be JSON and may repeat members (`origin` too): the origin is the first, non-empty,
+/// without `\`. Every passkey origin the node reads comes from here, as the token's do.
+pub fn origin_of<'a>(cd: &'a [u8], challenge: &[u8; 32]) -> Option<&'a [u8]> {
+    let has = |hay: &[u8], pat: &[u8]| hay.windows(pat.len()).any(|w| w == pat);
+    let c = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(challenge);
+    let prefix = format!(r#"{{"type":"webauthn.get","challenge":"{c}","origin":""#);
+    let rest = cd.strip_prefix(prefix.as_bytes())?;
+    let end = rest.iter().position(|c| *c == b'"')?;
+    let (origin, tail) = (&rest[..end], &rest[end + 1..]);
+    let ok = match tail.strip_prefix(br#","crossOrigin":false"#) {
+        _ if tail == b"}" => true,
+        Some(t) => t == b"}" || (t.starts_with(b",") && t.ends_with(b"}") && !has(t, br#""topOrigin""#) && !has(t, br#""crossOrigin""#)),
+        None => false,
+    };
+    (ok && !origin.is_empty() && !origin.contains(&b'\\')).then_some(origin)
 }
 
 /// UA kinds (common/src/ua.rs).
@@ -334,14 +356,14 @@ const KIND_MSIG: u16 = 0x0120;
 
 impl Auth {
     /// Exactly one `Auth`; an msig inside an msig and a passkey field over `PASSKEY_FIELD_MAX` refused (as on chain).
-    pub fn decode(b: &[u8]) -> Result<Self> {
+    pub fn decode(b: &[u8], challenge: &[u8; 32]) -> Result<Self> {
         let mut r = Reader::new(b);
-        let a = Self::read(&mut r, true)?;
+        let a = Self::read(&mut r, true, challenge)?;
         r.end()?;
         Ok(a)
     }
 
-    fn read(r: &mut Reader, top: bool) -> Result<Self> {
+    fn read(r: &mut Reader, top: bool, challenge: &[u8; 32]) -> Result<Self> {
         Ok(match r.u8()? {
             0 => {
                 let key = r.arr32()?;
@@ -361,7 +383,10 @@ impl Auth {
                     bail!("passkey clientDataJSON / authenticatorData over {PASSKEY_FIELD_MAX} bytes");
                 }
                 let rp = ad.get(..32).and_then(|x| x.try_into().ok());
-                let origin = serde_json::from_slice::<Value>(cd).ok().and_then(|v| v["origin"].as_str().map(str::to_string));
+                // fix 4 N1: as the token reads it (its `webauthn::origin`); a clientDataJSON it cannot parse never verifies
+                let origin = origin_of(cd, challenge).and_then(|o| String::from_utf8(o.to_vec()).ok()).ok_or_else(|| {
+                    anyhow!("passkey clientDataJSON is not in the token's grammar for this op (webauthn origin_of: type, challenge, origin, tail)")
+                })?;
                 Auth::Passkey { key, rp, origin }
             }
             3 if top => {
@@ -370,7 +395,7 @@ impl Auth {
                 let mut sigs = Vec::new();
                 for _ in 0..n {
                     r.u8()?;
-                    sigs.push(Self::read(r, false)?);
+                    sigs.push(Self::read(r, false, challenge)?);
                 }
                 Auth::Msig { key_data, sigs }
             }
@@ -418,7 +443,7 @@ impl Auth {
     /// The origins of its passkey signatures.
     fn origins(&self) -> Vec<String> {
         match self {
-            Auth::Passkey { origin, .. } => origin.iter().cloned().collect(),
+            Auth::Passkey { origin, .. } => vec![origin.clone()],
             Auth::Msig { sigs, .. } => sigs.iter().flat_map(Self::origins).collect(),
             _ => vec![],
         }
@@ -538,8 +563,8 @@ fn read_param(r: &mut Reader, p: P) -> Result<()> {
 fn wrapper_args(entry: &str, args: &[u8]) -> Result<Auth> {
     let (_, params) = WRAPPED.iter().find(|w| w.0 == entry).ok_or_else(|| anyhow!("{entry} is not a wrapped entry"))?;
     let mut r = Reader::new(args);
-    MetaOp::read(&mut r)?;
-    let auth = Auth::read(&mut r, true)?;
+    let op = MetaOp::read(&mut r)?;
+    let auth = Auth::read(&mut r, true, &op.digest())?;
     for p in params.iter() {
         read_param(&mut r, *p)?;
     }
@@ -869,7 +894,7 @@ fn settle_legs(b: &[u8]) -> Result<Vec<SettleLeg>> {
         let order = b[start..r.i].to_vec();
         let op = MetaOp::read(&mut r)?;
         let at = r.i;
-        let auth = Auth::read(&mut r, true)?;
+        let auth = Auth::read(&mut r, true, &op.digest())?;
         legs.push(SettleLeg { order, sell_token, buy_token, sell_amount, min_buy, expiry, relayer, op, auth_raw: b[at..r.i].to_vec(), auth });
     }
     r.end()?;
@@ -946,7 +971,7 @@ pub fn wrapper_conflicts(entry: &Entry, op: &MetaOp, auth: &Auth) -> Result<()> 
     let Entry::FeeWrapper { entry, args } = entry else { return Ok(()) };
     let mut r = Reader::new(args);
     let eop = MetaOp::read(&mut r)?;
-    Auth::read(&mut r, true)?;
+    Auth::read(&mut r, true, &eop.digest())?;
     if eop.from != op.from {
         return Ok(());
     }
@@ -975,8 +1000,8 @@ pub fn wrapper_conflicts(entry: &Entry, op: &MetaOp, auth: &Auth) -> Result<()> 
 /// Fix 3 N2: the `expiry` of a `mtx_mandate_open(op, auth, terms)` call's `MandateTerms`.
 fn mandate_expiry(args: &[u8]) -> Result<u64> {
     let mut r = Reader::new(args);
-    MetaOp::read(&mut r)?;
-    Auth::read(&mut r, true)?;
+    let op = MetaOp::read(&mut r)?;
+    Auth::read(&mut r, true, &op.digest())?;
     r.holder()?;
     r.holder()?;
     r.u128()?;
@@ -991,7 +1016,7 @@ fn mandate_expiry(args: &[u8]) -> Result<u64> {
 fn entry_origins(entry: &str, args: &[u8]) -> Result<(Holder, Vec<String>)> {
     let mut r = Reader::new(args);
     let op = MetaOp::read(&mut r)?;
-    let mut origins = Auth::read(&mut r, true)?.origins();
+    let mut origins = Auth::read(&mut r, true, &op.digest())?.origins();
     match entry {
         "mtx_add_origin" => origins.push(r.string()?),
         "mtx_add_key" => {
@@ -1060,7 +1085,7 @@ pub struct Call {
 /// meta)`, `relay_fee_<entry>(entry args…, op, auth)` on the token, or the router's `relay(…)`. Its `*_check` view
 /// takes the same arguments, after `caller` on the token (the router's `relay_check` has none).
 pub fn call_of(policy: &RelayFeePolicy, entry: &Entry, op: &MetaOp, auth: &[u8]) -> Result<Call> {
-    let gas = job_gas(entry, &Auth::decode(auth)?)?;
+    let gas = job_gas(entry, &Auth::decode(auth, &op.digest())?)?;
     let pay = [op.borsh(), auth.to_vec()].concat();
     let (receiver, method, args) = match entry {
         Entry::Pay => (op.contract.clone(), "mtx_pay".to_string(), pay),
@@ -1176,7 +1201,7 @@ fn relay_args_ref(args: &[u8]) -> Result<[u8; 32]> {
     r.u128()?;
     r.account()?;
     let op = MetaOp::read(&mut r)?;
-    Auth::read(&mut r, true)?;
+    Auth::read(&mut r, true, &op.digest())?;
     r.end()?;
     Ok(op.pay_ref)
 }
@@ -1414,6 +1439,7 @@ pub struct NearAdapter {
 struct Work {
     op: MetaOp,
     auth_raw: Vec<u8>,
+    auth: Auth,
     entry: Entry,
 }
 
@@ -1527,10 +1553,15 @@ impl NearAdapter {
         }
         let auth_raw = hex_field(&o["signature"], "signature")?;
         let entry = entry(&self.relay_fee, &op, o)?;
-        let auth = Auth::decode(&auth_raw)?;
-        job_gas(&entry, &auth)?;
+        let auth = Auth::decode(&auth_raw, &op.digest())?;
+        // fix 4 n1: a router job's target_gas is the node's (`build`, `target_check`): only the rest is bounded here
+        let mut pinned = entry.clone();
+        if let Entry::FeeRouter { target_gas, .. } = &mut pinned {
+            *target_gas = 0;
+        }
+        job_gas(&pinned, &auth)?;
         wrapper_conflicts(&entry, &op, &auth)?;
-        Ok(Work { op, auth_raw, entry })
+        Ok(Work { op, auth_raw, auth, entry })
     }
 
     fn lane_of(&self, account: &str) -> Option<usize> {
@@ -1660,7 +1691,7 @@ impl NearAdapter {
                 return Err(rv(format!("router target {target}: {method} is not a relayable token entry (no check view)")));
             }
             let mut r = Reader::new(args);
-            let (top, auth) = MetaOp::read(&mut r).and_then(|op| Ok((op, Auth::read(&mut r, true)?)))
+            let (auth, top) = MetaOp::read(&mut r).and_then(|op| Ok((Auth::read(&mut r, true, &op.digest())?, op)))
                 .map_err(|e| rv(format!("router target args of {method}: {e:#}")))?;
             margin(top.valid_until, "the target op")?;
             if method == "mtx_mandate_open" {
@@ -1843,7 +1874,7 @@ impl ChainAdapter for NearAdapter {
         // fix 3 N1: an unopened subject paying for its own wrapped entry: the entry opens it with its own origins, then the
         // payment's passkey is checked against them
         if let Entry::FeeWrapper { entry, args } = &w.entry {
-            let pay_origins = Auth::decode(&w.auth_raw).map(|a| a.origins()).unwrap_or_default();
+            let pay_origins = w.auth.origins();
             let (from, origins) = entry_origins(entry, args).map_err(revert)?;
             if from == w.op.from && !pay_origins.is_empty() {
                 let mut a = Vec::new();
@@ -2141,6 +2172,20 @@ mod tests {
 
     fn bstr(s: &str) -> Vec<u8> {
         bvec(s.as_bytes())
+    }
+
+    /// Chrome's tail after the origin (WebAuthn L3); Safari's is `}`.
+    const CHROME_TAIL: &str = r#","crossOrigin":false}"#;
+
+    /// `{"type":"webauthn.get","challenge":"<b64url(ch)>","origin":"<origin>"` ‖ `tail`.
+    fn cdj(ch: &[u8; 32], origin: &str, tail: &str) -> String {
+        let c = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(ch);
+        format!(r#"{{"type":"webauthn.get","challenge":"{c}","origin":"{origin}"{tail}"#)
+    }
+
+    /// A Borsh passkey auth carrying clientDataJSON `cd` (key and signature not checked off chain).
+    fn passkey(cd: &str) -> Vec<u8> {
+        [vec![2], vec![7; 64], bvec(&[1; 37]), bstr(cd), vec![0; 64]].concat()
     }
 
     /// Borsh `Auth` of a vector row's `auth` (common/src/auth.rs: 0 ed25519, 1 secp256k1, 2 passkey).
@@ -2454,12 +2499,12 @@ mod tests {
             assert_eq!(op.digest().to_vec(), hx(&r["digest"]), "{}", r["name"]);
             assert_eq!(op.borsh(), enc[15..].to_vec());
             if r["auth"].is_object() && r["auth"]["kind"].is_string() {
-                Auth::decode(&auth_bytes(&r["auth"])).unwrap_or_else(|e| panic!("{} auth: {e:#}", r["name"]));
+                Auth::decode(&auth_bytes(&r["auth"]), &op.digest()).unwrap_or_else(|e| panic!("{} auth: {e:#}", r["name"]));
                 n_auth += 1;
             }
         }
         assert_eq!(n_auth, rows.len(), "every row's auth decodes");
-        assert!(matches!(Auth::decode(&auth_bytes(&row("set_guardian_msig")["auth"])).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
+        assert!(matches!(Auth::decode(&auth_bytes(&row("set_guardian_msig")["auth"]), &op_of("set_guardian_msig").digest()).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
         assert_eq!(op_of("pay_ua_ed25519_u128_max").amount, u128::MAX);
         assert_eq!(Holder::Ua([0xab; 32]).display(), format!("0x{}", "ab".repeat(32)));
         assert_eq!(Holder::Near("alice.test.near".into()).display(), "alice.test.near");
@@ -2476,14 +2521,15 @@ mod tests {
         assert!(MetaOp::decode(&bad).is_err(), "holder tag 2");
         // Auth: trailing, unknown tag, msig in msig, an oversized passkey field
         let a = auth_bytes(&row("pay")["auth"]);
-        assert!(Auth::decode(&[&a[..], &[0]].concat()).is_err());
-        assert!(Auth::decode(&[&[4u8][..], &a[1..]].concat()).is_err());
+        let z = [0; 32];
+        assert!(Auth::decode(&[&a[..], &[0]].concat(), &z).is_err());
+        assert!(Auth::decode(&[&[4u8][..], &a[1..]].concat(), &z).is_err());
         let msig = |inner: &[u8]| [vec![3], bvec(&[0, 1]), 1u32.to_le_bytes().to_vec(), vec![0], inner.to_vec()].concat();
-        assert!(matches!(Auth::decode(&msig(&a)).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
-        assert!(Auth::decode(&msig(&msig(&a))).is_err(), "msig inside msig");
-        let pk = |cd: usize| [vec![2], vec![0; 64], bvec(&[0; 37]), bvec(&vec![b'x'; cd]), vec![0; 64]].concat();
-        assert_eq!(Auth::decode(&pk(1024)).unwrap().passkeys(), 1);
-        assert!(Auth::decode(&pk(1025)).is_err(), "passkey field over 1024 bytes (contract PASSKEY_FIELD_MAX)");
+        assert!(matches!(Auth::decode(&msig(&a), &z).unwrap(), Auth::Msig { sigs, .. } if matches!(sigs[..], [Auth::Ed25519(_)])));
+        assert!(Auth::decode(&msig(&msig(&a)), &z).is_err(), "msig inside msig");
+        let pk = |n: usize| passkey(&cdj(&z, &format!("https://{}", "a".repeat(n - cdj(&z, "https://", "}").len())), "}"));
+        assert_eq!(Auth::decode(&pk(1024), &z).unwrap().passkeys(), 1);
+        assert!(Auth::decode(&pk(1025), &z).is_err(), "passkey field over 1024 bytes (contract PASSKEY_FIELD_MAX)");
     }
 
     /// The node's hand-encoded Borsh transaction and lane signature equal nearcore's (`near-tx.json`, written by
@@ -2669,7 +2715,8 @@ mod tests {
     /// router job's relay_gas = 36 Tgas + the payment's signature budget + target_gas ≤ 300 Tgas.
     #[test]
     fn signature_budgets() {
-        let pk = [vec![2], vec![0; 64], bvec(&[0; 37]), bvec(&[b'x'; 200]), vec![0; 64]].concat();
+        let ch = op_of("cancel_recovery").digest();
+        let pk = passkey_from(&ch, "https://pay.scaas.test");
         let msig = |n: usize| {
             let mut b = [vec![3], bvec(&[0; 4]), (n as u32).to_le_bytes().to_vec()].concat();
             (0..n).for_each(|i| {
@@ -2682,10 +2729,10 @@ mod tests {
             let call = [&[19u8][..], b"mtx_cancel_recovery", &op_of("cancel_recovery").borsh(), &msig(n)].concat();
             Entry::FeeWrapper { entry: "mtx_cancel_recovery".into(), args: call[20..].to_vec() }
         };
-        let pay = Auth::decode(&pk).unwrap();
+        let pay = Auth::decode(&pk, &ch).unwrap();
         assert!(job_gas(&wrapper(12), &pay).unwrap() <= MAX_GAS, "12 + 1 passkeys");
         assert!(format!("{:#}", job_gas(&wrapper(13), &pay).unwrap_err()).contains("13"), "13 + 1 passkeys");
-        let ed = Auth::decode(&auth_bytes(&row("pay")["auth"])).unwrap();
+        let ed = Auth::decode(&auth_bytes(&row("pay")["auth"]), &ch).unwrap();
         assert!(job_gas(&wrapper(13), &ed).is_ok(), "13 passkeys + an ed25519 payment");
         assert!(job_gas(&Entry::Pay, &ed).unwrap() < job_gas(&Entry::Pay, &pay).unwrap(), "a passkey costs more");
         let router = |tg: u64| Entry::FeeRouter { target: DEX.into(), method: "settle".into(), args: vec![], target_gas: tg * TGAS, target_deposit: 0 };
@@ -2771,7 +2818,7 @@ mod tests {
         let (rop, ro) = router_op_g(TOKEN, "mtx_pay", &pay, Holder::Near(ROUTER.into()), "30000000000000", &td.to_string());
         // (fix 3 g1: the node's target figures, the entry's pinned gas 11 Tgas and its storage td)
         let set = Entry::FeeRouter { target: TOKEN.into(), method: "mtx_pay".into(), args: pay.clone(), target_gas: 11 * TGAS, target_deposit: td };
-        let g = job_gas(&set, &Auth::decode(&hx(&ro["signature"])).unwrap()).unwrap();
+        let g = job_gas(&set, &Auth::decode(&hx(&ro["signature"]), &rop.digest()).unwrap()).unwrap();
         let (entry_dep, hold) = (3_140 * 10u128.pow(18) + 1_250 * 10u128.pow(18) + 2 + td, 2_800 * 10u128.pow(18));
         let rcall = call_of(&pol(), &set, &rop, &hx(&ro["signature"])).unwrap();
         let quote = (g + action_fees(&rcall) + timeout_gas()) as u128 * 100_000_000 + entry_dep + hold;
@@ -3218,7 +3265,7 @@ mod tests {
 
     async fn build_router_op(w: World, relay_fee: &str, op: MetaOp, o: Value) -> (std::result::Result<Built, SimError>, Arc<Mutex<World>>) {
         let gas = entry(&RelayFeePolicy { dex: Some(DEX.into()), targets: BTreeMap::from([("app.near".to_string(), vec!["anything".to_string()])]), tokens: vec![TOKEN.into(), TOKENB.into()], ..pol() }, &op, &o)
-            .ok().and_then(|e| job_gas(&e, &Auth::decode(&hx(&o["signature"])).unwrap()).ok()).unwrap_or(0);
+            .ok().and_then(|e| job_gas(&e, &Auth::decode(&hx(&o["signature"]), &op.digest()).unwrap()).ok()).unwrap_or(0);
         let mut w = w;
         w.views.insert((ROUTER.into(), "relay_check".into()), router_check(1, 1, gas));
         let w = Arc::new(Mutex::new(w));
@@ -3372,8 +3419,8 @@ mod tests {
     async fn wrapper_conflicts_refused() {
         let alice = Holder::Near("alice.test.near".into());
         let pay = op_of("pay");
-        let ed = Auth::decode(&auth_bytes(&row("pay")["auth"])).unwrap();
-        let pk_auth = Auth::decode(&auth_bytes(&row("pay_ua_passkey")["auth"])).unwrap();
+        let ed = Auth::decode(&auth_bytes(&row("pay")["auth"]), &pay.digest()).unwrap();
+        let pk_auth = Auth::decode(&auth_bytes(&row("pay_ua_passkey")["auth"]), &op_of("pay_ua_passkey").digest()).unwrap();
         let eop = MetaOp { from: alice.clone(), ..op_of("remove_key") };
         let ea = auth_bytes(&row("remove_key")["auth"]);
         let w = |name: &str, params: Vec<u8>, from: &Holder| Entry::FeeWrapper {
@@ -3595,20 +3642,20 @@ mod tests {
 
     // ------------------------------------------------------------------------------------------------ fix 3
 
-    /// A passkey auth (bytes) asserted from `origin` (signature and key not checked off chain).
-    fn passkey_from(origin: &str) -> Vec<u8> {
-        let cd = format!(r#"{{"type":"webauthn.get","challenge":"x","origin":"{origin}"}}"#);
-        [vec![2], vec![7; 64], bvec(&[1; 37]), bstr(&cd), vec![0; 64]].concat()
+    /// A Chrome-shaped passkey auth (bytes) for challenge `ch` asserted from `origin` (signature and key not checked off
+    /// chain).
+    fn passkey_from(ch: &[u8; 32], origin: &str) -> Vec<u8> {
+        passkey(&cdj(ch, origin, CHROME_TAIL))
     }
 
-    /// A wrapper job for `entry` with `params` after (op, auth), its op signed `entry_auth`, its payment `pay_auth`, both
-    /// by `from`, open mode on TOKEN.
-    fn wrapper_for(entry: &str, eop: MetaOp, entry_auth: &[u8], params: &[u8], pay_from: Holder, pay_auth: &[u8]) -> Value {
+    /// A wrapper job for `entry` with `params` after (op, auth), its op signed `entry_auth`, its payment `pay_auth(digest
+    /// of the payment op)`, open mode on TOKEN.
+    fn wrapper_for(entry: &str, eop: MetaOp, entry_auth: &[u8], params: &[u8], pay_from: Holder, pay_auth: impl Fn(&[u8; 32]) -> Vec<u8>) -> Value {
         let call = [&[entry.len() as u8][..], entry.as_bytes(), &eop.borsh(), entry_auth, params].concat();
         let mut op = MetaOp { from: pay_from, relayer: Some(TOKEN.into()), to: Holder::Near(TOKEN.into()), extra: [0x51; 32], ..op_of("pay") };
         op.pay_ref = relay_ref(&op.network, &[&[TOKEN.len() as u8][..], TOKEN.as_bytes()].concat(), &call, &op.extra);
         op.lane = pay_lane(&op.pay_ref);
-        o_op(&op, pay_auth, json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}))
+        o_op(&op, &pay_auth(&op.digest()), json!({"kind": "relay_fee", "extra": {"call": h(&call), "route": "wrapper"}}))
     }
 
     /// N1 (review RV7): an unopened UA pays for its own wrapped entry; the entry opens the subject with its assertion's
@@ -3629,17 +3676,18 @@ mod tests {
             let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
             a.build(&job(o), 0).await
         };
-        let (pa, pb) = (passkey_from("https://a.test"), passkey_from("https://b.test"));
-        let r = run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), &pb), vec![0]).await;
+        let pa = passkey_from(&eop.digest(), "https://a.test");
+        let (ra, rb) = (|d: &[u8; 32]| passkey_from(d, "https://a.test"), |d: &[u8; 32]| passkey_from(d, "https://b.test"));
+        let r = run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), rb), vec![0]).await;
         assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("origin")), "{r:?}");
-        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), &pa), vec![0]).await.is_ok(), "same origin");
-        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), &pb), opened).await.is_ok(), "opened subject");
-        assert!(run(wrapper_for("mtx_add_origin", eop.clone(), &pa, &bstr("https://b.test"), x.clone(), &pb), vec![0]).await.is_ok(),
+        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), ra), vec![0]).await.is_ok(), "same origin");
+        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], x.clone(), rb), opened).await.is_ok(), "opened subject");
+        assert!(run(wrapper_for("mtx_add_origin", eop.clone(), &pa, &bstr("https://b.test"), x.clone(), rb), vec![0]).await.is_ok(),
                 "the entry adds the payment's origin");
         let other = Holder::Ua([0xdd; 32]);
-        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], other, &pb), vec![0]).await.is_ok(), "another payer");
+        assert!(run(wrapper_for("mtx_cancel_recovery", eop.clone(), &pa, &[], other, rb), vec![0]).await.is_ok(), "another payer");
         let ed = auth_bytes(&row("pay")["auth"]);
-        let r = run(wrapper_for("mtx_cancel_recovery", eop, &ed, &[], x, &pb), vec![0]).await;
+        let r = run(wrapper_for("mtx_cancel_recovery", eop, &ed, &[], x, rb), vec![0]).await;
         assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("origin")), "a key-signed entry opens no origin: {r:?}");
     }
 
@@ -3662,7 +3710,7 @@ mod tests {
             let mut w = world();
             w.views.insert((TOKEN.into(), "relay_fee_mandate_open_check".into()), check_ok(1));
             let (a, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
-            let o = wrapper_for("mtx_mandate_open", mop.clone(), &ma, &terms(exp), Holder::Near("alice.test.near".into()), &auth_bytes(&row("pay")["auth"]));
+            let o = wrapper_for("mtx_mandate_open", mop.clone(), &ma, &terms(exp), Holder::Near("alice.test.near".into()), |_: &[u8; 32]| auth_bytes(&row("pay")["auth"]));
             let r = a.build(&job(o), 0).await;
             assert_eq!(expires(&r), bad, "wrapper {exp}: {r:?}");
             let mut w = router_world(0);
@@ -3707,6 +3755,119 @@ mod tests {
         a.build(&job(o_of("pay", json!({}))), 0).await.unwrap();
     }
 
+    // ------------------------------------------------------------------------------------------------ fix 4
+
+    const ORIGIN_VECTORS: &str = include_str!("../../../smartcontracts/near/vectors/webauthn-origin.json");
+
+    /// N1 (fix 3 re-review): the node's `origin_of` is common/src/webauthn.rs's byte for byte. Every
+    /// `webauthn-origin.json` row (also run by common/tests/vectors.rs `origin_of_parity_vectors`) gives its `origin`,
+    /// and `Auth::decode` takes exactly that origin or refuses the passkey (directly or as an msig member).
+    #[test]
+    fn origin_of_parity_vectors() {
+        let v: Value = serde_json::from_str(ORIGIN_VECTORS).unwrap();
+        let rows = v["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 31);
+        for r in rows {
+            let (cd, ch, want) = (r["clientDataJSON"].as_str().unwrap(), b32(&r["challenge"]), r["origin"].as_str());
+            assert_eq!(origin_of(cd.as_bytes(), &ch).map(|o| std::str::from_utf8(o).unwrap()), want, "{}", r["name"]);
+            let msig = [vec![3], bvec(&[0; 4]), 1u32.to_le_bytes().to_vec(), vec![0], passkey(cd)].concat();
+            match (Auth::decode(&passkey(cd), &ch), want) {
+                (Ok(a), Some(o)) => {
+                    assert_eq!(a.origins(), [o], "{}", r["name"]);
+                    assert_eq!(Auth::decode(&msig, &ch).unwrap().origins(), [o], "{}", r["name"]);
+                }
+                (Err(e), None) => {
+                    assert!(format!("{e:#}").contains("clientDataJSON"), "{}: {e:#}", r["name"]);
+                    assert!(Auth::decode(&msig, &ch).is_err(), "{}", r["name"]);
+                }
+                (a, _) => panic!("{}: {a:?}", r["name"]),
+            }
+        }
+    }
+
+    /// N1 and the m4 `mtx_remove_origin` rule read the origin the token verifies. A payment whose clientDataJSON
+    /// carries origin b behind a non-JSON tail or a later duplicate `"origin":"a"` is from b: refused against an entry
+    /// that opens the subject with {a}, and against an entry that removes b; the duplicate on the entry's side opens
+    /// {b}. A passkey the token cannot parse is refused. Honest Chrome (with or without its extra member) and Safari
+    /// assertions stay accepted.
+    #[tokio::test]
+    async fn passkey_origin_shapes_as_on_chain() {
+        let (a, b) = ("https://a.test", "https://b.test");
+        let extra = r#","crossOrigin":false,"other_keys_can_be_added_here":"do not compare clientDataJSON against a template. See https://goo.gl/yabPex"}"#;
+        let non_json = r#","crossOrigin":false,x}"#;
+        let dup = |o: &str| format!(r#","crossOrigin":false,"origin":"{o}"}}"#);
+        let honest = [CHROME_TAIL, extra, "}"];
+        let x = Holder::Ua([0xee; 32]);
+        let eop = MetaOp { from: x.clone(), ..op_of("cancel_recovery") };
+        type PayCd = Box<dyn Fn(&[u8; 32]) -> String>;
+        let run = |entry_cd: String, pay: PayCd| {
+            let o = wrapper_for("mtx_cancel_recovery", eop.clone(), &passkey(&entry_cd), &[], x.clone(), |d| passkey(&pay(d)));
+            async move {
+                let mut w = world();
+                w.views.insert((TOKEN.into(), "relay_fee_cancel_recovery_check".into()), check_ok(1));
+                w.views.insert((TOKEN.into(), "subject".into()), vec![0]);
+                let (ad, _) = adapter(w, &fee_cfg("1000000000000000000000000")).await;
+                ad.build(&job(o), 0).await
+            }
+        };
+        let ch = eop.digest();
+        // honest shapes, same origin: passes
+        for te in honest {
+            for tp in honest {
+                let r = run(cdj(&ch, a, te), Box::new(move |d: &[u8; 32]| cdj(d, a, tp))).await;
+                assert!(r.is_ok(), "{te} / {tp}: {r:?}");
+            }
+        }
+        let r = run(cdj(&ch, a, non_json), Box::new(move |d: &[u8; 32]| cdj(d, a, non_json))).await;
+        assert!(r.is_ok(), "the token accepts a non-JSON tail: {r:?}");
+        // the token reads b (fix 3 review N1 (a), (b)), and b on the entry's side
+        let origin_refused = |r: &std::result::Result<Built, SimError>| matches!(r, Err(SimError::Revert(e)) if e.contains("origin https://"));
+        let r = run(cdj(&ch, a, CHROME_TAIL), Box::new(move |d: &[u8; 32]| cdj(d, b, non_json))).await;
+        assert!(origin_refused(&r), "non-JSON tail: {r:?}");
+        let r = run(cdj(&ch, a, CHROME_TAIL), Box::new(move |d: &[u8; 32]| cdj(d, b, &dup(a)))).await;
+        assert!(origin_refused(&r), "duplicate origin in the payment: {r:?}");
+        let r = run(cdj(&ch, b, &dup(a)), Box::new(move |d: &[u8; 32]| cdj(d, a, CHROME_TAIL))).await;
+        assert!(origin_refused(&r), "duplicate origin in the entry: {r:?}");
+        // unparseable for the token: refused, on either side
+        for i in 0..4 {
+            let bad = move |d: &[u8; 32]| match i {
+                0 => cdj(d, a, "}").replacen("\":\"", "\": \"", 1),
+                1 => cdj(&[8; 32], a, "}"),
+                2 => cdj(d, a, r#","crossOrigin":true}"#),
+                _ => format!(r#"{{"type":"webauthn.get","challenge":"x","origin":"{a}"}}"#),
+            };
+            let r = run(cdj(&ch, a, CHROME_TAIL), Box::new(bad)).await;
+            assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("clientDataJSON")), "payment {i}: {r:?}");
+        }
+        let r = run(cdj(&ch, a, r#","crossOrigin":true}"#), Box::new(move |d: &[u8; 32]| cdj(d, a, CHROME_TAIL))).await;
+        assert!(matches!(&r, Err(SimError::Revert(e)) if e.contains("clientDataJSON")), "entry: {r:?}");
+        // m4: an entry removing b fails a payment the token reads as from b, whatever its tail; a payment from a passes
+        let pay = op_of("pay_ua_passkey");
+        let pd = pay.digest();
+        let eop = MetaOp { from: pay.from.clone(), ..op_of("remove_origin") };
+        let remove = Entry::FeeWrapper { entry: "mtx_remove_origin".into(), args: [eop.borsh(), auth_bytes(&row("pay")["auth"]), bstr(b)].concat() };
+        for tail in [CHROME_TAIL.to_string(), non_json.into(), dup(a)] {
+            let auth = Auth::decode(&passkey(&cdj(&pd, b, &tail)), &pd).unwrap();
+            assert!(format!("{:#}", wrapper_conflicts(&remove, &pay, &auth).unwrap_err()).contains(b), "{tail}");
+        }
+        for tail in honest {
+            let auth = Auth::decode(&passkey(&cdj(&pd, a, tail)), &pd).unwrap();
+            assert!(wrapper_conflicts(&remove, &pay, &auth).is_ok(), "{tail}");
+        }
+    }
+
+    /// n1 (fix 3 re-review): a router job's relayer-chosen `target_gas` is not bounded before the node replaces it with
+    /// its own figure (it was refused as a bad payload above 300 Tgas in all).
+    #[tokio::test]
+    async fn router_job_gas_on_node_figures() {
+        let pay = [op_of("pay").borsh(), auth_bytes(&row("pay")["auth"])].concat();
+        for tg in ["264000000000000", "18446744073709551615"] {
+            let (r, _) = build_router(router_world(0), &sponsored_cfg(), TOKEN, "mtx_pay", &pay, tg, "0").await;
+            let b = r.unwrap_or_else(|e| panic!("{tg}: {e:?}"));
+            assert_eq!(relay_figures(&b.body), (GAS_JOB_BASE + GAS_KEY_SIG, 7), "{tg}");
+        }
+    }
+
     proptest! {
         /// Untrusted input never panics (§5): job bytes and JSON, RPC JSON, event logs.
         #[test]
@@ -3715,7 +3876,9 @@ mod tests {
                                      Just(Some(ROUTER.to_string())), proptest::option::of("[a-z.]{0,12}")]) {
             let _ = MetaOp::decode(&b);
             let _ = MetaOp::decode(&[LABEL, &b[..]].concat());
-            let _ = Auth::decode(&b);
+            let _ = Auth::decode(&b, &[0; 32]);
+            let pre = cdj(&[0; 32], "", "");
+            let _ = (origin_of(&b, &[0; 32]), origin_of(&[&pre.as_bytes()[..pre.len() - 1], &b].concat(), &[0; 32]));
             let hb = h(&b);
             let kind = [json!("pay_meta"), json!("relay_fee"), json!(s.clone()), json!(n)][k].clone();
             let route = if n % 2 == 0 { "wrapper" } else { "router" };
@@ -3729,7 +3892,7 @@ mod tests {
                 let _ = job_gas(&e, &Auth::Ed25519([0; 32]));
                 let _ = call_of(&pol(), &e, &op, &b);
             }
-            let _ = job_gas(&Entry::FeeWrapper { entry: "mtx_cancel".into(), args: b.clone() }, &Auth::Passkey { key: [0; 64], rp: None, origin: None });
+            let _ = job_gas(&Entry::FeeWrapper { entry: "mtx_cancel".into(), args: b.clone() }, &Auth::Passkey { key: [0; 64], rp: None, origin: String::new() });
             let _ = dec_u128(&json!(s), "x");
             // fix 1 m3: reach the relay-fee parsers past the binding (a payment consistent with random call bytes)
             for (route, call) in [("wrapper", [&[11u8][..], b"mtx_add_key", &b].concat()), ("wrapper", [&[9u8][..], b"mtx_cancel", &b].concat()),
