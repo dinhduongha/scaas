@@ -118,7 +118,7 @@ does with it.
   settlement needs the taker's `minFill`, else an IOC taker is cancelled and a GTC taker rests. An order fills in any
   number of settlements; the dust rule ([NODE-DEX-05](#NODE-DEX-05)) applies to remainders. **Junk fills are venue
   policy:** no leg whose base-token amount is below the market's `min_base_amount` ([intake](#intake)) unless it closes
-  the order, no settlement worth less than its gas; `depth` / `ticker` keep an order whose minimum fill in base units
+  the order, no settlement worth less than its gas; `depth` / `ticker` keep an order whose minimum fill in base units (an ask's `minFill`, a bid's `ceil(minFill · receiveAmount / amount)`, [CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
   exceeds `min_base_amount` in a separate `min_fill` bucket, never in best bid / ask. Status **SPECIFIED**;
   **Transitional (BUILT, P5):** `min_fill` still returns `max(minFill, ceil(amount / 2))`, as the built contracts.
 - **IOC, FOK, escrow.** `IOC` (flag 1): the token closes the order at its single pull, so nothing of it rests. FOK:

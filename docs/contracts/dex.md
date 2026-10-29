@@ -123,7 +123,7 @@ refuses 0). `minFill = amount` is fill-or-kill (with `pulled == 0` the remainder
 no received-side line: the price limit with `sellFill > 0` already gives `receiveFill > 0`, and `receiveFill ≥
 minFill · receiveAmount / amount` follows from the sold side. The remainder clause stays: without it a remainder below
 `minFill` could never close. Consequences: an order fills in any number of settlements, each at least `minFill` except
-the one that closes it; the signer alone decides how small a fill it accepts.
+the one that closes it; the signer alone decides how small a fill it accepts. `minFill` is in the **sell** token's units, so a bid signs it in quote; clients take the minimum in base and convert ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35)).
 
 Why no floor ([decisions.md](../decisions.md#ctr-dex-14--minimum-fill-the-signers-minfill-for-every-order-in-a-settlement-no-protocol-floor)): the floor was a fixed
 number the signer could not lower. It let a large order at the best price show as liquidity that only takers of half

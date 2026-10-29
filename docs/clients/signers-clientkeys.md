@@ -256,6 +256,24 @@ mempool). Why: the token requires only that `dex` is a contract (owner decision 
 the signer is the last place a phishing `dex` can be stopped. Cost: a new DEX needs a profile update before users can
 trade on it.
 
+**`minFill` in base units (owner 2026-10-29).** `minFill` is counted in the **sell** token
+([CTR-DEX-14](../contracts/dex.md#CTR-DEX-14)): on a market base / quote an ask (sells base) signs it in base, a bid
+(sells quote, `amount` = quote, `receiveAmount` = base at the limit) in quote. The client takes the user's minimum in
+**base** for both sides and converts a bid's before signing:
+
+```text
+ask:  minFill = minBase
+bid:  minFill = ceil(minBase · amount / receiveAmount)        // quote units; refused if minFill > amount
+show: bid minimum in base = ceil(minFill · receiveAmount / amount)
+```
+
+`ceil` on the way in makes every fill of a bid deliver at least `minBase` base at the limit price (the price limit
+gives `receiveFill ≥ sellFill · receiveAmount / amount`, and `receiveFill` is an integer); the shown figure is that
+same guaranteed base. At a better price a fill of `minFill` quote buys more base, so a fill that buys exactly
+`minBase` base spends less than `minFill` and is refused: the review says "at least `minBase` at your limit price".
+`decimals` of both tokens are applied before the formula (amounts are raw units). The venue counts a bid's minimum
+the same way ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). Status **SPECIFIED**.
+
 <a id="CLI-SGN-36"></a>**CLI-SGN-36** — **A client never asks an EOA to approve a SCaaS token; wrapping a SCaaS
 underlying is signed, not approved.** Status: **BUILT** in clientkeys (P5: no approve builder; `checkTradeOrder` with `wrappers`, a flat list: defence in depth, the wrapper itself checks the underlying). On a SCaaS token only a contract may call `approve`
 ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), and `approve` is on no token allowlist, so no client offers
