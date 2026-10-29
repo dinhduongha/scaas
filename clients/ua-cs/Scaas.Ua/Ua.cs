@@ -199,6 +199,7 @@ public static partial class UA
     public static byte[] KemRecordDigest(byte[] ua, ulong version, byte[] kemPk)
     {
         if (version == 0) throw new UAException("UAKemVersion", "0");
+        kemPk ??= []; // ponytail: a null key is an empty key (UAKemKeyLength), not a NullReferenceException
         if (kemPk.Length != KemPkLength) throw new UAException("UAKemKeyLength", kemPk.Length.ToString(CultureInfo.InvariantCulture));
         return Keccak256(KemRecordTag, Sized(ua, 32, "ua"), Word(version), Keccak256(kemPk));
     }
@@ -214,6 +215,7 @@ public static partial class UA
     static byte[] ProofHashOf(byte[]? pop, byte[]? hash)
     {
         var proof = pop is { Length: > 0 } ? Keccak256(pop) : null;
+        if (hash is { Length: not 32 }) throw new UAException("UAPqzPopHash", "hash must be 32 bytes");
         var given = hash is not null && hash.Any(b => b != 0) ? hash : null;
         if (proof is not null && given is not null && !proof.AsSpan().SequenceEqual(given)) throw new UAException("UAPqzPopHash", "mismatch");
         var h = proof ?? given ?? new byte[32];
@@ -247,6 +249,38 @@ public static partial class UA
         var reg = RegistrationDigest(portable, popHash);
         var msg = UAMessage(kind, PopV2Tag, reg);
         return new(keyHash, popHash, kemHash, portable, reg, msg, kind == 0x0120 ? MemberDigest(ua, msg) : null);
+    }
+
+    public static readonly byte[] PqzKeyRecordTag = Keccak256(Utf8("scaas.ua.pqz-key-record.v1"));
+
+    /// <summary><c>keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)</c>: what a later PQZ key's R_REG proves over (no proof hash: no cycle).</summary>
+    public static byte[] PqzKeyDigest(byte[] ua, byte[] pqzKeyHash) =>
+        Keccak256(PqzKeyRecordTag, Sized(ua, 32, "ua"), Sized(pqzKeyHash, 32, "pqzKeyHash"));
+
+    /// <summary><c>keccak256(pqzKeyDigest ‖ pqzPopHash)</c>: what <c>setPqzKey</c>'s signature signs under <c>UAMessage(kind, PURPOSE_PQZ_KEY, ·)</c>.</summary>
+    public static byte[] PqzKeyRecordDigest(byte[] keyDigest, byte[] pqzPopHash) =>
+        Keccak256(Sized(keyDigest, 32, "pqzKeyDigest"), Sized(pqzPopHash, 32, "pqzPopHash"));
+
+    /// <summary>The PQZ key record of <c>setPqzKey</c> (ruling A1-I1): <c>Message</c> is what the UA signs, <c>PqzRegMessage</c> what the key's R_REG proves over.</summary>
+    public sealed record PqzKeyRecord(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] PqzKeyDigest, byte[] RecordDigest, byte[] Message,
+        byte[] PqzRegMessage, byte[]? MemberDigest);
+
+    /// <summary>The signed, portable, write-once PQZ key record: accepted only by a registration without a PQZ key
+    /// (<paramref name="alreadySet"/> = it has one: UAPqzKeySet). Holder rules of <see cref="HolderPopMessage"/>; the key and its proof hash are both required.
+    /// Check order: UAPqzHolder, UAPqzKeySet, then UAKeyData / UAPqzPopHash.</summary>
+    public static PqzKeyRecord PqzKeyRecordMessage(ushort kind, byte[] ua, byte[] keyData, byte[] pqzKey, byte[]? pqzPop = null,
+        byte[]? pqzPopHash = null, bool alreadySet = false)
+    {
+        if (!Holds(kind, keyData)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        if (alreadySet) throw new UAException("UAPqzKeySet");
+        var keyHash = PqzKeyHashOf(pqzKey);
+        var popHash = ProofHashOf(pqzPop, pqzPopHash);
+        if (popHash.All(b => b == 0)) throw new UAException("UAPqzPopHash", "required");
+        var keyDigest = PqzKeyDigest(ua, keyHash);
+        var recordDigest = PqzKeyRecordDigest(keyDigest, popHash);
+        var tag = PurposeTag("pqz-key");
+        var msg = UAMessage(kind, tag, recordDigest);
+        return new(keyHash, popHash, keyDigest, recordDigest, msg, UAMessage(0x0142, tag, keyDigest), kind == 0x0120 ? MemberDigest(ua, msg) : null);
     }
 
     /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))</c>.</summary>

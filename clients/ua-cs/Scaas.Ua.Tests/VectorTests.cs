@@ -268,39 +268,103 @@ public class VectorTests
     }
 
     [Fact]
+    public void PqzKeyRecordVectors()
+    {
+        var p = Load("portable.json");
+        Assert.Equal(PqzKeyDigestHex(p, "PQZ_KEY_RECORD_TAG"), Hx(UA.PqzKeyRecordTag));
+        var regs = p.GetProperty("registrations").EnumerateArray().ToList();
+        var n = 0;
+        foreach (var r in p.GetProperty("pqzKeyRecords").EnumerateArray())
+        {
+            byte[] ua = B(r.GetProperty("ua")), key = B(r.GetProperty("pqzKey")), hash = B(r.GetProperty("pqzPopHash"));
+            var kind = Kind(r);
+            var kd = B(regs.First(x => x.GetProperty("ua").GetString() == r.GetProperty("ua").GetString()).GetProperty("keyData"));
+            var pop = B(regs.First(x => x.GetProperty("set").GetString() == r.GetProperty("set").GetString()).GetProperty("pqzPop"));
+            foreach (var hashOnly in new[] { false, true })
+            {
+                var g = UA.PqzKeyRecordMessage(kind, ua, kd, key, hashOnly ? null : pop, hashOnly ? hash : null);
+                Assert.Equal(r.GetProperty("pqzKeyHash").GetString(), Hx(g.PqzKeyHash));
+                Assert.Equal(r.GetProperty("pqzPopHash").GetString(), Hx(g.PqzPopHash));
+                Assert.Equal(r.GetProperty("pqzKeyDigest").GetString(), Hx(g.PqzKeyDigest));
+                Assert.Equal(r.GetProperty("recordDigest").GetString(), Hx(g.RecordDigest));
+                Assert.Equal(r.GetProperty("message").GetString(), Hx(g.Message));
+                Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(g.PqzRegMessage));
+                Assert.Equal(Hx(UA.PqzKeyDigest(ua, g.PqzKeyHash)), Hx(g.PqzKeyDigest));
+                Assert.Equal(Hx(UA.PqzKeyRecordDigest(g.PqzKeyDigest, g.PqzPopHash)), Hx(g.RecordDigest));
+                Assert.Equal(kind == 0x0120, g.MemberDigest is not null);
+            }
+            // write-once: a key already set refuses
+            Assert.Equal("UAPqzKeySet", Assert.Throws<UAException>(() => UA.PqzKeyRecordMessage(kind, ua, kd, key, null, hash, true)).Code);
+            n++;
+        }
+        Assert.Equal(8, n);
+    }
+
+    static string PqzKeyDigestHex(JsonElement p, string tag) => p.GetProperty("tags").GetProperty(tag).GetProperty("hash").GetString()!;
+
+    [Fact]
     public void HolderRefusals()
     {
         var p = Load("portable.json");
-        int run = 0;
+        var regs = p.GetProperty("registrations").EnumerateArray().ToList();
+        int run = 0, sigLevel = 0;
         foreach (var n in p.GetProperty("negatives").EnumerateArray())
         {
+            var entry = n.GetProperty("entry").GetString();
+            var name = n.GetProperty("name").GetString();
             var m = n.GetProperty("mutation");
-            if (n.GetProperty("entry").GetString() is not ("register" or "storePqzPop")) continue;
-            if (!m.TryGetProperty("row", out var rn) || !m.TryGetProperty("set", out var set)) continue;
-            if (!set.EnumerateObject().All(o => o.Name.StartsWith("attrs.") || o.Name == "pqzPop")) continue;
-            var row = p.GetProperty("registrations").EnumerateArray().First(r => r.GetProperty("name").GetString() == rn.GetString());
-            var dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(row.GetRawText())!;
-            var attrs = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(row.GetProperty("attrs").GetRawText())!;
-            foreach (var o in set.EnumerateObject())
-                if (o.Name.StartsWith("attrs.")) attrs[o.Name[6..]] = o.Value; else dict[o.Name] = o.Value;
-            dict["attrs"] = JsonSerializer.SerializeToElement(attrs);
-            var mutated = JsonSerializer.SerializeToElement(dict);
             var err = n.GetProperty("error").GetString();
-            if (err == "UAPoP")
+            var set = m.TryGetProperty("set", out var sv) ? sv.EnumerateObject().ToList() : [];
+            if (entry is "register" or "storePqzPop" && set.All(o => o.Name.StartsWith("attrs.") || o.Name == "pqzPop"))
             {
-                // the digest layer accepts it; the PoP of the unmutated row does not cover it
-                Assert.NotEqual(row.GetProperty("popMessage").GetString(), Hx(Register(mutated).Message));
+                var row = regs.First(r => r.GetProperty("name").GetString() == m.GetProperty("row").GetString());
+                var dict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(row.GetRawText())!;
+                var attrs = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(row.GetProperty("attrs").GetRawText())!;
+                // registerWith first (the state the registry holds), then the mutation
+                var steps = (m.TryGetProperty("registerWith", out var w) ? w.EnumerateObject() : default).Concat(set);
+                foreach (var o in steps)
+                    if (o.Name.StartsWith("attrs.")) attrs[o.Name[6..]] = o.Value; else dict[o.Name] = o.Value;
+                dict["attrs"] = JsonSerializer.SerializeToElement(attrs);
+                var mutated = JsonSerializer.SerializeToElement(dict);
+                if (err == "UAPoP")
+                    Assert.NotEqual(row.GetProperty("popMessage").GetString(), Hx(Register(mutated).Message)); // digest layer accepts it; the PoP of the unmutated row does not cover it
+                else Assert.Equal(err, Assert.Throws<UAException>(() => Register(mutated)).Code);
+                run++;
             }
-            else Assert.Equal(err, Assert.Throws<UAException>(() => Register(mutated)).Code);
-            run++;
+            else if (entry == "setPqzKey" && err is "UAPqzKeySet" or "UAPqzHolder" or "UAPqzPopHash")
+            {
+                var rec = p.GetProperty("pqzKeyRecords").EnumerateArray().First(r => r.GetProperty("name").GetString() == m.GetProperty("row").GetString());
+                var ua = set.FirstOrDefault(o => o.Name == "ua").Value;
+                var uaHex = ua.ValueKind == JsonValueKind.String ? ua.GetString() : rec.GetProperty("ua").GetString();
+                var holder = regs.First(r => r.GetProperty("ua").GetString() == uaHex);
+                var ph = set.FirstOrDefault(o => o.Name == "pqzPopHash").Value;
+                var hash = B(ph.ValueKind == JsonValueKind.String ? ph : rec.GetProperty("pqzPopHash"));
+                Assert.Equal(err, Assert.Throws<UAException>(() => UA.PqzKeyRecordMessage(Kind(holder), Convert.FromHexString(uaHex![2..]),
+                    B(holder.GetProperty("keyData")), B(rec.GetProperty("pqzKey")), null, hash, err == "UAPqzKeySet")).Code);
+                run++;
+            }
+            else if (entry == "setKemKey" && name == "kem-record-of-other-ua")
+            {
+                // the record of one UA offered for another: the signed message differs, so the signature cannot verify
+                var k = p.GetProperty("kemRecords").EnumerateArray().First(r => r.GetProperty("id").GetString() == m.GetProperty("row").GetString());
+                var t = regs.First(r => r.GetProperty("ua").GetString() == set.First(o => o.Name == "ua").Value.GetString());
+                var msg = UA.UAMessage(Kind(t), UA.PurposeTag("kem"), UA.KemRecordDigest(B(set.First(o => o.Name == "ua").Value), ulong.Parse(k.GetProperty("version").ToString()), B(k.GetProperty("kemPk"))));
+                Assert.NotEqual(k.GetProperty("message").GetString(), Hx(msg));
+                run++;
+            }
+            else sigLevel++; // signatures / native personal_sign: verified by the signature vectors
         }
-        Assert.True(run > 0);
-        // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
+        Assert.Equal((56, 7), (run, sigLevel));
+        // single-key non-holders refuse a PQZ key
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         var key = new byte[16384];
         var proof = Enumerable.Repeat((byte)7, 32).ToArray();
+        // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         foreach (var kd in new[] { new byte[] { 0, 2, 0 }, new byte[] { 0, 2, 0, 2, 9, 9 } })
             Assert.Equal("UAKeyData", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0120, u, kd, key, pqzPopHash: proof)).Code);
         Assert.Equal("UAPqzHolder", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0120, u, [], key, pqzPopHash: proof)).Code);
+        // malformed inputs are UAException, not ArgumentException / NullReferenceException
+        Assert.Equal("UAPqzPopHash", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], key, pqzPopHash: new byte[31])).Code);
+        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0130, u, [], kem: (1, null!))).Code);
     }
 }

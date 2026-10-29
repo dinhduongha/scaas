@@ -58,6 +58,14 @@ pub mod qobject {
         /// an empty `kem_pk` = no KEM record. A key for a non-holder is `UAPqzHolder` / `UAKemHolder`.
         #[qinvokable] #[cxx_name = "holderPopMessage"]
         fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_version: f64, kem_pk: &QString) -> QString;
+        /// As `holderPopMessage`, with only the proof's hash (`pqz_pop_hash` 32 bytes, "0x" = absent) next to or instead of the proof bytes.
+        #[qinvokable] #[cxx_name = "holderPopMessageH"]
+        fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_version: f64, kem_pk: &QString) -> QString;
+        /// The `setPqzKey` record (ruling A1-I1), JSON `{pqzKeyHash, pqzPopHash, pqzKeyDigest, recordDigest, message, pqzRegMessage[, memberDigest]}`:
+        /// `message` is what the UA signs, `pqzRegMessage` what the key's `R_REG` proves over. `pqz_pop` bytes and / or `pqz_pop_hash`
+        /// ("0x" = absent); `already_set` = the registration has a PQZ key (`UAPqzKeySet`).
+        #[qinvokable] #[cxx_name = "pqzKeyRecordMessage"]
+        fn pqz_key_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool) -> QString;
         /// What the PQZ key's `R_REG` proves over.
         #[qinvokable] #[cxx_name = "pqzRegMessage"]
         fn pqz_reg_message(self: Pin<&mut Self>, ua: &QString, pqz_key: &QString, kem_version: f64, kem_pk: &QString) -> QString;
@@ -134,6 +142,11 @@ fn key(q: &QString) -> Res<Vec<u8>> {
 }
 fn fixed<const N: usize>(q: &QString) -> Res<[u8; N]> {
     bytes(q)?.try_into().map_err(|_| ARG)
+}
+/// A proof hash: "" or "0x" = absent, else exactly 32 bytes.
+fn optional_hash(q: &QString) -> Res<Option<[u8; 32]>> {
+    let b = bytes(q)?;
+    if b.is_empty() { Ok(None) } else { b.try_into().map(Some).map_err(|_| ARG) }
 }
 fn k(kind: i32) -> Res<u16> {
     u16::try_from(kind).map_err(|_| ARG)
@@ -246,17 +259,37 @@ impl qobject::UaKinds {
         self.hex(|| Ok(from_ua(ua::ua8::kem_record_digest(&fixed(ua)?, id(version)?, &bytes(kem_pk)?))?.to_vec()))
     }
     pub fn holder_pop_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, kem_version: f64, kem_pk: &QString) -> QString {
+        self.holder_pop_message_h(kind, ua, key_data, pqz_key, pqz_pop, &QString::from("0x"), kem_version, kem_pk)
+    }
+    pub fn holder_pop_message_h(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, kem_version: f64, kem_pk: &QString) -> QString {
         QString::from(&self.run(|| {
             let (pk, pop, kpk) = (key(pqz_key)?, bytes(pqz_pop)?, bytes(kem_pk)?);
+            let hash = optional_hash(pqz_pop_hash)?;
             let kem = (id(kem_version)? != 0 || !kpk.is_empty()).then(|| (id(kem_version).unwrap_or(0), kpk));
             let h = from_ua(ua::ua8::holder_pop_message(
-                k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), None, kem.as_ref().map(|(v, p)| (*v, &p[..])),
+                k(kind)?, &fixed(ua)?, &key(key_data)?, Some(&pk[..]), Some(&pop[..]), hash.as_ref(), kem.as_ref().map(|(v, p)| (*v, &p[..])),
             ))?;
             let mut o = serde_json::json!({
                 "pqzKeyHash": hx(&h.pqz_key_hash), "pqzPopHash": hx(&h.pqz_pop_hash), "kemRecordHash": hx(&h.kem_record_hash),
                 "portablePopDigest": hx(&h.portable_pop_digest), "registrationDigest": hx(&h.registration_digest), "message": hx(&h.message),
             });
             if let Some(m) = h.member_digest {
+                o["memberDigest"] = hx(&m).into();
+            }
+            Ok(o.to_string())
+        }))
+    }
+    pub fn pqz_key_record_message(self: Pin<&mut Self>, kind: i32, ua: &QString, key_data: &QString, pqz_key: &QString, pqz_pop: &QString, pqz_pop_hash: &QString, already_set: bool) -> QString {
+        QString::from(&self.run(|| {
+            let (pop, hash) = (bytes(pqz_pop)?, optional_hash(pqz_pop_hash)?);
+            let r = from_ua(ua::ua8::pqz_key_record_message(
+                k(kind)?, &fixed(ua)?, &key(key_data)?, &key(pqz_key)?, Some(&pop[..]), hash.as_ref(), already_set,
+            ))?;
+            let mut o = serde_json::json!({
+                "pqzKeyHash": hx(&r.pqz_key_hash), "pqzPopHash": hx(&r.pqz_pop_hash), "pqzKeyDigest": hx(&r.pqz_key_digest),
+                "recordDigest": hx(&r.record_digest), "message": hx(&r.message), "pqzRegMessage": hx(&r.pqz_reg_message),
+            });
+            if let Some(m) = r.member_digest {
                 o["memberDigest"] = hx(&m).into();
             }
             Ok(o.to_string())
