@@ -7,6 +7,8 @@
 use sha3::{Digest, Keccak256};
 
 mod keydata;
+pub mod near;
+pub mod algorand;
 pub use keydata::validate_key_data;
 pub mod verify;
 mod groups;

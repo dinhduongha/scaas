@@ -221,6 +221,34 @@ TestCase {
         compare(UaKinds.lastError, "UAArgument")
     }
 
+    // near-algorand T18: NEAR / Algorand MetaOp digest + relay-fee ref against the family vector files
+    property var nv: vectors.load("../../near/vectors/near-vectors.json")
+    property var av: vectors.load("../../algorand/vectors/algorand-vectors.json")
+
+    function test_near_digest_and_relay_ref() {
+        for (const r of nv.metaops.vectors) compare(UaKinds.nearDigest(r.encoding), r.digest, r.name)
+        for (const r of nv.relayRefs) {
+            compare(UaKinds.nearRelayRef(nv.network, r.targetBytes, r.call, r.salt), r.ref, r.name)
+            compare(UaKinds.payLane(r.ref), r.lane, r.name)
+        }
+        compare(UaKinds.nearDigest("0xzz"), "")
+        compare(UaKinds.lastError, "UAArgument")
+        compare(UaKinds.nearRelayRef("0x1234", "0x", "0x", nv.relayRefs[0].salt), "")
+        compare(UaKinds.lastError, "UAArgument")
+    }
+
+    function test_algorand_digest_and_relay_ref() {
+        for (const r of av.metaops.vectors) compare(UaKinds.algorandDigest(r.encoding), r.digest, r.name)
+        for (const r of av.relayRefs) {
+            compare(UaKinds.algorandRelayRef(av.network, r.target, r.call, r.salt), r.ref, r.name)
+            compare(UaKinds.payLane(r.ref), r.lane, r.name)
+        }
+        compare(UaKinds.algorandDigest("0x1"), "")
+        compare(UaKinds.lastError, "UAArgument")
+        compare(UaKinds.algorandRelayRef(av.network, "0x1234", "0x", av.relayRefs[0].salt), "")
+        compare(UaKinds.lastError, "UAArgument")
+    }
+
     function test_encode_msig() {
         const id = "0x" + "11".repeat(32)
         compare(UaKinds.encodeMsig(2, JSON.stringify([[256, id, 1], [257, id, 1]])),

@@ -65,6 +65,15 @@ pub mod qobject {
         /// is a JS number (exact up to 2^53), `target` 20 bytes.
         #[qinvokable] #[cxx_name = "relayRef"]
         fn relay_ref(self: Pin<&mut Self>, chain_id: f64, target: &QString, call_data: &QString) -> QString;
+        /// near-algorand T18: `sha256(op)`, `op` = the full MetaOp v1 encoding (label ‖ Borsh / ARC-4).
+        #[qinvokable] #[cxx_name = "nearDigest"] fn near_digest(self: Pin<&mut Self>, op: &QString) -> QString;
+        /// NEAR relay-fee `ref`; `network` 32 bytes, `target` = `u8 len ‖ account id`, `salt` 32 bytes.
+        #[qinvokable] #[cxx_name = "nearRelayRef"]
+        fn near_relay_ref(self: Pin<&mut Self>, network: &QString, target: &QString, call: &QString, salt: &QString) -> QString;
+        #[qinvokable] #[cxx_name = "algorandDigest"] fn algorand_digest(self: Pin<&mut Self>, op: &QString) -> QString;
+        /// Algorand relay-fee `ref`; `network` = GenesisHash 32 bytes, `target` = the target app address 32 bytes.
+        #[qinvokable] #[cxx_name = "algorandRelayRef"]
+        fn algorand_relay_ref(self: Pin<&mut Self>, network: &QString, target: &QString, call: &QString, salt: &QString) -> QString;
         /// `members` is a JSON array of `[kind, "0x<id32>", weight]`.
         #[qinvokable] #[cxx_name = "encodeMsig"]
         fn encode_msig(self: Pin<&mut Self>, threshold: i32, members: &QString) -> QString;
@@ -246,6 +255,18 @@ impl qobject::UaKinds {
     }
     pub fn relay_ref(self: Pin<&mut Self>, chain_id: f64, target: &QString, call_data: &QString) -> QString {
         self.hex(|| Ok(ua::relay_ref(id(chain_id)?, &fixed(target)?, &bytes(call_data)?).to_vec()))
+    }
+    pub fn near_digest(self: Pin<&mut Self>, op: &QString) -> QString {
+        self.hex(|| Ok(ua::near::metaop_digest(&bytes(op)?).to_vec()))
+    }
+    pub fn near_relay_ref(self: Pin<&mut Self>, network: &QString, target: &QString, call: &QString, salt: &QString) -> QString {
+        self.hex(|| Ok(ua::near::relay_ref(&fixed(network)?, &bytes(target)?, &bytes(call)?, &fixed(salt)?).to_vec()))
+    }
+    pub fn algorand_digest(self: Pin<&mut Self>, op: &QString) -> QString {
+        self.hex(|| Ok(ua::algorand::metaop_digest(&bytes(op)?).to_vec()))
+    }
+    pub fn algorand_relay_ref(self: Pin<&mut Self>, network: &QString, target: &QString, call: &QString, salt: &QString) -> QString {
+        self.hex(|| Ok(ua::algorand::relay_ref(&fixed(network)?, &fixed(target)?, &bytes(call)?, &fixed(salt)?).to_vec()))
     }
     pub fn canonical_id(self: Pin<&mut Self>, text: &QString) -> QString {
         QString::from(&self.run(|| from_ua(ua::canonical_id(&s(text)))))
