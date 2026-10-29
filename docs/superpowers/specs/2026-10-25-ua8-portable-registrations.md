@@ -1,6 +1,6 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
-**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**. Nothing is built. Queued **after plan 5h,
+**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**; **PQ verification: on chain on EVM, added for Cosmos / Soroban / Sui (spikes first), relayer-checked elsewhere (owner 2026-10-29, P11)**. Nothing is built. Queued **after plan 5h,
 before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P9) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
@@ -199,6 +199,57 @@ near-algorand merge), TON last (after its registry design). NEAR and Algorand ar
 storage payment (NEAR storage staking by attached deposit vs Algorand box MBR by a payment transaction). Each family is
 a task of the same plan or a follow-up plan; the vector file is the shared contract between them.
 
+**P11 — PQ verification per family, and the relayer's part where a chain cannot verify (owner 2026-10-29: option
+(a) plus part of (b) — Cosmos, Soroban, Sui).** A KEM key is held only by PQ kinds (P7), so a family that cannot verify
+the UA's PQ signature cannot check `pop` or a KEM record on chain. State of each family (web check 2026-10-29; re-check
+before the plan, these move fast):
+
+| Family | What exists for PQ signatures | Fit with our kinds | UA-8 rule |
+|---|---|---|---|
+| EVM, Hedera | our verifiers (`UAMldsaVerifier`, `UAFndsaVerifier`, `UASlhdsaVerifier`; EIP-8355 / -8051 precompiles where probed) | all PQ kinds | **(a)** on chain, P1–P9 |
+| Cosmos | SDK 0.55 adds `ml_dsa_65` for **account and validator keys** (native tx signing); no CosmWasm crypto API for it found | contract-level: none yet | **(b)** a verifier inside the `ua-registry` contract (Rust → Wasm: ML-DSA-44 / -65, FN-DSA-512, SLH-DSA-128s), gated by a measured spike against the chain's gas limits |
+| Soroban | no PQ host function (no CAP found); a community Falcon verify contract and an XMSS wallet over BN254 host functions are self-reported | contract-level: none from the protocol | **(b)** the same Rust verifiers inside the registry, gated by a spike against the CPU / memory budget per transaction |
+| Sui | Mysten plan: ML-DSA-65 as a native **account** scheme (Testnet end 2026, Mainnet Q1 2027 worst case), SLH-DSA-SHA2-128s through Move vault contracts (Mainnet 2026); no Move-callable verify function named yet | ML-DSA-65 = our `mldsa65`, SLH-DSA-SHA2-128s = our `slhdsa128s` | **(b)** use Sui's Move verifier when it is published; until then a spike decides whether a pure-Move verifier fits the computation budget |
+| Algorand | `falcon_verify` opcode since AVM v12 (go-algorand 4.3.0), deterministic Falcon with 1,793-byte public keys, i.e. **Falcon-1024**; stateless and stateful contracts | our `fndsa512` is Falcon-512: **not the same parameter set** | relayer-checked (below); a Falcon-1024 kind matching `falcon_verify` is a possible later kind, not in UA-8 |
+| NEAR | NEP-645 (draft) adds ML-DSA-65 **transaction** signatures; on-chain verification host functions are out of its scope | none for contracts | relayer-checked |
+| Aptos, Solana | none found for contracts | none | relayer-checked |
+| TON | no registry yet (P10) | — | after its registry design |
+
+Sources (read 2026-10-29): Algorand cryptographic tools https://dev.algorand.co/concepts/smart-contracts/cryptographic-tools/
+and the Falcon brief https://algorand.co/blog/technical-brief-quantum-resistant-transactions-on-algorand-with-falcon-signatures;
+Sui https://www.sui.io/blog/suis-post-quantum-signature-schemes; Cosmos SDK
+https://docs.cosmos.network/sdk/next/keys/post-quantum-keys; NEAR NEP-645 https://github.com/near/neps/pull/645; Soroban:
+no CAP found (Stellar community fund submissions only).
+
+Native PQ **accounts** (Cosmos `ml_dsa_65`, Sui ML-DSA-65, NEAR NEP-645) are not enough: they sign the chain's own
+transactions, while a UA registry must verify a UA's signature over the portable digest inside a contract. A family
+gets status (b) only when a contract can run the verifier.
+
+**Relayer-checked mode (owner 2026-10-29: "phải có thêm phần trách nhiệm của relayer").** Where a part cannot be
+verified on chain — the PQ signature of `pop` or of a KEM record, the PQZ proof (P8, already "unproven"), a KEM key
+proof if one is added later — the record may still be stored, under these rules (controller proposals, owner may
+override):
+
+1. **The relayer checks off chain before it submits**: the full verification the EVM registry does (UA id from key
+   data, `pop` over `portablePopDigest`, every KEM record signature, the PQZ proof where it has the verifier). A node
+   never submits a registration or a KEM record that fails it.
+2. **Only listed relayers may write in this mode**: the registry takes the list at deployment (the same pattern as the
+   relay router's targets); writes that the chain can verify stay open to anyone.
+3. **The record says who checked each part**: `checked = chain | relayer(<relayer id>) | none` per part (signature,
+   PQZ proof, KEM record), stored with the record and in the event.
+4. **Everything needed to re-check is stored** (P2 already stores `pop`, `pqzPop`, every KEM record and its signature),
+   and **clients always re-verify off chain** before they use a KEM key or a PQZ key read from such a chain; a record
+   that fails is ignored. The UA id is a hash of its key data, so a client never trusts the relayer for the identity.
+5. **A relayer-checked record never authorises anything on that chain**: a UA whose kind the chain cannot verify cannot
+   sign writes there (transactions stay chain-bound, P6); the record serves discovery (KEM keys for UA-7, PQZ key
+   lookup, copying to other chains).
+6. **Residual, accepted with the mode**: a listed relayer that stores a bad record first takes that write-once
+   `(ua, version)` slot on that chain (clients ignore it, the relayer id is on record, the slot is lost there); the
+   operator delists such a relayer. Nothing is lost on any other chain.
+
+Families in status (b) move a part from `relayer` to `chain` as soon as their verifier lands; records written earlier
+keep their `checked` value (re-checking on chain is a later, optional call).
+
 ## 3. Work (for the plan after 5h)
 
 1. `UAKinds` (`PURPOSE_POP_V2`, `portablePopDigest`), `UARegistry.register` on the portable digest, `pop` / `pqzPop`
@@ -219,3 +270,8 @@ a task of the same plan or a follow-up plan; the vector file is the shared contr
    family does not verify is refused; PQZ attributes stored unproven where there is no verifier); the node relays the
    writes as `call` jobs; Algorand `account` changes, then the NEAR `ua-registry` contract, each its own task, after the near-algorand merge;
    TON after its registry design.
+7. P11: per family the `checked` field and the relayer-checked mode (listed relayers, off-chain check in the node,
+   events); the node's off-chain verifier for every kind (reuse `ua-rs` / the clients' verifiers); client re-check
+   before use. Spikes first for Cosmos (CosmWasm gas), Soroban (CPU / memory budget) and Sui (Move computation budget,
+   or Sui's own verifier when published): each a pass / fail gate like the NEAR P-256 spike; a family that fails its
+   spike stays relayer-checked.
