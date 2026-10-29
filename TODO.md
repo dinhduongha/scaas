@@ -46,20 +46,25 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   1. [x] `near-algorand` — **DONE 2026-10-29**: Tasks 1–22, whole-branch review, fix wave, residual N1 / N2, merged into
      `main` and pushed (owner go 2026-10-29).
   2. Right after the merge, in parallel:
-     - **EVM contracts:** token-family rename first (moved up from step 7, owner 2026-10-29: names only — enum numbers
-       and ABI unchanged — so the new EVM code below is written with the final names).
+     - **UA-8 plan first** (steps 1–2: EVM + Soroban; the design is detailed, P1–P11), written at the start of this
+       step so its EVM code can start at once.
+     - **EVM contracts, two parallel tracks** (own worktrees; shared forge / size-gate slots; merge with care, the
+       rename sweeps wide):
+       - token-family rename (moved up from step 7, owner 2026-10-29: names only — enum numbers and ABI unchanged — so
+         the new EVM code is written with the final names);
+       - **UA-8 step 1 (EVM `UARegistry`)** as soon as the plan is written (owner 2026-10-29, moved up from step 3):
+         portable PoP, optional `pqzPop`, KEM keys, relayable writes, `checked = chain`, clients and vectors
+         (`UARegistry` / `UAKinds` / `IUARegistry`; overlap with the rename only where tokens read the PQZ key's
+         `proven`). Must land before fs3 Task 13 (the SCaaS testnet redeploys the registry once).
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`), TON passkey relays (P-256
        in the node), relay-fee minimum before mainnet.
      - **pqz-core:** fs3 Task 12 (final gate + merge) → Task 6 (reproduction package); its heavy gate interleaves with
        the forge runs for the `capped` slots.
      - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
-       **UA-8 plan** (steps 1–2: EVM + Soroban), the **4b spec for Soroban**, the governance matrix (§0).
-  3. EVM contracts, two parallel tracks (different files, shared forge / size gates):
-     - **DEX, one round:** the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` + `mtxExchangeBatch` + mode 3 /
-       4 tests + reference executor + Uniswap fork test (item "DEX: drop the 50 % minimum-fill floor + four matching
-       modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
-     - **UA-8 step 1 (EVM `UARegistry`):** portable PoP, optional `pqzPop`, KEM keys, relayable writes, `checked =
-       chain`, clients and vectors. Must land before fs3 Task 13 (the SCaaS testnet redeploys the registry once).
+       **4b spec for Soroban**, the governance matrix (§0).
+  3. EVM contracts: **DEX, one round** — the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` +
+     `mtxExchangeBatch` + mode 3 / 4 tests + reference executor + Uniswap fork test (item "DEX: drop the 50 % minimum-fill
+     floor + four matching modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
   4. **4b Soroban (UA base) + UA-8 step 2 (Soroban registry)** in one round — shared ML-DSA verifier (CAP-0087 host
      functions) and vectors. **No waiting** (owner 2026-10-29): code and tests on a local network / quickstart at
      Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
