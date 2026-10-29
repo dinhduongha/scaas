@@ -325,6 +325,41 @@ code.** CTR-DEX-14 viết lại trong `contracts/dex.md` (SPECIFIED, code hiện
   CTR-DEX-14 trong `decisions.md`.
 - Mọi chain hiện chỉ để test: không migration. Non-EVM không phải sửa (vốn không có sàn): đồng bộ với EVM.
 
+### 6.4 Tính atomic
+
+Atomic ở **mức từng lần khớp** (một settlement hoặc một plan), không phải cả vòng đời của một lệnh.
+
+**Mỗi lần khớp (EVM): atomic.** Trong một settlement: pull mọi leg vào DEX, trả mọi bên, chia phí, hoàn Path B,
+kiểm tra conservation (số dư DEX không đổi). Tất cả xảy ra hoặc không gì xảy ra; hỏng một bước thì cả settlement
+revert, không ai mất tiền. `mtxSettle` chạy mỗi settlement trong một self-call: cái hỏng chỉ ra `MatchFailed`, các
+cái khác vẫn chạy. Một plan `mtxExchange` atomic nguyên plan: mọi leg, mọi interaction, gồm cả hybrid và CoW (chế độ
+3, 4), trong một giao dịch.
+
+**Cả lệnh: tùy loại.**
+
+| Loại lệnh | Atomic cả lệnh? |
+|---|---|
+| FOK (`minFill = amount`) | có: khớp đủ trong một settlement, hoặc không khớp gì |
+| IOC | có: một settlement, phần không khớp bị đóng ngay ở lần pull (CTR-DEX-04) |
+| Path B (`ESCROW`, ngầm định IOC) | có: pull cả `amount`, phần dư hoàn trong cùng giao dịch |
+| GTC Path A | **không**: khớp dần qua nhiều settlement / giao dịch, mỗi lần atomic riêng |
+
+Với GTC, giữa các lần khớp phần chưa khớp **vẫn nằm trong ví người ký**, không bị khóa hay escrow. On-chain chỉ ghi
+`pulled[h]`. Người ký tiêu số dư đó thì lần khớp sau fail riêng (`MatchFailed`); node gỡ maker và khớp lại.
+
+**Giữa book off-chain và chain.** Node khớp off-chain rồi mới gửi. Trong khoảng đó maker có thể hủy, hết số dư, hết
+hạn: settlement fail riêng, không mất tiền, node quy lỗi theo bằng chứng (NODE-DEX-02) và khớp lại. Một lệnh có thể
+"đã khớp trong book" mà chưa thanh toán, cho đến khi event cuối được xác nhận. Đây cũng là lý do chế độ 3 phải là một
+plan, không phải `mtxSettle` rồi AMM ở giao dịch sau (mục 4).
+
+**Non-EVM.**
+- Sui, Aptos, Solana, Soroban, Cosmos, Algorand: mỗi lần settle một cặp là một giao dịch atomic (PTB / tx / atomic
+  group).
+- TON, NEAR: message / receipt bất đồng bộ, không atomic trong một giao dịch. Bảo đảm bằng escrow + hoàn tiền: TON
+  escrow giữ tiền ngắn hạn (dex.md §11); NEAR DEX ghi mục `pending` theo `settle_id`, mỗi leg một receipt, leg hỏng
+  thì refund. Kết quả cuối vẫn là "khớp đủ hoặc hoàn lại", nhưng có trạng thái trung gian nhìn thấy được. Đường
+  exchange non-EVM (mục 7.9) trên hai family này phải tính đến điều đó.
+
 ## 7. Cần cải tiến (đề xuất, chưa code), theo thứ tự
 
 **Contract (EVM).**
