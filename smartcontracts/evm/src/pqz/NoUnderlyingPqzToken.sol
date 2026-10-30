@@ -8,6 +8,7 @@ import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {PqzLayer} from "./PqzLayer.sol";
 import {PqzCore} from "./PqzCore.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
@@ -23,7 +24,7 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         NoUnderlyingToken(envVersion, env, implArgs)
         PqzLayer(env)
     {
-        if (env.registry.code.length == 0) revert BadInit();
+        if (!SigCheck.isContract(env.registry)) revert BadInit();
     }
 
     function kind() public pure override(NoUnderlyingToken, MetaTokenBase) returns (uint8) {

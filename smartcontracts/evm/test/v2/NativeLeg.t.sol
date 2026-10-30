@@ -77,6 +77,21 @@ contract NativeLegTest is V2Fixture {
         t.wrap{value: v}(v);
     }
 
+    /// Owner ruling 2026-10-30 (D4): the native coin is never sent to an EIP-7702 designator (its delegate's code would
+    /// run on receipt, and an EOA must not run code); a plain EOA still gets it.
+    function test_native_unwrapToDesignatorRefused() public {
+        UnderlyingToken t = _native();
+        _wrapNative(t, alice, 1 ether);
+        address d = address(0xD7702);
+        vm.etch(d, abi.encodePacked(hex"ef0100", address(0x5EE9))); // the coin would land (empty delegate code)
+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, d));
+        vm.prank(alice);
+        t.unwrap(1 ether, d);
+        vm.prank(alice);
+        t.unwrap(1 ether, bob);
+        assertEq(bob.balance, 1 ether);
+    }
+
     function test_native_wrapAndUnwrap() public {
         UnderlyingToken t = _native();
         assertEq(t.underlying(), address(0));

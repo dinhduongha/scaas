@@ -435,6 +435,24 @@ contract MtxRelayFeeTest is PqzRegistryBase {
         }
     }
 
+    /// Owner ruling 2026-10-30 (D4): an EIP-7702 designator target is an EOA, refused like one: one to a contract (the
+    /// delegate's code must not run as the target) and one to a code-less address (the call would succeed empty and the
+    /// payer pay for nothing). Nothing is paid, the lane is not burnt.
+    function test_relay_targetDesignatorRefused() public {
+        bytes memory cd = abi.encodeCall(MtxRegistryMock.whoAmI, ());
+        address[2] memory to = [address(target), address(0xE0A)];
+        for (uint256 i; i < 2; ++i) {
+            address d = address(uint160(0xD7702 + i));
+            vm.etch(d, abi.encodePacked(hex"ef0100", to[i]));
+            MetaTxLib.MetaTransfer memory t = _pay(address(router), _ref(d, cd), FEE);
+            bytes memory s = _sig(t);
+            vm.prank(REL);
+            vm.expectRevert(abi.encodeWithSelector(MtxRelayFee.RelayTargetNoCode.selector, d));
+            router.relay(d, cd, address(tok), t, s);
+            assertEq(tok.mtxNonce(alice, t.batch), 0, "the lane is not burnt");
+        }
+    }
+
     /// Never pay the executor (controller call 2026-10-27): `t.to == executor` (UA: `pad(executor)`) is refused.
     function test_relay_payeeExecutorRefused() public {
         bytes memory cd = _call(0, address(0));

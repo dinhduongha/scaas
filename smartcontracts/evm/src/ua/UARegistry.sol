@@ -181,7 +181,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bool msig_,
         KindConfig[] memory kinds_
     ) SaltedEIP712("SCaaS UARegistry", predecessor_ == address(0) ? "1" : "2", chainUid_) {
-        if (verifyBudget_ == 0 || (smartKeyAccountImpl_ != address(0) && smartKeyAccountImpl_.code.length == 0)) {
+        if (verifyBudget_ == 0 || (smartKeyAccountImpl_ != address(0) && !SigCheck.isContract(smartKeyAccountImpl_))) {
             revert UAConfig(0);
         }
         if (predecessor_ != address(0)) {
@@ -197,7 +197,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             KindConfig memory c = kinds_[i];
             uint256 slot = _slot(c.kind);
             if (
-                slot > 19 || k[slot] != 0 || c.verifier.code.length == 0 || c.cap == 0 || c.cap > verifyBudget_
+                slot > 19 || k[slot] != 0 || !SigCheck.isContract(c.verifier) || c.cap == 0 || c.cap > verifyBudget_
                     || (predecessor_ != address(0) && _groupInPredecessor(predecessor_, c.kind))
             ) revert UAConfig(c.kind);
             k[slot] = uint256(uint160(c.verifier)) | uint256(c.cap) << 160;

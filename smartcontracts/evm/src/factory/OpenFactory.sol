@@ -212,7 +212,7 @@ contract OpenFactory is IOpenFactory {
         Release memory r;
         (implementation, r) =
             _deploy(DEX_DOMAIN, envVersion, keccak256(abi.encode("dex", version)), initcode, implArgs);
-        if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
+        if (!SigCheck.isContract(implementation)) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, bytes4(keccak256("factory()")));
         if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
         (ok, got) = _word(implementation, bytes4(keccak256("chainUid()")));
@@ -306,7 +306,7 @@ contract OpenFactory is IOpenFactory {
 
     /// @dev Code, `kind()`, `factory()`, `chainUid()`: each read by staticcall, a missing or short answer refused.
     function _checkImplementation(TokenKind kind, address implementation) private view {
-        if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
+        if (!SigCheck.isContract(implementation)) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, IFactoryToken.kind.selector);
         if (!ok) got = type(uint256).max;
         if (got != uint256(kind)) revert VersionKindMismatch(kind, got);

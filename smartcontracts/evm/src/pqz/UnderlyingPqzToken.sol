@@ -9,6 +9,7 @@ import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {UnderlyingLib} from "../metatx/UnderlyingLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {PqzLayer} from "./PqzLayer.sol";
 import {PqzCore} from "./PqzCore.sol";
 import {PqzBurnLib} from "./PqzBurnLib.sol";
@@ -30,7 +31,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
         UnderlyingToken(envVersion, env, implArgs)
         PqzLayer(env)
     {
-        if (env.registry.code.length == 0) revert BadInit();
+        if (!SigCheck.isContract(env.registry)) revert BadInit();
     }
 
     /// @dev The legs (`UnderlyingToken`), restated for the second base.

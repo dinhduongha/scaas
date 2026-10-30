@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IUALedger} from "./IUALedger.sol";
 
@@ -46,8 +47,9 @@ contract MtxRelayFee is ReentrancyGuardTransient {
                        uint256 amount);
 
     error RelayFeeShape();
-    /// @notice The target has no code at relay time (a counterfactual address not yet deployed, an EOA, a precompile):
-    ///         a call to it would succeed and the payer would pay for nothing (CTR-MTX-13).
+    /// @notice The target has no code at relay time (a counterfactual address not yet deployed, an EOA, a precompile)
+    ///         or is an EIP-7702 designator (an EOA: its delegate's code must not run, and a designator to a code-less
+    ///         address would succeed empty): the payer would pay for nothing (CTR-MTX-13; owner ruling 2026-10-30, D4).
     error RelayTargetNoCode(address target);
 
     address public immutable EXECUTOR;
@@ -87,7 +89,7 @@ contract MtxRelayFee is ReentrancyGuardTransient {
 
     /// @dev CTR-MTX-27 step 2: `entryRef == ref`, lane `payLane(ref)` (CTR-MTX-10, `MetaTokenBase.payLane`), nonce 0,
     ///      relayer bound to this router, fee mode `NONE` and fee 0 (the payment's `value` is the fee), the payee not the
-    ///      executor (`to` as an id); and the target has code (conformance item 9).
+    ///      executor (`to` as an id); and the target is a contract: code, not an EIP-7702 designator (conformance item 9).
     function _shape(bytes32 ref, address target, bytes32 entryRef, bytes32 to, uint256 batch, uint256 nonce, uint32 mode,
                     address relayer, uint256 fee) private view
     {
@@ -95,7 +97,7 @@ contract MtxRelayFee is ReentrancyGuardTransient {
             || mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || relayer != address(this)
             || mode & MetaTxLib.MODE_FEE_MASK != MetaTxLib.MODE_FEE_NONE || fee != 0
             || to == MetaTxLib.pad(EXECUTOR)) revert RelayFeeShape();
-        if (target.code.length == 0) revert RelayTargetNoCode(target);
+        if (!SigCheck.isContract(target)) revert RelayTargetNoCode(target);
     }
 
     /// @dev Step 5. Open mode (`to == pad(router)`): the payment just landed here and goes on to whoever submitted the

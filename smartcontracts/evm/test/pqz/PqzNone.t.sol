@@ -449,8 +449,14 @@ contract PqzNoneTest is PqzFixture {
     /// constructor, bubbled through `deployImplementation`.
     function test_constructorChecksTheEnv() public {
         bytes memory code = type(NoUnderlyingPqzToken).creationCode;
-        IFactoryToken.Env[4] memory bad;
+        IFactoryToken.Env[6] memory bad;
         for (uint256 i; i < bad.length; ++i) bad[i] = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
+        // owner ruling 2026-10-30 (D5): an EIP-7702 designator is not a dependency, even one delegating to the real one
+        (address dVer, address dReg) = (address(0xD7702), address(0xD7703));
+        vm.etch(dVer, abi.encodePacked(hex"ef0100", address(pqv)));
+        vm.etch(dReg, abi.encodePacked(hex"ef0100", address(reg)));
+        bad[4].deps[0] = dVer;                                           // a designator verifier
+        bad[5].registry = dReg;                                          // a designator registry
         bad[0].deps = new address[](0);                                  // no verifier
         bad[1].deps = new address[](2);                                  // two
         (bad[1].deps[0], bad[1].deps[1]) = (address(pqv), address(pqv));

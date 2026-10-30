@@ -13,6 +13,7 @@ import {PqzTransferLib} from "./PqzTransferLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
 import {ENV_PQZ_VERIFIER} from "../factory/IFactoryToken.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title The PQZ layer of the kinds `NONE_PQZ` and `UNDERLYING_PQZ` (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1): the entry
@@ -37,7 +38,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     /// @dev `env.deps = [UAPqzVerifier]` (`ENV_PQZ_VERIFIER`); never on Hedera.
     constructor(Env memory env) {
-        if (env.deps.length != 1 || env.hedera || env.deps[ENV_PQZ_VERIFIER].code.length == 0) revert BadInit();
+        if (env.deps.length != 1 || env.hedera || !SigCheck.isContract(env.deps[ENV_PQZ_VERIFIER])) revert BadInit();
         PQZ_VERIFIER = env.deps[ENV_PQZ_VERIFIER];
     }
 

@@ -307,8 +307,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
         address other = address(new OtherSystemBurnVerifier(ip));
         IZetherVerifier copy = IZetherVerifier(address(new ZetherTransferVerifierBls12381(
             ZetherVerifierBase(address(ver)).innerProduct())));
-        IFactoryToken.Env[10] memory bad;
+        IFactoryToken.Env[12] memory bad;
         for (uint256 i; i < bad.length; ++i) bad[i] = _zenv();
+        // owner ruling 2026-10-30 (D5): an EIP-7702 designator is not a dependency, even one delegating to the real one
+        (address dReg, address dDisc) = (address(0xD7702), address(0xD7703));
+        vm.etch(dReg, abi.encodePacked(hex"ef0100", bad[0].registry));
+        vm.etch(dDisc, abi.encodePacked(hex"ef0100", bad[0].deps[3]));
+        bad[10].registry = dReg;                                         // a designator registry
+        bad[11].deps[3] = dDisc;                                         // a designator disclosure
         bad[0].registry = address(0x1234);                               // a registry without code
         bad[1].deps[3] = address(0x1234);                                // a disclosure without code
         bad[2].deps[0] = address(0x1234);                                // a transfer verifier without code

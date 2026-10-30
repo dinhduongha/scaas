@@ -856,6 +856,19 @@ contract UARegistryTest is UARegistryBase {
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0x1234), true, new UARegistry.KindConfig[](0));
     }
 
+    /// Owner ruling 2026-10-30 (D5): a deployer-chosen implementation or verifier that is an EIP-7702 designator (its
+    /// delegate can change under the registry) is refused, even one delegating to real code.
+    function test_constructorDesignatorRefused() public {
+        address d = address(0xD7702);
+        vm.etch(d, abi.encodePacked(hex"ef0100", address(mock)));
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, d, true, new UARegistry.KindConfig[](0));
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
+        c[0] = UARegistry.KindConfig(0x0101, d, 50_000);
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0101)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+    }
+
     // ----- T-CHAIN, T-MEMBER -----
 
     /// Contexts B and C of structures.json: chain 7622 twice, same registry address, different chainUid. UA-8 (P1):

@@ -10,6 +10,7 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {
     ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_INNER_PRODUCT, ENV_ZETHER_DISCLOSURE
@@ -45,11 +46,11 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///      verifier does not (a swapped or duplicated pair would accept shields and lock them).
     constructor(Env memory env) {
         address[] memory d = env.deps;
-        if (d.length != 4 || env.hedera || _REGISTRY.code.length == 0) revert BadInit(); // never on Hedera
+        if (d.length != 4 || env.hedera || !SigCheck.isContract(_REGISTRY)) revert BadInit(); // never on Hedera
         IZetherVerifier t = IZetherVerifier(d[ENV_ZETHER_TRANSFER]);
         IZetherBurnVerifier b = IZetherBurnVerifier(d[ENV_ZETHER_BURN]);
         address ip = d[ENV_ZETHER_INNER_PRODUCT];
-        if (address(t).code.length == 0 || address(b).code.length == 0 || d[ENV_ZETHER_DISCLOSURE].code.length == 0
+        if (!SigCheck.isContract(address(t)) || !SigCheck.isContract(address(b)) || !SigCheck.isContract(d[ENV_ZETHER_DISCLOSURE])
             || t.proofSystemId() != b.proofSystemId() || ip == address(0)
             || IInnerProductBound(address(t)).innerProduct() != ip || IInnerProductBound(address(b)).innerProduct() != ip
             || address(t) == address(b) || !_answers(address(t), IZetherVerifier.ringSize.selector)

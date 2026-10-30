@@ -6,6 +6,7 @@ import {
 } from "./IZetherVerifier.sol";
 import {ZetherTranscript as T} from "./ZetherTranscript.sol";
 import {ZetherSafety} from "./ZetherSafety.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {G1Bls12381} from "./ZetherCurves.sol";
 
 /// @title The curve layer every Zether verifier contract shares: the curve hooks, the proof system ids, the NUMS
@@ -343,7 +344,7 @@ abstract contract ZetherVerifierBase is ZetherCurve {
 
     constructor(IZetherInnerProductVerifier innerProduct_) {
         ZetherSafety.requireDevChain();
-        if (address(innerProduct_).code.length == 0 || innerProduct_.proofSystemId() != proofSystemId()) {
+        if (!SigCheck.isContract(address(innerProduct_)) || innerProduct_.proofSystemId() != proofSystemId()) {
             revert InnerProductMismatch(address(innerProduct_));
         }
         innerProduct = innerProduct_;

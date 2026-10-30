@@ -264,6 +264,15 @@ contract FactoryTest is Test {
         f.setKindEnabled(NONE, false);
     }
 
+    /// Owner ruling 2026-10-30 (D5): an EIP-7702 designator is not an implementation (it could redelegate under every
+    /// clone), even one delegating to a real implementation.
+    function test_designatorImplementationRefused() public {
+        address d = address(0xD7702);
+        vm.etch(d, abi.encodePacked(hex"ef0100", address(noneImpl)));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, d));
+        f.createTokenUnregistered(NONE, d, abi.encode(_none(alice)), "designator");
+    }
+
     /// The factory's generic gate (plan 5g-Z2): the plain kinds start on, the confidential ones off; registrar only.
     function test_kindEnabled() public {
         assertTrue(f.kindEnabled(NONE));

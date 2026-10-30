@@ -12,6 +12,7 @@ import {IUALedger} from "./IUALedger.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
@@ -108,7 +109,7 @@ library UnderlyingLib {
         if (u == NATIVE) {
             d = isHedera ? 8 : 18; // Hedera's EVM counts the native coin in tinybars
         } else {
-            if (u == address(this) || u.code.length == 0) revert IUnderlyingToken.UnderlyingInvalid(u);
+            if (u == address(this) || !SigCheck.isContract(u)) revert IUnderlyingToken.UnderlyingInvalid(u);
             if (isHedera && !HederaLib.checkAndAssociate(u)) revert IUnderlyingToken.UnderlyingInvalid(u);
             (bool ok, bytes memory ret) = u.staticcall(abi.encodeCall(IERC20Metadata.decimals, ()));
             if (!ok || ret.length != 32 || uint256(bytes32(ret)) > type(uint8).max) {
@@ -259,13 +260,17 @@ library UnderlyingLib {
 
     /// @notice After the token burned: `reserve -= out`, then the one outside call, under the token's guard (CEI).
     ///         The balance must drop by EXACTLY `out` (a sender-pays fee reverts, CTR-TOK-11). The native coin goes
-    ///         with all gas; a recipient that refuses it reverts the unwrap.
+    ///         with all gas; a recipient that refuses it reverts the unwrap, and an EIP-7702 designator recipient is
+    ///         refused (`UnwrapRecipientInvalid`: an EOA must not run code, owner ruling 2026-10-30, D4).
     function payOut(uint256 i, address recipient, uint256 out) public returns (address u) {
         Leg storage L = $().legs[i];
         L.reserve -= out;
         u = L.token;
         uint256 before = _balance(u);
-        if (u == NATIVE) Address.sendValue(payable(recipient), out);
+        if (u == NATIVE) {
+            if (SigCheck.isDesignator(recipient)) revert IUnderlyingToken.UnwrapRecipientInvalid(recipient);
+            Address.sendValue(payable(recipient), out);
+        }
         else IERC20(u).safeTransfer(recipient, out);
         uint256 after_ = _balance(u);
         uint256 sent = before > after_ ? before - after_ : 0;

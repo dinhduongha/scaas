@@ -255,6 +255,9 @@ contract Tier2Test is V2Fixture {
         Rate memory f = _fixedRate();
         bytes4 inv = IUnderlyingToken.UnderlyingInvalid.selector;
         _refuse(address(0xDEAD), 1, 1, f, abi.encodeWithSelector(inv, address(0xDEAD)));
+        // owner ruling 2026-10-30 (D5): an EIP-7702 designator is not a token, even one delegating to a real token
+        vm.etch(address(0xD7702), abi.encodePacked(hex"ef0100", address(usdc)));
+        _refuse(address(0xD7702), 1, 1, f, abi.encodeWithSelector(inv, address(0xD7702)));
         address nd = address(new NoDecimals());
         _refuse(nd, 1, 1, f, abi.encodeWithSelector(IUnderlyingToken.DecimalsUnreadable.selector, nd));
         address bd = address(new BadDecimals());
