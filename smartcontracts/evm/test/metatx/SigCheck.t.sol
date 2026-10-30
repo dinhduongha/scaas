@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {Test} from "forge-std/Test.sol";
+import {Test, console2} from "forge-std/Test.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 
@@ -14,9 +14,27 @@ contract SigCheckHarness {
     function isContract(address a) external view returns (bool) {
         return SigCheck.isContract(a);
     }
+
+    function isDesignator(address a) external view returns (bool) {
+        return SigCheck.isDesignator(a);
+    }
+
+    function requireNotDelegated(address a) external view {
+        SigCheck.requireNotDelegated(a);
+    }
+
+    /// The gas of the caller guard as `_msgSender()` runs it, on a warm caller (a real direct caller is warm: the
+    /// transaction's sender, or a contract already executing).
+    function guardGas() external view returns (uint256 g) {
+        address s = msg.sender;
+        SigCheck.requireNotDelegated(s); // warms the caller's account
+        g = gasleft();
+        SigCheck.requireNotDelegated(s);
+        g -= gasleft();
+    }
 }
 
-/// CTR-MTX-25: EOA low-s, ERC-1271 with the gas-cap rule, EIP-7702 by CTR-UA-24 (base key, else the delegate's 1271).
+/// CTR-MTX-25: EOA low-s, ERC-1271 with the gas-cap rule, EIP-7702 by CTR-UA-24 (owner ruling 2026-10-30: own key only).
 contract SigCheckTest is Test {
     uint256 internal constant N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
     uint256 internal constant PK = 0xA11CE;
@@ -66,16 +84,19 @@ contract SigCheckTest is Test {
         assertTrue(h.isContract(address(wallet)));
     }
 
-    /// accounts.md CTR-UA-24, one rule on every path (owner ruling 2026-10-28, metatx-split final review item 1): a
-    /// 7702-delegated EOA signs with its base key or through its delegate's ERC-1271 under the 50 k cap; empty code is
-    /// ECDSA only; other code is ERC-1271 only.
+    /// accounts.md CTR-UA-24, one rule on every path (owner ruling 2026-10-30, D1, superseding 2026-10-28): a
+    /// 7702-delegated EOA signs with its own key only; its delegate's ERC-1271 is never asked, even when it would say
+    /// yes (a sweeper delegate); empty code is ECDSA only; other code is ERC-1271 only.
     function test_isValid_7702_ctrUa24() public {
         address delegated = vm.addr(0xD7702);
         Mock1271Wallet delegate = new Mock1271Wallet(signer); // answers for ECDSA by `signer` over the hash
         vm.signAndAttachDelegation(address(delegate), 0xD7702);
         assertEq(delegated.code.length, 23);
         assertTrue(h.isValid(delegated, D, _sig(0xD7702, D), SigCheck.ERC1271_GAS), "the base key");
-        assertTrue(h.isValid(delegated, D, _sig(PK, D), SigCheck.ERC1271_GAS), "the delegate's ERC-1271");
+        assertFalse(h.isValid(delegated, D, _sig(PK, D), SigCheck.ERC1271_GAS), "the delegate's ERC-1271 refused");
+        bytes memory viaDelegate = _sig(PK, D);
+        vm.expectCall(delegated, abi.encodeCall(Mock1271Wallet.isValidSignature, (D, viaDelegate)), 0);
+        assertFalse(h.isValid(delegated, D, viaDelegate, SigCheck.ERC1271_GAS), "the delegate is never called");
         assertFalse(h.isValid(delegated, D, _sig(0xB0B, D), SigCheck.ERC1271_GAS));
         assertTrue(h.isValid(signer, D, _sig(PK, D), SigCheck.ERC1271_GAS));
         assertFalse(h.isValid(signer, D, _sig(0xB0B, D), SigCheck.ERC1271_GAS));
@@ -108,6 +129,39 @@ contract SigCheckTest is Test {
         assertEq(fake.code.length, 23);
         assertTrue(h.isContract(fake));
         assertFalse(h.isValid(fake, D, _sig(0xFA4E, D), SigCheck.ERC1271_GAS), "not a designator: 1271 only");
+    }
+
+    /// D2 helper: a designator (to code or to a code-less address) is refused as a direct caller; a contract, a
+    /// code-less EOA and 23 bytes of real code pass. (revm refuses to etch other `0xef01…` code.)
+    function test_requireNotDelegated() public {
+        address delegated = vm.addr(0xD7702);
+        h.requireNotDelegated(delegated);
+        h.requireNotDelegated(address(wallet));
+        vm.etch(delegated, abi.encodePacked(hex"ef0100", address(wallet)));
+        assertTrue(h.isDesignator(delegated));
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, delegated));
+        h.requireNotDelegated(delegated);
+        vm.etch(delegated, abi.encodePacked(hex"ef0100", address(0xdead)));
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, delegated));
+        h.requireNotDelegated(delegated);
+        address fake = vm.addr(0xFA4E);
+        vm.etch(fake, abi.encodePacked(hex"63ffffffff60e01b60005260206000f3", bytes7(0))); // 23 bytes, real code
+        assertFalse(h.isDesignator(fake));
+        assertTrue(h.isContract(fake));
+        h.requireNotDelegated(fake);
+    }
+
+    /// The per-call cost of the D2 caller guard for a code-less EOA and a contract caller, warm. Logged for the gas
+    /// record; bounded here (one warm EXTCODESIZE and a compare: 313 at Amsterdam prices, 2026-10-30).
+    function test_requireNotDelegated_gas() public {
+        address[2] memory callers = [vm.addr(0xE0A), address(wallet)];
+        string[2] memory label = ["code-less EOA", "contract"];
+        for (uint256 i; i < 2; ++i) {
+            vm.prank(callers[i]);
+            uint256 g = h.guardGas();
+            console2.log("requireNotDelegated gas,", label[i], g);
+            assertLt(g, 400);
+        }
     }
 
     function test_1271_valid() public view {

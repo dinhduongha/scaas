@@ -308,7 +308,8 @@ contract UAReceiverFeeTest is UALedgerBase {
         assertEq(t400.balanceOf(FEE_TO), 2_000);
     }
 
-    /// An EIP-7702 delegated payee (CTR-UA-24): its own key, or the delegate's ERC-1271.
+    /// An EIP-7702 delegated payee (CTR-UA-24, owner ruling 2026-10-30 D1): its own key only; the delegate's ERC-1271
+    /// is refused.
     function test_uaPayReceiverFee_7702Payee() public {
         address carol = vm.addr(0xCA401);
         MockWallet delegate = new MockWallet(bob, 0, 0, address(0));
@@ -320,10 +321,11 @@ contract UAReceiverFeeTest is UALedgerBase {
             bytes32 rf = tok.receiverFeeDigest(d, 500, FEE_TO, block.timestamp);
             bytes memory payeeSig = i == 0 ? _ecdsa(0xCA401, rf) : _ecdsa(BOB_PK, rf);
             bytes memory payerAuth = _sign(uaP, UAKinds.PURPOSE_METATX, d);
+            if (i == 1) vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
             vm.prank(RELAYER);
             tok.uaPayReceiverFee(t, payerAuth, 500, FEE_TO, block.timestamp, payeeSig);
         }
-        assertEq(tok.balanceOf(carol), 2 * (N - 500));
+        assertEq(tok.balanceOf(carol), N - 500);
     }
 
     /// RP1 under fuzz: payee nets `N − fee ≥ 0`, payer `−N`, fee recipient `+fee`.

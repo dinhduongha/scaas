@@ -374,8 +374,8 @@ contract UALedgerTest is UALedgerBase {
 
     // ----- CTR-UA-24: an EIP-7702 delegated native `from` -----
 
-    /// The base key's ECDSA passes; a delegate's ERC-1271 passes on the UA path and, since the owner ruling of 2026-10-28
-    /// (CTR-UA-24 on every path), on the address path too.
+    /// Owner ruling 2026-10-30 (D1, superseding 2026-10-28): the base key's ECDSA passes; a delegate's ERC-1271 is
+    /// refused on the UA path and on the address path.
     function test_7702_nativeFrom() public {
         MockWallet delegate = new MockWallet(bob, 0, 0, address(0)); // ERC-1271: ECDSA by bob over the hash
         vm.signAndAttachDelegation(address(delegate), ALICE_PK);
@@ -383,17 +383,22 @@ contract UALedgerTest is UALedgerBase {
         _xfer(t); // alice's own key
         t = _t(_pad(alice), uaP, 5);
         bytes memory bySession = _ecdsa(BOB_PK, tok.uaTransferDigest(t));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // the delegate's isValidSignature is never asked (D1)
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, bySession); // through the delegate's isValidSignature
-        assertEq(tok.balanceOfUA(uaP), 10);
+        tok.uaExecuteTransfer(t, bySession);
+        assertEq(tok.balanceOfUA(uaP), 5);
         MetaTxLib.MetaTransfer memory v2 = MetaTxLib.MetaTransfer({
-            from: alice, to: bob, value: 1, entryRef: 0, batch: 1, nonce: 2, validUntil: block.timestamp + 300,
+            from: alice, to: bob, value: 1, entryRef: 0, batch: 1, nonce: 1, validUntil: block.timestamp + 300,
             mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
         bytes memory v2Session = _ecdsa(BOB_PK, tok.mtxTransferDigest(v2));
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector); // nor on the address path
+        vm.prank(RELAYER);
+        tok.mtxExecuteTransfer(v2, v2Session);
+        v2Session = _ecdsa(ALICE_PK, tok.mtxTransferDigest(v2));
         uint256 before = tok.balanceOf(bob);
         vm.prank(RELAYER);
-        tok.mtxExecuteTransfer(v2, v2Session); // through the delegate's isValidSignature on the address path
+        tok.mtxExecuteTransfer(v2, v2Session); // alice's own key on the address path
         assertEq(tok.balanceOf(bob), before + 1);
     }
 

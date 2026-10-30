@@ -1781,12 +1781,12 @@ abstract contract ParityCases is ParityIO {
         Tk memory d = _pAs(k, e, P_E7702);
         _pFundSigner(k, e);
         _pSignerCases(d, "e7702", false);
-        // signed by the delegate's owner instead of the account's key: accepted through ERC-1271 of the delegate
+        // signed by the delegate's owner instead of the account's key: refused, the delegate's ERC-1271 is never asked
+        // (one rule on both paths, CTR-UA-24, owner ruling 2026-10-30 D1: a designator signs with its own key only)
         m = _pMt(d, _pCancel(7), 0, P_RR, 0, address(0));
-        // (one rule on both paths, CTR-UA-24, owner ruling 2026-10-28: the address path follows the designator too)
-        _pMx(d, "mtxExecute", "ok_e7702_viaDelegate_addr", "", IMetaTx.mtxExecute.selector, m, _pEcdsa(P_OWNER, MetaTokenBase(d.t).mtxDigest(m)), d.relayer);
+        _pMx(d, "mtxExecute", "err_e7702_viaDelegate_addr", "", IMetaTx.mtxExecute.selector, m, _pEcdsa(P_OWNER, MetaTokenBase(d.t).mtxDigest(m)), d.relayer);
         u = _pUm(d, MetaTxLib.pad(e), _pAmt(d, 1_000), 0, P_RR, 0, address(0));
-        _pUx(d, "ok_e7702_viaDelegate", "", u, _pEcdsa(P_OWNER, MetaTokenBase(d.t).uaDigest(u)), d.relayer);
+        _pUx(d, "err_e7702_viaDelegate", "", u, _pEcdsa(P_OWNER, MetaTokenBase(d.t).uaDigest(u)), d.relayer);
     }
 
     /// `mtxExecute`, `uaExecute`, a typed transfer and a trade for the contract signer `w`: valid and wrong signature.
