@@ -1,3 +1,3 @@
-# named-tests at commit 21a8aac9
-named-tests: 152 names, 0 problem(s)
+# named-tests at commit 7e5d1697
+named-tests: 154 names, 0 problem(s)
 rc=0
