@@ -1,6 +1,6 @@
-# docs at commit f2e4fe9f
+# docs at commit e2513dd5
 test_docs_check: ok
-  note: accepted budget contracts/accounts.md: 2118 lines > 1.3 x 1100
+  note: accepted budget contracts/accounts.md: 2119 lines > 1.3 x 1100
   note: accepted budget contracts/dex.md: 663 lines > 1.3 x 400
   note: accepted budget contracts/metatx.md: 1209 lines > 1.3 x 650
   note: accepted budget contracts/pq-zero-knowledge.md: 2609 lines > 1.3 x 950

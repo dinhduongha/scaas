@@ -1,7 +1,13 @@
-# ua-c at commit 4adc323a
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+# ua-c at commit e2513dd5
+    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Checking scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-c)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.66s
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-c)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.96s
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+   Compiling scaas-ua-c v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-c)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.00s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua_c-253808dcc5db056b)
 
 running 0 tests
@@ -13,7 +19,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test header_matches_src ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
 smoke ok
 test_buffer_too_small (tests.test_vectors.Abi.test_buffer_too_small)
@@ -36,7 +42,7 @@ test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_grou
 test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
 
 ----------------------------------------------------------------------
-Ran 16 tests in 0.561s
+Ran 16 tests in 0.516s
 
 OK
 rc=0
