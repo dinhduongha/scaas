@@ -11,6 +11,10 @@
 //! `op_digest(mandate, "<fn>", args without auth)` under purpose `metatx` through the registry bound at construction;
 //! each UA signature runs once, by the mandate's own lane `UaNonce(ua, lane)` (owner entries, `mtx_revoke` by the
 //! delegate) or by `pay_ref` (`mtx_mandate_pay`). `valid_until` and a bound `relayer` are checked for both.
+//!
+//! The epoch (CTR-ACC-07, owner 2026-10-30): `epoch(token)` rises on every `mtx_set_mandate` and every revoke; the
+//! delegate's `mtx_revoke` and `mtx_mandate_pay` name it in their signed arguments and are refused (`StaleEpoch`)
+//! unless it is the current one, so an unused delegate signature dies when the owner revokes or re-sets the mandate.
 #![no_std]
 /// The holder type of the mandate's interface (owner, delegate, payee).
 pub use scaas_ua_common::Holder;
@@ -44,6 +48,8 @@ pub enum Error {
     BadNonce = 11,
     /// A UA signer and no registry bound at construction.
     UaLedgerOff = 12,
+    /// A delegate's `mtx_revoke` / `mtx_mandate_pay` whose `epoch` is not `epoch(token)` (CTR-ACC-07).
+    StaleEpoch = 13,
 }
 
 #[contracttype]
@@ -70,6 +76,8 @@ enum Key {
     Ref(BytesN<32>),
     /// A UA's lane nonce, the mandate's own (not the token's).
     UaNonce(BytesN<32>, BytesN<32>),
+    /// The token's mandate epoch (outlives a revoke).
+    Epoch(Address),
 }
 
 #[contractevent(topics = ["MandateSet"], data_format = "vec")]
@@ -132,6 +140,21 @@ fn owner(env: &Env) -> Holder {
 
 fn mandate(env: &Env, token: &Address) -> Option<Mandate> {
     read(env, &Key::Mandate(token.clone()))
+}
+
+fn epoch(env: &Env, token: &Address) -> u64 {
+    read(env, &Key::Epoch(token.clone())).unwrap_or(0)
+}
+
+fn bump_epoch(env: &Env, token: &Address) {
+    write(env, &Key::Epoch(token.clone()), &(epoch(env, token) + 1));
+}
+
+/// A delegate's signed `epoch` must be the current one (CTR-ACC-07).
+fn check_epoch(env: &Env, token: &Address, signed: u64) {
+    if signed != epoch(env, token) {
+        panic_with_error!(env, Error::StaleEpoch);
+    }
 }
 
 fn must_mandate(env: &Env, token: &Address) -> Mandate {
@@ -210,6 +233,11 @@ impl MandateWallet {
         mandate(&env, &token)
     }
 
+    /// +1 on every `mtx_set_mandate` and every revoke; 0 before the first mandate.
+    pub fn epoch(env: Env, token: Address) -> u64 {
+        epoch(&env, &token)
+    }
+
     pub fn ua_nonce(env: Env, ua: BytesN<32>, lane: BytesN<32>) -> u64 {
         read(&env, &Key::UaNonce(ua, lane)).unwrap_or(0)
     }
@@ -246,6 +274,7 @@ impl MandateWallet {
         let m = Mandate { delegate: delegate.clone(), expiry, period_seconds, period_start: env.ledger().timestamp(),
                           max_per_payment, max_per_period, spent_in_period: 0 };
         write(&env, &Key::Mandate(token.clone()), &m);
+        bump_epoch(&env, &token);
         MandateSet { token, delegate, max_per_payment, max_per_period, period_seconds, expiry }.publish(&env);
     }
 
@@ -271,12 +300,14 @@ impl MandateWallet {
         }
     }
 
-    /// The owner, or the delegate revoking its own authority (the platform's kill switch).
+    /// The owner, or the delegate revoking its own authority (the platform's kill switch). The delegate's `epoch` must
+    /// be `epoch(token)`; the owner's is not checked.
     #[allow(clippy::too_many_arguments)]
     pub fn mtx_revoke(
         env: Env,
         token: Address,
         by: Holder,
+        epoch: u64,
         lane: BytesN<32>,
         nonce: u64,
         valid_until: u64,
@@ -284,12 +315,16 @@ impl MandateWallet {
         auth: Bytes,
     ) {
         let m = must_mandate(&env, &token);
-        if by != owner(&env) && by != m.delegate {
-            panic_with_error!(&env, Error::NotAllowed);
+        if by != owner(&env) {
+            if by != m.delegate {
+                panic_with_error!(&env, Error::NotAllowed);
+            }
+            check_epoch(&env, &token, epoch);
         }
-        let args = (token.clone(), by.clone(), lane.clone(), nonce, valid_until, relayer.clone());
+        let args = (token.clone(), by.clone(), epoch, lane.clone(), nonce, valid_until, relayer.clone());
         authorize(&env, &by, "mtx_revoke", args.into_val(&env), Some((&lane, nonce)), valid_until, &relayer, &auth);
         env.storage().persistent().remove(&Key::Mandate(token.clone()));
+        bump_epoch(&env, &token);
         MandateRevoked { token, by }.publish(&env);
     }
 
@@ -316,7 +351,7 @@ impl MandateWallet {
     }
 
     /// Anyone submits (a relayer); the authority is the delegate's, the limits are the mandate's. `pay_ref` runs once
-    /// per mandate, which also makes a UA delegate's signature one-shot.
+    /// per mandate, which also makes a UA delegate's signature one-shot; `epoch` must be `epoch(token)`.
     #[allow(clippy::too_many_arguments)]
     pub fn mtx_mandate_pay(
         env: Env,
@@ -324,6 +359,7 @@ impl MandateWallet {
         payee: Holder,
         amount: i128,
         pay_ref: BytesN<32>,
+        epoch: u64,
         valid_until: u64,
         relayer: Option<Address>,
         auth: Bytes,
@@ -334,7 +370,8 @@ impl MandateWallet {
         if env.storage().persistent().has(&rk) {
             panic_with_error!(&env, Error::RefAlreadyPaid);
         }
-        let args = (token.clone(), payee.clone(), amount, pay_ref.clone(), valid_until, relayer.clone());
+        check_epoch(&env, &token, epoch);
+        let args = (token.clone(), payee.clone(), amount, pay_ref.clone(), epoch, valid_until, relayer.clone());
         authorize(&env, &m.delegate, "mtx_mandate_pay", args.into_val(&env), None, valid_until, &relayer, &auth);
         let now = env.ledger().timestamp();
         if now > m.expiry {

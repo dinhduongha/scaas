@@ -110,7 +110,7 @@ const ENTRIES = [
     a('relayer', 'Option<Address>', s.some(s.addr(C.router)))]],
   ['mtx_mandate_pay', C.mandate, 'mtx_mandate_pay', 'metatx', () => [a('token', 'Address', s.addr(C.token)),
     a('payee', 'Holder', s.holderAddr(TO)), a('amount', 'i128', s.i128(5_000)), a('pay_ref', 'BytesN<32>', s.bytesN(fill(0x12))),
-    VU, NO_RELAYER]],
+    a('epoch', 'u64', s.u64(1)), VU, NO_RELAYER]],
   ['mtx_set_mandate', C.mandate, 'mtx_set_mandate', 'metatx', () => [a('token', 'Address', s.addr(C.token)),
     a('delegate', 'Holder', s.holderUa(p256Ua())), a('max_per_payment', 'i128', s.i128(50_000)),
     a('max_per_period', 'i128', s.i128(200_000)), a('period_seconds', 'u64', s.u64(86_400)), a('expiry', 'u64', s.u64(1_900_000_000)),
@@ -160,7 +160,8 @@ function build() {
     'per kind. ua_order is ua_trade\'s digest (contract = token, fn "ua_order", args (dex, order)); ua_cancel the DEX\'s',
     '(SOR-D10); ua_relay the inner token.ua_pay of router.ua_relay (relayer = Some(router), pay_ref = relay.ref =',
     'keccak256("scaas.relayfee" | networkId | xdr(target) | keccak256(xdr((func, args))) | salt), open mode: to = router);',
-    'mtx_* are signed by the mandate owner (mtx_set_mandate) and the delegate (mtx_mandate_pay). registrations[i] =',
+    'mtx_* are signed by the mandate owner (mtx_set_mandate) and the delegate (mtx_mandate_pay, epoch 1 = after the',
+    'first mtx_set_mandate, CTR-ACC-07). registrations[i] =',
     'register(kind, keyData, empty attrs, pop, empty pqz_pop, None) (portable, no network); the single-key rows are',
     'portable.json\'s; mldsa65 signs as mldsa65#2, mldsa65#1 is an msig member.',
   ].join(' ');

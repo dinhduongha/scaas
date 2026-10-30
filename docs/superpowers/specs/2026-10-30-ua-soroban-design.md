@@ -190,9 +190,16 @@ Rules (CTR-UA-27 parity, Soroban form):
 Owner, delegate and each payee become `Holder` (EVM UA-5c, CTR-ACC-12 `bytes32` ids). Funds stay in the mandate's own
 native balance. A native owner or delegate keeps host authorisation; a UA owner signs `mtx_set_mandate`,
 `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw` (purpose `metatx`, mandate-own lanes `UaNonce(ua, lane)`); a UA
-delegate signs `mtx_mandate_pay(token, payee, amount, pay_ref, valid_until, relayer, auth)`. A UA payee is paid by
+delegate signs `mtx_mandate_pay(token, payee, amount, pay_ref, epoch, valid_until, relayer, auth)`. A UA payee is paid by
 `token.pay_to_ua(self, …)`, a withdrawal to a UA owner by `transfer_to_ua`. `pay_ref` once per mandate as today. The
 NET-SOR-16 renames apply (new deployment).
+
+**Epoch (CTR-ACC-07 parity).** Change note, owner ruling 2026-10-30 (one rule on every family; built in T6b): the
+mandate keeps `epoch(token) -> u64`, +1 on every `mtx_set_mandate` and every revoke; the delegate's
+`mtx_revoke(token, by, epoch, lane, nonce, valid_until, relayer, auth)` and `mtx_mandate_pay` name it in their signed
+arguments (the UA `op_digest`, a native delegate's `require_auth_for_args`) and are refused `StaleEpoch` unless
+`epoch == epoch(token)`, so an unused delegate signature dies when the owner revokes and re-sets the mandate. The
+owner's `mtx_revoke` carries the argument unchecked; the other owner entries are unchanged.
 
 ### 5.3 DEX
 

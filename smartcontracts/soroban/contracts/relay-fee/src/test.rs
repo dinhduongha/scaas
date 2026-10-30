@@ -68,10 +68,10 @@ fn tail(env: &Env) -> (BytesN<32>, u64, u64, Option<Address>, Bytes) {
     (BytesN::from_array(env, &[1; 32]), 0, NOW + 60, None, Bytes::new(env))
 }
 
-/// `wallet.mtx_revoke(token, by, tail)` arguments.
+/// `wallet.mtx_revoke(token, by, epoch 0, tail)` arguments (`by` is the owner: its epoch is not checked).
 fn revoke_args(env: &Env, token: &Address, by: &Address) -> soroban_sdk::Vec<Val> {
     let (lane, nonce, vu, relayer, auth) = tail(env);
-    (token.clone(), Holder::Addr(by.clone()), lane, nonce, vu, relayer, auth).into_val(env)
+    (token.clone(), Holder::Addr(by.clone()), 0u64, lane, nonce, vu, relayer, auth).into_val(env)
 }
 
 /// A native owner sets a mandate for a fresh native delegate (host auth mocked by the caller).
