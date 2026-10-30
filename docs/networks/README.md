@@ -466,6 +466,33 @@ The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN
 | GRAM | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
 | Cosmos | none (native; multi-key seam) | 1 | no | seed: native; passkey-only: **unsatisfiable** | no | no |
 
+<a id="code-authority"></a><a id="NET-ALL-83"></a>**NET-ALL-83** — **Non-EVM analogues of EIP-7702 (residual risk).** Owner rule 2026-10-30, after the
+EIP-7702 sweeper drain: an account signs with its own key, no delegation, and an account runs no code. Families where
+a key-holder account's authority can be handed to code:
+
+- **Algorand:** a rekey to a LogicSig or an app address, and a delegated LogicSig (the key signs a TEAL program that
+  anyone may then satisfy). A rekey is readable (`AcctAuthAddr`) but is also Algorand's key rotation (to a multisig,
+  a hardware key, a Falcon key for the post-quantum migration) and looks the same on chain as a rekey to code, so SCaaS
+  does not refuse rekeyed senders (owner 2026-10-30: the proposed refusal, D6, was dropped). Signature ops verify the
+  current authority, which code cannot be. A delegated LogicSig is invisible to apps.
+- **Aptos:** account abstraction (AIP-104 dispatchable authentication functions) and `offer_signer_capability` hand
+  the account to Move code; whether a contract can query it is unverified.
+- **Cosmos:** `authz` `MsgGrant` to any grantee, a CosmWasm contract included, which then `MsgExec`s as the granter;
+  the contract sees `info.sender` = the granter and cannot tell.
+- **TON:** W5 wallet extensions and v4 plugins send arbitrary messages from the wallet; the jetton wallet sees the
+  owner wallet as sender.
+- **NEAR:** `DeployContract` / full-access `AddKey` on the user's own account (also inside a NEP-366
+  `DelegateAction`); the code then acts with `predecessor` = the account, with no synchronous on-chain check.
+- **Hedera:** an account key can be a ContractID / delegatable ContractID key, handing HTS authority to code; HIP-1340
+  (EIP-7702 itself on Hedera) is unverified. SCaaS EVM tokens on Hedera follow the EVM rule.
+- **None** on Solana (a program never makes a keypair account a signer), Sui (an address is the hash of a key scheme)
+  and Soroban (G-accounts add only key, hash and pre-auth-tx signers; C-accounts are contracts already).
+
+SCaaS contracts refuse none of these (only the Algorand rekey is detectable, and it is indistinguishable from key rotation). Wallet guidance for every family:
+**never authorise code over your account** (no rekey to a program or an app, no signed LogicSig, no account
+abstraction or signer capability, no authz grant to a contract, no wallet extension or plugin, no contract deployed or
+full-access key added on your own account, no contract key).
+
 ## 8. Head-of-line per adapter
 
 <a id="head-of-line"></a><a id="NET-ALL-03"></a>**NET-ALL-03** — **Every adapter states how it avoids head-of-line

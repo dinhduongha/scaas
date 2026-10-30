@@ -4341,6 +4341,24 @@ R36-R49 reserved for the third design batch, never used.
 **What it said.** `KeyOp` (`scaas.keyop.v1`), `ForwardOp`, `MandateInit`, mandate close/revoke messages, the Cosmos mandate JSON and GRAM `MandatePay` were separate signed structs with their own nonces.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-3, §6 Q3.
 
+### NET-ALL-83 — Non-EVM analogues of EIP-7702: recorded, not refused
+- old: — · status: current · owner: yes · date: 2026-10-30 · normative: networks/README.md#NET-ALL-83 · superseded-by: —
+
+**Rule.** The ways a non-EVM family hands a key-holder account's authority to code (Algorand rekey to a LogicSig or app
+and delegated LogicSigs, Aptos account abstraction and signer capabilities, Cosmos `authz` to a contract, TON W5
+extensions / v4 plugins, NEAR `DeployContract` / full-access `AddKey` on the user's own account, Hedera contract keys;
+none on Solana, Sui, Soroban) are residual risks with wallet guidance "never authorise code over your account"; SCaaS
+contracts refuse none of them. Owner ruling 2026-10-30 (EIP-7702 follow-up, decision D6): first "on Algorand refuse a
+rekeyed sender on sender-authorised key ops" (built on branch `no7702` as `86b099f1`, docs `f6700897`), then dropped
+the same day on the controller's assessment and reverted (`c3f9e646`, `2be46f20`). Status: recorded on `no7702`.
+**Why.** On Algorand a rekey is also the key-rotation mechanism (multisig, hardware key, the Falcon post-quantum
+migration) and looks the same on chain as a rekey to code, so the refusal blocked legitimate and stronger accounts from
+`add_key_native`, while the Algorand analogue that matters most (a delegated LogicSig, which can even rekey the victim
+to an attacker key) stays undetectable; signature paths already verify the current authority, which code cannot be.
+**Cost if wrong.** A rekeyed-to-LogicSig sender can still add a native key to its SCaaS record; the EVM rule
+(EIP-7702 designators: own-key ECDSA only, no delegated caller) is unaffected.
+**Source.** EIP-7702 audit 2026-10-30 (`docs/research` note with the `no7702` branch), the D6 build report.
+
 ## 27. Networks — EVM
 
 ### NET-EVM-01 — Celo fee currency (CIP-64)
