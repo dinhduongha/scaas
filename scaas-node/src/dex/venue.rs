@@ -28,7 +28,7 @@ use super::{
     TradeOrder, WireOrder, FLAG_IOC, KIND_OUTSIDE, KIND_SCAAS,
 };
 use crate::abi::{IToken, TradeFill};
-use crate::chain::{classify, Chain, SimError};
+use crate::chain::{classify, is_contract, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
 use crate::submit::now;
@@ -386,16 +386,13 @@ impl Venue {
     }
 
     /// `SigCheck.isValid` exactly as `verifier` (the order's token, or the DEX) runs it (CTR-MTX-25, review T3 C1; CTR-UA-24
-    /// on every path, owner ruling 2026-10-28): no code ⇒ ECDSA only; an EIP-7702 designator ⇒ ECDSA by the base key,
-    /// else ERC-1271 through the delegate; a contract ⇒ ERC-1271 called from `verifier` with the cap by codehash as the
+    /// on every path, owner ruling 2026-10-30, D1): no code or an EIP-7702 designator (an EOA) ⇒ ECDSA by its own key
+    /// only, the delegate is never asked; a contract ⇒ ERC-1271 called from `verifier` with the cap by codehash as the
     /// callee's gas, accepted only as exactly 32 bytes equal to the magic word. `Err` = the RPC, never a verdict.
     async fn valid_sig(&self, verifier: Address, signer: Address, digest: B256, sig: &Bytes) -> Result<bool> {
         let code = self.chain.primary().get_code_at(signer).await?;
-        if code.is_empty() {
+        if !is_contract(&code) {
             return Ok(ecdsa_ok(signer, digest, sig));
-        }
-        if !is_contract(&code) && ecdsa_ok(signer, digest, sig) {
-            return Ok(true);
         }
         alloy::sol! {
             function isValidSignature(bytes32 hash, bytes signature) external view returns (bytes4);
@@ -947,12 +944,6 @@ impl Venue {
 /// (`amount − pulled`) after what rests in the book and what other planned fills still pull (review T3 I1).
 fn restorable(fill: U256, on_chain: U256, in_book: U256, pending: U256) -> U256 {
     fill.min(on_chain.saturating_sub(in_book.saturating_add(pending)))
-}
-
-/// `SigCheck.isContract`: code, and not an EIP-7702 designator (`0xef0100 ‖ address`, whose key still signs).
-fn is_contract(code: &[u8]) -> bool {
-    let designator = code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]);
-    !code.is_empty() && !designator
 }
 
 /// The ERC-1271 cap (CTR-DEX-08): 400 k for this chain's `SmartKeyAccount` clone, by codehash; 50 k for any other.
@@ -1731,7 +1722,7 @@ mod tests {
     /// CTR-UA-24 on the venue too (owner ruling 2026-10-28): an EIP-7702 maker signs with its base key, or through its
     /// delegate's ERC-1271 (called on the maker's address with the 50 k cap); a wrong answer is invalid.
     #[tokio::test]
-    async fn a_7702_maker_signs_with_its_key_or_its_delegate() {
+    async fn a_7702_maker_signs_with_its_key_only() {
         let maker = PrivateKeySigner::random();
         let mut designator = vec![0xef, 0x01, 0x00];
         designator.extend_from_slice(Address::repeat_byte(0x55).as_slice());
@@ -1744,9 +1735,10 @@ mod tests {
         assert!(world.lock().unwrap().sig_calls.is_empty(), "the base key needs no ERC-1271 call");
         let other = Bytes::from_static(&[0xab; 65]);
         assert!(!v.valid_sig(BASE, maker.address(), d, &other).await.unwrap(), "no answer from the delegate");
+        // a sweeper delegate that says yes to anything is never asked (owner ruling 2026-10-30, D1)
         world.lock().unwrap().answers.insert(maker.address(), Bytes::from([MAGIC_1271.to_vec(), vec![0; 28]].concat()));
-        assert!(v.valid_sig(BASE, maker.address(), d, &other).await.unwrap(), "the delegate's ERC-1271");
-        assert_eq!(world.lock().unwrap().sig_calls.last().map(|c| (c.0, c.1)), Some((BASE, maker.address())));
+        assert!(!v.valid_sig(BASE, maker.address(), d, &other).await.unwrap(), "the delegate's ERC-1271 refused");
+        assert!(world.lock().unwrap().sig_calls.is_empty(), "the delegate is never called");
     }
 
     /// Outside legs are never probed through `mtxTrade` (an outside token has none: an honest maker would revert there

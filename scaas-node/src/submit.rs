@@ -930,6 +930,8 @@ mod tests {
         estimate: Option<u64>,
         /// Only this address has code (`contract_signer` = every address).
         code_only: Option<Address>,
+        /// This address's code is an EIP-7702 designator `0xef0100 ‖ 0x55…55` (an EOA, not a contract signer).
+        designator: Option<Address>,
         /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
         genesis: bool,
         /// `latest`'s `gasLimit` (default 200,000,000, the SCaaS testnet's target).
@@ -996,7 +998,8 @@ mod tests {
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();
-                    Ok(json!(if e.contract_signer || e.code_only == Some(a) { "0x6001" } else { "0x" }))
+                    Ok(json!(if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
+                             else if e.contract_signer || e.code_only == Some(a) { "0x6001".into() } else { "0x".into() }))
                 }
                 "eth_call" => {
                     let input = p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap();
@@ -1490,6 +1493,9 @@ mod tests {
         let (_, rpc) = outcomes(Evm { code_only: Some(Address::repeat_byte(0xab)), ..ok() }, vec![job(7)], |_| {}).await;
         let len = rpc.lock().unwrap().sent[0].2.len();
         assert_eq!(rpc.lock().unwrap().gas, vec![guard::erc1271_floor(len)]);
+        // an EIP-7702 designator signer is an EOA (ECDSA only, owner ruling 2026-10-30): no 1271 floor
+        let (_, rpc) = outcomes(Evm { designator: Some(Address::repeat_byte(0xab)), ..ok() }, vec![job(7)], |_| {}).await;
+        assert_eq!(rpc.lock().unwrap().gas, vec![0x30000 * 6 / 5], "a designator signer gets no 1271 floor");
     }
 
     /// The Amsterdam gas model (EIP-7825 + EIP-8037): regular gas ≤ 2^24, the gas limit (regular + state) bounded by

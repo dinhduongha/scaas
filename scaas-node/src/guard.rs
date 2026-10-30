@@ -695,9 +695,10 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     } else {
         let contract_signer = match &w.meta {
             // a derived UA has no code: its verify is held by the registry (`UAVerifyGas` when starved), so the
-            // estimate already covers it; a native id that is a contract gets the ERC-1271 floor on either path
+            // estimate already covers it; a native id that is a contract gets the ERC-1271 floor on either path (an
+            // EIP-7702 designator is an EOA, own key only: no floor, owner ruling 2026-10-30 D1)
             Some(m) => match crate::metatx::native(&m.from) {
-                Some(a) => chain.has_code(a).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
+                Some(a) => chain.is_contract_at(a).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
                 None => false,
             },
             None => false,

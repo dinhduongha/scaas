@@ -33,6 +33,12 @@ impl std::fmt::Display for SimError {
     }
 }
 
+/// `SigCheck.isContract`: code, and not an EIP-7702 designator (`0xef0100 ‖ address`: an EOA, ECDSA by its own key only).
+pub fn is_contract(code: &[u8]) -> bool {
+    let designator = code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]);
+    !code.is_empty() && !designator
+}
+
 pub fn classify(e: &TransportError) -> SimError {
     match e.as_error_resp() {
         Some(resp) => match resp.as_revert_data() {
@@ -180,9 +186,10 @@ impl Chain {
         self.primary().call(tx).await.map_err(|e| classify(&e))
     }
 
-    /// `who` has code (a contract signer: ERC-1271, `guard::erc1271_floor`).
-    pub async fn has_code(&self, who: Address) -> Result<bool> {
-        Ok(!self.primary().get_code_at(who).await?.is_empty())
+    /// `who` is a contract signer (ERC-1271, `guard::erc1271_floor`): `is_contract` of its code, so an EIP-7702
+    /// designator (an EOA, ECDSA only) is not.
+    pub async fn is_contract_at(&self, who: Address) -> Result<bool> {
+        Ok(is_contract(&self.primary().get_code_at(who).await?))
     }
 
     pub async fn fees(&self) -> Result<(u128, u128)> {
