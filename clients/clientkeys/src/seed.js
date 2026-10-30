@@ -13,7 +13,7 @@ import { sha3_256 } from '@noble/hashes/sha3.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
 import { bech32, base32 } from '@scure/base';
 import { concatBytes, utf8ToBytes, bytesToHex, hex, wipe } from './bytes.js';
-import { evmAddress } from './evm.js';
+import { evmAddress, hashTypedData, keyProofMessage } from './evm.js';
 
 const HARDENED = 0x80000000;
 
@@ -142,8 +142,29 @@ export function deriveKey(seed, network, i = 0, { coinType = null } = {}) {
   return { network, curve: net.curve, path, privateKey, ...describe(network, net.curve, privateKey) };
 }
 
-/** Sign a 32-byte digest (or batch root). secp256k1 ⇒ r‖s‖v (v = 27|28, low-s); ed25519 ⇒ 64 bytes. */
-export function signDigest(key, digest) {
+/** Sign EIP-712 typed data: the digest is computed here (`hashTypedData`, preimage `0x1901 ‖ …`), so it can never be
+ *  an EIP-7702 authorization (`0x05 ‖ rlp(…)`) or a transaction hash. Check `td` first (`checkPayment`, `checkCall`, …). */
+export function signTyped(key, td) {
+  return sign(key, hashTypedData(td));
+}
+
+/** Sign the key-possession proof for `challenge` (`keyProofMessage`, Odoo `key_proof_message`). */
+export function signKeyProof(key, challenge) {
+  return sign(key, keyProofMessage(challenge));
+}
+
+/** Sign a raw 32-byte digest (or batch root). DANGER: a raw digest hides its preimage — it may be an EIP-7702
+ *  authorization (`keccak256(0x05 ‖ rlp([chainId, address, nonce]))`), which hands the account to a sweeper, or a
+ *  transaction hash. Owner rule 2026-10-30: never sign a 7702 authorization. Refused unless the caller opts in with
+ *  `{ allowRawDigest: true }` and itself built the digest from a checked SCaaS message (a Merkle batch root, a digest a
+ *  `check*` function returned); prefer `signTyped` / `signKeyProof`. secp256k1 ⇒ r‖s‖v (v = 27|28, low-s);
+ *  ed25519 ⇒ 64 bytes. */
+export function signDigest(key, digest, { allowRawDigest = false } = {}) {
+  if (allowRawDigest !== true) throw new Error('signDigest: raw digest refused; use signTyped / signKeyProof, or pass { allowRawDigest: true }');
+  return sign(key, digest);
+}
+
+function sign(key, digest) {
   if (key.curve === 'secp256k1') {
     const rec = secp256k1.sign(digest, key.privateKey, { prehash: false, format: 'recovered' });
     return concatBytes(rec.subarray(1), new Uint8Array([27 + rec[0]]));

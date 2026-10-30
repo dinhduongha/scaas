@@ -19,10 +19,11 @@ import { HDKey } from '@scure/bip32';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import {
-  entropyToWords, wordsToEntropy, seedFromWords, seedFromEntropy, slip10Ed25519, deriveKey, signDigest,
+  entropyToWords, wordsToEntropy, seedFromWords, seedFromEntropy, slip10Ed25519, deriveKey, signDigest, signTyped, signKeyProof,
   strkey, normalizeMnemonic, generateEntropy,
 } from '../src/seed.js';
-import { bytesToHex, fromHex, keccak_256 } from '../src/bytes.js';
+import { bytesToHex, concatBytes, fromHex, keccak_256 } from '../src/bytes.js';
+import { hashTypedData, keyProofMessage, metaTransferTypedData } from '../src/evm.js';
 
 const trezor = JSON.parse(readFileSync(new URL('./vectors/bip39-trezor.json', import.meta.url)));
 const M = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
@@ -141,12 +142,27 @@ test('signing: secp256k1 r‖s‖v recovers the EVM address; ed25519 verifies', 
   const seed = seedFromWords(M);
   const digest = keccak_256(new TextEncoder().encode('operation'));
   const evm = deriveKey(seed, 'evm', 0);
-  const sig = signDigest(evm, digest);
+  const sig = signDigest(evm, digest, { allowRawDigest: true });
   assert.equal(sig.length, 65);
   assert.ok(sig[64] === 27 || sig[64] === 28);
   const rec = secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27)
     .recoverPublicKey(digest).toBytes(false);
   assert.equal(bytesToHex(keccak_256(rec.subarray(1)).subarray(12)), evm.address.slice(2).toLowerCase());
   const stellar = deriveKey(seed, 'stellar', 0);
-  assert.ok(ed25519.verify(signDigest(stellar, digest), digest, fromHex(stellar.publicKey)));
+  assert.ok(ed25519.verify(signDigest(stellar, digest, { allowRawDigest: true }), digest, fromHex(stellar.publicKey)));
+});
+
+// Owner rule 2026-10-30: never sign an EIP-7702 authorization. A raw digest needs the explicit opt-in; typed data and
+// the key proof are hashed here, so their preimage is never `0x05 ‖ rlp(…)`.
+test('signing: a raw digest is refused without the opt-in; signTyped / signKeyProof hash it themselves', () => {
+  const evm = deriveKey(seedFromWords(M), 'evm', 0);
+  // keccak256(0x05 ‖ rlp([chainId 0, address, nonce 0])): what a sweeper would ask a wallet to sign
+  const auth = keccak_256(concatBytes(new Uint8Array([0x05]), fromHex('d78094' + '00'.repeat(18) + 'dead80')));
+  assert.throws(() => signDigest(evm, auth), /raw digest refused/);
+  assert.throws(() => signDigest(evm, auth, { allowRawDigest: 1 }), /raw digest refused/, 'only literal true');
+  const td = metaTransferTypedData({ contract: '0x' + '11'.repeat(20), chainId: 7622, chainUid: '0x' + '22'.repeat(32),
+    message: { from: evm.address, to: '0x' + '33'.repeat(20), value: '1', validUntil: '9' } });
+  assert.deepEqual(signTyped(evm, td), signDigest(evm, hashTypedData(td), { allowRawDigest: true }));
+  const ch = new Uint8Array(32).fill(7);
+  assert.deepEqual(signKeyProof(evm, ch), signDigest(evm, keyProofMessage(ch), { allowRawDigest: true }));
 });
