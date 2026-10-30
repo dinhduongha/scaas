@@ -86,6 +86,16 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
        `signKeyProof` `b76b168c`; node venue key-only + `is_contract_at` `dad611dc`; runner `20129a8b`; docs and gate logs
        after them. D6 (Algorand rekeyed sender) dropped: record only (NET-ALL-83, `644cb40a`). Left as ruled: the DEX order
        `relayer` binding, the `OpenFactory` creator, `TokenCall`'s code check, wallet `execute` / DEX interaction targets.
+       Whole-branch review 2026-10-30: Ready with fixes, fixed in the `no7702 fix:` commits (m1 PQZ submitter read only
+       on a pull `5f2724fa`, m2 registry `predecessor_` `isContract` + n3 `2738caee`, n1 / n2 `eaa1ba11`, n5 DEX test `d1a9ebe9`,
+       m3 CLI-SGN-40 scope, n4, n7 docs).
+       - [ ] **Watch: EIP-7851** (`0xef0101 ‖ delegate`, ECDSA key disabled; [research](docs/research/pq-eips-vs-scaas.md)):
+         today such code is not a designator (`SigCheck.isDesignator` and the node's `is_contract` match only `0xef0100`),
+         so it counts as a contract: ERC-1271 through its delegate, and allowed as a direct caller. If 7851 ships, classify
+         it like a designator (owner rule "an EOA must not run code"; with its key off it then cannot sign at all) — owner
+         decision at that time.
+       - Gate logs: the `no7702` runner logs reuse the `ua8` file names (`smartcontracts/evm/runs/2026-10-30-ua8-*`), so the
+         `ua8` merge evidence is overwritten in the tree; git history keeps it (`06cedadc` and before).
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`; merged 2026-10-30), TON passkey relays (P-256
        in the node), relay-fee minimum before mainnet. **UA-8 (owner ruling R-node, 2026-10-30):** the gateway route
        `POST /v1/ua/register` and the `~gateway` sponsor policy for the four registry selectors (`register`, `setKemKey`,
@@ -399,8 +409,9 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   `SUI_GAS_BUDGET`; the cap object must be gone afterwards), and the Aptos `deploy-object` publish with
   `upgrade_policy = "immutable"` (the package registry reads back policy 2); neither has run against a network.
 - [ ] **metatx split — final review follow-ups** (review done, branch merged into `main` 2026-10-28; leftover minors the reviews deferred):
-  - [x] 7702 intent: ruled (owner 2026-10-28): delegate-only signatures accepted on both paths; the address path follows
-    CTR-UA-24 (`SigCheck.isValid`), parity case `ok_e7702_viaDelegate_addr`.
+  - [x] 7702 intent: ruled (owner 2026-10-28): delegate-only signatures accepted on both paths. **Superseded** by owner
+    ruling D1 (2026-10-30): a designator signs with its own key only, never through its delegate's ERC-1271 (CTR-UA-24,
+    `SigCheck.isValid`); the parity case is now `err_e7702_viaDelegate_addr`.
   - Node items that T17 pulled forward (verify, they are believed done): bound-payee relay-fee jobs (Cosmos, Solana) refused
     unless `params.relay_fee.relay_bound_payee = true`; a plain pay to the router / marker / executor refused in every adapter;
     unknown or non-string `op.kind` refused in every adapter (T17c `3a98e74a`).

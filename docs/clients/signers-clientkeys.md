@@ -341,9 +341,13 @@ its vectors):
 4. **TON**: do not queue an op at lane nonce `n + 1` behind a revocable order at `n`: a revoke moves the lane to `n + 2`,
    so the queued op fails.
 
-<a id="CLI-SGN-40"></a>**CLI-SGN-40** — **A wallet never signs an EIP-7702 authorization, and clientkeys never blind-signs a raw
-digest.** Owner rule 2026-10-30 after the EIP-7702 hot-wallet drain ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24);
-the EIP-7702 audit of 2026-10-30, §9). Status: clientkeys **BUILT** (`b76b168c`). Wallet rules:
+<a id="CLI-SGN-40"></a>**CLI-SGN-40** — **A wallet never signs an EIP-7702 authorization, and clientkeys refuses a raw
+digest unless the caller opts in.** Owner rule 2026-10-30 after the EIP-7702 hot-wallet drain
+([CTR-UA-24](../contracts/accounts.md#CTR-UA-24); the EIP-7702 audit of 2026-10-30, §9). Status: clientkeys **BUILT**
+(`b76b168c`). The opt-in guards against integrator mistakes (an accidental blind signature), not against
+attacker-controlled code: a compromised page already holds the key (`deriveKey`). The real defences are EIP-7702 off on
+the SCaaS chains ([NET-EVM-07](../networks/evm.md#NET-EVM-07)) and the contract rules D1–D5 (a designator signs by its
+own key only and never acts as a direct caller, [CTR-UA-24](../contracts/accounts.md#CTR-UA-24)). Wallet rules:
 1. never sign an EIP-7702 authorization (magic `0x05`, `keccak256(0x05 ‖ rlp([chainId, address, nonce]))`) or a type-4
    transaction, and never anything with chain id 0;
 2. never sign a raw 32-byte digest whose preimage the wallet did not build and show;

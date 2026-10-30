@@ -1138,7 +1138,7 @@ interface IUARegistry is IERC5267 {
 }
 // constructor (the UA-2a UARegistry): error UAConfig(uint16 kind) — kind outside the code's table, duplicate, verifier
 //   (or smartKeyAccountImpl) not a contract (no code or an EIP-7702 designator, owner ruling D5), cap 0 or above the budget, a keyHash group the predecessor enables, a predecessor of another
-//   chain/profile (kind 0 for the non-kind arguments)
+//   chain/profile or itself not a contract (D5) (kind 0 for the non-kind arguments)
 // UAAuth typehash = keccak256("UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)")
 // domain          = EIP712Domain("SCaaS UARegistry", "<generation, decimal>", block.chainid, address(this),
 //                                bytes32 salt = chainUid)                 // ERC-5267 fields = 0x1f
@@ -1386,7 +1386,8 @@ ERC-1271 is `isValidSignature(memberDigest, sig)`.
 `OpenFactory` registrar, and the bound relayer of a `MODE_RESTRICT_RELAYER` envelope (`MtxPipelineLib`). The pipeline's step-5
 ticket (self-call) is unchanged. **While an account is delegated it cannot call SCaaS contracts directly.** It still acts
 through relayed `mtx*` / `ua*` signed with its own key (the fee may be 0), or it first clears its delegation (a type-4
-transaction authorising `address(0)`, signed by its key). Open roles are unchanged: any submitter of a relayed call, the
+transaction authorising `address(0)`, signed by its key). Open roles are unchanged: any submitter of a relayed call (a PQZ
+op reads its caller only to pull a non-zero `shieldIn` from it, no7702 review m1), the
 `mtxWrap` / `uaWrap` fee mint, the `MtxRelayFee` open-mode payee, the DEX settle submitter and its order-relayer binding, the
 `OpenFactory` creator. **SCaaS never calls into a designator where it picks the callee:** a `MtxRelayFee` target must be a
 contract (`RelayTargetNoCode`; before, a designator pointing at a code-less address passed and the payer paid for an empty

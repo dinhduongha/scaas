@@ -178,8 +178,10 @@ unwrap(uint256 wrapped, address recipient, uint256 minOut) returns (uint256 out)
     require recipient ∉ {0, address(this), UA_POOL, SHIELD_POOL}  // UnwrapRecipientInvalid (SHIELD_POOL: review C5-4)
     require U ≠ NATIVE or recipient is not an EIP-7702 designator  // UnwrapRecipientInvalid (owner ruling D4, 2026-10-30:
                                                                //   no native coin into a delegate's code; also the
-                                                               //   Zether / PQZ unshield-unwrap; an ERC-20 leg runs no
-                                                               //   recipient code, so it may pay a designator)
+                                                               //   Zether / PQZ unshield-unwrap; an ERC-20 leg may pay
+                                                               //   a designator: a plain ERC-20 runs no recipient code,
+                                                               //   an outside token with ERC-777 / ERC-1363 hooks may,
+                                                               //   but the unwrapper chose the recipient)
     out    = mulDiv(wrapped, den, num)                         // floor
     require out > 0                                            // UnwrapTooSmall
     require out ≥ minOut                                       // UnwrapBelowMin(out, minOut)
