@@ -612,6 +612,10 @@ impl ChainAdapter for SorobanAdapter {
             return Ok(None);
         }
         let Some(Ok((call, f))) = job.op.as_ref().map(ua_call) else { return Ok(None) };
+        // the guard's allow-list: a job it refuses is never reported consumed by a contract it would not serve
+        if !listed(&call, f, &self.relay_fee) {
+            return Ok(None);
+        }
         let (a, c) = (call.args.as_slice(), &call.contract_address);
         let b32 = |b: [u8; 32]| -> Result<ScVal> { Ok(ScVal::Bytes(b.to_vec().try_into()?)) };
         let by_ref = match f.name {
@@ -622,6 +626,9 @@ impl ChainAdapter for SorobanAdapter {
             }
             "ua_relay" => {
                 let ScVal::Address(token) = &a[5] else { return Ok(None) };
+                if !self.relay_fee.tokens.contains(token) {
+                    return Ok(None);
+                }
                 Some((token.clone(), "ua_ref_used", vec![a[0].clone(), b32(ua_relay_ref(&self.network_id, a)?)?]))
             }
             "mtx_mandate_pay" => Some((c.clone(), "paid", vec![a[3].clone()])),
@@ -800,14 +807,19 @@ pub fn job_call(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &Relay
     Ok((call, auth))
 }
 
-/// CTR-MTX-27: a token `pay` / `pay_meta` / `transfer` whose payee (argument 1) is the router or its executor, or a
-/// `ua_pay` / `ua_pay_meta` / `ua_transfer` to `Holder::Addr` of either (outside `ua_relay`). The router's balance is
-/// whatever a relay in open mode forwards and the executor holds nothing, so coins sent there are stranded.
+/// CTR-MTX-27: a call that pays (or approves for later pays) the router or its executor: a token `pay` / `pay_meta` /
+/// `transfer` to either (argument 1), a `Holder::Addr` of either as the `to` / payee (argument 1) of `ua_pay` /
+/// `ua_pay_meta` / `ua_transfer` (outside `ua_relay`), `mtx_mandate_pay`, `mtx_withdraw`, `mtx_set_payee` (unless it
+/// withdraws the approval), or as either order's `destination` of `settle`. Coins on the router are stranded; the
+/// executor runs targets as itself, so the next relay could take them.
 pub fn pays_router(call: &InvokeContractArgs, policy: &RelayFeePolicy) -> bool {
-    let to = call.args.get(1);
-    policy.router.iter().chain(policy.executor.get()).any(|a| match call.function_name.0.as_slice() {
-        b"pay" | b"pay_meta" | b"transfer" => to == Some(&ScVal::Address(a.clone())),
-        b"ua_pay" | b"ua_pay_meta" | b"ua_transfer" => to == Some(&holder_addr(a)),
+    let (a, f) = (call.args.as_slice(), call.function_name.0.as_slice());
+    let to = a.get(1);
+    policy.router.iter().chain(policy.executor.get()).any(|x| match f {
+        b"pay" | b"pay_meta" | b"transfer" => to == Some(&ScVal::Address(x.clone())),
+        b"ua_pay" | b"ua_pay_meta" | b"ua_transfer" | b"mtx_mandate_pay" | b"mtx_withdraw" => to == Some(&holder_addr(x)),
+        b"mtx_set_payee" => to == Some(&holder_addr(x)) && a.get(2) != Some(&ScVal::Bool(false)),
+        b"settle" => a.iter().take(2).any(|o| field(o, "destination") == Some(&holder_addr(x))),
         _ => false,
     })
 }
@@ -963,6 +975,10 @@ const UA_FNS: [UaFn; 13] = [
 /// from, signature}]}` ⇒ the call and its table row (function first, then arity).
 fn ua_call(op: &Value) -> Result<(InvokeContractArgs, &'static UaFn)> {
     let s = |k: &str| op[k].as_str().ok_or_else(|| anyhow!("op.{k} missing"));
+    // decision (C): the kind is `job.kind`; an `op.kind` here is a misrouted job, never ignored
+    if op.get("kind").is_some_and(|k| !k.is_null()) {
+        bail!("a ua_metatx op carries no op.kind (got {})", op["kind"]);
+    }
     let function = s("function")?;
     let f = UA_FNS.iter().find(|f| f.name == function).ok_or_else(|| anyhow!("{function:?} is not a ua_metatx function"))?;
     let contract = match ScAddress::from_str(s("contract")?) {
@@ -1054,6 +1070,17 @@ fn ua_relay_policy(call: &InvokeContractArgs, lane: &ScAddress, policy: &RelayFe
     crate::adapter::relay_fee_ours(*to == holder_addr(&call.contract_address), *to == holder_addr(lane), amount, &policy.params)
 }
 
+/// The allow-list by contract class: a token ∈ `policy.tokens`, the router, `policy.dex`, any mandate.
+fn listed(call: &InvokeContractArgs, f: &UaFn, policy: &RelayFeePolicy) -> bool {
+    let c = &call.contract_address;
+    match f.class {
+        Class::Token => policy.tokens.contains(c),
+        Class::Router => policy.router.as_ref() == Some(c),
+        Class::Dex => policy.dex.as_ref() == Some(c),
+        Class::Mandate => true,
+    }
+}
+
 /// A `ua_metatx` job (spec §9.1, SOR-D14): the allow-list (token ∈ `policy.tokens`: `ua_transfer`, `ua_pay`,
 /// `ua_pay_meta`, `ua_burn`, `ua_cancel_nonce`; router = `policy.router`: `ua_relay`; DEX = `policy.dex`: `settle`,
 /// `ua_cancel`; any contract: the mandate's `mtx_*`), `relayer` `None` or this lane (`ua_relay`, and each `settle`
@@ -1065,15 +1092,8 @@ pub fn ua_metatx_job(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &
     -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>, [u8; 32])>
 {
     let (call, f) = ua_call(op)?;
-    let c = &call.contract_address;
-    let listed = match f.class {
-        Class::Token => policy.tokens.contains(c),
-        Class::Router => policy.router.as_ref() == Some(c),
-        Class::Dex => policy.dex.as_ref() == Some(c),
-        Class::Mandate => true,
-    };
-    if !listed {
-        bail!("{} is not allowed on {c} (not this chain's {:?} contract)", f.name, f.class);
+    if !listed(&call, f, policy) {
+        bail!("{} is not allowed on {} (not this chain's {:?} contract)", f.name, call.contract_address, f.class);
     }
     let (a, me) = (call.args.as_slice(), ScVal::Address(lane.clone()));
     let lane_bound = match f.name {
@@ -1634,6 +1654,16 @@ mod tests {
         assert_eq!(pay.len(), 8);
         let old: Vec<ScVal> = pay.iter().enumerate().filter(|(i, _)| *i != 4).map(|(_, v)| v.clone()).collect();
         assert!(ua_metatx_job(&NET7, &ua_op(MANDATE, "mtx_mandate_pay", old), &lane(), &p).is_err());
+        // decision (C): the job kind is `job.kind`; a ua_metatx op carrying any `op.kind` is refused
+        let (c, f, args) = ua_ops(ScVal::Void).remove(0);
+        for k in [json!("relay_fee"), json!("pay_meta"), json!("ua_metatx"), json!(7), json!({})] {
+            let mut o = ua_op(c, f, args.clone());
+            o["kind"] = k.clone();
+            assert!(ua_metatx_job(&NET7, &o, &lane(), &p).unwrap_err().to_string().contains("op.kind"), "{k}");
+        }
+        let mut o = ua_op(c, f, args);
+        o["kind"] = Value::Null;
+        assert!(ua_metatx_job(&NET7, &o, &lane(), &p).is_ok(), "null = absent");
     }
 
     /// S8 / §8: `relayer` is `None` (no lane authority) or this lane (one `SourceAccount` entry rooted at exactly the
@@ -1734,6 +1764,30 @@ mod tests {
                 assert!(pays_router(&call, &p), "{f} to {to}");
                 let e = ua_metatx_job(&NET7, &ua_op(contract, f, args), &lane(), &p).unwrap_err().to_string();
                 assert!(e.contains("router"), "{f} to {to}: {e}");
+            }
+        }
+        // every other entry that pays or approves a holder: the mandate's payee / withdrawal `to`, settle's destinations
+        for f in ["mtx_mandate_pay", "mtx_withdraw", "mtx_set_payee"] {
+            for to in [WALLET2, ex.as_str()] {
+                let (contract, _, mut args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == f).unwrap();
+                args[1] = h_addr(to);
+                let e = ua_metatx_job(&NET7, &ua_op(contract, f, args.clone()), &lane(), &p).unwrap_err().to_string();
+                assert!(e.contains("router"), "{f} to {to}: {e}");
+                if f == "mtx_set_payee" {
+                    args[2] = ScVal::Bool(false);
+                    assert!(ua_metatx_job(&NET7, &ua_op(contract, f, args), &lane(), &p).is_ok(), "withdrawing an approval");
+                }
+            }
+        }
+        for to in [WALLET2, ex.as_str()] {
+            for i in 0..2 {
+                let (_, _, mut args) = ua_ops(ScVal::Void).pop().unwrap();
+                let ScVal::Map(Some(m)) = &mut args[i] else { panic!() };
+                let mut v = m.0.to_vec();
+                v.iter_mut().find(|e| e.key == sym("destination")).unwrap().val = h_addr(to);
+                args[i] = ScVal::Map(Some(ScMap(v.try_into().unwrap())));
+                let e = ua_metatx_job(&NET7, &ua_op(DEX, "settle", args), &lane(), &p).unwrap_err().to_string();
+                assert!(e.contains("router"), "settle order {i} to {to}: {e}");
             }
         }
         // ua_relay's open mode names the router as `to`: that is the relay, not a pay to it
@@ -1995,7 +2049,7 @@ mod tests {
                 "paid" => c.args[0].clone(),
                 _ => panic!("{f}"),
             };
-            let hit = u2.lock().unwrap().iter().any(|(g, x)| *g == f && *x == r && c.contract_address == sc(if f == "paid" { MANDATE } else { CONTRACT }));
+            let hit = u2.lock().unwrap().iter().any(|(g, x)| *g == f && *x == r);
             view_ok(ScVal::Bool(hit))
         });
         let (a, _) = stub_adapter(answer, true).await;
@@ -2018,6 +2072,13 @@ mod tests {
         for j in [job("ua_pay"), job("ua_pay_meta"), job("mtx_mandate_pay"), relay] {
             assert_eq!(a.op_consumed(&j).await.unwrap(), Some(true), "{:?}", j.op);
         }
+        // the guard's allow-list: a job it refuses is never reported consumed
+        let (_, _, pay) = ops.iter().find(|o| o.1 == "ua_pay").cloned().unwrap();
+        assert_eq!(a.op_consumed(&ua_job(WALLET, "ua_pay", pay)).await.unwrap(), None, "unlisted token");
+        let mut other_token = ua_relay_args(h_addr(WALLET2), LANE);
+        other_token[5] = addr(WALLET);
+        assert_eq!(a.op_consumed(&ua_job(WALLET2, "ua_relay", other_token)).await.unwrap(), None, "unregistered fee token");
+        assert_eq!(a.op_consumed(&ua_job(CONTRACT, "ua_relay", ua_relay_args(h_addr(WALLET2), LANE))).await.unwrap(), None, "not the router");
     }
 
     /// CTR-ACC-07: a delegate job refused `StaleEpoch` (mandate error #13) names the current `epoch(token)`, re-read
