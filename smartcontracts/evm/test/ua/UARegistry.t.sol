@@ -856,8 +856,8 @@ contract UARegistryTest is UARegistryBase {
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0x1234), true, new UARegistry.KindConfig[](0));
     }
 
-    /// Owner ruling 2026-10-30 (D5): a deployer-chosen implementation or verifier that is an EIP-7702 designator (its
-    /// delegate can change under the registry) is refused, even one delegating to real code.
+    /// Owner ruling 2026-10-30 (D5): a deployer-chosen implementation, verifier or predecessor that is an EIP-7702
+    /// designator (its delegate can change under the registry) is refused, even one delegating to real code.
     function test_constructorDesignatorRefused() public {
         address d = address(0xD7702);
         vm.etch(d, abi.encodePacked(hex"ef0100", address(mock)));
@@ -867,6 +867,12 @@ contract UARegistryTest is UARegistryBase {
         c[0] = UARegistry.KindConfig(0x0101, d, 50_000);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0101)));
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, c);
+        // a gen-2 predecessor delegating to the real gen 1 (review m2): every view would pass, the delegate could change
+        address p = address(0xD7703);
+        vm.etch(p, abi.encodePacked(hex"ef0100", address(reg)));
+        assertEq(UARegistry(p).generation(), 1, "the delegate answers as gen 1");
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        new UARegistry(chainUidA, p, false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
     }
 
     // ----- T-CHAIN, T-MEMBER -----

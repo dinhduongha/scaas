@@ -186,7 +186,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         }
         if (predecessor_ != address(0)) {
             IUARegistry p = IUARegistry(predecessor_);
-            if (p.generation() != 1 || p.chainUid() != chainUid_ || p.hederaNative() != hederaNative_) {
+            // D5 (owner ruling 2026-10-30): real code; a designator's delegate could change under gen 2
+            if (
+                !SigCheck.isContract(predecessor_) || p.generation() != 1 || p.chainUid() != chainUid_
+                    || p.hederaNative() != hederaNative_
+            ) {
                 revert UAConfig(0);
             }
             // review n3: gen 1 speaks the UA-8 views gen 2 forwards to (`pqzKeyOf`, `registrationOf`, `checkedOf`)
@@ -993,8 +997,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// The native rule (ruling D1): an EOA (no code, or the EIP-7702 designator `0xef0100 ‖ delegate`) ⇒ ECDSA over `e`
     /// by its own key only; a contract ⇒ ERC-1271 over `h` only.
     function _byCode(address a, bytes32 e, bytes32 h, bytes memory sig) private view returns (bool) {
-        uint256 len = a.code.length;
-        if (len == 0 || (len == 23 && bytes3(a.code) == 0xef0100)) {
+        if (!SigCheck.isContract(a)) {
             (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(e, sig);
             return err == ECDSA.RecoverError.NoError && rec == a;
         }
