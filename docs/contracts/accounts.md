@@ -327,7 +327,7 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   quorum's signatures can submit a different valid subset first: the stored `pop` / `sig` differs, the key, the version and
   the id do not. Nothing depends on which valid subset is stored.
 
-<a id="CTR-UA-33"></a>**CTR-UA-33** — **The registration event carries `popHash`; `msig` members sign without key data** (owner 2026-10-30;
+<a id="CTR-UA-33"></a>**CTR-UA-33** — **The registration event carries `popHash`; `msig` members sign without key data; WebAuthn blobs canonical only** (owner 2026-10-30;
 [decisions.md](../decisions.md)). One rule on every family that has a UA registry:
 
 - **A.** The registration event (`UARegistered` on EVM, `UaRegistered` on Soroban, the equivalent elsewhere) carries
@@ -343,6 +343,15 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   keep `auth = abi.encode(keyData, sig)` with the key data of a classical kind.
 - NEAR and Algorand have no UA registry and no registration event: their `msig` members are key ids inside the structure,
   never registered, and each member signature carries its key (their own auth formats); A and B have nothing to apply to there.
+- **C. WebAuthn signature blob: canonical encoding only** (owner 2026-10-30, every registry). A `webauthn-p256` signature
+  `abi.encode(bytes authenticatorData, bytes clientDataJSON, bytes32 r, bytes32 s)` is accepted only when byte-equal to its
+  canonical re-encoding: head offsets 0x80 and 0x80 + 32 + pad32(len(authenticatorData)), each dynamic field = 32-byte
+  length ‖ data ‖ zero padding, no trailing bytes. Anything else fails before any field or signature check. So one
+  signature has one byte string: a front-runner cannot register the same id with other `pop` bytes (another `popHash`,
+  [CTR-UA-07](#CTR-UA-07)'s identical record), and the canonical `MemberSig[]` rule holds for a WebAuthn member. On EVM
+  `WebAuthnP256Verifier` enforces it for `verifyPop` and `verify` alike: `register`'s PoP, the portable `msig` records,
+  `requireAuthorized` (tokens' relayed operations, `msig` member slots). `SmartKeyAccount` (CTR-ACC-08) has its own
+  decoder and is not a registry.
 
 <a id="kem-keys"></a>
 <a id="CTR-UA-32"></a>**CTR-UA-32** — **KEM (chat) key records: signed, versioned, write-once in any order, never revoked, 1,601 bytes (scheme byte + key)** (owner

@@ -3638,7 +3638,7 @@ override**, status decided, built on branch `ua8` (not merged):
 
 Change (2026-10-30): **the KEM key record carries a scheme id — the first byte of `kemPk`** (owner 2026-10-30; the design below is the controller's, owner may override). Rule: `kemPk = scheme byte ‖ key`. **Scheme 1** = ML-KEM-1024 + X25519 (X-Wing order): `kemPk = 0x01 ‖ ek (1,568 B) ‖ X25519 pk (32 B)` = **1,601 B**. **Scheme 2** is reserved for ML-KEM-1024 + HQC + X25519 (after FIPS 207) and is **not enabled**: the registry refuses it like any unknown id. HQC itself is not built now. Registry check order (EVM `UARegistry._checkKemPk`, every client the same): empty `kemPk` → `UAKemKeyLength(0)`; first byte not an enabled scheme (0, 2, 3 … 255) → new error `UAKemScheme(uint8 scheme)`; enabled scheme but not its exact length → `UAKemKeyLength(length)`. `kemRecordDigest` is unchanged (it already hashes `kemPk`, so the scheme byte is signed); the ABI of the existing functions is unchanged (one error added). Why: a later hybrid scheme with HQC then needs no new registry generation and no new record format — only an enabled id and its length; a registry that does not know the id refuses it, so a key of an unknown scheme is never stored. Test-only chains: no migration and no compatibility path (the 1,600-byte keys of the earlier test vectors are in `smartcontracts/vectors/ua/legacy/portable.json`). Status: decided (owner 2026-10-30); built on branch `kem-scheme` — clientkeys `90c79186`, EVM registry + forge tests + size baseline (`UARegistry` 36,868 → 37,066 B), the Rust, C, C++, Qt, Go, Python, C#, Dart and Dart-FRB clients and these docs in the later `kem-scheme:` commits; not merged (merge before the UA-Soroban registry task, whose `Kem(ua, version)` stores 1,601-byte keys). The 1,600 B of the CTR-UA-32 text above and of the earlier UA-8 spec and plan records is the pre-scheme length (history).
 
-### CTR-UA-33 — The registration event carries `popHash`; `msig` members sign without key data
+### CTR-UA-33 — The registration event carries `popHash`; `msig` members sign without key data; WebAuthn blobs canonical only
 - old: — · status: current · owner: yes · date: 2026-10-30 · normative: contracts/accounts.md#CTR-UA-33 · superseded-by: —
 
 **Rule.** Owner ruling 2026-10-30, two parts, one rule on every family (owner: never split a rule by chain kind). **A.** The
@@ -3676,6 +3676,23 @@ authorize at the new bounds. (4) Launch note (review M4, for the 22776 checklist
 built before CTR-UA-33 would hand `abi.encode("", sig)` under `member` and the old gen 1 would refuse every classical
 member (`uaOf("") != id`); the gen-2 constructor probes gen 1's UA-8 views only. Not reachable on the test-only chains (all
 redeploy together); a mainnet gen 2 must sit on a gen 1 with CTR-UA-33.
+
+**C. WebAuthn signature blob canonical only** (owner ruling 2026-10-30, every registry). Rule: wherever a registry, or
+the verifier it relies on, decodes the `webauthn-p256` signature `abi.encode(bytes authenticatorData, bytes clientDataJSON,
+bytes32 r, bytes32 s)`, the input is refused unless it is byte-equal to its canonical re-encoding: head offsets 0x80 and
+0x80 + 32 + pad32(len(authenticatorData)), each dynamic field = 32-byte length ‖ data ‖ zero padding, no trailing bytes.
+Why: a lenient decoder gives one signature many byte strings, so a front-runner could register the same id with different
+`pop` bytes and so another `popHash` (CTR-UA-07: identical record or revert), and the canonical-only `MemberSig[]` rule
+(review m3) would not hold for a WebAuthn member. As built on EVM: `WebAuthnP256Verifier._fields` reads the two lengths at
+their canonical places, requires the canonical total length and compares `keccak256(sig)` with the hash of the re-encoding;
+it is the verifier's first check (before the rpIdHash, flags, clientDataJSON grammar and the signature), and `verify` and
+`verifyPop` share it, so it covers `register`'s PoP, the portable `msig` records (KEM / PQZ key), `requireAuthorized`
+(tokens, `msig` member slots). Not covered: `SmartKeyAccount._verifyWebAuthn` (CTR-ACC-08, Solidity `abi.decode`; an
+account, not a registry, outside the ruling) and the client mirrors (`clients/ua-rs` `verify`, `clientkeys` test helper),
+which still accept a non-canonical blob the registry refuses. Soroban: built on `ua-soroban` (T2b `657e71ab`, test
+`webauthn_blob_canonical_only`). Test: `EccVerifiers.t.sol` `test_WebAuthnCanonicalOnly` (trailing byte, each offset
+shifted, non-zero padding after each field, each length word beyond the data, fields swapped with offsets fixed up; RED on
+the old decoder). Status: decided (owner 2026-10-30); built on `msig-pophash` in the `msig-pophash: WebAuthn` commit.
 
 NEAR and Algorand (inventory 2026-10-30): no UA registry and no registration event; an `msig` member there is a key id
 inside the structure, never registered (no member record exists), and its signature carries its key in the family's own auth
