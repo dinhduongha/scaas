@@ -11,8 +11,9 @@ using Nethermind.Evm.Precompiles;
 using Nethermind.Pqz;
 
 // P6f Task 6 (D6, D7): gas calibration inside the built image, on the chain host.
-//   Calibrate run <corpus.jsonl> <fresh.jsonl> <ua vectors dir> <out dir> [--n 1000] [--cold 200] [--label L] [--ops 7]
+//   Calibrate run <corpus.jsonl> <fresh.jsonl> <ua vectors dir> <out dir> [--n 1000] [--cold 200] [--label L] [--ops 7] [--keys a-b]
 // --ops: only the rows of these ops (comma list; P6-ANON S8 calibrates op 7 alone, the other rows stay as calibrated).
+// --keys a-b: only rows a..b of the sorted row list (after --ops); a > b: no row (fs3 Task 13: slices of one run).
 //   Calibrate cold                         (child: one cold OP_SELFTEST, prints its milliseconds)
 // t_ecMul = median of Nethermind's own BN254MulPrecompile.Run (EIP-196 vector, same process and JIT); per row
 // t_row = max(p99 over n calls on the row's valid inputs (vectors + fresh proofs), p99 over n distinct adversarial
@@ -102,6 +103,11 @@ static class Cal
         var keys = corpus.Where(r => r.kind == "honest").Select(r => (k: Key(r.input), r.id)).Distinct().OrderBy(r => r.k.op).ThenBy(r => r.id).ThenByDescending(r => r.k.len).ThenBy(r => r.k.legs).ThenBy(r => r.k.aud).ToList();
         JsonArray rows0 = new(keys.Select(k => (JsonNode)Row(k.k, 1)).ToArray());
         if (ops is not null) keys = keys.Where(k => ops.Contains(k.k.op)).ToList();
+        // --keys a-b: only rows a..b (0-based, inclusive) of the sorted list, so a run splits into short slices (fs3 Task 13:
+        // each slice must end within the shell's 3-minute limit); a > b selects none (a --cold-only slice)
+        if (Array.IndexOf(a, "--keys") is var ki and >= 0 && a[ki + 1].Split('-') is [var k0, var k1])
+            keys = keys.Skip(int.Parse(k0)).Take(Math.Max(0, int.Parse(k1) - int.Parse(k0) + 1)).ToList();
+        W($"# rows {keys.Count}: {string.Join("; ", keys.Select(k => $"op {k.k.op} {k.id} {k.k.len}" + (k.k.op == PqzSchedule.OpMulti ? $" [{k.k.legs}, {k.k.aud}]" : "")))}");
         PqzSchedule sched = Sched(rows0, 1, 6500, 9000);
         byte[] One = [.. new byte[31], 1], Zero = new byte[32];
         bool Is(byte[] x, byte[] want) => PqzPrecompile.Run(x, sched) is { IsSuccess: true } r && r.Data!.AsSpan().SequenceEqual(want);

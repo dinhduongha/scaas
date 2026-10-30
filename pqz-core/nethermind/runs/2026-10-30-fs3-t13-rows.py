@@ -2,6 +2,8 @@
 """fs3 Task 13 + plan 5h Task 9 (2026-10-30): the row rule of 2026-10-19 (runs/2026-10-19-pqzl-rows.py, kept unchanged
 as record) adapted to today's ids, for the SCaaS testnet reset on path B:
   python3 -I runs/2026-10-30-fs3-t13-rows.py <live> <run 1 json> <run 2 json> <run 1 log> <run 2 log> <out.json>
+Each run argument may be a comma list (the slices of one run, runs/2026-10-30-fs3-t13-calib-step.sh): rows are joined,
+selftestGas = the smallest slice value (= the smallest row; a row-less slice has none), ML-DSA = the largest.
 <live> = the live engine.Pqz: chain/engine-pqz-provisional-n2304.json, or the live genesis.json (its engine.Pqz is read).
 Per row: new = min(live, max(run 1, run 2)); the same for selftestGas; mldsa44Gas / mldsa65Gas stay live.
 Adapted: the committed script matched PQZL rows by the v2 id only, so on other ids it printed "0 PQZL rows changed" and
@@ -34,18 +36,28 @@ def t_rows(log):
     return out
 
 
+def run_json(arg):
+    ss = [json.load(open(p))["schedules"][0] for p in arg.split(",")]
+    st = [s["selftestGas"] for s in ss if s["pqz"]]
+    return {"pqz": [r for s in ss for r in s["pqz"]], "selftestGas": min(st),
+            "mldsa44Gas": max(s["mldsa44Gas"] for s in ss), "mldsa65Gas": max(s["mldsa65Gas"] for s in ss)}
+
+
 def main(live_p, r1_p, r2_p, l1_p, l2_p, out_p):
     lj = json.load(open(live_p))
     live = (lj["engine"]["Pqz"] if "engine" in lj else lj)["schedules"][-1]
-    r1, r2 = (json.load(open(p))["schedules"][0] for p in (r1_p, r2_p))
+    r1, r2 = run_json(r1_p), run_json(r2_p)
     g1, g2 = ({K(r): r["gas"] for r in s["pqz"]} for s in (r1, r2))
+    for name, s in (("run 1", r1), ("run 2", r2)):
+        if len({K(r) for r in s["pqz"]}) != len(s["pqz"]):
+            sys.exit(f"FAIL {name}: a row measured twice")
     lk = {K(r) for r in live["pqz"]}
     for name, g in (("run 1", g1), ("run 2", g2)):
         if not g or set(g) != lk:
             sys.exit(f"FAIL keys: live {len(lk)} rows, {name} {len(g)}; only live {sorted(lk - set(g))}, only {name} {sorted(set(g) - lk)}")
     worst = 0.0
     for log in (l1_p, l2_p):
-        t = t_rows(log)
+        t = [x for p in log.split(",") for x in t_rows(p)]
         if len(t) != len(lk):
             sys.exit(f"FAIL {log}: {len(t)} table rows, {len(lk)} expected")
         over = [f"{k} {v:.3f} ms" for k, v in t if v > LIMIT_MS]
