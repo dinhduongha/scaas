@@ -152,6 +152,8 @@ rpc_urls = ["https://soroban-testnet.stellar.org"]
 lanes = [0, 1]
 finality = { mode = "instant", quorum = 1 }      # SCP: a closed ledger is final
 # fee_bump_lane = i: lane i's account pays every lane's fee (CAP-15 fee bump); base_fee in stroops.
+# relay_fee = { router = "C…", min_amount = N }: the relay-fee router (deploy.sh soroban <net> relay_fee); its
+# executor is read once from router.executor() and refused as a payee like the router.
 params = { network_passphrase = "Test SDF Network ; September 2015", base_fee = 100 }
 
 [[chains]]                                       # Pi Network: Soroban family, Stellar-compatible
