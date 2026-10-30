@@ -1,4 +1,4 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua_spike-3bfd193c125ccb0d)
 
 running 10 tests
@@ -25,10 +25,10 @@ ok
 test test::spike_mldsa65_verify_budget ... BUDGET verify_only mldsa65: cpu=2572818 mem=54694
 Writing test snapshot file for test "test::spike_mldsa65_verify_budget" to "test_snapshots/test/spike_mldsa65_verify_budget.1.json".
 ok
-test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=8297246 mem=447710
+test test::spike_msig3_mldsa65_model_budget ... BUDGET msig_model n=3 mldsa65: cpu=8913540 mem=586768
 Writing test snapshot file for test "test::spike_msig3_mldsa65_model_budget" to "test_snapshots/test/spike_msig3_mldsa65_model_budget.1.json".
 ok
-test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=2975057 mem=157367
+test test::spike_register_mldsa65_model_budget ... BUDGET register_model mldsa65: cpu=3135351 mem=157407
 Writing test snapshot file for test "test::spike_register_mldsa65_model_budget" to "test_snapshots/test/spike_register_mldsa65_model_budget.1.json".
 ok
 test test::spike_require_authorized_passkey_budget ... BUDGET require_authorized webauthn-p256: cpu=3152068 mem=45756
@@ -41,7 +41,7 @@ BUDGET zether_transfer_model m=8: cpu=2409274068 mem=17966446
 Writing test snapshot file for test "test::spike_zether_transfer_model_budget" to "test_snapshots/test/spike_zether_transfer_model_budget.1.json".
 ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.22s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.29s
 
      Running unittests src/lib.rs (target/debug/deps/scaas_ua_spike_token-3e620c5d0f94a950)
 
@@ -52,5 +52,5 @@ ok
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
-    Finished `release` profile [optimized] target(s) in 0.12s
-    Finished `release` profile [optimized] target(s) in 0.09s
+    Finished `release` profile [optimized] target(s) in 0.08s
+    Finished `release` profile [optimized] target(s) in 0.08s

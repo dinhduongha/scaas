@@ -51,9 +51,13 @@ for i in $(seq 1 30); do   # friendbot comes up after the RPC
   sleep 5
 done
 [ -n "$funded" ] || { echo "friendbot: no funded account after 30 tries" >&2; exit 1; }
-deploy() {
-  "$STELLAR_BIN" contract deploy --wasm "$1" --source-account spike --config-dir "$SPIKE_CFG" "${NET[@]}" "${@:2}" \
-    2>"$SPIKE_CFG/deploy.err" || { cat "$SPIKE_CFG/deploy.err" >&2; exit 1; }
+deploy() {   # retried: the funded account can reach the RPC a few ledgers after friendbot answers
+  for _ in $(seq 1 10); do
+    "$STELLAR_BIN" contract deploy --wasm "$1" --source-account spike --config-dir "$SPIKE_CFG" "${NET[@]}" "${@:2}" \
+      2>"$SPIKE_CFG/deploy.err" && return 0
+    sleep 3
+  done
+  cat "$SPIKE_CFG/deploy.err" >&2; exit 1
 }
 SPIKE_ID=$(deploy "$WASM")
 SPIKE_TOKEN=$(deploy "$TOKEN_WASM" -- --registry "$SPIKE_ID")
