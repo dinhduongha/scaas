@@ -80,7 +80,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 
 # The new tests of the plan (Tasks 1-18), "<step>|<form>|<name>", and the pass line each must show in that step's log:
 #   forge  "[PASS] <name>(" in at least one forge-* log
-#   cargo  "test [<path>::]<name> ... ok"; a "::" in <name> may span module path segments
+#   cargo  "test [<path>::]<name>[ - should panic] ... ok"; a "::" in <name> may span module path segments
 #   move   "[ PASS    ] <addr>::<module>::<name>"
 #   jest   "✓ <name>"     node "✔ <name>"     qt "PASS   : <TestCase>::<name>()"
 #   go "--- PASS: <Test>"   cs "Passed <Test> [" (dotnet verbosity normal)   ctest "Test #n: <name> ... Passed"
@@ -762,13 +762,13 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
   norm() { sed -E 's/^[[:space:]]*([0-9]+: )?[[:space:]]*//; s/ \([0-9.]+ ?m?s\)$//' "$1"; }
   # cargo --nocapture --test-threads=1 (the near step) prints "test <t> ... " + the test's output + "ok" on its own line:
   # rejoin each result to its "test <t> ... " line
-  cnorm() { awk '/^test [^ ]+ \.\.\. / { i = index($0, " ... "); h = substr($0, 1, i + 4); r = substr($0, i + 5)
+  cnorm() { awk '/^test [^ ]+( - should panic)? \.\.\. / { i = index($0, " ... "); h = substr($0, 1, i + 4); r = substr($0, i + 5)
       if (r ~ /^(ok|FAILED|ignored)/) print; else p = h; next }
     p != "" && /^(ok|FAILED|ignored)/ { print p $0; p = "" }' "$1"; }
   while IFS='|' read -r step form name; do
     case $form in
       forge) cat "$D/$P"-forge-*.txt 2>/dev/null | grep -qF "[PASS] $name(" ;;
-      cargo) re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}"
+      cargo) re="^test ([^ ]+::)?${name//::/::([^ ]+::)?}( - should panic)?" # a #[should_panic] test prints the suffix
         f=$(cnorm "$D/$P-$step.txt" 2>/dev/null)
         ! grep -qE "$re \.\.\. ignored(, .*)?$" <<< "$f" && grep -qE "$re \.\.\. ok$" <<< "$f" ;;
       move) grep -qE "\[ PASS +\] [^ ]*::${name}\$" "$D/$P-$step.txt" 2>/dev/null ;;
