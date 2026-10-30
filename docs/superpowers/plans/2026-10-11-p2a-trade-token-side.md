@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give every SCaaS token the sell side of a role-free signed `TradeOrder` (CTR-DEX-13/14/15, cancel CTR-DEX-02)
-through an external library `TradeLib` (ERC-7201 `scaas.trade`), and give `UnderlyingToken` the signature wrap of a SCaaS
+through an external library `TradeLib` (ERC-7201 `scaas.trade`), and give `WrappedToken` the signature wrap of a SCaaS
 underlying `mtxWrap` (CTR-TOK-20) that uses it. The DEX side (`SCaaSDex` clone, `createDex`, `mtxSettle`) is P2b; the
 exchange path is P2c.
 
@@ -12,7 +12,7 @@ order: `precheck` (caller = `o.dex`, `dex` a contract, no self order, relayer, e
 fee cap) → the token checks the signature (`_requireValidSignature`, Hedera branch included) → `record` (closed, Path A
 bounds or Path B shape, `pulled`, `TradeFilled`) → the token moves the fill to `o.dex` (ERC-20 inline). Cancel and lane
 invalidation never expire. `ITradeToken` carries the structs, events, errors and functions so the library's events and
-errors are in every token's ABI. `mtxWrap` lives in `UnderlyingLib.wrapBySig`: the wrapper is the order's `dex`, calls the
+errors are in every token's ABI. `mtxWrap` lives in `WrappedLib.wrapBySig`: the wrapper is the order's `dex`, calls the
 underlying's `mtxTrade`, measures the delta and mints.
 
 **Tech Stack:** Solidity 0.8.37 (`evm_version = "osaka"`), Foundry (forge 1.3.5), OpenZeppelin 5.2.0, forge-std 1.16.2.
@@ -34,9 +34,9 @@ TODO.md §00 P2 notes (D1: `mtxWrap` and `NativeNotGasless` come with P2).
   token's `("SCaaS MetaToken","1",chainId,token,chain_uid)`. `orderHash` = the order's EIP-712 digest.
 - Constants: `IOC = 1`, `ESCROW = 2` (requires `IOC`), `LISTED_POOLS = 4` (not read by the token), `MIN_FILL_PPM =
   500_000`, fee cap `10_000` ppm, `minNonce` cap `2^128`, strictly increasing.
-- **Size (owner: optimise later):** `NoUnderlyingToken` grows to 22,951 B (over the 20,480 budget, under EIP-170) and
-  `UnderlyingToken` to 29,974 B; both go into the ratchet baseline (`smartcontracts/evm/size-baseline.json`); `TradeLib`
-  3,129 B, `UnderlyingLib` 11,654 B. Measured in the spike.
+- **Size (owner: optimise later):** `NormalToken` grows to 22,951 B (over the 20,480 budget, under EIP-170) and
+  `WrappedToken` to 29,974 B; both go into the ratchet baseline (`smartcontracts/evm/size-baseline.json`); `TradeLib`
+  3,129 B, `WrappedLib` 11,654 B. Measured in the spike.
 - Test chain: id 7622, `chain_uid` `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`; key `0xA11CE`.
 - Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Do not push. Never `git add claude-code-api.txt`.
 
@@ -66,8 +66,8 @@ TODO.md §00 P2 notes (D1: `mtxWrap` and `NativeNotGasless` come with P2).
 - **F3 — `mtxWrap` errors:** `NativeNotGasless()`, `WrapOrderInvalid(receiveToken)` (step 2, `o.receiveToken ≠ this`),
   `WrapReceivedMismatch(expected, received)`. The relayer binding of step 2 is enforced by the underlying's `mtxTrade`
   (the wrapper passes its caller as `submitter`), so the wrapper does not repeat it.
-- **F4 — Size:** the owner's "optimise later" stands: `NoUnderlyingToken` and `UnderlyingToken` enter the ratchet
-  baseline at their new sizes; the size-pin tests move to NONE ≤ 23,552 and UNDERLYING ≤ 30,720. Flag to the owner: NONE
+- **F4 — Size:** the owner's "optimise later" stands: `NormalToken` and `WrappedToken` enter the ratchet
+  baseline at their new sizes; the size-pin tests move to NORMAL ≤ 23,552 and WRAPPED ≤ 30,720. Flag to the owner: NORMAL
   is now over its 20,480 budget (still deployable).
 - **F5 — Vectors:** the new KAT is `test/vectors/trade_kat.json`; `dex_kat.json` stays the built `SCaaSDex` `Order`
   vector that the node reads (`scaas-node/src/dex.rs`) until P2b/P5.
@@ -84,7 +84,7 @@ TODO.md §00 P2 notes (D1: `mtxWrap` and `NativeNotGasless` come with P2).
   `smartcontracts/evm/test/v2/Trade.t.sol`, `smartcontracts/evm/test/metatx/TradeKat.t.sol`,
   `smartcontracts/evm/test/vectors/trade_kat.json` (written by the KAT test)
 - Create also: `smartcontracts/evm/test/v2/MtxWrap.t.sol`
-- Modify: `smartcontracts/evm/src/metatx/{ERC20MetaTx,IUnderlyingToken,UnderlyingLib,UnderlyingToken}.sol`,
+- Modify: `smartcontracts/evm/src/metatx/{ERC20MetaTx,IWrappedToken,WrappedLib,WrappedToken}.sol`,
   `smartcontracts/evm/test/metatx/MsgSenderLint.t.sol`,
   `smartcontracts/evm/test/v2/Factory.t.sol`, `smartcontracts/evm/test/hedera/HederaV2.t.sol`,
   `smartcontracts/evm/size-baseline.json`
@@ -94,7 +94,7 @@ TODO.md §00 P2 notes (D1: `mtxWrap` and `NativeNotGasless` come with P2).
   submitter)`, `ITradeToken.mtxTrade(TradeOrder, bytes, TradeFill)`, errors `WrongRelayer(bytes32, address)`,
   `PriceLimit(bytes32)`, `NotDex(address)`; `tradeOrderDigest(TradeOrder)`, `pulled(bytes32)` on every token;
   `mtxWrap(address underlying, ITradeToken.TradeOrder o, bytes sig) returns (uint256 minted)` and errors
-  `NativeNotGasless()`, `WrapOrderInvalid(address)`, `WrapReceivedMismatch(uint256,uint256)` on `UnderlyingToken`.
+  `NativeNotGasless()`, `WrapOrderInvalid(address)`, `WrapReceivedMismatch(uint256,uint256)` on `WrappedToken`.
 
 - [ ] **Step 1: `src/trade/ITradeToken.sol`**
 
@@ -381,7 +381,7 @@ pragma solidity ^0.8.20;
 
 import {V2Fixture} from "./helpers/V2Fixture.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
@@ -391,8 +391,8 @@ contract TradeTest is V2Fixture {
     uint256 constant ALICE_PK = 0xA11CE;
     address alice = vm.addr(ALICE_PK);
     address other = address(0x07E5);
-    NoUnderlyingToken t;
-    NoUnderlyingToken t2;
+    NormalToken t;
+    NormalToken t2;
 
     function setUp() public {
         t = _none(alice, 1_000_000, address(0));
@@ -410,7 +410,7 @@ contract TradeTest is V2Fixture {
         o.validUntil = block.timestamp + 300;
     }
 
-    function _sign(NoUnderlyingToken tok, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
+    function _sign(NormalToken tok, ITradeToken.TradeOrder memory o) internal view returns (bytes memory) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, tok.tradeOrderDigest(o));
         return abi.encodePacked(r, s, v);
     }
@@ -619,26 +619,26 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
-import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {normalInit} from "../v2/helpers/V2Fixture.sol";
 
 /// KATs of the token-side DEX structs (CTR-DEX-13, CTR-DEX-02) on a real token: `trade_kat.json` holds a
 /// `TradeOrder`, its `CancelOrder` and an `InvalidateNonces`, in the token domain "SCaaS MetaToken" of a
-/// `NoUnderlyingToken` clone on chain 7622 with its real `chain_uid`. (`dex_kat.json` stays the built `SCaaSDex`
+/// `NormalToken` clone on chain 7622 with its real `chain_uid`. (`dex_kat.json` stays the built `SCaaSDex`
 /// `Order` vector the node reads.) `WRITE_KAT=true forge test --match-contract TradeKatTest` rewrites the file.
 contract TradeKatTest is Test {
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant ALICE_PK = 0xA11CE;
     string internal constant OUT = "./test/vectors/trade_kat.json";
-    NoUnderlyingToken internal tok;
+    NormalToken internal tok;
 
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
-        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
+        tok = NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), UID, false))));
+        tok.initialize(address(this), 1, normalInit("Points", "PTS", 6, 0, address(this), address(this)));
     }
 
     function _domainSep() internal view returns (bytes32) {
@@ -707,20 +707,20 @@ contract TradeKatTest is Test {
 - [ ] **Step 6: `mtxWrap` (CTR-TOK-20)** — apply:
 
 ```diff
-diff --git a/smartcontracts/evm/src/metatx/IUnderlyingToken.sol b/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/IWrappedToken.sol b/smartcontracts/evm/src/metatx/IWrappedToken.sol
 index 2b50b01..eb6277c 100644
---- a/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
+--- a/smartcontracts/evm/src/metatx/IWrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/IWrappedToken.sol
 @@ -1,6 +1,8 @@
  // SPDX-License-Identifier: Apache-2.0
  pragma solidity ^0.8.24;
  
 +import {ITradeToken} from "../trade/ITradeToken.sol";
 +
- /// @title Kind `UNDERLYING` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
- /// @notice Events and errors raised by `UnderlyingLib` (an external library) are declared here so that they are in the
+ /// @title Kind `WRAPPED` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
+ /// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
  ///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
-@@ -43,6 +45,11 @@ interface IUnderlyingToken {
+@@ -43,6 +45,11 @@ interface IWrappedToken {
      error WrapPausedForRateChange(address u);
      /// @notice `msg.value` must equal `amount` on the native leg and be 0 on any other leg (CTR-TOK-26).
      error NativeValueMismatch(uint256 value, uint256 expected);
@@ -729,10 +729,10 @@ index 2b50b01..eb6277c 100644
 +    error NativeNotGasless();
 +    error WrapOrderInvalid(address receiveToken);
 +    error WrapReceivedMismatch(uint256 expected, uint256 received);
-     /// @notice Raised by OpenZeppelin inside UnderlyingLib (same selectors), listed for the ABI.
+     /// @notice Raised by OpenZeppelin inside WrappedLib (same selectors), listed for the ABI.
      error FailedCall();
      error SafeERC20FailedOperation(address token);
-@@ -58,6 +65,10 @@ interface IUnderlyingToken {
+@@ -58,6 +65,10 @@ interface IWrappedToken {
      function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
          external returns (uint256 out, uint256 burned);
      function addReserve(address underlying, uint256 amount) external payable;
@@ -746,19 +746,19 @@ index 2b50b01..eb6277c 100644
 ```
 
 ```diff
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingLib.sol b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedLib.sol b/smartcontracts/evm/src/metatx/WrappedLib.sol
 index b6238c6..e546376 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingLib.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
+--- a/smartcontracts/evm/src/metatx/WrappedLib.sol
++++ b/smartcontracts/evm/src/metatx/WrappedLib.sol
 @@ -8,6 +8,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
  import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
- import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+ import {IWrappedToken} from "./IWrappedToken.sol";
  import {IFactoryToken} from "../factory/IFactoryToken.sol";
 +import {ITradeToken} from "../trade/ITradeToken.sol";
  import {AdminLib} from "./AdminLib.sol";
  import {MetaTokenBase} from "./MetaTokenBase.sol";
  import {HederaLib} from "../hedera/HederaLib.sol";
-@@ -165,6 +166,45 @@ library UnderlyingLib {
+@@ -165,6 +166,45 @@ library WrappedLib {
          L.reserve = reserve + received;
      }
  
@@ -773,18 +773,18 @@ index b6238c6..e546376 100644
 +    {
 +        Leg storage L = _wrapLeg(u, o);
 +        minted = Math.mulDiv(o.amount, L.num, L.den);
-+        if (minted == 0) revert IUnderlyingToken.WrapTooSmall();
++        if (minted == 0) revert IWrappedToken.WrapTooSmall();
 +        fee = Math.mulDiv(minted, o.fee, 1_000_000, Math.Rounding.Ceil);
 +        received = _pullBySig(L, o, sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
 +    }
 +
 +    function _wrapLeg(address u, ITradeToken.TradeOrder calldata o) private view returns (Leg storage L) {
-+        if (u == NATIVE) revert IUnderlyingToken.NativeNotGasless();
-+        UnderlyingStorage storage s = $();
++        if (u == NATIVE) revert IWrappedToken.NativeNotGasless();
++        WrappedStorage storage s = $();
 +        L = s.legs[indexOf(u)];
-+        if (!L.wrapEnabled) revert IUnderlyingToken.WrapDisabledFor(u);
-+        if (L.adjustable && _isPending(s)) revert IUnderlyingToken.WrapPausedForRateChange(u);
-+        if (o.receiveToken != address(this)) revert IUnderlyingToken.WrapOrderInvalid(o.receiveToken);
++        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
++        if (L.adjustable && _isPending(s)) revert IWrappedToken.WrapPausedForRateChange(u);
++        if (o.receiveToken != address(this)) revert IWrappedToken.WrapOrderInvalid(o.receiveToken);
 +    }
 +
 +    /// @dev One balance read before serves the shortfall check and the measurement, as in `_pull`.
@@ -794,10 +794,10 @@ index b6238c6..e546376 100644
 +        address u = L.token;
 +        uint256 reserve = L.reserve;
 +        uint256 before = IERC20(u).balanceOf(address(this));
-+        if (before < reserve) revert IUnderlyingToken.ReserveShortfall(u, before, reserve);
++        if (before < reserve) revert IWrappedToken.ReserveShortfall(u, before, reserve);
 +        ITradeToken(u).mtxTrade(o, sig, f);
 +        received = IERC20(u).balanceOf(address(this)) - before;
-+        if (received != o.amount) revert IUnderlyingToken.WrapReceivedMismatch(o.amount, received);
++        if (received != o.amount) revert IWrappedToken.WrapReceivedMismatch(o.amount, received);
 +        L.reserve = reserve + received;
 +    }
 +
@@ -807,12 +807,12 @@ index b6238c6..e546376 100644
 ```
 
 ```diff
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingToken.sol b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedToken.sol b/smartcontracts/evm/src/metatx/WrappedToken.sol
 index 6e712e1..e661556 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-@@ -71,6 +71,19 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
-         emit ReserveAdded(from, u, UnderlyingLib.addReserve(UnderlyingLib.indexOf(u), amount, from, msg.value));
+--- a/smartcontracts/evm/src/metatx/WrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/WrappedToken.sol
+@@ -71,6 +71,19 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+         emit ReserveAdded(from, u, WrappedLib.addReserve(WrappedLib.indexOf(u), amount, from, msg.value));
      }
  
 +    /// @notice Signature wrap of a SCaaS underlying (CTR-TOK-20): mints `minted − fee` to `o.destination` (or
@@ -822,7 +822,7 @@ index 6e712e1..e661556 100644
 +    {
 +        uint256 received;
 +        uint256 fee;
-+        (received, minted, fee) = UnderlyingLib.wrapBySig(u, o, sig, msg.sender);
++        (received, minted, fee) = WrappedLib.wrapBySig(u, o, sig, msg.sender);
 +        _mint(o.destination == address(0) ? o.from : o.destination, minted - fee);
 +        if (fee != 0) _mint(msg.sender, fee);
 +        emit Wrapped(o.from, u, received, minted);
@@ -830,7 +830,7 @@ index 6e712e1..e661556 100644
 +
      function _wrap(uint256 i, uint256 amount) private returns (uint256 minted) {
          address account = _msgSender();
-         (address u, uint256 received, uint256 m) = UnderlyingLib.wrap(i, amount, account, msg.value);
+         (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value);
 ```
 
 - [ ] **Step 7: `test/v2/MtxWrap.t.sol`** (full text). Compute signatures and order hashes **before** `vm.prank`: an
@@ -842,9 +842,9 @@ pragma solidity ^0.8.20;
 
 import {V2Fixture, Rate} from "./helpers/V2Fixture.sol";
 import {RateAdminForwarder} from "./helpers/V2Mocks.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 
@@ -854,8 +854,8 @@ contract MtxWrapTest is V2Fixture {
     uint256 constant ALICE_PK = 0xA11CE;
     address alice = vm.addr(ALICE_PK);
     address bob = address(0xB0B);
-    NoUnderlyingToken u;
-    UnderlyingToken w;
+    NormalToken u;
+    WrappedToken w;
 
     function setUp() public {
         u = _none(alice, 1_000_000, address(0)); // decimals 0
@@ -884,7 +884,7 @@ contract MtxWrapTest is V2Fixture {
         ITradeToken.TradeOrder memory o = _order(1000, 3000, 1_000); // 0.1 % of 3000 = 3
         bytes memory sig = _sig(o); // before the prank: an external call would consume it
         vm.expectEmit(address(w));
-        emit IUnderlyingToken.Wrapped(alice, address(u), 1000, 3000);
+        emit IWrappedToken.Wrapped(alice, address(u), 1000, 3000);
         vm.prank(relayer);
         assertEq(w.mtxWrap(address(u), o, sig), 3000);
         assertEq(w.balanceOf(alice), 2997);
@@ -930,11 +930,11 @@ contract MtxWrapTest is V2Fixture {
     function test_mtxWrap_refusals() public {
         ITradeToken.TradeOrder memory o = _order(1000, 3000, 0);
         bytes memory sig = _sig(o);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(0xDEAD)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(0xDEAD)));
         w.mtxWrap(address(0xDEAD), o, sig);
         o.receiveToken = address(u);
         sig = _sig(o);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapOrderInvalid.selector, address(u)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapOrderInvalid.selector, address(u)));
         w.mtxWrap(address(u), o, sig);
         // the order names another dex: the underlying refuses the wrapper as caller
         o = _order(1000, 3000, 0);
@@ -945,29 +945,29 @@ contract MtxWrapTest is V2Fixture {
     }
 
     function test_mtxWrap_nativeLegIsNotGasless() public {
-        UnderlyingToken n = _single(address(0), 18, 1, 1, _fixedRate());
+        WrappedToken n = _single(address(0), 18, 1, 1, _fixedRate());
         ITradeToken.TradeOrder memory o = _order(1000, 1000, 0);
         o.receiveToken = address(n);
         o.dex = address(n);
-        vm.expectRevert(IUnderlyingToken.NativeNotGasless.selector);
+        vm.expectRevert(IWrappedToken.NativeNotGasless.selector);
         n.mtxWrap(address(0), o, "");
     }
 
     function test_mtxWrap_pausedDuringARateChange() public {
         RateAdminForwarder adm = new RateAdminForwarder();
-        UnderlyingToken a = _single(address(u), 0, 3, 1, _adjustable(address(adm)));
+        WrappedToken a = _single(address(u), 0, 3, 1, _adjustable(address(adm)));
         adm.exec(address(a), abi.encodeCall(a.proposeRate, (address(u), 301, 100)));
         ITradeToken.TradeOrder memory o = _order(1000, 3000, 0);
         o.receiveToken = address(a);
         o.dex = address(a);
         bytes memory sig = _sig(o);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapPausedForRateChange.selector, address(u)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(u)));
         a.mtxWrap(address(u), o, sig);
     }
 
     function test_mtxWrap_anOutsideLegHasNoMtxTrade() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
-        UnderlyingToken x = _single(address(usdc), 6, 1, 1, _fixedRate());
+        WrappedToken x = _single(address(usdc), 6, 1, 1, _fixedRate());
         ITradeToken.TradeOrder memory o = _order(1000, 1000, 0);
         o.receiveToken = address(x);
         o.dex = address(x);
@@ -995,7 +995,7 @@ index 2a9ef43..6dc812c 100644
  contract MsgSenderLintTest is Test {
 -    string[8] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
 +    string[9] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
-         "src/metatx/NoUnderlyingToken.sol", "src/metatx/UnderlyingToken.sol", "src/metatx/UnderlyingLib.sol",
+         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
 -        "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol"];
 +        "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol"];
  
@@ -1008,10 +1008,10 @@ index 2a9ef43..6dc812c 100644
 -        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 2, "ERC20MetaTx: event relayer, fee default");
 +        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 3, "ERC20MetaTx: event relayer, fee default, mtxTrade caller (CTR-DEX-15)");
          assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
-         assertEq(_count("src/metatx/NoUnderlyingToken.sol", "msg.sender", false), 0, "NoUnderlyingToken");
--        assertEq(_count("src/metatx/UnderlyingToken.sol", "msg.sender", false), 0, "UnderlyingToken");
-+        assertEq(_count("src/metatx/UnderlyingToken.sol", "msg.sender", false), 2, "UnderlyingToken: mtxWrap submitter x2 (CTR-TOK-20)");
-         assertEq(_count("src/metatx/UnderlyingLib.sol", "msg.sender", false), 0, "UnderlyingLib");
+         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
+-        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 0, "WrappedToken");
++        assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 2, "WrappedToken: mtxWrap submitter x2 (CTR-TOK-20)");
+         assertEq(_count("src/metatx/WrappedLib.sol", "msg.sender", false), 0, "WrappedLib");
 +        assertEq(_count("src/trade/TradeLib.sol", "msg.sender", false), 0, "TradeLib: the caller is a parameter");
          assertEq(_count("src/metatx/AdminLib.sol", "msg.sender", false), 0, "AdminLib");
          assertEq(_count("src/hedera/HederaLib.sol", "msg.sender", false), 0, "HederaLib");
@@ -1027,12 +1027,12 @@ index a56c796..e1ba4a5 100644
      }
  
      function test_sizes() public view {
--        assertLe(address(noneImpl).code.length, 20_480); // CTR-TOK-24
-+        assertLe(address(noneImpl).code.length, 23_552); // owner: size later; budget 20,480 (P2a ruling)
+-        assertLe(address(normalImpl).code.length, 20_480); // CTR-TOK-24
++        assertLe(address(normalImpl).code.length, 23_552); // owner: size later; budget 20,480 (P2a ruling)
          assertLe(address(f).code.length, 24_576);
          // Transitional (P1d D2): over EIP-170 until the size work
--        assertLe(address(underlyingImpl).code.length, 27_648);
-+        assertLe(address(underlyingImpl).code.length, 30_720);
+-        assertLe(address(wrappedImpl).code.length, 27_648);
++        assertLe(address(wrappedImpl).code.length, 30_720);
      }
  }
 ```
@@ -1046,11 +1046,11 @@ index e9ccdf0..3eab985 100644
      }
  
      function test_implementationSizes() public view {
--        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 20_480); // CTR-TOK-24
-+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 23_552); // owner: size later; budget 20,480 (P2a ruling)
+-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 20_480); // CTR-TOK-24
++        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 23_552); // owner: size later; budget 20,480 (P2a ruling)
          // Transitional (P1d D2): over EIP-170 until the size work
--        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 27_648);
-+        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 30_720);
+-        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 27_648);
++        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 30_720);
      }
  
      function _edSign(bytes32 digest) internal pure returns (bytes memory) {
@@ -1064,9 +1064,9 @@ index 55e4507..a49c42d 100644
 @@ -1,5 +1,6 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
--  "UnderlyingToken": 26449,
-+  "NoUnderlyingToken": 22951,
-+  "UnderlyingToken": 29974,
+-  "WrappedToken": 26449,
++  "NormalToken": 22951,
++  "WrappedToken": 29974,
    "ZetherToken": 28860
  }
 ```

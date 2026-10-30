@@ -127,7 +127,7 @@ limit, record cache), `docs/clients/signers-clientkeys.md` (register flow with t
 
 ### Task 4: Zether (U8–U10)
 **Files:** `src/zether/ZetherLib.sol` (`_check` without the registry auth; `rollOverSigned` / `setRollOverMode` through
-`requireAuthorized`; `AUTH_TAG` out), `ZetherLayer.sol`, `IZetherToken.sol`, `UnderlyingZetherToken.sol`,
+`requireAuthorized`; `AUTH_TAG` out), `ZetherLayer.sol`, `IZetherToken.sol`, `WrappedZetherToken.sol`,
 `ZetherStatements.sol` (entry points without `authSig`), `ZetherTypes.sol` (BLS12-381 only), the bn254 token verifier
 instances and `proofSystemId` (to legacy per U10); tests `test/zether/**` (fixtures `useBls = true` only;
 `ZetherAuthRef.t.sol` and the bn254 KAT / prover-cross suites to `legacy/ua6/test/`), `test/ua/UAReceivers.t.sol`,

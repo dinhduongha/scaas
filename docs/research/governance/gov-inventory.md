@@ -45,24 +45,24 @@ Source column:
 | Holder of the role | IMPL (factory immutable) | — | — | one address | no transfer and no renounce. "Trust root for code: a multisig / UA msig before mainnet" | Z2:…OpenFactory.sol:20-21,33 |
 | Powers | POST | registrar | see §1 | publish env, deploy release, deprecate, enable/disable kind | **no power over any existing token or DEX** (no call into instances) | Z2:…OpenFactory.sol:11-15 |
 
-## 3. Every token kind (MetaTokenBase / AdminLib / ERC20MetaTx), the six kinds NONE, UNDERLYING, NONE_ZETHER, UNDERLYING_ZETHER, NONE_PQZ, UNDERLYING_PQZ
+## 3. Every token kind (MetaTokenBase / AdminLib / ERC20MetaTx), the six kinds NORMAL, WRAPPED, NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_PQZ, WRAPPED_PQZ
 
 | Property / power | Src | Who | Delay | Bounds | Lock / renounce | Ref |
 |---|---|---|---|---|---|---|
 | Code / implementation | IMPL | — | — | EIP-1167 clone of a release. **No proxy, no upgrade**; external libraries linked by address (`Env.libs`, code-hash pinned) | permanent; no migration path | Z2:metatx/MetaTokenBase.sol:21,53-66; spec:token-wrappers.md#CTR-TOK-25 |
-| `kind()` | IMPL | — | — | pure constant | — | Z2:metatx/NoUnderlyingToken.sol:18-20 |
+| `kind()` | IMPL | — | — | pure constant | — | Z2:metatx/NormalToken.sol:18-20 |
 | `FACTORY`, `CHAIN_UID` (EIP-712 salt) | IMPL (Env) | — | — | — | — | Z2:metatx/MetaTokenBase.sol:56-60 |
 | UA registry `_REGISTRY` (UA ledger on/off, 0 = off) | IMPL (Env.registry) | — | — | must name this chain's `chainUid` (checked at `initialize`) | a new registry generation needs a new env + release; existing tokens stay on theirs | Z2:metatx/ERC20MetaTx.sol:32-33; MetaTokenBase.sol:72-75 |
 | `SMART_KEY_ACCOUNT_IMPL` (ERC-1271 gas 400k for its clones, 50k otherwise) | IMPL (Env) | — | — | constants 400k / 50k | — | Z2:…MetaTokenBase.sol:40-41,418-421 |
 | `IS_HEDERA` (HIP-632 path) | IMPL (Env.hedera) | — | — | Zether/PQZ refuse `hedera = true` | — | Z2:…MetaTokenBase.sol:45,64 |
 | `creator`, `version` | INIT (supplied by the factory) | — | — | — | never change | Z2:…MetaTokenBase.sol:70-82 |
-| `name`, `symbol`, `decimals` | INIT | — | — | none (`decimals` not checked against legs) | **no setter** | Z2:…MetaTokenBase.sol:103-112; UnderlyingLib.sol:83-86 |
+| `name`, `symbol`, `decimals` | INIT | — | — | none (`decimals` not checked against legs) | **no setter** | Z2:…MetaTokenBase.sol:103-112; WrappedLib.sol:83-86 |
 | `features` (bit set) | INIT, then POST (clear only) | owner (`disableFeature`) | immediate | only a set bit outside `lockedFeatures` and outside `ALWAYS_LOCKED`; must be valid for the kind; bits 5–8 refused `FeatureNotBuilt` | one-way: a bit can never be set again. Removes the power forever | Z2:metatx/AdminLib.sol:77-85,121-128,193-201 |
 | `lockedFeatures` | INIT | — | — | `⊆ features`; `PAYABLE` and `BURNABLE` are forced locked | never changes. Note: "locked" means the **power exists forever**, not that it is switched off | Z2:…AdminLib.sol:81,85; spec:token-wrappers.md#CTR-TOK-22 |
 | Bit 0 `PAYABLE`: gates `mtxPay`, `uaPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`, `uaPayReceiverFee`, `supportsInterface(IERC20Payment)`. A `MetaTransfer` is never gated | INIT | — | — | all kinds | always locked (no role) | Z2:…MetaTokenBase.sol:149,210,272,321,345,378,396 |
-| Bit 1 `MINTABLE` → `mint`, `mintToUA` | INIT flag; POST action | `minter` role | immediate | **no cap, no rate limit** (spec: the cap belongs in the minter contract); public balance only | `disableFeature` if unlocked; otherwise revoke every minter and renounce the owner | Z2:metatx/NoUnderlyingToken.sol:29-39 |
-| Bit 2 `BURNABLE` → holder `burn` (own balance) | INIT | holder | — | `NONE*` kinds | always locked | Z2:…NoUnderlyingToken.sol:41-45 |
-| Bit 3 `RATE_ADJUSTABLE`, bit 4 `WRAP_DISABLEABLE` | INIT | see §5 | | `UNDERLYING*` kinds | owner may `disableFeature` if unlocked | Z2:…AdminLib.sol:18-19,195 |
+| Bit 1 `MINTABLE` → `mint`, `mintToUA` | INIT flag; POST action | `minter` role | immediate | **no cap, no rate limit** (spec: the cap belongs in the minter contract); public balance only | `disableFeature` if unlocked; otherwise revoke every minter and renounce the owner | Z2:metatx/NormalToken.sol:29-39 |
+| Bit 2 `BURNABLE` → holder `burn` (own balance) | INIT | holder | — | `NORMAL*` kinds | always locked | Z2:…NormalToken.sol:41-45 |
+| Bit 3 `RATE_ADJUSTABLE`, bit 4 `WRAP_DISABLEABLE` | INIT | see §5 | | `WRAPPED*` kinds | owner may `disableFeature` if unlocked | Z2:…AdminLib.sol:18-19,195 |
 | Bits 5 `FREEZE`, 6 `FORCE`, 7 `PAUSE`, 8 `ALLOWLIST` (regulated) | IMPL: refused | — | — | `FeatureNotBuilt` on the plain kinds, `FeatureInvalidForKind` on the confidential ones | not built | Z2:…AdminLib.sol:20-23,33-34,80; spec:asset-suite.md#CTR-AS-17 |
 | `owner` | INIT (`TokenConfig.owner`; 0 = no administration ever) | — | — | — | — | Z2:…AdminLib.sol:91-94 |
 | `transferOwnership` → `acceptOwnership` | POST | owner, then the new owner | **no delay** (two-step only) | `transferOwnership(0)` cancels the pending transfer | — | Z2:…AdminLib.sol:130-143 |
@@ -70,36 +70,36 @@ Source column:
 | `grantRole(bit, acct)` / `revokeRole` | POST | owner | **immediate** | role bits 1, 3, 4 only; the flag must be set; several holders allowed; the `RATE_ADJUSTABLE` role must be a contract. The owner may grant itself a role | ends with `renounceOwnership` | Z2:…AdminLib.sol:99-110,176-184 |
 | `renounceRole(bit)` | POST | the holder | immediate | — | — | Z2:…AdminLib.sol:113-118 |
 | Initial roles (`minter`, `rateAdmin`, `guardian`) | INIT | — | — | each only for a set flag; `issuer` and `compliance` must be 0 | — | Z2:…AdminLib.sol:40-46,86-90 |
-| Meta-tx selector allowlist (`mtxSelectors`, `_mtxRule`, fee class) | IMPL (pure, per kind) | — | — | base `cancelNonce`; NONE adds `burn`; UNDERLYING adds wrap/unwrap/addReserve/…ToUA; Zether/PQZ add their ops | — | Z2:metatx/MetaTxBase.sol:89-100,229-231; NoUnderlyingToken.sol:47-66; UnderlyingToken.sol:177-213 |
+| Meta-tx selector allowlist (`mtxSelectors`, `_mtxRule`, fee class) | IMPL (pure, per kind) | — | — | base `cancelNonce`; NORMAL adds `burn`; WRAPPED adds wrap/unwrap/addReserve/…ToUA; Zether/PQZ add their ops | — | Z2:metatx/MetaTxBase.sol:89-100,229-231; NormalToken.sol:47-66; WrappedToken.sol:177-213 |
 | UA allowlist (`_uaAllowed`) | IMPL | — | — | none on the base; `burn` / `unwrap`s | — | Z2:metatx/ERC20MetaTx.sol:456-462 |
 | Meta-tx fee (`mtxTransferWithFee`, `mtxExecuteWithFee`, pay) | per intent (signed) | signer | — | `MAX_FEE_PPM = 10_000` (1%) hard cap, PERCENT and FIXED alike; **no token-level fee setter, no protocol fee** | — | Z2:common/FeePolicy.sol:16-50; spec:metatx.md#CTR-MTX-08 |
 | Receiver fee | per payment (co-signed by the payee) | payee | — | `0 < fee ≤ value` | — | Z2:…MetaTokenBase.sol:317-334 |
 | Trade fee (`mtxTrade`, `TradeOrder.fee`) | per order (signed) | signer | — | `≤ 1%` (`TradeLib.MAX_FEE_PPM`) | — | Z2:trade/TradeLib.sol:36,97 |
 | Pause / freeze / blacklist / clawback / rescue / sweep | — | — | — | **absent** (no such function; `_uaMove` comment: the regulated hooks are not built) | — | Z2:metatx/ERC20MetaTx.sol:464-468 |
 
-## 4. Supply of the NONE* kinds (NONE, NONE_ZETHER, NONE_PQZ)
+## 4. Supply of the NORMAL* kinds (NORMAL, NORMAL_ZETHER, NORMAL_PQZ)
 
 | Property / power | Src | Who | Delay | Bounds | Lock / renounce | Ref |
 |---|---|---|---|---|---|---|
-| `initialSupply`, `initialHolder` | INIT | — | — | `NONE*` only (other kinds: `ConfigFieldForOtherKind(1)`); supply 0 ⇒ holder ignored | — | Z2:metatx/NoUnderlyingToken.sol:26; MetaTokenBase.sol:92-101 |
-| Further supply | POST | `minter` (bit 1) | immediate | unbounded; public units only (the Zether/PQZ minter never mints shielded value) | as bit 1 | Z2:zether/NoUnderlyingZetherToken.sol:16-17; pqz/NoUnderlyingPqzToken.sol:15-17 |
+| `initialSupply`, `initialHolder` | INIT | — | — | `NORMAL*` only (other kinds: `ConfigFieldForOtherKind(1)`); supply 0 ⇒ holder ignored | — | Z2:metatx/NormalToken.sol:26; MetaTokenBase.sol:92-101 |
+| Further supply | POST | `minter` (bit 1) | immediate | unbounded; public units only (the Zether/PQZ minter never mints shielded value) | as bit 1 | Z2:zether/NormalZetherToken.sol:16-17; pqz/NormalPqzToken.sol:15-17 |
 
-## 5. Legs, rates and wrap of the UNDERLYING* kinds (UNDERLYING, UNDERLYING_ZETHER, UNDERLYING_PQZ)
+## 5. Legs, rates and wrap of the WRAPPED* kinds (WRAPPED, WRAPPED_ZETHER, WRAPPED_PQZ)
 
 | Property / power | Src | Who | Delay | Bounds | Lock / renounce | Ref |
 |---|---|---|---|---|---|---|
-| Legs (`underlying`, order) | INIT | — | — | 1–8, no duplicate, ERC-20 with readable decimals or native (`address(0)`, 18 or 8 decimals on Hedera); Hedera associates | **never added or removed** | Z2:metatx/UnderlyingLib.sol:80-127 |
-| Rate `num/den` per leg | INIT; POST with bit 3 | `rateAdmin` role (a contract): `proposeRate` → `executeRate` (the rate admin only); `cancelRate` | **timelock `rateDelay`**, then a 7-day execution window (`RATE_WINDOW`) | one pending change at a time; `|Δ| ≤ maxRateStepBps` against the current rate; `num, den ∈ [1, 2^96)`; `executeRate` needs collateral `≥ totalSupply()` (the pool counts in `totalSupply()` since plan 5h D19); a decrease is refused if any leg has wrap disabled | `disableFeature(RATE_ADJUSTABLE)` (owner, if unlocked) fixes the rates and drops the pending change; or revoke the rate admin and renounce the owner | Z2:…UnderlyingLib.sol:308-369; UnderlyingToken.sol:157-173; UnderlyingZetherToken.sol:99-107; UnderlyingPqzToken.sol:101-108; spec:token-wrappers.md#CTR-TOK-06 |
-| `rateDelay` | INIT | — | — | 2–30 days with bit 3, else 0 | never changes | Z2:…UnderlyingLib.sol:91-98; IFactoryToken.sol:49-53 |
+| Legs (`underlying`, order) | INIT | — | — | 1–8, no duplicate, ERC-20 with readable decimals or native (`address(0)`, 18 or 8 decimals on Hedera); Hedera associates | **never added or removed** | Z2:metatx/WrappedLib.sol:80-127 |
+| Rate `num/den` per leg | INIT; POST with bit 3 | `rateAdmin` role (a contract): `proposeRate` → `executeRate` (the rate admin only); `cancelRate` | **timelock `rateDelay`**, then a 7-day execution window (`RATE_WINDOW`) | one pending change at a time; `|Δ| ≤ maxRateStepBps` against the current rate; `num, den ∈ [1, 2^96)`; `executeRate` needs collateral `≥ totalSupply()` (the pool counts in `totalSupply()` since plan 5h D19); a decrease is refused if any leg has wrap disabled | `disableFeature(RATE_ADJUSTABLE)` (owner, if unlocked) fixes the rates and drops the pending change; or revoke the rate admin and renounce the owner | Z2:…WrappedLib.sol:308-369; WrappedToken.sol:157-173; WrappedZetherToken.sol:99-107; WrappedPqzToken.sol:101-108; spec:token-wrappers.md#CTR-TOK-06 |
+| `rateDelay` | INIT | — | — | 2–30 days with bit 3, else 0 | never changes | Z2:…WrappedLib.sol:91-98; IFactoryToken.sol:49-53 |
 | `maxRateStepBps` | INIT | — | — | 1–1000 bps (≤ 10% per change) with bit 3, else 0 | never changes | same |
-| `RATE_WINDOW = 7 days` | IMPL | — | — | constant | — | Z2:…UnderlyingLib.sol:68-69 |
-| Wrap pause while a rate change is pending | POST (side effect) | `rateAdmin` | lasts until execute/cancel or `eta + 7 days` | applies to **every** adjustable leg (`wrap`, `wrapToUA`, `mtxWrap`/`uaWrap`, `zether`/`pqz` wrap-shield), not only the pending leg; unwrap is never paused | can be renewed indefinitely (cancel, re-propose); ends with bit 3 | Z2:…UnderlyingLib.sol:139-140,206-207,432-435 |
-| `disableWrap(leg, reason)` | POST (bit 4) | `guardian` role | immediate | per leg; blocks `wrap` and `addReserve` on that leg; unwrap stays open | **one-way per leg** (no re-enable); the flag itself is cleared by the owner if unlocked | Z2:…UnderlyingLib.sol:293-304 |
-| `addReserve` | — | anyone | — | no mint; leg must have wrap enabled | — | Z2:metatx/UnderlyingToken.sol:91-95 |
-| `mtxWrap` / `uaWrap` fee to the submitter | per order (signed) | signer | — | `≤ 1%` | — | Z2:…UnderlyingToken.sol:97-126 |
-| Stray underlying above `reserve` (sent without `wrap`) | — | — | — | **no skim or rescue**: stays locked | — | Z2:…UnderlyingLib.sol (`_pull` measures the delta only) |
+| `RATE_WINDOW = 7 days` | IMPL | — | — | constant | — | Z2:…WrappedLib.sol:68-69 |
+| Wrap pause while a rate change is pending | POST (side effect) | `rateAdmin` | lasts until execute/cancel or `eta + 7 days` | applies to **every** adjustable leg (`wrap`, `wrapToUA`, `mtxWrap`/`uaWrap`, `zether`/`pqz` wrap-shield), not only the pending leg; unwrap is never paused | can be renewed indefinitely (cancel, re-propose); ends with bit 3 | Z2:…WrappedLib.sol:139-140,206-207,432-435 |
+| `disableWrap(leg, reason)` | POST (bit 4) | `guardian` role | immediate | per leg; blocks `wrap` and `addReserve` on that leg; unwrap stays open | **one-way per leg** (no re-enable); the flag itself is cleared by the owner if unlocked | Z2:…WrappedLib.sol:293-304 |
+| `addReserve` | — | anyone | — | no mint; leg must have wrap enabled | — | Z2:metatx/WrappedToken.sol:91-95 |
+| `mtxWrap` / `uaWrap` fee to the submitter | per order (signed) | signer | — | `≤ 1%` | — | Z2:…WrappedToken.sol:97-126 |
+| Stray underlying above `reserve` (sent without `wrap`) | — | — | — | **no skim or rescue**: stays locked | — | Z2:…WrappedLib.sol (`_pull` measures the delta only) |
 
-## 6. Zether layer (NONE_ZETHER, UNDERLYING_ZETHER)
+## 6. Zether layer (NORMAL_ZETHER, WRAPPED_ZETHER)
 
 | Property / power | Src | Who | Delay | Bounds | Lock / renounce | Ref |
 |---|---|---|---|---|---|---|
@@ -117,11 +117,11 @@ Source column:
 | Rollover mode PUBLIC / OWNER_ONLY | POST | the account (its Zether key or `authRef` authority, signed) | immediate | per account; `modeNonce`, `validUntilBlock` | reversible | Z2:…ZetherLib.sol:318-367; ZetherTypes.sol:26-29 |
 | Regulated flags | IMPL | — | — | refused (`FeatureInvalidForKind`) | — | Z2:metatx/AdminLib.sol:198-199; spec:zether.md#CTR-ZTH-47 |
 
-## 7. PQZ layer (NONE_PQZ, UNDERLYING_PQZ)
+## 7. PQZ layer (NORMAL_PQZ, WRAPPED_PQZ)
 
 | Property / power | Src | Who | Delay | Bounds | Lock / renounce | Ref |
 |---|---|---|---|---|---|---|
-| `UAPqzVerifier` | IMPL (Z2: `Env.deps[0]`; main: canonical) | — | — | `deps.length == 1`, code present, not Hedera; registry has code | fixed per release | Z2:pqz/PqzLayer.sol:23-27; pqz/NoUnderlyingPqzToken.sol:21-26 |
+| `UAPqzVerifier` | IMPL (Z2: `Env.deps[0]`; main: canonical) | — | — | `deps.length == 1`, code present, not Hedera; registry has code | fixed per release | Z2:pqz/PqzLayer.sol:23-27; pqz/NormalPqzToken.sol:21-26 |
 | Precompile and proof system | INIT (read from the verifier) but pinned by IMPL constants | — | — | exactly `PQZ = 0x5caA…0F01`, PQZL or PQZH id, self-test passes now | — | Z2:pqz/PqzLib.sol:164-168; pqz/PqzSafety.sol:9-15,55-58 |
 | Chain gate (31337, 1337, 7622) | IMPL constant | — | — | checked in `init` | code change | Z2:pqz/PqzSafety.sol:22-28; PqzLib.sol:149 |
 | `shieldScale`, `maxShielded` | INIT | — | — | `maxShielded ≤ 2^62` (**Zether: 2^54**) | never change | Z2:pqz/PqzLib.sol:126,151-154 |
@@ -182,7 +182,7 @@ Source column:
 | Property / power | Src | Who | Delay | Bounds | Lock / renounce | Ref |
 |---|---|---|---|---|---|---|
 | Instances (tokens, DEX, SmartKeyAccount) | IMPL | — | — | EIP-1167 clones; the implementation locks itself in its constructor | no proxy, no `delegatecall` to a mutable target, no `selfdestruct`. An existing instance never changes code | Z2:metatx/MetaTokenBase.sol:53-66; dex/SCaaSDex.sol:117-128 |
-| Linked libraries (`AdminLib`, `UnderlyingLib`, `ZetherLib`, `PqzLib`, `HederaLib`, …) | IMPL (link-time addresses, `Env.libs` code hashes checked at release deploy) | — | — | — | immutable code | Z2:…OpenFactory.sol:266-277 |
+| Linked libraries (`AdminLib`, `WrappedLib`, `ZetherLib`, `PqzLib`, `HederaLib`, …) | IMPL (link-time addresses, `Env.libs` code hashes checked at release deploy) | — | — | — | immutable code | Z2:…OpenFactory.sol:266-277 |
 | "Upgrade" | POST (new release) | registrar | `noticePeriod` | affects **new** creations only | old releases: deprecate only | Z2:…OpenFactory.sol:89-109 |
 | Emergency pause / rescue / sweep / force | — | — | — | none anywhere (searched `src/`: no `pause`, `rescue`, `sweep`, `skim`, `recover`, `upgrade`) | — | — |
 
@@ -192,7 +192,7 @@ Source column:
 - **Forced transfer / clawback / confiscation** (absent): flag 6 `FORCE` specced, not built. Never allowed on confidential kinds.
 - **Global pause of a token** (absent): flag 7 `PAUSE` specced, not built. The DEX has no pause either (delisting a market is the only stop).
 - **Receiver allowlist / KYC** (absent): flag 8 `ALLOWLIST` specced, not built.
-- **Supply cap / mint rate limit** (absent): left to the minter contract (NoUnderlyingToken.sol:10-11).
+- **Supply cap / mint rate limit** (absent): left to the minter contract (NormalToken.sol:10-11).
 - **Rescue / sweep / skim of stray tokens** (absent): on tokens, the DEX and the wallets (the wallets' owner can `execute`).
 - **Upgradeable proxy / migration** (absent): clones only.
 - **Delayed ownership transfer / timelock on owner actions** (absent): spec CTR-TOK-22 names `AccessControlDefaultAdminRules` (delayed two-step) as the candidate, but the code has a two-step transfer with no delay.

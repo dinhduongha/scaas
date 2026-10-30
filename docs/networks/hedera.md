@@ -31,7 +31,7 @@ someone else pays) is **not** used: it orders operations by the subject's accoun
 
 | Piece | Hedera-specific part | File |
 |---|---|---|
-| Token | every kind with `IS_HEDERA`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); `UnderlyingToken` on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaLib.sol` (v1 `HederaMetaToken` in `legacy/p5/`) |
+| Token | every kind with `IS_HEDERA`: a Hedera account's **ED25519** signature verified through HIP-632 `isAuthorizedRaw` (`0x16a`); `WrappedToken` on HTS tokens ([wrappers](#wrappers)) | `smartcontracts/evm/src/hedera/HederaLib.sol` (v1 `HederaMetaToken` in `legacy/p5/`) |
 | Account auth | library calling `isAuthorizedRaw` with `CALL` (100 000 gas cap); a revert or garbage ⇒ `false` | `smartcontracts/evm/src/hedera/HederaAccountAuth.sol` |
 | Mandate | `HederaMandateWallet is MandateWallet` checks HIP-632 signatures on every entry ([NET-HED-03](#NET-HED-03)) | `smartcontracts/evm/src/hedera/HederaMandateWallet.sol` |
 | DEX | a SCaaS leg's `TradeOrder` is checked by the Hedera token (HIP-632 included); `DexOrder` and DEX cancels have no HIP-632 branch ([Mandate and DEX](#mandate)) | — |
@@ -285,7 +285,7 @@ signers are not contracts, so they can never call `approve` on a SCaaS token
 <a id="hts"></a>
 
 An HTS token (e.g. USDC on Hedera) has an ERC-20 facade at its long-zero address (HIP-218/376). It is used only
-behind a **tier-2 wrapper** (an `UNDERLYING` token with `IS_HEDERA`) with the HTS token as `underlying`; the
+behind a **tier-2 wrapper** (an `WRAPPED` token with `IS_HEDERA`) with the HTS token as `underlying`; the
 contract must **associate** the HTS token before receiving it (`SUCCESS (22)` or `TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT (194)`;
 `HederaLib.sol` (`checkAndAssociate`), [wrappers](#wrappers)); users grant the HTS allowance **to the wrapper
 contract** (valid under [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)). Risk, stated: protocol-level HTS
@@ -303,9 +303,9 @@ warning, which also goes into the wrapper's risk disclosure. SPECIFIED.
 <a id="wrappers"></a>
 
 <a id="NET-HED-14"></a>**NET-HED-14** — **Hedera v2 wrappers check every underlying in `initialize`, fail-closed,
-through the HTS precompile `0x167`.** There are no Hedera wrapper children (P1d): `UnderlyingLib` init calls
+through the HTS precompile `0x167`.** There are no Hedera wrapper children (P1d): `WrappedLib` init calls
 `HederaLib.checkAndAssociate` under `IS_HEDERA`, and a native (HBAR) leg has 8 decimals, the tinybar (controller ruling, pending the owner): a native wrap's `amount` is in tinybars while the relay's transaction `value` is in weibars (18 decimals), so a client passing an 18-decimal amount gets `NativeValueMismatch` (it fails safe); the HIP-632 signature rule is the `IS_HEDERA` branch in `MetaTokenBase`
-(`HederaLib.requireValid`), as the v1 `HederaMetaToken` (`legacy/p5`) did, and kind `NONE` on Hedera is `NoUnderlyingToken` with `IS_HEDERA`. In `initialize`, for every underlying `u`:
+(`HederaLib.requireValid`), as the v1 `HederaMetaToken` (`legacy/p5`) did, and kind `NORMAL` on Hedera is `NormalToken` with `IS_HEDERA`. In `initialize`, for every underlying `u`:
 
 1. `isToken(u)` → `(rc, isHts)`; `rc ≠ SUCCESS` ⇒ `HtsQueryFailed(u, rc)`.
 2. If `isHts`: `getTokenCustomFees(u)` with `rc ≠ SUCCESS` or an undecodable result ⇒ `HtsQueryFailed(u, rc)`; any

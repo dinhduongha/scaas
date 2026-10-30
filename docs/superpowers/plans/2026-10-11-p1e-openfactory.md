@@ -11,7 +11,7 @@ the deterministic CREATE2 deployer with a `chainUid()` gate (CTR-GEN-05/06, NET-
 **Architecture:** `OpenFactory` = `git mv` of `OpenFactoryV2`, rewritten. `IFactoryToken` (new content) holds
 `TokenConfig` (+ `Leg`, `RateConfig`, `ConfidentialConfig`; roles = `AdminLib.Roles`), `initialize`, `kind()`, and
 `ConfigFieldForOtherKind`. `MetaTokenBase.initialize(creator, version, cfg)` → `_init(cfg)`; each kind returns a constant
-`kind()` and refuses fields of other kinds. `UnderlyingLib.initToken(cfg, isHedera)` reads `cfg.legs` — the same legs
+`kind()` and refuses fields of other kinds. `WrappedLib.initToken(cfg, isHedera)` reads `cfg.legs` — the same legs
 the factory indexes. Deploy scripts share `script/DeployBase.sol`.
 
 **Tech Stack:** Solidity 0.8.28, Foundry (forge 1.3.5; `new X{salt: s}` in a broadcast goes through forge-std's
@@ -32,15 +32,15 @@ the v1/v2 lines; put them in the backup) and size is optimised later.
   `rtk proxy git diff`. `forge build --sizes` exits non-zero (EIP-170, P1d D2): use `forge build`/`forge test`, and
   `forge build src --sizes --json … || true` only for measuring.
 - Build pins unchanged (solc 0.8.28, optimizer 200, no via-IR, EVM prague). New/touched src `pragma solidity ^0.8.24;`.
-- Kinds (`IOpenFactory.TokenKind`, = the implementation's `kind()`): 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`,
-  3 `UNDERLYING_ZETHER`, 4–7 `*_PQZ` reserved (`KindReserved`). Leg count: `NONE*` 0, `UNDERLYING*` 1–8.
-- `ConfigFieldForOtherKind(uint8 field)`: 1 `initialSupply`/`initialHolder` (not `NONE*`), 2 `legs` (not
-  `UNDERLYING*`), 3 `rate` (not `UNDERLYING*`), 4 `conf` (not `*_ZETHER`).
-- Measured in the spike: `NoUnderlyingToken` 20,196 B (≤ 20,480), `UnderlyingToken` 26,449 B (over EIP-170, ratchet
-  baseline), `UnderlyingLib` 10,096, `OpenFactory` 6,715, `OpenFactoryV1` 6,057, `ZetherToken` 28,849 (baseline).
+- Kinds (`IOpenFactory.TokenKind`, = the implementation's `kind()`): 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`,
+  3 `WRAPPED_ZETHER`, 4–7 `*_PQZ` reserved (`KindReserved`). Leg count: `NORMAL*` 0, `WRAPPED*` 1–8.
+- `ConfigFieldForOtherKind(uint8 field)`: 1 `initialSupply`/`initialHolder` (not `NORMAL*`), 2 `legs` (not
+  `WRAPPED*`), 3 `rate` (not `WRAPPED*`), 4 `conf` (not `*_ZETHER`).
+- Measured in the spike: `NormalToken` 20,196 B (≤ 20,480), `WrappedToken` 26,449 B (over EIP-170, ratchet
+  baseline), `WrappedLib` 10,096, `OpenFactory` 6,715, `OpenFactoryV1` 6,057, `ZetherToken` 28,849 (baseline).
 - Deploy: `DEPLOY_SALT` env (default `keccak256("scaas.deploy.v1")`); JSON `deployments/<chainid>.json` keeps `factory`,
   `implementation`, `dex`, `subject_account_factory`, `subject_account_implementation`, `scaas_dex`, `demo_token` (the
-  node e2e reads `factory`, `demo_token`, `scaas_dex`) and gains `token_factory`, `implementation_none`, `chain_uid`;
+  node e2e reads `factory`, `demo_token`, `scaas_dex`) and gains `token_factory`, `implementation_normal`, `chain_uid`;
   `factory_v2`/`implementation_meta_none` are gone. `forge script … --broadcast` needs `--sender <deployer address>`.
 - Test chain: id 7622, `chain_uid` `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`.
 - Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Do not push. Never `git add claude-code-api.txt`.
@@ -49,9 +49,9 @@ the v1/v2 lines; put them in the backup) and size is optimised later.
 
 - An implementation registered under the wrong kind, for another factory or another chain (a clone with a foreign
   domain salt) — pinned by `test_register_checksKindFactoryAndChainUid`, `test_createTokenUnregistered_isCheckedAndRecordedAsVersion0` (Task 1).
-- The factory's underlying index lying (a `NONE` token with legs, a leg not indexed, the native leg) — pinned by
-  `test_createToken_legCountByKind`, `test_createToken_underlying_indexesEveryLeg_includingNative` (Task 1).
-- A config field silently ignored (supply on a wrapper, a rate or a confidential config on `NONE`) — pinned by
+- The factory's underlying index lying (a `NORMAL` token with legs, a leg not indexed, the native leg) — pinned by
+  `test_createToken_legCountByKind`, `test_createToken_wrapped_indexesEveryLeg_includingNative` (Task 1).
+- A config field silently ignored (supply on a wrapper, a rate or a confidential config on `NORMAL`) — pinned by
   `test_factoryOnlyForwards_theTokenValidatesFlagsAndFields` (Task 1).
 - Someone taking another creator's address, or re-initialising a clone or the implementation — pinned by
   `test_saltIsScopedByCreator_andCannotBeReused`, `test_onlyTheFactoryInitializes_andOnlyOnce` (Task 1).
@@ -79,13 +79,13 @@ the v1/v2 lines; put them in the backup) and size is optimised later.
 - **E6 — One source for the legs:** the factory indexes `cfg.legs` and the token reads the same `cfg.legs`, so the P1d
   cross-check of init legs against the factory's `underlyings` (ruling D8) is gone.
 - **E7 — CREATE2 for every contract the scripts deploy** (the v1 line included) through forge's deterministic deployer;
-  the scripts stop when it is missing (runbook NET-EVM-05). Linked libraries (`AdminLib`, `HederaLib`, `UnderlyingLib`)
+  the scripts stop when it is missing (runbook NET-EVM-05). Linked libraries (`AdminLib`, `HederaLib`, `WrappedLib`)
   are still placed by forge from `--sender`; the e2e and `deploy.sh` pass `--sender`.
 - **E8 — Deploy gate in the scripts:** `chainUid()` of the factory and of each implementation equals the `chain_uid`
   read from the RPC (`CHAIN_UID` env or block 0's hash). The node's gate at chain activation stays P5.
 - **E9 — Size gate = ratchet** (`scripts/size_gate.py`, `smartcontracts/evm/size-baseline.json`): token implementations
   ≤ 20,480, everything else ≤ 24,576, init ≤ 49,152; a baselined contract may exceed its limit but never its recorded
-  size. Baseline: `UnderlyingToken` 26,449, `ZetherToken` 28,849 (owner: optimise later).
+  size. Baseline: `WrappedToken` 26,449, `ZetherToken` 28,849 (owner: optimise later).
 - **E10 — `salt = chain_uid` in the other domains** (SubjectAccount/SmartKeyAccount and MandateWallet P4, `SCaaSDex`
   P2, UA registry UA F1, Zether digests P3) is not in P1e; MT-4 stays open for them.
 
@@ -95,7 +95,7 @@ the v1/v2 lines; put them in the backup) and size is optimised later.
 |---|---|---|
 | `src/factory/IFactoryToken.sol` (new content), `src/factory/IOpenFactory.sol`, `src/factory/OpenFactory.sol` | 1 | the factory and its token interface |
 | `src/factory/OpenFactoryV1.sol`, `src/common/IOpenFactoryV1.sol`, `src/factory/IFactoryTokenV1.sol` | 1 | the v1 factory, renamed (E1) |
-| `src/metatx/{MetaTokenBase,NoUnderlyingToken,UnderlyingToken,UnderlyingLib,IUnderlyingToken}.sol` | 1 | init on `TokenConfig`, `kind()` constant |
+| `src/metatx/{MetaTokenBase,NormalToken,WrappedToken,WrappedLib,IWrappedToken}.sol` | 1 | init on `TokenConfig`, `kind()` constant |
 | `legacy/p1e/{OpenFactoryV2,IOpenFactoryV2,IFactoryTokenV2}.sol` + `legacy/README.md` | 1 | backup (E2) |
 | `test/v2/helpers/V2Fixture.sol`, `test/v2/Factory.t.sol` (replaces `FactoryV2.t.sol`), ported tests | 1 | |
 | `script/DeployBase.sol` (new), `script/Deploy.s.sol`, `script/hedera/DeployHedera.s.sol`, `smartcontracts/scripts/deploy.sh`, `scaas-node/tests/e2e{,_hedera}.rs` | 2 | CREATE2, gate, `--sender` |
@@ -109,11 +109,11 @@ the v1/v2 lines; put them in the backup) and size is optimised later.
 **Model:** Opus, effort high (factory = the most critical immutable artifact, CTR-TOK-18; plus a port across many tests).
 
 **Interfaces:**
-- Consumes: `AdminLib.Roles`, `AdminLib.KIND_NONE/KIND_UNDERLYING`, `MetaTxBase.chainUid()`, `MetaTokenBase.factory()`.
+- Consumes: `AdminLib.Roles`, `AdminLib.KIND_NORMAL/KIND_WRAPPED`, `MetaTxBase.chainUid()`, `MetaTokenBase.factory()`.
 - Produces (Task 2 relies on them): `OpenFactory(address registrar, bytes32 chainUid)`, `registerImplementation(TokenKind,
-  uint64, address)`, `IOpenFactory.TokenKind.NONE`, `NoUnderlyingToken(address factory, address smartKeyAccountImpl,
+  uint64, address)`, `IOpenFactory.TokenKind.NORMAL`, `NormalToken(address factory, address smartKeyAccountImpl,
   bytes32 chainUid, bool isHedera)` (unchanged), `OpenFactoryV1(address registrar)`, `IOpenFactoryV1.TokenKind.META`.
-  Fixture (later plans): `noneInit(…)` and `underlyingInit(…)` return `IFactoryToken.TokenConfig`; `_clone(impl, creator,
+  Fixture (later plans): `normalInit(…)` and `wrappedInit(…)` return `IFactoryToken.TokenConfig`; `_clone(impl, creator,
   us, abi.encode(cfg))` asserts `us` equals the legs.
 
 - [ ] **Step 1: Rename the v1 line (E1) and back up the v2 factory files (E2)**
@@ -153,7 +153,7 @@ import {AdminLib} from "../metatx/AdminLib.sol";
 ///        `initialize` the factory calls in the SAME call as `CREATE2`, and `kind()`. The factory also reads
 ///        `factory()` and `chainUid()` (`IMetaTx`) at registration.
 interface IFactoryToken {
-    /// @notice One leg of an `UNDERLYING*` kind: `underlying` (`address(0)` = the native coin, CTR-TOK-26), rate
+    /// @notice One leg of an `WRAPPED*` kind: `underlying` (`address(0)` = the native coin, CTR-TOK-26), rate
     ///         `num/den` (CTR-TOK-04). `uint256` so a value `≥ 2^96` reverts `RateInvalid` instead of failing to decode.
     struct Leg {
         address underlying;
@@ -184,10 +184,10 @@ interface IFactoryToken {
         uint256 lockedFeatures;
         address owner;               // 0 = no administration ever
         AdminLib.Roles roles;        // initial holders, each only for a set flag
-        uint256 initialSupply;       // NONE* only
-        address initialHolder;       // NONE* only
-        Leg[] legs;                  // UNDERLYING* only, 1..8
-        RateConfig rate;             // UNDERLYING* only, with RATE_ADJUSTABLE
+        uint256 initialSupply;       // NORMAL* only
+        address initialHolder;       // NORMAL* only
+        Leg[] legs;                  // WRAPPED* only, 1..8
+        RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
         ConfidentialConfig conf;     // *_ZETHER only
     }
 
@@ -216,14 +216,14 @@ interface IOpenFactory {
     /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`. The `*_PQZ`
     ///         kinds are reserved (no implementation can be registered for them yet).
     enum TokenKind {
-        NONE,
-        UNDERLYING,
-        NONE_ZETHER,
-        UNDERLYING_ZETHER,
-        NONE_PQZ,
-        UNDERLYING_PQZ,
-        NONE_ZETHER_PQZ,
-        UNDERLYING_ZETHER_PQZ
+        NORMAL,
+        WRAPPED,
+        NORMAL_ZETHER,
+        WRAPPED_ZETHER,
+        NORMAL_PQZ,
+        WRAPPED_PQZ,
+        NORMAL_ZETHER_PQZ,
+        WRAPPED_ZETHER_PQZ
     }
 
     event ImplementationRegistered(
@@ -244,7 +244,7 @@ interface IOpenFactory {
     error ImplementationNotAContract(address implementation);
     error ImplementationFactoryMismatch(address implementation);
     error ChainUidMismatch(bytes32 expected, bytes32 got);
-    /// @notice `NONE*` 0 legs, `UNDERLYING*` 1–8.
+    /// @notice `NORMAL*` 0 legs, `WRAPPED*` 1–8.
     error UnderlyingCountInvalid(uint256 n);
     error SaltAlreadyUsed(address existing);
 
@@ -293,7 +293,7 @@ import {IFactoryToken} from "./IFactoryToken.sol";
 ///         `factory() == this` and `chainUid() == chainUid` (so a clone's domain salt has one source, CTR-GEN-05);
 ///         the catalogue is append-only, so a wrong entry would be dead forever. Creation clones by `CREATE2` with
 ///         the salt scoped by the creator and calls `initialize` in the same call; flag validation is the token's.
-///         Built kinds: `NONE`, `UNDERLYING` (the `*_ZETHER` implementations come with P3, the DEX with P2).
+///         Built kinds: `NORMAL`, `WRAPPED` (the `*_ZETHER` implementations come with P3, the DEX with P2).
 contract OpenFactory is IOpenFactory {
     struct Info {
         address creator;
@@ -409,7 +409,7 @@ contract OpenFactory is IOpenFactory {
 
     /// @dev Code, `kind()`, `factory()`, `chainUid()`: each read by staticcall, a missing or short answer refused.
     function _checkImplementation(TokenKind kind, address implementation) private view {
-        if (uint8(kind) > uint8(TokenKind.UNDERLYING_ZETHER)) revert KindReserved(kind);
+        if (uint8(kind) > uint8(TokenKind.WRAPPED_ZETHER)) revert KindReserved(kind);
         if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, IFactoryToken.kind.selector);
         if (!ok) got = type(uint256).max;
@@ -435,7 +435,7 @@ contract OpenFactory is IOpenFactory {
         bytes32 salt) private returns (address token)
     {
         uint256 n = cfg.legs.length;
-        bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER;
+        bool wrapper = kind == TokenKind.WRAPPED || kind == TokenKind.WRAPPED_ZETHER;
         if (wrapper ? n == 0 || n > MAX_LEGS : n != 0) revert UnderlyingCountInvalid(n);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
@@ -532,9 +532,9 @@ index 14142df..d8aaf98 100644
      function implementation() external view returns (address) { return _SELF; }
      function creator() external view returns (address) { return AdminLib.$().creator; }
      function version() external view returns (uint64) { return AdminLib.$().version; }
--    /// @notice CTR-TOK-21 kind: 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`, 3 `UNDERLYING_ZETHER`.
+-    /// @notice CTR-TOK-21 kind: 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`, 3 `WRAPPED_ZETHER`.
 -    function kind() external view returns (uint8) { return AdminLib.$().kind; }
-+    /// @notice CTR-TOK-21 kind: 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`, 3 `UNDERLYING_ZETHER`; a constant of the
++    /// @notice CTR-TOK-21 kind: 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`, 3 `WRAPPED_ZETHER`; a constant of the
 +    ///         implementation, so the factory can check it before any clone exists.
 +    function kind() public pure virtual returns (uint8);
  
@@ -543,24 +543,24 @@ index 14142df..d8aaf98 100644
 ```
 
 ```diff
-diff --git a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/NormalToken.sol b/smartcontracts/evm/src/metatx/NormalToken.sol
 index 216fe2d..c0164fa 100644
---- a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
+--- a/smartcontracts/evm/src/metatx/NormalToken.sol
++++ b/smartcontracts/evm/src/metatx/NormalToken.sol
 @@ -5,41 +5,25 @@ import {MetaTokenBase} from "./MetaTokenBase.sol";
  import {AdminLib} from "./AdminLib.sol";
  import {MetaTxBase} from "./MetaTxBase.sol";
  import {IMetaTx} from "./IMetaTx.sol";
 -import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
  
- /// @title Kind `NONE` (CTR-TOK-21): a standalone token, no underlying.
+ /// @title Kind `NORMAL` (CTR-TOK-21): a standalone token, no underlying.
  /// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn). A supply cap or a mint
 -///         rate limit, if an issuer needs one, lives in its minter contract. Built by the factory through
 -///         `initialize(creator, [], version, abi.encode(NoneInit))`; P1e switches to `TokenConfig`.
 +///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 +///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
- contract NoUnderlyingToken is MetaTokenBase {
--    /// @notice The NONE subset of `TokenConfig` (CTR-TOK-25).
+ contract NormalToken is MetaTokenBase {
+-    /// @notice The NORMAL subset of `TokenConfig` (CTR-TOK-25).
 -    struct NoneInit {
 -        string name;
 -        string symbol;
@@ -580,7 +580,7 @@ index 216fe2d..c0164fa 100644
 -    function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
 -        return IOpenFactoryV2.TokenKind.META_NONE;
 +    function kind() public pure override returns (uint8) {
-+        return AdminLib.KIND_NONE;
++        return AdminLib.KIND_NORMAL;
      }
  
 -    /// @param initData `abi.encode(NoneInit)`.
@@ -588,12 +588,12 @@ index 216fe2d..c0164fa 100644
 -        if (underlyings.length != 0) revert UnderlyingCountInvalid(underlyings.length);
 -        NoneInit memory c = abi.decode(initData, (NoneInit));
 -        _setMetadata(c.name, c.symbol, c.decimals);
--        AdminLib.init(AdminLib.KIND_NONE, c.features, c.lockedFeatures, c.owner, c.roles);
+-        AdminLib.init(AdminLib.KIND_NORMAL, c.features, c.lockedFeatures, c.owner, c.roles);
 -        if (c.initialSupply != 0) _mint(c.initialHolder, c.initialSupply);
 +    function _init(TokenConfig calldata cfg) internal override {
 +        _requireUnused(cfg, false, true, true);
 +        _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-+        AdminLib.init(AdminLib.KIND_NONE, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
++        AdminLib.init(AdminLib.KIND_NORMAL, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
 +        if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
      }
  
@@ -601,19 +601,19 @@ index 216fe2d..c0164fa 100644
 ```
 
 ```diff
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingToken.sol b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedToken.sol b/smartcontracts/evm/src/metatx/WrappedToken.sol
 index 8380e9b..3e78195 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-@@ -7,7 +7,6 @@ import {UnderlyingLib} from "./UnderlyingLib.sol";
- import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+--- a/smartcontracts/evm/src/metatx/WrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/WrappedToken.sol
+@@ -7,7 +7,6 @@ import {WrappedLib} from "./WrappedLib.sol";
+ import {IWrappedToken} from "./IWrappedToken.sol";
  import {MetaTxBase} from "./MetaTxBase.sol";
  import {IMetaTx} from "./IMetaTx.sol";
 -import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
  
- /// @title Kind `UNDERLYING` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
- ///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `UnderlyingLib`.
-@@ -30,14 +29,14 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+ /// @title Kind `WRAPPED` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
+ ///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `WrappedLib`.
+@@ -30,14 +29,14 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
          MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
      {}
  
@@ -621,35 +621,35 @@ index 8380e9b..3e78195 100644
 -    function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
 -        return IOpenFactoryV2.TokenKind.META_SINGLE;
 +    function kind() public pure override returns (uint8) {
-+        return AdminLib.KIND_UNDERLYING;
++        return AdminLib.KIND_WRAPPED;
      }
  
--    /// @param initData `abi.encode(UnderlyingInit)`; decoded and checked in `UnderlyingLib.initToken`.
+-    /// @param initData `abi.encode(UnderlyingInit)`; decoded and checked in `WrappedLib.initToken`.
 -    function _init(address, address[] calldata us, bytes calldata initData) internal override {
--        UnderlyingLib.initToken(us, initData, IS_HEDERA);
-+    /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `UnderlyingLib`.
+-        WrappedLib.initToken(us, initData, IS_HEDERA);
++    /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `WrappedLib`.
 +    function _init(TokenConfig calldata cfg) internal override {
 +        _requireUnused(cfg, true, false, false);
-+        UnderlyingLib.initToken(cfg, IS_HEDERA);
++        WrappedLib.initToken(cfg, IS_HEDERA);
      }
  
      // ------------------------------------------------------------------ wrap / unwrap / reserve
 ```
 
 ```diff
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingLib.sol b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedLib.sol b/smartcontracts/evm/src/metatx/WrappedLib.sol
 index f56cd13..b6238c6 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingLib.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
+--- a/smartcontracts/evm/src/metatx/WrappedLib.sol
++++ b/smartcontracts/evm/src/metatx/WrappedLib.sol
 @@ -7,6 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  import {Address} from "@openzeppelin/contracts/utils/Address.sol";
  import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
- import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+ import {IWrappedToken} from "./IWrappedToken.sol";
 +import {IFactoryToken} from "../factory/IFactoryToken.sol";
  import {AdminLib} from "./AdminLib.sol";
  import {MetaTokenBase} from "./MetaTokenBase.sol";
  import {HederaLib} from "../hedera/HederaLib.sol";
-@@ -69,17 +70,11 @@ library UnderlyingLib {
+@@ -69,17 +70,11 @@ library WrappedLib {
  
      // ------------------------------------------------------------------ init
  
@@ -657,7 +657,7 @@ index f56cd13..b6238c6 100644
 -    ///         order), write the metadata, the flags/owner/roles (`AdminLib.init`), the rate config and the legs in the
 -    ///         factory's order (which never changes).
 -    function initToken(address[] calldata underlyings, bytes calldata initData, bool isHedera) public {
--        IUnderlyingToken.UnderlyingInit memory c = abi.decode(initData, (IUnderlyingToken.UnderlyingInit));
+-        IWrappedToken.UnderlyingInit memory c = abi.decode(initData, (IWrappedToken.UnderlyingInit));
 -        uint256 n = underlyings.length;
 +    /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
 +    ///         flags/owner/roles (`AdminLib.init`), the rate config, then the legs in their given order (never changes).
@@ -666,47 +666,47 @@ index f56cd13..b6238c6 100644
          if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
 -        if (c.legs.length != n) revert MetaTokenBase.UnderlyingCountInvalid(c.legs.length);
 -        for (uint256 i; i < n; ++i) {
--            if (c.legs[i].underlying != underlyings[i]) revert IUnderlyingToken.UnknownUnderlying(underlyings[i]);
+-            if (c.legs[i].underlying != underlyings[i]) revert IWrappedToken.UnknownUnderlying(underlyings[i]);
 -        }
          AdminLib.TokenStorage storage t = AdminLib.$();
          t.name = c.name;
          t.symbol = c.symbol;
-@@ -87,7 +82,7 @@ library UnderlyingLib {
-         AdminLib.init(AdminLib.KIND_UNDERLYING, c.features, c.lockedFeatures, c.owner, c.roles);
+@@ -87,7 +82,7 @@ library WrappedLib {
+         AdminLib.init(AdminLib.KIND_WRAPPED, c.features, c.lockedFeatures, c.owner, c.roles);
          bool adjustable = AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
-         UnderlyingStorage storage s = $();
--        IUnderlyingToken.RateConfig memory rate = c.rate;
+         WrappedStorage storage s = $();
+-        IWrappedToken.RateConfig memory rate = c.rate;
 +        IFactoryToken.RateConfig calldata rate = c.rate;
          if (!adjustable) {
-             if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IUnderlyingToken.RateConfigInvalid();
+             if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IWrappedToken.RateConfigInvalid();
          } else {
-@@ -99,7 +94,7 @@ library UnderlyingLib {
+@@ -99,7 +94,7 @@ library WrappedLib {
          for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
      }
  
--    function _addLeg(UnderlyingStorage storage s, IUnderlyingToken.LegInit memory l, bool adjustable, bool isHedera)
-+    function _addLeg(UnderlyingStorage storage s, IFactoryToken.Leg calldata l, bool adjustable, bool isHedera)
+-    function _addLeg(WrappedStorage storage s, IWrappedToken.LegInit memory l, bool adjustable, bool isHedera)
++    function _addLeg(WrappedStorage storage s, IFactoryToken.Leg calldata l, bool adjustable, bool isHedera)
          private
      {
          address u = l.underlying;
 ```
 
 ```diff
-diff --git a/smartcontracts/evm/src/metatx/IUnderlyingToken.sol b/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/IWrappedToken.sol b/smartcontracts/evm/src/metatx/IWrappedToken.sol
 index 895a276..2b50b01 100644
---- a/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
+--- a/smartcontracts/evm/src/metatx/IWrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/IWrappedToken.sol
 @@ -1,40 +1,10 @@
  // SPDX-License-Identifier: Apache-2.0
  pragma solidity ^0.8.24;
  
 -import {AdminLib} from "./AdminLib.sol";
 -
- /// @title Kind `UNDERLYING` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
- /// @notice Events and errors raised by `UnderlyingLib` (an external library) are declared here so that they are in the
+ /// @title Kind `WRAPPED` (CTR-TOK-21): 1–8 legs, each an ERC-20 or the native coin (`address(0)`, CTR-TOK-26).
+ /// @notice Events and errors raised by `WrappedLib` (an external library) are declared here so that they are in the
 -///         token ABI.
 +///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
- interface IUnderlyingToken {
+ interface IWrappedToken {
 -    /// @notice One leg at creation: `underlying` (`address(0)` = the native coin), rate `num/den` (CTR-TOK-04).
 -    ///         `uint256` so a value `≥ 2^96` reverts `RateInvalid` instead of failing to decode.
 -    struct LegInit {
@@ -721,7 +721,7 @@ index 895a276..2b50b01 100644
 -        uint16 maxRateStepBps;
 -    }
 -
--    /// @notice The UNDERLYING subset of `TokenConfig` (CTR-TOK-25); `legs[i].underlying == underlyings[i]` of the
+-    /// @notice The WRAPPED subset of `TokenConfig` (CTR-TOK-25); `legs[i].underlying == underlyings[i]` of the
 -    ///         factory call.
 -    struct UnderlyingInit {
 -        string name;
@@ -756,9 +756,9 @@ index f82a06f..b2f0962 100644
 -import {IOpenFactoryV2} from "../../../src/common/IOpenFactoryV2.sol";
 +import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
  import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
- import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
- import {UnderlyingToken} from "../../../src/metatx/UnderlyingToken.sol";
--import {IUnderlyingToken} from "../../../src/metatx/IUnderlyingToken.sol";
+ import {NormalToken} from "../../../src/metatx/NormalToken.sol";
+ import {WrappedToken} from "../../../src/metatx/WrappedToken.sol";
+-import {IWrappedToken} from "../../../src/metatx/IWrappedToken.sol";
  
  bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
  
@@ -772,7 +772,7 @@ index f82a06f..b2f0962 100644
 -    function tokenKind() external pure override returns (IOpenFactoryV2.TokenKind) {
 -        return IOpenFactoryV2.TokenKind.META_NONE;
 +    function kind() public pure override returns (uint8) {
-+        return AdminLib.KIND_NONE;
++        return AdminLib.KIND_NORMAL;
      }
  
 -    function _init(address creator_, address[] calldata, bytes calldata initData) internal override {
@@ -782,7 +782,7 @@ index f82a06f..b2f0962 100644
 +    function _init(TokenConfig calldata cfg) internal override {
 +        _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
          AdminLib.Roles memory none;
-         AdminLib.init(AdminLib.KIND_NONE, 1 << AdminLib.PAYABLE, 0, address(0), none);
+         AdminLib.init(AdminLib.KIND_NORMAL, 1 << AdminLib.PAYABLE, 0, address(0), none);
 -        _mint(creator_, supply);
 +        _mint(cfg.initialHolder, cfg.initialSupply);
      }
@@ -794,8 +794,8 @@ index f82a06f..b2f0962 100644
 -/// locked, no owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
 +/// Kind-NONE `TokenConfig` with the behaviour built before P1c: `PAYABLE | MINTABLE | BURNABLE`, nothing locked, no
 +/// owner, `minter` (0 = none), `supply` to `holder`. Callers `abi.encode` it (after adjusting fields).
- function noneInit(string memory n, string memory s, uint8 d, uint256 supply, address holder, address minter)
--    pure returns (NoUnderlyingToken.NoneInit memory c)
+ function normalInit(string memory n, string memory s, uint8 d, uint256 supply, address holder, address minter)
+-    pure returns (NormalToken.NoneInit memory c)
 +    pure returns (IFactoryToken.TokenConfig memory c)
  {
      c.name = n;
@@ -805,21 +805,21 @@ index f82a06f..b2f0962 100644
  }
  
 -/// `UnderlyingInit` for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
-+/// `TokenConfig` of kind UNDERLYING for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
++/// `TokenConfig` of kind WRAPPED for legs `us` at `nums/dens`: `PAYABLE` (as built), `RATE_ADJUSTABLE` with `cfg.adjustable`,
  /// `WRAP_DISABLEABLE` with a non-zero `guardian`; nothing locked; `owner` (0 = none).
- function underlyingInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
--    address guardian, address owner) pure returns (IUnderlyingToken.UnderlyingInit memory c)
+ function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] memory dens, uint8 dec, Rate memory cfg,
+-    address guardian, address owner) pure returns (IWrappedToken.UnderlyingInit memory c)
 +    address guardian, address owner) pure returns (IFactoryToken.TokenConfig memory c)
  {
      c.name = "Wrapped";
      c.symbol = "WRP";
-@@ -71,9 +68,9 @@ function underlyingInit(address[] memory us, uint256[] memory nums, uint256[] me
+@@ -71,9 +68,9 @@ function wrappedInit(address[] memory us, uint256[] memory nums, uint256[] me
      c.owner = owner;
      c.roles.rateAdmin = cfg.rateAdmin;
      c.roles.guardian = guardian;
--    c.legs = new IUnderlyingToken.LegInit[](us.length);
--    for (uint256 i; i < us.length; ++i) c.legs[i] = IUnderlyingToken.LegInit(us[i], nums[i], dens[i]);
--    c.rate = IUnderlyingToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
+-    c.legs = new IWrappedToken.LegInit[](us.length);
+-    for (uint256 i; i < us.length; ++i) c.legs[i] = IWrappedToken.LegInit(us[i], nums[i], dens[i]);
+-    c.rate = IWrappedToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
 +    c.legs = new IFactoryToken.Leg[](us.length);
 +    for (uint256 i; i < us.length; ++i) c.legs[i] = IFactoryToken.Leg(us[i], nums[i], dens[i]);
 +    c.rate = IFactoryToken.RateConfig(cfg.rateDelay, cfg.maxRateStepBps);
@@ -861,7 +861,7 @@ index f82a06f..b2f0962 100644
 +        return BaseHarness(_clone(address(impl), creator_, new address[](0), abi.encode(c)));
      }
  
-     address internal noneImpl;
+     address internal normalImpl;
 @@ -135,7 +137,7 @@ abstract contract V2Fixture is Test {
          xs[0] = x;
      }
@@ -884,12 +884,12 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UID_, noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
+import {UID_, normalInit, wrappedInit, Rate} from "./helpers/V2Fixture.sol";
 
 /// Answers `kind()` only.
 contract KindOnly {
@@ -901,28 +901,28 @@ contract KindOnly {
 contract FactoryTest is Test {
     OpenFactory f;
     address registrar = address(0xF00D);
-    NoUnderlyingToken noneImpl;
-    UnderlyingToken underlyingImpl;
+    NormalToken normalImpl;
+    WrappedToken wrappedImpl;
     MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
     MockERC20 usdt = new MockERC20("Tether", "USDT", 6);
     address alice = address(0xA11CE);
     address bob = address(0xB0B);
 
-    IOpenFactory.TokenKind constant NONE = IOpenFactory.TokenKind.NONE;
-    IOpenFactory.TokenKind constant UNDERLYING = IOpenFactory.TokenKind.UNDERLYING;
+    IOpenFactory.TokenKind constant NORMAL = IOpenFactory.TokenKind.NORMAL;
+    IOpenFactory.TokenKind constant WRAPPED = IOpenFactory.TokenKind.WRAPPED;
 
     function setUp() public {
         f = new OpenFactory(registrar, UID_);
-        noneImpl = new NoUnderlyingToken(address(f), address(0), UID_, false);
-        underlyingImpl = new UnderlyingToken(address(f), address(0), UID_, false);
+        normalImpl = new NormalToken(address(f), address(0), UID_, false);
+        wrappedImpl = new WrappedToken(address(f), address(0), UID_, false);
         vm.startPrank(registrar);
-        f.registerImplementation(NONE, 1, address(noneImpl));
-        f.registerImplementation(UNDERLYING, 1, address(underlyingImpl));
+        f.registerImplementation(NORMAL, 1, address(normalImpl));
+        f.registerImplementation(WRAPPED, 1, address(wrappedImpl));
         vm.stopPrank();
     }
 
     function _none(address holder) internal pure returns (IFactoryToken.TokenConfig memory) {
-        return noneInit("Points", "PTS", 0, 1000, holder, address(0));
+        return normalInit("Points", "PTS", 0, 1000, holder, address(0));
     }
 
     /// Legs `us` at 1:1, rates fixed, no guardian, no owner.
@@ -930,7 +930,7 @@ contract FactoryTest is Test {
         Rate memory c;
         uint256[] memory one = new uint256[](us.length);
         for (uint256 i; i < us.length; ++i) one[i] = 1;
-        return underlyingInit(us, one, one, 6, c, address(0), address(0));
+        return wrappedInit(us, one, one, 6, c, address(0), address(0));
     }
 
     function _two() internal view returns (address[] memory us) {
@@ -949,59 +949,59 @@ contract FactoryTest is Test {
 
     function test_register_checksKindFactoryAndChainUid() public {
         vm.startPrank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, UNDERLYING, 0));
-        f.registerImplementation(UNDERLYING, 2, address(noneImpl));
-        address otherFactory = address(new NoUnderlyingToken(address(0xFAC), address(0), UID_, false));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, WRAPPED, 0));
+        f.registerImplementation(WRAPPED, 2, address(normalImpl));
+        address otherFactory = address(new NormalToken(address(0xFAC), address(0), UID_, false));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, otherFactory));
-        f.registerImplementation(NONE, 2, otherFactory);
+        f.registerImplementation(NORMAL, 2, otherFactory);
         bytes32 otherUid = keccak256("other chain");
-        address otherChain = address(new NoUnderlyingToken(address(f), address(0), otherUid, false));
+        address otherChain = address(new NormalToken(address(f), address(0), otherUid, false));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, otherUid));
-        f.registerImplementation(NONE, 2, otherChain);
+        f.registerImplementation(NORMAL, 2, otherChain);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, address(0xDEAD)));
-        f.registerImplementation(NONE, 2, address(0xDEAD));
+        f.registerImplementation(NORMAL, 2, address(0xDEAD));
         address mute = address(new MockERC20("M", "M", 6)); // no kind()
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, NONE, type(uint256).max));
-        f.registerImplementation(NONE, 2, mute);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, NORMAL, type(uint256).max));
+        f.registerImplementation(NORMAL, 2, mute);
         address kindOnly = address(new KindOnly()); // no factory()
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, kindOnly));
-        f.registerImplementation(NONE, 2, kindOnly);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_PQZ));
-        f.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 1, address(noneImpl));
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NONE, 0));
-        f.registerImplementation(NONE, 0, address(noneImpl));
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, NONE, 1,
-            address(noneImpl)));
-        f.registerImplementation(NONE, 1, address(noneImpl));
+        f.registerImplementation(NORMAL, 2, kindOnly);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NORMAL_PQZ));
+        f.registerImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 1, address(normalImpl));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 0));
+        f.registerImplementation(NORMAL, 0, address(normalImpl));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, NORMAL, 1,
+            address(normalImpl)));
+        f.registerImplementation(NORMAL, 1, address(normalImpl));
         vm.stopPrank();
         vm.prank(alice);
         vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.registerImplementation(NONE, 3, address(noneImpl));
-        assertEq(f.latestVersion(NONE), 1);
-        assertEq(f.implementationOf(UNDERLYING, 1), address(underlyingImpl));
+        f.registerImplementation(NORMAL, 3, address(normalImpl));
+        assertEq(f.latestVersion(NORMAL), 1);
+        assertEq(f.implementationOf(WRAPPED, 1), address(wrappedImpl));
     }
 
     function test_deprecateOnlyMarks() public {
         vm.prank(alice);
         vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.deprecate(NONE, 1, "x");
+        f.deprecate(NORMAL, 1, "x");
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NONE, 9));
-        f.deprecate(NONE, 9, "x");
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 9));
+        f.deprecate(NORMAL, 9, "x");
         vm.prank(registrar);
-        f.deprecate(NONE, 1, "bug");
-        assertTrue(f.isDeprecated(NONE, 1));
+        f.deprecate(NORMAL, 1, "bug");
+        assertTrue(f.isDeprecated(NORMAL, 1));
         vm.prank(alice);
-        f.createToken(NONE, 1, _none(alice), "still"); // deprecation is advisory
+        f.createToken(NORMAL, 1, _none(alice), "still"); // deprecation is advisory
     }
 
     // ------------------------------------------------------------------ create
 
-    function test_createToken_none_emitsOneEventWithProvenance() public {
-        address predicted = f.predictAddress(address(noneImpl), alice, "s");
+    function test_createToken_normal_emitsOneEventWithProvenance() public {
+        address predicted = f.predictAddress(address(normalImpl), alice, "s");
         vm.recordLogs();
         vm.prank(alice);
-        address t = f.createToken(NONE, 1, _none(alice), "s");
+        address t = f.createToken(NORMAL, 1, _none(alice), "s");
         assertEq(t, predicted);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 created;
@@ -1011,31 +1011,31 @@ contract FactoryTest is Test {
                 assertEq(logs[i].topics[0], IOpenFactory.TokenCreated.selector);
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), t);
                 assertEq(address(uint160(uint256(logs[i].topics[2]))), alice);
-                assertEq(uint256(logs[i].topics[3]), uint256(NONE));
+                assertEq(uint256(logs[i].topics[3]), uint256(NORMAL));
                 (uint64 v, address impl, uint256 feat, uint256 locked, address owner, address[] memory us) =
                     abi.decode(logs[i].data, (uint64, address, uint256, uint256, address, address[]));
                 assertEq(abi.encode(v, impl, feat, locked, owner, us.length),
-                    abi.encode(uint64(1), address(noneImpl), uint256(7), uint256(0), address(0), uint256(0)));
+                    abi.encode(uint64(1), address(normalImpl), uint256(7), uint256(0), address(0), uint256(0)));
             }
         }
         assertEq(created, 1);
-        assertEq(NoUnderlyingToken(t).balanceOf(alice), 1000);
-        assertEq(NoUnderlyingToken(t).version(), 1);
-        assertEq(NoUnderlyingToken(t).creator(), alice);
+        assertEq(NormalToken(t).balanceOf(alice), 1000);
+        assertEq(NormalToken(t).version(), 1);
+        assertEq(NormalToken(t).creator(), alice);
         assertTrue(f.isToken(t));
         assertEq(f.creatorOf(t), alice);
         (IOpenFactory.TokenKind k, uint64 ver) = f.versionOf(t);
-        assertEq(uint8(k), uint8(NONE));
+        assertEq(uint8(k), uint8(NORMAL));
         assertEq(ver, 1);
-        assertFalse(f.isToken(address(noneImpl)));
+        assertFalse(f.isToken(address(normalImpl)));
     }
 
-    function test_createToken_underlying_indexesEveryLeg_includingNative() public {
+    function test_createToken_wrapped_indexesEveryLeg_includingNative() public {
         address[] memory us = new address[](3);
         (us[0], us[1], us[2]) = (address(usdc), address(usdt), address(0));
         vm.prank(alice);
-        address t = f.createToken(UNDERLYING, 1, _wrapper(us), "w");
-        assertEq(UnderlyingToken(t).underlyings().length, 3);
+        address t = f.createToken(WRAPPED, 1, _wrapper(us), "w");
+        assertEq(WrappedToken(t).underlyings().length, 3);
         assertEq(f.getWrapper(alice, address(usdc)), t);
         assertEq(f.getWrapper(alice, address(0)), t);
         assertEq(f.getWrapperCount(alice, address(usdt)), 1);
@@ -1050,125 +1050,125 @@ contract FactoryTest is Test {
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usdc), 1, 1);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnderlyingCountInvalid.selector, 1));
-        f.createToken(NONE, 1, c, "a");
+        f.createToken(NORMAL, 1, c, "a");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnderlyingCountInvalid.selector, 0));
-        f.createToken(UNDERLYING, 1, _wrapper(new address[](0)), "a");
+        f.createToken(WRAPPED, 1, _wrapper(new address[](0)), "a");
         address[] memory nine = new address[](9);
         for (uint256 i; i < 9; ++i) nine[i] = address(new MockERC20("X", "X", 6));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnderlyingCountInvalid.selector, 9));
-        f.createToken(UNDERLYING, 1, _wrapper(nine), "a");
+        f.createToken(WRAPPED, 1, _wrapper(nine), "a");
         address[] memory eight = new address[](8);
         for (uint256 i; i < 8; ++i) eight[i] = nine[i];
-        f.createToken(UNDERLYING, 1, _wrapper(eight), "a");
+        f.createToken(WRAPPED, 1, _wrapper(eight), "a");
     }
 
     function test_createToken_unknownVersion() public {
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NONE, 2));
-        f.createToken(NONE, 2, _none(alice), "a");
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 2));
+        f.createToken(NORMAL, 2, _none(alice), "a");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector,
-            IOpenFactory.TokenKind.NONE_ZETHER, 1));
-        f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, _none(alice), "a");
+            IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
+        f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _none(alice), "a");
     }
 
     function test_saltIsScopedByCreator_andCannotBeReused() public {
         vm.prank(alice);
-        address a = f.createToken(NONE, 1, _none(alice), "same");
+        address a = f.createToken(NORMAL, 1, _none(alice), "same");
         vm.prank(bob);
-        address b = f.createToken(NONE, 1, _none(bob), "same");
+        address b = f.createToken(NORMAL, 1, _none(bob), "same");
         assertTrue(a != b);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, a));
-        f.createToken(NONE, 1, _none(alice), "same");
+        f.createToken(NORMAL, 1, _none(alice), "same");
     }
 
     function test_createTokenUnregistered_isCheckedAndRecordedAsVersion0() public {
-        NoUnderlyingToken mine = new NoUnderlyingToken(address(f), address(0), UID_, false);
+        NormalToken mine = new NormalToken(address(f), address(0), UID_, false);
         vm.prank(alice);
-        address t = f.createTokenUnregistered(NONE, address(mine), _none(alice), "u");
+        address t = f.createTokenUnregistered(NORMAL, address(mine), _none(alice), "u");
         (, uint64 v) = f.versionOf(t);
         assertEq(v, 0);
-        assertEq(NoUnderlyingToken(t).version(), 0);
-        NoUnderlyingToken other = new NoUnderlyingToken(address(f), address(0), keccak256("x"), false);
+        assertEq(NormalToken(t).version(), 0);
+        NormalToken other = new NormalToken(address(f), address(0), keccak256("x"), false);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));
-        f.createTokenUnregistered(NONE, address(other), _none(alice), "u2");
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, UNDERLYING, 0));
-        f.createTokenUnregistered(UNDERLYING, address(mine), _wrapper(_two()), "u3");
+        f.createTokenUnregistered(NORMAL, address(other), _none(alice), "u2");
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, WRAPPED, 0));
+        f.createTokenUnregistered(WRAPPED, address(mine), _wrapper(_two()), "u3");
     }
 
     // ------------------------------------------------------------------ the token validates
 
     function test_factoryOnlyForwards_theTokenValidatesFlagsAndFields() public {
         IFactoryToken.TokenConfig memory c = _none(alice);
-        c.features |= 1 << 3; // RATE_ADJUSTABLE on NONE
+        c.features |= 1 << 3; // RATE_ADJUSTABLE on NORMAL
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, 3));
-        f.createToken(NONE, 1, c, "a");
+        f.createToken(NORMAL, 1, c, "a");
         c = _none(alice);
         c.rate.rateDelay = 7 days;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 3));
-        f.createToken(NONE, 1, c, "a");
+        f.createToken(NORMAL, 1, c, "a");
         c = _none(alice);
         c.conf.shieldScale = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
-        f.createToken(NONE, 1, c, "a");
+        f.createToken(NORMAL, 1, c, "a");
         c = _wrapper(_two());
         c.initialSupply = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 1));
-        f.createToken(UNDERLYING, 1, c, "a");
+        f.createToken(WRAPPED, 1, c, "a");
         c = _wrapper(_two());
         c.initialHolder = alice;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 1));
-        f.createToken(UNDERLYING, 1, c, "a");
+        f.createToken(WRAPPED, 1, c, "a");
         c = _wrapper(_two());
         c.conf.auditorKey = hex"01";
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
-        f.createToken(UNDERLYING, 1, c, "a");
+        f.createToken(WRAPPED, 1, c, "a");
     }
 
     function test_onlyTheFactoryInitializes_andOnlyOnce() public {
         vm.prank(alice);
-        address t = f.createToken(NONE, 1, _none(alice), "s");
+        address t = f.createToken(NORMAL, 1, _none(alice), "s");
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        NoUnderlyingToken(t).initialize(alice, 1, _none(alice));
+        NormalToken(t).initialize(alice, 1, _none(alice));
         vm.prank(address(f));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        NoUnderlyingToken(t).initialize(alice, 1, _none(alice));
+        NormalToken(t).initialize(alice, 1, _none(alice));
         vm.prank(address(f));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        noneImpl.initialize(alice, 1, _none(alice)); // the implementation locked itself
+        normalImpl.initialize(alice, 1, _none(alice)); // the implementation locked itself
     }
 
     function test_kindIsAConstantOfTheImplementation() public view {
-        assertEq(noneImpl.kind(), uint8(NONE));
-        assertEq(underlyingImpl.kind(), uint8(UNDERLYING));
+        assertEq(normalImpl.kind(), uint8(NORMAL));
+        assertEq(wrappedImpl.kind(), uint8(WRAPPED));
     }
 
     function test_sizes() public view {
-        assertLe(address(noneImpl).code.length, 20_480); // CTR-TOK-24
+        assertLe(address(normalImpl).code.length, 20_480); // CTR-TOK-24
         assertLe(address(f).code.length, 24_576);
         // Transitional (P1d D2): over EIP-170 until the size work
-        assertLe(address(underlyingImpl).code.length, 27_648);
+        assertLe(address(wrappedImpl).code.length, 27_648);
     }
 }
 ```
 
 - [ ] **Step 8: Port the remaining tests.** Find them by compiling; at least `test/v2/{Base,Tier1,Tier2,Multi,Features,
 Allowlist,ReceiverPays,MetaTxGasV2,Underlying}.t.sol`, `test/metatx/TokenKat.t.sol`, `test/hedera/HederaV2.t.sol`. Rules:
-1. `IOpenFactoryV2` → `IOpenFactory` (`src/factory/IOpenFactory.sol`); `TokenKind.META_NONE` → `NONE`,
-   `TokenKind.META_SINGLE` → `UNDERLYING`; `t.tokenKind()` asserts → `assertEq(t.kind(), AdminLib.KIND_NONE)` /
-   `KIND_UNDERLYING`.
+1. `IOpenFactoryV2` → `IOpenFactory` (`src/factory/IOpenFactory.sol`); `TokenKind.META_NONE` → `NORMAL`,
+   `TokenKind.META_SINGLE` → `WRAPPED`; `t.tokenKind()` asserts → `assertEq(t.kind(), AdminLib.KIND_NORMAL)` /
+   `KIND_WRAPPED`.
 2. `new OpenFactoryV2(registrar)` → `new OpenFactory(registrar, UID)`; `createTiered(kind, v, us, bytes, salt)` →
-   `createToken(kind, v, cfg, salt)` with the `TokenConfig` that used to be `abi.encode`d (`noneInit`/`underlyingInit`
+   `createToken(kind, v, cfg, salt)` with the `TokenConfig` that used to be `abi.encode`d (`normalInit`/`wrappedInit`
    now return it); `createTieredUnregistered` → `createTokenUnregistered`; `isDeployedHere` → `isToken`;
    `TieredTokenDeployed` → `TokenCreated`.
 3. Direct `initialize(creator, us, version, bytes)` → `initialize(creator, version, cfg)` (as the factory, `vm.prank`
    where the test did). `UnderlyingCountInvalid` from a bad count stays the token's error for direct calls.
-4. `Underlying.t.sol test_init_legsMustMatchTheFactoryUnderlyings` → `test_init_legCount`: 0 legs and 9 legs reverted by
+4. `Wrapped.t.sol test_init_legsMustMatchTheFactoryUnderlyings` → `test_init_legCount`: 0 legs and 9 legs reverted by
    the token (`MetaTokenBase.UnderlyingCountInvalid`) through a direct `initialize`; the mismatch cases go (E6).
 5. `TokenKat.t.sol`: the written vectors must stay byte-identical (`git diff test/vectors` empty after the run). If a
    vector changes, stop and report.
 6. `MetaTxGasV2.t.sol`: rows logged on the new factory; update logged numbers only.
-7. `HederaV2.t.sol`: `OpenFactory(registrar, UID)`, `createToken`, kinds `NONE`/`UNDERLYING`; size pins: NONE ≤ 20,480,
-   UNDERLYING ≤ 27,648 (`// Transitional (P1d D2): over EIP-170 until the size work`).
+7. `HederaV2.t.sol`: `OpenFactory(registrar, UID)`, `createToken`, kinds `NORMAL`/`WRAPPED`; size pins: NORMAL ≤ 20,480,
+   WRAPPED ≤ 27,648 (`// Transitional (P1d D2): over EIP-170 until the size work`).
 8. Any other compile error from the renames of Step 1 (a v1 test naming `OpenFactory`): apply the Step 1 rename.
 Do not change what a test asserts beyond these rules; a failure the rules do not explain → stop and report.
 
@@ -1184,7 +1184,7 @@ status test/vectors` is clean.
 
 **Model:** Sonnet, effort medium (files are complete; the e2e is the check).
 
-**Interfaces:** Consumes Task 1's `OpenFactory(registrar, uid)`, `IOpenFactory.TokenKind.NONE`, `OpenFactoryV1`,
+**Interfaces:** Consumes Task 1's `OpenFactory(registrar, uid)`, `IOpenFactory.TokenKind.NORMAL`, `OpenFactoryV1`,
 `IOpenFactoryV1`. Produces the JSON keys of the Global Constraints.
 
 - [ ] **Step 1: `script/DeployBase.sol`** (full text)
@@ -1196,7 +1196,7 @@ pragma solidity ^0.8.24;
 import {Script} from "forge-std/Script.sol";
 import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
-import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../src/metatx/NormalToken.sol";
 
 /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
 ///        deployer, the token factory with its implementations, the `chainUid()` gate.
@@ -1232,20 +1232,20 @@ abstract contract DeployBase is Script {
         require(u != bytes32(0), "set CHAIN_UID (chain-uids.json)");
     }
 
-    /// @notice The token factory and the `NONE` implementation by CREATE2, `NONE` registered as version 1 when the
-    ///         deployer is the registrar; writes `token_factory`, `implementation_none`, `chain_uid` into the JSON
-    ///         object `"deploy"`. Transitional (P1d ruling D2): `UnderlyingToken` is over EIP-170 until the size work,
-    ///         so `UNDERLYING` is not deployed yet.
+    /// @notice The token factory and the `NORMAL` implementation by CREATE2, `NORMAL` registered as version 1 when the
+    ///         deployer is the registrar; writes `token_factory`, `implementation_normal`, `chain_uid` into the JSON
+    ///         object `"deploy"`. Transitional (P1d ruling D2): `WrappedToken` is over EIP-170 until the size work,
+    ///         so `WRAPPED` is not deployed yet.
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
         f = new OpenFactory{salt: salt}(registrar, uid);
-        NoUnderlyingToken none = new NoUnderlyingToken{salt: salt}(address(f), smartKeyAccountImpl, uid, isHedera);
-        if (register) f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
+        NormalToken none = new NormalToken{salt: salt}(address(f), smartKeyAccountImpl, uid, isHedera);
+        if (register) f.registerImplementation(IOpenFactory.TokenKind.NORMAL, 1, address(none));
         _gate(address(f));
         _gate(address(none));
         vm.serializeAddress("deploy", "token_factory", address(f));
-        vm.serializeAddress("deploy", "implementation_none", address(none));
+        vm.serializeAddress("deploy", "implementation_normal", address(none));
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
@@ -1280,7 +1280,7 @@ index b15f200..b96a98f 100644
  import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 -import {OpenFactoryV2} from "../src/factory/OpenFactoryV2.sol";
 -import {IOpenFactoryV2} from "../src/common/IOpenFactoryV2.sol";
--import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
+-import {NormalToken} from "../src/metatx/NormalToken.sol";
 +import {DeployBase} from "./DeployBase.sol";
  
  /// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast
@@ -1322,7 +1322,7 @@ index b15f200..b96a98f 100644
          console.log(out);
      }
 -
--    /// TW2 §9: factory v2 + tầng None (UnderlyingToken chờ việc tối ưu kích thước, P1d D2), version 1 của kind riêng (số version theo kind; chuỗi domain "2"
+-    /// TW2 §9: factory v2 + tầng None (WrappedToken chờ việc tối ưu kích thước, P1d D2), version 1 của kind riêng (số version theo kind; chuỗi domain "2"
 -    /// là thế hệ hợp đồng). Factory v2 không đăng ký MetaToken v1. Ghi thẳng vào object JSON "deploy" (run() đã
 -    /// hết chỗ trên stack).
 -    function _deployV2(address registrar, bool register, address subjectImpl) internal {
@@ -1338,9 +1338,9 @@ index b15f200..b96a98f 100644
 -            vm.roll(head);
 -        }
 -        require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
--        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only META_NONE
+-        // Transitional (P1d, D2): `WrappedToken` is over EIP-170 until the size work; only META_NONE
 -        // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
--        address none = address(new NoUnderlyingToken(address(f), subjectImpl, uid, false));
+-        address none = address(new NormalToken(address(f), subjectImpl, uid, false));
 -        if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
 -        vm.serializeAddress("deploy", "factory_v2", address(f));
 -        vm.serializeAddress("deploy", "implementation_meta_none", none);
@@ -1368,7 +1368,7 @@ index eed0434..e279ee1 100644
  import {HederaMetaToken} from "../../src/hedera/HederaMetaToken.sol";
 -import {OpenFactoryV2} from "../../src/factory/OpenFactoryV2.sol";
 -import {IOpenFactoryV2} from "../../src/common/IOpenFactoryV2.sol";
--import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+-import {NormalToken} from "../../src/metatx/NormalToken.sol";
 +import {DeployBase} from "../DeployBase.sol";
  
  /// Như `script/Deploy.s.sol` nhưng implementation META là `HederaMetaToken` (R63).
@@ -1405,7 +1405,7 @@ index eed0434..e279ee1 100644
          console.log(out);
      }
 -
--    /// TW2 §9/§11: factory v2 + tầng None Hedera (UnderlyingToken chờ việc tối ưu kích thước, P1d D2), version 1; ghi thẳng vào object JSON "deploy".
+-    /// TW2 §9/§11: factory v2 + tầng None Hedera (WrappedToken chờ việc tối ưu kích thước, P1d D2), version 1; ghi thẳng vào object JSON "deploy".
 -    function _deployV2(address registrar, bool register) internal {
 -        OpenFactoryV2 f = new OpenFactoryV2(registrar);
 -        // chain_uid = genesis hash (CTR-GEN-05, chain-uids.json). Default: block 0's hash as the RPC reports it. The
@@ -1419,9 +1419,9 @@ index eed0434..e279ee1 100644
 -            vm.roll(head);
 -        }
 -        require(uid != bytes32(0), "set CHAIN_UID (chain-uids.json)");
--        // Transitional (P1d, D2): `UnderlyingToken` is over EIP-170 until the size work; only META_NONE
+-        // Transitional (P1d, D2): `WrappedToken` is over EIP-170 until the size work; only META_NONE
 -        // is deployed and registered, and the JSON has no implementation_meta_single/_multi keys.
--        address none = address(new NoUnderlyingToken(address(f), address(0), uid, true));
+-        address none = address(new NormalToken(address(f), address(0), uid, true));
 -        if (register) f.registerImplementation(IOpenFactoryV2.TokenKind.META_NONE, 1, none);
 -        vm.serializeAddress("deploy", "factory_v2", address(f));
 -        vm.serializeAddress("deploy", "implementation_meta_none", none);
@@ -1529,7 +1529,7 @@ usage: size_gate.py <sizes.json> <size-baseline.json>     exit 1 on a violation
 import json
 import sys
 
-TOKENS = {'NoUnderlyingToken', 'UnderlyingToken'}
+TOKENS = {'NormalToken', 'WrappedToken'}
 TOKEN_LIMIT, EIP170, EIP3860 = 20_480, 24_576, 49_152
 
 
@@ -1567,7 +1567,7 @@ if __name__ == '__main__':
         s = lambda rt, init=0: {'runtime_size': rt, 'init_size': init}
         assert check({'A': s(24_576)}, {}) == ([], [])
         assert check({'A': s(24_577)}, {})[0]
-        assert check({'NoUnderlyingToken': s(20_481)}, {})[0]
+        assert check({'NormalToken': s(20_481)}, {})[0]
         assert check({'X': s(26_000)}, {'X': 26_000}) == ([], [])
         assert check({'X': s(26_001)}, {'X': 26_000})[0]
         assert check({'X': s(20_000)}, {'X': 26_000})[1]
@@ -1580,7 +1580,7 @@ if __name__ == '__main__':
 ```json
 {
   "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
-  "UnderlyingToken": 26449,
+  "WrappedToken": 26449,
   "ZetherToken": 28849
 }
 ```

@@ -61,7 +61,7 @@ gasless wrap (PLANNED); HTS-native regulated tokens on Hedera (owner: HSCS contr
 (eligibility is expressed as attestation flags whose meaning the issuer defines); a new DEX contract (managed markets
 are node policy over `SCaaSDex` plus token-level enforcement).
 
-Measured runtime sizes of the base tiers (before `UnderlyingToken` replaced them): `SingleUnderlyingToken` 21 637, `MultiUnderlyingToken`
+Measured runtime sizes of the base tiers (before `WrappedToken` replaced them): `SingleUnderlyingToken` 21 637, `MultiUnderlyingToken`
 22 561, `HederaMultiUnderlyingToken` 23 885 bytes — 2.9 k (Single), 2.0 k (Multi) and 0.7 k (Hedera Multi) bytes of
 headroom below 24 576, less than the control surface; hence the controls live in `AdminLib`, an external library
 ([CTR-TOK-24](token-wrappers.md#CTR-TOK-24)).
@@ -406,8 +406,8 @@ these statements, kept to the enabled bits:
   open-ended freezes require an order recorded by the compliance role, and end when that order is revoked."*
 - *"With a recorded order naming an account, the issuer can move tokens out of that frozen account to the beneficiary
   named in the order, up to the recorded amount."*
-- Wrapper kind (`UNDERLYING`): *"The issuer can pause transfers for up to 7 days at a time, with at least 7 days between pauses.
-  Unwrapping is never paused, and frozen accounts cannot unwrap."* Kind `NONE`: *"The issuer can pause transfers for up to
+- Wrapper kind (`WRAPPED`): *"The issuer can pause transfers for up to 7 days at a time, with at least 7 days between pauses.
+  Unwrapping is never paused, and frozen accounts cannot unwrap."* Kind `NORMAL`: *"The issuer can pause transfers for up to
   7 days at a time, with at least 7 days between pauses. Redemption, buyback and exchange offers are paused too; only
   burning stays open."*
 - *"Receiving requires an attestation from the registry above; its admin chooses the attesters. The owner can switch
@@ -444,7 +444,7 @@ Invariants (each an invariant test):
 | A8 | Attestation lapse | receivers fail; holders still send to eligible parties, burn and unwrap |
 | A9 | Fee griefing with a frozen/ineligible fee recipient | fails at the shape step (cheap) |
 | A10 | Unwrap to a frozen accomplice | out of scope: the underlying is a different asset; the holder itself must be unfrozen to unwrap |
-| A11 | Rolling pauses | bounded by the cooldown; wrapper exits stay open; `NONE` tokens with `PAUSE` are disclosed as pausable half of the time, offers included |
+| A11 | Rolling pauses | bounded by the cooldown; wrapper exits stay open; `NORMAL` tokens with `PAUSE` are disclosed as pausable half of the time, offers included |
 | A12 | Frozen holder escapes via DEX | `transferFrom` checks `F(from)`; the pair fails; the venue drops the maker's orders on `AccountFrozen` |
 | A13 | Forced transfer from a protocol clone | address-exact; the clone degrades as defined below |
 | A14 | Renounced or dead issuer | no `issuer` holder left stops `FREEZE|FORCE|PAUSE` (all freezes end); a dead issuer multisig leaves issuer-only freezes ending within 60 days and record-backed ones at `freezeUntil` or when compliance revokes |
@@ -462,7 +462,7 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | Area | Tests |
 |---|---|
 | Init | every init refusal; EOA and 7702 roles refused; `FORCE` without `FREEZE`; config stored before the initial-supply mint (allowlist refuses an unattested `creator`) |
-| Factory | `Factory.t.sol`: flags 5–8 on `NONE` and `UNDERLYING` with counts 0/1/2/8/9; flags 5–8 refused on both confidential kinds in `initialize`, including through `createTokenUnregistered` |
+| Factory | `Factory.t.sol`: flags 5–8 on `NORMAL` and `WRAPPED` with counts 0/1/2/8/9; flags 5–8 refused on both confidential kinds in `initialize`, including through `createTokenUnregistered` |
 | Paths | each row of the path table on both kinds, direct and meta-tx (generic, named, `mtxBatch`), refused at the shape step (gas of a refused intent < 40 k); `payWithFee` override emits exactly the base events |
 | Freeze | issuer-only 30 d, extension to 60 d from episode start, `FreezeTooLong`, `FreezeCooldown` after expiry and after unfreeze, record-backed freeze to `freezeUntil`, ended by `revokeOrder`, open-ended record |
 | Orders | record/revoke/execute; `SubjectNotFrozen`; `OrderExceeded` at the exact edge; beneficiary frozen/ineligible; same `orderId` with two subjects |
@@ -472,7 +472,7 @@ warm (≈ +0.5 k). Control calls add one library `DELEGATECALL` (≈ 2.6 k cold)
 | DEX | `SCaaSDex.mtxSettle` with a frozen maker, an ineligible taker, an ineligible fee recipient: only that settlement fails |
 | Keywords | the kind gas table and layout pins identical after the shape-check hook change |
 | Registry | admin contract only; attester add/remove; disable voids its attestations; batch attest; revoke by flags 0; expiry; `ELIGIBLE_CONTRACT` by admin only |
-| Hedera | the `IS_HEDERA` variants of `NONE` and `UNDERLYING` with flags 5–8 sign via HIP-632; HTS fail-closed checks and association on `UNDERLYING` |
+| Hedera | the `IS_HEDERA` variants of `NORMAL` and `WRAPPED` with flags 5–8 sign via HIP-632; HTS fail-closed checks and association on `WRAPPED` |
 | Sizes | `--sizes` within the cap of CTR-TOK-24 with flags 5–8 compiled in |
 | Invariant | handlers: transfers, meta-tx with fees, wraps/unwraps, freezes (both kinds), records, forced transfers, pauses with `warp`, role grants, revokes and renounces, `disableFeature`, attester disable and attestation expiry by the registry admin; invariants I1–I7 |
 
@@ -791,7 +791,7 @@ take unexchanged holders' new shares or redemption money.
 
 | Use | `tokenIn` | `tokenOut` | `num/den` | Window | `closable` | `sink` |
 |---|---|---|---|---|---|---|
-| Bond redemption at maturity | bond (kind `NONE` with flags 5–8, minter renounced) | payout stablecoin | face value per unit | `opensAt = maturity`, `closesAt = 0` or ≥ `opensAt + 365 d` per the terms | no | 0 (burn) |
+| Bond redemption at maturity | bond (kind `NORMAL` with flags 5–8, minter renounced) | payout stablecoin | face value per unit | `opensAt = maturity`, `closesAt = 0` or ≥ `opensAt + 365 d` per the terms | no | 0 (burn) |
 | Buyback (tender at a fixed price) | equity | stablecoin | price | issuer's choice, `capIn` | yes | issuer treasury or 0 |
 | Split `1 : k` | old equity (minter renounced) | new equity (pre-minted `k × supply` to the offer) | `k/1` | `closesAt = 0` (default) or ≥ 365 d | no | 0 (burn) |
 | Reverse split `k : 1` | old equity (minter renounced) | new equity | `1/k` | as split | no | 0 (burn) |
@@ -834,7 +834,7 @@ interface IExchangeOffer {
 (`NotATradeLeg`), `relayer ∈ {0, msg.sender}`. The offer computes `out`, requires `out ≥ receiveAmount` (`PriceNotMet`),
 `filledIn + amount ≤ capIn`, the window open, non-closable ⇒ `tokenIn.features()` has `MINTABLE` clear (`MinterLive`),
 `tokenOut.balanceOf(this) ≥ out`; calls `tokenIn.mtxTrade(leg, sig, TradeFill(amount, out, fee, msg.sender))` with `fee
-= ⌈out · leg.fee / 10⁶⌉`, requires the measured delta `== amount`; writes `filledIn`, burns (`NoUnderlyingToken.burn`)
+= ⌈out · leg.fee / 10⁶⌉`, requires the measured delta `== amount`; writes `filledIn`, burns (`NormalToken.burn`)
 or forwards to `sink`, pays `out − fee` to `destination` (or `from`) and `fee` to `msg.sender`, the relayer.
 `exchangeDirect`: the same with `transferFrom(msg.sender)`. (Replaced: a `trade`-op leg, `tokenIn.executeMetaTransaction(leg,
 sig)`, `MetaTxDex._terms`/`_checkRouting`, `feeRecipient ∉ {0, this}`, `out ≥ minCounterValue`, `filledIn + in ≤ capIn`,
@@ -842,7 +842,7 @@ sig)`, `MetaTxDex._terms`/`_checkRouting`, `feeRecipient ∉ {0, this}`, `out �
 
 `predictOffer` checks (`ParamsInvalid`/`SinkRequired`): `num, den ∈ [1, 2⁹⁶)`; `tokenIn ≠ tokenOut`; `closesAt == 0 ||
 closesAt > opensAt`; `sweepTo ≠ 0`; `closable == false` ⇒ `sink == 0` and (`closesAt == 0 || closesAt ≥ opensAt + 365
-days`); `sink == 0` ⇒ `tokenIn.kind() == NONE`. Offers need not be funded at creation (a
+days`); `sink == 0` ⇒ `tokenIn.kind() == NORMAL`. Offers need not be funded at creation (a
 redemption offer is created at issuance and funded at maturity); an exchange that cannot be paid reverts
 `InsufficientOut`.
 
@@ -905,10 +905,10 @@ names its kind, `initData` builder, required inputs, defaults, follow-up actions
 
 | Template | Kind | Defaults | Follow-ups |
 |---|---|---|---|
-| **Equity** (shares, units of a fund) | `NONE` + flags 5–8 | `decimals 0`; `initialSupply` to the issuer treasury Safe (the Safe calls `createToken`); `minter` = issuance multisig or 0 (fixed); `features` include `FREEZE|FORCE|PAUSE|ALLOWLIST`; `requiredFlags = KYC_DONE|SANCTIONS_CLEAR` (+ `ACCREDITED` for restricted offerings); fee `NONE` | dividends, splits/buybacks, managed market, vesting of employee grants |
-| **Bond** | `NONE` + flags 5–8 | `decimals 0` (1 unit = 1 denomination); supply minted at issuance, **minter renounced** after (required by the redemption offer); controls as equity; `termsHash` covers face, coupon dates and rate, maturity, redemption offer address and any prescription date | one `Distribution` per coupon date; one `ExchangeOffer` (redemption, burn, `opensAt = maturity`) created at issuance |
-| **Loyalty points** | `NONE` | `decimals 0`; `minter` = the issuer's mint contract (rate limits live there); fee `NONE`; no regulated module. Prepaid points: `UNDERLYING` with one leg and a rate (1 USDC → 100 points, [token-wrappers.md](token-wrappers.md#CTR-TOK-08)) | campaigns as `Distribution` of points; redemption = `pay` to the merchant |
-| **Voucher** (gift card, coupon) | `NONE` (or `UNDERLYING` with one leg for prepaid value) | `decimals 0`, 1 unit = 1 voucher of the stated face value; issuer minter; validity = the redemption offer's window | issuance by mint or `Distribution` (campaign); merchants accept by `pay`; the issuer redeems merchants' vouchers by a **closable** `ExchangeOffer` (voucher → payout, burn) whose `closesAt` is the expiry |
+| **Equity** (shares, units of a fund) | `NORMAL` + flags 5–8 | `decimals 0`; `initialSupply` to the issuer treasury Safe (the Safe calls `createToken`); `minter` = issuance multisig or 0 (fixed); `features` include `FREEZE|FORCE|PAUSE|ALLOWLIST`; `requiredFlags = KYC_DONE|SANCTIONS_CLEAR` (+ `ACCREDITED` for restricted offerings); fee `NONE` | dividends, splits/buybacks, managed market, vesting of employee grants |
+| **Bond** | `NORMAL` + flags 5–8 | `decimals 0` (1 unit = 1 denomination); supply minted at issuance, **minter renounced** after (required by the redemption offer); controls as equity; `termsHash` covers face, coupon dates and rate, maturity, redemption offer address and any prescription date | one `Distribution` per coupon date; one `ExchangeOffer` (redemption, burn, `opensAt = maturity`) created at issuance |
+| **Loyalty points** | `NORMAL` | `decimals 0`; `minter` = the issuer's mint contract (rate limits live there); fee `NONE`; no regulated module. Prepaid points: `WRAPPED` with one leg and a rate (1 USDC → 100 points, [token-wrappers.md](token-wrappers.md#CTR-TOK-08)) | campaigns as `Distribution` of points; redemption = `pay` to the merchant |
+| **Voucher** (gift card, coupon) | `NORMAL` (or `WRAPPED` with one leg for prepaid value) | `decimals 0`, 1 unit = 1 voucher of the stated face value; issuer minter; validity = the redemption offer's window | issuance by mint or `Distribution` (campaign); merchants accept by `pay`; the issuer redeems merchants' vouchers by a **closable** `ExchangeOffer` (voucher → payout, burn) whose `closesAt` is the expiry |
 
 Points and vouchers do not expire on chain (balances never change); expiry is the end of the issuer's redemption
 offer, disclosed as such. A loyalty or voucher issuer who needs freeze or allowlist sets flags 5–8 on the same kind;
@@ -919,11 +919,11 @@ The configuration wizard (in the app and any client system) works over `IOpenFac
 
 | Template | Factory call | Parameters | Status of primitive |
 |---|---|---|---|
-| Loyalty / rewards | `createToken` kind `NONE` (built; the v1 factory also has `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
-| Internal 1:1 money | `createToken` kind `UNDERLYING`, one leg, `num = den = 1` (built; the v1 factory also has `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
-| Wrapper with a rate | `createToken` kind `UNDERLYING` (built) | underlying, `num/den`, fixed or adjustable (rate role, delay, step) | **BUILT** |
-| Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` on `OpenFactoryV1` (`createToken` of kind `NONE_ZETHER`/`UNDERLYING_ZETHER` with P3) | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
-| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `UNDERLYING` with 2–8 legs (built: 1–8 legs) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
+| Loyalty / rewards | `createToken` kind `NORMAL` (built; the v1 factory also has `createMetaToken(1, 0, initData, salt)`) | name, symbol, decimals, `minter` = issuer's mint contract or treasury multisig, fee 0 | **BUILT** |
+| Internal 1:1 money | `createToken` kind `WRAPPED`, one leg, `num = den = 1` (built; the v1 factory also has `createMetaToken(1, underlying, …)`) | underlying stablecoin; wrap/unwrap through the clone | **BUILT** |
+| Wrapper with a rate | `createToken` kind `WRAPPED` (built) | underlying, `num/den`, fixed or adjustable (rate role, delay, step) | **BUILT** |
+| Confidential money | `createZetherToken(1, underlying, verifier, initData, salt)` on `OpenFactoryV1` (`createToken` of kind `NORMAL_ZETHER`/`WRAPPED_ZETHER` with P3) | `registry`, `shieldScale`, `maxDecryptableShielded ≤ 2^54`, `confidentialFee`, auditor key | **BUILT** (dev chains only) |
+| Multi-underlying money (e.g. xDAI/USDC/USDT) | `createToken` kind `WRAPPED` with 2–8 legs (built: 1–8 legs) | 2–8 underlyings, per-leg rates, guardian | **BUILT** |
 | Vesting / streaming | `VestingGrant` clone per grant | cliff, duration, interval or tranches, approver, revocability | **SPECIFIED** |
 | Controlled / security / bond | `createToken` with flags 5–8 + `Distribution` / `ExchangeOffer` | issuer and compliance contracts, the flags, `ComplianceRegistry` + `requiredFlags`, `termsHash` | **SPECIFIED** |
 | Non-fungible in-app assets (ERC-721/1155 with meta-tx) | new kinds | — | **PLANNED** |

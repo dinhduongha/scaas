@@ -48,8 +48,8 @@ to a scratch worktree from `main` and run green (full suite 910, Dex 36, DexOuts
   `vm.expectPartialRevert`: the external call would consume the cheatcode. Every DEX-only check has a named killer test
   (mutation table, Task 1 Step 8).
 - Code size is not a concern (owner: wait for the Glamsterdam fork); the ratchet baseline records sizes. Measured:
-  `SCaaSDex` 14,722 B (was 9,574), `DexPuller` 624 B, `TradeLib` 3,140 B, `NoUnderlyingToken` 22,960 B (+9),
-  `UnderlyingToken` 29,983 B (+9) — the two token entries of `size-baseline.json` are raised by those 9 bytes.
+  `SCaaSDex` 14,722 B (was 9,574), `DexPuller` 624 B, `TradeLib` 3,140 B, `NormalToken` 22,960 B (+9),
+  `WrappedToken` 29,983 B (+9) — the two token entries of `size-baseline.json` are raised by those 9 bytes.
 - Commit trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Never `git add claude-code-api.txt`.
 
 ## Review Focus
@@ -111,7 +111,7 @@ to a scratch worktree from `main` and run green (full suite 910, Dex 36, DexOuts
 - **H9 — Tests.** `test/v2/Dex.t.sol` keeps 36 tests: its two `OutsideLegNotBuilt` tests become
   `test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller` and `test_takerSellsAnOutsideToken_settles`;
   `test/v2/DexOutside.t.sol` adds 19. `OutsideLegNotBuilt` is removed from `ISCaaSDex`.
-- **H10 — Size baseline** raised for `NoUnderlyingToken` (22,960) and `UnderlyingToken` (29,983): the extra `precheck`
+- **H10 — Size baseline** raised for `NormalToken` (22,960) and `WrappedToken` (29,983): the extra `precheck`
   argument costs 9 bytes in every token (owner: size is not a concern until Glamsterdam).
 
 ---
@@ -676,7 +676,7 @@ index 0ee989c..fd630c3 100644
 +++ b/smartcontracts/evm/script/DeployBase.sol
 @@ -55,7 +55,7 @@ abstract contract DeployBase is Script {
          vm.serializeAddress("deploy", "token_factory", address(f));
-         vm.serializeAddress("deploy", "implementation_none", address(none));
+         vm.serializeAddress("deploy", "implementation_normal", address(none));
          // The DEX implementation (CTR-DEX-24): clones come from `createDex`; registered as DEX version 1.
 -        SCaaSDex dexImpl = new SCaaSDex{salt: salt}(address(f), uid);
 +        SCaaSDex dexImpl = new SCaaSDex{salt: salt}(address(f), uid, smartKeyAccountImpl);
@@ -690,10 +690,10 @@ index a49c42d..42010b9 100644
 @@ -1,6 +1,6 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
--  "NoUnderlyingToken": 22951,
--  "UnderlyingToken": 29974,
-+  "NoUnderlyingToken": 22960,
-+  "UnderlyingToken": 29983,
+-  "NormalToken": 22951,
+-  "WrappedToken": 29974,
++  "NormalToken": 22960,
++  "WrappedToken": 29983,
    "ZetherToken": 28860
  }
 ```
@@ -709,22 +709,22 @@ diff --git a/smartcontracts/evm/test/v2/Dex.t.sol b/smartcontracts/evm/test/v2/D
 index 2599cda..441d1a7 100644
 --- a/smartcontracts/evm/test/v2/Dex.t.sol
 +++ b/smartcontracts/evm/test/v2/Dex.t.sol
-@@ -9,6 +9,7 @@ import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+@@ -9,6 +9,7 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
  import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
  import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
  import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 +import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
  import {MockERC20} from "../helpers/Mocks.sol";
- import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+ import {UID_, normalInit} from "./helpers/V2Fixture.sol";
  
 @@ -45,7 +46,7 @@ contract DexTest is Test {
      function setUp() public {
          f = new OpenFactory(registrar, UID_);
-         address noneImpl = address(new NoUnderlyingToken(address(f), address(0), UID_, false));
+         address normalImpl = address(new NormalToken(address(f), address(0), UID_, false));
 -        dexImpl = new SCaaSDex(address(f), UID_);
 +        dexImpl = new SCaaSDex(address(f), UID_, address(0));
          vm.startPrank(registrar);
-         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, noneImpl);
+         f.registerImplementation(IOpenFactory.TokenKind.NORMAL, 1, normalImpl);
          f.registerDexImplementation(1, address(dexImpl));
 @@ -523,25 +524,57 @@ contract DexTest is Test {
      function test_gasBurning1271Maker_othersStillSettle() public { _hostileMaker(address(new Burner1271())); }
@@ -737,7 +737,7 @@ index 2599cda..441d1a7 100644
 +    /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
 +    function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
 +        vm.prank(registrar);
-+        f.deprecate(IOpenFactory.TokenKind.NONE, 1, "x");
++        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
          vm.prank(admin);
 -        dex.setMarket(address(a), address(usdc), true);
 -        assertEq(dex.tokenKind(address(usdc)), 2);
@@ -835,7 +835,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {DexPuller} from "../../src/dex/DexPuller.sol";
@@ -843,7 +843,7 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {Burner1271, Bomb1271} from "./Dex.t.sol";
-import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
@@ -904,17 +904,17 @@ contract DexOutsideTest is Test {
     OpenFactory f;
     SCaaSDex dex;
     address work;             // the "SmartKeyAccount implementation" of this chain
-    NoUnderlyingToken a;      // SCaaS: Alice, the taker, sells it
+    NormalToken a;      // SCaaS: Alice, the taker, sells it
     MockERC20 usdc;           // outside: Dave, the maker, sells it
 
     function setUp() public {
         work = address(new Work1271());
         f = new OpenFactory(address(this), UID_);
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), UID_, false)));
+        f.registerImplementation(IOpenFactory.TokenKind.NORMAL, 1,
+            address(new NormalToken(address(f), address(0), UID_, false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, work)));
-        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
-            noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));
+        a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1,
+            normalInit("A", "A", 0, 1e6, alice, address(0)), "a"));
         dex = SCaaSDex(f.createDex(1, ISCaaSDex.DexConfig(admin, 0, treasury, false), "dex"));
         usdc = _list(new MockERC20("USD Coin", "USDC", 6));
         _fund(usdc, dave);
@@ -1505,7 +1505,7 @@ index 8938adf..8fe827b 100644
 @@ -52,7 +52,7 @@ intent is a booked fact. Every kind below shares these properties:
  | Receiver pays | `mtxPayReceiverFee` | payer signs `MetaTransfer`, payee co-signs `ReceiverFee`; the bound relayer | token | absolute fee from the payee's balance | tx | **BUILT** (EVM, Hedera) | [CTR-MTX-05](metatx.md#CTR-MTX-05), [-06](metatx.md#CTR-MTX-06) |
  | Generic gasless call | `mtxExecute`, `mtxBatch`, `executeMetaTransaction` | subject signs `MetaTransaction`; any relayer | the contract's selector allowlist | per fee class, after the call | tx | **BUILT** | [CTR-MTX-12](metatx.md#CTR-MTX-12), [-19](metatx.md#CTR-MTX-19), [-20](metatx.md#CTR-MTX-20) |
- | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
+ | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `WrappedToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
 -| DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` clone in progress (P2b-1), outside legs in progress (P2b-2); pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
 +| DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
  | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **SPECIFIED** (P2c) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |

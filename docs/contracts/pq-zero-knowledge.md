@@ -103,7 +103,7 @@ immutable `chainUid`, which enters every statement and `entryRef`, so no proof, 
 another chain with the same chain id; the UA registration PoP is portable and carries no chain (UA-8, [CTR-UA-07](accounts.md#CTR-UA-07)); the chain binding lives in the statements and tokens above and in the registry's `UAAuth` domain.
 
 The node binds registry, `chainUid()` and the RPC genesis hash per chain profile and refuses a mismatch.
-`OpenFactory.kindEnabled(NONE_PQZ / UNDERLYING_PQZ)` starts `false` (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. The SCaaS testnet is
+`OpenFactory.kindEnabled(NORMAL_PQZ / WRAPPED_PQZ)` starts `false` (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. The SCaaS testnet is
 the owner's named target and runs our client. The owner moved the private chain off its former id 9000 because 9000
 is also Evmos Testnet, a public chain; 7622 is not assumed unique either, hence `chain_uid`. The self-test is what
 keeps PQZ off chains whose client is not ours. **Public chains** (owner, 2026-10-08): PQZ is meant for public
@@ -819,7 +819,7 @@ indexers follow events for "what changed" and read bytes from state. Contract co
 the same namespace (D14): `PqzStateLib` (init, shield, rollover, prepare), `PqzTransferLib` (op 1, op 7), `PqzBurnLib`
 (burn, refresh, unwrap debit), `PqzViewLib` (statement views, disclosure), over the internal `PqzCore` (types, constants,
 the shared steps); the libraries return what the debit moved (`PqzCore.Paid`) and the token pays exactly that. Each library
-is below 24,576 B and both tokens fit the hard 65,536 B limit (UnderlyingPqzToken 60,907 B, NoUnderlyingPqzToken 48,412 B at
+is below 24,576 B and both tokens fit the hard 65,536 B limit (WrappedPqzToken 60,907 B, NormalPqzToken 48,412 B at
 the 5h Task 3 fix; the earlier 4 KiB margin target was dropped by the owner, the size ratchet still applies).
 
 <a id="limits"></a>
@@ -882,7 +882,7 @@ refused ([CTR-PQZ-06](#CTR-PQZ-06)).
   `ProofRejected` by a merge before it; wallets use the same-call `shieldIn` top-up for "shield and spend now".
 - **Spendable** after `ROLL_AGE` and a rollover (anyone's), at once in the owner's own debit with `p` past it (the inline
   window), or in the same call as a debit's `shieldIn` top-up from the signer's public balance.
-- **Wrap-shield.** On `UNDERLYING_PQZ`, `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)` takes a leg's
+- **Wrap-shield.** On `WRAPPED_PQZ`, `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)` takes a leg's
   underlying, mints `minted` public units **to `SHIELD_POOL`** (`minted % shieldScale ≠ 0` ⇒ `AmountNotScaled`) and
   writes the same TRIVIAL entry. BUILT (P6g plan D1): an earlier text pulled the underlying with `transferFrom`; in the
   token tree the public ERC-20 balance is the layer below the confidential one, so a direct call and an envelope op both
@@ -1109,7 +1109,7 @@ rows 1, 2, 4, 6, 7 with `d = digits(amount)` **public** (no `d` witness, no rows
 fee − amount` (checked); the token then moves `amount·shieldScale` public units **from `SHIELD_POOL` to `recipient`** (no mint;
 a UA recipient: pool → its ledger balance), the `txFee` from the pool to the beneficiary's public balance, and `shieldIn` into the pool. Events:
 `Debited(ua, rolled, floor, blob)` and `Unshielded(ua, amount, recipient, blob)` (`amount = 0` for a refresh). The randomness of
-`u' ‖ v_f` is fresh on every build, never derived from the counter ([CTR-PQZ-19](#CTR-PQZ-19)). On `UNDERLYING_PQZ`,
+`u' ‖ v_f` is fresh on every build, never derived from the counter ([CTR-PQZ-19](#CTR-PQZ-19)). On `WRAPPED_PQZ`,
 `mtxUnshieldUnwrap` takes the same arguments plus the leg (`u`, `minOut`): it burns `amount·shieldScale` from `SHIELD_POOL` and the
 leg pays the underlying (a UA recipient: a SCaaS ledger leg through `transferToUA`, else `UALegNotLedger`); the leg and
 `minOut` are folded into the binding ([CTR-PQZ-25](#CTR-PQZ-25)).
@@ -1237,7 +1237,7 @@ bytes32 indexed recipient, address blob)` (burn or refresh, `amount = 0`; the as
 recipient, widened with the UA recipient in Task 3b). There is no `PqzRegistered` event: the PQZ key is in `UARegistered(…, attrs, …)` of the registry (or `UAPqzKeyAdded` for a key added by `setPqzKey`) ([accounts.md](accounts.md#CTR-UA-17)). `PqzPlainCredit` is gone with `plainPending`.
 `Shielded.from` is `_msgSender()`; for a UA signer (`uaExecute`) it is `UA_POOL`, not the UA (the UA is in the same transaction's
 `UAMetaTransactionExecuted` and in the `UATransfer(ua, SHIELD_POOL, …)` of the pool move). `mtxUnshieldUnwrap` takes the leg as the calldata struct
-`Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)`, pays through `UnderlyingLib.payOutTo` (native id: `quoteUnwrap` + `payOut`;
+`Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)`, pays through `WrappedLib.payOutTo` (native id: `quoteUnwrap` + `payOut`;
 derived UA: `quoteUnwrapToUA` + `payOutToUA`, `UALegNotLedger` for an outside leg) after the debit and the pool burn. A `beneficiary` that differs from the payload's word
 reverts `BeneficiaryMismatch(payload, given)`.
 
@@ -1369,7 +1369,7 @@ from its own public balance, its nonce, and for `mtxShield` the public amount it
 
 **PQ-complete
 path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
-`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `UNDERLYING_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `uaWrap`, then relays `uaExecute(mtxShield)`, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
+`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `uaWrap`, then relays `uaExecute(mtxShield)`, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
 classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
 ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
 existing meta-tx path. An address-path envelope signer is ECDSA/1271, hence the UA path. A broken envelope key can
@@ -1403,7 +1403,7 @@ which pays the underlying straight to `recipient`, so no envelope `unwrap` op is
 | `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)` | [transfer](#transfer) | `envelopeBinding` = this envelope's, folded with the mode ([CTR-PQZ-25](#CTR-PQZ-25)) |
 | `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)` (burn and refresh) | burn and refresh | `envelopeBinding` = this envelope's, raw: not folded with the mode (`prepareBurn` never calls `_bindMode`) |
 | `mtxShield(bytes32,uint256)` | shield, source = the signer's public balance | none: no statement; the envelope signature covers `(ua, amount)` |
-| `UNDERLYING_PQZ`: `mtxWrapShield(address,uint256,bytes32)`, `mtxUnshieldUnwrap` | wrap-shield, unshield-unwrap | wrap-shield: none (no statement); the unwrap folds `(leg, minOut)` into the binding. `mtxWrapShield` is on the `mtxExecute` allowlist only, not the UA one; with the native coin as the leg it cannot be relayed at all (see below) |
+| `WRAPPED_PQZ`: `mtxWrapShield(address,uint256,bytes32)`, `mtxUnshieldUnwrap` | wrap-shield, unshield-unwrap | wrap-shield: none (no statement); the unwrap folds `(leg, minOut)` into the binding. `mtxWrapShield` is on the `mtxExecute` allowlist only, not the UA one; with the native coin as the leg it cannot be relayed at all (see below) |
 
 `mtxRollOver(bytes32,uint256)` and `mtxPrepareAcc(bytes32,uint256)` are allowlisted on both paths (Task R, owner 2026-10-20: every `mtx*` write is relayable; `ABSOLUTE`, the outer fee may be 0; static 68-byte shape; unbatched like the other PQZ ops). **One exception** (C0-18, owner ruling 2026-10-27): `mtxWrapShield` with the native coin as the leg is not relayable, because the leg is paid from `msg.value` and a relayer cannot supply the signer's native coin; the holder wraps directly, then relays `mtxShield` (an ERC-20 leg is relayable on `mtxExecute`). Neither `mtxRollOver` nor `mtxPrepareAcc` needs an authority: the relayed call does what the direct call does, and the signer's only role is to pay the outer fee. BUILT, commit `b5e61c96`.
 
@@ -1434,7 +1434,7 @@ again. An earlier ≈ 2 M estimate, which had motivated a mixin reading `m.data`
 `mtxUnshieldUnwrap`, `mtxRollOver` and the PQZ-only `mtxPrepareAcc`; they implement `IConfidentialToken` (one selector per shared function
 across both layers) and `IPqzToken` (the PQZ-only functions, views and errors). Events: `Shielded`, `Credited`, `Debited`,
 `ConfidentialTransfer`, `ConfidentialTransferMulti`, `RolledOver`, `Unshielded`. Views keep their `pqz*` names (`pqzAccount`, `pqzAcc`,
-`pqzPending`, `pqzPendingCt`, `pqzEntryBlob`). Kinds `NONE_PQZ`, `UNDERLYING_PQZ` are built; the combined kinds 6 and 7 are dropped
+`pqzPending`, `pqzPendingCt`, `pqzEntryBlob`). Kinds `NORMAL_PQZ`, `WRAPPED_PQZ` are built; the combined kinds 6 and 7 are dropped
 ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)). There is no `pqzRegister`. Earlier names: `fund`, `pqzBurn`, `rollOver`, then
 `pqzShield`, `pqzTransfer*`, `pqzUnshield`, `pqzRollOver`, `pqzPrepareAcc`. Multi-recipient transfers:
 [CTR-PQZ-25](#CTR-PQZ-25) / [CTR-PQZ-26](#CTR-PQZ-26) (`mtxConfidentialTransfer*` = op 7, the single path `mtxConfidentialTransferSingle*`); Z9 is already PQZ ([CTR-PQZ-14](#CTR-PQZ-14)), Z10 is not needed (`SENDER_S` is per leg), Z12 is [CTR-PQZ-24](#CTR-PQZ-24).
@@ -2119,7 +2119,7 @@ estimates below predate this table.
 | `register` `mldsa65` / `mldsa44` (PoP on the precompile) | 687,743 / 509,018 | |
 | `registry.requireAuthorized` `mldsa65` / `mldsa44` (`eth_estimateGas`) | 301,776 / 287,268 | incl. 21,000 and the 3.3 / 2.4 KB signature calldata |
 | `mtxShield` | 97,801 | public units burned |
-| `mtxWrapShield` (`UNDERLYING_PQZ`) | 159,757 | |
+| `mtxWrapShield` (`WRAPPED_PQZ`) | 159,757 | |
 | `mtxConfidentialTransfer` BUNDLE, auditor on, fee | 10,720,732 | precompile row 5,409,000 + SSTORE2 of the 16.7 KB bundle + 80 KB calldata |
 | `mtxConfidentialTransfer` BUNDLE, auditor on, 1 inline credit | 11,039,035 | +16.5 KB calldata |
 | `mtxConfidentialTransfer` commit-reveal, auditor off (`R_TX0`) | 7,142,520 | no SSTORE2; the 57-byte memo |
@@ -2128,7 +2128,7 @@ estimates below predate this table.
 | `mtxUnshieldUnwrap` (leg payout) | 5,594,862 | |
 | `mtxRollOver` (1 credit) | 710,370 | |
 | `verifyTransferAmount` `SENDER_S` / `RECEIVER_X` / `AUDITOR` (`eth_estimateGas`) | 3,650,832 / 3,616,461 / 3,618,801 | views; op 4 / op 5 rows 2,601,000 / 2,567,000 |
-| `setPqzEnabled(true)` (self-test) / `createToken` `NONE_PQZ` / `UNDERLYING_PQZ` | 2,612,253 / 3,022,079 / 3,192,615 | each creation runs the self-test; measured before plan 5g-Z2, whose `setKindEnabled` runs no self-test (the token's `initialize` does) |
+| `setPqzEnabled(true)` (self-test) / `createToken` `NORMAL_PQZ` / `WRAPPED_PQZ` | 2,612,253 / 3,022,079 / 3,192,615 | each creation runs the self-test; measured before plan 5g-Z2, whose `setKindEnabled` runs no self-test (the token's `initialize` does) |
 
 A BUNDLE transfer with many inline credits approached the 16,777,216 cap (≈ +0.32 M per credit) before plan 5h; see below
 for the state redesign, where an inline credit costs ≈ 36 k.
@@ -2202,10 +2202,10 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | Contract | Role | Notes |
 |---|---|---|
 | `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | BUILT (P6g D2): {31337, 1337, 7622}; `selfTest` = op 6 answers exactly the build's set's hash (`PqzSet.SELFTEST`: `n2304-kmax4096` `0x23d7a1db…c97c0`, `n2048-kmax1024` `0xed910a2c…d205`, `n2560-kmax16384` `0x167c772e…45e7`, `n2816-kmax65536` `0x0aa1dfe2…1882`); the set's ids only, at `0x…5caa0f01` (plan 5h Task 8d part 2) |
-| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NONE_PQZ` / `UNDERLYING_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
+| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NORMAL_PQZ` / `WRAPPED_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
-| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1, state redesign plan 5h part A) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + four external libraries in the one namespace `scaas.pqz` over the internal `PqzCore` (`PqzStateLib` init / shield / rollover / prepare, `PqzTransferLib` op 1 and op 7, `PqzBurnLib` burn / refresh / unwrap debit, `PqzViewLib` statement views and disclosure; they are the release's `Env.libs`, code hashes checked by `deployImplementation`, plan 5g-Z2); clones via `OpenFactory.createToken` behind the kind gate (`setKindEnabled`); disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `minDecoyFee`. Sizes at the 5h Task 3 fix: `UnderlyingPqzToken` 60,907 B, `NoUnderlyingPqzToken` 48,412 B (hard limit 65,536; the 4 KiB margin target was dropped), libraries 6,378 / 13,194 / 7,633 / 12,111 B (each < 24,576) |
+| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1, state redesign plan 5h part A) as the kinds `NORMAL_PQZ` (`NormalPqzToken`) and `WRAPPED_PQZ` (`WrappedPqzToken`): `PqzLayer` on `MetaTokenBase` + four external libraries in the one namespace `scaas.pqz` over the internal `PqzCore` (`PqzStateLib` init / shield / rollover / prepare, `PqzTransferLib` op 1 and op 7, `PqzBurnLib` burn / refresh / unwrap debit, `PqzViewLib` statement views and disclosure; they are the release's `Env.libs`, code hashes checked by `deployImplementation`, plan 5g-Z2); clones via `OpenFactory.createToken` behind the kind gate (`setKindEnabled`); disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `minDecoyFee`. Sizes at the 5h Task 3 fix: `WrappedPqzToken` 60,907 B, `NormalPqzToken` 48,412 B (hard limit 65,536; the 4 KiB margin target was dropped), libraries 6,378 / 13,194 / 7,633 / 12,111 B (each < 24,576) |
 | `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the `shieldIn` term and `subTrivial` / `addMem` / `subMem` / `loadBlob` / `isZero` for the queue, `reduce`, the `< q` check; the [stored form](#stored-form) (`packCd` / `packMem`, `expandAt`, `addBlob`, the rollover accumulators `addBlobEO` / `combineEO`) | BUILT (P6g; P46 and `PqzSet` in plan 5h Task 8d part 2): pure Solidity, no precompile; checked on the set's vectors (round trip, all `q − 1`, the bit layout) |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 

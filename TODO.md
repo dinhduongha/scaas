@@ -55,6 +55,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          the calldata embedding them); also rename the deploy JSON keys `implementation_none` /
          `implementation_{none,underlying}_zether_bls12381` (`deployments/<chainid>.json`, read by e2e and the node);
          start after the `ua8` merge (rebase onto main then). Inventory: `scratchpad/token-rename-report.md`;
+         **BUILT 2026-10-30 on branch `token-rename`** (worktree `.claude/worktrees/token-rename`, on main `920f13d0`;
+         code `5823c740`, vectors `593af6e5`, then docs and gate logs; report `scratchpad/token-rename-report-2.md`);
+         merge after the owner's go. `metatx-parity.json` needed no change (CREATE clones; its `gas` column is stale
+         on main in eight PQZ rows, compared only under `PARITY_GAS=1`).
        - **UA-8 step 1 (EVM `UARegistry`)** — IN PROGRESS on branch `ua8` (worktree `.claude/worktrees/ua8`; plan
          `docs/superpowers/plans/2026-10-30-ua8-portable-registrations.md`): A1–A10 complete and reviewed, A11 paused
          at WIP `6dd00de7` (2026-10-30), then A12, A13, final review, owner go to merge. As soon as the plan is written (owner 2026-10-29, moved up from step 3):
@@ -327,7 +331,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   p99 51.0 ms vs 60 ms; D6 `pqz-core/pqzl/rust/runs/d6/results-d6.md`) — Task 14, own branch; (4) M = 16 Rust rows
   (`--multi-bench`) — Task 13; (5) deferred minors (heap check in `verify_only` C-M5, pqz-ffi OOM and fallible `Ctx`
   tests, panic-path test, `PQZL_MEM_*` echo, gate PASS line file, two-limb S3 oracle) — Task 5e.
-- [ ] **Rename token family** (owner 2026-10-13 / -18 / -19: right after the PQZL Rust port follow-ups, before P6h /
+- [ ] **Rename token family** (BUILT on branch `token-rename` 2026-10-30, merge pending; owner 2026-10-13 / -18 / -19: right after the PQZL Rust port follow-ups, before P6h /
   P6i / P6j / P6-PUB): `UnderlyingToken` → `WrappedToken`, `NoUnderlyingToken` → `NormalToken`, the whole family
   (`UnderlyingZetherToken` / `NoUnderlyingZetherToken`, `UnderlyingLib`, `IUnderlyingToken`, `TokenKind` `NONE` →
   `NORMAL`, `UNDERLYING` → `WRAPPED` and the `_ZETHER` / `_PQZ` / `_ZETHER_PQZ` variants); names only (enum numbers, ABI,
@@ -417,7 +421,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   - Node items that T17 pulled forward (verify, they are believed done): bound-payee relay-fee jobs (Cosmos, Solana) refused
     unless `params.relay_fee.relay_bound_payee = true`; a plain pay to the router / marker / executor refused in every adapter;
     unknown or non-string `op.kind` refused in every adapter (T17c `3a98e74a`).
-  - HederaLib errors (`HtsQueryFailed`, `AssociateFailed`) are not in the `NoUnderlying*` ABIs (pre-existing, unreachable from the
+  - HederaLib errors (`HtsQueryFailed`, `AssociateFailed`) are not in the `Normal*` ABIs (pre-existing, unreachable from the
     library).
   - Test nits: the parity probe's write-time guard asserts some, not every, unlisted row refused (`MetaTxParity.t.sol:2212`);
     `bothFail_feeExceedsCapFixed_callReverts` is not a fee fault and no both-fail row has a FIXED fee over the cap; tests of T3
@@ -502,7 +506,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 - [ ] **P1c–P1e parked:** P1c test gaps (list in COMPLETED.md "P1c notes" (e)); P1d test gaps (`mtxExecute(single-asset
   selector)` on a two-leg token, native `UnderlyingTransferMismatch`, `addReserve` with native `msg.value > amount`,
   guardian revoke); a native 4th leg in the `WrapperInvariant` handler + §12 row for CTR-TOK-26; deploy scripts deploy
-  `UnderlyingToken` once it fits EIP-170; the size ratchet is lowered by hand; `deploy.sh` needs `PRIVATE_KEY` (KMS /
+  `WrappedToken` once it fits EIP-170; the size ratchet is lowered by hand; `deploy.sh` needs `PRIVATE_KEY` (KMS /
   hardware wallet needs a change); libraries placed from the sender's nonce (E7). Full notes in COMPLETED.md.
 - [ ] Mandate epoch-bound pay and period-keeping `setMandate` (M1/M2) are EVM-only in P4; the other families keep their rules. One follow-up per family, owner decision first: Solana (generation binding), Sui, Aptos, Soroban, Cosmos, TON (one-shot or own pay binding).
 - [ ] Agent mandates (research `docs/research/node-ai-agents.md` row c, not accepted): several delegates per token, per-payee caps, a co-sign threshold, a gateway route for mandate payments — owner decision.
@@ -539,7 +543,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   CREATE2 through a factory, called by meta-transaction. Spec first: `docs/contracts/templates.md`. Full note in
   COMPLETED.md.
 - [ ] **P0 follow-ups (minor doc nits, deferred by the final review):** `zether.md` (single-recipient-only gas-cap
-  figures, ~1327 `recipient` vs `to`, informal `zetherShield(Y…)` prose), architecture sequence 5 (`UnderlyingLib`),
+  figures, ~1327 `recipient` vs `to`, informal `zetherShield(Y…)` prose), architecture sequence 5 (`WrappedLib`),
   `asset-suite.md` 893–897 and the old `IRegulatedToken` names, `clients/app.md` CLI-APP-26, `node/store.md`:157,
   `node/job-api.md`:328, CTR-TOK-26 wording, `dropped-artifacts.tsv` duplicates / bare `273`, CTR-ACC-80, budget
   warnings in `token-wrappers.md` / `dex.md` (owner). Full list in COMPLETED.md.

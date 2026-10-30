@@ -89,7 +89,7 @@
 **Files:**
 - Modify: `smartcontracts/evm/src/metatx/ERC20MetaTx.sol` (`mtxTrade`, `uaTrade`, `mtxCancelOrder`, `uaCancelOrder`, `mtxInvalidateNonces`, `uaInvalidateNonces`), `smartcontracts/evm/src/metatx/MetaTokenBase.sol` (`mtxPayReceiverFee`, `uaPayReceiverFee` payee check; delete `_chargeFee`, `_requireNativeUASignature`, `_erc1271Gas`, the Hedera branch of `_requireValidSignature`), token interfaces for any error that now lives only in the library
 - Create: `smartcontracts/evm/legacy/metatx-v1/` (copies of `_checkCall`, `_callFee`, `_checkTransfer`, `_checkUATransfer`, `_uaAuthorize`, the Hedera overrides as on `main`, with a README line naming the commit)
-- Modify: `smartcontracts/evm/test/v2/Underlying.t.sol` (`test_libraryErrorsAreInTheTokenAbi` over `MtxPipelineLib` × every kind's artifact)
+- Modify: `smartcontracts/evm/test/v2/Wrapped.t.sol` (`test_libraryErrorsAreInTheTokenAbi` over `MtxPipelineLib` × every kind's artifact)
 
 - [ ] **Step 1: Failing test.** Extend `test_libraryErrorsAreInTheTokenAbi`: every error selector in `out/MtxPipelineLib.sol/MtxPipelineLib.json` `abi` appears in each of the six kinds' artifact ABIs (`SigCheckGasStarved`, `ModeFeeInvalid`, `FeeRecipientRequired`, `HtsQueryFailed` named in the assertion message).
 - [ ] **Step 2:** `../../scripts/capped forge test --match-test test_libraryErrorsAreInTheTokenAbi` — FAIL.
@@ -115,7 +115,7 @@
 ### Task 6: Release pins — `DeployBase`, factory fixtures, `e2e.py` link closure (§4; R5, R6; gap §11.1 (2))
 
 **Files:**
-- Modify: `smartcontracts/evm/script/DeployBase.sol` (`_deployTokenFactory` NONE env `libs` += `MtxPipelineLib`; `_deployZether` env += `MtxPipelineLib`), `smartcontracts/evm/test/v2/Factory.t.sol` and every fixture building an `Env` by hand, `smartcontracts/evm/script/pqz/e2e.py` (`Deployer.linked()` transitive)
+- Modify: `smartcontracts/evm/script/DeployBase.sol` (`_deployTokenFactory` NORMAL env `libs` += `MtxPipelineLib`; `_deployZether` env += `MtxPipelineLib`), `smartcontracts/evm/test/v2/Factory.t.sol` and every fixture building an `Env` by hand, `smartcontracts/evm/script/pqz/e2e.py` (`Deployer.linked()` transitive)
 - Create: `smartcontracts/evm/test/v2/LinkClosure.t.sol`, `smartcontracts/evm/script/pqz/test_e2e_linked.py`
 
 **Interfaces:**

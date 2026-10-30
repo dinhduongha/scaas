@@ -423,7 +423,7 @@ index 363064d..7b4e356 100644
  /// @title The one token factory of a chain (CTR-TOK-03, CTR-TOK-25): an append-only catalogue of implementations per
  ///        kind, EIP-1167 clones by `CREATE2` initialised in the same call, no power over any token it created.
 @@ -40,6 +41,13 @@ interface IOpenFactory {
-     /// @notice `NONE*` 0 legs, `UNDERLYING*` 1–8.
+     /// @notice `NORMAL*` 0 legs, `WRAPPED*` 1–8.
      error UnderlyingCountInvalid(uint256 n);
      error SaltAlreadyUsed(address existing);
 +    error DexVersionUnknown(uint64 version);
@@ -532,12 +532,12 @@ import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
-import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 
 /// `SCaaSDex` as a factory clone (CTR-DEX-24) settling SCaaS legs (CTR-DEX-16, -17, -11): one taker against many makers,
 /// every leg pulled through its token's `mtxTrade`, every party paid in the same call, the fee split, conservation.
@@ -556,20 +556,20 @@ contract DexTest is Test {
     OpenFactory f;
     SCaaSDex dexImpl;
     SCaaSDex dex;
-    NoUnderlyingToken a; // the taker sells A
-    NoUnderlyingToken b; // the makers sell B
+    NormalToken a; // the taker sells A
+    NormalToken b; // the makers sell B
 
     function setUp() public {
         f = new OpenFactory(registrar, UID_);
-        address noneImpl = address(new NoUnderlyingToken(address(f), address(0), UID_, false));
+        address normalImpl = address(new NormalToken(address(f), address(0), UID_, false));
         dexImpl = new SCaaSDex(address(f), UID_);
         vm.startPrank(registrar);
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, noneImpl);
+        f.registerImplementation(IOpenFactory.TokenKind.NORMAL, 1, normalImpl);
         f.registerDexImplementation(1, address(dexImpl));
         vm.stopPrank();
-        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));
-        IFactoryToken.TokenConfig memory cb = noneInit("B", "B", 0, 1e6, bob, address(0));
-        b = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, cb, "b"));
+        a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, normalInit("A", "A", 0, 1e6, alice, address(0)), "a"));
+        IFactoryToken.TokenConfig memory cb = normalInit("B", "B", 0, 1e6, bob, address(0));
+        b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, cb, "b"));
         vm.prank(bob);
         b.transfer(carol, 500_000);
         dex = SCaaSDex(f.createDex(1, ISCaaSDex.DexConfig(admin, 200_000, treasury, false), "dex"));
@@ -579,7 +579,7 @@ contract DexTest is Test {
 
     // ------------------------------------------------------------------ helpers
 
-    function _order(address from, NoUnderlyingToken receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
+    function _order(address from, NormalToken receiveToken, uint256 amount, uint256 receiveAmount, uint256 fee)
         internal view returns (ITradeToken.TradeOrder memory o)
     {
         o.from = from;
@@ -593,7 +593,7 @@ contract DexTest is Test {
         o.validUntil = block.timestamp + 300;
     }
 
-    function _leg(uint256 pk, NoUnderlyingToken sell, ITradeToken.TradeOrder memory o, uint256 fill)
+    function _leg(uint256 pk, NormalToken sell, ITradeToken.TradeOrder memory o, uint256 fill)
         internal view returns (ISCaaSDex.Leg memory l)
     {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, sell.tradeOrderDigest(o));
@@ -844,7 +844,7 @@ index 0b04445..0ee989c 100644
 @@ -5,6 +5,7 @@ import {Script} from "forge-std/Script.sol";
  import {OpenFactory} from "../src/factory/OpenFactory.sol";
  import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
- import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
+ import {NormalToken} from "../src/metatx/NormalToken.sol";
 +import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
  
  /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
@@ -853,13 +853,13 @@ index 0b04445..0ee989c 100644
          require(u != bytes32(0), "RPC gave no block 0 hash");
      }
  
--    /// @notice The token factory and the `NONE` implementation by CREATE2, `NONE` registered as version 1 when the
--    ///         deployer is the registrar; writes `token_factory`, `implementation_none`, `chain_uid` into the JSON
--    ///         object `"deploy"`. Transitional (P1d ruling D2): `UnderlyingToken` is over EIP-170 until the size work,
--    ///         so `UNDERLYING` is not deployed yet.
-+    /// @notice The token factory, the `NONE` implementation and the `SCaaSDex` implementation by CREATE2, each
+-    /// @notice The token factory and the `NORMAL` implementation by CREATE2, `NORMAL` registered as version 1 when the
+-    ///         deployer is the registrar; writes `token_factory`, `implementation_normal`, `chain_uid` into the JSON
+-    ///         object `"deploy"`. Transitional (P1d ruling D2): `WrappedToken` is over EIP-170 until the size work,
+-    ///         so `WRAPPED` is not deployed yet.
++    /// @notice The token factory, the `NORMAL` implementation and the `SCaaSDex` implementation by CREATE2, each
 +    ///         registered as version 1 when the deployer is the registrar; writes `token_factory`,
-+    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`. `UNDERLYING` is
++    ///         `implementation_normal`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`. `WRAPPED` is
 +    ///         not deployed: over EIP-170 on real chains (owner: wait for Glamsterdam).
      function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
          internal returns (OpenFactory f)
@@ -867,7 +867,7 @@ index 0b04445..0ee989c 100644
 @@ -53,6 +54,11 @@ abstract contract DeployBase is Script {
          _gate(address(none));
          vm.serializeAddress("deploy", "token_factory", address(f));
-         vm.serializeAddress("deploy", "implementation_none", address(none));
+         vm.serializeAddress("deploy", "implementation_normal", address(none));
 +        // The DEX implementation (CTR-DEX-24): clones come from `createDex`; registered as DEX version 1.
 +        SCaaSDex dexImpl = new SCaaSDex{salt: salt}(address(f), uid);
 +        if (register) f.registerDexImplementation(1, address(dexImpl));

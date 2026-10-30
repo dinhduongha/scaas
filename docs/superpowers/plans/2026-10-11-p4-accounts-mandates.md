@@ -88,7 +88,7 @@ checkers 0 errors and 0 fact misses, mutation probe 69/69 killed.
   `test_owner_executes_and_cannot_reenter`.
 - **The 400 k cap stays consistent (CTR-ACC-05).** The tokens and the DEX compute the clone codehash from
   `SMART_KEY_ACCOUNT_IMPL`; `Deploy.s.sol` passes the new factory's `IMPLEMENTATION` to `MetaToken`, `_deployTokenFactory`
-  (NONE, the DEX, the Zether kinds); `test_cloneCodehashIsWhatTokensCap`, `ZetherDeploy.t` (`SMART_KEY_ACCOUNT_IMPL ==
+  (NORMAL, the DEX, the Zether kinds); `test_cloneCodehashIsWhatTokensCap`, `ZetherDeploy.t` (`SMART_KEY_ACCOUNT_IMPL ==
   new SmartKeyAccountFactory(ZUID).IMPLEMENTATION()`), the existing token-side `test_erc1271Gets400kOnlyAsSmartKeyAccountClone`
   and the DeployBase `require(dexImpl.SMART_KEY_ACCOUNT_IMPL() == none.SMART_KEY_ACCOUNT_IMPL())`.
 - **Mandate money rules (CTR-ACC-06).** Delegate only (`NotDelegate`), mandate live (`NoMandate`, `MandateExpired` at
@@ -179,8 +179,8 @@ checkers 0 errors and 0 fact misses, mutation probe 69/69 killed.
 - **L16 — No node code.** The node relays `call` jobs with Odoo-built calldata and has no call table yet (NODE-JOB-20,
   P5): the renamed rows of job-api.md stay transitional until the release that deploys P4 contracts.
 - **L17 — Size.** `SmartKeyAccount` 18,738 B, `SmartKeyAccountFactory` 1,250 B (init 20,842 B), `MandateWallet` 15,430 B,
-  `HederaMandateWallet` 15,918 B (all under EIP-170); tokens +8 B (L1): baseline `NoUnderlyingToken` 22,986,
-  `UnderlyingToken` 30,044, `NoUnderlyingZetherToken` 30,667, `UnderlyingZetherToken` 40,389.
+  `HederaMandateWallet` 15,918 B (all under EIP-170); tokens +8 B (L1): baseline `NormalToken` 22,986,
+  `WrappedToken` 30,044, `NormalZetherToken` 30,667, `WrappedZetherToken` 40,389.
 - **L18 — Docs.** Transitional notes become built text with net ≤ 0 lines on budgeted pages; `decisions.md` and
   `docs/history/` stay records (four renamed tokens go to `dropped-artifacts.tsv` for the C7/facts ledger);
   `token-axes.svg` carries no P4 text (only `account-forms.svg` changes; both alt texts checked).
@@ -274,14 +274,14 @@ index 1ea808f..c6230f9 100644
 @@ -1,7 +1,7 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
--  "NoUnderlyingToken": 22978,
--  "UnderlyingToken": 30036,
--  "NoUnderlyingZetherToken": 30659,
--  "UnderlyingZetherToken": 40381
-+  "NoUnderlyingToken": 22986,
-+  "UnderlyingToken": 30044,
-+  "NoUnderlyingZetherToken": 30667,
-+  "UnderlyingZetherToken": 40389
+-  "NormalToken": 22978,
+-  "WrappedToken": 30036,
+-  "NormalZetherToken": 30659,
+-  "WrappedZetherToken": 40381
++  "NormalToken": 22986,
++  "WrappedToken": 30044,
++  "NormalZetherToken": 30667,
++  "WrappedZetherToken": 40389
  }
 diff --git a/smartcontracts/evm/src/metatx/MetaTokenBase.sol b/smartcontracts/evm/src/metatx/MetaTokenBase.sol
 index 2c6ae9e..f4296d0 100644
@@ -349,8 +349,8 @@ index 45d0b6d..fc5b72e 100644
 -import {SubjectAccountFactory} from "../../src/account/SubjectAccountFactory.sol";
 +import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
  import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
- import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
- import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+ import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+ import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 @@ -33,7 +33,7 @@ contract DeployHarness is DeployBase {
  contract ZetherDeployTest is Test {
      /// EIP-7825 (Osaka): the per-transaction gas cap.
@@ -771,8 +771,8 @@ import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
-import {V2Fixture, UID_, noneInit} from "../v2/helpers/V2Fixture.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {V2Fixture, UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -862,15 +862,15 @@ contract SmartKeyAccountTest is WebAuthnSoft {
 
     SmartKeyAccountFactory internal fac;
     SmartKeyAccount internal acct;
-    NoUnderlyingToken internal t;
+    NormalToken internal t;
 
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
-        NoUnderlyingToken impl = new NoUnderlyingToken(address(this), fac.IMPLEMENTATION(), UID_, false);
-        t = NoUnderlyingToken(_clone(address(impl), address(this), new address[](0),
-            abi.encode(noneInit("Points", "PTS", 0, 0, address(this), address(this)))));
+        NormalToken impl = new NormalToken(address(this), fac.IMPLEMENTATION(), UID_, false);
+        t = NormalToken(_clone(address(impl), address(this), new address[](0),
+            abi.encode(normalInit("Points", "PTS", 0, 0, address(this), address(this)))));
         acct = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), GUARDIAN)));
         t.mint(address(acct), 1000);
     }
@@ -2092,8 +2092,8 @@ contract HederaMandateWallet is MandateWallet {
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import {V2Fixture, UID_, noneInit} from "../v2/helpers/V2Fixture.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {V2Fixture, UID_, normalInit} from "../v2/helpers/V2Fixture.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -2118,7 +2118,7 @@ abstract contract MandateFixture is V2Fixture {
     address internal delegate = vm.addr(DELEGATE_PK);
     address internal npp = address(0x4EE);
     address internal stranger = address(0x5745);
-    NoUnderlyingToken internal t;
+    NormalToken internal t;
     MandateWallet internal w;
 
     function setUp() public virtual {
@@ -2227,7 +2227,7 @@ contract MandateWalletTest is MandateFixture {
     }
 
     function test_payee_is_per_token() public {
-        NoUnderlyingToken t2 = _none(address(this), 0, address(this));
+        NormalToken t2 = _none(address(this), 0, address(this));
         t2.mint(address(w), 100);
         vm.prank(owner);
         w.setMandate(address(t2), delegate, 10, 10, 1 days, uint64(block.timestamp + 1 days));
@@ -2694,9 +2694,9 @@ index c2d19a2..b1b19db 100644
  import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
  import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 +import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
++import {NormalToken} from "../../src/metatx/NormalToken.sol";
 +import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
-+import {noneInit} from "../v2/helpers/V2Fixture.sol";
++import {normalInit} from "../v2/helpers/V2Fixture.sol";
  
  /// Shared writer of the account-side `MetaTransaction` KATs (metatx.md §15: the `MandateWallet` and `SmartKeyAccount`
  /// vectors are `MetaTransaction` vectors in their own domains), chain 7622 with its real `chain_uid`.
@@ -2716,9 +2716,9 @@ index c2d19a2..b1b19db 100644
 +    function test_mandateWalletKat() public {
 +        vm.chainId(7622);
 +        vm.warp(1_800_000_000);
-+        NoUnderlyingToken tok =
-+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
-+        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
++        NormalToken tok =
++            NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), UID, false))));
++        tok.initialize(address(this), 1, normalInit("Points", "PTS", 6, 0, address(this), address(this)));
 +        MandateWallet w = new MandateWallet(vm.addr(OWNER_PK), UID);
 +        tok.mint(address(w), 1_000e6);
 +        vm.startPrank(vm.addr(OWNER_PK));
@@ -3740,7 +3740,7 @@ index a61503a..6315e38 100644
 --- a/TODO.md
 +++ b/TODO.md
 @@ -16,7 +16,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
- | P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NONE`, `UNDERLYING`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
+ | P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NORMAL`, `WRAPPED`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
  | P2 | **P2a** `TradeLib` token side + `mtxWrap` (done, merged `6a5c6b0`); **P2b-1** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` for SCaaS legs (done, merged `0510c7d`; old `SCaaSDex` kept as `SCaaSDexV1` for the node until P5); **P2b-2** outside legs (`DexOrder`, `DexPuller`, DEX-side cancels, ERC-1271 cap, bounded `MatchFailed`) (done, merged `7049c78`; `checkOrder` not built, H7); **P2c** exchange path `mtxExchange`/`mtxExchangeVia`, `setExchangeTarget`, `setListedOnly` (done, merged `d85fc8b`) | MT-5 |
  | P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; `ZetherToken` to `legacy/p3/` (owner: backup, not delete) (done on branch `p3-zether`, merge pending the final review) | MT-6 |
 -| P4 | `MandateWallet`, `SmartKeyAccount` (rename, every family) on `MetaTxBase` | MT-7 (+ rename in NM-*) |
@@ -3751,7 +3751,7 @@ index a61503a..6315e38 100644
 @@ -49,7 +49,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
        `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
        `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
- - [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (UnderlyingToken), inherited by `UnderlyingZetherToken` (P3); the approve rule holds on both Zether kinds (tested in P3).
+ - [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (WrappedToken), inherited by `WrappedZetherToken` (P3); the approve rule holds on both Zether kinds (tested in P3).
 -- [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the other domains: SmartKeyAccount, MandateWallet P4, UA registry UA F1; Zether digests done in P3) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
 +- [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the UA registry, UA F1; Zether digests done in P3, SmartKeyAccount and MandateWallet in P4) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
        UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
@@ -3870,11 +3870,11 @@ index 0cfdc68..c03d26f 100644
  clones of one implementation share the name; replay safety comes from `verifyingContract` and the salt
 @@ -233,7 +233,7 @@ by rolling to block 1), else the script stops; unset it defaults to that hash.
  
- The script creates `deployments/` itself. It deploys `OpenFactory` with `NoUnderlyingToken` as version 1 of `NONE` (`UnderlyingToken` is over
+ The script creates `deployments/` itself. It deploys `OpenFactory` with `NormalToken` as version 1 of `NORMAL` (`WrappedToken` is over
  EIP-170 and waits for the size work) and, for the node until P5, the v1 line: `OpenFactoryV1` with `MetaToken` (version 1
 -of `META`, when the registrar is the deployer), `SubjectAccountFactory`, `MetaTxDex` and `SCaaSDexV1`. The JSON gains
 +of `META`, when the registrar is the deployer), `MetaTxDex` and `SCaaSDexV1`, plus `SmartKeyAccountFactory`. The JSON gains
- `token_factory`, `implementation_none`, `dex_implementation` (the `SCaaSDex` implementation) and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
+ `token_factory`, `implementation_normal`, `dex_implementation` (the `SCaaSDex` implementation) and `chain_uid`. `forge script … --broadcast` needs `--sender <deployer address>`; `DEPLOY_SALT` is optional.
  
  <a id="CTR-GEN-06"></a>**CTR-GEN-06** — **Every SCaaS EVM contract is deployed through a deterministic CREATE2
 diff --git a/docs/contracts/accounts.md b/docs/contracts/accounts.md
@@ -4021,7 +4021,7 @@ index 77b1fdc..ff412fa 100644
 @@ -165,7 +165,7 @@ They are locked by known-answer vectors generated by forge (`vm.writeJson`):
  `smartcontracts/evm/test/vectors/metatx_kat.json` (v3 `MetaTransaction`, `MetaTxBase`) and `metatransfer_kat.json` (`MetaTransfer`);
  `metatx_v1_kat.json` is the built v1 struct (`LegacyMetaTransaction`), read by scaas-node and clientkeys until P5,
- the two v3 vectors written by `TokenKat.t.sol` on a `NoUnderlyingToken` clone, each with domain (with `salt`), struct, `structHash`, digest and the signature of key `0xA11CE`; the `MandateWallet` and
+ the two v3 vectors written by `TokenKat.t.sol` on a `NormalToken` clone, each with domain (with `salt`), struct, `structHash`, digest and the signature of key `0xA11CE`; the `MandateWallet` and
 -`SmartKeyAccount` vectors are `MetaTransaction` vectors in their own domains. The contract, node and client tests read
 +`SmartKeyAccount` vectors are `MetaTransaction` vectors in their own domains (`mandate_pay_kat.json`, `mandate_revoke_kat.json`, `smart_key_account_kat.json`, P4). The contract, node and client tests read
  the same files; changing a typehash turns three tests red. Clients decode `MetaTransaction.data` against the
@@ -4053,7 +4053,7 @@ index 77b1fdc..ff412fa 100644
 +| `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `cancelRecovery`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
  
  Transfer and payment are `MetaTransfer`s ([CTR-MTX-23](#CTR-MTX-23)); neither `transfer` nor `pay` is ever
- allowlisted, so one transfer has one encoding and one digest. `UnderlyingToken`'s two-argument `unwrap(uint256,address)` is not listed (the same intent with a
+ allowlisted, so one transfer has one encoding and one digest. `WrappedToken`'s two-argument `unwrap(uint256,address)` is not listed (the same intent with a
 @@ -912,15 +912,13 @@ named in brackets). The v2 tiers run on the new tree (last bullet).
    `WrapperHasNoMint`; errors `NotMinter`, `NotAWrapper`) and `HederaMetaToken`; the Zether kinds are on `MetaTokenBase` (P3; the old `ZetherMetaTx` is in `legacy/p3/`). Invariants as
    built: `Σ balance == totalSupply`; wrapper `reserve >= totalSupply`, fuzzed as `reserve >= supply`.
@@ -4091,19 +4091,19 @@ index 72613d1..bcbb797 100644
 +++ b/docs/networks/evm.md
 @@ -172,12 +172,12 @@ chain, deploy it first (the keyless presigned deployment transaction of that pro
  and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
- places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` with `NoUnderlyingToken` as
- version 1 of `NONE` (`UnderlyingToken` is over EIP-170 and is not deployed until the size work) and, for the node until
+ places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` with `NormalToken` as
+ version 1 of `NORMAL` (`WrappedToken` is over EIP-170 and is not deployed until the size work) and, for the node until
 -P5, the v1 line (`OpenFactoryV1` with `MetaToken` as version 1 of `META`, `MetaTxDex`), `SubjectAccountFactory` and
 +P5, the v1 line (`OpenFactoryV1` with `MetaToken` as version 1 of `META`, `MetaTxDex`), `SmartKeyAccountFactory` (P4) and
  `SCaaSDexV1` (plus the `SCaaSDex` implementation, registered as DEX version 1 on the factory), optionally a tier-1 demo token ([deploy](../contracts/README.md#build-ci-and-pins)).
  
  It writes
 -`deployments/<chainid>.json` (`factory`, `implementation`, `dex`, `subject_account_factory`,
--`subject_account_implementation`, `scaas_dex`, `demo_token`, and `token_factory`, `implementation_none`, `dex_implementation`, `chain_uid`),
+-`subject_account_implementation`, `scaas_dex`, `demo_token`, and `token_factory`, `implementation_normal`, `dex_implementation`, `chain_uid`),
 +`deployments/<chainid>.json` (`factory`, `implementation`, `dex`, `smart_key_account_factory`,
-+`smart_key_account_implementation` (were `subject_account_*` before P4), `scaas_dex`, `demo_token`, and `token_factory`, `implementation_none`, `dex_implementation`, `chain_uid`),
++`smart_key_account_implementation` (were `subject_account_*` before P4), `scaas_dex`, `demo_token`, and `token_factory`, `implementation_normal`, `dex_implementation`, `chain_uid`),
  which seeds the client and the node configuration. forge writes it during the simulation, before the broadcast; `deploy.sh` puts the previous file back (or removes the new one) when the broadcast fails.
- Zether (built, P3; dev chains only, UNAUDITED): opt in with `DEPLOY_ZETHER=1` (default off, so a plain anvil deploys as before P3, every contract under EIP-170; on a non-dev chain the script refuses). It adds the account registry, `ZetherDisclosure`, `ZetherStatements`, both verifiers and the two confidential implementations (versions 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, the factory's Zether gate on when the deployer is the registrar), and the keys `zether_registry`, `zether_disclosure`, `zether_statements`, `zether_verifier_bn254`, `zether_verifier_bls12381`, `implementation_none_zether`, `implementation_underlying_zether`. The implementations exceed 24,576 B and the BLS verifier's deploy uses ~14.1 M gas (forge's estimate ~15.0 M), so `deploy.sh` then passes `--code-size-limit 65536 --gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails) and the anvil needs `--code-size-limit 65536`; `ZetherDeploy.t` checks each deploy fits.
+ Zether (built, P3; dev chains only, UNAUDITED): opt in with `DEPLOY_ZETHER=1` (default off, so a plain anvil deploys as before P3, every contract under EIP-170; on a non-dev chain the script refuses). It adds the account registry, `ZetherDisclosure`, `ZetherStatements`, both verifiers and the two confidential implementations (versions 1 of `NORMAL_ZETHER` and `WRAPPED_ZETHER`, the factory's Zether gate on when the deployer is the registrar), and the keys `zether_registry`, `zether_disclosure`, `zether_statements`, `zether_verifier_bn254`, `zether_verifier_bls12381`, `implementation_normal_zether`, `implementation_wrapped_zether`. The implementations exceed 24,576 B and the BLS verifier's deploy uses ~14.1 M gas (forge's estimate ~15.0 M), so `deploy.sh` then passes `--code-size-limit 65536 --gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails) and the anvil needs `--code-size-limit 65536`; `ZetherDeploy.t` checks each deploy fits.
  Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
 diff --git a/docs/node/job-api.md b/docs/node/job-api.md
 index aa831a8..6961762 100644

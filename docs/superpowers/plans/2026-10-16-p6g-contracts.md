@@ -5,7 +5,7 @@
 **Goal:** the P6g row of the [P6 roadmap](2026-10-12-p6-roadmap.md): the PQZ contracts on the finished token tree —
 `PqzSafety` (allowlist + precompile self-test), `PqzCt` (ciphertext arithmetic), `UAPqzVerifier` (the `pqz-mlwe`
 0x0142 kind through the `PQZ` precompile op 3), the PQZ layer (`PqzLayer` + `PqzLib`) on `MetaTokenBase` with the kinds
-`NONE_PQZ` / `UNDERLYING_PQZ` (CTR-PQZ-15/21/22/23/24), `OpenFactory.pqzEnabled`; forge tests with the precompile
+`NORMAL_PQZ` / `WRAPPED_PQZ` (CTR-PQZ-15/21/22/23/24), `OpenFactory.pqzEnabled`; forge tests with the precompile
 mocked and real ciphertext arithmetic; then the owner mandate of 2026-10-15 (TODO.md): **deploy on the SCaaS testnet** (UA
 registry generation 1 with `UAMldsaVerifier` on the `MLDSA44` / `MLDSA65` precompiles and `UAPqzVerifier`, the factory,
 the implementations, tokens) and an **e2e with real proofs** — register, shield, transfer, rollover, burn, refresh,
@@ -15,8 +15,8 @@ Not here: op 7 `R_TXM` entry points (after P6-ANON S3–S8, D8), the clients' `p
 
 **Architecture:** classical Zether's shape, one-to-one (D1). `PqzLib` is an external library (ERC-7201 `scaas.pqz`)
 holding the state and the logic (statements, checks, the precompile call, account updates, entries, disclosure);
-`PqzLayer` (abstract, on `MetaTokenBase`) holds the entry points and views; `NoUnderlyingPqzToken` and
-`UnderlyingPqzToken` combine it with the public tiers exactly as `NoUnderlyingZetherToken` / `UnderlyingZetherToken`
+`PqzLayer` (abstract, on `MetaTokenBase`) holds the entry points and views; `NormalPqzToken` and
+`WrappedPqzToken` combine it with the public tiers exactly as `NormalZetherToken` / `WrappedZetherToken`
 do. Ciphertexts live in calldata and events, hashes in storage (CTR-PQZ-07); public amounts are `plainPending`
 (CTR-PQZ-06). The contract builds every statement from storage, the registry's stored keys and calldata, hashes it into
 `authDigest`, checks the PQ `authSig` through `registry.requireZetherAuthorized(…, zkCovered = true)` and then calls
@@ -56,22 +56,22 @@ plan only adds one example file there and touches nothing else.
 |---|---|
 | Registry | `UARegistry` gen 1 has slot `_CFG18` for `pqz-mlwe` (P6c): stored 16,384-byte `pk` (`keyPtr` SSTORE2), `_checkPqzAuthRef` (PQ-only `authRef`, PQ-dominant `msig`), PoP by `IUAPopVerifier.verifyPop(pk, message, pop)` capped at the kind's `verifyCap`; `requireZetherAuthorized(ua, digest, auth, true)` runs `requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, …)`; `keyOf(ua)` returns the stored key. `UAKinds.isZether` covers 0x0142. Nothing to change. |
 | ML-DSA | `UAMldsaVerifier(kind, candidate, probeValid, probeInvalid)` (P6a/P6c) uses the precompile when the probe passes; vectors `smartcontracts/vectors/ua/pq_signatures.json` (P6f e2e already probed both levels on the copy). |
-| Zether layer | `ZetherLayer` / `ZetherLib` / `NoUnderlyingZetherToken` / `UnderlyingZetherToken`: shield burns public units, unshield mints (or pays a leg), `_ticketBinding()` gives the envelope binding inside `mtxExecute`, `unwrapBinding(u, minOut)` binds a direct unshield-unwrap, `ZetherSafety` gates dev chains 31337 / 1337. |
+| Zether layer | `ZetherLayer` / `ZetherLib` / `NormalZetherToken` / `WrappedZetherToken`: shield burns public units, unshield mints (or pays a leg), `_ticketBinding()` gives the envelope binding inside `mtxExecute`, `unwrapBinding(u, minOut)` binds a direct unshield-unwrap, `ZetherSafety` gates dev chains 31337 / 1337. |
 | Meta-tx base | `MetaTxBase._execute` writes `_envelopeBinding(m)` into the ticket; `ERC20MetaTx._uaExecute` passes binding 0 with the note "safe only while no confidential selector is on the UA allowlist (L4-4); when one joins (P6), write the envelope binding here". `mtxBatch` / `uaBatch` batch any allowlisted selector. |
-| Factory | `TokenKind` already lists `NONE_PQZ` (4), `UNDERLYING_PQZ` (5), `*_ZETHER_PQZ` (6, 7); `_checkImplementation` refuses kinds above `UNDERLYING_ZETHER` (`KindReserved`). `ConfidentialConfig {verifier, auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode}`. |
-| Sizes | baseline `NoUnderlyingZetherToken` 43,624, `UnderlyingZetherToken` 55,528 (init 57,223): over EIP-170, under 7622's 65,536. |
+| Factory | `TokenKind` already lists `NORMAL_PQZ` (4), `WRAPPED_PQZ` (5), `*_ZETHER_PQZ` (6, 7); `_checkImplementation` refuses kinds above `WRAPPED_ZETHER` (`KindReserved`). `ConfidentialConfig {verifier, auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode}`. |
+| Sizes | baseline `NormalZetherToken` 43,624, `WrappedZetherToken` 55,528 (init 57,223): over EIP-170, under 7622's 65,536. |
 | Vectors | `smartcontracts/vectors/pqz/`: statement rows with full statement bytes (`statement_*.json`), `enc.json` Add / Sub with Trivial as `ct_keccak`, proofs per id, `selftest.json` (`0xed910a2c…d205`), `pqz_kat.py` (KeyGen, Enc, `trivial`, `digits`, `build_debit`, witnesses). |
 | SCaaS testnet | head ≈ 340, base fee 7 wei, gas limit 23.4 M and rising; PQZ / ML-DSA live (P6f `runs/2026-10-16-live.txt`). Nothing of SCaaS deployed since the reset (no CREATE2 deployer either). |
 
 ## 2. Decisions (controller proposals, owner may override; recorded in decisions.md)
 
 - **D1 — Mirror the Zether layer** (design note 1). `PqzLayer` (abstract, on `MetaTokenBase`) + `PqzLib` (external,
-  ERC-7201 `scaas.pqz`) + kinds `NONE_PQZ` = 4 (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` = 5 (`UnderlyingPqzToken`).
+  ERC-7201 `scaas.pqz`) + kinds `NORMAL_PQZ` = 4 (`NormalPqzToken`) and `WRAPPED_PQZ` = 5 (`WrappedPqzToken`).
   `pqzShield(ua, amount)` **burns** `amount · shieldScale` public units of the signer, exactly as `zetherShield`
   (pq-zero-knowledge.md §7.3's `transferFrom` of the underlying predates the token tree, where the public ERC-20 balance is
-  the layer below; §7.3 is amended). `pqzUnshield` mints public units to `recipient`; on `UNDERLYING_PQZ`,
+  the layer below; §7.3 is amended). `pqzUnshield` mints public units to `recipient`; on `WRAPPED_PQZ`,
   `pqzWrapShield` (a leg's underlying straight into `plainPending`) and `pqzUnshieldUnwrap` (straight out to a leg)
-  follow `zetherWrapShield` / `zetherUnshieldUnwrap` (CTR-PQZ-22). `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` stay
+  follow `zetherWrapShield` / `zetherUnshieldUnwrap` (CTR-PQZ-22). `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` stay
   reserved. `OpenFactory.pqzEnabled` + `setPqzEnabled` (registrar; `true` needs `PqzSafety`'s chain and a passing
   self-test), `KindReserved` above 5; a `*_PQZ` creation re-checks the gate, the chain and the verifier (D9).
 - **D2 — `PqzSafety`** (note 2): a library, allowlist {31337, 1337, 7622} hard-coded (a new chain = a code change and a
@@ -89,7 +89,7 @@ plan only adds one example file there and touches nothing else.
 - **D4 — v3 path and batching** (note 4): `ERC20MetaTx._uaExecute` writes `_uaEnvelopeBinding(m)` (new virtual hook,
   default 0) into the ticket, as the address path does with `_envelopeBinding(m)`; the PQZ layer overrides it with
   tag `SCAAS-PQZ-UA-ENVELOPE-V1` and `m.from` as `bytes32`. The four PQZ selectors (`pqzShield`, `pqzTransfer*`,
-  `pqzUnshield`, `pqzRollOver`; on `UNDERLYING_PQZ` also `pqzWrapShield`, `pqzUnshieldUnwrap`) join both allowlists,
+  `pqzUnshield`, `pqzRollOver`; on `WRAPPED_PQZ` also `pqzWrapShield`, `pqzUnshieldUnwrap`) join both allowlists,
   fee class `ABSOLUTE`. A new hook `_batchable(sel)` (default true) in `mtxBatch` / `uaBatch`; the PQZ layer returns
   false for its selectors ⇒ `MtxNotBatchable(sel)` (CTR-PQZ-21).
 - **D5 — Sizes** (note 5): the SCaaS testnet has `maxCodeSize` 0x10000 from block 0; no size-reduction work (owner: wait for
@@ -182,14 +182,14 @@ flags as the Zether kinds'), `smartcontracts/evm/src/factory/IOpenFactory.sol`, 
 pinned layout changes (it must not).
 
 - Tests (with Task 5's token): `KindReserved` for 6 / 7; `setPqzEnabled(true)` refused off the allowlist and without
-  the self-test; `createToken(NONE_PQZ)` refused with the gate off, a verifier without `isSupportedOnThisChain() = 1`;
+  the self-test; `createToken(NORMAL_PQZ)` refused with the gate off, a verifier without `isSupportedOnThisChain() = 1`;
   the existing suites unchanged (binding 0 for every non-PQZ token).
 
-### Task 5: `PqzLib`, `PqzLayer`, `NoUnderlyingPqzToken`
+### Task 5: `PqzLib`, `PqzLayer`, `NormalPqzToken`
 
 **Files:** create `smartcontracts/evm/src/pqz/IPqzToken.sol`, `smartcontracts/evm/src/pqz/PqzLib.sol`,
-`smartcontracts/evm/src/pqz/PqzLayer.sol`, `smartcontracts/evm/src/pqz/NoUnderlyingPqzToken.sol`,
-`smartcontracts/evm/test/pqz/helpers/PqzFixture.sol`, `smartcontracts/evm/test/pqz/PqzNone.t.sol`.
+`smartcontracts/evm/src/pqz/PqzLayer.sol`, `smartcontracts/evm/src/pqz/NormalPqzToken.sol`,
+`smartcontracts/evm/test/pqz/helpers/PqzFixture.sol`, `smartcontracts/evm/test/pqz/PqzNormal.t.sol`.
 
 - Entry points and views of pq-zero-knowledge.md §9.4 (selectors normative): `pqzShield(bytes32,uint256)`,
   `pqzTransfer` / `pqzTransferCompact` / `pqzTransferNoBundle` `(bytes payload, bytes acc, bytes[] inline, bytes proof,
@@ -207,9 +207,9 @@ pinned layout changes (it must not).
   word by word and the body against `statement_transfer.json`; the precompile input exact (`vm.expectCall`);
   disclosure statement and verdicts; `pendingHash` slots deleted below `floor` (≤ 32 per debit).
 
-### Task 6: `UnderlyingPqzToken`, relaying, sizes
+### Task 6: `WrappedPqzToken`, relaying, sizes
 
-**Files:** create `smartcontracts/evm/src/pqz/UnderlyingPqzToken.sol`, `smartcontracts/evm/test/pqz/PqzUnderlying.t.sol`,
+**Files:** create `smartcontracts/evm/src/pqz/WrappedPqzToken.sol`, `smartcontracts/evm/test/pqz/PqzWrapped.t.sol`,
 `smartcontracts/evm/test/pqz/PqzRelay.t.sol`; modify `smartcontracts/evm/size-baseline.json`, `scripts/size_gate.py`.
 
 - `pqzWrapShield(address u, uint256 amountIn, bytes32 ua)`, `pqzUnshieldUnwrap(bytes payload, bytes acc, bytes[] inline,
@@ -236,8 +236,8 @@ pinned layout changes (it must not).
 ### Task 8: Deploy and e2e on the SCaaS testnet
 
 - One run: `UAMldsaVerifier` ×2 (`PRECOMPILE()` = `…0012` / `…0013`), `UAPqzVerifier` (PQZL), `UARegistry` gen 1,
-  `OpenFactory`, the libraries, both implementations, `setPqzEnabled(true)`, tokens (`NONE_PQZ` BUNDLE / FULL auditor,
-  `UNDERLYING_PQZ` COMPACT / OPTIONAL over a `NONE` underlying); ML-DSA `authRef` UAs, three `pqz-mlwe` UAs (alice,
+  `OpenFactory`, the libraries, both implementations, `setPqzEnabled(true)`, tokens (`NORMAL_PQZ` BUNDLE / FULL auditor,
+  `WRAPPED_PQZ` COMPACT / OPTIONAL over a `NONE` underlying); ML-DSA `authRef` UAs, three `pqz-mlwe` UAs (alice,
   bob, auditor) with real `R_REG` proofs; shield, transfer (both auditor forms where the mode allows), rollover, a
   transfer with inline credits, burn, refresh, unshield-unwrap, disclosure views (all three kinds), a v1 and a v3
   relayed transfer; ML-DSA `requireAuthorized` gas both levels.
@@ -256,13 +256,13 @@ pinned layout changes (it must not).
   `enc.json` ops[0], `T − Trivial(1000)` = rows[0], 16-term sums exact. **T3** `UAPqzVerifier` (`186f4a4`): constructor
   self-test + `R_REG` probe, exact op-3 input, `pk < q`; a `pqz-mlwe` UA in a gen-1 registry (3,693,727 gas with a
   mocked PoP). **T4** base hooks, kinds 4 / 5, factory gate (`5a24fdc`). **T5** `PqzLib`, `PqzLayer`,
-  `NoUnderlyingPqzToken` (`befc7d8`): the token-built transfer statement body equals `statement_transfer.json`'s byte
-  for byte. **T6** `UnderlyingPqzToken`, relay tests, sizes (`80d6ced`). **T7** tooling (`0bb7690`). **T8** SCaaS testnet (`8b5a322`).
-- **Forge:** 31 PQZ tests in `test/pqz/` (PqzCt 5, UAPqzVerifier 4, PqzNone 13, PqzUnderlying 2, PqzRelay 3) and the
+  `NormalPqzToken` (`befc7d8`): the token-built transfer statement body equals `statement_transfer.json`'s byte
+  for byte. **T6** `WrappedPqzToken`, relay tests, sizes (`80d6ced`). **T7** tooling (`0bb7690`). **T8** SCaaS testnet (`8b5a322`).
+- **Forge:** 31 PQZ tests in `test/pqz/` (PqzCt 5, UAPqzVerifier 4, PqzNormal 13, PqzWrapped 2, PqzRelay 3) and the
   whole suite (1,272 tests: 1,256 passed, 10 skipped) green except the six `test/pqzh/ligero` `test_mutations_*` (`MemoryOOG`), which fail the same on `main`
   `b6185dd` (not touched here). Two existing tests updated for kinds 4 / 5 being built (`AdminLib.t.sol`,
   `v2/Factory.t.sol`).
-- **Sizes** (runtime / init, B): `NoUnderlyingPqzToken` 50,483 / 52,073, `UnderlyingPqzToken` 62,572 / 64,169 (2,964 B
+- **Sizes** (runtime / init, B): `NormalPqzToken` 50,483 / 52,073, `WrappedPqzToken` 62,572 / 64,169 (2,964 B
   under 7622's 65,536), `PqzLib` 12,725, `UAPqzVerifier` 1,314; the four existing tokens +137 B each (the two hooks);
   `size-baseline.json` ratchet entries, size gate 0 errors.
 - **SCaaS testnet** (log `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`, 89 checks, 0 failures, 479 s; the first run,
@@ -271,9 +271,9 @@ pinned layout changes (it must not).
   `0xe120dcaba543fb54a37cc5dddcc11199f0d4073e` / 65 `0xf422e821237328257e9ae78d30a6081753cd67be` (`PRECOMPILE()` =
   `…0012` / `…0013`), `UAPqzVerifier` (PQZL) `0x3423b8c21222aac7bcfaa3b330e651f74e0d6188`, `OpenFactory`
   `0x61ff7446c5610cd99970e37b0f1dffea00789ca4`, `PqzLib` `0x2182c58ec11ca75831ae99ff04da3c3eb27de195`,
-  `NoUnderlyingPqzToken` `0x6a23b0bdbb88c34589366388194e403b78176248`, `UnderlyingPqzToken`
-  `0x0f39a5bcb7149ec90d9139d4437b7833b85bc802`, tokens pqUSD (`NONE_PQZ`, BUNDLE, FULL)
-  `0x802348c24edfbb3fabd9a1e3038eec225c3485ec`, pqW (`UNDERLYING_PQZ` over a MockERC20 tUSD, COMPACT, OPTIONAL)
+  `NormalPqzToken` `0x6a23b0bdbb88c34589366388194e403b78176248`, `WrappedPqzToken`
+  `0x0f39a5bcb7149ec90d9139d4437b7833b85bc802`, tokens pqUSD (`NORMAL_PQZ`, BUNDLE, FULL)
+  `0x802348c24edfbb3fabd9a1e3038eec225c3485ec`, pqW (`WRAPPED_PQZ` over a MockERC20 tUSD, COMPACT, OPTIONAL)
   `0xfb5b3b351c7aa91612bd6bd5989a4904589b9113`. Gas per path: pq-zero-knowledge.md §9.3 "Measured on the SCaaS testnet (P6g)".
 - **Open:** D16's PQZH token (not run; PQZH debit paths unmeasured on chain); the sender memo body is random filler
   in the e2e (the CTR-ZTH-50 HKDF memo is the client's, P6h); op 7 entry points (D8); `pqzUnshield` to a `bytes32`

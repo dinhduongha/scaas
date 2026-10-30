@@ -241,20 +241,20 @@ model (fixed address, changed only by a chain upgrade).
   ([protocol_params.go](https://github.com/ethereum/go-ethereum/blob/17e0a6ca4ed14f46997f6d0f1edb4cca33b86024/params/protocol_params.go),
   [legacypool.go](https://github.com/ethereum/go-ethereum/blob/17e0a6ca4ed14f46997f6d0f1edb4cca33b86024/core/txpool/legacypool/legacypool.go)).
   [source]
-- **Applied to `deployImplementation`** (sizes from `smartcontracts/evm/size-baseline.json`: `UnderlyingPqzToken`
-  60,105 B runtime / 61,702 B init, `UnderlyingZetherToken` 57,475 / 59,170 B; SCaaS testnet `maxCodeSize` 65,536 and
+- **Applied to `deployImplementation`** (sizes from `smartcontracts/evm/size-baseline.json`: `WrappedPqzToken`
+  60,105 B runtime / 61,702 B init, `WrappedZetherToken` 57,475 / 59,170 B; SCaaS testnet `maxCodeSize` 65,536 and
   init 131,072 per `src/chains/private7622/README.md`):
   - init code + appended `Env` (≈ 1 KB) ≈ 62.7 KB: over 49,152 on any chain without EIP-7954, under 131,072 on the SCaaS testnet;
     the transaction is under the 128 KB pool limit. The factory route adds no new limit compared with a direct
     `0x4e59` deployment: the same EIP-3860 check applies to the factory's `CREATE2`. [estimate]
   - gas, **corrected 2026-10-27 (review C5-1)**: the old figure (code deposit 200 × 60,105 ≈ 12.0 M, ≈ 12.9 M in all,
     "3.8 M to spare under 2^24") is the pre-Amsterdam schedule. Under EIP-8037 (Amsterdam, NET-EVM-06) the code deposit is
-    state gas at 1,530 per byte, 61,519 B = 94.1 M for `UnderlyingPqzToken`, on top of about 4.1 M regular gas (measured,
-    `PqzUnderlying.t.sol`), and the transaction's gas may not exceed the block gas limit: a release needs
-    `runtime × 1,530 + 2^24`, about 75.8 M (`NoUnderlyingToken`) to 110.9 M (`UnderlyingPqzToken`), see
+    state gas at 1,530 per byte, 61,519 B = 94.1 M for `WrappedPqzToken`, on top of about 4.1 M regular gas (measured,
+    `PqzWrapped.t.sol`), and the transaction's gas may not exceed the block gas limit: a release needs
+    `runtime × 1,530 + 2^24`, about 75.8 M (`NormalToken`) to 110.9 M (`WrappedPqzToken`), see
     [NET-EVM-06](../networks/evm.md#NET-EVM-06). [measured]
   - every `Env` entry kept as an `immutable` is inlined as a 32-byte `PUSH32` at each place the code reads it, so
-    `UnderlyingPqzToken` (5,431 B under 65,536) has room for at most ≈ 170 such references [inference].
+    `WrappedPqzToken` (5,431 B under 65,536) has room for at most ≈ 170 such references [inference].
 
 ## 6. Comparison
 

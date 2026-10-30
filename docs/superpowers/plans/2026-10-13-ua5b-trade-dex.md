@@ -126,7 +126,7 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
 - **C5b-7 Shape-0 decode** by `abi.decode(order, (TradeOrder))` (address words validated); trailing bytes after the 13
   words are ignored (the hash is over the decoded fields).
 - **C5b-8 Placement.** `UATradeOrder`, the `ua*` trade functions and events in `ITradeToken`; `uaWrap`, `UAWrapped` in
-  `IUnderlyingToken`; `UALegNotLedger` (also in `IUALedger`), `UAReceiveNotLedger`, `LegShapeUnknown`, `UALegSettled`,
+  `IWrappedToken`; `UALegNotLedger` (also in `IUALedger`), `UAReceiveNotLedger`, `LegShapeUnknown`, `UALegSettled`,
   `UAExchangeLegSettled` in `ISCaaSDex`.
 - **C5b-9 `uaWrap` events**: `UAWrapped` only (plus `Transfer` / `UATransfer`), no `Wrapped`; the leg check is
   `ERC165Checker` on `IUALedger` (as `payOutToUA`), before the pull.
@@ -143,7 +143,7 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
   is a `UATradeOrder`, `account` an id).
 - **C5b-14 Sizes.** Measured after Task 4: `SCaaSDex` 23,493 (+1,627) stays under 24,576, so it does not join
   `size-baseline.json` (the design estimated + 4–6 K); the token implementations ratchet in `size-baseline.json`;
-  the `UNDERLYING` pin in `Factory.t.sol` / `HederaV2.t.sol` 45,056 → 49,152 (as C5a-9).
+  the `WRAPPED` pin in `Factory.t.sol` / `HederaV2.t.sol` 45,056 → 49,152 (as C5a-9).
 
 ## File map
 
@@ -154,7 +154,7 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
 | `smartcontracts/evm/src/trade/ITradeToken.sol`, `TradeLib.sol` | `UATradeOrder`, ua functions/events; the id core | 2 |
 | `smartcontracts/evm/src/metatx/ERC20MetaTx.sol` | `uaTrade`, `uaCancelOrder`, `uaInvalidateNonces`, views; UP-12 | 2 |
 | `smartcontracts/evm/test/ua/UATrade.t.sol` (new) | CTR-DEX-15 matrix on the UA shape, floors, UP-12 | 2 |
-| `smartcontracts/evm/src/metatx/UnderlyingLib.sol`, `IUnderlyingToken.sol`, `UnderlyingToken.sol` | `uaWrap` | 3 |
+| `smartcontracts/evm/src/metatx/WrappedLib.sol`, `IWrappedToken.sol`, `WrappedToken.sol` | `uaWrap` | 3 |
 | `smartcontracts/evm/test/ua/UAWrap.t.sol` (new) | `uaWrap` | 3 |
 | `smartcontracts/evm/src/dex/ISCaaSDex.sol`, `SCaaSDex.sol` | tagged legs, UA payouts, `UAVerifyGas`, interactions | 4 |
 | `smartcontracts/evm/test/helpers/DexLegs.sol` (new), `test/v2/Dex*.t.sol` | shim | 4 |
@@ -189,7 +189,7 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
 
 - [ ] Tests first (`test/ua/UAWrap.t.sol`): derived and native holders, derived / native / zero destination, fee to
   the submitter, `UALegNotLedger` (outside leg), `NativeNotGasless`, `WrapOrderInvalid`, wrong purpose, the reserve.
-- [ ] Code; `MsgSenderLint` pin `UnderlyingToken` 2 → 4; sizes.
+- [ ] Code; `MsgSenderLint` pin `WrappedToken` 2 → 4; sizes.
 - [ ] Commit `feat(ua5b): uaWrap — wrap a SCaaS ledger underlying by a UATradeOrder into a UA`.
 
 ### Task 4: `SCaaSDex` tagged legs
@@ -243,8 +243,8 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
 
 **Results (Final, 2026-10-13).** forge default 102 suites, 1196 passed / 0 failed / 10 skipped; `private7622` the same;
 `test/ua/**` 31 suites, 320 passed; `--isolate` `UAGas` 6, `UARegistryGroups` 14; size gate 0 errors, 84 contracts
-(`SCaaSDex` 23,493 B fits; NONE 35,272, UNDERLYING 45,132, NONE_ZETHER 43,624, UNDERLYING_ZETHER 55,528 / init 57,223,
-`UnderlyingLib` 13,016, `TradeLib` 3,369). scaas-node `cargo test` 279 passed, e2e (EVM, anvil) 4/4, clippy
+(`SCaaSDex` 23,493 B fits; NORMAL 35,272, WRAPPED 45,132, NORMAL_ZETHER 43,624, WRAPPED_ZETHER 55,528 / init 57,223,
+`WrappedLib` 13,016, `TradeLib` 3,369). scaas-node `cargo test` 279 passed, e2e (EVM, anvil) 4/4, clippy
 `-D warnings` clean; settle selector `0x0403b13c` (solc). clientkeys 109 / 107 / 2 skipped; `ua-vectors.mjs`,
 `ua-sig-vectors.mjs` and `WRITE_KAT` `DexKat` regenerate byte-identical. Docs checkers 0 errors, facts 0 misses.
 Mutations (applied, run, reverted; each killed): `_uaMove` amount in `uaTrade` − 1 (23 fail); `pulled[h] == 0` →

@@ -53,10 +53,10 @@ intent is a booked fact. Every kind below shares these properties:
 | Typed transfer / payment | `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay` on `payLane(payId)`; direct `payWithFee`; event `PaymentSettled` | payer signs `MetaTransfer`; any relayer | token | NONE / PERCENT / FIXED in the token, on top, signer's choice, never to the payee | tx | **BUILT** (v2 tiers) | [CTR-MTX-23](metatx.md#CTR-MTX-23), [-24](metatx.md#CTR-MTX-24), [-10](metatx.md#CTR-MTX-10), [-08](metatx.md#CTR-MTX-08), [-09](metatx.md#CTR-MTX-09) |
 | Receiver pays | `mtxPayReceiverFee` | payer signs `MetaTransfer`, payee co-signs `ReceiverFee`; the bound relayer | token | absolute fee from the payee's balance | tx | **BUILT** (EVM, Hedera) | [CTR-MTX-05](metatx.md#CTR-MTX-05), [-06](metatx.md#CTR-MTX-06) |
 | Generic gasless call | `mtxExecute`, `mtxBatch`, `executeMetaTransaction` | subject signs `MetaTransaction`; any relayer | the contract's selector allowlist | per fee class, after the call | tx | **BUILT** | [CTR-MTX-12](metatx.md#CTR-MTX-12), [-19](metatx.md#CTR-MTX-19), [-20](metatx.md#CTR-MTX-20) |
-| Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
+| Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `WrappedToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
 | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
 | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx; the DEX watcher reads no `ExchangeLegSettled` yet (**P7, SPECIFIED**) | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
-| Confidential (Zether) | `mtxConfidentialTransfer*`, `mtxShield`, `mtxUnshield`, roll-over; `mtxWrapShield`, `mtxUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
+| Confidential (Zether) | `mtxConfidentialTransfer*`, `mtxShield`, `mtxUnshield`, roll-over; `mtxWrapShield`, `mtxUnshieldUnwrap` (`WRAPPED_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
 | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT** (P4: epoch, `mtx` names) | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
 | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
 | Tender | `commitBid` (deposit is a `MetaTransfer`), `revealBid`, `withdrawDeposit` | bidder signs only the deposit | tender and token | NONE | tx | **SPECIFIED**, nothing built | [CTR-TND-01](tender.md#CTR-TND-01), [-03](tender.md#CTR-TND-03) |
@@ -131,8 +131,8 @@ sequenceDiagram
 
 `mtxExecute(m, sig)` runs the signer's calldata as a **self-call** of one selector on the contract's published
 allowlist `mtxSelectors()`, then charges the fee **after** the call ([CTR-MTX-17](metatx.md#CTR-MTX-17),
-[CTR-MTX-19](metatx.md#CTR-MTX-19)). On the built tokens: `cancelNonce`, `burn` (`NoUnderlyingToken`), and on
-`UnderlyingToken` the single- and multi-leg `wrap`, `unwrap` and `addReserve`. Gasless unwrap is `mtxExecute` with the
+[CTR-MTX-19](metatx.md#CTR-MTX-19)). On the built tokens: `cancelNonce`, `burn` (`NormalToken`), and on
+`WrappedToken` the single- and multi-leg `wrap`, `unwrap` and `addReserve`. Gasless unwrap is `mtxExecute` with the
 real `unwrap` calldata and a `minOut` ([CTR-MTX-12](metatx.md#CTR-MTX-12)). Fee classes ([CTR-MTX-20](metatx.md#CTR-MTX-20)):
 `AMOUNT(i)` for `burn` and `unwrap`, `ABSOLUTE` for `wrap`, `addReserve`, `cancelNonce` and every Zether selector.
 Never allowlisted: `approve`, `transferFrom`, role functions, `transfer` and `pay` (they are `MetaTransfer`s), any
@@ -147,7 +147,7 @@ Never allowlisted: `approve`, `transferFrom`, role functions, `transfer` and `pa
 
 ### 3.4 Signature wrap
 
-The holder signs a `TradeOrder` in the **underlying's** domain with `dex` = the wrapper; `UnderlyingToken.mtxWrap`
+The holder signs a `TradeOrder` in the **underlying's** domain with `dex` = the wrapper; `WrappedToken.mtxWrap`
 quotes `minted`, calls `underlying.mtxTrade(...)` and the underlying moves funds only into the wrapper
 ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)). The holder never approves anything.
 
@@ -166,7 +166,7 @@ sequenceDiagram
 ```
 
 - **Atomic:** the wrapper requires `received == o.amount`; any failure reverts the order's `pulled` state with it.
-  `NativeNotGasless` for the native coin; `UnderlyingZetherToken` inherits it (P3).
+  `NativeNotGasless` for the native coin; `WrappedZetherToken` inherits it (P3).
 - **Node:** a `metatx` job entry point. Clients refuse to build an order whose `dex` is not a registered wrapper of the
   underlying ([CTR-DEX-19](dex.md#CTR-DEX-19)).
 

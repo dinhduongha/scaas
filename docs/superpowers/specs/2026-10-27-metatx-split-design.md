@@ -18,7 +18,7 @@ UA-7, governance code.
 |---|---|---|
 | 2026-10-20 | The meta-tx code is split anyway ("kiểu gì cũng phải tách"), because governance code is coming to every factory-made contract; governance goes to a library or module. | TODO "Metatx split" |
 | 2026-10-21 | **Variant A:** a DELEGATECALL library; the token keeps every entry point. The library gets only the envelope's data hash (`keccak256(data)`), the selector and the fee-basis word, never `data` itself (else a ≈ 340 KB op 7 pays ≈ +1 M gas). The self-call stays in the token. | TODO, HANDOFF 2026-10-21 |
-| 2026-10-21 | Timing: after 5h part B (done), before fs3 Tasks 12 / 6 / 13 and before governance code. Purpose: room for governance code in the shared base; the binding kind is `UnderlyingPqzToken`. | TODO, HANDOFF |
+| 2026-10-21 | Timing: after 5h part B (done), before fs3 Tasks 12 / 6 / 13 and before governance code. Purpose: room for governance code in the shared base; the binding kind is `WrappedPqzToken`. | TODO, HANDOFF |
 | 2026-10-11, 2026-10-21 | Code size: no micro-optimisation. The ceiling is 64 KiB (65,536 B). The size gate's ratchet baseline records sizes ([CTR-TOK-24](../../contracts/token-wrappers.md#CTR-TOK-24)). | `size-baseline.json` comment |
 | 2026-10-20 | `MtxRule` stays as is (`feeClass = 0` = not relayable; `ABSOLUTE` / `AMOUNT` = the fee basis). | TODO `MtxRule` item, CTR-MTX-20 |
 | 2026-10-26 | CTR-MTX-26 as recorded: every token tier and every non-EVM family. | decisions.md CTR-MTX-26 |
@@ -41,7 +41,7 @@ UA-7, governance code.
 **Why.** Every token kind carries the whole meta-tx pipeline in its own bytecode: envelope checks, the EIP-712
 digest, signature and UA-registry authorization, the allowlist check, nonce lanes, fee amounts, for four signed
 structs. Governance code (the governance matrix, TODO) will go into the shared base and so into every kind.
-`UnderlyingPqzToken` is 61,519 B today (`size-baseline.json`), 4,017 B under the 65,536 B ceiling. The split moves
+`WrappedPqzToken` is 61,519 B today (`size-baseline.json`), 4,017 B under the 65,536 B ceiling. The split moves
 the pipeline's checks into one library that every kind links, so the shared base has room again.
 
 **Goals.**
@@ -99,11 +99,11 @@ the pipeline's checks into one library that every kind links, so the shared base
   clone, else 50,000), the immutables `FACTORY`, `SMART_KEY_ACCOUNT_IMPL`, `_SMART_KEY_CLONE_CODEHASH`, `IS_HEDERA`.
 - The kinds override `_mtxRule`, `mtxSelectors`, `_uaAllowed`; the PQZ and Zether kinds also `_domainName`,
   `_envelopeBinding`, `_uaEnvelopeBinding`, `_batchable`.
-- Linked libraries today: `AdminLib`, `HederaLib`, `TradeLib` (every kind), `UnderlyingLib` (underlying kinds),
+- Linked libraries today: `AdminLib`, `HederaLib`, `TradeLib` (every kind), `WrappedLib` (wrapped kinds),
   `ZetherLib`, `PqzStateLib` / `PqzTransferLib` / `PqzBurnLib` / `PqzViewLib`. `OpenFactory._deploy` checks each
   `Env.libs[i].codehash` against `Env.libCodeHashes[i]` before the release's CREATE2.
-- Sizes (runtime, baseline): `NoUnderlyingToken` 38,598; `UnderlyingToken` 48,524; `NoUnderlyingZetherToken` 48,605;
-  `NoUnderlyingPqzToken` 49,336; `UnderlyingZetherToken` 60,625; `UnderlyingPqzToken` 61,519.
+- Sizes (runtime, baseline): `NormalToken` 38,598; `WrappedToken` 48,524; `NormalZetherToken` 48,605;
+  `NormalPqzToken` 49,336; `WrappedZetherToken` 60,625; `WrappedPqzToken` 61,519.
 - The spike (branch `metatx-lib`, report `scratchpad/metatx-lib-report.md`) predates 5h part B, UA-6's final round and
   the 2026-10-27 review fix round. Its library ran the self-call and took `data`. It lacks today's pool checks
   (`_notPool`, C5-3), the id-0 refusal (C5-2), the unconditional binding write (C5-5) and `_pullShieldIn` (C2-5). Its
@@ -249,7 +249,7 @@ sequenceDiagram
 
 ### 3.5 Each token kind
 
-All six kinds (`NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`, `NONE_PQZ`, `UNDERLYING_PQZ`) use the
+All six kinds (`NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ`, `WRAPPED_PQZ`) use the
 library through `ERC20MetaTx` / `MetaTokenBase`, in the same way. What differs per kind enters as data:
 
 | Input | Source |
@@ -260,7 +260,7 @@ library through `ERC20MetaTx` / `MetaTokenBase`, in the same way. What differs p
 | Batchable | the kind's `_batchable` |
 | Registry, Hedera, SmartKeyAccount clone hash | the release's `Env`, through the immutables |
 
-`UNDERLYING*` kinds: `mtxWrap` / `uaWrap` run the underlying token's `mtxTrade` / `uaTrade`, which checks the
+`WRAPPED*` kinds: `mtxWrap` / `uaWrap` run the underlying token's `mtxTrade` / `uaTrade`, which checks the
 signature through its own (the same) library. Hedera: `IS_HEDERA` implementations take the HIP-632 branch inside the
 library; the HIP-632 call runs in the token's context, as today.
 
@@ -305,7 +305,7 @@ step 3 lists the fee checks, step 6 is "fee move".
 - **`Env.libs` pin the link closure.** Every kind's env lists `MtxPipelineLib` with its code hash, and keeps listing
   `HederaLib`, which becomes a library of `MtxPipelineLib` (the token may no longer link it directly). Rule: a
   release's `Env.libs` equals the transitive link closure of its implementation (direct and library-of-library).
-- **`DeployBase`:** add `address(MtxPipelineLib)` to the `libs` arrays of the `NONE` env and of the Zether envs
+- **`DeployBase`:** add `address(MtxPipelineLib)` to the `libs` arrays of the `NORMAL` env and of the Zether envs
   (`_deployTokenFactory`, `_deployZether`). Forge links and deploys it as it does today's linked libraries.
   `Deploy.s.sol` and `script/hedera/DeployHedera.s.sol` go through `DeployBase`, so they follow.
 - **`script/pqz/e2e.py`:** `Deployer.linked()` collects only the token artifact's direct `linkReferences`. Change it
@@ -330,10 +330,10 @@ step 3 lists the fee checks, step 6 is "fee move".
 
 | Item | Spike (2026-10-21, other code) | This design [estimate] |
 |---|---|---|
-| Token runtime saving | A: −3,763 B (`NONE`), −4,147 B (`UNDERLYING_PQZ`) | −3.5 to −5 KB per kind (the self-call stays; trade and receiver-fee signatures and the digest views move) |
+| Token runtime saving | A: −3,763 B (`NORMAL`), −4,147 B (`WRAPPED_PQZ`) | −3.5 to −5 KB per kind (the self-call stays; trade and receiver-fee signatures and the digest views move) |
 | Library runtime | 11,577 B | 10–12 KB |
 | `mtxPayMeta` + `uaPayMeta` | — | +0.8 to +1.2 KB per kind |
-| `UnderlyingPqzToken` after this item | — | ≈ 57–59 KB (headroom ≈ 6.5–8.5 KB) |
+| `WrappedPqzToken` after this item | — | ≈ 57–59 KB (headroom ≈ 6.5–8.5 KB) |
 | Relayed call, cold | A: +7.1k to +9.4k | +3k to +6k (2,600 cold account at the Amsterdam price, ABI of ≈ 25 words plus the signature, return) |
 | Relayed call, warm (2nd in a transaction) | A: +5.9k | +1k to +2.5k |
 | Relayed op 1 (≈ 21 KB `data`) | A: +19.8k to +21.3k | as a small call, + ≤ 0.5k (§5.2) |
@@ -625,7 +625,7 @@ their minimum balance), and the router's shape (an atomic transaction group or a
 | R1 | Behaviour drift between today's pipeline and the split | **Parity fixture** (controller call): in Part 0, on `main`, a forge test runs a fixed case set on every kind (clones) — every signed entry point × address / UA path × success and each error, incl. batches, receiver-pays, trade, PQZ / Zether relayed ops at the committed set — and writes outcome, return data, revert data, events, nonces, balances (`SHIELD_POOL`, `UA_POOL` included) and gas to `test/vectors/metatx-parity.json`. After the split the same test replays and compares. The only allowed difference is §3.8, listed case by case in the fixture. |
 | R2 | The context the library gets differs from the token's immutables (the spike's "module immutables" risk) | `_mtxCtx()` is the only builder. Per kind, on a clone: every `Ctx` field equals the token's own view (`eip712Domain()` → separator, `registry()`, the clone hash of `SMART_KEY_ACCOUNT_IMPL`, `IS_HEDERA`); `callDigest` / `transferDigest` equal `mtxDigest` / `uaDigest` / `mtxTransferDigest` / `uaTransferDigest` and the existing off-chain envelope vectors (clientkeys, zether-prover). |
 | R3 | A rule table copied out of the kinds (the spike's A2 risk) | Not possible by design: the token passes the looked-up rule per call. The existing `test_allowlistPinned*` tests and R1's per-selector cases cover every selector of every kind. |
-| R4 | ABI artifacts: errors raised only inside the library vanish from the token ABI (e.g. `SigCheckGasStarved`, `ModeFeeInvalid`, `FeeRecipientRequired`, `HtsQueryFailed`) | Extend `test_libraryErrorsAreInTheTokenAbi` (`test/v2/Underlying.t.sol`) to `MtxPipelineLib` × every kind's artifact; declare a missing error on a token interface. Function and event selectors unchanged: R1. |
+| R4 | ABI artifacts: errors raised only inside the library vanish from the token ABI (e.g. `SigCheckGasStarved`, `ModeFeeInvalid`, `FeeRecipientRequired`, `HtsQueryFailed`) | Extend `test_libraryErrorsAreInTheTokenAbi` (`test/v2/Wrapped.t.sol`) to `MtxPipelineLib` × every kind's artifact; declare a missing error on a token interface. Function and event selectors unchanged: R1. |
 | R5 | A library in the release's link closure is not pinned | A forge test reads each kind's artifact `linkReferences` recursively and asserts the `Env.libs` built by `DeployBase` (and the PQZ envs of e2e.py, through a small Python self-test) equal the closure. |
 | R6 | SELFDESTRUCT, CALLCODE or a DELEGATECALL to a non-named address in a linked library; a direct CALL that writes the library's own storage | An opcode walk (PUSH data skipped) over the runtime code of every library in every closure: no `SELFDESTRUCT`, no `CALLCODE`; `DELEGATECALL` only in `MtxPipelineLib` toward `HederaLib`. A direct CALL of `preCall` / `preTransfer` reverts (solc's library call guard). |
 | R7 | The library writes more storage than the nonce | `vm.record` / `vm.accesses` around a relayed call of each path: written slots equal R1's recorded set. |

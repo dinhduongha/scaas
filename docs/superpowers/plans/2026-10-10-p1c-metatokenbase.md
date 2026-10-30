@@ -1,18 +1,18 @@
-# P1c — `MetaTokenBase`: features, owner and roles (`AdminLib`), `PAYABLE` gate, init/provenance in `scaas.token`, `IS_HEDERA` + `HederaLib`, kind `NONE` — Implementation Plan
+# P1c — `MetaTokenBase`: features, owner and roles (`AdminLib`), `PAYABLE` gate, init/provenance in `scaas.token`, `IS_HEDERA` + `HederaLib`, kind `NORMAL` — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Give every token the creation-time feature flags and the one-owner administration model of CTR-TOK-22
 through an external library `AdminLib` (ERC-7201 `scaas.token`), gate pay behind `PAYABLE`, move init/provenance into
 that namespace, replace the Hedera children by the implementation immutable `IS_HEDERA` with `HederaLib`, and move kind
-`NONE` (`NoUnderlyingToken`) fully onto it (`MINTABLE` role instead of `minter`, `BURNABLE`, `PAYABLE`); the wrapper
+`NORMAL` (`NormalToken`) fully onto it (`MINTABLE` role instead of `minter`, `BURNABLE`, `PAYABLE`); the wrapper
 tiers only report their legacy powers as flags until P1d replaces them.
 
 **Architecture:** `AdminLib` (new, `public` mutations linked at deploy, `internal` checks inlined) owns
 `TokenStorage` at `keccak256(abi.encode(uint256(keccak256("scaas.token")) - 1)) & ~0xff` = features, locked
 features, owner, pending owner, creator, version, kind, decimals, initialized, name, symbol, roles. `MetaTokenBase`
 keeps one-line wrappers (`grantRole` …), the views, ERC-165, the `PAYABLE` gate and the `IS_HEDERA` signature branch.
-`NoUnderlyingToken` decodes a `NoneInit` (the NONE subset of `TokenConfig`) from the unchanged factory-v2
+`NormalToken` decodes a `NoneInit` (the NORMAL subset of `TokenConfig`) from the unchanged factory-v2
 `initialize(creator, underlyings, version, initData)`; P1e switches to `TokenConfig`.
 
 **Tech Stack:** Solidity 0.8.28, Foundry (forge 1.3.5; external libraries are auto-linked in tests and scripts),
@@ -32,9 +32,9 @@ CTR-AS-17; `docs/contracts/metatx.md` CTR-MTX-07; TODO.md §00 "P1c notes" (a)�
 - Build pins unchanged (solc 0.8.28, optimizer 200, no via-IR, EVM prague). Touched/new files `pragma solidity ^0.8.24;`.
 - Flag bits (CTR-TOK-22, verbatim): 0 `PAYABLE`, 1 `MINTABLE` (role minter), 2 `BURNABLE`, 3 `RATE_ADJUSTABLE` (role
   rateAdmin, contract), 4 `WRAP_DISABLEABLE` (role guardian), 5 `FREEZE`, 6 `FORCE`, 7 `PAUSE`, 8 `ALLOWLIST`.
-  Valid: `NONE` {0,1,2,5–8}, `UNDERLYING` {0,3,4,5–8}, `NONE_ZETHER` {0,1,2}, `UNDERLYING_ZETHER` {0,3,4}.
-  `PAYABLE`/`BURNABLE` are always locked. Kinds (fresh): 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`,
-  3 `UNDERLYING_ZETHER`; ≥ 4 reserved (no valid flag).
+  Valid: `NORMAL` {0,1,2,5–8}, `WRAPPED` {0,3,4,5–8}, `NORMAL_ZETHER` {0,1,2}, `WRAPPED_ZETHER` {0,3,4}.
+  `PAYABLE`/`BURNABLE` are always locked. Kinds (fresh): 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`,
+  3 `WRAPPED_ZETHER`; ≥ 4 reserved (no valid flag).
 - `scaas.token` slot `0x83083067f3d1caf66741d4eeefa9d3f4f0e5b0793677731d6fee7e67b774ac00` (`cast index-erc7201 scaas.token`);
   `scaas.metatx` `0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00` (P1a).
 - `AdminLib` errors: `FeatureInvalidForKind(uint8)`, `FeatureNotBuilt(uint8)`, `LockedNotSubset()`,
@@ -47,12 +47,12 @@ CTR-AS-17; `docs/contracts/metatx.md` CTR-MTX-07; TODO.md §00 "P1c notes" (a)�
   `kind() returns (uint8)`, `creator()`, `version()`, `grantRole(uint8,address)`, `revokeRole(uint8,address)`,
   `renounceRole(uint8)`, `disableFeature(uint8)`, `transferOwnership(address)`, `acceptOwnership()`,
   `renounceOwnership()`, `supportsInterface(bytes4)`, immutable `IS_HEDERA`. None is allowlisted. Removed on
-  `NoUnderlyingToken`: `minter()`, `renounceMinter()`, `NotMinter`, `MinterRenounced`.
+  `NormalToken`: `minter()`, `renounceMinter()`, `NotMinter`, `MinterRenounced`.
 - Constructors: tiers `(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)`; Hedera wrapper children
-  `(factory_, chainUid_)`; `HederaNoUnderlyingToken` is deleted (kind NONE on Hedera = `NoUnderlyingToken` with
+  `(factory_, chainUid_)`; `HederaNoUnderlyingToken` is deleted (kind NORMAL on Hedera = `NormalToken` with
   `isHedera_ = true`).
 - Size budget (CTR-TOK-24): token implementation ≤ 20,480 B. Measured in a scratch copy of this plan's code:
-  `NoUnderlyingToken` 20,038 (NONE has 442 B left — see C9), `SingleUnderlyingToken` 28,296, `MultiUnderlyingToken`
+  `NormalToken` 20,038 (NORMAL has 442 B left — see C9), `SingleUnderlyingToken` 28,296, `MultiUnderlyingToken`
   29,337, `HederaSingleUnderlyingToken` 29,201, `HederaMultiUnderlyingToken` 30,242 (wrappers over EIP-170 until P1d,
   P1b ruling R3), `AdminLib` 3,359, `HederaLib` 753.
 - Test chain: id 7622, `chain_uid` `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`; key `0xA11CE`.
@@ -89,22 +89,22 @@ CTR-AS-17; `docs/contracts/metatx.md` CTR-MTX-07; TODO.md §00 "P1c notes" (a)�
   `MetaTransfer` (with or without `entryRef`) stay ungated (T2: "`MetaTransfer` is never gated"). Flag to the owner.
 - **C4 — `HederaLib`** = `git mv src/hedera/HederaV2Lib.sol` with `HederaSig`/`HederaHts` merged: `requireValid` is
   `public view` (linked; −225 B per token), `checkAndAssociate` stays `internal` (only the transitional Hedera wrapper
-  children use it; P1d moves it into `UnderlyingLib`). The `asView` comment in `HederaAccountAuth` is updated (P1c
+  children use it; P1d moves it into `WrappedLib`). The `asView` comment in `HederaAccountAuth` is updated (P1c
   note d).
 - **C5 — Wrapper tiers transitional.** `SingleUnderlyingToken`/`MultiUnderlyingToken` keep their init data, their
-  `rateAdmin`/`guardian` storage and `renounceRateAdmin`/`renounceGuardian`; they call `AdminLib.init(UNDERLYING, f, f,
+  `rateAdmin`/`guardian` storage and `renounceRateAdmin`/`renounceGuardian`; they call `AdminLib.init(WRAPPED, f, f,
   0, noRoles)` with `f = PAYABLE | (rateAdjustable ? RATE_ADJUSTABLE) | (guardian ≠ 0 ? WRAP_DISABLEABLE)` so the views
   report their powers (locked, no owner; `PAYABLE` on as built). P1d replaces them.
-- **C6 — NONE init data** is `abi.encode(NoUnderlyingToken.NoneInit)` (name, symbol, decimals, features,
+- **C6 — NORMAL init data** is `abi.encode(NormalToken.NoneInit)` (name, symbol, decimals, features,
   lockedFeatures, owner, roles, initialSupply, initialHolder — field names of `TokenConfig`); the factory-v2
   `initialize` signature is unchanged until P1e. `initialHolder = 0` with a supply reverts in OZ `_mint`
   (`ERC20InvalidReceiver`).
 - **C7 — Error reuse:** `FeatureNotSet(bit)` both for `disableFeature` on a clear flag and for calling a gated function
   whose flag is clear; `MissingRole(bit, account)` for a missing role. `kind()` returns `uint8` (P1e defines the enum).
 - **C8 — Storage:** the `MetaTokenBase` state moves into `scaas.token`; `_legCount` stays linear (P1d moves it with
-  the legs). Layout: NONE = ERC-20 slots 0–4 + `_legCount` 5; Single `_legs` 6, `_legIndex` 7, `_pending` 8, rate
+  the legs). Layout: NORMAL = ERC-20 slots 0–4 + `_legCount` 5; Single `_legs` 6, `_legIndex` 7, `_pending` 8, rate
   config 9; Multi `guardian` 10.
-- **C9 — Size is the next constraint.** NONE is 20,038 / 20,480 B after P1c; P2 (`TradeLib`'s token side and three
+- **C9 — Size is the next constraint.** NORMAL is 20,038 / 20,480 B after P1c; P2 (`TradeLib`'s token side and three
   `mtx…` entries) will not fit without finding room (a slimmer `MetaTxBase`, more behind libraries, or a budget change).
   Flag to the owner now; P2's plan starts with it. Wrapper ceilings in the size tests rise to Single 28,672, Multi
   29,696, HederaSingle 29,696, HederaMulti 30,720 (transitional, R3).
@@ -122,7 +122,7 @@ CTR-AS-17; `docs/contracts/metatx.md` CTR-MTX-07; TODO.md §00 "P1c notes" (a)�
 - Create: `smartcontracts/evm/test/metatx/helpers/AdminHarness.sol`, `smartcontracts/evm/test/metatx/AdminLib.t.sol`
 
 **Interfaces:**
-- Produces: `library AdminLib` — constants `PAYABLE…ALLOWLIST`, `KIND_NONE…KIND_UNDERLYING_ZETHER`, `REGULATED`,
+- Produces: `library AdminLib` — constants `PAYABLE…ALLOWLIST`, `KIND_NORMAL…KIND_WRAPPED_ZETHER`, `REGULATED`,
   `ROLE_BITS`, `ALWAYS_LOCKED`; `struct Roles {minter, rateAdmin, guardian, issuer, compliance}`;
   `struct TokenStorage {features, lockedFeatures, owner, pendingOwner, creator, version, kind, decimals, initialized,
   name, symbol, roles}`; `$() internal pure returns (TokenStorage storage)`; public `init(uint8 kind, uint256 features,
@@ -141,7 +141,7 @@ pragma solidity ^0.8.24;
 
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 
-/// Exposes `AdminLib` on its own storage, for every kind (the built tokens use NONE and, transitionally, UNDERLYING).
+/// Exposes `AdminLib` on its own storage, for every kind (the built tokens use NORMAL and, transitionally, WRAPPED).
 contract AdminHarness {
     function init(uint8 kind, uint256 features, uint256 locked, address owner_, AdminLib.Roles memory roles) external {
         AdminLib.init(kind, features, locked, owner_, roles);
@@ -226,50 +226,50 @@ contract AdminLibTest is Test {
     function test_regulatedFlags_notBuiltOnPublicKinds_invalidOnConfidential() public {
         for (uint8 b = 5; b < 9; ++b) {
             vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureNotBuilt.selector, b));
-            h.init(AdminLib.KIND_NONE, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_NORMAL, 1 << b, 0, address(0), none);
             vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureNotBuilt.selector, b));
-            h.init(AdminLib.KIND_UNDERLYING, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_WRAPPED, 1 << b, 0, address(0), none);
             vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureInvalidForKind.selector, b));
-            h.init(AdminLib.KIND_NONE_ZETHER, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_NORMAL_ZETHER, 1 << b, 0, address(0), none);
             vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureInvalidForKind.selector, b));
-            h.init(AdminLib.KIND_UNDERLYING_ZETHER, 1 << b, 0, address(0), none);
+            h.init(AdminLib.KIND_WRAPPED_ZETHER, 1 << b, 0, address(0), none);
         }
     }
 
     function test_unknownBitsAndKinds_refused() public {
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureInvalidForKind.selector, uint8(9)));
-        h.init(AdminLib.KIND_NONE, 1 << 9, 0, address(0), none);
+        h.init(AdminLib.KIND_NORMAL, 1 << 9, 0, address(0), none);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureInvalidForKind.selector, uint8(0)));
         h.init(4, PAYABLE, 0, address(0), none); // reserved PQZ kinds: nothing valid
     }
 
     function test_lockedMustBeSubset_payableBurnableAlwaysLocked() public {
         vm.expectRevert(AdminLib.LockedNotSubset.selector);
-        h.init(AdminLib.KIND_NONE, MINTABLE, BURNABLE, address(0), none);
-        h.init(AdminLib.KIND_NONE, PAYABLE | MINTABLE | BURNABLE, 0, address(0), none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, BURNABLE, address(0), none);
+        h.init(AdminLib.KIND_NORMAL, PAYABLE | MINTABLE | BURNABLE, 0, address(0), none);
         assertEq(h.lockedFeatures(), PAYABLE | BURNABLE);
     }
 
     function test_initialRoles_onlyForSetFlags() public {
         vm.expectRevert(abi.encodeWithSelector(AdminLib.RoleWithoutFeature.selector, uint8(1)));
-        h.init(AdminLib.KIND_NONE, BURNABLE, 0, address(0), _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, BURNABLE, 0, address(0), _roles(minter));
         AdminLib.Roles memory r;
         r.issuer = address(1);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.RoleWithoutFeature.selector, uint8(5)));
-        h.init(AdminLib.KIND_NONE, 0, 0, address(0), r);
+        h.init(AdminLib.KIND_NORMAL, 0, 0, address(0), r);
         r.issuer = address(0);
         r.compliance = address(1);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.RoleWithoutFeature.selector, uint8(8)));
-        h.init(AdminLib.KIND_NONE, 0, 0, address(0), r);
+        h.init(AdminLib.KIND_NORMAL, 0, 0, address(0), r);
     }
 
     function test_rateAdminMustBeAContract() public {
         AdminLib.Roles memory r;
         r.rateAdmin = address(0xEE);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.RoleNotContract.selector, uint8(3), address(0xEE)));
-        h.init(AdminLib.KIND_UNDERLYING, RATE, 0, address(0), r);
+        h.init(AdminLib.KIND_WRAPPED, RATE, 0, address(0), r);
         r.rateAdmin = address(new Puller());
-        h.init(AdminLib.KIND_UNDERLYING, RATE, 0, address(0), r);
+        h.init(AdminLib.KIND_WRAPPED, RATE, 0, address(0), r);
         assertTrue(h.hasRole(3, r.rateAdmin));
     }
 
@@ -278,7 +278,7 @@ contract AdminLibTest is Test {
         emit AdminLib.RoleGranted(1, minter, address(0));
         vm.expectEmit(address(h));
         emit AdminLib.OwnershipTransferred(address(0), ownerA);
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, _roles(minter));
         assertEq(h.owner(), ownerA);
         assertTrue(h.hasRole(1, minter));
     }
@@ -286,7 +286,7 @@ contract AdminLibTest is Test {
     // ------------------------------------------------------------------ owner powers
 
     function test_grantRevokeRenounce() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, none);
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.NotOwner.selector, minter));
         h.grantRole(1, minter);
@@ -311,7 +311,7 @@ contract AdminLibTest is Test {
     }
 
     function test_grant_onlyARoleOfASetFlag() public {
-        h.init(AdminLib.KIND_NONE, PAYABLE | BURNABLE, 0, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, PAYABLE | BURNABLE, 0, ownerA, none);
         vm.startPrank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.NoSuchRole.selector, uint8(0)));
         h.grantRole(0, minter);
@@ -323,7 +323,7 @@ contract AdminLibTest is Test {
     }
 
     function test_disableFeature_oneWay_lockedRefused() public {
-        h.init(AdminLib.KIND_NONE, PAYABLE | MINTABLE | BURNABLE, 0, ownerA, _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, PAYABLE | MINTABLE | BURNABLE, 0, ownerA, _roles(minter));
         vm.startPrank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureLocked.selector, uint8(0)));
         h.disableFeature(0);
@@ -343,14 +343,14 @@ contract AdminLibTest is Test {
     }
 
     function test_lockedFlagCannotBeDisabled() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, MINTABLE, ownerA, none);
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, MINTABLE, ownerA, none);
         vm.prank(ownerA);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureLocked.selector, uint8(1)));
         h.disableFeature(1);
     }
 
     function test_twoStepTransferAndRenounce_rolesSurvive() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, ownerA, _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, ownerA, _roles(minter));
         vm.prank(ownerA);
         vm.expectEmit(address(h));
         emit AdminLib.OwnershipTransferStarted(ownerA, ownerB);
@@ -375,7 +375,7 @@ contract AdminLibTest is Test {
     }
 
     function test_noOwnerMeansNoAdministration() public {
-        h.init(AdminLib.KIND_NONE, MINTABLE, 0, address(0), _roles(minter));
+        h.init(AdminLib.KIND_NORMAL, MINTABLE, 0, address(0), _roles(minter));
         vm.prank(address(0));
         vm.expectRevert(abi.encodeWithSelector(AdminLib.NotOwner.selector, address(0)));
         h.disableFeature(1);
@@ -415,10 +415,10 @@ library AdminLib {
     uint8 internal constant ALLOWLIST = 8;
 
     // ------------------------------------------------------------------ kinds (CTR-TOK-21, fresh enum)
-    uint8 internal constant KIND_NONE = 0;
-    uint8 internal constant KIND_UNDERLYING = 1;
-    uint8 internal constant KIND_NONE_ZETHER = 2;
-    uint8 internal constant KIND_UNDERLYING_ZETHER = 3;
+    uint8 internal constant KIND_NORMAL = 0;
+    uint8 internal constant KIND_WRAPPED = 1;
+    uint8 internal constant KIND_NORMAL_ZETHER = 2;
+    uint8 internal constant KIND_WRAPPED_ZETHER = 3;
 
     /// @dev Flags 5–8 (regulated controls, CTR-AS-17): valid on non-confidential kinds, not built yet (asset suite).
     uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST);
@@ -593,15 +593,15 @@ library AdminLib {
         if (caller != s.owner || caller == address(0)) revert NotOwner(caller);
     }
 
-    /// @dev Valid flags per kind (CTR-TOK-22 table): NONE* mint/burn, UNDERLYING* rate/wrap, regulated only on
+    /// @dev Valid flags per kind (CTR-TOK-22 table): NORMAL* mint/burn, WRAPPED* rate/wrap, regulated only on
     ///      non-confidential kinds (CTR-AS-17), PAYABLE everywhere. An unknown kind has no valid flag.
     function _validFor(uint8 kind) private pure returns (uint256) {
         uint256 none = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE);
         uint256 und = (1 << PAYABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
-        if (kind == KIND_NONE) return none | REGULATED;
-        if (kind == KIND_UNDERLYING) return und | REGULATED;
-        if (kind == KIND_NONE_ZETHER) return none;
-        if (kind == KIND_UNDERLYING_ZETHER) return und;
+        if (kind == KIND_NORMAL) return none | REGULATED;
+        if (kind == KIND_WRAPPED) return und | REGULATED;
+        if (kind == KIND_NORMAL_ZETHER) return none;
+        if (kind == KIND_WRAPPED_ZETHER) return und;
         return 0;
     }
 
@@ -621,27 +621,27 @@ library AdminLib {
 
 ---
 
-### Task 2: `MetaTokenBase` on `AdminLib`, `IS_HEDERA` + `HederaLib`, kind NONE, wrappers transitional; port the tests
+### Task 2: `MetaTokenBase` on `AdminLib`, `IS_HEDERA` + `HederaLib`, kind NORMAL, wrappers transitional; port the tests
 
 **Model:** Opus, effort high (src rewrite + test port across many files).
 
 **Files (src):**
 - Rename + rewrite: `src/hedera/HederaV2Lib.sol` → `src/hedera/HederaLib.sol` (`git mv`; full text below)
-- Rewrite: `src/metatx/MetaTokenBase.sol`, `src/metatx/NoUnderlyingToken.sol`, `src/hedera/HederaTokensV2.sol` (full texts below)
+- Rewrite: `src/metatx/MetaTokenBase.sol`, `src/metatx/NormalToken.sol`, `src/hedera/HederaTokensV2.sol` (full texts below)
 - Modify: `src/metatx/SingleUnderlyingToken.sol`, `src/metatx/MultiUnderlyingToken.sol`, `src/hedera/HederaAccountAuth.sol`
 - Modify: `script/Deploy.s.sol`, `script/hedera/DeployHedera.s.sol`
 
-**Files (tests):** every test that constructs a v2 tier, decodes the old NONE init data, uses `minter()`,
+**Files (tests):** every test that constructs a v2 tier, decodes the old NORMAL init data, uses `minter()`,
 `renounceMinter`, `NotMinter`, `MinterRenounced`, `HederaNoUnderlyingToken`, `HederaHts`/`HederaSig`/`HederaV2Lib`, or
 pins sizes/layout: at least `test/v2/helpers/V2Fixture.sol`, `test/v2/{Base,Tier1,Tier2,Multi,Rates,FactoryV2,
 MetaTxGasV2,UnwrapOp,WrapperInvariant,Layout,Allowlist,ReceiverPays}.t.sol`, `test/v2/layout/*.json`,
 `test/metatx/{TokenKat,MsgSenderLint}.t.sol`, `test/hedera/HederaV2.t.sol`. Find them with
-`/usr/bin/grep -rlE "UnderlyingToken\(|HederaNoUnderlying|HederaHts|HederaSig|HederaV2Lib|renounceMinter|NotMinter|MinterRenounced|\.minter\(\)|META_NONE" smartcontracts/evm/test smartcontracts/evm/script`.
+`/usr/bin/grep -rlE "WrappedToken\(|HederaNoUnderlying|HederaHts|HederaSig|HederaV2Lib|renounceMinter|NotMinter|MinterRenounced|\.minter\(\)|META_NONE" smartcontracts/evm/test smartcontracts/evm/script`.
 
 **Interfaces:**
 - Consumes: Task 1 `AdminLib`.
 - Produces: `MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)`, `IS_HEDERA`, the token functions
-  listed in Global Constraints; `NoUnderlyingToken.NoneInit`; `HederaLib.requireValid` (public view),
+  listed in Global Constraints; `NormalToken.NoneInit`; `HederaLib.requireValid` (public view),
   `HederaLib.checkAndAssociate` (internal), errors `HederaLib.HtsQueryFailed`, `HederaLib.AssociateFailed`;
   `SingleUnderlyingToken._initLegacyFeatures(bool)`.
 
@@ -818,7 +818,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, I
     function implementation() external view returns (address) { return _SELF; }
     function creator() external view returns (address) { return AdminLib.$().creator; }
     function version() external view returns (uint64) { return AdminLib.$().version; }
-    /// @notice CTR-TOK-21 kind: 0 `NONE`, 1 `UNDERLYING`, 2 `NONE_ZETHER`, 3 `UNDERLYING_ZETHER`.
+    /// @notice CTR-TOK-21 kind: 0 `NORMAL`, 1 `WRAPPED`, 2 `NORMAL_ZETHER`, 3 `WRAPPED_ZETHER`.
     function kind() external view returns (uint8) { return AdminLib.$().kind; }
 
     // ------------------------------------------------------------------ features, owner, roles (CTR-TOK-22)
@@ -987,7 +987,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryTokenV2, I
 }
 ```
 
-- [ ] **Step 3: `NoUnderlyingToken.sol`** — replace the whole file:
+- [ ] **Step 3: `NormalToken.sol`** — replace the whole file:
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
@@ -999,12 +999,12 @@ import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
 import {IOpenFactoryV2} from "../common/IOpenFactoryV2.sol";
 
-/// @title Kind `NONE` (CTR-TOK-21): a standalone token, no underlying.
+/// @title Kind `NORMAL` (CTR-TOK-21): a standalone token, no underlying.
 /// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn). A supply cap or a mint
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by the factory through
 ///         `initialize(creator, [], version, abi.encode(NoneInit))`; P1e switches to `TokenConfig`.
-contract NoUnderlyingToken is MetaTokenBase {
-    /// @notice The NONE subset of `TokenConfig` (CTR-TOK-25).
+contract NormalToken is MetaTokenBase {
+    /// @notice The NORMAL subset of `TokenConfig` (CTR-TOK-25).
     struct NoneInit {
         string name;
         string symbol;
@@ -1030,7 +1030,7 @@ contract NoUnderlyingToken is MetaTokenBase {
         if (underlyings.length != 0) revert UnderlyingCountInvalid(underlyings.length);
         NoneInit memory c = abi.decode(initData, (NoneInit));
         _setMetadata(c.name, c.symbol, c.decimals);
-        AdminLib.init(AdminLib.KIND_NONE, c.features, c.lockedFeatures, c.owner, c.roles);
+        AdminLib.init(AdminLib.KIND_NORMAL, c.features, c.lockedFeatures, c.owner, c.roles);
         if (c.initialSupply != 0) _mint(c.initialHolder, c.initialSupply);
     }
 
@@ -1078,7 +1078,7 @@ constructor becomes
 and `_init` calls `_initLegacyFeatures(false);` right after `_setRateConfig(cfg);`, with this function added after `_init`:
 
 ```solidity
-    /// @dev Transitional (P1d replaces the wrapper tiers with `UnderlyingToken`): the rate admin and the guardian stay
+    /// @dev Transitional (P1d replaces the wrapper tiers with `WrappedToken`): the rate admin and the guardian stay
     ///      in this contract's storage and are not `AdminLib` roles; the flags only report them, locked, with
     ///      `PAYABLE` on as built and no owner.
     function _initLegacyFeatures(bool wrapDisableable) internal {
@@ -1086,7 +1086,7 @@ and `_init` calls `_initLegacyFeatures(false);` right after `_setRateConfig(cfg)
         if (rateAdjustable) f |= 1 << AdminLib.RATE_ADJUSTABLE;
         if (wrapDisableable) f |= 1 << AdminLib.WRAP_DISABLEABLE;
         AdminLib.Roles memory none;
-        AdminLib.init(AdminLib.KIND_UNDERLYING, f, f, address(0), none);
+        AdminLib.init(AdminLib.KIND_WRAPPED, f, f, address(0), none);
     }
 ```
 
@@ -1100,7 +1100,7 @@ and `_init` calls `_initLegacyFeatures(false);` right after `_setRateConfig(cfg)
 
 and in `_init` insert `_initLegacyFeatures(guardian_ != address(0));` directly before the `_addLeg` loop.
 
-`src/hedera/HederaTokensV2.sol` — replace the whole file (the NONE child is gone; the signature override now lives
+`src/hedera/HederaTokensV2.sol` — replace the whole file (the NORMAL child is gone; the signature override now lives
 in `MetaTokenBase`):
 
 ```solidity
@@ -1113,8 +1113,8 @@ import {HederaLib} from "./HederaLib.sol";
 
 /// @title Transitional Hedera wrapper tiers (CTR-TOK-23): `IS_HEDERA = true` gives them HIP-632 signatures from
 ///        `MetaTokenBase`; what is left here is the fail-closed HTS check and association of every leg at init
-///        (`HederaLib.checkAndAssociate`), which moves into `UnderlyingLib` with `UnderlyingToken` in P1d. Kind `NONE`
-///        on Hedera is a `NoUnderlyingToken` deployed with `isHedera_ = true`. No SmartKeyAccount on Hedera:
+///        (`HederaLib.checkAndAssociate`), which moves into `WrappedLib` with `WrappedToken` in P1d. Kind `NORMAL`
+///        on Hedera is a `NormalToken` deployed with `isHedera_ = true`. No SmartKeyAccount on Hedera:
 ///        `SMART_KEY_ACCOUNT_IMPL = 0`, every contract wallet keeps the 50k ERC-1271 cap.
 contract HederaSingleUnderlyingToken is SingleUnderlyingToken {
     constructor(address factory_, bytes32 chainUid_) SingleUnderlyingToken(factory_, address(0), chainUid_, true) {}
@@ -1135,26 +1135,26 @@ contract HederaMultiUnderlyingToken is MultiUnderlyingToken {
 }
 ```
 
-- [ ] **Step 5: Scripts** — `script/Deploy.s.sol`: `new NoUnderlyingToken(address(f), subjectImpl, uid)` →
-`new NoUnderlyingToken(address(f), subjectImpl, uid, false)`. `script/hedera/DeployHedera.s.sol`: import
-`{NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol"` instead of `HederaNoUnderlyingToken`, and
-`new HederaNoUnderlyingToken(address(f), uid)` → `new NoUnderlyingToken(address(f), address(0), uid, true)`.
+- [ ] **Step 5: Scripts** — `script/Deploy.s.sol`: `new NormalToken(address(f), subjectImpl, uid)` →
+`new NormalToken(address(f), subjectImpl, uid, false)`. `script/hedera/DeployHedera.s.sol`: import
+`{NormalToken} from "../../src/metatx/NormalToken.sol"` instead of `HederaNoUnderlyingToken`, and
+`new HederaNoUnderlyingToken(address(f), uid)` → `new NormalToken(address(f), address(0), uid, true)`.
 `forge build src` (capped) — Expected: success.
 
 - [ ] **Step 6: Port the tests.** Rules:
-  - every `new NoUnderlyingToken/SingleUnderlyingToken/MultiUnderlyingToken(f, s, uid)` gains `, false`;
-    `new HederaNoUnderlyingToken(f, uid)` → `new NoUnderlyingToken(f, address(0), uid, true)`;
+  - every `new NormalToken/SingleUnderlyingToken/MultiUnderlyingToken(f, s, uid)` gains `, false`;
+    `new HederaNoUnderlyingToken(f, uid)` → `new NormalToken(f, address(0), uid, true)`;
     `HederaHts.X` / `HederaSig` → `HederaLib.X`; imports from `HederaV2Lib.sol` → `HederaLib.sol`.
-  - NONE init data `abi.encode(name, symbol, decimals, supply, minter)` → `abi.encode(NoUnderlyingToken.NoneInit({…}))`
+  - NORMAL init data `abi.encode(name, symbol, decimals, supply, minter)` → `abi.encode(NormalToken.NoneInit({…}))`
     with `features: PAYABLE | MINTABLE | BURNABLE` (= `7`, the built behaviour), `lockedFeatures: 0`,
     `owner: address(0)`, `roles.minter: <old minter>`, `initialSupply: <old supply>`, `initialHolder: <old creator>`.
     Put one helper `_noneInit(...)` in `V2Fixture` (and reuse it; tests outside V2Fixture may inline the struct).
-  - `t.minter()` → `t.hasRole(1, x)`; `renounceMinter()` → `renounceRole(1)`; `NoUnderlyingToken.NotMinter` →
+  - `t.minter()` → `t.hasRole(1, x)`; `renounceMinter()` → `renounceRole(1)`; `NormalToken.NotMinter` →
     `AdminLib.MissingRole(1, caller)` (or `AdminLib.FeatureNotSet(1)` when the flag is off — "zero minter means fixed
     supply" becomes "no MINTABLE flag"); `MinterRenounced` → `AdminLib.RoleRevoked(1, minter, minter)`.
   - `Allowlist.t.sol` `test_refusedEverywhere`: `renounceMinter` → `renounceRole(uint8)`; keep `mint`.
-  - Size tests: `FactoryV2.t.sol` `test_implementationSizes` ceilings Single **28,672**, Multi **29,696** (NONE stays
-    ≤ 20,480); `HederaV2.t.sol` NONE ≤ 20,480, HederaSingle ≤ **29,696**, HederaMulti ≤ **30,720**; update the
+  - Size tests: `FactoryV2.t.sol` `test_implementationSizes` ceilings Single **28,672**, Multi **29,696** (NORMAL stays
+    ≤ 20,480); `HederaV2.t.sol` NORMAL ≤ 20,480, HederaSingle ≤ **29,696**, HederaMulti ≤ **30,720**; update the
     "measured" comments with the numbers `forge build --sizes` prints.
   - `Layout.t.sol`: regenerate the six pins → five (`HederaNoUnderlyingToken` is gone: drop its `_pin` line and file)
     with the `jq` loop from P1b (`{labels, slots, offsets}` of `.storageLayout.storage[]`);
@@ -1167,15 +1167,15 @@ contract HederaMultiUnderlyingToken is MultiUnderlyingToken {
     `WRITE_KAT=true forge test --match-contract TokenKatTest` and record both new digests in the report.
   - Everything else keeps its assertions.
 
-- [ ] **Step 7: Full suite** — Expected: 0 failed. Then the e2e deploy check (it deploys `NoUnderlyingToken` with the
+- [ ] **Step 7: Full suite** — Expected: 0 failed. Then the e2e deploy check (it deploys `NormalToken` with the
   linked libraries): `timeout 1800 scripts/capped bash -c 'cd scaas-node && CARGO_BUILD_JOBS=4 cargo test --test e2e -- --ignored 2>&1 | tail -15'`
   and the same for `e2e_hedera`. Expected: 4/4 and 1/1; if a prerequisite is missing, say so.
 
-- [ ] **Step 8: Commit** — `git status --short` first; message `P1c: MetaTokenBase on AdminLib — PAYABLE gate, init/provenance in scaas.token, IS_HEDERA + HederaLib, NONE on MINTABLE/BURNABLE roles` + trailer.
+- [ ] **Step 8: Commit** — `git status --short` first; message `P1c: MetaTokenBase on AdminLib — PAYABLE gate, init/provenance in scaas.token, IS_HEDERA + HederaLib, NORMAL on MINTABLE/BURNABLE roles` + trailer.
 
 ---
 
-### Task 3: Feature tests on kind NONE
+### Task 3: Feature tests on kind NORMAL
 
 **Model:** Sonnet, effort high (complete code below, run green in a scratch copy).
 
@@ -1183,7 +1183,7 @@ contract HederaMultiUnderlyingToken is MultiUnderlyingToken {
 - Create: `smartcontracts/evm/test/v2/Features.t.sol`
 
 **Interfaces:**
-- Consumes: Task 2 (`NoUnderlyingToken(f, s, uid, isHedera)`, `NoneInit`, the token admin functions), Task 1
+- Consumes: Task 2 (`NormalToken(f, s, uid, isHedera)`, `NoneInit`, the token admin functions), Task 1
   (`AdminLib` errors/events), `test/hedera/HederaMocks.sol` (`MockHederaAccountService`).
 
 - [ ] **Step 1: Write `test/v2/Features.t.sol`**
@@ -1196,7 +1196,7 @@ import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
@@ -1205,7 +1205,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 
-/// Kind NONE on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
+/// Kind NORMAL on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
 contract FeaturesTest is Test {
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     uint256 internal constant PK = 0xA11CE;
@@ -1225,7 +1225,7 @@ contract FeaturesTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        impl = address(new NoUnderlyingToken(address(this), address(0), UID, false));
+        impl = address(new NormalToken(address(this), address(0), UID, false));
     }
 
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
@@ -1233,14 +1233,14 @@ contract FeaturesTest is Test {
     {
         AdminLib.Roles memory r;
         r.minter = minter_;
-        return abi.encode(NoUnderlyingToken.NoneInit({
+        return abi.encode(NormalToken.NoneInit({
             name: "Points", symbol: "PTS", decimals: 6, features: features, lockedFeatures: locked, owner: owner_,
             roles: r, initialSupply: supply, initialHolder: alice
         }));
     }
 
-    function _token(address implementation, bytes memory cfg) internal returns (NoUnderlyingToken t) {
-        t = NoUnderlyingToken(Clones.clone(implementation));
+    function _token(address implementation, bytes memory cfg) internal returns (NormalToken t) {
+        t = NormalToken(Clones.clone(implementation));
         t.initialize(address(this), new address[](0), 1, cfg);
     }
 
@@ -1252,7 +1252,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ init, provenance
 
     function test_initWritesMetadataProvenanceAndFlags() public {
-        NoUnderlyingToken t = _token(impl, _cfg(PAYABLE | MINTABLE | BURNABLE, MINTABLE, ownerA, minter, 1_000));
+        NormalToken t = _token(impl, _cfg(PAYABLE | MINTABLE | BURNABLE, MINTABLE, ownerA, minter, 1_000));
         assertEq(t.name(), "Points");
         assertEq(t.symbol(), "PTS");
         assertEq(t.decimals(), 6);
@@ -1268,7 +1268,7 @@ contract FeaturesTest is Test {
     }
 
     function test_initRefusesFlagsOfAnotherKind() public {
-        NoUnderlyingToken t = NoUnderlyingToken(Clones.clone(impl));
+        NormalToken t = NormalToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureInvalidForKind.selector, uint8(3)));
         t.initialize(address(this), new address[](0), 1, _cfg(1 << 3, 0, address(0), address(0), 0));
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureNotBuilt.selector, uint8(7)));
@@ -1278,7 +1278,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ MINTABLE, BURNABLE
 
     function test_mint_needsTheFlagAndTheRole() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.MissingRole.selector, uint8(1), alice));
         t.mint(alice, 1);
@@ -1293,25 +1293,25 @@ contract FeaturesTest is Test {
     }
 
     function test_mint_withoutTheFlag_fixedSupply() public {
-        NoUnderlyingToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
+        NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureNotSet.selector, uint8(1)));
         t.mint(alice, 1);
         assertEq(t.totalSupply(), 7);
     }
 
     function test_burn_onlyWithBurnable_directAndGasless() public {
-        NoUnderlyingToken off = _token(impl, _cfg(0, 0, address(0), address(0), 100));
+        NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 100));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureNotSet.selector, uint8(2)));
         off.burn(1);
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
-            data: abi.encodeCall(NoUnderlyingToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
+            data: abi.encodeCall(NormalToken.burn, (1)), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
             mode: RR, relayer: relayer, fee: 0, feeRecipient: address(0)});
         bytes memory s = _sig(off.mtxDigest(m));
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(AdminLib.FeatureNotSet.selector, uint8(2)));
         off.mtxExecute(m, s);
-        NoUnderlyingToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
+        NormalToken on = _token(impl, _cfg(BURNABLE, 0, address(0), address(0), 100));
         s = _sig(on.mtxDigest(m));
         vm.prank(relayer);
         on.mtxExecute(m, s);
@@ -1321,7 +1321,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ PAYABLE
 
     function test_payable_off_gatesThePayEntries_notMetaTransfer() public {
-        NoUnderlyingToken t = _token(impl, _cfg(0, 0, address(0), address(0), 100));
+        NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 100));
         bytes memory off = abi.encodeWithSelector(AdminLib.FeatureNotSet.selector, uint8(0));
         vm.prank(alice);
         vm.expectRevert(off);
@@ -1345,15 +1345,15 @@ contract FeaturesTest is Test {
     }
 
     function test_payable_on_payWithFeeWorks() public {
-        NoUnderlyingToken t = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 100));
+        NormalToken t = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 100));
         vm.prank(alice);
         t.payWithFee(shop, 10, FeeMode.NONE, 0, address(0), bytes32("r"));
         assertEq(t.balanceOf(shop), 10);
     }
 
     function test_supportsInterface_paymentOnlyWhenPayable() public {
-        NoUnderlyingToken off = _token(impl, _cfg(0, 0, address(0), address(0), 0));
-        NoUnderlyingToken on = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 0));
+        NormalToken off = _token(impl, _cfg(0, 0, address(0), address(0), 0));
+        NormalToken on = _token(impl, _cfg(PAYABLE, 0, address(0), address(0), 0));
         bytes4[4] memory always = [type(IERC165).interfaceId, type(IERC20).interfaceId, type(IMetaTx).interfaceId,
             type(IERC20MetaTx).interfaceId];
         for (uint256 i; i < 4; ++i) {
@@ -1368,7 +1368,7 @@ contract FeaturesTest is Test {
     // ------------------------------------------------------------------ owner through the token
 
     function test_ownerAdministersThroughTheToken() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 0));
         vm.prank(ownerA);
         vm.expectEmit(address(t));
         emit AdminLib.RoleGranted(1, minter, ownerA);
@@ -1393,7 +1393,7 @@ contract FeaturesTest is Test {
     }
 
     function test_adminFunctionsAreNeverSelfCalls() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, alice, address(0), 0));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, alice, address(0), 0));
         bytes4[7] memory sels = [t.grantRole.selector, t.revokeRole.selector, t.renounceRole.selector,
             t.disableFeature.selector, t.transferOwnership.selector, t.acceptOwnership.selector,
             t.renounceOwnership.selector];
@@ -1410,7 +1410,7 @@ contract FeaturesTest is Test {
 
     /// AdminLib writes `scaas.token` only: the meta-tx lanes (`scaas.metatx`) and the ERC-20 slots stay put.
     function test_adminWritesDoNotTouchOtherNamespaces() public {
-        NoUnderlyingToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 100));
+        NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, address(0), 100));
         bytes32 lane = keccak256(abi.encode(uint256(1), keccak256(abi.encode(alice,
             bytes32(0x06b01547c739946503c06c80685cc72ae2fec5074fd602f84cd2fa888722ac00)))));
         bytes32 bal = keccak256(abi.encode(alice, uint256(0)));
@@ -1438,12 +1438,12 @@ contract FeaturesTest is Test {
         uint256 edKey = 0xA11CE5;
         address native = address(uint160(1_234_567));
         MockHederaAccountService(has).setEdKey(native, vm.addr(edKey));
-        address hImpl = address(new NoUnderlyingToken(address(this), address(0), UID, true));
+        address hImpl = address(new NormalToken(address(this), address(0), UID, true));
         AdminLib.Roles memory r;
-        bytes memory cfg = abi.encode(NoUnderlyingToken.NoneInit({name: "P", symbol: "P", decimals: 0, features: 0,
+        bytes memory cfg = abi.encode(NormalToken.NoneInit({name: "P", symbol: "P", decimals: 0, features: 0,
             lockedFeatures: 0, owner: address(0), roles: r, initialSupply: 100, initialHolder: native}));
-        NoUnderlyingToken h = _token(hImpl, cfg);
-        NoUnderlyingToken e = _token(impl, cfg);
+        NormalToken h = _token(hImpl, cfg);
+        NormalToken e = _token(impl, cfg);
         assertTrue(h.IS_HEDERA());
         MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: native, to: shop, value: 10, entryRef: 0,
             batch: 1, nonce: 0, validUntil: block.timestamp + 300, mode: RR, relayer: relayer, fee: 0,
@@ -1462,7 +1462,7 @@ contract FeaturesTest is Test {
 
 - [ ] **Step 2: Run** — Expected: 12 passed. Full suite: 0 failed.
 
-- [ ] **Step 3: Commit** — message `P1c: kind NONE feature tests — flags, owner, PAYABLE gate, ERC-165, IS_HEDERA, namespace isolation` + trailer.
+- [ ] **Step 3: Commit** — message `P1c: kind NORMAL feature tests — flags, owner, PAYABLE gate, ERC-165, IS_HEDERA, namespace isolation` + trailer.
 
 ---
 
@@ -1472,12 +1472,12 @@ contract FeaturesTest is Test {
 
 **Files:**
 - Modify: `docs/contracts/token-wrappers.md` — CTR-TOK-22 "Transitional (BUILT)" paragraph (owner model and flags
-  built on kind NONE through `AdminLib`; regulated flags refused `FeatureNotBuilt` until the asset suite (C2); wrapper
-  tiers report legacy powers (C5)); CTR-TOK-23 Transitional (NONE child gone; `IS_HEDERA` built; Hedera wrapper children
+  built on kind NORMAL through `AdminLib`; regulated flags refused `FeatureNotBuilt` until the asset suite (C2); wrapper
+  tiers report legacy powers (C5)); CTR-TOK-23 Transitional (NORMAL child gone; `IS_HEDERA` built; Hedera wrapper children
   remain until P1d); CTR-TOK-24 (the `AdminLib`/`HederaLib` rows as built, no external `PayLib` (C3), the measured
-  sizes and C9); §8 storage table (C8 and the `scaas.token` namespace); §7 Interfaces rows for `NoUnderlyingToken`
+  sizes and C9); §8 storage table (C8 and the `scaas.token` namespace); §7 Interfaces rows for `NormalToken`
   (no `MinterRenounced`/`NotMinter`; `AdminLib` events/errors) and Hedera children. Net ≤ 0 lines (budget warning).
-- Modify: `docs/contracts/metatx.md` §16 "P1b (BUILT)" bullet → add P1c (features/roles/`PAYABLE` gate built on NONE).
+- Modify: `docs/contracts/metatx.md` §16 "P1b (BUILT)" bullet → add P1c (features/roles/`PAYABLE` gate built on NORMAL).
 - Modify: `docs/contracts/asset-suite.md` CTR-AS-17 neighbourhood: one sentence "Transitional (BUILT): the flags exist,
   `initialize` refuses 5–8 with `FeatureNotBuilt` until this stream builds the controls" (only if no such note exists).
 - Modify: `TODO.md` (§00 P1 line: P1c done with its merge; P1c notes (a)–(e) dispositions: (a) no `_update`
@@ -1490,11 +1490,11 @@ contract FeaturesTest is Test {
 ```bash
 timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge build --sizes --json 2>/dev/null' > /tmp/p1c-sizes.json || true
 jq -r 'to_entries[] | select(.value.runtime_size > 24576) | "\(.key) \(.value.runtime_size)"' /tmp/p1c-sizes.json
-jq -r 'to_entries[] | select(.key | test("NoUnderlyingToken|AdminLib|HederaLib")) | "\(.key) \(.value.runtime_size)"' /tmp/p1c-sizes.json
+jq -r 'to_entries[] | select(.key | test("NormalToken|AdminLib|HederaLib")) | "\(.key) \(.value.runtime_size)"' /tmp/p1c-sizes.json
 ```
 
 Expected over 24,576: exactly `ZetherToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken`,
-`HederaSingleUnderlyingToken`, `HederaMultiUnderlyingToken`; `NoUnderlyingToken` ≤ 20,480. Anything else: stop, report.
+`HederaSingleUnderlyingToken`, `HederaMultiUnderlyingToken`; `NormalToken` ≤ 20,480. Anything else: stop, report.
 
 - [ ] **Step 2: Docs edits**, then `python3 scripts/docs_check.py check`, `… facts check`,
   `python3 scripts/test_docs_check.py` — 0 errors (budget warnings may stay; `token-wrappers.md` must not grow).

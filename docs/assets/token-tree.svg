@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="740" viewBox="0 0 960 740" role="img" aria-labelledby="t d">
   <title id="t">EVM token tree</title>
-  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, built in phase P3 (unaudited, dev chains only); NONE_PQZ and UNDERLYING_PQZ, the post-quantum confidential kinds, built in phase P6g (unaudited, chain 7622). External libraries: AdminLib, UnderlyingLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries PqzStateLib, PqzTransferLib, PqzBurnLib and PqzViewLib (P6g, plan 5h; PqzCore is internal), all built. Features are flags chosen at creation. The combined kinds 6 and 7 (both confidential layers in one token) were dropped on 2026-10-20; their ids are not reused.</desc>
+  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed), built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER, built in phase P3 (unaudited, dev chains only); NORMAL_PQZ and WRAPPED_PQZ, the post-quantum confidential kinds, built in phase P6g (unaudited, chain 7622). External libraries: AdminLib, WrappedLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries PqzStateLib, PqzTransferLib, PqzBurnLib and PqzViewLib (P6g, plan 5h; PqzCore is internal), all built. Features are flags chosen at creation. The combined kinds 6 and 7 (both confidential layers in one token) were dropped on 2026-10-20; their ids are not reused.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -53,29 +53,29 @@
 
   <!-- kinds -->
   <rect class="built" x="24" y="380" width="156" height="96" rx="8"/>
-  <text class="k" x="102" y="401" text-anchor="middle">NONE</text>
-  <text class="m" x="102" y="420" text-anchor="middle">NoUnderlyingToken</text>
+  <text class="k" x="102" y="401" text-anchor="middle">NORMAL</text>
+  <text class="m" x="102" y="420" text-anchor="middle">NormalToken</text>
   <text class="s" x="102" y="438" text-anchor="middle">standalone: loyalty,</text>
   <text class="s" x="102" y="453" text-anchor="middle">internal units</text>
   <text class="okc" x="102" y="469" text-anchor="middle">built (P1)</text>
 
   <rect class="built" x="190" y="380" width="156" height="96" rx="8"/>
-  <text class="k" x="268" y="401" text-anchor="middle">UNDERLYING</text>
-  <text class="m" x="268" y="420" text-anchor="middle">UnderlyingToken</text>
+  <text class="k" x="268" y="401" text-anchor="middle">WRAPPED</text>
+  <text class="m" x="268" y="420" text-anchor="middle">WrappedToken</text>
   <text class="s" x="268" y="438" text-anchor="middle">wrapper of 1–8 legs,</text>
   <text class="s" x="268" y="453" text-anchor="middle">ERC-20s or native coin</text>
   <text class="okc" x="268" y="469" text-anchor="middle">built (P1)</text>
 
   <rect class="built" x="356" y="380" width="156" height="96" rx="8"/>
-  <text class="k" x="434" y="401" text-anchor="middle">NONE_ZETHER</text>
-  <text class="m" x="434" y="420" text-anchor="middle" font-size="10.5">NoUnderlyingZetherToken</text>
+  <text class="k" x="434" y="401" text-anchor="middle">NORMAL_ZETHER</text>
+  <text class="m" x="434" y="420" text-anchor="middle" font-size="10.5">NormalZetherToken</text>
   <text class="s" x="434" y="438" text-anchor="middle">standalone +</text>
   <text class="s" x="434" y="453" text-anchor="middle">Zether layer</text>
   <text class="okc" x="434" y="469" text-anchor="middle">built (P3)</text>
 
   <rect class="built" x="522" y="380" width="156" height="96" rx="8"/>
-  <text class="k" x="600" y="401" text-anchor="middle">UNDERLYING_ZETHER</text>
-  <text class="m" x="600" y="420" text-anchor="middle" font-size="10.5">UnderlyingZetherToken</text>
+  <text class="k" x="600" y="401" text-anchor="middle">WRAPPED_ZETHER</text>
+  <text class="m" x="600" y="420" text-anchor="middle" font-size="10.5">WrappedZetherToken</text>
   <text class="s" x="600" y="438" text-anchor="middle">wrapper + Zether layer,</text>
   <text class="s" x="600" y="453" text-anchor="middle">wrap-shield from a leg</text>
   <text class="okc" x="600" y="469" text-anchor="middle">built (P3)</text>
@@ -86,15 +86,15 @@
   <line class="flow" x1="600" y1="490" x2="600" y2="498" marker-end="url(#ah)"/>
 
   <rect class="built" x="356" y="500" width="156" height="96" rx="8"/>
-  <text class="k" x="434" y="521" text-anchor="middle">NONE_PQZ</text>
-  <text class="m" x="434" y="540" text-anchor="middle" font-size="10.5">NoUnderlyingPqzToken</text>
+  <text class="k" x="434" y="521" text-anchor="middle">NORMAL_PQZ</text>
+  <text class="m" x="434" y="540" text-anchor="middle" font-size="10.5">NormalPqzToken</text>
   <text class="s" x="434" y="558" text-anchor="middle">standalone +</text>
   <text class="s" x="434" y="573" text-anchor="middle">PQZ layer (lattice)</text>
   <text class="okc" x="434" y="589" text-anchor="middle">built (P6g)</text>
 
   <rect class="built" x="522" y="500" width="156" height="96" rx="8"/>
-  <text class="k" x="600" y="521" text-anchor="middle">UNDERLYING_PQZ</text>
-  <text class="m" x="600" y="540" text-anchor="middle" font-size="10.5">UnderlyingPqzToken</text>
+  <text class="k" x="600" y="521" text-anchor="middle">WRAPPED_PQZ</text>
+  <text class="m" x="600" y="540" text-anchor="middle" font-size="10.5">WrappedPqzToken</text>
   <text class="s" x="600" y="558" text-anchor="middle">wrapper + PQZ layer,</text>
   <text class="s" x="600" y="573" text-anchor="middle">wrap-shield from a leg</text>
   <text class="okc" x="600" y="589" text-anchor="middle">built (P6g)</text>
@@ -119,9 +119,9 @@
   <text class="s" x="716" y="168">flags, roles, owner · all kinds</text>
 
   <rect class="built" x="702" y="194" width="234" height="58" rx="8"/>
-  <text class="b" x="716" y="216">UnderlyingLib</text>
+  <text class="b" x="716" y="216">WrappedLib</text>
   <text class="okc" x="922" y="216" text-anchor="end">built</text>
-  <text class="s" x="716" y="236">legs, wrap, rates · UNDERLYING*</text>
+  <text class="s" x="716" y="236">legs, wrap, rates · WRAPPED*</text>
 
   <rect class="built" x="702" y="262" width="234" height="58" rx="8"/>
   <text class="b" x="716" y="284">HederaLib</text>

@@ -22,7 +22,7 @@ or not at all, and anyone can read the rules.
 
 | Term | Meaning |
 |---|---|
-| Item kind | One token (`NONE` kind, `decimals 0`). All units of a kind are identical and interchangeable. |
+| Item kind | One token (`NORMAL` kind, `decimals 0`). All units of a kind are identical and interchangeable. |
 | Unit | One item. Balance 5 of "Iron Ingot" = five ingots. |
 | Recipe | `inputs → outputs`, each side a list of (item kind, amount): m·X + n·Y + … → k·Z + l·W + … |
 | Catalyst | An item that must be held for a recipe but is not consumed (an anvil, a crafting licence). |
@@ -82,7 +82,7 @@ something you can spend.
 
 ## 5. Creating the item tokens
 
-Each item kind is one token created through `OpenFactory.createToken` (`NONE` kind) with:
+Each item kind is one token created through `OpenFactory.createToken` (`NORMAL` kind) with:
 
 | Field | Value | Why |
 |---|---|---|
@@ -136,7 +136,7 @@ Rules worth building in:
 
 | Part | Status |
 |---|---|
-| Item tokens: `NONE`, `decimals 0`, `MINTABLE`, `BURNABLE`, several minters | BUILT |
+| Item tokens: `NORMAL`, `decimals 0`, `MINTABLE`, `BURNABLE`, several minters | BUILT |
 | Gasless transfers and fees in the item token | BUILT |
 | Item markets on `SCaaSDex` | BUILT on EVM |
 | Receiver allowlist (soul-bound items) | SPECIFIED |

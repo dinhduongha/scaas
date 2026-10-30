@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Classical Zether as two token kinds on the one meta-transaction base (MT-6, CTR-TOK-21, CTR-ZTH-44…47):
-`NONE_ZETHER` (`NoUnderlyingZetherToken`) and `UNDERLYING_ZETHER` (`UnderlyingZetherToken`), a `ZetherLayer` over the
+`NORMAL_ZETHER` (`NormalZetherToken`) and `WRAPPED_ZETHER` (`WrappedZetherToken`), a `ZetherLayer` over the
 public ERC-20 balance with its logic in the external library `ZetherLib` (`scaas.zether`), the prover views in a
 stateless `ZetherStatements`; shield from the public balance (`zetherShield`), wrap-shield from a leg's underlying
 (`zetherWrapShield`), unshield into public units (`zetherUnshield`) or straight out to a leg (`zetherUnshieldUnwrap`);
@@ -16,9 +16,9 @@ chains; the built `ZetherToken` line backed up in `smartcontracts/evm/legacy/p3/
 one-line entry points; `ZetherLib` (public functions, `DELEGATECALL`) holds the storage and the logic, ported from the
 built `ZetherToken` (`_prepare*` → `prepareSingle/Multi/Unshield`, `_header` with `chainUid`, `_credit`, `_rollOver`,
 `_storeBundles`, disclosure entries unchanged). The statement builders are `internal`, so `ZetherStatements` runs the
-very same code on the token's views. The kinds are the public kinds plus the layer: `NoUnderlyingZetherToken is
-NoUnderlyingToken, ZetherLayer`, `UnderlyingZetherToken is UnderlyingToken, ZetherLayer` (kind ids 2/3, domain
-`"SCaaS ZetherToken"` through an `ERC20MetaTx._domainName()` hook, `UnderlyingLib.initToken` takes the kind). The base gains
+very same code on the token's views. The kinds are the public kinds plus the layer: `NormalZetherToken is
+NormalToken, ZetherLayer`, `WrappedZetherToken is WrappedToken, ZetherLayer` (kind ids 2/3, domain
+`"SCaaS ZetherToken"` through an `ERC20MetaTx._domainName()` hook, `WrappedLib.initToken` takes the kind). The base gains
 one hook: `MetaTxBase._envelopeBinding(m)` (0 by default) stored in a transient slot for the self-call and read by
 `_ticketBinding()` only under a live ticket. Disclosure (`ZetherDisclosure`, `ITransferDisclosure`, four openings,
 auditor key, per-transfer auditor opt-out, HASH/BUNDLE/NONE storage) is carried over unchanged except the `chainUid` the
@@ -56,7 +56,7 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
 - `via_ir` stays off: `ZetherLib`'s `_prepare*`/`_settle*` split and the fixture's helpers exist to stay under the stack
   limit.
 - Code size is not a concern (owner: wait for the Glamsterdam fork; anvil and the SCaaS testnet run 64 KiB); the ratchet
-  baseline records sizes (`NoUnderlyingToken` 22,978 B, `UnderlyingToken` 30,036 B, `NoUnderlyingZetherToken` 30,659 B, `UnderlyingZetherToken` 40,381 B (init 41,991 B), `ZetherLib` 15,662 B, `ZetherStatements` 7,311 B). The deploy of the Zether stack on an anvil needs `--code-size-limit 65536`.
+  baseline records sizes (`NormalToken` 22,978 B, `WrappedToken` 30,036 B, `NormalZetherToken` 30,659 B, `WrappedZetherToken` 40,381 B (init 41,991 B), `ZetherLib` 15,662 B, `ZetherStatements` 7,311 B). The deploy of the Zether stack on an anvil needs `--code-size-limit 65536`.
 - Component docs say "controller ruling, pending the owner", never a K-id. The multi-key account is `SmartKeyAccount`.
 - Commit trailer (both lines): `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and
   `Claude-Session: https://claude.ai/code/session_01GBLbPyQuG5HXALewwBZ7Bb`. Never `git add claude-code-api.txt`.
@@ -84,14 +84,14 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
   through `zetherUnshield`: `test_unshieldUnwrap_directProofBindsLegAndMinOut`.
 - **Allowlist and fees.** Every confidential op `ABSOLUTE` (PERCENT refused before the call), the roll-overs, `mint` and
   `mtxTrade` refused, the outer fee only from the signer's public balance, a fee to the token refused:
-  `test_allowlistPinned`, `test_allowlistPinned_underlyingZether`, `test_percentFeeRefused`,
+  `test_allowlistPinned`, `test_allowlistPinned_wrappedZether`, `test_percentFeeRefused`,
   `test_outerFeeOnlyFromThePublicBalance`, `test_feeToTheTokenRefused`.
 - **Replay and the acc/pending race** carried over: `test_replaySameProofRejected`, `…AcrossTokens…`, `…AcrossChains…`,
   `test_rollOverBetweenProveAndSubmitRejectsCheaply`, `test_rollOverSigned*`.
 - **Disclosure carried over (owner flag).** Four openings on both formats and all three storage modes, the auditor
   opt-out, `disclosure()`/`transferEntry`/`auditorKey()` on both kinds: `test_disclosureFourOpenings`,
   `test_singleAuditorOptOut`, `test_disclosure{Hash,Bundle,NoBundle}Mode…` (Multi), `test_auditorOptOut`,
-  `test_disclosureOnTheUnderlyingKind`, `test_thirdPartyContractVerifiesOnChain`; HASH in one `bytes32` slot
+  `test_disclosureOnTheWrappedKind`, `test_thirdPartyContractVerifiesOnChain`; HASH in one `bytes32` slot
   (disclosure review G2): `test_disclosureHashMode` reads the slot.
 - **Relayed HASH (G3).** The default `zetherTransfer` relays like the single format:
   `test_relayedMultiTransfer_unshield_shield`.
@@ -108,11 +108,11 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
   address, so without it two chains would reuse one `s` (leaking `v1 − v2`). The built `UniversalAccountRegistry` is not
   changed (its PoP binds `msg.sender`; the UA registry that replaces it carries `chainUid`, CTR-UA-22).
 - **K2 — The kinds are the public kinds plus the layer.** `ZetherLayer is MetaTokenBase, IZetherToken`;
-  `NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer`, `UnderlyingZetherToken is UnderlyingToken, ZetherLayer`
+  `NormalZetherToken is NormalToken, ZetherLayer`, `WrappedZetherToken is WrappedToken, ZetherLayer`
   (the class diagram's `MetaTokenBase <|--` holds through the parent), so mint/burn, the legs, `wrap`/`unwrap`,
   `addReserve`, `mtxWrap`, the rate and guardian roles are inherited, not copied. `kind()`, `_init`, `mtxSelectors`,
   `_mtxRule`, `executeRate`, `disableFeature` become `virtual` in the public kinds (no bytecode change); the second
-  base forces `disableFeature` to be restated in `UnderlyingZetherToken` (three lines). No `isHedera` on the Zether
+  base forces `disableFeature` to be restated in `WrappedZetherToken` (three lines). No `isHedera` on the Zether
   kinds: no Hedera chain is a dev chain.
 - **K3 — Domain name.** CTR-MTX-02 / CTR-ZTH-08 give Zether `("SCaaS ZetherToken", "1", chainId, clone, chain_uid)`;
   token-wrappers.md §7's interface comment says "SCaaS MetaToken" for "all kinds". Ruled for CTR-MTX-02: a
@@ -129,8 +129,8 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
   `initialize` repeats the dev-chain check.
 - **K6 — The allowlist (CTR-ZTH-34, CTR-MTX-19).** Spec lists `zetherTransfer`, `zetherUnshield`, `zetherShield`;
   ruled: every signer-authorised confidential op is allowlisted `ABSOLUTE` with `staticLen 0` — the four transfers,
-  `zetherShield`, `zetherUnshield`, and on `UNDERLYING_ZETHER` `zetherWrapShield` (`staticLen 100`) and
-  `zetherUnshieldUnwrap`. `UNDERLYING_ZETHER` keeps exactly `UnderlyingToken`'s six (no `unwrap(uint256,address)`:
+  `zetherShield`, `zetherUnshield`, and on `WRAPPED_ZETHER` `zetherWrapShield` (`staticLen 100`) and
+  `zetherUnshieldUnwrap`. `WRAPPED_ZETHER` keeps exactly `WrappedToken`'s six (no `unwrap(uint256,address)`:
   metatx.md's row predates P1d's "one intent, one digest"). The roll-overs stay out (they carry their own signature or
   none).
 - **K7 — The ticket binding.** `MetaTxBase._selfCall` stores `_envelopeBinding(m)` (virtual, 0 by default, so the
@@ -146,7 +146,7 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
   `unwrapBinding` in a request; `ZetherStatements.unshieldUnwrapStatement` / `unwrapBinding` serve clients.
 - **K9 — Reserve invariant by construction** (CTR-ZTH-44 "checked after every operation that moves value out"): a
   wrap-shield credits exactly `minted / scale` with `minted` a multiple of the scale, an unshield-unwrap pays at most
-  the value it removes, and `UnderlyingLib` already refuses a payout above the leg's reserve; `executeRate` passes
+  the value it removes, and `WrappedLib` already refuses a payout above the leg's reserve; `executeRate` passes
   `totalSupply() + totalShielded·shieldScale`. The built `_checkEscrow` is not ported: a balance check is what the
   reserve model never prices, and the check could not fail (no killable mutant); the invariant handler pins it.
 - **K10 — Events.** The names of CTR-ZTH-45 (`ZetherShielded`, `ZetherTransfer`, `ZetherTransferMulti`,
@@ -156,7 +156,7 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
 - **K11 — Shapes and the interface.** `zetherShield(bytes encodedY, uint256)` (selector pinned by CTR-ZTH-34) and
   `zetherWrapShield(address u, uint256 amountIn, UA ua)` (§21) as specified. `IZetherToken` is standalone (not
   `is IERC20MetaTx`: the shared functions would need override lists on every kind) and holds the ops both kinds have;
-  `zetherWrapShield` / `zetherUnshieldUnwrap` are on `UnderlyingZetherToken` (CTR-ZTH-45: "`NONE_ZETHER` has
+  `zetherWrapShield` / `zetherUnshieldUnwrap` are on `WrappedZetherToken` (CTR-ZTH-45: "`NORMAL_ZETHER` has
   `zetherShield` / `zetherUnshield` only"). The built error names are kept, `EscrowInvariant`, `UnsupportedUnderlying`,
   `ZetherOpNotCanonical` go with the old token; `AmountNotScaled(minted, shieldScale)` is new.
 - **K12 — `ZetherStatements`.** Every view takes `envelopeBinding` (`transferStatement` too: §21 has none, but a
@@ -178,10 +178,10 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
 - **K16 — Deploy.** `DeployBase._deployTokenFactory` deploys on a dev chain the registry, `ZetherDisclosure`,
   `ZetherStatements`, both verifiers and both kinds, registers kinds 2–3 as version 1 and switches the gate on (JSON keys
   `zether_*`, `implementation_*_zether`); elsewhere nothing of Zether (the registry and verifiers would revert). Because
-  the script links them, forge now also deploys `UnderlyingLib` and `ZetherLib` on every chain (stateless, unused
+  the script links them, forge now also deploys `WrappedLib` and `ZetherLib` on every chain (stateless, unused
   there). The e2e chains (319xx, 298) are not dev chains: `ZetherDeploy.t` runs the step on 31337 and checks the others.
 - **K17 — Size.** `size_gate.py` treats the two kinds as token implementations (20,480 B budget); the ratchet baseline
-  gains `NoUnderlyingZetherToken` and `UnderlyingZetherToken`, raises `NoUnderlyingToken` / `UnderlyingToken` by what the
+  gains `NormalZetherToken` and `WrappedZetherToken`, raises `NormalToken` / `WrappedToken` by what the
   hooks cost, drops the unbuilt `ZetherToken`.
 - **K18 — Not built in P3.** The `mtxBatch` not-batchable hook (CTR-PQZ-21): no PQZ selector exists, it comes with
   `PqzToken`; the registry's `chainUid` (UA F1); a real-passkey envelope test (CTR-ZTH-21; a `Mock1271Wallet` signer is
@@ -205,11 +205,11 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
   controller ruling over a spec gap; the alternative is accepting the front-run (another leg, `minOut = 0`, or the
   unshield into public units) on multi-leg tokens.
 - **K6:** the allowlist goes beyond the three Zether selectors CTR-ZTH-34 names (Bundle/NoBundle/Single, wrap-shield,
-  unshield-unwrap): confirm, and confirm that `unwrap(uint256,address)` stays unlisted on `UNDERLYING_ZETHER`.
+  unshield-unwrap): confirm, and confirm that `unwrap(uint256,address)` stays unlisted on `WRAPPED_ZETHER`.
 - **K3:** two docs disagree on the confidential domain name; the code follows CTR-MTX-02 (`"SCaaS ZetherToken"`).
 - **Gas tables:** zether.md §19 still shows the measurements of the old `ZetherToken`; the new kinds add the library's
   `DELEGATECALL` and the base's pipeline (the tests log every cell): re-measure and update with the node gas-cap advice?
-- **K16:** the deploy script now deploys `UnderlyingLib` and `ZetherLib` on every chain (forge links what the script can
+- **K16:** the deploy script now deploys `WrappedLib` and `ZetherLib` on every chain (forge links what the script can
   create). A separate `DeployZether.s.sol` for dev chains would avoid it at the cost of a second script.
 - **e2e flake:** one of three e2e runs hung in `forge script Deploy.s.sol` (anvil kept 13 deploy transactions in its
   pool, unmined; an empty `evm_mine` did not include them); the rerun and the final run passed. P3 adds library
@@ -222,14 +222,14 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
 
 **Files:**
 - Modify: `smartcontracts/evm/src/factory/IFactoryToken.sol`, `IOpenFactory.sol`, `OpenFactory.sol`,
-  `src/metatx/ERC20MetaTx.sol`, `MetaTokenBase.sol`, `NoUnderlyingToken.sol`, `UnderlyingToken.sol`, `UnderlyingLib.sol`,
+  `src/metatx/ERC20MetaTx.sol`, `MetaTokenBase.sol`, `NormalToken.sol`, `WrappedToken.sol`, `WrappedLib.sol`,
   `size-baseline.json`
 - Create: `smartcontracts/evm/test/v2/FactoryZether.t.sol`
 
 **Interfaces:** Produces `ConfidentialConfig{verifier, auditorKey, shieldScale, maxShielded, confidentialFee}` (K4);
 `MetaTokenBase._requireUnused(cfg, supply, legs, rate, conf)`; `ERC20MetaTx._domainName()` (K3); `virtual` on the
 public kinds' `kind`, `_init`, `mtxSelectors`, `_mtxRule`, `executeRate`, `disableFeature` (K2);
-`UnderlyingLib.initToken(cfg, isHedera, kind)`; `OpenFactory.zetherEnabled`, `setZetherEnabled`, `ZetherEnabled`,
+`WrappedLib.initToken(cfg, isHedera, kind)`; `OpenFactory.zetherEnabled`, `setZetherEnabled`, `ZetherEnabled`,
 `ZetherDisabled`, `VerifierRequiredForZether`, `VerifierUnsupportedOnThisChain` and the gate in `_create` (K5).
 
 - [ ] **Step 1: the source changes** (apply the diff; the factory imports `ZetherSafety`/`IZetherVerifier`, which stay
@@ -297,8 +297,8 @@ index 9e78774..ce827b5 100644
  ///         `factory() == this` and `chainUid() == chainUid` (so a clone's domain salt has one source, CTR-GEN-05);
  ///         the catalogue is append-only, so a wrong entry would be dead forever. Creation clones by `CREATE2` with
  ///         the salt scoped by the creator and calls `initialize` in the same call; flag validation is the token's.
--///         Built kinds: `NONE`, `UNDERLYING` (the `*_ZETHER` implementations come with P3, the DEX with P2).
-+///         Kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`; a `*_ZETHER` creation passes the Zether gate
+-///         Built kinds: `NORMAL`, `WRAPPED` (the `*_ZETHER` implementations come with P3, the DEX with P2).
++///         Kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER`; a `*_ZETHER` creation passes the Zether gate
 +///         (`zetherEnabled`, a dev chain, a verifier this chain runs). **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS.**
  contract OpenFactory is IOpenFactory {
      struct Info {
@@ -351,9 +351,9 @@ index 9e78774..ce827b5 100644
      function _create(TokenKind kind, uint64 version, address impl, IFactoryToken.TokenConfig calldata cfg,
          bytes32 salt) private returns (address token)
      {
-+        if (kind == TokenKind.NONE_ZETHER || kind == TokenKind.UNDERLYING_ZETHER) _checkZether(cfg.conf.verifier);
++        if (kind == TokenKind.NORMAL_ZETHER || kind == TokenKind.WRAPPED_ZETHER) _checkZether(cfg.conf.verifier);
          uint256 n = cfg.legs.length;
-         bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER;
+         bool wrapper = kind == TokenKind.WRAPPED || kind == TokenKind.WRAPPED_ZETHER;
          if (wrapper ? n == 0 || n > MAX_LEGS : n != 0) revert UnderlyingCountInvalid(n);
 diff --git a/smartcontracts/evm/src/metatx/ERC20MetaTx.sol b/smartcontracts/evm/src/metatx/ERC20MetaTx.sol
 index 1f8b625..729722c 100644
@@ -395,17 +395,17 @@ index d8aaf98..2c6ae9e 100644
      }
  
      function _setMetadata(string memory n, string memory sym, uint8 d) internal {
-diff --git a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/NormalToken.sol b/smartcontracts/evm/src/metatx/NormalToken.sol
 index c0164fa..e1dcce9 100644
---- a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
-@@ -15,12 +15,12 @@ contract NoUnderlyingToken is MetaTokenBase {
+--- a/smartcontracts/evm/src/metatx/NormalToken.sol
++++ b/smartcontracts/evm/src/metatx/NormalToken.sol
+@@ -15,12 +15,12 @@ contract NormalToken is MetaTokenBase {
          MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
      {}
  
 -    function kind() public pure override returns (uint8) {
 +    function kind() public pure virtual override returns (uint8) {
-         return AdminLib.KIND_NONE;
+         return AdminLib.KIND_NORMAL;
      }
  
 -    function _init(TokenConfig calldata cfg) internal override {
@@ -413,9 +413,9 @@ index c0164fa..e1dcce9 100644
 +    function _init(TokenConfig calldata cfg) internal virtual override {
 +        _requireUnused(cfg, false, true, true, true);
          _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-         AdminLib.init(AdminLib.KIND_NONE, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+         AdminLib.init(AdminLib.KIND_NORMAL, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
          if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
-@@ -40,7 +40,7 @@ contract NoUnderlyingToken is MetaTokenBase {
+@@ -40,7 +40,7 @@ contract NormalToken is MetaTokenBase {
  
      /// @notice The allowlist (CTR-MTX-19): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`.
      function mtxSelectors()
@@ -424,7 +424,7 @@ index c0164fa..e1dcce9 100644
      {
          s = new bytes4[](2);
          c = new uint8[](2);
-@@ -49,7 +49,7 @@ contract NoUnderlyingToken is MetaTokenBase {
+@@ -49,7 +49,7 @@ contract NormalToken is MetaTokenBase {
          (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
      }
  
@@ -433,17 +433,17 @@ index c0164fa..e1dcce9 100644
          if (sel == this.burn.selector) return MtxRule(FEE_CLASS_AMOUNT, 0, 36);
          return super._mtxRule(sel);
      }
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingLib.sol b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedLib.sol b/smartcontracts/evm/src/metatx/WrappedLib.sol
 index e546376..36e4e1c 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingLib.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
-@@ -72,15 +72,16 @@ library UnderlyingLib {
+--- a/smartcontracts/evm/src/metatx/WrappedLib.sol
++++ b/smartcontracts/evm/src/metatx/WrappedLib.sol
+@@ -72,15 +72,16 @@ library WrappedLib {
      // ------------------------------------------------------------------ init
  
      /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
 -    ///         flags/owner/roles (`AdminLib.init`), the rate config, then the legs in their given order (never changes).
 -    function initToken(IFactoryToken.TokenConfig calldata c, bool isHedera) public {
-+    ///         flags/owner/roles of `kind` (`AdminLib.init`: `UNDERLYING` or `UNDERLYING_ZETHER`), the rate config, then
++    ///         flags/owner/roles of `kind` (`AdminLib.init`: `WRAPPED` or `WRAPPED_ZETHER`), the rate config, then
 +    ///         the legs in their given order (never changes).
 +    function initToken(IFactoryToken.TokenConfig calldata c, bool isHedera, uint8 kind) public {
          uint256 n = c.legs.length;
@@ -452,50 +452,50 @@ index e546376..36e4e1c 100644
          t.name = c.name;
          t.symbol = c.symbol;
          t.decimals = c.decimals;
--        AdminLib.init(AdminLib.KIND_UNDERLYING, c.features, c.lockedFeatures, c.owner, c.roles);
+-        AdminLib.init(AdminLib.KIND_WRAPPED, c.features, c.lockedFeatures, c.owner, c.roles);
 +        AdminLib.init(kind, c.features, c.lockedFeatures, c.owner, c.roles);
          bool adjustable = AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
-         UnderlyingStorage storage s = $();
+         WrappedStorage storage s = $();
          IFactoryToken.RateConfig calldata rate = c.rate;
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingToken.sol b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedToken.sol b/smartcontracts/evm/src/metatx/WrappedToken.sol
 index e661556..d677d65 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-@@ -29,14 +29,14 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+--- a/smartcontracts/evm/src/metatx/WrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/WrappedToken.sol
+@@ -29,14 +29,14 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
          MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
      {}
  
 -    function kind() public pure override returns (uint8) {
 +    function kind() public pure virtual override returns (uint8) {
-         return AdminLib.KIND_UNDERLYING;
+         return AdminLib.KIND_WRAPPED;
      }
  
-     /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `UnderlyingLib`.
+     /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `WrappedLib`.
 -    function _init(TokenConfig calldata cfg) internal override {
 -        _requireUnused(cfg, true, false, false);
--        UnderlyingLib.initToken(cfg, IS_HEDERA);
+-        WrappedLib.initToken(cfg, IS_HEDERA);
 +    function _init(TokenConfig calldata cfg) internal virtual override {
 +        _requireUnused(cfg, true, false, false, true);
-+        UnderlyingLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_UNDERLYING);
++        WrappedLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_WRAPPED);
      }
  
      // ------------------------------------------------------------------ wrap / unwrap / reserve
-@@ -117,12 +117,12 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
-         UnderlyingLib.cancelRate(_msgSender());
+@@ -117,12 +117,12 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+         WrappedLib.cancelRate(_msgSender());
      }
  
 -    function executeRate() external {
 +    function executeRate() external virtual {
-         UnderlyingLib.executeRate(_msgSender(), totalSupply());
+         WrappedLib.executeRate(_msgSender(), totalSupply());
      }
  
      /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
 -    function disableFeature(uint8 bit) external override {
 +    function disableFeature(uint8 bit) external virtual override {
          AdminLib.disableFeature(bit, _msgSender());
-         if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
+         if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
      }
-@@ -134,7 +134,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+@@ -134,7 +134,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
      ///         `unwrap(address,uint256,address,uint256)` `AMOUNT(1)` (gasless unwrap, CTR-MTX-12). The two-argument
      ///         `unwrap` is not listed (same intent, second digest, no `minOut`).
      function mtxSelectors()
@@ -504,7 +504,7 @@ index e661556..d677d65 100644
      {
          s = new bytes4[](6);
          c = new uint8[](6);
-@@ -147,7 +147,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+@@ -147,7 +147,7 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
          (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
      }
  
@@ -528,39 +528,39 @@ import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {UnderlyingLib} from "../../src/metatx/UnderlyingLib.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
 import {MockERC20, SupportedVerifier, UnsupportedVerifier} from "../helpers/Mocks.sol";
-import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 
-/// Kind 2 stand-in: the public `NONE` kind under the confidential id and domain name, accepting `conf` (the factory's
+/// Kind 2 stand-in: the public `NORMAL` kind under the confidential id and domain name, accepting `conf` (the factory's
 /// side only; the Zether layer is tested in `test/zether`).
-contract MockNoneZether is NoUnderlyingToken {
-    constructor(address f) NoUnderlyingToken(f, address(0), UID_, false) {}
+contract MockNormalZether is NormalToken {
+    constructor(address f) NormalToken(f, address(0), UID_, false) {}
 
-    function kind() public pure override returns (uint8) { return AdminLib.KIND_NONE_ZETHER; }
+    function kind() public pure override returns (uint8) { return AdminLib.KIND_NORMAL_ZETHER; }
 
     function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
 
     function _init(TokenConfig calldata cfg) internal override {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NONE_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
     }
 }
 
-/// Kind 3 stand-in: the public `UNDERLYING` kind under the confidential id, its flags validated for kind 3.
-contract MockUnderlyingZether is UnderlyingToken {
-    constructor(address f) UnderlyingToken(f, address(0), UID_, false) {}
+/// Kind 3 stand-in: the public `WRAPPED` kind under the confidential id, its flags validated for kind 3.
+contract MockWrappedZether is WrappedToken {
+    constructor(address f) WrappedToken(f, address(0), UID_, false) {}
 
-    function kind() public pure override returns (uint8) { return AdminLib.KIND_UNDERLYING_ZETHER; }
+    function kind() public pure override returns (uint8) { return AdminLib.KIND_WRAPPED_ZETHER; }
 
     function _init(TokenConfig calldata cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
-        UnderlyingLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_UNDERLYING_ZETHER);
+        WrappedLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_WRAPPED_ZETHER);
     }
 }
 
@@ -569,27 +569,27 @@ contract MockUnderlyingZether is UnderlyingToken {
 contract FactoryZetherTest is Test {
     OpenFactory f;
     address registrar = address(0xF00D);
-    MockNoneZether noneZ;
-    MockUnderlyingZether undZ;
+    MockNormalZether normalZ;
+    MockWrappedZether undZ;
     MockERC20 usd = new MockERC20("USD", "USD", 6);
     SupportedVerifier okVer = new SupportedVerifier();
     UnsupportedVerifier badVer = new UnsupportedVerifier();
 
-    IOpenFactory.TokenKind constant NZ = IOpenFactory.TokenKind.NONE_ZETHER;
-    IOpenFactory.TokenKind constant UZ = IOpenFactory.TokenKind.UNDERLYING_ZETHER;
+    IOpenFactory.TokenKind constant NZ = IOpenFactory.TokenKind.NORMAL_ZETHER;
+    IOpenFactory.TokenKind constant UZ = IOpenFactory.TokenKind.WRAPPED_ZETHER;
 
     function setUp() public {
         f = new OpenFactory(registrar, UID_);
-        noneZ = new MockNoneZether(address(f));
-        undZ = new MockUnderlyingZether(address(f));
+        normalZ = new MockNormalZether(address(f));
+        undZ = new MockWrappedZether(address(f));
         vm.startPrank(registrar);
-        f.registerImplementation(NZ, 1, address(noneZ));
+        f.registerImplementation(NZ, 1, address(normalZ));
         f.registerImplementation(UZ, 1, address(undZ));
         vm.stopPrank();
     }
 
     function _conf(address verifier) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        c = noneInit("Zether", "Z", 6, 0, address(0), address(0));
+        c = normalInit("Zether", "Z", 6, 0, address(0), address(0));
         c.conf.verifier = verifier;
         c.conf.shieldScale = 1;
     }
@@ -666,16 +666,16 @@ contract FactoryZetherTest is Test {
         address w = f.createToken(UZ, 1, _underlying(address(okVer)), "ok");
         assertEq(f.getWrapper(address(this), address(usd)), w);
         // the public kinds never pass through the gate (no flag, no verifier)
-        NoUnderlyingToken none = new NoUnderlyingToken(address(f), address(0), UID_, false);
+        NormalToken none = new NormalToken(address(f), address(0), UID_, false);
         vm.prank(registrar);
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
+        f.registerImplementation(IOpenFactory.TokenKind.NORMAL, 1, address(none));
         vm.prank(registrar);
         f.setZetherEnabled(false);
-        f.createToken(IOpenFactory.TokenKind.NONE, 1, noneInit("P", "P", 0, 0, address(0), address(0)), "public");
+        f.createToken(IOpenFactory.TokenKind.NORMAL, 1, normalInit("P", "P", 0, 0, address(0), address(0)), "public");
     }
 
     /// The flags of kind 3 are validated for kind 3: the regulated flags are invalid there (CTR-ZTH-47), not "not built".
-    function test_underlyingZether_flagsValidatedForItsKind() public {
+    function test_wrappedZether_flagsValidatedForItsKind() public {
         _enable();
         IFactoryToken.TokenConfig memory c = _underlying(address(okVer));
         c.features = 1 << AdminLib.FREEZE;
@@ -689,26 +689,26 @@ contract FactoryZetherTest is Test {
     /// A public kind refuses every `conf` field, the two new ones included.
     function test_publicKinds_refuseEveryConfField() public {
         OpenFactory g = new OpenFactory(registrar, UID_);
-        NoUnderlyingToken none = new NoUnderlyingToken(address(g), address(0), UID_, false);
+        NormalToken none = new NormalToken(address(g), address(0), UID_, false);
         vm.prank(registrar);
-        g.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
-        IFactoryToken.TokenConfig memory c = noneInit("P", "P", 0, 0, address(0), address(0));
+        g.registerImplementation(IOpenFactory.TokenKind.NORMAL, 1, address(none));
+        IFactoryToken.TokenConfig memory c = normalInit("P", "P", 0, 0, address(0), address(0));
         c.conf.maxShielded = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
-        g.createToken(IOpenFactory.TokenKind.NONE, 1, c, "a");
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, c, "a");
         c.conf.maxShielded = 0;
         c.conf.confidentialFee = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
-        g.createToken(IOpenFactory.TokenKind.NONE, 1, c, "a");
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, c, "a");
         c.conf.confidentialFee = 0;
         c.conf.verifier = address(okVer);
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
-        g.createToken(IOpenFactory.TokenKind.NONE, 1, c, "a");
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, c, "a");
     }
 
     /// CTR-MTX-02: the confidential kinds sign under "SCaaS ZetherToken", the public ones under "SCaaS MetaToken".
     function test_domainNameHook() public view {
-        (, string memory n,,,, bytes32 salt,) = noneZ.eip712Domain();
+        (, string memory n,,,, bytes32 salt,) = normalZ.eip712Domain();
         assertEq(n, "SCaaS ZetherToken");
         assertEq(salt, UID_);
         (, n,,,,,) = undZ.eip712Domain();
@@ -727,10 +727,10 @@ index 42010b9..01b600b 100644
 @@ -1,6 +1,6 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
--  "NoUnderlyingToken": 22960,
--  "UnderlyingToken": 29983,
-+  "NoUnderlyingToken": 22972,
-+  "UnderlyingToken": 30030,
+-  "NormalToken": 22960,
+-  "WrappedToken": 29983,
++  "NormalToken": 22972,
++  "WrappedToken": 30030,
    "ZetherToken": 28860
  }
 ```
@@ -806,13 +806,13 @@ import {ZetherTypes} from "./ZetherTypes.sol";
 import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 
-/// @title The confidential layer of the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
+/// @title The confidential layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
 ///        `acc`/`pending` balances over the token's public ERC-20 balance.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Byte-exact contract with the prover: `docs/contracts/zether.md`.
 ///         The token is also an `IERC20MetaTx` on the one meta-transaction base: every proof-carrying entry point is a
 ///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` whose envelope
 ///         binding the statement carries (`ZTX_V1_RELAYED`, CTR-ZTH-34). `zetherWrapShield` and `zetherUnshieldUnwrap`
-///         are on `UNDERLYING_ZETHER` only; the prover views are in `ZetherStatements` (CTR-ZTH-46).
+///         are on `WRAPPED_ZETHER` only; the prover views are in `ZetherStatements` (CTR-ZTH-46).
 interface IZetherToken {
     /// @notice One account at one block. An unset point is `O`.
     struct AccountState {
@@ -1180,7 +1180,7 @@ index 74facff..19841b2 100644
  /// @notice Verifier đứng một mình: proof đúng qua, mọi thay đổi một bit / một trường / một witness sai
 -///         đều bị từ chối. Statement dựng tay theo §6 (token dựng y hệt — xem ZetherToken.t.sol).
 +///         đều bị từ chối. Statement dựng tay theo zether.md §7 (header 416 byte, `chainUid` là word 3; token và
-+///         `ZetherStatements` dựng y hệt — xem ZetherNone.t.sol).
++///         `ZetherStatements` dựng y hệt — xem ZetherNormal.t.sol).
  contract ZetherVerifierTest is Test {
      bytes32 constant OP_T = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
      bytes32 constant OP_B = keccak256("SCAAS-ZETHER-OP-BURN-V1");
@@ -2163,14 +2163,14 @@ cf134fde9fc3de50  transfer_multi_noaud_bls12381.json   27a2c684c48feb83  transfe
 
 ---
 
-### Task 3: `ZetherLib`, `ZetherLayer`, `ZetherStatements` and kind `NONE_ZETHER`; the ported tests
+### Task 3: `ZetherLib`, `ZetherLayer`, `ZetherStatements` and kind `NORMAL_ZETHER`; the ported tests
 
 **Model:** Opus, effort high (money and crypto path; port of the built logic with the stack-limit split).
 
 **Files:**
-- Create: `src/zether/ZetherLib.sol`, `ZetherLayer.sol`, `ZetherStatements.sol`, `NoUnderlyingZetherToken.sol`;
-  `test/zether/helpers/ZetherFixture.sol`, `test/zether/ZetherNone.t.sol`, `ZetherMulti.t.sol`, `ZetherRevertPaths.t.sol`,
-  `test/v2/layout/NoUnderlyingZetherToken.json`
+- Create: `src/zether/ZetherLib.sol`, `ZetherLayer.sol`, `ZetherStatements.sol`, `NormalZetherToken.sol`;
+  `test/zether/helpers/ZetherFixture.sol`, `test/zether/ZetherNormal.t.sol`, `ZetherMulti.t.sol`, `ZetherRevertPaths.t.sol`,
+  `test/v2/layout/NormalZetherToken.json`
 - Modify: `test/v2/Layout.t.sol`, `test/metatx/MsgSenderLint.t.sol`, `size-baseline.json`
 
 **Interfaces:** Consumes Task 1 (kind plumbing, gate) and Task 2 (`IZetherToken`, header 416). Produces `ZetherLib`
@@ -2178,7 +2178,7 @@ cf134fde9fc3de50  transfer_multi_noaud_bls12381.json   27a2c684c48feb83  transfe
 `setRollOverMode`; internal `ctx`, `acct`, `tagOf`, `entryRefOf`, `singleFrom`/`multiFrom`/`unshieldFrom`,
 `prepareSingle`/`prepareMulti`/`prepareUnshield`; structs `Env`, `Ctx`, `Acct`, `Prepared`), `ZetherLayer` (views, entry
 points, `_env()` direct only in this task, `_zetherBinding`), `ZetherStatements` (`transferStatement`,
-`transferStatementSingle`, `unshieldStatement`, K12), `NoUnderlyingZetherToken(factory, smartKeyAccountImpl, chainUid,
+`transferStatementSingle`, `unshieldStatement`, K12), `NormalZetherToken(factory, smartKeyAccountImpl, chainUid,
 registry, disclosure)`.
 
 - [ ] **Step 1: `src/zether/ZetherLib.sol`** (new). Port of the built `ZetherToken` logic: the same checks in the same
@@ -2824,7 +2824,7 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 
-/// @title The Zether layer of the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` (CTR-ZTH-44): the entry points of
+/// @title The Zether layer of the kinds `NORMAL_ZETHER` and `WRAPPED_ZETHER` (CTR-ZTH-44): the entry points of
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only (`ZetherSafety`, CTR-ZTH-02). A layer over the
 ///         public ERC-20 balance: `zetherShield` burns public units, `zetherUnshield` mints them; the confidential layer
@@ -3068,13 +3068,13 @@ contract ZetherStatements {
 }
 ```
 
-- [ ] **Step 4: `src/zether/NoUnderlyingZetherToken.sol`** (new; the allowlist stays `NoUnderlyingToken`'s until Task 4):
+- [ ] **Step 4: `src/zether/NormalZetherToken.sol`** (new; the allowlist stays `NormalToken`'s until Task 4):
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import {NoUnderlyingToken} from "../metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../metatx/NormalToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
@@ -3084,26 +3084,26 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 
-/// @title Kind `NONE_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
+/// @title Kind `NORMAL_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. `MINTABLE` mints public units only; shielded
 ///         value exists only through `zetherShield`, which burns public units. Flags: `PAYABLE`, `MINTABLE`, `BURNABLE`
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (no dev chain there).
-contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
+contract NormalZetherToken is NormalToken, ZetherLayer {
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
         ITransferDisclosure disclosure_)
-        NoUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, false)
+        NormalToken(factory_, smartKeyAccountImpl_, chainUid_, false)
         ZetherLayer(registry_, disclosure_)
     {}
 
-    function kind() public pure override(NoUnderlyingToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_NONE_ZETHER;
+    function kind() public pure override(NormalToken, MetaTokenBase) returns (uint8) {
+        return AdminLib.KIND_NORMAL_ZETHER;
     }
 
-    function _init(TokenConfig calldata cfg) internal override(NoUnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig calldata cfg) internal override(NormalToken, MetaTokenBase) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        AdminLib.init(AdminLib.KIND_NONE_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
+        AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
         ZetherLib.init(cfg.conf);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
@@ -3114,14 +3114,14 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
 
     /// @notice The public allowlist until the layer's entries are relayed (`cancelNonce`, `burn`).
     function mtxSelectors()
-        public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
+        public pure override(NormalToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory, uint8[] memory, uint8[] memory)
     {
-        return NoUnderlyingToken.mtxSelectors();
+        return NormalToken.mtxSelectors();
     }
 
-    function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {
-        return NoUnderlyingToken._mtxRule(sel);
+    function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
+        return NormalToken._mtxRule(sel);
     }
 }
 ```
@@ -3141,7 +3141,7 @@ import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {AuthScheme} from "../../../src/common/AuthScheme.sol";
 import {UniversalAccountRegistry} from "../../../src/registry/UniversalAccountRegistry.sol";
-import {NoUnderlyingZetherToken} from "../../../src/zether/NoUnderlyingZetherToken.sol";
+import {NormalZetherToken} from "../../../src/zether/NormalZetherToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {ZetherDisclosure} from "../../../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../../../src/zether/ZetherStatements.sol";
@@ -3157,7 +3157,7 @@ import {ZetherKeys} from "./ZetherKeys.sol";
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
 /// @notice The real stack: `OpenFactory` with the Zether gate on, the registry, a verifier, `ZetherDisclosure`,
-///         `ZetherStatements` and `NoUnderlyingZetherToken` clones. The test wallet keeps `x` and the plaintext balances
+///         `ZetherStatements` and `NormalZetherToken` clones. The test wallet keeps `x` and the plaintext balances
 ///         to build witnesses and decrypt; the prover is the test-only `ZetherProver`. Public units come from `mint`
 ///         (the fixture is the minter); `_public` is overridden where they come from a wrap.
 abstract contract ZetherFixture is Test {
@@ -3169,7 +3169,7 @@ abstract contract ZetherFixture is Test {
     }
 
     OpenFactory internal factory;
-    NoUnderlyingZetherToken internal noneImpl;
+    NormalZetherToken internal normalImpl;
     UniversalAccountRegistry internal reg;
     IZetherVerifier internal ver;
     ZetherLayer internal tok;
@@ -3206,9 +3206,9 @@ abstract contract ZetherFixture is Test {
         reg = new UniversalAccountRegistry();
         prover = new ZetherProver();
         ver = useBls ? IZetherVerifier(address(new ZetherVerifierBls12381())) : IZetherVerifier(address(new ZetherVerifierBn254()));
-        noneImpl = new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis);
+        normalImpl = new NormalZetherToken(address(factory), address(0), ZUID, address(reg), dis);
         vm.startPrank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(noneImpl));
+        factory.registerImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, address(normalImpl));
         factory.setZetherEnabled(true);
         vm.stopPrank();
     }
@@ -3236,7 +3236,7 @@ abstract contract ZetherFixture is Test {
     }
 
     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
-        return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, _cfg(auditor, maxShielded), salt));
+        return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _cfg(auditor, maxShielded), salt));
     }
 
     function _user(uint256 x, address evm) internal returns (User memory u) {
@@ -3252,7 +3252,7 @@ abstract contract ZetherFixture is Test {
 
     /// @dev `units` public units to `to`.
     function _public(ZetherLayer t, address to, uint256 units) internal virtual {
-        NoUnderlyingZetherToken(address(t)).mint(to, units);
+        NormalZetherToken(address(t)).mint(to, units);
         minted[address(t)] += units;
     }
 
@@ -3485,7 +3485,7 @@ abstract contract ZetherFixture is Test {
 }
 ```
 
-- [ ] **Step 6: `test/zether/ZetherNone.t.sol`** (new; port of the built `ZetherToken.t` minus relaying, plus shield,
+- [ ] **Step 6: `test/zether/ZetherNormal.t.sol`** (new; port of the built `ZetherToken.t` minus relaying, plus shield,
   the header pin, the `chainUid` digests and challenge; both curves):
 
 ```solidity
@@ -3500,11 +3500,11 @@ import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 
-/// @notice The whole life of a `NONE_ZETHER` token (a factory clone, the real verifier, real proofs from the test
+/// @notice The whole life of a `NORMAL_ZETHER` token (a factory clone, the real verifier, real proofs from the test
 ///         prover), on BOTH curves through the two contracts at the end: shield from the public balance, transfer,
 ///         roll-over, unshield into public units; replay protection; `chainUid` in every digest (CTR-ZTH-36);
 ///         disclosure.
-abstract contract ZetherNoneSuite is ZetherFixture {
+abstract contract ZetherNormalSuite is ZetherFixture {
     function _curve() internal pure virtual returns (bool);
 
     function setUp() public {
@@ -4021,11 +4021,11 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     }
 }
 
-contract ZetherNoneBn254Test is ZetherNoneSuite {
+contract ZetherNormalBn254Test is ZetherNormalSuite {
     function _curve() internal pure override returns (bool) { return false; }
 }
 
-contract ZetherNoneBls12381Test is ZetherNoneSuite {
+contract ZetherNormalBls12381Test is ZetherNormalSuite {
     function _curve() internal pure override returns (bool) { return true; }
 }
 ```
@@ -4044,7 +4044,7 @@ import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 
-/// @notice Multi-recipient transfers (CTR-ZTH-37/38) on a `NONE_ZETHER` token: effects, refusals, disclosure in the
+/// @notice Multi-recipient transfers (CTR-ZTH-37/38) on a `NORMAL_ZETHER` token: effects, refusals, disclosure in the
 ///         three modes and the gas table M ∈ {1, 2, 4, 8} × {HASH, BUNDLE, NONE}, on both curves.
 abstract contract ZetherMultiSuite is ZetherFixture {
     User[8] internal rs;
@@ -4548,7 +4548,7 @@ import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
@@ -4560,8 +4560,8 @@ import {Puller} from "../helpers/WalletMocks.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {AuthScheme} from "../../src/common/AuthScheme.sol";
 
-/// @notice The revert paths of the confidential layer on `NONE_ZETHER` (the relaying ones are in `ZetherRelay.t`, the
-///         underlying ones in `ZetherUnderlying.t`): shield, transfer and unshield shapes, the confidential config at
+/// @notice The revert paths of the confidential layer on `NORMAL_ZETHER` (the relaying ones are in `ZetherRelay.t`, the
+///         underlying ones in `ZetherWrapped.t`): shield, transfer and unshield shapes, the confidential config at
 ///         creation, the approve rule on the public side (CTR-TOK-01), the spending authority beside the proof.
 contract ZetherRevertPathsTest is ZetherFixture {
     function setUp() public {
@@ -4665,7 +4665,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         for (uint256 i; i < ok.length; ++i) {
             IFactoryToken.TokenConfig memory c = _cfg(false, max);
             c.conf.confidentialFee = ok[i];
-            ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, bytes32(i + 900)));
+            ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, c, bytes32(i + 900)));
             assertEq(z.confidentialFee(), ok[i]);
         }
         uint256[2] memory bad = [max, (uint256(1) << 64) - 1];
@@ -4673,7 +4673,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
             IFactoryToken.TokenConfig memory c = _cfg(false, max);
             c.conf.confidentialFee = bad[i];
             vm.expectRevert(IZetherToken.BadInit.selector);
-            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, bytes32(i + 910));
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, c, bytes32(i + 910));
         }
     }
 
@@ -4682,10 +4682,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_initializeRevertPaths() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        noneImpl.initialize(address(this), 1, c);
+        normalImpl.initialize(address(this), 1, c);
         vm.prank(address(factory));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        NoUnderlyingZetherToken(address(tok)).initialize(address(this), 1, c);
+        NormalZetherToken(address(tok)).initialize(address(this), 1, c);
         IFactoryToken.TokenConfig[6] memory bad;
         for (uint256 i; i < 6; ++i) bad[i] = _cfg(false, uint256(1) << 40);
         bad[0].conf.shieldScale = 0;
@@ -4696,47 +4696,47 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bad[5].conf.auditorKey = ZetherKeys.pub(X_AUD, true);           // a BLS key on a bn254 token
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert(IZetherToken.BadInit.selector);
-            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, bad[i], bytes32(i + 100));
+            factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, bad[i], bytes32(i + 100));
         }
         // cap · scale must not overflow
         IFactoryToken.TokenConfig memory big = _cfg(false, uint256(1) << 40);
         big.conf.shieldScale = type(uint256).max / (uint256(1) << 40) + 1;
         vm.expectRevert(IZetherToken.BadInit.selector);
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, big, "overflow");
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, big, "overflow");
         // the kind's fields: legs and rate belong to other kinds; the regulated flags are refused
         IFactoryToken.TokenConfig memory r = _cfg(false, uint256(1) << 40);
         r.rate.rateDelay = 2 days;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 3));
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "rate");
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, r, "rate");
         r = _cfg(false, uint256(1) << 40);
         r.features |= 1 << AdminLib.PAUSE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.PAUSE));
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "pause");
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, r, "pause");
         r = _cfg(false, uint256(1) << 40);
         r.features |= 1 << AdminLib.WRAP_DISABLEABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.WRAP_DISABLEABLE));
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "wrap");
+        factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, r, "wrap");
         // initialize outside a dev chain (a hand-made clone, around the factory gate)
-        address cl = Clones.clone(address(noneImpl));
+        address cl = Clones.clone(address(normalImpl));
         vm.chainId(1);
         vm.prank(address(factory));
         vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        NoUnderlyingZetherToken(cl).initialize(address(this), 1, c);
+        NormalZetherToken(cl).initialize(address(this), 1, c);
     }
 
     /// The implementation's immutables need code: a registry and a disclosure contract.
     function test_constructorNeedsRegistryAndDisclosure() public {
         vm.expectRevert(IZetherToken.BadInit.selector);
-        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(0x1234), dis);
+        new NormalZetherToken(address(factory), address(0), ZUID, address(0x1234), dis);
         vm.expectRevert(IZetherToken.BadInit.selector);
-        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), ITransferDisclosure(address(0x1234)));
+        new NormalZetherToken(address(factory), address(0), ZUID, address(reg), ITransferDisclosure(address(0x1234)));
     }
 
     /// The minter never mints shielded value (CTR-ZTH-44): `mint` and the initial supply only add public units.
     function test_minterMintsPublicUnitsOnly() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         (c.initialSupply, c.initialHolder) = (7 * SCALE, address(0xA77));
-        ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "supply"));
+        ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, c, "supply"));
         assertEq(z.balanceOf(address(0xA77)), 7 * SCALE);
         assertEq(z.totalShielded(), 0);
         _public(tok, address(0xA77), 5 * SCALE);
@@ -4744,7 +4744,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(tok.totalShielded(), 0);
         vm.prank(address(0xBAD));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.MissingRole.selector, AdminLib.MINTABLE, address(0xBAD)));
-        NoUnderlyingZetherToken(address(tok)).mint(address(0xBAD), 1);
+        NormalZetherToken(address(tok)).mint(address(0xBAD), 1);
     }
 
     /// CTR-TOK-01 (MT-3) on the public side of a Zether token: only contracts grant and spend allowances.
@@ -4846,12 +4846,12 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_provenanceRecorded() public view {
         assertEq(address(tok.verifier()), address(ver));
         assertEq(tok.registry(), address(reg));
-        NoUnderlyingZetherToken z = NoUnderlyingZetherToken(address(tok));
+        NormalZetherToken z = NormalZetherToken(address(tok));
         assertEq(z.factory(), address(factory));
-        assertEq(z.implementation(), address(noneImpl));
+        assertEq(z.implementation(), address(normalImpl));
         assertEq(z.version(), 1);
         assertEq(z.creator(), address(this));
-        assertEq(z.kind(), AdminLib.KIND_NONE_ZETHER);
+        assertEq(z.kind(), AdminLib.KIND_NORMAL_ZETHER);
         assertEq(z.decimals(), 6);
         assertEq(tok.shieldScale(), SCALE);
         assertEq(tok.confidentialFee(), FEE);
@@ -4864,17 +4864,17 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(vc, address(tok));
         assertEq(salt, ZUID);
         (IOpenFactory.TokenKind k, uint64 v) = factory.versionOf(address(tok));
-        assertEq(uint8(k), uint8(IOpenFactory.TokenKind.NONE_ZETHER));
+        assertEq(uint8(k), uint8(IOpenFactory.TokenKind.NORMAL_ZETHER));
         assertEq(v, 1);
     }
 }
 ```
 
-- [ ] **Step 9: layout pin, lint, size baseline** (`test/v2/layout/NoUnderlyingZetherToken.json` is a copy of
-  `NoUnderlyingToken.json`: the layer's state is in `scaas.zether`):
+- [ ] **Step 9: layout pin, lint, size baseline** (`test/v2/layout/NormalZetherToken.json` is a copy of
+  `NormalToken.json`: the layer's state is in `scaas.zether`):
 
 ```bash
-cp test/v2/layout/NoUnderlyingToken.json test/v2/layout/NoUnderlyingZetherToken.json
+cp test/v2/layout/NormalToken.json test/v2/layout/NormalZetherToken.json
 ```
 
 ```diff
@@ -4885,10 +4885,10 @@ index 5709ce1..b341560 100644
 @@ -1,5 +1,6 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
-   "NoUnderlyingToken": 22972,
--  "UnderlyingToken": 30030
-+  "UnderlyingToken": 30030,
-+  "NoUnderlyingZetherToken": 29641
+   "NormalToken": 22972,
+-  "WrappedToken": 30030
++  "WrappedToken": 30030,
++  "NormalZetherToken": 29641
  }
 diff --git a/smartcontracts/evm/test/metatx/MsgSenderLint.t.sol b/smartcontracts/evm/test/metatx/MsgSenderLint.t.sol
 index 6dc812c..99cd1f3 100644
@@ -4900,10 +4900,10 @@ index 6dc812c..99cd1f3 100644
  contract MsgSenderLintTest is Test {
 -    string[9] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
 +    string[12] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
-         "src/metatx/NoUnderlyingToken.sol", "src/metatx/UnderlyingToken.sol", "src/metatx/UnderlyingLib.sol",
+         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
 -        "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol"];
 +        "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
-+        "src/zether/ZetherLib.sol", "src/zether/NoUnderlyingZetherToken.sol"];
++        "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol"];
  
      /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
      function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
@@ -4913,7 +4913,7 @@ index 6dc812c..99cd1f3 100644
          assertEq(_count("src/hedera/HederaLib.sol", "msg.sender", false), 0, "HederaLib");
 +        assertEq(_count("src/zether/ZetherLayer.sol", "msg.sender", false), 0, "ZetherLayer");
 +        assertEq(_count("src/zether/ZetherLib.sol", "msg.sender", false), 0, "ZetherLib");
-+        assertEq(_count("src/zether/NoUnderlyingZetherToken.sol", "msg.sender", false), 0, "NoUnderlyingZetherToken");
++        assertEq(_count("src/zether/NormalZetherToken.sol", "msg.sender", false), 0, "NormalZetherToken");
      }
  
      /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume
@@ -4923,9 +4923,9 @@ index 4009bcf..10f4a73 100644
 +++ b/smartcontracts/evm/test/v2/Layout.t.sol
 @@ -31,6 +31,7 @@ contract LayoutTest is V2Fixture {
      function test_storageLayoutIsPinned() public view {
-         _pin("NoUnderlyingToken", "NoUnderlyingToken");
-         _pin("UnderlyingToken", "UnderlyingToken");
-+        _pin("NoUnderlyingZetherToken", "NoUnderlyingZetherToken"); // the Zether layer lives in `scaas.zether`
+         _pin("NormalToken", "NormalToken");
+         _pin("WrappedToken", "WrappedToken");
++        _pin("NormalZetherToken", "NormalZetherToken"); // the Zether layer lives in `scaas.zether`
      }
  
      /// Thứ indexer thật sự đọc (ERC-7201 `scaas.underlying`): chân i ở `keccak256(i ‖ NS)`: `token`, `+ 1` `num ‖ den`,
@@ -4934,9 +4934,9 @@ index 4009bcf..10f4a73 100644
 - [ ] **Step 10: Run:**
   - `forge test --match-path "test/zether/*"` → 220 passed (None 21 + 21, Multi 41 + 41, RevertPaths 17, Kat
     13, S3 17, Verifier 27, Registry 22).
-  - `forge test` → **941 passed**; size gate 0 errors (`NoUnderlyingZetherToken` 29,641 B, `ZetherLib`
+  - `forge test` → **941 passed**; size gate 0 errors (`NormalZetherToken` 29,641 B, `ZetherLib`
     15,662 B).
-- [ ] **Step 11: Commit** `P3: ZetherLib, ZetherLayer, ZetherStatements, NONE_ZETHER kind; Zether suites ported` + trailer.
+- [ ] **Step 11: Commit** `P3: ZetherLib, ZetherLayer, ZetherStatements, NORMAL_ZETHER kind; Zether suites ported` + trailer.
 
 ---
 
@@ -4945,13 +4945,13 @@ index 4009bcf..10f4a73 100644
 **Model:** Opus, effort high (the envelope-stripping defence lives here).
 
 **Files:**
-- Modify: `src/metatx/MetaTxBase.sol`, `src/zether/ZetherLayer.sol`, `src/zether/NoUnderlyingZetherToken.sol`,
+- Modify: `src/metatx/MetaTxBase.sol`, `src/zether/ZetherLayer.sol`, `src/zether/NormalZetherToken.sol`,
   `test/metatx/MsgSenderLint.t.sol`, `size-baseline.json`
 - Create: `test/zether/ZetherRelay.t.sol`
 
 **Interfaces:** Produces `MetaTxBase._envelopeBinding(m)` (virtual, 0) and `_ticketBinding()` (K7),
 `ZetherLayer._envelopeBinding` (= `_zetherBinding`), `_env()` with the ticket binding, `_isZetherOp(sel)` (K6), the
-`NONE_ZETHER` allowlist (8 entries).
+`NORMAL_ZETHER` allowlist (8 entries).
 
 - [ ] **Step 1: the base hook, the layer, the allowlist:**
 
@@ -5003,19 +5003,19 @@ index d17b6ce..1db780a 100644
      /// @notice The signer inside the one self-call of step 5 (live ticket), else `msg.sender` (CTR-MTX-18).
      function _msgSender() internal view virtual override returns (address) {
          if (msg.sender == address(this) && _tload(_TICKET) != 0) return address(uint160(_tload(_SENDER)));
-diff --git a/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol b/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol
+diff --git a/smartcontracts/evm/src/zether/NormalZetherToken.sol b/smartcontracts/evm/src/zether/NormalZetherToken.sol
 index 788f655..f13566c 100644
---- a/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol
-+++ b/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol
+--- a/smartcontracts/evm/src/zether/NormalZetherToken.sol
++++ b/smartcontracts/evm/src/zether/NormalZetherToken.sol
 @@ -10,6 +10,7 @@ import {AdminLib} from "../metatx/AdminLib.sol";
  import {ITransferDisclosure} from "./ITransferDisclosure.sol";
  import {ZetherLayer} from "./ZetherLayer.sol";
  import {ZetherLib} from "./ZetherLib.sol";
 +import {MetaTxLib} from "../common/MetaTxLib.sol";
  
- /// @title Kind `NONE_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
+ /// @title Kind `NORMAL_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
  /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. `MINTABLE` mints public units only; shielded
-@@ -39,15 +40,33 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
+@@ -39,15 +40,33 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
          return ZetherLayer._domainName();
      }
  
@@ -5029,11 +5029,11 @@ index 788f655..f13566c 100644
 +    /// @notice The allowlist (CTR-MTX-19, CTR-ZTH-34): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`, then the
 +    ///         Zether ops, each `ABSOLUTE`.
      function mtxSelectors()
-         public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
+         public pure override(NormalToken, IMetaTx, MetaTxBase)
 -        returns (bytes4[] memory, uint8[] memory, uint8[] memory)
 +        returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
      {
--        return NoUnderlyingToken.mtxSelectors();
+-        return NormalToken.mtxSelectors();
 +        s = new bytes4[](8);
 +        c = new uint8[](8);
 +        a = new uint8[](8);
@@ -5047,9 +5047,9 @@ index 788f655..f13566c 100644
 +        (s[7], c[7]) = (this.zetherUnshield.selector, FEE_CLASS_ABSOLUTE);
      }
  
-     function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {
+     function _mtxRule(bytes4 sel) internal view override(NormalToken, MetaTxBase) returns (MtxRule memory) {
 +        if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
-         return NoUnderlyingToken._mtxRule(sel);
+         return NormalToken._mtxRule(sel);
      }
  }
 diff --git a/smartcontracts/evm/src/zether/ZetherLayer.sol b/smartcontracts/evm/src/zether/ZetherLayer.sol
@@ -5099,7 +5099,7 @@ import {console2} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -5284,7 +5284,7 @@ contract ZetherRelayTest is ZetherFixture {
     function test_allowlistPinned() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = tok.mtxSelectors();
         bytes4[8] memory want = [
-            IMetaTx.cancelNonce.selector, NoUnderlyingToken.burn.selector, ZetherLayer.zetherShield.selector,
+            IMetaTx.cancelNonce.selector, NormalToken.burn.selector, ZetherLayer.zetherShield.selector,
             ZetherLayer.zetherTransfer.selector, ZetherLayer.zetherTransferBundle.selector,
             ZetherLayer.zetherTransferNoBundle.selector, ZetherLayer.zetherTransferSingle.selector,
             ZetherLayer.zetherUnshield.selector
@@ -5303,7 +5303,7 @@ contract ZetherRelayTest is ZetherFixture {
             abi.encodeCall(ZetherLayer.zetherRollOver, (alice.ua)),
             abi.encodeCall(ZetherLayer.zetherRollOverSigned, (alice.ua, 1, 1, bytes(""))),
             abi.encodeCall(ZetherLayer.zetherSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, bytes(""))),
-            abi.encodeCall(NoUnderlyingToken.mint, (payer, 1))
+            abi.encodeCall(NormalToken.mint, (payer, 1))
         ];
         for (uint256 i; i < refused.length; ++i) {
             MetaTxLib.MetaTransaction memory m = _mt(refused[i], 100 + i, RR, 0);
@@ -5401,12 +5401,12 @@ index b341560..76c78b6 100644
 @@ -1,6 +1,6 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
--  "NoUnderlyingToken": 22972,
--  "UnderlyingToken": 30030,
--  "NoUnderlyingZetherToken": 29641
-+  "NoUnderlyingToken": 22978,
-+  "UnderlyingToken": 30036,
-+  "NoUnderlyingZetherToken": 30659
+-  "NormalToken": 22972,
+-  "WrappedToken": 30030,
+-  "NormalZetherToken": 29641
++  "NormalToken": 22978,
++  "WrappedToken": 30036,
++  "NormalZetherToken": 30659
  }
 diff --git a/smartcontracts/evm/test/metatx/MsgSenderLint.t.sol b/smartcontracts/evm/test/metatx/MsgSenderLint.t.sol
 index 99cd1f3..b97e4f8 100644
@@ -5421,7 +5421,7 @@ index 99cd1f3..b97e4f8 100644
 +            "MetaTxBase: guard, event, relayer binding x2, _msgSender x2, fee default, ticket binding (CTR-ZTH-34)");
          assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 3, "ERC20MetaTx: event relayer, fee default, mtxTrade caller (CTR-DEX-15)");
          assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
-         assertEq(_count("src/metatx/NoUnderlyingToken.sol", "msg.sender", false), 0, "NoUnderlyingToken");
+         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
 ```
 
 - [ ] **Step 4: Run:** `forge test --match-path test/zether/ZetherRelay.t.sol` → 12 passed; `forge test --match-path
@@ -5430,63 +5430,63 @@ index 99cd1f3..b97e4f8 100644
 
 ---
 
-### Task 5: Kind `UNDERLYING_ZETHER` — wrap-shield, unshield-unwrap, the reserve invariant
+### Task 5: Kind `WRAPPED_ZETHER` — wrap-shield, unshield-unwrap, the reserve invariant
 
 **Model:** Opus, effort high (underlying legs, reserve invariant, the K8 binding).
 
 **Files:**
-- Create: `src/zether/UnderlyingZetherToken.sol`, `test/zether/ZetherUnderlying.t.sol`, `test/zether/ZetherInvariant.t.sol`,
-  `test/v2/layout/UnderlyingZetherToken.json`
+- Create: `src/zether/WrappedZetherToken.sol`, `test/zether/ZetherWrapped.t.sol`, `test/zether/ZetherInvariant.t.sol`,
+  `test/v2/layout/WrappedZetherToken.json`
 - Modify: `src/zether/ZetherLib.sol` (`unwrapBinding`), `src/zether/ZetherStatements.sol` (`unshieldUnwrapStatement`,
   `unwrapBinding`), `test/v2/Layout.t.sol`, `test/metatx/MsgSenderLint.t.sol`, `size-baseline.json`
 
-**Interfaces:** Produces `UnderlyingZetherToken(factory, smartKeyAccountImpl, chainUid, registry, disclosure)` with
+**Interfaces:** Produces `WrappedZetherToken(factory, smartKeyAccountImpl, chainUid, registry, disclosure)` with
 `zetherWrapShield(address u, uint256 amountIn, UA ua)` (payable), `zetherUnshieldUnwrap(payload, proof, authSig,
 beneficiary, u, recipient, amount, minOut)`, `executeRate` counting the shielded part (K9), the 14-entry allowlist;
 `ZetherLib.unwrapBinding(u, minOut)` (K8).
 
-- [ ] **Step 1: `src/zether/UnderlyingZetherToken.sol`** (new):
+- [ ] **Step 1: `src/zether/WrappedZetherToken.sol`** (new):
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.24;
 
-import {UnderlyingToken} from "../metatx/UnderlyingToken.sol";
+import {WrappedToken} from "../metatx/WrappedToken.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
-import {UnderlyingLib} from "../metatx/UnderlyingLib.sol";
+import {WrappedLib} from "../metatx/WrappedLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 
-/// @title Kind `UNDERLYING_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
+/// @title Kind `WRAPPED_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. The legs, rates, reserves, `wrap`/`unwrap`,
-///         `mtxWrap` and the rate and guardian roles are `UnderlyingToken`'s (`UnderlyingLib`); the layer adds
+///         `mtxWrap` and the rate and guardian roles are `WrappedToken`'s (`WrappedLib`); the layer adds
 ///         `zetherWrapShield` (a leg's underlying straight into a shielded balance, nothing minted) and
 ///         `zetherUnshieldUnwrap` (a shielded balance straight out to a leg's underlying, nothing minted). Reserve
 ///         invariant: `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply() + totalShielded·shieldScale`, by construction (a wrap-shield
 ///         credits `minted / shieldScale` with `minted` a multiple of the scale, an unshield-unwrap pays
 ///         `⌊amount·shieldScale·den/num⌋`, worth at most what it removes), and `executeRate` checks it with the shielded
 ///         part. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
-contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
+contract WrappedZetherToken is WrappedToken, ZetherLayer {
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
         ITransferDisclosure disclosure_)
-        UnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, false)
+        WrappedToken(factory_, smartKeyAccountImpl_, chainUid_, false)
         ZetherLayer(registry_, disclosure_)
     {}
 
-    function kind() public pure override(UnderlyingToken, MetaTokenBase) returns (uint8) {
-        return AdminLib.KIND_UNDERLYING_ZETHER;
+    function kind() public pure override(WrappedToken, MetaTokenBase) returns (uint8) {
+        return AdminLib.KIND_WRAPPED_ZETHER;
     }
 
-    function _init(TokenConfig calldata cfg) internal override(UnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig calldata cfg) internal override(WrappedToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
-        UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_ZETHER);
+        WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED_ZETHER);
         ZetherLib.init(cfg.conf);
     }
 
@@ -5496,7 +5496,7 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     ///         rate on the measured delta) as `minted / shieldScale` shielded units to `ua`, minting nothing;
     ///         `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled` (the client sends an exact amount).
     function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable nonReentrant {
-        (,, uint256 minted) = UnderlyingLib.wrap(UnderlyingLib.indexOf(u), amountIn, _msgSender(), msg.value);
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(u), amountIn, _msgSender(), msg.value);
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         ZetherLib.shield(ua, minted / scale, _REGISTRY);
@@ -5533,21 +5533,21 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
         ZetherTypes.UA beneficiary,
         Unwrap memory x
     ) private {
-        uint256 i = UnderlyingLib.indexOf(x.u);
+        uint256 i = WrappedLib.indexOf(x.u);
         ZetherLib.unshield(payload, proof, authSig, beneficiary, x.amount, x.recipient, _envUnwrap(x.u, x.minOut));
-        (uint256 out,) = UnderlyingLib.quoteUnwrap(i, x.amount * ZetherLib.$().shieldScale, x.recipient, x.minOut);
-        UnderlyingLib.payOut(i, x.recipient, out);
+        (uint256 out,) = WrappedLib.quoteUnwrap(i, x.amount * ZetherLib.$().shieldScale, x.recipient, x.minOut);
+        WrappedLib.payOut(i, x.recipient, out);
     }
 
-    /// @notice As `UnderlyingToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
-    function disableFeature(uint8 bit) external override(UnderlyingToken, MetaTokenBase) {
+    /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
+    function disableFeature(uint8 bit) external override(WrappedToken, MetaTokenBase) {
         AdminLib.disableFeature(bit, _msgSender());
-        if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
+        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change counts the shielded value too.
     function executeRate() external override {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply() + ZetherLib.$().totalShielded * ZetherLib.$().shieldScale);
+        WrappedLib.executeRate(_msgSender(), totalSupply() + ZetherLib.$().totalShielded * ZetherLib.$().shieldScale);
     }
 
     // ------------------------------------------------------------------ the layer's hooks
@@ -5572,9 +5572,9 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19, CTR-ZTH-34)
 
-    /// @notice `UnderlyingToken`'s six, then the Zether ops and the two underlying paths, each `ABSOLUTE`.
+    /// @notice `WrappedToken`'s six, then the Zether ops and the two underlying paths, each `ABSOLUTE`.
     function mtxSelectors()
-        public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
+        public pure override(WrappedToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](14);
@@ -5596,10 +5596,10 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
         (s[13], c[13]) = (this.zetherUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
     }
 
-    function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {
+    function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
         if (_isZetherOp(sel) || sel == this.zetherUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         if (sel == this.zetherWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
-        return UnderlyingToken._mtxRule(sel);
+        return WrappedToken._mtxRule(sel);
     }
 }
 ```
@@ -5651,7 +5651,7 @@ index ff58d4b..283e8e1 100644
          return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
      }
  
-+    /// @notice The statement of `zetherUnshieldUnwrap` on an `UNDERLYING_ZETHER` token: relayed, the envelope binding;
++    /// @notice The statement of `zetherUnshieldUnwrap` on an `WRAPPED_ZETHER` token: relayed, the envelope binding;
 +    ///         direct, `ZTX_V1_DIRECT` with the leg and `minOut` bound (`unwrapBinding`).
 +    function unshieldUnwrapStatement(
 +        address token,
@@ -5679,7 +5679,7 @@ index ff58d4b..283e8e1 100644
          bytes calldata payload,
 ```
 
-- [ ] **Step 3: `test/zether/ZetherUnderlying.t.sol`** (new):
+- [ ] **Step 3: `test/zether/ZetherWrapped.t.sol`** (new):
 
 ```solidity
 // SPDX-License-Identifier: Apache-2.0
@@ -5689,14 +5689,14 @@ import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
@@ -5725,12 +5725,12 @@ contract HookLeg is MockERC20 {
     }
 }
 
-/// @notice Kind `UNDERLYING_ZETHER` (CTR-ZTH-44/45): the legs' underlying straight into a shielded balance and back,
+/// @notice Kind `WRAPPED_ZETHER` (CTR-ZTH-44/45): the legs' underlying straight into a shielded balance and back,
 ///         nothing minted either way; the reserve invariant counts the shielded value; `mtxWrap`, the native leg, the
 ///         direct unshield-unwrap binding its leg and `minOut`, relaying, re-entry.
-contract ZetherUnderlyingTest is ZetherFixture {
-    UnderlyingZetherToken internal undImpl;
-    UnderlyingZetherToken internal w;
+contract ZetherWrappedTest is ZetherFixture {
+    WrappedZetherToken internal undImpl;
+    WrappedZetherToken internal w;
     MockERC20 internal usd = new MockERC20("USD", "USD", 6);
     MockERC20 internal eur = new MockERC20("EUR", "EUR", 6);
     uint256 constant PAYER_PK = 0x9A7E5;
@@ -5738,9 +5738,9 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     function setUp() public {
         _stack(false);
-        undImpl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis);
+        undImpl = new WrappedZetherToken(address(factory), address(0), ZUID, address(reg), dis);
         vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(undImpl));
+        factory.registerImplementation(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, address(undImpl));
         address[] memory legs = new address[](2);
         (legs[0], legs[1]) = (address(usd), address(eur));
         uint256[] memory nums = new uint256[](2);
@@ -5757,7 +5757,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     /// `PAYABLE | RATE_ADJUSTABLE | WRAP_DISABLEABLE`; the test is owner, rate admin (a contract) and guardian.
     function _wrapper(address[] memory legs, uint256[] memory nums, uint256[] memory dens, bytes32 salt, bool auditor)
-        internal returns (UnderlyingZetherToken)
+        internal returns (WrappedZetherToken)
     {
         IFactoryToken.TokenConfig memory c;
         c.name = "Zether wrapped";
@@ -5773,14 +5773,14 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.conf = IFactoryToken.ConfidentialConfig(
             address(ver), auditor ? ZetherKeys.pub(X_AUD, false) : bytes(""), SCALE, uint256(1) << 40, FEE
         );
-        return UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, salt)));
+        return WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, c, salt)));
     }
 
     /// Public units by a 1:1 USD wrap.
     function _public(ZetherLayer t, address to, uint256 units) internal override {
         usd.mint(address(this), units);
         usd.approve(address(t), units);
-        UnderlyingToken(payable(address(t))).wrap(address(usd), units);
+        WrappedToken(payable(address(t))).wrap(address(usd), units);
         if (to != address(this)) t.transfer(to, units);
         minted[address(t)] += units;
     }
@@ -5794,7 +5794,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
             sum += a + p;
         }
         assertEq(sum, t.totalShielded(), "sum of plaintext balances == totalShielded");
-        UnderlyingToken u = UnderlyingToken(payable(address(t)));
+        WrappedToken u = WrappedToken(payable(address(t)));
         assertGe(u.collateralValue(), t.totalSupply() + t.totalShielded() * SCALE, "reserve invariant");
     }
 
@@ -5833,25 +5833,25 @@ contract ZetherUnderlyingTest is ZetherFixture {
         usd.approve(address(w), 100 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountNotScaled.selector, 30 * SCALE + 1, SCALE));
         w.zetherWrapShield(address(usd), 30 * SCALE + 1, alice.ua);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(0xDEAD)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(0xDEAD)));
         w.zetherWrapShield(address(0xDEAD), SCALE, alice.ua);
         ZetherTypes.UA ghost = ZetherTypes.toUA(ZetherKeys.pub(0x6057, false));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ghost));
         w.zetherWrapShield(address(usd), SCALE, ghost);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 1, 0));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 1, 0));
         w.zetherWrapShield{value: 1}(address(usd), SCALE, alice.ua);
         // a disabled leg (guardian, one-way) and a pending rate change pause the inflow
         w.disableWrap(address(eur), "depeg");
         eur.mint(address(this), SCALE);
         eur.approve(address(w), SCALE);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapDisabledFor.selector, address(eur)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(eur)));
         w.zetherWrapShield(address(eur), SCALE, alice.ua);
         w.proposeRate(address(usd), 11, 10);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapPausedForRateChange.selector, address(usd)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(usd)));
         w.zetherWrapShield(address(usd), SCALE, alice.ua);
         w.cancelRate();
         // the cap
-        UnderlyingZetherToken small = _small();
+        WrappedZetherToken small = _small();
         usd.mint(address(this), 101 * SCALE);
         usd.approve(address(small), 101 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 101, 100));
@@ -5859,7 +5859,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
     }
 
     /// One USD leg 1:1, cap 100.
-    function _small() internal returns (UnderlyingZetherToken z) {
+    function _small() internal returns (WrappedZetherToken z) {
         IFactoryToken.TokenConfig memory c;
         c.name = "S";
         c.symbol = "S";
@@ -5870,7 +5870,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE);
-        z = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "small")));
+        z = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, c, "small")));
     }
 
     // ------------------------------------------------------------------ unshield-unwrap
@@ -5911,17 +5911,17 @@ contract ZetherUnderlyingTest is ZetherFixture {
         _shielded(10, 0);
         // more than the leg's reserve: EUR holds nothing
         (bytes memory pl, bytes memory pr) = _unwrapProof(10, 10, address(0xD00D), address(eur), 0, 0);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.InsufficientReserve.selector, address(eur), 5 * SCALE, 0));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(eur), 5 * SCALE, 0));
         w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(eur), address(0xD00D), 10, 0);
         // minOut above what the leg pays
         (pl, pr) = _unwrapProof(10, 10, address(0xD00D), address(usd), 10 * SCALE + 1, 0);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 10 * SCALE, 10 * SCALE + 1));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 10 * SCALE, 10 * SCALE + 1));
         w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(0xD00D), 10, 10 * SCALE + 1);
         // the token itself as recipient
         (pl, pr) = _unwrapProof(10, 10, address(w), address(usd), 0, 0);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, address(w)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapRecipientInvalid.selector, address(w)));
         w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(w), 10, 0);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(0xDEAD)));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(0xDEAD)));
         w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0xDEAD), address(w), 10, 0);
     }
 
@@ -5954,7 +5954,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
             feeRecipient: address(0)
         });
         (bytes memory pl, bytes memory pr) = _unwrapProof(10, 30, address(0xB0C), address(usd), 0, w.envelopeBinding(m));
-        m.data = abi.encodeCall(UnderlyingZetherToken.zetherUnshieldUnwrap,
+        m.data = abi.encodeCall(WrappedZetherToken.zetherUnshieldUnwrap,
             (pl, pr, bytes(""), _none(), address(usd), address(0xB0C), 10, 0));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, w.mtxDigest(m));
         bytes memory sig = abi.encodePacked(r, s, v);
@@ -5971,7 +5971,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     /// The disclosure reads (`disclosure()`, `transferEntry`, `auditorKey()`, `verifier()`, `chainUid()`) work on kind 3
     /// as on kind 2: every opening of a transfer opens through the canonical `ZetherDisclosure`.
-    function test_disclosureOnTheUnderlyingKind() public {
+    function test_disclosureOnTheWrappedKind() public {
         _shielded(50, 0);
         Tx memory t = _proveTransfer(tok, alice, bob, 21, 50, _none(), 0);
         bytes32 ref = _direct(tok, t, _none());
@@ -5995,14 +5995,14 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     /// A rate decrease that the public supply alone would allow, but the shielded value would not.
     function test_executeRate_countsTheShieldedValue() public {
-        UnderlyingZetherToken z = _small();
+        WrappedZetherToken z = _small();
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(z), 100 * SCALE);
         z.zetherWrapShield(address(usd), 100 * SCALE, alice.ua);
         assertEq(z.totalSupply(), 0);
         z.proposeRate(address(usd), 9, 10);
         vm.warp(block.timestamp + 2 days);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.RateChangeUndercollateralized.selector, 90 * SCALE,
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.RateChangeUndercollateralized.selector, 90 * SCALE,
             100 * SCALE));
         z.executeRate();
     }
@@ -6023,10 +6023,10 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.FREEZE));
-        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "freeze");
+        factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, c, "freeze");
         c.features = 1 << AdminLib.MINTABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
-        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "mint");
+        factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, c, "mint");
     }
 
     // ------------------------------------------------------------------ mtxWrap and shield, gasless (CTR-TOK-20, MT-3)
@@ -6034,16 +6034,16 @@ contract ZetherUnderlyingTest is ZetherFixture {
     /// An EOA holding a SCaaS underlying cannot approve (CTR-TOK-01): it wraps by signature (`mtxWrap`, inherited) and
     /// shields through `mtxExecute`, paying no gas.
     function test_mtxWrapThenRelayedShield_noApproveAnywhere() public {
-        NoUnderlyingToken pImpl = new NoUnderlyingToken(address(factory), address(0), ZUID, false);
+        NormalToken pImpl = new NormalToken(address(factory), address(0), ZUID, false);
         vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(pImpl));
+        factory.registerImplementation(IOpenFactory.TokenKind.NORMAL, 1, address(pImpl));
         IFactoryToken.TokenConfig memory pc;
         (pc.name, pc.symbol, pc.decimals, pc.features) = ("Points", "PTS", 6, 1 << AdminLib.PAYABLE);
         (pc.initialSupply, pc.initialHolder) = (50 * SCALE, payer);
-        NoUnderlyingToken pts = NoUnderlyingToken(factory.createToken(IOpenFactory.TokenKind.NONE, 1, pc, "pts"));
+        NormalToken pts = NormalToken(factory.createToken(IOpenFactory.TokenKind.NORMAL, 1, pc, "pts"));
         address[] memory legs = new address[](1);
         legs[0] = address(pts);
-        UnderlyingZetherToken z = _wrapper(legs, _ones(1), _ones(1), "zpts", false);
+        WrappedZetherToken z = _wrapper(legs, _ones(1), _ones(1), "zpts", false);
         ITradeToken.TradeOrder memory o;
         (o.from, o.receiveToken, o.amount, o.receiveAmount, o.minFill, o.dex) =
             (payer, address(z), 20 * SCALE, 20 * SCALE, 20 * SCALE, address(z));
@@ -6073,12 +6073,12 @@ contract ZetherUnderlyingTest is ZetherFixture {
         address[] memory legs = new address[](1);
         uint256[] memory dens = new uint256[](1);
         dens[0] = 1e12; // 1e12 wei = 1 public unit
-        UnderlyingZetherToken z = _wrapper(legs, _ones(1), dens, "native", false);
+        WrappedZetherToken z = _wrapper(legs, _ones(1), dens, "native", false);
         vm.deal(address(this), 1 ether);
         z.zetherWrapShield{value: 3e16}(address(0), 3e16, alice.ua);
         assertEq(z.totalShielded(), 3);
         assertEq(address(z).balance, 3e16);
-        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 0, 3e16));
+        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 0, 3e16));
         z.zetherWrapShield(address(0), 3e16, alice.ua);
     }
 
@@ -6089,7 +6089,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         HookLeg hook = new HookLeg();
         address[] memory legs = new address[](1);
         legs[0] = address(hook);
-        UnderlyingZetherToken z = _wrapper(legs, _ones(1), _ones(1), "hook", false);
+        WrappedZetherToken z = _wrapper(legs, _ones(1), _ones(1), "hook", false);
         hook.mint(address(this), 50 * SCALE);
         hook.approve(address(z), 50 * SCALE);
         z.zetherWrapShield(address(hook), 30 * SCALE, alice.ua);
@@ -6107,11 +6107,11 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertEq(hook.balanceOf(address(0xD00D)), 10 * SCALE);
     }
 
-    function test_allowlistPinned_underlyingZether() public {
+    function test_allowlistPinned_wrappedZether() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
         assertEq(s.length, 14);
-        assertEq(s[12], UnderlyingZetherToken.zetherWrapShield.selector);
-        assertEq(s[13], UnderlyingZetherToken.zetherUnshieldUnwrap.selector);
+        assertEq(s[12], WrappedZetherToken.zetherWrapShield.selector);
+        assertEq(s[13], WrappedZetherToken.zetherUnshieldUnwrap.selector);
         assertEq(s[6], ZetherLayer.zetherShield.selector);
         assertEq(s[11], ZetherLayer.zetherUnshield.selector);
         for (uint256 i = 6; i < 14; ++i) {
@@ -6122,16 +6122,16 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertEq(a[4], 1, "unwrap(address,uint256,address,uint256) AMOUNT(1) as on UNDERLYING");
         // the static shape of wrap-shield is pinned: a longer `data` is refused at step 3
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: payer, data: bytes.concat(abi.encodeCall(UnderlyingZetherToken.zetherWrapShield,
+            from: payer, data: bytes.concat(abi.encodeCall(WrappedZetherToken.zetherWrapShield,
                 (address(usd), SCALE, alice.ua)), hex"00"), batch: 1, nonce: 0, validUntil: block.timestamp + 300,
             mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0, feeRecipient: address(0)
         });
         (uint8 v, bytes32 r, bytes32 sg) = vm.sign(PAYER_PK, w.mtxDigest(m));
         bytes memory sig = abi.encodePacked(r, sg, v);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, UnderlyingZetherToken.zetherWrapShield.selector));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxDataShape.selector, WrappedZetherToken.zetherWrapShield.selector));
         w.mtxExecute(m, sig);
-        assertEq(w.kind(), AdminLib.KIND_UNDERLYING_ZETHER);
+        assertEq(w.kind(), AdminLib.KIND_WRAPPED_ZETHER);
         (, string memory n,,,,,) = w.eip712Domain();
         assertEq(n, "SCaaS ZetherToken");
     }
@@ -6149,15 +6149,15 @@ import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap sequences on one
-/// `UNDERLYING_ZETHER` token (one USD leg 1:1, bn254, no auditor), real proofs; the plaintext balances are the ghost.
+/// `WRAPPED_ZETHER` token (one USD leg 1:1, bn254, no auditor), real proofs; the plaintext balances are the ghost.
 contract ZetherHandler is ZetherFixture {
-    UnderlyingZetherToken public w;
+    WrappedZetherToken public w;
     MockERC20 public usd;
     User[3] internal us;
     uint256[3] public acc;
@@ -6167,15 +6167,15 @@ contract ZetherHandler is ZetherFixture {
     constructor() {
         _stack(false);
         usd = new MockERC20("USD", "USD", 6);
-        UnderlyingZetherToken impl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis);
+        WrappedZetherToken impl = new WrappedZetherToken(address(factory), address(0), ZUID, address(reg), dis);
         vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(impl));
+        factory.registerImplementation(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, address(impl));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, MAX, FEE);
-        w = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "inv")));
+        w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, c, "inv")));
         tok = ZetherLayer(address(w));
         _users();
         us[0] = alice;
@@ -6186,7 +6186,7 @@ contract ZetherHandler is ZetherFixture {
     function _public(ZetherLayer t, address to, uint256 units) internal override {
         usd.mint(address(this), units);
         usd.approve(address(t), units);
-        UnderlyingToken(payable(address(t))).wrap(address(usd), units);
+        WrappedToken(payable(address(t))).wrap(address(usd), units);
         if (to != address(this)) t.transfer(to, units);
     }
 
@@ -6281,7 +6281,7 @@ contract ZetherInvariantTest is Test {
 }
 ```
 
-- [ ] **Step 5: layout pin, lint, size** (`cp test/v2/layout/UnderlyingToken.json test/v2/layout/UnderlyingZetherToken.json`):
+- [ ] **Step 5: layout pin, lint, size** (`cp test/v2/layout/WrappedToken.json test/v2/layout/WrappedZetherToken.json`):
 
 ```diff
 diff --git a/smartcontracts/evm/size-baseline.json b/smartcontracts/evm/size-baseline.json
@@ -6290,11 +6290,11 @@ index 76c78b6..1ea808f 100644
 +++ b/smartcontracts/evm/size-baseline.json
 @@ -2,5 +2,6 @@
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed. Owner 2026-10-11: size optimised later; remove an entry once the contract fits.",
-   "NoUnderlyingToken": 22978,
-   "UnderlyingToken": 30036,
--  "NoUnderlyingZetherToken": 30659
-+  "NoUnderlyingZetherToken": 30659,
-+  "UnderlyingZetherToken": 40381
+   "NormalToken": 22978,
+   "WrappedToken": 30036,
+-  "NormalZetherToken": 30659
++  "NormalZetherToken": 30659,
++  "WrappedZetherToken": 40381
  }
 diff --git a/smartcontracts/evm/test/metatx/MsgSenderLint.t.sol b/smartcontracts/evm/test/metatx/MsgSenderLint.t.sol
 index b97e4f8..a7d2537 100644
@@ -6306,18 +6306,18 @@ index b97e4f8..a7d2537 100644
  contract MsgSenderLintTest is Test {
 -    string[12] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
 +    string[13] internal FILES = ["src/metatx/MetaTxBase.sol", "src/metatx/ERC20MetaTx.sol", "src/metatx/MetaTokenBase.sol",
-         "src/metatx/NoUnderlyingToken.sol", "src/metatx/UnderlyingToken.sol", "src/metatx/UnderlyingLib.sol",
+         "src/metatx/NormalToken.sol", "src/metatx/WrappedToken.sol", "src/metatx/WrappedLib.sol",
          "src/metatx/AdminLib.sol", "src/hedera/HederaLib.sol", "src/trade/TradeLib.sol", "src/zether/ZetherLayer.sol",
--        "src/zether/ZetherLib.sol", "src/zether/NoUnderlyingZetherToken.sol"];
-+        "src/zether/ZetherLib.sol", "src/zether/NoUnderlyingZetherToken.sol", "src/zether/UnderlyingZetherToken.sol"];
+-        "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol"];
++        "src/zether/ZetherLib.sol", "src/zether/NormalZetherToken.sol", "src/zether/WrappedZetherToken.sol"];
  
      /// Occurrences of `pat` (not preceded by an identifier character); `exceptSelector` skips `pat<ident>.selector`.
      function _count(string memory path, bytes memory pat, bool exceptSelector) internal view returns (uint256 n) {
 @@ -66,6 +66,7 @@ contract MsgSenderLintTest is Test {
          assertEq(_count("src/zether/ZetherLayer.sol", "msg.sender", false), 0, "ZetherLayer");
          assertEq(_count("src/zether/ZetherLib.sol", "msg.sender", false), 0, "ZetherLib");
-         assertEq(_count("src/zether/NoUnderlyingZetherToken.sol", "msg.sender", false), 0, "NoUnderlyingZetherToken");
-+        assertEq(_count("src/zether/UnderlyingZetherToken.sol", "msg.sender", false), 0, "UnderlyingZetherToken");
+         assertEq(_count("src/zether/NormalZetherToken.sol", "msg.sender", false), 0, "NormalZetherToken");
++        assertEq(_count("src/zether/WrappedZetherToken.sol", "msg.sender", false), 0, "WrappedZetherToken");
      }
  
      /// CTR-MTX-18: an external self-call (`this.f(…)`) inside an allowlisted body would let a guarded callee consume
@@ -6326,10 +6326,10 @@ index 10f4a73..90dc5d0 100644
 --- a/smartcontracts/evm/test/v2/Layout.t.sol
 +++ b/smartcontracts/evm/test/v2/Layout.t.sol
 @@ -32,6 +32,7 @@ contract LayoutTest is V2Fixture {
-         _pin("NoUnderlyingToken", "NoUnderlyingToken");
-         _pin("UnderlyingToken", "UnderlyingToken");
-         _pin("NoUnderlyingZetherToken", "NoUnderlyingZetherToken"); // the Zether layer lives in `scaas.zether`
-+        _pin("UnderlyingZetherToken", "UnderlyingZetherToken");
+         _pin("NormalToken", "NormalToken");
+         _pin("WrappedToken", "WrappedToken");
+         _pin("NormalZetherToken", "NormalZetherToken"); // the Zether layer lives in `scaas.zether`
++        _pin("WrappedZetherToken", "WrappedZetherToken");
      }
  
      /// Thứ indexer thật sự đọc (ERC-7201 `scaas.underlying`): chân i ở `keccak256(i ‖ NS)`: `token`, `+ 1` `num ‖ den`,
@@ -6337,8 +6337,8 @@ index 10f4a73..90dc5d0 100644
 
 - [ ] **Step 6: Run:** `forge test --match-path "test/zether/Zether{Underlying,Invariant}.t.sol"` → 14 passed
   (invariant: 8 runs × 16 calls, 0 reverts); `forge test` → **967 passed**; size gate 0 errors
-  (`UnderlyingZetherToken` 40,381 B, init 41,991 B < 49,152).
-- [ ] **Step 7: Commit** `P3: UNDERLYING_ZETHER kind — wrap-shield, unshield-unwrap, reserve invariant with the shielded part` + trailer.
+  (`WrappedZetherToken` 40,381 B, init 41,991 B < 49,152).
+- [ ] **Step 7: Commit** `P3: WRAPPED_ZETHER kind — wrap-shield, unshield-unwrap, reserve invariant with the shielded part` + trailer.
 
 ---
 
@@ -6359,26 +6359,26 @@ index 1fc5227..5f2929c 100644
 +++ b/smartcontracts/evm/script/DeployBase.sol
 @@ -6,6 +6,13 @@ import {OpenFactory} from "../src/factory/OpenFactory.sol";
  import {IOpenFactory} from "../src/factory/IOpenFactory.sol";
- import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
+ import {NormalToken} from "../src/metatx/NormalToken.sol";
  import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
 +import {UniversalAccountRegistry} from "../src/registry/UniversalAccountRegistry.sol";
 +import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
 +import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 +import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
 +import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../src/zether/ZetherVerifier.sol";
-+import {NoUnderlyingZetherToken} from "../src/zether/NoUnderlyingZetherToken.sol";
-+import {UnderlyingZetherToken} from "../src/zether/UnderlyingZetherToken.sol";
++import {NormalZetherToken} from "../src/zether/NormalZetherToken.sol";
++import {WrappedZetherToken} from "../src/zether/WrappedZetherToken.sol";
  
  /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
  ///        deployer, the token factory with its implementations, the `chainUid()` gate.
 @@ -42,8 +49,9 @@ abstract contract DeployBase is Script {
  
-     /// @notice The token factory, the `NONE` implementation and the `SCaaSDex` implementation by CREATE2, each
+     /// @notice The token factory, the `NORMAL` implementation and the `SCaaSDex` implementation by CREATE2, each
      ///         registered as version 1 when the deployer is the registrar; writes `token_factory`,
--    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`. `UNDERLYING` is
+-    ///         `implementation_normal`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`. `WRAPPED` is
 -    ///         not deployed: over EIP-170 on real chains (owner: wait for Glamsterdam).
-+    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`; on a dev chain
-+    ///         also the Zether stack (`_deployZether`). `UNDERLYING` is not deployed: over EIP-170 on real chains
++    ///         `implementation_normal`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`; on a dev chain
++    ///         also the Zether stack (`_deployZether`). `WRAPPED` is not deployed: over EIP-170 on real chains
 +    ///         (owner: wait for Glamsterdam).
      function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
          internal returns (OpenFactory f)
@@ -6393,7 +6393,7 @@ index 1fc5227..5f2929c 100644
  
 +    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the registry and the verifiers refuse to deploy): the account
 +    ///         registry, `ZetherDisclosure`, `ZetherStatements`, both verifiers, the two confidential implementations
-+    ///         registered as version 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, and the factory's Zether gate switched on
++    ///         registered as version 1 of `NORMAL_ZETHER` and `WRAPPED_ZETHER`, and the factory's Zether gate switched on
 +    ///         when the deployer is the registrar. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The implementations exceed
 +    ///         EIP-170: an anvil needs `--code-size-limit 65536` (owner: code size waits for Glamsterdam).
 +    function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl) internal {
@@ -6402,13 +6402,13 @@ index 1fc5227..5f2929c 100644
 +        ZetherStatements stm = new ZetherStatements{salt: salt}();
 +        ZetherVerifierBn254 bn = new ZetherVerifierBn254{salt: salt}();
 +        ZetherVerifierBls12381 bls = new ZetherVerifierBls12381{salt: salt}();
-+        NoUnderlyingZetherToken none =
-+            new NoUnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
-+        UnderlyingZetherToken und =
-+            new UnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
++        NormalZetherToken none =
++            new NormalZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
++        WrappedZetherToken und =
++            new WrappedZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
 +        if (register) {
-+            f.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(none));
-+            f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(und));
++            f.registerImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, address(none));
++            f.registerImplementation(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, address(und));
 +            f.setZetherEnabled(true);
 +        }
 +        _gate(address(none));
@@ -6418,8 +6418,8 @@ index 1fc5227..5f2929c 100644
 +        vm.serializeAddress("deploy", "zether_statements", address(stm));
 +        vm.serializeAddress("deploy", "zether_verifier_bn254", address(bn));
 +        vm.serializeAddress("deploy", "zether_verifier_bls12381", address(bls));
-+        vm.serializeAddress("deploy", "implementation_none_zether", address(none));
-+        vm.serializeAddress("deploy", "implementation_underlying_zether", address(und));
++        vm.serializeAddress("deploy", "implementation_normal_zether", address(none));
++        vm.serializeAddress("deploy", "implementation_wrapped_zether", address(und));
 +    }
 +
      /// @notice The deploy gate (CTR-GEN-05): `chainUid()` of the deployed contract equals the RPC's genesis hash.
@@ -6443,8 +6443,8 @@ import {UniversalAccountRegistry} from "../../src/registry/UniversalAccountRegis
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {ZetherVerifierBn254} from "../../src/zether/ZetherVerifier.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
-import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
-import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
 
 /// The deploy steps without the RPC parts (`_setup`): the salt and `chain_uid` set directly.
@@ -6467,11 +6467,11 @@ contract ZetherDeployTest is Test {
         DeployHarness h = new DeployHarness();
         OpenFactory f = h.deploy(ZUID);
         assertTrue(f.zetherEnabled());
-        NoUnderlyingZetherToken none = NoUnderlyingZetherToken(f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, 1));
-        UnderlyingZetherToken und =
-            UnderlyingZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1)));
-        assertEq(none.kind(), AdminLib.KIND_NONE_ZETHER);
-        assertEq(und.kind(), AdminLib.KIND_UNDERLYING_ZETHER);
+        NormalZetherToken none = NormalZetherToken(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
+        WrappedZetherToken und =
+            WrappedZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1)));
+        assertEq(none.kind(), AdminLib.KIND_NORMAL_ZETHER);
+        assertEq(und.kind(), AdminLib.KIND_WRAPPED_ZETHER);
         address reg = _at(h, type(UniversalAccountRegistry).creationCode);
         address dis = _at(h, type(ZetherDisclosure).creationCode);
         address bn = _at(h, type(ZetherVerifierBn254).creationCode);
@@ -6481,7 +6481,7 @@ contract ZetherDeployTest is Test {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
         c.conf = IFactoryToken.ConfidentialConfig(bn, "", 1, 1 << 40, 0);
-        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "z"));
+        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, c, "z"));
         assertEq(address(t.verifier()), bn);
         assertEq(t.chainUid(), ZUID);
     }
@@ -6493,9 +6493,9 @@ contract ZetherDeployTest is Test {
             DeployHarness h = new DeployHarness();
             OpenFactory f = h.deploy(ZUID);
             assertFalse(f.zetherEnabled());
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, 1), address(0));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1), address(0));
-            assertEq(f.implementationOf(IOpenFactory.TokenKind.NONE, 1) == address(0), false, "the public kinds still");
+            assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
+            assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
+            assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still");
         }
     }
 }
@@ -6512,16 +6512,16 @@ index 18cc21f..b152edd 100755
  import json
  import sys
  
--TOKENS = {'NoUnderlyingToken', 'UnderlyingToken'}
-+TOKENS = {'NoUnderlyingToken', 'UnderlyingToken', 'NoUnderlyingZetherToken', 'UnderlyingZetherToken'}
+-TOKENS = {'NormalToken', 'WrappedToken'}
++TOKENS = {'NormalToken', 'WrappedToken', 'NormalZetherToken', 'WrappedZetherToken'}
  TOKEN_LIMIT, EIP170, EIP3860 = 20_480, 24_576, 49_152
  
  
 @@ -49,6 +49,7 @@ if __name__ == '__main__':
          assert check({'A': s(24_576)}, {}) == ([], [])
          assert check({'A': s(24_577)}, {})[0]
-         assert check({'NoUnderlyingToken': s(20_481)}, {})[0]
-+        assert check({'UnderlyingZetherToken': s(20_481)}, {})[0]
+         assert check({'NormalToken': s(20_481)}, {})[0]
++        assert check({'WrappedZetherToken': s(20_481)}, {})[0]
          assert check({'X': s(26_000)}, {'X': 26_000}) == ([], [])
          assert check({'X': s(26_001)}, {'X': 26_000})[0]
          assert check({'X': s(20_000)}, {'X': 26_000})[1]
@@ -6529,8 +6529,8 @@ index 18cc21f..b152edd 100755
 
 - [ ] **Step 4: Run** (each through `scripts/capped`, one at a time):
   - `python3 scripts/size_gate.py --self-test`; `forge test` → **969 passed**, 0 failed; size gate `0 error(s)`
-    (`NoUnderlyingToken` 22,978, `UnderlyingToken` 30,036, `NoUnderlyingZetherToken` 30,659,
-    `UnderlyingZetherToken` 40,381).
+    (`NormalToken` 22,978, `WrappedToken` 30,036, `NormalZetherToken` 30,659,
+    `WrappedZetherToken` 40,381).
   - e2e: `forge build` (full), then in `scaas-node`: `cargo test --test e2e -- --ignored --test-threads=1` → 4 passed;
     `cargo test --test e2e_hedera -- --ignored` → 1 passed (no node change: the node reads nothing of Zether; the e2e
     chains are not dev chains, so the deploy skips the Zether stack). If `forge script Deploy.s.sol` hangs with
@@ -6543,8 +6543,8 @@ import subprocess, sys
 W='/home/ha/work/ainative/scaas/.claude/worktrees/p3/smartcontracts/evm'
 L=W+'/src/zether/ZetherLib.sol'
 Y=W+'/src/zether/ZetherLayer.sol'
-N=W+'/src/zether/NoUnderlyingZetherToken.sol'
-U=W+'/src/zether/UnderlyingZetherToken.sol'
+N=W+'/src/zether/NormalZetherToken.sol'
+U=W+'/src/zether/WrappedZetherToken.sol'
 S=W+'/src/zether/ZetherStatements.sol'
 D=W+'/src/zether/ZetherDisclosure.sol'
 V=W+'/src/zether/ZetherVerifier.sol'
@@ -6608,23 +6608,23 @@ muts=[
  ('Y10 constructor checks off', Y, 'if (registry_.code.length == 0 || address(disclosure_).code.length == 0) revert BadInit();', '', Z),
  ('Y12 HASH record not read', Y, 'return h != bytes32(0) ? abi.encodePacked(h) : ZetherLib.$().entries[entryRef];', 'return ZetherLib.$().entries[entryRef];', Z),
  ('Y11 unshield not allowlisted', Y, '|| sel == this.zetherTransferSingle.selector || sel == this.zetherUnshield.selector;', '|| sel == this.zetherTransferSingle.selector;', Z),
- # NoUnderlyingZetherToken
+ # NormalZetherToken
  ('N1 init skips the layer', N, '        ZetherLib.init(cfg.conf);\n', '', Z),
  ('N2 conf refused', N, '_requireUnused(cfg, false, true, true, false);', '_requireUnused(cfg, false, true, true, true);', Z),
- ('N3 regulated flags valid', N, 'AdminLib.init(AdminLib.KIND_NONE_ZETHER, cfg.features', 'AdminLib.init(AdminLib.KIND_NONE, cfg.features', Z),
+ ('N3 regulated flags valid', N, 'AdminLib.init(AdminLib.KIND_NORMAL_ZETHER, cfg.features', 'AdminLib.init(AdminLib.KIND_NORMAL, cfg.features', Z),
  ('N4 allowlist entry dropped', N, '(s[7], c[7]) = (this.zetherUnshield.selector, FEE_CLASS_ABSOLUTE);', '', Z),
  ('N5 initial supply ignored', N, '        if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);\n', '', Z),
- # UnderlyingZetherToken
+ # WrappedZetherToken
  ('U1 wrap-shield: scale remainder allowed', U, 'if (minted % scale != 0) revert AmountNotScaled(minted, scale);', '', Z),
  ('U2 wrap-shield: credits minted', U, 'ZetherLib.shield(ua, minted / scale, _REGISTRY);', 'ZetherLib.shield(ua, minted, _REGISTRY);', Z),
  ('U3 direct unwrap binds nothing', U, 'return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_DIRECT, ZetherLib.unwrapBinding(u, minOut));', 'return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_DIRECT, bytes32(0));', Z),
  ('U4 relayed unwrap not relayed', U, 'if (b != bytes32(0)) return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_RELAYED, b);', '', Z),
- ('U5 unwrap pays unscaled', U, 'UnderlyingLib.quoteUnwrap(i, x.amount * ZetherLib.$().shieldScale, x.recipient, x.minOut);', 'UnderlyingLib.quoteUnwrap(i, x.amount, x.recipient, x.minOut);', Z),
- ('U6 executeRate ignores the shielded value', U, 'UnderlyingLib.executeRate(_msgSender(), totalSupply() + ZetherLib.$().totalShielded * ZetherLib.$().shieldScale);', 'UnderlyingLib.executeRate(_msgSender(), totalSupply());', Z),
- ('U7 disableFeature keeps the pending rate', U, '        if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();\n    }\n\n    /// @notice The collateral', '    }\n\n    /// @notice The collateral', Z),
+ ('U5 unwrap pays unscaled', U, 'WrappedLib.quoteUnwrap(i, x.amount * ZetherLib.$().shieldScale, x.recipient, x.minOut);', 'WrappedLib.quoteUnwrap(i, x.amount, x.recipient, x.minOut);', Z),
+ ('U6 executeRate ignores the shielded value', U, 'WrappedLib.executeRate(_msgSender(), totalSupply() + ZetherLib.$().totalShielded * ZetherLib.$().shieldScale);', 'WrappedLib.executeRate(_msgSender(), totalSupply());', Z),
+ ('U7 disableFeature keeps the pending rate', U, '        if (bit == AdminLib.RATE_ADJUSTABLE) WrappedLib.dropPending();\n    }\n\n    /// @notice The collateral', '    }\n\n    /// @notice The collateral', Z),
  ('U8 wrap-shield unguarded', U, 'function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable nonReentrant {', 'function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable {', Z),
  ('U9 unshield-unwrap unguarded', U, '    ) external nonReentrant {\n        _unshieldUnwrap(', '    ) external {\n        _unshieldUnwrap(', Z),
- ('U10 kind 3 flags as UNDERLYING', U, 'UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_ZETHER);', 'UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING);', Z),
+ ('U10 kind 3 flags as WRAPPED', U, 'WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED_ZETHER);', 'WrappedLib.initToken(cfg, false, AdminLib.KIND_WRAPPED);', Z),
  ('U11 wrap-shield static shape off', U, 'if (sel == this.zetherWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);', 'if (sel == this.zetherWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);', Z),
  # ZetherStatements
  ('S1 view always DIRECT', S, 'ZetherLib.Ctx memory c = _ctx(token, ZetherLib.tagOf(envelopeBinding), envelopeBinding);\n        ZetherLib.Acct memory a = _acct(token, ZetherLib.singleFrom(payload, c.p));', 'ZetherLib.Ctx memory c = _ctx(token, ZetherLib.TAG_DIRECT, envelopeBinding);\n        ZetherLib.Acct memory a = _acct(token, ZetherLib.singleFrom(payload, c.p));', Z),
@@ -6644,7 +6644,7 @@ muts=[
  ('F3 enable anywhere', F, '        if (on) ZetherSafety.requireDevChain();\n', '', FZ),
  ('F4 verifier 0 allowed', F, '        if (verifier == address(0)) revert VerifierRequiredForZether();\n', '', FZ),
  ('F5 unsupported verifier allowed', F, '        if (ok) return;\n        string memory curve;', '        return;\n        string memory curve;', FZ),
- ('F6 gate only for kind 2', F, 'if (kind == TokenKind.NONE_ZETHER || kind == TokenKind.UNDERLYING_ZETHER) _checkZether(cfg.conf.verifier);', 'if (kind == TokenKind.NONE_ZETHER) _checkZether(cfg.conf.verifier);', FZ),
+ ('F6 gate only for kind 2', F, 'if (kind == TokenKind.NORMAL_ZETHER || kind == TokenKind.WRAPPED_ZETHER) _checkZether(cfg.conf.verifier);', 'if (kind == TokenKind.NORMAL_ZETHER) _checkZether(cfg.conf.verifier);', FZ),
  ('F7 anyone switches the gate', F, '''    function setZetherEnabled(bool on) external {
         if (msg.sender != registrar) revert NotRegistrar();''', '''    function setZetherEnabled(bool on) external {''', FZ),
 ]
@@ -6728,11 +6728,11 @@ for name,f,a,b,path in muts:
   | U7 disableFeature keeps the pending rate | `test_kindFlags_andDisableFeatureCancelsAPendingRate` |
   | U8 wrap-shield unguarded | `test_reentryThroughAHookLegRefused` |
   | U9 unshield-unwrap unguarded | `test_reentryThroughAHookLegRefused` |
-  | U10 kind 3 flags as UNDERLYING | `test_kindFlags_andDisableFeatureCancelsAPendingRate` |
-  | U11 wrap-shield static shape off | `test_allowlistPinned_underlyingZether` |
+  | U10 kind 3 flags as WRAPPED | `test_kindFlags_andDisableFeatureCancelsAPendingRate` |
+  | U11 wrap-shield static shape off | `test_allowlistPinned_wrappedZether` |
   | S1 view always DIRECT | `test_batch_eachItemItsOwnBinding` |
   | S2 unwrap view binds nothing | `test_unshieldUnwrap_directProofBindsLegAndMinOut` |
-  | D1 disclosure challenge without chainUid | `test_disclosureOnTheUnderlyingKind` |
+  | D1 disclosure challenge without chainUid | `test_disclosureOnTheWrappedKind` |
   | V1 header 384 | `test_confKeyAloneCannotSpendMultisigAccount` |
   | V2 fee read at the old offset | `test_confKeyAloneCannotSpendMultisigAccount` |
   | V3 D_out = O allowed | `test_dOutIdentityRejected` |
@@ -6770,20 +6770,20 @@ index 0d2c57e..b93f2e4 100644
  [CTR-TOK-24](docs/contracts/token-wrappers.md#CTR-TOK-24)).
  
  <p align="center">
--  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code. NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER are the target of phase P3. External libraries: AdminLib, UnderlyingLib and HederaLib built; TradeLib (P2) and ZetherLib (P3) target. Features are flags chosen at creation; the post-quantum kinds are reserved.">
-+  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code. NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER are built in phase P3 (unaudited, dev chains only). External libraries: AdminLib, UnderlyingLib, HederaLib, TradeLib (P2) and ZetherLib (P3), all built. Features are flags chosen at creation; the post-quantum kinds are reserved.">
+-  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code. NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER are the target of phase P3. External libraries: AdminLib, WrappedLib and HederaLib built; TradeLib (P2) and ZetherLib (P3) target. Features are flags chosen at creation; the post-quantum kinds are reserved.">
++  <img src="docs/assets/token-tree.svg" width="900" alt="EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code. NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed) are built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER are built in phase P3 (unaudited, dev chains only). External libraries: AdminLib, WrappedLib, HederaLib, TradeLib (P2) and ZetherLib (P3), all built. Features are flags chosen at creation; the post-quantum kinds are reserved.">
  </p>
  
  <details>
 @@ -273,15 +273,15 @@ heavy logic sits in external libraries ([CTR-TOK-21](docs/contracts/token-wrappe
  | Area | Contracts | Built on | Status | Read |
  |---|---|---|---|---|
- | Factory | `OpenFactory` (one factory) | EIP-1167 clones at CREATE2 addresses: shared code, separate data ([section 4](#shared-code)); the version catalogue | BUILT as `OpenFactory` (`createToken`; kinds `NONE`, `UNDERLYING`) and the v1 line `OpenFactoryV1` | [token-wrappers](docs/contracts/token-wrappers.md) |
+ | Factory | `OpenFactory` (one factory) | EIP-1167 clones at CREATE2 addresses: shared code, separate data ([section 4](#shared-code)); the version catalogue | BUILT as `OpenFactory` (`createToken`; kinds `NORMAL`, `WRAPPED`) and the v1 line `OpenFactoryV1` | [token-wrappers](docs/contracts/token-wrappers.md) |
 -| Gasless contracts | `MetaTxBase` (any SCaaS contract) → `ERC20MetaTx` (every token) → `MetaTokenBase` | `EIP712`; `mtxExecute` runs a signed `MetaTransaction` as a self-call on a selector allowlist; tokens add `ERC20` + `IERC20MetaTx` and the typed `MetaTransfer` ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22), [CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)) | BUILT (P1a–P1c): `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; the older v1 line remains until Zether (P3) and the node and clientkeys (P5) move | [metatx](docs/contracts/metatx.md) |
 +| Gasless contracts | `MetaTxBase` (any SCaaS contract) → `ERC20MetaTx` (every token) → `MetaTokenBase` | `EIP712`; `mtxExecute` runs a signed `MetaTransaction` as a self-call on a selector allowlist; tokens add `ERC20` + `IERC20MetaTx` and the typed `MetaTransfer` ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22), [CTR-MTX-23](docs/contracts/metatx.md#CTR-MTX-23)) | BUILT (P1a–P1c): `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; the older v1 line remains until the node and clientkeys move (P5) | [metatx](docs/contracts/metatx.md) |
  | Payments | a signed `MetaTransfer` with an `entryRef` (`mtxPay`), or `IERC20Payment.payWithFee`; both emit `PaymentSettled` | `IERC20MetaTx` | BUILT: `MetaTransfer` and `mtxPay` on `MetaTokenBase`; the v1 line keeps a `pay(bytes32)` data shape | [metatx](docs/contracts/metatx.md) |
--| Token kinds | four kinds by code: `NoUnderlyingToken` (`NONE`), `UnderlyingToken` (`UNDERLYING`, 1–8 legs, the native coin allowed), `NoUnderlyingZetherToken`, `UnderlyingZetherToken` (the two `*_ZETHER` kinds); `*_PQZ` reserved. Features by flags fixed at creation: payable, mint, burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NONE` and `UNDERLYING` BUILT (P1c–P1d) with `AdminLib`, `UnderlyingLib`, `HederaLib` (`UnderlyingToken` still over EIP-170); `*_ZETHER` kinds and `ZetherLib` SPECIFIED (P3; today the legacy `ZetherToken`) | [token-wrappers](docs/contracts/token-wrappers.md) |
-+| Token kinds | four kinds by code: `NoUnderlyingToken` (`NONE`), `UnderlyingToken` (`UNDERLYING`, 1–8 legs, the native coin allowed), `NoUnderlyingZetherToken`, `UnderlyingZetherToken` (the two `*_ZETHER` kinds); `*_PQZ` reserved. Features by flags fixed at creation: payable, mint, burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NONE` and `UNDERLYING` BUILT (P1c–P1d) with `AdminLib`, `UnderlyingLib`, `HederaLib` (`UnderlyingToken` still over EIP-170); `*_ZETHER` kinds with `ZetherLib` BUILT, unaudited (P3; over EIP-170 too) | [token-wrappers](docs/contracts/token-wrappers.md) |
+-| Token kinds | four kinds by code: `NormalToken` (`NORMAL`), `WrappedToken` (`WRAPPED`, 1–8 legs, the native coin allowed), `NormalZetherToken`, `WrappedZetherToken` (the two `*_ZETHER` kinds); `*_PQZ` reserved. Features by flags fixed at creation: payable, mint, burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NORMAL` and `WRAPPED` BUILT (P1c–P1d) with `AdminLib`, `WrappedLib`, `HederaLib` (`WrappedToken` still over EIP-170); `*_ZETHER` kinds and `ZetherLib` SPECIFIED (P3; today the legacy `ZetherToken`) | [token-wrappers](docs/contracts/token-wrappers.md) |
++| Token kinds | four kinds by code: `NormalToken` (`NORMAL`), `WrappedToken` (`WRAPPED`, 1–8 legs, the native coin allowed), `NormalZetherToken`, `WrappedZetherToken` (the two `*_ZETHER` kinds); `*_PQZ` reserved. Features by flags fixed at creation: payable, mint, burn, adjustable rate, wrap-disable, freeze, force, pause, allowlist ([CTR-TOK-21](docs/contracts/token-wrappers.md#CTR-TOK-21)) | `MetaTokenBase` | `NORMAL` and `WRAPPED` BUILT (P1c–P1d) with `AdminLib`, `WrappedLib`, `HederaLib` (`WrappedToken` still over EIP-170); `*_ZETHER` kinds with `ZetherLib` BUILT, unaudited (P3; over EIP-170 too) | [token-wrappers](docs/contracts/token-wrappers.md) |
  | Tradable tokens | `mtxTrade`: the token pulls a signed `TradeOrder` into the DEX named in it | `IERC20MetaTx` | SPECIFIED (`TradeLib`, P2; today: the `trade` op and the legacy `MetaTxDex`, both to be removed) | [metatx](docs/contracts/metatx.md), [legacy DEX](docs/contracts/dex.md#legacy-metatxdex) |
  | DEX | `SCaaSDex`, `DexPuller` | `EIP712` + `ReentrancyGuardTransient`; one taker against many makers per call on two paths, no maker allowance; `mtxExchange` fills the same orders against AMMs (Uniswap v2/v3), multi-hop or in a cycle, surplus to the signers ([CTR-DEX-20](docs/contracts/dex.md#CTR-DEX-20)) | BUILT (P2c: the exchange path on the new `SCaaSDex`) | [dex](docs/contracts/dex.md) |
  | Mandates | `MandateWallet` | `MetaTxBase` + `IERC1271` | BUILT (own signed structs; on `MetaTxBase` in P4) | [mandates](docs/contracts/mandates.md) |
@@ -6801,14 +6801,14 @@ index 3ce6b50..38c9f5b 100644
 @@ -1,6 +1,6 @@
  <svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-labelledby="t d">
    <title id="t">Token model: two axes</title>
--  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NONE (standalone) and UNDERLYING (wrapper of one to eight legs), columns plain (NONE and UNDERLYING, built in P1), ZETHER (NONE_ZETHER and UNDERLYING_ZETHER, target P3; classical Zether built and unaudited on dev chains), PQZ (NONE_PQZ and UNDERLYING_PQZ, reserved, not built; post-quantum Zether specified and unaudited) and ZETHER_PQZ (NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ, reserved, not built; room in the kind ids only). Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
-+  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NONE (standalone) and UNDERLYING (wrapper of one to eight legs), columns plain (NONE and UNDERLYING, built in P1), ZETHER (NONE_ZETHER and UNDERLYING_ZETHER, built in P3, unaudited, dev chains only), PQZ (NONE_PQZ and UNDERLYING_PQZ, reserved, not built; post-quantum Zether specified and unaudited) and ZETHER_PQZ (NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ, reserved, not built; room in the kind ids only). Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
+-  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NORMAL (standalone) and WRAPPED (wrapper of one to eight legs), columns plain (NORMAL and WRAPPED, built in P1), ZETHER (NORMAL_ZETHER and WRAPPED_ZETHER, target P3; classical Zether built and unaudited on dev chains), PQZ (NORMAL_PQZ and WRAPPED_PQZ, reserved, not built; post-quantum Zether specified and unaudited) and ZETHER_PQZ (NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ, reserved, not built; room in the kind ids only). Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
++  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NORMAL (standalone) and WRAPPED (wrapper of one to eight legs), columns plain (NORMAL and WRAPPED, built in P1), ZETHER (NORMAL_ZETHER and WRAPPED_ZETHER, built in P3, unaudited, dev chains only), PQZ (NORMAL_PQZ and WRAPPED_PQZ, reserved, not built; post-quantum Zether specified and unaudited) and ZETHER_PQZ (NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ, reserved, not built; room in the kind ids only). Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
    <defs>
      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
        <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
 @@ -30,7 +30,7 @@
    <text class="b" x="170" y="132">plain</text>
-   <rect x="170" y="140" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="191" y="152" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="218" y="152">NONE, UNDERLYING in P1</text>
+   <rect x="170" y="140" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="191" y="152" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="218" y="152">NORMAL, WRAPPED in P1</text>
    <text class="b" x="366" y="132">ZETHER</text>
 -  <text class="s" x="366" y="152">target, P3</text>
 +  <rect x="366" y="140" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="387" y="152" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="414" y="152">in P3, unaudited</text>
@@ -6822,8 +6822,8 @@ index db333a7..d2bdb7a 100644
 @@ -1,6 +1,6 @@
  <svg xmlns="http://www.w3.org/2000/svg" width="960" height="620" viewBox="0 0 960 620" role="img" aria-labelledby="t d">
    <title id="t">EVM token tree</title>
--  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, target in phase P3. External libraries: AdminLib, UnderlyingLib and HederaLib built; TradeLib (P2) and ZetherLib (P3) target. Features are flags chosen at creation. The post-quantum kinds are reserved, not built.</desc>
-+  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, built in phase P3 (unaudited, dev chains only). External libraries: AdminLib, UnderlyingLib, HederaLib, TradeLib (P2) and ZetherLib (P3), all built. Features are flags chosen at creation. The post-quantum kinds are reserved, not built.</desc>
+-  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code: NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed), built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER, target in phase P3. External libraries: AdminLib, WrappedLib and HederaLib built; TradeLib (P2) and ZetherLib (P3) target. Features are flags chosen at creation. The post-quantum kinds are reserved, not built.</desc>
++  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then four kinds by code: NORMAL (NormalToken) and WRAPPED (WrappedToken, 1 to 8 legs, the native coin allowed), built in phase P1; NORMAL_ZETHER and WRAPPED_ZETHER, built in phase P3 (unaudited, dev chains only). External libraries: AdminLib, WrappedLib, HederaLib, TradeLib (P2) and ZetherLib (P3), all built. Features are flags chosen at creation. The post-quantum kinds are reserved, not built.</desc>
    <defs>
      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
        <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -6833,8 +6833,8 @@ index db333a7..d2bdb7a 100644
  
 -  <rect class="target" x="356" y="380" width="156" height="96" rx="8"/>
 +  <rect class="built" x="356" y="380" width="156" height="96" rx="8"/>
-   <text class="k" x="434" y="401" text-anchor="middle">NONE_ZETHER</text>
-   <text class="m" x="434" y="420" text-anchor="middle" font-size="10.5">NoUnderlyingZetherToken</text>
+   <text class="k" x="434" y="401" text-anchor="middle">NORMAL_ZETHER</text>
+   <text class="m" x="434" y="420" text-anchor="middle" font-size="10.5">NormalZetherToken</text>
    <text class="s" x="434" y="438" text-anchor="middle">standalone +</text>
    <text class="s" x="434" y="453" text-anchor="middle">Zether layer</text>
 -  <text class="tgc" x="434" y="469" text-anchor="middle">target (P3)</text>
@@ -6842,14 +6842,14 @@ index db333a7..d2bdb7a 100644
  
 -  <rect class="target" x="522" y="380" width="156" height="96" rx="8"/>
 +  <rect class="built" x="522" y="380" width="156" height="96" rx="8"/>
-   <text class="k" x="600" y="401" text-anchor="middle">UNDERLYING_ZETHER</text>
-   <text class="m" x="600" y="420" text-anchor="middle" font-size="10.5">UnderlyingZetherToken</text>
+   <text class="k" x="600" y="401" text-anchor="middle">WRAPPED_ZETHER</text>
+   <text class="m" x="600" y="420" text-anchor="middle" font-size="10.5">WrappedZetherToken</text>
    <text class="s" x="600" y="438" text-anchor="middle">wrapper + Zether layer,</text>
    <text class="s" x="600" y="453" text-anchor="middle">wrap-shield from a leg</text>
 -  <text class="tgc" x="600" y="469" text-anchor="middle">target (P3)</text>
 +  <text class="okc" x="600" y="469" text-anchor="middle">built (P3)</text>
  
-   <text class="s" x="24" y="500">Reserved, not built: NONE_PQZ, UNDERLYING_PQZ, NONE_ZETHER_PQZ, UNDERLYING_ZETHER_PQZ (post-quantum layer).</text>
+   <text class="s" x="24" y="500">Reserved, not built: NORMAL_PQZ, WRAPPED_PQZ, NORMAL_ZETHER_PQZ, WRAPPED_ZETHER_PQZ (post-quantum layer).</text>
  
 @@ -104,14 +104,14 @@
    <text class="okc" x="922" y="284" text-anchor="end">built</text>
@@ -6878,8 +6878,8 @@ index db333a7..d2bdb7a 100644
 +  <text class="s" x="52" y="607">built (as of P3)</text>
    <rect class="target" x="160" y="596" width="22" height="12" rx="3"/>
    <text class="s" x="188" y="607">target, not built yet (phase)</text>
--  <text class="s" x="936" y="607" text-anchor="end">UnderlyingToken is built but still over the EIP-170 size limit</text>
-+  <text class="s" x="936" y="607" text-anchor="end">UnderlyingToken and the *_ZETHER kinds are built but over the EIP-170 limit</text>
+-  <text class="s" x="936" y="607" text-anchor="end">WrappedToken is built but still over the EIP-170 size limit</text>
++  <text class="s" x="936" y="607" text-anchor="end">WrappedToken and the *_ZETHER kinds are built but over the EIP-170 limit</text>
  </svg>
 diff --git a/docs/contracts/README.md b/docs/contracts/README.md
 index e02285d..eefbbe4 100644
@@ -6889,8 +6889,8 @@ index e02285d..eefbbe4 100644
  | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
  | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
  
--<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (target, P3; classical Zether built and unaudited on dev chains), NONE_PQZ and UNDERLYING_PQZ (reserved, not built; PQ Zether specified and unaudited) and NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
-+<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (built in P3, unaudited, dev chains only), NONE_PQZ and UNDERLYING_PQZ (reserved, not built; PQ Zether specified and unaudited) and NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
+-<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NORMAL and WRAPPED (plain, built in P1), NORMAL_ZETHER and WRAPPED_ZETHER (target, P3; classical Zether built and unaudited on dev chains), NORMAL_PQZ and WRAPPED_PQZ (reserved, not built; PQ Zether specified and unaudited) and NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
++<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NORMAL and WRAPPED (plain, built in P1), NORMAL_ZETHER and WRAPPED_ZETHER (built in P3, unaudited, dev chains only), NORMAL_PQZ and WRAPPED_PQZ (reserved, not built; PQ Zether specified and unaudited) and NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
  
  How the families relate:
  
@@ -6898,8 +6898,8 @@ index e02285d..eefbbe4 100644
  
  | Contract | Source of `chain_uid` |
  |---|---|
--| token implementations (`NoUnderlyingToken`, `UnderlyingToken`; `ZetherToken` with P3) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
-+| token implementations (`NoUnderlyingToken`, `UnderlyingToken`, `NoUnderlyingZetherToken`, `UnderlyingZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
+-| token implementations (`NormalToken`, `WrappedToken`; `ZetherToken` with P3) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
++| token implementations (`NormalToken`, `WrappedToken`, `NormalZetherToken`, `WrappedZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
  | `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
  | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
  | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
@@ -6911,21 +6911,21 @@ index 6c25ca5..4331aca 100644
  | | `wrap(address,uint256)` | `ABSOLUTE` |
  | | `unwrap(address,uint256,address,uint256)` | `AMOUNT(1)` |
  | | `addReserve(address,uint256)` | `ABSOLUTE` |
--| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `wrap(uint256)` (UnderlyingLib surface of `UNDERLYING_ZETHER`), `zetherShield(bytes,uint256)` | `ABSOLUTE` |
--| | `unwrap(uint256,address)` (public balance; `UNDERLYING_ZETHER`) | `AMOUNT(0)` |
+-| `NORMAL_ZETHER` / `WRAPPED_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `wrap(uint256)` (WrappedLib surface of `WRAPPED_ZETHER`), `zetherShield(bytes,uint256)` | `ABSOLUTE` |
+-| | `unwrap(uint256,address)` (public balance; `WRAPPED_ZETHER`) | `AMOUNT(0)` |
 -| | `zetherTransfer(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
-+| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | the kind's public entries (`burn`; or `UnderlyingToken`'s six, without `unwrap(uint256,address)`) | as above |
-+| | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
++| `NORMAL_ZETHER` / `WRAPPED_ZETHER` (built, P3) | the kind's public entries (`burn`; or `WrappedToken`'s six, without `unwrap(uint256,address)`) | as above |
++| | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`WRAPPED_ZETHER`) | `ABSOLUTE` |
 +| | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
  | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
  | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
  | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 @@ -339,7 +339,7 @@ sequential nonce lets only one variant execute.
  <a id="CTR-MTX-12"></a>**CTR-MTX-12** — **Gasless unwrap** is `mtxExecute` with the wrapper's real `unwrap` calldata:
- `unwrap(uint256 wrapped, address recipient, uint256 minOut)` on `UnderlyingToken` with one leg, `unwrap(address underlying,
+ `unwrap(uint256 wrapped, address recipient, uint256 minOut)` on `WrappedToken` with one leg, `unwrap(address underlying,
  uint256 wrapped, address recipient, uint256 minOut)` with one or several legs, `unwrap(uint256, address)` (public
--balance) on `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3). The function runs exactly as a direct call by `from` (checks, burn
-+balance) on `UNDERLYING_ZETHER` (built in P3 with `UnderlyingToken`'s `minOut` forms only). The function runs exactly as a direct call by `from` (checks, burn
+-balance) on `WRAPPED_ZETHER` (built: `ZetherToken`; replaced in P1/P3). The function runs exactly as a direct call by `from` (checks, burn
++balance) on `WRAPPED_ZETHER` (built in P3 with `WrappedToken`'s `minOut` forms only). The function runs exactly as a direct call by `from` (checks, burn
  `⌈out·q⌉`, reserve debit, the underlying's exact-amount transfer, `Unwrapped`), and `minOut` protects the signer
  against rate moves between signing and execution. Its fee class is `AMOUNT` with the wrapped amount as basis, taken
  in wrapped units after the call. The underlying's transfer failing reverts everything, fee and nonce included. The fee
@@ -6933,10 +6933,10 @@ index 6c25ca5..4331aca 100644
  | every contract on `MetaTxBase` | `mtxExecute` (+ alias `executeMetaTransaction`), `mtxBatch`; `cancelNonce(uint256 batch)` (direct, or signed through `mtxExecute`); views `mtxNonce`, `mtxDigest`, `mtxSelectors`, `chainUid`, `supportedModes` |
  | tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane` |
  | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)) |
--| wrappers, `UNDERLYING_ZETHER` (built on `UnderlyingToken`; `ZetherToken` in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
--| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
-+| wrappers, `UNDERLYING_ZETHER` (built on `UnderlyingToken`, inherited in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
-+| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
+-| wrappers, `WRAPPED_ZETHER` (built on `WrappedToken`; `ZetherToken` in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
+-| `NORMAL_ZETHER` / `WRAPPED_ZETHER` (built: `ZetherToken`; replaced in P1/P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
++| wrappers, `WRAPPED_ZETHER` (built on `WrappedToken`, inherited in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
++| `NORMAL_ZETHER` / `WRAPPED_ZETHER` (built, P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
  | `MandateWallet` | + `mtxPayUnderMandate`, `mtxRevoke`, `mtxExecuteAsOwner`, named builders of a `MetaTransaction` ([mandates.md](mandates.md#mandatewallet)) |
  | `SmartKeyAccount` | + `mtxExecuteAsOwner`, named builder of a `MetaTransaction` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
  | `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |
@@ -6954,11 +6954,11 @@ index 73331d1..b2cdc5f 100644
 --- a/docs/contracts/settlement.md
 +++ b/docs/contracts/settlement.md
 @@ -56,7 +56,7 @@ intent is a booked fact. Every kind below shares these properties:
- | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
+ | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `WrappedToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
  | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
  | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
 -| Confidential (Zether) | target `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; built `transferConfidential*`, `fund`, `burn` | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (dev chains only); target kinds P3 **SPECIFIED**; PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
-+| Confidential (Zether) | `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; `zetherWrapShield`, `zetherUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
++| Confidential (Zether) | `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; `zetherWrapShield`, `zetherUnshieldUnwrap` (`WRAPPED_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
  | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT**; epoch and `mtx` names **SPECIFIED** | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
  | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
  | Tender | `commitBid` (deposit is a `MetaTransfer`), `revealBid`, `withdrawDeposit` | bidder signs only the deposit | tender and token | NONE | tx | **SPECIFIED**, nothing built | [CTR-TND-01](tender.md#CTR-TND-01), [-03](tender.md#CTR-TND-03) |
@@ -6976,7 +6976,7 @@ index 73331d1..b2cdc5f 100644
  
  - **Atomic:** the wrapper requires `received == o.amount`; any failure reverts the order's `pulled` state with it.
 -  `NativeNotGasless` for the native coin; Zether wrapper gets it in P3.
-+  `NativeNotGasless` for the native coin; `UnderlyingZetherToken` inherits it (P3).
++  `NativeNotGasless` for the native coin; `WrappedZetherToken` inherits it (P3).
  - **Node:** a `metatx` job entry point. Clients refuse to build an order whose `dex` is not a registered wrapper of the
    underlying ([CTR-DEX-19](dex.md#CTR-DEX-19)).
  
@@ -6998,30 +6998,30 @@ diff --git a/docs/contracts/token-wrappers.md b/docs/contracts/token-wrappers.md
 index 23d5dbc..1af9a81 100644
 --- a/docs/contracts/token-wrappers.md
 +++ b/docs/contracts/token-wrappers.md
-@@ -104,8 +104,8 @@ low-value currency token — an `UnderlyingToken` with two legs and one rate per
+@@ -104,8 +104,8 @@ low-value currency token — an `WrappedToken` with two legs and one rate per
  
  `initData` per kind below. Fee-on-transfer underlyings are measured on the way in and must
  transfer exactly on the way out; rebasing underlyings are unsupported (a negative rebase stops wrap, exits stay
 -first-come); built `ZetherToken` refuses fee-on-transfer underlyings (`UnsupportedUnderlying`,
--[CTR-ZTH-14](zether.md#CTR-ZTH-14)); target: the confidential kinds use UnderlyingLib ([CTR-TOK-11](#CTR-TOK-11)). Weighted baskets (proportional redemption) are not planned.
-+first-come); the confidential kinds use the same `UnderlyingLib` (built, P3; the old `ZetherToken` refused fee-on-transfer
+-[CTR-ZTH-14](zether.md#CTR-ZTH-14)); target: the confidential kinds use WrappedLib ([CTR-TOK-11](#CTR-TOK-11)). Weighted baskets (proportional redemption) are not planned.
++first-come); the confidential kinds use the same `WrappedLib` (built, P3; the old `ZetherToken` refused fee-on-transfer
 +with `UnsupportedUnderlying`, [CTR-ZTH-14](zether.md#CTR-ZTH-14), [CTR-TOK-11](#CTR-TOK-11)). Weighted baskets are not planned.
  
- ### 2.1 NONE — `NoUnderlyingToken`
+ ### 2.1 NORMAL — `NormalToken`
  
 @@ -454,17 +454,17 @@ cannot approve anything ([CTR-TOK-01](#CTR-TOK-01)) and wraps by signature:
  <a id="CTR-TOK-20"></a>**CTR-TOK-20** — **Signature wrap of a SCaaS underlying** (owner). The holder signs a
  `TradeOrder` ([CTR-DEX-13](dex.md#CTR-DEX-13)) in the **underlying's** domain with `dex` = the wrapper, `receiveToken`
  = the wrapper, `receiveAmount` = the minimum it accepts to receive (its `minOut`), `minFill = amount`, `fee` = the
--relayer's rate. **BUILT (P2a) on `UnderlyingToken`**; `ZetherToken` gets it with P3. `UnderlyingToken` exposes
-+relayer's rate. **BUILT on `UnderlyingToken` (P2a)**, inherited by `UnderlyingZetherToken` (P3). Both expose
+-relayer's rate. **BUILT (P2a) on `WrappedToken`**; `ZetherToken` gets it with P3. `WrappedToken` exposes
++relayer's rate. **BUILT on `WrappedToken` (P2a)**, inherited by `WrappedZetherToken` (P3). Both expose
  
  ```solidity
  function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external nonReentrant returns (uint256 minted);
  ```
  
--1. `address(0)` ⇒ `NativeNotGasless()` (checked first); resolve the leg: `_legOf(underlying)` (UnderlyingToken; Zether: `underlying == this.underlying()`), which refuses an
-+1. `address(0)` ⇒ `NativeNotGasless()` (checked first); resolve the leg: `_legOf(underlying)` (both `UNDERLYING*` kinds), which refuses an
+-1. `address(0)` ⇒ `NativeNotGasless()` (checked first); resolve the leg: `_legOf(underlying)` (WrappedToken; Zether: `underlying == this.underlying()`), which refuses an
++1. `address(0)` ⇒ `NativeNotGasless()` (checked first); resolve the leg: `_legOf(underlying)` (both `WRAPPED*` kinds), which refuses an
     unknown "underlying" whose `mtxTrade` could be a no-op (built: `UnknownUnderlying(u)`, controller ruling, pending the owner); require `wrapEnabled`, no pending
     rate change and no reserve shortfall;
  2. require `o.receiveToken == address(this)` (`WrapOrderInvalid`); the relayer binding is the underlying's (`submitter` = `msg.sender`, `WrongRelayer`; controller ruling, pending the owner: the wrapper does not repeat it); `o.receiveAmount` is gross, the holder receives `minted − wrapFee`;
@@ -7045,8 +7045,8 @@ index 23d5dbc..1af9a81 100644
    Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
    accounts on the old deployment keep working with the old code ([CTR-GEN-02](README.md#CTR-GEN-02)).
 @@ -663,7 +663,7 @@ struct TokenConfig {
-     uint256 initialSupply; address initialHolder;   // NONE* only; initialHolder is ignored when initialSupply == 0
-     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — UNDERLYING* only, 1..8
+     uint256 initialSupply; address initialHolder;   // NORMAL* only; initialHolder is ignored when initialSupply == 0
+     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — WRAPPED* only, 1..8
      RateConfig rate;                           // with RATE_ADJUSTABLE
 -    ConfidentialConfig conf;                   // verifier, auditorKey (empty = no auditor), shieldScale — *_ZETHER only
 +    ConfidentialConfig conf;                   // verifier, auditorKey (empty = none), shieldScale, maxShielded, confidentialFee — *_ZETHER only
@@ -7058,10 +7058,10 @@ index 23d5dbc..1af9a81 100644
  
  **Transitional (BUILT, P1e).** `OpenFactory` (`src/factory/OpenFactory.sol`, `IOpenFactory.sol`, `IFactoryToken.sol`) is
 -built as [CTR-TOK-03](#CTR-TOK-03) and [CTR-TOK-25](#CTR-TOK-25) specify, except that it creates no Zether token and has
--no `setZetherEnabled` (P3); `createDex` and the DEX catalogue are built (P2b-1, [CTR-DEX-24](dex.md#CTR-DEX-24)). `NoUnderlyingToken` and
+-no `setZetherEnabled` (P3); `createDex` and the DEX catalogue are built (P2b-1, [CTR-DEX-24](dex.md#CTR-DEX-24)). `NormalToken` and
 +built as [CTR-TOK-03](#CTR-TOK-03) and [CTR-TOK-25](#CTR-TOK-25) specify, the Zether gate and kinds 2–3 included (P3); `createDex`
-+and the DEX catalogue are built (P2b-1, [CTR-DEX-24](dex.md#CTR-DEX-24)). `NoUnderlyingToken` and
- `UnderlyingToken` implement `initialize(creator, version, TokenConfig)` and a constant `kind()` (0 and 1). The v1 line
++and the DEX catalogue are built (P2b-1, [CTR-DEX-24](dex.md#CTR-DEX-24)). `NormalToken` and
+ `WrappedToken` implement `initialize(creator, version, TokenConfig)` and a constant `kind()` (0 and 1). The v1 line
 -(`ERC20MetaTxV1`, `MetaToken`, `HederaMetaToken`, `ZetherToken`, `MetaTxDex`) stays in the build as `OpenFactoryV1`,
 -`IOpenFactoryV1` and `IFactoryTokenV1` (`createMetaToken`, `createZetherToken`) until the node, clientkeys (P5) and Zether (P3) move; it then goes to
 +(`ERC20MetaTxV1`, `MetaToken`, `HederaMetaToken`, `MetaTxDex`; `ZetherToken` went to `legacy/p3/`) stays as `OpenFactoryV1`,
@@ -7072,11 +7072,11 @@ index 23d5dbc..1af9a81 100644
 @@ -704,7 +704,7 @@ no `setZetherEnabled` (P3); `createDex` and the DEX catalogue are built (P2b-1,
  - **Registration** requires `implementation.code.length > 0` and reads `kind(), `factory()` and `chainUid()` by staticcall: `ImplementationNotAContract`,
    `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
-   `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NONE_PQZ`…`UNDERLYING_ZETHER_PQZ` (4–7) revert `KindReserved`;
+   `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NORMAL_PQZ`…`WRAPPED_ZETHER_PQZ` (4–7) revert `KindReserved`;
 -  kinds 2 and 3 are accepted before P3 (controller ruling, pending the owner).
 +  kinds 2 and 3 are built (P3) and their creation passes the Zether gate.
  - **Creation:** `createToken` (registered version) and `createTokenUnregistered` (same four checks, recorded with
-   `version == 0`) take the leg count from `cfg.legs` (`NONE*` 0, `UNDERLYING*` 1–8, else `UnderlyingCountInvalid`),
+   `version == 0`) take the leg count from `cfg.legs` (`NORMAL*` 0, `WRAPPED*` 1–8, else `UnderlyingCountInvalid`),
    clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed` when the predicted address is already in the
 @@ -716,11 +716,11 @@ no `setZetherEnabled` (P3); `createDex` and the DEX catalogue are built (P2b-1,
    `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first; it may be a multi-leg token: read
@@ -7096,18 +7096,18 @@ index 23d5dbc..1af9a81 100644
 @@ -729,8 +729,8 @@ no `setZetherEnabled` (P3); `createDex` and the DEX catalogue are built (P2b-1,
  The built interface is `IOpenFactory.sol` and the `TokenConfig` block of [CTR-TOK-25](#CTR-TOK-25); the event is
  `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
- enum `TokenKind { NONE, UNDERLYING, NONE_ZETHER, UNDERLYING_ZETHER, NONE_PQZ, UNDERLYING_PQZ, NONE_ZETHER_PQZ,
--UNDERLYING_ZETHER_PQZ }`. The deploy scripts register `NoUnderlyingToken` as version 1 of `NONE`; `UnderlyingToken` is over EIP-170 and is not
+ enum `TokenKind { NORMAL, WRAPPED, NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_PQZ, WRAPPED_PQZ, NORMAL_ZETHER_PQZ,
+-WRAPPED_ZETHER_PQZ }`. The deploy scripts register `NormalToken` as version 1 of `NORMAL`; `WrappedToken` is over EIP-170 and is not
 -deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
-+UNDERLYING_ZETHER_PQZ }`. The deploy scripts register `NoUnderlyingToken` as version 1 of `NONE` (on a dev chain also both `*_ZETHER`
-+kinds, the gate on); `UnderlyingToken` is not deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
++WRAPPED_ZETHER_PQZ }`. The deploy scripts register `NormalToken` as version 1 of `NORMAL` (on a dev chain also both `*_ZETHER`
++kinds, the gate on); `WrappedToken` is not deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
  contracts: [asset-suite.md](asset-suite.md#templates).
  
  ## <a id="interfaces"></a>7. Interfaces
 @@ -791,7 +791,7 @@ each library ≤ 24,576 B.
  | `TradeLib` (built, 3,104 B) | `TradeOrder` checks, `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, the token side of fills; `scaas.trade` | all |
  | `AdminLib` | flag validation, roles, owner, `disableFeature` (built, 3,406 B); later freeze / force / pause / allowlist | all |
- | `UnderlyingLib` (built, 11,654 B) | legs; the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out); rate changes with timelock; `disableWrap`; the reserve invariant | `UNDERLYING*` |
+ | `WrappedLib` (built, 11,654 B) | legs; the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out); rate changes with timelock; `disableWrap`; the reserve invariant | `WRAPPED*` |
 -| `ZetherLib` | statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries | `*_ZETHER` |
 +| `ZetherLib` (built, 15,662 B) | statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries | `*_ZETHER` |
  | `HederaLib` | HIP-632 signature path (`requireValid`, public view, linked; 753 B), HTS associate | all (branch on `IS_HEDERA`, [CTR-TOK-23](#CTR-TOK-23)) |
@@ -7117,20 +7117,20 @@ index 23d5dbc..1af9a81 100644
    contract exceeds its budget. **Transitional (BUILT, P1e):** `scripts/size_gate.py` runs in CI over
    `forge build src --sizes --json` as a ratchet (controller ruling, pending the owner): token implementations ≤ 20,480 B,
    other contracts ≤ 24,576 B, init code ≤ 49,152 B, and a contract named in `smartcontracts/evm/size-baseline.json`
--  may exceed its limit but never its recorded size (`NoUnderlyingToken` 22,951 B, `UnderlyingToken` 29,974 B, `ZetherToken` 28,860 B; owner decision 2026-10-11: optimise
-+  may exceed its limit but never its recorded size (`NoUnderlyingToken` 22,978 B, `UnderlyingToken` 30,036 B, `NoUnderlyingZetherToken` 30,659 B, `UnderlyingZetherToken` 40,381 B; owner decision 2026-10-11: optimise
+-  may exceed its limit but never its recorded size (`NormalToken` 22,951 B, `WrappedToken` 29,974 B, `ZetherToken` 28,860 B; owner decision 2026-10-11: optimise
++  may exceed its limit but never its recorded size (`NormalToken` 22,978 B, `WrappedToken` 30,036 B, `NormalZetherToken` 30,659 B, `WrappedZetherToken` 40,381 B; owner decision 2026-10-11: optimise
    later, wait for the Glamsterdam fork, code size is not a concern); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
-   **Flag:** with P2a `NoUnderlyingToken` is over its 20,480 B budget (still under EIP-170).
+   **Flag:** with P2a `NormalToken` is over its 20,480 B budget (still under EIP-170).
  
 @@ -900,7 +900,7 @@ Unit (forge, `test/v2/`):
  |---|---|
  | Base | both typehashes pinned (`test_metaTxTypehashIsPinned`, `test_metaTransferTypehashIsPinned`, [CTR-MTX-15](metatx.md#CTR-MTX-15)); salted-domain KATs `test/vectors/metatx_kat.json` (v3 `MetaTransaction`, `MetaTxBase`; the built v1 struct is `metatx_v1_kat.json`, read by scaas-node and clientkeys until P5) and `metatransfer_kat.json` plus an `mtxpay` vector with `batch = payLane(payId)`, `nonce = 0` and `mtxExecute` calldata vectors per allowlisted selector, all checked by Solidity, node and the client library (its lane derivation already equals `payLane`); `MetaNonceCancelled`; the allowance rule on every kind (EOA caller and EOA spender of `approve` refused); ERC-1271 400 k only for `SmartKeyAccount` clones; `chainUid()` equals the implementation's; the factory refuses an implementation with another `chainUid()` |
  | Fees | percent on the basis, fee on top, 1 % cap on transfer, payment and `AMOUNT` selectors; `ABSOLUTE` selectors uncapped and `PERCENT` refused; `FeeRecipientIsPayee` for transfer, `pay`, `payWithFee`, bound and relayer-default |
--| Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on `UnderlyingToken` (built, P2a; Zether: P3): price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
-+| Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on `UnderlyingToken` (built, P2a; `UNDERLYING_ZETHER` P3): price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
+-| Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on `WrappedToken` (built, P2a; Zether: P3): price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
++| Gasless unwrap and wrap | `mtxExecute(unwrap(…))`: fee in wrapped units after the call; `UnwrapRecipientInvalid` for 0 and `address(this)`; `UnwrapBelowMin`; underlying revert (blacklist mock) reverts fee and nonce; sender-pays fee-on-transfer ⇒ `UnderlyingTransferMismatch`; ERC-777 mock whose hook re-enters (`cancelNonce`, `transfer`) mid-unwrap ⇒ `Reentrancy`; not allowlisted on tier 1; works on a disabled leg and during a pending rate change. `mtxExecute(wrap(…))` pays its fee from minted units. `mtxWrap` on `WrappedToken` (built, P2a; `WRAPPED_ZETHER` P3): price, minimum, fee to the relayer, `WrapReceivedMismatch`, unknown underlying refused |
  | Named | `testFuzz_namedDigestEqualsGeneric` over random struct fields for every named function; a signature consumed by a named call fails on the generic path and vice versa; every `MtxModeShape` case; a no-fee struct signed with a leftover `fee ≠ 0` fails through `mtxTransfer`; `mtxPay` lane equals `payLane`; second `mtxPay` of a `payId` reverts `MetaTxBadNonce`; `payWithFee` with the same `entryRef` still emits `PaymentSettled` (documents the per-path limit); `mtxBatch` atomic (one bad item reverts all), length mismatch, empty |
- | `NONE` | init mint to `initialHolder`; `mint` with `MINTABLE` and `MissingRole`; `burn` with `BURNABLE`; fixed supply without `MINTABLE`; `disableFeature(MINTABLE)` |
- | `UNDERLYING`, one leg | rate 1:1 equals the removed v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
+ | `NORMAL` | init mint to `initialHolder`; `mint` with `MINTABLE` and `MissingRole`; `burn` with `BURNABLE`; fixed supply without `MINTABLE`; `disableFeature(MINTABLE)` |
+ | `WRAPPED`, one leg | rate 1:1 equals the removed v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
 diff --git a/docs/contracts/zether.md b/docs/contracts/zether.md
 index eab8a28..edf1994 100644
 --- a/docs/contracts/zether.md
@@ -7147,8 +7147,8 @@ index eab8a28..edf1994 100644
 -separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). The relaying target — `ZetherToken` on the one meta-transaction base,
 -confidential ops through the generic self-call, `zetherShield` from the public balance, `chainUid` in every chain-bound
 -digest — is **SPECIFIED** ([relaying](#envelope)); the built `ZetherMetaTx` envelope ops are its transitional form.
-+**Status: BUILT, UNAUDITED — NOT FOR PRODUCTION FUNDS.** The kinds `NONE_ZETHER` (`NoUnderlyingZetherToken`) and
-+`UNDERLYING_ZETHER` (`UnderlyingZetherToken`) on the one meta-transaction base (`ZetherLayer` + `ZetherLib`),
++**Status: BUILT, UNAUDITED — NOT FOR PRODUCTION FUNDS.** The kinds `NORMAL_ZETHER` (`NormalZetherToken`) and
++`WRAPPED_ZETHER` (`WrappedZetherToken`) on the one meta-transaction base (`ZetherLayer` + `ZetherLib`),
 +`ZetherStatements`, `ZetherDisclosure`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ZetherCurves`,
 +`ZetherTranscript`, `ZetherSafety`, the built `UniversalAccountRegistry` and the Rust prover `zether-prover` exist with
 +tests (P3; `smartcontracts/evm/src/zether/**`, `src/registry/**`). Every Zether contract and the registry refuse to
@@ -7256,7 +7256,7 @@ index eab8a28..edf1994 100644
 -and re-sent through the self-only `relayedTransfer`/`relayedBurn`/`relayedBurnDecoded` with an internal `OuterFee`
 -(payer, recipient, amount); `zetherShield` and the `rollOver*` functions are direct calls only.
 +**Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the four transfers, `zetherShield`,
-+`zetherUnshield`, and on `UNDERLYING_ZETHER` `zetherWrapShield` and `zetherUnshieldUnwrap` beside `UnderlyingToken`'s
++`zetherUnshield`, and on `WRAPPED_ZETHER` `zetherWrapShield` and `zetherUnshieldUnwrap` beside `WrappedToken`'s
 +wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `zetherUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
 +with `keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))` as its binding word, so a copied proof can
 +neither change the leg, drop `minOut` nor become a `zetherUnshield` (controller rulings, pending the owner).
@@ -7322,7 +7322,7 @@ index eab8a28..edf1994 100644
 @@ -885,7 +873,8 @@ sender's `s` opens only this transfer, [CTR-ZTH-30](#CTR-ZTH-30)).
  ([CTR-ZTH-38](#CTR-ZTH-38)), the single format stores the full bundle: **bn254 256 B** (≈ 9 slots, ≈ +200 k gas), **BLS12-381 512 B** (4 points × 128 B,
  ≈ 17 slots, ≈ +375 k gas — estimate); `be32(amount)` already has room for 64 bits. Unsupported underlyings (fee-on-transfer,
- rebasing) are the `UnderlyingLib` rule ([CTR-TOK-11](token-wrappers.md#CTR-TOK-11)). The built NatSpec of
+ rebasing) are the `WrappedLib` rule ([CTR-TOK-11](token-wrappers.md#CTR-TOK-11)). The built NatSpec of
 -`ITransferDisclosure.sol:24` ("no extra gas at transfer") is wrong and is corrected with the next fix.
 +`ITransferDisclosure.sol:24` ("no extra gas at transfer") is corrected in P3, where HASH stores its hash in one `bytes32`
 +slot as CTR-ZTH-38 says (built: a 32-byte `bytes`, two slots).
@@ -7339,16 +7339,16 @@ index eab8a28..edf1994 100644
  `ZetherStatements` ([CTR-ZTH-46](#CTR-ZTH-46)).
  
  All rules of the multi-recipient design (Z1–Z13,
-@@ -930,15 +920,15 @@ leg may be the native coin like on every `UNDERLYING*` kind ([CTR-TOK-26](token-
+@@ -930,15 +920,15 @@ leg may be the native coin like on every `WRAPPED*` kind ([CTR-TOK-26](token-
  ([CTR-ZTH-04](#CTR-ZTH-04); shielded amounts are bounded by `2^54`).
  
- - **Reserve invariant.** `UNDERLYING_ZETHER`: `Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply() + totalShielded·shieldScale`,
+ - **Reserve invariant.** `WRAPPED_ZETHER`: `Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply() + totalShielded·shieldScale`,
 -  checked after every operation that moves value out. `totalSupply()` counts public balances only (the ERC-20 meaning);
 -  `totalShielded()` is a separate view.
 +  held by construction (a wrap-shield credits whole units, an unshield-unwrap pays at most what it removes) and checked
 +  by `executeRate` with the shielded part (controller ruling, pending the owner). `totalSupply()` counts public
 +  balances only (the ERC-20 meaning); `totalShielded()` is a separate view.
- - **The minter never mints shielded.** `MINTABLE` on `NONE_ZETHER` mints public balance only; shielded value exists only
+ - **The minter never mints shielded.** `MINTABLE` on `NORMAL_ZETHER` mints public balance only; shielded value exists only
    through `zetherShield` / `zetherWrapShield`, which take public units or an underlying deposit.
  - **Fees.** The inner confidential fee (fixed per token, credited to the beneficiary UA) stays in `ZetherLib`. Relaying
    goes through the base ([CTR-ZTH-34](#CTR-ZTH-34)).
@@ -7360,8 +7360,8 @@ index eab8a28..edf1994 100644
  
  <a id="CTR-ZTH-45"></a>**CTR-ZTH-45** — **Entry points and names** (owner, T5). Zether entry points carry the prefix
  `zether` (classical) or `pqz` ([CTR-PQZ-22](pq-zero-knowledge.md#CTR-PQZ-22)); `shieldScale` as above.
-@@ -955,18 +945,17 @@ leg may be the native coin like on every `UNDERLYING*` kind ([CTR-TOK-26](token-
- `NONE_ZETHER` has `zetherShield` / `zetherUnshield` only. Events follow the names (`ZetherShielded`, `ZetherUnshielded`,
+@@ -955,18 +945,17 @@ leg may be the native coin like on every `WRAPPED*` kind ([CTR-TOK-26](token-
+ `NORMAL_ZETHER` has `zetherShield` / `zetherUnshield` only. Events follow the names (`ZetherShielded`, `ZetherUnshielded`,
  `ZetherTransfer`, `ZetherTransferMulti`, …). There is no `zetherRegister` / `pqzRegister` (T6): the registry's
  `register` is relayable (PoP over `popDigest(ua, authRef)`, anyone submits, [accounts.md](accounts.md)), and the
 -confidential kinds depend on that registry for gasless onboarding. **Transitional (BUILT, renamed in P3; node and client
@@ -7384,7 +7384,7 @@ index eab8a28..edf1994 100644
 +relays), and `unshieldUnwrapStatement` / `unwrapBinding` serve `zetherUnshieldUnwrap` (controller ruling, pending the owner).
  
  <a id="CTR-ZTH-47"></a>**CTR-ZTH-47** — **Regulated flags are refused on confidential kinds** (owner, T11). The flags
- valid on `NONE_ZETHER` / `UNDERLYING_ZETHER` are `PAYABLE`; `MINTABLE` / `BURNABLE` (`NONE_ZETHER`);
+ valid on `NORMAL_ZETHER` / `WRAPPED_ZETHER` are `PAYABLE`; `MINTABLE` / `BURNABLE` (`NORMAL_ZETHER`);
 @@ -994,9 +983,9 @@ chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the privat
  default; the check is repeated in `initialize` and in the verifier and registry constructors. Adding a chain = a change
  of `ZetherSafety` + a new deployment, after the cryptographic audit.
@@ -7430,7 +7430,7 @@ index eab8a28..edf1994 100644
 -| `ZetherVerifierBls12381` | 16,312 | 16,312 |
 +| Contract | Built (P3, solc 0.8.37) |
 +|---|---|
-+| `NoUnderlyingZetherToken` / `UnderlyingZetherToken` | 30,659 / 40,381 (over EIP-170: ratchet baseline; owner: size waits for Glamsterdam) |
++| `NormalZetherToken` / `WrappedZetherToken` | 30,659 / 40,381 (over EIP-170: ratchet baseline; owner: size waits for Glamsterdam) |
 +| `ZetherLib` / `ZetherStatements` / `ZetherDisclosure` | 15,662 / 7,311 / 5,021 |
 +| `ZetherVerifierBn254` / `ZetherVerifierBls12381` | 15,955 / 16,312 |
  
@@ -7454,10 +7454,10 @@ index eab8a28..edf1994 100644
      function zetherUnshield(bytes calldata payload, bytes calldata proof, bytes calldata authSig,
                    ZetherTypes.UA beneficiary, address to, uint256 amount) external;
 -    function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable;   // CTR-ZTH-45; payable for a native leg
-+    function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable;   // UNDERLYING_ZETHER; payable for a native leg
++    function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable;   // WRAPPED_ZETHER; payable for a native leg
      function zetherUnshieldUnwrap(bytes calldata payload, bytes calldata proof, bytes calldata authSig,
                    ZetherTypes.UA beneficiary, address u, address recipient, uint256 amount, uint256 minOut) external;
-     // wrap / unwrap / mtxWrap and the legs are the UnderlyingLib surface of UNDERLYING_ZETHER (CTR-TOK-24), not repeated here
+     // wrap / unwrap / mtxWrap and the legs are the WrappedLib surface of WRAPPED_ZETHER (CTR-TOK-24), not repeated here
 @@ -1378,11 +1363,13 @@ interface IZetherToken is IERC20MetaTx {
      // provenance: factory(), creator(), implementation(), version()
  }
@@ -7479,8 +7479,8 @@ index 4ce5423..3fdab84 100644
 --- a/docs/history/dropped-artifacts.tsv
 +++ b/docs/history/dropped-artifacts.tsv
 @@ -767,3 +767,20 @@ FactoryV2.t.sol	renamed	P1e: smartcontracts/evm/test/v2/Factory.t.sol, contracts
- createTiered(META_SINGLE, …)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt), contracts/token-wrappers.md#CTR-TOK-25
- createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt) with one leg, contracts/token-wrappers.md#CTR-TOK-25; the v1 createMetaToken stays on OpenFactoryV1
+ createTiered(META_SINGLE, …)	obsolete	P1e: createToken(WRAPPED, version, cfg, salt), contracts/token-wrappers.md#CTR-TOK-25
+ createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)	obsolete	P1e: createToken(WRAPPED, version, cfg, salt) with one leg, contracts/token-wrappers.md#CTR-TOK-25; the v1 createMetaToken stays on OpenFactoryV1
  28	obsolete	solc 0.8.28 pin; the pin is 0.8.37 with evm_version osaka since 2026-10-11 (contracts/README.md build pins)
 +smartcontracts/src/zether/**	internal-path	contracts/zether.md header: the sources live under smartcontracts/evm/src/zether (P3)
 +smartcontracts/src/…	internal-path	contracts/zether.md header: every contract path is under smartcontracts/evm/
@@ -7518,16 +7518,16 @@ index 0d8f214..47d76f2 100644
 +**State:** P3 on branch `p3-zether`, merge pending the final review. Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`.
 +969 forge tests; `zether-prover` `cargo test` green; e2e 4/4 and 1/1.
 +
-+**Built:** `src/zether/ZetherLib.sol` (external, `scaas.zether`), `ZetherLayer.sol`, `NoUnderlyingZetherToken.sol` (kind 2),
-+`UnderlyingZetherToken.sol` (kind 3: `zetherWrapShield`, `zetherUnshieldUnwrap`), `ZetherStatements.sol`, the new
++**Built:** `src/zether/ZetherLib.sol` (external, `scaas.zether`), `ZetherLayer.sol`, `NormalZetherToken.sol` (kind 2),
++`WrappedZetherToken.sol` (kind 3: `zetherWrapShield`, `zetherUnshieldUnwrap`), `ZetherStatements.sol`, the new
 +`IZetherToken.sol`; `MetaTxBase._envelopeBinding` / `_ticketBinding` (transient `scaas.mtx.binding`); `ERC20MetaTx._domainName`
 +(`"SCaaS ZetherToken"`); `ConfidentialConfig.maxShielded` / `confidentialFee`; `OpenFactory` Zether gate and verifier check;
 +verifier header 416 B and `ZetherDisclosure` challenge with `chainUid`; `DeployBase` deploys the Zether stack on dev chains;
 +the Rust prover on the new header, digests and ABI (vectors regenerated, `envelope.json`); from the disclosure review,
-+HASH stored in one `bytes32` slot and the `ITransferDisclosure` NatSpec corrected (G2, G5). Tests: `ZetherNone.t`,
-+`ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherRelay.t`, `ZetherUnderlying.t`, `ZetherInvariant.t`, `ZetherDeploy.t`,
++HASH stored in one `bytes32` slot and the `ITransferDisclosure` NatSpec corrected (G2, G5). Tests: `ZetherNormal.t`,
++`ZetherMulti.t`, `ZetherRevertPaths.t`, `ZetherRelay.t`, `ZetherWrapped.t`, `ZetherInvariant.t`, `ZetherDeploy.t`,
 +`v2/FactoryZether.t`. The old `ZetherToken` line is in `smartcontracts/evm/legacy/p3/` (not built). Sizes:
-+`NoUnderlyingZetherToken` 30,659 B, `UnderlyingZetherToken` 40,381 B, `ZetherLib` 15,662 B (ratchet baseline).
++`NormalZetherToken` 30,659 B, `WrappedZetherToken` 40,381 B, `ZetherLib` 15,662 B (ratchet baseline).
 +
 +**Rulings K1-K18 (plan header).** **K1** `chainUid` in every token-side digest, the prover's `s` too; registry unchanged.
 +**K2** the kinds are the public kinds plus the layer. **K3** domain `"SCaaS ZetherToken"` by a hook. **K4** two config
@@ -7555,7 +7555,7 @@ index ad47067..8c075a6 100644
 @@ -14,8 +14,8 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
  |---|---|---|
  | P0 | Spec and fold into the component docs and `decisions.md` | done |
- | P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NONE`, `UNDERLYING`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
+ | P1 | The complete base on the new tree: `MetaTxBase`, `ERC20MetaTx`, `MetaTokenBase`; both structs, allowlist, ticket; approve rule; `salt = chain_uid`; CREATE2 deployer; kinds `NORMAL`, `WRAPPED`; factory `createToken`; the v1/v2 lines to the backup (v2 done in P1e, v1 renamed `…V1` until P3/P5) | MT-1, MT-2, MT-3, MT-4 |
 -| P2 | **P2a** `TradeLib` token side + `mtxWrap` (done, merged `6a5c6b0`); **P2b-1** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` for SCaaS legs (done, merged `0510c7d`; old `SCaaSDex` kept as `SCaaSDexV1` for the node until P5); **P2b-2** outside legs (`DexOrder`, `DexPuller`, DEX-side cancels, ERC-1271 cap, bounded `MatchFailed`) (done, merged `7049c78`; `checkOrder` not built, H7); **P2c** exchange path `mtxExchange`/`mtxExchangeVia`, `setExchangeTarget`, `setListedOnly` (done on branch `p2c-dex`, merge pending the final review) | MT-5 |
 -| P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; delete `ZetherToken` | MT-6 |
 +| P2 | **P2a** `TradeLib` token side + `mtxWrap` (done, merged `6a5c6b0`); **P2b-1** `SCaaSDex` as a clone, `createDex`, DEX registry, `mtxSettle` for SCaaS legs (done, merged `0510c7d`; old `SCaaSDex` kept as `SCaaSDexV1` for the node until P5); **P2b-2** outside legs (`DexOrder`, `DexPuller`, DEX-side cancels, ERC-1271 cap, bounded `MatchFailed`) (done, merged `7049c78`; `checkOrder` not built, H7); **P2c** exchange path `mtxExchange`/`mtxExchangeVia`, `setExchangeTarget`, `setListedOnly` (done, merged `d85fc8b`) | MT-5 |
@@ -7565,37 +7565,37 @@ index ad47067..8c075a6 100644
  
 @@ -35,7 +35,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
  - P1c notes (from the P1b reviews, 2026-10-10): (a) the typed path's "cannot fail after step 3" and `mtxPayReceiverFee` step 5 hold only while `_update` refuses nothing beyond `to == this`: any P1c pause/freeze/feature refusal added to `_update` must be mirrored in `_checkTransfer` (and checked before the receiver-fee transfer); (b) `_chargeFee` re-derives the fee class from `_mtxRule`, so rules must stay constant per selector (hardened in P1b: an ABSOLUTE+FIXED fee is taken as is); (c) Multi `_mtxRule` falls back to `MetaTxBase._mtxRule`, so rules P1c adds in `ERC20MetaTx`/`MetaTokenBase` are dropped on Multi (moot after P1d; otherwise switch it to `MetaTokenBase._mtxRule`); (d) `HederaAccountAuth.sol:29` `asView` safety comment names `executeMetaTransaction` as the sole call site: there are now many non-view call sites (all `nonReentrant`, non-static frames), still safe; repoint the comment in P1c (HederaLib); (e) deferred test gaps still open: Task 3 — `FeePolicy.validateRecipient` is unreachable on both paths (the resolved recipient is never 0; delete or pin), no success-path test of a relayer-filled third-party `feeRecipient` on the typed path (only the `== to` refusal, `test/v2/Base.t.sol`); Task 4 — unwrap: no raw `ERC20InsufficientBalance`-from-`_burn` case when the reserve suffices, no dirty-address-word case; Task 5 — no SmartKeyAccount-clone (400k) payee test, no single-field tamper tests (`fee`/`feeRecipient`/`rfValidUntil`), no invalid-fee-nibble shape case, no RP4 assertions after a failed co-signature. Task 6's gaps were closed in the P1b final fix wave.
- - P1c notes dispositions (2026-10-10): (a) no `_update` refusal was added in P1c (flags 5–8 are refused at init, C2): carry to the asset-suite stream; (b) unchanged; (c) done in P1d (`UnderlyingToken._mtxRule` falls back to `super._mtxRule`); (d) done (`HederaLib`, `asView` comment repointed); (e) open test gaps stay as listed.
+ - P1c notes dispositions (2026-10-10): (a) no `_update` refusal was added in P1c (flags 5–8 are refused at init, C2): carry to the asset-suite stream; (b) unchanged; (c) done in P1d (`WrappedToken._mtxRule` falls back to `super._mtxRule`); (d) done (`HederaLib`, `asView` comment repointed); (e) open test gaps stay as listed.
  - Asset-suite stream, from the P1c final review (C2): issuer and compliance must be contract-only when flags 5–8 are built; roles are keyed by flag bit and `_grant` requires the role's own bit, which cannot express FORCE = issuer + compliance or one issuer shared by FREEZE/FORCE/PAUSE, so the stream must key roles by role id (issuer, compliance) or map bits; and any `_update` refusal (freeze/pause/allowlist) must be mirrored in `_checkTransfer` and before the receiver-fee transfer.
 -- [~] **MT-1** (built through P1e: kinds on `TokenConfig`, `OpenFactory.createToken`; the v1 line is kept as `…V1` until P3/P5, see the backup items under P3 and P5; owner: backup, not delete) Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
 +- [~] **MT-1** (built through P1e: kinds on `TokenConfig`, `OpenFactory.createToken`; the v1 line is kept as `…V1` until P5 (the node's e2e deploys it), see the backup item under P5; owner: backup, not delete) Two bases: generic `MetaTxBase` (any SCaaS contract; `_chargeFee` refuses all but `NONE`, CTR-MTX-22) and
-       the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NONE` and
-       `UNDERLYING` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `UnderlyingLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
+       the token base `ERC20MetaTx is MetaTxBase` (absorbs `MetaTxCore`) with `MetaTokenBase` on top; kinds `NORMAL` and
+       `WRAPPED` (the native-coin leg, CTR-TOK-26) with `AdminLib`, `WrappedLib`, `HederaLib`, `SigCheck` (CTR-TOK-21…24); factory
        `createToken` (CTR-TOK-25). Delete what token-tree spec §8 deletes: `ERC20MetaTx`(v1), `MetaToken`, `HederaMetaToken`,
 @@ -48,36 +48,34 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
        all-or-nothing; `_msgSender()` everywhere per the `msg.sender` inventory; lint/test that no token reads
        `msg.sender` directly except the allowed spots; UA path split into `UAMetaTransaction`/`UAMetaTransfer` +
        `uaExecuteTransfer`/`uaBatchTransfer` (CTR-UA-26); KATs `metatx_kat.json`, `metatransfer_kat.json`, v3 pair.
--- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P3/P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (UnderlyingToken; `ZetherToken` in P3).
+-- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P3/P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (WrappedToken; `ZetherToken` in P3).
 -- [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the other domains: SmartKeyAccount, MandateWallet P4, UA registry UA F1, Zether digests P3) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
-+- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (UnderlyingToken), inherited by `UnderlyingZetherToken` (P3); the approve rule holds on both Zether kinds (tested in P3).
++- [ ] **MT-3** `approve` only by contracts (caller and spender) — built in P1b on the v2 line; open: v1 line (P5, E1); `mtxWrap` for a SCaaS underlying done in P2a (WrappedToken), inherited by `WrappedZetherToken` (P3); the approve rule holds on both Zether kinds (tested in P3).
 +- [~] **MT-4** (built in P1e for tokens and the token factory: both deploy scripts on CREATE2, gate on `chainUid()`; open for the other domains: SmartKeyAccount, MandateWallet P4, UA registry UA F1; Zether digests done in P3) `salt = chain_uid` in every domain (implementation immutables; SmartKeyAccount, MandateWallet, SCaaSDex,
        UA registry, Zether digests); deploy scripts on a CREATE2 deployer; deploy gate checks `chainUid()`.
  
  - UA ledger split (CTR-UA-26: `UAMetaTransaction`/`UAMetaTransfer`, `uaExecuteTransfer`/`uaBatchTransfer`) moved from P1b to UA F1 (R4).
- - P1e sizes: `UnderlyingToken` 26,449 B is over EIP-170 (24,576) until the size work (owner: optimise later; baseline in `size-baseline.json`); `UnderlyingLib` 10,096 B; `NoUnderlyingToken` 20,196 B; `OpenFactory` 6,715 B; the deploy scripts deploy only `NONE` for the new factory.
+ - P1e sizes: `WrappedToken` 26,449 B is over EIP-170 (24,576) until the size work (owner: optimise later; baseline in `size-baseline.json`); `WrappedLib` 10,096 B; `NormalToken` 20,196 B; `OpenFactory` 6,715 B; the deploy scripts deploy only `NORMAL` for the new factory.
  - P1d follow-ups (parked test gaps, not fixed): no `mtxExecute(single-asset selector)` on a two-leg token test; native `UnderlyingTransferMismatch` untested; `addReserve` with native `msg.value > amount` untested; guardian revoke untested (these stay parked; the dead `META_MULTI` count branch is gone with factory v2: done in P1e).
- - P1d follow-ups (final review): (a) the native leg is absent from the `WrapperInvariant` handler: add a 4th leg (native, with a `vm.deal` forced coin) and a §12 conformance row for CTR-TOK-26; (b) the deploy scripts must deploy `UnderlyingToken` (it links `UnderlyingLib` and `AdminLib`) once it fits EIP-170.
+ - P1d follow-ups (final review): (a) the native leg is absent from the `WrapperInvariant` handler: add a 4th leg (native, with a `vm.deal` forced coin) and a §12 conformance row for CTR-TOK-26; (b) the deploy scripts must deploy `WrappedToken` (it links `WrappedLib` and `AdminLib`) once it fits EIP-170.
 -- P1e follow-ups (parked): (a) the size ratchet does not tighten itself: when a baselined contract shrinks, lower its entry in `smartcontracts/evm/size-baseline.json` by hand (the gate only notes an entry that now fits); (b) `smartcontracts/scripts/deploy.sh` requires `PRIVATE_KEY` (it derives `--sender` from it), so a KMS or hardware-wallet deployer needs a script change; (c) `OpenFactory` accepts the registration of kinds 2 and 3 (`*_ZETHER`) before P3: only the PQZ kinds 4–7 are `KindReserved`; (d) integrators: the factory's underlying index is only as truthful as the implementation, trust it for registered versions (`versionOf(token).version != 0`); `createTokenUnregistered` records version 0; (e) libraries stay placed by forge from the sender's nonce, not by CREATE2 (E7); (f) the P1d parked test gaps above stay.
 +- P1e follow-ups (parked): (a) the size ratchet does not tighten itself: when a baselined contract shrinks, lower its entry in `smartcontracts/evm/size-baseline.json` by hand (the gate only notes an entry that now fits); (b) `smartcontracts/scripts/deploy.sh` requires `PRIVATE_KEY` (it derives `--sender` from it), so a KMS or hardware-wallet deployer needs a script change; (c) done in P3: kinds 2 and 3 are built, their creation passes the Zether gate; only the PQZ kinds 4–7 are `KindReserved`; (d) integrators: the factory's underlying index is only as truthful as the implementation, trust it for registered versions (`versionOf(token).version != 0`); `createTokenUnregistered` records version 0; (e) libraries stay placed by forge from the sender's nonce, not by CREATE2 (E7); (f) the P1d parked test gaps above stay.
  
  **P2 — MT-5**
- - P2a (done, merged `6a5c6b0`): `TradeLib` (`scaas.trade`) and the trade entries on every token, `mtxWrap` + `NativeNotGasless` on `UnderlyingToken` (D1 closed; a native wrap by `mtxExecute(wrap(…))` still reverts `NativeValueMismatch(0, amount)`); 855 tests. Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. Open for P2b/P2c: the DEX side below. **F4 (owner): `NoUnderlyingToken` is 22,951 B, over its 20,480 B budget (ratchet baseline), `UnderlyingToken` 29,974 B: owner — code size is not a concern, the product waits for the Glamsterdam fork (larger code limit); the ratchet baseline records sizes.**
+ - P2a (done, merged `6a5c6b0`): `TradeLib` (`scaas.trade`) and the trade entries on every token, `mtxWrap` + `NativeNotGasless` on `WrappedToken` (D1 closed; a native wrap by `mtxExecute(wrap(…))` still reverts `NativeValueMismatch(0, amount)`); 855 tests. Plan `docs/superpowers/plans/2026-10-11-p2a-trade-token-side.md`. Open for P2b/P2c: the DEX side below. **F4 (owner): `NormalToken` is 22,951 B, over its 20,480 B budget (ratchet baseline), `WrappedToken` 29,974 B: owner — code size is not a concern, the product waits for the Glamsterdam fork (larger code limit); the ratchet baseline records sizes.**
  - P2b-1 (done, merged `0510c7d`): `SCaaSDex` clone (`scaas.dex`, salted domain `SCaaS Dex`; MT-4 domain done for the new DEX), `OpenFactory` DEX catalogue and `createDex`/`isDex`/`dexVersionOf`, deploy key `dex_implementation`, built DEX kept as `SCaaSDexV1`; 891 tests. Plan `docs/superpowers/plans/2026-10-11-p2b1-scaasdex-clone.md`. P2b-2 built them except `checkOrder` (see P2b-2). P2c built `mtxExchange`/`mtxExchangeVia`, `setExchangeTarget`, `setListedOnly`. `SCaaSDexV1` moves to `legacy/` at P5 (owner: backup, not delete).
  - P2b-2 (done, merged `7049c78`): outside legs (`DexOrder` in the DEX domain, `TradeLib` on the DEX's own `scaas.trade` state, `ESCROW` refused), `DexPuller` deployed by `initialize`, `mtxCancelOrders` / `mtxInvalidateNonces`, ERC-1271 cap by codehash (constructor takes the `SmartKeyAccount` implementation), `MatchFailed` reason capped at 256 bytes, `SigCheckGasStarved` reverts the whole `mtxSettle` (m8 closed), payouts by `SafeERC20`; 913 tests. Plan `docs/superpowers/plans/2026-10-11-p2b2-dex-outside-legs.md`. Open: `checkOrder` for the new DEX (not specified: dex.md §10 reads are the intake; with the node's P7 intake), the DEX invariant suite (§14). Size baseline raised by 9 B per token (`precheck` argument). Node P7: a batch reverting with `SigCheckGasStarved` is split and simulated per settlement, never retried whole with more gas (a party's `destination` that is a hook-token recipient can forge the selector; hook tokens are never listed). `mtxSettle` success is not monotonic in gas (a settlement can fail with an empty `MatchFailed` reason at a gas above a starved-revert window), so the node never trusts plain `eth_estimateGas`: it sizes gas from a simulation that requires every planned `ok[i]` true and reads an empty `MatchFailed` reason as out of gas (retry with more gas, never mark the order invalid). Limitation: no HIP-632 branch on DEX signatures, so a Hedera ED25519 account cannot sign a `DexOrder` or a DEX-side cancel (follow-up: `IS_HEDERA` in `SCaaSDex`).
 -- P2c (done on branch `p2c-dex`, merge pending the final review): the exchange path on `SCaaSDex` — `mtxExchange` (interactions: never the DEX or the puller, never `mtxTrade`, data of at least 4 bytes), `mtxExchangeVia` (`IExchangeExecutor.exchangeCallback`), `setExchangeTarget` / `setListedOnly` and the `LISTED_POOLS` condition, `tokenKnown` (counted per listed market), the surplus to the signers by floor with the remainder to the last leg, `InsufficientOutput`, conservation over every snapshotted token, a pull check that refuses an inexact sell token, every `approve` interaction reset to 0, `increaseAllowance` and Permit2 `approve` refused (`ForbiddenSelector`, controller ruling, pending the owner); `ExchangeLegSettled`; 949 tests. Plan `docs/superpowers/plans/2026-10-11-p2c-dex-exchange-path.md`. Open: the fork test with real Uniswap bytecode (dex.md section 14), the DEX invariant suite, the node's TradeEngine (NODE-DEX-17/18, P7).
 +- P2c (done, merged `d85fc8b`): the exchange path on `SCaaSDex` — `mtxExchange` (interactions: never the DEX or the puller, never `mtxTrade`, data of at least 4 bytes), `mtxExchangeVia` (`IExchangeExecutor.exchangeCallback`), `setExchangeTarget` / `setListedOnly` and the `LISTED_POOLS` condition, `tokenKnown` (counted per listed market), the surplus to the signers by floor with the remainder to the last leg, `InsufficientOutput`, conservation over every snapshotted token, a pull check that refuses an inexact sell token, every `approve` interaction reset to 0, `increaseAllowance` and Permit2 `approve` refused (`ForbiddenSelector`, controller ruling, pending the owner); `ExchangeLegSettled`; 949 tests. Plan `docs/superpowers/plans/2026-10-11-p2c-dex-exchange-path.md`. Open: the fork test with real Uniswap bytecode (dex.md section 14), the DEX invariant suite, the node's TradeEngine (NODE-DEX-17/18, P7).
- - P2 notes (from P1c, P1d): (2) Named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672): the row is logged, not asserted; `mtxPay` on a fresh lane is +2.6 k (the `PAYABLE` gate's cold SLOAD, C3). (3) The asset suite's inline per-transfer admin check (CTR-TOK-24) also needs NONE bytes: it competes with the size debt in F4.
+ - P2 notes (from P1c, P1d): (2) Named `mtxTransfer` is +9 execution gas over `mtxExecuteTransfer` (33,681 vs 33,672): the row is logged, not asserted; `mtxPay` on a fresh lane is +2.6 k (the `PAYABLE` gate's cold SLOAD, C3). (3) The asset suite's inline per-transfer admin check (CTR-TOK-24) also needs NORMAL bytes: it competes with the size debt in F4.
  - [x] Rename `OrderBookDex` → `SCaaSDex` (owner 2026-10-09; EIP-712 domain name `SCaaS Dex`); git mv + docs + node names. (done 2026-10-09)
 -- [~] **MT-5** DEX (P2a done: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens, `receiveToken == this` accepted, flag 4 not read by the token; P2b done (P2b-1, P2b-2); P2c done on branch `p2c-dex`; open: the invariant suite, the Uniswap fork test): `SCaaSDex.mtxSettle`
 +- [~] **MT-5** DEX (P2a done: `TradeOrder` + `mtxTrade`/`mtxCancelOrder`/`mtxInvalidateNonces` in the tokens, `receiveToken == this` accepted, flag 4 not read by the token; P2b done (P2b-1, P2b-2); P2c done (merged `d85fc8b`); open: the invariant suite, the Uniswap fork test): `SCaaSDex.mtxSettle`
@@ -7611,7 +7611,7 @@ index ad47067..8c075a6 100644
 -      `zetherSetRollOverMode`, CTR-ZTH-45; built: `rollOverSigned`, `setRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
 -      no `PqzMetaTx`, PQZ selectors not batchable (CTR-PQZ-21); prover `Header` gains `chain_uid` as word 3,
 -      `HEADER_LEN` 384 → 416 (`clients/zether-prover/src/zether.rs`).
-+- P3 (done on branch `p3-zether`, merge pending the final review): `NoUnderlyingZetherToken` / `UnderlyingZetherToken` (`ZetherLayer is MetaTokenBase`, logic in the external `ZetherLib`, `scaas.zether`), `ZetherStatements`, `zetherShield` from the public balance, `zetherWrapShield` / `zetherUnshieldUnwrap` on `UNDERLYING_ZETHER` (nothing minted), relaying through `mtxExecute` with the envelope binding in the transient ticket (`MetaTxBase._envelopeBinding`), `chainUid` in every token-side digest and the 416-byte header, the Zether gate on `OpenFactory`, `DeployBase` registers kinds 2–3 on dev chains, the prover on the new header and ABI; the built `ZetherToken`, `ZetherMetaTx`, old `IZetherToken` and their tests in `smartcontracts/evm/legacy/p3/`; 969 tests. Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`. Open: a real-passkey envelope test (CTR-ZTH-21), re-measuring the zether.md gas tables on the new kinds, the registry's `chainUid` (UA F1), client ABI (P5); disclosure questions for the disclosure review (plan header).
++- P3 (done on branch `p3-zether`, merge pending the final review): `NormalZetherToken` / `WrappedZetherToken` (`ZetherLayer is MetaTokenBase`, logic in the external `ZetherLib`, `scaas.zether`), `ZetherStatements`, `zetherShield` from the public balance, `zetherWrapShield` / `zetherUnshieldUnwrap` on `WRAPPED_ZETHER` (nothing minted), relaying through `mtxExecute` with the envelope binding in the transient ticket (`MetaTxBase._envelopeBinding`), `chainUid` in every token-side digest and the 416-byte header, the Zether gate on `OpenFactory`, `DeployBase` registers kinds 2–3 on dev chains, the prover on the new header and ABI; the built `ZetherToken`, `ZetherMetaTx`, old `IZetherToken` and their tests in `smartcontracts/evm/legacy/p3/`; 969 tests. Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`. Open: a real-passkey envelope test (CTR-ZTH-21), re-measuring the zether.md gas tables on the new kinds, the registry's `chainUid` (UA F1), client ABI (P5); disclosure questions for the disclosure review (plan header).
 +- [ ] v1 line to backup (P5): `OpenFactoryV1`, `IOpenFactoryV1`, `IFactoryTokenV1` (and `MetaToken`/`HederaMetaToken`/`MetaTxDex`) wait for the node and clientkeys (the e2e deploys them); the Zether part moved in P3 (E1; owner: backup, not delete).
 +- [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zero-knowledge.md CTR-PQZ-21): with `PqzToken` (no PQZ selector exists yet; P3 left the room: the binding hook takes a PQZ tag).
 +- [~] **MT-6** Zether (done in P3: transient envelope binding, `zetherShield` from the public balance, `mtxWrap` inherited, the `zether*` renames, binding without `to`/`value`, prover `Header.chain_uid`, `HEADER_LEN` 416; open: `PqzToken` on the one base, PQZ selectors not batchable, CTR-PQZ-21, with the PQZ stream).

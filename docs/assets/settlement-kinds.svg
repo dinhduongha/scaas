@@ -39,7 +39,7 @@
   <text class="b" x="40" y="299">Signature wrap</text>
   <text class="s" x="40" y="321">mtxWrap: a TradeOrder in the underlying</text>
   <rect x="40" y="331" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="61" y="343" text-anchor="middle" fill="#1a7f37">BUILT</text>
-  <text class="s" x="88" y="343">P2a, UnderlyingToken</text>
+  <text class="s" x="88" y="343">P2a, WrappedToken</text>
   <rect class="card" stroke="#16a34a" x="28" y="361" width="282" height="76" rx="8"/>
   <text class="b" x="40" y="382">Confidential (Zether)</text>
   <text class="s" x="40" y="404">built: transferConfidential*, fund, burn</text>

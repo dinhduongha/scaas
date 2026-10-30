@@ -37,12 +37,12 @@ digest, and the registry's existing `receiver-fee` purpose for a derived payee.
 ```mermaid
 sequenceDiagram
     participant H as Native holder
-    participant W as UnderlyingToken (wrapper)
+    participant W as WrappedToken (wrapper)
     participant U as Leg u (SCaaS token, ledger on)
     participant G as UARegistry
     H->>W: wrapToUA(u, amount, to) [payable]
     W->>G: kindOf(to) — registered SIGNING
-    W->>W: UnderlyingLib.wrap(i, amount, holder, msg.value)
+    W->>W: WrappedLib.wrap(i, amount, holder, msg.value)
     W->>W: _uaMove(0, to, minted): Transfer(0, UA_POOL), UATransfer(0, to)
     Note over H,W: later, the UA signs a UAMetaTransaction{data: unwrapToUA(u, wrapped, to2, minOut)}
     H->>W: uaExecute(m, auth) (any relayer)
@@ -68,9 +68,9 @@ new address-allowlist rows; `mintToUA`, `payWithFeeToUA` never allowlisted), CTR
 
 **Base (measured at `82d7d7c`, Task 0 Step 1):** forge default 94 suites, 1104 passed / 0 failed / 10 skipped;
 `FOUNDRY_PROFILE=private7622` the same; `--match-path 'test/ua/**'` 23 suites, 232 passed; clientkeys
-`node --test test/` 101 tests, 99 passed / 2 skipped; runtime (init) sizes: `NoUnderlyingToken` 31,770 (33,276),
-`UnderlyingToken` 39,189 (40,702), `NoUnderlyingZetherToken` 40,067 (41,727), `UnderlyingZetherToken` 49,778 (51,473),
-`UnderlyingLib` 11,697 (11,749).
+`node --test test/` 101 tests, 99 passed / 2 skipped; runtime (init) sizes: `NormalToken` 31,770 (33,276),
+`WrappedToken` 39,189 (40,702), `NormalZetherToken` 40,067 (41,727), `WrappedZetherToken` 49,778 (51,473),
+`WrappedLib` 11,697 (11,749).
 
 ## Global Constraints
 
@@ -129,23 +129,23 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
 
 - **R5a-1 Scope.** `_uaMint`, `wrapToUA` (direct and relayed through `mtxExecute`), `unwrapToUA` (direct, relayed,
   and under `uaExecute`), `mintToUA`, `burn` on the UA allowlist, `payWithFeeToUA`, `uaPayReceiverFee`, clientkeys
-  typed data and calldata builders, the vector rows. Kinds: `wrapToUA` / `unwrapToUA` on `UnderlyingToken` and,
-  inherited, `UnderlyingZetherToken`; `mintToUA` and the UA-allowlisted `burn` on `NoUnderlyingToken` and, inherited,
-  `NoUnderlyingZetherToken`; `payWithFeeToUA` and `uaPayReceiverFee` on every kind (`MetaTokenBase`).
+  typed data and calldata builders, the vector rows. Kinds: `wrapToUA` / `unwrapToUA` on `WrappedToken` and,
+  inherited, `WrappedZetherToken`; `mintToUA` and the UA-allowlisted `burn` on `NormalToken` and, inherited,
+  `NormalZetherToken`; `payWithFeeToUA` and `uaPayReceiverFee` on every kind (`MetaTokenBase`).
 - **R5a-2 One receiver check, one ledger write.** `ERC20MetaTx` gets `_requireDerivedReceiver(bytes32 to)` —
   `_uaOn()`; a native id ⇒ `UANotRegistered(to)`; `_checkTo(to)` (`UANotRegistered`, `UAKindNotAccepted`) — factored
   out of `transferToUA` (whose behaviour does not change), and `_uaMint(bytes32 to, uint256 v)` =
   `_requireDerivedReceiver(to); _uaMove(bytes32(0), to, v)`. A native `to` is refused on every `…ToUA` function: the
   address twin serves it (CTR-UA-28), as `transferToUA` does today.
 - **R5a-3 `wrapToUA(address u, uint256 amount, bytes32 to) payable returns (uint256 minted)`.** Cheap first:
-  `_requireDerivedReceiver(to)`, then `UnderlyingLib.wrap(UnderlyingLib.indexOf(u), amount, _msgSender(), msg.value)`
+  `_requireDerivedReceiver(to)`, then `WrappedLib.wrap(WrappedLib.indexOf(u), amount, _msgSender(), msg.value)`
   (every leg check, the native leg's `msg.value` rule and the measured delta unchanged), then
   `_uaMove(bytes32(0), to, minted)`; `Wrapped(account, u, received, minted)`. `nonReentrant`. Address allowlist:
   `ABSOLUTE`, static length 100 (`4 + 3 · 32`); not on the UA allowlist (a UA holds no outside underlying). No
   single-leg form. Relayed, the `ABSOLUTE` fee is charged after the call from the signer's own native balance of this
   token by the built `_chargeFee` — a signer without one signs fee `NONE`. (Built through one shared `_wrap`, C5a-2.)
 - **R5a-4 `unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut) returns (uint256 out, uint256 burned)`.**
-  `UnderlyingLib` gets `quoteUnwrapToUA(i, wrapped, minOut)` (the checks of `quoteUnwrap` without the address recipient
+  `WrappedLib` gets `quoteUnwrapToUA(i, wrapped, minOut)` (the checks of `quoteUnwrap` without the address recipient
   check; both call one private `_quote`) and `payOutToUA(i, bytes32 to, out) returns (address u)`: `u == NATIVE` or
   `!ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)` ⇒ `UALegNotLedger(u)` (a `MetaTokenBase` answers
   `IUALedger` iff its registry ≠ 0; an HTS or outside ERC-20 leg answers false); `reserve -= out` (C5a-3: after the leg
@@ -154,12 +154,12 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
   `_unwrap`) and emits `UnwrappedToUA(account, u, to, burned, out)` (`account` = `UA_POOL` under a derived subject;
   CTR-UA-28, owner 2026-10-13). `to` is checked by the leg's own `transferToUA`. Both allowlists, `AMOUNT(1)`, static
   length 132.
-- **R5a-5 `mintToUA(bytes32 to, uint256 amount)`** on `NoUnderlyingToken`: `AdminLib.requireRole(MINTABLE,
+- **R5a-5 `mintToUA(bytes32 to, uint256 amount)`** on `NormalToken`: `AdminLib.requireRole(MINTABLE,
   _msgSender())` exactly as `mint`, then `_uaMint(to, amount)`. Never allowlisted (a role function, CTR-MTX-19).
-- **R5a-6 `burn` on the UA allowlist.** `NoUnderlyingToken._uaAllowed(sel) = sel == this.burn.selector`; no body
-  change. `NoUnderlyingZetherToken` inherits `_uaAllowed` from two paths (`NoUnderlyingToken`, and `ZetherLayer`
-  through `ERC20MetaTx`), so it declares `override(NoUnderlyingToken, ERC20MetaTx)` returning
-  `NoUnderlyingToken._uaAllowed(sel)` (as `UnderlyingZetherToken` does for its parent) — confirmed by the compiler. The
+- **R5a-6 `burn` on the UA allowlist.** `NormalToken._uaAllowed(sel) = sel == this.burn.selector`; no body
+  change. `NormalZetherToken` inherits `_uaAllowed` from two paths (`NormalToken`, and `ZetherLayer`
+  through `ERC20MetaTx`), so it declares `override(NormalToken, ERC20MetaTx)` returning
+  `NormalToken._uaAllowed(sel)` (as `WrappedZetherToken` does for its parent) — confirmed by the compiler. The
   fee is the address path's `AMOUNT(0)` from the signer's UA balance (built `_uaExecute`).
 - **R5a-7 `payWithFeeToUA(bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient,
   bytes32 entryRef) returns (bool)`** on `MetaTokenBase` beside `payWithFee`: `PAYABLE`; `_requireDerivedReceiver(to)`;
@@ -174,12 +174,12 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
   purpose. The `msg.sender` lint counts do not change (C5a-4: the shape checks stay duplicated, as the named UA
   functions duplicate theirs).
 - **R5a-9 Placement.** `error UALegNotLedger(address token)` in `IUALedger`; `event UnwrappedToUA`, `wrapToUA`,
-  `unwrapToUA` in `IUnderlyingToken`; `event UAReceiverFeePaid`, `payWithFeeToUA`, `uaPayReceiverFee` in
+  `unwrapToUA` in `IWrappedToken`; `event UAReceiverFeePaid`, `payWithFeeToUA`, `uaPayReceiverFee` in
   `IMetaTokenV2`; `mintToUA` beside `mint` (no interface).
-- **R5a-10 Allowlist pins.** `UnderlyingToken.mtxSelectors()` 6 → 8 (`wrapToUA`, `unwrapToUA` appended);
-  `UnderlyingZetherToken.mtxSelectors()` 14 → 16 (appended at 14, 15), its `_mtxRule` falls back to
-  `UnderlyingToken._mtxRule`; `NoUnderlyingToken`'s and `NoUnderlyingZetherToken`'s lists do not change. The UA
-  allowlists: `UnderlyingToken` = the two `unwrap`s with `minOut` + `unwrapToUA`; `NoUnderlyingToken` = `burn`.
+- **R5a-10 Allowlist pins.** `WrappedToken.mtxSelectors()` 6 → 8 (`wrapToUA`, `unwrapToUA` appended);
+  `WrappedZetherToken.mtxSelectors()` 14 → 16 (appended at 14, 15), its `_mtxRule` falls back to
+  `WrappedToken._mtxRule`; `NormalToken`'s and `NormalZetherToken`'s lists do not change. The UA
+  allowlists: `WrappedToken` = the two `unwrap`s with `minOut` + `unwrapToUA`; `NormalToken` = `burn`.
   (C5a-1: the address-allowlist rows land in Task 2 with their functions.)
 - **R5a-11 Vectors.** `metatx3.json` gains `burn`, `unwrapToUA`, `receiverFee` (and `noteUA5a`, C5a-11), existing
   keys byte-identical, `version` 1. `receiverFee` rows `{payer, payee, transfer, paymentDigest, receiverFee,
@@ -193,15 +193,15 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
   intrinsic and calldata gas (measured **11,874,662**, Task 6).
 - **R5a-14 Hedera.** `test_wrapToUA_htsLeg`, `test_unwrapToUA_htsLegRefused`, `test_uaPayReceiverFee_hip632Payee`
   (C5a-5: on version-2 implementations with a stub registry).
-- **R5a-15 Sizes.** Measured (runtime / init, after Task 4): `NoUnderlyingToken` 32,985 / 34,491 (+1,215),
-  `UnderlyingToken` 41,685 / 43,198 (+2,496), `NoUnderlyingZetherToken` 41,248 (+1,181), `UnderlyingZetherToken`
-  52,182 / 53,877 (+2,404 / +2,404), `UnderlyingLib` 12,560 (+863, under 24,576). All below the design's estimates
+- **R5a-15 Sizes.** Measured (runtime / init, after Task 4): `NormalToken` 32,985 / 34,491 (+1,215),
+  `WrappedToken` 41,685 / 43,198 (+2,496), `NormalZetherToken` 41,248 (+1,181), `WrappedZetherToken`
+  52,182 / 53,877 (+2,404 / +2,404), `WrappedLib` 12,560 (+863, under 24,576). All below the design's estimates
   (§4.17); recorded in `size-baseline.json`.
 
 ## Controller rulings (spike, 2026-10-13)
 
 - **C5a-1 Task split.** The address-allowlist rows of `wrapToUA` / `unwrapToUA` (`mtxSelectors` 6 → 8 and 14 → 16,
-  `_mtxRule`, the pins in `Allowlist.t.sol` and `ZetherUnderlying.t.sol`) land in Task 2 with the functions, so every
+  `_mtxRule`, the pins in `Allowlist.t.sol` and `ZetherWrapped.t.sol`) land in Task 2 with the functions, so every
   commit is green; Task 3 is the UA allowlist only.
 - **C5a-2 One wrap body.** `_wrap(i, amount, bytes32 to)` serves `wrap` (`to = 0`: `_mint`) and `wrapToUA` (`_uaMove`
   from 0); `wrapToUA` checks the receiver itself, so the registry is asked once. `_uaMint` serves `mintToUA`.
@@ -218,12 +218,12 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
 - **C5a-7 ERC-1271 payee at 400 k.** Instead of deploying a `SmartKeyAccount`, the payee is an EIP-1167 clone of a
   gas-burning `MockWallet` that is the token's `SMART_KEY_ACCOUNT_IMPL`: 400 k passes; the same wallet against a token
   without that implementation (50 k) fails — the exact budget path a `SmartKeyAccount` payee takes.
-- **C5a-8 Zether fixtures.** In `test_everyListedSelectorRuns_underlyingZether`, `wrapToUA` credits a registered
+- **C5a-8 Zether fixtures.** In `test_everyListedSelectorRuns_wrappedZether`, `wrapToUA` credits a registered
   `schnorr-bn254` UA and `unwrapToUA` reaches the call and reverts `UALegNotLedger` (the legs are outside tokens); the
-  `NONE_ZETHER` UA-allowlist test (`test_noneZether_burnUnderUA`) lives in `ZetherUnderlying.t.sol`, which has the
+  `NORMAL_ZETHER` UA-allowlist test (`test_normalZether_burnUnderUA`) lives in `ZetherWrapped.t.sol`, which has the
   SIGNING-UA helper.
-- **C5a-9 Size pins.** `Factory.t.sol` / `HederaV2.t.sol` `assertLe` bounds 32,768 → 36,864 (`NONE`) and 40,960 →
-  45,056 (`UNDERLYING`); `size-baseline.json` remains the exact ratchet.
+- **C5a-9 Size pins.** `Factory.t.sol` / `HederaV2.t.sol` `assertLe` bounds 32,768 → 36,864 (`NORMAL`) and 40,960 →
+  45,056 (`WRAPPED`); `size-baseline.json` remains the exact ratchet.
 - **C5a-10 JS verification of derived rows.** The new `metatx3.json` rows' derived signatures are verified with noble
   for `p256`, `bip340` and `ed25519` (and the native ECDSA rows), each also refused under the other purpose; the other
   kinds are verified on chain by `UAMetaTx3Vectors.t.sol` with the real verifiers (as the file already does for every
@@ -274,14 +274,14 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
 |---|---|---|
 | `smartcontracts/evm/src/metatx/IUALedger.sol` | `error UALegNotLedger(address token)` | 1 |
 | `smartcontracts/evm/src/metatx/ERC20MetaTx.sol` | `_requireDerivedReceiver`, `_uaMint`; `transferToUA` uses the former; `_uaAuthorize(from, purpose, digest, auth)` internal; `_uaAllowed` doc | 1, 3 |
-| `smartcontracts/evm/src/metatx/UnderlyingLib.sol` | `_quote`, `quoteUnwrapToUA`, `payOutToUA` (`ERC165Checker`) | 2 |
-| `smartcontracts/evm/src/metatx/IUnderlyingToken.sol` | `wrapToUA`, `unwrapToUA`, `event UnwrappedToUA` | 2 |
-| `smartcontracts/evm/src/metatx/UnderlyingToken.sol` | `wrapToUA`, `unwrapToUA`, `_wrap(i, amount, to)`, two selectors, `mtxSelectors` 6 → 8, `_mtxRule`; `_uaAllowed` + `unwrapToUA` | 2, 3 |
-| `smartcontracts/evm/src/metatx/NoUnderlyingToken.sol` | `mintToUA`; `_uaAllowed` = `burn` | 2, 3 |
+| `smartcontracts/evm/src/metatx/WrappedLib.sol` | `_quote`, `quoteUnwrapToUA`, `payOutToUA` (`ERC165Checker`) | 2 |
+| `smartcontracts/evm/src/metatx/IWrappedToken.sol` | `wrapToUA`, `unwrapToUA`, `event UnwrappedToUA` | 2 |
+| `smartcontracts/evm/src/metatx/WrappedToken.sol` | `wrapToUA`, `unwrapToUA`, `_wrap(i, amount, to)`, two selectors, `mtxSelectors` 6 → 8, `_mtxRule`; `_uaAllowed` + `unwrapToUA` | 2, 3 |
+| `smartcontracts/evm/src/metatx/NormalToken.sol` | `mintToUA`; `_uaAllowed` = `burn` | 2, 3 |
 | `smartcontracts/evm/src/metatx/MetaTokenBase.sol` | `payWithFeeToUA`; `uaPayReceiverFee` | 2, 4 |
 | `smartcontracts/evm/src/metatx/IMetaTokenV2.sol` | `payWithFeeToUA`; `uaPayReceiverFee`, `event UAReceiverFeePaid` | 2, 4 |
-| `smartcontracts/evm/src/zether/UnderlyingZetherToken.sol` | `mtxSelectors` 14 → 16 | 2 |
-| `smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol` | `_uaAllowed` override (two paths) | 3 |
+| `smartcontracts/evm/src/zether/WrappedZetherToken.sol` | `mtxSelectors` 14 → 16 | 2 |
+| `smartcontracts/evm/src/zether/NormalZetherToken.sol` | `_uaAllowed` override (two paths) | 3 |
 | `smartcontracts/evm/size-baseline.json` | the ratchet | 2, 3, 4 |
 | `smartcontracts/evm/test/helpers/Mocks.sol` | `StubUARegistry` | 2 |
 | `smartcontracts/evm/test/ua/UALedgerBase.sol` | `wrpL` (leg `tok`), `wrpN` (native leg), `_wrapper`, `_wrapL` | 2 |
@@ -290,7 +290,7 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
 | `smartcontracts/evm/test/ua/UAReceiverFee.t.sol` (new) | `uaPayReceiverFee` | 4 |
 | `smartcontracts/evm/test/ua/UALedgerInvariant.t.sol` | handlers for the new moves; `wrpL`, `wrpN` invariants, `invariant_ledgerLegSolvent` | 5 |
 | `smartcontracts/evm/test/v2/Allowlist.t.sol` | stub registry, `ledgered`; pins 6 → 8; the new selectors run; refusals | 2, 4 |
-| `smartcontracts/evm/test/zether/ZetherUnderlying.t.sol` | pin 14 → 16; the loop runs both; `test_noneZether_burnUnderUA` | 2, 3 |
+| `smartcontracts/evm/test/zether/ZetherWrapped.t.sol` | pin 14 → 16; the loop runs both; `test_normalZether_burnUnderUA` | 2, 3 |
 | `smartcontracts/evm/test/hedera/HederaV2.t.sol` | HTS `wrapToUA`, HTS `unwrapToUA` refused; HIP-632 payee; size pin | 2, 4 |
 | `smartcontracts/evm/test/v2/Factory.t.sol` | size pin | 4 |
 | `smartcontracts/evm/test/ua/UAMetaTx3Vectors.t.sol`, `test/ua/UAMetaTx3Pq.t.sol` | the new rows; the two-`mldsa65` cap | 6 |
@@ -314,7 +314,7 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
 ### Task 1: Plumbing — `UALegNotLedger`, `_requireDerivedReceiver`, `_uaMint`, `_uaAuthorize` with a purpose
 
 **Files:** Modify `src/metatx/IUALedger.sol`, `src/metatx/ERC20MetaTx.sol`; create `test/ua/UAReceivers.t.sol` (its
-`_uaMint` part, through the harness `UAMintHarness is NoUnderlyingToken`). Paths in `smartcontracts/evm`.
+`_uaMint` part, through the harness `UAMintHarness is NormalToken`). Paths in `smartcontracts/evm`.
 
 - [ ] **Step 1: Tests first.** `/usr/bin/git apply --whitespace=error` this diff (`test_uaMint_eventsAndTotals`,
   `test_uaMint_refusesNativeUnregisteredZether`, `test_uaMint_ledgerOff`):
@@ -333,13 +333,13 @@ index 0000000..785aca0
 +import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 +import {UAKinds} from "../../src/ua/UAKinds.sol";
 +import {IUALedger} from "../../src/metatx/IUALedger.sol";
-+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-+import {noneInit} from "../v2/helpers/V2Fixture.sol";
++import {NormalToken} from "../../src/metatx/NormalToken.sol";
++import {normalInit} from "../v2/helpers/V2Fixture.sol";
 +import {UALedgerBase} from "./UALedgerBase.sol";
 +
 +/// Exposes `_uaMint` (accounts.md CTR-UA-28).
-+contract UAMintHarness is NoUnderlyingToken {
-+    constructor(bytes32 uid, address reg) NoUnderlyingToken(msg.sender, address(0), uid, reg, false) {}
++contract UAMintHarness is NormalToken {
++    constructor(bytes32 uid, address reg) NormalToken(msg.sender, address(0), uid, reg, false) {}
 +
 +    function mintUA(bytes32 to, uint256 v) external {
 +        _uaMint(to, v);
@@ -357,7 +357,7 @@ index 0000000..785aca0
 +
 +    function _harness(address registry_) internal returns (UAMintHarness h) {
 +        h = UAMintHarness(Clones.clone(address(new UAMintHarness(chainUidA, registry_))));
-+        h.initialize(address(this), 1, noneInit("H", "H", 6, 0, address(0), address(this)));
++        h.initialize(address(this), 1, normalInit("H", "H", 6, 0, address(0), address(this)));
 +    }
 +
 +    // ----- _uaMint -----
@@ -491,10 +491,10 @@ index 4dc92b8..18d7d24 100644
 
 ### Task 2: The receivers — `wrapToUA`, `unwrapToUA`, `mintToUA`, `payWithFeeToUA`, and their address-allowlist rows
 
-**Files:** Modify `src/metatx/UnderlyingLib.sol`, `IUnderlyingToken.sol`, `UnderlyingToken.sol`, `NoUnderlyingToken.sol`,
-`MetaTokenBase.sol`, `IMetaTokenV2.sol`, `src/zether/UnderlyingZetherToken.sol`, `size-baseline.json`,
+**Files:** Modify `src/metatx/WrappedLib.sol`, `IWrappedToken.sol`, `WrappedToken.sol`, `NormalToken.sol`,
+`MetaTokenBase.sol`, `IMetaTokenV2.sol`, `src/zether/WrappedZetherToken.sol`, `size-baseline.json`,
 `test/helpers/Mocks.sol`, `test/ua/UALedgerBase.sol`, `test/ua/UAReceivers.t.sol`, `test/hedera/HederaV2.t.sol`,
-`test/v2/Allowlist.t.sol`, `test/zether/ZetherUnderlying.t.sol`.
+`test/v2/Allowlist.t.sol`, `test/zether/ZetherWrapped.t.sol`.
 
 - [ ] **Step 1: Tests first.** Apply this diff. New tests: `UAReceivers.t.sol` — `test_wrapToUA_erc20Leg`,
   `test_wrapToUA_nativeLeg_direct`, `test_wrapToUA_relayed_absoluteFeeFromNativeBalance`,
@@ -505,21 +505,21 @@ index 4dc92b8..18d7d24 100644
   `test_gas_snapshotRestoresColdAccess`, `test_gas_receiversVsAddressTwins`; `HederaV2.t.sol` — `test_wrapToUA_htsLeg`,
   `test_unwrapToUA_htsLegRefused`; `Allowlist.t.sol` — the pins 6 → 8, `wrapToUA` / `unwrapToUA` in the "every listed
   selector runs" tests, the class cross-check over all eight on `ledgered`, `payWithFeeToUA` / `mintToUA` refused;
-  `ZetherUnderlying.t.sol` — the pin 14 → 16, both selectors in the relayed loop (C5a-8):
+  `ZetherWrapped.t.sol` — the pin 14 → 16, both selectors in the relayed loop (C5a-8):
 
 ```diff
 diff --git a/smartcontracts/evm/test/hedera/HederaV2.t.sol b/smartcontracts/evm/test/hedera/HederaV2.t.sol
 index 4220d2a..a887445 100644
 --- a/smartcontracts/evm/test/hedera/HederaV2.t.sol
 +++ b/smartcontracts/evm/test/hedera/HederaV2.t.sol
-@@ -13,7 +13,8 @@ import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
- import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
- import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+@@ -13,7 +13,8 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+ import {NormalToken} from "../../src/metatx/NormalToken.sol";
  import {HederaLib} from "../../src/hedera/HederaLib.sol";
 -import {MockERC20} from "../helpers/Mocks.sol";
 +import {IUALedger} from "../../src/metatx/IUALedger.sol";
 +import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
- import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
+ import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
  import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
  
 @@ -180,6 +181,52 @@ contract HederaV2Test is Test {
@@ -530,21 +530,21 @@ index 4220d2a..a887445 100644
 +
 +    bytes32 constant UA = keccak256("scaas.hedera.ua"); // a derived id: the stub registry calls it a p256 UA
 +
-+    /// Version 2 of NONE and UNDERLYING with the UA ledger on (a stub registry: native signers only).
++    /// Version 2 of NORMAL and WRAPPED with the UA ledger on (a stub registry: native signers only).
 +    function _ledgerOn() internal {
 +        StubUARegistry stub = new StubUARegistry(UID);
 +        vm.startPrank(registrar);
-+        f.registerImplementation(IOpenFactory.TokenKind.NONE, 2,
-+            address(new NoUnderlyingToken(address(f), address(0), UID, address(stub), true)));
-+        f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 2,
-+            address(new UnderlyingToken(address(f), address(0), UID, address(stub), true)));
++        f.registerImplementation(IOpenFactory.TokenKind.NORMAL, 2,
++            address(new NormalToken(address(f), address(0), UID, address(stub), true)));
++        f.registerImplementation(IOpenFactory.TokenKind.WRAPPED, 2,
++            address(new WrappedToken(address(f), address(0), UID, address(stub), true)));
 +        vm.stopPrank();
 +    }
 +
 +    function _singleV2(address u) internal returns (address) {
 +        address[] memory us = new address[](1);
 +        us[0] = u;
-+        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 2, _init(us), keccak256(abi.encode(u, 2)));
++        return f.createToken(IOpenFactory.TokenKind.WRAPPED, 2, _init(us), keccak256(abi.encode(u, 2)));
 +    }
 +
 +    /// An HTS leg wraps straight into a UA: the wrapper's association is unchanged, the UA needs none.
@@ -555,9 +555,9 @@ index 4220d2a..a887445 100644
 +        usdc.mint(alice, 10e6);
 +        vm.startPrank(alice);
 +        usdc.approve(t, 10e6);
-+        UnderlyingToken(t).wrapToUA(address(usdc), 10e6, UA);
++        WrappedToken(t).wrapToUA(address(usdc), 10e6, UA);
 +        vm.stopPrank();
-+        assertEq(UnderlyingToken(t).balanceOfUA(UA), 10e6);
++        assertEq(WrappedToken(t).balanceOfUA(UA), 10e6);
 +        assertEq(usdc.balanceOf(t), 10e6);
 +    }
 +
@@ -568,7 +568,7 @@ index 4220d2a..a887445 100644
 +        _wrapFor(t, usdc, alice, 10e6);
 +        vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usdc)));
 +        vm.prank(alice);
-+        UnderlyingToken(t).unwrapToUA(address(usdc), 1e6, UA, 0);
++        WrappedToken(t).unwrapToUA(address(usdc), 1e6, UA, 0);
 +        assertEq(IERC20MetaTx(t).balanceOf(alice), 10e6);
 +    }
 +
@@ -601,9 +601,9 @@ index e42e746..12362e0 100644
 @@ -14,7 +14,9 @@ import {UARegistryBase} from "./UARegistryBase.sol";
  
  /// The UA ledger fixture (accounts.md CTR-UA-18/19/26): a registry at `REG_L` on context A (chain 31337, `chainUidA`)
- /// with the stand-in verifier for the eight classical kinds and `zether-bn254`; a `NONE` clone and a one-leg 1:1
--/// `UNDERLYING` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA.
-+/// `UNDERLYING` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA. UA-5a
+ /// with the stand-in verifier for the eight classical kinds and `zether-bn254`; a `NORMAL` clone and a one-leg 1:1
+-/// `WRAPPED` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA.
++/// `WRAPPED` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA. UA-5a
 +/// (CTR-UA-28): `wrpL`, a one-leg 1:1 wrapper of the ledger token `tok` (its reserve wrapped by this fixture, a contract
 +/// that may approve, CTR-TOK-01), and `wrpN`, a one-leg 1:1 wrapper of the native coin.
  abstract contract UALedgerBase is UARegistryBase {
@@ -611,29 +611,29 @@ index e42e746..12362e0 100644
      using MetaTxLib for MetaTxLib.UAMetaTransaction;
 @@ -33,6 +35,8 @@ abstract contract UALedgerBase is UARegistryBase {
      UARegistry internal lreg;
-     NoUnderlyingToken internal tok;
-     UnderlyingToken internal wrp;
-+    UnderlyingToken internal wrpL; // leg: `tok` (a SCaaS ledger token)
-+    UnderlyingToken internal wrpN; // leg: the native coin
+     NormalToken internal tok;
+     WrappedToken internal wrp;
++    WrappedToken internal wrpL; // leg: `tok` (a SCaaS ledger token)
++    WrappedToken internal wrpN; // leg: the native coin
      MockERC20 internal und;
      address internal alice;
      address internal bob;
 @@ -61,6 +65,18 @@ abstract contract UALedgerBase is UARegistryBase {
          (us[0], one[0]) = (address(und), 1);
          Rate memory fixedRate;
-         wrp.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
+         wrp.initialize(address(this), 1, wrappedInit(us, one, one, 6, fixedRate, address(0), address(0)));
 +        wrpL = _wrapper(address(tok));
 +        wrpN = _wrapper(address(0));
 +    }
 +
 +    /// A one-leg 1:1 wrapper of `leg`, ledger on (`REG_L`), `PAYABLE`, fixed rate.
-+    function _wrapper(address leg) internal returns (UnderlyingToken w) {
-+        w = UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
++    function _wrapper(address leg) internal returns (WrappedToken w) {
++        w = WrappedToken(Clones.clone(address(new WrappedToken(address(this), address(0), chainUidA, REG_L, false))));
 +        address[] memory us = new address[](1);
 +        uint256[] memory one = new uint256[](1);
 +        (us[0], one[0]) = (leg, 1);
 +        Rate memory fixedRate;
-+        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
++        w.initialize(address(this), 1, wrappedInit(us, one, one, 6, fixedRate, address(0), address(0)));
      }
  
      // ----- structs -----
@@ -664,21 +664,21 @@ index 785aca0..9bc0ad8 100644
 +import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 +import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 +import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-+import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
++import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 +import {AdminLib} from "../../src/metatx/AdminLib.sol";
- import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
--import {noneInit} from "../v2/helpers/V2Fixture.sol";
-+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+ import {NormalToken} from "../../src/metatx/NormalToken.sol";
+-import {normalInit} from "../v2/helpers/V2Fixture.sol";
++import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 +import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 +import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 +import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 +import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
 +import {MockERC20} from "../helpers/Mocks.sol";
-+import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
++import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
  import {UALedgerBase} from "./UALedgerBase.sol";
  
  /// Exposes `_uaMint` (accounts.md CTR-UA-28).
-@@ -18,8 +30,32 @@ contract UAMintHarness is NoUnderlyingToken {
+@@ -18,8 +30,32 @@ contract UAMintHarness is NormalToken {
      }
  }
  
@@ -698,7 +698,7 @@ index 785aca0..9bc0ad8 100644
 +    }
 +
 +    function transferToUA(bytes32, uint256 v) external returns (bool) {
-+        if (mode == 1) UnderlyingToken(target).unwrapToUA(address(this), 1, bytes32(0), 0);
++        if (mode == 1) WrappedToken(target).unwrapToUA(address(this), 1, bytes32(0), 0);
 +        _transfer(msg.sender, address(0xdead), v - 1);
 +        return true;
 +    }
@@ -734,14 +734,14 @@ index 785aca0..9bc0ad8 100644
 +        MetaTokenBase(token).mtxExecute(m, sig);
 +    }
 +
-+    function _reserve(UnderlyingToken w, address leg) internal view returns (uint256 r) {
++    function _reserve(WrappedToken w, address leg) internal view returns (uint256 r) {
 +        (,, r,,) = w.legOf(leg);
 +    }
 +
-+    /// A NONE clone on `REG_L` with `features` and no minter.
-+    function _none(uint256 features) internal returns (NoUnderlyingToken t) {
-+        t = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-+        IFactoryToken.TokenConfig memory c = noneInit("N", "N", 6, 1_000, alice, address(0));
++    /// A NORMAL clone on `REG_L` with `features` and no minter.
++    function _none(uint256 features) internal returns (NormalToken t) {
++        t = NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), chainUidA, REG_L, false))));
++        IFactoryToken.TokenConfig memory c = normalInit("N", "N", 6, 1_000, alice, address(0));
 +        c.features = features;
 +        t.initialize(address(this), 1, c);
 +    }
@@ -757,7 +757,7 @@ index 785aca0..9bc0ad8 100644
 +        vm.expectEmit(address(wrp));
 +        emit IUALedger.UATransfer(bytes32(0), uaP, 1_000);
 +        vm.expectEmit(address(wrp));
-+        emit IUnderlyingToken.Wrapped(alice, address(und), 1_000, 1_000);
++        emit IWrappedToken.Wrapped(alice, address(und), 1_000, 1_000);
 +        vm.prank(alice);
 +        assertEq(wrp.wrapToUA(address(und), 1_000, uaP), 1_000);
 +        assertEq(wrp.balanceOfUA(uaP), 1_000);
@@ -775,11 +775,11 @@ index 785aca0..9bc0ad8 100644
 +        assertEq(wrpN.balanceOfUA(uaB), 5_000);
 +        assertEq(address(wrpN).balance, 5_000);
 +        assertEq(_reserve(wrpN, address(0)), 5_000);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 4_999, 5_000));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 4_999, 5_000));
 +        vm.prank(alice);
 +        wrpN.wrapToUA{value: 4_999}(address(0), 5_000, uaB);
 +        // an ERC-20 leg takes no coin
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 1, 0));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 1, 0));
 +        vm.prank(alice);
 +        wrp.wrapToUA{value: 1}(address(und), 5_000, uaB);
 +    }
@@ -791,7 +791,7 @@ index 785aca0..9bc0ad8 100644
 +        und.mint(alice, 2_000);
 +        vm.prank(alice);
 +        und.approve(address(wrp), 2_000);
-+        bytes memory data = abi.encodeCall(UnderlyingToken.wrapToUA, (address(und), 1_000, uaP));
++        bytes memory data = abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1_000, uaP));
 +        _relay(address(wrp), data, RR | RF | FIX, 5, FEE_TO, "");
 +        assertEq(wrp.balanceOfUA(uaP), 1_000);
 +        assertEq(wrp.balanceOf(alice), 0);
@@ -799,12 +799,12 @@ index 785aca0..9bc0ad8 100644
 +        _relay(address(wrp), data, RR, 0, address(0), "");
 +        assertEq(wrp.balanceOfUA(uaP), 2_000);
 +        _relay(address(wrp), data, RR | RF | PCT, 1, FEE_TO,
-+            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, UnderlyingToken.wrapToUA.selector, RR | RF | PCT));
++            abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, WrappedToken.wrapToUA.selector, RR | RF | PCT));
 +    }
 +
 +    function test_wrapToUA_nativeLeg_relayedRefused() public {
-+        _relay(address(wrpN), abi.encodeCall(UnderlyingToken.wrapToUA, (address(0), 1_000, uaP)), RR, 0, address(0),
-+            abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 0, 1_000));
++        _relay(address(wrpN), abi.encodeCall(WrappedToken.wrapToUA, (address(0), 1_000, uaP)), RR, 0, address(0),
++            abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 0, 1_000));
 +    }
 +
 +    /// The receiver is checked before any pull; the leg's own refusals are `wrap`'s.
@@ -815,9 +815,9 @@ index 785aca0..9bc0ad8 100644
 +        uint256[] memory one = new uint256[](2);
 +        (one[0], one[1]) = (1, 1);
 +        Rate memory adj = Rate(true, address(this), 2 days, 1_000);
-+        UnderlyingToken w =
-+            UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-+        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, adj, address(this), address(0)));
++        WrappedToken w =
++            WrappedToken(Clones.clone(address(new WrappedToken(address(this), address(0), chainUidA, REG_L, false))));
++        w.initialize(address(this), 1, wrappedInit(us, one, one, 6, adj, address(this), address(0)));
 +        und.mint(alice, 1_000);
 +        und2.mint(alice, 1_000);
 +        vm.startPrank(alice);
@@ -830,37 +830,37 @@ index 785aca0..9bc0ad8 100644
 +        w.wrapToUA(address(und), 100, unknown);
 +        vm.expectRevert(abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
 +        w.wrapToUA(address(und), 100, uaZ);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(tok)));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(tok)));
 +        w.wrapToUA(address(tok), 100, uaP);
 +        assertEq(und.allowance(alice, address(w)), 1_000, "nothing pulled");
 +        w.wrapToUA(address(und), 100, uaP);
 +        vm.stopPrank();
 +        deal(address(und), address(w), 99);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.ReserveShortfall.selector, address(und), 99, 100));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(und), 99, 100));
 +        vm.prank(alice);
 +        w.wrapToUA(address(und), 100, uaP);
 +        deal(address(und), address(w), 100);
 +        w.disableWrap(address(und2), "depeg");
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapDisabledFor.selector, address(und2)));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(und2)));
 +        vm.prank(alice);
 +        w.wrapToUA(address(und2), 100, uaP);
 +        w.proposeRate(address(und), 101, 100);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.WrapPausedForRateChange.selector, address(und)));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(und)));
 +        vm.prank(alice);
 +        w.wrapToUA(address(und), 100, uaP);
-+        UnderlyingToken off = _offWrapper();
++        WrappedToken off = _offWrapper();
 +        vm.expectRevert(IUALedger.UALedgerOff.selector);
 +        vm.prank(alice);
 +        off.wrapToUA(address(und), 100, uaP);
 +    }
 +
-+    function _offWrapper() internal returns (UnderlyingToken w) {
-+        w = UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, address(0), false))));
++    function _offWrapper() internal returns (WrappedToken w) {
++        w = WrappedToken(Clones.clone(address(new WrappedToken(address(this), address(0), chainUidA, address(0), false))));
 +        address[] memory us = new address[](1);
 +        uint256[] memory one = new uint256[](1);
 +        (us[0], one[0]) = (address(und), 1);
 +        Rate memory fixedRate;
-+        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
++        w.initialize(address(this), 1, wrappedInit(us, one, one, 6, fixedRate, address(0), address(0)));
 +    }
 +
 +    // ----- unwrapToUA -----
@@ -874,7 +874,7 @@ index 785aca0..9bc0ad8 100644
 +        vm.expectEmit(address(tok));
 +        emit IUALedger.UATransfer(_pad(address(wrpL)), uaB, 4_000);
 +        vm.expectEmit(address(wrpL));
-+        emit IUnderlyingToken.UnwrappedToUA(alice, address(tok), uaB, 4_000, 4_000);
++        emit IWrappedToken.UnwrappedToUA(alice, address(tok), uaB, 4_000, 4_000);
 +        vm.prank(alice);
 +        (uint256 out, uint256 burned) = wrpL.unwrapToUA(address(tok), 4_000, uaB, 4_000);
 +        assertEq(out, 4_000);
@@ -899,10 +899,10 @@ index 785aca0..9bc0ad8 100644
 +        vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(0)));
 +        wrpN.unwrapToUA(address(0), 100, uaP, 0);
 +        vm.stopPrank();
-+        NoUnderlyingToken off =
-+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, address(0), false))));
-+        off.initialize(address(this), 1, noneInit("Off", "OFF", 6, 0, address(0), address(this)));
-+        UnderlyingToken w = _wrapper(address(off));
++        NormalToken off =
++            NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), chainUidA, address(0), false))));
++        off.initialize(address(this), 1, normalInit("Off", "OFF", 6, 0, address(0), address(this)));
++        WrappedToken w = _wrapper(address(off));
 +        off.mint(address(this), 100);
 +        off.approve(address(w), 100);
 +        w.wrap(100);
@@ -930,11 +930,11 @@ index 785aca0..9bc0ad8 100644
 +    function test_unwrapToUA_minOutAndReserve() public {
 +        _wrapL(alice, 100);
 +        vm.startPrank(alice);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 10, 11));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 10, 11));
 +        wrpL.unwrapToUA(address(tok), 10, uaP, 11);
-+        vm.expectRevert(IUnderlyingToken.UnwrapTooSmall.selector);
++        vm.expectRevert(IWrappedToken.UnwrapTooSmall.selector);
 +        wrpL.unwrapToUA(address(tok), 0, uaP, 0);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(und)));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnknownUnderlying.selector, address(und)));
 +        wrpL.unwrapToUA(address(und), 10, uaP, 0);
 +        vm.stopPrank();
 +        // two legs: units wrapped on `und`, unwrapped from `tok`, whose reserve is 0
@@ -943,14 +943,14 @@ index 785aca0..9bc0ad8 100644
 +        uint256[] memory one = new uint256[](2);
 +        (one[0], one[1]) = (1, 1);
 +        Rate memory fixedRate;
-+        UnderlyingToken w =
-+            UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-+        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
++        WrappedToken w =
++            WrappedToken(Clones.clone(address(new WrappedToken(address(this), address(0), chainUidA, REG_L, false))));
++        w.initialize(address(this), 1, wrappedInit(us, one, one, 6, fixedRate, address(0), address(0)));
 +        und.mint(alice, 50);
 +        vm.startPrank(alice);
 +        und.approve(address(w), 50);
 +        w.wrap(address(und), 50);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.InsufficientReserve.selector, address(tok), 50, 0));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(tok), 50, 0));
 +        w.unwrapToUA(address(tok), 50, uaP, 0);
 +        vm.stopPrank();
 +    }
@@ -959,12 +959,12 @@ index 785aca0..9bc0ad8 100644
 +    /// the wrapper hits its guard.
 +    function test_unwrapToUA_lyingLeg() public {
 +        LyingLedgerLeg leg = new LyingLedgerLeg();
-+        UnderlyingToken w = _wrapper(address(leg));
++        WrappedToken w = _wrapper(address(leg));
 +        leg.mint(alice, 100);
 +        vm.startPrank(alice);
 +        leg.approve(address(w), 100);
 +        w.wrap(100);
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnderlyingTransferMismatch.selector, address(leg), 40, 39));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.UnderlyingTransferMismatch.selector, address(leg), 40, 39));
 +        w.unwrapToUA(address(leg), 40, uaP, 0);
 +        vm.stopPrank();
 +        leg.arm(1, address(w));
@@ -977,12 +977,12 @@ index 785aca0..9bc0ad8 100644
 +    /// Relayed through `mtxExecute`: `AMOUNT(1)`, a fee of 1 % of `wrapped` from the signer's balance after the call.
 +    function test_unwrapToUA_relayedNative() public {
 +        _wrapL(alice, 10_000);
-+        _relay(address(wrpL), abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 4_000, uaP, 4_000)),
++        _relay(address(wrpL), abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 4_000, uaP, 4_000)),
 +            RR | RF | PCT, 10_000, FEE_TO, "");
 +        assertEq(tok.balanceOfUA(uaP), 4_000);
 +        assertEq(wrpL.balanceOf(alice), 10_000 - 4_000 - 40);
 +        assertEq(wrpL.balanceOf(FEE_TO), 40);
-+        _relay(address(wrpL), abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 1_000, uaP, 0)), RR | RF | FIX,
++        _relay(address(wrpL), abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaP, 0)), RR | RF | FIX,
 +            11, FEE_TO, abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 11, 10));
 +    }
 +
@@ -1002,11 +1002,11 @@ index 785aca0..9bc0ad8 100644
 +        tok.mintToUA(uaP, 1);
 +        vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
 +        tok.mintToUA(_pad(bob), 1);
-+        NoUnderlyingToken noMint = _none(1 << AdminLib.PAYABLE);
++        NormalToken noMint = _none(1 << AdminLib.PAYABLE);
 +        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.MINTABLE));
 +        noMint.mintToUA(uaP, 1);
-+        _relay(address(tok), abi.encodeCall(NoUnderlyingToken.mintToUA, (uaP, 1)), RR, 0, address(0),
-+            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NoUnderlyingToken.mintToUA.selector));
++        _relay(address(tok), abi.encodeCall(NormalToken.mintToUA, (uaP, 1)), RR, 0, address(0),
++            abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, NormalToken.mintToUA.selector));
 +    }
 +
 +    // ----- payWithFeeToUA -----
@@ -1033,7 +1033,7 @@ index 785aca0..9bc0ad8 100644
 +        vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
 +        tok.payWithFeeToUA(uaP, 1_000, FeeMode.PERCENT, 10_001, FEE_TO, REF);
 +        vm.stopPrank();
-+        NoUnderlyingToken notPayable = _none(1 << AdminLib.BURNABLE);
++        NormalToken notPayable = _none(1 << AdminLib.BURNABLE);
 +        vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
 +        vm.prank(alice);
 +        notPayable.payWithFeeToUA(uaP, 1, FeeMode.NONE, 0, address(0), REF);
@@ -1094,17 +1094,17 @@ index 785aca0..9bc0ad8 100644
 +        _wrapL(alice, 1_000);
 +        _logPair("wrap(u, v) ERC-20 leg", _gasOf(alice, address(wrp), 0, abi.encodeWithSignature(
 +            "wrap(address,uint256)", address(und), 1_000)),
-+            "wrapToUA ERC-20 leg", _gasOf(alice, address(wrp), 0, abi.encodeCall(UnderlyingToken.wrapToUA, (address(und), 1_000, uaP))));
++            "wrapToUA ERC-20 leg", _gasOf(alice, address(wrp), 0, abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1_000, uaP))));
 +        _logPair("wrap(u, v) native leg", _gasOf(alice, address(wrpN), 1_000, abi.encodeWithSignature(
 +            "wrap(address,uint256)", address(0), 1_000)),
-+            "wrapToUA native leg", _gasOf(alice, address(wrpN), 1_000, abi.encodeCall(UnderlyingToken.wrapToUA, (address(0), 1_000, uaP))));
++            "wrapToUA native leg", _gasOf(alice, address(wrpN), 1_000, abi.encodeCall(WrappedToken.wrapToUA, (address(0), 1_000, uaP))));
 +        _logPair("unwrap(u, ...) ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeWithSignature(
 +            "unwrap(address,uint256,address,uint256)", address(tok), 1_000, bob, 0)),
-+            "unwrapToUA ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 1_000, uaB, 0))));
++            "unwrapToUA ledger leg", _gasOf(alice, address(wrpL), 0, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 1_000, uaB, 0))));
 +        _logPair("payWithFee", _gasOf(alice, address(tok), 0, abi.encodeCall(MetaTokenBase.payWithFee, (bob, 1_000, FeeMode.FIXED, 10, FEE_TO, REF))),
 +            "payWithFeeToUA", _gasOf(alice, address(tok), 0, abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1_000, FeeMode.FIXED, 10, FEE_TO, REF))));
-+        _logPair("mint", _gasOf(address(this), address(tok), 0, abi.encodeCall(NoUnderlyingToken.mint, (bob, 1_000))),
-+            "mintToUA", _gasOf(address(this), address(tok), 0, abi.encodeCall(NoUnderlyingToken.mintToUA, (uaB, 1_000))));
++        _logPair("mint", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mint, (bob, 1_000))),
++            "mintToUA", _gasOf(address(this), address(tok), 0, abi.encodeCall(NormalToken.mintToUA, (uaB, 1_000))));
 +    }
  }
 diff --git a/smartcontracts/evm/test/v2/Allowlist.t.sol b/smartcontracts/evm/test/v2/Allowlist.t.sol
@@ -1118,49 +1118,49 @@ index 64c2159..32879d6 100644
 -import {MockERC20} from "../helpers/Mocks.sol";
 +import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
  import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
- import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
- import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+ import {NormalToken} from "../../src/metatx/NormalToken.sol";
+ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 @@ -42,6 +42,12 @@ contract AllowlistTest is Test {
-     UnderlyingToken internal multi;
+     WrappedToken internal multi;
      MockERC20 internal u;
      MockERC20 internal u2;
 +    /// UA-5a (CTR-UA-28): the wrappers run the UA ledger on a stub registry (every derived id a `p256` UA); `ledgered`
 +    /// is a one-leg 1:1 wrapper of `pts`, a SCaaS ledger token, so `unwrapToUA` can pay out.
 +    StubUARegistry internal stub;
-+    NoUnderlyingToken internal pts;
-+    UnderlyingToken internal ledgered;
++    NormalToken internal pts;
++    WrappedToken internal ledgered;
 +    bytes32 internal constant UA = keccak256("scaas.allowlist.ua");
  
      function setUp() public {
          vm.chainId(7622);
 @@ -50,8 +56,9 @@ contract AllowlistTest is Test {
          u2 = new MockERC20("U2", "U2", 6);
-         none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false))));
-         none.initialize(address(this), 1, noneInit("P", "P", 6, 0, address(this), address(this)));
+         none = NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), UID, address(0), false))));
+         none.initialize(address(this), 1, normalInit("P", "P", 6, 0, address(this), address(this)));
 +        stub = new StubUARegistry(UID);
-         single = UnderlyingToken(
--            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(0), false))));
-+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(stub), false))));
+         single = WrappedToken(
+-            Clones.clone(address(new WrappedToken(address(this), address(0), UID, address(0), false))));
++            Clones.clone(address(new WrappedToken(address(this), address(0), UID, address(stub), false))));
          Rate memory cfg;
          address[] memory one = new address[](1);
          one[0] = address(u);
 @@ -59,12 +66,22 @@ contract AllowlistTest is Test {
          r1[0] = 1;
-         single.initialize(address(this), 1, underlyingInit(one, r1, r1, 6, cfg, address(0), address(0)));
-         multi = UnderlyingToken(
--            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(0), false))));
-+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(stub), false))));
+         single.initialize(address(this), 1, wrappedInit(one, r1, r1, 6, cfg, address(0), address(0)));
+         multi = WrappedToken(
+-            Clones.clone(address(new WrappedToken(address(this), address(0), UID, address(0), false))));
++            Clones.clone(address(new WrappedToken(address(this), address(0), UID, address(stub), false))));
          address[] memory two = new address[](2);
          (two[0], two[1]) = (address(u), address(u2));
          uint256[] memory r = new uint256[](2);
          (r[0], r[1]) = (1, 1);
-         multi.initialize(address(this), 1, underlyingInit(two, r, r, 6, cfg, address(0), address(0)));
-+        pts = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(stub), false))));
-+        pts.initialize(address(this), 1, noneInit("PTS", "PTS", 6, 0, address(this), address(this)));
-+        ledgered = UnderlyingToken(
-+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(stub), false))));
+         multi.initialize(address(this), 1, wrappedInit(two, r, r, 6, cfg, address(0), address(0)));
++        pts = NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), UID, address(stub), false))));
++        pts.initialize(address(this), 1, normalInit("PTS", "PTS", 6, 0, address(this), address(this)));
++        ledgered = WrappedToken(
++            Clones.clone(address(new WrappedToken(address(this), address(0), UID, address(stub), false))));
 +        one[0] = address(pts);
-+        ledgered.initialize(address(this), 1, underlyingInit(one, r1, r1, 6, cfg, address(0), address(0)));
++        ledgered.initialize(address(this), 1, wrappedInit(one, r1, r1, 6, cfg, address(0), address(0)));
 +        pts.mint(address(this), 10e6); // this fixture is a contract, so it may approve (CTR-TOK-01)
 +        pts.approve(address(ledgered), 10e6);
 +        ledgered.wrap(10e6);
@@ -1175,7 +1175,7 @@ index 64c2159..32879d6 100644
 -    /// P1d: one implementation for 1–8 legs, so one list (the single-asset ABI and the per-leg ABI).
 +    /// P1d: one implementation for 1–8 legs, so one list (the single-asset ABI and the per-leg ABI); UA-5a appends
 +    /// `wrapToUA` `ABSOLUTE` and `unwrapToUA` `AMOUNT(1)`.
-     function _pinUnderlying(address t) internal view {
+     function _pinWrapped(address t) internal view {
 -        bytes4[] memory s = new bytes4[](6);
 -        uint8[] memory c = new uint8[](6);
 -        uint8[] memory a = new uint8[](6);
@@ -1197,13 +1197,13 @@ index 64c2159..32879d6 100644
          _run(address(single), abi.encodeWithSignature("wrap(address,uint256)", address(u), 10e6));
          _run(address(single), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 1e6, alice, 0));
          _run(address(single), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
-+        _run(address(single), abi.encodeCall(UnderlyingToken.wrapToUA, (address(u), 10e6, UA)));
++        _run(address(single), abi.encodeCall(WrappedToken.wrapToUA, (address(u), 10e6, UA)));
          assertEq(single.balanceOf(alice), 36e6);
 -        assertEq(u.balanceOf(address(single)), 38e6);       // 40 wrapped − 4 unwrapped + 2 by addReserve
 +        assertEq(single.balanceOfUA(UA), 20e6);
 +        assertEq(u.balanceOf(address(single)), 58e6);       // 60 wrapped − 4 unwrapped + 2 by addReserve
 +        // `unwrapToUA` needs a ledger leg: the same implementation, one leg `pts`
-+        _run(address(ledgered), abi.encodeCall(UnderlyingToken.unwrapToUA, (address(pts), 1e6, UA, 1e6)));
++        _run(address(ledgered), abi.encodeCall(WrappedToken.unwrapToUA, (address(pts), 1e6, UA, 1e6)));
 +        assertEq(pts.balanceOfUA(UA), 2e6);
 +        assertEq(ledgered.balanceOf(alice), 8e6);
      }
@@ -1213,7 +1213,7 @@ index 64c2159..32879d6 100644
          _run(address(multi), abi.encodeWithSignature("wrap(address,uint256)", address(u2), 10e6));
          _run(address(multi), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 1e6, alice, 0));
          _run(address(multi), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
-+        _run(address(multi), abi.encodeCall(UnderlyingToken.wrapToUA, (address(u2), 10e6, UA)));
++        _run(address(multi), abi.encodeCall(WrappedToken.wrapToUA, (address(u2), 10e6, UA)));
          assertEq(multi.balanceOf(alice), 18e6);
 +        assertEq(multi.balanceOfUA(UA), 20e6);
          assertEq(u.balanceOf(address(multi)), 2e6);         // addReserve(u) twice
@@ -1231,7 +1231,7 @@ index 64c2159..32879d6 100644
 +    /// P1d: one implementation, so one rule for every leg count; all eight entries need a one-leg token (with more
 +    /// legs the single-asset rows revert `UnderlyingRequired` before the AMOUNT cap is checked) whose leg is a ledger
 +    /// token (`unwrapToUA` reaches the cap only after its pay-out).
-     function test_underlying_classAndBasisMatchTheRule() public {
+     function test_wrapped_classAndBasisMatchTheRule() public {
 -        vm.prank(alice);
 -        single.wrap(10e6);
 -        bytes[] memory k = new bytes[](6);
@@ -1249,8 +1249,8 @@ index 64c2159..32879d6 100644
 -        _crossCheck(address(single), k, b);
 +        (k[4], b[4]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(pts), 3e6, alice, 1e6), 3e6);
 +        k[5] = abi.encodeWithSignature("addReserve(address,uint256)", address(pts), 1e6);
-+        k[6] = abi.encodeCall(UnderlyingToken.wrapToUA, (address(pts), 10e6, UA));
-+        (k[7], b[7]) = (abi.encodeCall(UnderlyingToken.unwrapToUA, (address(pts), 3e6, UA, 1e6)), 3e6);
++        k[6] = abi.encodeCall(WrappedToken.wrapToUA, (address(pts), 10e6, UA));
++        (k[7], b[7]) = (abi.encodeCall(WrappedToken.unwrapToUA, (address(pts), 3e6, UA, 1e6)), 3e6);
 +        _crossCheck(address(ledgered), k, b);
      }
  
@@ -1261,15 +1261,15 @@ index 64c2159..32879d6 100644
              _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPayReceiverFee.selector));
 +            _refused(t, abi.encodeWithSelector(MetaTokenBase.payWithFeeToUA.selector));
          }
-         _refused(address(none), abi.encodeCall(NoUnderlyingToken.mint, (alice, 1)));
-+        _refused(address(none), abi.encodeCall(NoUnderlyingToken.mintToUA, (UA, 1)));
+         _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1)));
++        _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1)));
          _refused(address(none), abi.encodeCall(ITokenAdmin.renounceRole, (1)));
          _refused(address(single), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
          _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
-diff --git a/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol b/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol
+diff --git a/smartcontracts/evm/test/zether/ZetherWrapped.t.sol b/smartcontracts/evm/test/zether/ZetherWrapped.t.sol
 index b99c462..a8e1ece 100644
---- a/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol
-+++ b/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol
+--- a/smartcontracts/evm/test/zether/ZetherWrapped.t.sol
++++ b/smartcontracts/evm/test/zether/ZetherWrapped.t.sol
 @@ -19,6 +19,8 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
  import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
  import {ZetherKeys} from "./helpers/ZetherKeys.sol";
@@ -1279,7 +1279,7 @@ index b99c462..a8e1ece 100644
  
  /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
  contract HookLeg is MockERC20 {
-@@ -70,6 +72,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
+@@ -70,6 +72,7 @@ contract ZetherWrappedTest is ZetherFixture {
      MockERC20 internal eur = new MockERC20("EUR", "EUR", 6);
      uint256 constant PAYER_PK = 0x9A7E5;
      address payer = vm.addr(PAYER_PK);
@@ -1287,16 +1287,16 @@ index b99c462..a8e1ece 100644
  
      function setUp() public {
          _stack(false);
-@@ -484,9 +487,15 @@ contract ZetherUnderlyingTest is ZetherFixture {
+@@ -484,9 +487,15 @@ contract ZetherWrappedTest is ZetherFixture {
  
-     function test_allowlistPinned_underlyingZether() public {
+     function test_allowlistPinned_wrappedZether() public {
          (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
 -        assertEq(s.length, 14);
 +        assertEq(s.length, 16);
-         assertEq(s[12], UnderlyingZetherToken.zetherWrapShield.selector);
-         assertEq(s[13], UnderlyingZetherToken.zetherUnshieldUnwrap.selector);
-+        assertEq(s[14], UnderlyingToken.wrapToUA.selector);
-+        assertEq(s[15], UnderlyingToken.unwrapToUA.selector);
+         assertEq(s[12], WrappedZetherToken.zetherWrapShield.selector);
+         assertEq(s[13], WrappedZetherToken.zetherUnshieldUnwrap.selector);
++        assertEq(s[14], WrappedToken.wrapToUA.selector);
++        assertEq(s[15], WrappedToken.unwrapToUA.selector);
 +        assertEq(c[14], 1, "wrapToUA ABSOLUTE");
 +        assertEq(a[14], 0);
 +        assertEq(c[15], 2, "unwrapToUA AMOUNT(1)");
@@ -1304,7 +1304,7 @@ index b99c462..a8e1ece 100644
          assertEq(s[6], ZetherLayer.zetherShield.selector);
          assertEq(s[7], ZetherLayer.zetherTransfer.selector);
          assertEq(s[8], ZetherLayer.zetherTransferCompact.selector);
-@@ -543,8 +552,17 @@ contract ZetherUnderlyingTest is ZetherFixture {
+@@ -543,8 +552,17 @@ contract ZetherWrappedTest is ZetherFixture {
          }
      }
  
@@ -1320,10 +1320,10 @@ index b99c462..a8e1ece 100644
 -    /// entries reach the call and revert `UnderlyingRequired`: the rule let them through.
 +    /// entries reach the call and revert `UnderlyingRequired`, and `unwrapToUA` reverts `UALegNotLedger` (its legs are
 +    /// outside tokens): the rule let them through.
-     function test_everyListedSelectorRuns_underlyingZether() public {
+     function test_everyListedSelectorRuns_wrappedZether() public {
          _shielded(70, 0);
          _public(tok, payer, 100 * SCALE);
-@@ -552,21 +570,27 @@ contract ZetherUnderlyingTest is ZetherFixture {
+@@ -552,21 +570,27 @@ contract ZetherWrappedTest is ZetherFixture {
          vm.prank(payer);
          usd.approve(address(w), type(uint256).max);
          (bytes4[] memory s,,) = w.mtxSelectors();
@@ -1335,9 +1335,9 @@ index b99c462..a8e1ece 100644
              bytes memory data = _k3Call(s[i], bal, w.envelopeBinding(_envOf(300 + i)));
              uint256 sc = w.accountState(alice.ua).sendCounter;
              bool single = s[i] == bytes4(keccak256("wrap(uint256)")) || s[i] == bytes4(keccak256("unwrap(uint256,address,uint256)"));
--            _relay(data, 300 + i, single ? abi.encodeWithSelector(IUnderlyingToken.UnderlyingRequired.selector) : bytes(""));
-+            bytes memory err = single ? abi.encodeWithSelector(IUnderlyingToken.UnderlyingRequired.selector) : bytes("");
-+            if (s[i] == UnderlyingToken.unwrapToUA.selector) {
+-            _relay(data, 300 + i, single ? abi.encodeWithSelector(IWrappedToken.UnderlyingRequired.selector) : bytes(""));
++            bytes memory err = single ? abi.encodeWithSelector(IWrappedToken.UnderlyingRequired.selector) : bytes("");
++            if (s[i] == WrappedToken.unwrapToUA.selector) {
 +                err = abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usd));
 +            }
 +            _relay(data, 300 + i, err);
@@ -1354,21 +1354,21 @@ index b99c462..a8e1ece 100644
          assertEq(w.balanceOf(address(0xB0C)), 10 * SCALE, "unshield");
          assertEq(usd.balanceOf(address(0xB0C)), 10 * SCALE, "unshield-unwrap");
      }
-@@ -594,6 +618,10 @@ contract ZetherUnderlyingTest is ZetherFixture {
+@@ -594,6 +618,10 @@ contract ZetherWrappedTest is ZetherFixture {
          if (sel == bytes4(keccak256("addReserve(address,uint256)"))) {
              return abi.encodeWithSignature("addReserve(address,uint256)", address(usd), SCALE);
          }
-+        if (sel == UnderlyingToken.wrapToUA.selector) return abi.encodeCall(UnderlyingToken.wrapToUA, (address(usd), SCALE, signer));
-+        if (sel == UnderlyingToken.unwrapToUA.selector) {
-+            return abi.encodeCall(UnderlyingToken.unwrapToUA, (address(usd), SCALE, signer, 0));
++        if (sel == WrappedToken.wrapToUA.selector) return abi.encodeCall(WrappedToken.wrapToUA, (address(usd), SCALE, signer));
++        if (sel == WrappedToken.unwrapToUA.selector) {
++            return abi.encodeCall(WrappedToken.unwrapToUA, (address(usd), SCALE, signer, 0));
 +        }
-         if (sel == UnderlyingZetherToken.zetherWrapShield.selector) {
-             return abi.encodeCall(UnderlyingZetherToken.zetherWrapShield, (address(usd), SCALE, bob.ua));
+         if (sel == WrappedZetherToken.zetherWrapShield.selector) {
+             return abi.encodeCall(WrappedZetherToken.zetherWrapShield, (address(usd), SCALE, bob.ua));
          }
 ```
 
 - [ ] **Step 2: Red.** `../../scripts/capped forge test --match-path test/ua/UAReceivers.t.sol` — compile error
-  (`Error (9582): Member "wrapToUA" not found or not visible after argument-dependent lookup in contract UnderlyingToken.`).
+  (`Error (9582): Member "wrapToUA" not found or not visible after argument-dependent lookup in contract WrappedToken.`).
 - [ ] **Step 3: Implement** R5a-3, R5a-4, R5a-5, R5a-7, R5a-9, R5a-10's address rows (C5a-1, C5a-2, C5a-3):
 
 ```diff
@@ -1395,11 +1395,11 @@ index 67a7a61..f7051fa 100644
      function uaTransfer(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
                          uint32 mode, address relayer, bytes calldata auth) external returns (bool);
      function uaTransferWithFee(bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce,
-diff --git a/smartcontracts/evm/src/metatx/IUnderlyingToken.sol b/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/IWrappedToken.sol b/smartcontracts/evm/src/metatx/IWrappedToken.sol
 index 31eb1fc..ef3faa7 100644
---- a/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/IUnderlyingToken.sol
-@@ -10,6 +10,10 @@ interface IUnderlyingToken {
+--- a/smartcontracts/evm/src/metatx/IWrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/IWrappedToken.sol
+@@ -10,6 +10,10 @@ interface IWrappedToken {
      event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
      event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
          uint256 underlyingOut);
@@ -1410,7 +1410,7 @@ index 31eb1fc..ef3faa7 100644
      event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
      event RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen,
          uint64 eta);
-@@ -65,6 +69,11 @@ interface IUnderlyingToken {
+@@ -65,6 +69,11 @@ interface IWrappedToken {
      function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
          external returns (uint256 out, uint256 burned);
      function addReserve(address underlying, uint256 amount) external payable;
@@ -1449,11 +1449,11 @@ index e5e07a8..038ca3a 100644
      /// @dev Hedera (CTR-TOK-23): a 64-byte signature from an account without code is HIP-632; all else is EVM.
      function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
          if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
-diff --git a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/NormalToken.sol b/smartcontracts/evm/src/metatx/NormalToken.sol
 index bbae93c..1e4b17e 100644
---- a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
-@@ -32,6 +32,12 @@ contract NoUnderlyingToken is MetaTokenBase {
+--- a/smartcontracts/evm/src/metatx/NormalToken.sol
++++ b/smartcontracts/evm/src/metatx/NormalToken.sol
+@@ -32,6 +32,12 @@ contract NormalToken is MetaTokenBase {
          _mint(to, amount);
      }
  
@@ -1466,23 +1466,23 @@ index bbae93c..1e4b17e 100644
      /// @notice Allowlisted `AMOUNT(0)` (CTR-MTX-19): gasless through `mtxExecute`.
      function burn(uint256 amount) external nonReentrant {
          AdminLib.requireFeature(AdminLib.BURNABLE);
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingLib.sol b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedLib.sol b/smartcontracts/evm/src/metatx/WrappedLib.sol
 index ad25658..92af2e4 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingLib.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingLib.sol
+--- a/smartcontracts/evm/src/metatx/WrappedLib.sol
++++ b/smartcontracts/evm/src/metatx/WrappedLib.sol
 @@ -6,7 +6,9 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
  import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
  import {Address} from "@openzeppelin/contracts/utils/Address.sol";
  import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 +import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
- import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+ import {IWrappedToken} from "./IWrappedToken.sol";
 +import {IUALedger} from "./IUALedger.sol";
  import {IFactoryToken} from "../factory/IFactoryToken.sol";
  import {ITradeToken} from "../trade/ITradeToken.sol";
  import {MetaTxLib} from "../common/MetaTxLib.sol";
-@@ -214,6 +216,16 @@ library UnderlyingLib {
+@@ -214,6 +216,16 @@ library WrappedLib {
          if (recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL) {
-             revert IUnderlyingToken.UnwrapRecipientInvalid(recipient);
+             revert IWrappedToken.UnwrapRecipientInvalid(recipient);
          }
 +        return _quote(i, wrapped, minOut);
 +    }
@@ -1497,8 +1497,8 @@ index ad25658..92af2e4 100644
          Leg storage L = $().legs[i];
          (uint256 num, uint256 den) = (L.num, L.den);
          out = Math.mulDiv(wrapped, den, num);
-@@ -239,6 +251,24 @@ library UnderlyingLib {
-         if (sent != out) revert IUnderlyingToken.UnderlyingTransferMismatch(u, out, sent);
+@@ -239,6 +251,24 @@ library WrappedLib {
+         if (sent != out) revert IWrappedToken.UnderlyingTransferMismatch(u, out, sent);
      }
  
 +    /// @notice `payOut` into a derived UA (CTR-UA-28): leg `u` pays `to` in its own UA ledger,
@@ -1516,17 +1516,17 @@ index ad25658..92af2e4 100644
 +        IUALedger(u).transferToUA(to, out);
 +        uint256 after_ = IERC20(u).balanceOf(address(this));
 +        uint256 sent = before > after_ ? before - after_ : 0;
-+        if (sent != out) revert IUnderlyingToken.UnderlyingTransferMismatch(u, out, sent);
++        if (sent != out) revert IWrappedToken.UnderlyingTransferMismatch(u, out, sent);
 +    }
 +
      // ------------------------------------------------------------------ guardian (WRAP_DISABLEABLE)
  
      /// @notice One-way: no re-enable (a compromised guardian reopening a depegged inflow would drain the good legs).
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingToken.sol b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedToken.sol b/smartcontracts/evm/src/metatx/WrappedToken.sol
 index cee6318..9105639 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-@@ -24,6 +24,8 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+--- a/smartcontracts/evm/src/metatx/WrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/WrappedToken.sol
+@@ -24,6 +24,8 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
      bytes4 internal constant SEL_WRAP_LEG = bytes4(keccak256("wrap(address,uint256)"));
      bytes4 internal constant SEL_UNWRAP_LEG = bytes4(keccak256("unwrap(address,uint256,address,uint256)"));
      bytes4 internal constant SEL_ADD_RESERVE = bytes4(keccak256("addReserve(address,uint256)"));
@@ -1535,29 +1535,29 @@ index cee6318..9105639 100644
  
      constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
          MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, registry_, isHedera_)
-@@ -43,11 +45,18 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+@@ -43,11 +45,18 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
  
      /// @notice Single-asset ABI. Mints the MEASURED amount received at the leg's rate, rounded down.
      function wrap(uint256 amount) external payable nonReentrant returns (uint256) {
--        return _wrap(UnderlyingLib.sole(), amount);
-+        return _wrap(UnderlyingLib.sole(), amount, 0);
+-        return _wrap(WrappedLib.sole(), amount);
++        return _wrap(WrappedLib.sole(), amount, 0);
      }
  
      function wrap(address u, uint256 amount) external payable nonReentrant returns (uint256) {
--        return _wrap(UnderlyingLib.indexOf(u), amount);
-+        return _wrap(UnderlyingLib.indexOf(u), amount, 0);
+-        return _wrap(WrappedLib.indexOf(u), amount);
++        return _wrap(WrappedLib.indexOf(u), amount, 0);
 +    }
 +
 +    /// @notice `wrap(u, amount)` minted into the registered SIGNING UA `to` (CTR-UA-28), the receiver checked first.
 +    ///         Address allowlist `ABSOLUTE`: relayed, the native leg reverts (no coin in a self-call).
 +    function wrapToUA(address u, uint256 amount, bytes32 to) external payable nonReentrant returns (uint256) {
 +        _requireDerivedReceiver(to);
-+        return _wrap(UnderlyingLib.indexOf(u), amount, to);
++        return _wrap(WrappedLib.indexOf(u), amount, to);
      }
  
      /// @notice Single-asset ABI, `minOut = 0`; not allowlisted.
-@@ -65,6 +74,19 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
-         return _unwrap(UnderlyingLib.indexOf(u), wrapped, recipient, minOut);
+@@ -65,6 +74,19 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
+         return _unwrap(WrappedLib.indexOf(u), wrapped, recipient, minOut);
      }
  
 +    /// @notice `unwrap(u, …)` paid into `to` in leg `u`'s UA ledger (CTR-UA-28): burns from the subject (a native, or a
@@ -1565,18 +1565,18 @@ index cee6318..9105639 100644
 +    function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut)
 +        external nonReentrant returns (uint256 out, uint256 burned)
 +    {
-+        uint256 i = UnderlyingLib.indexOf(u);
-+        (out, burned) = UnderlyingLib.quoteUnwrapToUA(i, wrapped, minOut);
++        uint256 i = WrappedLib.indexOf(u);
++        (out, burned) = WrappedLib.quoteUnwrapToUA(i, wrapped, minOut);
 +        address from = _msgSender();
 +        _burn(from, burned);
-+        UnderlyingLib.payOutToUA(i, to, out);
++        WrappedLib.payOutToUA(i, to, out);
 +        emit UnwrappedToUA(from, u, to, burned, out);
 +    }
 +
      /// @notice Anyone; no mint. Over-collateralises before a rate decrease; otherwise a donation to every holder.
      function addReserve(address u, uint256 amount) external payable nonReentrant {
          address from = _msgSender();
-@@ -84,11 +106,13 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+@@ -84,11 +106,13 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
          emit Wrapped(o.from, u, received, minted);
      }
  
@@ -1584,7 +1584,7 @@ index cee6318..9105639 100644
 +    /// @dev `to == 0`: mint to the caller; else into the derived UA `to` (checked by the caller), a move from 0.
 +    function _wrap(uint256 i, uint256 amount, bytes32 to) private returns (uint256 minted) {
          address account = _msgSender();
-         (address u, uint256 received, uint256 m) = UnderlyingLib.wrap(i, amount, account, msg.value);
+         (address u, uint256 received, uint256 m) = WrappedLib.wrap(i, amount, account, msg.value);
          minted = m;
 -        _mint(account, minted);
 +        if (to == 0) _mint(account, minted);
@@ -1592,7 +1592,7 @@ index cee6318..9105639 100644
          emit Wrapped(account, u, received, minted);
      }
  
-@@ -131,20 +155,23 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+@@ -131,20 +155,23 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
  
      /// @notice `cancelNonce` (base); `wrap(uint256)`, `wrap(address,uint256)`, `addReserve` `ABSOLUTE` (fee from the
      ///         minted units or the caller's balance); `unwrap(uint256,address,uint256)` `AMOUNT(0)`,
@@ -1621,7 +1621,7 @@ index cee6318..9105639 100644
      }
  
      /// @notice The UA allowlist (CTR-UA-26): the two `unwrap`s with `minOut` (a derived signer burns its UA balance).
-@@ -158,6 +185,8 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+@@ -158,6 +185,8 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
          if (sel == SEL_WRAP_LEG) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
          if (sel == SEL_UNWRAP_LEG) return MtxRule(FEE_CLASS_AMOUNT, 1, 132);
          if (sel == SEL_ADD_RESERVE) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
@@ -1630,19 +1630,19 @@ index cee6318..9105639 100644
          return super._mtxRule(sel);
      }
  
-diff --git a/smartcontracts/evm/src/zether/UnderlyingZetherToken.sol b/smartcontracts/evm/src/zether/UnderlyingZetherToken.sol
+diff --git a/smartcontracts/evm/src/zether/WrappedZetherToken.sol b/smartcontracts/evm/src/zether/WrappedZetherToken.sol
 index cb205b8..2fa3392 100644
---- a/smartcontracts/evm/src/zether/UnderlyingZetherToken.sol
-+++ b/smartcontracts/evm/src/zether/UnderlyingZetherToken.sol
-@@ -122,14 +122,15 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
+--- a/smartcontracts/evm/src/zether/WrappedZetherToken.sol
++++ b/smartcontracts/evm/src/zether/WrappedZetherToken.sol
+@@ -122,14 +122,15 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer {
  
      // ------------------------------------------------------------------ allowlist (CTR-MTX-19, CTR-ZTH-34)
  
--    /// @notice `UnderlyingToken`'s six, then the Zether ops and the two underlying paths, each `ABSOLUTE`.
-+    /// @notice `UnderlyingToken`'s first six, then the Zether ops and the two underlying paths, each `ABSOLUTE`, then
-+    ///         `UnderlyingToken`'s UA-5a two (`wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`, CTR-UA-28).
+-    /// @notice `WrappedToken`'s six, then the Zether ops and the two underlying paths, each `ABSOLUTE`.
++    /// @notice `WrappedToken`'s first six, then the Zether ops and the two underlying paths, each `ABSOLUTE`, then
++    ///         `WrappedToken`'s UA-5a two (`wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`, CTR-UA-28).
      function mtxSelectors()
-         public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
+         public pure override(WrappedToken, IMetaTx, MetaTxBase)
          returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
      {
 -        s = new bytes4[](14);
@@ -1654,7 +1654,7 @@ index cb205b8..2fa3392 100644
          (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
          (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
          (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
-@@ -144,6 +145,8 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
+@@ -144,6 +145,8 @@ contract WrappedZetherToken is WrappedToken, ZetherLayer {
          (s[11], c[11]) = (this.zetherUnshield.selector, FEE_CLASS_ABSOLUTE);
          (s[12], c[12]) = (this.zetherWrapShield.selector, FEE_CLASS_ABSOLUTE);
          (s[13], c[13]) = (this.zetherUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
@@ -1662,17 +1662,17 @@ index cb205b8..2fa3392 100644
 +        (s[15], c[15], a[15]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
      }
  
-     function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {
+     function _mtxRule(bytes4 sel) internal view override(WrappedToken, MetaTxBase) returns (MtxRule memory) {
 ```
 
 - [ ] **Step 4: Green.** In `smartcontracts/evm`, each through `../../scripts/capped forge test --match-path`:
   `test/ua/UAReceivers.t.sol` 19 passed; `test/hedera/HederaV2.t.sol` 14 passed; `test/v2/Allowlist.t.sol`
-  13 passed; `test/zether/ZetherUnderlying.t.sol` 16 passed; `'test/ua/**'` 24 suites, 251 passed. Logged by
+  13 passed; `test/zether/ZetherWrapped.t.sol` 16 passed; `'test/ua/**'` 24 suites, 251 passed. Logged by
   `-vv --match-test test_gas_receiversVsAddressTwins`: the table under **Spike findings**.
 - [ ] **Step 5: Size gate.** `../../scripts/capped forge build src --sizes --json > /tmp/ua5a-sizes.json; python3
-  ../../scripts/size_gate.py /tmp/ua5a-sizes.json size-baseline.json` — before the ratchet 5 errors (`NoUnderlyingToken`
-  32,150, `UnderlyingToken` 40,815, `NoUnderlyingZetherToken` 40,383, `UnderlyingZetherToken` 51,327 / init 53,022;
-  `UnderlyingLib` 12,560 fits); apply the ratchet, then `size gate: 0 error(s), 84 contracts`:
+  ../../scripts/size_gate.py /tmp/ua5a-sizes.json size-baseline.json` — before the ratchet 5 errors (`NormalToken`
+  32,150, `WrappedToken` 40,815, `NormalZetherToken` 40,383, `WrappedZetherToken` 51,327 / init 53,022;
+  `WrappedLib` 12,560 fits); apply the ratchet, then `size gate: 0 error(s), 84 contracts`:
 
 ```diff
 diff --git a/smartcontracts/evm/size-baseline.json b/smartcontracts/evm/size-baseline.json
@@ -1682,17 +1682,17 @@ index 000f1d6..035100b 100644
 @@ -1,8 +1,8 @@
  {
 -  "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed; `<name>.init` likewise for init code over EIP-3860. Owner 2026-10-11: size optimised later (Glamsterdam); remove an entry once the contract fits. UA-4: + the UA ledger.",
--  "NoUnderlyingToken": 31770,
--  "UnderlyingToken": 39189,
--  "NoUnderlyingZetherToken": 40067,
--  "UnderlyingZetherToken": 49778,
--  "UnderlyingZetherToken.init": 51473
+-  "NormalToken": 31770,
+-  "WrappedToken": 39189,
+-  "NormalZetherToken": 40067,
+-  "WrappedZetherToken": 49778,
+-  "WrappedZetherToken.init": 51473
 +  "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed; `<name>.init` likewise for init code over EIP-3860. Owner 2026-10-11: size optimised later (Glamsterdam); remove an entry once the contract fits. UA-4: + the UA ledger. UA-5a: + the receivers (wrapToUA, unwrapToUA, mintToUA, payWithFeeToUA), the UA allowlist, uaPayReceiverFee.",
-+  "NoUnderlyingToken": 32150,
-+  "UnderlyingToken": 40815,
-+  "NoUnderlyingZetherToken": 40383,
-+  "UnderlyingZetherToken": 51327,
-+  "UnderlyingZetherToken.init": 53022
++  "NormalToken": 32150,
++  "WrappedToken": 40815,
++  "NormalZetherToken": 40383,
++  "WrappedZetherToken": 51327,
++  "WrappedZetherToken.init": 53022
  }
 ```
 
@@ -1700,13 +1700,13 @@ index 000f1d6..035100b 100644
 
 ### Task 3: The UA allowlist — `burn` and `unwrapToUA` under `uaExecute`
 
-**Files:** Modify `src/metatx/NoUnderlyingToken.sol`, `src/metatx/UnderlyingToken.sol`, `src/metatx/ERC20MetaTx.sol`
-(doc), `src/zether/NoUnderlyingZetherToken.sol`, `size-baseline.json`, `test/zether/ZetherUnderlying.t.sol`; create
+**Files:** Modify `src/metatx/NormalToken.sol`, `src/metatx/WrappedToken.sol`, `src/metatx/ERC20MetaTx.sol`
+(doc), `src/zether/NormalZetherToken.sol`, `size-baseline.json`, `test/zether/ZetherWrapped.t.sol`; create
 `test/ua/UAAllowlist5a.t.sol`.
 
 - [ ] **Step 1: Tests first.** Apply this diff (`test_uaExecute_burnUnderUA`, `test_uaExecute_burnNative`,
   `test_uaExecute_unwrapToUAUnderUA`, `test_uaExecute_unwrapToUA_nativeToRefused`, `test_uaAllowlist_refusals`,
-  `test_uaBatch_burnAndUnwrapToUA`; `test_noneZether_burnUnderUA`):
+  `test_uaBatch_burnAndUnwrapToUA`; `test_normalZether_burnUnderUA`):
 
 ```diff
 diff --git a/smartcontracts/evm/test/ua/UAAllowlist5a.t.sol b/smartcontracts/evm/test/ua/UAAllowlist5a.t.sol
@@ -1722,19 +1722,19 @@ index 0000000..0b24f0d
 +import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 +import {IUALedger} from "../../src/metatx/IUALedger.sol";
 +import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
-+import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
++import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 +import {AdminLib} from "../../src/metatx/AdminLib.sol";
-+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
-+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
++import {NormalToken} from "../../src/metatx/NormalToken.sol";
++import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 +import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 +import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 +import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 +import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 +import {FeeMode} from "../../src/common/FeePolicy.sol";
-+import {noneInit} from "../v2/helpers/V2Fixture.sol";
++import {normalInit} from "../v2/helpers/V2Fixture.sol";
 +import {UALedgerBase} from "./UALedgerBase.sol";
 +
-+/// accounts.md CTR-UA-26 as grown by UA-5a (CTR-UA-27 "allowlist or dedicated function"): `burn` (`NONE*`) and
++/// accounts.md CTR-UA-26 as grown by UA-5a (CTR-UA-27 "allowlist or dedicated function"): `burn` (`NORMAL*`) and
 +/// `unwrapToUA` (the wrappers) run under `uaExecute` / `uaBatch`; under a derived ticket each debits exactly the subject
 +/// through `UA_POOL`, and the fee (`AMOUNT(i)`) comes from the signer's UA balance after the call. The dedicated
 +/// functions (`wrapToUA`, `mintToUA`, `payWithFeeToUA`), `addReserve`, `approve` and `mtxTrade` stay off it.
@@ -1758,7 +1758,7 @@ index 0000000..0b24f0d
 +    function test_uaExecute_burnUnderUA() public {
 +        _fund(uaP, 1_000);
 +        uint256 supply = tok.totalSupply();
-+        MetaTxLib.UAMetaTransaction memory m = _withFee(_m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (400))), 4);
++        MetaTxLib.UAMetaTransaction memory m = _withFee(_m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (400))), 4);
 +        vm.expectEmit(address(tok));
 +        emit IUALedger.UATransfer(uaP, bytes32(0), 400);
 +        vm.expectEmit(address(tok));
@@ -1773,23 +1773,23 @@ index 0000000..0b24f0d
 +        assertEq(tok.balanceOf(FEE_TO), 4);
 +        assertEq(tok.totalSupply(), supply - 400);
 +        // more than the UA holds: the burn through the pool refuses; the fee cap is `AMOUNT(0)`'s 1 %
-+        _exec(address(tok), _m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (597))),
++        _exec(address(tok), _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (597))),
 +            abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597));
 +        // `BURNABLE` off: the feature error of `burn`
-+        NoUnderlyingToken nb =
-+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-+        IFactoryToken.TokenConfig memory c = noneInit("NB", "NB", 6, 0, address(0), address(this));
++        NormalToken nb =
++            NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), chainUidA, REG_L, false))));
++        IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
 +        c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE);
 +        nb.initialize(address(this), 1, c);
 +        nb.mintToUA(uaP, 10);
-+        _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NoUnderlyingToken.burn, (1))),
++        _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
 +            abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.BURNABLE));
 +    }
 +
 +    /// A native signer burns its own address balance (`mtxExecute` on the ids path).
 +    function test_uaExecute_burnNative() public {
 +        uint256 supply = tok.totalSupply();
-+        _exec(address(tok), _m(address(tok), _pad(alice), abi.encodeCall(NoUnderlyingToken.burn, (100))), "");
++        _exec(address(tok), _m(address(tok), _pad(alice), abi.encodeCall(NormalToken.burn, (100))), "");
 +        assertEq(tok.balanceOf(alice), 1_000_000 - 100);
 +        assertEq(tok.totalSupply(), supply - 100);
 +    }
@@ -1801,7 +1801,7 @@ index 0000000..0b24f0d
 +        _wrapL(alice, 10_000);
 +        vm.prank(alice);
 +        wrpL.transferToUA(uaP, 10_000);
-+        bytes memory data = abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 4_000, uaB, 4_000));
++        bytes memory data = abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 4_000, uaB, 4_000));
 +        MetaTxLib.UAMetaTransaction memory m = _m(address(wrpL), uaP, data);
 +        (m.mode, m.fee, m.feeRecipient) = (RR | RF | PCT, 10_000, FEE_TO); // 1 % of `wrapped`
 +        vm.expectEmit(address(wrpL));
@@ -1811,7 +1811,7 @@ index 0000000..0b24f0d
 +        vm.expectEmit(address(tok));
 +        emit IUALedger.UATransfer(_pad(address(wrpL)), uaB, 4_000);
 +        vm.expectEmit(address(wrpL));
-+        emit IUnderlyingToken.UnwrappedToUA(POOL, address(tok), uaB, 4_000, 4_000);
++        emit IWrappedToken.UnwrappedToUA(POOL, address(tok), uaB, 4_000, 4_000);
 +        _exec(address(wrpL), m, "");
 +        assertEq(wrpL.balanceOfUA(uaP), 10_000 - 4_000 - 40);
 +        assertEq(wrpL.balanceOf(FEE_TO), 40);
@@ -1826,7 +1826,7 @@ index 0000000..0b24f0d
 +        _wrapL(alice, 100);
 +        vm.prank(alice);
 +        wrpL.transferToUA(uaP, 100);
-+        _exec(address(wrpL), _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 10, _pad(bob), 0))),
++        _exec(address(wrpL), _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 10, _pad(bob), 0))),
 +            abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
 +        assertEq(wrpL.balanceOfUA(uaP), 100);
 +    }
@@ -1839,8 +1839,8 @@ index 0000000..0b24f0d
 +        _fund(uaP, 10);
 +        address[6] memory on = [address(wrp), address(tok), address(tok), address(wrp), address(tok), address(tok)];
 +        bytes[6] memory calls = [
-+            abi.encodeCall(UnderlyingToken.wrapToUA, (address(und), 1, uaB)),
-+            abi.encodeCall(NoUnderlyingToken.mintToUA, (uaB, 1)),
++            abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1, uaB)),
++            abi.encodeCall(NormalToken.mintToUA, (uaB, 1)),
 +            abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), bytes32("ref"))),
 +            abi.encodeWithSignature("addReserve(address,uint256)", address(und), 1),
 +            abi.encodeCall(IERC20.approve, (address(this), 1)),
@@ -1865,24 +1865,24 @@ index 0000000..0b24f0d
 +        wrpL.transferToUA(uaP, 100);
 +        MetaTxLib.UAMetaTransaction[] memory ms = new MetaTxLib.UAMetaTransaction[](2);
 +        bytes[] memory as_ = new bytes[](2);
-+        ms[0] = _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 60, uaB, 0)));
-+        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 60, uaB, 0)));
++        ms[0] = _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 60, uaB, 0)));
++        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 60, uaB, 0)));
 +        ms[1].nonce = 1;
 +        (as_[0], as_[1]) = (_authM(address(wrpL), ms[0]), _authM(address(wrpL), ms[1]));
 +        // the second item asks for more than is left (the reserve, 1:1 with the supply, is checked first)
-+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.InsufficientReserve.selector, address(tok), 60, 40));
++        vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(tok), 60, 40));
 +        vm.prank(RELAYER);
 +        wrpL.uaBatch(ms, as_);
 +        assertEq(wrpL.balanceOfUA(uaP), 100);
-+        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 40, uaB, 0)));
++        ms[1] = _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 40, uaB, 0)));
 +        ms[1].nonce = 1;
 +        as_[1] = _authM(address(wrpL), ms[1]);
 +        vm.prank(RELAYER);
 +        wrpL.uaBatch(ms, as_);
 +        assertEq(wrpL.balanceOfUA(uaP), 0);
 +        assertEq(tok.balanceOfUA(uaB), 100);
-+        ms[0] = _m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (30)));
-+        ms[1] = _m(address(tok), uaP, abi.encodeCall(NoUnderlyingToken.burn, (70)));
++        ms[0] = _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (30)));
++        ms[1] = _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (70)));
 +        ms[1].nonce = 1;
 +        (as_[0], as_[1]) = (_authM(address(tok), ms[0]), _authM(address(tok), ms[1]));
 +        vm.prank(RELAYER);
@@ -1891,31 +1891,31 @@ index 0000000..0b24f0d
 +        assertEq(tok.balanceOf(POOL), 100); // uaB's
 +    }
 +}
-diff --git a/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol b/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol
+diff --git a/smartcontracts/evm/test/zether/ZetherWrapped.t.sol b/smartcontracts/evm/test/zether/ZetherWrapped.t.sol
 index a8e1ece..87d2de3 100644
---- a/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol
-+++ b/smartcontracts/evm/test/zether/ZetherUnderlying.t.sol
+--- a/smartcontracts/evm/test/zether/ZetherWrapped.t.sol
++++ b/smartcontracts/evm/test/zether/ZetherWrapped.t.sol
 @@ -13,6 +13,7 @@ import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
  import {ITradeToken} from "../../src/trade/ITradeToken.sol";
  import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
- import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
-+import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
+ import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
++import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
  import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
  import {IZetherToken} from "../../src/zether/IZetherToken.sol";
  import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
-@@ -560,6 +561,26 @@ contract ZetherUnderlyingTest is ZetherFixture {
+@@ -560,6 +561,26 @@ contract ZetherWrappedTest is ZetherFixture {
          reg.register(UAKinds.SCHNORR_BN254, y, ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), 0, "");
      }
  
-+    /// UA-5a (CTR-UA-26): `NONE_ZETHER` inherits `burn` on the UA allowlist from `NoUnderlyingToken`; a derived signer
++    /// UA-5a (CTR-UA-26): `NORMAL_ZETHER` inherits `burn` on the UA allowlist from `NormalToken`; a derived signer
 +    /// burns its public UA balance through `UA_POOL`.
-+    function test_noneZether_burnUnderUA() public {
++    function test_normalZether_burnUnderUA() public {
 +        signer = _signingUA();
 +        ZetherLayer nz = _newToken(false, "nz");
-+        NoUnderlyingZetherToken(address(nz)).mint(address(this), 100);
++        NormalZetherToken(address(nz)).mint(address(this), 100);
 +        nz.transferToUA(signer, 100);
 +        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-+            from: signer, data: abi.encodeCall(NoUnderlyingToken.burn, (40)), batch: 1, nonce: 0,
++            from: signer, data: abi.encodeCall(NormalToken.burn, (40)), batch: 1, nonce: 0,
 +            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
 +            feeRecipient: address(0)
 +        });
@@ -1932,8 +1932,8 @@ index a8e1ece..87d2de3 100644
      /// outside tokens): the rule let them through.
 ```
 
-- [ ] **Step 2: Red.** `../../scripts/capped forge test --match-path 'test/{ua/UAAllowlist5a,zether/ZetherUnderlying}.t.sol'`
-  — 6 failures (5 in `UAAllowlist5a`, `test_noneZether_burnUnderUA`): `MetaTxUnknownOp(0x42966c68)` (`burn`),
+- [ ] **Step 2: Red.** `../../scripts/capped forge test --match-path 'test/{ua/UAAllowlist5a,zether/ZetherWrapped}.t.sol'`
+  — 6 failures (5 in `UAAllowlist5a`, `test_normalZether_burnUnderUA`): `MetaTxUnknownOp(0x42966c68)` (`burn`),
   `MetaTxUnknownOp(0xe4a9f766)` (`unwrapToUA`), or the expected events missing for the same reason;
   `test_uaAllowlist_refusals` passes already.
 - [ ] **Step 3: Implement** R5a-6 and R5a-10's UA allowlists:
@@ -1949,17 +1949,17 @@ index 7d83e86..a8f21da 100644
  
 -    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, the wrapper
 -    ///         kinds add their `unwrap`s. `approve`, `trade` and transfers are never on it (`MetaTxUnknownOp`).
-+    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NONE` adds
++    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NORMAL` adds
 +    ///         `burn`, the wrapper kinds their `unwrap`s and `unwrapToUA`. `approve`, `trade`, transfers and the dedicated
 +    ///         `…ToUA` functions are never on it (`MetaTxUnknownOp`).
      function _uaAllowed(bytes4) internal view virtual returns (bool) {
          return false;
      }
-diff --git a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/NormalToken.sol b/smartcontracts/evm/src/metatx/NormalToken.sol
 index 1e4b17e..a1247e1 100644
---- a/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/NoUnderlyingToken.sol
-@@ -55,6 +55,11 @@ contract NoUnderlyingToken is MetaTokenBase {
+--- a/smartcontracts/evm/src/metatx/NormalToken.sol
++++ b/smartcontracts/evm/src/metatx/NormalToken.sol
+@@ -55,6 +55,11 @@ contract NormalToken is MetaTokenBase {
          (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
      }
  
@@ -1971,11 +1971,11 @@ index 1e4b17e..a1247e1 100644
      function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {
          if (sel == this.burn.selector) return MtxRule(FEE_CLASS_AMOUNT, 0, 36);
          return super._mtxRule(sel);
-diff --git a/smartcontracts/evm/src/metatx/UnderlyingToken.sol b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
+diff --git a/smartcontracts/evm/src/metatx/WrappedToken.sol b/smartcontracts/evm/src/metatx/WrappedToken.sol
 index 9105639..3793348 100644
---- a/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-+++ b/smartcontracts/evm/src/metatx/UnderlyingToken.sol
-@@ -174,9 +174,10 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
+--- a/smartcontracts/evm/src/metatx/WrappedToken.sol
++++ b/smartcontracts/evm/src/metatx/WrappedToken.sol
+@@ -174,9 +174,10 @@ contract WrappedToken is MetaTokenBase, IWrappedToken {
          (s[7], c[7], a[7]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
      }
  
@@ -1988,23 +1988,23 @@ index 9105639..3793348 100644
      }
  
      function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {
-diff --git a/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol b/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol
+diff --git a/smartcontracts/evm/src/zether/NormalZetherToken.sol b/smartcontracts/evm/src/zether/NormalZetherToken.sol
 index 1750015..45332b5 100644
---- a/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol
-+++ b/smartcontracts/evm/src/zether/NoUnderlyingZetherToken.sol
-@@ -69,4 +69,9 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
+--- a/smartcontracts/evm/src/zether/NormalZetherToken.sol
++++ b/smartcontracts/evm/src/zether/NormalZetherToken.sol
+@@ -69,4 +69,9 @@ contract NormalZetherToken is NormalToken, ZetherLayer {
          if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
-         return NoUnderlyingToken._mtxRule(sel);
+         return NormalToken._mtxRule(sel);
      }
 +
-+    /// @notice `NoUnderlyingToken`'s UA allowlist (`burn`); the Zether ops join it in UA-5c (CTR-ZTH-51).
-+    function _uaAllowed(bytes4 sel) internal view override(NoUnderlyingToken, ERC20MetaTx) returns (bool) {
-+        return NoUnderlyingToken._uaAllowed(sel);
++    /// @notice `NormalToken`'s UA allowlist (`burn`); the Zether ops join it in UA-5c (CTR-ZTH-51).
++    function _uaAllowed(bytes4 sel) internal view override(NormalToken, ERC20MetaTx) returns (bool) {
++        return NormalToken._uaAllowed(sel);
 +    }
  }
 ```
 
-- [ ] **Step 4: Green.** `--match-path test/ua/UAAllowlist5a.t.sol` 6 passed; `test/zether/ZetherUnderlying.t.sol`
+- [ ] **Step 4: Green.** `--match-path test/ua/UAAllowlist5a.t.sol` 6 passed; `test/zether/ZetherWrapped.t.sol`
   17 passed; `test/v2/Allowlist.t.sol` 13 passed; `test/metatx/MsgSenderLint.t.sol` 2 passed (counts unchanged);
   `'test/ua/**'` 25 suites, 257 passed.
 - [ ] **Step 5: Size gate** as Task 2 Step 5 — before the ratchet 5 errors (+19 to +34 B each), after it 0:
@@ -2017,16 +2017,16 @@ index 035100b..ed0b8c3 100644
 @@ -1,8 +1,8 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed; `<name>.init` likewise for init code over EIP-3860. Owner 2026-10-11: size optimised later (Glamsterdam); remove an entry once the contract fits. UA-4: + the UA ledger. UA-5a: + the receivers (wrapToUA, unwrapToUA, mintToUA, payWithFeeToUA), the UA allowlist, uaPayReceiverFee.",
--  "NoUnderlyingToken": 32150,
--  "UnderlyingToken": 40815,
--  "NoUnderlyingZetherToken": 40383,
--  "UnderlyingZetherToken": 51327,
--  "UnderlyingZetherToken.init": 53022
-+  "NoUnderlyingToken": 32169,
-+  "UnderlyingToken": 40842,
-+  "NoUnderlyingZetherToken": 40417,
-+  "UnderlyingZetherToken": 51354,
-+  "UnderlyingZetherToken.init": 53049
+-  "NormalToken": 32150,
+-  "WrappedToken": 40815,
+-  "NormalZetherToken": 40383,
+-  "WrappedZetherToken": 51327,
+-  "WrappedZetherToken.init": 53022
++  "NormalToken": 32169,
++  "WrappedToken": 40842,
++  "NormalZetherToken": 40417,
++  "WrappedZetherToken": 51354,
++  "WrappedZetherToken.init": 53049
  }
 ```
 
@@ -2054,13 +2054,13 @@ index a887445..2fdd219 100644
  
      function test_implementationSizes() public view {
 -        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4)
--        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 32_768);
+-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 32_768);
 +        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4); +1.2 / +2.5 KB
 +        // for the UA-5a receivers (size-baseline.json holds the exact ratchet)
-+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 36_864);
++        assertLe(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1).code.length, 36_864);
          // Transitional (P1d D2): over EIP-170 until the size work
--        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 40_960);
-+        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 45_056);
+-        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 40_960);
++        assertLe(f.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1).code.length, 45_056);
      }
  
      function _edSign(bytes32 digest) internal pure returns (bytes memory) {
@@ -2073,7 +2073,7 @@ index a887445..2fdd219 100644
 +    function test_uaPayReceiverFee_hip632Payee() public {
 +        _ledgerOn();
 +        vm.prank(alice);
-+        address t = f.createToken(IOpenFactory.TokenKind.NONE, 2, noneInit("Points", "PTS", 0, 1000, alice, address(0)), "n2");
++        address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 2, normalInit("Points", "PTS", 0, 1000, alice, address(0)), "n2");
 +        uint256 payerPk = 0xB0B;
 +        address payer = vm.addr(payerPk);
 +        address feeTo = address(0xFEE);
@@ -2116,10 +2116,10 @@ index 0000000..1eba3e8
 +import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 +import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 +import {AdminLib} from "../../src/metatx/AdminLib.sol";
-+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
++import {NormalToken} from "../../src/metatx/NormalToken.sol";
 +import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 +import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
-+import {noneInit} from "../v2/helpers/V2Fixture.sol";
++import {normalInit} from "../v2/helpers/V2Fixture.sol";
 +import {MockWallet} from "./UARegistryBase.sol";
 +import {UALedgerBase} from "./UALedgerBase.sol";
 +
@@ -2162,7 +2162,7 @@ index 0000000..1eba3e8
 +        _fund(id, amount);
 +    }
 +
-+    function _call(NoUnderlyingToken t_, MetaTxLib.UAMetaTransfer memory t, uint256 fee, address feeTo, uint256 rfUntil,
++    function _call(NormalToken t_, MetaTxLib.UAMetaTransfer memory t, uint256 fee, address feeTo, uint256 rfUntil,
 +        bytes memory err) internal returns (uint256 gas)
 +    {
 +        bytes32 d = t_.uaTransferDigest(t);
@@ -2290,9 +2290,9 @@ index 0000000..1eba3e8
 +        _runRevert(t, 0, FEE_TO, until, abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeAmount.selector, 0, 10));
 +        _runRevert(t, 11, FEE_TO, until, abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeAmount.selector, 11, 10));
 +        // `PAYABLE` off
-+        NoUnderlyingToken np =
-+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-+        IFactoryToken.TokenConfig memory c = noneInit("NP", "NP", 6, 0, address(0), address(this));
++        NormalToken np =
++            NormalToken(Clones.clone(address(new NormalToken(address(this), address(0), chainUidA, REG_L, false))));
++        IFactoryToken.TokenConfig memory c = normalInit("NP", "NP", 6, 0, address(0), address(this));
 +        c.features = (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
 +        np.initialize(address(this), 1, c);
 +        np.mintToUA(uaP, 10);
@@ -2384,11 +2384,11 @@ index 0000000..1eba3e8
 +    function test_uaPayReceiverFee_erc1271Payee() public {
 +        MockWallet impl = new MockWallet(bob, 0, 100_000, address(0)); // ECDSA by bob after burning 100 k gas
 +        address payee = Clones.clone(address(impl));
-+        NoUnderlyingToken t400 =
-+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(impl), chainUidA, REG_L, false))));
-+        t400.initialize(address(this), 1, noneInit("S", "S", 6, 0, address(0), address(this)));
++        NormalToken t400 =
++            NormalToken(Clones.clone(address(new NormalToken(address(this), address(impl), chainUidA, REG_L, false))));
++        t400.initialize(address(this), 1, normalInit("S", "S", 6, 0, address(0), address(this)));
 +        t400.mintToUA(uaP, 2 * N);
-+        NoUnderlyingToken[2] memory ts = [tok, t400];
++        NormalToken[2] memory ts = [tok, t400];
 +        _fund(uaP, N);
 +        for (uint256 i; i < 2; ++i) {
 +            MetaTxLib.UAMetaTransfer memory t = _pay(uaP, _pad(payee), N);
@@ -2444,8 +2444,8 @@ index 32879d6..219107b 100644
              _refused(t, abi.encodeWithSelector(MetaTokenBase.payWithFeeToUA.selector));
 +            _refused(t, abi.encodeWithSelector(MetaTokenBase.uaPayReceiverFee.selector));
          }
-         _refused(address(none), abi.encodeCall(NoUnderlyingToken.mint, (alice, 1)));
-         _refused(address(none), abi.encodeCall(NoUnderlyingToken.mintToUA, (UA, 1)));
+         _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1)));
+         _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1)));
 diff --git a/smartcontracts/evm/test/v2/Factory.t.sol b/smartcontracts/evm/test/v2/Factory.t.sol
 index 6ca98bf..5c964dc 100644
 --- a/smartcontracts/evm/test/v2/Factory.t.sol
@@ -2455,14 +2455,14 @@ index 6ca98bf..5c964dc 100644
  
      function test_sizes() public view {
 -        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4)
--        assertLe(address(noneImpl).code.length, 32_768);
+-        assertLe(address(normalImpl).code.length, 32_768);
 +        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4); +1.2 / +2.5 KB
 +        // for the UA-5a receivers (size-baseline.json holds the exact ratchet)
-+        assertLe(address(noneImpl).code.length, 36_864);
++        assertLe(address(normalImpl).code.length, 36_864);
          assertLe(address(f).code.length, 24_576);
          // Transitional (P1d D2): over EIP-170 until the size work
--        assertLe(address(underlyingImpl).code.length, 40_960);
-+        assertLe(address(underlyingImpl).code.length, 45_056);
+-        assertLe(address(wrappedImpl).code.length, 40_960);
++        assertLe(address(wrappedImpl).code.length, 45_056);
      }
  }
 ```
@@ -2561,16 +2561,16 @@ index ed0b8c3..787e7fb 100644
 @@ -1,8 +1,8 @@
  {
    "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed; `<name>.init` likewise for init code over EIP-3860. Owner 2026-10-11: size optimised later (Glamsterdam); remove an entry once the contract fits. UA-4: + the UA ledger. UA-5a: + the receivers (wrapToUA, unwrapToUA, mintToUA, payWithFeeToUA), the UA allowlist, uaPayReceiverFee.",
--  "NoUnderlyingToken": 32169,
--  "UnderlyingToken": 40842,
--  "NoUnderlyingZetherToken": 40417,
--  "UnderlyingZetherToken": 51354,
--  "UnderlyingZetherToken.init": 53049
-+  "NoUnderlyingToken": 32985,
-+  "UnderlyingToken": 41685,
-+  "NoUnderlyingZetherToken": 41248,
-+  "UnderlyingZetherToken": 52182,
-+  "UnderlyingZetherToken.init": 53877
+-  "NormalToken": 32169,
+-  "WrappedToken": 40842,
+-  "NormalZetherToken": 40417,
+-  "WrappedZetherToken": 51354,
+-  "WrappedZetherToken.init": 53049
++  "NormalToken": 32985,
++  "WrappedToken": 41685,
++  "NormalZetherToken": 41248,
++  "WrappedZetherToken": 52182,
++  "WrappedZetherToken.init": 53877
  }
 ```
 
@@ -2599,8 +2599,8 @@ index 4651ba4..94f045b 100644
  import {UALedgerBase} from "./UALedgerBase.sol";
  
  /// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`uaExecuteTransfer`, the named
- /// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NONE
- /// clone and on the 1:1 UNDERLYING clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
+ /// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NORMAL
+ /// clone and on the 1:1 WRAPPED clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
  /// `uaExecute` with a fee after the self-call, or the named `uaUnwrap`), and the `UA_POOL` `transferFrom` refusal.
 -/// After every call the handler replays the token's `Transfer` logs per native holder and `UATransfer` logs per
 +/// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
@@ -2626,9 +2626,9 @@ index 4651ba4..94f045b 100644
 +    uint256 internal refs;
  
      constructor(
--        NoUnderlyingToken tok_, UnderlyingToken wrp_, MockERC20 und_, UARegistry reg_, address minter_,
+-        NormalToken tok_, WrappedToken wrp_, MockERC20 und_, UARegistry reg_, address minter_,
 -        bytes32[2] memory uas_, bytes[2] memory keys_, uint16[2] memory kinds_
-+        NoUnderlyingToken tok_, UnderlyingToken wrp_, UnderlyingToken wrpL_, UnderlyingToken wrpN_, MockERC20 und_,
++        NormalToken tok_, WrappedToken wrp_, WrappedToken wrpL_, WrappedToken wrpN_, MockERC20 und_,
 +        UARegistry reg_, address minter_, bytes32[2] memory uas_, bytes[2] memory keys_, uint16[2] memory kinds_
      ) {
 -        (tok, wrp, und, reg, minter) = (tok_, wrp_, und_, reg_, minter_);
@@ -2646,7 +2646,7 @@ index 4651ba4..94f045b 100644
 +            address(this)];
      }
  
-     // ----- ops: NONE clone -----
+     // ----- ops: NORMAL clone -----
 @@ -135,6 +144,124 @@ contract UALedgerHandler is Test {
          _settle(wrp, n, n);
      }
@@ -2660,11 +2660,11 @@ index 4651ba4..94f045b 100644
 +        vm.startPrank(a);
 +        if (nativeLeg) {
 +            vm.deal(a, amount);
-+            UnderlyingToken(address(wrpN)).wrapToUA{value: amount}(address(0), amount, uas[ua % 2]);
++            WrappedToken(address(wrpN)).wrapToUA{value: amount}(address(0), amount, uas[ua % 2]);
 +        } else {
 +            und.mint(a, amount);
 +            und.approve(address(wrp), amount);
-+            UnderlyingToken(address(wrp)).wrapToUA(address(und), amount, uas[ua % 2]);
++            WrappedToken(address(wrp)).wrapToUA(address(und), amount, uas[ua % 2]);
 +        }
 +        vm.stopPrank();
 +        _settle(nativeLeg ? wrpN : wrp, 1, 1);
@@ -2673,7 +2673,7 @@ index 4651ba4..94f045b 100644
 +    function mintToUA(uint256 ua, uint256 amount) external {
 +        amount = bound(amount, 0, 1e12);
 +        vm.prank(minter);
-+        NoUnderlyingToken(address(tok)).mintToUA(uas[ua % 2], amount);
++        NormalToken(address(tok)).mintToUA(uas[ua % 2], amount);
 +        _settle(tok, 1, 1);
 +    }
 +
@@ -2692,7 +2692,7 @@ index 4651ba4..94f045b 100644
 +        bytes32 f = uas[fromIdx % 2];
 +        amount = bound(amount, 0, tok.balanceOfUA(f) * 100 / 101) / 100 * 100;
 +        uint256 fee = withFee ? amount / 100 : 0;
-+        MetaTxLib.UAMetaTransaction memory m = _uaCall(tok, f, abi.encodeCall(NoUnderlyingToken.burn, (amount)), fee);
++        MetaTxLib.UAMetaTransaction memory m = _uaCall(tok, f, abi.encodeCall(NormalToken.burn, (amount)), fee);
 +        bytes memory auth = _auth(3 + fromIdx % 2, tok.uaDigest(m));
 +        vm.prank(RELAYER);
 +        tok.uaExecute(m, auth);
@@ -2705,9 +2705,9 @@ index 4651ba4..94f045b 100644
 +    function wrapLedger(uint256 to, uint256 amount) external {
 +        amount = bound(amount, 1, 1e12);
 +        vm.prank(minter);
-+        NoUnderlyingToken(address(tok)).mint(address(this), amount);
++        NormalToken(address(tok)).mint(address(this), amount);
 +        tok.approve(address(wrpL), amount);
-+        UnderlyingToken(address(wrpL)).wrap(amount);
++        WrappedToken(address(wrpL)).wrap(amount);
 +        bool toUA = to % 5 > 2;
 +        if (toUA) wrpL.transferToUA(_id(to % 5), amount);
 +        else wrpL.transfer(vm.addr(pks[to % 5]), amount);
@@ -2724,7 +2724,7 @@ index 4651ba4..94f045b 100644
 +            amount = bound(amount, 0, wrpL.balanceOf(a));
 +            if (amount == 0) return;
 +            vm.prank(a);
-+            UnderlyingToken(address(wrpL)).unwrapToUA(address(tok), amount, to, 0);
++            WrappedToken(address(wrpL)).unwrapToUA(address(tok), amount, to, 0);
 +            _settle2(wrpL, 0, 1, tok, 1, 1);
 +            return;
 +        }
@@ -2732,7 +2732,7 @@ index 4651ba4..94f045b 100644
 +        amount = bound(amount, 0, wrpL.balanceOfUA(f) * 100 / 101) / 100 * 100;
 +        if (amount == 0) return;
 +        uint256 fee = withFee ? amount / 100 : 0;
-+        data = abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), amount, to, 0));
++        data = abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), amount, to, 0));
 +        MetaTxLib.UAMetaTransaction memory m = _uaCall(wrpL, f, data, fee);
 +        bytes memory auth = _auth(3 + fromIdx % 2, wrpL.uaDigest(m));
 +        vm.prank(RELAYER);
@@ -2831,11 +2831,11 @@ index 4651ba4..94f045b 100644
      }
  }
  
--/// T-V3-2, on the NONE clone and on the 1:1 UNDERLYING clone: `totalSupply == Σ balanceOf(native incl. UA_POOL)`,
+-/// T-V3-2, on the NORMAL clone and on the 1:1 WRAPPED clone: `totalSupply == Σ balanceOf(native incl. UA_POOL)`,
 -/// `balanceOf(UA_POOL) == Σ balanceOfUA`, replaying `Transfer` logs equals `balanceOf` for every native holder
 -/// (`UA_POOL` included), replaying `UATransfer` logs equals `balanceOfUA` for every tracked UA; `UATransfer` iff a side
 -/// is derived (checked per call by the handler); on `wrp` also `totalSupply == underlying.balanceOf(wrp)`.
-+/// T-V3-2, on the NONE clone and on the 1:1 UNDERLYING clones (`wrp`; UA-5a: the ledger-leg `wrpL`, the native-leg
++/// T-V3-2, on the NORMAL clone and on the 1:1 WRAPPED clones (`wrp`; UA-5a: the ledger-leg `wrpL`, the native-leg
 +/// `wrpN`): `totalSupply == Σ balanceOf(native incl. UA_POOL)`, `balanceOf(UA_POOL) == Σ balanceOfUA`, replaying
 +/// `Transfer` logs equals `balanceOf` for every native holder (`UA_POOL` included), replaying `UATransfer` logs equals
 +/// `balanceOfUA` for every tracked UA; `UATransfer` iff a side is derived (checked per call by the handler); each
@@ -2847,7 +2847,7 @@ index 4651ba4..94f045b 100644
          bytes32[2] memory u = [uaP, uaB];
          bytes[2] memory k = [_key(UAKinds.P256), _key(UAKinds.BIP340)];
          uint16[2] memory kd = [UAKinds.P256, UAKinds.BIP340];
--        h = new UALedgerHandler(tok, wrp, und, lreg, address(this), u, k, kd); // this fixture is the NONE token's minter
+-        h = new UALedgerHandler(tok, wrp, und, lreg, address(this), u, k, kd); // this fixture is the NORMAL token's minter
 +        h = new UALedgerHandler(tok, wrp, wrpL, wrpN, und, lreg, address(this), u, k, kd); // this fixture is tok's minter
          targetContract(address(h));
      }
@@ -3094,13 +3094,13 @@ index 031351c..aee5f45 100644
 --- a/smartcontracts/evm/test/ua/UAMetaTx3Pq.t.sol
 +++ b/smartcontracts/evm/test/ua/UAMetaTx3Pq.t.sol
 @@ -15,6 +15,8 @@ import {UARegistryBase} from "./UARegistryBase.sol";
- /// metatx3.json structs and domain, one row per PQ kind — on a `NONE` clone at the vector token address, context A,
+ /// metatx3.json structs and domain, one row per PQ kind — on a `NORMAL` clone at the vector token address, context A,
  /// the real PQ verifiers (ML-DSA on its cached expanded key). Every digest is recomputed by the token, every auth passes
  /// `requireAuthorized` under `metatx`, every `UAMetaTransfer` row executes. Gas of `uaExecuteTransfer` per kind is logged.
 +/// UA-5a (metatx.md, the `uaPayReceiverFee` paragraph): receiver-pays with an `mldsa65` payer and an `mldsa65` payee
 +/// (two PQ verifies) fits one 16,777,216-gas transaction (EIP-7825), intrinsic and calldata included.
  contract UAMetaTx3PqTest is UARegistryBase {
-     NoUnderlyingToken internal tok;
+     NormalToken internal tok;
  
 @@ -38,6 +40,10 @@ contract UAMetaTx3PqTest is UARegistryBase {
              for (uint256 p; kind <= 0x0131 && p < (kind == 0x0130 ? 1 : 2); ++p) reg.cacheExpandedKey(kind, pk, p);
@@ -3111,7 +3111,7 @@ index 031351c..aee5f45 100644
 +        for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk1, p);
 +        reg.register(0x0131, pk1, vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), 0, "");
          address token = vm.parseJsonAddress(pj, ".metatx3.token");
-         address impl = address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_A, false));
+         address impl = address(new NormalToken(address(this), address(0), chainUidA, REG_A, false));
          vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
 @@ -62,18 +68,23 @@ contract UAMetaTx3PqTest is UARegistryBase {
          m.feeRecipient = vm.parseJsonAddress(pj, _f(r, "feeRecipient"));
@@ -3148,7 +3148,7 @@ index 031351c..aee5f45 100644
 +        t.feeRecipient = vm.parseJsonAddress(pj, string.concat(p, "feeRecipient"));
      }
  
-     /// `UAMetaTransaction` rows: digest and auth (the `unwrap` itself is not on the `NONE` kind's allowlist).
+     /// `UAMetaTransaction` rows: digest and auth (the `unwrap` itself is not on the `NORMAL` kind's allowlist).
 @@ -118,4 +129,63 @@ contract UAMetaTx3PqTest is UARegistryBase {
          assertEq(tok.balanceOf(address(0xFEE)), 4 * 100_000);
          assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
@@ -3291,7 +3291,7 @@ index f9c4189..425f161 100644
 +        assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
 +    }
 +
-+    /// `unwrapToUA` rows: digest and auth (the call is not on the `NONE` kind's allowlist; it runs in UAAllowlist5a).
++    /// `unwrapToUA` rows: digest and auth (the call is not on the `NORMAL` kind's allowlist; it runs in UAAllowlist5a).
 +    function test_vectors_unwrapToUA() public view {
 +        uint256 n;
 +        for (uint256 i; vm.keyExistsJson(vj, string.concat(".unwrapToUA[", vm.toString(i), "]")); ++i) {
