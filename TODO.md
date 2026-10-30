@@ -164,6 +164,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      (DEX).
   7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next UA-Soroban / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
      NEAR → Cosmos / Sui / Aptos / Solana → Algorand (`fndsa512` once AVM v14 ships `falcon_verify` Falcon-DET-512, the same key signing deterministically there; no Falcon-DET-1024 kind, owner 2026-10-30) → TON (registry design first).
+     **Soroban job fee cap (owner question, from UA-Soroban T10 2026-10-31):** the node has no per-job resource-fee cap
+     on Soroban jobs. A first call to a fresh contract pays its 60-day TTL rent (measured 50–90 M stroops vs ≈0.7 M
+     warm); `deploy.sh` now warms every contract at deploy (controller ruling), but an operator cap per job / per lane
+     (and on other families' storage-rent paths) is an operator policy to decide. Also: NODE-JOB-08 `lane_hint` — a
+     lane-bound UA (or native relay_fee) job claimed by another lane goes `dead` on a two-lane chain.
      **Mandate epoch on every family (owner 2026-10-30, CTR-ACC-07 parity):** EVM `MandateWallet` binds the delegate's
      revoke and pay to `epoch[token]` (incremented by every set / revoke), so a revoke + re-set voids unused delegate
      signatures. Soroban gets it in the UA-Soroban round (task T6b); NEAR, Algorand, Cosmos and Solana have no epoch
