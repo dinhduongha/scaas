@@ -69,15 +69,18 @@ fn derived_positives_verify() {
 #[test]
 fn derived_negatives_refused() {
     let v = load();
-    let mut n = 0;
+    let (mut n, mut accepted) = (0, vec![]);
     for r in arr(&v["derived"]) {
         let (kind, kd) = (num(&r["kind"]) as u16, bytes(&r["keyData"]));
         for x in arr(&r["negatives"]) {
             let pop = x["verifyPop"].as_bool().unwrap();
-            assert!(!verify(kind, &kd, &b32(&x["message"]), &bytes(&x["sig"]), pop), "{} {}", r["name"], x["name"]);
+            if verify(kind, &kd, &b32(&x["message"]), &bytes(&x["sig"]), pop) {
+                accepted.push(format!("{} {}", r["name"], x["name"]));
+            }
             n += 1;
         }
     }
+    assert!(accepted.is_empty(), "negatives accepted: {accepted:?}");
     println!("{n} derived negatives refused");
 }
 
