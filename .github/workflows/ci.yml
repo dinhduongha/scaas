@@ -80,6 +80,13 @@ jobs:
         run: |
           ../../scripts/evm_libs.sh install
           ../../scripts/evm_libs.sh check
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # the Algorand adapter's unit tests read the compiled apps (git-ignored smartcontracts/algorand/out)
+      - name: Algorand artifacts for the adapter tests
+        working-directory: .
+        run: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: unit + proptest
@@ -371,6 +378,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: smartcontracts/near
+      # cargo-near depends on hidapi, whose build script needs libudev
+      - run: sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
       - name: cargo-near
         run: cargo install cargo-near --version 0.22.0 --locked
       # build + unit + near-workspaces tests on near-sandbox (fetched by near-workspaces; one sandbox at a time)
