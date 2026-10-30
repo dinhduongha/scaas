@@ -163,6 +163,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      (DEX).
   7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next UA-Soroban / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
      NEAR → Cosmos / Sui / Aptos / Solana → Algorand (`fndsa512` once AVM v14 ships `falcon_verify` Falcon-DET-512, the same key signing deterministically there; no Falcon-DET-1024 kind, owner 2026-10-30) → TON (registry design first).
+     **Mandate epoch on every family (owner 2026-10-30, CTR-ACC-07 parity):** EVM `MandateWallet` binds the delegate's
+     revoke and pay to `epoch[token]` (incremented by every set / revoke), so a revoke + re-set voids unused delegate
+     signatures. Soroban gets it in the UA-Soroban round (task T6b); NEAR, Algorand, Cosmos and Solana have no epoch
+     today (an unused delegate revoke / pay signature survives a revoke + re-set until `valid_until`) — add it in each
+     family's own UA round (Sui / Aptos / TON: check and add if missing).
   Details of the registration items:
      - **UA on non-EVM families — every kind, not only PQ** (owner 2026-10-29; rules NET-ALL-20 / NET-ALL-21,
        accounts.md "Where the records live"; today only EVM is built, NEAR / Algorand have a lazy-opened `Ua` on the
