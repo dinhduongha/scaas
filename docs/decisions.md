@@ -3687,12 +3687,22 @@ Why: a lenient decoder gives one signature many byte strings, so a front-runner 
 their canonical places, requires the canonical total length and compares `keccak256(sig)` with the hash of the re-encoding;
 it is the verifier's first check (before the rpIdHash, flags, clientDataJSON grammar and the signature), and `verify` and
 `verifyPop` share it, so it covers `register`'s PoP, the portable `msig` records (KEM / PQZ key), `requireAuthorized`
-(tokens, `msig` member slots). Not covered: `SmartKeyAccount._verifyWebAuthn` (CTR-ACC-08, Solidity `abi.decode`; an
-account, not a registry, outside the ruling) and the client mirrors (`clients/ua-rs` `verify`, `clientkeys` test helper),
-which still accept a non-canonical blob the registry refuses. Soroban: built on `ua-soroban` (T2b `657e71ab`, test
+(tokens, `msig` member slots). Follow-up `webauthn-clients` (owner 2026-10-30: every verifier of this blob agrees, so no
+client accepts a blob a registry refuses): `SmartKeyAccount._verifyWebAuthn` (CTR-ACC-08) compares the blob with its
+re-encoding right after `abi.decode` (a blob `abi.decode` cannot read reverts, which its ERC-1271 callers read as a
+refusal); `clients/ua-rs` `verify` (`webauthn_fields`, also behind the C / C++ / Qt / FRB bindings, which do not export
+`verify`) and the `clientkeys` reference verifier (`test/ua-verify.js` `webauthnFields`; `src/` only encodes) apply the
+`_fields` rule as their first check. The pure ports (`ua-py`, `ua-go`, `ua-cs`, `ua-dart`) and `scaas-node` decode no
+WebAuthn signature; the non-EVM families carry the assertion in their own formats (NEAR Borsh `Auth`, Algorand tag 4,
+Aptos `u16be(len ad) ‖ ad ‖ cd`, Sui struct, Solana precompile, TON cells, Cosmos JSON), not this ABI blob, so they are
+left as they are. Shared vectors: `signatures.json` `derived[0].negatives` gained the eight `abi-*` rows (old file in
+`vectors/ua/legacy/webauthn-clients/`). Soroban: built on `ua-soroban` (T2b `657e71ab`, test
 `webauthn_blob_canonical_only`). Test: `EccVerifiers.t.sol` `test_WebAuthnCanonicalOnly` (trailing byte, each offset
 shifted, non-zero padding after each field, each length word beyond the data, fields swapped with offsets fixed up; RED on
-the old decoder). Status: decided (owner 2026-10-30); built on `msig-pophash` in `80be9314`.
+the old decoder). Status: decided (owner 2026-10-30); built on `msig-pophash` in `80be9314`; clients, `SmartKeyAccount`,
+shared vectors and the real-verifier `msig` test (review M2) on `webauthn-clients` in `7b229c98` (ua-rs), `66210ae1`
+(clientkeys), `24d3df61` (SmartKeyAccount), `e3e25b35` (vectors), `4c6def75` (M2). Soroban still has to read the new rows:
+`ua-registry` `src/test_verify.rs` `kind_webauthn_p256_negatives_fail` (branch `ua-soroban`).
 
 NEAR and Algorand (inventory 2026-10-30): no UA registry and no registration event; an `msig` member there is a key id
 inside the structure, never registered (no member record exists), and its signature carries its key in the family's own auth

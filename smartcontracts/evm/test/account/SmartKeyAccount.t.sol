@@ -269,6 +269,63 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         assertFalse(_valid(acct, D, _withAuth(0x05, ORIGIN, ',"crossOrigin":false,')));
     }
 
+    /// CTR-UA-33 C (owner 2026-10-30, webauthn-clients): the inner blob is accepted only as
+    /// `abi.encode(authenticatorData, clientDataJSON, r, s)` byte for byte, as `WebAuthnP256Verifier._fields`. Rows 0–4
+    /// and 7 decode, leniently, to the canonical blob's own fields: only the rule refuses them. The two length words are
+    /// refused too (a revert of `abi.decode` counts as a refusal: `_ownerCall` / tokens read ERC-1271 by staticcall).
+    function test_webAuthnCanonicalOnly() public view {
+        Assertion memory x = _assertion(PASSKEY, D);
+        bytes memory sig = _enc(x);
+        assertTrue(_accepts(acct, D, _sig(0, sig)), "canonical");
+        (uint256 la, uint256 lc) = (x.authData.length, x.clientData.length);
+        (uint256 pa, uint256 pc) = ((la + 31) / 32 * 32, (lc + 31) / 32 * 32);
+        assertTrue(pa != la && pc != lc, "padding bytes to corrupt");
+        bytes memory rs = abi.encode(x.r, x.s);
+        bytes memory fa = _field(x.authData);
+        bytes memory fc = _field(x.clientData);
+        bytes[8] memory bad = [
+            bytes.concat(sig, hex"00"),
+            bytes.concat(abi.encode(uint256(0xa0), 0xc0 + pa), rs, new bytes(32), fa, fc),
+            bytes.concat(abi.encode(uint256(0x80), 0xc0 + pa), rs, fa, new bytes(32), fc),
+            _setByte(sig, 0xa0 + la),
+            _setByte(sig, 0xc0 + pa + lc),
+            _setWord(sig, 0xa0 + pa, lc + 64),
+            _setWord(sig, 0x80, la + 64),
+            bytes.concat(abi.encode(0xa0 + pc, uint256(0x80)), rs, fc, fa)
+        ];
+        for (uint256 i; i < 8; ++i) {
+            assertFalse(_accepts(acct, D, _sig(0, bad[i])), vm.toString(i));
+            if (i == 5 || i == 6) continue;
+            (bytes memory a, bytes memory c, bytes32 r, bytes32 s) = abi.decode(bad[i], (bytes, bytes, bytes32, bytes32));
+            assertEq(abi.encode(a, c, r, s), sig, string.concat(vm.toString(i), ": same fields"));
+        }
+    }
+
+    /// `isValidSignature` read as callers do (staticcall): a revert is a refusal.
+    function _accepts(SmartKeyAccount a, bytes32 digest, bytes memory sig) internal view returns (bool) {
+        (bool ok, bytes memory ret) = address(a).staticcall(abi.encodeCall(IERC1271.isValidSignature, (digest, sig)));
+        return ok && ret.length == 32 && bytes4(ret) == MAGIC;
+    }
+
+    /// `abi.encode(x)` without its offset word: length ‖ data ‖ zero padding.
+    function _field(bytes memory x) internal pure returns (bytes memory c) {
+        bytes memory e = abi.encode(x);
+        c = new bytes(e.length - 32);
+        for (uint256 i; i < c.length; ++i) c[i] = e[32 + i];
+    }
+
+    function _setByte(bytes memory b, uint256 o) internal pure returns (bytes memory c) {
+        c = bytes.concat(b);
+        c[o] = 0x01;
+    }
+
+    function _setWord(bytes memory b, uint256 o, uint256 w) internal pure returns (bytes memory c) {
+        c = bytes.concat(b);
+        assembly ("memory-safe") {
+            mstore(add(add(c, 32), o), w)
+        }
+    }
+
     function test_other_passkey_and_unknown_index_are_refused() public view {
         assertFalse(_valid(acct, D, _pk(0, PASSKEY2, D)));
         assertFalse(_valid(acct, D, _pk(5, PASSKEY, D)));

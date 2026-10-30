@@ -350,8 +350,9 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   signature has one byte string: a front-runner cannot register the same id with other `pop` bytes (another `popHash`,
   [CTR-UA-07](#CTR-UA-07)'s identical record), and the canonical `MemberSig[]` rule holds for a WebAuthn member. On EVM
   `WebAuthnP256Verifier` enforces it for `verifyPop` and `verify` alike: `register`'s PoP, the portable `msig` records,
-  `requireAuthorized` (tokens' relayed operations, `msig` member slots). `SmartKeyAccount` (CTR-ACC-08) has its own
-  decoder and is not a registry.
+  `requireAuthorized` (tokens' relayed operations, `msig` member slots). `SmartKeyAccount` (CTR-ACC-08) applies the same
+  rule in its own decoder, and so do the client verifiers (`clients/ua-rs`, the `clientkeys` reference verifier), so no
+  client accepts a blob a registry refuses (owner 2026-10-30, `webauthn-clients`).
 
 <a id="kem-keys"></a>
 <a id="CTR-UA-32"></a>**CTR-UA-32** — **KEM (chat) key records: signed, versioned, write-once in any order, never revoked, 1,601 bytes (scheme byte + key)** (owner
@@ -2021,7 +2022,8 @@ root. The key lifecycle runs through the account ([NET-ALL-05](../networks/READM
 check order are one rule for every family ([NET-ALL-04](../networks/README.md#NET-ALL-04)); custodial and mandate
 wallets remain the only place a server signs, explicitly delegated and limited.
 
-Verifier checks, in order: `authenticatorData` ≥ 37 bytes; `rpIdHash` (its first 32 bytes) equals the stored one
+Verifier checks, in order: on EVM the signature blob `abi.encode(authenticatorData, clientDataJSON, r, s)` is its
+canonical encoding ([CTR-UA-33](#CTR-UA-33) C); `authenticatorData` ≥ 37 bytes; `rpIdHash` (its first 32 bytes) equals the stored one
 (`SHA-256(rpId)`); flags UP **and** UV; `clientDataJSON` matches exactly
 `{"type":"webauthn.get","challenge":"<b64url(digest)>","origin":"<origin>"` followed by `}` (end), or by
 `,"crossOrigin":false` and then `}` (end) or `,` (more members; the string must still end in `}`, review C1-2); the origin equals a stored origin **exactly** (stored per key as
