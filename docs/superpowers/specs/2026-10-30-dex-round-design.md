@@ -1,9 +1,11 @@
 # DEX round (EVM): no minimum-fill floor, four matching modes, `mtxHybrid`, `mtxExchangeBatch` — design
 
-**Status:** draft for owner review; nothing is built. Written 2026-10-30 on branch `spec-dex` from `main` `cc07fced`
-(after the token-family rename: `NormalToken` / `WrappedToken`, `TokenKind.NORMAL` / `WRAPPED`). Rules are cited by
-ID, not restated. Every row of §0 marked **controller proposal** is the controller's and the owner may override it;
-the rows marked **owner** rest on a recorded ruling (the owner answers of 2026-10-29 are research note
+**Status:** accepted by the owner 2026-10-30 (DX7 changed to refund the taker; DX10, DX11 confirmed); every other §0
+row a controller proposal, owner may override; the plan follows without owner review
+(`docs/superpowers/plans/2026-10-30-dex-round.md`). Nothing is built. Written 2026-10-30 on branch `spec-dex` from
+`main` `cc07fced` (after the token-family rename: `NormalToken` / `WrappedToken`, `TokenKind.NORMAL` / `WRAPPED`).
+Rules are cited by ID, not restated. Every row of §0 marked **controller proposal** is the controller's and the owner
+may override it; the rows marked **owner** rest on a recorded ruling (the owner answers of 2026-10-29 are research note
 `docs/research/dex-matching-modes.md` §8, the minimum-fill ruling is CTR-DEX-14, the EIP-7702 rulings are D1–D5 of
 2026-10-30 in [accounts.md](../../contracts/accounts.md#CTR-UA-24)).
 
@@ -31,7 +33,7 @@ Each row: the decision, the options weighed, the choice and why, the cost if it 
 | DX4 | `mtxExchangeBatch` | later / now | **now**, in this round with `mtxHybrid` and the mode 3 / 4 tests: one self-call per plan, a failing plan emits `ExchangeFailed(ref, reason)`, the gas-starvation errors re-raised as in `mtxSettle` (§5) | — | owner 2026-10-29 (research §7.2, §8.3) |
 | DX5 | `HybridPlan` shape | the research sketch `{ref, taker, makers[], outsideSell, outsideFloor}` / plus `extraTokens` | **the sketch plus `address[] extraTokens`** (intermediate hop tokens that pass through the DEX, snapshotted, as `ExchangePlan`); `makers` may be empty (a listed-market taker routed only outside), `outsideSell` may be 0 (book only; the planner then uses `mtxSettle`, which is cheaper). No new error for either | an `extraTokens` nobody uses costs one empty array word | controller proposal |
 | DX6 | Events of a hybrid | a new `HybridSettled` event / reuse | **reuse**: each maker `LegSettled` / `UALegSettled` (owner sketch); the taker `ExchangeLegSettled` / `UAExchangeLegSettled` with `receivedFloor = Σ maker sold + outsideFloor`, `surplus` = the outside output above `outsideFloor`, `limitReceive` as today. The watcher and indexer already know both shapes (NODE-DEX-04; `ExchangeLegSettled` with P7) | an indexer that wants `outsideFloor` alone derives it (`receivedFloor − Σ maker sold`) | controller proposal |
-| DX7 | A route that leaves part of `outsideSell` in the DEX | give it to the makers pro rata (CTR-DEX-21) / refund the taker / revert | **revert `ConservationBroken(sellToken)`**: makers get exactly their price (owner: "no surplus to makers"); the taker's pull is already recorded at `sellFill`, so there is nothing to refund into. The route must spend exactly `outsideSell` (exact-input swaps, or an executor) | a planner bug costs one failed plan (relayer gas) | controller proposal (follows DX2) |
+| DX7 | A route that leaves part of `outsideSell` in the DEX | give it to the makers pro rata (CTR-DEX-21) / refund the taker / revert | **refund the taker, only if what it really sold still satisfies its signed order** (owner answer and clarification 2026-10-30): `leftover` of A goes back to the taker's `from`, fee-free; the taker's sold part `sold = taker.fill − leftover` must be > 0 (`ZeroFill`), ≥ its `minFill` (`BelowMinFill`; CTR-DEX-14) and at a price no worse than its limit (`PriceLimit`), else the whole hybrid reverts — there is no partial refund path. Makers never receive the leftover, each maker's own `minFill` / limit holds as in `mtxSettle`. `leftover > outsideSell` (A from nowhere) or A below its expected balance stays `ConservationBroken(A)`. Observable in the taker's `ExchangeLegSettled`: `sold` is the sold part, `refund` includes the leftover (§4.2) | the refunded part stays counted in the token's `pulled[h]` (a GTC taker's capacity shrinks by it; §14) | owner 2026-10-30 |
 | DX8 | Self-trade and `LISTED_POOLS` in a hybrid | the exchange path's rules / `mtxSettle`'s | **`mtxSettle`'s self-trade rule** (no maker's `from` equals the taker's; makers may share a signer), because it is a book settlement plus a route. `LISTED_POOLS` is read from the **taker** only (or the admin's `listedOnly`): the route cannot change what a maker gets | a maker that wants listed pools only cannot force it in a hybrid (it gets its exact price anyway) | controller proposal |
 | DX9 | Fees of a hybrid | as `mtxSettle` / as the exchange path | **makers as `mtxSettle`** (`ceil(recv · fee / 10⁶)` on their exact receive); **taker once on its floor** (`Σ maker sold + outsideFloor`), surplus fee-free (CTR-DEX-21); relayer share to `msg.sender` (CTR-DEX-17) | — | controller proposal (follows CTR-DEX-17 / -21) |
 | DX10 | `mtxExchangeBatch` form | path (a) only / (a) and (b) items; parallel arrays / an item struct | **path (a) only, parallel arrays** `mtxExchangeBatch(ExchangePlan[] ps, Interaction[][] xs) returns (bool[] ok)` (owner sketch), `LengthMismatch` on unequal lengths, `NothingSettled` when no plan succeeds; no `mtxHybridBatch` and no executor items (add when the planner shows the need) | one transaction per executor plan or hybrid until then | controller proposal |
@@ -128,7 +130,7 @@ Two executions, both one transaction (DX2):
 | Used for | mode 3 on a listed market (the default) | a hybrid mixed with CoW counterparts, or any shape `mtxHybrid` cannot express |
 | Market | must be listed (`MarketNotListed`) | both tokens known |
 | Maker price | computed on chain, `⌈fill · receiveAmount / amount⌉`, as `mtxSettle` | the submitter's floor, only checked ≥ the signed limit |
-| Maker surplus | none (DX7: a leftover of the taker's sell token reverts) | pro rata of `excess` in its receive token |
+| Maker surplus | none (DX7: a leftover of the taker's sell token is refunded to the taker, never to a maker) | pro rata of `excess` in its receive token |
 | Taker | sells `Σ maker receive + outsideSell` (`FillMismatch`), floor `Σ maker sold + outsideFloor`, every unit above `outsideFloor` | floor chosen by the submitter, pro-rata surplus |
 | Events | makers `LegSettled`, taker `ExchangeLegSettled` | every leg `ExchangeLegSettled` |
 | Self-trade | as `mtxSettle` (DX8) | distinct `from`s across all legs |
@@ -203,23 +205,40 @@ SCaaS Path A / Path B and outside-token (`DexOrder`) legs all work as in `mtxSet
    failure reverts `InteractionFailed` (DX11), `approve` allowances reset to 0 after the last one; (b) `transfer`
    `outsideSell` of A to `executor` (listed if `onlyListed`, `TargetNotListed`) and call
    `exchangeCallback(ref, [A], [outsideSell], [B], [outsideFloor], data)`.
-5. **Outside output.** `out = bal(B) − snap(B) − Σ fill_i − Σ refund_i(B)`; `out < outsideFloor` ⇒
-   `InsufficientOutput(B)`. A must now hold `snap(A) + Σ recv_i + refund(taker)`, else `ConservationBroken(A)` (DX7).
+5. **Outside output and the taker's leftover (DX7), in this order:**
+   1. `out = bal(B) − snap(B) − Σ fill_i − Σ refund_i(B)`; `out < outsideFloor` ⇒ `InsufficientOutput(B)` (the
+      floor holds with or without a leftover).
+   2. `base = snap(A) + Σ recv_i + refundB(taker)` (`refundB` = the taker's Path B remainder, 0 on Path A);
+      `bal(A) < base` ⇒ `ConservationBroken(A)`; `leftover = bal(A) − base`; `leftover > outsideSell` ⇒
+      `ConservationBroken(A)` (the route cannot hand back more than it was given).
+   3. With `leftover > 0`, the taker's sold part `sold = taker.fill − leftover` must satisfy its signed order, else
+      the whole hybrid reverts: `sold > 0` (`ZeroFill(h)`); `sold ≥ minFill` (`BelowMinFill(h)`; the remainder clause
+      cannot apply, because `sold < taker.fill ≤ amount − pulled`, so FOK can never be refunded); `sold · receiveAmount
+      ≤ recv · amount` (`PriceLimit(h)`; `recv` = the floor of step 1 — implied by the token's check at the pull, since
+      `sold < taker.fill`, asserted anyway in one internal function `_takerSoldCheck(taker, leftover)`). The errors carry the taker's order hash, as the token's do.
+   4. Each maker's `minFill` and limit were checked at its pull (step 3) on its exact fill; the leftover never
+      reaches a maker.
 6. **Pay.** Makers as `mtxSettle` (`_pay`: `recv_i − dexFee_i` to the destination, fee split, Path B refund, event
-   `LegSettled` / `UALegSettled`). The taker: `recv − dexFee + (out − outsideFloor)` to its destination, its fee split,
-   its Path B refund, event `ExchangeLegSettled` / `UAExchangeLegSettled(ref, h, from, to, sold, receivedFloor = recv,
-   surplus = out − outsideFloor, dexFee, refund, limitReceive = ⌈sold · receiveAmount / amount⌉)`.
+   `LegSettled` / `UALegSettled`). The taker: `recv − dexFee + (out − outsideFloor)` to its destination, its fee split
+   (the fee is on `recv` only: the refund carries no fee), `refund = refundB + leftover` in A to its `from` (as a Path
+   B refund), event `ExchangeLegSettled` / `UAExchangeLegSettled(ref, h, from, to, sold, receivedFloor = recv,
+   surplus = out − outsideFloor, dexFee, refund, limitReceive = ⌈sold · receiveAmount / amount⌉)` with `sold =
+   taker.fill − leftover`. A client sees the refund as `refund − (amount − taker.fill)` on Path B, `refund` on Path A;
+   the token's `TradeFilled` still shows the pulled `taker.fill`, and `pulled[h]` keeps counting it (the token cannot
+   be told to give capacity back).
 7. **Conservation** over every snapshotted token (`ConservationBroken`).
 
 Implementation note: steps 2–7 are the exchange path's `_exchangeIn` / `_exchangeOut` with the makers' floors computed
-on chain and the excess of A required to be 0 (B has one receiver, the taker, so CTR-DEX-21 gives it the whole excess
-unchanged); only the check step and the makers' event differ. The internal helpers take `submitter` as a parameter
+on chain and the excess of A, instead of being distributed, refunded to the taker under step 5's checks (B has one
+receiver, the taker, so CTR-DEX-21 gives it the whole excess unchanged); only the check step, step 5.2–5.3 and the
+makers' event differ. The internal helpers take `submitter` as a parameter
 (they read `msg.sender` today), which §5 needs too. If the stack limit bites (`mtxExchangeVia` is at it, via_ir off),
 the locals move into a memory struct; `via_ir` stays off (DX17).
 
 ### 4.3 Errors and events
 
-New: none for `mtxHybrid` beyond DX11's `InteractionFailed`. Reused: `MarketNotListed`, `TokenMismatch`, `SelfTrade`,
+New: none for `mtxHybrid` beyond DX11's `InteractionFailed`; the refund checks reuse `ZeroFill`, `BelowMinFill`,
+`PriceLimit` (declared on `ISCaaSDex`, raised with the taker's order hash) and `ConservationBroken(A)`. Reused: `MarketNotListed`, `TokenMismatch`, `SelfTrade`,
 `DuplicateOrder`, `FillMismatch`, `WrongRelayer`, `DexMismatch`, `LegShapeUnknown`, `UALegNotLedger`,
 `UAReceiveNotLedger`, `BadFlags`, `Overfill`, `BelowMinFill`, `PriceLimit` (Path B), every `TradeLib` / token error
 (they carry the order hash), `ForbiddenTarget`, `ForbiddenSelector`, `TargetNotListed`, `InsufficientOutput`,
@@ -421,8 +440,14 @@ expectations follow DX11):
   their prices; taker IOC and FOK; a UA maker (shape 1) and an outside-token maker; a stale maker reverts the whole
   plan with its `orderHash`; `excess_A ≠ 0` paid to the makers pro rata.
 - **`mtxHybrid` / `Via`.** Makers at `⌈fill · receiveAmount / amount⌉`, `LegSettled` per maker; the taker's
-  `ExchangeLegSettled` with floor and surplus; all output above `outsideFloor` to the taker, makers' surplus 0; route
-  leaves A ⇒ `ConservationBroken(A)`; output below `outsideFloor` ⇒ `InsufficientOutput(B)`; `FillMismatch`;
+  `ExchangeLegSettled` with floor and surplus; all output above `outsideFloor` to the taker, makers' surplus 0; the
+  DX7 refund: a route leaving A with the sold part ≥ `minFill` at the limit settles and refunds the leftover to the
+  taker's `from` (event `sold` / `refund`, no fee on it, makers' balances exactly their price), the sold part below
+  `minFill` ⇒ `BelowMinFill`, a FOK taker with any leftover ⇒ `BelowMinFill`, a sold part of 0 ⇒ `ZeroFill`, the sold
+  part at a worse price ⇒ `PriceLimit` (unreachable through the entry — the floor already met the limit on the
+  larger full fill — so this case drives the step-5.3 check, one internal function `_takerSoldCheck`, through a test
+  harness that exposes it), a leftover
+  above `outsideSell` ⇒ `ConservationBroken(A)`, the refund on the executor path (b); output below `outsideFloor` ⇒ `InsufficientOutput(B)`; `FillMismatch`;
   `MarketNotListed` (a known but unlisted pair); `SelfTrade` taker = maker, two makers of one signer settle;
   `DuplicateOrder`; taker IOC (closed at the pull) and FOK; taker Path B (refund) and a Path B maker; maker relayer
   binding; maker fees on their receive, the taker's once on its floor, the surplus fee-free; `LISTED_POOLS` on the
@@ -482,7 +507,7 @@ line (ratchet). `TradeLib` shrinks slightly; the token kinds do not move (`Trade
 | Dust fills now that the floor is gone | CTR-DEX-14's accepted cost: the submitter pays gas, the maker gets its price, the fee rounds up; node policy (NODE-DEX-15) |
 | A fake wall with a large signed `minFill` | the node's `min_fill` bucket keeps it out of best bid / ask (NODE-DEX-15) |
 | A batch item replays an order an earlier item filled | the token's fill accounting (`pulled`) refuses it (`OrderClosed` / `Overfill`); that plan only |
-| A leftover of the taker's sell token in a hybrid | `ConservationBroken(A)` (DX7), never paid to anyone |
+| A leftover of the taker's sell token in a hybrid (DX7) | refunded to the taker only if its sold part is > 0, ≥ its `minFill` and within its limit, else the hybrid reverts; never paid to a maker; no fee on it. A planner cannot sell a taker below its own bounds this way. What it can do: the refunded part stays counted in the token's `pulled[h]`, so with a GTC Path A taker a submitter can close the order after selling only `minFill` of it (like a cancel after a minimum fill at ≥ the signer's price; no funds lost). Bounded by the relayer binding (CLI-SGN-35 defaults it to the venue), the signer's own `minFill`, and the venue's rule that hybrid takers are incoming orders (§7.2) |
 | A receive-only outside token with a transfer fee | unchanged residual (CTR-DEX-21, review C6-4): list exact-transfer tokens only |
 | A stray balance in the DEX | the sweep rule (CTR-DEX-20) is unchanged; the new entries snapshot their tokens the same way |
 | The executor's pool callback called by a non-pool | CREATE2 pool check (`NotPool`); v4 only from the pool manager; the executor holds nothing between calls |
@@ -519,9 +544,9 @@ Unchanged in this round. Per family:
 
 ## 17. Open questions for the owner
 
-None blocks the build. The rows most likely to be overridden are DX7 (a hybrid's leftover reverts instead of being
-paid out), DX10 (no executor items and no hybrids in the batch), DX11 (wrapping changes the built `mtxExchange`
-revert shape) and DX16 (the fork test is opt-in, not in CI).
+None open. Owner answers 2026-10-30: DX7 changed (refund the taker's leftover when its sold part still satisfies
+its `minFill` and limit, else revert), DX10 (path (a) only) and DX11 (`InteractionFailed`) confirmed, the spec
+accepted. Recorded, not a question: DX7's refund leaves the refunded part counted in `pulled[h]` (§14).
 
 ## 18. Conflicts noted in the inputs
 
