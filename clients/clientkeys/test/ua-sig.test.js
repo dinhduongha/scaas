@@ -15,7 +15,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
-import { int, B, eq, attempt, wordAt, bytesAt, ED_L, leInt, edNoble, ed25519Ok, verify, SECP_N, nativeOk } from './ua-verify.js';
+import { int, B, eq, attempt, wordAt, bytesAt, webauthnFields, ED_L, leInt, edNoble, ed25519Ok, verify, SECP_N, nativeOk } from './ua-verify.js';
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('signatures.json', dir)));
 const FUZZ = JSON.parse(readFileSync(new URL('ed25519_fuzz.json', dir)));
@@ -63,6 +63,24 @@ test('derived kinds: every negative fails', () => {
     const pops = ['chain-bound-pop', 'pop-v1-purpose', 'other-chain-uid', 'other-registry'];
     assert.deepEqual(r.negatives.filter((n) => pops.includes(n.name)).map((n) => [n.name, n.verifyPop, n.message]),
       [['chain-bound-pop', true, r.pop.message], ['pop-v1-purpose', true, r.pop.message]], r.name);
+  }
+});
+
+// CTR-UA-33 C (owner 2026-10-30): the abi-* rows are refused by the canonical-encoding rule itself — webauthnFields, the
+// verifier's first check, refuses each — and all but the two length words decode, leniently, to the positive's own fields.
+test('webauthn-p256: the abi-* negatives are refused by the canonical rule alone', () => {
+  const r = V.derived.find((x) => x.kind === 0x0100);
+  const pos = B(r.sigs[0].sig);
+  assert.ok(webauthnFields(pos));
+  const rows = r.negatives.filter((n) => n.name.startsWith('abi-'));
+  assert.equal(rows.length, 8);
+  for (const n of rows) {
+    const b = B(n.sig);
+    assert.equal(n.message, r.sigs[0].message, n.name);
+    assert.equal(webauthnFields(b), null, n.name);
+    if (n.name.includes('length-beyond')) continue; // no decoder reads the canonical fields from these
+    const lenient = [bytesAt(b, 0, 0), bytesAt(b, 0, 32), b.subarray(64, 128)];
+    assert.ok(eq(concatBytes(...lenient), concatBytes(...webauthnFields(pos), pos.subarray(64, 128))), `${n.name}: same fields`);
   }
 });
 

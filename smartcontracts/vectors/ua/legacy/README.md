@@ -16,3 +16,7 @@
   and the p256 member of `pq_signatures.json` `msig.hybrid` carried their key data, which the registry now refuses: it
   reads a registered member's key from its record). The live files change only those `MemberSig` blobs (the same
   signatures) and add the negative set `derived-member-keydata`.
+- webauthn-clients (2026-10-30, owner, CTR-UA-33 C): `webauthn-clients/signatures.json` as it stood before the eight
+  `webauthn-p256` `abi-*` negatives (the canonical WebAuthn blob re-encoded off the canonical layout: trailing byte, each
+  offset shifted, non-zero padding after each field, each length word beyond the data, fields swapped). The live file only
+  appends those rows to `derived[0].negatives` (91 → 99 derived negatives).

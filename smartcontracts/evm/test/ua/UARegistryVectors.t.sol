@@ -69,7 +69,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         }
         assertEq(rows, 10, "derived kinds");
         assertEq(nSigs, 22, "derived sigs");
-        assertEq(nNegs, 91, "derived negatives");
+        assertEq(nNegs, 99, "derived negatives");
     }
 
     function _derivedRow(uint256 i) internal {
