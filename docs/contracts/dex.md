@@ -163,7 +163,7 @@ costs its submitter the gas, pays the maker its price, and its fee rounds up ([C
 default `minFill` to the market's minimum size ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35)). The
 non-EVM programs never had the floor ([section 11](#11-non-evm-dex-programs)).
 
-Status **BUILT** (DEX round, 2026-10-30, branch `dex-round`, commit `24a53454`): `TradeLib.record` refuses `move != amount −
+Status **BUILT** (DEX round, 2026-10-30, branch `dex-round`, task T1): `TradeLib.record` refuses `move != amount −
 pulled && move < minFill` (`BelowMinFill`) and has no received-side line, `SCaaSDex._calc` Path B refuses `sold != amount &&
 sold < minFill`, `MIN_FILL_PPM` is deleted, the node's `min_fill` returns `minFill` ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)) and
 clientkeys shows the signed `minFill` ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35)). Tests: a fill below half settles, an
