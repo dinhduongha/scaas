@@ -1,6 +1,6 @@
 # Soroban UA base (4b) and the Soroban registry of UA-8 step 2 — design
 
-**Status:** draft for owner review, 2026-10-30. Nothing is built. Written from `main` at `920f13d0`. Rules are cited by
+**Status:** accepted by the owner 2026-10-30 (S6 UA ledger in each token and S10 msig members confirmed as specified; every other §0 row stands as a controller proposal, owner may override); the plan follows without owner review. Nothing is built. Written from `main` at `920f13d0`. Rules are cited by
 ID, not restated. Every choice marked **controller call** is the controller's; the owner may override it. A choice
 that an owner ruling already decides cites the ruling.
 
