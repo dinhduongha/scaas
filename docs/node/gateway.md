@@ -147,19 +147,22 @@ from the store: before that, the built gateway's in-memory `mpsc` feeds only the
 door A work is not journaled and has no digest guard until it becomes a `~gateway` job).
 
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
-registry's four writes.** Gateway `call` jobs in `~gateway` go only to the chain's `chain.ua_registry`, for the four
+registry's four writes.** Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the four
 UA-8 writes `register` (`0x0c936361`), `setKemKey` (`0x2d21c58e`), `storePqzPop` (`0x7fac161a`) and `setPqzKey`
 (`0xbde71760`) — all relayable by anyone, gasless, no fee ([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)); `POST
 /v1/ua/register` builds the `register` calldata from the checked body. A relayed PQ registration whose `eth_estimateGas`
 of the full call exceeds min(block gas limit, relayer per-transaction cap) is split: `register` without `pqzPop`, then
 `storePqzPop` (the SCaaS testnet: 200 M block, relayer cap `max_gas_per_tx` 64 M, so every PQ registration with its
 proof, 84.8–109.1 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays all four writes (call
-table rows) and the sponsor policy below covers all four; built on `ua8` (commit TBD). It is a gateway
+table rows, guard rule `Rule::UaRegistry`; a relayed `register` with its proof over the cap is refused `UA_REGISTER_SPLIT: <why>;
+send register without pqzPop, then storePqzPop`) and the sponsor policy below covers all four; the call-table rows and the refusal
+are built on `ua8` (`64c233d4`); **this route and the sponsor policy are not built** (no gateway route, no sponsor-policy code;
+`TODO.md`), so relaying goes through job-API `call` jobs today. It is a gateway
 capability, not an `allow_call` grant ("gateway capability, not a namespace grant") ([NODE-JOB-09](job-api.md#NODE-JOB-09) is unchanged for namespaces);
 `job_live_call` dedupes retries; every registration lives in `~gateway`, so the per-namespace index
 ([NODE-JOB-13](job-api.md#NODE-JOB-13)) dedupes them node-wide. Sponsored registration spam is bounded by the per-chain
 registration quota and the sponsor budget; the one `~gateway` `call` sponsor policy shape allowed is `contract =
-chain.ua_registry`, `selector` ∈ {`register`, `setKemKey`, `storePqzPop`, `setPqzKey`}, `max_tx_per_payer_hour = 0`
+chain.ua_registry` (node config `[[chains]] ua_registry`), `selector` ∈ {`register`, `setKemKey`, `storePqzPop`, `setPqzKey`}, `max_tx_per_payer_hour = 0`
 ([sponsorship.md#admin](sponsorship.md#admin)). The universal-account migration uses this route
 ([contracts/accounts.md#migration](../contracts/accounts.md#migration)).
 

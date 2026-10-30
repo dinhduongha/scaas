@@ -60,10 +60,32 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          `portable.json`, `ua-rs`, zether-prover, `UAKinds` / `UARegistry` with `storePqzPop`, `setPqzKey`, `setKemKey`, the gas
          log, ten client libraries, node call-job test, e2e scripts), A12 (docs, decisions, this TODO) and A13 (whole-branch gates:
          forge per set, size gate, client suites) done; the final whole-branch review (2026-10-30, two parts) is done and the
-         **final fix wave** is running (owner rulings 2026-10-30: R-node, R-cross-set, R-7702, `docs/decisions.md` CTR-UA-31,
-         CTR-UA-16, CTR-UA-24), then the owner's go to merge. Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
+         **final fix wave is done** (owner rulings 2026-10-30: R-node, R-cross-set, R-7702 superseded the same day by the EIP-7702
+         ruling D1 (registry only), `docs/decisions.md` CTR-UA-31, CTR-UA-16, CTR-UA-07, CTR-UA-24; contracts / node / clientkeys /
+         e2e.py `e6cdc13e` … `128becef`, runner / client pins / docs `2d819009` … `95b00fde`, integration and gate logs after them);
+         **next: the re-review of the fix wave**, then the owner's go to merge. Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
+     - **EIP-7702 work on branch `no7702` — the next item after the `ua8` merge, before the token-family rename** (owner rulings
+       D1–D5 of 2026-10-30, after the 2026-10-29 EIP-7702 hot-wallet drain: "an EOA must really sign — no delegation at all; an EOA must
+       not run code"; audit `scratchpad/eip7702/audit-2026-10-30.md`, moves into `docs/research` with the branch; `docs/decisions.md`
+       CTR-UA-24). On `ua8` only the registry is done (D1: a designator ⇒ own-key ECDSA, never ERC-1271, `0c113cfc`, `128becef`). On
+       `no7702`: D1 on the address path (`SigCheck.isValid` and its callers `MetaTxBase`, `MtxPipelineLib`, the DEX; `MtxRelayFee`
+       `isContract`; the node's DEX venue `valid_sig` and guard `has_code`; clientkeys `signDigest` → typed signing + wallet guidance;
+       flip `UALedger.t.sol test_7702_nativeFrom`, `UAReceiverFee.t.sol test_uaPayReceiverFee_7702Payee`, venue
+       `a_7702_maker_signs_with_its_key_or_its_delegate`); D2 refuse a designator caller wherever a caller is authority
+       (`MetaTxBase._msgSender`, `SmartKeyAccount`, `SCaaSDex`, `OpenFactory` raw `msg.sender` checks); D3 guard only the relayer-binding
+       check (`MtxPipelineLib`); D4 refuse designator relay targets and native-unwrap recipients (`UnderlyingLib`); D5 deployer- /
+       registrar-chosen code checks use `isContract`. D6 (Algorand rekeyed sender) dropped: record only (`e7859ad1`, NET-ALL-83).
+       **Chain level:** EIP-7702 **off on the SCaaS testnet 7622 at the fs3 Task 13 reset**, which must start from
+       `/home/dockers/mba-chain-nethermind/genesis.json` (`eip7702TransitionTimestamp` removed 2026-10-30; backup
+       `genesis.json.bak-pre-no7702-20261030`) — **never from a scratchpad genesis copy** (17 stale copies still enable 7702); **off on
+       mainnet 22776 at launch** (no config in the repo yet).
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`), TON passkey relays (P-256
-       in the node), relay-fee minimum before mainnet.
+       in the node), relay-fee minimum before mainnet. **UA-8 (owner ruling R-node, 2026-10-30):** the gateway route
+       `POST /v1/ua/register` and the `~gateway` sponsor policy for the four registry selectors (`register`, `setKemKey`,
+       `storePqzPop`, `setPqzKey`; NODE-GW-03, `sponsorship.md#admin`) **do not exist in code** — the ruling asked to extend them, but
+       there is no gateway route and no sponsor-policy code to extend; the node relays the four writes through job-API `call` jobs only
+       (`Rule::UaRegistry`, `[[chains]] ua_registry`, `UA_REGISTER_SPLIT`, `64c233d4` on `ua8`). Build the route (calldata from the
+       checked body, split rule) and the sponsor policy; optional: registry revert names (`UAPoP`, …) in `abi::decode_revert`.
      - **pqz-core:** fs3 Task 12 (final gate + merge) → Task 6 (reproduction package); its heavy gate interleaves with
        the forge runs for the `capped` slots.
      - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
@@ -183,15 +205,20 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   gas log with the `rreg` stand-in, plus ≈ 2.4 M regular gas for the ≈ 3.65 M verify), right at a 60 M block; **the gen-2 variant**
   (`storePqzPop` on a gen 2 that enables `0x0142` for a gen-1 record, 57,729,122 in the gas log with the stand-in) is **≈ 60.1 M, above a
   60 M block** (a gen-1 PQ holder's key could then never be proven on such a chain); `n2304-kmax4096`
-  has ≈ 7 M headroom. Measure the real call (Task 13) before choosing `n2816-kmax65536` for a chain whose block limit is
+  has ≈ 7 M headroom. **No split option for `storePqzPop` itself:** through a relayer its cap is min(block gas limit,
+  `max_gas_per_tx`), and a `storePqzPop` over it (n2816 ≈ 57.7–60.1 M) gets the node's ordinary gas refusal — `UA_REGISTER_SPLIT`
+  applies only to `register` with its proof, and the proof cannot be split further (final fix A concern 1, part 1 m1). Measure the real call (Task 13) before choosing `n2816-kmax65536` for a chain whose block limit (or relayer cap) is
   60 M; this concerns 60 M-block chains, **not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`)**. `e2e.py` takes the full path only when
   `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise (or on an estimate error) `register` + `storePqzPop` (a full
   registration with the proof is 84.8–109.1 M). Coverage note: on the SCaaS testnet (200 M) `e2e.py` takes the **full** path, so the inline `register` + proof runs
   in Task 13; the paths that have never run on a chain with the real `R_REG` verifier are the **split** one — `register` without `pqzPop`
   then `storePqzPop`, which `e2e.py --split` forces — and the **later PQZ key**: `setPqzKey` + `storePqzPop` with the `R_REG` proof over
-  `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, h))`, which `e2e.py` gains as its own step in the UA-8 final fix wave (an ML-DSA-65 UA
-  registered without a PQZ key, then `setPqzKey`, `storePqzPop`, `pqzKeyOf(ua).proven`); run both once on the SCaaS testnet in Task 13 (an
-  anvil has no PQZ precompile). (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
+  `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, h))`, which `e2e.py` now has as its own step (`a651600f`: `dave`, an ML-DSA-65 UA
+  registered without a PQZ key, then `setPqzKey`, a third party's `storePqzPop`, `pqzKeyOf(ua).proven`, `checkedOf` = (1, 1, 0)); run both once on the SCaaS testnet in Task 13 (an
+  anvil has no PQZ precompile). (2b) **A replaced `setPqzKey` key survives only in its log** (owner ruling R-cross-set, `cc965914`):
+  when `setPqzKey` replaces an other-set key that `setPqzKey` itself stored, the old key, hash and signature are overwritten in
+  state; the record survives only in its `UAPqzKeyAdded` log (and on the chains of its own set) — a replaced `register` key is kept
+  for `registrationOf`. Watch: decide whether to keep it in state if logs get pruned (EIP-4444) before anyone copies it. (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
   message's pre-image (`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))`), not the `R_REG`
   relation, statement or precompile. Edit the comment with the next pqz-core change (a doc-only edit in a core file would
   force the full pqz-core gate; owner rule: full gate only for core changes). Decision: `docs/decisions.md` CTR-UA-31 (the plan decision
@@ -215,7 +242,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   key registered in `UARegistry` as a signed versioned record, copyable the same way; short design
   [`2026-10-25-ua8-portable-registrations.md`](docs/superpowers/specs/2026-10-25-ua8-portable-registrations.md), plan
   [`2026-10-30-ua8-portable-registrations.md`](docs/superpowers/plans/2026-10-30-ua8-portable-registrations.md). **Step 1 (EVM) is
-  built on branch `ua8` (A1–A13 done, final review done, final fix wave running; not merged, not pushed)**; step 2 (Soroban, Part B) is open.
+  built on branch `ua8` (A1–A13 done, final review done, final fix wave done, its re-review next; not merged, not pushed)**; step 2 (Soroban, Part B) is open.
 - [ ] **UA-7: PQ chat sessions** (owner 2026-10-25, queued **after 5h**; **UA-7 can now read a UA's chat key with
   `UARegistry.kemKeyOf(ua)` (the highest stored version) and `kemKeyAt(ua, version)`**, UA-8 step 1 on branch `ua8`; wrap a session
   key to any stored version — every stored version is usable, no revocation): application contract `PqChat` — one

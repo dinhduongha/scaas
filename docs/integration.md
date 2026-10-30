@@ -830,7 +830,8 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
 3. **Anyone** submits `register(kind, keyData, attrs, pop, pqzPop)`: the subject self-paid, a relayer job, a sponsor,
    or the node gateway `POST /v1/ua/register {chain, kind, keyData, attrs, pop, pqzPop?}` (gasless,
    [NODE-GW-03](node/gateway.md#NODE-GW-03); the node relays all four registry writes, `register`, `setKemKey`, `storePqzPop` and `setPqzKey`, owner 2026-10-30
-   ruling R-node). Front-running yields the identical record or a revert. When the full call with the proof does not fit one
+   ruling R-node: the node's call-table rows are built, the gateway route and its sponsor policy are not yet, `TODO.md`; a relayed `register`
+   with its proof over the cap is refused `UA_REGISTER_SPLIT`). Front-running yields the identical record or a revert. When the full call with the proof does not fit one
    transaction — its estimate exceeds the block gas limit for a direct submitter, or min(block gas limit, the relayer's per-transaction
    cap) through a relayer (the SCaaS testnet relayer cap is 64 M, so a relayed PQ registration splits there) — `register` goes without
    `pqzPop` and `storePqzPop(ua, pqzPop)` follows. The **same call registers the UA on any other chain** (build it from the first

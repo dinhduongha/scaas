@@ -883,8 +883,9 @@ a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or th
 limit (through a relayer: min(block gas limit, the relayer's per-transaction cap), owner 2026-10-30 ruling R-node) the client registers
 with an empty `pqzPop` and then calls `storePqzPop(ua, pqzPop)`. A PQ signer is registered together
 with its PQZ key by default; a holder registered without one may add it later, once, with `pqzKeyRecordMessage` + `setPqzKey` (**one PQZ key per UA,
-ever** on chains of one PQZ parameter set — a copied key of another set's length may be replaced once by `setPqzKey`, owner 2026-10-30
-ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum signs `memberDigest(ua, message)`; a code-less native (EOA) member — or an EIP-7702-delegated one with its root key (owner 2026-10-30 ruling R-7702) — signs
+ever** on chains of one PQZ parameter set — a copied unproven key of another set's length may be replaced by `setPqzKey` where `0x0142`
+has a verifier (it then emits `UAPqzKeyAdded`; the replaced `register` key stays in `registrationOf`, so read the current key with
+`pqzKeyOf`), owner 2026-10-30 ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum signs `memberDigest(ua, message)`; a native (EOA) member — code-less, or EIP-7702-delegated, always with its own key (owner 2026-10-30 ruling D1: the registry never takes a designator's ERC-1271) — signs
 `personalSignDigest(memberDigest)` through `personal_sign` for the three portable purposes only (`pop` v2, `kem`, `pqz-key`; `isPortablePurpose`), so the
 wallet shows a `personal_sign` prompt, not typed data. KEM versions come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)). An explicit export of the 32-byte leaf (never the
 seed) feeds the native prover or the organization's key oracle — PQ Zether proving is **not** in JS; envelopes reuse the
