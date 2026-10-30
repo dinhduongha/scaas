@@ -2,7 +2,9 @@
 # UA-3 e2e on a dev chain (accounts.md CTR-UA-22; T-ZET; UA-6: BLS12-381 only, no `authRef`): a fresh anvil (chain
 # 31337, osaka, 64 KiB code), `deploy.sh evm` with DEPLOY_ZETHER=1 (the UA registry with its verifiers, the precompile
 # probe through eth_call, the Zether stack), then on that chain:
-#   1. a `zether-bls12381` UA: clientkeys makes the PoP against the deployed registry, a relayer submits it;
+#   1. a `zether-bls12381` UA: clientkeys makes the portable PoP (UA-8 P1: no chain id, chain uid or registry), a relayer
+#      submits it through `register(kind, keyData, UAAttrs, pop, pqzPop)` (a Zether UA holds no PQZ or KEM key: no
+#      `storePqzPop`, whatever the block gas limit);
 #   2. a NONE_ZETHER token from the deployed factory shields to it (script/ZetherE2E.s.sol).
 # Needs anvil, forge, cast, jq, node (clients/clientkeys with its node_modules). PORT (default 18545) for the anvil.
 set -euo pipefail
@@ -20,20 +22,20 @@ DEPLOYER="$(cast wallet address --private-key "$PRIVATE_KEY")"
 DEPLOY_ZETHER=1 "$ROOT/smartcontracts/scripts/deploy.sh" evm "$RPC" --silent >/dev/null
 J="$ROOT/smartcontracts/evm/deployments/31337.json"
 REG="$(jq -r .ua_registry "$J")"
-CUID="$(jq -r .chain_uid "$J")"
 call() { cast call "$REG" "$@" --rpc-url "$RPC"; }
-# clientkeys: Y, UA and the registry PoP of the BLS12-381 key x (hex), over popDigest(ua, 0)
+# clientkeys: Y, UA and the portable PoP of the BLS12-381 key x (hex)
 pop() {
   node --input-type=module -e "
     import { zetherPop } from '$ROOT/clients/clientkeys/src/zether.js';
     import { fromHex } from '$ROOT/clients/clientkeys/src/bytes.js';
-    const p = zetherPop('bls12381', fromHex('$1'), { chainId: 31337, chainUid: '$CUID', registry: '$REG' });
+    const p = zetherPop('bls12381', fromHex('$1'));
     console.log(p.Y, p.UA, p.pop);"
 }
-# 1. the Zether UA (register(kind, keyData, pop, pqzKey, pqzProof): no PQZ key)
+# 1. the Zether UA (register(kind, keyData, UAAttrs, pop, pqzPop): all attributes absent)
 read -r Y1 UA1 POP1 < <(pop "0x$(printf '%064x' 0x5eed1)")
 [ "$(call 'uaOf(uint16,bytes)(bytes32)' 0x0141 "$Y1")" = "$UA1" ]
-cast send "$REG" 'register(uint16,bytes,bytes,bytes,bytes)' 0x0141 "$Y1" "$POP1" 0x 0x --private-key "$RELAYER" \
+cast send "$REG" 'register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)' 0x0141 "$Y1" \
+  "(0x,$(printf '0x%064x' 0),0,0x)" "$POP1" 0x --private-key "$RELAYER" \
   --rpc-url "$RPC" >/dev/null
 [ "$(call 'kindOf(bytes32)(uint16)' "$UA1")" = 321 ]
 [ "$(call 'keyOf(bytes32)(bytes)' "$UA1")" = "$Y1" ]

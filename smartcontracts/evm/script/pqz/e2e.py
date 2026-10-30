@@ -53,6 +53,7 @@ MLDSA44, MLDSA65, PQZ_MLWE, SECP256K1 = 0x0130, 0x0131, 0x0142, 0x0108
 CAP_ML, CAP_PQZ, BUDGET = 200_000, 4_500_000, 12_000_000
 FAILS, LOG = [], []
 RPC = None
+SPLIT = False  # --split: force the register + storePqzPop path
 
 
 def pack(b):
@@ -72,9 +73,12 @@ def probe(n):
 
 
 def pqz_key(ua):
-    """A holder's PQZ key as the token reads it (UA-6: an attribute, `recordOf(ua).pqzKey` = its SSTORE2 pointer; data
-    after the pointer's leading 0x00); `keyOf` is the UA's signing key."""
-    ptr = "0x" + words(call(REG[0], cd("recordOf(bytes32)", ["w"], ua)))[-1][12:].hex()
+    """A holder's PQZ key as the token reads it (UA-8 UA8-D9, `PqzCore._keyPtr`): `pqzKeyOf(ua)` = (SSTORE2 pointer, proof
+    hash, proven), a proven key only (`recordOf` lists unproven keys too); the key is the pointer's code after its leading
+    0x00. `keyOf` is the UA's signing key."""
+    w = words(call(REG[0], cd("pqzKeyOf(bytes32)", ["w"], ua)))
+    assert int.from_bytes(w[2], "big") == 1, f"pqz_key: {ua.hex()[:16]}… has no proven PQZ key"
+    ptr = "0x" + w[0][12:].hex()
     k = bytes.fromhex(rpc("eth_getCode", [ptr, "latest"])[2:])[1:]
     assert len(k) == K.PK_BYTES, f"pqz_key: {len(k)} B at {ptr}, want {K.PK_BYTES} (a UA without a PQZ key?)"
     return k
@@ -84,9 +88,49 @@ def kc(*parts):
     return keccak256(b"".join(p if isinstance(p, bytes) else p.encode() for p in parts))
 
 
-P_POP, P_METATX, P_ZAUTH = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("pop", "metatx", "zether-auth"))
+P_METATX, P_ZAUTH = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("metatx", "zether-auth"))
 MSG_TAG = kc("scaas.ua.msg.v1")
 TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), SECP256K1: kc("scaas.ua.secp256k1.v1"), PQZ_MLWE: kc("scaas.ua.pqz-mlwe.v1")}
+
+
+# ------------------------------------------------------------------ UA-8 registration (portable PoP, UAAttrs)
+REGISTER = "register(uint16,bytes,(bytes,bytes32,uint64,bytes),bytes,bytes)"
+REGISTER_T = ["w", "b", ("t", ["b", "w", "w", "b"]), "b", "b"]  # kind, keyData, UAAttrs, pop, pqzPop
+NO_ATTRS = [b"", bytes(32), 0, b""]  # UAAttrs{pqzKey, pqzPopHash, kemVersion, kemPk}: all absent
+# clientkeys (with its node_modules): this checkout's, else the main checkout's (as `PQ`)
+CK = (os.path.join(ROOT, "clients/clientkeys") if os.path.isdir(os.path.join(ROOT, "clients/clientkeys/node_modules"))
+      else os.path.join(ROOT, "../../../clients/clientkeys"))
+_PORTABLE_JS = """
+const U = await import(process.argv[1] + '/src/ua.js'), B = await import(process.argv[1] + '/src/bytes.js');
+const a = JSON.parse(process.argv[2]), h = (k) => (a[k] === undefined ? undefined : B.fromHex(a[k]));
+const o = { ua: h('ua'), pqzKey: h('pqzKey'), kemVersion: a.kemVersion ?? 0, kemPk: h('kemPk') };
+console.log(B.hex(a.fn === 'reg' ? U.pqzRegMessage(o) : a.fn === 'kem' ? U.kemRecordMessage(a.kind, { ua: o.ua, version: a.kemVersion, kemPk: o.kemPk })
+  : a.fn === 'keyreg' ? U.uaMessage(0x0142, U.PQZ_KEY_TAG, U.pqzKeyDigest({ ua: o.ua, pqzKeyHash: U.keyHashOf(0x0142, o.pqzKey) }))
+  : a.fn === 'keyrec' ? U.pqzKeyRecordMessage(a.kind, { ua: o.ua, pqzKey: o.pqzKey, pqzPopHash: h('pqzPopHash') }).message
+  : U.holderPopMessage(a.kind, { ...o, pqzPopHash: h('pqzPopHash') }).message));
+"""
+
+
+def portable(fn, **a):
+    """The portable message from clients/clientkeys (ua.js): fn 'pop' = `holderPopMessage(kind, ...).message` (what the
+    UA's `pop` signs, UA-8 P1), fn 'reg' = `pqzRegMessage` (what R_REG proves over), fn 'kem' = `kemRecordMessage` (`setKemKey`'s sig),
+    fn 'keyrec' = `pqzKeyRecordMessage(...).message` (`setPqzKey`'s sig), fn 'keyreg' = `uaMessage(0x0142, PURPOSE_PQZ_KEY,
+    pqzKeyDigest(ua, keyHash(0x0142, pqzKey)))` (what a later key's R_REG proves over). bytes arguments go as hex."""
+    a = {k: v.hex() if isinstance(v, bytes) else v for k, v in dict(a, fn=fn).items()}
+    out = subprocess.run(["node", "--input-type=module", "-e", _PORTABLE_JS, "--", CK, json.dumps(a)], check=True, capture_output=True, text=True)
+    return bytes.fromhex(out.stdout.strip()[2:])
+
+
+def full_register_fits(to, data):
+    """The chain decides: `eth_estimateGas` of the FULL register (proof in the call) against the latest block gas limit
+    (no margin: Sender.send adds its own 15 % + 50 k to the estimate and caps the limit at the block's). The node refuses
+    an estimate above its block gas limit / RPC gas cap, so an error also means: register without the proof."""
+    try:
+        est = int(rpc("eth_estimateGas", [{"to": to, "data": "0x" + data.hex()}]), 16)
+    except RuntimeError:
+        return False
+    # 1023/1024: the next block's limit may step down by that much, and a block-sized tx would wait for it.
+    return est <= int(rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16) * 1023 // 1024
 
 
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
@@ -192,9 +236,10 @@ def words(h, n=None):
     return [b[i:i + 32] for i in range(0, len(b), 32)][:n]
 
 
-def dec_bytes(h):
+def dec_bytes(h, i=0):
+    """The `bytes` whose offset is head word `i` of the return data."""
     b = bytes.fromhex(h[2:])
-    o = int.from_bytes(b[0:32], "big")
+    o = int.from_bytes(b[32 * i:32 * i + 32], "big")
     n = int.from_bytes(b[o:o + 32], "big")
     return b[o + 32:o + 32 + n]
 
@@ -476,13 +521,14 @@ def bal(s_key, T):
 
 
 def main():
-    global RPC
+    global RPC, SPLIT
     ap = argparse.ArgumentParser()
     ap.add_argument("--rpc", default="http://127.0.0.1:8545")
     ap.add_argument("--log", default=os.path.join(EVM, "runs/2026-10-16-p6g-7622.txt"))
     ap.add_argument("--keys", default="1,2,3")
+    ap.add_argument("--split", action="store_true", help="always register without the proof, then storePqzPop")
     a = ap.parse_args()
-    RPC = a.rpc
+    RPC, SPLIT = a.rpc, a.split
     kd, kr, ke = (int(x) for x in a.keys.split(","))
     try:
         run(kd, kr, ke)
@@ -569,25 +615,38 @@ def run(kd, kr, ke):
         pk = pq.ml_pk(lvl, seed)
         ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], kind, pk)))[0]
         u = UA(name=name, kind=kind, seed=seed, pk=pk, ua=ua)
-        pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], ua, 0)))[0]
-        pop = pq.ml_sign(lvl, seed, kc(TAG[kind], ua_msg(kind, P_POP, pd)))
-        sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], kind, pk, pop, b"", b""),
+        pop = pq.ml_sign(lvl, seed, kc(TAG[kind], portable("pop", kind=kind, ua=ua)))
+        sd.send(reg, cd(REGISTER, REGISTER_T, kind, pk, NO_ATTRS, pop, b""),
                 f"register {name} (mldsa{lvl}, seed {seed.hex()[:8]}…)")
         return u
 
     def pqz_ua(name, seed, mlseed):
-        """A PQZ holder (UA-6): an ML-DSA-65 UA with the pqz-mlwe key as an attribute, ONE register call."""
+        """A PQZ holder (UA-6, UA-8): an ML-DSA-65 UA with the pqz-mlwe key and KEM v1 as attributes; ONE register call, or
+        `register` without the proof + `storePqzPop` when the full call does not fit the chain's block."""
         pk, s, e, _ = K.keygen(seed)
         mlpk = pq.ml_pk(65, mlseed)
         ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], MLDSA65, mlpk)))[0]
-        h = words(call(reg, cd("keyHashOf(uint16,bytes)", ["w", "b"], PQZ_MLWE, pk)))[0]
-        pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], ua, h)))[0]
-        pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], ua_msg(MLDSA65, P_POP, pd)))
-        proof = pq.prove(3, K.build_register(ua_msg(PQZ_MLWE, P_POP, pd), pk), K.i8(s) + K.i16(e))
-        sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], MLDSA65, mlpk, pop, pk, proof),
-                f"register {name} (mldsa65 + pqz-mlwe key, R_REG {len(proof):,} B, one call)")
+        kem = (kc("kem", mlseed) * 50)[:1600]  # the initial KEM record, version 1 (UA8-D3; any 1,600 bytes here)
+        proof = pq.prove(3, K.build_register(portable("reg", ua=ua, pqzKey=pk, kemVersion=1, kemPk=kem), pk), K.i8(s) + K.i16(e))
+        ph = kc(proof)
+        pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], portable("pop", kind=MLDSA65, ua=ua, pqzKey=pk, pqzPopHash=ph,
+                                                                  kemVersion=1, kemPk=kem)))
+        full_cd = cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 1, kem], pop, proof)
+        full = not SPLIT and full_register_fits(reg, full_cd)
+        sd.send(reg, full_cd if full else cd(REGISTER, REGISTER_T, MLDSA65, mlpk, [pk, ph, 1, kem], pop, b""),
+                f"register {name} (mldsa65 + pqz-mlwe key + KEM v1, R_REG {len(proof):,} B, "
+                f"{'one call' if full else 'proof by storePqzPop'})")
+        if not full:
+            sd.send(reg, cd("storePqzPop(bytes32,bytes)", ["w", "b"], ua, proof), f"storePqzPop {name}")
         rec = words(call(reg, cd("recordOf(bytes32)", ["w"], ua)))
         check(int.from_bytes(rec[-1], "big") != 0, f"{name} = {ua.hex()[:16]}… recordOf: PQZ key pointer set")
+        pk_of = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], ua)))
+        check(pk_of[1] == ph and int.from_bytes(pk_of[2], "big") == 1, f"{name} pqzKeyOf: proof hash set, proven")
+        check([int.from_bytes(w, "big") for w in words(call(reg, cd("checkedOf(bytes32)", ["w"], ua)))] == [1, 1, 1],
+              f"{name} checkedOf = (chain, chain, chain)")
+        kr = call(reg, cd("kemKeyOf(bytes32)", ["w"], ua))
+        check(int.from_bytes(words(kr)[0], "big") == 1 and dec_bytes(kr, 1) == kem and dec_bytes(kr, 2) == b"",
+              f"{name} kemKeyOf = (1, kem, \"\")")
         check(int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], ua)))[0], "big") == MLDSA65, f"{name} kindOf 0x0131")
         return UA(name=name, kind=MLDSA65, seed=mlseed, pk=pk, s=s, e=e, ua=ua)
 
@@ -597,6 +656,32 @@ def run(kd, kr, ke):
     feeua = ml_ua("fee-ua", MLDSA65, sk("fee"))
     U = {n: pqz_ua(n, sk("pqz-" + n), sk("ml-" + n)) for n in ("alice", "bob", "aud", "carol")}
     alice, bob, aud, carol = U["alice"], U["bob"], U["aud"], U["carol"]
+    # UA8-D5: a second KEM record, signed by the holder (real ML-DSA-65) over the portable KEM message
+    kem2 = (kc("kem2", alice.seed) * 50)[:1600]
+    sd.send(reg, cd("setKemKey(bytes32,uint64,bytes,bytes)", ["w", "w", "b", "b"], alice.ua, 2, kem2,
+                    pq.ml_sign(65, alice.seed, kc(TAG[MLDSA65], portable("kem", kind=MLDSA65, ua=alice.ua, kemVersion=2, kemPk=kem2)))),
+            "setKemKey v2 (alice, ML-DSA-65 sig)")
+    check(int.from_bytes(words(call(reg, cd("kemKeyOf(bytes32)", ["w"], alice.ua)))[0], "big") == 2, "alice kemKeyOf: version 2")
+    # ruling A1-I1 (review m2): a PQZ key added later to a UA registered without one — `setPqzKey` signed by the UA (real
+    # ML-DSA-65) over `uaMessage(0x0131, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(pqzKeyDigest(ua, h), ph))`, then a third
+    # party's `storePqzPop` with the real R_REG over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, h))`
+    dave = ml_ua("dave", MLDSA65, sk("ml-dave"))
+    dpk, ds, de, _ = K.keygen(sk("pqz-dave"))
+    dproof = pq.prove(3, K.build_register(portable("keyreg", ua=dave.ua, pqzKey=dpk), dpk), K.i8(ds) + K.i16(de))
+    dph = kc(dproof)
+    dsig = pq.ml_sign(65, dave.seed, kc(TAG[MLDSA65], portable("keyrec", kind=MLDSA65, ua=dave.ua, pqzKey=dpk, pqzPopHash=dph)))
+    sd.send(reg, cd("setPqzKey(bytes32,bytes,bytes32,bytes)", ["w", "b", "w", "b"], dave.ua, dpk, dph, dsig),
+            "setPqzKey dave (ML-DSA-65 sig over PURPOSE_PQZ_KEY)")
+    w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
+    check(w[1] == dph and int.from_bytes(w[2], "big") == 0, "dave pqzKeyOf: the added key's proof hash, unproven")
+    check(dec_bytes(call(reg, cd("pqzKeySigOf(bytes32)", ["w"], dave.ua))) == dsig, "dave pqzKeySigOf = the setPqzKey signature")
+    sd.send(reg, cd("storePqzPop(bytes32,bytes)", ["w", "b"], dave.ua, dproof),
+            f"storePqzPop dave (R_REG {len(dproof):,} B over PURPOSE_PQZ_KEY)")
+    w = words(call(reg, cd("pqzKeyOf(bytes32)", ["w"], dave.ua)))
+    check(w[1] == dph and int.from_bytes(w[2], "big") == 1, "dave pqzKeyOf: proven")
+    check([int.from_bytes(x, "big") for x in words(call(reg, cd("checkedOf(bytes32)", ["w"], dave.ua)))] == [1, 1, 0],
+          "dave checkedOf = (chain, chain, none)")
+    check(pqz_key(dave.ua) == dpk, "dave: the key a PQZ token reads (pqzKeyOf, proven) is the added key")
     # op 7 decoys (P6g op 7): five more PQZ holders
     DEC = [pqz_ua(f"decoy{i}", sk(f"pqz-decoy{i}"), sk(f"ml-decoy{i}")) for i in range(5)]
 
@@ -611,9 +696,8 @@ def run(kd, kr, ke):
     secd = x.to_bytes(32, "big") + y.to_bytes(32, "big")
     sec_ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], SECP256K1, secd)))[0]
     check(sec_ua == kc(TAG[SECP256K1], secd), "secp256k1 UA = keccak256(TAG ‖ x ‖ y)")
-    pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], sec_ua, b"\0" * 32)))[0]
-    sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], SECP256K1, secd,
-                    ecdsa(seck, ua_msg(SECP256K1, P_POP, pd)), b"", b""), "register secp256k1 (ECDSA PoP)")
+    sd.send(reg, cd(REGISTER, REGISTER_T, SECP256K1, secd, NO_ATTRS,
+                    ecdsa(seck, portable("pop", kind=SECP256K1, ua=sec_ua)), b""), "register secp256k1 (ECDSA PoP)")
     kind = int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], sec_ua)))[0], "big")
     check(kind == SECP256K1, f"secp256k1 UA {sec_ua.hex()[:16]}… kindOf 0x0108; the same key's EOA {address(seck)} is a "
                              f"separate native id")

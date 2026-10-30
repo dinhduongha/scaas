@@ -54,6 +54,9 @@ fn table_groups_purposes_constants() {
         let n = kind(&r["kind"]);
         assert_eq!(n, PQZ_SCHEME);
         assert_eq!(SCHEMES[0].name, r["name"]);
+        let lengths: Vec<usize> = arr(r, "lengths").iter().map(|x| x.as_u64().unwrap() as usize).collect();
+        assert_eq!(SCHEMES[0].lengths, &lengths[..]);
+        assert_eq!(SCHEMES[0].lengths, &ua8::PQZ_KEY_LENGTHS[..]);
         assert_eq!(kind_tag_string(n).unwrap(), r["tag"]);
         assert_eq!(hx(&tag(n).unwrap()), r["TAG"]);
         assert_eq!(ua_of(n, &[]), Err(UAError::KindNotDerived(n)));
@@ -67,9 +70,12 @@ fn table_groups_purposes_constants() {
         assert_eq!(group_tag_string(g).unwrap(), r["tag"]);
         assert_eq!(hx(&group_tag(g).unwrap()), r["GROUP"]);
     }
-    assert_eq!(arr(&k, "purposes").len(), PURPOSES.len());
+    // 13 purposes; `pop` has two versions (v1 legacy, v2 portable), every other purpose is v1
+    assert_eq!(arr(&k, "purposes").len(), PURPOSES.len() + 1);
     for r in arr(&k, "purposes") {
-        assert_eq!(hx(&purpose_tag(r["purpose"].as_str().unwrap()).unwrap()), r["purposeTag"]);
+        let (p, v) = (r["purpose"].as_str().unwrap(), r["version"].as_u64().unwrap() as u32);
+        assert_eq!(hx(&purpose_tag_v(p, v).unwrap()), r["purposeTag"], "{p} v{v}");
+        assert!(PURPOSES.contains(&p), "{p}");
     }
     let c = &k["constants"];
     assert_eq!(hx(&msg_tag()), c["MSG_TAG"]);
@@ -127,7 +133,8 @@ fn natives_native_space_canonical_ids() {
 fn messages() {
     let k = load("kinds.json");
     for r in arr(&k, "messages") {
-        let p = purpose_tag(r["purpose"].as_str().unwrap()).unwrap();
+        let ver = r.get("version").map_or(1, |v| v.as_u64().unwrap() as u32);
+        let p = purpose_tag_v(r["purpose"].as_str().unwrap(), ver).unwrap();
         assert_eq!(hx(&p), r["purposeTag"]);
         assert_eq!(hx(&ua_message(kind(&r["kind"]), &p, &b32(&r["digest"])).unwrap()), r["uaMsg"]);
     }
@@ -138,28 +145,39 @@ fn structures() {
     let s = load("structures.json");
     let ctx = |name: &str| &s["contexts"][name];
     for p in arr(&s, "pop") {
-        let c = ctx(p["context"].as_str().unwrap());
-        let chain_id = c["chainId"].as_u64().unwrap();
-        assert_eq!(hx(&chain_key_hash(chain_id)), p["chainKeyHash"]);
-        let got = pop_digest(chain_id, &b32(&c["chainUid"]), &b20(&c["registry"]), &b32(&p["ua"]), &b32(&p["pqzKeyHash"]));
-        assert_eq!(hx(&got), p["popDigest"]);
+        let (ua, h, kr, ph) = (b32(&p["ua"]), b32(&p["pqzKeyHash"]), b32(&p["kemRecordHash"]), b32(&p["pqzPopHash"]));
+        let portable = ua8::portable_pop_digest(&ua, &h, &kr);
+        assert_eq!(hx(&portable), p["portablePopDigest"]);
+        assert_eq!(hx(&ua8::registration_digest(&portable, &ph)), p["registrationDigest"]);
     }
     let pk = bytes(&load("kinds.json")["pqzKey"]);
     for p in arr(&s, "pqzReg") {
-        let c = ctx(p["context"].as_str().unwrap());
-        let (id, reg, uid, ua) = (c["chainId"].as_u64().unwrap(), b20(&c["registry"]), b32(&c["chainUid"]), b32(&p["ua"]));
-        let (h, d, m) = holder_pop_message(kind(&p["kind"]), id, &uid, &reg, &ua, Some(&pk)).unwrap();
-        assert_eq!((hx(&h), hx(&d)), (p["pqzKeyHash"].as_str().unwrap().to_string(), p["popDigest"].as_str().unwrap().to_string()));
-        assert_eq!(hx(&pqz_reg_message(id, &uid, &reg, &ua, &pk).unwrap()), p["pqzRegMessage"]);
-        assert_eq!(holder_pop_message(0x0101, id, &uid, &reg, &ua, Some(&pk)), Err(UAError::PqzHolder(0x0101)));
-        assert_eq!(holder_pop_message(0x0133, id, &uid, &reg, &ua, Some(&pk)), Err(UAError::PqzHolder(0x0133)));
-        // the message the holder signs: ua_message(kind, pop, the vector's popDigest)
-        assert_eq!(m, ua_message(kind(&p["kind"]), &purpose_tag("pop").unwrap(), &b32(&p["popDigest"])).unwrap());
+        let ua = b32(&p["ua"]);
+        let h = key_hash_of(PQZ_SCHEME, &pk).unwrap().unwrap();
+        assert_eq!(hx(&h), p["pqzKeyHash"]);
+        assert_eq!(hx(&ua8::portable_pop_digest(&ua, &h, &b32(&p["kemRecordHash"]))), p["portablePopDigest"]);
+        let portable = b32(&p["portablePopDigest"]);
+        assert_eq!(hx(&ua_message(PQZ_SCHEME, &ua8::pop_v2_tag(), &portable).unwrap()), p["pqzRegMessage"]);
+        if b32(&p["kemRecordHash"]) != [0; 32] {
+            continue; // the row's KEM record hash is opaque (a label); the real records are in portable.json (tests/ua8.rs)
+        }
+        assert_eq!(hx(&pqz_reg_message(&ua, &pk, None).unwrap()), p["pqzRegMessage"]);
+        // a single-key holder carries the key; anything else is refused
+        let proof = [7u8; 32];
+        let k = kind(&p["kind"]);
+        let got = holder_pop_message(k, &ua, &[], Some(&pk), None, Some(&proof), None).unwrap();
+        assert_eq!(hx(&got.pqz_key_hash), p["pqzKeyHash"]);
+        assert_eq!(hx(&got.portable_pop_digest), p["portablePopDigest"]);
+        for bad in [0x0101, 0x0133] {
+            assert_eq!(holder_pop_message(bad, &ua, &[], Some(&pk), None, Some(&proof), None), Err(UAError::PqzHolder(bad)));
+        }
     }
     for p in arr(&s, "pqzMsig") {
         let d = bytes(&p["keyData"]);
         assert_eq!(msig_pqz_eligible(&d).unwrap(), p["eligible"], "{}", p["reason"]);
         assert_eq!(hx(&derive_ua(0x0120, &d, false).unwrap()), p["ua"]);
+        let h = if p["eligible"].as_bool().unwrap() { b32(&load("kinds.json")["pqzKeyHash"]) } else { [0; 32] };
+        assert_eq!(hx(&ua8::portable_pop_digest(&b32(&p["ua"]), &h, &[0; 32])), p["portablePopDigest"], "{}", p["reason"]);
     }
     assert!(msig_pqz_eligible(&[0u8; 5]).is_err());
     for a in arr(&s, "uaAuth") {

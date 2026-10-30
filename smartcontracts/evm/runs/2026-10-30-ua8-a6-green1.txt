@@ -1,0 +1,19 @@
+# A6 GREEN 1 (ruling A5-c1): PqzCore._keyPtr reads pqzKeyOf (proven only); whole suite --no-match-contract UAGas (C5), set n2304-kmax4096
+# first run (before the storage repack): MtxSplitOverhead test_splitOverhead_dataSizeBound failed, 'ecdsa pqzl-M8-on: overhead grows with data: 34437 > 8000' (pqzKeyOf read 4 slots per leg vs recordOf's 2).
+# fix: PqzKey{ptr, proven} in one slot, _pqzPopHash apart, _elsewhere checks predecessor first: pqzKeyOf = 2 SLOADs on gen 1
+Ran 135 test suites in 88.76s (712.36s CPU time): 1504 tests passed, 0 failed, 10 skipped (1514 total tests)
+rc=0
+# size gate
+error: UARegistry: runtime 32257 > baseline 32240 (it may only shrink)
+size gate: 1 error(s), 45 contracts
+rc=1
+UARegistry {'runtime_size': 32257, 'init_size': 38898, 'runtime_margin': 33279, 'init_margin': 92174}
+NoUnderlyingPqzToken {'runtime_size': 49067, 'init_size': 51595, 'runtime_margin': 16469, 'init_margin': 79477}
+UnderlyingPqzToken {'runtime_size': 61137, 'init_size': 63672, 'runtime_margin': 4399, 'init_margin': 67400}
+PqzStateLib {'runtime_size': 8402, 'init_size': 8454, 'runtime_margin': 57134, 'init_margin': 122618}
+PqzTransferLib None
+PqzBurnLib None
+PqzViewLib {'runtime_size': 14458, 'init_size': 14510, 'runtime_margin': 51078, 'init_margin': 116562}
+# size gate after the ratchet entry
+size gate: 0 error(s), 45 contracts
+rc=0

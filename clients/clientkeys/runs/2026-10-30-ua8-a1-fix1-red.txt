@@ -1,0 +1,280 @@
+# ua8 A1 fix 1 RED at commit 6f72d0ba + tests only (setPqzKey record, C7 scope, minors): ../../scripts/capped npm test
+
+> @scaas/clientkeys@1.0.0 test
+> node --test 'test/*.test.js'
+
+✔ algorand vectors (107.178382ms)
+✔ algorand addresses and app addresses (6.426998ms)
+✔ algorand relay refs, lanes and router call (1.256787ms)
+✔ algorand passkey assertion (1.284581ms)
+✔ refuses pay-meta mismatch (1.307754ms)
+✔ relay fee prompt carries both intents (1.369029ms)
+✔ pay-meta and relay-fee payments need nonce 0 (0.407458ms)
+✔ passkeyAssertion refuses a wrong challenge (0.535869ms)
+✔ refuses native send to a UA id (0.948567ms)
+﹣ committed bundle == fresh esbuild output (1.049798ms) # no vendored bundle next to this checkout
+﹣ bundles load and work (0.254499ms) # no vendored bundle next to this checkout
+✔ MetaTransfer payment = forge KAT (TokenKat.t.sol, metatransfer_kat.json) (3.457554ms)
+✔ TradeOrder, CancelOrder, InvalidateNonces in the token domain = forge KAT (TradeKat.t.sol, trade_kat.json) (2.076963ms)
+✔ DexOrder (nested TradeOrder) and the DEX cancels in the DEX domain = forge KAT (DexKat.t.sol, dex_order_kat.json) (4.638189ms)
+✔ SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_account_kat.json) (23.366835ms)
+✔ MandateWallet pay and revoke = forge KATs (mandate_pay_kat.json, mandate_revoke_kat.json) (1.300791ms)
+✔ metaTxTypedData zeroes relayer / feeRecipient by mode, as the contract hashes them = metatx_kat.json (1.859363ms)
+✔ metaTxTypedData keeps chainId exact (number, decimal or hex string, BigInt) and needs a 32-byte chainUid (3.493332ms)
+✔ passkey keyId = keccak(abi.encode(SubjectKey)) as cast computes it (1.540773ms)
+✔ SmartKeyAccount CREATE2: salt and clone address match the forge-pinned vector (46.427643ms)
+✔ ABI encodings match `cast abi-encode` (foundry 1.3.5) (0.505302ms)
+✔ Merkle batch: every digest proves to the root; foreign digest does not (10.871182ms)
+✔ owner call: the client signs only addKey(the key it just made) as its own account, on its chain (12.904062ms)
+✔ payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes with its fee named (2.464032ms)
+✔ payment: only the payment the user was shown (payee, token, reference, amount, lane, fee), CLI-SGN-05/08 (7.803562ms)
+✔ self-call: exactly the call the client built, on its contract, with the fee the user allows (CLI-SGN-34) (4.708251ms)
+✔ trade order: exactly the order the client built, on a pinned DEX or wrapper (CLI-SGN-35, CLI-SGN-36) (13.063602ms)
+✔ cancel: only the order hash or the lane the user chose, from the account, in the order's domain (3.077608ms)
+✔ key proof message = keccak256("scaas-subject-key-proof-v1" ‖ challenge) (pinned with Odoo) (0.166063ms)
+✔ UA-5a: ReceiverFee typed data and the receivers' calldata (`cast calldata`, foundry 1.3.5); checkCall (8.405797ms)
+✔ receiver-pays, address path: the payee co-signs ReceiverFee only over the payment it expects, within its own bounds (5.961161ms)
+✔ near vectors (128.782345ms)
+✔ near relay refs, lanes and call forms (2.652447ms)
+✔ near native ids (0.980948ms)
+✔ near passkey assertion: low-s normalised, challenge = digest (1.688462ms)
+✔ refuses pay-meta mismatch (2.143368ms)
+✔ relay fee prompt carries both intents (1.187698ms)
+✔ refuses native send to a UA id (0.845693ms)
+✔ near key op fans out to every held token, each at its own nonce (0.908952ms)
+✔ pay-meta and relay-fee payments need nonce 0 (1.296673ms)
+✔ passkeyAssertion refuses a wrong challenge, type or invalid UTF-8 (1.398806ms)
+✔ passkeyAssertion output verifies as P-256 over authenticatorData || sha256(clientDataJSON) (5.952695ms)
+✔ paymeta vectors (13.025892ms)
+✔ decodeMeta refuses a non-canonical envelope or an unknown schema (1.779803ms)
+✔ refuses a payId that does not commit to meta (1.968579ms)
+✔ mtxPayMeta: the payment is mtxPay with payId = metaPayId(salt, meta), lane payLane, nonce 0 (6.358049ms)
+✔ uaPayMeta: UAMetaTransfer between ids, uaPayMeta / uaPay calldata (6.442508ms)
+✔ checkPayMeta: server typed data for the committed payId passes and returns the decoded meta (2.130073ms)
+✔ keys and ids: pq_kat.json's keys, ids from the kind table, the portable PoP (UA-8) on contexts A and B (44.153217ms)
+✔ every PoP and signature verifies with noble; every negative is refused (292.439837ms)
+✔ UA-6 / UA-8: a holder registers its PQZ key in the same call: pop over registrationDigest(portablePopDigest(ua, h, 0), pqzPopHash) (19.379923ms)
+✔ msig structures: key data, id, member digest; every member signature verifies; auth = abi.encode(keyData, sig) (26.582603ms)
+✔ metatx3 rows: typed data → digest, one call and one transfer per PQ kind, auth with empty key data (2.535738ms)
+✔ metatx3 receiverFee (UA-5a): an mldsa65 payer and an mldsa65 payee, both signatures verify with noble (21.497032ms)
+✔ purpose tag and digest of the vectors (1.922963ms)
+✔ mldsa44: seed → key, UA id, ua_msg, signed message = vectors (10.231737ms)
+✔ mldsa44: deterministic signature = vector; verifies; tampering fails (36.339446ms)
+✔ mldsa65: seed → key, UA id, ua_msg, signed message = vectors (3.586276ms)
+✔ mldsa65: deterministic signature = vector; verifies; tampering fails (48.717577ms)
+✔ fndsa512: seed → key, UA id, ua_msg, signed message = vectors (294.668887ms)
+✔ fndsa512: deterministic signature = vector; verifies; tampering fails (296.203799ms)
+✔ slhdsa128s: seed → key, UA id, ua_msg, signed message = vectors (413.733483ms)
+✔ slhdsa128s: deterministic signature = vector; verifies; tampering fails (4714.245537ms)
+✔ PQ seeds: HKDF per kind, account and index; lengths per scheme (1.028838ms)
+✔ pq-external.mjs refuses a download whose SHA-256 is not the pinned one, before writing anything (88.984152ms)
+✔ EIP-8051 expanded key = vectors (the forge suite derives the same bytes on chain) (8.78419ms)
+✔ no raw-digest signing: purpose and digest must be 32 bytes (2.237606ms)
+✔ relayRef matches the contract vector (2.547139ms)
+✔ buildRelayFee: open mode by default, one prompt with both intents, the router-bound payment (2.887581ms)
+✔ buildRelayFee: an open inner envelope stays open; a bound payee; the UA path (3.201692ms)
+✔ mtxExecuteCalldata: the signed call the payment commits to (1.547455ms)
+✔ buildRelayFee refuses to pay the executor, an inner envelope bound elsewhere or on another contract (1.027566ms)
+✔ buildRelayFee refuses an inner call on another chain or outliving its payment, a zero or token payee (0.804596ms)
+✔ BIP-39 Trezor vectors (passphrase TREZOR): words, checksum import, seed, BIP-32 root (446.897197ms)
+✔ BIP-39 import refuses a bad checksum and tolerates spacing/case (1.71388ms)
+✔ generated phrases are 24 words (0.510201ms)
+✔ BIP-32 test vector 1 (published, bip-0032.mediawiki) (9.821194ms)
+✔ SLIP-10 ed25519 test vector 1 (published, slip-0010.md) (39.182292ms)
+✔ SEP-0005 (published): seed, m/44'/148' key, Stellar G/S keys (29.200736ms)
+✔ Pi Network: Stellar keys at the chain's SLIP-44 coin type 314159 (16.329366ms)
+✔ per-network keys match reference tooling (111.457303ms)
+✔ signing: secp256k1 r‖s‖v recovers the EVM address; ed25519 verifies (59.166093ms)
+✔ secp256k1 groups: ids, KeyAgg / DKG recomputed, PoP and signatures verify (566.067351ms)
+✔ secp256k1 negatives refused for their stated reason (256.554396ms)
+✔ BIP-327 KeyAgg rows (official, incl. duplicate and unsorted lists) (54.018895ms)
+✔ RFC 9591 E.5, the ZF DKG vector, T-FROST (35.966203ms)
+✔ every row: typed data → digest, and the builder rebuilds the typed data from its message (21.640712ms)
+✔ typehashes and the signer set match signatures.json (0.563692ms)
+✔ the native rows are ECDSA over the v3 digest itself (CTR-UA-24), not the UAAuth wrapper (16.92633ms)
+✔ burn and unwrapToUA rows: one per signer of call, the same envelope, data the new call (127.63887ms)
+✔ receiverFee rows: native payer x every derived payee and p256 x bip340; payer under metatx, payee under receiver-fee (83.36752ms)
+✔ receiver-pays, UA path: checkReceiverFee accepts every receiverFee row for its payee id and refuses another payee (14.530486ms)
+✔ the generator reproduces signatures.json, ed25519_fuzz.json, metatx3.json and pq_signatures.json byte for byte (24596.947532ms)
+✔ derived kinds: key data, ids, portable PoP messages, every signature verifies (492.053822ms)
+✔ derived kinds: every negative fails (411.583201ms)
+✔ native EOA: UAAuth signatures verify, negatives fail (12.713804ms)
+✔ msig: structure id, members, every set gives its verdict (84.539979ms)
+✔ BIP-340 official vectors (32-byte messages) give their verdict (11.916862ms)
+✔ ed25519: the strict-only negatives are the ones noble zip215:false alone accepts (11.170346ms)
+✔ ed25519Rfc8032: RFC 8032 §7.1 TEST 1, 2, 3, 1024, SHA(abc) verify; the A-side cases give their verdict (16.767892ms)
+✔ ed25519_fuzz.json: every case gives its strict verdict; noble zip215:false alone differs only in the listed classes (3030.698027ms)
+✔ typehashes, the purpose tag and the signer set (2.427063ms)
+✔ every row: order, cancel and invalidate digests; the builders rebuild the typed data (202.251627ms)
+✔ mldsa65 orders for the caps verify with noble under trade (63.480422ms)
+✔ checkTradeOrder({ ua }) accepts the order built from the input and refuses any other; checkCancel UA invalidate (3.833884ms)
+✔ the generator reproduces kinds.json and structures.json byte for byte (1638.946831ms)
+✔ valid rows derive, invalid rows fail with their code (87.249534ms)
+✔ digests: portable pop (UA-8, no chain context), UAAuth, member (1.350274ms)
+✔ purposes: every purpose at v1, pop also at v2 (UA-8), kem (1.341016ms)
+✔ pq.js and ua.js agree on the PQ kinds (0.957735ms)
+✔ key data that is neither bytes nor a hex string is UAKeyData type (0.902ms)
+✔ UA-6: 0x0142 is a scheme, not a kind; 0x0140 is gone; Zether is 0x0141 alone and signs (1.786396ms)
+✔ UA-6: PQZ holders, msig eligibility, pop digest and R_REG message (4.403426ms)
+✔ UA-6 vectors: schemes, holder flags, pqz_reg_message and msig eligibility rows (2.569591ms)
+✔ portable.json reproduced byte for byte (7.664741ms)
+✖ portable PoP has no chain context (2.561657ms)
+✔ registration digest covers the proof hash (63.861048ms)
+✔ kem record digest matches the hand-built words (3.917721ms)
+✖ holder refusals (7.499499ms)
+✖ pqz key record: signed, portable, write-once, only for a registration without a PQZ key (setPqzKey) (0.473592ms)
+✖ C7 scope: personal_sign only for the portable records of code-less native msig members (0.279146ms)
+✔ every portable pop verifies (610.101143ms)
+✔ vault: passphrase via scrypt N=2^17 r=8 p=1, AES-GCM, fresh IV and salt, parameters recorded (3470.755516ms)
+✔ vault: a new passphrase needs 8+ characters and not only digits (787.056228ms)
+✔ vault: an old N=2^15 / 6-digit vault still opens, then is re-wrapped with the new parameters (3359.677325ms)
+✔ vault: tampering and label swap are detected (AAD) (1549.382734ms)
+✔ vault: passkey PRF envelope opens without the PIN; PIN envelope always stays (2060.401277ms)
+✔ backup: shown once, verify 3 random words, only then usable (2.256862ms)
+✔ DER decode, low-s normalisation and strictness (2.479061ms)
+✔ options builders: ES256, user verification required, challenge = 32-byte digest, PRF opt-in (1.58712ms)
+✔ software authenticator: SPKI → (x,y), assertion verifies over sha256(authData ‖ sha256(cdj)) after low-s (158.009571ms)
+✔ clientDataJSON shape is what SmartKeyAccount checks (RS4-2) (4.035764ms)
+✔ creationOptions: random 16-byte user handle per credential, account passkeys excluded (1.171067ms)
+✔ EIP-2333 published test cases (BLS12-381) (41.122348ms)
+✔ bn254 is gone since UA-6 (kept in legacy/ua6/zether.js) (1.028718ms)
+✔ conf/disclosure keys from the mnemonic == S3 (x, Y, UA, path) on both curves (118.684891ms)
+✖ the Zether PoP is portable (UA-8 P1): no chain field, over registrationDigest(portablePopDigest(UA, 0, 0), 0) (48.748525ms)
+✔ owner op: abi.encode(bytes(""), Schnorr over uaMessage(kind, zether-owner, digest)) (34.581074ms)
+✔ every UA-ledger write: Schnorr by x over uaMessage(0x0141, purpose, digest); no raw digest, no other purpose (131.040079ms)
+✔ Schnorr with S3 fixed nonce is byte-identical; tampering fails (16.667122ms)
+✔ conf key is apart from signing keys: other path/curve/account ⇒ other x; never a signing scalar (182.483772ms)
+✔ x is sealed at rest like the seed; only Y/UA come back (2556.814346ms)
+✔ path-index rule == S3 prover (r33_inputs.json) (89.100081ms)
+✔ bls12381: checkBalance — one comparison, any size, exact (26.542528ms)
+✔ bls12381: cache box opens only with x, BigInt survives (4.476224ms)
+✔ bls12381: balance > 2^44 — device refuses, CLI value validated, debit and rollOver tracked (91.925584ms)
+✔ bls12381: cached balance > 2^44 survives third-party rollOver griefing and unrecorded debits (301.123829ms)
+✔ bls12381: accSeq is monotonic — a forged lower-seq acc does not move the anchor (30.542694ms)
+✔ bls12381: big anchor, balance spent down elsewhere — full device BSGS still recovers it (133.081815ms)
+✔ bls12381: small balance — cache miss falls back to device BSGS and fills the cache (16.830339ms)
+ℹ tests 150
+ℹ suites 0
+ℹ pass 143
+ℹ fail 5
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 29164.852821
+
+✖ failing tests:
+
+test at test/ua8.test.js:67:1
+✖ portable PoP has no chain context (2.561657ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  ... Skipped lines
+  
+    {
+      KEM_RECORD_TAG: {
+        hash: '0x29f8f9b02ee4297dbc83229b662caeac7f44f90cc2c68e2106abc8e91a805643',
+        tag: 'scaas.ua.kem-record.v1'
+      },
+  -   PQZ_KEY_GROUP: {
+  -     hash: '0x0b46b017252788e1ba969e603cf986c143943e1d6d1176004a6f577a298a53e4',
+  -     tag: 'scaas.ua.group.pqz-mlwe.v1'
+  -   },
+  -   PQZ_KEY_RECORD_TAG: {
+  -     hash: '0x33277d3cc9f2c17a36c673363ff0167a98d43e39a7aafa719523120c269379b3',
+  -     tag: 'scaas.ua.pqz-key-record.v1'
+  -   },
+      PURPOSE_KEM: {
+        hash: '0x99f2818f111f001f1f71ec2f8756cff7e9858c0fcb204b353c21f95b2ff3f2b8',
+        tag: 'scaas.ua.purpose.kem.v1'
+      },
+      PURPOSE_POP_V2: {
+  ...
+      },
+  -   PURPOSE_PQZ_KEY: {
+  -     hash: '0x8f354ac3b315d85e2c32c80857a1600c5aebe8bbe14a265d56079725a6602330',
+  -     tag: 'scaas.ua.purpose.pqz-key.v1'
+  -   }
+    }
+  
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:68:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { PURPOSE_POP_V2: { tag: 'scaas.ua.purpose.pop.v2', hash: '0x0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93' }, PURPOSE_KEM: { tag: 'scaas.ua.purpose.kem.v1', hash: '0x99f2818f111f001f1f71ec2f8756cff7e9858c0fcb204b353c21f95b2ff3f2b8' }, KEM_RECORD_TAG: { tag: 'scaas.ua.kem-record.v1', hash: '0x29f8f9b02ee4297dbc83229b662caeac7f44f90cc2c68e2106abc8e91a805643' } },
+    expected: { PURPOSE_POP_V2: { tag: 'scaas.ua.purpose.pop.v2', hash: '0x0ffb2c52d2a16294393778508b3fff52351664d2c5bbe5deb3d3278f56281f93' }, PURPOSE_KEM: { tag: 'scaas.ua.purpose.kem.v1', hash: '0x99f2818f111f001f1f71ec2f8756cff7e9858c0fcb204b353c21f95b2ff3f2b8' }, KEM_RECORD_TAG: { tag: 'scaas.ua.kem-record.v1', hash: '0x29f8f9b02ee4297dbc83229b662caeac7f44f90cc2c68e2106abc8e91a805643' }, PURPOSE_PQZ_KEY: { tag: 'scaas.ua.purpose.pqz-key.v1', hash: '0x8f354ac3b315d85e2c32c80857a1600c5aebe8bbe14a265d56079725a6602330' }, PQZ_KEY_RECORD_TAG: { tag: 'scaas.ua.pqz-key-record.v1', hash: '0x33277d3cc9f2c17a36c673363ff0167a98d43e39a7aafa719523120c269379b3' }, PQZ_KEY_GROUP: { tag: 'scaas.ua.group.pqz-mlwe.v1', hash: '0x0b46b017252788e1ba969e603cf986c143943e1d6d1176004a6f577a298a53e4' } },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at test/ua8.test.js:150:1
+✖ holder refusals (7.499499ms)
+  AssertionError [ERR_ASSERTION]: kemPk omitted = empty
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:169:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: Error: UAKeyData: type
+        at fail (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:22:40)
+        at bytes (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:25:90)
+        at kemRecordDigest (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:192:14)
+        at Module.holderPopMessage (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/src/ua.js:224:34)
+        at file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:169:26
+        at getActual (node:assert:580:5)
+        at strict.throws (node:assert:728:24)
+        at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:169:10)
+        at Test.runInAsyncScope (node:async_hooks:226:14)
+        at Test.run (node:internal/test_runner/test:1402:25),
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at test/ua8.test.js:250:1
+✖ pqz key record: signed, portable, write-once, only for a registration without a PQZ key (setPqzKey) (0.473592ms)
+  TypeError: Cannot read properties of undefined (reading 'map')
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:251:48)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at test/ua8.test.js:285:1
+✖ C7 scope: personal_sign only for the portable records of code-less native msig members (0.279146ms)
+  TypeError: ua.isPortablePurpose is not a function
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/ua8.test.js:286:77)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
+
+test at test/zether.test.js:66:1
+✖ the Zether PoP is portable (UA-8 P1): no chain field, over registrationDigest(portablePopDigest(UA, 0, 0), 0) (48.748525ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/clientkeys/test/zether.test.js:80:14)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: /no chain context/,
+    operator: 'throws',
+    diff: 'simple'
+  }
+rc=1

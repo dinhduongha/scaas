@@ -184,8 +184,8 @@ which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles 
 (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
 from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
 EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
-state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`UNDERLYING_PQZ`, 110.3 M, table below), so the testnet block gas limit must ramp to
-its 200 M target (genesis `0x1000000`).
+state gas) exceeds 2^24, up to ~111 M for the largest implementation deploy (`UNDERLYING_PQZ`, 110.3 M, table below), so the SCaaS testnet runs a 200 M block gas limit
+(genesis `gasLimit` `0xbebc200`, reset 2026-10-22; `TargetBlockGasLimit` 200,000,000).
 
 **Minimum block gas limit per release kind (review C5-1; controller proposal, owner may override; no code-size work before
 Glamsterdam).** A release is one `CREATE2` of the whole implementation in the registrar's transaction. Under EIP-8037 the
@@ -252,9 +252,9 @@ It writes
 `smart_key_account_implementation`, `demo_token`, `demo_token_2`; `factory`, `implementation`, `dex`, `scaas_dex` are gone with v1),
 which seeds the client and the node configuration. forge writes it during the simulation, before the broadcast; `deploy.sh` puts the previous file back (or removes the new one) when the broadcast fails.
 Zether (built, P3; dev chains only, UNAUDITED): opt in with `DEPLOY_ZETHER=1` (default off; on a non-dev chain the script refuses). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NONE_ZETHER` and `UNDERLYING_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1 bn254, env 2 BLS12-381), has the factory deploy the two confidential implementations on it (bn254 as version 1, BLS12-381 as version 2 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_none_zether_<curve>`, `implementation_underlying_zether_<curve>` (`<curve>` = `bn254`, `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so `deploy.sh` always passes `--gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails; the largest implementation, `UnderlyingPqzToken`, 13,467,833 gas measured through `deployImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit) and the anvil needs `--code-size-limit 65536`; `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
-dev-chain e2e (UA-3): a fresh anvil 31337, this deploy, two Zether UAs registered with clientkeys PoPs through a relayer
-(self, and a native `authRef` co-signed with `UAAuth`), and a `NONE_ZETHER` token shielding to one
-(`script/ZetherE2E.s.sol`).
+dev-chain e2e (UA-3, rewritten for UA-8): a fresh anvil 31337, this deploy, one BLS12-381 Zether UA registered through a relayer
+with the clientkeys portable PoP (no chain id, chain uid or registry in it; all attributes absent), and a `NONE_ZETHER` token
+shielding to it (`script/ZetherE2E.s.sol`).
 Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
 
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):

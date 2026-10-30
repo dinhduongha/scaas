@@ -17,7 +17,7 @@ contract GasMeter {
 }
 
 /// The UA-2c groups of `vectors/ua/groups.json` (Rust signers: BIP-327 MuSig2, ZF frost-secp256k1 3.0.0 and the bn254
-/// ports; PoPs under structures.json context A = this suite's `REG_A` on chain 31337) and signers over the group secret
+/// ports; the PoPs are portable (UA-8 P1: no chain context, valid on every registry)) and signers over the group secret
 /// for messages the file does not carry: BIP-340 by `x(Q)` (musig2-secp256k1), RFC 9591 FROST(secp256k1, SHA-256)
 /// (frost-secp256k1), the scaas Schnorr (both bn254 kinds). An aggregate MuSig2 / FROST signature has the same form as
 /// the single-signer one by the group secret.
@@ -42,7 +42,7 @@ abstract contract GroupFixtures is Test {
         bytes32 ua;
         bytes32 keyHash;
         bytes32 popMessage;
-        bytes pop; // pop.blob, context A
+        bytes pop; // pop.blob (portable)
     }
 
     function _gj() internal view returns (string memory) {

@@ -68,31 +68,37 @@ fn flip_last(b: &[u8]) -> Vec<u8> {
 // ---------- context ----------
 
 struct Ctx {
-    name: &'static str,
     chain_id: u64,
     uid: [u8; 32],
     registry: [u8; 20],
 }
-/// Context A (the PoPs), B (the other-context negative) and the fixed digest of the `sigs` rows.
+/// Context A (only the chain-bound negative uses it) and the fixed digest of the `sigs` rows.
 struct Env {
     a: Ctx,
-    b: Ctx,
     digest: [u8; 32],
 }
 fn contexts() -> (Value, Env) {
     let s = read_json("../../smartcontracts/vectors/ua/signatures.json");
     let ctx = |name: &'static str| {
         let c = &s["contexts"][name];
-        Ctx { name, chain_id: c["chainId"].as_u64().unwrap(), uid: unhex(&c["chainUid"]).try_into().unwrap(), registry: unhex(&c["registry"]).try_into().unwrap() }
+        Ctx { chain_id: c["chainId"].as_u64().unwrap(), uid: unhex(&c["chainUid"]).try_into().unwrap(), registry: unhex(&c["registry"]).try_into().unwrap() }
     };
-    let contexts = json!({ "A": s["contexts"]["A"], "B": s["contexts"]["B"] });
-    (contexts, Env { a: ctx("A"), b: ctx("B"), digest: unhex(&s["digest"]).try_into().unwrap() })
+    let contexts = json!({ "A": s["contexts"]["A"] }); // only the chain-bound negative (pop-chain-bound) uses it
+    (contexts, Env { a: ctx("A"), digest: unhex(&s["digest"]).try_into().unwrap() })
 }
-/// `(ua, popDigest, ua_msg)` of key data under a context (authRef 0).
-fn pop_of(kind: u16, kd: &[u8], c: &Ctx) -> ([u8; 32], [u8; 32], [u8; 32]) {
+/// `(ua, portablePopDigest, ua_msg)` of key data (UA-8: the portable PoP has no chain context; `_c` is kept for the callers).
+fn pop_of(kind: u16, kd: &[u8], _c: &Ctx) -> ([u8; 32], [u8; 32], [u8; 32]) {
     let ua = ua_of(kind, kd).unwrap();
-    let pd = pop_digest(c.chain_id, &c.uid, &c.registry, &ua, &[0; 32]);
-    (ua, pd, ua_message(kind, &purpose_tag("pop").unwrap(), &pd).unwrap())
+    let pd = scaas_ua::ua8::portable_pop_digest(&ua, &[0; 32], &[0; 32]);
+    let rd = scaas_ua::ua8::registration_digest(&pd, &[0; 32]);
+    (ua, pd, ua_message(kind, &scaas_ua::ua8::pop_v2_tag(), &rd).unwrap())
+}
+/// The message of a pre-UA-8 chain-bound PoP of context `c` (legacy `pop_digest_v1`, purpose `pop` v1): offered as a
+/// portable PoP it must be refused.
+fn chain_bound_msg(kind: u16, kd: &[u8], c: &Ctx) -> [u8; 32] {
+    let ua = ua_of(kind, kd).unwrap();
+    let pd = pop_digest_v1(c.chain_id, &c.uid, &c.registry, &ua, &[0; 32]);
+    ua_message(kind, &purpose_tag("pop").unwrap(), &pd).unwrap()
 }
 
 /// A negative row: `entry` "register" (keyData + pop blob under context A; `error` UAKeyData = refused by key-data
@@ -199,7 +205,7 @@ impl<C: MusigKind> Musig<C> {
 }
 
 fn musig_row<C: MusigKind>(label: &str, n: usize, role: &str, e: &Env) -> Value {
-    let (a, b, digest) = (&e.a, &e.b, &e.digest);
+    let (a, digest) = (&e.a, &e.digest);
     let kind = C::KIND;
     let mut r = rng(label);
     let g = Musig::<C>::sorted(label, n);
@@ -273,8 +279,8 @@ fn musig_row<C: MusigKind>(label: &str, n: usize, role: &str, e: &Env) -> Value 
             negs.push(reg("pop-trailing-byte", &kd, &[blob.clone(), vec![0]].concat(), "UAPoP", "the 96-byte signature plus one byte"));
         }
         negs.push(reg("pop-sig-mutated", &kd, &[flip_last(&sig), hints.clone()].concat(), "UAPoP", "last byte of s flipped"));
-        let mb = pop_of(kind, &kd, b).2;
-        negs.push(reg("pop-other-context", &kd, &[g.sign(&mb, &mut r), hints.clone()].concat(), "UAPoP", "a valid PoP for context B (other chainUid) offered under context A"));
+        let mb = chain_bound_msg(kind, &kd, a);
+        negs.push(reg("pop-chain-bound", &kd, &[g.sign(&mb, &mut r), hints.clone()].concat(), "UAPoP", "a valid pre-UA-8 chain-bound PoP (context A, purpose pop v1) offered as the portable PoP"));
         // malformed group key data (UA F3, every UA library that reads groups.json): one member point changed, the
         // list still sorted, Q and the PoP by the group unchanged (over the changed ua)
         let mut r2 = rng(&format!("{label}/key-data"));
@@ -325,7 +331,7 @@ fn musig_row<C: MusigKind>(label: &str, n: usize, role: &str, e: &Env) -> Value 
         "members": g.pks.iter().map(|p| hx(p)).collect::<Vec<_>>(), "L": hx(&g.ka.l), "coefficients": coefs,
         "hints": hints.chunks(64).map(hx).collect::<Vec<_>>(), "dkg": [],
         "keyData": hx(&kd), "ua": hx(&ua), "keyHash": hx(&key_hash_of(kind, &kd).unwrap().unwrap()), "vk": hx(vk),
-        "pop": { "context": a.name, "popDigest": hx(&pd), "message": hx(&m), "sig": hx(&sig), "blob": hx(&blob) },
+        "pop": { "popDigest": hx(&pd), "registrationDigest": hx(&scaas_ua::ua8::registration_digest(&pd, &[0; 32])), "message": hx(&m), "sig": hx(&sig), "blob": hx(&blob) },
         "sigs": sigs, "negatives": negs,
     })
 }
@@ -397,7 +403,7 @@ fn frost_blocks(kd: &[u8], w: usize) -> Vec<(Vec<Vec<u8>>, Vec<u8>)> {
 }
 
 fn frost_row<C: Ciphersuite>(kind: u16, label: &str, (t, n): (u16, u16), role: &str, e: &Env) -> Value {
-    let (a, b, digest) = (&e.a, &e.b, &e.digest);
+    let (a, digest) = (&e.a, &e.digest);
     let w = if kind == FROST_SECP { 33 } else { 64 };
     let mut r = rng(label);
     let g: Dkg<C> = dkg::<C, _>(t, n, &mut r).unwrap();
@@ -468,9 +474,9 @@ fn frost_row<C: Ciphersuite>(kind: u16, label: &str, (t, n): (u16, u16), role: &
         let m2 = pop_of(kind, &kd2, a).2;
         negs.push(reg("y-negated", &kd2, &single_frost::<C>(&neg_s, &m2, &mut r), "UAPoP", "Y negated, PoP by −s valid; Y ≠ Σ C_i0"));
         negs.push(reg("pop-sig-mutated", &kd, &flip_last(&sig), "UAPoP", "last byte of z flipped"));
-        let mb = pop_of(kind, &kd, b).2;
-        negs.push(reg("pop-other-context", &kd, &g.sign(&first, &mb, &mut r).unwrap().serialize().unwrap(), "UAPoP",
-            "a valid PoP for context B (other chainUid) offered under context A"));
+        let mb = chain_bound_msg(kind, &kd, a);
+        negs.push(reg("pop-chain-bound", &kd, &g.sign(&first, &mb, &mut r).unwrap().serialize().unwrap(), "UAPoP",
+            "a valid pre-UA-8 chain-bound PoP (context A, purpose pop v1) offered as the portable PoP"));
         if kind == FROST_SECP {
             let bip = Secp256k1::single(&Secp256k1::s_parse(&ss::<C>(&secret)).unwrap(), &m);
             negs.push(reg("pop-bip340", &kd, &bip, "UAPoP", "a BIP-340 signature by x(Y) as the PoP (T-FROST: never verified as BIP-340)"));
@@ -534,7 +540,7 @@ fn frost_row<C: Ciphersuite>(kind: u16, label: &str, (t, n): (u16, u16), role: &
         "secrets": shares, "groupSecret": hx(&ss::<C>(&secret)),
         "members": [], "L": "0x", "coefficients": [], "hints": [], "dkg": dkg_rows::<C>(&kd, w),
         "keyData": hx(&kd), "ua": hx(&ua), "keyHash": hx(&key_hash_of(kind, &kd).unwrap().unwrap()), "vk": hx(&vk),
-        "pop": { "context": a.name, "popDigest": hx(&pd), "message": hx(&m), "signers": first, "sig": hx(&sig), "blob": hx(&sig) },
+        "pop": { "popDigest": hx(&pd), "registrationDigest": hx(&scaas_ua::ua8::registration_digest(&pd, &[0; 32])), "message": hx(&m), "signers": first, "sig": hx(&sig), "blob": hx(&sig) },
         "sigs": sigs, "negatives": negs,
     })
 }

@@ -1,5 +1,5 @@
 //! ABI — copied from `smartcontracts/evm/src` (`IMetaTx`, `IERC20MetaTx`, `IERC20Payment`, `ITradeToken`, `MetaTxLib`,
-//! `ISCaaSDex`, `MandateWallet`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
+//! `ISCaaSDex`, `MandateWallet`, `IUARegistry`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
 //! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`, `dex_order_kat.json`: digests and relayed calldata).
 // `sol!` builds a constructor per event; `LegSettled` / `UALegSettled` have ten fields.
 #![allow(clippy::too_many_arguments)]
@@ -251,6 +251,17 @@ sol! {
     #[derive(Debug)]
     interface IGasPriceOracle {
         function getL1Fee(bytes _data) external view returns (uint256);
+    }
+
+    /// `UARegistry`'s four writes (accounts.md §1.8, UA-8; CTR-UA-07: anyone may relay them): the call-table rows on
+    /// `ua_registry`, and `register`'s `pqzPop` for the split rule ([`crate::guard::UA_REGISTER_SPLIT`]).
+    #[derive(Debug)]
+    interface IUARegistry {
+        struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }
+        function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
+        function setKemKey(bytes32 ua, uint64 version, bytes kemPk, bytes sig) external;
+        function storePqzPop(bytes32 ua, bytes pqzPop) external;
+        function setPqzKey(bytes32 ua, bytes pqzKey, bytes32 pqzPopHash, bytes sig) external;
     }
 
     /// `MandateWallet` errors (CTR-ACC-06/07): a `call` job's revert reason names them, so the client re-reads

@@ -872,10 +872,12 @@ library PqzCore {
         }
     }
 
-    /// @dev The PQZ key pointer of a holder (`AccountNotRegistered` otherwise, or for a key of another length).
+    /// @dev The PQZ key pointer of a holder (`AccountNotRegistered` otherwise, for a key not proven on this chain
+    ///      (UA8-D9: `recordOf` lists unproven keys too), or for a key of another length).
     function _keyPtr(address registry, bytes32 ua) internal view returns (address ptr) {
-        (, ptr) = IUARegistry(registry).recordOf(ua);
-        if (ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
+        bool proven;
+        (ptr,, proven) = IUARegistry(registry).pqzKeyOf(ua);
+        if (!proven || ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
     }
 
     // ------------------------------------------------------------------ the buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof`

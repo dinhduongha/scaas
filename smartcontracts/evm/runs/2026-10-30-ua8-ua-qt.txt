@@ -1,0 +1,70 @@
+# ua-qt at commit e2513dd5
+-- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
+-- Could NOT find WrapVulkanHeaders (missing: Vulkan_INCLUDE_DIR) 
+-- Rust Toolchain: 1.99.0-x86_64-unknown-linux-gnu
+-- Rust Target: x86_64-unknown-linux-gnu
+-- Using Corrosion as a subdirectory
+-- CXX-Qt Found crate(s): scaas_ua_qt
+-- Configuring done (1.9s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build
+[  0%] Built target tst_ua_autogen_timestamp_deps
+[  0%] Built target cargo-prebuild_scaas_ua_qt
+warning: failed to connect to jobserver from environment variable `MAKEFLAGS="s -j2 --jobserver-auth=3,4"`: cannot open file descriptor 3 from the jobserver environment variable value: Bad file descriptor (os error 9)
+[  0%] Built target scaas_ua_qml_module_mock_obj_output
+[ 25%] Built target tst_ua_autogen
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+   Compiling scaas_ua_qt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.97s
+Copying byproducts `libscaas_ua_qt.a` to /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build
+[ 25%] Built target _cargo-build_scaas_ua_qt
+[ 25%] Built target cargo-build_scaas_ua_qt
+[ 50%] Linking CXX executable tst_ua
+[100%] Built target tst_ua
+UpdateCTestConfiguration  from :/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build/DartConfiguration.tcl
+UpdateCTestConfiguration  from :/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build/DartConfiguration.tcl
+Test project /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: tst_ua
+
+1: Test command: /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build/tst_ua "-input" "/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/tests/tst_ua.qml"
+1: Working Directory: /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-qt/build
+1: Environment variables: 
+1:  QT_QPA_PLATFORM=offscreen
+1: Test timeout computed to be: 10000000
+1: ********* Start testing of ua *********
+1: Config: Using QtTest library 6.12.0, Qt 6.12.0 (x86_64-little_endian-lp64 shared (dynamic) release build; by GCC 11.5.0 20240719 (Red Hat 11.5.0-5)), ubuntu 24.04
+1: PASS   : ua::UaKinds::initTestCase()
+1: PASS   : ua::UaKinds::test_algorand_digest_and_relay_ref()
+1: PASS   : ua::UaKinds::test_encode_msig()
+1: PASS   : ua::UaKinds::test_invalid_rows()
+1: PASS   : ua::UaKinds::test_kemRecord()
+1: PASS   : ua::UaKinds::test_last_error_cleared_and_notifies()
+1: PASS   : ua::UaKinds::test_malformed_input_sets_last_error()
+1: PASS   : ua::UaKinds::test_malformed_numbers_and_hex()
+1: PASS   : ua::UaKinds::test_messages()
+1: PASS   : ua::UaKinds::test_meta_pay_id_vectors()
+1: PASS   : ua::UaKinds::test_natives_native_space_canonical_ids()
+1: PASS   : ua::UaKinds::test_near_digest_and_relay_ref()
+1: PASS   : ua::UaKinds::test_personalSign()
+1: PASS   : ua::UaKinds::test_portable()
+1: PASS   : ua::UaKinds::test_pqzKeyRecord()
+1: PASS   : ua::UaKinds::test_relay_ref_matches_vector()
+1: PASS   : ua::UaKinds::test_structures()
+1: PASS   : ua::UaKinds::test_table_groups_purposes_constants()
+1: PASS   : ua::UaKinds::test_valid_rows()
+1: PASS   : ua::UaKinds::cleanupTestCase()
+1: Totals: 20 passed, 0 failed, 0 skipped, 0 blacklisted, 1132ms
+1: ********* Finished testing of ua *********
+1/1 Test #1: tst_ua ...........................   Passed    1.33 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   1.33 sec
+rc=0

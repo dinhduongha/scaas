@@ -36,6 +36,26 @@ fn committed_vectors_are_current_and_verify() {
     }
 }
 
+/// The committed `r33_keys.json` PoPs are portable (UA-8 P1): no chain fields, and they verify under `verify_pop`.
+#[test]
+fn r33_keys_reproduced() {
+    use zether_prover::curve::{decode_point, Bls12381};
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/vectors/");
+    let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}r33_keys.json")).unwrap()).unwrap();
+    let h = |v: &serde_json::Value| hex::decode(&v.as_str().unwrap()[2..]).unwrap();
+    let mut n = 0;
+    for k in r["bls12381"]["keys"].as_array().unwrap().iter().filter(|k| k.get("pop").is_some()) {
+        let pop = &k["pop"];
+        for f in ["chainId", "chainUid", "registry", "pqzKeyHash"] {
+            assert!(pop.get(f).is_none(), "{f}");
+        }
+        let y = decode_point::<Bls12381>(&h(&k["Y"])).unwrap();
+        zether_prover::schnorr::verify_pop(&y, &h(&pop["pop"])).unwrap();
+        n += 1;
+    }
+    assert!(n >= 2);
+}
+
 #[test]
 fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
     let mnemonic = zether_prover::vectors::MNEMONIC;
@@ -77,8 +97,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert_eq!(p["amount"], json!("5000"));
         assert_eq!(call("checkBalance", json!({"curve": curve, "key": k0, "acc": acc, "balance": 5000}))["ok"], json!(true));
         assert_eq!(call("checkBalance", json!({"curve": curve, "key": k1, "acc": acc, "balance": 5000}))["ok"], json!(false));
-        let pop = call("pop", json!({"curve": curve, "key": k0, "registry": "0x".to_string() + &"aa".repeat(20),
-                                      "chainId": 31337, "chainUid": "0x".to_string() + &"24".repeat(32)}));
+        let pop = call("pop", json!({"curve": curve, "key": k0}));
         assert_eq!(pop["UA"], a["UA"]);
         assert_eq!(pop["popDigest"].as_str().unwrap().len(), 66);
         let own = call("ownerAuth", json!({"curve": curve, "key": k0, "digest": "0x".to_string() + &"77".repeat(32)}));

@@ -1,0 +1,81 @@
+# A7: test/ua/UARegistryUA8.t.sol after setKemKey (set n2304-kmax4096)
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+   --> src/factory/OpenFactory.sol:282:26:
+  --> src/common/Bls12381.sol:60:28:
+  --> src/zether/ZetherVerifier.sol:89:28:
+   --> src/zether/ZetherVerifier.sol:269:13:
+   --> src/zether/ZetherVerifier.sol:374:9:
+   --> test/ua/UAGas.t.sol:220:26:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   --> test/zether/helpers/ZetherFixture.sol:141:38:
+  --> test/zether/helpers/ZetherFixture.sol:63:5:
+   --> test/zether/helpers/ZetherFixture.sol:145:38:
+  --> test/zether/helpers/ZetherFixture.sol:63:5:
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   --> script/DeployBase.sol:302:5:
+  --> test/helpers/Catalogue.sol:47:1:
+   --> test/ua/UARegistryBase.sol:265:5:
+   --> test/ua/UAGas.t.sol:242:5:
+[PASS] test_ua8_attrsShapeRefused() (gas: 737152617)
+[PASS] test_ua8_blobChunksRoundTrip() (gas: 341067006)
+[PASS] test_ua8_checkedIsChain() (gas: 444851636)
+[PASS] test_ua8_copyBetweenRegistries() (gas: 901626999)
+[PASS] test_ua8_copyFromState() (gas: 796922658)
+[PASS] test_ua8_disabledKindReverts() (gas: 216711600)
+[PASS] test_ua8_everyKindFromVectors() (gas: 1139882215)
+[PASS] test_ua8_frontRunnerDropsPqzPop() (gas: 259408306)
+[PASS] test_ua8_frontRunnerGetsIdenticalRecord() (gas: 318943351)
+[PASS] test_ua8_gen2ForwardsReads() (gas: 323329874)
+[PASS] test_ua8_gen2PqzKeyWhenGen1HasNone() (gas: 434074147)
+[PASS] test_ua8_gen2ProvesGen1RegisterKey() (gas: 346430132)
+[PASS] test_ua8_gen2RefusesWhenGen1HasPqz() (gas: 431537946)
+[PASS] test_ua8_gen2RefusesWritesForGen1() (gas: 485391197)
+[PASS] test_ua8_gen2SetPqzKeyForGen1Record() (gas: 755937300)
+[PASS] test_ua8_kemBadSigRefused() (gas: 839630325)
+[PASS] test_ua8_kemCopyBetweenRegistries() (gas: 930298918)
+[PASS] test_ua8_kemEvent() (gas: 598795243)
+  setKemKey gas, fndsa512/v2 (sig 666 B; event data B 2432): 6274848
+  setKemKey gas, mldsa65/v2 (sig 3309 B; event data B 5088): 8236344
+  setKemKey gas, msig-pq/v2 (sig 7104 B; event data B 8864): 14284716
+[PASS] test_ua8_kemGen2RecordElsewhereRefused() (gas: 613366232)
+[PASS] test_ua8_kemInitialVersionFromRegister() (gas: 358866575)
+[PASS] test_ua8_kemLengthRefused() (gas: 223723382)
+[PASS] test_ua8_kemLowerVersionAfterHigher() (gas: 247656066)
+[PASS] test_ua8_kemMsigMofN() (gas: 641780590)
+[PASS] test_ua8_kemNoOwnerCheck() (gas: 248470291)
+[PASS] test_ua8_kemNonHolderRefused() (gas: 254716895)
+[PASS] test_ua8_kemRepeatedVersionRefused() (gas: 230903735)
+[PASS] test_ua8_kemVersionZeroRefused() (gas: 221974640)
+[PASS] test_ua8_largestMsigPopStored() (gas: 330256690)
+[PASS] test_ua8_msigNativeMember7702Portable() (gas: 251120768)
+[PASS] test_ua8_msigNativeMemberPersonalSignPortable() (gas: 674373253)
+[PASS] test_ua8_msigNativeMemberWithCode1271() (gas: 248375615)
+[PASS] test_ua8_msigPqEligibleCopy() (gas: 459780213)
+[PASS] test_ua8_nonHolderAttrsRefused() (gas: 717049623)
+[PASS] test_ua8_popCoversAttrs() (gas: 518471639)
+[PASS] test_ua8_pqzPopInRegisterProven() (gas: 310560336)
+[PASS] test_ua8_pqzProveLaterOnVerifierChain() (gas: 502532432)
+[PASS] test_ua8_pqzUnprovenWithoutVerifier() (gas: 310393877)
+[PASS] test_ua8_provenKeyStillUnique() (gas: 351560220)
+[PASS] test_ua8_setKemKeyByThirdParty() (gas: 358502229)
+[PASS] test_ua8_setPqzKeyCopyFromState() (gas: 533739541)
+[PASS] test_ua8_setPqzKeyFromVectors() (gas: 2028805523)
+[PASS] test_ua8_setPqzKeyRefused() (gas: 2031544908)
+[PASS] test_ua8_sigOkPortablePurposesOnly() (gas: 59234023)
+[PASS] test_ua8_storePqzPopBadProofReverts() (gas: 256510910)
+[PASS] test_ua8_storePqzPopIdempotent() (gas: 413319709)
+[PASS] test_ua8_storePqzPopNoKemExactMessage() (gas: 300932376)
+[PASS] test_ua8_storePqzPopWrongBytesRefused() (gas: 689208613)
+[PASS] test_ua8_storesEveryField() (gas: 310275840)
+[PASS] test_ua8_unprovenListingDoesNotBlockOwner() (gas: 347563960)
+Suite result: ok. 49 passed; 0 failed; 0 skipped; finished in 31.97s (247.89s CPU time)
+rc=0

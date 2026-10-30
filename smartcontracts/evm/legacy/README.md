@@ -58,6 +58,18 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   fixture with `useBls`, the bn254 KATs, S3 vector and prover-cross suites, the bn254 gas rows). The registry side
   (kind 0x0140, slot 12, `requireZetherAuthorized`) is in the pre-UA-6 `src/ua/` copies above. The vector JSON
   (`test/vectors/zether/*bn254*`, the 0x0140 rows of `../vectors/ua/kinds.json`) stays in place until UA-6 Task 8.
+- `ua8/`: the UA registry as it stood on `main` (`ref/pre-ua8`) before UA-8 made registrations portable (plan
+  `docs/superpowers/plans/2026-10-30-ua8-portable-registrations.md`; owner: backup, not delete): `src/ua/UARegistry.sol`,
+  `IUARegistry.sol`, `UAKinds.sol` (`register(kind, keyData, pop, pqzKey, pqzPop)` with the chain-bound `popDigest`).
+  UA-8 Task A5 (the portable `register`) added, as they stood at commit `e8a6a711`, the tests built on the chain-bound
+  PoP (verbatim backups; they do not resolve from here): `test/ua/UARegistryBase.sol` (`_pop` over `popDigest`),
+  `UARegistry.t.sol` (T-CHAIN: a PoP of one registry refused on another; T-REG-3b: `UAKindDisabled(0x0142)`),
+  `UARegistryVectors.t.sol` / `UARegistryPq.t.sol` (`popOther` refused), `UARegistryUA6.t.sol` /
+  `UARegistryPqzBound.t.sol` (R_REG and the holder PoP over `popDigest(ua, h)`, every PQZ key claimed),
+  `UARegistryGroups.t.sol` (PoPs re-signed per registry), `verifiers/EccVerifiers.t.sol` /
+  `verifiers/PairingVerifiers.t.sol` (context-bound PoP digests), `test/pqz/UAPqzVerifier.t.sol` and
+  `helpers/PqzRegistryBase.sol` (R_REG over `popDigest`), `test/zether/ZetherS3Vectors.t.sol` (`test_s3PopRegisters`
+  at the vector's registry address); not built.
 - `metatx-v1/`: the token meta-tx pipeline before the metatx split (spec
   `docs/superpowers/specs/2026-10-27-metatx-split-design.md`; owner: backup, not delete), taken from `main` commit
   `f50d18a4` (`src/metatx/` identical to the branch base `0c191232`): `src/metatx/ERC20MetaTx.sol`, `MetaTokenBase.sol`,

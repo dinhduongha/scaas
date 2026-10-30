@@ -78,8 +78,13 @@ void main() {
       expect(hx(groupTag(group: r['group'])!), r['GROUP']);
     }
     expect(groupTag(group: 'nope'), isNull);
+    expect(rows(k, 'purposes').length, 14); // 13 purposes, `pop` has v1 and v2
     for (final r in rows(k, 'purposes')) {
-      expect(hx(purposeTag(purpose: r['purpose'])), r['purposeTag']);
+      expect(hx(purposeTagV(purpose: r['purpose'], version: r['version'])), r['purposeTag']);
+      if (r['version'] == 1) expect(hx(purposeTag(purpose: r['purpose'])), r['purposeTag']);
+    }
+    for (final bad in <(String, int)>[('metatx', 2), ('pop', 3), ('pop', 0), ('nope', 1)]) {
+      expect(errCode(() => purposeTagV(purpose: bad.$1, version: bad.$2)), 'UAPurposeUnknown');
     }
     expect(errCode(() => purposeTag(purpose: 'nope')), 'UAPurposeUnknown');
     expect(errCode(() => kindInfo(kind: 0xffff)), 'UAKindUnknown');
@@ -129,7 +134,7 @@ void main() {
 
   test('messages', () {
     for (final r in rows(load('kinds.json'), 'messages')) {
-      final p = purposeTag(purpose: r['purpose']);
+      final p = purposeTagV(purpose: r['purpose'], version: r['version']); // each row carries its purpose `version` (A4-c1)
       expect(hx(p), r['purposeTag']);
       expect(hx(uaMessage(kind: r['kind'], purpose: p, digest: b32(r['digest']))), r['uaMsg']);
     }
@@ -138,42 +143,34 @@ void main() {
   test('structures', () {
     final s = load('structures.json');
     for (final p in rows(s, 'pop')) {
-      final c = s['contexts'][p['context']];
-      final id = c['chainId'] as int; // 2^40+7 in context E
-      expect(hx(chainKeyHash(chainId: id)), p['chainKeyHash']);
-      expect(
-          hx(popDigest(
-              chainId: id,
-              chainUid: b32(c['chainUid']),
-              registry: b20(c['registry']),
-              ua: b32(p['ua']),
-              pqzKeyHash: b32(p['pqzKeyHash']))),
-          p['popDigest']);
+      final portable = portablePopDigest(ua: b32(p['ua']), pqzKeyHash: b32(p['pqzKeyHash']), kemRecordHash: b32(p['kemRecordHash']));
+      expect(hx(portable), p['portablePopDigest']);
+      expect(hx(registrationDigest(portable: portable, pqzPopHash: b32(p['pqzPopHash']))), p['registrationDigest']);
     }
-    final pk = bytes(load('kinds.json')['pqzKey']);
+    expect(hx(chainKeyHash(chainId: 0x10000000007)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950'); // keccak256("evm:1099511627783")
+    final kinds = load('kinds.json');
+    final pk = bytes(kinds['pqzKey']), proof = Uint8List.fromList(List.filled(32, 7));
     for (final p in rows(s, 'pqzReg')) {
-      final c = s['contexts'][p['context']];
-      final id = c['chainId'] as int;
-      final h = holderPopMessage(
-          kind: p['kind'], chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']), pqzKey: pk);
-      expect(hx(h.pqzKeyHash), p['pqzKeyHash']);
-      expect(hx(h.popDigest), p['popDigest']);
-      expect(
-          hx(pqzRegMessage(
-              chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']), pqzKey: pk)),
-          p['pqzRegMessage']);
+      final ua = b32(p['ua']), kem = bytes(p['kemRecordHash']), h = keyHashOf(kind: 0x0142, keyData: pk)!;
+      expect(hx(h), p['pqzKeyHash']);
+      final portable = portablePopDigest(ua: ua, pqzKeyHash: h, kemRecordHash: U8Array32(kem));
+      expect(hx(portable), p['portablePopDigest']);
+      expect(hx(uaMessage(kind: 0x0142, purpose: purposeTagV(purpose: 'pop', version: 2), digest: portable)), p['pqzRegMessage']);
+      if (kem.any((x) => x != 0)) continue; // the row's KEM record hash is opaque; the real records are in portable.json
+      expect(hx(pqzRegMessage(ua: ua, pqzKey: pk)), p['pqzRegMessage']);
+      final got = holderPopMessage(kind: p['kind'], ua: ua, keyData: Uint8List(0), pqzKey: pk, pqzPopHash: proof);
+      expect([hx(got.pqzKeyHash), hx(got.portablePopDigest)], [p['pqzKeyHash'], p['portablePopDigest']]);
       for (final bad in [0x0101, 0x0133]) {
-        expect(
-            errCode(() => holderPopMessage(
-                kind: bad, chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']), pqzKey: pk)),
-            'UAPqzHolder');
+        expect(errCode(() => holderPopMessage(kind: bad, ua: ua, keyData: Uint8List(0), pqzKey: pk, pqzPopHash: proof)), 'UAPqzHolder');
       }
-      final none = holderPopMessage(
-          kind: p['kind'], chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']));
-      expect(none.pqzKeyHash.toList(), List.filled(32, 0));
     }
     for (final p in rows(s, 'pqzMsig')) {
-      expect(msigPqzEligible(keyData: bytes(p['keyData'])), p['eligible'], reason: p['reason']);
+      final d = bytes(p['keyData']);
+      expect(msigPqzEligible(keyData: d), p['eligible'], reason: p['reason']);
+      expect(hx(deriveUa(kind: 0x0120, keyData: d, hederaNative: false)), p['ua']);
+      final eligibleHash = bytes(kinds['pqzKeyHash']);
+      final h = U8Array32(p['eligible'] as bool ? eligibleHash : Uint8List(32));
+      expect(hx(portablePopDigest(ua: b32(p['ua']), pqzKeyHash: h, kemRecordHash: U8Array32(Uint8List(32)))), p['portablePopDigest']);
     }
     for (final a in rows(s, 'uaAuth')) {
       final c = s['contexts'][a['context']];
@@ -209,5 +206,199 @@ void main() {
     expect(errCode(() => encodeMsig(threshold: 0x10001, members: [(1, id, 1)])), 'UAArgument');
     expect(errCode(() => encodeMsig(threshold: 1, members: [(0x10001, id, 1)])), 'UAKindUnknown');
     expect(isNative(kind: 0x10000), false);
+  });
+
+  final pv = load('portable.json');
+  final regs = rows(pv, 'registrations');
+  Map byKey(List rs, String key, Object? v) => rs.firstWhere((r) => r[key] == v, orElse: () => throw StateError('no $key = $v'));
+  String? hxn(U8Array32? b) => b == null ? null : hx(b);
+
+  /// The holder call over a registration row's attrs (and the proof bytes, or only their hash).
+  HolderPop register(Map row, {bool hashOnly = false}) {
+    final a = row['attrs'] as Map;
+    final key = bytes(a['pqzKey']), pop = bytes(row['pqzPop']), hash = bytes(a['pqzPopHash']), pk = bytes(a['kemPk']);
+    final ver = BigInt.from(a['kemVersion'] as int);
+    return holderPopMessage(
+        kind: row['kind'],
+        ua: b32(row['ua']),
+        keyData: bytes(row['keyData']),
+        pqzKey: key.isEmpty ? null : key,
+        pqzPop: hashOnly || pop.isEmpty ? null : pop,
+        pqzPopHash: hash.every((x) => x == 0) ? null : hash,
+        kemRecord: ver == BigInt.zero && pk.isEmpty ? null : KemRecord(version: ver, pk: pk));
+  }
+
+  test('portable', () {
+    final t = pv['tags'] as Map;
+    String tg(String n) => (t[n] as Map)['hash'] as String;
+    expect(hx(purposeTagV(purpose: 'pop', version: 2)), tg('PURPOSE_POP_V2'));
+    expect(hx(purposeTag(purpose: 'kem')), tg('PURPOSE_KEM'));
+    expect(hx(purposeTag(purpose: 'pqz-key')), tg('PURPOSE_PQZ_KEY'));
+    expect(hx(kemRecordTag()), tg('KEM_RECORD_TAG'));
+    expect(hx(pqzKeyRecordTag()), tg('PQZ_KEY_RECORD_TAG'));
+    var n = 0, withPqz = 0, msigs = 0;
+    for (final r in regs) {
+      final ua = b32(r['ua']), name = r['name'] as String;
+      expect(hx(uaOf(kind: r['kind'], keyData: bytes(r['keyData']))), r['ua'], reason: name);
+      for (final hashOnly in [false, true]) {
+        final h = register(r, hashOnly: hashOnly);
+        expect(hx(h.pqzKeyHash), r['pqzKeyHash'], reason: name);
+        expect(hx(h.pqzPopHash), (r['attrs'] as Map)['pqzPopHash'], reason: name);
+        expect(hx(h.kemRecordHash), r['kemRecordHash'], reason: name);
+        expect(hx(h.portablePopDigest), r['portablePopDigest'], reason: name);
+        expect(hx(h.registrationDigest), r['registrationDigest'], reason: name);
+        expect(hx(h.message), r['popMessage'], reason: name);
+        expect(hx(portablePopDigest(ua: ua, pqzKeyHash: h.pqzKeyHash, kemRecordHash: h.kemRecordHash)), hx(h.portablePopDigest));
+        expect(hx(registrationDigest(portable: h.portablePopDigest, pqzPopHash: h.pqzPopHash)), hx(h.registrationDigest));
+        expect(hx(uaMessage(kind: r['kind'], purpose: purposeTagV(purpose: 'pop', version: 2), digest: h.registrationDigest)), hx(h.message));
+        expect(hxn(h.memberDigest) ?? '', r['memberDigest'] ?? '', reason: name);
+      }
+      final a = r['attrs'] as Map, pk = bytes(a['pqzKey']);
+      if (pk.isNotEmpty) {
+        withPqz++;
+        final v = a['kemVersion'] as int;
+        expect(hx(pqzRegMessage(ua: ua, pqzKey: pk, kemRecord: v != 0 ? KemRecord(version: BigInt.from(v), pk: bytes(a['kemPk'])) : null)),
+            r['pqzRegMessage'], reason: name);
+      } else {
+        expect(bytes(r['pqzRegMessage']).every((x) => x == 0), isTrue);
+      }
+      if (r['kind'] == 0x0120) msigs++;
+      n++;
+    }
+    expect([n, withPqz, msigs], [25, 8, 6]);
+  });
+
+  test('kem record', () {
+    for (final r in rows(pv, 'kemRecords')) {
+      final ua = b32(r['ua']), pk = bytes(r['kemPk']), v = BigInt.from(r['version'] as int);
+      final d = kemRecordDigest(ua: ua, version: v, kemPk: pk);
+      expect(hx(d), r['digest']);
+      final m = kemRecordMessage(kind: r['kind'], ua: ua, version: v, kemPk: pk);
+      expect(hx(m), r['message']);
+      expect(hx(m), hx(uaMessage(kind: r['kind'], purpose: purposeTag(purpose: 'kem'), digest: d)));
+      if (r['kind'] == 0x0120) expect(hx(memberDigest(structureUa: ua, uaMsg: m)), r['memberDigest']);
+    }
+    expect(rows(pv, 'kemRecords').length, 9);
+    final u = U8Array32(Uint8List.fromList(List.filled(32, 1)));
+    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.zero, kemPk: Uint8List(1600))), 'UAKemVersion');
+    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(1599))), 'UAKemKeyLength');
+    expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(1601))), 'UAKemKeyLength');
+    expect(hx(kemRecordDigest(ua: u, version: (BigInt.one << 64) - BigInt.one, kemPk: Uint8List(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31'); // pins the 8-byte version word
+    // m-C3: frb would wrap 2^64 + 1 to 1 and -1 to 2^64 - 1; the package refuses them (as ua-dart / JS)
+    final pk = Uint8List(1600), big = (BigInt.one << 64) + BigInt.one;
+    for (final bad in [BigInt.one << 64, big, -BigInt.one]) {
+      expect(errCode(() => kemRecordDigest(ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
+      expect(errCode(() => kemRecordMessage(kind: 0x0130, ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
+      expect(errCode(() => holderPopMessage(kind: 0x0130, ua: u, keyData: Uint8List(0), kemRecord: KemRecord(version: bad, pk: pk))), 'UAKemVersion', reason: '$bad');
+      expect(errCode(() => pqzRegMessage(ua: u, pqzKey: Uint8List(16384), kemRecord: KemRecord(version: bad, pk: pk))), 'UAKemVersion', reason: '$bad');
+    }
+  });
+
+  test('pqz key record', () {
+    var n = 0, msigRows = 0;
+    for (final r in rows(pv, 'pqzKeyRecords')) {
+      final ua = b32(r['ua']), key = bytes(r['pqzKey']), hash = bytes(r['pqzPopHash']), kind = r['kind'] as int;
+      final kd = bytes(byKey(regs, 'ua', r['ua'])['keyData']), pop = bytes(byKey(regs, 'set', r['set'])['pqzPop']);
+      for (final hashOnly in [false, true]) {
+        final g = pqzKeyRecordMessage(
+            kind: kind, ua: ua, keyData: kd, pqzKey: key, pqzPop: hashOnly ? null : pop, pqzPopHash: hashOnly ? hash : null, alreadySet: false);
+        expect(hx(g.pqzKeyHash), r['pqzKeyHash']);
+        expect(hx(g.pqzPopHash), r['pqzPopHash']);
+        expect(hx(g.pqzKeyDigest), r['pqzKeyDigest']);
+        expect(hx(g.recordDigest), r['recordDigest']);
+        expect(hx(g.message), r['message']);
+        expect(hx(g.pqzRegMessage), r['pqzRegMessage']);
+        expect(hx(pqzKeyDigest(ua: ua, pqzKeyHash: g.pqzKeyHash)), hx(g.pqzKeyDigest));
+        expect(hx(pqzKeyRecordDigest(keyDigest: g.pqzKeyDigest, pqzPopHash: g.pqzPopHash)), hx(g.recordDigest));
+        expect(g.memberDigest != null, kind == 0x0120);
+        expect(hxn(g.memberDigest) ?? '', r['memberDigest'] ?? '');
+        if (kind == 0x0120) {
+          msigRows++;
+          expect(hx(memberDigest(structureUa: ua, uaMsg: g.message)), hx(g.memberDigest!));
+        }
+      }
+      // write-once: a key already set refuses
+      expect(errCode(() => pqzKeyRecordMessage(kind: kind, ua: ua, keyData: kd, pqzKey: key, pqzPopHash: hash, alreadySet: true)), 'UAPqzKeySet');
+      n++;
+    }
+    expect([n, msigRows], [8, 8]); // 4 msig rows, each with the proof bytes and hash-only
+  });
+
+  test('personal_sign of the portable purposes', () {
+    final tags = [purposeTagV(purpose: 'pop', version: 2), purposeTag(purpose: 'kem'), purposeTag(purpose: 'pqz-key')];
+    expect([for (final t in tags) isPortablePurpose(tag: t)], [true, true, true]);
+    expect(isPortablePurpose(tag: purposeTag(purpose: 'metatx')) || isPortablePurpose(tag: purposeTag(purpose: 'pop')), isFalse);
+    final md = b32(byKey(regs, 'name', 'msig-pq-native')['memberDigest']);
+    // known answer from the JS reference (clientkeys ua.js); prefix = 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
+    expect(hx(md), '0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c');
+    expect(hx(personalSignDigest(digest: md)), '0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8');
+    final n = byKey(rows(pv, 'negatives'), 'name', 'native-personal-sign-under-metatx');
+    expect(isPortablePurpose(tag: b32(n['mutation']['set']['purposeTag'])), isFalse);
+  });
+
+  test('holder refusals', () {
+    var run = 0, sigLevel = 0;
+    for (final n in rows(pv, 'negatives')) {
+      final entry = n['entry'], name = n['name'], err = n['error'];
+      final m = n['mutation'] as Map, set = (m['set'] ?? <String, Object?>{}) as Map;
+      if ((entry == 'register' || entry == 'storePqzPop') && set.keys.every((k) => (k as String).startsWith('attrs.') || k == 'pqzPop')) {
+        final row = byKey(regs, 'name', m['row']);
+        final mut = Map<String, Object?>.from(row), attrs = Map<String, Object?>.from(row['attrs'] as Map);
+        for (final o in [(m['registerWith'] ?? {}) as Map, set]) {
+          // registerWith first (the state the registry holds), then the mutation
+          o.forEach((k, v) {
+            if ((k as String).startsWith('attrs.')) {
+              attrs[k.substring(6)] = v;
+            } else {
+              mut[k] = v;
+            }
+          });
+        }
+        mut['attrs'] = attrs;
+        if (err == 'UAPoP') {
+          // the digest layer accepts it; the PoP of the unmutated row does not cover it
+          expect(hx(register(mut).message), isNot(row['popMessage']), reason: '$name');
+        } else {
+          expect(errCode(() => register(mut)), err, reason: '$name');
+        }
+        run++;
+      } else if (entry == 'setPqzKey' && (err == 'UAPqzKeySet' || err == 'UAPqzHolder' || err == 'UAPqzPopHash')) {
+        final rec = byKey(rows(pv, 'pqzKeyRecords'), 'name', m['row']);
+        final uaHex = (set['ua'] ?? rec['ua']) as String, holder = byKey(regs, 'ua', uaHex);
+        final hash = bytes((set['pqzPopHash'] ?? rec['pqzPopHash']) as String);
+        expect(
+            errCode(() => pqzKeyRecordMessage(
+                kind: holder['kind'], ua: b32(uaHex), keyData: bytes(holder['keyData']), pqzKey: bytes(rec['pqzKey']),
+                pqzPopHash: hash, alreadySet: (holder['attrs'] as Map)['pqzKey'] != '0x')),
+            err, reason: '$name');
+        run++;
+      } else if (entry == 'setKemKey' && name == 'kem-record-of-other-ua') {
+        // the record of one UA offered for another: the signed message differs, so the signature cannot verify
+        final k = byKey(rows(pv, 'kemRecords'), 'id', m['row']);
+        final t = byKey(regs, 'ua', set['ua']);
+        final msg = kemRecordMessage(kind: t['kind'], ua: b32(set['ua']), version: BigInt.from(k['version'] as int), kemPk: bytes(k['kemPk']));
+        expect(hx(msg), isNot(k['message']));
+        run++;
+      } else {
+        sigLevel++; // signatures / native personal_sign: verified by the signature vectors
+      }
+    }
+    expect([run, sigLevel], [56, 7]);
+    final u = U8Array32(Uint8List.fromList(List.filled(32, 1))), key = Uint8List(16384), proof = Uint8List.fromList(List.filled(32, 7));
+    HolderPop holder({required int kind, Uint8List? keyData, Uint8List? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, KemRecord? kem}) =>
+        holderPopMessage(
+            kind: kind, ua: u, keyData: keyData ?? Uint8List(0), pqzKey: pqzKey, pqzPop: pqzPop, pqzPopHash: pqzPopHash, kemRecord: kem);
+    // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
+    for (final kd in [Uint8List.fromList([0, 2, 0]), Uint8List.fromList([0, 2, 0, 2, 9, 9])]) {
+      expect(errCode(() => holder(kind: 0x0120, keyData: kd, pqzKey: key, pqzPopHash: proof)), 'UAKeyData');
+    }
+    expect(errCode(() => holder(kind: 0x0120, pqzKey: key, pqzPopHash: proof)), 'UAPqzHolder');
+    expect(errCode(() => holder(kind: 0x0130, pqzKey: key, pqzPopHash: Uint8List(31))), 'UAPqzPopHash');
+    expect(errCode(() => holder(kind: 0x0130, pqzKey: key, pqzPop: Uint8List(0))), 'UAPqzPopHash');
+    expect(errCode(() => holder(kind: 0x0130, pqzKey: Uint8List(100), pqzPopHash: proof)), 'UAKeyData');
+    expect(errCode(() => holder(kind: 0x0130, kem: KemRecord(version: BigInt.one, pk: Uint8List(0)))), 'UAKemKeyLength');
+    expect(errCode(() => holder(kind: 0x0101, kem: KemRecord(version: BigInt.one, pk: Uint8List(1600)))), 'UAKemHolder');
+    // a zero-length proof hash is absent (same as no hash)
+    expect(hx(holder(kind: 0x0130, pqzPopHash: Uint8List(0)).message), hx(holder(kind: 0x0130).message));
   });
 }

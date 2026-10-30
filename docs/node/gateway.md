@@ -29,7 +29,7 @@ gateway body, job payloads, every family adapter's decoder — BCS/XDR/protobuf/
 (dev-dependency): no panic, every error is an `Err`. The job API extends the `hmac` mode with per-namespace key ids
 ([NODE-JOB-05](job-api.md#NODE-JOB-05)).
 
-Limits: body 64 KiB (1 MiB on the PQZ chain profile only; `POST /v1/ua/register` 160 KiB: a PQZL holder registration is ≈ 49 KB binary, ≈ 100–108 KB as hex, and PQZH proofs of ≈ 187 KB register directly, not through the gateway); a global concurrency limit (`tower`
+Limits: body 64 KiB (1 MiB on the PQZ chain profile only; `POST /v1/ua/register` 160 KiB: a PQZL holder registration with its proof and KEM key is ≈ 51–67 KB binary (largest: a PQ `msig` at `n2816-kmax65536`, 66.8 KB), ≈ 103–134 KB as hex, and PQZH proofs of ≈ 187 KB register directly, not through the gateway); a global concurrency limit (`tower`
 `ConcurrencyLimitLayer`, default 32) because every request costs a simulation; a per-IP rate limit at the reverse
 proxy in front of an open gateway ([runbooks.md#production-gates](runbooks.md#production-gates)).
 
@@ -86,7 +86,7 @@ A duplicate returns `200` with the stored state (idempotent).
 | `POST /v1/metatx {chain, token, struct?, m, signature}` (`struct` = `call` \| `transfer`, default `transfer`; [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)) | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; the lanes' guard: chain binding, `data` shape and selector ([NODE-JOB-20](job-api.md#NODE-JOB-20)), refused ⇒ `400`; simulation, then `mtxDigest` / `mtxTransferDigest`; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
 | `POST /v1/ua-metatx {chain, token, struct?, m: WireUAMetaTransaction \| WireUAMetaTransfer, auth}` | `ua_metatx` job | token `features ∋ ua` (v3: `registry() ≠ 0`); `from >> 160 ≠ 0` ⇒ registry record ([UA record cache](#ua-cache), `UA_NOT_REGISTERED`); cheap kinds verified locally ([NODE-GSP-15](gossip.md#NODE-GSP-15)); node computes `uaDigest` |
-| `POST /v1/ua/register {chain, kind, keyData, pop, pqzKey?, pqzPop?}` (`{chain, kind, keyData: 0x…, pop: 0x…, pqzKey?: 0x…, pqzPop?: 0x…}`; the pair only for a PQ signer that carries a PQZ key, [CTR-UA-16](../contracts/accounts.md#CTR-UA-16)) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); the node recomputes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)` and verifies the PoP of cheap kinds over `pop_digest(ua, h)` with `chain.chain_uid`; it never verifies `R_REG` locally (simulation does); body limit 160 KiB; per-chain registration quota |
+| `POST /v1/ua/register {chain, kind, keyData, attrs?, pop, pqzPop?}` (`{chain, kind, keyData: 0x…, attrs: {pqzKey?: 0x…, pqzPopHash?: 0x…, kemVersion?: n, kemPk?: 0x…}, pop: 0x…, pqzPop?: 0x…}`; the PQZ and KEM attributes only for a PQ holder, [CTR-UA-16](../contracts/accounts.md#CTR-UA-16), [CTR-UA-32](../contracts/accounts.md#CTR-UA-32); `pqzPop` may be omitted and given later by a `storePqzPop` call job) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)); a PQ registration whose full-call estimate exceeds min(block gas limit, relayer cap) is relayed split: `register` without the proof, then `storePqzPop` | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); the node recomputes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)` and the KEM record hash and verifies the PoP of cheap kinds over the portable `registrationDigest` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07): no `chain_uid` in it); it never verifies `R_REG` locally (simulation does); body limit 160 KiB; per-chain registration quota |
 | `GET /v1/intents/{intent_id}` | the `~gateway` job: `{"intent_id", "state", "consumed_kind"?, "tx_hash"?, "updated_at"}` | **only for gateway-origin rows**: rows from peers or from the job API (incl. private-chain intents) answer 404, the same as unknown or expired ids |
 | `POST /v1/dex/orders`, `…/cancel`, `…/cancel-all`; `GET /v1/dex/{markets,depth,trades,ticker,orders}` (`GET /v1/dex/orders?maker=`), `GET /v1/dex/exchanges/{ref}` (SPECIFIED) | [dex-venue.md#routes](dex-venue.md#routes) | managed markets add `NOT_ELIGIBLE {reason}`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`, `PAUSED`, `ATTESTATION_SHORTER`; mesh `route_order` ⇒ `MANAGED_LOCAL` ([dex-venue.md#managed-markets](dex-venue.md#managed-markets)) |
 | `GET /v1/dex/depth?scope=network`, `GET /v1/dex/homes` | network depth and DEX homes ([dex-venue.md#gossip](dex-venue.md#gossip)) | — |
@@ -146,14 +146,23 @@ node's. Limits: 64 KiB body, the per-chain breaker and the gateway concurrency l
 from the store: before that, the built gateway's in-memory `mpsc` feeds only the EVM submitter (Transitional (BUILT):
 door A work is not journaled and has no digest guard until it becomes a `~gateway` job).
 
-<a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for UA
-registration.** `POST /v1/ua/register` is the one gateway route that creates a `call` job in `~gateway`: target = the
-chain's `chain.ua_registry`, function `register`, calldata built by the node from the checked body. It is a gateway
+<a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
+registry's four writes.** Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the four
+UA-8 writes `register` (`0x0c936361`), `setKemKey` (`0x2d21c58e`), `storePqzPop` (`0x7fac161a`) and `setPqzKey`
+(`0xbde71760`) — all relayable by anyone, gasless, no fee ([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)); `POST
+/v1/ua/register` builds the `register` calldata from the checked body. A relayed PQ registration whose `eth_estimateGas`
+of the full call exceeds min(block gas limit, relayer per-transaction cap) is split: `register` without `pqzPop`, then
+`storePqzPop` (the SCaaS testnet: 200 M block, relayer cap `max_gas_per_tx` 64 M, so every PQ registration with its
+proof, 84.8–109.1 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays all four writes (call
+table rows, guard rule `Rule::UaRegistry`; a relayed `register` with its proof over the cap is refused `UA_REGISTER_SPLIT: <why>;
+send register without pqzPop, then storePqzPop`) and the sponsor policy below covers all four; the call-table rows and the refusal
+are built on `ua8` (`64c233d4`); **this route and the sponsor policy are not built** (no gateway route, no sponsor-policy code;
+`TODO.md`), so relaying goes through job-API `call` jobs today. It is a gateway
 capability, not an `allow_call` grant ("gateway capability, not a namespace grant") ([NODE-JOB-09](job-api.md#NODE-JOB-09) is unchanged for namespaces);
 `job_live_call` dedupes retries; every registration lives in `~gateway`, so the per-namespace index
 ([NODE-JOB-13](job-api.md#NODE-JOB-13)) dedupes them node-wide. Sponsored registration spam is bounded by the per-chain
 registration quota and the sponsor budget; the one `~gateway` `call` sponsor policy shape allowed is `contract =
-chain.ua_registry`, `selector` = `register`, `max_tx_per_payer_hour = 0`
+chain.ua_registry` (node config `[[chains]] ua_registry`), `selector` ∈ {`register`, `setKemKey`, `storePqzPop`, `setPqzKey`}, `max_tx_per_payer_hour = 0`
 ([sponsorship.md#admin](sponsorship.md#admin)). The universal-account migration uses this route
 ([contracts/accounts.md#migration](../contracts/accounts.md#migration)).
 
@@ -184,7 +193,7 @@ chain (readiness reason `chain_uid mismatch`, as `finality violated`): nothing i
 `UNKNOWN_CHAIN`.
 
 Every EIP-712 domain `salt` the node computes (token, subject account, mandate wallet, DEX, registry),
-`pop_digest` and the `metatx-cancel` digest use `chain.chain_uid`, never the chain id alone. The post-quantum Zether
+and the `metatx-cancel` digest use `chain.chain_uid`, never the chain id alone (the registration PoP is portable and has no chain in it). The post-quantum Zether
 chain profile adds the same binding for its registry and tokens (RPC genesis hash `==` profile `genesis_hash` `==`
 `registry.chainUid()` `==` each token's `chainUid`, [ops.md#pqz](ops.md#pqz)). Why: a contract cannot read its own
 genesis hash after block 256, so a wrong constructor value is caught only off chain; a wrong value makes correct

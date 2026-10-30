@@ -1,0 +1,310 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.20;
+
+import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
+import {Test} from "forge-std/Test.sol";
+import {stdJson} from "forge-std/StdJson.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
+import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
+import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
+import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
+
+/// Token views `ZetherDisclosure` reads, etched at a vector's token address.
+contract S3Token {
+    IZetherVerifier public verifier;
+    bytes32 public chainUid;
+    bytes public auditorKey;
+    bytes entry;
+
+    function set(IZetherVerifier v, bytes32 uid, bytes memory ya, bytes memory e) external {
+        (verifier, chainUid, auditorKey, entry) = (v, uid, ya, e);
+    }
+
+    function transferEntry(bytes32) external view returns (bytes memory) { return entry; }
+}
+
+/// @notice Proof do prover Rust của luồng S3 (`r3-zether-prover`, chép vào `test/vectors/zether/s3/`) —
+///         một hiện thực ĐỘC LẬP của đặc tả. Đúng thì qua verifier Solidity; lật bất kỳ bit nào thì không.
+///         BLS12-381 only since UA-6 (CTR-ZTH-32): the `*_bn254.json` rows are read by `legacy/ua6/` only.
+contract ZetherS3VectorsTest is Test {
+    using stdJson for string;
+
+    string constant DIR = "test/vectors/zether/s3/";
+    IZetherVerifier bls;
+    IZetherBurnVerifier blsB;
+    ZetherDisclosure disc;
+
+    function setUp() public {
+        (bls, blsB) = ZetherVerifiers.deploy();
+        disc = new ZetherDisclosure();
+    }
+
+    enum Op { TRANSFER, BURN, MULTI }
+
+    function _ok(IZetherVerifier v, bytes memory st, bytes memory pr, Op op) internal view returns (bool) {
+        try this.verify{gas: 60_000_000}(v, st, pr, op) returns (bool ok) { return ok; } catch { return false; }
+    }
+
+    function verify(IZetherVerifier v, bytes memory st, bytes memory pr, Op op) external view returns (bool) {
+        if (op == Op.TRANSFER) return v.verifyTransfer(st, pr);
+        if (op == Op.MULTI) return v.verifyTransferMulti(st, pr);
+        return address(v) == address(bls) && blsB.verifyBurn(st, pr);
+    }
+
+    function _flip(bytes memory a, uint256 i) internal pure returns (bytes memory b) {
+        b = bytes.concat(a);
+        b[i] = bytes1(uint8(b[i]) ^ 0x01);
+    }
+
+    /// Proof đúng qua; một bit lật ở 7 vị trí trải đều proof và 5 trường statement thì không.
+    function _checkProof(string memory file, Op op) internal view {
+        string memory j = vm.readFile(string.concat(DIR, file));
+        IZetherVerifier v = bls;
+        assertEq(j.readString(".curve"), "bls12381");
+        bytes memory st = j.readBytes(".statement");
+        bytes memory pr = j.readBytes(".proof");
+        assertTrue(j.readBool(".expect"));
+        assertTrue(this.verify(v, st, pr, op), "S3 proof rejected");
+        for (uint256 k = 1; k <= 7; ++k) {
+            assertFalse(_ok(v, st, _flip(pr, (pr.length * k) / 8 - 1), op), "tampered proof accepted");
+        }
+        // chainId, chainUid, binding, sendCounter, accSeq, fee, validUntilBlock (review C0-9)
+        uint256[7] memory fields = [uint256(95), 127, 223, 255, 287, 319, 511];
+        for (uint256 k; k < 7; ++k) {
+            assertFalse(_ok(v, _flip(st, fields[k]), pr, op), "tampered statement accepted");
+        }
+        if (op == Op.MULTI) {
+            // every leg point of the statement is bound; so is the mode (opTag)
+            for (uint256 k = 1; k <= 5; ++k) {
+                assertFalse(_ok(v, _flip(st, st.length - (st.length - 512) * k / 6), pr, op), "tampered leg accepted");
+            }
+            assertFalse(_ok(v, _flip(st, 31), pr, op), "mode switch accepted");
+        }
+        // `.authDigest` (the `SCAAS-ZETHER-AUTH-V1` digest) is no longer checked: removed with `authSig` (UA-6 U9)
+    }
+
+    function test_s3TransferBls12381() public view { _checkProof("transfer_bls12381.json", Op.TRANSFER); }
+    function test_s3TransferNoAuditorBls12381() public view { _checkProof("transfer_noaud_bls12381.json", Op.TRANSFER); }
+    function test_s3BurnBls12381() public view { _checkProof("burn_bls12381.json", Op.BURN); }
+    function test_s3MultiBls12381() public view { _checkProof("transfer_multi_bls12381.json", Op.MULTI); }
+    function test_s3MultiNoAuditorBls12381() public view { _checkProof("transfer_multi_noaud_bls12381.json", Op.MULTI); }
+
+    /// Header của statement nhiều người nhận: opTag theo mode, proof system id "/multi".
+    function test_s3MultiStatementHeader() public view {
+        string memory j = vm.readFile(string.concat(DIR, "transfer_multi_bls12381.json"));
+        (bytes32 op, bytes32 psid) = abi.decode(_head(j.readBytes(".statement"), 0), (bytes32, bytes32));
+        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH"));
+        assertEq(psid, bls.proofSystemIdMulti());
+        assertEq(bls.proofSystemIdMulti(), keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3/multi"));
+        assertEq(bls.proofSystemId(), keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v3"));
+        // the payload's decoyFee word (owner 2026-10-20) and the statement fee txFee + M · decoyFee (word 9)
+        bytes memory pl = j.readBytes(".payload");
+        uint256 d = j.readUint(".request.decoyFee");
+        assertEq(uint256(bytes32(_head(pl, 144))), d);
+        assertEq(uint256(bytes32(_head(pl, 112))), 3);
+        // validUntilBlock: payload word 2, statement word 15 (review C0-9)
+        assertEq(uint256(bytes32(_head(pl, 64))), j.readUint(".request.validUntilBlock"));
+        assertEq(uint256(bytes32(_head(j.readBytes(".statement"), 480))), j.readUint(".request.validUntilBlock"));
+        assertEq(uint256(bytes32(_head(j.readBytes(".statement"), 288))), j.readUint(".request.fee") + 3 * d);
+        string memory k = vm.readFile(string.concat(DIR, "transfer_multi_noaud_bls12381.json"));
+        (op,) = abi.decode(_head(k.readBytes(".statement"), 0), (bytes32, bytes32));
+        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/BUNDLE"));
+    }
+
+    /// Header statement của S3 đúng bố cục zether.md §7 (512 byte, `chainUid` là word 3) với các trường của `request`.
+    function test_s3StatementHeaderMatchesRequest() public view {
+        string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
+        bytes memory st = j.readBytes(".statement");
+        (bytes32 op, bytes32 psid, uint256 chainId, bytes32 uid, address token, bytes32 tag) =
+            abi.decode(_head(st, 0), (bytes32, bytes32, uint256, bytes32, address, bytes32));
+        assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-V1"));
+        assertEq(psid, bls.proofSystemId());
+        assertEq(chainId, j.readUint(".request.chainId"));
+        assertEq(uid, j.readBytes32(".request.chainUid"));
+        assertEq(token, j.readAddress(".request.token"));
+        assertEq(tag, keccak256("ZTX_V1_RELAYED"));
+        assertEq(bytes32(_head(st, 192)), j.readBytes32(".request.envelopeBinding"));
+    }
+
+    function test_s3StatementCountersAndEntryRef() public view {
+        string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
+        bytes memory st = j.readBytes(".statement");
+        (uint256 sc, uint256 accSeq, uint256 fee, bytes32 ben,,) =
+            abi.decode(_head(st, 224), (uint256, uint256, uint256, bytes32, uint256, address));
+        assertEq(sc, j.readUint(".request.sendCounter"));
+        assertEq(accSeq, j.readUint(".request.accSeq"));
+        assertEq(fee, j.readUint(".request.fee"));
+        assertEq(ben, j.readBytes32(".request.beneficiary"));
+        _checkMemo(j, st);
+        _checkMemo(vm.readFile(string.concat(DIR, "transfer_multi_bls12381.json")), "");
+        // entryRef (CTR-ZTH-36) = keccak(tag, chainId, chainUid, token, fromUA, sendCounter), fromUA tagged (CTR-UA-16)
+        bytes memory yf = new bytes(128);
+        for (uint256 i; i < 128; ++i) yf[i] = st[512 + i];
+        bytes32 fromUA = keccak256(abi.encodePacked(keccak256("scaas.ua.zether-bls12381.v1"), yf));
+        assertEq(
+            keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), j.readUint(".request.chainId"),
+                j.readBytes32(".request.chainUid"), j.readAddress(".request.token"), fromUA, sc)),
+            j.readBytes32(".entryRef")
+        );
+    }
+
+    /// Header word 13 is the salt (16 zero bytes ‖ salt), the payload's bytes 96..112 too (CTR-ZTH-30); word 14 is
+    /// `keccak256(memo)` on commit-reveal, the payload then ending with the memo of `17 + 40·M` bytes, else 0
+    /// (CTR-ZTH-50).
+    function _checkMemo(string memory j, bytes memory st) internal view {
+        if (st.length == 0) st = j.readBytes(".statement");
+        bytes memory pl = j.readBytes(".payload");
+        bytes16 salt = bytes16(j.readBytes(".salt"));
+        assertEq(bytes32(_head(st, 416)), bytes32(uint256(uint128(salt))), "salt, word 13");
+        assertEq(bytes16(_head(pl, 96)), salt, "salt after validUntilBlock");
+        bytes memory memo = vm.keyExistsJson(j, ".memo") ? j.readBytes(".memo") : bytes("");
+        assertEq(bytes32(_head(st, 448)), memo.length == 0 ? bytes32(0) : keccak256(memo), "memoHash, word 14");
+        if (memo.length == 0) return;
+        bytes memory tail = new bytes(memo.length);
+        for (uint256 i; i < memo.length; ++i) tail[i] = pl[pl.length - memo.length + i];
+        assertEq(tail, memo, "the payload ends with the memo");
+        assertEq((memo.length - 17) % 40, 0);
+    }
+
+    function _head(bytes memory st, uint256 off) internal pure returns (bytes memory out) {
+        out = new bytes(192);
+        for (uint256 i; i < 192; ++i) out[i] = st[off + i];
+    }
+
+    /// `directCalldata` = `mtxConfidentialTransferSingle(payload, proof, beneficiary)`: the direct call, and unchanged the
+    /// envelope's `data` (CTR-ZTH-34; no `authSig` since UA-6 U9).
+    function test_s3DirectCalldataIsTheEntryPointCall() public view {
+        string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
+        bytes memory op = j.readBytes(".directCalldata");
+        assertEq(bytes4(op), ZetherLayer.mtxConfidentialTransferSingle.selector);
+        bytes memory args = new bytes(op.length - 4);
+        for (uint256 i; i < args.length; ++i) args[i] = op[4 + i];
+        (bytes memory pl, bytes memory pr, bytes memory auth, bytes32 ben, bytes memory hint) =
+            abi.decode(args, (bytes, bytes, bytes, bytes32, bytes));
+        assertEq(pl, j.readBytes(".payload"));
+        assertEq(pr, j.readBytes(".proof"));
+        assertEq(ben, j.readBytes32(".request.beneficiary"));
+        assertEq(auth.length + hint.length, 0, "Zether: auth and accHint empty");
+    }
+
+    /// Mở tiết lộ của S3 qua contract `ZetherDisclosure` thật (token giả etch tại địa chỉ token của vector): bốn kind
+    ///      trên transfer một người nhận (leg 0) và bốn kind trên leg 1 của transfer nhiều người nhận. Leg chép sang
+    ///      index kế tiếp thì không mở (index nằm trong challenge). `uid != 0`: chain B (cùng chainid, khác chainUid).
+    function _checkDisclosure(string memory file, bytes32 uid) internal returns (uint256 ok) {
+        string memory j = vm.readFile(string.concat(DIR, file));
+        IZetherVerifier v = bls;
+        address impl = address(new S3Token());
+        uint256 n;
+        for (; vm.keyExistsJson(j, string.concat(".cases[", vm.toString(n), "]")); ++n) {
+            string memory c = string.concat(".cases[", vm.toString(n), "]");
+            assertTrue(j.readBool(string.concat(c, ".expect")));
+            uint256 idx = j.readUint(string.concat(c, ".index"));
+            address tok = j.readAddress(string.concat(c, ".token"));
+            vm.etch(tok, impl.code);
+            // the multi-recipient record layout `Y_t ‖ C_out ‖ D_out ‖ C_aud ‖ D_aud` (review C0-1; the single case's
+            // `D_aud` is its `D_out`)
+            bytes memory leg = bytes.concat(j.readBytes(string.concat(c, ".Yt")), j.readBytes(string.concat(c, ".Cout")),
+                j.readBytes(string.concat(c, ".Dout")), j.readBytes(string.concat(c, ".Caud")),
+                j.readBytes(string.concat(c, ".Daud")));
+            S3Token(tok).set(v, uid == 0 ? j.readBytes32(string.concat(c, ".chainUid")) : uid,
+                j.readBytes(string.concat(c, ".Ya")), bytes.concat(new bytes(16 + idx * leg.length), leg, leg)); // R = salt ‖ …
+            vm.chainId(j.readUint(string.concat(c, ".chainId")));
+            if (!_disclose(j, c, tok, idx)) continue;
+            ++ok;
+            if (j.readUint(string.concat(c, ".kind")) != 0) assertFalse(_disclose(j, c, tok, idx + 1), "opening moved leg");
+        }
+        assertEq(n, 8);
+    }
+
+    function _disclose(string memory j, string memory c, address tok, uint256 idx) internal view returns (bool) {
+        return disc.verifyTransferAmount(tok, j.readBytes32(string.concat(c, ".entryRef")), idx,
+            j.readUint(string.concat(c, ".amount")), ITransferDisclosure.OpeningKind(j.readUint(string.concat(c, ".kind"))),
+            j.readBytes(string.concat(c, ".opening")));
+    }
+
+    function test_s3DisclosureBls12381() public { assertEq(_checkDisclosure("disclosure_bls12381.json", 0), 8); }
+
+    /// Review C0-4: the openings of the weak challenge (`weak-fs/`, no statement points in `e`) are refused; only the two
+    /// SENDER_S openings (no challenge) still pass.
+    function test_weakFiatShamirOpeningsRefused() public {
+        assertEq(_checkDisclosure("weak-fs/disclosure_bls12381.json", 0), 2);
+    }
+
+    /// A record whose key point `K` is `O` (and `M = O`, amount 0) satisfies both equations with `A1 = A2 = O, z = 0`:
+    /// refused, as the prover's `verify_opening` does.
+    function test_keyPointIdentityRefused() public {
+        S3Token t = new S3Token();
+        uint256 p = bls.g1EncodedBytes();
+        t.set(bls, bytes32(0), "", new bytes(16 + 4 * p)); // Y_t = C_out = D_out = C_aud = O
+        assertFalse(disc.verifyTransferAmount(address(t), "ref", 0, 0, ITransferDisclosure.OpeningKind.RECEIVER_X,
+            abi.encode(new bytes(p), new bytes(p), uint256(0))));
+    }
+
+    /// Review C0-1 / C0-9: the `…/v2` vectors (the pre-fix prover, `s3/v2/`) are refused by the `…/v3` verifiers: another
+    /// `proofSystemId`, another header (512 bytes) and another leg layout.
+    function test_v2ProofRefused() public view {
+        string[3] memory files = ["transfer_bls12381.json", "transfer_multi_bls12381.json", "burn_bls12381.json"];
+        Op[3] memory ops = [Op.TRANSFER, Op.MULTI, Op.BURN];
+        for (uint256 k; k < 3; ++k) {
+            string memory j = vm.readFile(string.concat(DIR, "v2/", files[k]));
+            bytes memory st = j.readBytes(".statement");
+            assertEq(bytes32(_head(st, 32)), keccak256(k == 1 ? bytes("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2/multi")
+                : bytes("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2")), "a v2 statement");
+            assertFalse(_ok(bls, st, j.readBytes(".proof"), ops[k]), "v2 proof accepted");
+        }
+    }
+
+    /// Chain B (same chainid, another chainUid, a re-created chain): every Chaum-Pedersen opening (kinds 1-3) fails.
+    /// The two SENDER_S openings still pass by design: no challenge, bound through `entryRef` and the chain-specific `s`.
+    function test_s3DisclosureRefusedOnAnotherChainUid() public {
+        assertEq(_checkDisclosure("disclosure_bls12381.json", keccak256("chain B")), 2);
+    }
+
+    /// Review T2 m4: a foreign token's entry shorter than the salt is not a record: `RecordMalformed`, not a panic.
+    function test_shortEntryIsNotARecord() public {
+        S3Token t = new S3Token();
+        t.set(bls, bytes32(0), "", hex"0102");
+        vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.RecordMalformed.selector, bytes32("ref")));
+        disc.verifyTransferAmount(address(t), "ref", 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(1));
+    }
+
+    function test_s3SchnorrMatches() public view {
+        string memory j = vm.readFile(string.concat(DIR, "schnorr_bls12381.json"));
+        bytes memory y = j.readBytes(".Y");
+        bytes memory r = j.readBytes(".R");
+        uint256 e = T.hashToScalar(keccak256(abi.encodePacked("SCAAS-ZETHER-SCHNORR-V1", r, y, j.readBytes32(".msg"))), bls.groupOrder());
+        assertEq(e, j.readUint(".e"));
+        assertEq(bls.g1MulBase(j.readUint(".z")), bls.g1Add(r, bls.g1Mul(y, e)));
+    }
+
+    /// The prover's registration PoP (`r33_keys.json`, CTR-UA-07: chain 31337, the vectors' `chainUid`, registry
+    /// `0xaa…aa`, no PQZ key) registers on a real UA registry at that address: one PoP for the prover, clientkeys
+    /// (`test/zether.test.js` reads the same file) and the registry. A flipped bit is `UAPoP`.
+    function test_s3PopRegisters() public {
+        string memory j = vm.readFile(string.concat(DIR, "r33_keys.json"));
+        address at = j.readAddress(".bls12381.keys[0].pop.registry");
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
+        k[0] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        bytes32 uid = j.readBytes32(".bls12381.keys[0].pop.chainUid");
+        deployCodeTo("UARegistry.sol:UARegistry", abi.encode(uid, address(0), false, uint64(12_000_000), address(0), false, k), at);
+        IUARegistry reg = IUARegistry(at);
+        {
+            string memory key = ".bls12381.keys[0]";
+            uint16 kind = uint16(j.readUint(string.concat(key, ".pop.kind")));
+            bytes memory y = j.readBytes(string.concat(key, ".Y"));
+            bytes32 ua = j.readBytes32(string.concat(key, ".UA"));
+            assertEq(j.readUint(string.concat(key, ".pop.chainId")), block.chainid);
+            assertEq(reg.uaOf(kind, y), ua);
+            assertEq(reg.popDigest(ua, 0), j.readBytes32(string.concat(key, ".pop.popDigest")));
+            bytes memory pop = j.readBytes(string.concat(key, ".pop.pop"));
+            vm.expectRevert(IUARegistry.UAPoP.selector);
+            reg.register(kind, y, _flip(pop, pop.length - 1), "", "");
+            assertEq(reg.register(kind, y, pop, "", ""), ua);
+            assertEq(reg.keyOf(ua), y);
+        }
+    }
+}

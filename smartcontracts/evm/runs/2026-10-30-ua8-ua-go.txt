@@ -1,0 +1,26 @@
+# ua-go at commit 4adc323a
+=== RUN   TestTableGroupsPurposesConstants
+--- PASS: TestTableGroupsPurposesConstants (0.00s)
+=== RUN   TestValidRows
+--- PASS: TestValidRows (0.00s)
+=== RUN   TestInvalidRows
+--- PASS: TestInvalidRows (0.00s)
+=== RUN   TestNativesNativeSpaceCanonicalIDs
+--- PASS: TestNativesNativeSpaceCanonicalIDs (0.00s)
+=== RUN   TestMessages
+--- PASS: TestMessages (0.00s)
+=== RUN   TestStructures
+--- PASS: TestStructures (0.00s)
+=== RUN   TestPortable
+--- PASS: TestPortable (0.02s)
+=== RUN   TestKemRecord
+--- PASS: TestKemRecord (0.01s)
+=== RUN   TestPqzKeyRecord
+--- PASS: TestPqzKeyRecord (0.01s)
+=== RUN   TestPersonalSignPortablePurposes
+--- PASS: TestPersonalSignPortablePurposes (0.01s)
+=== RUN   TestHolderRefusals
+--- PASS: TestHolderRefusals (0.02s)
+PASS
+ok  	github.com/dinhduongha/scaas/clients/ua-go	(cached)
+rc=0

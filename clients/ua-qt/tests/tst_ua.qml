@@ -51,7 +51,8 @@ TestCase {
             compare(UaKinds.groupTag(r.group), r.GROUP)
         }
         for (const r of k.purposes)
-            compare(UaKinds.purposeTag(r.purpose), r.purposeTag)
+            compare(UaKinds.purposeTagV(r.purpose, r.version), r.purposeTag, r.purpose)
+        compare(UaKinds.purposeTag("kem"), k.purposes.find(r => r.purpose === "kem").purposeTag)
         compare(UaKinds.msgTag(), k.constants.MSG_TAG)
         compare(UaKinds.purposeTag("pop"), k.constants.POP_TAG)
     }
@@ -99,30 +100,197 @@ TestCase {
 
     function test_messages() {
         for (const r of k.messages) {
-            const p = UaKinds.purposeTag(r.purpose)
+            const p = UaKinds.purposeTagV(r.purpose, r.version ?? 1)
             compare(p, r.purposeTag)
             compare(UaKinds.uaMessage(r.kind, p, r.digest), r.uaMsg)
         }
     }
 
-    function test_structures() {
-        for (const p of s.pop) {
-            const c = s.contexts[p.context]
-            compare(UaKinds.chainKeyHash(c.chainId), p.chainKeyHash)
-            compare(UaKinds.popDigest(c.chainId, c.chainUid, c.registry, p.ua, p.pqzKeyHash), p.popDigest)
+    function test_portable() {
+        const pp = vectors.load("portable.json")
+        compare(UaKinds.purposeTagV("pop", 2), pp.tags.PURPOSE_POP_V2.hash)
+        compare(UaKinds.purposeTag("kem"), pp.tags.PURPOSE_KEM.hash)
+        compare(UaKinds.purposeTag("pqz-key"), pp.tags.PURPOSE_PQZ_KEY.hash)
+        compare(pp.registrations.length, 25)
+        let withPqz = 0
+        for (const r of pp.registrations) {
+            const a = r.attrs
+            const h = JSON.parse(UaKinds.holderPopMessage(r.kind, r.ua, r.keyData, a.pqzKey, r.pqzPop, Number(a.kemVersion), a.kemPk))
+            compare(UaKinds.lastError, "", r.name)
+            compare(h.pqzKeyHash, r.pqzKeyHash, r.name)
+            compare(h.pqzPopHash, a.pqzPopHash, r.name)
+            compare(h.kemRecordHash, r.kemRecordHash, r.name)
+            compare(h.portablePopDigest, r.portablePopDigest, r.name)
+            compare(h.registrationDigest, r.registrationDigest, r.name)
+            compare(h.message, r.popMessage, r.name)
+            compare(h.memberDigest ?? "", r.memberDigest ?? "", r.name)
+            compare(UaKinds.portablePopDigest(r.ua, h.pqzKeyHash, h.kemRecordHash), r.portablePopDigest)
+            compare(UaKinds.registrationDigest(r.portablePopDigest, h.pqzPopHash), r.registrationDigest)
+            if (a.pqzKey !== "0x") {
+                withPqz++
+                compare(UaKinds.pqzRegMessage(r.ua, a.pqzKey, Number(a.kemVersion), a.kemPk), r.pqzRegMessage, r.name)
+            }
         }
-        for (const p of s.pqzReg) {
-            const c = s.contexts[p.context]
-            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey))
-            compare(h.pqzKeyHash, p.pqzKeyHash)
-            compare(h.popDigest, p.popDigest)
-            compare(UaKinds.pqzRegMessage(c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey), p.pqzRegMessage)
-            for (const bad of [0x0101, 0x0133]) {
-                UaKinds.holderPopMessage(bad, c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey)
+        compare(withPqz, 8)
+        // hash-only proof path agrees with the proof bytes
+        for (const r of pp.registrations) {
+            const a = r.attrs
+            if (a.pqzKey === "0x")
+                continue
+            const h = JSON.parse(UaKinds.holderPopMessageH(r.kind, r.ua, r.keyData, a.pqzKey, "0x", a.pqzPopHash, Number(a.kemVersion), a.kemPk))
+            compare(UaKinds.lastError, "", r.name)
+            compare(h.message, r.popMessage, r.name)
+        }
+        // the portable.json negatives that are digest-layer rules (as ua-rs / ua-cs)
+        let run = 0
+        for (const n of pp.negatives) {
+            const m = n.mutation, set = m.set ?? {}
+            const only = Object.keys(set).every(x => x.startsWith("attrs.") || x === "pqzPop")
+            if ((n.entry === "register" || n.entry === "storePqzPop") && only) {
+                const row = JSON.parse(JSON.stringify(pp.registrations.find(r => r.name === m.row)))
+                for (const [key, v] of Object.entries(Object.assign({}, m.registerWith ?? {}, set))) {
+                    if (key.startsWith("attrs.")) row.attrs[key.slice(6)] = v; else row[key] = v
+                }
+                const a = row.attrs
+                const out = UaKinds.holderPopMessageH(row.kind, row.ua, row.keyData, a.pqzKey, row.pqzPop, a.pqzPopHash, Number(a.kemVersion), a.kemPk)
+                if (n.error === "UAPoP") {
+                    compare(UaKinds.lastError, "", n.name)
+                    verify(JSON.parse(out).message !== row.popMessage, n.name)
+                } else {
+                    compare(UaKinds.lastError, n.error, n.name)
+                }
+                run++
+            } else if (n.entry === "setPqzKey" && ["UAPqzKeySet", "UAPqzHolder", "UAPqzPopHash"].includes(n.error)) {
+                const rec = pp.pqzKeyRecords.find(r => r.name === m.row)
+                const ua = set.ua ?? rec.ua
+                const holder = pp.registrations.find(r => r.ua === ua)
+                UaKinds.pqzKeyRecordMessage(holder.kind, ua, holder.keyData, rec.pqzKey, "0x", set.pqzPopHash ?? rec.pqzPopHash, holder.attrs.pqzKey !== "0x")
+                compare(UaKinds.lastError, n.error, n.name)
+                run++
+            } else if (n.entry === "setKemKey" && n.name === "kem-record-of-other-ua") {
+                const kr = pp.kemRecords.find(r => r.id === m.row)
+                const t = pp.registrations.find(r => r.ua === set.ua)
+                const d = UaKinds.kemRecordDigest(set.ua, Number(kr.version), kr.kemPk)
+                verify(UaKinds.uaMessage(t.kind, UaKinds.purposeTag("kem"), d) !== kr.message, n.name)
+                run++
+            }
+        }
+        compare(run, 56)
+        // refusals
+        const proof = "0x" + "07".repeat(32), ua = "0x" + "01".repeat(32)
+        for (const bad of [0x0101, 0x0133]) {  // single-key non-holders refuse a PQZ key (on every pqzReg row's UA)
+            for (const p of s.pqzReg) {
+                UaKinds.holderPopMessage(bad, p.ua, "0x", k.pqzKey, proof, 0, "")
                 compare(UaKinds.lastError, "UAPqzHolder")
             }
-            compare(JSON.parse(UaKinds.holderPopMessage(p.kind, c.chainId, c.chainUid, c.registry, p.ua, "")).pqzKeyHash,
-                    "0x" + "00".repeat(32))
+        }
+        UaKinds.holderPopMessage(0x0130, ua, "0x", k.pqzKey, "0x", 0, "")
+        compare(UaKinds.lastError, "UAPqzPopHash")  // a PQZ key without its proof
+        UaKinds.holderPopMessage(0x0120, ua, "0x000200", k.pqzKey, proof, 0, "")
+        compare(UaKinds.lastError, "UAKeyData")
+        UaKinds.holderPopMessage(0x0120, ua, "0x", k.pqzKey, proof, 0, "")
+        compare(UaKinds.lastError, "UAPqzHolder")
+        UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", 1, "0x" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAKemHolder")
+        // a proof hash of the wrong length is UAPqzPopHash, as in every other package (m-C4)
+        UaKinds.holderPopMessageH(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), 0, "")
+        compare(UaKinds.lastError, "UAPqzPopHash")
+        UaKinds.pqzKeyRecordMessage(0x0130, ua, "0x", k.pqzKey, "0x", "0x" + "07".repeat(31), false)
+        compare(UaKinds.lastError, "UAPqzPopHash")
+        // keccak256("evm:1099511627783"), as ua-py / ua-go
+        compare(UaKinds.chainKeyHash(1099511627783), "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950")
+    }
+
+    function test_personalSign() {
+        const pp = vectors.load("portable.json")
+        const md = pp.registrations.find(r => r.name === "msig-pq-native").memberDigest
+        // known answer from the JS reference: prefix 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
+        compare(md, "0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c")
+        compare(UaKinds.personalSignDigest(md), "0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8")
+        compare(UaKinds.lastError, "")
+        verify(UaKinds.isPortablePurpose(pp.tags.PURPOSE_POP_V2.hash) && UaKinds.isPortablePurpose(pp.tags.PURPOSE_KEM.hash)
+               && UaKinds.isPortablePurpose(pp.tags.PURPOSE_PQZ_KEY.hash))
+        verify(!UaKinds.isPortablePurpose(UaKinds.purposeTag("metatx")) && !UaKinds.isPortablePurpose(UaKinds.purposeTag("pop")))
+        compare(UaKinds.lastError, "")
+        verify(!UaKinds.isPortablePurpose("0x" + "00".repeat(31)))
+        compare(UaKinds.lastError, "UAArgument")
+        UaKinds.personalSignDigest("0x" + "00".repeat(31))
+        compare(UaKinds.lastError, "UAArgument")
+    }
+
+    function test_pqzKeyRecord() {
+        const pp = vectors.load("portable.json")
+        compare(pp.pqzKeyRecords.length, 8)
+        let msigRows = 0
+        for (const r of pp.pqzKeyRecords) {
+            const reg = pp.registrations.find(x => x.ua === r.ua)
+            const pop = pp.registrations.find(x => x.set === r.set).pqzPop
+            for (const hashOnly of [false, true]) {
+                const g = JSON.parse(UaKinds.pqzKeyRecordMessage(r.kind, r.ua, reg.keyData, r.pqzKey, hashOnly ? "0x" : pop, hashOnly ? r.pqzPopHash : "0x", false))
+                compare(UaKinds.lastError, "", r.name)
+                compare(g.pqzKeyHash, r.pqzKeyHash, r.name)
+                compare(g.pqzPopHash, r.pqzPopHash, r.name)
+                compare(g.pqzKeyDigest, r.pqzKeyDigest, r.name)
+                compare(g.recordDigest, r.recordDigest, r.name)
+                compare(g.message, r.message, r.name)
+                compare(g.pqzRegMessage, r.pqzRegMessage, r.name)
+                compare(g.memberDigest !== undefined, r.kind === 0x0120, r.name)
+                compare(g.memberDigest ?? "", r.memberDigest ?? "", r.name)
+                if (r.kind === 0x0120) {
+                    compare(g.memberDigest, UaKinds.memberDigest(r.ua, g.message), r.name)
+                    msigRows++
+                }
+            }
+            UaKinds.pqzKeyRecordMessage(r.kind, r.ua, reg.keyData, r.pqzKey, "0x", r.pqzPopHash, true)
+            compare(UaKinds.lastError, "UAPqzKeySet", r.name)
+            compare(UaKinds.pqzKeyDigest(r.ua, r.pqzKeyHash), r.pqzKeyDigest, r.name)
+            compare(UaKinds.pqzKeyRecordDigest(r.pqzKeyDigest, r.pqzPopHash), r.recordDigest, r.name)
+        }
+        compare(UaKinds.pqzKeyRecordTag(), pp.tags.PQZ_KEY_RECORD_TAG.hash)
+        compare(msigRows, 8)  // 4 msig rows, each with the proof bytes and hash-only
+    }
+
+    function test_kemRecord() {
+        const pp = vectors.load("portable.json")
+        compare(pp.kemRecords.length, 9)
+        for (const r of pp.kemRecords) {
+            const d = UaKinds.kemRecordDigest(r.ua, Number(r.version), r.kemPk)
+            compare(d, r.digest, r.id)
+            compare(UaKinds.uaMessage(r.kind, UaKinds.purposeTag("kem"), d), r.message, r.id)
+            compare(UaKinds.kemRecordMessage(r.kind, r.ua, Number(r.version), r.kemPk), r.message, r.id)
+            if (r.kind === 0x0120)
+                compare(UaKinds.memberDigest(r.ua, r.message), r.memberDigest, r.id)
+        }
+        const ua = "0x" + "01".repeat(32)
+        UaKinds.kemRecordDigest(ua, 0, "0x" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAKemVersion")
+        UaKinds.kemRecordDigest(ua, 1, "0x" + "00".repeat(1599))
+        compare(UaKinds.lastError, "UAKemKeyLength")
+        UaKinds.kemRecordDigest(ua, 1, "0x" + "00".repeat(1601))
+        compare(UaKinds.lastError, "UAKemKeyLength")
+        compare(UaKinds.kemRecordTag(), pp.tags.KEM_RECORD_TAG.hash)
+        // known answer at 2^53, the largest version a QML number carries exactly (ua-rs / ua-py pin 2^64 - 1)
+        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, "0x" + "00".repeat(1600)), "0xff3acbe0a43298885ac3679368a3e0a38ceb9fdf63d4a03ed54a4a9d62e0348b")
+        UaKinds.kemRecordDigest(ua, 9007199254740994, "0x" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAArgument")
+    }
+
+    function test_structures() {
+        for (const p of s.pop) {
+            const portable = UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash)
+            compare(portable, p.portablePopDigest)
+            compare(UaKinds.registrationDigest(portable, p.pqzPopHash), p.registrationDigest)
+        }
+        for (const p of s.pqzReg) {
+            compare(UaKinds.keyHashOf(0x0142, k.pqzKey), p.pqzKeyHash)
+            compare(UaKinds.portablePopDigest(p.ua, p.pqzKeyHash, p.kemRecordHash), p.portablePopDigest)
+            compare(UaKinds.uaMessage(0x0142, UaKinds.purposeTagV("pop", 2), p.portablePopDigest), p.pqzRegMessage)
+            if (p.kemRecordHash !== "0x" + "00".repeat(32))
+                continue  // an opaque label; the real records are in portable.json
+            compare(UaKinds.pqzRegMessage(p.ua, k.pqzKey, 0, ""), p.pqzRegMessage)
+            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, p.ua, "0x", k.pqzKey, "0x" + "07".repeat(32), 0, ""))
+            compare(h.pqzKeyHash, p.pqzKeyHash)
+            compare(h.portablePopDigest, p.portablePopDigest)
         }
         for (const p of s.pqzMsig)
             compare(UaKinds.msigPqzEligible(p.keyData), p.eligible, p.reason)

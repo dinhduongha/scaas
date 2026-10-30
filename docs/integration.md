@@ -819,28 +819,34 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
 1. The client derives the key for the kind on its own path (`m/7622'/0'/<account>'/<kindNo>'/<i>'`; Zether conf keys
    keep `m/254|12381/<coin>/<account>/7`; passkeys are one credential per `rpId`), builds the normalised `keyData`,
    computes `ua = keccak256(keccak256("scaas.ua.<kind>.v1") ‖ keyData)` and checks `ua >> 160 ≠ 0`.
-2. It reads `popDigest(ua, authRef)` from the registry, or computes it —
-   `keccak256(POP_TAG ‖ keccak256(chain_key) ‖ chainUid ‖ registry_id ‖ ua ‖ authRef)` binds chain (`chain_key` **and**
-   `chain_uid`, the genesis hash: the chain id alone is not unique, [NET-ALL-22](networks/README.md#NET-ALL-22)),
-   registry, UA and `authRef`, **not the caller** ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)). `chain_uid`
-   comes from the chain profile (`GET /v1/gateway`) and must equal the registry's `chainUid()`; clientkeys refuses an
-   EIP-712 domain whose `salt` differs from it. The client then signs `uaMessage(kind, POP_TAG, popDigest)` with the
-   kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session plus the KeyAgg hints or the DKG
-   transcript). For a Zether kind with `authRef ≠ 0` the authority also signs `authPop` (purpose `authref`; a native
-   authority signs the EIP-712 `UAAuth`). `authRef = 0` for every non-Zether kind.
-3. **Anyone** submits `register(kind, keyData, pop, authRef, authPop)`: the subject self-paid, a relayer job, a sponsor,
-   or the node gateway `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (gasless,
-   [NODE-GW-03](node/gateway.md#NODE-GW-03)) — the only node path, since registry calls run only from `~gateway`.
-   Front-running yields the identical record or a revert.
-4. On the finalized `UARegistered` event the client reads `recordOf(ua)` — kind **and** `authRef` equal what it asked
-   for — and only then marks the account usable on that chain.
+2. It computes the portable PoP locally: `portablePopDigest = keccak256(abi.encode(PURPOSE_POP_V2, ua, pqzKeyHash,
+   kemRecordHash))` and `registrationDigest = keccak256(abi.encode(portablePopDigest, pqzPopHash))` bind the UA, its PQZ key,
+   its first KEM record and the PQZ proof hash — **no chain, no registry, not the caller**
+   ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)); the hashes are 0 for an absent attribute. The client signs
+   `uaMessage(kind, PURPOSE_POP_V2, registrationDigest)` with the kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group
+   signing session plus the KeyAgg hints or the DKG transcript; a PQ-eligible `msig`: its members, a native member by
+   `personal_sign`). A PQ holder with a PQZ key first makes the `R_REG` proof over `portablePopDigest`. The EIP-712 `salt =
+   chain_uid` ([NET-ALL-22](networks/README.md#NET-ALL-22)) still guards every `UAAuth` and mtx signature, which stay chain-bound.
+3. **Anyone** submits `register(kind, keyData, attrs, pop, pqzPop)`: the subject self-paid, a relayer job, a sponsor,
+   or the node gateway `POST /v1/ua/register {chain, kind, keyData, attrs, pop, pqzPop?}` (gasless,
+   [NODE-GW-03](node/gateway.md#NODE-GW-03); the node relays all four registry writes, `register`, `setKemKey`, `storePqzPop` and `setPqzKey`, owner 2026-10-30
+   ruling R-node: the node's call-table rows are built, the gateway route and its sponsor policy are not yet, `TODO.md`; a relayed `register`
+   with its proof over the cap is refused `UA_REGISTER_SPLIT`). Front-running yields the identical record or a revert. When the full call with the proof does not fit one
+   transaction — its estimate exceeds the block gas limit for a direct submitter, or min(block gas limit, the relayer's per-transaction
+   cap) through a relayer (the SCaaS testnet relayer cap is 64 M, so a relayed PQ registration splits there) — `register` goes without
+   `pqzPop` and `storePqzPop(ua, pqzPop)` follows. The **same call registers the UA on any other chain** (build it from the first
+   chain's logs or from `registrationOf`; [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
+   ([CTR-UA-32](contracts/accounts.md#CTR-UA-32)), a PQZ key by `setPqzKey` — ordinary `call` jobs, no fee.
+4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent),
+   `pqzKeyOf(ua).proven` and `checkedOf(ua)`, and only then marks the account usable on that chain.
 
 Kind choice: staff/points of sale with a phone → `webauthn-p256` UA (or `SmartKeyAccount` when they want recovery);
 extension-wallet users → native EOA; boards and finance → `msig` over members' passkey UAs and/or EOAs (each member
 confirms its listing off chain; membership is not consent); agent clusters and Schnorr MPC → `frost-*` (shown with its
-attestation-only caveats); HSM keys → `p256`; confidential balances → `zether-*` with `authRef` one of the above; PQ
-authority → `mldsa65`; PQZ on the private chain → `pqz-mlwe` with a PQ `authRef`. The registry refuses the same public
-key under a second kind (`UAKeyInUse`) and a BLS `authRef` on the same curve as the Zether key.
+attestation-only caveats); HSM keys → `p256`; confidential balances → `zether-*` (the Zether key is the UA); PQ
+authority → `mldsa65`; PQZ on the private chain → a PQ holder (`mldsa44` / `mldsa65` / `fndsa512` or a PQ-eligible `msig`) that carries a
+`pqz-mlwe` key ([CTR-UA-16](contracts/accounts.md#CTR-UA-16)). The registry refuses the same public
+key under a second kind (`UAKeyInUse`).
 
 **Identity sync rules.**
 

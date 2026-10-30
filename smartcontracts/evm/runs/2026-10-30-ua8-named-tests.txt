@@ -1,0 +1,3 @@
+# named-tests at commit e2513dd5
+named-tests: 130 names, 0 problem(s)
+rc=0

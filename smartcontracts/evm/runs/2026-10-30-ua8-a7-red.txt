@@ -1,0 +1,27 @@
+# A7 RED: test/ua/UARegistryUA8.t.sol before setKemKey exists (set n2304-kmax4096)
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:220:26:
+    |
+220 |     function _registerAt(address at, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d, uint256 bound)
+    |                          ^^^^^^^^^^
+Error (9582): Member "setKemKey" not found or not visible after argument-dependent lookup in contract UARegistry.
+    --> test/ua/UARegistryUA8.t.sol:1707:9:
+     |
+1707 |         a.setKemKey(k2.ua, 2, k2.kemPk, k2.sig);
+     |         ^^^^^^^^^^^
+rc=1

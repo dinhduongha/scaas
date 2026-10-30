@@ -653,15 +653,15 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "verifyTransfer" => verify_json::<C>(&gens(), v, false),
         "verifyTransferMulti" => verify_multi_json::<C>(&gens(), v),
         "verifyBurn" => verify_json::<C>(&gens(), v, true),
-        // The `register` PoP (CTR-UA-07): `chainId`, `chainUid`, `registry` (a Zether UA holds no PQZ key: the digest's last word is 0).
+        // The `register` PoP (UA-8 P1, portable: no chain, chainUid or registry; a Zether UA holds no PQZ key or KEM record).
         "pop" => {
             let k = key::<C>(v)?;
-            let (chain, uid, reg) = (num(v, "chainId")?, fixed::<32>(v, "chainUid")?, fixed::<20>(v, "registry")?);
-            let d = schnorr::pop_digest(chain, &uid, &reg, &k.ua(), &[0u8; 32]);
+            let rd = schnorr::zether_registration_digest(&k.ua());
             Ok(json!({
                 "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
-                "popDigest": hx(&d), "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d)),
-                "pop": hx(&schnorr::zether_pop(&k, chain, &uid, &reg, rng)),
+                "popDigest": hx(&schnorr::portable_pop_digest(&k.ua(), &[0u8; 32], &[0u8; 32])), "registrationDigest": hx(&rd),
+                "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::pop_tag(), &rd)),
+                "pop": hx(&schnorr::zether_pop(&k, rng)),
             }))
         }
         // A self account's owner op (roll-over, mode): `sig` for `mtxRollOverSigned` / `mtxSetRollOverMode`.

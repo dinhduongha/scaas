@@ -59,9 +59,19 @@ pub fn verify<C: ZCurve>(y: &G<C>, msg: &[u8; 32], sig: &[u8]) -> Result<(), ZEr
     Ok(())
 }
 
-/// `purposeTag = keccak256("scaas.ua.purpose.<p>.v1")` (accounts.md CTR-UA-10): `pop`, `zether-owner`, …
+/// `purposeTag = keccak256("scaas.ua.purpose.<p>.v<version>")` (accounts.md CTR-UA-10; the JS `purposeTag(p, version)`).
+pub fn purpose_tag_v(purpose: &str, version: u32) -> [u8; 32] {
+    keccak256(format!("scaas.ua.purpose.{purpose}.v{version}").as_bytes())
+}
+
+/// The v1 purpose tag: `zether-owner`, `metatx`, … (`pop` is v2 since UA-8, see [`pop_tag`]).
 pub fn purpose_tag(purpose: &str) -> [u8; 32] {
-    keccak256(format!("scaas.ua.purpose.{purpose}.v1").as_bytes())
+    purpose_tag_v(purpose, 1)
+}
+
+/// `PURPOSE_POP_V2` of the portable PoP (UA-8 P1).
+pub fn pop_tag() -> [u8; 32] {
+    purpose_tag_v("pop", 2)
 }
 
 /// `ua_msg = keccak256(MSG_TAG ‖ TAG(kind) ‖ purposeTag ‖ digest)` of this curve's Zether kind (CTR-UA-12) — what the
@@ -70,34 +80,54 @@ pub fn ua_message<C: ZCurve>(purpose: &[u8; 32], digest: &[u8; 32]) -> [u8; 32] 
     keccak256(&[keccak256(b"scaas.ua.msg.v1"), zether_tag::<C>(), *purpose, *digest].concat())
 }
 
+/// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`, each hash 0 when absent (UA-8 P1; ua-rs `portable_pop_digest`).
+pub fn portable_pop_digest(ua: &[u8; 32], pqz_key_hash: &[u8; 32], kem_record_hash: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[pop_tag(), *ua, *pqz_key_hash, *kem_record_hash].concat())
+}
+
+/// `keccak256(portablePopDigest ‖ pqzPopHash)`: what `ua_message(kind, POP_V2, ·)` is taken over.
+pub fn registration_digest(portable: &[u8; 32], pqz_pop_hash: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[*portable, *pqz_pop_hash].concat())
+}
+
+/// The registration digest of a Zether UA: it holds no PQZ key, KEM record or PQZ proof (all hashes 0).
+pub fn zether_registration_digest(ua: &[u8; 32]) -> [u8; 32] {
+    registration_digest(&portable_pop_digest(ua, &[0u8; 32], &[0u8; 32]), &[0u8; 32])
+}
+
+/// The `pop` of `register(0x0141, Y, …)` (UA-8 P1, portable: no chain, chainUid or registry): Schnorr by `x` under the
+/// Zether tag over `ua_message(POP_V2, registration_digest(portable_pop_digest(UA(Y), 0, 0), 0))`.
+pub fn zether_pop<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, rng: &mut R) -> Vec<u8> {
+    sign(key, &ua_message::<C>(&pop_tag(), &zether_registration_digest(&key.ua())), rng)
+}
+
+pub fn verify_pop<C: ZCurve>(y: &G<C>, pop: &[u8]) -> Result<(), ZError> {
+    verify(y, &ua_message::<C>(&pop_tag(), &zether_registration_digest(&ua_of::<C>(y))), pop)
+}
+
+// ---- Legacy (backup, not delete): the chain-bound PoP before UA-8 (pop.v1) ----
+
 /// `pop_digest = keccak256(abi.encode(POP_TAG, keccak256("evm:" ‖ decimal(chainId)), chainUid, registry, ua, pqzKeyHash))`
-/// (CTR-UA-07) — the registry's `popDigest(ua, pqzKeyHash)`; 0 without a PQZ key (always, for a Zether UA).
-pub fn pop_digest(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
+/// (CTR-UA-07) — the pre-UA-8 registry's `popDigest(ua, pqzKeyHash)`.
+pub fn pop_digest_v1(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
     let chain_key = keccak256(format!("evm:{chain_id}").as_bytes());
     keccak256(&[purpose_tag("pop"), chain_key, *chain_uid, abi::addr(registry), *ua, *pqz_key_hash].concat())
 }
 
-/// The `pop` of `register(0x0141, Y, pop, "", "")`: Schnorr by `x` under the Zether tag over
-/// `ua_message(POP, pop_digest(…, UA(Y), 0))`.
-pub fn zether_pop<C: ZCurve, R: RngCore + CryptoRng>(
+/// The pre-UA-8 `pop`: Schnorr by `x` over `ua_message(pop.v1, pop_digest_v1(…, UA(Y), 0))`.
+pub fn zether_pop_v1<C: ZCurve, R: RngCore + CryptoRng>(
     key: &ZetherKey<C>,
     chain_id: u64,
     chain_uid: &[u8; 32],
     registry: &[u8; 20],
     rng: &mut R,
 ) -> Vec<u8> {
-    let d = pop_digest(chain_id, chain_uid, registry, &key.ua(), &[0u8; 32]);
+    let d = pop_digest_v1(chain_id, chain_uid, registry, &key.ua(), &[0u8; 32]);
     sign(key, &ua_message::<C>(&purpose_tag("pop"), &d), rng)
 }
 
-pub fn verify_pop<C: ZCurve>(
-    y: &G<C>,
-    chain_id: u64,
-    chain_uid: &[u8; 32],
-    registry: &[u8; 20],
-    pop: &[u8],
-) -> Result<(), ZError> {
-    let d = pop_digest(chain_id, chain_uid, registry, &ua_of::<C>(y), &[0u8; 32]);
+pub fn verify_pop_v1<C: ZCurve>(y: &G<C>, chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], pop: &[u8]) -> Result<(), ZError> {
+    let d = pop_digest_v1(chain_id, chain_uid, registry, &ua_of::<C>(y), &[0u8; 32]);
     verify(y, &ua_message::<C>(&purpose_tag("pop"), &d), pop)
 }
 
@@ -331,14 +361,19 @@ mod tests {
         *bad.last_mut().unwrap() ^= 1;
         assert!(verify(&k1.y, &msg, &bad).is_err());
 
-        // PoP is bound to chain, chainUid, registry and key (CTR-UA-07), never to the caller.
+        // The portable PoP is bound to the key alone (UA-8 P1): no chain, chainUid or registry.
+        let pop = zether_pop(&k1, &mut rng);
+        verify_pop(&k1.y, &pop).unwrap();
+        assert!(verify_pop(&k2.y, &pop).is_err());
+        // legacy chain-bound PoP (pop.v1): bound to chain, chainUid, registry and key; not a v2 PoP
         let (uid, reg) = ([0x24; 32], [0xaa; 20]);
-        let pop = zether_pop(&k1, 31337, &uid, &reg, &mut rng);
-        verify_pop(&k1.y, 31337, &uid, &reg, &pop).unwrap();
-        assert!(verify_pop(&k1.y, 1337, &uid, &reg, &pop).is_err());
-        assert!(verify_pop(&k1.y, 31337, &[0x25; 32], &reg, &pop).is_err());
-        assert!(verify_pop(&k1.y, 31337, &uid, &[0xab; 20], &pop).is_err());
-        assert!(verify_pop(&k2.y, 31337, &uid, &reg, &pop).is_err());
+        let pop1 = zether_pop_v1(&k1, 31337, &uid, &reg, &mut rng);
+        verify_pop_v1(&k1.y, 31337, &uid, &reg, &pop1).unwrap();
+        assert!(verify_pop_v1(&k1.y, 1337, &uid, &reg, &pop1).is_err());
+        assert!(verify_pop_v1(&k1.y, 31337, &[0x25; 32], &reg, &pop1).is_err());
+        assert!(verify_pop_v1(&k1.y, 31337, &uid, &[0xab; 20], &pop1).is_err());
+        assert!(verify_pop_v1(&k2.y, 31337, &uid, &reg, &pop1).is_err());
+        assert!(verify_pop(&k1.y, &pop1).is_err());
         // the owner op signs zether-owner: not a PoP, not the raw digest
         let d = keccak256(b"rollover");
         let auth_blob = owner_auth(&k1, &d, &mut rng);

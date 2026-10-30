@@ -11,6 +11,7 @@ import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
 
 /// Token views `ZetherDisclosure` reads, etched at a vector's token address.
@@ -281,29 +282,33 @@ contract ZetherS3VectorsTest is Test {
         assertEq(bls.g1MulBase(j.readUint(".z")), bls.g1Add(r, bls.g1Mul(y, e)));
     }
 
-    /// The prover's registration PoP (`r33_keys.json`, CTR-UA-07: chain 31337, the vectors' `chainUid`, registry
-    /// `0xaa…aa`, no PQZ key) registers on a real UA registry at that address: one PoP for the prover, clientkeys
-    /// (`test/zether.test.js` reads the same file) and the registry. A flipped bit is `UAPoP`.
+    /// The prover's registration PoP (`r33_keys.json`, UA-8 portable: no chain, no registry, no PQZ key) registers on
+    /// two real UA registries of different chains, chain uids and addresses: one PoP for the prover, clientkeys
+    /// (`test/zether.test.js` reads the same file) and every registry. A flipped bit is `UAPoP`.
     function test_s3PopRegisters() public {
         string memory j = vm.readFile(string.concat(DIR, "r33_keys.json"));
-        address at = j.readAddress(".bls12381.keys[0].pop.registry");
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
-        bytes32 uid = j.readBytes32(".bls12381.keys[0].pop.chainUid");
-        deployCodeTo("UARegistry.sol:UARegistry", abi.encode(uid, address(0), false, uint64(12_000_000), address(0), false, k), at);
-        IUARegistry reg = IUARegistry(at);
-        {
-            string memory key = ".bls12381.keys[0]";
-            uint16 kind = uint16(j.readUint(string.concat(key, ".pop.kind")));
-            bytes memory y = j.readBytes(string.concat(key, ".Y"));
-            bytes32 ua = j.readBytes32(string.concat(key, ".UA"));
-            assertEq(j.readUint(string.concat(key, ".pop.chainId")), block.chainid);
+        string memory key = ".bls12381.keys[0]";
+        uint16 kind = uint16(j.readUint(string.concat(key, ".pop.kind")));
+        bytes memory y = j.readBytes(string.concat(key, ".Y"));
+        bytes32 ua = j.readBytes32(string.concat(key, ".UA"));
+        bytes memory pop = j.readBytes(string.concat(key, ".pop.pop"));
+        for (uint256 i; i < 2; ++i) {
+            vm.chainId(i == 0 ? 31337 : 7622);
+            address at = address(uint160(0xaa00 + i));
+            deployCodeTo("UARegistry.sol:UARegistry",
+                abi.encode(keccak256(abi.encode("s3 chain", i)), address(0), false, uint64(12_000_000), address(0), false, k), at);
+            IUARegistry reg = IUARegistry(at);
             assertEq(reg.uaOf(kind, y), ua);
-            assertEq(reg.popDigest(ua, 0), j.readBytes32(string.concat(key, ".pop.popDigest")));
-            bytes memory pop = j.readBytes(string.concat(key, ".pop.pop"));
+            bytes32 d = reg.portablePopDigest(ua, 0, 0);
+            assertEq(d, j.readBytes32(string.concat(key, ".pop.popDigest")));
+            bytes32 rd = reg.registrationDigest(d, 0);
+            assertEq(rd, j.readBytes32(string.concat(key, ".pop.registrationDigest")));
+            assertEq(reg.uaMessage(kind, UAKinds.PURPOSE_POP_V2, rd), j.readBytes32(string.concat(key, ".pop.uaMsg")));
             vm.expectRevert(IUARegistry.UAPoP.selector);
-            reg.register(kind, y, _flip(pop, pop.length - 1), "", "");
-            assertEq(reg.register(kind, y, pop, "", ""), ua);
+            reg.register(kind, y, IUARegistry.UAAttrs("", 0, 0, ""), _flip(pop, pop.length - 1), "");
+            assertEq(reg.register(kind, y, IUARegistry.UAAttrs("", 0, 0, ""), pop, ""), ua);
             assertEq(reg.keyOf(ua), y);
         }
     }

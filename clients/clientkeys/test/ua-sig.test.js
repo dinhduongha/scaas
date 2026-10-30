@@ -10,24 +10,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { p256 } from '@noble/curves/nist.js';
-import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
-import { bn254 } from '@noble/curves/bn254.js';
-import { bls12_381 } from '@noble/curves/bls12-381.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { sha256, sha512 } from '@noble/hashes/sha2.js';
+import { sha512 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
-import { schnorrVerify as zetherVerify } from '../src/zether.js';
-import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url } from '../src/bytes.js';
-
+import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
+import { int, B, eq, attempt, wordAt, bytesAt, ED_L, leInt, edNoble, ed25519Ok, verify, SECP_N, nativeOk } from './ua-verify.js';
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('signatures.json', dir)));
 const FUZZ = JSON.parse(readFileSync(new URL('ed25519_fuzz.json', dir)));
-const int = (b) => BigInt(hex(b));
-const B = (h) => fromHex(h);
-const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 const tag = (p) => ua.purposeTag(p);
-const attempt = (f) => { try { return f(); } catch { return false; } };
 
 test('the generator reproduces signatures.json, ed25519_fuzz.json, metatx3.json and pq_signatures.json byte for byte', () => {
   const out = mkdtempSync(join(tmpdir(), 'ua-sig-vectors-'));
@@ -40,140 +32,22 @@ test('the generator reproduces signatures.json, ed25519_fuzz.json, metatx3.json 
   }
 });
 
-// --- ABI reading (offsets as the decoder sees them) ---
-const wordAt = (b, o) => Number(int(b.subarray(o, o + 32)));
-const bytesAt = (b, base, head) => { const o = base + wordAt(b, head); return b.subarray(o + 32, o + 32 + wordAt(b, o)); };
-
-// --- verifiers (§1.9) ---
-const P256_N = p256.Point.Fn.ORDER;
-const p256Ok = (xy, h, r, s) => int(s) <= P256_N / 2n
-  && p256.verify(concatBytes(r, s), h, concatBytes(Uint8Array.of(4), xy), { prehash: false, lowS: true });
-
-/** SmartKeyAccount._clientDataOk without the origin comparison. */
-function clientDataOk(cd, challenge) {
-  const prefix = `{"type":"webauthn.get","challenge":"${b64url(challenge)}","origin":"`;
-  const s = new TextDecoder().decode(cd);
-  const n = s.length;
-  if (n < prefix.length + 2 || !s.startsWith(prefix)) return false;
-  const end = s.indexOf('"', prefix.length);
-  if (end < 0 || end + 1 >= n) return false;
-  if (s[end + 1] === '}') return end + 2 === n;
-  const cross = ',"crossOrigin":false';
-  const after = end + 1 + cross.length;
-  if (after >= n || s.slice(end + 1, after) !== cross) return false;
-  return s[after] === '}' ? after + 1 === n : s[after] === ',';
-}
-function webauthnOk(kd, msg, blob) {
-  const authData = bytesAt(blob, 0, 0);
-  const cd = bytesAt(blob, 0, 32);
-  if (authData.length < 37 || !eq(authData.subarray(0, 32), kd.subarray(64, 96)) || (authData[32] & 0x05) !== 0x05) return false;
-  if (!clientDataOk(cd, msg)) return false;
-  return p256Ok(kd.subarray(0, 64), sha256(concatBytes(authData, sha256(cd))), blob.subarray(64, 96), blob.subarray(96, 128));
-}
-
-const hashToScalar = (seed, r) => ((int(keccak_256(concatBytes(seed, Uint8Array.of(2)))) << 256n)
-  + int(keccak_256(concatBytes(seed, Uint8Array.of(3))))) % r;
-const bnG1 = (b) => {
-  const x = int(b.subarray(0, 32)); const y = int(b.subarray(32, 64));
-  if (x === 0n && y === 0n) throw new Error('identity');
-  const P = bn254.G1.Point.fromAffine({ x, y }); P.assertValidity(); return P;
-};
-const blsFp = (b) => { if (!b.subarray(0, 16).every((v) => v === 0)) throw new Error('padding'); return int(b.subarray(16, 64)); };
-const blsG1 = (b) => {
-  const x = blsFp(b.subarray(0, 64)); const y = blsFp(b.subarray(64, 128));
-  if (x === 0n && y === 0n) throw new Error('identity');
-  const P = bls12_381.G1.Point.fromAffine({ x, y }); P.assertValidity(); return P; // assertValidity includes the subgroup
-};
-const schnorrOk = (G, r, size, dec) => (kd, msg, sig) => {
-  if (sig.length !== size + 32) return false;
-  const Rb = sig.subarray(0, size);
-  const z = int(sig.subarray(size));
-  const R = dec(Rb); const Y = dec(kd);
-  const e = hashToScalar(keccak_256(concatBytes(utf8ToBytes('scaas.ua.schnorr.v1'), Rb, kd, msg)), r);
-  if (z >= r || e === 0n) return false;
-  return G.BASE.multiplyUnsafe(z).equals(R.add(Y.multiply(e)));
-};
-
-function mapToG1Bn254(prefix) {
-  const { Fp } = bn254.fields;
-  for (let ctr = 0; ; ctr++) {
-    const c = new Uint8Array(4); new DataView(c.buffer).setUint32(0, ctr);
-    const x = int(keccak_256(concatBytes(prefix, c))) % Fp.ORDER;
-    const rhs = Fp.add(Fp.mul(Fp.sqr(x), x), 3n);
-    let y = Fp.pow(rhs, (Fp.ORDER + 1n) / 4n);
-    if (Fp.eql(Fp.sqr(y), rhs)) return bn254.G1.Point.fromAffine({ x, y: y & 1n ? Fp.ORDER - y : y });
-  }
-}
-const pairingEq = (curve, a, b, c, d) => curve.fields.Fp12.eql(curve.pairing(a, b), curve.pairing(c, d));
-function blsBn254Ok(kd, msg, sig, pop) {
-  if (sig.length !== 64) return false;
-  const S = bnG1(sig);
-  const w = [0, 1, 2, 3].map((i) => int(kd.subarray(32 * i, 32 * i + 32)));
-  const pk = bn254.G2.Point.fromAffine({ x: { c0: w[1], c1: w[0] }, y: { c0: w[3], c1: w[2] } });
-  const H = mapToG1Bn254(concatBytes(utf8ToBytes(pop ? 'SCAAS-UA-BLS-BN254-POP-V1' : 'SCAAS-UA-BLS-BN254-SIG-V1'), msg));
-  return pairingEq(bn254, S, bn254.G2.Point.BASE, H, pk);
-}
-function bls12381Ok(kd, msg, sig, pop) {
-  if (sig.length !== 128) return false;
-  const S = blsG1(sig);
-  const w = [0, 1, 2, 3].map((i) => blsFp(kd.subarray(64 * i, 64 * i + 64)));
-  const pk = bls12_381.G2.Point.fromAffine({ x: { c0: w[0], c1: w[1] }, y: { c0: w[2], c1: w[3] } });
-  const H = bls12_381.G1.hashToCurve(msg, { DST: `SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_${pop ? 'POP' : 'SIG'}_` });
-  return pairingEq(bls12_381, S, bls12_381.G2.Point.BASE, H, pk);
-}
-// ed25519 (§1.9 "RFC 8032 strict"): noble zip215:false refuses non-canonical A / R, S ≥ L and small-order A and checks the
-// cofactored equation; verify_strict also refuses small-order R and checks [S]B == R + [k]A without the cofactor.
-const ED_L = ed25519.Point.Fn.ORDER;
-const leInt = (b) => int(Uint8Array.from(b).reverse());
-const edNoble = (pk, msg, sig) => attempt(() => ed25519.verify(sig, msg, pk, { zip215: false }));
-function ed25519Ok(pk, msg, sig) {
-  if (sig.length !== 64 || !edNoble(pk, msg, sig)) return false;
-  const R = ed25519.Point.fromBytes(sig.subarray(0, 32));
-  if (R.isSmallOrder()) return false;
-  const k = leInt(sha512(concatBytes(sig.subarray(0, 32), pk, msg))) % ED_L;
-  return ed25519.Point.BASE.multiplyUnsafe(leInt(sig.subarray(32))).equals(R.add(ed25519.Point.fromBytes(pk).multiplyUnsafe(k)));
-}
-const VERIFY = {
-  0x0100: webauthnOk,
-  0x0102: ed25519Ok,
-  0x0101: (kd, msg, sig) => sig.length === 64 && p256Ok(kd, sha256(msg), sig.subarray(0, 32), sig.subarray(32)),
-  0x0103: (kd, msg, sig) => sig.length === 64 && schnorr.verify(sig, msg, kd),
-  0x0104: schnorrOk(bn254.G1.Point, bn254.fields.Fr.ORDER, 64, bnG1),
-  0x0105: schnorrOk(bls12_381.G1.Point, bls12_381.fields.Fr.ORDER, 128, blsG1),
-  0x0106: bls12381Ok,
-  0x0107: blsBn254Ok,
-  // UA-6: the Zether UA's Schnorr (tag SCAAS-ZETHER-SCHNORR-V1), verified by clientkeys' own zether.js (the prover's twin)
-  0x0141: (kd, msg, sig) => zetherVerify('bls12381', kd, msg, sig),
-  // secp256k1 (ECDSA): r‖s‖v over ua_msg recovering address(keccak256(x ‖ y)), as the native EOA rule
-  0x0108: (kd, msg, sig) => kd.length === 64 && nativeOk(hex(keccak_256(kd).subarray(12)), msg, hex(sig)),
-};
-/** `verify` / `verifyPop` (pop only matters for the BLS kinds); any throw is a refusal. */
-const verify = (kind, kd, msg, sig, pop = false) => attempt(() => VERIFY[kind](B(kd), B(msg), B(sig), pop) === true);
-
-const SECP_N = secp256k1.Point.Fn.ORDER;
-/** Native EOA: low-s ECDSA r‖s‖v over UAAuth(ua, purpose, digest) under the registry domain. */
-function nativeOk(address, h, sig) {
-  return attempt(() => {
-    const s = B(sig);
-    if (s.length !== 65 || (s[64] !== 27 && s[64] !== 28) || int(s.subarray(32, 64)) > SECP_N / 2n) return false;
-    const pub = secp256k1.recoverPublicKey(concatBytes(Uint8Array.of(s[64] - 27), s.subarray(0, 64)), h, { prehash: false });
-    return eq(keccak_256(secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1)).subarray(12), B(address));
-  });
-}
 const domain = (ctx, generation) => ({ generation, ...V.contexts[ctx] });
 
-test('derived kinds: key data, ids, PoP messages, every signature verifies', () => {
+test('derived kinds: key data, ids, portable PoP messages, every signature verifies', () => {
   assert.equal(V.derived.length, 10);
   assert.deepEqual(V.derived.map((r) => r.kind), [0x0100, 0x0101, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0102, 0x0108, 0x0141]); // append-only
   for (const r of V.derived) {
     const kd = B(r.keyData);
     assert.equal(hex(ua.deriveUA(r.kind, kd)), r.ua, r.name);
+    // UA-8: the portable PoP, the same on every context (popDigest = portablePopDigest, message over registrationDigest)
+    const m = ua.holderPopMessage(r.kind, { ua: r.ua });
     for (const p of [r.pop, r.popOther]) {
-      const d = ua.popDigest({ ...V.contexts[p.context], ua: B(r.ua) });
-      assert.equal(hex(d), p.popDigest, `${r.name} popDigest ${p.context}`);
-      assert.equal(hex(ua.uaMessage(r.kind, ua.POP_TAG, d)), p.message);
+      assert.deepEqual([p.popDigest, p.registrationDigest, p.message], [m.portablePopDigest, m.registrationDigest, m.message].map(hex),
+        `${r.name} pop ${p.context}`);
       assert.ok(verify(r.kind, r.keyData, p.message, p.sig, true), `${r.name} pop ${p.context}`);
     }
+    assert.deepEqual({ ...r.pop, context: r.popOther.context }, r.popOther, `${r.name}: one PoP for every chain`);
     for (const s of r.sigs) {
       assert.equal(hex(ua.uaMessage(r.kind, tag(s.purpose), B(s.digest))), s.message);
       assert.ok(verify(r.kind, r.keyData, s.message, s.sig), `${r.name} ${s.purpose} ${s.variant ?? ''}`);
@@ -185,6 +59,10 @@ test('derived kinds: every negative fails', () => {
   for (const r of V.derived) {
     assert.ok(r.negatives.length >= 6, r.name);
     for (const n of r.negatives) assert.equal(verify(r.kind, r.keyData, n.message, n.sig, n.verifyPop), false, `${r.name} ${n.name}`);
+    // UA-8: a PoP over the chain-bound digest or under the v1 purpose is refused; no per-chain negative is left
+    const pops = ['chain-bound-pop', 'pop-v1-purpose', 'other-chain-uid', 'other-registry'];
+    assert.deepEqual(r.negatives.filter((n) => pops.includes(n.name)).map((n) => [n.name, n.verifyPop, n.message]),
+      [['chain-bound-pop', true, r.pop.message], ['pop-v1-purpose', true, r.pop.message]], r.name);
   }
 });
 

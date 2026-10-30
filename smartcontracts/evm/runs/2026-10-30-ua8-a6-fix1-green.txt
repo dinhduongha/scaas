@@ -1,0 +1,22 @@
+# A6 fix 1 GREEN: I1 (ruling A6-I1), m1-m4; whole suite --no-match-contract UAGas (C5), set n2304-kmax4096
+[FAIL: cancel_digest: 0x21961a479d01eb7fcc93a3cc280be1bfde4ebcb6e6a75d6e502cd5e3b2103274 != 0xd5bef046e876a7a5db96a4040382aa6debbe1f2c874bd110cca450b72f8ff5da] test_dexKat() (gas: 929003)
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 150.49ms (146.06ms CPU time)
+Ran 135 test suites in 91.23s (705.68s CPU time): 1522 tests passed, 1 failed, 10 skipped (1533 total tests)
+Encountered 1 failing test in test/v2/DexKat.t.sol:DexKatTest
+[FAIL: cancel_digest: 0x21961a479d01eb7fcc93a3cc280be1bfde4ebcb6e6a75d6e502cd5e3b2103274 != 0xd5bef046e876a7a5db96a4040382aa6debbe1f2c874bd110cca450b72f8ff5da] test_dexKat() (gas: 929003)
+Encountered a total of 1 failing tests, 1522 tests succeeded
+rc=1
+# size gate
+error: UARegistry: runtime 35632 > baseline 33972 (it may only shrink)
+size gate: 1 error(s), 45 contracts
+rc=1
+UARegistry {'runtime_size': 35632, 'init_size': 42322, 'runtime_margin': 29904, 'init_margin': 88750}
+NoUnderlyingPqzToken {'runtime_size': 49067, 'init_size': 51595, 'runtime_margin': 16469, 'init_margin': 79477}
+UnderlyingPqzToken {'runtime_size': 61137, 'init_size': 63672, 'runtime_margin': 4399, 'init_margin': 67400}
+# DexKat: dex_order_kat.json regenerated (WRITE_KAT=true; the token's CREATE2 address follows the metadata of the changed IUARegistry source)
+# size gate after the ratchet entry
+size gate: 0 error(s), 45 contracts
+rc=0
+# re-run: whole suite --no-match-contract UAGas
+Ran 135 test suites in 90.17s (610.28s CPU time): 1523 tests passed, 0 failed, 10 skipped (1533 total tests)
+rc=0

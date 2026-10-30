@@ -1,0 +1,201 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling version_check v0.9.5
+   Compiling syn v2.0.119
+   Compiling generic-array v0.14.9
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling rand_core v0.6.4
+   Compiling autocfg v1.5.1
+   Compiling zerocopy v0.8.62
+   Compiling num-traits v0.2.19
+   Compiling cfg-if v1.0.5
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling num-integer v0.1.47
+   Compiling syn v3.0.8
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling num-bigint v0.4.8
+   Compiling zeroize_derive v1.5.0
+   Compiling rand v0.8.8
+   Compiling paste v1.0.15
+   Compiling ark-std v0.5.0
+   Compiling ark-serialize-derive v0.5.0
+   Compiling zeroize v1.9.1
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling digest v0.10.7
+   Compiling der v0.7.10
+   Compiling enum-ordinalize v4.4.2
+   Compiling ff v0.13.1
+   Compiling ahash v0.8.12
+   Compiling either v1.19.0
+   Compiling base16ct v0.2.0
+   Compiling arrayvec v0.7.8
+   Compiling ark-serialize v0.5.0
+   Compiling sec1 v0.7.3
+   Compiling itertools v0.13.0
+   Compiling group v0.13.0
+   Compiling educe v0.6.0
+   Compiling signature v2.2.0
+   Compiling crypto-bigint v0.5.5
+   Compiling ark-ff-macros v0.5.0
+   Compiling ark-ff-asm v0.5.0
+   Compiling semver v1.0.28
+   Compiling cpufeatures v0.2.17
+   Compiling once_cell v1.21.4
+   Compiling allocator-api2 v0.2.21
+   Compiling hashbrown v0.15.5
+   Compiling rustc_version v0.4.1
+   Compiling elliptic-curve v0.13.8
+   Compiling hmac v0.12.1
+   Compiling rfc6979 v0.4.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling sha2 v0.10.9
+   Compiling ecdsa v0.16.9
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling ark-ff v0.5.0
+   Compiling ark-poly v0.5.0
+   Compiling zmij v1.0.23
+   Compiling ark-ec v0.5.0
+   Compiling serde_core v1.0.229
+   Compiling primeorder v0.13.6
+   Compiling ed25519 v2.2.3
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling keccak v0.1.6
+   Compiling serde_json v1.0.154
+   Compiling sha3 v0.10.9
+   Compiling indexmap v2.14.2
+   Compiling ed25519-dalek v2.2.0
+   Compiling p256 v0.13.2
+   Compiling ark-bn254 v0.5.0
+   Compiling ark-bls12-381 v0.5.0
+   Compiling k256 v0.13.4
+   Compiling memchr v2.8.3
+   Compiling foldhash v0.2.0
+   Compiling itoa v1.0.18
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+   Compiling hex v0.4.3
+error[E0432]: unresolved import `scaas_ua::ua8`
+ --> tests/ua8.rs:5:15
+  |
+5 | use scaas_ua::ua8::*;
+  |               ^^^ could not find `ua8` in `scaas_ua`
+
+error[E0308]: mismatched types
+  --> tests/ua8.rs:47:24
+   |
+47 |         if hash_only { None } else { pop.as_deref() },
+   |                        ^^^^ expected `&[u8; 32]`, found `Option<_>`
+   |
+   = note: expected reference `&[u8; 32]`
+                   found enum `Option<_>`
+
+error[E0308]: mismatched types
+  --> tests/ua8.rs:47:38
+   |
+47 |         if hash_only { None } else { pop.as_deref() },
+   |                                      ^^^^^^^^^^^^^^ expected `&[u8; 32]`, found `Option<&[u8]>`
+   |
+   = note: expected reference `&[u8; 32]`
+                   found enum `Option<&[u8]>`
+
+error[E0061]: this function takes 6 arguments but 7 arguments were supplied
+   --> tests/ua8.rs:42:5
+    |
+ 42 |     holder_pop_message(
+    |     ^^^^^^^^^^^^^^^^^^
+ 43 |         num(&row["kind"]) as u16,
+ 44 |         &b32(&row["ua"]),
+    |         ---------------- argument #2 of type `u64` is missing
+ 45 |         &bytes(&row["keyData"]),
+ 46 |         key.as_deref(),
+    |         -------------- unexpected argument #4 of type `Option<&[u8]>`
+...
+ 49 |         kem.as_ref().map(|(v, p)| (*v, &p[..])),
+    |         --------------------------------------- unexpected argument #7 of type `Option<(u64, &[u8])>`
+    |
+note: expected `&[u8; 20]`, found `&Vec<u8>`
+   --> tests/ua8.rs:45:9
+    |
+ 45 |         &bytes(&row["keyData"]),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    = note: expected reference `&[u8; 20]`
+               found reference `&Vec<u8>`
+note: function defined here
+   --> src/lib.rs:305:8
+    |
+305 | pub fn holder_pop_message(
+    |        ^^^^^^^^^^^^^^^^^^
+help: did you mean
+    |
+ 42 ~     holder_pop_message(
+ 43 +         num(&row["kind"]) as u16,
+ 44 +         /* u64 */,
+ 45 +         &b32(&row["ua"]),
+ 46 +         /* &[u8; 20] */,
+ 47 +         if hash_only { None } else { pop.as_deref() },
+ 48 +         (!zero(&hash)).then_some(&hash),
+ 49 +     )
+    |
+
+error[E0277]: the size for values of type `[u8]` cannot be known at compilation time
+  --> tests/ua8.rs:92:45
+   |
+92 | ...   assert_eq!(h.member_digest.map(|d| hx(&d)), r.get("memberDigest").map(|d| d.as_str().unwrap().to_string()), "{}", r["name"]);
+   |                                       ^ doesn't have a size known at compile-time
+   |
+   = help: the trait `Sized` is not implemented for `[u8]`
+   = note: all function arguments must have a statically known size
+
+error[E0061]: this function takes 5 arguments but 3 arguments were supplied
+   --> tests/ua8.rs:98:23
+    |
+ 98 |             let got = pqz_reg_message(&ua, &pk, kem.as_ref().map(|(v, p)| (*v, &p[..]))).unwrap();
+    |                       ^^^^^^^^^^^^^^^---------------------------------------------------
+    |                                      ||         |
+    |                                      ||         unexpected argument #3 of type `Option<(u64, &[u8])>`
+    |                                      |argument #1 of type `u64` is missing
+    |                                      two arguments of type `&[u8; 20]` and `&[u8; 32]` are missing
+    |
+note: function defined here
+   --> src/lib.rs:322:8
+    |
+322 | pub fn pqz_reg_message(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: &[u8]) -> Result<[u8; 32]> {
+    |        ^^^^^^^^^^^^^^^
+help: did you mean
+    |
+ 98 -             let got = pqz_reg_message(&ua, &pk, kem.as_ref().map(|(v, p)| (*v, &p[..]))).unwrap();
+ 98 +             let got = pqz_reg_message(/* u64 */, &ua, /* &[u8; 20] */, /* &[u8; 32] */, &pk).unwrap();
+    |
+
+error[E0599]: no variant, associated function, or constant named `KemVersion` found for enum `scaas_ua::UAError` in the current scope
+   --> tests/ua8.rs:126:68
+    |
+126 |     assert_eq!(kem_record_digest(&ua, 0, &[0; 1600]), Err(UAError::KemVersion));
+    |                                                                    ^^^^^^^^^^ variant, associated function, or constant not found in `scaas_ua::UAError`
+
+error[E0599]: no variant, associated function, or constant named `KemKeyLength` found for enum `scaas_ua::UAError` in the current scope
+   --> tests/ua8.rs:127:68
+    |
+127 |     assert_eq!(kem_record_digest(&ua, 1, &[0; 1599]), Err(UAError::KemKeyLength));
+    |                                                                    ^^^^^^^^^^^^ variant, associated function, or constant not found in `scaas_ua::UAError`
+
+error[E0599]: no variant, associated function, or constant named `KemKeyLength` found for enum `scaas_ua::UAError` in the current scope
+   --> tests/ua8.rs:128:68
+    |
+128 |     assert_eq!(kem_record_digest(&ua, 1, &[0; 1601]), Err(UAError::KemKeyLength));
+    |                                                                    ^^^^^^^^^^^^ variant, associated function, or constant not found in `scaas_ua::UAError`
+
+error[E0599]: no variant, associated function, or constant named `PqzKeySet` found for enum `scaas_ua::UAError` in the current scope
+   --> tests/ua8.rs:159:101
+    |
+159 |         assert_eq!(pqz_key_record_message(kind, &ua, &kd, &key, None, Some(&h), true), Err(UAError::PqzKeySet), "{}", r["name"]);
+    |                                                                                                     ^^^^^^^^^ variant, associated function, or constant not found in `scaas_ua::UAError`
+
+Some errors have detailed explanations: E0061, E0277, E0308, E0432, E0599.
+For more information about an error, try `rustc --explain E0061`.
+error: could not compile `scaas-ua` (test "ua8") due to 10 previous errors

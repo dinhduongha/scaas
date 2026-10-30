@@ -15,6 +15,9 @@
 #   clients/ua-qt:         cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
+#   UA-8 portable registrations: smartcontracts/vectors/ua/portable.json is read by ua-rs, ua-py, ua-go, ua-cs, ua-c, ua-cxx, ua-qt, ua-dart, ua-dart-frb,
+#                  clientkeys and forge (UARegistryUA8.t.sol); the jobs above already run them, so no new job. The old chain-bound vectors are in
+#                  smartcontracts/vectors/ua/legacy/. The local closing gate: smartcontracts/evm/runs/2026-10-30-ua8-gates.sh (its logs are runs/2026-10-30-ua8-*.txt)
 #   smartcontracts/near:   smartcontracts/scripts/test.sh near (check_no_authority.sh, cargo near build, cargo test: unit + near-sandbox)
 #   smartcontracts/algorand: ALGORAND_ARTIFACTS_CHECK=1 smartcontracts/scripts/build.sh algorand; gen_vectors.py --check;
 #                  scripts/test_deploy.py (pytest on the localnet and the node e2e of both: local only, the gate runner)

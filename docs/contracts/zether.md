@@ -395,9 +395,9 @@ implementation's constructor immutable, exposed as `chainUid()` and equal to the
 Without it a re-created chain restarts `modeNonce`, `accSeq`, `sendCounter` and
 block numbers, so a captured mode or rollover signature, a proof or a disclosure would verify there; `entryRef` gains
 it so that references never collide across chains (client reconciliation still keys by `(chain_key, entryRef)`). The
-UA registry (target) takes `chainUid` as a constructor immutable and adds it to its PoP challenge; because
-it checks raw digests, every caller's digest carries `chainUid` itself. **Built (P3)** for every token-side digest and
-the prover (which also mixes `chainUid` into its `s`); the vectors are regenerated. The UA registry has it since UA-3 (`popDigest`, the `UAAuth` domain salt).
+UA registry (target) takes `chainUid` as a constructor immutable (its `UAAuth` domain salt; its PoP challenge carries no chain since
+UA-8); because it checks raw digests, every caller's digest carries `chainUid` itself. **Built (P3)** for every token-side digest and
+the prover (which also mixes `chainUid` into its `s`); the vectors are regenerated. The UA registry has it since UA-3 (the `UAAuth` domain salt; the registration PoP itself became portable in UA-8 and carries no chain, [CTR-UA-07](accounts.md#CTR-UA-07)).
 
 Points:
 
@@ -849,7 +849,7 @@ other write of the account is a Zether Schnorr by `x` through `registry.requireA
 | Write | Purpose | `auth` |
 |---|---|---|
 | `mtxRollOverSigned`, `mtxSetRollOverMode` | `zether-owner` | `abi.encode(bytes(""), sig)`: Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record; a registered Zether UA only, else `AccountNotRegistered` |
-| `register` PoP | `pop` | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP, popDigest(UA, 0))` |
+| `register` PoP | `pop` (version 2) | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))` |
 | UA-ledger writes of the account's public balance (`ua*`, `uaExecute(mtxShield)`, trade, mandates, receiver fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
 
 Schnorr (every curve):
@@ -860,11 +860,12 @@ sign(x, msg32):  k hedged;  R = [k]G;  e = hashToScalar(keccak256("SCAAS-ZETHER-
 verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
 ```
 
-`UARegistry.register(0x0141, Y, pop, "", "")` ([accounts.md §1.8](accounts.md#registry)): `Y` canonical, on
+`UARegistry.register(0x0141, Y, attrs0, pop, "")` (`attrs0` = all absent) ([accounts.md §1.8](accounts.md#registry)): `Y` canonical, on
 the curve, in the subgroup, `≠ O` (BLS12-381 128 bytes in the EIP-2537 encoding); `pop` = the
-Schnorr above by `x` over `uaMessage(0x0141, PURPOSE_POP, popDigest(UA, 0))`, which binds the chain key,
-`chainUid`, the registry and the UA — never the caller, so anyone may relay it and a front-runner gets the
-identical record or a revert. A Zether UA holds no PQZ key (`UAPqzHolder`); BLS keys and signatures at
+Schnorr above by `x` over `uaMessage(0x0141, PURPOSE_POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))`, which binds the UA
+and nothing else — no chain key, no `chainUid`, no registry (UA-8, portable: the same `pop` registers the Zether UA on any chain,
+[CTR-UA-07](accounts.md#CTR-UA-07)) and never the caller, so anyone may relay it and a front-runner gets the
+identical record or a revert. The prover's `purpose_tag_v(p, version)` builds the `pop.v2` tag; `r33_keys.json` and `schnorr_bls12381.json` carry the portable PoP. A Zether UA holds no PQZ key (`UAPqzHolder`); BLS keys and signatures at
 infinity are refused ([CTR-UA-01](accounts.md#CTR-UA-01)). Using one secret as both a Zether key and a
 `bls12381-minsig` key would make DDH on G1 decidable (publishing `[x]G2`): a wallet derivation rule (separate trees),
 not a registry check. `Y` is stored with SSTORE2: `keyOf(UA)` serves the sender's storage-only recovery
@@ -928,7 +929,7 @@ account's level); a replay needs that same `msg.sender` and yields the same reco
   `msg.sender` is a shared contract (a public multicall/forwarder), a front-runner can replay `schnorrPop` through that
   contract with `SMART_ACCOUNT_1271` pointing at its own always-true contract, giving the UA a foreign authority forever;
   **register only from an account you alone control** (an EOA, your own `SmartKeyAccount`, your own Safe;
-  `UniversalAccountRegistry.sol:96`) until the UA registry, whose PoP binds chain, registry and UA ([CTR-UA-07](accounts.md#CTR-UA-07)), replaces it. `SMART_ACCOUNT_1271`
+  `UniversalAccountRegistry.sol:96`) until the UA registry, whose portable PoP binds the UA and its record, not the chain or the registry ([CTR-UA-07](accounts.md#CTR-UA-07)), replaces it. `SMART_ACCOUNT_1271`
   calls `isValidSignature` with a 50 k cap (`UniversalAccountRegistry.sol:206`), so a passkey `SmartKeyAccount` (Solidity P-256 on a dev chain without
   P256VERIFY) cannot register (`InvalidProofOfPossession`; fail-closed, no loss). `AuthSchemeLib`'s leak predicate for `PQ_COMMITMENT`
   returns `true` (`AuthScheme.sol:58-60`) although the registry treats `PQ_COMMITMENT` exactly like `SELF_SCHNORR`
@@ -1087,7 +1088,7 @@ list these selectors; the Zether roll-overs (all four) and PQZ's `mtxRollOver` a
 `Unshielded` (refresh: `amount = 0`), `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)` (Zether:
 `rolled` = `accSeq`), `Credited`, `Debited`; `TransferBundles` and `RollOverModeChanged` unchanged. **Views keep their names**
 (`accountState`, `pqzAccount`, …): this rule is about entry points. `NONE_ZETHER` has `mtxShield` / `mtxUnshield` only. There is no
-`zetherRegister` / `pqzRegister` (T6): the registry's `register` is relayable (PoP over `popDigest(ua, pqzKeyHash)`, anyone submits,
+`zetherRegister` / `pqzRegister` (T6): the registry's `register` is relayable (portable PoP over `registrationDigest`, anyone submits,
 [accounts.md](accounts.md)), and the confidential kinds depend on that registry for gasless onboarding. **Built (P3)** as
 `zether*` names, **renamed in plan 5h Task 3b** (before P3: `transferConfidential*`, `burn`, `fund`, `rollOverPublic`,
 `setRollOverMode`, …; no compatibility shims, all chains are test chains); the two underlying paths emit `Shielded` / `Unshielded` only, since

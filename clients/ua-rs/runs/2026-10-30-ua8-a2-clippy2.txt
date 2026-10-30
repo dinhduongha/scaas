@@ -1,0 +1,2 @@
+    Checking scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.43s

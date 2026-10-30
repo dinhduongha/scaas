@@ -151,10 +151,9 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     transcripts.push(json!({"name": format!("burn_{}", C::NAME), "case": transcript_json::<C>(&t)}));
     files.push((format!("burn_{}.json", C::NAME), bv));
 
-    // Schnorr over the UA registry's PoP message (CTR-UA-07, pqzKeyHash 0), fixed k.
-    let (registry, uid) = ([0xaa_u8; 20], hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap());
-    let d = schnorr::pop_digest(CHAIN, &uid, &registry, &from.ua(), &[0u8; 32]);
-    let msg = schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d);
+    // Schnorr over the portable PoP message (UA-8 P1, no PQZ key or KEM record), fixed k.
+    let d = schnorr::zether_registration_digest(&from.ua());
+    let msg = schnorr::ua_message::<C>(&schnorr::pop_tag(), &d);
     let k = Fr::<C>::from(0xcafe_f00d_u64);
     let (r, e, z) = schnorr::sign_with_k::<C>(&from.x, &msg, &k);
     let mut sig = encode_point::<C>(&r);
@@ -245,16 +244,13 @@ fn r33_curve<C: ZCurve>() -> Value {
                 "x": hx(&encode_scalar::<C>(&k.x)), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
             });
             if key_use == USE_CONF {
-                // the UA registry's PoP (CTR-UA-07; no PQZ key: pqzKeyHash 0), on the vectors' chain
-                let (registry, pqz_key_hash) = ([0xaa_u8; 20], [0u8; 32]);
-                let uid: [u8; 32] = hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap();
-                let pop = schnorr::zether_pop(&k, CHAIN, &uid, &registry, &mut rng);
-                schnorr::verify_pop(&k.y, CHAIN, &uid, &registry, &pop).unwrap();
-                let d = schnorr::pop_digest(CHAIN, &uid, &registry, &k.ua(), &pqz_key_hash);
+                // the portable PoP (UA-8 P1: no chain, chainUid or registry; no PQZ key or KEM record)
+                let pop = schnorr::zether_pop(&k, &mut rng);
+                schnorr::verify_pop(&k.y, &pop).unwrap();
+                let rd = schnorr::zether_registration_digest(&k.ua());
                 v["pop"] = json!({
-                    "kind": zether_kind::<C>(), "chainId": CHAIN, "chainUid": CHAIN_UID, "registry": hx(&registry),
-                    "pqzKeyHash": hx(&pqz_key_hash), "popDigest": hx(&d),
-                    "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d)), "pop": hx(&pop),
+                    "kind": zether_kind::<C>(), "popDigest": hx(&schnorr::portable_pop_digest(&k.ua(), &[0u8; 32], &[0u8; 32])),
+                    "registrationDigest": hx(&rd), "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::pop_tag(), &rd)), "pop": hx(&pop),
                 });
             }
             keys.push(v);

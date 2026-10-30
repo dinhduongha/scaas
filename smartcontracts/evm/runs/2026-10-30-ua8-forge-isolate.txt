@@ -1,0 +1,107 @@
+# forge-isolate at commit 128becef
+Compiling 2 files with Solc 0.8.37
+Solc 0.8.37 finished in 3.58s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:220:26:
+    |
+220 |     function _registerAt(address at, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d, uint256 bound)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UARegistryGroups.t.sol:465:56:
+    |
+465 |     function _memberBound(uint16 kind, uint256 sigLen, address at) internal {
+    |                                                        ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:268:5:
+    |
+268 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/ua/UARegistryGroups.t.sol:73:5:
+   |
+73 |     function _popMsg(UARegistry r, uint16 kind, bytes memory keyData) internal view returns (bytes32) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 7 tests for test/ua/UAGas.t.sol:UAGasTest
+[PASS] test_T_GAS_capsWithinBudget() (gas: 110758)
+[PASS] test_T_GAS_ed25519() (gas: 23584218)
+[PASS] test_T_GAS_msigAtBudget() (gas: 466343355)
+[PASS] test_T_GAS_msigPqAtBudget() (gas: 450292509)
+[PASS] test_T_GAS_native() (gas: 4554131)
+[PASS] test_T_GAS_registerHeadroomBlsBn254() (gas: 21304699)
+[PASS] test_T_GAS_structureOverBudgetRefused() (gas: 23674240)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.73s (2.90s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 14 tests for test/ua/UARegistryGroups.t.sol:UARegistryGroupsTest
+[PASS] test_T_GAS_groups() (gas: 133964321)
+[PASS] test_T_GAS_msigStoredMemberBound() (gas: 32970530)
+[PASS] test_authStored() (gas: 69802485)
+[PASS] test_authStoredStarved() (gas: 61296868)
+[PASS] test_gen2EnablesGroupKinds() (gas: 68156333)
+[PASS] test_gen2HandsStoredToGen1() (gas: 50487501)
+[PASS] test_groupKindsEnabled() (gas: 60715)
+[PASS] test_keyHashGroup() (gas: 17195326)
+[PASS] test_msigStoredMembers() (gas: 19916575)
+[PASS] test_msigStoredMembersGen2() (gas: 19446037)
+[PASS] test_registerKeyXAtLeastN() (gas: 4896501)
+[PASS] test_registerStoredStarved() (gas: 3060801723)
+[PASS] test_vectorsRegister() (gas: 142015326)
+[PASS] test_vectorsRegisterNegatives() (gas: 92326742)
+Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 2.29s (8.10s CPU time)
+
+Ran 2 test suites in 2.29s (4.02s CPU time): 21 tests passed, 0 failed, 0 skipped (21 total tests)
+rc=0

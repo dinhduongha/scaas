@@ -128,7 +128,7 @@ contract UAGasTest is UARegistryBase {
         UARegistry home = _deploy(address(0x5ce0), chainUidA, address(0), false, BUDGET, address(impl), true, c);
         Member[] memory all = new Member[](16);
         for (uint256 i; i < 8; ++i) {
-            all[i] = Member(KINDS[i], home.register(KINDS[i], _key(KINDS[i]), "", "", ""), 1);
+            all[i] = Member(KINDS[i], home.register(KINDS[i], _key(KINDS[i]), _none(), "", ""), 1);
         }
         bytes memory clone = abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3");
         for (uint256 i; i < 8; ++i) {
@@ -169,16 +169,16 @@ contract UAGasTest is UARegistryBase {
         Member[] memory m = new Member[](9);
         for (uint256 i; i < 8; ++i) {
             bytes memory pk = abi.encodePacked(keccak256(abi.encode("slh", i)));
-            tight.register(0x0133, pk, hex"01", "", "");
-            m[i] = Member(0x0133, r.register(0x0133, pk, hex"01", "", ""), 1);
+            tight.register(0x0133, pk, _none(), hex"01", "");
+            m[i] = Member(0x0133, r.register(0x0133, pk, _none(), hex"01", ""), 1);
         }
         m[8] = Member(UAKinds.EVM_EOA, _pad(clone), 1);
         bytes memory d = _msigKey(9, m);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
-        tight.register(UAKinds.MSIG, d, "", "", "");
+        tight.register(UAKinds.MSIG, d, _none(), "", "");
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](9);
         for (uint16 j; j < 9; ++j) s[j] = UARegistry.MemberSig(j, "", _big);
-        bytes32 ua = r.register(UAKinds.MSIG, d, abi.encode(s), "", ""); // all PQ but the clone: PQ-eligible, m-of-n PoP
+        bytes32 ua = r.register(UAKinds.MSIG, d, _none(), abi.encode(s), ""); // all PQ but the clone: PQ-eligible, m-of-n PoP
         uint256 least = _leastGas(
             address(r),
             abi.encodeCall(r.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s))),
@@ -228,8 +228,8 @@ contract UAGasTest is UARegistryBase {
             _registerMembers(r, d);
         }
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
-        tight.register(UAKinds.MSIG, d, "", "", "");
-        ua = r.register(UAKinds.MSIG, d, "", "", "");
+        tight.register(UAKinds.MSIG, d, _none(), "", "");
+        ua = r.register(UAKinds.MSIG, d, _none(), "", "");
     }
 
     /// Asserts `call` succeeds with `bound` gas for the callee frame; returns the least frame gas that succeeds. Each
@@ -237,11 +237,11 @@ contract UAGasTest is UARegistryBase {
     /// of its own, all accounts and slots cold; its calldata is paid by that transaction, not by the frame).
     /// F185: EIP-8037 state gas of `register`'s new storage slots (the record), charged inside the call's gas: `gas used`
     /// of `register` 312,557 -> 658,937 (ed25519) and 346,533 -> 692,913 (bls-bn254-minsig) from Osaka to Amsterdam, +346 k.
-    uint256 internal constant REGISTER_STATE_GAS = 350_000;
-
-    function _registerLimit() internal view returns (uint256) {
-        return _cap(0x0102) + 100_000 + REGISTER_STATE_GAS;
-    }
+    /// A8 (UA-8, D7): `register` also writes the whole registration as SSTORE2 code (state gas 1,164,330 for ed25519,
+    /// 1,311,210 for bls-bn254-minsig), so the least call gas is 1,460,619 / 1,635,814. REGRESSION GUARDS ONLY: pinned
+    /// from the first measured run on this build ("/ 1.0"), not derived bounds. Full table: runs/2026-10-30-ua8-gas.txt.
+    uint256 internal constant HEADROOM_ED25519 = 1_460_619;
+    uint256 internal constant HEADROOM_BLS_BN254 = 1_635_814;
 
     function _leastGas(address r, bytes memory call, uint256 bound) internal returns (uint256 hi) {
         GasProbe p = new GasProbe();
@@ -259,7 +259,7 @@ contract UAGasTest is UARegistryBase {
         uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         for (uint256 j; j < count; ++j) {
             uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * j], d[5 + 36 * j])));
-            if (kind >= 0x0100) r.register(kind, _key(kind), "", "", "");
+            if (kind >= 0x0100) r.register(kind, _key(kind), _none(), "", "");
         }
     }
 
@@ -317,14 +317,14 @@ contract UAGasTest is UARegistryBase {
         for (uint256 i; i < 8; ++i) {
             bytes memory k = _key(KINDS[i]);
             bytes32 id = UAKinds.uaOf(KINDS[i], k);
-            if (!home.isRegistered(id)) home.register(KINDS[i], k, big, "", "");
+            if (!home.isRegistered(id)) home.register(KINDS[i], k, _none(), big, "");
             m[i] = Member(KINDS[i], id, w);
         }
         uint256[2] memory used;
         uint16[2] memory t = [uint16(1), uint16(8)];
         for (uint256 x; x < 2; ++x) {
             bytes memory d = _msigKey(t[x] * w, m);
-            bytes32 ua = r.register(UAKinds.MSIG, d, "", "", "");
+            bytes32 ua = r.register(UAKinds.MSIG, d, _none(), "", "");
             UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](t[x]);
             for (uint16 j; j < t[x]; ++j) {
                 (, bytes memory k) = _memberAt(d, j);
@@ -378,7 +378,7 @@ contract UAGasTest is UARegistryBase {
         uint16[2] memory t = [uint16(1), uint16(16)];
         for (uint256 x; x < 2; ++x) {
             bytes memory d = _msigKey(t[x], m);
-            bytes32 ua = r.register(UAKinds.MSIG, d, "", "", "");
+            bytes32 ua = r.register(UAKinds.MSIG, d, _none(), "", "");
             bytes memory auth = _nativeAuth(r, d, ua, t[x], ids);
             vm.cool(address(r));
             _cool(accounts);
@@ -428,11 +428,11 @@ contract UAGasTest is UARegistryBase {
         }
         bytes memory d = _msigKey(3, m);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
-        tight.register(UAKinds.MSIG, d, "", "", "");
-        roomy.register(UAKinds.MSIG, d, "", "", ""); // exactly at the budget
+        tight.register(UAKinds.MSIG, d, _none(), "", "");
+        roomy.register(UAKinds.MSIG, d, _none(), "", ""); // exactly at the budget
         // threshold 2 of the same three: c = 2, the two largest caps
         d = _msigKey(2, m);
-        tight.register(UAKinds.MSIG, d, "", "", "");
+        tight.register(UAKinds.MSIG, d, _none(), "", "");
         // 16 native members on a chain with SmartKeyAccount clones: 16 × 435 k = 6.96 M ≤ 12 M
         UARegistry ska = _deploy(
             address(0x5cc3),
@@ -449,7 +449,7 @@ contract UAGasTest is UARegistryBase {
             n[i] = Member(UAKinds.EVM_EOA, _pad(vm.addr(1000 + i)), 1);
         }
         uint256 g = gasleft();
-        ska.register(UAKinds.MSIG, _msigKey(16, n), "", "", "");
+        ska.register(UAKinds.MSIG, _msigKey(16, n), _none(), "", "");
         emit log_named_uint("register msig 16 natives", g - gasleft());
         UARegistry small = _deploy(
             address(0x5cc4),
@@ -462,7 +462,7 @@ contract UAGasTest is UARegistryBase {
             _cfgs(address(mock))
         );
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
-        small.register(UAKinds.MSIG, _msigKey(16, n), "", "", "");
+        small.register(UAKinds.MSIG, _msigKey(16, n), _none(), "", "");
     }
 
     /// Caps of the gen-1 default config: ≤ 50 % of `verifyBudget` (public-chain rule, CTR-UA-23); each pairing kind's
@@ -523,10 +523,10 @@ contract UAGasTest is UARegistryBase {
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory call = abi.encodeCall(
             r.register,
-            (0x0107, vm.parseJsonBytes(sj, ".derived[6].keyData"), vm.parseJsonBytes(sj, ".derived[6].pop.sig"), "", "")
+            (0x0107, vm.parseJsonBytes(sj, ".derived[6].keyData"), _none(), vm.parseJsonBytes(sj, ".derived[6].pop.sig"), "")
         );
         uint256 lo = 100_000;
-        uint256 hi = 1_000_000;
+        uint256 hi = 4_000_000; // A8: the state gas of the record counts in the call gas (F185), so the least gas is > 1 M
         while (hi - lo > 500) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
@@ -540,7 +540,7 @@ contract UAGasTest is UARegistryBase {
         (bool ok2,) = address(r).call(call);
         assertTrue(ok2);
         emit log_named_uint("register bls-bn254-minsig: gas used", g - gasleft());
-        assertLt(hi, 500_000 + REGISTER_STATE_GAS); // F185: was 500,000 (452,440 on Osaka); 673,046 under Amsterdam
+        assertLe(hi, HEADROOM_BLS_BN254); // F185: was 500,000 (452,440 on Osaka); A8: the UA-8 record, 1,635,814
     }
 
     /// UA-2b `ed25519`: the least frame gas of the verifier on its most expensive accepted input (every Straus window
@@ -568,9 +568,9 @@ contract UAGasTest is UARegistryBase {
         c[0] = UARegistry.KindConfig(0x0102, address(ev), uint64(cap));
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory k = vm.parseJsonBytes(sj, ".derived[7].keyData");
-        bytes memory call = abi.encodeCall(r.register, (0x0102, k, vm.parseJsonBytes(sj, ".derived[7].pop.sig"), "", ""));
+        bytes memory call = abi.encodeCall(r.register, (0x0102, k, _none(), vm.parseJsonBytes(sj, ".derived[7].pop.sig"), ""));
         uint256 lo = 100_000;
-        uint256 hi = 1_000_000;
+        uint256 hi = 4_000_000; // A8: the state gas of the record counts in the call gas (F185), so the least gas is > 1 M
         while (hi - lo > 500) {
             uint256 mid = (lo + hi) / 2;
             uint256 snap = vm.snapshotState();
@@ -590,6 +590,6 @@ contract UAGasTest is UARegistryBase {
         g = gasleft();
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, dg, auth);
         emit log_named_uint("requireAuthorized ed25519", g - gasleft());
-        assertLt(hi, _registerLimit()); // F185: was cap + 100,000 (288,524 on Osaka); 640,966 under Amsterdam
+        assertLe(hi, HEADROOM_ED25519); // F185: was cap + 100,000 (288,524 on Osaka); A8: the UA-8 record, 1,460,619
     }
 }

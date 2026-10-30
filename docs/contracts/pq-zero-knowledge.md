@@ -100,7 +100,7 @@ constructor/`initialize` runs the precompile self-test ([self-test](#self-test))
 public chain) fails it. **And** the chain is identified by `(chainid, chain_uid)` ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
 `PqzToken.initialize` copies `registry.chainUid()` (the genesis hash, a registry constructor immutable, `≠ 0`) into an
 immutable `chainUid`, which enters every statement and `entryRef`, so no proof, authorization or disclosure verifies on
-another chain with the same chain id; the UA PoPs bind it through `popDigest` ([CTR-UA-07](accounts.md#CTR-UA-07)).
+another chain with the same chain id; the UA registration PoP is portable and carries no chain (UA-8, [CTR-UA-07](accounts.md#CTR-UA-07)); the chain binding lives in the statements and tokens above and in the registry's `UAAuth` domain.
 
 The node binds registry, `chainUid()` and the RPC genesis hash per chain profile and refuses a mismatch.
 `OpenFactory.kindEnabled(NONE_PQZ / UNDERLYING_PQZ)` starts `false` (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. The SCaaS testnet is
@@ -251,9 +251,9 @@ PQZ parameters.
 | Forks live | through Fusaka + BPO2, incl. EIP-2537, EIP-7951 (secp256r1 at `0x100`), **EIP-7825**, **EIP-7623**, **EIP-7934** | — |
 | [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) tx gas cap | 16,777,216 per transaction, independent of block limit | rules out a Solidity lattice verifier ([verifier](#verifier)) |
 | Chain id | **7622** (owner, 2026-10-07; formerly 9000, which is **also Evmos Testnet**, a public chain: [chainlist](https://chainlist.org/chain/9000), [Sequence chainlist](https://docs.sequence.xyz/solutions/chainlist/non-integrated/evmos-testnet)). Chain ids are a registry convention, so 7622 is not assumed unique either | `chainid == 7622` does not prove "our chain"; the precompile self-test, the registry's `chain_uid` (genesis hash) in every statement and the node's genesis-hash binding do |
-| Block gas limit | 16,777,216 (Clique signer can move it without reset) | ~5 transfers per block unless raised ([CTR-PQZ-11](#CTR-PQZ-11)) |
+| Block gas limit | 200,000,000 since the reset of 2026-10-22 (genesis `gasLimit` `0xbebc200`, `TargetBlockGasLimit` 200,000,000); 16,777,216 at the time of this table, then an 80 M target (P6f) | gas meters block capacity ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | [EIP-7623](https://eips.ethereum.org/EIPS/eip-7623) calldata floor | `10 × tokens`, token = zero byte 1 / non-zero byte 4 ⇒ 40 gas per non-zero byte | dominates PQZ cost once verification is native |
-| [EIP-7934](https://eips.ethereum.org/EIPS/eip-7934) | RLP block ≤ 8,388,608 B | a block can carry at most `gasLimit / 10` calldata bytes (all-zero calldata at the floor); the 80 M target keeps that ≤ 8.0 MB, so the limit cannot be hit |
+| [EIP-7934](https://eips.ethereum.org/EIPS/eip-7934) | RLP block ≤ 8,388,608 B | a block can carry at most `gasLimit / 10` calldata bytes (all-zero calldata at the floor); the former 80 M target kept that ≤ 8.0 MB; at today's 200 M limit the gas limit alone no longer bounds a block under 8,388,608 B, so the block producer's own EIP-7934 check is what holds it |
 | Tx-pool size limit | 128 KiB is the common client default (geth/reth); Nethermind `TxPool.MaxTxSize` to be confirmed | transfers with inline credits exceed it ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | Missing transition keys | Nethermind silently ignores unknown keys; `eip1108Transition` was once missing and made `ecMul` 6.4× dearer with no symptom | every PQZ activation is **probed**, never trusted ([CTR-PQZ-10](#CTR-PQZ-10)) |
 
@@ -625,17 +625,18 @@ kind** (owner, CTR-UA-30 in [decisions.md](../decisions.md)). Tag `scaas.ua.pqz-
 now), keyHash group `pqz-mlwe`. A UA is the actor that signs a write; the PQZ key cannot sign compactly (an `R_REG` proof
 is ≈ 40 KB), so it rides on a PQ signer: the signer's id is the PQZ account (`fromUA`, `toUA`, `auditorUA`), its public
 balance on the UA ledger and its confidential balance share it, and the PQZ key is **not** in the id. The key is supplied
-in the signer's `register(kind, keyData, pop, pqzKey, pqzPop)` ([CTR-UA-16](accounts.md#CTR-UA-16)), is immutable and
-belongs to one UA only (`UAKeyInUse` on the group `pqz-mlwe`, `msig` included). The signer's PoP and the `R_REG` proof
-are over the same `popDigest(ua, pqzKeyHash)` ([CTR-UA-07](accounts.md#CTR-UA-07)) under different kind tags: the proof is
-bound to chain (`chain_key` and `chain_uid`), registry and the signer's id, not the caller, and nobody can strip or swap
-the key. Key seed by the UA PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`, derived
+in the signer's `register(kind, keyData, attrs, pop, pqzPop)` (`attrs.pqzKey`; or later by the signed `setPqzKey`, [CTR-UA-16](accounts.md#CTR-UA-16)), is immutable and
+belongs to one UA only (`UAKeyInUse` on the group `pqz-mlwe`, `msig` included, checked once the key is proven). The `R_REG` proof is over
+`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))` and the signer's PoP over the `registrationDigest` that covers the proof's hash
+([CTR-UA-07](accounts.md#CTR-UA-07)): the proof is bound to the signer's id (a proof made for another UA fails) but **not to a chain or a registry**, so one
+proof serves every chain with the PQZ precompile; nobody can strip or swap the key. The proof is **optional** in `register` (the key is then `proven = false` until
+`storePqzPop` gives bytes that hash to the signed `pqzPopHash` and a registry with the verifier checks them); PQZ tokens accept only proven keys (`pqzKeyOf(ua).proven`). Key seed by the UA PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`, derived
 **only in the key worker** ([CLI-APP-24](../clients/app.md#CLI-APP-24)) and sealed there as a 32-byte PQZ leaf that the
 Zether worker and `pqz-cli` open (`sealPqKey` / `openPqKey`). PQZ adds no signing kind and no UA kind.
 
 | No. | Name (tag `scaas.ua.<name>.v1`) | Key | keyHash group | Proof | Verifier (EVM) | Chains |
 |---|---|---|---|---|---|---|
-| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, POP_TAG, popDigest(signerUA, pqzKeyHash))` | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
+| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(signerUA, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
 
 **Record storage.** The signer's UA `Record` is unchanged; the PQZ key is a second SSTORE2 pointer beside it
 (`recordOf(ua)` returns it, 0 = none; `UAPqzVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
@@ -831,32 +832,32 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 
 ### 7.2 Register (the UA registry)
 
-`register(kind, keyData, pop, pqzKey, pqzPop)` of a PQ signer follows the UA register steps
-([registry](accounts.md#registry)); PQZ-specific content of each step (only when `pqzKey` is given):
+`register(kind, keyData, attrs, pop, pqzPop)` of a PQ signer follows the UA register steps
+([registry](accounts.md#registry)); PQZ-specific content of each step (only when `attrs.pqzKey` is given):
 
-1. `kindEnabled(0x0142)`: the registry generation was deployed with `UAPqzVerifier` in slot `0x0142`
-   ([CTR-UA-05](accounts.md#CTR-UA-05), [CTR-UA-23](accounts.md#CTR-UA-23)); else `UAKindDisabled(0x0142)`. A generation
-   enables `0x0142` for at most one generation per chain.
-2. Key data of the signer as for its kind (`UAKeyData`). The PQZ key is checked inside step 7 (exactly `PqzCt.PK` bytes,
-   every coefficient `< q`).
+1. Verifier slot: a generation deployed with `UAPqzVerifier` in slot `0x0142` ([CTR-UA-05](accounts.md#CTR-UA-05),
+   [CTR-UA-23](accounts.md#CTR-UA-23)) checks the proof; with the slot empty the key is accepted unproven (`proven = false`). A gen 2 whose
+   gen 1 enables `0x0142` refuses a PQZ key (`UAKindDisabled(0x0142)`, before the holder check). A generation enables `0x0142` for at most one generation per chain.
+2. Key data of the signer as for its kind (`UAKeyData`). The PQZ key's length is one of the four sets' `PqzCt.PK` (`UAKeyData(0x0142)`, step 5); every coefficient `< q` is checked by the verifier in step 7.
 3. Id: `uaOf(kind, keyData)` of the signer, not in the native space, not registered. Its `pop` is verified in step 6.
-4. `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)` free here and in the predecessor (`UAKeyInUse`).
-5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `pqzPop` is non-empty (`UAPoP`).
-6. The signer's PoP over `popDigest(ua, pqzKeyHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
+4. `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)`; free here and in the predecessor (`UAKeyInUse`) only when the key becomes proven (step 7 or `storePqzPop`).
+5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `attrs.pqzPopHash` ≠ 0 and not the hash of an empty proof (`UAPqzPopHash`); `pqzPop`, if given, hashes to it.
+6. The signer's PoP over `registrationDigest(portablePopDigest(ua, pqzKeyHash, kemRecordHash), pqzPopHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
 7. PoP of the PQZ key: `UAPqzVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
    `stmt = opTag(REGISTER) ‖ proofSystemId ‖ message ‖ pk` (prefix as [encodings](#encodings); `proofSystemId` is an
-   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, POP_TAG, popDigest(ua, pqzKeyHash))` — relation
-   `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `popDigest` is
-   `keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ pqzKeyHash)` ([CTR-UA-07](accounts.md#CTR-UA-07)):
-   it binds chain (`chain_key` and `chain_uid`), registry and the signer's id, not the caller, so anyone may submit,
-   nobody can strip or swap the key, and a proof made for another UA fails. The relation, the statement layout and the
-   verifier do not depend on what the message commits to.
-8. Store the signer's record, `_pqzKey[ua] = SSTORE2(pk)`, `keyOwner` for the signer's key and for `pqzKeyHash`, the
-   lists (the signer's kind, and `0x0142`); emit `UARegistered(ua, kind, keyData, pqzKeyPtr)` (a 20-byte pointer, not
-   16 KB of log data).
+   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))` — relation
+   `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `portablePopDigest` is
+   `keccak256(abi.encode(PURPOSE_POP_V2, ua, pqzKeyHash, kemRecordHash))` ([CTR-UA-07](accounts.md#CTR-UA-07)): it binds the signer's id and
+   the attributes, not a chain, a registry or the caller, so anyone may submit on any chain, nobody can strip or swap the key,
+   and a proof made for another UA fails. The relation, the statement layout and the verifier do not depend on what the message
+   commits to: UA-8 changed only the 32-byte message's pre-image (the `pqz-core/stmt` doc comment that still names `popDigest` is
+   updated with the next core change, `TODO.md`). The step is optional in `register`: without `pqzPop`, or on a registry whose slot `0x0142` is empty,
+   the key is stored with `proven = false`, claims no `keyOwner` or list entry, and `storePqzPop(ua, pqzPop)` completes it later.
+8. Store the signer's record, `_pqzKey[ua] = SSTORE2(pk)`, `keyOwner` for the signer's key and, for a proven key, for `pqzKeyHash` and the
+   `0x0142` list; emit `UARegistered(ua, kind, keyData, attrs, pop, pqzPop, checkedPop, checkedPqzPop, checkedKem)` (it carries the
+   whole PQZ key in `attrs`; [accounts.md §1.8](accounts.md#registry)).
 
-The signer's `register` without a PQZ key is the plain UA registration; it can never get one later (the PQZ key is not
-in the id; a new signing key is a new UA).
+The signer's `register` without a PQZ key is the plain UA registration; it may add the key later, once, by the signed `setPqzKey` ([CTR-UA-16](accounts.md#CTR-UA-16); the PQZ key is not in the id).
 
 No rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): a new key is a new UA plus a confidential transfer to it.
 
@@ -1233,7 +1234,7 @@ entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint
 earlier `recipientsHash, legs`, both derivable from it),
 `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)`, `Unshielded(bytes32 indexed ua, uint256 amount,
 bytes32 indexed recipient, address blob)` (burn or refresh, `amount = 0`; the as-built PQZ event of plan 5h Task 3 had an `address`
-recipient, widened with the UA recipient in Task 3b). There is no `PqzRegistered` event: the PQZ key is in `UARegistered(…, pqzKey)` of the registry ([accounts.md](accounts.md#CTR-UA-17)). `PqzPlainCredit` is gone with `plainPending`.
+recipient, widened with the UA recipient in Task 3b). There is no `PqzRegistered` event: the PQZ key is in `UARegistered(…, attrs, …)` of the registry (or `UAPqzKeyAdded` for a key added by `setPqzKey`) ([accounts.md](accounts.md#CTR-UA-17)). `PqzPlainCredit` is gone with `plainPending`.
 `Shielded.from` is `_msgSender()`; for a UA signer (`uaExecute`) it is `UA_POOL`, not the UA (the UA is in the same transaction's
 `UAMetaTransactionExecuted` and in the `UATransfer(ua, SHIELD_POOL, …)` of the pool move). `mtxUnshieldUnwrap` takes the leg as the calldata struct
 `Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)`, pays through `UnderlyingLib.payOutTo` (native id: `quoteUnwrap` + `payOut`;
@@ -1980,14 +1981,15 @@ calibrated on the p99 verify time over adversarial inputs against `ecMul` on the
 (`engine.Pqz.schedules`: per schedule an activation timestamp, the `pqz` rows `(op, id, stmtLen, gas)`, `selftestGas`,
 `mldsa44Gas`, `mldsa65Gas`; parsed strictly, a new price or op 7 is a new schedule with a later timestamp: P6f D2);
 `OP_SELFTEST` has a fixed price of its own and is computed once per process. EIP-7623 and EIP-7825 stay enabled.
-Operator change: Clique `TargetBlockGasLimit` **80,000,000** on the SCaaS testnet (no data reset): at the calldata floor a
-block then carries at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata, so
-no block the producer builds can be oversized.
+Operator change (P6f): Clique `TargetBlockGasLimit` **80,000,000** on the SCaaS testnet (no data reset): at the calldata floor a
+block then carried at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata. Since the
+reset of 2026-10-22 the SCaaS testnet runs **200,000,000** (genesis `gasLimit` `0xbebc200`, `TargetBlockGasLimit` 200,000,000), so that
+bound no longer follows from the gas limit (the producer's EIP-7934 check holds it).
 
 Node and client limits on the SCaaS testnet: Nethermind `TxPool.MaxTxSize`
-1,048,576 and `Blocks.TargetBlockGasLimit` 80,000,000 in the node's `config.json`, JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 16_000_000`, gateway body limit 1 MiB on job
+1,048,576 and `Blocks.TargetBlockGasLimit` 200,000,000 in the node's `config.json` (80,000,000 at P6f), JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 64_000_000` (owner 2026-10-22; `max_gas_per_tx = 16_000_000` at P6f), gateway body limit 1 MiB on job
 submissions to the `pqz` chain profile only (64 KiB elsewhere) — recommendations to node operators
-([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block while
+([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block (at 80 M) while
 the floor binds, ≈ 10 at the 50 ms verify kill threshold; ≈ 45 GB/day of archive growth at sustained full load. The
 node's default `max_gas_per_tx` of 3,000,000 already rejects classical Zether transfers (3.36 M), so a PQZ chain
 profile must raise it.
@@ -2181,7 +2183,7 @@ byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
 | `mtxRollOver` of 16 credits | 3.43 M (measured, 5h) | from state, no calldata (the pre-5h estimate was ≈ 8.9 M calldata-bound); see the 5h table above |
 | `mtxShield` | 0.05–0.09 M (measured, 5h) | proof-free: public units to `SHIELD_POOL`, a TRIVIAL pending entry, `totalShielded`; see the 5h table above |
 | `mtxUnshield` / `refresh` | ≈ 2.6 M | one recipient, no auditor, ≈ 258 k tokens |
-| `register` | ≈ 4.7–5.2 M once | SSTORE2 of the per-set `pk` (16–22 KB; 16 KB ≈ 3.3 M) + `R_REG` verify + standard calldata ≈ 0.59 M + the signer's PoP verify ≈ 0.01 M (above its ≈ 1.46 M floor); one transaction with the signer's registration, no second record slot, and the `UARegistered` log carries a 20-byte pointer, not 16 KB; +≈ 27 k for the `0x0142` list append; UA-6 re-measures it (`runs/<date>-ua6-gas.txt`) |
+| `register` | ≈ 4.7–5.2 M once (pre-UA-8 estimate) | SSTORE2 of the per-set `pk` (16–22 KB; 16 KB ≈ 3.3 M) + `R_REG` verify + standard calldata ≈ 0.59 M + the signer's PoP verify ≈ 0.01 M (above its ≈ 1.46 M floor); one transaction with the signer's registration, no second record slot; +≈ 27 k for the `0x0142` list append; **UA-8 measured figures (the proof stored too, the `UARegistered` log carries the whole registration): [accounts.md#gas-ua8](accounts.md#gas-ua8)** (84.8–109.1 M with the proof in the call, or 39.2–51.8 M + `storePqzPop`) |
 | Classical reference (measured) | 3.33 M / 3.41 M transfer, 0.115 M rollover | [zether.md](zether.md#gas-measured) |
 
 **Note (2026-10-14).** Every "50 ms" figure in this section (and the "+16 inline at 50 ms" requirement) is at the
@@ -2190,7 +2192,8 @@ prices are recalibrated on measured p99 in P6f. The estimates are for PQZL; a PQ
 ≈ 9.2 M gas of EIP-7623 calldata floor (P6e D5), so its `INLINE_MAX` is a P6g question.
 
 Per received payment PQZ costs ≈ 3.3 M (transfer plus the later roll of its credit) against classical ≈ 3.4–3.5 M,
-while the floor binds. At the 80 M block target: ≈ 28 transfers per 5 s block (≈ 10 at the 50 ms threshold). **Archive
+while the floor binds. At the former 80 M block target (P6f): ≈ 28 transfers per 5 s block (≈ 10 at the 50 ms threshold); the 200 M
+limit of today raises the gas bound ≈ 2.5×, and the 50 ms verify threshold stays the binding one. **Archive
 growth** at sustained full load: ≈ 430 KB/s of calldata plus ≈ 95 KB/s of logs, ≈ 45 GB/day; operators size archive
 disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 
@@ -2271,7 +2274,7 @@ split, never a silent acceptance (fail closed).
    the formula, not with "it answered" (the `eip1108` lesson).
 3. Roll the signer and every follower to the image before the timestamp (or reset the testnet with `engine.Pqz` from
    genesis, owner 2026-10-15); then repeat step 2 on the live chain.
-4. Raise `TargetBlockGasLimit` to 80 M and `TxPool.MaxTxSize` to 1 MiB ([CTR-PQZ-11](#CTR-PQZ-11)).
+4. Set `TargetBlockGasLimit` to 200 M (genesis `gasLimit` `0xbebc200` since the reset of 2026-10-22; 80 M at P6f) and `TxPool.MaxTxSize` to 1 MiB ([CTR-PQZ-11](#CTR-PQZ-11)).
 5. **RPC topology.** The signer exposes no public RPC; a follower node serves all public `eth_call`, `eth_estimateGas`
    and node pre-simulation, and the signer peers only with our followers. A crash on a crafted `eth_call` then takes
    down a follower, not block production (defence in depth only, since an included transaction runs on every node).
@@ -2420,8 +2423,8 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; continuous ASan/UBSan fuzzing of `pqz_verify`; fail-closed returndata check; deterministic integer code |
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
 | T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9); for `R_TXM` per `(r_g, e1_g)` see T21; fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
-| T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
-| T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the UA `popDigest(ua, pqzKeyHash)` (chain key, `chain_uid`, registry, the signer's UA, the key hash) beside the signer's own PoP over the same digest ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
+| T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and `UAAuth`; node binds genesis hash, registry `chainUid()` and token |
+| T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the portable digest of the signer's UA and its attributes, beside the signer's own PoP over the `registrationDigest` that covers the proof's hash ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`, held only by proven keys, so listing a victim's key without a proof blocks nobody; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
 | T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
@@ -2499,7 +2502,7 @@ Later phases add, in the same directory: `derive.json` (P6h), `register_pqz.json
 | `derive.json` | BIP-39 seed → derivation seeds, PQZ pk, ML-DSA pk, UAs, keyHashes (rows also in the UA `kinds.json`) |
 | `mldsa65.json` | NIST ACVP-style vectors via the chosen implementation |
 | `auth_{mldsa65,mldsa44,msig}.json` | `authDigest` → the UA `ua_msg` (with `MSG_TAG`, `TAG(authKind)`, `PURPOSE_ZETHER_AUTH`) → signature, for an `mldsa65`, an `mldsa44` and a hybrid `msig {mldsa65 w1, p256 w1} t=2` holder; each verifies through `UARegistry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, …)`; rows shared with the UA vectors |
-| `register_pqz.json` | `popDigest(ua, pqzKeyHash)` (with `chainKeyHash`, `chainUid`) for a signer with a PQZ key, the signer's PoP and the `R_REG` PoP over it |
+| `register_pqz.json` | the pre-UA-8 chain-bound form (`popDigest` with `chainKeyHash`, `chainUid`); UA-8 moved the registration rows to `smartcontracts/vectors/ua/portable.json` (`R_REG` message over `portablePopDigest`, the signer's PoP over `registrationDigest`; the `pqzPop` bytes there are length-faithful filler, not proofs) |
 | `metatx_pqz.json` | per op and path: envelope fields → `metaTxDigest` (v1 domain, no salt) / `uaDigest` (v3, `salt = chainUid`), `envelopeBinding` / `uaEnvelopeBinding`, the bound statement and `authDigest`, the signature (ECDSA, `mldsa65` fee UA); the direct form with binding 0; typehashes pinned to the classical meta-tx vectors and the UA `metatx3.json` |
 
 The UA `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed → pk, UA, keyHash).

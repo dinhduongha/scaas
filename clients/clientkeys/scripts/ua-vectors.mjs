@@ -1,6 +1,7 @@
 // Generates smartcontracts/vectors/ua/kinds.json and structures.json: the UA identity layer of src/ua.js on deterministic
 // keys — the kind table, every derived kind's valid key data with its id and keyHash, invalid key data with the error
-// every implementation must give, native ids, canonical ids, ua_msg, popDigest, UAAuth and member digests. Every valid row
+// every implementation must give, native ids, canonical ids, ua_msg, the portable PoP digests (UA-8: no chain context), UAAuth
+// and member digests. Every valid row
 // is accepted and every invalid row refused by src/ua.js before it is written; clients/ua-rs recomputes all of it with
 // independent curve code (k256, p256, curve25519-dalek, arkworks). MuSig2 / FROST rows are valid layouts of valid points,
 // not real groups (KeyAgg and the DKG check are UA-2).
@@ -450,12 +451,14 @@ const canonicalIds = [
 
 // --- messages ---
 const digest = label('digest');
-const messages = [...[...key.keys(), 0x0120, 0x0142].map((kind) => [kind, 'pop']), ...ua.PURPOSES.map((p) => [0x0100, p])]
-  .map(([kind, purpose]) => ({ kind, purpose, purposeTag: hex(ua.purposeTag(purpose)), digest: hex(digest),
-    uaMsg: hex(ua.uaMessage(kind, ua.purposeTag(purpose), digest)) }));
+// per kind: the portable PoP's purpose (pop v2, UA-8 P1); then every purpose at v1 under webauthn-p256
+const messages = [...[...key.keys(), 0x0120, 0x0142].map((kind) => [kind, 'pop', 2]), ...ua.PURPOSES.map((p) => [0x0100, p, 1])]
+  .map(([kind, purpose, version]) => ({ kind, purpose, version, purposeTag: hex(ua.purposeTag(purpose, version)),
+    digest: hex(digest), uaMsg: hex(ua.uaMessage(kind, ua.purposeTag(purpose, version), digest)) }));
 
-// --- structures.json: pop, UAAuth, member ---
+// --- structures.json: the portable pop (UA-8), UAAuth, member ---
 const registry = '0x5ca0000000000000000000000000000000000001';
+// the chain contexts of the chain-bound UAAuth rows (and of signatures.json); the PoP rows have none (UA-8 P1)
 const contexts = {
   A: { chainId: 31337, chainUid: hex(label('chain uid A')), registry },
   B: { chainId: 7622, chainUid: hex(label('chain uid B')), registry },
@@ -467,23 +470,29 @@ const zero = hex(z32);
 const hex0 = zero;
 const pqzH = hex(pqzKeyHash);
 const holder = hex(id(0x0130));
-// pqzKeyHash 0 for every UA without a PQZ key; a holder's digest binds h (a key added later cannot reuse a PoP)
-const pop = [...Object.keys(contexts).map((c) => ({ context: c, ua: derivedId, pqzKeyHash: hex0 })),
-  { context: 'A', ua: hex(id(0x0141)), pqzKeyHash: hex0 }, { context: 'A', ua: holder, pqzKeyHash: hex0 },
-  { context: 'A', ua: holder, pqzKeyHash: pqzH }, { context: 'B', ua: holder, pqzKeyHash: pqzH }]
-  .map((p) => {
-    const c = contexts[p.context];
-    return { ...p, chainKeyHash: hex(ua.chainKeyHash(c.chainId)), popDigest: hex(ua.popDigest({ ...c, ua: p.ua, pqzKeyHash: p.pqzKeyHash })) };
-  });
-assert(new Set(pop.map((p) => p.popDigest)).size === pop.length, 'popDigest must separate chain id, chain uid, registry, ua and pqzKeyHash');
-// R_REG's message: uaMessage(0x0142, pop, popDigest(ua, keyHash(0x0142, pqzKey))), per holder kind and context
-const pqzReg = [['A', 0x0130], ['B', 0x0131], ['A', 0x0132]].map(([context, kind]) => {
-  const c = contexts[context];
-  const u = id(kind);
-  return { context, kind, ua: hex(u), pqzKeyHash: pqzH, popDigest: hex(ua.popDigest({ ...c, ua: u, pqzKeyHash })),
-    pqzRegMessage: hex(ua.pqzRegMessage({ ...c, ua: u, pqzKey })) };
+// word inputs (each 0 when absent): a PQZ key's keyHash, the initial KEM record's hash, the R_REG proof's hash
+const kemH = hex(label('kem record'));
+const proofH = hex(label('pqz pop'));
+const pop = [
+  { kind: 0x0101, ua: derivedId, pqzKeyHash: hex0, kemRecordHash: hex0, pqzPopHash: hex0 },
+  { kind: 0x0141, ua: hex(id(0x0141)), pqzKeyHash: hex0, kemRecordHash: hex0, pqzPopHash: hex0 },
+  { kind: 0x0130, ua: holder, pqzKeyHash: hex0, kemRecordHash: hex0, pqzPopHash: hex0 },
+  { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: hex0, pqzPopHash: proofH },
+  { kind: 0x0130, ua: holder, pqzKeyHash: hex0, kemRecordHash: kemH, pqzPopHash: hex0 },
+  { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: kemH, pqzPopHash: proofH },
+  { kind: 0x0130, ua: holder, pqzKeyHash: pqzH, kemRecordHash: hex0, pqzPopHash: kemH },
+].map((p) => {
+  const d = ua.portablePopDigest(p);
+  return { ...p, portablePopDigest: hex(d), registrationDigest: hex(ua.registrationDigest(d, p.pqzPopHash)) };
 });
-assert(new Set(pqzReg.map((p) => p.pqzRegMessage)).size === pqzReg.length, 'pqz_reg_message must separate context and holder');
+assert(new Set(pop.map((p) => p.registrationDigest)).size === pop.length, 'registrationDigest must separate ua and every attribute hash');
+// R_REG's message: uaMessage(0x0142, pop v2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash)), per holder kind
+const pqzReg = [[0x0130, hex0], [0x0131, kemH], [0x0132, hex0]].map(([kind, kemRecordHash]) => {
+  const u = hex(id(kind));
+  const d = ua.portablePopDigest({ ua: u, pqzKeyHash: pqzH, kemRecordHash });
+  return { kind, ua: u, pqzKeyHash: pqzH, kemRecordHash, portablePopDigest: hex(d), pqzRegMessage: hex(ua.uaMessage(0x0142, ua.POP_V2_TAG, d)) };
+});
+assert(new Set(pqzReg.map((p) => p.pqzRegMessage)).size === pqzReg.length, 'pqz_reg_message must separate holder and KEM record');
 // msig_pqz_eligible: the weight of members outside 0x0130-0x0133 must be below the threshold (CTR-PQZ-12)
 const pqzMsig = [
   ['classical members outweigh the threshold', msigKey, false],
@@ -498,7 +507,7 @@ const pqzMsig = [
   valid.push(row(0x0120, d));
   const u = ua.deriveUA(0x0120, d);
   return { reason, keyData: hex(d), ua: hex(u), eligible,
-    popDigest: hex(ua.popDigest({ ...contexts.A, ua: u, pqzKeyHash: eligible ? pqzKeyHash : z32 })) };
+    portablePopDigest: hex(ua.portablePopDigest({ ua: u, pqzKeyHash: eligible ? pqzKeyHash : z32 })) };
 });
 const memberTag = ua.purposeTag('member');
 const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1], ['E', 1]].map(([context, generation]) => {
@@ -522,7 +531,8 @@ const constants = { MSG_TAG: hex(ua.MSG_TAG), POP_TAG: hex(ua.POP_TAG), DOMAIN_T
 const schemes = ua.SCHEMES.map((k) => ({ kind: k.kind, name: k.name, lengths: k.lengths, group: k.group,
   tag: ua.kindTagString(k.kind), TAG: hex(ua.TAG(k.kind)) }));
 const groups = ua.GROUPS.map((g) => ({ group: g, tag: ua.groupTagString(g), GROUP: hex(ua.GROUP(g)) }));
-const purposes = ua.PURPOSES.map((p) => ({ purpose: p, tag: `scaas.ua.purpose.${p}.v1`, purposeTag: hex(ua.purposeTag(p)) }));
+const purposes = [...ua.PURPOSES.map((p) => [p, 1]), ['pop', 2]].map(([p, version]) => ({ purpose: p, version,
+  tag: ua.purposeTagString(p, version), purposeTag: hex(ua.purposeTag(p, version)) }));
 const note = 'Generated by clients/clientkeys/scripts/ua-vectors.mjs (src/ua.js on @noble/curves 2.4.0); never edit by hand. '
   + 'Solidity UAKinds, clientkeys ua.js, clients/ua-rs, clients/ua-py, clients/ua-go and clients/ua-cs must reproduce every '
   + 'field and refuse every invalid row with its error (the reason is a label). MuSig2 / FROST rows are valid layouts of valid '
@@ -531,5 +541,5 @@ mkdirSync(OUT, { recursive: true });
 const write = (name, obj) => writeFileSync(join(OUT, name), `${JSON.stringify(obj, null, 2)}\n`);
 write('kinds.json', { note, version: 1, constants, kinds, schemes, pqzKey: hex(pqzKey), pqzKeyHash: pqzH, groups, purposes, valid, invalid, natives, nativeInvalid, nativeSpace,
   messages, canonicalIds });
-write('structures.json', { note, version: 1, contexts, pop, pqzReg, pqzMsig, uaAuth, member });
+write('structures.json', { note, version: 2, contexts, pop, pqzReg, pqzMsig, uaAuth, member });
 console.log(`kinds.json: ${valid.length} valid, ${invalid.length} invalid; structures.json written to ${OUT}`);

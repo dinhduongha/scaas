@@ -1,0 +1,12 @@
+# A5 info only (ruling C5: A8 re-pins): forge test --match-contract UAGas at e8a6a711 + working tree
+[PASS] test_T_GAS_capsWithinBudget() (gas: 110582)
+[FAIL: assertion failed: 1000000 >= 660000] test_T_GAS_ed25519() (gas: 10057971)
+[PASS] test_T_GAS_msigAtBudget() (gas: 458371671)
+[PASS] test_T_GAS_msigPqAtBudget() (gas: 448547813)
+[PASS] test_T_GAS_native() (gas: 4554061)
+[FAIL: assertion failed: 1000000 >= 850000] test_T_GAS_registerHeadroomBlsBn254() (gas: 6211132)
+[PASS] test_T_GAS_structureOverBudgetRefused() (gas: 23402126)
+Suite result: FAILED. 5 passed; 2 failed; 0 skipped; finished in 883.91ms (1.73s CPU time)
+[FAIL: assertion failed: 1000000 >= 660000] test_T_GAS_ed25519() (gas: 10057971)
+[FAIL: assertion failed: 1000000 >= 850000] test_T_GAS_registerHeadroomBlsBn254() (gas: 6211132)
+rc=1

@@ -4,6 +4,6 @@
 library;
 
 export 'src/keydata.dart' show validateKeyData;
-export 'src/table.dart' show UAError, Kind, kinds, schemes, groups, purposes, kindInfo, isNative, isZether, isSigning, isPqzHolder, isMember;
+export 'src/table.dart' show UAError, Kind, kinds, schemes, pqzKeyLengths, groups, purposes, kindInfo, isNative, isZether, isSigning, isPqzHolder, isMember;
 export 'src/ua.dart';
 export 'src/keccak.dart' show keccak256;

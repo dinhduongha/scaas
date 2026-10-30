@@ -7,6 +7,7 @@ import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../../src/ua/MlDsa.sol";
 import {UAPqzVerifier} from "../../../src/pqz/UAPqzVerifier.sol";
 import {PqzSet} from "../../../src/pqz/PqzSet.sol";
+import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 
 /// @notice `slhdsa128s` (0x0133, 0.79 M) / `fndsa512` (0x0132, 2.3 M) stand-in: burns what a valid pure-Solidity verify
 ///         costs (accounts.md CTR-UA-23, measured P6a) and accepts: a fee UA of that kind in the relay gas rows (review2 T2).
@@ -98,7 +99,7 @@ abstract contract PqzRegistryBase is PqzMock {
 
     /// An `mldsa65` UA with the filler key `seed ‖ 0…` (PoP accepted by the mocked precompile), no PQZ key.
     function _mldsaUA(uint8 seed) internal returns (bytes32 ua) {
-        ua = reg.register(UAKinds.MLDSA65, _mlPk(seed), new bytes(ML65_SIG), "", "");
+        ua = reg.register(UAKinds.MLDSA65, _mlPk(seed), IUARegistry.UAAttrs("", 0, 0, ""), new bytes(ML65_SIG), "");
     }
 
     /// The `UA` auth format with a filler ML-DSA signature (`abi.encode(bytes(""), sig)`).
@@ -106,9 +107,20 @@ abstract contract PqzRegistryBase is PqzMock {
         return abi.encode(bytes(""), new bytes(ML65_SIG));
     }
 
-    /// A PQZ account (UA-6): the `mldsa65` UA of the filler key `seed ‖ 0…` registered with the PQZ key `pk` in one
-    /// call (`R_REG`: any proof bytes, op 3 mocked to 1 by the caller).
+    /// A PQZ account (UA-6): the `mldsa65` UA of the filler key `seed ‖ 0…` registered with the PQZ key `pk` and its
+    /// proof `0xaa` in one call (UA-8: `attrs.pqzPopHash = keccak256(0xaa)`; `R_REG` over the portable message
+    /// `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, h, 0))`, op 3 mocked by the caller), so the key is proven.
     function _pqzUA(bytes memory pk, uint8 seed) internal returns (bytes32) {
-        return reg.register(UAKinds.MLDSA65, _mlPk(seed), new bytes(ML65_SIG), pk, hex"aa");
+        return reg.register(UAKinds.MLDSA65, _mlPk(seed), _pqzAttrs(pk), new bytes(ML65_SIG), hex"aa");
+    }
+
+    function _pqzAttrs(bytes memory pk) internal pure returns (IUARegistry.UAAttrs memory) {
+        return IUARegistry.UAAttrs(pk, keccak256(hex"aa"), 0, "");
+    }
+
+    /// The portable `R_REG` message of the `mldsa65` UA `ua` holding PQZ key `pk` (no KEM record).
+    function _pqzRegMessage(bytes32 ua, bytes memory pk) internal pure returns (bytes32) {
+        return UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
+            UAKinds.portablePopDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pk), 0));
     }
 }

@@ -46,10 +46,12 @@ fn derived_positives_verify() {
         let (kind, kd) = (num(&r["kind"]) as u16, bytes(&r["keyData"]));
         assert_eq!(derive_ua(kind, &kd, false).unwrap(), b32(&r["ua"]), "{}", r["name"]);
         for p in [&r["pop"], &r["popOther"]] {
-            let d = domain(&v, s(&p["context"]), 1);
-            let pd = pop_digest(d.chain_id, &d.chain_uid, &d.registry, &b32(&r["ua"]), &[0; 32]);
+            // portable (UA-8): no chain context; message = ua_message(kind, POP_V2, registrationDigest)
+            let pd = ua8::portable_pop_digest(&b32(&r["ua"]), &[0; 32], &[0; 32]);
             assert_eq!(pd, b32(&p["popDigest"]));
-            let m = ua_message(kind, &purpose_tag("pop").unwrap(), &pd).unwrap();
+            let rd = ua8::registration_digest(&pd, &[0; 32]);
+            assert_eq!(rd, b32(&p["registrationDigest"]));
+            let m = ua_message(kind, &ua8::pop_v2_tag(), &rd).unwrap();
             assert_eq!(m, b32(&p["message"]));
             assert!(verify(kind, &kd, &m, &bytes(&p["sig"]), true), "{} pop {}", r["name"], p["context"]);
             n += 1;

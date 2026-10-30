@@ -84,16 +84,9 @@ contract PairingVerifiersTest is Test {
         assertEq(got, 4, "signatures.json: the four pairing-curve kinds");
     }
 
-    function _ctxPopDigest(string memory c, bytes32 ua) internal view returns (bytes32) {
-        string memory s = vm.readFile(STRUCTURES);
-        string memory pfx = string.concat(".contexts.", c);
-        return UAKinds.popDigest(
-            UAKinds.chainKeyHash(vm.parseJsonUint(s, string.concat(pfx, ".chainId"))),
-            vm.parseJsonBytes32(s, string.concat(pfx, ".chainUid")),
-            vm.parseJsonAddress(s, string.concat(pfx, ".registry")),
-            ua,
-            bytes32(0)
-        );
+    /// UA-8: the portable PoP message (no chain context), the same in every context.
+    function _popMessage(uint16 kind, bytes32 ua) internal pure returns (bytes32) {
+        return UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0));
     }
 
     function _bls(uint16 k) internal pure returns (bool) {
@@ -133,8 +126,8 @@ contract PairingVerifiersTest is Test {
         for (uint256 i; i < rows.length; ++i) {
             Row memory r = rows[i];
             assertEq(UAKinds.uaOf(r.kind, r.keyData), r.ua, "ua");
-            assertEq(r.popMsg, UAKinds.uaMessage(r.kind, UAKinds.PURPOSE_POP, _ctxPopDigest("A", r.ua)), "pop A");
-            assertEq(r.popOtherMsg, UAKinds.uaMessage(r.kind, UAKinds.PURPOSE_POP, _ctxPopDigest("B", r.ua)), "pop B");
+            assertEq(r.popMsg, _popMessage(r.kind, r.ua), "pop A");
+            assertEq(r.popOtherMsg, r.popMsg, "pop B = pop A (portable)");
             assertEq(r.metaMsg, UAKinds.uaMessage(r.kind, UAKinds.PURPOSE_METATX, digest), "metatx");
             UAKinds.validateKeyData(r.kind, r.keyData, false);
         }
@@ -152,8 +145,9 @@ contract PairingVerifiersTest is Test {
             // Schnorr: verifyPop == verify; BLS: the PoP domain is separate (CTR-UA-07).
             assertEq(v.verify(r.keyData, r.popMsg, r.popSig), !_bls(r.kind), "pop via verify");
             assertEq(v.verifyPop(r.keyData, r.metaMsg, r.metaSig), !_bls(r.kind), "metatx via verifyPop");
-            // PoP of context A does not verify for context B's message.
-            assertFalse(v.verifyPop(r.keyData, r.popOtherMsg, r.popSig), "pop A on B");
+            // UA-8: the PoP is portable (context A's verifies for B's message, the same bytes); another message does not.
+            assertTrue(v.verifyPop(r.keyData, r.popOtherMsg, r.popSig), "pop A on B");
+            assertFalse(v.verifyPop(r.keyData, ~r.popMsg, r.popSig), "pop over another message");
         }
     }
 

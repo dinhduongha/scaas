@@ -73,10 +73,10 @@ for (const curve of ["bls12381"]) {
   assert.throws(() => zetherCall("recoverTransfer", JSON.stringify({ ...stored, entry: bad })));
   n++;
 
-  // the UA registry's PoP (CTR-UA-07) equals the native vector's: same key, chain, chainUid, registry, no PQZ key
+  // the UA registry's PoP (CTR-UA-07) equals the vector's (UA-8 P1, portable: same key, no chain context)
   const v = r33[curve].keys[0].pop;
-  const pop = call("pop", { curve, key: k0, chainId: v.chainId, chainUid: v.chainUid, registry: v.registry });
-  assert.deepEqual([pop.UA, pop.kind, pop.popDigest, pop.uaMsg], [from.UA, v.kind, v.popDigest, v.uaMsg]);
+  const pop = call("pop", { curve, key: k0 });
+  assert.deepEqual([pop.UA, pop.kind, pop.popDigest, pop.registrationDigest, pop.uaMsg], [from.UA, v.kind, v.popDigest, v.registrationDigest, v.uaMsg]);
   n++;
 
   assert.throws(() => zetherCall("proveTransfer", JSON.stringify({ curve, key: k0 })));

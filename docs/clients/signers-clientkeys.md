@@ -772,7 +772,7 @@ Built entry points (BUILT; load only what the chosen signer needs):
 |---|---|---|
 | `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment`, `checkCall`, `checkTradeOrder`, `checkCancel`, `payLane`, `metaTransferTypedData`, `tradeOrderTypedData`, `orderCancelTypedData`, the UA ledger's `uaMetaTxTypedData`, `uaMetaTransferTypedData` and `padId` (UA-4, accounts.md CTR-UA-26), the pay-meta and relay-fee helpers `metaPayId`, `decodeMeta`, `checkPayMeta`, `buildMtxPayMeta`, `buildUaPayMeta`, `relayRef`, `mtxExecuteCalldata`, `buildRelayFee` ([CLI-SGN-38](#CLI-SGN-38), [CLI-SGN-39](#CLI-SGN-39)) (both bundles) | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
 | `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signDigest`, `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
-| `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (the tagged UA, `zetherKind`), `zetherPop` (the UA registry PoP, CTR-UA-07; `popMessage` removed in UA-3), `zetherOwnerAuth` (a self account's roll-over / mode signature), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `ownerAuth`, `fundCalldata`, `envelope`) |
+| `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (the tagged UA, `zetherKind`), `zetherPop(curve, x)` (the UA registry PoP, CTR-UA-07; portable since UA-8, no chain context; `popMessage` removed in UA-3), `zetherOwnerAuth` (a self account's roll-over / mode signature), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `ownerAuth`, `fundCalldata`, `envelope`) |
 
 EVM extension wallets also use `wallet_switchEthereumChain`/`wallet_addEthereumChain`. A UA or role key signs only
 through `UAKey.signUA(purpose, digest)`: there is no raw "sign these 32 bytes" for a UA key.
@@ -875,10 +875,19 @@ the 32-byte leaf from stdin, exported on the user's own machine, never the BIP-3
 key oracle and the ML-DSA key in an HSM with FIPS 204 firmware where available. `sealPqKey`/`openPqKey` join the vault v2 API
 next to `sealConfKey`/`openConfKey`. clientkeys uses `deriveUAKey(seed, {kind: 'mldsa65', account, index})` /
 `signUA('zether-auth', authDigest)` with a vetted JS/WASM ML-DSA package; **the register flow** builds the PQZ key from the
-sealed leaf (`openPqKey`), computes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)`, signs the signer's `pop` over
-`popDigest(ua, h)` and hands the leaf to the native prover for `pqzPop` (the `R_REG` proof over `uaMessage(0x0142, pop,
-popDigest(ua, h))`), then submits `register(kind, pk, pop, pqzKey, pqzPop)` once; a PQ signer is registered together
-with its PQZ key (a holder-kind registration without one is refused unless asked: the key can never be added later); an explicit export of the 32-byte leaf (never the
+sealed leaf (`openPqKey`), computes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)`, hands the leaf to the native prover for `pqzPop` (the `R_REG` proof over
+`pqzRegMessage(ua, pqzKey, kem)` = `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, h, kemRecordHash))`), then signs the signer's `pop`
+over `holderPopMessage(kind, {ua, keyData, pqzKey, pqzPop, kemVersion, kemPk})` (`registrationDigest`, which covers the proof's hash) and submits
+`register(kind, keyData, attrs, pop, pqzPop)`; **the PoP carries no chain context, so the same `pop` and `pqzPop` register the UA on any chain** and
+a copy elsewhere re-sends the fields unchanged (read from `registrationOf` or the logs). When `eth_estimateGas` of the full call exceeds the block gas
+limit (through a relayer: min(block gas limit, the relayer's per-transaction cap), owner 2026-10-30 ruling R-node) the client registers
+with an empty `pqzPop` and then calls `storePqzPop(ua, pqzPop)`. A PQ signer is registered together
+with its PQZ key by default; a holder registered without one may add it later, once, with `pqzKeyRecordMessage` + `setPqzKey` (**one PQZ key per UA,
+ever** on chains of one PQZ parameter set — a copied unproven key of another set's length may be replaced by `setPqzKey` where `0x0142`
+has a verifier (it then emits `UAPqzKeyAdded`; the replaced `register` key stays in `registrationOf`, so read the current key with
+`pqzKeyOf`), owner 2026-10-30 ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum signs `memberDigest(ua, message)`; a native (EOA) member — code-less, or EIP-7702-delegated, always with its own key (owner 2026-10-30 ruling D1: the registry never takes a designator's ERC-1271) — signs
+`personalSignDigest(memberDigest)` through `personal_sign` for the three portable purposes only (`pop` v2, `kem`, `pqz-key`; `isPortablePurpose`), so the
+wallet shows a `personal_sign` prompt, not typed data. KEM versions come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)). An explicit export of the 32-byte leaf (never the
 seed) feeds the native prover or the organization's key oracle — PQ Zether proving is **not** in JS; envelopes reuse the
 existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzToken", "1", …)`) and the
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA

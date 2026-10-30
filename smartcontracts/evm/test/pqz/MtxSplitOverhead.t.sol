@@ -6,6 +6,7 @@ import {PqzStatePinGasTest, GasBurner, RowBurner} from "./PqzStateGas.t.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 
 /// metatx-split T5 (spec §3.6, §10 R9; owner variant A 2026-10-21): the split's relayed overhead must not grow with the
 /// envelope's `data` size. For each accepted fee-UA kind (ECDSA address path, `mldsa65` and `fndsa512` on `uaExecute`) the
@@ -33,7 +34,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         if (!logOnly) vm.skip(!vm.keyExistsJson(pre, string.concat(".", PqzSet.NAME)));
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
-        fnFee2 = reg.register(UAKinds.FNDSA512, fpk, new bytes(666), "", "");
+        fnFee2 = reg.register(UAKinds.FNDSA512, fpk, IUARegistry.UAAttrs("", 0, 0, ""), new bytes(666), "");
         NoUnderlyingPqzToken(address(tok)).mintToUA(fnFee2, 1000);
         minted += 1000;
         bytes32 mlFee = feeUA;

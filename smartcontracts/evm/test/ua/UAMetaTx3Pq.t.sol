@@ -39,12 +39,12 @@ contract UAMetaTx3PqTest is UARegistryBase {
             uint16 kind = uint16(vm.parseJsonUint(pj, string.concat(k, "kind")));
             bytes memory pk = vm.parseJsonBytes(pj, string.concat(k, "keyData"));
             for (uint256 p; kind <= 0x0131 && p < (kind == 0x0130 ? 1 : 2); ++p) reg.cacheExpandedKey(kind, pk, p);
-            reg.register(kind, pk, vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "", "");
+            reg.register(kind, pk, _none(), vm.parseJsonBytes(pj, string.concat(k, "pop.sig")), "");
         }
         // the receiverFee payee: mldsa65 index 1 (extraKeys[0]), its expanded key cached as the payer's
         bytes memory pk1 = vm.parseJsonBytes(pj, ".extraKeys[0].keyData");
         for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk1, p);
-        reg.register(0x0131, pk1, vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), "", "");
+        reg.register(0x0131, pk1, _none(), vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), "");
         address token = vm.parseJsonAddress(pj, ".metatx3.token");
         address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));

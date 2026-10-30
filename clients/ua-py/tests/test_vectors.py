@@ -8,6 +8,7 @@ import scaas_ua as ua
 VEC = pathlib.Path(__file__).resolve().parents[3] / 'smartcontracts' / 'vectors' / 'ua'
 K = json.loads((VEC / 'kinds.json').read_text())
 S = json.loads((VEC / 'structures.json').read_text())
+P = json.loads((VEC / 'portable.json').read_text())
 
 
 def b(h):
@@ -49,9 +50,14 @@ class Vectors(unittest.TestCase):
         for r in K['groups']:
             self.assertEqual(ua.group_tag_string(r['group']), r['tag'])
             self.assertEqual(hx(ua.group_tag(r['group'])), r['GROUP'])
-        self.assertEqual([r['purpose'] for r in K['purposes']], list(ua.PURPOSES))
+        self.assertEqual(len(K['purposes']), len(ua.PURPOSES) + 1)  # `pop` has v1 and v2
+        self.assertEqual([r['purpose'] for r in K['purposes'] if r['version'] == 1], list(ua.PURPOSES))
         for r in K['purposes']:
-            self.assertEqual(hx(ua.purpose_tag(r['purpose'])), r['purposeTag'])
+            self.assertEqual(hx(ua.purpose_tag(r['purpose'], r['version'])), r['purposeTag'])
+        for bad in (('metatx', 2), ('pop', 3), ('pop', 0), ('nope', 1)):
+            with self.assertRaises(ua.UAError) as e:
+                ua.purpose_tag(*bad)
+            self.assertEqual(e.exception.code, 'UAPurposeUnknown')
         c = K['constants']
         self.assertEqual((hx(ua.MSG_TAG), hx(ua.POP_TAG), hx(ua.DOMAIN_TYPEHASH), hx(ua.UAAUTH_TYPEHASH), hx(ua.NAME_HASH)),
                          (c['MSG_TAG'], c['POP_TAG'], c['DOMAIN_TYPEHASH'], c['UAAUTH_TYPEHASH'], c['NAME_HASH']))
@@ -90,28 +96,39 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(e.exception.code, r['error'])
 
     def test_messages(self):
-        for r in K['messages']:
-            self.assertEqual(hx(ua.ua_message(r['kind'], ua.purpose_tag(r['purpose']), b(r['digest']))), r['uaMsg'])
+        for r in K['messages']:  # each row carries its purpose `version` (A4-c1)
+            p = ua.purpose_tag(r['purpose'], r['version'])
+            self.assertEqual(hx(p), r['purposeTag'])
+            self.assertEqual(hx(ua.ua_message(r['kind'], p, b(r['digest']))), r['uaMsg'])
 
     def test_structures(self):
         for p in S['pop']:
-            c = S['contexts'][p['context']]
-            self.assertEqual(hx(ua.chain_key_hash(c['chainId'])), p['chainKeyHash'])
-            got = ua.pop_digest(c['chainId'], b(c['chainUid']), b(c['registry']), b(p['ua']), b(p['pqzKeyHash']))
-            self.assertEqual(hx(got), p['popDigest'])
+            portable = ua.portable_pop_digest(b(p['ua']), b(p['pqzKeyHash']), b(p['kemRecordHash']))
+            self.assertEqual(hx(portable), p['portablePopDigest'])
+            self.assertEqual(hx(ua.registration_digest(portable, b(p['pqzPopHash']))), p['registrationDigest'])
+        proof = bytes([7]) * 32
         for r in S['pqzReg']:
-            c = S['contexts'][r['context']]
-            args = (c['chainId'], b(c['chainUid']), b(c['registry']), b(r['ua']))
-            self.assertEqual(hx(ua.pqz_reg_message(*args, b(K['pqzKey']))), r['pqzRegMessage'])
-            self.assertEqual(hx(ua.pop_digest(*args, b(r['pqzKeyHash']))), r['popDigest'])
-            h, d, m = ua.holder_pop_message(r['kind'], *args, b(K['pqzKey']))
-            self.assertEqual((hx(h), hx(d)), (r['pqzKeyHash'], r['popDigest']))
-            self.assertEqual(m, ua.ua_message(r['kind'], ua.POP_TAG, d))
-        with self.assertRaises(ua.UAError) as e:
-            ua.holder_pop_message(0x0101, 1, bytes(32), bytes(20), bytes(32), bytes(16384))
-        self.assertEqual(e.exception.code, 'UAPqzHolder')
+            u, kem = b(r['ua']), b(r['kemRecordHash'])
+            h = ua.key_hash_of(0x0142, b(K['pqzKey']))
+            self.assertEqual(hx(h), r['pqzKeyHash'])
+            portable = ua.portable_pop_digest(u, h, kem)
+            self.assertEqual(hx(portable), r['portablePopDigest'])
+            self.assertEqual(hx(ua.ua_message(0x0142, ua.POP_V2_TAG, portable)), r['pqzRegMessage'])
+            if any(kem):
+                continue  # the row's KEM record hash is opaque; the real records are in portable.json
+            self.assertEqual(hx(ua.pqz_reg_message(u, b(K['pqzKey']))), r['pqzRegMessage'])
+            got = ua.holder_pop_message(r['kind'], u, b'', b(K['pqzKey']), pqz_pop_hash=proof)
+            self.assertEqual((hx(got.pqz_key_hash), hx(got.portable_pop_digest)), (r['pqzKeyHash'], r['portablePopDigest']))
+            for bad in (0x0101, 0x0133):
+                with self.assertRaises(ua.UAError) as e:
+                    ua.holder_pop_message(bad, u, b'', b(K['pqzKey']), pqz_pop_hash=proof)
+                self.assertEqual(e.exception.code, 'UAPqzHolder')
         for r in S['pqzMsig']:
-            self.assertEqual(ua.msig_pqz_eligible(b(r['keyData'])), r['eligible'], r['reason'])
+            d = b(r['keyData'])
+            self.assertEqual(ua.msig_pqz_eligible(d), r['eligible'], r['reason'])
+            self.assertEqual(hx(ua.derive_ua(0x0120, d)), r['ua'])
+            h = b(K['pqzKeyHash']) if r['eligible'] else bytes(32)
+            self.assertEqual(hx(ua.portable_pop_digest(b(r['ua']), h)), r['portablePopDigest'])
         for a in S['uaAuth']:
             c = S['contexts'][a['context']]
             args = (a['generation'], c['chainId'], b(c['registry']), b(c['chainUid']))
@@ -119,6 +136,169 @@ class Vectors(unittest.TestCase):
             self.assertEqual(hx(ua.ua_auth_digest(*args, b(a['ua']), b(a['purposeTag']), b(a['digest']))), a['uaAuthDigest'])
         for m in S['member']:
             self.assertEqual(hx(ua.member_digest(b(m['structureUa']), b(m['uaMsg']))), m['memberDigest'])
+
+    @staticmethod
+    def register(row, hash_only=False):
+        """The holder call over a registration row's attrs (and the proof bytes, or only their hash)."""
+        a = row['attrs']
+        key, pop, h, pk, ver = b(a['pqzKey']), b(row['pqzPop']), b(a['pqzPopHash']), b(a['kemPk']), int(a['kemVersion'])
+        return ua.holder_pop_message(row['kind'], b(row['ua']), b(row['keyData']), key or None,
+                                     None if hash_only or not pop else pop, h if any(h) else None,
+                                     None if ver == 0 and not pk else (ver, pk))
+
+    def test_portable(self):
+        t = P['tags']
+        self.assertEqual(hx(ua.POP_V2_TAG), t['PURPOSE_POP_V2']['hash'])
+        self.assertEqual(hx(ua.purpose_tag('kem')), t['PURPOSE_KEM']['hash'])
+        self.assertEqual(hx(ua.purpose_tag('pqz-key')), t['PURPOSE_PQZ_KEY']['hash'])
+        self.assertEqual(hx(ua.KEM_RECORD_TAG), t['KEM_RECORD_TAG']['hash'])
+        self.assertEqual(hx(ua.PQZ_KEY_RECORD_TAG), t['PQZ_KEY_RECORD_TAG']['hash'])
+        n = with_pqz = msigs = 0
+        for r in P['registrations']:
+            u = b(r['ua'])
+            self.assertEqual(hx(ua.ua_of(r['kind'], b(r['keyData']))), r['ua'], r['name'])
+            for hash_only in (False, True):
+                h = self.register(r, hash_only)
+                self.assertEqual(hx(h.pqz_key_hash), r['pqzKeyHash'], r['name'])
+                self.assertEqual(hx(h.pqz_pop_hash), r['attrs']['pqzPopHash'], r['name'])
+                self.assertEqual(hx(h.kem_record_hash), r['kemRecordHash'], r['name'])
+                self.assertEqual(hx(h.portable_pop_digest), r['portablePopDigest'], r['name'])
+                self.assertEqual(hx(h.registration_digest), r['registrationDigest'], r['name'])
+                self.assertEqual(hx(h.message), r['popMessage'], r['name'])
+                self.assertEqual(h.portable_pop_digest, ua.portable_pop_digest(u, h.pqz_key_hash, h.kem_record_hash))
+                self.assertEqual(h.registration_digest, ua.registration_digest(h.portable_pop_digest, h.pqz_pop_hash))
+                self.assertEqual(h.message, ua.ua_message(r['kind'], ua.POP_V2_TAG, h.registration_digest))
+                self.assertEqual(h.member_digest and hx(h.member_digest), r.get('memberDigest'), r['name'])
+            a = r['attrs']
+            pk = b(a['pqzKey'])
+            if pk:
+                with_pqz += 1
+                kem = (int(a['kemVersion']), b(a['kemPk'])) if int(a['kemVersion']) else None
+                self.assertEqual(hx(ua.pqz_reg_message(u, pk, kem)), r['pqzRegMessage'])
+            else:
+                self.assertEqual(b(r['pqzRegMessage']), bytes(32))
+            msigs += r['kind'] == 0x0120
+            n += 1
+        self.assertEqual((n, with_pqz, msigs), (25, 8, 6))
+
+    def test_kem_record(self):
+        for r in P['kemRecords']:
+            u, pk = b(r['ua']), b(r['kemPk'])
+            d = ua.kem_record_digest(u, int(r['version']), pk)
+            self.assertEqual(hx(d), r['digest'])
+            m = ua.kem_record_message(r['kind'], u, int(r['version']), pk)
+            self.assertEqual(hx(m), r['message'])
+            self.assertEqual(m, ua.ua_message(r['kind'], ua.purpose_tag('kem'), d))
+            if r['kind'] == 0x0120:
+                self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'])
+        self.assertEqual(len(P['kemRecords']), 9)
+        u = bytes([1]) * 32
+        for args, code in (((u, 0, bytes(1600)), 'UAKemVersion'), ((u, 2**64, bytes(1600)), 'UAKemVersion'),
+                           ((u, 1, bytes(1599)), 'UAKemKeyLength'), ((u, 1, bytes(1601)), 'UAKemKeyLength'),
+                           ((u, 1, None), 'UAKemKeyLength')):
+            with self.assertRaises(ua.UAError) as e:
+                ua.kem_record_digest(*args)
+            self.assertEqual(e.exception.code, code)
+        self.assertEqual(hx(ua.kem_record_digest(u, 2**64 - 1, bytes(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31')  # pins the 8-byte version word
+        self.assertEqual(hx(ua.chain_key_hash(2**40 + 7)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950')  # keccak256("evm:1099511627783")
+
+    def test_pqz_key_record(self):
+        regs = P['registrations']
+        n = msig_runs = 0
+        for r in P['pqzKeyRecords']:
+            u, key, hash_ = b(r['ua']), b(r['pqzKey']), b(r['pqzPopHash'])
+            holder = next(x for x in regs if x['ua'] == r['ua'])
+            pop = b(next(x for x in regs if x['set'] == r['set'])['pqzPop'])
+            for hash_only in (False, True):
+                g = ua.pqz_key_record_message(r['kind'], u, b(holder['keyData']), key, None if hash_only else pop,
+                                              hash_ if hash_only else None)
+                self.assertEqual(hx(g.pqz_key_hash), r['pqzKeyHash'])
+                self.assertEqual(hx(g.pqz_pop_hash), r['pqzPopHash'])
+                self.assertEqual(hx(g.pqz_key_digest), r['pqzKeyDigest'])
+                self.assertEqual(hx(g.record_digest), r['recordDigest'])
+                self.assertEqual(hx(g.message), r['message'])
+                self.assertEqual(hx(g.pqz_reg_message), r['pqzRegMessage'])
+                self.assertEqual(g.pqz_key_digest, ua.pqz_key_digest(u, g.pqz_key_hash))
+                self.assertEqual(g.record_digest, ua.pqz_key_record_digest(g.pqz_key_digest, g.pqz_pop_hash))
+                self.assertEqual(g.member_digest is not None, r['kind'] == 0x0120)
+                self.assertEqual(g.member_digest and hx(g.member_digest), r.get('memberDigest'))
+                if r['kind'] == 0x0120:
+                    msig_runs += 1
+                    self.assertEqual(g.member_digest, ua.member_digest(u, g.message))
+            with self.assertRaises(ua.UAError) as e:  # write-once
+                ua.pqz_key_record_message(r['kind'], u, b(holder['keyData']), key, None, hash_, True)
+            self.assertEqual(e.exception.code, 'UAPqzKeySet')
+            n += 1
+        self.assertEqual((n, msig_runs), (8, 8))  # 4 msig rows, each with the proof bytes and hash-only
+
+    def test_personal_sign_portable_purposes(self):
+        self.assertTrue(all(ua.is_portable_purpose(ua.purpose_tag(p, v)) for p, v in (('pop', 2), ('kem', 1), ('pqz-key', 1))))
+        self.assertFalse(ua.is_portable_purpose(ua.purpose_tag('metatx')) or ua.is_portable_purpose(ua.purpose_tag('pop')))
+        r = next(x for x in P['registrations'] if x['name'] == 'msig-pq-native')
+        md = b(r['memberDigest'])
+        # known answer from the JS reference (clientkeys ua.js); prefix = 0x19 + "Ethereum Signed Message:\n32" (28 bytes)
+        self.assertEqual(hx(md), '0x606d9a70c70d39e5d8d079c3ae31eefa6db574219dab56d6c776cb6731e61a7c')
+        self.assertEqual(hx(ua.personal_sign_digest(md)), '0xe5d24987e9b4e710063a5432d6215eaead64d8dc073f7561726d21644d54c3d8')
+        self.assertEqual(len(b'\x19Ethereum Signed Message:\n32'), 28)
+        n = next(x for x in P['negatives'] if x['name'] == 'native-personal-sign-under-metatx')
+        self.assertFalse(ua.is_portable_purpose(b(n['mutation']['set']['purposeTag'])))
+
+    def test_holder_refusals(self):
+        regs = P['registrations']
+        run = sig_level = 0
+        for n in P['negatives']:
+            m, err, s = n['mutation'], n['error'], n['mutation'].get('set', {})
+            if n['entry'] in ('register', 'storePqzPop') and all(k.startswith('attrs.') or k == 'pqzPop' for k in s):
+                row = next(x for x in regs if x['name'] == m['row'])
+                mut = {**row, 'attrs': dict(row['attrs'])}
+                for k, v in {**m.get('registerWith', {}), **s}.items():  # registerWith first, then the mutation
+                    if k.startswith('attrs.'):
+                        mut['attrs'][k[6:]] = v
+                    else:
+                        mut[k] = v
+                if err == 'UAPoP':  # the digest layer accepts it; the PoP of the unmutated row does not cover it
+                    self.assertNotEqual(row['popMessage'], hx(self.register(mut).message), n['name'])
+                else:
+                    with self.assertRaises(ua.UAError, msg=n['name']) as e:
+                        self.register(mut)
+                    self.assertEqual(e.exception.code, err, n['name'])
+                run += 1
+            elif n['entry'] == 'setPqzKey' and err in ('UAPqzKeySet', 'UAPqzHolder', 'UAPqzPopHash'):
+                rec = next(x for x in P['pqzKeyRecords'] if x['name'] == m['row'])
+                ua_hex = s.get('ua', rec['ua'])
+                holder = next(x for x in regs if x['ua'] == ua_hex)
+                with self.assertRaises(ua.UAError, msg=n['name']) as e:
+                    ua.pqz_key_record_message(holder['kind'], b(ua_hex), b(holder['keyData']), b(rec['pqzKey']), None,
+                                              b(s.get('pqzPopHash', rec['pqzPopHash'])), holder['attrs']['pqzKey'] != '0x')
+                self.assertEqual(e.exception.code, err, n['name'])
+                run += 1
+            elif n['entry'] == 'setKemKey' and n['name'] == 'kem-record-of-other-ua':
+                # the record of one UA offered for another: the signed message differs, so the signature cannot verify
+                k = next(x for x in P['kemRecords'] if x['id'] == m['row'])
+                t = next(x for x in regs if x['ua'] == s['ua'])
+                msg = ua.kem_record_message(t['kind'], b(s['ua']), int(k['version']), b(k['kemPk']))
+                self.assertNotEqual(k['message'], hx(msg))
+                run += 1
+            else:
+                sig_level += 1  # signatures / native personal_sign: verified by the signature vectors
+        self.assertEqual((run, sig_level), (56, 7))
+        u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
+        # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
+        for kd in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
+            with self.assertRaises(ua.UAError) as e:
+                ua.holder_pop_message(0x0120, u, kd, key, pqz_pop_hash=proof)
+            self.assertEqual(e.exception.code, 'UAKeyData')
+        for args, code in (((0x0120, u, b'', key), 'UAPqzHolder'),
+                           ((0x0130, u, b'', key, None, bytes(31)), 'UAPqzPopHash'),
+                           ((0x0130, u, b'', bytes(100), None, proof), 'UAKeyData'),
+                           ((0x0130, u, b'', None, None, None, (1, None)), 'UAKemKeyLength'),
+                           ((0x0101, u, b'', None, None, None, (1, bytes(1600))), 'UAKemHolder'),
+                           ((0x0130, u, b'', key, b'', None), 'UAPqzPopHash')):
+            with self.assertRaises(ua.UAError, msg=args) as e:
+                ua.holder_pop_message(*args[:3] + ((args[3] if len(args) > 3 else None),) + args[4:])
+            self.assertEqual(e.exception.code, code)
+        # a zero-length proof hash is absent (same as no hash)
+        self.assertEqual(ua.holder_pop_message(0x0130, u).message, ua.holder_pop_message(0x0130, u, b'', None, None, b'').message)
 
     def test_non_bytes_key_data_raises_ua_key_data(self):
         for x in (None, 'ab', 1312, [1, 2], 1.5):

@@ -39,14 +39,14 @@ contract UARegistryZetherTest is UARegistryBase {
         c[base.length] = UARegistry.KindConfig(ZK, address(zbls), 70_000);
     }
 
-    /// The Zether PoP: Schnorr by `x` under the Zether tag over `uaMessage(0x0141, POP, popDigest(ua, 0))`.
+    /// The Zether PoP: Schnorr by `x` under the Zether tag over the portable `uaMessage(0x0141, POP_V2, registrationDigest(portablePopDigest(ua, 0, 0), 0))` (UA-8).
     function _zpop(UARegistry r, uint256 x) internal view returns (bytes memory) {
         bytes32 ua = r.uaOf(ZK, ZetherKeys.pub(x, true));
-        return ZetherKeys.schnorr(x, r.uaMessage(ZK, UAKinds.PURPOSE_POP, r.popDigest(ua, 0)), true);
+        return ZetherKeys.schnorr(x, r.uaMessage(ZK, UAKinds.PURPOSE_POP_V2, UAKinds.registrationDigest(UAKinds.portablePopDigest(ua, 0, 0), 0)), true);
     }
 
     function _zregister(UARegistry r, uint256 x) internal returns (bytes32) {
-        return r.register(ZK, ZetherKeys.pub(x, true), _zpop(r, x), "", "");
+        return r.register(ZK, ZetherKeys.pub(x, true), _none(), _zpop(r, x), "");
     }
 
     /// A Zether UA's signature: `abi.encode(bytes(""), Schnorr by x over uaMessage(0x0141, purpose, digest))`.
@@ -67,9 +67,9 @@ contract UARegistryZetherTest is UARegistryBase {
         bytes32 ua = UAKinds.uaOf(ZK, y);
         bytes memory pop = _zpop(zreg, X1);
         vm.expectEmit(true, true, false, true, address(zreg));
-        emit IUARegistry.UARegistered(ua, ZK, y, address(0));
+        emit IUARegistry.UARegistered(ua, ZK, y, _none(), pop, "", 1, 0, 0);
         uint256 g = gasleft();
-        assertEq(zreg.register(ZK, y, pop, "", ""), ua);
+        assertEq(zreg.register(ZK, y, _none(), pop, ""), ua);
         console.log("register zether-bls12381", g - gasleft());
         (IUARegistry.Record memory rec, address pqzKey) = zreg.recordOf(ua);
         assertEq(rec.kind, ZK);
@@ -79,7 +79,7 @@ contract UARegistryZetherTest is UARegistryBase {
         assertEq(zreg.kindOf(ua), ZK);
         assertEq(zreg.keyOwner(UAKinds.keyHashOf(ZK, y)), ua);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, ua));
-        zreg.register(ZK, y, pop, "", "");
+        zreg.register(ZK, y, _none(), pop, "");
         assertEq(zreg.keyOf(bytes32(uint256(1) << 200)).length, 0, "unregistered: empty");
     }
 
@@ -90,7 +90,7 @@ contract UARegistryZetherTest is UARegistryBase {
         bytes32 kh = UAKinds.keyHashOf(UAKinds.SCHNORR_BLS12381, y);
         bytes memory pop = _pop(zreg, UAKinds.SCHNORR_BLS12381, y);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, kh, ua));
-        zreg.register(UAKinds.SCHNORR_BLS12381, y, pop, "", "");
+        zreg.register(UAKinds.SCHNORR_BLS12381, y, _none(), pop, "");
     }
 
     // ----- requireAuthorized (UA-6 U8/U9: no requireZetherAuthorized) -----
@@ -133,7 +133,7 @@ contract UARegistryZetherTest is UARegistryBase {
         gen2.requireAuthorized(z, UAKinds.PURPOSE_METATX, DIGEST, other);
         bytes memory y = ZetherKeys.pub(X1, true);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, ZK));
-        gen2.register(ZK, y, "", "", "");
+        gen2.register(ZK, y, _none(), "", "");
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(ZK, address(zbls), 70_000);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, ZK));

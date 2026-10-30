@@ -1,0 +1,140 @@
+# ua-cxx at commit 4adc323a
+   Compiling scaas-ua-cxx v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cxx)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.19s
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Using the multi-header code from /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cxx/build/_deps/json-src/include/
+-- Configuring done (44.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cxx/build
+[0/2] Re-checking globbed directories...
+[1/5] cargo build scaas-ua-cxx
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling rand_core v0.6.4
+   Compiling autocfg v1.5.1
+   Compiling zerocopy v0.8.62
+   Compiling cfg-if v1.0.5
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling generic-array v0.14.9
+   Compiling paste v1.0.15
+   Compiling cc v1.8.0
+   Compiling ahash v0.8.12
+   Compiling ff v0.13.1
+   Compiling either v1.19.0
+   Compiling num-traits v0.2.19
+   Compiling arrayvec v0.7.8
+   Compiling base16ct v0.2.0
+   Compiling itertools v0.13.0
+   Compiling group v0.13.0
+   Compiling once_cell v1.21.4
+   Compiling hashbrown v0.17.1
+   Compiling syn v2.0.119
+   Compiling syn v3.0.8
+   Compiling num-integer v0.1.47
+   Compiling equivalent v1.0.2
+   Compiling semver v1.0.28
+   Compiling num-bigint v0.4.8
+   Compiling allocator-api2 v0.2.21
+   Compiling cpufeatures v0.2.17
+   Compiling rustc_version v0.4.1
+   Compiling link-cplusplus v1.0.12
+   Compiling indexmap v2.14.2
+   Compiling hashbrown v0.15.5
+   Compiling scratch v1.0.9
+   Compiling curve25519-dalek v4.1.3
+   Compiling termcolor v1.4.1
+   Compiling cxxbridge-flags v1.0.202
+   Compiling unicode-width v0.2.2
+   Compiling cxx v1.0.202
+   Compiling codespan-reporting v0.13.1
+   Compiling keccak v0.1.6
+   Compiling foldhash v0.2.0
+   Compiling ppv-lite86 v0.2.21
+   Compiling cxx-build v1.0.202
+   Compiling rand_chacha v0.3.1
+   Compiling rand v0.8.8
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling ark-std v0.5.0
+   Compiling cxxbridge-macro v1.0.202
+   Compiling enum-ordinalize v4.4.2
+   Compiling zeroize_derive v1.5.0
+   Compiling ark-serialize-derive v0.5.0
+   Compiling ark-ff-macros v0.5.0
+   Compiling educe v0.6.0
+   Compiling ark-ff-asm v0.5.0
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling zeroize v1.9.1
+   Compiling der v0.7.10
+   Compiling scaas-ua-cxx v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cxx)
+   Compiling crypto-common v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling crypto-bigint v0.5.5
+   Compiling sec1 v0.7.3
+   Compiling digest v0.10.7
+   Compiling signature v2.2.0
+   Compiling ark-serialize v0.5.0
+   Compiling hmac v0.12.1
+   Compiling sha2 v0.10.9
+   Compiling rfc6979 v0.4.0
+   Compiling ed25519 v2.2.3
+   Compiling sha3 v0.10.9
+   Compiling ark-ff v0.5.0
+   Compiling ed25519-dalek v2.2.0
+   Compiling elliptic-curve v0.13.8
+   Compiling ecdsa v0.16.9
+   Compiling primeorder v0.13.6
+   Compiling p256 v0.13.2
+   Compiling k256 v0.13.4
+   Compiling ark-poly v0.5.0
+   Compiling ark-ec v0.5.0
+   Compiling ark-bls12-381 v0.5.0
+   Compiling ark-bn254 v0.5.0
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+    Finished `release` profile [optimized] target(s) in 31.11s
+[2/5] Building CXX object CMakeFiles/scaas_ua.dir/src/scaas_ua.cpp.o
+[3/5] Linking CXX static library libscaas_ua.a
+[4/5] Building CXX object CMakeFiles/vectors_test.dir/tests/vectors_test.cpp.o
+[5/5] Linking CXX executable vectors_test
+Internal ctest changing into directory: /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cxx/build
+Test project /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cxx/build
+      Start  1: table_groups_purposes_constants
+ 1/11 Test  #1: table_groups_purposes_constants ......   Passed    0.01 sec
+      Start  2: valid_rows
+ 2/11 Test  #2: valid_rows ...........................   Passed    0.01 sec
+      Start  3: invalid_rows
+ 3/11 Test  #3: invalid_rows .........................   Passed    0.01 sec
+      Start  4: natives_native_space_canonical_ids
+ 4/11 Test  #4: natives_native_space_canonical_ids ...   Passed    0.01 sec
+      Start  5: messages
+ 5/11 Test  #5: messages .............................   Passed    0.01 sec
+      Start  6: structures
+ 6/11 Test  #6: structures ...........................   Passed    0.01 sec
+      Start  7: portable
+ 7/11 Test  #7: portable .............................   Passed    0.05 sec
+      Start  8: kem_record
+ 8/11 Test  #8: kem_record ...........................   Passed    0.02 sec
+      Start  9: pqz_key_record
+ 9/11 Test  #9: pqz_key_record .......................   Passed    0.03 sec
+      Start 10: personal_sign_portable_purposes
+10/11 Test #10: personal_sign_portable_purposes ......   Passed    0.02 sec
+      Start 11: holder_refusals
+11/11 Test #11: holder_refusals ......................   Passed    0.05 sec
+
+100% tests passed, 0 tests failed out of 11
+
+Total Test time (real) =   0.23 sec
+rc=0

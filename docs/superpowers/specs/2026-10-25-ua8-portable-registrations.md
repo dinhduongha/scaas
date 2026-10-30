@@ -1,13 +1,13 @@
 # UA-8: portable UA registrations — a UA registered on one chain can be registered on any other chain by anyone
 
-**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**; **PQ verification: on chain on EVM, added for Cosmos / Soroban / Sui (owner 2026-10-29), NEAR `mldsa65` (host function) and Algorand `fndsa512` (after AVM v14) added by the owner the same day, relayer-checked elsewhere (P11)**. Nothing is built. Queued **after plan 5h,
+**Status:** short design, **registration flow approved by the owner 2026-10-25** (P1, P2, P7, P8); **scope: every family (owner 2026-10-29, P10)**; **PQ verification: on chain on EVM, added for Cosmos / Soroban / Sui (owner 2026-10-29), NEAR `mldsa65` (host function) and Algorand `fndsa512` (after AVM v14) added by the owner the same day, relayer-checked elsewhere (P11)**. **Step 1 (EVM) built on branch `ua8` 2026-10-30** (plan `2026-10-30-ua8-portable-registrations.md`, Part A: tasks A1–A11 = `UAKinds` / `UARegistry` / `IUARegistry`, `portable.json`, the ten client libraries, the node call-job test, the e2e scripts, the gas log; A12 = this documentation; A13 = the gate run; not merged, not pushed); the corrections below (P3, P7, P9) record what the build settled, and the decisions are in [decisions.md](../../decisions.md) (CTR-UA-31, CTR-UA-32, CTR-UA-07, CTR-UA-16). Steps 2–6 are not built. Queued **after plan 5h,
 before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry once) and before UA-7. The choices below (P1–P9) are controller proposals; the owner may override them.
 
 **Request (owner 2026-10-25).** "When an account is registered in `UARegistry` on Ethereum, anyone can take exactly
 that information and register it on another chain: a UA account does not depend on the chain (its transactions do).
 The KEM keys likewise."
 
-## 1. Today
+## 1. Before UA-8
 
 - The **UA id is already chain-independent**: `UA = keccak256(keccak256(kind_tag) ‖ key_data)`, a pure function, the
   same on every chain ([accounts.md](../../contracts/accounts.md) scope, CTR-UA-03).
@@ -52,20 +52,26 @@ pays the gas. Copying a UA to another chain = sending the same fields to that ch
 service can do it for any UA it sees on another chain. Today the registry stores `keyData` and the PQZ key (SSTORE2)
 but not `pop` / `pqzPop`; **UA-8 stores every `register` field in contract state** (owner 2026-10-25: "store all of
 it": `pop`, `pqzPop`, the KEM record and its signature, as SSTORE2 blobs), so anyone can rebuild the registration from
-state and re-submit it elsewhere even when logs are gone (history expiry); the event carries them as well. Cost
-[estimate, ≈ 1,530 state gas per byte]: `pop` 65 B (secp256k1) to 3,309 B (ML-DSA-65), ≈ 0.1–5 M; `pqzPop` (the
-`R_REG` proof, 28,080–35,420 B by set) ≈ 43–54 M; the PQZ key itself (16–22 KB) ≈ 25–35 M is stored already. A full
-PQ registration with a stored proof is then ≈ 75–95 M of state gas: more than a 60 M block, so on such a chain the
-proof is stored by a second call `storePqzPop` (P9) — on chains with larger blocks (SCaaS testnet 200 M) one `register` holds everything. Later KEM versions come by
+state and re-submit it elsewhere even when logs are gone (history expiry); the event carries them as well. Cost **[measured 2026-10-30, `smartcontracts/evm/runs/2026-10-30-ua8-gas.txt`; the first draft's estimate was ≈ 1,530 state gas per byte and 75–95 M]**: a
+single classical key 1.3–1.9 M gas, `mldsa65` 9.7 M, `fndsa512` 9.3 M, `slhdsa128s` 14.4 M, a PQ registration with a stored `R_REG` proof (28,191–35,479 B by set)
+84.8–109.1 M (regular + state): more than a 60 M block, so on such a chain the proof is stored by a second call `storePqzPop` (P9; 45.6–57.5 M, the real `R_REG`
+verify adds ≈ 2.4 M, so `n2816-kmax65536` is ≈ 59.9 M, a fs3 Task 13 watch item for 60 M-block chains) — on chains with larger blocks (SCaaS testnet 200 M) one `register` holds everything. Later KEM versions come by
 `setKemKey` (P7).
 
 **P3 — What must match.** The same kind must be enabled in the target registry's generation (a PQ kind needs its
-verifier there; a PQZ key needs `UAPqzVerifier` and the PQZ precompile of the same parameter set — otherwise the copy
-reverts like any registration of a disabled kind). `msig` UAs: the structure is key data, so the id and the members'
-PoP are portable the same way (members sign `uaMessage(MSIG, POP_V2, portablePopDigest)`).
+verifier there; otherwise the copy reverts like any registration of a disabled kind). **A PQZ key does not need the PQZ
+verifier on the target:** where `UAPqzVerifier` and the PQZ precompile of the same parameter set are absent, the key is stored
+unproven (`proven = false`) and nothing is refused — the first draft of this paragraph said the copy reverts, which P8 supersedes
+(corrected 2026-10-30). `msig` UAs: the structure is key data, so the id and the members'
+PoP are portable the same way: **every member signs `uaMessage(MSIG, POP_V2, registrationDigest)`** wrapped by `memberDigest`
+(corrected 2026-10-30; the first draft said `portablePopDigest`, which would leave the proof hash signed by nobody), and a native
+(EOA) member signs it chain-free with EIP-191 `personal_sign` (a member with code answers ERC-1271) — owner-requested "a UA does not depend on the chain", ruling C7 in decisions.md CTR-UA-07.
+A front-runner holding a quorum's signatures may submit another valid subset first: the stored `pop` differs, the key, version and id do not.
 
 **P4 — Only the chat (KEM) key changes; the balance key never does.** The PQZ key (balance encryption, UA-6) is
-immutable: part of the registration, set once and copied unchanged to every chain (owner 2026-10-25). The only
+immutable: part of the registration, set once and copied unchanged to every chain (owner 2026-10-25). **Set once per chain, also later:**
+a record registered without a PQZ key may add it by the signed, portable, write-once `setPqzKey` (P9), so an old copied registration cannot
+deny the key on a chain for ever; the client rule is **one PQZ key per UA, ever** (two PoPs with different PQZ keys can diverge across chains). The only
 attribute a UA may change is UA-7's KEM (chat) key: a new key is a record `(ua, version, pk)` signed by the UA over a
 chain-independent digest `uaMessage(kind, purpose, keccak256(tag ‖ ua ‖ version ‖ keccak256(pk)))`, stored by anyone
 on any chain, **in any order** (owner 2026-10-25: a lower version may be stored after a higher one, because others
@@ -107,7 +113,7 @@ for the PQZ key: the UA-6 U3 holder set — `mldsa44` / `mldsa65` / `fndsa512`, 
 the KEM secret, so a uniqueness check would let anyone who sees a key first register it under their own UA and block
 the real owner on that chain; a UA that lists someone else's KEM key gains nothing (it cannot decrypt). The registry stores each version's `pk` **and its signature** in state (SSTORE2), so any version can be copied to
 another chain from state alone. Views: `kemKeyOf(ua) → (version, pk, sig)` (the highest stored version),
-`kemKeyAt(ua, version) → (pk, sig)`, `popOf(ua)`, `pqzPopOf(ua)`. Event `UAKemKeySet(ua, version, keyHash)`.
+`kemKeyAt(ua, version) → (pk, sig)`, `popOf(ua)`, `pqzPopOf(ua)`. Event `UAKemKeySet(ua, version, keyHash, kemPk, sig)` (`keyHash = keccak256(kemPk)`; it carries the written bytes, as `UAPqzPopStored` and `UAPqzKeyAdded` do; the first draft showed three fields), plus `pqzKeyOf`, `pqzKeySigOf`, `registrationOf` and `checkedOf`.
 
 **P8 — The balance-key proof is optional (owner 2026-10-25).** So that a UA with all its keys — signing key, PQZ
 (balance) key, KEM key — can be registered on chains without the PQZ precompile (Ethereum, for example). The two
@@ -149,8 +155,14 @@ and the key becomes proven.
 
 ```solidity
 function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
-// sig over uaMessage(kind, PURPOSE_KEM, keccak256(KEM_TAG ‖ ua ‖ version ‖ keccak256(kemPk)))     (P7)
+// sig over uaMessage(kind, PURPOSE_KEM, keccak256(KEM_RECORD_TAG ‖ ua ‖ version ‖ keccak256(kemPk)))     (P7)
+// KEM_RECORD_TAG = keccak256("scaas.ua.kem-record.v1"); PURPOSE_KEM = keccak256("scaas.ua.purpose.kem.v1") — the formula tag is named
+// KEM_RECORD_TAG (renamed 2026-10-30 from KEM_TAG so it is not read as a purpose)
 function storePqzPop(bytes32 ua, bytes calldata pqzPop) external;   // after register; no signature
+function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, bytes calldata sig) external;
+// the PQZ key for a record that has none, once; sig over uaMessage(kind, PURPOSE_PQZ_KEY, keccak256(abi.encode(pqzKeyDigest, pqzPopHash))),
+// pqzKeyDigest = keccak256(abi.encode(PQZ_KEY_RECORD_TAG, ua, pqzKeyHash)); the key's R_REG is over uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest),
+// PURPOSE_PQZ_KEY = keccak256("scaas.ua.purpose.pqz-key.v1") — added 2026-10-30 (ruling A1-I1, controller call, owner may override)
 ```
 
 `storePqzPop` needs **no signature** (owner 2026-10-25): `register` stored `pqzPopHash`, which the UA's `pop` covers,
@@ -158,7 +170,7 @@ so the call only checks `keccak256(pqzPop) == pqzPopHash` — garbage cannot mat
 already stored. Where the PQZ verifier exists it also checks the proof (`proven = true`). `setKemKey` keeps its
 signature (a new KEM version is new consent); an `msig` signs it with its m-of-n members.
 
-**All of them are mtx-style writes without a chain and without a fee** (owner 2026-10-25): signed by the UA, relayable
+**All of them (`setKemKey`, `storePqzPop`, `setPqzKey`) are mtx-style writes without a chain and without a fee** (owner 2026-10-25): signed by the UA, relayable
 by anyone (the submitter — the UA or a relayer — pays the gas), chain-independent, so the same record can be moved to
 any chain. **There are no `mtx*` fee forms** (`mtxRegister` / `mtxSetKemKey` / `mtxStorePqzPop` dropped): these writes
 are not token operations, so there is no token to take a fee from; a relayer that wants payment arranges it off chain.

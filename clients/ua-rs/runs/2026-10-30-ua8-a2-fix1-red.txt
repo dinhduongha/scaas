@@ -1,0 +1,40 @@
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+error[E0425]: cannot find function `is_portable_purpose` in this scope
+   --> tests/ua8.rs:226:26
+    |
+226 |                 assert!(!is_portable_purpose(&tag), "{name}");
+    |                          ^^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `is_portable_purpose` in this scope
+   --> tests/ua8.rs:289:13
+    |
+289 |     assert!(is_portable_purpose(&pop_v2_tag()) && is_portable_purpose(&purpose_tag("kem").unwrap()) && is_portable_purpose(&purpose...
+    |             ^^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `is_portable_purpose` in this scope
+   --> tests/ua8.rs:289:51
+    |
+289 |     assert!(is_portable_purpose(&pop_v2_tag()) && is_portable_purpose(&purpose_tag("kem").unwrap()) && is_portable_purpose(&purpose...
+    |                                                   ^^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `is_portable_purpose` in this scope
+   --> tests/ua8.rs:289:104
+    |
+289 | ..._purpose(&purpose_tag("kem").unwrap()) && is_portable_purpose(&purpose_tag("pqz-key").unwrap()));
+    |                                              ^^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `is_portable_purpose` in this scope
+   --> tests/ua8.rs:290:14
+    |
+290 |     assert!(!is_portable_purpose(&purpose_tag("metatx").unwrap()) && !is_portable_purpose(&purpose_tag("pop").unwrap()));
+    |              ^^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `is_portable_purpose` in this scope
+   --> tests/ua8.rs:290:71
+    |
+290 |     assert!(!is_portable_purpose(&purpose_tag("metatx").unwrap()) && !is_portable_purpose(&purpose_tag("pop").unwrap()));
+    |                                                                       ^^^^^^^^^^^^^^^^^^^ not found in this scope
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `scaas-ua` (test "ua8") due to 6 previous errors
+warning: build failed, waiting for other jobs to finish...

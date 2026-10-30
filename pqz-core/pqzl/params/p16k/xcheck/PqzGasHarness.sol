@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 // Plan 5h Task 7b, measurement only (never deployed outside the SCaaS testnet cross-check): the as-built rollover,
 // `mtxPrepareAcc` and op 1 library paths (`PqzStateLib`, `PqzTransferLib`, `PqzCore` at the 16k sizes of the work tree)
-// behind a contract that is its own registry (`recordOf`, `requireAuthorized`) and whose `pqz` is `PqzOk` (answers 1).
+// behind a contract that is its own registry (`recordOf`, `pqzKeyOf`, `requireAuthorized`) and whose `pqz` is `PqzOk` (answers 1).
 // The same transactions run on Nethermind 2.2.0 (receipts, eth_estimateGas) and on Foundry 1.8.5 (`cast run`).
 // Copied into the gas16k.sh work tree by xcheck7622.sh.
 
@@ -66,6 +66,11 @@ contract PqzGasHarness {
     function recordOf(bytes32 ua) external view returns (IUARegistry.Record memory r, address pqzKey) {
         pqzKey = keyOf[ua];
         r.keyPtr = pqzKey;
+    }
+
+    /// UA-8: `PqzCore._keyPtr` reads the key here (proven keys only); every harness key counts as proven.
+    function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven) {
+        return (keyOf[ua], 0, true);
     }
 
     function requireAuthorized(bytes32, bytes32, bytes32, bytes calldata) external pure {}

@@ -12,7 +12,7 @@ import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, abiEncode, wipe } from './bytes.js';
 import { createVault, openVault, seal, open } from './vault.js';
-import { uaOf, popDigest, uaMessage, purposeTag } from './ua.js';
+import { uaOf, uaMessage, purposeTag, holderPopMessage } from './ua.js';
 
 export const USE_CONF = 7;
 export const USE_DISCLOSURE = 8;
@@ -167,17 +167,19 @@ export function schnorrVerify(curve, Ybytes, msg, sig) {
 }
 
 /**
- * The `pop` of `UARegistry.register(0x0141, Y, pop, "", "")` (CTR-UA-07): Schnorr by `x` under the Zether tag
- * over `uaMessage(kind, POP, popDigest)`, `popDigest` over the chain, its `chainUid`, the registry and the UA (the last
- * word, `pqzKeyHash`, is 0: a Zether UA holds no PQZ key). Never bound to a caller: anyone may relay the registration.
+ * The `pop` of `UARegistry.register(0x0141, Y, attrs = none, pop, "")` (UA-8 P1, the portable PoP): Schnorr by `x` under the
+ * Zether tag over `uaMessage(0x0141, POP_V2, registrationDigest(portablePopDigest(UA, 0, 0), 0))` (a Zether UA holds no PQZ
+ * key and no KEM key). No chain id, chain uid or registry: one PoP registers the UA on every chain, relayed by anyone.
+ * The chain-bound form before UA-8 is `zetherPopV1` in legacy/ua8/ua-pop-v1.js. Curve first, as every function of this
+ * module (`zetherSign(curve, x, …)`); an old caller still passing the chain context gets an error, not a silent drop.
  */
-export function zetherPop(curve, x, { chainId, chainUid, registry }) {
-  // chainUid, registry: hex strings or bytes (ua.js)
+export function zetherPop(curve, x, ...rest) {
+  if (rest.length) throw new Error('zetherPop takes no chain context since UA-8 (the PoP is portable): zetherPop(curve, x)');
   const kind = zetherKind(curve);
   const { Y, UA } = confPublic(curve, x);
-  const d = popDigest({ chainId, chainUid, registry, ua: UA });
-  const m = uaMessage(kind, purposeTag('pop'), d);
-  return { kind, Y, UA, popDigest: hex(d), uaMsg: hex(m), pop: hex(schnorrSign(curve, x, m)) };
+  const p = holderPopMessage(kind, { ua: UA });
+  return { kind, Y, UA, popDigest: hex(p.portablePopDigest), registrationDigest: hex(p.registrationDigest), uaMsg: hex(p.message),
+    pop: hex(schnorrSign(curve, x, p.message)) };
 }
 
 // The purposes a Zether UA signs: no contract accepts `member` (the kind is SIGNING, not MEMBER) or `zether-auth` (no PQZ key).

@@ -1,0 +1,63 @@
+   Compiling zeroize v1.9.1
+   Compiling ppv-lite86 v0.2.21
+   Compiling generic-array v0.14.9
+   Compiling rand_chacha v0.3.1
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling digest v0.10.7
+   Compiling rand v0.8.8
+   Compiling der v0.7.10
+   Compiling ark-std v0.5.0
+   Compiling signature v2.2.0
+   Compiling sec1 v0.7.3
+   Compiling crypto-bigint v0.5.5
+   Compiling ark-serialize v0.5.0
+   Compiling hmac v0.12.1
+   Compiling elliptic-curve v0.13.8
+   Compiling thiserror v2.0.21
+   Compiling ark-ff v0.5.0
+   Compiling rfc6979 v0.4.0
+   Compiling sha2 v0.10.9
+   Compiling thiserror-impl v2.0.21
+   Compiling litrs v1.0.0
+   Compiling document-features v0.2.12
+   Compiling ark-poly v0.5.0
+   Compiling ecdsa v0.16.9
+   Compiling itertools v0.14.0
+   Compiling visibility v0.1.1
+   Compiling derive-getters v0.5.0
+   Compiling const-crc32-nostd v1.3.1
+   Compiling byteorder v1.5.0
+   Compiling ark-ec v0.5.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling frost-core v3.0.0
+   Compiling frost-rerandomized v3.0.0
+   Compiling k256 v0.13.4
+   Compiling primeorder v0.13.6
+   Compiling ed25519 v2.2.3
+   Compiling sha3 v0.10.9
+   Compiling ed25519-dalek v2.2.0
+   Compiling p256 v0.13.2
+   Compiling frost-secp256k1 v3.0.0
+   Compiling ark-bn254 v0.5.0
+   Compiling ark-bls12-381 v0.5.0
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
+warning: field `name` is never read
+  --> tests/groups.rs:71:5
+   |
+70 | struct Ctx {
+   |        --- field in this struct
+71 |     name: &'static str,
+   |     ^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `scaas-ua` (test "groups") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 26.61s
+     Running tests/groups.rs (target/debug/deps/groups-9b73789e0704c494)
+
+running 1 test
+test write_groups_json ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 5.60s
+

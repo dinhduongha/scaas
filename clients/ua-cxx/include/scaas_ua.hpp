@@ -13,7 +13,8 @@ namespace scaas::ua {
 
 using Bytes = std::vector<uint8_t>;
 
-// code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown, UAPqzHolder.
+// code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown, UAPqzHolder, UAKemHolder,
+// UAKemVersion, UAKemKeyLength, UAPqzPopHash, UAPqzKeySet.
 // reason(): the label after "UAKeyData: " (empty for every other code).
 class Error : public std::runtime_error {
 public:
@@ -38,10 +39,22 @@ struct Member {
     Bytes id;  // 32 bytes
     uint16_t weight;
 };
+// A KEM record attribute: (version >= 1, 1,600-byte key). nullopt, or (0, empty), = absent.
+using Kem = std::pair<uint64_t, Bytes>;
+// The portable PoP of a registration (UA-8 P1, P2); every hash is 32 bytes, 0 when absent.
 struct HolderPop {
-    Bytes pqzKeyHash;  // 32 bytes, 0 without a PQZ key
-    Bytes popDigest;
-    Bytes message;  // uaMessage(kind, pop, popDigest)
+    Bytes pqzKeyHash, pqzPopHash, kemRecordHash, portablePopDigest, registrationDigest;
+    Bytes message;  // uaMessage(kind, POP_V2, registrationDigest): what the signer's pop signs (every kind)
+    // msig only: memberDigest(ua, message), what each member signs under `member`. A code-less native member signs
+    // personalSignDigest(memberDigest) (ruling C7).
+    std::optional<Bytes> memberDigest;
+};
+// The PQZ key record of setPqzKey (ruling A1-I1).
+struct PqzKeyRecord {
+    Bytes pqzKeyHash, pqzPopHash, pqzKeyDigest, recordDigest;
+    Bytes message;         // uaMessage(kind, PURPOSE_PQZ_KEY, recordDigest): what the UA signs
+    Bytes pqzRegMessage;   // uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest): what the key's R_REG proves over
+    std::optional<Bytes> memberDigest;  // msig only, as in HolderPop
 };
 struct Domain {
     uint32_t generation;
@@ -57,7 +70,10 @@ std::string kindTagString(uint16_t kind);
 std::optional<Bytes> groupTag(const std::string& group);
 std::optional<std::string> groupTagString(const std::string& group);
 Bytes msgTag();
-Bytes purposeTag(const std::string& purpose);
+Bytes purposeTag(const std::string& purpose, uint32_t version = 1);  // every purpose is v1; pop is also v2 (UA-8)
+Bytes kemRecordTag();
+Bytes pqzKeyRecordTag();
+constexpr size_t kKemPkLength = 1600;  // ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
 Bytes uaOf(uint16_t kind, const Bytes& keyData);
 Bytes deriveUA(uint16_t kind, const Bytes& keyData, bool hederaNative);
 Bytes nativeId(uint16_t kind, const Bytes& raw);
@@ -72,11 +88,33 @@ bool isSigning(uint16_t kind);
 bool isMember(uint16_t kind, bool hederaNative);
 Bytes uaMessage(uint16_t kind, const Bytes& purposeTag, const Bytes& digest);
 Bytes chainKeyHash(uint64_t chainId);
-Bytes popDigest(uint64_t chainId, const Bytes& chainUid, const Bytes& registry, const Bytes& ua, const Bytes& pqzKeyHash);  // pqzKeyHash: keyHash of the UA's PQZ key, 0 without one
-// What a PQ holder signs to register; pqzKey nullopt = no key. A key for a non-holder kind throws UAPqzHolder.
-HolderPop holderPopMessage(uint16_t kind, uint64_t chainId, const Bytes& chainUid, const Bytes& registry, const Bytes& ua,
-                           const std::optional<Bytes>& pqzKey);
-Bytes pqzRegMessage(uint64_t chainId, const Bytes& chainUid, const Bytes& registry, const Bytes& ua, const Bytes& pqzKey);
+// keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash), each hash 32 zero bytes when absent (UA-8 P1: no chain).
+Bytes portablePopDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& kemRecordHash);
+// keccak256(portablePopDigest ‖ pqzPopHash): what the signer's pop signs under uaMessage(kind, POP_V2, ·).
+Bytes registrationDigest(const Bytes& portable, const Bytes& pqzPopHash);
+// keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk)): version 1 … 2^64 − 1 (UAKemVersion), a 1,600-byte key (UAKemKeyLength).
+Bytes kemRecordDigest(const Bytes& ua, uint64_t version, const Bytes& kemPk);
+Bytes kemRecordMessage(uint16_t kind, const Bytes& ua, uint64_t version, const Bytes& kemPk);  // uaMessage(kind, PURPOSE_KEM, digest)
+// The portable PoP message of a registration. pqzKey with its proof pqzPop (or only its hash pqzPopHash; a relayer may hold only
+// that; an empty hash is absent, another length than 32 is UAPqzPopHash) and the initial KEM record; nullopt = absent. Only
+// holders carry them (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its
+// proof hash and only with it (UAPqzPopHash).
+HolderPop holderPopMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const std::optional<Bytes>& pqzKey = std::nullopt,
+                           const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
+                           const std::optional<Kem>& kem = std::nullopt);
+// The message R_REG proves over: uaMessage(0x0142, POP_V2, portablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash)).
+Bytes pqzRegMessage(const Bytes& ua, const Bytes& pqzKey, const std::optional<Kem>& kem = std::nullopt);
+Bytes pqzKeyDigest(const Bytes& ua, const Bytes& pqzKeyHash);  // keccak256(PQZ_KEY_RECORD_TAG ‖ ua ‖ pqzKeyHash)
+Bytes pqzKeyRecordDigest(const Bytes& pqzKeyDigest, const Bytes& pqzPopHash);  // keccak256(pqzKeyDigest ‖ pqzPopHash)
+// The signed, portable, write-once PQZ key record of setPqzKey: alreadySet = the registration has a key (UAPqzKeySet). The holder
+// rules of holderPopMessage; the key and its proof (or hash) are both required.
+PqzKeyRecord pqzKeyRecordMessage(uint16_t kind, const Bytes& ua, const Bytes& keyData, const Bytes& pqzKey,
+                                 const std::optional<Bytes>& pqzPop = std::nullopt, const std::optional<Bytes>& pqzPopHash = std::nullopt,
+                                 bool alreadySet = false);
+// EIP-191 personal_sign of a 32-byte digest: keccak256(0x19 ‖ "Ethereum Signed Message:\n32" ‖ digest). A code-less native (EOA) msig
+// member signs it over the memberDigest of a portable record only (POP_V2, KEM, PQZ_KEY; ruling C7); every other purpose stays UAAuth.
+Bytes personalSignDigest(const Bytes& digest);
+bool isPortablePurpose(const Bytes& purposeTag);
 Bytes uaAuthDomainSeparator(const Domain& d);
 Bytes uaAuthDigest(const Domain& d, const Bytes& ua, const Bytes& purposeTag, const Bytes& digest);
 Bytes memberDigest(const Bytes& structureUa, const Bytes& uaMsg);

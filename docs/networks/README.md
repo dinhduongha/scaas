@@ -268,8 +268,8 @@ account factory, mandate wallets, the DEX and the Universal Account registry —
 EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267 `eip712Domain()` fields
 `0x1f`.
 
-It is also bound into the registry's proof-of-possession digest and the `metatx-cancel` digest
-([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
+It is also bound into the `metatx-cancel` digest (the registry's proof of possession is portable since UA-8 and carries no
+chain, [CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
 mode, disclosure and `entryRef` digests beside `chainId`, since those are not EIP-712 domains. The EVM cannot read its
 own genesis hash after block 256, so a contract cannot *prove* `chain_uid`; the deploy script reads it from the RPC,
 and the deploy gate and the node require each contract's `chainUid()` = the RPC's genesis hash = the chain profile
@@ -416,7 +416,7 @@ BCS). Client rendering: [CLI-SGN-27](../clients/signers-clientkeys.md#CLI-SGN-27
 tags, the derivations and one vector file** (`smartcontracts/vectors/ua/kinds.json`,
 [CTR-UA-05](../contracts/accounts.md#CTR-UA-05)); each family realises the registry in its own idiom. GRAM
 has no registry in v1: a derived key on GRAM is bound by the native wallet owner's `set_key`, which **also carries a
-signature by the bound key** over `uaMessage(kind, POP_TAG, pop_digest)` (`registry_id` = the jetton-wallet address;
+signature by the bound key** over `uaMessage(kind, POP_TAG, pop_digest)` (the chain-bound wallet-binding digest of UA-3, not the portable registration PoP of UA-8: TON gets a portable registry only with its own registry design, UA-8 P10; `registry_id` = the jetton-wallet address;
 TVM `CHKSIGNS` for ed25519, `P256_CHKSIGNS` for P-256), so binding is consent **and** possession; chain-wide keyHash
 uniqueness is not enforced there (the other purpose layers still hold, and the wallet refuses binding the same key
 under two wallets). Why: GRAM calls are asynchronous, and owner consent alone would let a wallet claim someone else's

@@ -431,7 +431,8 @@ A **native account** is what the chain already understands, and never registers.
 default for subjects: a 32-byte id derived from key data, so any key type works on any family without a contract per
 user ([universal-account](contracts/accounts.md#universal-account)). Because a token must know how to verify such a
 key, the id is registered once per chain in the admin-free UA registry (`UARegistry`) with a proof of possession that
-binds the chain, the registry, the id and `authRef` — but not the caller, so a relayer can submit the registration and
+binds the id, its attributes (the PQZ key and the KEM record) and the PQZ proof hash — no chain, no registry and not the caller (UA-8: the
+same registration is valid on every chain), so a relayer can submit the registration and
 onboarding is gasless ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)).
 
 A UA never rotates: its key is its identity ([CTR-UA-13](contracts/accounts.md#CTR-UA-13)). A subject that needs a
@@ -712,8 +713,8 @@ AMM pools with `mtxExchange` ([CTR-DEX-20](contracts/dex.md#CTR-DEX-20)).
 <a id="universal-account-registration-submitted-by-a-relayer-specified"></a>
 ### 6.4 Universal Account registration submitted by a relayer (SPECIFIED)
 
-The proof of possession binds the chain, the registry, the id and `authRef` but not the caller, so the gateway can pay
-for it ([CTR-UA-07](contracts/accounts.md#CTR-UA-07), [NODE-GW-03](node/gateway.md#NODE-GW-03)).
+The proof of possession binds the id, its attributes and the PQZ proof hash — no chain, no registry and not the caller — so
+the gateway can pay for it, and anyone can copy the same registration to another chain ([CTR-UA-07](contracts/accounts.md#CTR-UA-07), [NODE-GW-03](node/gateway.md#NODE-GW-03)).
 
 ```mermaid
 sequenceDiagram
@@ -723,18 +724,20 @@ sequenceDiagram
     participant REG as UARegistry
     participant VER as Kind verifier
     APP->>APP: ua = uaOf(kind, keyData)
-    APP->>REG: popDigest(ua, authRef), bound to chain_uid
+    APP->>APP: portable PoP over registrationDigest (no chain context, the same pop serves every chain)
     APP->>APP: the key signs the PoP
-    APP->>GW: POST /v1/ua/register (chain, kind, keyData, pop, authRef)
+    APP->>GW: POST /v1/ua/register (chain, kind, keyData, attrs, pop, pqzPop?)
     GW->>GW: recompute the id, not yet registered, PoP of cheap kinds
     GW->>LANE: call job in ~gateway to chain.ua_registry
     GW-->>APP: 202 queued
-    LANE->>REG: register(kind, keyData, pop, authRef, authPop)
+    LANE->>REG: register(kind, keyData, attrs, pop, pqzPop)
     REG->>VER: verify the PoP, capped staticcall
     VER-->>REG: valid
-    REG->>REG: store the record, UARegistered(ua, kind, keyData, authRef)
-    APP->>REG: isRegistered(ua)
+    REG->>REG: store the record and every field, UARegistered(ua, kind, keyData, attrs, pop, pqzPop, checked)
+    APP->>REG: registrationOf(ua), checkedOf(ua)
 ```
+
+The same call, with the same bytes, registers the UA on any other chain (anyone submits it; [CTR-UA-31](contracts/accounts.md#CTR-UA-31)).
 
 <a id="confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3"></a>
 ### 6.5 Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)
@@ -939,7 +942,7 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **`entryRef`** | The 32-byte reference carried by a payment op and emitted in `PaymentSettled`; links an on-chain payment to a business document; 32 random bytes ([CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)). Some requirement texts call it `payId`. |
 | **Finality gate** | The rule that decides when a block range is final: `depth` (n confirmations), `tag` (`finalized`) or `instant` (BFT families), plus a quorum of independent RPC endpoints returning the same event set ([NODE-IDX-02](node/indexer-feeds.md#NODE-IDX-02)). |
 | **Consumed** | Job state: the subject nonce moved past the intent's nonce through a transaction this node did not land (or has not attributed yet). Never a failure by itself ([NODE-LANE-09](node/submit-lanes.md#NODE-LANE-09)). |
-| **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a proof of possession that binds the chain (`chain_key` and `chain_uid`, the genesis hash), the registry, the UA and `authRef` (not the caller, so registration is relayable) ([contracts/accounts.md](contracts/accounts.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/accounts.md#CTR-UA-22)). |
+| **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a portable proof of possession that binds the UA, its attributes (PQZ key, KEM record) and the PQZ proof hash — no chain, registry or caller, so registration is relayable and copyable to any chain (UA-8) ([contracts/accounts.md](contracts/accounts.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/accounts.md#CTR-UA-22)). |
 | **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)). |
 | **Kind** | The implementation a token is cloned from, chosen at creation: `NONE`, `UNDERLYING` (1–8 legs), `NONE_ZETHER`, `UNDERLYING_ZETHER`; the post-quantum kinds are reserved ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Code, not a setting. |
 | **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
