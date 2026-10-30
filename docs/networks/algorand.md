@@ -89,9 +89,9 @@ the MBR. BUILT.
 
 <a id="NET-ALG-20"></a>**NET-ALG-20** — **Native UA kind `0x0018 algorand-address`.** Id = the address's 32-byte public
 key. Accepted signature: `ed25519verify_bare` by the address's **current authority** (`AcctAuthAddr` if set, else the
-address); an address rekeyed to a LogicSig or a multisig signs through an account record instead, with keys it added
-before the rekey ([NET-ALG-24](#NET-ALG-24); a rekey is readable on chain). Not a registry: the kind names an Algorand
-address as a holder or msig member ([accounts.md](../contracts/accounts.md) §1.6 table). An `algorand-address` member of an msig pays only if the relayer lists it in the target's `accounts`. BUILT.
+address); an address rekeyed to a LogicSig or a multisig signs through an account record instead (a rekey is readable
+on chain). Not a registry: the kind names an Algorand address as a holder or msig member ([accounts.md](../contracts/accounts.md)
+§1.6 table). An `algorand-address` member of an msig pays only if the relayer lists it in the target's `accounts`. BUILT.
 
 MBR (µALGO; box MBR = 2,500 + 400 per name and value byte):
 
@@ -104,8 +104,8 @@ MBR (µALGO; box MBR = 2,500 + 400 per name and value byte):
 | mandate box (41 B name + 204 B value) | 100,500 | `…/2026-10-29-algorand-mandate-fix1.txt` |
 | an app address's base minimum (each app is funded to it at deploy); the deployer's own minimum grows by each app's schema and pages, read from algod (the e2e's partial deploy hit "below min 1035500") | 100,000 | `…/2026-10-29-algorand-relayfee-fix1.txt`; `…/2026-10-28-algorand-e2e.txt` |
 
-Approval programs (`smartcontracts/algorand/runs/2026-10-28-algorand-e2e.txt`): account 4,954 B (2 extra pages;
-4,945 B in that log, +9 B by NET-ALG-24), token 3,661 B (1), mandate 2,304 B (1), relayfee 857 B (0), dex 961 B (0); clear programs 4 B; executor LogicSig 85 B (`…/2026-10-29-algorand-relayfee-fix1.txt`).
+Approval programs (`smartcontracts/algorand/runs/2026-10-28-algorand-e2e.txt`): account 4,945 B (2 extra pages), token
+3,661 B (1), mandate 2,304 B (1), relayfee 857 B (0), dex 961 B (0); clear programs 4 B; executor LogicSig 85 B (`…/2026-10-29-algorand-relayfee-fix1.txt`).
 
 ## 3. Keys
 
@@ -121,22 +121,8 @@ nonce). Key ops 6–12 sign `extra = sha256(ARC-4 parameter tuple)`; set_policy 
 recovery: the guardian (checked before the signature; none = the zero holder) signs `mtx_start_recovery` and, after
 `RECOVERY_DELAY_S` = 172,800 s, `mtx_finish_recovery` (op 11, params `[7]`), which **adds** the key
 ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)); start and finish refuse a key already present or a full 8-key set
-(fail fast: keep a slot free). `add_origin` is idempotent; an msig refuses a repeated signing key; a rekeyed address
-adds no key natively ([NET-ALG-24](#NET-ALG-24)), and keys it added before the rekey sign its key ops (there is no
-native remove: NEAR parity). BUILT.
-
-<a id="NET-ALG-24"></a>**NET-ALG-24** — **A sender-authorised key op refuses a rekeyed sender** (owner rule
-2026-10-30, after the EIP-7702 sweeper drain: an account signs with its own key, no delegation, an account runs no
-code). `add_key_native`, the one `account` entry authorised by `Txn.Sender` rather than by a signature over a digest,
-asserts `AcctAuthAddr(Txn.Sender) == ZeroAddress` ("add_key_native: a rekeyed sender is refused (NET-ALG-24)"; 6
-opcodes, +9 B of approval program). A rekey to a LogicSig or an app hands the address to code; on chain it cannot be
-told apart from a rekey to another ed25519 account or a multisig (`AcctAuthAddr` is a 32-byte address either way), so
-every rekeyed sender is refused, rekey-to-key included. Keys added before the rekey keep signing; a rekey back to the
-address itself makes it a key-signed sender again. Signature paths are unchanged and key-only already: a native wallet
-signature and an `algorand-address` msig member are `ed25519verify_bare` by the current authority, which a LogicSig,
-an app or a multisig cannot produce ([NET-ALG-20](#NET-ALG-20)). Not detectable, so not refused: a delegated LogicSig
-(the address's key signed a program; `AcctAuthAddr` stays zero) — wallet guidance
-([networks/README §7](README.md#code-authority)). BUILT (branch `no7702`, `86b099f1`).
+(fail fast: keep a slot free). `add_origin` is idempotent; an msig refuses a repeated signing key; a LogicSig- or
+msig-rekeyed address can add keys natively but not remove them (NEAR parity). BUILT.
 
 <a id="NET-ALG-09"></a>**NET-ALG-09** — **An msig has at most 3 members.** `MSIG_MAX_MEMBERS` is bound by the 2,048 B of
 app-call arguments, not by budget: with a Chrome-shaped `clientDataJSON` (286 B: a 64 B origin and Chrome's extra
@@ -423,10 +409,6 @@ passkey payer 22,294 / 31, msig-3 + msig-3 32,403 / 45 (pin 35,000 / 47).
 - **Stray funds:** ALGO or tokens sent to the executor, the router, the mandate or DEX address outside an open or
   settle stay there or are movable by any relayed `arc200_transfer` (the executor); never pay them; the DEX keeps a
   permanent per-token box (28,500 µALGO).
-- **Rekeyed addresses** ([NET-ALG-24](#NET-ALG-24)): an address rekeyed for any reason (a multisig, a hardware key,
-  a post-quantum Falcon account: existing accounts migrate by rekeying) adds no key natively; it adds its keys before
-  the rekey, or rekeys back to itself first. The rule covers key ops only: the token's direct ARC-200 calls
-  (`arc200_transfer`, `transfer_to_ua`) still act for a rekeyed sender, as the chain's own payments do.
 - **Third-party targets** are operator-vouched per method; their ARC-4 reference-type arguments are not covered by
   `ref`; assets, holdings and locals reported unnamed are refused.
 - A replayed passkey assertion can lazily open a record pinned to its origin (a recoverable grief). The contract's

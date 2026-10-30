@@ -227,8 +227,7 @@ bytes with a 1-byte prefix where the raw name would exceed 64 B (exact naming: b
 
 Subject = native address or UA id (lazily opened, relayer pays MBR). A native address signs with its **current
 authority**: `AcctAuthAddr` if set, else the address itself; an address rekeyed to a LogicSig or multisig signs
-through an account record instead (controller call: a rekey is readable on chain, unlike NEAR keys), with keys it added
-before the rekey: since the owner rule of 2026-10-30 `add_key_native` refuses a rekeyed sender (NET-ALG-24). Native kind
+through an account record instead (controller call: a rekey is readable on chain, unlike NEAR keys). Native kind
 `0x0018 algorand-address`: id = the address's 32-byte public key; accepted signature as above (`ed25519verify_bare`
 by the current authority). `msig` (kind 288) verified in `account` from its key data, native members by that rule;
 the member cap is what fits the group's budget and argument limits, stated in algorand.md.
