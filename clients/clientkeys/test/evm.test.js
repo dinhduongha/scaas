@@ -611,7 +611,7 @@ test('a bid\'s minFill from a base minimum and back (CLI-SGN-35)', () => {
   assert.equal(bidMinFill(0n, 1000n, 2000n), 0n);
   assert.equal(bidMinBase(7n, 1000n, 3001n), 22n, 'ceil(21007 / 1000), floor is 21');
   assert.equal(bidMinBase(1n, 3000n, 1000n), 1n, 'ceil(1000 / 3000), floor is 0');
-  for (const [x, a, r] of [[7n, 1000n, 3000n], [13n, 999n, 7n]]) {
+  for (const [x, a, r] of [[7n, 1000n, 3000n], [13n, 999n, 70n]]) {
     assert.ok(bidMinBase(bidMinFill(x, a, r), a, r) >= x, 'a round trip never lowers the minimum');
   }
   assert.throws(() => bidMinFill(1n, 0n, 2000n), /malformed/);
