@@ -12,7 +12,7 @@ STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n28
 # the skipped / empty-suite check (base runner) over every client step; clientkeys keeps its 2 environmental skips
 # (the vendored-bundle tests), so it is checked by its named tests only
 FAMILIES="ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb"
-# "<step>|<form>|<name>": every test name added by Tasks A1-A11, in its tool's pass form (forms: see the base runner)
+# "<step>|<form>|<name>": every test name added by Tasks A1-A11 and the final fix wave, in its tool's pass form (forms: see the base runner)
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_T_GAS_register_ua8PerKind
 forge|forge|test_T_GAS_setKemKey
@@ -29,6 +29,9 @@ forge|forge|test_ua8_blobChunksRoundTrip
 forge|forge|test_ua8_checkedIsChain
 forge|forge|test_ua8_copyBetweenRegistries
 forge|forge|test_ua8_copyFromState
+forge|forge|test_ua8_crossSetGen2ReplacesGen1Key
+forge|forge|test_ua8_crossSetKeyReplaced
+forge|forge|test_ua8_crossSetRightSetKeyStays
 forge|forge|test_ua8_disabledKindReverts
 forge|forge|test_ua8_everyKindFromVectors
 forge|forge|test_ua8_frontRunnerDropsPqzPop
@@ -36,6 +39,7 @@ forge|forge|test_ua8_frontRunnerGetsIdenticalRecord
 forge|forge|test_ua8_gen2ForwardsReads
 forge|forge|test_ua8_gen2PqzKeyWhenGen1HasNone
 forge|forge|test_ua8_gen2ProvesGen1RegisterKey
+forge|forge|test_ua8_gen2RefusesPreUa8Gen1
 forge|forge|test_ua8_gen2RefusesWhenGen1HasPqz
 forge|forge|test_ua8_gen2RefusesWritesForGen1
 forge|forge|test_ua8_gen2SetPqzKeyForGen1Record
@@ -55,6 +59,7 @@ forge|forge|test_ua8_largestMsigPopStored
 forge|forge|test_ua8_msigNativeMember7702Portable
 forge|forge|test_ua8_msigNativeMemberPersonalSignPortable
 forge|forge|test_ua8_msigNativeMemberWithCode1271
+forge|forge|test_ua8_msigPopCanonical
 forge|forge|test_ua8_msigPqEligibleCopy
 forge|forge|test_ua8_nonHolderAttrsRefused
 forge|forge|test_ua8_popCoversAttrs
@@ -85,6 +90,7 @@ ua-rs|cargo|negatives_refused
 ua-rs|cargo|native_member_personal_sign
 ua-rs|cargo|malformed_msig_key_data
 cargo-scaas-node|cargo|submit::ua8_registry_writes_are_call_jobs
+cargo-scaas-node|cargo|submit::ua8_relayed_pq_register_over_the_cap_is_split
 clientkeys|node|keys and ids: pq_kat.json's keys, ids from the kind table, the portable PoP (UA-8) on contexts A and B
 clientkeys|node|UA-6 / UA-8: a holder registers its PQZ key in the same call: pop over registrationDigest(portablePopDigest(ua, h, 0), pqzPopHash)
 clientkeys|node|derived kinds: key data, ids, portable PoP messages, every signature verifies
