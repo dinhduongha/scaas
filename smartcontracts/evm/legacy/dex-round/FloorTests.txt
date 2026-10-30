@@ -1,0 +1,15 @@
+// Pre-round floor tests (dex-round PD1); not built. Taken from test/v2/Trade.t.sol.
+
+    function test_minFill_oddAmountRoundsTheHalfUp() public {
+        // half of 1001 = 500.5 -> 501; receiveAmount 2000 keeps the received side (>= 1000) out of play
+        ITradeToken.TradeOrder memory o = _order(1001, 2000);
+        _expect(ITradeToken.BelowMinFill.selector, o, _fill(500, 1000, 0));
+        _trade(o, _fill(501, 1001, 0));
+        assertEq(t.pulled(t.tradeOrderDigest(o)), 501);
+    }
+
+
+    function test_minFillPpm_halvingEncodesIt() public pure {
+        // TradeLib.record writes ceil(x * MIN_FILL_PPM / PPM) as x - x / 2; that is only right while this holds
+        assertEq(2 * TradeLib.MIN_FILL_PPM, TradeLib.PPM);
+    }

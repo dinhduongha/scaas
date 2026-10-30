@@ -73,7 +73,8 @@ contract TradeTest is V2Fixture {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         _expect(ITradeToken.ZeroFill.selector, o, _fill(0, 0, 0));
         _expect(ITradeToken.Overfill.selector, o, _fill(1001, 2002, 0));
-        _expect(ITradeToken.BelowMinFill.selector, o, _fill(499, 998, 0)); // 50 % floor
+        o.minFill = 500;
+        _expect(ITradeToken.BelowMinFill.selector, o, _fill(499, 998, 0)); // below the signed minFill
         _expect(ITradeToken.PriceLimit.selector, o, _fill(600, 1199, 0));
         _expect(ITradeToken.FeeAboveSigned.selector, o, _fill(600, 1200, 1)); // fee 0 signed
         o.fee = 3_000; // 0.3 % of 1200 = 3.6 -> 4 (rounded up)
@@ -115,7 +116,7 @@ contract TradeTest is V2Fixture {
         assertFalse(TradeLib.mulGt(1 << 200, 1 << 100, 1 << 100, 1 << 200));
     }
 
-    function test_minFill_signerAboveTheFloor_andFillOrKill() public {
+    function test_minFill_signerMinimum_andFillOrKill() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.minFill = 800;
         _expect(ITradeToken.BelowMinFill.selector, o, _fill(700, 1400, 0));
@@ -125,6 +126,35 @@ contract TradeTest is V2Fixture {
         o.minFill = 1001;
         o.nonce = 2;
         _expect(ITradeToken.BadMinFill.selector, o, _fill(1000, 2000, 0));
+    }
+
+    function test_minFill_belowHalfSettles() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000); // minFill 0: no floor
+        _trade(o, _fill(100, 200, 0));
+        assertEq(t.pulled(t.tradeOrderDigest(o)), 100);
+    }
+
+    function test_minFill_zeroAcceptsAnyFill() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        _trade(o, _fill(1, 2, 0));
+        assertEq(t.pulled(t.tradeOrderDigest(o)), 1);
+        _expect(ITradeToken.ZeroFill.selector, o, _fill(0, 0, 0));
+    }
+
+    function test_minFill_remainderClosesBelowMinFill() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.minFill = 300;
+        _trade(o, _fill(800, 1600, 0));
+        _trade(o, _fill(200, 400, 0)); // the remainder, below minFill
+        assertEq(t.pulled(t.tradeOrderDigest(o)), 1000);
+        _expect(ITradeToken.OrderClosed.selector, o, _fill(1, 2, 0));
+    }
+
+    function test_minFill_belowSignedMinFill_reverts() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 2000);
+        o.minFill = 300;
+        _expect(ITradeToken.BelowMinFill.selector, o, _fill(299, 598, 0));
+        _trade(o, _fill(300, 600, 0));
     }
 
     function test_ioc_closesAtItsSinglePull() public {
@@ -320,14 +350,6 @@ contract TradeTest is V2Fixture {
         t.mtxTrade(o, "", _fill(600, 1200, 0));
     }
 
-    function test_minFill_oddAmountRoundsTheHalfUp() public {
-        // half of 1001 = 500.5 -> 501; receiveAmount 2000 keeps the received side (>= 1000) out of play
-        ITradeToken.TradeOrder memory o = _order(1001, 2000);
-        _expect(ITradeToken.BelowMinFill.selector, o, _fill(500, 1000, 0));
-        _trade(o, _fill(501, 1001, 0));
-        assertEq(t.pulled(t.tradeOrderDigest(o)), 501);
-    }
-
     function test_hugeAmount_partFillDoesNotOverflow() public {
         NormalToken big = _normal(alice, type(uint256).max, address(0));
         ITradeToken.TradeOrder memory o = _order(type(uint256).max, 1);
@@ -376,11 +398,6 @@ contract TradeTest is V2Fixture {
             vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(data[i])));
             MetaTokenBase(address(t)).mtxExecute(m, sig);
         }
-    }
-
-    function test_minFillPpm_halvingEncodesIt() public pure {
-        // TradeLib.record writes ceil(x * MIN_FILL_PPM / PPM) as x - x / 2; that is only right while this holds
-        assertEq(2 * TradeLib.MIN_FILL_PPM, TradeLib.PPM);
     }
 
     function test_tradeNamespace_pulledSlot_andBaseNamespacesUntouched() public {

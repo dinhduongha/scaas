@@ -72,6 +72,9 @@ sol! {
     struct ExchangePlan { bytes32 ref; ExchangeLeg[] legs; address[] extraTokens; }
     #[derive(Debug, PartialEq, Eq)]
     struct Interaction { address target; bytes data; }
+    /// `ISCaaSDex.HybridPlan`: makers at their own price plus an outside part (floor `outsideFloor`).
+    #[derive(Debug, PartialEq, Eq)]
+    struct HybridPlan { bytes32 ref; Leg taker; Leg[] makers; uint256 outsideSell; uint256 outsideFloor; address[] extraTokens; }
 
     /// An outside-token order (CTR-DEX-18): the `TradeOrder` signed in the DEX's domain with its sell token.
     #[derive(Debug, PartialEq, Eq)]
@@ -90,6 +93,11 @@ sol! {
         function mtxSettle(Settlement[] s) external returns (bool[] ok);
         function mtxExchange(ExchangePlan p, Interaction[] interactions) external;
         function mtxExchangeVia(ExchangePlan p, address executor, bytes data) external;
+        function mtxExchangeBatch(ExchangePlan[] ps, Interaction[][] interactions) external returns (bool[] ok);
+        function exchangeOne(ExchangePlan p, Interaction[] interactions, address submitter) external;
+        function mtxHybrid(HybridPlan p, Interaction[] interactions) external;
+        function mtxHybridVia(HybridPlan p, address executor, bytes data) external;
+        event ExchangeFailed(bytes32 indexed ref, bytes reason);
         function settleOne(Settlement s, address submitter) external;
         function mtxCancelOrders(DexOrder[] orders, bytes[] sigs) external;
         function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
@@ -130,6 +138,7 @@ sol! {
         error FillMismatch(uint256 expected, uint256 got);
         error ConservationBroken(address token);
         error NotSelf();
+        error InteractionFailed(uint256 index, address target, bytes reason);
     }
 
     /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the token surface the node reads or relays.

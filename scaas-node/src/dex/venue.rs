@@ -899,8 +899,10 @@ impl Venue {
     }
 
     pub async fn depth(&self, market_id: i64, levels: usize) -> Option<Value> {
-        let (bids, asks) = self.book.lock().await.depth(market_id, levels)?;
-        Some(json!({"market_id": market_id, "bids": bids, "asks": asks}))
+        let book = self.book.lock().await;
+        let (bids, asks) = book.depth(market_id, levels)?;
+        let (mb, ma) = book.depth_min_fill(market_id, levels)?;
+        Some(json!({"market_id": market_id, "bids": bids, "asks": asks, "min_fill": {"bids": mb, "asks": ma}}))
     }
 
     pub fn trades(&self, market_id: i64) -> Vec<TradeView> {
@@ -1072,9 +1074,9 @@ fn sig_bytes(s: &str) -> std::result::Result<Bytes, VenueError> {
 }
 
 /// Readable DEX error (for `MatchFailed.reason` in the client); an EMPTY reason is the settlement's self-call
-/// running out of gas, never an order's fault (P2b-2: success is not monotonic in gas).
+/// running out of gas (or an interaction's, wrapped in `InteractionFailed`), never an order's fault (P2b-2: success is not monotonic in gas).
 pub fn revert_name(data: &[u8]) -> String {
-    if data.is_empty() {
+    if crate::guard::reason_is_out_of_gas(data) {
         return "out_of_gas".into();
     }
     crate::abi::decode_revert(data)
@@ -1149,6 +1151,14 @@ pub fn encode_event(log: &Log) -> Option<Value> {
 
 #[cfg(test)]
 mod tests {
+    /// T5 minor: an interaction out of gas inside a batch plan is `InteractionFailed(i, target, "")`, read as out_of_gas.
+    #[test]
+    fn a_wrapped_empty_interaction_revert_is_out_of_gas() {
+        let e = |r: &[u8]| ISCaaSDex::InteractionFailed { index: alloy::primitives::U256::from(2), target: Address::repeat_byte(7), reason: r.to_vec().into() }.abi_encode();
+        assert_eq!(revert_name(&[]), "out_of_gas");
+        assert_eq!(revert_name(&e(&[])), "out_of_gas");
+        assert!(revert_name(&e(&[1, 2])).starts_with("InteractionFailed"));
+    }
     use super::*;
     use alloy::primitives::LogData;
     use alloy::sol_types::SolError;
@@ -1483,6 +1493,19 @@ mod tests {
         let mut l = log_of(data);
         l.inner.address = addr;
         l
+    }
+
+    #[tokio::test]
+    async fn ticker_ignores_the_min_fill_bucket() {
+        let (m1, m2) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let normal = order(m1.address(), QUOTE, 10, 30, 1);
+        let big = TradeOrder { minFill: U256::from(5), ..order(m2.address(), QUOTE, 10, 20, 1) }; // better price, in the bucket
+        let (v, _) = venue(World::default(), vec![(normal.clone(), sig_of(&m1, oh(&normal))), (big.clone(), sig_of(&m2, oh(&big)))]).await;
+        assert_eq!(v.ticker(1).await.unwrap()["best_ask"], "3");
+        let d = v.depth(1, 5).await.unwrap();
+        assert_eq!(d["asks"].as_array().unwrap().len(), 1);
+        assert_eq!(d["min_fill"]["asks"][0]["price"], "2");
+        assert!(d["min_fill"]["bids"].as_array().unwrap().is_empty());
     }
 
     /// C6-3: the watcher takes leg events only from the DEX, and cancel / invalidation only from the DEX or a SCaaS
