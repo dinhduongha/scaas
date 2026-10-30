@@ -39,7 +39,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
         --match-path test/zether/ZetherProverCross.t.sol 2>&1 | tee "$o"; rc=${PIPESTATUS[0]}
       [ $rc -eq 0 ] && grep -q "6 passed; 0 failed; 0 skipped" "$o" || { echo "zether-cross: not 6 passed / 0 skipped"; rc=1; }
       rm -f "$o"; return $rc ;;
-    cargo-scaas-node) cd scaas-node && ../scripts/capped cargo test -j2 ;;
+    cargo-scaas-node) cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2' ;;
     clientkeys) cd clients/clientkeys && ../../scripts/capped npm test ;;
     ua-rs) cd clients/ua-rs && ../../scripts/capped cargo test -j2 ;;
     ua-rs-signers) cd clients/ua-rs && ../../scripts/capped cargo test -j2 --features signers ;;
@@ -328,7 +328,7 @@ cargo-scaas-node|cargo|ton::ton_relay_fee_job_tracks_escrow
 cargo-scaas-node|cargo|ton::ton_relay_fee_refunds_after_deadline
 cargo-scaas-node|cargo|ton::ton_relay_fee_refuses_failing_call_before_send
 cargo-scaas-node|cargo|ton::ton_relay_fee_refuses_failing_payment_before_send
-cargo-scaas-node|cargo|venue::a_7702_maker_signs_with_its_key_or_its_delegate
+cargo-scaas-node|cargo|venue::a_7702_maker_signs_with_its_key_only
 cargo-scaas-node|cargo|ton::pay_meta_job_never_panics
 cargo-scaas-node|cargo|ton::relay_fee_job_never_panics
 cargo-scaas-node|cargo|config::relay_params_default_and_refuse_invalid_values

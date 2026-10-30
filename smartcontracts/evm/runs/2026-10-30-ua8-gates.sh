@@ -12,7 +12,8 @@ STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n28
 # the skipped / empty-suite check (base runner) over every client step; clientkeys keeps its 2 environmental skips
 # (the vendored-bundle tests), so it is checked by its named tests only
 FAMILIES="ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb"
-# "<step>|<form>|<name>": every test name added by Tasks A1-A11 and the final fix wave, in its tool's pass form (forms: see the base runner)
+# "<step>|<form>|<name>": every test name added by Tasks A1-A11 and the final fix wave, in its tool's pass form (forms: see the base runner);
+# last block: no7702 (EIP-7702 owner rulings D1-D5, 2026-10-30): its new tests and the flipped ones
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_T_GAS_register_ua8PerKind
 forge|forge|test_T_GAS_setKemKey
@@ -144,6 +145,28 @@ ua-dart-frb|dart|kem record
 ua-dart-frb|dart|pqz key record
 ua-dart-frb|dart|personal_sign of the portable purposes
 ua-dart-frb|dart|holder refusals
+forge|forge|test_requireNotDelegated
+forge|forge|test_requireNotDelegated_gas
+forge|forge|test_sweeper_directCallsRefused
+forge|forge|test_sweeper_signaturesRefused
+forge|forge|test_plainEoaAndContractCallersUnchanged
+forge|forge|test_boundRelayerDelegatedRefused
+forge|forge|test_recovery_delegatedGuardianRefused
+forge|forge|test_adminOnly_delegatedAdminRefused
+forge|forge|test_delegatedRegistrarRefused
+forge|forge|test_designatorImplementationRefused
+forge|forge|test_shield_delegatedCallerRefused
+forge|forge|test_relay_targetDesignatorRefused
+forge|forge|test_native_unwrapToDesignatorRefused
+forge|forge|test_constructorDesignatorRefused
+forge|forge|test_isValid_7702_ctrUa24
+forge|forge|test_7702_nativeFrom
+forge|forge|test_uaPayReceiverFee_7702Payee
+forge|forge|test_allowance_7702DelegatedEoaRefused
+forge|forge|test_msgSenderReadsArePinned
+cargo-scaas-node|cargo|dex::venue::tests::a_7702_maker_signs_with_its_key_only
+cargo-scaas-node|cargo|submit::tests::the_guard_derives_its_facts_from_the_chain_and_the_config
+clientkeys|node|signing: a raw digest is refused without the opt-in; signTyped / signKeyProof hash it themselves
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
