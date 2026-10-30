@@ -120,6 +120,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   3. EVM contracts: **DEX, one round** — the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` +
      `mtxExchangeBatch` + mode 3 / 4 tests + reference executor + Uniswap fork test (item "DEX: drop the 50 % minimum-fill
      floor + four matching modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
+     DEX spec drafted: `docs/superpowers/specs/2026-10-30-dex-round-design.md` (branch `spec-dex`), owner review.
   4. **4b Soroban (UA base) + UA-8 step 2 (Soroban registry)** in one round — shared ML-DSA verifier (CAP-0087 host
      functions) and vectors. **No waiting** (owner 2026-10-29): code and tests on a local network / quickstart at
      Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
