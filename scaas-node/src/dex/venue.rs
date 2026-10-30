@@ -899,8 +899,10 @@ impl Venue {
     }
 
     pub async fn depth(&self, market_id: i64, levels: usize) -> Option<Value> {
-        let (bids, asks) = self.book.lock().await.depth(market_id, levels)?;
-        Some(json!({"market_id": market_id, "bids": bids, "asks": asks}))
+        let book = self.book.lock().await;
+        let (bids, asks) = book.depth(market_id, levels)?;
+        let (mb, ma) = book.depth_min_fill(market_id, levels)?;
+        Some(json!({"market_id": market_id, "bids": bids, "asks": asks, "min_fill": {"bids": mb, "asks": ma}}))
     }
 
     pub fn trades(&self, market_id: i64) -> Vec<TradeView> {
@@ -1483,6 +1485,19 @@ mod tests {
         let mut l = log_of(data);
         l.inner.address = addr;
         l
+    }
+
+    #[tokio::test]
+    async fn ticker_ignores_the_min_fill_bucket() {
+        let (m1, m2) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let normal = order(m1.address(), QUOTE, 10, 30, 1);
+        let big = TradeOrder { minFill: U256::from(5), ..order(m2.address(), QUOTE, 10, 20, 1) }; // better price, in the bucket
+        let (v, _) = venue(World::default(), vec![(normal.clone(), sig_of(&m1, oh(&normal))), (big.clone(), sig_of(&m2, oh(&big)))]).await;
+        assert_eq!(v.ticker(1).await.unwrap()["best_ask"], "3");
+        let d = v.depth(1, 5).await.unwrap();
+        assert_eq!(d["asks"].as_array().unwrap().len(), 1);
+        assert_eq!(d["min_fill"]["asks"][0]["price"], "2");
+        assert!(d["min_fill"]["bids"].as_array().unwrap().is_empty());
     }
 
     /// C6-3: the watcher takes leg events only from the DEX, and cancel / invalidation only from the DEX or a SCaaS
