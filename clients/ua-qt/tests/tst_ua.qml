@@ -175,7 +175,7 @@ TestCase {
                 run++
             }
         }
-        compare(run, 56)
+        compare(run, 60)
         // refusals
         const proof = "0x" + "07".repeat(32), ua = "0x" + "01".repeat(32)
         for (const bad of [0x0101, 0x0133]) {  // single-key non-holders refuse a PQZ key (on every pqzReg row's UA)
@@ -262,16 +262,23 @@ TestCase {
                 compare(UaKinds.memberDigest(r.ua, r.message), r.memberDigest, r.id)
         }
         const ua = "0x" + "01".repeat(32)
-        UaKinds.kemRecordDigest(ua, 0, "0x" + "00".repeat(1600))
+        const kem = (n, scheme = "01") => "0x" + scheme + "00".repeat(n - 1) // scheme byte, zeros, n bytes in all
+        UaKinds.kemRecordDigest(ua, 0, kem(1601))
         compare(UaKinds.lastError, "UAKemVersion")
-        UaKinds.kemRecordDigest(ua, 1, "0x" + "00".repeat(1599))
+        UaKinds.kemRecordDigest(ua, 1, kem(1600))
         compare(UaKinds.lastError, "UAKemKeyLength")
-        UaKinds.kemRecordDigest(ua, 1, "0x" + "00".repeat(1601))
+        UaKinds.kemRecordDigest(ua, 1, kem(1602))
         compare(UaKinds.lastError, "UAKemKeyLength")
+        UaKinds.kemRecordDigest(ua, 1, "0x")
+        compare(UaKinds.lastError, "UAKemKeyLength")
+        for (const scheme of ["00", "02", "ff"]) {
+            UaKinds.kemRecordDigest(ua, 1, kem(1601, scheme))
+            compare(UaKinds.lastError, "UAKemScheme", scheme)
+        }
         compare(UaKinds.kemRecordTag(), pp.tags.KEM_RECORD_TAG.hash)
         // known answer at 2^53, the largest version a QML number carries exactly (ua-rs / ua-py pin 2^64 - 1)
-        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, "0x" + "00".repeat(1600)), "0xff3acbe0a43298885ac3679368a3e0a38ceb9fdf63d4a03ed54a4a9d62e0348b")
-        UaKinds.kemRecordDigest(ua, 9007199254740994, "0x" + "00".repeat(1600))
+        compare(UaKinds.kemRecordDigest(ua, 9007199254740992, kem(1601)), "0x044b39422238f0bea9c5d8689f0d3b3d3139c83928ca8c12b30a7238225a673e")
+        UaKinds.kemRecordDigest(ua, 9007199254740994, kem(1601))
         compare(UaKinds.lastError, "UAArgument")
     }
 
