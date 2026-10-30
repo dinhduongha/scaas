@@ -37,9 +37,27 @@ export function clientDataOk(cd, challenge) {
   if (after >= n || s.slice(end + 1, after) !== cross) return false;
   return s[after] === '}' ? after + 1 === n : s[after] === ',';
 }
+/** `[authenticatorData, clientDataJSON]` only if `blob` is their canonical `abi.encode(authenticatorData, clientDataJSON,
+ *  r, s)` (owner 2026-10-30, CTR-UA-33 C; WebAuthnP256Verifier._fields): heads 0x80 and 0xa0 + pad32(len a), each field
+ *  its length word ‖ data ‖ zero padding, no trailing bytes; else null. */
+export function webauthnFields(blob) {
+  const n = blob.length;
+  const pad = (x) => Math.ceil(x / 32) * 32;
+  if (n < 0xc0) return null;
+  const la = wordAt(blob, 0x80);
+  if (la > n) return null;
+  const oc = 0xa0 + pad(la);
+  if (oc + 32 > n) return null;
+  const lc = wordAt(blob, oc);
+  if (lc > n || n !== oc + 32 + pad(lc) || wordAt(blob, 0) !== 0x80 || wordAt(blob, 32) !== oc) return null;
+  const zero = (from, to) => blob.subarray(from, to).every((x) => x === 0);
+  if (!zero(0xa0 + la, oc) || !zero(oc + 32 + lc, n)) return null;
+  return [blob.subarray(0xa0, 0xa0 + la), blob.subarray(oc + 32, oc + 32 + lc)];
+}
 export function webauthnOk(kd, msg, blob) {
-  const authData = bytesAt(blob, 0, 0);
-  const cd = bytesAt(blob, 0, 32);
+  const f = webauthnFields(blob); // checked first
+  if (!f) return false;
+  const [authData, cd] = f;
   if (authData.length < 37 || !eq(authData.subarray(0, 32), kd.subarray(64, 96)) || (authData[32] & 0x05) !== 0x05) return false;
   if (!clientDataOk(cd, msg)) return false;
   return p256Ok(kd.subarray(0, 64), sha256(concatBytes(authData, sha256(cd))), blob.subarray(64, 96), blob.subarray(96, 128));
