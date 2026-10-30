@@ -1,221 +1,29 @@
 //! cargo test --test e2e_soroban -- --ignored --nocapture
 //!
-//! Cần `stellar/quickstart` (local, core+rpc+horizon/friendbot) tại `$STELLAR_URL` (mặc định
-//! `http://127.0.0.1:31980`), CLI `stellar` ≥ 30 tại `$STELLAR_BIN`, và target `wasm32v1-none`.
+//! Needs a running `stellar/quickstart` (core + rpc + friendbot) and the stellar CLI ≥ 30 — env `STELLAR_URL` (the RPC),
+//! `STELLAR_PASSPHRASE`, `STELLAR_FRIENDBOT`, `STELLAR_BIN` (defaults in `soroban_common`: the local quickstart) — and
+//! the `wasm32v1-none` target. `smartcontracts/soroban/scripts/e2e-local.sh` runs this file too.
 //! Chứng minh trên ledger thật với contract thật (R65, R62):
 //! 1. hai lane từ mnemonic 24 từ; chủ thể là ví seed `m/44'/148'/9'` (R32) chỉ KÝ auth entry, không gửi tx;
 //! 2. anti-lock: X (token 1) bị giữ, Y (token 2) qua `lane_step` thành công, rồi X thành công;
 //! 3. phát lại X ⇒ mô phỏng từ chối (nonce đã dùng) ⇒ job chết, không tốn phí;
 //! 4. fee-bump: lane 0 trả phí cho tx của lane 1;
 //! 5. `index_step` đưa `PaymentSettled` + `MetaTransactionExecuted` (digest khớp) về Odoo giả.
-use std::net::SocketAddr;
-use std::process::Command;
+mod soroban_common;
+
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use axum::extract::{Path, State};
-use axum::routing::post;
-use axum::{Json, Router};
 use scaas_node::adapter::{index_step, lane_step, ChainAdapter};
-use scaas_node::adapters::soroban::{network_id, SorobanAdapter};
-use scaas_node::config::{ChainCfg, FinalityCfg, OdooCfg};
-use scaas_node::keys::{lane_secret, Seed};
-use scaas_node::odoo::Odoo;
-use scaas_node::signer::{base32, crc16_xmodem, stellar_account_strkey, LocalSigner, Signer};
+use scaas_node::adapters::soroban::SorobanAdapter;
+use scaas_node::signer::{LocalSigner, Signer};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use soroban_common::*;
 use stellar_xdr::{
-    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ScAddress,
-    ScSymbol, ScVal, SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
+    Hash, HashIdPreimage, HashIdPreimageSorobanAuthorization, Int128Parts, InvokeContractArgs, Limits, ScSymbol, ScVal,
+    SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
 };
-
-const NETWORK: &str = "Standalone Network ; February 2017";
-const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
-    abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
-
-fn url() -> String {
-    std::env::var("STELLAR_URL").unwrap_or_else(|_| "http://127.0.0.1:31980".into())
-}
-
-fn now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
-}
-
-fn key(i: u32) -> LocalSigner {
-    let seed = Seed::from_words(MNEMONIC, None).unwrap();
-    let (curve, k) = lane_secret(&seed, "soroban", i).unwrap();
-    LocalSigner::new(curve, &k).unwrap()
-}
-
-fn g(s: &LocalSigner) -> String {
-    stellar_account_strkey(&s.public_key())
-}
-
-/// `S…` strkey (seed ed25519) cho CLI.
-fn secret(i: u32) -> String {
-    let seed = Seed::from_words(MNEMONIC, None).unwrap();
-    let (_, k) = lane_secret(&seed, "soroban", i).unwrap();
-    let mut p = vec![18u8 << 3];
-    p.extend_from_slice(&k[..]);
-    let crc = crc16_xmodem(&p);
-    p.extend_from_slice(&crc.to_le_bytes());
-    base32(&p)
-}
-
-async fn rpc(method: &str, params: Value) -> Value {
-    let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-    let r: Value = reqwest::Client::new().post(format!("{}/rpc", url())).json(&body).send().await.unwrap().json().await.unwrap();
-    assert!(r.get("error").is_none(), "{method}: {r}");
-    r["result"].clone()
-}
-
-async fn fund(addr: &str) {
-    let r = reqwest::get(format!("{}/friendbot?addr={addr}", url())).await.unwrap();
-    let st = r.status();
-    let body = r.text().await.unwrap();
-    assert!(st.is_success() || body.contains("createAccountAlreadyExist"), "friendbot {addr}: {body}");
-}
-
-fn cli(args: &[&str]) -> String {
-    let bin = std::env::var("STELLAR_BIN").unwrap_or_else(|_| "stellar".into());
-    let rpc = format!("{}/rpc", url());
-    let mut full = args.to_vec();
-    let pos = full.iter().position(|a| *a == "--").unwrap_or(full.len());
-    let net = ["--rpc-url", rpc.as_str(), "--network-passphrase", NETWORK];
-    full.splice(pos..pos, net);
-    let out = Command::new(&bin).args(&full).output().expect("stellar CLI");
-    assert!(out.status.success(), "stellar {}: {}", full.join(" "), String::from_utf8_lossy(&out.stderr));
-    String::from_utf8(out.stdout).unwrap().trim().to_string()
-}
-
-fn wasm(name: &str) -> String {
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/soroban");
-    // soroban-sdk 30 refuses a plain `cargo build` for wasm: stellar-cli >= 30 builds the contract
-    let st = Command::new(std::env::var("STELLAR_BIN").unwrap_or_else(|_| "stellar".into()))
-        .current_dir(dir)
-        .args(["contract", "build", "--package", &format!("scaas-{name}")])
-        .status()
-        .unwrap();
-    assert!(st.success());
-    format!("{dir}/target/wasm32v1-none/release/scaas_{name}.wasm")
-}
-
-/// The token's `registry: Option<Address>` is passed only when set (omitted = `None`, the UA ledger off).
-fn deploy_token(admin_secret: &str, admin: &str, registry: Option<&str>) -> String {
-    let w = wasm("token");
-    let mut args = vec!["contract", "deploy", "--wasm", &w, "--source-account", admin_secret, "--",
-                        "--admin", admin, "--decimals", "7", "--name", "SCaaS", "--symbol", "BMB"];
-    if let Some(r) = registry {
-        args.extend(["--registry", r]);
-    }
-    cli(&args)
-}
-
-fn allowed(from: &str, to: &str) -> bool {
-    matches!(
-        (from, to),
-        ("queued", "nonce_leased")
-            | ("nonce_leased", "queued" | "signed" | "dead")
-            | ("signed", "broadcast" | "mined" | "reverted" | "queued" | "dead")
-            | ("broadcast", "mined" | "reverted" | "broadcast" | "queued" | "dead")
-            | ("mined", "reverted")
-    )
-}
-
-#[derive(Default)]
-struct FakeOdoo {
-    states: std::collections::HashMap<i64, String>,
-    refused: Vec<Value>,
-    jobs: Vec<Value>,
-    reports: Vec<Value>,
-    ingested: Vec<Value>,
-    indexed_block: u64,
-    /// Token contract ids registered in Odoo (strkey `C…`) — the indexer must filter on these.
-    tokens: Vec<String>,
-}
-
-async fn fake(State(s): State<Arc<Mutex<FakeOdoo>>>, Path((model, method)): Path<(String, String)>, Json(body): Json<Value>) -> Json<Value> {
-    let mut o = s.lock().unwrap();
-    let out = match (model.as_str(), method.as_str()) {
-        ("blockchain.chain", "node_config") => json!({
-            "evm_chain_number": body["evm_chain_number"], "finality_mode": "instant", "finality_depth": 0,
-            "finality_quorum": 1, "indexed_block": o.indexed_block,
-            "tokens": o.tokens.iter().map(|t| json!({"address": t, "decimals": 7})).collect::<Vec<_>>(), "journal_max_nonce": null, "inflight": []}),
-        ("blockchain.relay.job", "relay_poll") => json!(std::mem::take(&mut o.jobs)),
-        ("blockchain.relay.job", "relay_claim") => {
-            for id in body["job_ids"].as_array().unwrap() {
-                o.states.insert(id.as_i64().unwrap(), "nonce_leased".into());
-            }
-            body["job_ids"].clone()
-        }
-        ("blockchain.relay.job", "relay_report") => {
-            let id = body["job_id"].as_i64().unwrap();
-            let to = body["chain_state"].as_str().unwrap().to_string();
-            let from = o.states.get(&id).cloned().unwrap_or_else(|| "queued".into());
-            if !allowed(&from, &to) {
-                o.refused.push(body.clone());
-                return Json(json!({"error": format!("Transition {from} -> {to} is not allowed.")}));
-            }
-            o.states.insert(id, to);
-            o.reports.push(body.clone());
-            json!({"ok": true})
-        }
-        ("blockchain.chain.event", "chain_event_ingest") => {
-            assert_eq!(body["from_block"].as_u64().unwrap(), o.indexed_block + 1, "cursor gap");
-            o.indexed_block = body["to_block"].as_u64().unwrap();
-            // Real ingest rejects events of contracts Odoo has not registered.
-            for e in body["events"].as_array().unwrap() {
-                assert!(o.tokens.iter().any(|t| e["contract"] == json!(t)), "event from unregistered contract: {e}");
-            }
-            o.ingested.extend(body["events"].as_array().unwrap().iter().cloned());
-            json!({"indexed_block": o.indexed_block, "created": 0})
-        }
-        _ => json!({"error": "unexpected"}),
-    };
-    Json(out)
-}
-
-async fn start_fake(state: Arc<Mutex<FakeOdoo>>) -> SocketAddr {
-    let app = Router::new().route("/json/2/{model}/{method}", post(fake)).with_state(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    addr
-}
-
-fn odoo_at(addr: SocketAddr) -> Odoo {
-    let cfg = OdooCfg { url: format!("http://{addr}"), database: "t".into(), relay_api_key_env: String::new(), indexer_api_key_env: String::new() };
-    Odoo::with_key(&cfg, "k".into()).unwrap()
-}
-
-fn chain_cfg(fee_bump: bool) -> ChainCfg {
-    let mut params = toml::Table::new();
-    params.insert("network_passphrase".into(), NETWORK.into());
-    if fee_bump {
-        params.insert("fee_bump_lane".into(), 0.into());
-    }
-    ChainCfg {
-        family: "soroban".into(),
-        network: Some("standalone".into()),
-        evm_chain_number: 0,
-        rpc_urls: vec![format!("{}/rpc", url())],
-        signer_key_env: String::new(),
-        private_key: None,
-        lanes: vec![0, 1],
-        params,
-        finality: FinalityCfg { mode: "instant".into(), depth: 0, quorum: 1 },
-        dex: None,
-        poll_ms: 200,
-        stuck_after_secs: 60,
-        max_gas_per_tx: 3_000_000,
-        max_fee_cap_gwei: 500,
-        ..Default::default()
-    }
-}
-
-fn addr(s: &str) -> ScVal {
-    ScVal::Address(s.parse::<ScAddress>().unwrap())
-}
 
 /// Đúng phép dựng của Odoo `fam_soroban.build_terms` (vector chéo ghim ở ba phía).
 struct Signed {
@@ -240,7 +48,7 @@ fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref:
         args: args.clone().try_into().unwrap(),
     };
     let pre = HashIdPreimage::SorobanAuthorization(HashIdPreimageSorobanAuthorization {
-        network_id: Hash(network_id(NETWORK)),
+        network_id: Hash(network()),
         nonce,
         signature_expiration_ledger: exp,
         invocation: SorobanAuthorizedInvocation { function: SorobanAuthorizedFunction::ContractFn(call), sub_invocations: Default::default() },
@@ -251,7 +59,7 @@ fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref:
     let dv = ScVal::Vec(Some(
         vec![
             ScVal::Symbol(ScSymbol("scaas_metaop_v1".try_into().unwrap())),
-            ScVal::Bytes(network_id(NETWORK).to_vec().try_into().unwrap()),
+            ScVal::Bytes(network().to_vec().try_into().unwrap()),
             addr(token),
             ScVal::Symbol(ScSymbol("pay".try_into().unwrap())),
             ScVal::Vec(Some(args.try_into().unwrap())),
@@ -267,14 +75,6 @@ fn sign_pay(subject: &LocalSigner, token: &str, to: &str, amount: i128, pay_ref:
     Signed { job, digest }
 }
 
-fn last_state(o: &FakeOdoo, id: i64) -> String {
-    o.states.get(&id).cloned().unwrap_or_default()
-}
-
-fn report_of(o: &FakeOdoo, id: i64, state: &str) -> Value {
-    o.reports.iter().rev().find(|r| r["job_id"] == id && r["chain_state"] == state).cloned().unwrap_or_default()
-}
-
 #[tokio::test]
 #[ignore]
 async fn soroban_payments_anti_lock_fee_bump_and_finality() {
@@ -288,7 +88,7 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     }
 
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![t1.clone(), t2.clone()], ..Default::default() }));
-    let start = rpc("getLatestLedger", json!({})).await["sequence"].as_u64().unwrap();
+    let start = latest_ledger().await;
     state.lock().unwrap().indexed_block = start - 1;
     let odoo = odoo_at(start_fake(state.clone()).await);
     let signers = [key(0), key(1)];
@@ -327,7 +127,7 @@ async fn soroban_payments_anti_lock_fee_bump_and_finality() {
     assert_eq!(last_state(&state.lock().unwrap(), 4), "mined", "{:?}", state.lock().unwrap().reports);
 
     // Finality: index up to the head; the indexed events carry the digests the subject signed for.
-    let mined: u64 = rpc("getLatestLedger", json!({})).await["sequence"].as_u64().unwrap();
+    let mined = latest_ledger().await;
     for _ in 0..60 {
         let _ = index_step(&adapter, &odoo).await.unwrap();
         if state.lock().unwrap().indexed_block >= mined {
