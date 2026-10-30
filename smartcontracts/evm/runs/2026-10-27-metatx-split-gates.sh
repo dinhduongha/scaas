@@ -80,7 +80,7 @@ run_step() { # the command of one step (runs in a subshell, rc = the step's rc)
 #   move   "[ PASS    ] <addr>::<module>::<name>"
 #   jest   "✓ <name>"     node "✔ <name>"     qt "PASS   : <TestCase>::<name>()"
 #   go "--- PASS: <Test>"   cs "Passed <Test> [" (dotnet verbosity normal)   ctest "Test #n: <name> ... Passed"
-#   dart "<time> +n: <name>" (-r expanded)
+#   dart "<time> +n: <name>" (-r expanded), then "+n+1" with the same "~s -f" tail on the next progress line
 #   pytest "PASSED tests/<file>::<name>[<id>]" (-rA summary)   unittest "<name> (<class>) ... ok"
 # (the plan's test names, as the tasks built them: git diff of the test functions, merge-base..T19;
 #  near-algorand T22: the same for merge-base..T21, plus the existing tests its briefs name; final fix wave: its new
@@ -761,7 +761,15 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
       go) grep -qE "^--- PASS: ${name} \\(" "$D/$P-$step.txt" 2>/dev/null ;;
       cs) grep -qE "^ *Passed ([A-Za-z0-9_]+\\.)*${name} \\[" "$D/$P-$step.txt" 2>/dev/null ;;
       ctest) grep -qE "Test +#[0-9]+: ${name} \\.+ +Passed" "$D/$P-$step.txt" 2>/dev/null ;;
-      dart) sed -E 's/\x1b\[[0-9;]*m//g; s/^[0-9:]+ \+[0-9]+( [-~][0-9]+)*: //; s/^[^ ]+\.dart: //' "$D/$P-$step.txt" 2>/dev/null | grep -qxF "$name" ;;
+      # dart: the expanded reporter prints a name when its test STARTS; it passed only if the next progress line has
+      # "+" one higher and the same "~skipped -failed" tail. Every occurrence (vm, -p node, dart run) must pass.
+      dart) sed -E 's/\x1b\[[0-9;]*m//g' "$D/$P-$step.txt" 2>/dev/null | awk -v n="$name" '
+          match($0, /^[0-9:]+ \+[0-9]+( [-~][0-9]+)*: /) {
+            t = substr($0, RLENGTH + 1); sub(/^[^ ]+\.dart: /, "", t)
+            a = substr($0, 1, RLENGTH - 2); sub(/^[0-9:]+ \+/, "", a); x = a; sub(/^[0-9]+/, "", x); sub(/ .*/, "", a)
+            if (p) { if (a == pa + 1 && x == px) ok++; p = 0 }
+            if (t == n) { p = 1; pa = a; px = x; seen++ } }
+          END { exit !(seen > 0 && ok == seen) }' ;;
       unittest) grep -qE "^${name} \(.*\) \.\.\. ok\$" "$D/$P-$step.txt" 2>/dev/null ;;
     esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
   done <<< "$NEW_TESTS"
@@ -772,9 +780,12 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
     n=$(awk '/^ *Doc-tests /{d=1} /^ *Running /{d=0} /^running 0 tests$/{z=1}
              / 0 passed/{ if (!d && !z) c++; z=0 } END{print c+0}' "$f")
     [ "$n" -eq 0 ] || { echo "named-tests: $s reports 0 passed ($n)"; miss=$((miss + 1)); }
-    grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;|^(=+ )?([0-9]+ [a-z]+, )*[0-9]+ (skipped|deselected|xfailed)' "$f" && { echo "named-tests: $s has a skipped / empty suite"; miss=$((miss + 1)); }
+    # jest / pytest / cargo totals, then the UA-8 client forms: dart "+n ~s", go "--- SKIP", unittest, dotnet, qt, ctest
+    sed -E 's/\x1b\[[0-9;]*m//g' "$f" | grep -qE 'Test Suites:.* skipped|Total tests: 0;|passed: 0;|^(=+ )?([0-9]+ [a-z]+, )*[0-9]+ (skipped|deselected|xfailed)|^[0-9:]+ \+[0-9]+ ~[0-9]|^ *--- SKIP: |^Ran 0 tests|^OK \(.*skipped=| \.\.\. skipped |^ +Skipped( [A-Za-z]|: +[1-9])|^SKIP +: |\*\*\*(Skipped|Not Run)' && { echo "named-tests: $s has a skipped / empty suite"; miss=$((miss + 1)); }
   done
-  echo "named-tests: $(grep -c . <<< "$NEW_TESTS") names, $miss problem(s)"
+  n=$(grep -c . <<< "$NEW_TESTS")
+  [ "$n" -gt 0 ] || { echo "named-tests: NEW_TESTS is empty"; miss=$((miss + 1)); }
+  echo "named-tests: $n names, $miss problem(s)"
   [ $miss -eq 0 ]
 }
 
@@ -791,6 +802,7 @@ if [ -n "$NAMED_TESTS_LOG_DIR" ]; then # the guard self-check: report only, neve
   [ "$only" = named-tests ] || { echo "NAMED_TESTS_LOG_DIR only with --only named-tests" >&2; exit 2; }
   named_tests; exit $?
 fi
+[ -n "${STEPS//[[:space:]]/}" ] || { echo "STEPS is empty" >&2; exit 2; }
 fail=0
 for s in $STEPS; do
   [ -z "$only" ] || [ "$s" = "$only" ] || continue

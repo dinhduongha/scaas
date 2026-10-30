@@ -9,7 +9,9 @@
 # Owner rule 2026-10-23: when a docker job is running (docker ps), run with CAPPED_SLOTS=1.
 P=2026-10-30-ua8
 STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb named-tests"
-FAMILIES=""
+# the skipped / empty-suite check (base runner) over every client step; clientkeys keeps its 2 environmental skips
+# (the vendored-bundle tests), so it is checked by its named tests only
+FAMILIES="ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb"
 # "<step>|<form>|<name>": every test name added by Tasks A1-A11, in its tool's pass form (forms: see the base runner)
 NEW_TESTS=$(cat <<'NAMES'
 forge|forge|test_T_GAS_register_ua8PerKind
@@ -137,5 +139,4 @@ ua-dart-frb|dart|personal_sign of the portable purposes
 ua-dart-frb|dart|holder refusals
 NAMES
 )
-export P STEPS FAMILIES NEW_TESTS
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
