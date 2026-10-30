@@ -733,7 +733,7 @@ sequenceDiagram
     LANE->>REG: register(kind, keyData, attrs, pop, pqzPop)
     REG->>VER: verify the PoP, capped staticcall
     VER-->>REG: valid
-    REG->>REG: store the record and every field, UARegistered(ua, kind, keyData, attrs, pop, pqzPop, checked)
+    REG->>REG: store the record and every field, UARegistered(ua, kind, keyData, attrs, popHash, pqzPop, checked)
     APP->>REG: registrationOf(ua), checkedOf(ua)
 ```
 

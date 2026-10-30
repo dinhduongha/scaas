@@ -3,7 +3,7 @@
 //! (a Dart exception). Byte data is `Uint8List` (`Vec<u8>`), ids and digests are fixed-size arrays.
 use flutter_rust_bridge::frb;
 
-/// `code` is one of the shared codes (the seven of the vector files plus `UAPqzHolder`, `UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`) (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
+/// `code` is one of the shared codes (the seven of the vector files plus `UAPqzHolder`, `UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAKemScheme`, `UAPqzPopHash`, `UAPqzKeySet`) (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
 /// as in the cxx and pure-Dart libraries.
 ///
 /// Integers are `i64` so a Dart value cannot wrap at the Rust width: a kind outside 0..=0xFFFF is `UAKindUnknown`; a chain
@@ -177,7 +177,7 @@ pub fn portable_pop_digest(ua: [u8; 32], pqz_key_hash: [u8; 32], kem_record_hash
 pub fn registration_digest(portable: [u8; 32], pqz_pop_hash: [u8; 32]) -> [u8; 32] {
     scaas_ua::ua8::registration_digest(&portable, &pqz_pop_hash)
 }
-/// A KEM record attribute `(version >= 1, 1,600-byte key)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
+/// A KEM record attribute `(version >= 1, 1,601-byte key: scheme byte 1 first)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
 /// `BigInt`: 1 ... 2^64 - 1).
 pub struct KemRecord {
     pub version: u64,
@@ -186,7 +186,7 @@ pub struct KemRecord {
 fn kem(k: &Option<KemRecord>) -> Option<(u64, &[u8])> {
     k.as_ref().map(|k| (k.version, k.pk.as_slice()))
 }
-/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0, `UAKemKeyLength` unless 1,600 bytes).
+/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 #[frb(sync)]
 pub fn kem_record_digest(ua: [u8; 32], version: u64, kem_pk: Vec<u8>) -> R<[u8; 32]> {
     Ok(scaas_ua::ua8::kem_record_digest(&ua, version, &kem_pk)?)

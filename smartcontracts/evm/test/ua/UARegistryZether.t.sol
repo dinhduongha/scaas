@@ -67,7 +67,7 @@ contract UARegistryZetherTest is UARegistryBase {
         bytes32 ua = UAKinds.uaOf(ZK, y);
         bytes memory pop = _zpop(zreg, X1);
         vm.expectEmit(true, true, false, true, address(zreg));
-        emit IUARegistry.UARegistered(ua, ZK, y, _none(), pop, "", 1, 0, 0);
+        emit IUARegistry.UARegistered(ua, ZK, y, _none(), keccak256(pop), "", 1, 0, 0);
         uint256 g = gasleft();
         assertEq(zreg.register(ZK, y, _none(), pop, ""), ua);
         console.log("register zether-bls12381", g - gasleft());

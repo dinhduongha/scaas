@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -69,7 +70,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         }
         assertEq(rows, 10, "derived kinds");
         assertEq(nSigs, 22, "derived sigs");
-        assertEq(nNegs, 91, "derived negatives");
+        assertEq(nNegs, 99, "derived negatives");
     }
 
     function _derivedRow(uint256 i) internal {
@@ -110,15 +111,17 @@ contract UARegistryVectorsTest is UARegistryBase {
         return _d(i, string.concat("negatives[", vm.toString(n), "].", f));
     }
 
-    /// A stored kind (zether-bls12381) carries an empty keyData in its auth.
-    function _authKey(uint256 i, bytes memory k) internal view returns (bytes memory) {
-        return vm.keyExistsJson(sj, _d(i, "stored")) ? bytes("") : k;
+    /// A stored kind (zether-bls12381) carries an empty keyData in its auth, and so does every signature under
+    /// `member` (CTR-UA-33: the registry reads the key from the id's record).
+    function _authKey(uint256 i, bytes memory k, bytes32 p) internal view returns (bytes memory) {
+        return vm.keyExistsJson(sj, _d(i, "stored")) || p == UAKinds.PURPOSE_MEMBER ? bytes("") : k;
     }
 
     function _derivedSig(uint256 i, uint256 s, bytes memory k, bytes32 ua) internal {
         string memory row = string.concat("sigs[", vm.toString(s), "].");
         bytes32 p = _purposeTag(vm.parseJsonString(sj, _d(i, string.concat(row, "purpose"))));
-        bytes memory auth = abi.encode(_authKey(i, k), vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
+        bytes memory auth = abi.encode(_authKey(i, k, p), vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
+        if (p == UAKinds.PURPOSE_MEMBER && k.length != 0) _memberKeyRefused(i, row, k, ua);
         bytes32 dg = vm.parseJsonBytes32(sj, _d(i, string.concat(row, "digest")));
         uint256 g = gasleft();
         reg.requireAuthorized(ua, p, dg, auth);
@@ -126,14 +129,22 @@ contract UARegistryVectorsTest is UARegistryBase {
         if (s == 0) emit log_named_uint(string.concat("requireAuthorized ", vm.parseJsonString(sj, _d(i, "name"))), g);
     }
 
+    /// CTR-UA-33: under `member` the key data in auth is refused, even the id's own.
+    function _memberKeyRefused(uint256 i, string memory row, bytes memory k, bytes32 ua) internal {
+        bytes memory auth = abi.encode(k, vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
+        bytes32 dg = vm.parseJsonBytes32(sj, _d(i, string.concat(row, "digest")));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_MEMBER, dg, auth);
+    }
+
     /// Verify-side negatives: the registry is asked exactly the row's message under metatx or member.
     function _derivedNegative(uint256 i, uint256 n, uint16 kind, bytes memory k, bytes32 ua) internal {
         bytes32 m = vm.parseJsonBytes32(sj, _neg(i, n, "message"));
-        bytes memory auth = abi.encode(_authKey(i, k), vm.parseJsonBytes(sj, _neg(i, n, "sig")));
         bytes32 p;
         if (m == UAKinds.uaMessage(kind, UAKinds.PURPOSE_METATX, digest)) p = UAKinds.PURPOSE_METATX;
         else if (m == UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, digest)) p = UAKinds.PURPOSE_MEMBER;
         else revert(string.concat(vm.parseJsonString(sj, _neg(i, n, "name")), ": a message the registry never asks"));
+        bytes memory auth = abi.encode(_authKey(i, k, p), vm.parseJsonBytes(sj, _neg(i, n, "sig")));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         reg.requireAuthorized(ua, p, digest, auth);
     }
@@ -239,7 +250,75 @@ contract UARegistryVectorsTest is UARegistryBase {
                 reg.requireAuthorized(ua, p, dg, auth);
             }
         }
-        assertEq(sets, 9, "msig sets");
+        assertEq(sets, 10, "msig sets");
         assertEq(valid, 2);
+    }
+
+    uint256 internal constant N_P256 = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
+
+    /// msig-pophash review M2: an msig whose `webauthn-p256` member (signatures.json derived[0]) is registered with its
+    /// PoP through the real `WebAuthnP256Verifier.verifyPop`, then signs a fresh assertion under `member` that the real
+    /// `verify` checks inside `requireAuthorized` (2-of-2 with the `p256` member, derived[1]). The same assertion off its
+    /// canonical encoding (CTR-UA-33 C), or carrying the member's key data (CTR-UA-33 B), is refused.
+    function test_msig_webauthnMember_realVerifier() public {
+        Member[] memory m = new Member[](2);
+        uint256[2] memory sk;
+        for (uint256 i; i < 2; ++i) {
+            uint16 kind = uint16(vm.parseJsonUint(sj, _d(i, "kind")));
+            assertEq(kind, i == 0 ? UAKinds.WEBAUTHN_P256 : 0x0101);
+            bytes memory k = vm.parseJsonBytes(sj, _d(i, "keyData"));
+            m[i] = Member(kind, reg.register(kind, k, _none(), vm.parseJsonBytes(sj, _d(i, "pop.sig")), ""), 1);
+            sk[i] = vm.parseJsonUint(sj, _d(i, "secret"));
+        }
+        bytes memory waKey = vm.parseJsonBytes(sj, _d(0, "keyData"));
+        bytes memory d = _msigKey(2, m); // sorts m by id
+        bytes32 ua = reg.register(UAKinds.MSIG, d, _none(), "", "");
+        bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, digest);
+
+        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
+        bytes memory wa;
+        for (uint256 i; i < 2; ++i) {
+            bool isWa = m[i].kind == UAKinds.WEBAUTHN_P256;
+            bytes32 msg_ = UAKinds.uaMessage(m[i].kind, UAKinds.PURPOSE_MEMBER, md);
+            bytes memory sig = isWa ? _assertion(sk[0], bytes32(_slice32(waKey, 64)), msg_) : _p256(sk[1], msg_);
+            if (isWa) wa = sig;
+            s[i] = UARegistry.MemberSig(_indexOf(d, m[i].id), "", sig);
+        }
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
+
+        uint256 w = m[0].kind == UAKinds.WEBAUTHN_P256 ? 0 : 1;
+        s[w].sig = bytes.concat(wa, hex"00"); // a trailing byte: not the canonical encoding
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
+        (s[w].sig, s[w].keyData) = (wa, waKey);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, digest, _msigAuth(d, s));
+    }
+
+    /// A WebAuthn assertion over `m` (flags UP | UV, any origin), canonical `abi.encode(authData, clientDataJSON, r, s)`.
+    function _assertion(uint256 pk, bytes32 rpIdHash, bytes32 m) internal pure returns (bytes memory) {
+        bytes memory a = abi.encodePacked(rpIdHash, bytes1(0x05), uint32(1));
+        bytes memory c = abi.encodePacked(
+            '{"type":"webauthn.get","challenge":"', Base64.encodeURL(abi.encodePacked(m)), '","origin":"https://m2.example"}'
+        );
+        (bytes32 r, bytes32 s) = _lowS(pk, sha256(abi.encodePacked(a, sha256(c))));
+        return abi.encode(a, c, r, s);
+    }
+
+    /// `p256` (0x0101): low-s `r ‖ s` over sha256(m).
+    function _p256(uint256 pk, bytes32 m) internal pure returns (bytes memory) {
+        (bytes32 r, bytes32 s) = _lowS(pk, sha256(abi.encodePacked(m)));
+        return abi.encodePacked(r, s);
+    }
+
+    function _lowS(uint256 pk, bytes32 h) internal pure returns (bytes32 r, bytes32 s) {
+        (r, s) = vm.signP256(pk, h);
+        if (uint256(s) > N_P256 / 2) s = bytes32(N_P256 - uint256(s));
+    }
+
+    function _slice32(bytes memory b, uint256 o) internal pure returns (uint256 w) {
+        assembly ("memory-safe") {
+            w := mload(add(add(b, 32), o))
+        }
     }
 }

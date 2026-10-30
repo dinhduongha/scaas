@@ -305,8 +305,12 @@ var (
 	pqzKeyPurpose, _ = PurposeTag("pqz-key")
 )
 
-// KemPkLength is the one KEM key the registry stores: ML-KEM-1024 ek ‖ X25519 pk (X-Wing order).
-const KemPkLength = 1600
+// KemSchemeMlkem1024X25519 is kemPk[0] of the one enabled KEM scheme (CTR-UA-32); 2 (ML-KEM-1024 + HQC + X25519, after
+// FIPS 207) is reserved and refused (UAKemScheme).
+const KemSchemeMlkem1024X25519 = 1
+
+// KemPkLength is the one KEM key the registry stores: 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order).
+const KemPkLength = 1601
 
 // PortablePopDigest is keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash), each hash zero when absent (UA-8 P1: no chain).
 func PortablePopDigest(ua, pqzKeyHash, kemRecordHash [32]byte) [32]byte {
@@ -318,10 +322,14 @@ func RegistrationDigest(portable, pqzPopHash [32]byte) [32]byte {
 	return Keccak256(portable[:], pqzPopHash[:])
 }
 
-// KemRecordDigest is keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk)): version 1 … 2^64 − 1, a 1,600-byte key.
+// KemRecordDigest is keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk)): version 1 … 2^64 − 1, kemPk = scheme byte ‖ key (empty: UAKemKeyLength;
+// scheme not enabled: UAKemScheme; another length: UAKemKeyLength).
 func KemRecordDigest(ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
 	if version == 0 {
 		return [32]byte{}, fail("UAKemVersion", "0")
+	}
+	if len(kemPk) > 0 && kemPk[0] != KemSchemeMlkem1024X25519 {
+		return [32]byte{}, fail("UAKemScheme", strconv.Itoa(int(kemPk[0])))
 	}
 	if len(kemPk) != KemPkLength {
 		return [32]byte{}, fail("UAKemKeyLength", strconv.Itoa(len(kemPk)))

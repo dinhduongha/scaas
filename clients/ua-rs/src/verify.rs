@@ -83,11 +83,21 @@ fn word_usize(b: &[u8], o: usize) -> Option<usize> {
     let w = b.get(o..o.checked_add(32)?)?;
     w[..24].iter().all(|x| *x == 0).then(|| w[24..].iter().fold(0usize, |a, x| (a << 8) | *x as usize))
 }
-/// The dynamic `bytes` whose offset (relative to `base`) sits at `head`.
-fn abi_bytes(b: &[u8], base: usize, head: usize) -> Option<&[u8]> {
-    let o = base.checked_add(word_usize(b, head)?)?;
-    let n = word_usize(b, o)?;
-    b.get(o + 32..(o + 32).checked_add(n)?)
+/// `(authenticatorData, clientDataJSON)` of the WebAuthn blob, only if `sig` is their canonical
+/// `abi.encode(authenticatorData, clientDataJSON, r, s)` (owner 2026-10-30, CTR-UA-33 C; `WebAuthnP256Verifier._fields`):
+/// heads 0x80 and 0xa0 + pad32(len a), each field its length word ‖ data ‖ zero padding, no trailing bytes.
+fn webauthn_fields(sig: &[u8]) -> Option<(&[u8], &[u8])> {
+    let pad = |n: usize| n.checked_add(31).map(|x| x / 32 * 32);
+    let n = sig.len();
+    let la = word_usize(sig, 0x80).filter(|x| *x <= n)?;
+    let oc = 0xa0 + pad(la)?;
+    let lc = word_usize(sig, oc).filter(|x| *x <= n)?;
+    let (ea, ec) = (0xa0 + la, oc + 32 + lc);
+    let canonical = n == oc + 32 + pad(lc)?
+        && word_usize(sig, 0) == Some(0x80)
+        && word_usize(sig, 32) == Some(oc)
+        && sig[ea..oc].iter().chain(&sig[ec..]).all(|x| *x == 0);
+    canonical.then(|| (&sig[0xa0..ea], &sig[oc + 32..ec]))
 }
 
 fn base64url(data: &[u8]) -> String {
@@ -125,10 +135,10 @@ fn client_data_ok(cd: &[u8], challenge: &[u8; 32]) -> bool {
     if cd[after] == b'}' { after + 1 == n } else { cd[after] == b',' }
 }
 
-/// `abi.encode(bytes authenticatorData, string clientDataJSON, uint256 r, uint256 s)`.
+/// `abi.encode(bytes authenticatorData, string clientDataJSON, uint256 r, uint256 s)`, canonical only (checked first).
 fn webauthn_p256(key_data: &[u8], message: &[u8; 32], sig: &[u8]) -> bool {
-    let (Some(auth), Some(cd)) = (abi_bytes(sig, 0, 0), abi_bytes(sig, 0, 32)) else { return false };
-    if key_data.len() != 96 || sig.len() < 128 || auth.len() < 37 || auth[..32] != key_data[64..96] || auth[32] & 0x05 != 0x05 {
+    let Some((auth, cd)) = webauthn_fields(sig) else { return false };
+    if key_data.len() != 96 || auth.len() < 37 || auth[..32] != key_data[64..96] || auth[32] & 0x05 != 0x05 {
         return false;
     }
     client_data_ok(cd, message) && p256_ok(&key_data[..64], &sha256(&[auth, &sha256(&[cd])]), &sig[64..128])

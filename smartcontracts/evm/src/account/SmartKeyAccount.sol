@@ -297,11 +297,14 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
         return false;
     }
 
-    /// @dev WebAuthn assertion (CTR-ACC-08): rpIdHash, flags UP and UV, clientDataJSON, then P-256 over
+    /// @dev WebAuthn assertion (CTR-ACC-08): the canonical `abi.encode(authenticatorData, clientDataJSON, r, s)` only
+    ///      (CTR-UA-33 C, owner 2026-10-30: byte-equal to its re-encoding, first; a blob `abi.decode` cannot read
+    ///      reverts, which ERC-1271 callers read as a refusal), rpIdHash, flags UP and UV, clientDataJSON, then P-256 over
     ///      `sha256(authenticatorData ‖ sha256(clientDataJSON))`. `P256.verify` refuses s > n/2 (clients normalise).
     function _verifyWebAuthn(SubjectKey storage k, bytes32 message, bytes memory sig) private view returns (bool) {
         (bytes memory authData, bytes memory clientData, bytes32 r, bytes32 s) =
             abi.decode(sig, (bytes, bytes, bytes32, bytes32));
+        if (keccak256(abi.encode(authData, clientData, r, s)) != keccak256(sig)) return false;
         if (authData.length < 37) return false;
         bytes32 rpIdHash;
         assembly ("memory-safe") { rpIdHash := mload(add(authData, 32)) }

@@ -32,6 +32,8 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         secp256k1, 64 on bn254) with SSTORE2 as `keyPtr`. `requireAuthorized` takes `auth = abi.encode(bytes keyData,
 ///         bytes sig)` with `keyData` empty (non-empty ⇒ `UAUnauthorized`) and verifies `sig` against `vk` read from the
 ///         record's `keyPtr`; an `msig` member of a stored kind is checked the same way through the member's own record.
+///         Every `msig` member signature (purpose `member`; CTR-UA-33, owner 2026-10-30) carries an empty `keyData`: a
+///         classical member's key is read from its registration blob (`_reg`), a stored member's from its `keyPtr`.
 ///
 ///         Zether kinds (UA-3; CTR-UA-16, UA-6): the Zether key is the UA (no `authRef`); the PoP is a Zether Schnorr
 ///         by `x` over the portable registration message (UA-8); `Y` is stored with SSTORE2 like a group key, so
@@ -94,16 +96,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// @notice EIP-7825 per-transaction gas cap, the bound of a PQZ `msig` holder (`_attrs`).
     uint256 internal constant TX_GAS_CAP = 1 << 24;
     /// @notice Registration bound for `msig` (register step 4): gas per member beyond its cap — MemberSig decoding,
-    ///         `uaOf`, `uaMessage`, the call or the gen-1 hand-off, cold accounts (measured worst, cold under
-    ///         `--isolate`: 19,987 for a member handed to gen 1), plus what the caller must hold for the largest cap
-    ///         (400 k / 63 + 5 k): 31,336, rounded up. Also added in `_membersWorst`: `(held - 400 k) / 63` for the
-    ///         largest held member cap above 400 k, and for each member gen 2 hands to gen 1 the hold gen 2 keeps
+    ///         `uaOf`, `uaMessage`, the member's key read from its record (CTR-UA-33: the key bytes only, never the
+    ///         member's `pop`, so the figure does not depend on how the member registered), the call or the gen-1
+    ///         hand-off, cold accounts (measured worst, cold under `--isolate`: 28,544 for a member handed to gen 1,
+    ///         21,224 for a derived member here), plus what the caller must hold for the largest cap (400 k / 63 + 5 k):
+    ///         39,893, rounded up (35,000 before CTR-UA-33: 19,987 + 11,349 = 31,336). Also added in `_membersWorst`:
+    ///         `(held - 400 k) / 63` for the largest held member cap above 400 k, and for each member gen 2 hands to gen 1 the hold gen 2 keeps
     ///         around that call (the member counts `cap + cap / 63 + SigCheck.GAS_MARGIN`; gen 1 holds again
     ///         inside). `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
     ///         registered exactly at `verifyBudget` within `verifyBudget`. `test_T_GAS_msigPqAtBudget` covers PQ signatures
-    ///         (8 x `slhdsa128s`, 7,856 B each, + 1 clone, exactly at the bound 11,930,873; least frame gas 11,873,766, 57 k
-    ///         spare): no per-kind size term (review2 C4-2).
-    uint256 internal constant MSIG_MEMBER_GAS = 35_000;
+    ///         (8 x `slhdsa128s`, 7,856 B each, + 1 clone, exactly at the bound 12,020,873; least frame gas 11,875,412,
+    ///         145 k spare): no per-kind size term (review2 C4-2).
+    uint256 internal constant MSIG_MEMBER_GAS = 45_000;
     /// `keccak256("")`: the hash of an empty proof, refused as a `pqzPopHash` (ruling A6-m).
     bytes32 internal constant EMPTY_PROOF_HASH = keccak256("");
 
@@ -344,6 +348,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         keyData = bytes.concat(SSTORE2.read(keyPtr), rest);
     }
 
+    /// The `keyRest` of a record held here, read alone (msig-pophash I1: never the blob's `pop`, whose length the
+    /// member does not bound): the blob `abi.encode(keyRest, pop, kemVersion)` has `keyRest`'s length at 0x60 and its
+    /// bytes from 0x80, in chunk 0 (key data of a non-stored kind: at most 256 B, an `msig` 580 B; chunks 32,768 B).
+    function _keyRest(bytes32 ua) private view returns (bytes memory) {
+        address p = _reg[ua][0];
+        return SSTORE2.read(p, 0x80, uint256(bytes32(SSTORE2.read(p, 0x60, 32))));
+    }
+
     function popOf(bytes32 ua) external view returns (bytes memory pop) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).popOf(ua);
         if (_records[ua].kind == 0) return pop;
@@ -388,7 +400,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _kemAt(ua, version);
     }
 
-    /// The stored record `pk ‖ sig` of `(ua, version)` split at the 1,600-byte key; ("", "") when not stored.
+    /// Empty -> `UAKemKeyLength`; scheme id (first byte) not enabled -> `UAKemScheme`; other length -> `UAKemKeyLength`.
+    function _checkKemPk(bytes memory pk) private pure {
+        if (pk.length == 0) revert UAKemKeyLength(0);
+        if (uint8(pk[0]) != UAKinds.KEM_SCHEME_MLKEM1024_X25519) revert UAKemScheme(uint8(pk[0]));
+        if (pk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(pk.length);
+    }
+
+    /// The stored record `pk ‖ sig` of `(ua, version)` split at the 1,601-byte scheme-1 key; ("", "") when not stored.
     function _kemAt(bytes32 ua, uint64 version) private view returns (bytes memory pk, bytes memory sig) {
         bytes memory b = SSTORE2.readChunks(_kem[ua][version]);
         if (b.length == 0) return (pk, sig);
@@ -562,13 +581,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         _reg[ua] = SSTORE2.writeChunks(abi.encode(keyData[vl:], pop, v));
     }
 
-    /// Step 8, the event: every argument and the three `checkedOf` values (read back from storage: `register`'s stack
-    /// has no room for them).
+    /// Step 8, the event: every argument (`pop` as `keccak256(pop)`, CTR-UA-33) and the three `checkedOf` values (read
+    /// back from storage: `register`'s stack has no room for them).
     function _registered(bytes32 ua, uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) private
     {
         (uint8 q, uint8 k) = (_checked(_pqzKey[ua].proven), _checked(_kemMax[ua] != 0));
-        emit UARegistered(ua, kind, keyData, attrs, pop, pqzPop, UAKinds.CHECKED_CHAIN, q, k);
+        emit UARegistered(ua, kind, keyData, attrs, keccak256(pop), pqzPop, UAKinds.CHECKED_CHAIN, q, k);
     }
 
     /// Steps 1–4: kind enabled, key data canonical, the id (not native-space, not registered here or in gen 1), the
@@ -606,7 +625,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds
     /// 2^24; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
     /// `UAKeyData(0x0142)` for a PQZ key of no parameter set's length; `UAKemVersion` for version 0 with a key,
-    /// `UAKemKeyLength` for a KEM key other than 1,600 B; `UAKindDisabled(0x0142)` for a PQZ key on a gen 2 whose gen 1
+    /// `UAKemKeyLength` for a KEM key other than the scheme-1 length (1,601 B); `UAKemScheme` for a scheme id not enabled; `UAKindDisabled(0x0142)` for a PQZ key on a gen 2 whose gen 1
     /// enables 0x0142 (ruling A5-I1). The PQZ key's owner (`UAKeyInUse`) is step 7, for a proven key.
     function _attrs(uint16 kind, bytes memory d, bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop)
         private
@@ -624,7 +643,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes32 kemHash;
         if (kem) {
             if (v == 0) revert UAKemVersion(ua, 0);
-            if (attrs.kemPk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(attrs.kemPk.length);
+            _checkKemPk(attrs.kemPk);
             kemHash = UAKinds.kemRecordDigest(ua, v, attrs.kemPk);
         }
         portable = UAKinds.portablePopDigest(ua, h, kemHash);
@@ -800,7 +819,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (bytes memory d,,) = _registration(ua, r.keyPtr);
         if (!_holder(r.kind, d)) revert UAKemHolder(ua);
         if (version == 0 || _kem[ua][version].length != 0) revert UAKemVersion(ua, version);
-        if (kemPk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(kemPk.length);
+        _checkKemPk(kemPk);
         bytes32 rd = UAKinds.kemRecordDigest(ua, version, kemPk);
         if (!_sigOk(r.kind, d, ua, UAKinds.PURPOSE_KEM, rd, sig)) revert UAUnauthorized(ua);
         _kem[ua][version] = SSTORE2.writeChunks(bytes.concat(kemPk, sig));
@@ -911,8 +930,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// A derived id of `kind` (taken from the record, or from the structure for members): key data against the id
-    /// (stored kinds: `keyData` empty, `vk` from the id's own record), then the kind's verifier, `msig`, or gen 1 for
-    /// a kind this generation does not enable.
+    /// (stored kinds, and every member signature — purpose `member`, CTR-UA-33: `keyData` empty, the key from the id's
+    /// own record: `vk` at `keyPtr`, else the key data in the registration blob), then the kind's verifier, `msig`, or
+    /// gen 1 for a kind this generation does not enable (handed on with the empty `keyData`: gen 1 reads its record).
     function _derived(
         bytes32 id,
         uint16 kind,
@@ -922,17 +942,22 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes memory sig
     ) private view returns (bool) {
         uint256 cfg = _cfg(kind);
-        if (_vkLength(kind) != 0) {
-            if (keyData.length != 0) return false; // CTR-UA-17: auth carries only the signature
+        uint256 vl = _vkLength(kind);
+        if (vl != 0 || purposeTag == UAKinds.PURPOSE_MEMBER) {
+            if (keyData.length != 0) return false; // CTR-UA-17 / CTR-UA-33: auth carries only the signature
             if (uint160(cfg) != 0) {
                 Record memory r = _records[id];
                 if (r.kind != kind) return false;
-                bytes memory ek = _expanded(id, kind);
-                if (ek.length != 0) {
-                    bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
-                    return _verifierCall(cfg, UAMldsaVerifier.verifyCached.selector, ek, m, sig);
+                if (vl == 0) {
+                    keyData = _keyRest(id);
+                } else {
+                    bytes memory ek = _expanded(id, kind);
+                    if (ek.length != 0) {
+                        bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
+                        return _verifierCall(cfg, UAMldsaVerifier.verifyCached.selector, ek, m, sig);
+                    }
+                    keyData = SSTORE2.read(r.keyPtr);
                 }
-                keyData = SSTORE2.read(r.keyPtr);
             }
         } else if (UAKinds.uaOf(kind, keyData) != id) {
             return false;
@@ -973,7 +998,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return acc >= threshold;
     }
 
-    /// One `msig` member's signature over `md` under `member` (a native one without key data; `portable`: `_msig`).
+    /// One `msig` member's signature over `md` under `member`, without key data (native: none; registered: `_derived`
+    /// reads the member's record, CTR-UA-33); `portable`: `_msig`.
     function _memberOk(uint16 kind, bytes32 id, bytes32 md, MemberSig memory s, bool portable)
         private
         view

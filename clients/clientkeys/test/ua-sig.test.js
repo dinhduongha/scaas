@@ -15,7 +15,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha512 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
-import { int, B, eq, attempt, wordAt, bytesAt, ED_L, leInt, edNoble, ed25519Ok, verify, SECP_N, nativeOk } from './ua-verify.js';
+import { int, B, eq, attempt, wordAt, bytesAt, webauthnFields, ED_L, leInt, edNoble, ed25519Ok, verify, SECP_N, nativeOk } from './ua-verify.js';
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('signatures.json', dir)));
 const FUZZ = JSON.parse(readFileSync(new URL('ed25519_fuzz.json', dir)));
@@ -66,6 +66,24 @@ test('derived kinds: every negative fails', () => {
   }
 });
 
+// CTR-UA-33 C (owner 2026-10-30): the abi-* rows are refused by the canonical-encoding rule itself — webauthnFields, the
+// verifier's first check, refuses each — and all but the two length words decode, leniently, to the positive's own fields.
+test('webauthn-p256: the abi-* negatives are refused by the canonical rule alone', () => {
+  const r = V.derived.find((x) => x.kind === 0x0100);
+  const pos = B(r.sigs[0].sig);
+  assert.ok(webauthnFields(pos));
+  const rows = r.negatives.filter((n) => n.name.startsWith('abi-'));
+  assert.equal(rows.length, 8);
+  for (const n of rows) {
+    const b = B(n.sig);
+    assert.equal(n.message, r.sigs[0].message, n.name);
+    assert.equal(webauthnFields(b), null, n.name);
+    if (n.name.includes('length-beyond')) continue; // no decoder reads the canonical fields from these
+    const lenient = [bytesAt(b, 0, 0), bytesAt(b, 0, 32), b.subarray(64, 128)];
+    assert.ok(eq(concatBytes(...lenient), concatBytes(...webauthnFields(pos), pos.subarray(64, 128))), `${n.name}: same fields`);
+  }
+});
+
 test('native EOA: UAAuth signatures verify, negatives fail', () => {
   const N = V.native;
   assert.equal(hex(ua.nativeId(0x0001, B(N.address))), N.ua);
@@ -87,7 +105,10 @@ test('native EOA: UAAuth signatures verify, negatives fail', () => {
   assert.equal(hex(keccak_256(secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1)).subarray(12)), N.address);
 });
 
-/** The registry's msig path (§1.9): auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])). */
+/** The registered derived keys (id → keyData): the records the registry reads a member's key from (CTR-UA-33). */
+const registered = new Map(V.derived.map((r) => [`${r.kind}:${r.ua}`, r.keyData])); // by (kind, id), as `_derived`
+/** The registry's msig path (§1.9): auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])); every MemberSig
+ *  carries an empty keyData (native: R12; registered: CTR-UA-33, the key comes from the member's record). */
 function msigOk(structureUa, purposeTag, digest, auth) {
   return attempt(() => {
     const keyData = bytesAt(auth, 0, 0);
@@ -115,7 +136,8 @@ function msigOk(structureUa, purposeTag, digest, auth) {
       const sig = bytesAt(sigs, t, t + 64);
       const ok = ua.isNativeKind(kind)
         ? mkd.length === 0 && nativeOk(hex(id.subarray(12)), ua.uaAuthDigest(domain(V.msig.context, V.msig.generation), id, tag('member'), md), hex(sig))
-        : eq(ua.uaOf(kind, mkd), id) && verify(kind, hex(mkd), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig));
+        : mkd.length === 0 && registered.has(`${kind}:${hex(id)}`)
+          && verify(kind, registered.get(`${kind}:${hex(id)}`), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig)); // CTR-UA-33
       if (!ok) return false;
       sum += weight;
     }
@@ -136,7 +158,7 @@ test('msig: structure id, members, every set gives its verdict', () => {
     assert.equal(hex(ua.memberDigest(B(M.ua), ua.uaMessage(0x0120, tag(s.purpose), B(s.digest)))), s.memberDigest);
     assert.equal(msigOk(B(M.ua), tag(s.purpose), B(s.digest), B(s.auth)), s.valid, s.name);
   }
-  assert.equal(M.sets.length, 9);
+  assert.equal(M.sets.length, 10);
   assert.equal(M.sets.filter((s) => s.valid).length, 2);
 });
 

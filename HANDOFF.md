@@ -1,14 +1,54 @@
-## Session 2026-10-30 (part 2: UA-8 + no7702 merged and pushed, token rename, 4b Soroban spec + plan) — resume here
+## Session 2026-10-30 (part 3: paused for shutdown) — resume here
+
+**State (owner paused 2026-10-30 to shut down):** nothing running — every agent stopped, no Docker container of ours,
+no `capped` job. All WIP is committed on its branch (nothing pushed from the branches). `main` = this note, ahead of
+origin by the commits after `04472c24` (UA-Soroban rename `e5d913a7`, DEX spec / plan merge `c2cfc223` and the
+restorePulled amendment `6e166897`, the no-Falcon-DET-1024 TODO line `3fe8d60e`, this note); push on the owner's word.
+CI is green on origin `04472c24`.
+
+**Branches in flight** (worktrees under `.claude/worktrees/`; ledgers under `.superpowers/sdd/`, git-ignored):
+1. **`dex-round`** (worktree `dex-round`; plan `docs/superpowers/plans/2026-10-30-dex-round.md`; ledger
+   `2026-10-30-dex-round/progress.md`): T1 (minFill floor removed), T2 (`InteractionFailed`), T3 (`mtxHybrid` /
+   `mtxHybridVia`) done and reviewed; **T4 WIP `b45c4322`** (DX7 refund + `restorePulled`; not compiled). T4 must also
+   forbid both `restorePulled` selectors in `_interact` (T3 review: a submitter interaction runs as the DEX = `o.dex` and
+   could over-sell an order) and add the T3 review tests m1–m4; attack tests saved in `scratchpad/dex-round-DexHybridAttack.t.sol`.
+   `test_dexKat` stays red until T9. Then T5–T19.
+2. **`ua-soroban`** (worktree `soroban-4b`; plan `docs/superpowers/plans/2026-10-30-ua-soroban.md`; ledger
+   `2026-10-30-soroban-4b/progress.md`): **T0 WIP `53e8501d`** (Protocol 30 spike: crate + quickstart / run / measure
+   scripts; nothing measured yet). The first T0 agent stalled on a lost background notice; brief agents to run forge /
+   cargo / docker in the FOREGROUND. stellar-cli must be pinned newer than the installed 22.2.0 (own dir). T0 is a HARD
+   GATE (stop for the owner if a figure is over a limit). Then T1–T13; T14 (testnet) after 2026-11-03; then
+   `zether-soroban` Z0–Z10 (Z0 = the real measure-first STOP check); then `ua8-soroban`.
+3. **`kem-scheme`** (worktree `kem-scheme`; ledger `2026-10-30-kem-scheme/progress.md`): owner 2026-10-30 — the first
+   byte of `kemPk` is the scheme id (1 = ML-KEM-1024 + X25519, 1,601 B; 2 reserved for ML-KEM-1024 + HQC + X25519 after
+   FIPS 207). Done `90c79186` (clientkeys, `portable.json` regenerated, old copy in `vectors/ua/legacy/`). Not done:
+   EVM `UARegistry` / `UAKinds` (`KEM_PK_LENGTH`, `_kemAt`), forge tests, the 9 other clients, docs (CTR-UA-32,
+   decisions, client docs, UA-Soroban spec / plan), gates. Merge it before UA-Soroban T3 (the Soroban registry stores
+   KEM records).
+
+**Owner answers this part:** DEX spec accepted (DX7 refund of the taker's unsold remainder only when the sold part meets
+its `minFill` and limit; capacity restored via `restorePulled`; DX10 / DX11 confirmed); `minFill` is an amount, not a
+percentage (rationale in CTR-DEX-14); classical Zether on Soroban in this round (S13a; S13b PQZ none); "4b" renamed
+UA-Soroban, naming `ua-<family>` / `ua8-<family>` / `zether-<family>` (NET-ALL-84); KEM scheme id; no Falcon-DET-1024
+kind (Algorand waits for AVM v14 Falcon-DET-512); HQC only after FIPS 207, as scheme 2. Research answers (chat only):
+C# node scope (`scratchpad/csharp-node-scope-2026-10-30.md`), Cosmos PQ (no CosmWasm verifier; SDK 0.55 `ml_dsa_65`
+native accounts), NTRU (used only through Falcon), SSTORE2 (no refund; records are write-once anyway).
+
+**Next, in order:** re-dispatch DEX T4 → T5…; re-dispatch UA-Soroban T0 (foreground) → T1…; finish `kem-scheme` and
+merge before UA-Soroban T3; fs3 Task 13 + Task 9 (owner's go for timing; reset 7622 with 7702 off from
+`/home/dockers/mba-chain-nethermind/genesis.json`). Max 3 agents, 2 `capped` slots.
+
+## Session 2026-10-30 (part 2: UA-8 + no7702 merged and pushed, token rename, UA-Soroban spec + plan) — resume here
 
 **Pushed** (origin/main `cc07fced`): fs3 Task 6 (merge `2b162239`), UA-8 step 1 (merge `0390d3cf` + fixes), EIP-7702 work
 `no7702` (fast-forward to `b82f7c7f`), CI fixes (`920f13d0` Algorand artifacts in the node job, libudev for cargo-near;
-`74ae18f9` node anvil e2e on the UA-8 ABI — CI green from there), the token-family rename (merge `1a68427a`), the 4b
+`74ae18f9` node anvil e2e on the UA-8 ABI — CI green from there), the token-family rename (merge `1a68427a`), the UA-Soroban
 Soroban spec (merge `b7c34170`, S13 split `70bc6cf7`), NET-ALL-84 UA checklist (`cc07fced`). **Local, not pushed:**
 `04355b57` (classical Zether on Soroban in this round, spec S13a), `17342f75` (gate step `node-e2e-anvil`; parity gas
-refreshed), `ee6bfd22` (parity kind labels NONE / UNDERLYING → NORMAL / WRAPPED), `f18ed81a` (merge of the 4b plan).
+refreshed), `ee6bfd22` (parity kind labels NONE / UNDERLYING → NORMAL / WRAPPED), `f18ed81a` (merge of the UA-Soroban plan).
 
 **Owner rulings 2026-10-30** (all in `docs/decisions.md`; ledgers `.superpowers/sdd/2026-10-30-ua8-portable-registrations/progress.md`,
-`.superpowers/sdd/2026-10-30-soroban-4b/progress.md`):
+`.superpowers/sdd/2026-10-30-soroban-UA-Soroban/progress.md`):
 - UA-8 final review: R-node (the node relays register / setKemKey / storePqzPop / setPqzKey; split when estimate >
   min(block limit, relayer cap)); R-cross-set (setPqzKey may replace an unproven key of another set); R-7702 superseded by D1.
 - EIP-7702 (after the 2026-10-29 Binance hot-wallet drain): an EOA signs with its own key only, never ERC-1271 through a
@@ -19,16 +59,16 @@ refreshed), `ee6bfd22` (parity kind labels NONE / UNDERLYING → NORMAL / WRAPPE
   never reset from a scratchpad genesis copy) **and on 22776 at launch** (NET-EVM-07). Audit:
   `docs/research/eip7702-audit-2026-10-30.md`. Disclosure rule held: ua8 pushed only together with no7702.
 - Token-family rename option (a) incl. deploy keys and (follow-up) the parity labels.
-- 4b Soroban spec accepted (S6 UA ledger in each token, S10 msig members confirmed); classical Zether (S13a) and PQZ
+- UA-Soroban Soroban spec accepted (S6 UA ledger in each token, S10 msig members confirmed); classical Zether (S13a) and PQZ
   (S13b) are separate items; **classical Zether on Soroban is in this round** (own track, measure first); NET-ALL-84: every
   family's UA spec answers the 19-row checklist; plan runs without owner review.
 - C# node: scope assessment only (`scratchpad/csharp-node-scope-2026-10-30.md`), owner questions open.
 
-**Running at this note:** 4b **T0** (Protocol 30 spike, branch `soroban-4b`, worktree `.claude/worktrees/soroban-4b`;
-HARD GATE — stop for the owner if a 4b figure is over a limit); the combined **DEX spec** (worktree `.claude/worktrees/spec-dex`);
+**Running at this note:** UA-Soroban **T0** (Protocol 30 spike, branch `soroban-UA-Soroban`, worktree `.claude/worktrees/soroban-UA-Soroban`;
+HARD GATE — stop for the owner if a UA-Soroban figure is over a limit); the combined **DEX spec** (worktree `.claude/worktrees/spec-dex`);
 CI on `cc07fced`.
 
-**Next:** 4b T1–T13 subagent-driven (T14 testnet after 2026-11-03), then `soroban-zether` Z0–Z10 (Z0 = the real
+**Next:** UA-Soroban T1–T13 subagent-driven (T14 testnet after 2026-11-03), then `zether-soroban` Z0–Z10 (Z0 = the real
 measure-first STOP check), then UA-8 Part B (`ua8-soroban`); the DEX round after its spec (owner review of the spec);
 fs3 Task 13 + Task 9 calibration (owner's go for timing; reset 7622 with 7702 off; redeploy incl. the new MtxRelayFee
 address; `e2e.py` full + `--split` + setPqzKey path; check `probe.sh`, which gave 28 ok / 30 FAIL against the default

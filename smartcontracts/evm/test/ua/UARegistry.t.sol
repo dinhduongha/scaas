@@ -95,7 +95,7 @@ contract UARegistryTest is UARegistryBase {
             bytes32 ua = reg.uaOf(kind, k);
             vm.warp(1000 + i);
             vm.expectEmit(true, true, false, true, address(reg));
-            emit IUARegistry.UARegistered(ua, kind, k, _none(), _pop(reg, kind, k), "", 1, 0, 0);
+            emit IUARegistry.UARegistered(ua, kind, k, _none(), keccak256(_pop(reg, kind, k)), "", 1, 0, 0);
             assertEq(_register(reg, kind, k), ua);
             (IUARegistry.Record memory r, address pqzKey) = reg.recordOf(ua);
             assertEq(r.kind, kind);
@@ -315,9 +315,15 @@ contract UARegistryTest is UARegistryBase {
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
         uint16 ip = _indexOf(d2, p256Ua);
         uint16 ie = _indexOf(d2, edUa);
-        s[ip] = UARegistry.MemberSig(ip, p, _sig(p, UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
-        s[ie] = UARegistry.MemberSig(ie, ed, _sig(ed, UAKinds.uaMessage(0x0102, UAKinds.PURPOSE_MEMBER, md)));
-        gen2.requireAuthorized(msig2, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, s));
+        s[ip] = UARegistry.MemberSig(ip, "", _sig(p, UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
+        s[ie] = UARegistry.MemberSig(ie, "", _sig(ed, UAKinds.uaMessage(0x0102, UAKinds.PURPOSE_MEMBER, md)));
+        gen2.requireAuthorized(msig2, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, s)); // keys read from both records
+        // CTR-UA-33: the member's own key data is refused, for the gen-2 member and for the gen-1 member (gen 1 refuses)
+        s[ie].keyData = ed;
+        _expectUnauthorizedOn(gen2, msig2, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, s));
+        (s[ie].keyData, s[ip].keyData) = ("", p);
+        _expectUnauthorizedOn(gen2, msig2, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, s));
+        s[ip].keyData = "";
         s[ip].sig = _sig(p, UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_METATX, md));
         _expectUnauthorizedOn(gen2, msig2, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, s));
     }
@@ -466,14 +472,17 @@ contract UARegistryTest is UARegistryBase {
         s = _sigs(d, f, _memberDigest(bytes32(uint256(1) << 200), UAKinds.PURPOSE_METATX, DIGEST), 0x9);
         _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         s = _sigs(d, f, md, 0x7);
-        s[1].keyData = _key(0x0100);
+        s[1].sig = _sig(_key(0x0100), UAKinds.uaMessage(f.kinds[1], UAKinds.PURPOSE_MEMBER, md));
         _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
-        // a native member's MemberSig carries no key data
-        s = _sigs(d, f, md, 0x9);
-        for (uint256 i; i < s.length; ++i) {
-            if (s[i].keyData.length == 0) s[i].keyData = hex"01";
+        // no MemberSig carries key data: a native member's (R12), and a registered member's — not even its own key, the
+        // registry reads it from the member's record (CTR-UA-33)
+        for (uint256 i; i < 4; ++i) {
+            s = _sigs(d, f, md, i == 3 ? 0x9 : 0x7);
+            for (uint256 j; j < s.length; ++j) {
+                if (s[j].index == _indexOf(d, f.ids[i])) s[j].keyData = i == 0 ? bytes(hex"01") : f.keys[i];
+            }
+            _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         }
-        _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s));
         // the key data in auth must be the structure's
         bytes memory d2 = bytes.concat(d);
         d2[1] = 0x02;
@@ -788,7 +797,7 @@ contract UARegistryTest is UARegistryBase {
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
         uint16 ip = _indexOf(d2, p256Ua);
         uint16 ie = _indexOf(d2, _pad(vm.addr(PK_A)));
-        s[ip] = UARegistry.MemberSig(ip, p, _sig(p, UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
+        s[ip] = UARegistry.MemberSig(ip, "", _sig(p, UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
         s[ie] = UARegistry.MemberSig(
             ie, "", _ecdsa(PK_A, gen2.uaAuthDigest(_pad(vm.addr(PK_A)), UAKinds.PURPOSE_MEMBER, md))
         );
@@ -1135,7 +1144,7 @@ contract UARegistryTest is UARegistryBase {
                 s[j++] = i == 0
                     ? UARegistry.MemberSig(idx, "", _nativeSig(reg, PK_A, UAKinds.PURPOSE_MEMBER, md))
                     : UARegistry.MemberSig(
-                        idx, f.keys[i], _sig(f.keys[i], UAKinds.uaMessage(f.kinds[i], UAKinds.PURPOSE_MEMBER, md))
+                        idx, "", _sig(f.keys[i], UAKinds.uaMessage(f.kinds[i], UAKinds.PURPOSE_MEMBER, md))
                     );
             }
         }

@@ -130,8 +130,13 @@ export const KEM_RECORD_TAG = tagHash('scaas.ua.kem-record.v1');
 /** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose and record tag. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
 export const PQZ_KEY_RECORD_TAG = tagHash('scaas.ua.pqz-key-record.v1');
-/** ML-KEM-1024 ek ‖ X25519 pk (X-Wing order): the only KEM key the registry stores (UA-8 P7). */
-export const KEM_PK_LENGTH = 1600;
+/** The KEM scheme byte, `kemPk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519 (X-Wing order), `kemPk = 0x01 ‖ ek (1,568 B) ‖
+ *  X25519 pk (32 B)`; 2 = ML-KEM-1024 + HQC + X25519, reserved (after FIPS 207), refused today (`UAKemScheme`). */
+export const KEM_SCHEME = Object.freeze({ mlkem1024X25519: 1, mlkem1024HqcX25519: 2 });
+/** The length of a scheme-1 `kemPk`, its scheme byte included: the only KEM key the registry stores today (UA-8 P7). */
+export const KEM_PK_LENGTH = 1601;
+/** The `kemPk` length of an enabled scheme, 0 = unknown or reserved. */
+export const kemPkLength = (scheme) => (scheme === KEM_SCHEME.mlkem1024X25519 ? KEM_PK_LENGTH : 0);
 /** Who checked a part of a record (UA-8 P11.3); `relayer` comes with the relayer id. */
 export const CHECKED = Object.freeze({ none: 0, chain: 1, relayer: 2 });
 export const DOMAIN_TYPEHASH = tagHash('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)');
@@ -210,13 +215,17 @@ export const portablePopDigest = ({ ua, pqzKeyHash = Z32, kemRecordHash = Z32 })
 export const registrationDigest = (portable, pqzPopHash = Z32) =>
   keccak_256(concatBytes(sized(portable, 32, 'portablePopDigest'), sized(pqzPopHash, 32, 'pqzPopHash')));
 
-/** `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))` (UA-8 P7): version 1 … 2^64 − 1, 1,600-byte key. */
+/** `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))` (UA-8 P7): version 1 … 2^64 − 1; `kemPk` = scheme byte
+ *  ‖ key, the registry's check: empty is `UAKemKeyLength`, a scheme not enabled `UAKemScheme`, another length `UAKemKeyLength`. */
 export function kemRecordDigest({ ua, version, kemPk }) {
   let v;
   try { v = BigInt(version); } catch { fail('UAKemVersion', String(version)); }
   if (v < 1n || v >= 1n << 64n) fail('UAKemVersion', String(version));
   const pk = orEmpty(kemPk);
-  if (pk.length !== KEM_PK_LENGTH) fail('UAKemKeyLength', String(pk.length));
+  if (pk.length === 0) fail('UAKemKeyLength', '0');
+  const n = kemPkLength(pk[0]);
+  if (n === 0) fail('UAKemScheme', String(pk[0]));
+  if (pk.length !== n) fail('UAKemKeyLength', String(pk.length));
   return keccak_256(concatBytes(KEM_RECORD_TAG, sized(ua, 32, 'ua'), word(v), keccak_256(pk)));
 }
 

@@ -386,6 +386,66 @@ contract EccVerifiersTest is Test {
         );
     }
 
+    /// Owner 2026-10-30 (CTR-UA-33): the blob is accepted only as `abi.encode(authenticatorData, clientDataJSON, r, s)`,
+    /// byte for byte. The canonical rule is the verifier's first check (`_fields`, before any field or the signature),
+    /// and every malformed blob below that Solidity's lenient `abi.decode` reads at all decodes to the canonical blob's
+    /// own fields — a lenient decoder would accept it — so only the rule refuses it.
+    function test_WebAuthnCanonicalOnly() public view {
+        uint256 pk = 0xC0FFEE;
+        bytes memory key = _waKey(pk);
+        bytes32 m = _msg(UAKinds.WEBAUTHN_P256, keccak256("d"));
+        bytes memory a = _authData(RP_ID_HASH, 0x05);
+        bytes memory cd = _clientData(m, "}");
+        bytes memory sig = _waSig(pk, a, cd);
+        assertTrue(_both(webauthn, key, m, sig), "canonical");
+        assertTrue(a.length % 32 != 0 && cd.length % 32 != 0, "padding bytes to corrupt");
+        (uint256 pa, uint256 pc) = ((a.length + 31) / 32 * 32, (cd.length + 31) / 32 * 32);
+        bytes memory rs = _tail(_slice(sig, 128), 64);
+        bytes[8] memory bad = [
+            bytes.concat(sig, hex"00"),
+            bytes.concat(abi.encode(uint256(0xa0), 0xc0 + pa), rs, new bytes(32), _field(a), _field(cd)),
+            bytes.concat(abi.encode(uint256(0x80), 0xc0 + pa), rs, _field(a), new bytes(32), _field(cd)),
+            _setByte(sig, 0xa0 + a.length),
+            _setByte(sig, 0xc0 + pa + cd.length),
+            _setWord(sig, 0xa0 + pa, cd.length + 64),
+            _setWord(sig, 0x80, a.length + 64),
+            bytes.concat(abi.encode(0xa0 + pc, uint256(0x80)), rs, _field(cd), _field(a))
+        ];
+        string[8] memory name = [
+            "trailing byte",
+            "shifted authenticatorData offset",
+            "shifted clientDataJSON offset",
+            "non-zero padding after authenticatorData",
+            "non-zero padding after clientDataJSON",
+            "clientDataJSON length word beyond the data",
+            "authenticatorData length word beyond the data",
+            "fields swapped, offsets fixed up"
+        ];
+        for (uint256 i; i < 8; ++i) {
+            assertFalse(_both(webauthn, key, m, bad[i]), name[i]);
+            if (i == 5 || i == 6) continue; // the length words: no decoder reads the canonical fields from these
+            (bytes memory x, bytes memory y, uint256 xr, uint256 xs) = abi.decode(bad[i], (bytes, bytes, uint256, uint256));
+            assertEq(keccak256(abi.encode(x, y, xr, xs)), keccak256(sig), string.concat(name[i], ": same fields"));
+        }
+    }
+
+    /// `abi.encode(x)` without its offset word: length ‖ data ‖ zero padding.
+    function _field(bytes memory x) internal pure returns (bytes memory) {
+        return _tail(abi.encode(x), 32);
+    }
+
+    function _tail(bytes memory b, uint256 from) internal pure returns (bytes memory c) {
+        c = new bytes(b.length - from);
+        for (uint256 i; i < c.length; ++i) {
+            c[i] = b[from + i];
+        }
+    }
+
+    function _setByte(bytes memory b, uint256 o) internal pure returns (bytes memory c) {
+        c = bytes.concat(b);
+        c[o] = 0x01;
+    }
+
     function _setWord(bytes memory b, uint256 o, uint256 w) internal pure returns (bytes memory c) {
         c = bytes.concat(b);
         assembly ("memory-safe") {

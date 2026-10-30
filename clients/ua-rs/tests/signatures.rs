@@ -69,15 +69,18 @@ fn derived_positives_verify() {
 #[test]
 fn derived_negatives_refused() {
     let v = load();
-    let mut n = 0;
+    let (mut n, mut accepted) = (0, vec![]);
     for r in arr(&v["derived"]) {
         let (kind, kd) = (num(&r["kind"]) as u16, bytes(&r["keyData"]));
         for x in arr(&r["negatives"]) {
             let pop = x["verifyPop"].as_bool().unwrap();
-            assert!(!verify(kind, &kd, &b32(&x["message"]), &bytes(&x["sig"]), pop), "{} {}", r["name"], x["name"]);
+            if verify(kind, &kd, &b32(&x["message"]), &bytes(&x["sig"]), pop) {
+                accepted.push(format!("{} {}", r["name"], x["name"]));
+            }
             n += 1;
         }
     }
+    assert!(accepted.is_empty(), "negatives accepted: {accepted:?}");
     println!("{n} derived negatives refused");
 }
 
@@ -101,7 +104,8 @@ fn native_uaauth() {
     }
 }
 
-// --- msig: the registry path of §1.9, auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])) ---
+// --- msig: the registry path of §1.9, auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])), every MemberSig
+// with an empty keyData (CTR-UA-33) ---
 
 fn word(b: &[u8], o: usize) -> Option<usize> {
     let w = b.get(o..o + 32)?;
@@ -146,7 +150,13 @@ fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth
             let d = domain(v, s(&v["msig"]["context"]), num(&v["msig"]["generation"]) as u32);
             mkd.is_empty() && native_ecdsa(&id[12..].try_into().ok()?, &ua_auth_digest(&d, &id, &member, &md), sig)
         } else {
-            ua_of(kind, mkd).ok()? == id && verify(kind, mkd, &ua_message(kind, &member, &md).ok()?, sig, false)
+            // CTR-UA-33: a registered member's MemberSig carries no key data; the key is its record's (the derived rows)
+            let rec = arr(&v["derived"])
+                .iter()
+                .find(|r| b32(&r["ua"]) == id && num(&r["kind"]) as u16 == kind) // by (kind, id), as `_derived`
+                .map(|r| bytes(&r["keyData"]));
+            mkd.is_empty()
+                && rec.is_some_and(|k| verify(kind, &k, &ua_message(kind, &member, &md).unwrap(), sig, false))
         };
         if !ok {
             return Some(false);
@@ -166,7 +176,7 @@ fn msig_sets() {
     assert_eq!(key, bytes(&m["keyData"]));
     let ua = derive_ua(0x0120, &key, false).unwrap();
     assert_eq!(ua, b32(&m["ua"]));
-    assert_eq!(arr(&m["sets"]).len(), 9);
+    assert_eq!(arr(&m["sets"]).len(), 10);
     for x in arr(&m["sets"]) {
         let p = purpose_tag(s(&x["purpose"])).unwrap();
         let d = b32(&x["digest"]);

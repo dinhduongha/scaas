@@ -134,7 +134,8 @@ test('kem record digest matches the hand-built words', () => {
     assert.equal(hex(ua.kemRecordDigest({ ua: k.ua, version: k.version, kemPk: k.kemPk })), k.digest);
     assert.equal(hex(ua.uaMessage(k.kind, h('scaas.ua.purpose.kem.v1'), hand)), k.message);
     assert.equal(hex(ua.kemRecordMessage(k.kind, { ua: k.ua, version: k.version, kemPk: k.kemPk })), k.message);
-    assert.equal(B(k.kemPk).length, 1600);
+    assert.equal(B(k.kemPk).length, 1601);
+    assert.equal(B(k.kemPk)[0], ua.KEM_SCHEME.mlkem1024X25519, 'scheme byte');
   }
   for (const name of ['mldsa65', 'fndsa512', 'msig-pq']) {
     const ks = P.kemRecords.filter((k) => k.name === name);
@@ -145,6 +146,23 @@ test('kem record digest matches the hand-built words', () => {
       assert.deepEqual([r.attrs.kemVersion, r.attrs.kemPk, r.kemRecordHash], [1, ks[0].kemPk, ks[0].digest], r.name);
     }
   }
+});
+
+test('kem scheme byte: scheme 1 at 1,601 B only; the pre-scheme form, scheme 2 (reserved) and unknown bytes refused', () => {
+  const code = (c) => (e) => e instanceof ua.UAError && e.code === c;
+  const k = P.kemRecords[0];
+  const pk = B(k.kemPk);
+  const with0 = (s, p = pk) => Uint8Array.from([s, ...p.subarray(1)]);
+  const d = (kemPk) => ua.kemRecordDigest({ ua: k.ua, version: 1, kemPk });
+  assert.deepEqual([ua.KEM_SCHEME.mlkem1024X25519, ua.KEM_SCHEME.mlkem1024HqcX25519, ua.KEM_PK_LENGTH, P.kemScheme], [1, 2, 1601, 1]);
+  assert.deepEqual([0, 1, 2, 3, 255].map(ua.kemPkLength), [0, 1601, 0, 0, 0]);
+  assert.equal(hex(d(pk)), hex(ua.kemRecordDigest({ ua: k.ua, version: 1, kemPk: k.kemPk })));
+  for (const s of [0, 2, 3, 0xff]) assert.throws(() => d(with0(s)), code('UAKemScheme'), `scheme ${s}`);
+  assert.throws(() => d(Uint8Array.from([2, ...new Uint8Array(1600 + 32)])), code('UAKemScheme'), 'scheme 2 at any length');
+  assert.throws(() => d(pk.subarray(1)), (e) => e.code === (pk[1] === 1 ? 'UAKemKeyLength' : 'UAKemScheme'), 'pre-scheme 1,600-byte key');
+  for (const n of [0, 1, 1600, 1602]) assert.throws(() => d(Uint8Array.from({ length: n }, (_, i) => (i === 0 ? 1 : 7))), code('UAKemKeyLength'), `${n} B`);
+  const mlz = row('mldsa65/n2048-kmax1024');
+  assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: with0(2) }), code('UAKemScheme'), 'the initial record too');
 });
 
 test('holder refusals', () => {
@@ -164,10 +182,12 @@ test('holder refusals', () => {
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemPk: kem.kemPk.slice(0, -2) }), code('UAKemKeyLength'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), kemVersion: 0 }), code('UAKemVersion'));
   assert.throws(() => ua.kemRecordDigest({ ua: kem.ua, version: 2n ** 64n, kemPk: kem.kemPk }), code('UAKemVersion'));
-  // the shared KATs (review part 2 I-C1): the mesh chain key and the top byte of the 8-byte KEM version word
+  // the shared KATs (review part 2 I-C1): the mesh chain key and the top byte of the 8-byte KEM version word; the KEM key is
+  // scheme 1 with a zero key (0x01 ‖ 1,600 zero bytes, CTR-UA-32)
+  const KAT_KEM_PK = new Uint8Array(1601).fill(1, 0, 1);
   assert.equal(hex(ua.chainKeyHash(2n ** 40n + 7n)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950'); // keccak256("evm:1099511627783")
-  assert.equal(hex(ua.kemRecordDigest({ ua: new Uint8Array(32).fill(1), version: 2n ** 64n - 1n, kemPk: new Uint8Array(1600) })),
-    '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31');
+  assert.equal(hex(ua.kemRecordDigest({ ua: new Uint8Array(32).fill(1), version: 2n ** 64n - 1n, kemPk: KAT_KEM_PK })),
+    '0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092');
   // the proof-hash rule (review part 2 m-J1): a zero-length hash is absent, a hash of another length is UAPqzPopHash
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzPopHash: new Uint8Array(0) }), code('UAPqzPopHash'), 'key without hash');
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzPopHash: mlz.attrs.pqzPopHash.slice(0, -2) }), code('UAPqzPopHash'));
@@ -191,7 +211,7 @@ test('holder refusals', () => {
   assert.throws(() => ua.pqzKeyRecordMessage(0x0132, { ...recArgs(fr), pqzKey: fr.pqzKey.slice(0, -2) }), code('UAKeyData'));
   // every negative, by entry point (the note's table): register's attribute errors as holderPopMessage refusals, UAPoP as
   // a pop that does not verify on the row's (moved) digest, storePqzPop / setPqzKey / setKemKey / requireAuthorized below
-  assert.deepEqual([...new Set(P.negatives.map((n) => n.error))].sort(), ['UAKemHolder', 'UAKemKeyLength', 'UAKemVersion', 'UAKeyData',
+  assert.deepEqual([...new Set(P.negatives.map((n) => n.error))].sort(), ['UAKemHolder', 'UAKemKeyLength', 'UAKemScheme', 'UAKemVersion', 'UAKeyData',
     'UAPoP', 'UAPqzHolder', 'UAPqzKeySet', 'UAPqzPopHash', 'UAUnauthorized']);
   assert.deepEqual([...new Set(P.negatives.map((n) => n.entry))].sort(), ['register', 'requireAuthorized', 'setKemKey', 'setPqzKey', 'storePqzPop']);
   for (const n of P.negatives) {

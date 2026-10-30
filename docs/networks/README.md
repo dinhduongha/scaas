@@ -435,13 +435,15 @@ account-shaped form invites native sends to a keyless address. Cost: dev passkey
 not an address. Owner-confirmed.
 
 <a id="ua-family-checklist"></a><a id="NET-ALL-84"></a>**NET-ALL-84** — **Every family's UA spec answers the same
-checklist** (owner 2026-10-30). The questions come from the first non-EVM UA round, the 4b Soroban spec (its §0 rows
-S1–S18, `docs/superpowers/specs/2026-10-30-soroban-4b-ua-base-design.md`). A family spec answers every row in its own §0
+checklist** (owner 2026-10-30). The questions come from the first non-EVM UA round, the UA-Soroban spec (its §0 rows
+S1–S18, `docs/superpowers/specs/2026-10-30-ua-soroban-design.md`). A family spec answers every row in its own §0
 (row, options considered, choice and why, cost if wrong, who decided), or says why the row does not apply. The **shared**
 column is the same answer on every chain ([NET-ALL-20](#NET-ALL-20), one rule everywhere); only the **family** column
-differs, and it states the chain's own mechanics (NEAR ≠ Algorand ≠ Soroban …), never a lumped answer.
+differs, and it states the chain's own mechanics (NEAR ≠ Algorand ≠ Soroban …), never a lumped answer. Names (owner 2026-10-30): a family's round is the **UA family round** `ua-<family>` (`ua-soroban`, `ua-near`,
+`ua-cosmos`, …); its UA-8 portable-registry step is `ua8-<family>` and a classical Zether track `zether-<family>`; the
+branch, the spec / plan file names and the commit prefixes use these names.
 
-| # | Question | Shared answer (every family) | Family-specific part | 4b Soroban |
+| # | Question | Shared answer (every family) | Family-specific part | UA-Soroban |
 |---|---|---|---|---|
 | 1 | Where the records live | one registry per chain holding the UA-8 records; chain-wide `keyHash` uniqueness | a registry contract, a factory, a lazy open, an account app … | S1 |
 | 2 | Registration form | the UA-8 portable `register` (same record bytes and digests as EVM, [CTR-UA-31](../contracts/accounts.md#CTR-UA-31)) | encoding of the call on the chain | S2 |

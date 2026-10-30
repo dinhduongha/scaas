@@ -387,7 +387,7 @@ on-chain rules are [NET-ALL-04](../networks/README.md#NET-ALL-04) and
 [CTR-ACC-08](../contracts/accounts.md#CTR-ACC-08). Tests use real WebAuthn vectors from a software authenticator
 (fixed P-256 key) and a public vector set where available. BUILT (EVM). `clients/clientkeys/src/passkey-signer.js`:
 `creationOptions` (PRF enabled by default), `requestOptions`, `derToRS`, `encodeAssertion = abi.encode(authenticatorData,
-clientDataJSON, r, s)`, `merkleBatch`, `accountSignature = abi.encode(keyIndex, bytes32[] proof, sig)`. `signCount` is not
+clientDataJSON, r, s)` (the canonical encoding, the only one any verifier accepts: [CTR-UA-33](../contracts/accounts.md#CTR-UA-33) C), `merkleBatch`, `accountSignature = abi.encode(keyIndex, bytes32[] proof, sig)`. `signCount` is not
 checked (synced passkeys always return 0).
 
 <a id="CLI-SGN-04"></a>**CLI-SGN-04** — **Each passkey gets a random 16-byte WebAuthn user handle.** Not one per partner;
@@ -915,7 +915,7 @@ ever** on chains of one PQZ parameter set — a copied unproven key of another s
 has a verifier (it then emits `UAPqzKeyAdded`; the replaced `register` key stays in `registrationOf`, so read the current key with
 `pqzKeyOf`), owner 2026-10-30 ruling R-cross-set; and one KEM key per KEM version, the initial record included; [accounts.md](../contracts/accounts.md#CTR-UA-16)). An `msig` quorum signs `memberDigest(ua, message)`; a native (EOA) member — code-less, or EIP-7702-delegated, always with its own key (owner 2026-10-30 ruling D1: the registry never takes a designator's ERC-1271) — signs
 `personalSignDigest(memberDigest)` through `personal_sign` for the three portable purposes only (`pop` v2, `kem`, `pqz-key`; `isPortablePurpose`), so the
-wallet shows a `personal_sign` prompt, not typed data. KEM versions come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)). An explicit export of the 32-byte leaf (never the
+wallet shows a `personal_sign` prompt, not typed data. KEM versions come by `kemRecordMessage` + `setKemKey` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); `kemPk` is `0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk` (1,601 B: its first byte is the KEM scheme id, scheme 2 is reserved and refused with `UAKemScheme`; `KEM_SCHEME`, `KEM_PK_LENGTH`, `kemPkLength` in `ua.js`, the same constants in every client). An explicit export of the 32-byte leaf (never the
 seed) feeds the native prover or the organization's key oracle — PQ Zether proving is **not** in JS; envelopes reuse the
 existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzToken", "1", …)`) and the
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA

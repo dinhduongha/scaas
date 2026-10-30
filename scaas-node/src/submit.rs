@@ -1738,11 +1738,12 @@ mod tests {
         use crate::abi::IUARegistry::*;
         let ua = B256::repeat_byte(0x11);
         let b = |n: usize, v: u8| Bytes::from(vec![v; n]);
+        let kem = |v: u8| Bytes::from([vec![1u8], vec![v; 1600]].concat()); // scheme 1 key: 0x01 ‖ 1,600 bytes (CTR-UA-32)
         vec![
             registerCall { kind: 0x0131, keyData: b(1952, 1), attrs: UAAttrs { pqzKey: b(18_432, 2),
-                pqzPopHash: B256::repeat_byte(3), kemVersion: 1, kemPk: b(1600, 4) }, pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
+                pqzPopHash: B256::repeat_byte(3), kemVersion: 1, kemPk: kem(4) }, pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
                 .abi_encode(),
-            setKemKeyCall { ua, version: 2, kemPk: b(1600, 6), sig: b(3309, 7) }.abi_encode(),
+            setKemKeyCall { ua, version: 2, kemPk: kem(6), sig: b(3309, 7) }.abi_encode(),
             storePqzPopCall { ua, pqzPop: b(30_381, 8) }.abi_encode(),
             setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: b(3309, 11) }.abi_encode(),
         ]

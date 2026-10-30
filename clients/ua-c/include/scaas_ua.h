@@ -153,7 +153,7 @@ typedef struct {
 #define SCAAS_UA_ERR_KEM_VERSION 13
 
 /**
- * "UAKemKeyLength": a KEM key that is not 1,600 bytes.
+ * "UAKemKeyLength": a KEM key that is empty or not 1,601 bytes (scheme byte + key).
  */
 #define SCAAS_UA_ERR_KEM_KEY_LENGTH 14
 
@@ -180,7 +180,7 @@ uint32_t scaas_ua_abi_version(void);
 /**
  * The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
  * "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
- * "UAPqzKeySet"; "UAStatusUnknown" for any other value.
+ * "UAPqzKeySet", "UAKemScheme"; "UAStatusUnknown" for any other value.
  */
 const char *scaas_ua_status_name(ScaasUaStatus status);
 
@@ -355,7 +355,7 @@ ScaasUaStatus scaas_ua_registration_digest(const uint8_t *portable32,
 
 /**
  * `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))`: version 1 ... 2^64 - 1
- * (`SCAAS_UA_ERR_KEM_VERSION` for 0), a 1,600-byte key (`SCAAS_UA_ERR_KEM_KEY_LENGTH`).
+ * (`SCAAS_UA_ERR_KEM_VERSION` for 0), a 1,601-byte key, scheme byte first (`SCAAS_UA_ERR_KEM_SCHEME` for an id other than 1, `SCAAS_UA_ERR_KEM_KEY_LENGTH`).
  */
 ScaasUaStatus scaas_ua_kem_record_digest(const uint8_t *ua32,
                                          uint64_t version,

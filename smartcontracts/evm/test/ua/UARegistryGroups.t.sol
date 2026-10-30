@@ -118,7 +118,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             assertEq(reg.keyHashOf(g.kind, g.keyData), g.keyHash);
             vm.warp(5_000 + i);
             vm.expectEmit(true, true, false, true, address(reg));
-            emit IUARegistry.UARegistered(g.ua, g.kind, g.keyData, _none(), g.pop, "", 1, 0, 0);
+            emit IUARegistry.UARegistered(g.ua, g.kind, g.keyData, _none(), keccak256(g.pop), "", 1, 0, 0);
             assertEq(reg.register(g.kind, g.keyData, _none(), g.pop, ""), g.ua);
             (IUARegistry.Record memory r, address pqzKey) = reg.recordOf(g.ua);
             assertEq(r.kind, g.kind);
@@ -480,7 +480,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             m[0] = Member(kind, mu, uint16(i + 1)); // another id per generation
             bytes memory d = _msigKey(uint16(i + 1), m);
             bytes32 ms = regs[i].register(UAKinds.MSIG, d, _none(), "", "");
-            uint256 bound = GROUP_CAP + 35_000; // UARegistry.MSIG_MEMBER_GAS
+            uint256 bound = GROUP_CAP + 45_000; // UARegistry.MSIG_MEMBER_GAS
             if (i == 1) bound += GROUP_CAP / 63 + 5_000; // gen 1's own hold (register step 4)
             (bool ok,) = address(regs[i]).call{gas: bound}(
                 abi.encodeCall(regs[i].requireAuthorized, (ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s)))

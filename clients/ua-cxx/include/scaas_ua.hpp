@@ -14,7 +14,7 @@ namespace scaas::ua {
 using Bytes = std::vector<uint8_t>;
 
 // code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown, UAPqzHolder, UAKemHolder,
-// UAKemVersion, UAKemKeyLength, UAPqzPopHash, UAPqzKeySet.
+// UAKemVersion, UAKemKeyLength, UAKemScheme, UAPqzPopHash, UAPqzKeySet.
 // reason(): the label after "UAKeyData: " (empty for every other code).
 class Error : public std::runtime_error {
 public:
@@ -39,7 +39,7 @@ struct Member {
     Bytes id;  // 32 bytes
     uint16_t weight;
 };
-// A KEM record attribute: (version >= 1, 1,600-byte key). nullopt, or (0, empty), = absent.
+// A KEM record attribute: (version >= 1, 1,601-byte key, scheme byte first). nullopt, or (0, empty), = absent.
 using Kem = std::pair<uint64_t, Bytes>;
 // The portable PoP of a registration (UA-8 P1, P2); every hash is 32 bytes, 0 when absent.
 struct HolderPop {
@@ -73,7 +73,8 @@ Bytes msgTag();
 Bytes purposeTag(const std::string& purpose, uint32_t version = 1);  // every purpose is v1; pop is also v2 (UA-8)
 Bytes kemRecordTag();
 Bytes pqzKeyRecordTag();
-constexpr size_t kKemPkLength = 1600;  // ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
+constexpr uint8_t kKemSchemeMlkem1024X25519 = 1;  // kemPk[0] (CTR-UA-32); 2 = ML-KEM-1024 + HQC + X25519 is reserved (UAKemScheme)
+constexpr size_t kKemPkLength = 1601;  // 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
 Bytes uaOf(uint16_t kind, const Bytes& keyData);
 Bytes deriveUA(uint16_t kind, const Bytes& keyData, bool hederaNative);
 Bytes nativeId(uint16_t kind, const Bytes& raw);
@@ -92,7 +93,7 @@ Bytes chainKeyHash(uint64_t chainId);
 Bytes portablePopDigest(const Bytes& ua, const Bytes& pqzKeyHash, const Bytes& kemRecordHash);
 // keccak256(portablePopDigest ‖ pqzPopHash): what the signer's pop signs under uaMessage(kind, POP_V2, ·).
 Bytes registrationDigest(const Bytes& portable, const Bytes& pqzPopHash);
-// keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk)): version 1 … 2^64 − 1 (UAKemVersion), a 1,600-byte key (UAKemKeyLength).
+// keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk)): version 1 … 2^64 − 1 (UAKemVersion), a 1,601-byte key, scheme byte first (UAKemScheme for an id other than 1, UAKemKeyLength).
 Bytes kemRecordDigest(const Bytes& ua, uint64_t version, const Bytes& kemPk);
 Bytes kemRecordMessage(uint16_t kind, const Bytes& ua, uint64_t version, const Bytes& kemPk);  // uaMessage(kind, PURPOSE_KEM, digest)
 // The portable PoP message of a registration. pqzKey with its proof pqzPop (or only its hash pqzPopHash; a relayer may hold only

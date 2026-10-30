@@ -33,7 +33,7 @@ TradeEngine EVM stream (the planner of §7.2 is built there) in parallel with no
 [decisions.md](../../decisions.md) CTR-DEX entries; the code read on `main`: `smartcontracts/evm/src/dex/`
 (`SCaaSDex.sol`, `ISCaaSDex.sol`, `DexPuller.sol`, `TokenCall.sol`), `src/trade/TradeLib.sol`,
 `scaas-node/src/dex.rs`, `dex/venue.rs`, `abi.rs`, `guard.rs`, `clients/clientkeys/src/evm.js`. Template: the
-metatx-split spec (§0 rulings) and the 4b spec (§0 decisions table).
+metatx-split spec (§0 rulings) and the UA-Soroban spec (§0 decisions table).
 
 ## 0. Decisions
 
@@ -545,7 +545,7 @@ Unchanged in this round. Per family:
 |---|---|---|---|
 | Sui, Aptos | never had it | no exchange path | 1 × N (step 6); exchange path unscheduled (research §7.9) |
 | Solana | never had it | none | 1 × N; exchange path unscheduled |
-| Soroban | never had it | none | 1 × N; exchange path unscheduled (the 4b round does not touch the DEX) |
+| Soroban | never had it | none | 1 × N; exchange path unscheduled (the UA-Soroban round does not touch the DEX) |
 | Cosmos | FOK only | none | 1 × N needs partial fills first; exchange path unscheduled |
 | TON (GRAM) | FOK only, escrow | none | 1 × N; exchange path unscheduled (async) |
 | NEAR | FOK only, escrow DEX | none | 1 × N; exchange path unscheduled (async receipts, research §6.4) |

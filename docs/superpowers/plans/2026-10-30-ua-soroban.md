@@ -1,19 +1,19 @@
-# 4b Soroban UA base (+ the classical Zether track) Implementation Plan
+# UA-Soroban UA base (+ the classical Zether track) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Soroban becomes the first non-EVM family with Universal Accounts of every kind it can verify: a stand-alone
 `UaRegistry` with the portable UA-8 `register`, the UA ledger in the Soroban token, UA holders in the mandate, the DEX
-and the relay-fee router, the node's `ua_metatx` jobs, `clientkeys` encodings and shared vectors (Part 4b); then, on
+and the relay-fee router, the node's `ua_metatx` jobs, `clientkeys` encodings and shared vectors (Part UA-Soroban); then, on
 its own branch, the classical Zether token on Soroban (Part Z, spec S13a).
 
-**Architecture:** Part 4b on branch `soroban-4b` (worktree `.claude/worktrees/soroban-4b`) from `main` (S18; the
+**Architecture:** Part UA-Soroban on branch `ua-soroban` (worktree `.claude/worktrees/ua-soroban`) from `main` (S18; the
 token-family rename merged as `1a68427a`, so the precondition holds). Order: the network spike and its HARD GATE (T0),
 the SDK pin (T1), the shared crate and the verifiers (T2), the registry (T3), the vectors (T4), the token / mandate /
 DEX / router (T5–T8), the node (T9), the local e2e (T10), docs (T11), gates (T12), whole-branch review (T13); the
 Stellar testnet e2e (T14) is the round's last step, after Part B and Part Z. UA-8 Part B (`ua8-soroban`, the UA-8 plan
-B0–B10) starts after the owner's go merges `soroban-4b`; it is not in this plan except the items listed under "Part B
-items this plan builds". Part Z on branch `soroban-zether` from `main` after `soroban-4b` merges (it needs the UA ledger
+B0–B10) starts after the owner's go merges `ua-soroban`; it is not in this plan except the items listed under "Part B
+items this plan builds". Part Z on branch `zether-soroban` from `main` after `ua-soroban` merges (it needs the UA ledger
 and the registry); Part B and Part Z may then run in parallel worktrees, their docker steps never at the same time.
 Code and tests run on SDK testutils at protocol 30 and a local `stellar/quickstart` at Protocol 30; the testnet only
 after 2026-11-03 with protocol 30 read from the RPC.
@@ -24,7 +24,7 @@ pinned by digest (docker), `stellar-cli` pinned at T0; Rust `scaas-node` (`stell
 `@noble/curves` 2.4.0 / `@noble/post-quantum` 0.7.1 (`clients/clientkeys`); Python 3 stdlib (the spike's measurement
 script); Part Z: `clients/zether-prover` (Rust, wasm), Foundry only for the existing `zether-cross` check.
 
-**Spec:** `docs/superpowers/specs/2026-10-30-soroban-4b-ua-base-design.md` (§0 rows S1–S18 with S13a / S13b, §1–§13;
+**Spec:** `docs/superpowers/specs/2026-10-30-ua-soroban-design.md` (§0 rows S1–S18 with S13a / S13b, §1–§13;
 §11 conflict rulings C11–C17, owner accepted 2026-10-30, S6 and S10 confirmed; S13a in this round by the owner the same
 day). Background: the UA-8 plan `docs/superpowers/plans/2026-10-30-ua8-portable-registrations.md` (Part B);
 `docs/contracts/accounts.md` (CTR-UA-03/-04/-07/-09/-12/-15/-17/-18/-23/-26/-27/-28/-29/-31); `docs/networks/soroban.md`
@@ -35,8 +35,8 @@ day). Background: the UA-8 plan `docs/superpowers/plans/2026-10-30-ua8-portable-
 
 Binding rules of the spec (quoted or restated without change):
 
-- S2: "`register(kind, key_data, attrs, pop, pqz_pop, relayer)` on the CTR-UA-07 digests"; "4b accepts only empty
-  `attrs` (error `Attrs`)"; "4b already defines the full `Registration` type, so Part B changes no layout".
+- S2: "`register(kind, key_data, attrs, pop, pqz_pop, relayer)` on the CTR-UA-07 digests"; "UA-Soroban accepts only empty
+  `attrs` (error `Attrs`)"; "UA-Soroban already defines the full `Registration` type, so Part B changes no layout".
 - S3: enabled kinds `webauthn-p256` 0x0100, `p256` 0x0101, `ed25519` 0x0102, `secp256k1` 0x0108, `msig` 0x0120,
   `mldsa44` 0x0130, `mldsa65` 0x0131; "Every other derived kind is disabled (`KindDisabled`)". Part Z adds
   `zether-bls12381` 0x0141 together with the Zether token (S13a).
@@ -78,7 +78,7 @@ Owner rulings and house rules that bind every task:
   Every multi-step gate logs per step (`# <step> at commit <sha>` first, `rc=<n>` last) and skips a step done at the
   same commit with a clean tree (resume, never restart; on resume read the latest logs first).
 - **Branches.** Subagents stop at the branch: commit per task, **no merge, no push** (owner's go only). Commit messages
-  `4b T<n>: …` / `soroban-zether Z<n>: …`, ending with the `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` line.
+  `UA-Soroban T<n>: …` / `zether-soroban Z<n>: …`, ending with the `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` line.
 - English for code, comments, docs and commits. Parameter sets only in the `n2304-kmax4096` form (none is touched here).
   "SCaaS testnet" names chain 7622 in prose; it is not touched by this plan. EVM token names are the renamed ones
   (`NormalToken`, `WrappedToken`, `NormalZetherToken`, `WrappedZetherToken`).
@@ -140,24 +140,24 @@ spec's "who" column copied: "controller proposal, owner may override" or the own
 
 | # | Decision | Choice and why |
 |---|---|---|
-| 4B-D1 | Shared types | New lib crate `smartcontracts/soroban/contracts/ua-common/` (package `scaas-ua-common`, `crate-type = ["rlib"]`, no `#[contract]`): `Holder`, `Order`, `Checked`, `UaAttrs`, `Registration`, the `UaRegistryClient` (`#[contractclient]` trait), purpose tags, `op_digest`, `pay_lane`, `meta_pay_id`. A contract crate as a dependency would export its entry points into the dependent's Wasm; one type definition keeps the XDR identical in every contract. |
-| 4B-D2 | Task order vs spec §10 | Spec T0–T12 map to plan T0, T1, T2, T3, T5, T6, T7, T8, T9, T4 (clientkeys before the token: the token, mandate, DEX and router tests reproduce `ua-ops.json`), T11, T12, T14; new: T10 local e2e, T13 review. Spec C16b's "4b T12" (the testnet task) is this plan's **T14**. |
-| 4B-D3 | The spike crate | `smartcontracts/soroban/spike/` is its own cargo workspace (package `scaas-ua-spike`, pinned `=30.0.0-rc.1`), outside `contracts/*`, so T0 runs before T1 touches the workspace. Kept, never deployed; Part B's B0 extends it for the full PQZ + KEM registration (C11); Part Z's Z0 extends it with the real verifier. |
-| 4B-D4 | Quickstart | One script `smartcontracts/soroban/scripts/quickstart.sh up|down|wait` holds the pinned image digest and the command `docker run -d --rm --memory 3g --name scaas-stellar -p 127.0.0.1:31980:8000 <image@digest> --local --protocol-version 30 --limits testnet --enable core,rpc,horizon`; `up` exits 3 when a `scaas-stellar` container already runs; `wait` polls `getNetwork` until `protocolVersion == 30` (else fails). `smartcontracts/scripts/devnet.sh soroban` dispatches to it. |
-| 4B-D5 | stellar-cli | Pinned at T0 (`scripts/capped cargo install --locked stellar-cli --version =<v>`; the installed 22.2.0 predates Protocol 30): the first release whose `stellar-xdr` supports Protocol 30, version recorded in the run log and `quickstart.sh`. |
-| 4B-D6 | 4b and unverifiable parts | In 4b a signature part the chain cannot verify (an `evm-contract` member's slot, any `MemberSig` of a kind outside MEMBER) is `NotVerifiable`, whatever `relayer` says; `relayer` is accepted and ignored for chain-verified parts (UA8-D18). Part B's B4 adds the relayer-checked mode on top, with no caller change (C13). |
-| 4B-D7 | `ua_ref_used` | Derived, no own entry: `ua_ref_used(ua, pay_ref) = ua_nonce(ua, pay_lane(pay_ref)) > 0` (`ua_pay` is nonce 0 of its pay lane, S7). |
-| 4B-D8 | Constructors | Token `__constructor(admin, decimals, name, symbol, registry: Option<Address>)`; mandate `__constructor(owner: Holder, registry: Option<Address>)`; DEX `__constructor(admin, fee_recipient, registry: Option<Address>)` (its `ua_cancel` verifies a UA); the router stays stateless (its `ua_relay` reaches the registry through `token.ua_pay`). |
-| 4B-D9 | Mandate names | The mandate takes the NET-SOR-16 names in this deployment (spec §5.2): `mtx_set_mandate`, `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw`, `mtx_mandate_pay` — one entry each for a native and a UA holder. Owner entries end in `(lane, nonce, valid_until, relayer, auth)`; a native holder authorises by host auth (`auth` must be empty, `BadAuth`), its lane is not consumed; expiry and `relayer` are checked for both. The token's `pay` and the DEX's `settle` / `cancel` keep their names (their NET-SOR-16 renames stay SPECIFIED, outside 4b). |
-| 4B-D10 | DEX `ua_cancel` purpose | Purpose `trade` over `op_digest(dex, "ua_cancel", (order,))`, verified by the DEX through the registry (the spec names the entry, not its purpose; the function name in the digest separates it from the order signature). |
-| 4B-D11 | `RelayFeePaid` | `payer` **and** `payee` become `Holder` (a bound payee of `ua_relay` may be a UA; one event shape for `relay` and `ua_relay`). |
-| 4B-D12 | `ua-ops.json` | Generated by clientkeys (`scripts/soroban-ua-ops-vectors.mjs`, the deterministic signers of `scripts/ua-signers.mjs`), network passphrase `Standalone Network ; February 2017`, fixed contract ids; `--check` mode; the contract tests (registered at those ids with that network id), the adapter and clientkeys reproduce it. |
-| 4B-D13 | e2e signing | The e2e signs through `node clients/clientkeys/scripts/soroban-sign.mjs` (the vector signers, already the reference); no Rust ML-DSA / WebAuthn signing crate is added. |
-| 4B-D14 | Soroban `ua_metatx` job | `{kind: "ua_metatx", op: {contract, function, args: "<hex XDR ScVec>", auth?: [{payload, from, signature}], valid_until}}`; allow-list by function and contract class (below, T9); chain param `params.max_deposit_per_job` (stroops; absent = 0 = no restore accepted). |
-| 4B-D15 | `receivable` | `false` for an unregistered id too; the token tells the two errors apart on the failure path only (`record_of(ua).is_none()` ⇒ `UaNotRegistered`, else `UaNotReceivable`). |
-| 4B-D16 | Error codes | Registry: `KindDisabled = 1, KeyData = 2, IdInNativeSpace = 3, AlreadyRegistered = 4, KeyInUse = 5, MemberUnknown = 6, Attrs = 7, Pop = 8, NotRegistered = 9, Unauthorized = 10, NotVerifiable = 11, RelayerNotListed = 12` (Part B continues at 13: `PqzHolder, KemHolder, KemVersion, KemKeyLength, PqzPopHash`). Token (after the built 1–7): `UaLedgerOff = 8, UaNotRegistered = 9, UaNotReceivable = 10, UaPoolNotPayable = 11, BadNonce = 12`; mandate adds `BadAuth` after its built codes. A host crypto failure (ed25519 / P-256 / ML-DSA verify panics) is a host error, not `Pop` (finding F1). |
-| 4B-D17 | Testnet task placement | T14 runs once, as the round's last step, after Part B's B9 and Part Z's Z10, on branch `ua8-soroban` (or `soroban-zether` if Part B stopped at B0); its commits keep the prefix `4b T14:`; B10 follows it. |
-| 4B-D18 | Registry interface check | `smartcontracts/soroban/scripts/check-registry-interface.sh` compares `stellar contract info interface` of the built `ua-registry` Wasm with the exact function list of T3 (no admin, no upgrade, no setter); run by the `e2e-soroban-local` gate step. |
+| SOR-D1 | Shared types | New lib crate `smartcontracts/soroban/contracts/ua-common/` (package `scaas-ua-common`, `crate-type = ["rlib"]`, no `#[contract]`): `Holder`, `Order`, `Checked`, `UaAttrs`, `Registration`, the `UaRegistryClient` (`#[contractclient]` trait), purpose tags, `op_digest`, `pay_lane`, `meta_pay_id`. A contract crate as a dependency would export its entry points into the dependent's Wasm; one type definition keeps the XDR identical in every contract. |
+| SOR-D2 | Task order vs spec §10 | Spec T0–T12 map to plan T0, T1, T2, T3, T5, T6, T7, T8, T9, T4 (clientkeys before the token: the token, mandate, DEX and router tests reproduce `ua-ops.json`), T11, T12, T14; new: T10 local e2e, T13 review. Spec C16b's "UA-Soroban T12" (the testnet task) is this plan's **T14**. |
+| SOR-D3 | The spike crate | `smartcontracts/soroban/spike/` is its own cargo workspace (package `scaas-ua-spike`, pinned `=30.0.0-rc.1`), outside `contracts/*`, so T0 runs before T1 touches the workspace. Kept, never deployed; Part B's B0 extends it for the full PQZ + KEM registration (C11); Part Z's Z0 extends it with the real verifier. |
+| SOR-D4 | Quickstart | One script `smartcontracts/soroban/scripts/quickstart.sh up|down|wait` holds the pinned image digest and the command `docker run -d --rm --memory 3g --name scaas-stellar -p 127.0.0.1:31980:8000 <image@digest> --local --protocol-version 30 --limits testnet --enable core,rpc,horizon`; `up` exits 3 when a `scaas-stellar` container already runs; `wait` polls `getNetwork` until `protocolVersion == 30` (else fails). `smartcontracts/scripts/devnet.sh soroban` dispatches to it. |
+| SOR-D5 | stellar-cli | Pinned at T0 (`scripts/capped cargo install --locked stellar-cli --version =<v>`; the installed 22.2.0 predates Protocol 30): the first release whose `stellar-xdr` supports Protocol 30, version recorded in the run log and `quickstart.sh`. |
+| SOR-D6 | UA-Soroban and unverifiable parts | In UA-Soroban a signature part the chain cannot verify (an `evm-contract` member's slot, any `MemberSig` of a kind outside MEMBER) is `NotVerifiable`, whatever `relayer` says; `relayer` is accepted and ignored for chain-verified parts (UA8-D18). Part B's B4 adds the relayer-checked mode on top, with no caller change (C13). |
+| SOR-D7 | `ua_ref_used` | Derived, no own entry: `ua_ref_used(ua, pay_ref) = ua_nonce(ua, pay_lane(pay_ref)) > 0` (`ua_pay` is nonce 0 of its pay lane, S7). |
+| SOR-D8 | Constructors | Token `__constructor(admin, decimals, name, symbol, registry: Option<Address>)`; mandate `__constructor(owner: Holder, registry: Option<Address>)`; DEX `__constructor(admin, fee_recipient, registry: Option<Address>)` (its `ua_cancel` verifies a UA); the router stays stateless (its `ua_relay` reaches the registry through `token.ua_pay`). |
+| SOR-D9 | Mandate names | The mandate takes the NET-SOR-16 names in this deployment (spec §5.2): `mtx_set_mandate`, `mtx_set_payee`, `mtx_revoke`, `mtx_withdraw`, `mtx_mandate_pay` — one entry each for a native and a UA holder. Owner entries end in `(lane, nonce, valid_until, relayer, auth)`; a native holder authorises by host auth (`auth` must be empty, `BadAuth`), its lane is not consumed; expiry and `relayer` are checked for both. The token's `pay` and the DEX's `settle` / `cancel` keep their names (their NET-SOR-16 renames stay SPECIFIED, outside UA-Soroban). |
+| SOR-D10 | DEX `ua_cancel` purpose | Purpose `trade` over `op_digest(dex, "ua_cancel", (order,))`, verified by the DEX through the registry (the spec names the entry, not its purpose; the function name in the digest separates it from the order signature). |
+| SOR-D11 | `RelayFeePaid` | `payer` **and** `payee` become `Holder` (a bound payee of `ua_relay` may be a UA; one event shape for `relay` and `ua_relay`). |
+| SOR-D12 | `ua-ops.json` | Generated by clientkeys (`scripts/soroban-ua-ops-vectors.mjs`, the deterministic signers of `scripts/ua-signers.mjs`), network passphrase `Standalone Network ; February 2017`, fixed contract ids; `--check` mode; the contract tests (registered at those ids with that network id), the adapter and clientkeys reproduce it. |
+| SOR-D13 | e2e signing | The e2e signs through `node clients/clientkeys/scripts/soroban-sign.mjs` (the vector signers, already the reference); no Rust ML-DSA / WebAuthn signing crate is added. |
+| SOR-D14 | Soroban `ua_metatx` job | `{kind: "ua_metatx", op: {contract, function, args: "<hex XDR ScVec>", auth?: [{payload, from, signature}], valid_until}}`; allow-list by function and contract class (below, T9); chain param `params.max_deposit_per_job` (stroops; absent = 0 = no restore accepted). |
+| SOR-D15 | `receivable` | `false` for an unregistered id too; the token tells the two errors apart on the failure path only (`record_of(ua).is_none()` ⇒ `UaNotRegistered`, else `UaNotReceivable`). |
+| SOR-D16 | Error codes | Registry: `KindDisabled = 1, KeyData = 2, IdInNativeSpace = 3, AlreadyRegistered = 4, KeyInUse = 5, MemberUnknown = 6, Attrs = 7, Pop = 8, NotRegistered = 9, Unauthorized = 10, NotVerifiable = 11, RelayerNotListed = 12` (Part B continues at 13: `PqzHolder, KemHolder, KemVersion, KemKeyLength, PqzPopHash`). Token (after the built 1–7): `UaLedgerOff = 8, UaNotRegistered = 9, UaNotReceivable = 10, UaPoolNotPayable = 11, BadNonce = 12`; mandate adds `BadAuth` after its built codes. A host crypto failure (ed25519 / P-256 / ML-DSA verify panics) is a host error, not `Pop` (finding F1). |
+| SOR-D17 | Testnet task placement | T14 runs once, as the round's last step, after Part B's B9 and Part Z's Z10, on branch `ua8-soroban` (or `zether-soroban` if Part B stopped at B0); its commits keep the prefix `ua-soroban T14:`; B10 follows it. |
+| SOR-D18 | Registry interface check | `smartcontracts/soroban/scripts/check-registry-interface.sh` compares `stellar contract info interface` of the built `ua-registry` Wasm with the exact function list of T3 (no admin, no upgrade, no setter); run by the `e2e-soroban-local` gate step. |
 
 Part Z decisions are ZS-D1–ZS-D9 in Part Z's header.
 
@@ -165,7 +165,7 @@ Part Z decisions are ZS-D1–ZS-D9 in Part Z's header.
 
 | UA-8 Part B item | Moves to | What is left in Part B |
 |---|---|---|
-| B0 network spike (C11) | **T0** (`smartcontracts/soroban/spike/`, gate step `soroban-spike-local`), with the SDK pin (T1) and the image pin (T0) | B0 re-runs the spike for the full PQZ + KEM registration on the real registry; its "pin the SDK and the image" becomes "check the 4b pins" |
+| B0 network spike (C11) | **T0** (`smartcontracts/soroban/spike/`, gate step `soroban-spike-local`), with the SDK pin (T1) and the image pin (T0) | B0 re-runs the spike for the full PQZ + KEM registration on the real registry; its "pin the SDK and the image" becomes "check the UA-Soroban pins" |
 | B1 portable digests (C11) | **T2** (`portable_pop_digest`, `registration_digest`, `ua_message` in `ua-registry/src/digest.rs`) | the KEM record digest and the `portable.json` KEM check |
 | B2 `register` and `Registration` (S2) | **T3** (entry, full layout incl. `attrs`, `pop_checked`, `pqz_pop_checked`, `proven`, `signable`, `index`, `ledger`) | lift `Attrs`, the PQZ / KEM entries, `Checked::Relayer` |
 | B4 relayer list (C13) | **T3** (constructor `relayers: Vec<Address>`, `relayers()` view, `register(…, relayer: Option<Address>)`) | the relayer-checked mode; no caller changes |
@@ -173,7 +173,7 @@ Part Z decisions are ZS-D1–ZS-D9 in Part Z's header.
 | B10 SDK swap (C16b) | **T14** step 1 | B10 follows T14 |
 
 Names: Part B's "factory crate" is `ua-registry`; its entries `UA` / `KEY` / `PQZK` / `PQZP` / `KEM` / `KEMMAX` are
-`Ua` / `Key` / `PqzK` / `PqzP` / `Kem` / `KemMax` (spec §4; "the 4b name wins").
+`Ua` / `Key` / `PqzK` / `PqzP` / `Kem` / `KemMax` (spec §4; "the UA-Soroban name wins").
 
 ---
 
@@ -194,25 +194,25 @@ Names: Part B's "factory crate" is `ua-registry`; its entries `UA` / `KEY` / `PQ
 | `scaas-node/src/adapters/soroban.rs`, `node.example.toml`, `tests/e2e_soroban_ua.rs` | adapter, e2e |
 | `smartcontracts/scripts/{devnet.sh,deploy.sh}` | `soroban` entries |
 | `docs/networks/soroban.md`, `docs/contracts/accounts.md`, `docs/node/job-api.md`, `docs/decisions.md`, the spec, `TODO.md` | docs |
-| `smartcontracts/evm/runs/2026-10-30-soroban-4b-gates.sh` + logs; `smartcontracts/evm/runs/2026-10-27-metatx-split-gates.sh` (two new step commands) | gates |
+| `smartcontracts/evm/runs/2026-10-30-ua-soroban-gates.sh` + logs; `smartcontracts/evm/runs/2026-10-27-metatx-split-gates.sh` (two new step commands) | gates |
 | Part Z: `smartcontracts/soroban/contracts/zether-verifier/`, `clients/zether-prover/src/{zether.rs,api.rs,vectors.rs}`, `smartcontracts/vectors/zether/soroban/` | Part Z |
 
 ## Setup (before T0)
 
-- [ ] `git -C /home/ha/work/ainative/scaas worktree add -b soroban-4b /home/ha/work/ainative/scaas/.claude/worktrees/soroban-4b main`;
+- [ ] `git -C /home/ha/work/ainative/scaas worktree add -b ua-soroban /home/ha/work/ainative/scaas/.claude/worktrees/ua-soroban main`;
   check `git log main --oneline | grep -m1 'token-family rename'` (S18 precondition; merged as `1a68427a`) and
   `ls smartcontracts/vectors/ua/portable.json` (UA-8 Part A on `main`).
 
 ---
 
-# Part 4b — Soroban UA base (branch `soroban-4b`)
+# Part UA-Soroban — Soroban UA base (branch `ua-soroban`)
 
 ### Task T0: network spike at Protocol 30 — HARD GATE (spec §10 T0, C11, S5, S17; S13a host primitives)
 
 **Files:**
 - Create: `smartcontracts/soroban/spike/Cargo.toml` (`[workspace] members = ["ua-spike"]`, the release profile of the
   main workspace), `spike/ua-spike/{Cargo.toml,src/lib.rs,src/test.rs}`, `spike/run.sh`, `spike/measure.py`,
-  `smartcontracts/soroban/scripts/quickstart.sh`, `smartcontracts/soroban/runs/<run-date>-4b-t0-spike.txt`
+  `smartcontracts/soroban/scripts/quickstart.sh`, `smartcontracts/soroban/runs/<run-date>-ua-soroban-t0-spike.txt`
 - Modify: `smartcontracts/scripts/devnet.sh` (`soroban) exec "$SC/soroban/scripts/quickstart.sh" "$@"`),
   `smartcontracts/soroban/Cargo.toml` (`exclude = ["spike"]` only),
   `smartcontracts/soroban/.gitignore` (`spike/target/`)
@@ -232,7 +232,7 @@ Names: Part B's "factory crate" is `ua-registry`; its entries `UA` / `KEY` / `PQ
   over fixed valid points); `zether_transfer_model(m: u32)` (the host operations `ZetherVerifier.sol` `verifyTransfer`
   performs for `m` recipients — its MSM sizes, scalar multiplications, field inversions and keccak transcript calls,
   counted from the Solidity source and listed in the run log — over fixed valid points; a cost model, not a verifier).
-- Produces: `quickstart.sh` (4B-D4) with `QS_IMAGE=stellar/quickstart@sha256:<digest>`; `run.sh` = the spike's
+- Produces: `quickstart.sh` (SOR-D4) with `QS_IMAGE=stellar/quickstart@sha256:<digest>`; `run.sh` = the spike's
   `cargo test -j2` (capped), then `quickstart.sh up`,
   trap `quickstart.sh down` on every exit, `wait`, `stellar network settings --output json > <log dir>/settings.json`,
   friendbot, `stellar contract deploy` of the spike Wasm, then `python3 -I measure.py` per call;
@@ -250,17 +250,17 @@ Names: Part B's "factory crate" is `ua-registry`; its entries `UA` / `KEY` / `PQ
   (m = 1, 2, 4, 8).
 - [ ] **Step 2:** `cd smartcontracts/soroban/spike && ../../../scripts/capped cargo test -j2` — FAIL (no crate).
 - [ ] **Step 3: Implement.** Pull the Core v30 quickstart (`latest` if it carries Core v30.0.0, else the tag that
-  does), pin its digest; install the pinned `stellar-cli` (4B-D5); record in the run log: image digest, Core and RPC
+  does), pin its digest; install the pinned `stellar-cli` (SOR-D5); record in the run log: image digest, Core and RPC
   versions, CLI version, the exact Rust signatures of `ml_dsa_44_verify` / `ml_dsa_65_verify` and of the BLS12-381
   functions used.
-- [ ] **Step 4:** Step 2's command, then `CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh 2>&1 | tee -a smartcontracts/soroban/runs/<run-date>-4b-t0-spike.txt`.
+- [ ] **Step 4:** Step 2's command, then `CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh 2>&1 | tee -a smartcontracts/soroban/runs/<run-date>-ua-soroban-t0-spike.txt`.
   Also scan `msig_model` for n = 1…16 and log the largest `n` whose simulation fits (data, not a gate).
-  **Gate:** every unit test passes and every 4b network figure (`register_model`, `msig_model(3)`, `ua_pay_model`) is
+  **Gate:** every unit test passes and every UA-Soroban network figure (`register_model`, `msig_model(3)`, `ua_pay_model`) is
   within the limits read from the network ⇒ continue. Otherwise ⇒ **STOP**: commit the spike and the log, report the
   figures and limits to the controller for the owner, start no further task until the owner rules. The BLS12-381 and
   Zether-model figures are logged as the S13a early estimate (Z0 is the Zether HARD GATE); a Zether model over a limit
-  is reported, it does not stop 4b.
-- [ ] **Step 5: Commit** `4b T0: Protocol 30 spike (ML-DSA, register / msig / ua_pay models, BLS12-381 primitives), quickstart pinned`.
+  is reported, it does not stop UA-Soroban.
+- [ ] **Step 5: Commit** `ua-soroban T0: Protocol 30 spike (ML-DSA, register / msig / ua_pay models, BLS12-381 primitives), quickstart pinned`.
 
 ### Task T1: SDK `=30.0.0-rc.1` on the whole workspace (S5)
 
@@ -280,7 +280,7 @@ Names: Part B's "factory crate" is `ua-registry`; its entries `UA` / `KEY` / `PQ
   smartcontracts/scripts/build.sh soroban`; then the existing node e2e against the Protocol 30 quickstart:
   `smartcontracts/soroban/scripts/quickstart.sh up && smartcontracts/soroban/scripts/quickstart.sh wait && (cd scaas-node && CAPPED_SLOTS=1 STELLAR_BIN=$(command -v stellar) ../scripts/capped cargo test -j2 --test e2e_soroban -- --ignored --test-threads=1); rc=$?; smartcontracts/soroban/scripts/quickstart.sh down; exit $rc`
   — PASS (a `stellar-xdr` decode failure ⇒ bump it to the release with Protocol 30 XDR, re-run `cargo-scaas-node`).
-- [ ] **Step 5: Commit** `4b T1: soroban-sdk =30.0.0-rc.1 workspace-wide`.
+- [ ] **Step 5: Commit** `ua-soroban T1: soroban-sdk =30.0.0-rc.1 workspace-wide`.
 
 ### Task T2: `ua-common` and the registry's digests and verifiers (spec §2, §3; S3, S4, S10; C11)
 
@@ -345,13 +345,13 @@ pub fn meta_pay_id(env: &Env, salt: &BytesN<32>, meta: &Bytes) -> BytesN<32>;
 - [ ] **Step 3: Implement.** Ed25519 key validation (`y < p`, the eight small-order encodings) in the contract unless
   `kind_ed25519_negatives_fail` and the `kinds.json` `invalid` rows show the host already refuses them (record which).
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `4b T2: ua-common + registry digests and per-kind verifiers (vectors)`.
+- [ ] **Step 5: Commit** `ua-soroban T2: ua-common + registry digests and per-kind verifiers (vectors)`.
 
 ### Task T3: `UaRegistry` — `register`, `require_authorized`, lists, views (spec §3, §4; S1, S2, S9, S10, S11, S16; C13, C17)
 
 **Files:**
 - Modify: `contracts/ua-registry/src/lib.rs`; Create: `contracts/ua-registry/src/test.rs`,
-  `smartcontracts/soroban/scripts/check-registry-interface.sh` (4B-D18)
+  `smartcontracts/soroban/scripts/check-registry-interface.sh` (SOR-D18)
 
 **Interfaces:**
 - Produces (exactly these exported functions; spec §4):
@@ -364,7 +364,7 @@ fn registration_of(env: Env, ua: BytesN<32>) -> Option<(u32, Bytes, UaAttrs, Byt
 fn record_of(env: Env, ua: BytesN<32>) -> Option<Registration>;
 fn key_owner(env: Env, key_hash: BytesN<32>) -> Option<BytesN<32>>;
 fn ua_of(env: Env, kind: u32, key_data: Bytes) -> BytesN<32>;
-fn receivable(env: Env, ua: BytesN<32>) -> bool;                              // = signable; false when unregistered (4B-D15)
+fn receivable(env: Env, ua: BytesN<32>) -> bool;                              // = signable; false when unregistered (SOR-D15)
 fn relayers(env: Env) -> Vec<Address>;
 fn ua_count(env: Env, kind: u32) -> u32;
 fn ua_at(env: Env, kind: u32, i: u32) -> BytesN<32>;
@@ -382,7 +382,7 @@ fn ua_page(env: Env, kind: u32, start: u32, n: u32) -> Vec<BytesN<32>>;     // c
   `abi.encode(MemberSig[])` under purpose `member` (`member_digest(ua, uaMessage(MSIG, POP_V2, registrationDigest))`):
   derived members by `verify::check`, `evm-eoa` by `personal_sign`, native Soroban members by
   `member.require_auth_for_args((ua, purpose, digest))` with an empty slot, an `evm-contract` slot ⇒ `NotVerifiable`
-  (4B-D6). `require_authorized`: `NotRegistered`, then `Unauthorized` unless `signable` and `purpose ∉ {POP_V2, KEM,
+  (SOR-D6). `require_authorized`: `NotRegistered`, then `Unauthorized` unless `signable` and `purpose ∉ {POP_V2, KEM,
   PQZ_KEY}`, then the kind's check over `ua_message(kind, purpose, digest)` (ML-DSA over `pq_message`), `msig` members
   under purpose `member` until the threshold (an `evm-eoa` member never counts); extends `Ua(ua)`.
 
@@ -413,9 +413,9 @@ fn ua_page(env: Env, kind: u32, start: u32, n: u32) -> Vec<BytesN<32>>;     // c
   exactly the list above).
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS;
   `scripts/capped smartcontracts/scripts/build.sh soroban && smartcontracts/soroban/scripts/check-registry-interface.sh smartcontracts/soroban/target/wasm32v1-none/release/scaas_ua_registry.wasm` — `registry interface: ok`.
-- [ ] **Step 5: Commit** `4b T3: UaRegistry (portable register, require_authorized, msig members S10, lists, no admin)`.
+- [ ] **Step 5: Commit** `ua-soroban T3: UaRegistry (portable register, require_authorized, msig members S10, lists, no admin)`.
 
-### Task T4: clientkeys Soroban encodings and `ua-ops.json` (spec §2, §10; 4B-D12, 4B-D13)
+### Task T4: clientkeys Soroban encodings and `ua-ops.json` (spec §2, §10; SOR-D12, SOR-D13)
 
 **Files:**
 - Create: `clients/clientkeys/src/soroban.js`, `clients/clientkeys/scripts/soroban-ua-ops-vectors.mjs` →
@@ -448,7 +448,7 @@ fn ua_page(env: Env, kind: u32, start: u32, n: u32) -> Vec<BytesN<32>>;     // c
 - [ ] **Step 2:** `cd clients/clientkeys && ../../scripts/capped npm test` — FAIL.
 - [ ] **Step 3: Implement**; `node scripts/soroban-ua-ops-vectors.mjs` writes the file (`--check` compares).
 - [ ] **Step 4:** Step 2's command — PASS; `node scripts/soroban-ua-ops-vectors.mjs --check` — exit 0.
-- [ ] **Step 5: Commit** `4b T4: clientkeys Soroban encodings, ua-ops.json, e2e signer`.
+- [ ] **Step 5: Commit** `ua-soroban T4: clientkeys Soroban encodings, ua-ops.json, e2e signer`.
 
 ### Task T5: the token's UA ledger (spec §5.1, §5.5; S6, S7, S8, S9, S11, S16)
 
@@ -467,7 +467,7 @@ fn ua_page(env: Env, kind: u32, start: u32, n: u32) -> Vec<BytesN<32>>;     // c
 fn registry(env: Env) -> Option<Address>;
 fn ua_balance(env: Env, ua: BytesN<32>) -> i128;
 fn ua_nonce(env: Env, ua: BytesN<32>, lane: BytesN<32>) -> u64;
-fn ua_ref_used(env: Env, ua: BytesN<32>, pay_ref: BytesN<32>) -> bool;                       // 4B-D7
+fn ua_ref_used(env: Env, ua: BytesN<32>, pay_ref: BytesN<32>) -> bool;                       // SOR-D7
 fn transfer_to_ua(env: Env, from: Address, to: BytesN<32>, amount: i128);                     // from.require_auth()
 fn pay_to_ua(env: Env, from: Address, to: BytesN<32>, amount: i128, pay_ref: BytesN<32>, valid_until: u64); // PayRef(from, pay_ref) once
 fn mint_to_ua(env: Env, to: BytesN<32>, amount: i128);                                        // admin
@@ -486,7 +486,7 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
   `valid_until` ⇒ `Expired`; lane: `nonce == ua_nonce(from, lane)` else `BadNonce`, then `nonce + 1` (`ua_pay` /
   `ua_pay_meta`: `lane = pay_lane(pay_ref)`, `nonce = 0`); `ua_cancel_nonce` bumps the lane by one and emits
   `UaNonceCancelled { #[topic] ua, #[topic] lane, new_nonce }`; `Some(r)` ⇒ `r.require_auth()`; receivers
-  `Holder::Ua` through `receivable` (4B-D15); the **pool is the token's own address**: native ↔ UA moves go through the
+  `Holder::Ua` through `receivable` (SOR-D15); the **pool is the token's own address**: native ↔ UA moves go through the
   real balance `Balance(token)`, so `balance(token) = Σ UaBalance`; native `transfer`, `transfer_from`, `pay`, `pay_meta`,
   `mint`, `transfer_to_ua`'s `from`, a `Holder::Addr(token)` receiver ⇒ `UaPoolNotPayable`. Events: SEP-41
   `transfer` / `mint` / `burn` with the pool as the native endpoint of every native ↔ UA move;
@@ -515,9 +515,9 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
 - [ ] **Step 3: Implement**; update every constructor call site (`registry = None` where a test does not need the UA
   ledger; the CLI `deploy` passes `--registry` only when set).
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `4b T5: token UA ledger (ua_* entries, lanes, pool = token address, relayer binding)`.
+- [ ] **Step 5: Commit** `ua-soroban T5: token UA ledger (ua_* entries, lanes, pool = token address, relayer binding)`.
 
-### Task T6: mandate with UA owner, delegate and payees (spec §5.2; 4B-D9)
+### Task T6: mandate with UA owner, delegate and payees (spec §5.2; SOR-D9)
 
 **Files:**
 - Modify: `contracts/mandate/src/{lib.rs,test.rs}`, `contracts/mandate/Cargo.toml`, `contracts/relay-fee/src/test.rs`
@@ -542,9 +542,9 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
 - [ ] **Step 2:** `cd smartcontracts/soroban && ../../scripts/capped cargo test -j2 -p scaas-mandate` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `4b T6: mandate UA holders (mtx_* names, UA lanes, UA payees)`.
+- [ ] **Step 5: Commit** `ua-soroban T6: mandate UA holders (mtx_* names, UA lanes, UA payees)`.
 
-### Task T7: DEX UA legs (spec §5.3; 4B-D10)
+### Task T7: DEX UA legs (spec §5.3; SOR-D10)
 
 **Files:**
 - Modify: `contracts/dex/src/{lib.rs,test.rs}`, `contracts/dex/Cargo.toml`, `contracts/smart-key-account/src/test.rs`
@@ -556,7 +556,7 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
   `relayer.require_auth()` (NET-SOR-10); per leg: `Holder::Addr(a)` ⇒ `a.require_auth_for_args((order,))`, `auth` empty,
   funds by `transfer_from`; `Holder::Ua(u)` ⇒ `sell_token.ua_trade(dex, order, auth, fill)`; proceeds to each order's
   `destination` (native `transfer`, UA `transfer_to_ua` from the DEX); fees as today; `filled[order_hash]` bounds every
-  fill (overfill rule unchanged); `cancel(order)` for native makers; `ua_cancel(order: Order, auth: Bytes)` (4B-D10) sets
+  fill (overfill rule unchanged); `cancel(order)` for native makers; `ua_cancel(order: Order, auth: Bytes)` (SOR-D10) sets
   `filled = sell_amount`.
 
 - [ ] **Step 1: Failing tests:** `ua_trade_dex_only_partial_fill_no_resign` (a UA maker's one signature fills in three
@@ -567,9 +567,9 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
 - [ ] **Step 2:** `cd smartcontracts/soroban && ../../scripts/capped cargo test -j2 -p scaas-dex` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `4b T7: DEX UA legs (ua_trade, destinations, ua_cancel, bound relayer)`.
+- [ ] **Step 5: Commit** `ua-soroban T7: DEX UA legs (ua_trade, destinations, ua_cancel, bound relayer)`.
 
-### Task T8: relay-fee router `ua_relay` (spec §5.4, §5.5; CTR-MTX-27; 4B-D11)
+### Task T8: relay-fee router `ua_relay` (spec §5.4, §5.5; CTR-MTX-27; SOR-D11)
 
 **Files:**
 - Modify: `contracts/relay-fee/src/{lib.rs,test.rs}`, `contracts/relay-fee/Cargo.toml`
@@ -588,9 +588,9 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
 - [ ] **Step 2:** `cd smartcontracts/soroban && ../../scripts/capped cargo test -j2 -p scaas-relay-fee` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `4b T8: relay-fee ua_relay, Holder payer / payee`.
+- [ ] **Step 5: Commit** `ua-soroban T8: relay-fee ua_relay, Holder payer / payee`.
 
-### Task T9: `scaas-node` Soroban adapter (spec §8, §9; S12, S14, S15; 4B-D14)
+### Task T9: `scaas-node` Soroban adapter (spec §8, §9; S12, S14, S15; SOR-D14)
 
 **Files:**
 - Modify: `scaas-node/src/adapters/soroban.rs`, `scaas-node/src/config.rs` (only if `params` needs a typed field),
@@ -626,13 +626,13 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
 - [ ] **Step 2:** `cd scaas-node && ../scripts/capped cargo test -j2 adapters::soroban` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2'` — PASS.
-- [ ] **Step 5: Commit** `4b T9: scaas-node Soroban ua_metatx jobs, lane-authority rule, auto-restore cap, UA events`.
+- [ ] **Step 5: Commit** `ua-soroban T9: scaas-node Soroban ua_metatx jobs, lane-authority rule, auto-restore cap, UA events`.
 
 ### Task T10: local e2e on the Protocol 30 quickstart (spec §10 e2e; S17)
 
 **Files:**
 - Create: `scaas-node/tests/e2e_soroban_ua.rs` (`#[ignore]`), `smartcontracts/soroban/scripts/e2e-local.sh`,
-  `smartcontracts/soroban/runs/<run-date>-4b-e2e-local.txt`
+  `smartcontracts/soroban/runs/<run-date>-ua-soroban-e2e-local.txt`
 - Modify: `scaas-node/tests/e2e_soroban.rs` (the T5 constructor; env `STELLAR_PASSPHRASE`, `STELLAR_FRIENDBOT` with the
   local defaults, shared with the new file)
 
@@ -643,7 +643,7 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
   `STELLAR_FRIENDBOT`, `STELLAR_BIN` (T14 reuses it against the testnet). The e2e deploys the registry (relayers = the
   two lanes), a token bound to it, a mandate, the DEX and the router; registrations are submitted directly by the lane
   key through the CLI (anyone may submit; the node's `call` job is Part B B6); UA signatures come from
-  `soroban-sign.mjs` (4B-D13).
+  `soroban-sign.mjs` (SOR-D13).
 
 - [ ] **Step 1: Failing tests:** `e2e_soroban_ua_register_passkey_and_mldsa65`,
   `e2e_soroban_ua_transfer_to_ua_and_ua_pay_relayed` (a `ua_metatx` job through `lane_step`, finality and the
@@ -653,13 +653,13 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
   submission; the lane's sequence is unchanged); each logs CPU instructions and fees.
 - [ ] **Step 2:** `smartcontracts/soroban/scripts/e2e-local.sh` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4:** `smartcontracts/soroban/scripts/e2e-local.sh 2>&1 | tee smartcontracts/soroban/runs/<run-date>-4b-e2e-local.txt` — PASS.
-- [ ] **Step 5: Commit** `4b T10: local Protocol 30 e2e (registry, UA ledger, relay fee, mandate, DEX leg)`.
+- [ ] **Step 4:** `smartcontracts/soroban/scripts/e2e-local.sh 2>&1 | tee smartcontracts/soroban/runs/<run-date>-ua-soroban-e2e-local.txt` — PASS.
+- [ ] **Step 5: Commit** `ua-soroban T10: local Protocol 30 e2e (registry, UA ledger, relay fee, mandate, DEX leg)`.
 
 ### Task T11: docs, decisions, TODO (spec §1 docs list; every §0 row)
 
 **Files:**
-- Modify: `docs/networks/soroban.md` — new section "UA base (4b)" with NET-SOR-17 (registry: S1, S2, S4, S16, ids and
+- Modify: `docs/networks/soroban.md` — new section "UA base (UA-Soroban)" with NET-SOR-17 (registry: S1, S2, S4, S16, ids and
   URN display of spec §2, the `register` order, errors), NET-SOR-18 (kinds S3, `msig` members S10), NET-SOR-19
   (receivability S9), NET-SOR-20 (UA ledger S6, S7, S8, the pool, events), NET-SOR-21 (mandate, DEX, router UA holders,
   spec §5.2–§5.5), NET-SOR-22 (storage, TTL, archival, who pays: S11, S12), NET-SOR-23 (node: S14, S15, spec §8, §9),
@@ -668,19 +668,19 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
   node's restore half BUILT), NET-SOR-16 (the mandate names built), §8 conformance (the new tests); §9 "Confidential
   payments" points to NET-SOR-25. `docs/contracts/accounts.md` — the Soroban row of the non-EVM table ("registry =
   `UaRegistry`, persistent entries") and of "Where the records live" (`UaRegistry` `Ua(ua)` / `Key(keyHash)`, TTL
-  extended by use, **no node job**), the CTR-UA-31 family table (Soroban: 4b built, Part B next).
-  `docs/node/job-api.md` — the Soroban `ua_metatx` payload (4B-D14) and allow-list. `docs/decisions.md` (section 30,
+  extended by use, **no node job**), the CTR-UA-31 family table (Soroban: UA-Soroban built, Part B next).
+  `docs/node/job-api.md` — the Soroban `ua_metatx` payload (SOR-D14) and allow-list. `docs/decisions.md` (section 30,
   Networks — Soroban) — NET-SOR-17…26 entries, each spec row S1–S18 (S13a, S13b separate) **in full** with its "who",
-  and 4B-D1–D18 in full ("controller proposal, owner may override", status, commit). The spec's status line ("4b built
-  on `soroban-4b` …"); `TODO.md` step 4 (4b built, next: review, owner go, then Part B and Part Z).
+  and SOR-D1–D18 in full ("controller proposal, owner may override", status, commit). The spec's status line ("UA-Soroban built
+  on `ua-soroban` …"); `TODO.md` step 4 (UA-Soroban built, next: review, owner go, then Part B and Part Z).
 - [ ] **Step 1:** Write every change (measured figures only, no `[estimate]` for a measured one).
 - [ ] **Step 2:** `python3 scripts/test_docs_check.py && python3 -I scripts/docs_check.py check` — 0 errors.
-- [ ] **Step 3: Commit** `4b T11: docs (soroban NET-SOR-17..26, accounts, job API, decisions S1-S18 and 4B-D1..D18, TODO)`.
+- [ ] **Step 3: Commit** `ua-soroban T11: docs (soroban NET-SOR-17..26, accounts, job API, decisions S1-S18 and SOR-D1..D18, TODO)`.
 
 ### Task T12: gate runner (resumable per step)
 
 **Files:**
-- Create: `smartcontracts/evm/runs/2026-10-30-soroban-4b-gates.sh` (sets `P=2026-10-30-soroban-4b`, `STEPS`,
+- Create: `smartcontracts/evm/runs/2026-10-30-ua-soroban-gates.sh` (sets `P=2026-10-30-ua-soroban`, `STEPS`,
   `FAMILIES`, `NEW_TESTS`, then sources `2026-10-27-metatx-split-gates.sh`, as `2026-10-30-ua8-gates.sh` does)
 - Modify: `smartcontracts/evm/runs/2026-10-27-metatx-split-gates.sh` (`run_step` gains two commands, nothing else:
   `soroban-spike-local) CAPPED_SLOTS=1 smartcontracts/soroban/spike/run.sh ;;` (its first action is the spike's
@@ -691,33 +691,33 @@ fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128);
   `FAMILIES="soroban soroban-spike-local e2e-soroban-local"`; `NEW_TESTS` = every test name of T0–T10 in its step and
   form: `soroban-spike-local|cargo|<T0 name>`, `soroban|cargo|<T1–T3, T5–T8 name>`, `clientkeys|node|<T4 name>`,
   `cargo-scaas-node|cargo|<T9 name>`, `e2e-soroban-local|cargo|<T10 name>`. The step contract is the base runner's
-  (`--only <step>`, `GATES_FRESH=1`, logs `smartcontracts/evm/runs/2026-10-30-soroban-4b-<step>.txt`, skip at the same
+  (`--only <step>`, `GATES_FRESH=1`, logs `smartcontracts/evm/runs/2026-10-30-ua-soroban-<step>.txt`, skip at the same
   commit with a clean tree, stop at the first failure). `cargo-scaas-node` needs the Algorand artifacts once per
   checkout (`ALGORAND_ARTIFACTS_CHECK=1 scripts/capped smartcontracts/scripts/build.sh algorand`).
 
 - [ ] **Step 1:** Write the runner and the names.
-- [ ] **Step 2: Self-check the guard:** `NAMED_TESTS_LOG_DIR=<scratch copy of the logs with one soroban name removed> smartcontracts/evm/runs/2026-10-30-soroban-4b-gates.sh --only named-tests` exits non-zero.
-- [ ] **Step 3: Run** `smartcontracts/evm/runs/2026-10-30-soroban-4b-gates.sh` (no other gate runner and no other
+- [ ] **Step 2: Self-check the guard:** `NAMED_TESTS_LOG_DIR=<scratch copy of the logs with one soroban name removed> smartcontracts/evm/runs/2026-10-30-ua-soroban-gates.sh --only named-tests` exits non-zero.
+- [ ] **Step 3: Run** `smartcontracts/evm/runs/2026-10-30-ua-soroban-gates.sh` (no other gate runner and no other
   quickstart running). Expected: every step `rc=0`. On a failure: fix in the owning task's files, commit, re-run (done
   steps are skipped only at the same commit).
-- [ ] **Step 4: Commit** the runner and the logs: `4b T12: Soroban 4b gate runner, logs`.
+- [ ] **Step 4: Commit** the runner and the logs: `ua-soroban T12: Soroban UA-Soroban gate runner, logs`.
 
 ### Task T13: whole-branch review and fix wave
 
 - [ ] **Step 1:** Dispatch one reviewer (superpowers:requesting-code-review; Claude, not Codex — Codex only on the
-  owner's request) over `git diff main...soroban-4b`, with the spec, this plan and the Review Focus list; two parts if
+  owner's request) over `git diff main...ua-soroban`, with the spec, this plan and the Review Focus list; two parts if
   the diff is large (contracts; node + clients + docs).
-- [ ] **Step 2:** Fix every Critical / Important finding in the owning files (commits `4b fix: …`); record each
-  disposition (fixed / ruled with reason) in `.superpowers/sdd/2026-10-30-soroban-4b/final-review.md`; a finding that
+- [ ] **Step 2:** Fix every Critical / Important finding in the owning files (commits `UA-Soroban fix: …`); record each
+  disposition (fixed / ruled with reason) in `.superpowers/sdd/2026-10-30-ua-soroban/final-review.md`; a finding that
   changes a §0 row goes to the controller for the owner, not into code.
 - [ ] **Step 3:** Re-run the gate runner (it re-runs only what changed commit); every step `rc=0`; commit the logs
-  `4b T13: review fixes, gate logs`.
+  `ua-soroban T13: review fixes, gate logs`.
 - [ ] **Step 4:** Report to the controller: commits, the T0 figures and limits, the largest `msig`, findings and
   dispositions; ask for the owner's go to merge (push only on the owner's word).
 
-### Task T14: Stellar testnet e2e — the round's last step, only after 2026-11-03 (S5, S17; C16b; 4B-D17)
+### Task T14: Stellar testnet e2e — the round's last step, only after 2026-11-03 (S5, S17; C16b; SOR-D17)
 
-Runs after Part B's B9 and Part Z's Z10, before B10, on the branch named in 4B-D17.
+Runs after Part B's B9 and Part Z's Z10, before B10, on the branch named in SOR-D17.
 
 - [ ] **Step 1: SDK swap (C16b):** `soroban-sdk = "=30.0.0"` (and `soroban-ledger-snapshot`) in the workspace and the
   spike; `cargo update`; the gate steps `soroban`, `soroban-spike-local`, `e2e-soroban-local` (and Part B's / Part Z's
@@ -727,17 +727,17 @@ Runs after Part B's B9 and Part Z's Z10, before B10, on the branch named in 4B-D
 - [ ] **Step 3:** Lanes funded by the testnet friendbot; then
   `STELLAR_URL=<testnet rpc> STELLAR_PASSPHRASE='Test SDF Network ; September 2015' STELLAR_FRIENDBOT=https://friendbot.stellar.org scripts/capped sh -c 'cd scaas-node && cargo test -j2 --test e2e_soroban_ua -- --ignored --test-threads=1 --nocapture'`
   (plus Part Z's `e2e_soroban_zether` when Part Z is merged) — PASS.
-- [ ] **Step 4:** Log `smartcontracts/soroban/runs/<run-date>-4b-e2e-testnet.txt` (ledgers, contract ids, CPU, fees,
+- [ ] **Step 4:** Log `smartcontracts/soroban/runs/<run-date>-ua-soroban-e2e-testnet.txt` (ledgers, contract ids, CPU, fees,
   the network settings of the day); add the testnet figures to NET-SOR-24; docs check — 0 errors.
-- [ ] **Step 5: Commit** `4b T14: soroban-sdk 30.0.0, Stellar testnet e2e (Protocol 30)`; report to the controller;
+- [ ] **Step 5: Commit** `ua-soroban T14: soroban-sdk 30.0.0, Stellar testnet e2e (Protocol 30)`; report to the controller;
   B10 follows.
 
 ---
 
-# Part Z — classical Zether on Soroban (branch `soroban-zether`; spec S13a)
+# Part Z — classical Zether on Soroban (branch `zether-soroban`; spec S13a)
 
-**Starts only when** `soroban-4b` is merged into `main` (owner's go). Branch `soroban-zether`, worktree
-`.claude/worktrees/soroban-zether`. Classical Zether is ported; **PQZ stays out** (S13b) and is never mentioned as part
+**Starts only when** `ua-soroban` is merged into `main` (owner's go). Branch `zether-soroban`, worktree
+`.claude/worktrees/zether-soroban`. Classical Zether is ported; **PQZ stays out** (S13b) and is never mentioned as part
 of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR-ZTH-*), the EVM sources
 `smartcontracts/evm/src/zether/` and `clients/zether-prover` (one prover, two verifiers).
 
@@ -783,7 +783,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
   fitting M is recorded and becomes the Soroban maximum). Otherwise ⇒ **STOP**: commit, report to the controller for
   the owner with the spec's options (split the verification over transactions, a smaller range, Groth16 over a
   Zether-like circuit, wait for cheaper host functions); no token code until the owner rules.
-- [ ] **Step 5: Commit** `soroban-zether Z0: Zether verifier on CAP-59, quickstart measurement`.
+- [ ] **Step 5: Commit** `zether-soroban Z0: Zether verifier on CAP-59, quickstart measurement`.
 
 ### Task Z1: `zether-prover` Soroban header and shared vectors (ZS-D4)
 
@@ -802,7 +802,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
 - [ ] **Step 3: Implement**; regenerate with `zether-cli vectors <dir>`.
 - [ ] **Step 4:** Step 2's command, the wasm smoke and `zether-cross` (base runner steps `wasm-zether-prover`,
   `zether-cross`) — PASS; Z0's verifier tests also verify the Soroban vectors (`zether_soroban_vectors_verify`).
-- [ ] **Step 5: Commit** `soroban-zether Z1: zether-prover Soroban header, shared Soroban vectors`.
+- [ ] **Step 5: Commit** `zether-soroban Z1: zether-prover Soroban header, shared Soroban vectors`.
 
 ### Task Z2: kind 0x0141 on the Soroban registry (ZS-D8)
 
@@ -816,7 +816,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
 - [ ] **Step 2:** `cd smartcontracts/soroban && ../../scripts/capped cargo test -j2 -p scaas-ua-registry -p scaas-token` — FAIL.
 - [ ] **Step 3: Implement**; `check-registry-interface.sh` unchanged (no new function).
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `soroban-zether Z2: zether-bls12381 (0x0141) enabled on the Soroban registry`.
+- [ ] **Step 5: Commit** `zether-soroban Z2: zether-bls12381 (0x0141) enabled on the Soroban registry`.
 
 ### Task Z3: Zether layer state, shield, roll-over (ZS-D2, ZS-D6, ZS-D7)
 
@@ -838,7 +838,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS; release Wasm of the
   token within the network's Wasm size limit (logged).
-- [ ] **Step 5: Commit** `soroban-zether Z3: Zether layer state, shield, roll-over`.
+- [ ] **Step 5: Commit** `zether-soroban Z3: Zether layer state, shield, roll-over`.
 
 ### Task Z4: confidential transfers (CTR-ZTH-37/-38; auditor; beneficiary fee)
 
@@ -853,7 +853,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
 - [ ] **Step 2:** `cd smartcontracts/soroban && ../../scripts/capped cargo test -j2 -p scaas-token zether` — FAIL.
 - [ ] **Step 3: Implement** (the token builds the statement from state + payload per zether.md §7 with ZS-D4).
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `soroban-zether Z4: confidential transfers (single, multi, auditor, fee)`.
+- [ ] **Step 5: Commit** `zether-soroban Z4: confidential transfers (single, multi, auditor, fee)`.
 
 ### Task Z5: unshield, Wrapped kind, roll-over modes, disclosure
 
@@ -874,7 +874,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
 - [ ] **Step 2:** `cd smartcontracts/soroban && ../../scripts/capped cargo test -j2 -p scaas-token -p scaas-zether-verifier zether` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — PASS.
-- [ ] **Step 5: Commit** `soroban-zether Z5: unshield, Wrapped kind, roll-over modes, disclosure`.
+- [ ] **Step 5: Commit** `zether-soroban Z5: unshield, Wrapped kind, roll-over modes, disclosure`.
 
 ### Task Z6: node — Zether jobs (ZS-D9)
 
@@ -886,7 +886,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
 - [ ] **Step 2:** `cd scaas-node && ../scripts/capped cargo test -j2 adapters::soroban` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `cd scaas-node && ../scripts/capped sh -c 'cargo clippy -j2 --all-targets -- -D warnings && cargo test -j2'` — PASS.
-- [ ] **Step 5: Commit** `soroban-zether Z6: node Zether jobs on Soroban`.
+- [ ] **Step 5: Commit** `zether-soroban Z6: node Zether jobs on Soroban`.
 
 ### Task Z7: local e2e
 
@@ -900,7 +900,7 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
 - [ ] **Step 2:** `smartcontracts/soroban/scripts/e2e-local.sh` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** Step 2's command (tee the log) — PASS.
-- [ ] **Step 5: Commit** `soroban-zether Z7: local Protocol 30 Zether e2e`.
+- [ ] **Step 5: Commit** `zether-soroban Z7: local Protocol 30 Zether e2e`.
 
 ### Task Z8: docs, decisions, TODO
 
@@ -912,31 +912,31 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
   2026-10-30 in scope, the port design as controller proposal — and ZS-D1–D9 in full), `TODO.md`.
 - [ ] **Step 1:** Write every change.
 - [ ] **Step 2:** `python3 scripts/test_docs_check.py && python3 -I scripts/docs_check.py check` — 0 errors.
-- [ ] **Step 3: Commit** `soroban-zether Z8: docs (NET-SOR-25 built, zether.md Soroban, decisions ZS-D1..D9)`.
+- [ ] **Step 3: Commit** `zether-soroban Z8: docs (NET-SOR-25 built, zether.md Soroban, decisions ZS-D1..D9)`.
 
 ### Task Z9: gate runner
 
 **Files:**
-- Create: `smartcontracts/evm/runs/<date>-soroban-zether-gates.sh` (as T12: `P=<date>-soroban-zether`), sourcing the base runner
+- Create: `smartcontracts/evm/runs/<date>-zether-soroban-gates.sh` (as T12: `P=<date>-zether-soroban`), sourcing the base runner
 - Modify: the base runner's `run_step` only if a new command is needed (`zether-verify-local) CAPPED_SLOTS=1 smartcontracts/soroban/spike/zether.sh ;;`)
 
 **Interfaces:**
 - Produces: `STEPS="docs soroban cargo-zether-prover wasm-zether-prover zether-cross clientkeys cargo-scaas-node zether-verify-local e2e-soroban-local named-tests"`,
   `FAMILIES="soroban cargo-zether-prover zether-verify-local e2e-soroban-local"`, `NEW_TESTS` = every Z0–Z7 name (and
-  the 4b names, which re-run at the new commit).
+  the UA-Soroban names, which re-run at the new commit).
 
 - [ ] **Step 1:** Write the runner and the names.
 - [ ] **Step 2:** Guard self-check as T12 Step 2 (one Z name removed).
 - [ ] **Step 3:** Run (no other gate runner, no other quickstart) — every step `rc=0`.
-- [ ] **Step 4: Commit** `soroban-zether Z9: gate runner, logs`.
+- [ ] **Step 4: Commit** `zether-soroban Z9: gate runner, logs`.
 
 ### Task Z10: whole-branch review and fix wave
 
-- [ ] As T13 over `git diff main...soroban-zether`, focus: the ported verification equations (each E1–E8 and the
+- [ ] As T13 over `git diff main...zether-soroban`, focus: the ported verification equations (each E1–E8 and the
   Bulletproof checks against `ZetherVerifier.sol`), point checks, the never-lose rule, the statement header, the
-  disclosure openings. Fixes `soroban-zether fix: …`; gate re-run; commit
-  `soroban-zether Z10: review fixes, gate logs`; report to the controller (Z0 figures, Soroban maximum M, findings); ask
-  for the owner's go. T14 then runs the round's testnet step for 4b, Part B and Part Z.
+  disclosure openings. Fixes `zether-soroban fix: …`; gate re-run; commit
+  `zether-soroban Z10: review fixes, gate logs`; report to the controller (Z0 figures, Soroban maximum M, findings); ask
+  for the owner's go. T14 then runs the round's testnet step for UA-Soroban, Part B and Part Z.
 
 ---
 
@@ -947,16 +947,16 @@ of this track. Source of truth for the protocol: `docs/contracts/zether.md` (CTR
   `Pop`, for those kinds. Resolution applied: tests assert "refused" (`is_err()`) for host-checked parts and the exact
   `Pop` only for contract-checked ones (secp256k1 recovery compare, WebAuthn grammar, `msig` weight).
 - **F2 — "the NET-SOR-16 renames apply" only for the mandate.** Spec §5.2 applies them to the mandate; §5.1 / §5.3 keep
-  the token's `pay` and the DEX's `settle` / `cancel`. Resolution: 4B-D9 (mandate renamed, token and DEX not).
-- **F3 — `ua_cancel` purpose unstated** (§5.3). Resolution: 4B-D10.
+  the token's `pay` and the DEX's `settle` / `cancel`. Resolution: SOR-D9 (mandate renamed, token and DEX not).
+- **F3 — `ua_cancel` purpose unstated** (§5.3). Resolution: SOR-D10.
 - **F4 — `RelayFeePaid.payee`.** §5.4 makes `payer` a `Holder`, but a bound `ua_relay` payee may be a UA. Resolution:
-  4B-D11 (both `Holder`).
-- **F5 — spec §10 task numbers.** C16b names the testnet task "4b T12"; with the vectors moved before the token and the
-  local e2e / review added, it is T14 here (4B-D2, 4B-D17).
+  SOR-D11 (both `Holder`).
+- **F5 — spec §10 task numbers.** C16b names the testnet task "UA-Soroban T12"; with the vectors moved before the token and the
+  local e2e / review added, it is T14 here (SOR-D2, SOR-D17).
 - **F6 — a "real proof verified" in T0 needs the verifier.** A real `zether-prover` proof cannot be verified before the
-  verifier is ported, so 4b T0 measures the CAP-59 primitives at the verifier's sizes (an early estimate) and Part Z's
+  verifier is ported, so UA-Soroban T0 measures the CAP-59 primitives at the verifier's sizes (an early estimate) and Part Z's
   Z0 verifies real proofs on the quickstart as the S13a HARD GATE, before any Zether token code.
-- **F7 — 0x0141 and Part B's `checked` table.** UA8-D20 marks every kind 4b does not verify as `Relayer`; once Z2
+- **F7 — 0x0141 and Part B's `checked` table.** UA8-D20 marks every kind UA-Soroban does not verify as `Relayer`; once Z2
   enables 0x0141 it is `Chain`. Resolution: ZS-D8 (Z2 updates that row if Part B merged first).
 - **F8 — the spec's statement header for Soroban.** zether.md §7's `chainId` / `chainUid` / 20-byte token word have no
   Soroban meaning; ZS-D4 fixes the Soroban values and widens the prover's token word to 32 bytes (EVM bytes unchanged).

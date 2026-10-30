@@ -88,6 +88,36 @@ const edSignRaw = (a, A, M, r, T = ED_ID) => {
 
 
 // a sibling kind whose tag a "wrong-kind-tag" negative signs under (same curve where one exists)
+/** webauthn-clients (owner 2026-10-30, CTR-UA-33 C): the canonical blob `abi.encode(authenticatorData, clientDataJSON, r, s)`
+ *  re-encoded off the canonical layout. Every row but the two length words decodes, under a lenient ABI decoder, to the
+ *  canonical blob's own fields (it would verify): only the canonical-encoding rule refuses it. Needs padding after both
+ *  fields (authenticatorData 37 B, clientDataJSON not a multiple of 32). */
+function webauthnAbiNegatives(blob) {
+  const w = (v) => be(BigInt(v), 32);
+  const word = (o) => Number(int(blob.subarray(o, o + 32)));
+  const pad32 = (n) => Math.ceil(n / 32) * 32;
+  const field = (x) => concatBytes(w(x.length), x, new Uint8Array(pad32(x.length) - x.length));
+  const at = (o) => blob.subarray(o + 32, o + 32 + word(o));
+  const [a, cd, rs] = [at(word(0)), at(word(32)), blob.subarray(64, 128)];
+  const [pa, pc] = [pad32(a.length), pad32(cd.length)];
+  if (pa === a.length || pc === cd.length || !eqBytes(concatBytes(w(0x80), w(0xa0 + pa), rs, field(a), field(cd)), blob)) {
+    throw new Error('webauthnAbiNegatives: a canonical blob with padding after both fields');
+  }
+  const setByte = (o) => { const c = Uint8Array.from(blob); c[o] = 1; return c; };
+  const setWord = (o, v) => { const c = Uint8Array.from(blob); c.set(w(v), o); return c; };
+  return [
+    ['abi-trailing-byte', concatBytes(blob, new Uint8Array(1))],
+    ['abi-authdata-offset-shifted', concatBytes(w(0xa0), w(0xc0 + pa), rs, ZERO32, field(a), field(cd))],
+    ['abi-clientdata-offset-shifted', concatBytes(w(0x80), w(0xc0 + pa), rs, field(a), ZERO32, field(cd))],
+    ['abi-authdata-padding-nonzero', setByte(0xa0 + a.length)],
+    ['abi-clientdata-padding-nonzero', setByte(0xc0 + pa + cd.length)],
+    ['abi-clientdata-length-beyond', setWord(0xa0 + pa, cd.length + 64)],
+    ['abi-authdata-length-beyond', setWord(0x80, a.length + 64)],
+    ['abi-fields-swapped', concatBytes(w(0xa0 + pc), w(0x80), rs, field(cd), field(a))],
+  ];
+}
+const eqBytes = (x, y) => x.length === y.length && x.every((v, i) => v === y[i]);
+
 const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0112, 0x0105: 0x0141, 0x0141: 0x0105, 0x0106: 0x0105, 0x0107: 0x0104, 0x0102: 0x0103, 0x0108: 0x0103 };
 
 /** First point on y² = x³ + 4 (x = 1, 2, …) outside the BLS12-381 G1 subgroup. */
@@ -140,7 +170,8 @@ const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
       neg('no-uv', false, metatx, wa({ flags: 0x01 })), neg('no-up', false, metatx, wa({ flags: 0x04 })),
       neg('cross-origin-true', false, metatx, wa({ tail: ',"crossOrigin":true' })),
       neg('extra-without-cross-origin', false, metatx, wa({ tail: CHROME_EXTRA })),
-      neg('wrong-rp-id', false, metatx, wa({ rpId: 'other.example' })), neg('type-create', false, metatx, wa({ type: 'webauthn.create' })));
+      neg('wrong-rp-id', false, metatx, wa({ rpId: 'other.example' })), neg('type-create', false, metatx, wa({ type: 'webauthn.create' })),
+      ...webauthnAbiNegatives(metatxSig).map(([n, b]) => neg(n, false, metatx, b)));
   } else {
     // ed25519: flip S's low byte (its last byte would move S by 2^248, possibly past L)
     negatives.push(neg('mutated', false, metatx, flip(metatxSig, s.kind === 0x0102 ? 32 : s.kind === 0x0108 ? 63 : metatxSig.length - 1)));
@@ -214,7 +245,8 @@ const msigUa = ua.deriveUA(0x0120, msigKey);
 const msigPurpose = 'metatx';
 const memberDigest = ua.memberDigest(msigUa, ua.uaMessage(0x0120, tag(msigPurpose), DIGEST));
 const byName = Object.fromEntries(members.map((m) => [m.name, m]));
-/** One MemberSig {index, keyData, sig}: native over UAAuth(id, member, member_digest) in context A gen 1, derived via its scheme. */
+/** One MemberSig {index, keyData, sig}: native over UAAuth(id, member, member_digest) in context A gen 1, derived via its
+ *  scheme; keyData always empty (CTR-UA-33: the registry reads a registered member's key from its record). */
 function memberSig(name, { raw = false, secretName } = {}) {
   const m = byName[name];
   if (m.kind === 0x0001) {
@@ -222,7 +254,7 @@ function memberSig(name, { raw = false, secretName } = {}) {
   }
   const s = SCHEMES[name];
   const sk = secretOf(secretName ?? name, s.n);
-  return { index: m.index, keyData: s.keyData(sk), sig: s.sign(sk, ua.uaMessage(m.kind, tag('member'), memberDigest)) };
+  return { index: m.index, keyData: new Uint8Array(0), sig: s.sign(sk, ua.uaMessage(m.kind, tag('member'), memberDigest)) };
 }
 const byIndex = (list) => [...list].sort((a, b) => a.index - b.index);
 const set = (name, valid, list) => {
@@ -242,6 +274,8 @@ const sets = [
   set('native-raw-digest', false, byIndex([S('native', { raw: true }), S('schnorr-bn254')])),
   // R12: a native member's MemberSig carries no key data (here its address), even with a valid signature
   set('native-member-keydata', false, byIndex([{ ...S('native'), keyData: nativeAddr }, S('schnorr-bn254')])),
+  // CTR-UA-33: a registered member's MemberSig carries no key data either, not even its own key
+  set('derived-member-keydata', false, byIndex([S('native'), { ...S('schnorr-bn254'), keyData: fromHex(row('schnorr-bn254').keyData) }])),
 ];
 
 // --- BIP-340 official test vectors (bip-0340/test-vectors.csv), the 32-byte-message cases 0–14 ---
@@ -564,7 +598,7 @@ function pqMsig(name, list, threshold) {
   const id = ua.deriveUA(0x0120, keyData);
   const md = ua.memberDigest(id, ua.uaMessage(0x0120, tag('metatx'), DIGEST));
   const sigOf = (m, mdv = md) => (m.kind === 0x0101
-    ? { index: m.index, keyData: SCHEMES.p256.keyData(p256Sk), sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), mdv)) }
+    ? { index: m.index, keyData: new Uint8Array(0), sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), mdv)) }
     : { index: m.index, keyData: new Uint8Array(0), sig: pqSignMsg('mldsa65', m.sk, ua.uaMessage(0x0131, tag('member'), mdv)) });
   // UA-6 U5 / UA-8: a PQ-eligible msig registers with an m-of-n pop over the portable PoP (purpose pop v2, members under member)
   const hp = popOf(0x0120, id, { keyData, ...PQZ_ATTRS });
@@ -606,7 +640,8 @@ const pqRf = [pqSigner(0), pqSigner(1)].map((s) => ({ ...s, id: s.kp.ua }));
 const pqOut = {
   note: 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/pq.js on @noble/post-quantum 0.7.1, the keys of '
     + 'pq_kat.json: account 0, index 0; mldsa65 indexes 1 and 2 for the treasury); never edit by hand. Context A of '
-    + 'signatures.json. PQ kinds are stored (CTR-UA-17): every auth is abi.encode(bytes(""), sig). ML-DSA and SLH-DSA sign '
+    + 'signatures.json. PQ kinds are stored (CTR-UA-17): every auth is abi.encode(bytes(""), sig); every msig MemberSig '
+    + 'carries an empty keyData, the p256 member too (CTR-UA-33: the registry reads the key from the member\'s record). ML-DSA and SLH-DSA sign '
     + 'pq_msg with the empty context, Falcon ua_msg (CTR-UA-23). Negatives: verifyPop = which registry entry point is asked. '
     + 'metatx3 rows: the domain, structs and fields of metatx3.json, one per PQ signer.',
   version: 1, context: 'A', contexts: { A: contexts.A, B: contexts.B, C: contexts.C, D: contexts.D }, digest: hex(DIGEST),
@@ -680,7 +715,10 @@ const note = 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/ua
   + 'the same in every context (popOther repeats pop under context B for its consumers); chain-bound-pop / pop-v1-purpose: the '
   + 'pre-UA-8 PoP and the v1 purpose are refused. '
   + 'The scaas Schnorr transcript and the bn254 mapToG1 have no independent second implementation: clients/ua-rs agreeing '
-  + 'on them is self-consistency only (accounts.md §1.16). msig auth = abi.encode(bytes keyData, bytes sig) (§1.9).';
+  + 'on them is self-consistency only (accounts.md §1.16). msig auth = abi.encode(bytes keyData, bytes sig) (§1.9), sig = abi.encode(MemberSig[]) with an empty keyData in every '
+  + 'MemberSig (CTR-UA-33: the registry reads a registered member\'s key from its record; a non-empty one is refused). '
+  + 'webauthn-p256 abi-* negatives: the blob is accepted only as its canonical abi.encode(authenticatorData, clientDataJSON, r, s) '
+  + '(CTR-UA-33 C); all but the two length-word rows decode leniently to the positive\'s own fields.';
 const out = {
   note, version: 1, context: 'A', contextOther: 'B', contexts: { A: contexts.A, B: contexts.B, C: contexts.C, D: contexts.D },
   digest: hex(DIGEST), derived: derivedRows, bip340Official,
