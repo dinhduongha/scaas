@@ -42,6 +42,15 @@ fn deploy_router(env: &Env, at: &Address) -> RelayFeeClient<'static> {
     RelayFeeClient::new(env, &env.register_at(at, RelayFee, (x,)))
 }
 
+/// A router whose executor is bound to another router fails at deploy (`BadExecutor`), not at the first relay.
+#[test]
+#[should_panic(expected = "Error(Contract, #3)")]
+fn constructor_refuses_a_foreign_executor() {
+    let env = Env::default();
+    let x = env.register(RelayExecutor, (Address::generate(&env),));
+    env.register(RelayFee, (x,));
+}
+
 fn setup() -> T {
     setup_with(Env::default())
 }

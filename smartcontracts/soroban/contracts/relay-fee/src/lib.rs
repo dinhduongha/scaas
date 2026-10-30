@@ -29,6 +29,8 @@ pub enum Error {
     TargetNoCode = 1,
     /// The fee would rest on the router or the executor (`to`, or the relayer in open mode).
     BadPayee = 2,
+    /// The constructor's executor is not bound to this router (`executor.router() != self`).
+    BadExecutor = 3,
 }
 
 const DAY: u32 = 17_280;
@@ -108,8 +110,13 @@ pub struct RelayFee;
 
 #[contractimpl]
 impl RelayFee {
-    /// The executor's constructor names this router (deploy: the router id first, see `deploy.sh soroban`).
+    /// The executor's constructor names this router (deploy: the router id first, see `deploy.sh soroban`), checked
+    /// here so a mismatched pair fails at deploy, not at the first relay (`BadExecutor`).
     pub fn __constructor(env: Env, executor: Address) {
+        let bound: Address = env.invoke_contract(&executor, &Symbol::new(&env, "router"), vec![&env]);
+        if bound != env.current_contract_address() {
+            panic_with_error!(&env, Error::BadExecutor);
+        }
         env.storage().instance().set(&Key::Executor, &executor);
     }
 
