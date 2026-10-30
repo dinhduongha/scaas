@@ -6,7 +6,7 @@ import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, orderCancelTypedData,
-  checkTradeOrder, checkCancel, payLane, receiverFeeTypedData, wrapToUACalldata, unwrapToUACalldata,
+  checkTradeOrder, bidMinFill, bidMinBase, checkCancel, payLane, receiverFeeTypedData, wrapToUACalldata, unwrapToUACalldata,
   payWithFeeToUACalldata, checkReceiverFee,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
@@ -424,10 +424,12 @@ test('trade order: exactly the order the client built, on a pinned DEX or wrappe
     wrappers: [WRAPPER], now: NOW };
   const ok = checkTradeOrder(server(), want);
   assert.deepEqual(ok.warnings, []);
-  assert.equal(ok.minFill, 500n, 'a minFill below half is shown as half');
+  assert.equal(ok.minFill, 0n, 'the signed minFill (no protocol floor, CTR-DEX-14)');
   assert.equal(hex(ok.digest), hex(hashTypedData(server())));
   const odd = { ...mine, amount: '1001' };
-  assert.equal(checkTradeOrder(server(odd), { ...want, order: odd }).minFill, 501n, 'ceil(amount / 2)');
+  assert.equal(checkTradeOrder(server(odd), { ...want, order: odd }).minFill, 0n);
+  const some = { ...mine, minFill: '300' };
+  assert.equal(checkTradeOrder(server(some), { ...want, order: some }).minFill, 300n);
   checkTradeOrder(server(), { ...want, order: { ...mine, validUntil: String(NOW + 600) } });
   const outsideWant = { ...want, outside: true, sellToken: OUT };
   checkTradeOrder(server({}, { outside: true }), outsideWant);
@@ -599,4 +601,17 @@ test('receiver-pays, address path: the payee co-signs ReceiverFee only over the 
   no(rf(), { payment: { ...payment, primaryType: 'MetaTransaction' } }, /not on a payment/);
   no({ ...rf(), primaryType: 'MetaTransfer' }, {}, /not a receiver fee/);
   no(rf(), { payment: undefined }, /not on a payment/);
+});
+
+test('a bid\'s minFill from a base minimum and back (CLI-SGN-35)', () => {
+  assert.equal(bidMinFill(10n, 1000n, 2000n), 5n);
+  assert.equal(bidMinFill(7n, 1000n, 3000n), 3n, 'ceil(7000 / 3000)');
+  assert.equal(bidMinBase(5n, 1000n, 2000n), 10n);
+  assert.equal(bidMinBase(3n, 1000n, 3000n), 9n);
+  assert.equal(bidMinFill(0n, 1000n, 2000n), 0n);
+});
+
+test('a base minimum that needs more than the bid\'s amount is refused', () => {
+  assert.equal(bidMinFill(2000n, 1000n, 2000n), 1000n);
+  assert.throws(() => bidMinFill(2001n, 1000n, 2000n), /more than the bid/);
 });
