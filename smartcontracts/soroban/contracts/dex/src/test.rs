@@ -147,8 +147,12 @@ fn fee_inside_signed_max_and_under_cap() {
 fn cancelled_order_never_settles() {
     let t = setup(false);
     let ask = t.ask(1_000, 0);
+    // Review m3: every entry extends the instance TTL (here 35 days after `set_market` did).
+    t.env.ledger().with_mut(|l| l.sequence_number += 35 * DAY);
     t.dex.cancel(&ask);
     assert_eq!(t.env.auths()[0].0, t.alice);
+    use soroban_sdk::testutils::storage::Instance as _;
+    assert_eq!(t.env.as_contract(&t.dex.address, || t.env.storage().instance().get_ttl()), 60 * DAY);
     assert_eq!(t.try_settle(&ask, &t.bid(1_000, 3, 0), 1), Error::Overfill.into());
 }
 
@@ -237,6 +241,12 @@ fn contract_at(env: &Env, byte: u8) -> Address {
     x.extend([byte; 32]);
     Address::try_from_val(env, &ScVal::from_xdr(x, Limits::none()).unwrap()).unwrap()
 }
+
+/// A host failure seen across the call boundary: a missing auth entry, or an ed25519 UA signature that does not verify
+/// over the expected digest (the host's verify fails, not the registry — finding F1).
+const HOST_REFUSED: soroban_sdk::Error = soroban_sdk::Error::from_type_and_code(soroban_sdk::xdr::ScErrorType::Context, soroban_sdk::xdr::ScErrorCode::InvalidAction);
+/// The registry's `Pop` (8): an `auth` that does not decode (here empty).
+const REG_POP: soroban_sdk::Error = soroban_sdk::Error::from_contract_error(8);
 
 fn tok(e: scaas_token::Error) -> soroban_sdk::Error {
     e.into()
@@ -373,6 +383,14 @@ impl U {
         }
     }
 
+    /// bob approves `dex` for his B.
+    fn approve_b(&self, dex: &Address) {
+        let env = &self.env;
+        let args: SVec<Val> = (&self.bob, dex, 1_000_000i128, 1_000u32).into_val(env);
+        env.mock_auths(&[MockAuth { address: &self.bob, invoke: &MockAuthInvoke { contract: &self.b.address, fn_name: "approve", args, sub_invokes: &[] } }]);
+        self.b.approve(&self.bob, dex, &1_000_000, &1_000);
+    }
+
     /// A second DEX instance with the same market.
     fn other_dex(&self, registry: Option<Address>) -> DexClient<'static> {
         let env = &self.env;
@@ -403,7 +421,8 @@ fn ua_trade_dex_only_partial_fill_no_resign() {
     let no = Bytes::new(env);
     // Another DEX instance: the signature names the first one, so the token refuses it.
     let d2 = s.other_dex(None);
-    assert!(s.settle(&d2, &ask, &bid, 100, &auth, &no).is_err());
+    s.approve_b(&d2.address);
+    assert_eq!(s.settle(&d2, &ask, &bid, 100, &auth, &no), Err(HOST_REFUSED));
     for fill in [100, 120, 80] {
         s.settle(&s.dex, &ask, &bid, fill, &auth, &no).unwrap();
     }
@@ -429,7 +448,7 @@ fn dex_ua_maker_native_taker_settles() {
     let bid = s.bid(100_000, Holder::Addr(s.bob.clone()));
     let no = Bytes::new(env);
     // The UA leg needs its signature; the native leg must carry none.
-    assert!(s.settle(&s.dex, &ask, &bid, 100_000, &no, &no).is_err());
+    assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &no, &no), Err(REG_POP));
     assert_eq!(s.settle(&s.dex, &ask, &bid, 100_000, &auth, &auth), Err(Error::BadAuth.into()));
     s.settle(&s.dex, &ask, &bid, 100_000, &auth, &no).unwrap();
     // The UA gets 200 000 B minus 0.1 % in its UA balance, bob 100 000 A minus 0.2 %.
@@ -455,10 +474,10 @@ fn dex_native_orders_bind_relayer() {
     let bid = s.bid(100, Holder::Addr(s.bob.clone()));
     let no = Bytes::new(env);
     let other = Address::generate(env);
-    assert!(s.settle_as(&[other.clone()], &s.dex, &ask, &bid, 50, &no, &no).is_err());
+    assert_eq!(s.settle_as(&[other.clone()], &s.dex, &ask, &bid, 50, &no, &no), Err(HOST_REFUSED));
     // Each order binds its own relayer: a taker naming `other` needs `other` too.
     let bid_other = Order { relayer: other.clone(), ..bid.clone() };
-    assert!(s.settle_as(&[s.relayer.clone()], &s.dex, &ask, &bid_other, 50, &no, &no).is_err());
+    assert_eq!(s.settle_as(&[s.relayer.clone()], &s.dex, &ask, &bid_other, 50, &no, &no), Err(HOST_REFUSED));
     assert_eq!(s.dex.filled(&s.dex.order_hash(&ask)), 0);
     s.settle(&s.dex, &ask, &bid, 50, &no, &no).unwrap();
     s.settle(&s.dex, &ask, &bid_other, 50, &no, &no).unwrap();
@@ -479,11 +498,11 @@ fn dex_ua_cancel_sets_filled() {
     let bid = s.bid(1_000, Holder::Addr(s.bob.clone()));
     s.settle(&s.dex, &ask, &bid, 100, &order_auth, &no).unwrap();
     // Not a cancel signature: the order's own, a `metatx` one, another UA's.
-    assert!(s.dex.try_ua_cancel(&ask, &order_auth).is_err());
+    assert_eq!(code(s.dex.try_ua_cancel(&ask, &order_auth)), HOST_REFUSED);
     let metatx = s.sign(&u, PURPOSE_METATX, &s.dex.address, "ua_cancel", (&ask,).into_val(env));
-    assert!(s.dex.try_ua_cancel(&ask, &metatx).is_err());
+    assert_eq!(code(s.dex.try_ua_cancel(&ask, &metatx)), HOST_REFUSED);
     let v = s.ua(2);
-    assert!(s.dex.try_ua_cancel(&ask, &s.sign(&v, PURPOSE_TRADE, &s.dex.address, "ua_cancel", (&ask,).into_val(env))).is_err());
+    assert_eq!(code(s.dex.try_ua_cancel(&ask, &s.sign(&v, PURPOSE_TRADE, &s.dex.address, "ua_cancel", (&ask,).into_val(env)))), HOST_REFUSED);
     // A DEX without a registry cannot verify it.
     let d2 = s.other_dex(None);
     assert_eq!(code(d2.try_ua_cancel(&ask, &cancel)), Error::UaLedgerOff.into());
@@ -514,8 +533,17 @@ fn dex_ua_destination_receives_proceeds() {
     // A destination UA that is not registered: the whole settle fails.
     let ghost = Holder::Ua(BytesN::from_array(env, &[0x42; 32]));
     let bid2 = Order { destination: ghost, salt: 3, ..bid };
-    assert!(s.settle(&s.dex, &ask, &bid2, 100, &auth, &Bytes::new(env)).is_err());
+    assert_eq!(s.settle(&s.dex, &ask, &bid2, 100, &auth, &Bytes::new(env)), Err(tok(scaas_token::Error::UaNotRegistered)));
     assert_eq!(s.dex.filled(&s.dex.order_hash(&ask)), 400);
+    // Review I1: a destination equal to the DEX (no withdraw: the proceeds would be stuck) is refused, either order.
+    let me = Holder::Addr(s.dex.address.clone());
+    let bid3 = Order { destination: me.clone(), salt: 4, ..bid2.clone() };
+    assert_eq!(s.settle(&s.dex, &ask, &bid3, 100, &auth, &Bytes::new(env)), Err(Error::BadDestination.into()));
+    let ask2 = Order { destination: me, salt: 5, ..ask.clone() };
+    let auth2 = s.sign_order(&u, &s.dex.address, &ask2);
+    let bid4 = Order { destination: v.h(), salt: 6, ..bid2 };
+    assert_eq!(s.settle(&s.dex, &ask2, &bid4, 100, &auth2, &Bytes::new(env)), Err(Error::BadDestination.into()));
+    assert_eq!((s.a.balance(&s.dex.address), s.b.balance(&s.dex.address), s.dex.filled(&s.dex.order_hash(&ask))), (0, 0, 400));
 }
 
 fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {

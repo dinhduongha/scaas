@@ -42,6 +42,9 @@ pub enum Error {
     BadAuth = 9,
     /// `ua_cancel` and no registry bound at construction.
     UaLedgerOff = 10,
+    /// An order's `destination` is the DEX itself: it has no withdraw, the proceeds would be stuck (EVM
+    /// `ConservationBroken`).
+    BadDestination = 11,
 }
 
 #[contracttype]
@@ -107,6 +110,11 @@ fn set_filled(env: &Env, h: &BytesN<32>, v: i128) {
     let k = Key::Filled(h.clone());
     env.storage().persistent().set(&k, &v);
     env.storage().persistent().extend_ttl(&k, 30 * DAY, 60 * DAY);
+}
+
+/// Every entry keeps the instance (fee recipient, markets, registry) alive (S11).
+fn bump(env: &Env) {
+    env.storage().instance().extend_ttl(30 * DAY, 60 * DAY);
 }
 
 fn admin(env: &Env) -> Address {
@@ -182,6 +190,7 @@ impl Dex {
 
     /// Lệnh huỷ không bao giờ settle: đánh dấu đã khớp hết. Maker uỷ quyền (meta-tx qua relayer). A native maker only.
     pub fn cancel(env: Env, order: Order) {
+        bump(&env);
         let Holder::Addr(a) = &order.maker else { panic_with_error!(&env, Error::BadAuth) };
         a.require_auth();
         cancelled(&env, order);
@@ -190,6 +199,7 @@ impl Dex {
     /// `cancel` for a UA maker (SOR-D10): its signature over `op_digest(dex, "ua_cancel", (order,))`, purpose `trade`,
     /// through the registry bound at construction.
     pub fn ua_cancel(env: Env, order: Order, auth: Bytes) {
+        bump(&env);
         let Holder::Ua(ua) = &order.maker else { panic_with_error!(&env, Error::BadAuth) };
         let reg = match env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten() {
             Some(r) => UaRegistryClient::new(&env, &r),
@@ -204,6 +214,7 @@ impl Dex {
     /// (làm tròn lên — maker không bao giờ nhận dưới giới hạn), và phải nhận ít nhất giá của chính taker.
     /// `maker_auth` / `taker_auth`: a UA maker's order signature, empty for a native maker (`BadAuth`).
     pub fn settle(env: Env, maker: Order, taker: Order, maker_fill: i128, maker_auth: Bytes, taker_auth: Bytes) {
+        bump(&env);
         // Cùng token ⇒ một lệnh có thể khớp chính nó (mh == th) và ghi đè `filled`.
         if maker.sell_token != taker.buy_token || maker.buy_token != taker.sell_token || maker.sell_token == maker.buy_token {
             panic_with_error!(&env, Error::TokenMismatch);
@@ -250,6 +261,10 @@ impl Dex {
         // Phí trừ vào phần mỗi bên NHẬN.
         let maker_fee = taker_fill * mppm as i128 / PPM;
         let taker_fee = maker_fill * tppm as i128 / PPM;
+        let me = Holder::Addr(env.current_contract_address());
+        if maker.destination == me || taker.destination == me {
+            panic_with_error!(&env, Error::BadDestination);
+        }
         let fee_to = Holder::Addr(env.storage().instance().get(&Key::FeeRecipient).unwrap());
         pull(&env, &maker, &maker_auth, maker_fill);
         pull(&env, &taker, &taker_auth, taker_fill);
