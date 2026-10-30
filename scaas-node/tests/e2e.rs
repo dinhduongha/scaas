@@ -1024,9 +1024,12 @@ async fn evm_adapter_runs_the_generic_lane_runner_on_two_mnemonic_lanes() {
 }
 
 alloy::sol! {
-    function register(uint16 kind, bytes keyData, bytes pop, bytes pqzKey, bytes pqzPop) external returns (bytes32 ua);
+    // UA-8: the portable registration (accounts.md CTR-UA-07 / CTR-UA-31)
+    struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }
+    function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32 ua);
     function uaOf(uint16 kind, bytes keyData) external pure returns (bytes32);
-    function popDigest(bytes32 ua, bytes32 pqzKeyHash) external view returns (bytes32);
+    function portablePopDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 kemRecordHash) external pure returns (bytes32);
+    function registrationDigest(bytes32 portable, bytes32 pqzPopHash) external pure returns (bytes32);
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
 }
 
@@ -1108,11 +1111,12 @@ async fn ua_pay_meta_and_relay_fee_jobs_on_anvil() {
     let owner = small_key(0x05ec);
     let key_data = alloy::primitives::Bytes::from(owner.public_key().to_vec());
     let ua = view(&rpc, registry, uaOfCall { kind: UA_SECP256K1, keyData: key_data.clone() }).await;
-    let pd = view(&rpc, registry, popDigestCall { ua, pqzKeyHash: B256::ZERO }).await;
-    let pm = view(&rpc, registry, uaMessageCall { kind: UA_SECP256K1, purposeTag: keccak256(b"scaas.ua.purpose.pop.v1"), digest: pd }).await;
+    let pd = view(&rpc, registry, portablePopDigestCall { ua, pqzKeyHash: B256::ZERO, kemRecordHash: B256::ZERO }).await;
+    let rd = view(&rpc, registry, registrationDigestCall { portable: pd, pqzPopHash: B256::ZERO }).await;
+    let pm = view(&rpc, registry, uaMessageCall { kind: UA_SECP256K1, purposeTag: keccak256(b"scaas.ua.purpose.pop.v2"), digest: rd }).await;
     let pop = owner.sign_hash_sync(&pm).unwrap().as_bytes().to_vec();
-    send(&rpc, &deployer, registry, registerCall { kind: UA_SECP256K1, keyData: key_data, pop: pop.into(),
-        pqzKey: Default::default(), pqzPop: Default::default() }.abi_encode()).await;
+    send(&rpc, &deployer, registry, registerCall { kind: UA_SECP256K1, keyData: key_data, attrs: UAAttrs { pqzKey: Default::default(), pqzPopHash: B256::ZERO, kemVersion: 0, kemPk: Default::default() },
+        pop: pop.into(), pqzPop: Default::default() }.abi_encode()).await;
     send(&rpc, &deployer, token, IUALedger::transferToUACall { to: ua, amount: U256::from(1_000_000u64) }.abi_encode()).await;
     assert_eq!(view(&rpc, token, IUALedger::balanceOfUACall { ua }).await, U256::from(1_000_000u64));
 
