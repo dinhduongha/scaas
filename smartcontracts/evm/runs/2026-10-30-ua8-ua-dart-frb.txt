@@ -1,4 +1,4 @@
-# ua-dart-frb at commit f2e4fe9f
+# ua-dart-frb at commit 20129a8b
 Resolving dependencies...
 Downloading packages...
   _fe_analyzer_shared 85.0.0 (111.0.0 available)
@@ -19,7 +19,119 @@ Downloading packages...
 Got dependencies!
 15 packages have newer versions incompatible with dependency constraints.
 Try `dart pub outdated` for more information.
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling version_check v0.9.5
+   Compiling syn v2.0.119
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.9
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling rand_core v0.6.4
+   Compiling cfg-if v1.0.5
+   Compiling syn v3.0.8
+   Compiling zerocopy v0.8.62
+   Compiling zeroize_derive v1.5.0
+   Compiling autocfg v1.5.1
+   Compiling num-traits v0.2.19
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling zeroize v1.9.1
+   Compiling num-integer v0.1.47
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling digest v0.10.7
+   Compiling num-bigint v0.4.8
+   Compiling rand v0.8.8
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling paste v1.0.15
+   Compiling enum-ordinalize v4.4.2
+   Compiling ark-std v0.5.0
+   Compiling der v0.7.10
+   Compiling ark-serialize-derive v0.5.0
+   Compiling ff v0.13.1
+   Compiling ahash v0.8.12
+   Compiling arrayvec v0.7.8
+   Compiling base16ct v0.2.0
+   Compiling libc v0.2.190
+   Compiling memchr v2.8.3
+   Compiling either v1.19.0
+   Compiling itertools v0.13.0
+   Compiling ark-serialize v0.5.0
+   Compiling sec1 v0.7.3
+   Compiling group v0.13.0
+   Compiling educe v0.6.0
+   Compiling ark-ff-macros v0.5.0
+   Compiling signature v2.2.0
+   Compiling crypto-bigint v0.5.5
+   Compiling ark-ff-asm v0.5.0
+   Compiling allocator-api2 v0.2.21
+   Compiling semver v1.0.28
+   Compiling cpufeatures v0.2.17
+   Compiling once_cell v1.21.4
+   Compiling rustc_version v0.4.1
+   Compiling hashbrown v0.15.5
+   Compiling elliptic-curve v0.13.8
+   Compiling hmac v0.12.1
+   Compiling futures-core v0.3.34
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling futures-sink v0.3.34
+   Compiling pin-project-lite v0.2.17
+   Compiling object v0.37.3
+   Compiling futures-channel v0.3.34
+   Compiling cc v1.8.0
+   Compiling ark-ff v0.5.0
+   Compiling ark-poly v0.5.0
+   Compiling rfc6979 v0.4.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling sha2 v0.10.9
+   Compiling futures-macro v0.3.34
+   Compiling futures-task v0.3.34
+   Compiling futures-io v0.3.34
+   Compiling gimli v0.32.3
+   Compiling slab v0.4.12
+   Compiling adler2 v2.0.1
+   Compiling anyhow v1.0.104
+   Compiling miniz_oxide v0.8.9
+   Compiling addr2line v0.25.1
+   Compiling ark-ec v0.5.0
+   Compiling futures-util v0.3.34
+   Compiling ecdsa v0.16.9
+   Compiling dart-sys v4.1.5
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling build-target v0.4.0
+   Compiling portable-atomic v1.15.0
+   Compiling rustc-demangle v0.1.28
+   Compiling backtrace v0.3.76
+   Compiling flutter_rust_bridge v2.13.0
+   Compiling futures-executor v0.3.34
+   Compiling md-5 v0.10.6
+   Compiling num_cpus v1.17.0
+   Compiling primeorder v0.13.6
+   Compiling ed25519 v2.2.3
+   Compiling keccak v0.1.6
+   Compiling hex v0.4.3
+   Compiling atomic v0.5.3
+   Compiling flutter_rust_bridge_macros v2.13.0
+   Compiling allo-isolate v0.1.27
+   Compiling sha3 v0.10.9
+   Compiling ed25519-dalek v2.2.0
+   Compiling p256 v0.13.2
+   Compiling threadpool v1.8.1
+   Compiling futures v0.3.34
+   Compiling k256 v0.13.4
+   Compiling ark-bn254 v0.5.0
+   Compiling ark-bls12-381 v0.5.0
+   Compiling tokio v1.53.2
+   Compiling delegate-attr v0.3.1
+   Compiling byteorder v1.5.0
+   Compiling lazy_static v1.5.1
+   Compiling log v0.4.34
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
+   Compiling scaas_ua_frb v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-dart-frb/rust)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 51s
 00:00 [32m+0[0m: [1m[90mloading test/vectors_test.dart[0m[0m
 00:00 [32m+0[0m: test/vectors_test.dart: (setUpAll)[0m
 00:00 [32m+0[0m: test/vectors_test.dart: table, groups, purposes, constants[0m

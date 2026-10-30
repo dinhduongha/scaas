@@ -1,6 +1,86 @@
-# ua-rs at commit e2513dd5
-   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-rs)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.52s
+# ua-rs at commit 20129a8b
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling version_check v0.9.5
+   Compiling syn v2.0.119
+   Compiling generic-array v0.14.9
+   Compiling typenum v1.20.1
+   Compiling subtle v2.6.1
+   Compiling const-oid v0.9.6
+   Compiling rand_core v0.6.4
+   Compiling zerocopy v0.8.62
+   Compiling autocfg v1.5.1
+   Compiling num-traits v0.2.19
+   Compiling cfg-if v1.0.5
+   Compiling ppv-lite86 v0.2.21
+   Compiling rand_chacha v0.3.1
+   Compiling num-integer v0.1.47
+   Compiling syn v3.0.8
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling num-bigint v0.4.8
+   Compiling zeroize_derive v1.5.0
+   Compiling rand v0.8.8
+   Compiling paste v1.0.15
+   Compiling ark-std v0.5.0
+   Compiling ark-serialize-derive v0.5.0
+   Compiling zeroize v1.9.1
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling digest v0.10.7
+   Compiling der v0.7.10
+   Compiling enum-ordinalize v4.4.2
+   Compiling ff v0.13.1
+   Compiling ahash v0.8.12
+   Compiling either v1.19.0
+   Compiling base16ct v0.2.0
+   Compiling arrayvec v0.7.8
+   Compiling sec1 v0.7.3
+   Compiling ark-serialize v0.5.0
+   Compiling itertools v0.13.0
+   Compiling group v0.13.0
+   Compiling educe v0.6.0
+   Compiling signature v2.2.0
+   Compiling crypto-bigint v0.5.5
+   Compiling ark-ff-macros v0.5.0
+   Compiling ark-ff-asm v0.5.0
+   Compiling allocator-api2 v0.2.21
+   Compiling once_cell v1.21.4
+   Compiling semver v1.0.28
+   Compiling cpufeatures v0.2.17
+   Compiling rustc_version v0.4.1
+   Compiling hashbrown v0.15.5
+   Compiling elliptic-curve v0.13.8
+   Compiling hmac v0.12.1
+   Compiling rfc6979 v0.4.0
+   Compiling curve25519-dalek v4.1.3
+   Compiling sha2 v0.10.9
+   Compiling ecdsa v0.16.9
+   Compiling curve25519-dalek-derive v0.1.1
+   Compiling ark-ff v0.5.0
+   Compiling ark-poly v0.5.0
+   Compiling zmij v1.0.23
+   Compiling ark-ec v0.5.0
+   Compiling serde_core v1.0.229
+   Compiling primeorder v0.13.6
+   Compiling ed25519 v2.2.3
+   Compiling keccak v0.1.6
+   Compiling serde_json v1.0.154
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.2
+   Compiling sha3 v0.10.9
+   Compiling ed25519-dalek v2.2.0
+   Compiling p256 v0.13.2
+   Compiling ark-bn254 v0.5.0
+   Compiling ark-bls12-381 v0.5.0
+   Compiling k256 v0.13.4
+   Compiling foldhash v0.2.0
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling hex v0.4.3
+   Compiling scaas-ua v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-rs)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 17s
      Running unittests src/lib.rs (target/debug/deps/scaas_ua-7e1156df1164ba41)
 
 running 2 tests
@@ -19,8 +99,8 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/groups_verify.rs (target/debug/deps/groups_verify-b4c5ec9da21546d9)
 
 running 4 tests
-test t_frost_rows ... ok
 test official_sections ... ok
+test t_frost_rows ... ok
 test group_negatives_refused ... ok
 test groups_register_and_sign ... ok
 
@@ -52,32 +132,32 @@ test msig_sets ... ok
 test derived_positives_verify ... ok
 test derived_negatives_refused ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
 
      Running tests/ua8.rs (target/debug/deps/ua8-21f28f2691dd2c04)
 
 running 7 tests
 test malformed_msig_key_data ... ok
-test kem_record_vectors ... ok
 test tags ... ok
 test native_member_personal_sign ... ok
+test kem_record_vectors ... ok
 test pqz_key_record_vectors ... ok
 test portable_vectors ... ok
 test negatives_refused ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
 
      Running tests/vectors.rs (target/debug/deps/vectors-0191377074845c18)
 
 running 6 tests
-test natives_native_space_canonical_ids ... ok
 test messages ... ok
-test valid_rows ... ok
+test natives_native_space_canonical_ids ... ok
 test table_groups_purposes_constants ... ok
+test valid_rows ... ok
 test invalid_rows ... ok
 test structures ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
    Doc-tests scaas_ua
 

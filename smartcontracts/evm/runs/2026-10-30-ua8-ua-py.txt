@@ -1,4 +1,4 @@
-# ua-py at commit 4adc323a
+# ua-py at commit 20129a8b
 test_holder_refusals (tests.test_vectors.Vectors.test_holder_refusals) ... ok
 test_invalid_rows (tests.test_vectors.Vectors.test_invalid_rows) ... ok
 test_kem_record (tests.test_vectors.Vectors.test_kem_record) ... ok
@@ -13,7 +13,7 @@ test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_grou
 test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
 
 ----------------------------------------------------------------------
-Ran 12 tests in 0.230s
+Ran 12 tests in 0.193s
 
 OK
 rc=0

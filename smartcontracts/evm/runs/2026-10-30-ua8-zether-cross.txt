@@ -1,7 +1,75 @@
-# zether-cross at commit e2513dd5
-    Finished `release` profile [optimized] target(s) in 0.09s
+# zether-cross at commit 20129a8b
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.26
+   Compiling version_check v0.9.5
+   Compiling autocfg v1.5.1
+   Compiling num-traits v0.2.19
+   Compiling generic-array v0.14.9
+   Compiling typenum v1.20.1
+   Compiling syn v3.0.6
+   Compiling zerocopy v0.8.59
+   Compiling cfg-if v1.0.5
+   Compiling libc v0.2.190
+   Compiling syn v2.0.119
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.6
+   Compiling subtle v2.6.1
+   Compiling digest v0.10.7
+   Compiling getrandom v0.2.17
+   Compiling rand_core v0.6.4
+   Compiling ppv-lite86 v0.2.21
+   Compiling arrayvec v0.7.8
+   Compiling rand_chacha v0.3.1
+   Compiling num-integer v0.1.47
+   Compiling rand v0.8.8
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling paste v1.0.15
+   Compiling ark-std v0.5.0
+   Compiling enum-ordinalize v4.4.2
+   Compiling num-bigint v0.4.8
+   Compiling ark-serialize-derive v0.5.0
+   Compiling zeroize_derive v1.5.0
+   Compiling ahash v0.8.12
+   Compiling serde_core v1.0.229
+   Compiling either v1.18.0
+   Compiling itertools v0.13.0
+   Compiling zeroize v1.9.0
+   Compiling ark-serialize v0.5.0
+   Compiling ark-ff-macros v0.5.0
+   Compiling educe v0.6.0
+   Compiling ark-ff-asm v0.5.0
+   Compiling once_cell v1.21.4
+   Compiling allocator-api2 v0.2.21
+   Compiling hashbrown v0.15.5
+   Compiling ark-ff v0.5.0
+   Compiling zmij v1.0.23
+   Compiling serde v1.0.229
+   Compiling hex-conservative v0.2.3
+   Compiling serde_derive v1.0.229
+   Compiling ark-poly v0.5.0
+   Compiling thiserror v2.0.21
+   Compiling serde_json v1.0.151
+   Compiling tinyvec v1.13.3
+   Compiling unicode-normalization v0.1.25
+   Compiling ark-ec v0.5.0
+   Compiling bitcoin_hashes v0.14.101
+   Compiling hmac v0.12.1
+   Compiling thiserror-impl v2.0.21
+   Compiling memchr v2.8.3
+   Compiling cpufeatures v0.2.17
+   Compiling keccak v0.1.6
+   Compiling itoa v1.0.18
+   Compiling sha3 v0.10.9
+   Compiling sha2 v0.10.9
+   Compiling hkdf v0.12.4
+   Compiling ark-bls12-381 v0.5.0
+   Compiling bip39 v2.2.2
+   Compiling hex v0.4.3
+   Compiling zether-prover v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/zether-prover)
+    Finished `release` profile [optimized] target(s) in 44.00s
 Compiling 1 files with Solc 0.8.37
-Solc 0.8.37 finished in 6.21s
+Solc 0.8.37 finished in 5.41s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
@@ -34,27 +102,27 @@ Warning (6335): "at" will be promoted to keyword in the future and will not be a
    |                            ^^^^^^^^^^
 
 Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
-   --> src/factory/OpenFactory.sol:282:26:
+   --> src/factory/OpenFactory.sol:284:26:
     |
-282 |         private returns (address at, Release memory r)
+284 |         private returns (address at, Release memory r)
     |                          ^^^^^^^^^^
 
 Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
-  --> src/zether/ZetherVerifier.sol:89:28:
+  --> src/zether/ZetherVerifier.sol:90:28:
    |
-89 |     error PrecompileFailed(uint256 at);
+90 |     error PrecompileFailed(uint256 at);
    |                            ^^^^^^^^^^
 
 Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
-   --> src/zether/ZetherVerifier.sol:269:13:
+   --> src/zether/ZetherVerifier.sol:270:13:
     |
-269 |             uint256 at = 4 + 2 * n + 2 * j;
+270 |             uint256 at = 4 + 2 * n + 2 * j;
     |             ^^^^^^^^^^
 
 Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
-   --> src/zether/ZetherVerifier.sol:374:9:
+   --> src/zether/ZetherVerifier.sol:375:9:
     |
-374 |         uint256 at = HEADER + 6 * p;
+375 |         uint256 at = HEADER + 6 * p;
     |         ^^^^^^^^^^
 
 Warning (2519): This declaration shadows an existing declaration.
@@ -87,13 +155,13 @@ Warning (2018): Function state mutability can be restricted to pure
 
 
 Ran 6 tests for test/zether/ZetherProverCross.t.sol:ZetherProverCrossBls12381Test
-[PASS] test_bundleFull_compact() (gas: 20537920)
-[PASS] test_bundleNone_auditorOff() (gas: 19924892)
-[PASS] test_bundleOptional_decoyFee() (gas: 24102331)
-[PASS] test_bundleOptional_default() (gas: 23427524)
-[PASS] test_compactOptional_relayed_optOut() (gas: 20745551)
-[PASS] test_single_bundleFull() (gas: 12263776)
-Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 1.13s (5.52s CPU time)
+[PASS] test_bundleFull_compact() (gas: 20538530)
+[PASS] test_bundleNone_auditorOff() (gas: 19925406)
+[PASS] test_bundleOptional_decoyFee() (gas: 24103061)
+[PASS] test_bundleOptional_default() (gas: 23427966)
+[PASS] test_compactOptional_relayed_optOut() (gas: 20746650)
+[PASS] test_single_bundleFull() (gas: 12264482)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 989.83ms (4.58s CPU time)
 
-Ran 1 test suite in 1.13s (1.13s CPU time): 6 tests passed, 0 failed, 0 skipped (6 total tests)
+Ran 1 test suite in 990.52ms (989.83ms CPU time): 6 tests passed, 0 failed, 0 skipped (6 total tests)
 rc=0

@@ -1,9 +1,10 @@
-# ua-cs at commit f2e4fe9f
+# ua-cs at commit 20129a8b
   Determining projects to restore...
-  All projects are up-to-date for restore.
-  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
-  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
-Test run for /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
+  Restored /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua.Tests/Scaas.Ua.Tests.csproj (in 1.63 sec).
+  Restored /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua/Scaas.Ua.csproj (in 1.6 sec).
+  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
+  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
+Test run for /home/ha/work/ainative/scaas/.claude/worktrees/no7702/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
 VSTest version 18.0.2 (x64)
 
 Starting test execution, please wait...
@@ -12,21 +13,21 @@ A total of 1 test files matched the specified pattern.
 [xUnit.net 00:00:00.11]   Discovering: Scaas.Ua.Tests
 [xUnit.net 00:00:00.16]   Discovered:  Scaas.Ua.Tests
 [xUnit.net 00:00:00.19]   Starting:    Scaas.Ua.Tests
-  Passed Scaas.Ua.Tests.VectorTests.KemRecordVectors [65 ms]
-  Passed Scaas.Ua.Tests.VectorTests.Structures [19 ms]
-  Passed Scaas.Ua.Tests.VectorTests.PortableVectors [51 ms]
-  Passed Scaas.Ua.Tests.VectorTests.TableGroupsPurposesConstants [17 ms]
-  Passed Scaas.Ua.Tests.VectorTests.PersonalSignPortablePurposes [22 ms]
-  Passed Scaas.Ua.Tests.VectorTests.HolderRefusals [102 ms]
-  Passed Scaas.Ua.Tests.VectorTests.PqzKeyRecordVectors [25 ms]
-  Passed Scaas.Ua.Tests.VectorTests.NativesNativeSpaceCanonicalIds [5 ms]
+  Passed Scaas.Ua.Tests.VectorTests.KemRecordVectors [53 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Structures [17 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableVectors [47 ms]
+  Passed Scaas.Ua.Tests.VectorTests.TableGroupsPurposesConstants [14 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PersonalSignPortablePurposes [25 ms]
+  Passed Scaas.Ua.Tests.VectorTests.HolderRefusals [101 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PqzKeyRecordVectors [28 ms]
+  Passed Scaas.Ua.Tests.VectorTests.NativesNativeSpaceCanonicalIds [4 ms]
   Passed Scaas.Ua.Tests.VectorTests.Messages [2 ms]
-  Passed Scaas.Ua.Tests.VectorTests.ValidRows [948 ms]
-[xUnit.net 00:00:02.17]   Finished:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.ValidRows [931 ms]
+[xUnit.net 00:00:02.14]   Finished:    Scaas.Ua.Tests
   Passed Scaas.Ua.Tests.VectorTests.InvalidRows [677 ms]
 
 Test Run Successful.
 Total tests: 11
      Passed: 11
- Total time: 2.7973 Seconds
+ Total time: 2.7132 Seconds
 rc=0
