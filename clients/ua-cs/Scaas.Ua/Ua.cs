@@ -204,6 +204,10 @@ public static partial class UA
         return Keccak256(KemRecordTag, Sized(ua, 32, "ua"), Word(version), Keccak256(kemPk));
     }
 
+    /// <summary><c>UAMessage(kind, PURPOSE_KEM, KemRecordDigest(ua, version, kemPk))</c>: what the UA signs for <c>setKemKey</c>.</summary>
+    public static byte[] KemRecordMessage(ushort kind, byte[] ua, ulong version, byte[] kemPk) =>
+        UAMessage(kind, PurposeTag("kem"), KemRecordDigest(ua, version, kemPk));
+
     static bool Holds(ushort kind, byte[] keyData) => IsPqzHolder(kind) || (kind == 0x0120 && keyData.Length > 0 && MsigPqzEligible(keyData));
 
     static byte[] PqzKeyHashOf(byte[] pqzKey) =>
@@ -235,7 +239,7 @@ public static partial class UA
         byte[]? pqzPopHash = null, (ulong Version, byte[] Pk)? kem = null)
     {
         if (pqzKey is { Length: 0 }) pqzKey = null;
-        if (kem is { Version: 0, Pk.Length: 0 }) kem = null;
+        if (kem is { Version: 0, Pk: null or { Length: 0 } }) kem = null; // (0, null) / (0, []) = absent
         if (pqzKey is not null || kem is not null)
         {
             var holder = Holds(kind, keyData);
@@ -287,7 +291,7 @@ public static partial class UA
     /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortablePopDigest(ua, keyHash(0x0142, pqzKey), kemRecordHash))</c>.</summary>
     public static byte[] PqzRegMessage(byte[] ua, byte[] pqzKey, (ulong Version, byte[] Pk)? kem = null)
     {
-        if (kem is { Version: 0, Pk.Length: 0 }) kem = null;
+        if (kem is { Version: 0, Pk: null or { Length: 0 } }) kem = null; // (0, null) / (0, []) = absent
         var kemHash = kem is { } k ? KemRecordDigest(ua, k.Version, k.Pk) : new byte[32];
         return UAMessage(0x0142, PopV2Tag, PortablePopDigest(ua, PqzKeyHashOf(pqzKey), kemHash));
     }
