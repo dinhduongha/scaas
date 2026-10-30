@@ -457,3 +457,73 @@ fn webauthn_cross_origin_refused() {
         assert!(c.try_check(&0x0100, &kd, &p, &digest, &auth).is_err(), "{tail}");
     }
 }
+
+/// Owner 2026-10-30: the WebAuthn blob is accepted only in its canonical ABI encoding.
+#[test]
+fn webauthn_blob_canonical_only() {
+    let (env, c) = setup();
+    let digest = BytesN::from_array(&env, &[5; 32]);
+    let p = BytesN::from_array(&env, &PURPOSE_METATX);
+    let (kd, auth) = passkey(&env, &digest, ",\"origin\":\"https://a.example\"}");
+    c.check(&0x0100, &kd, &p, &digest, &auth);
+    let v: StdVec<u8> = auth.iter().collect();
+    let w = |x: &[u8], o: usize| u32::from_be_bytes(x[o + 28..o + 32].try_into().unwrap()) as usize;
+    let (a_len, a_off) = (w(&v, 128), 128);
+    let a_end = a_off + 32 + a_len.div_ceil(32) * 32;
+    let (c_len, c_off) = (w(&v, a_end), a_end);
+    let c_end = c_off + 32 + c_len.div_ceil(32) * 32;
+    assert_eq!(c_end, v.len());
+    assert!(a_len % 32 != 0 && c_len % 32 != 0, "need padding bytes to corrupt");
+    let a = v[a_off + 32..a_off + 32 + a_len].to_vec();
+    let cd = v[c_off + 32..c_off + 32 + c_len].to_vec();
+    let put = |v: &mut StdVec<u8>, at: usize, x: usize| {
+        v[at..at + 32].fill(0);
+        v[at + 24..at + 32].copy_from_slice(&(x as u64).to_be_bytes());
+    };
+    let mut bad: StdVec<(&str, StdVec<u8>)> = StdVec::new();
+    let mut t = v.clone();
+    t.push(0);
+    bad.push(("trailing byte", t));
+    // authenticatorData shifted by one empty word (both offsets fixed up)
+    let mut t = v.clone();
+    t.splice(128..128, [0u8; 32]);
+    put(&mut t, 0, 160);
+    put(&mut t, 32, w(&v, 32) + 32);
+    bad.push(("shifted authenticatorData offset", t));
+    // clientDataJSON shifted by one empty word
+    let mut t = v.clone();
+    t.splice(c_off..c_off, [0u8; 32]);
+    put(&mut t, 32, w(&v, 32) + 32);
+    bad.push(("shifted clientDataJSON offset", t));
+    let mut t = v.clone();
+    t[a_off + 32 + a_len] = 1;
+    bad.push(("padding after authenticatorData", t));
+    let mut t = v.clone();
+    t[c_off + 32 + c_len] = 1;
+    bad.push(("padding after clientDataJSON", t));
+    let mut t = v.clone();
+    put(&mut t, c_off, c_len + 64);
+    bad.push(("length word beyond data", t));
+    let mut t = v.clone();
+    put(&mut t, a_off, a_len + 64);
+    bad.push(("authenticatorData length beyond data", t));
+    // fields swapped: clientDataJSON first, offsets fixed up
+    let pad = |x: &[u8]| {
+        let mut y = x.to_vec();
+        y.resize(x.len().div_ceil(32) * 32, 0);
+        y
+    };
+    let mut t = v[..128].to_vec();
+    put(&mut t, 0, 128 + 32 + pad(&cd).len());
+    put(&mut t, 32, 128);
+    for f in [&cd, &a] {
+        t.extend_from_slice(&[0u8; 32]);
+        let n = t.len() - 32;
+        put(&mut t, n, f.len());
+        t.extend_from_slice(&pad(f));
+    }
+    bad.push(("fields swapped", t));
+    for (name, blob) in bad {
+        assert!(c.try_check(&0x0100, &kd, &p, &digest, &b(&env, &blob)).is_err(), "{name}");
+    }
+}

@@ -35,17 +35,17 @@ pub fn bytes_at(env: &Env, b: &Bytes, base: u32, head: u32) -> Bytes {
     b.slice(o + 32..end)
 }
 
-fn put_word(out: &mut Bytes, v: u32) {
+pub fn put_word(out: &mut Bytes, v: u32) {
     let mut w = [0u8; 32];
     w[28..].copy_from_slice(&v.to_be_bytes());
     out.extend_from_slice(&w);
 }
 
-fn padded(n: u32) -> u32 {
+pub fn padded(n: u32) -> u32 {
     n.div_ceil(32) * 32
 }
 
-fn put_bytes(out: &mut Bytes, b: &Bytes) {
+pub fn put_bytes(out: &mut Bytes, b: &Bytes) {
     put_word(out, b.len());
     out.append(b);
     out.extend_from_slice(&[0u8; 32][..(padded(b.len()) - b.len()) as usize]);

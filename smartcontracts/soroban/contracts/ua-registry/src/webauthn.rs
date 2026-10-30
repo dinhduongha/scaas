@@ -4,7 +4,10 @@
 //! "Passkey id without origin"). The `SmartKeyAccount` parser is not reused: it compares an origin.
 use soroban_sdk::{crypto::Hash, panic_with_error, Bytes, BytesN, Env};
 
-use crate::{abi::bytes_at, Error};
+use crate::{
+    abi::{bytes_at, padded, put_bytes, put_word},
+    Error,
+};
 
 const FLAG_UP: u8 = 0x01;
 const FLAG_UV: u8 = 0x04;
@@ -68,6 +71,17 @@ pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes) {
     }
     let auth_data = bytes_at(env, sig, 0, 0);
     let client_data = bytes_at(env, sig, 0, 32);
+    let rs: BytesN<64> = sig.slice(64..128).try_into().unwrap_or_else(|_| panic_with_error!(env, Error::Pop));
+    // Canonical encoding only (owner 2026-10-30): re-encode and compare, so `pop` bytes (and `pop_hash`) are unique.
+    let mut enc = Bytes::new(env);
+    put_word(&mut enc, 128);
+    put_word(&mut enc, 128 + 32 + padded(auth_data.len()));
+    enc.append(&rs.clone().into());
+    put_bytes(&mut enc, &auth_data);
+    put_bytes(&mut enc, &client_data);
+    if enc != *sig {
+        panic_with_error!(env, Error::Pop);
+    }
     let n = client_data.len() as usize;
     if auth_data.len() < 37 || auth_data.slice(0..32) != key_data.slice(64..96) || n > MAX_CLIENT_DATA {
         panic_with_error!(env, Error::Pop);
@@ -83,7 +97,6 @@ pub fn check(env: &Env, key_data: &Bytes, ua_msg: &Hash<32>, sig: &Bytes) {
     let mut key = Bytes::from_array(env, &[4u8]);
     key.append(&key_data.slice(0..64));
     let key: BytesN<65> = key.try_into().unwrap_or_else(|_| panic_with_error!(env, Error::KeyData));
-    let rs: BytesN<64> = sig.slice(64..128).try_into().unwrap_or_else(|_| panic_with_error!(env, Error::Pop));
     let mut signed = auth_data;
     signed.append(&env.crypto().sha256(&client_data).into());
     env.crypto().secp256r1_verify(&key, &env.crypto().sha256(&signed), &rs);
