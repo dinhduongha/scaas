@@ -538,7 +538,7 @@ fn kind_msig_negatives_fail() {
     // An index past the members.
     let mut past = good.clone();
     past[1].0 = 3;
-    assert!(c.try_require_authorized(&m.ua, &pm, &d, &member_sigs(&env, &past)).is_err());
+    assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &d, &member_sigs(&env, &past))), Error::Unauthorized);
     // Non-canonical encodings: a trailing byte; a non-minimal outer offset.
     let enc = vecu8(&member_sigs(&env, &good));
     let mut t = enc.clone();
@@ -857,4 +857,17 @@ fn member_large_pop_same_budget() {
     assert!(large.2 >= normal.2 + 16_384);
     assert_eq!(normal.0, large.0, "the member's pop never enters the check");
     assert!(large.1 > normal.1 + 16_384, "a whole-record read would scale with the pop");
+}
+
+/// T3 review m2: `native_address` rebuilds the `Address` of a `C…` (0x0012) and a `G…` (0x0011) id from its 32 bytes.
+#[test]
+fn native_address_round_trip() {
+    use soroban_sdk::xdr::ToXdr as _;
+    let env = new_env();
+    let g = Address::from_str(&env, "GDRXE2BQUC3AZNPVFSCEZ76NJ3WWL25FYFK6RGZGIEKWE4SOOHSUJUJ6");
+    for (kind, a) in [(digest::SOROBAN_CONTRACT, Address::generate(&env)), (digest::STELLAR_ACCOUNT, g)] {
+        let x = a.clone().to_xdr(&env);
+        let id: [u8; 32] = vecu8(&x.slice(x.len() - 32..)).try_into().unwrap();
+        assert_eq!(crate::native_address(&env, kind, &id), a);
+    }
 }
