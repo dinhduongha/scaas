@@ -10,7 +10,7 @@
 P=2026-10-30-dex-round
 STEPS="forge-n2304-kmax4096 sizes docs cargo-scaas-node node-e2e-anvil clientkeys named-tests"
 FAMILIES=""
-# "<step>|<form>|<name>": the tests T1-T14 built (git diff of the test functions, merge-base..T16), in their pass form,
+# "<step>|<form>|<name>": the tests T1-T14 and the final fix wave built (git diff of the test functions), in their pass form,
 # plus the existing tests the tasks rewrote (test_dexKat T9, test_pathB_dexChecksTheMatchedPart T1,
 # guard::the_call_table_is_pinned T12, dex::limits_and_the_settlement_mirror_... T11, the clientkeys trade-order test T14).
 # Not listed: the invariant_* of T8 (forge prints an invariant "[PASS] <name>" without "(", which the forge form does not
@@ -33,6 +33,7 @@ forge|forge|test_batch_laterPlanSeesEarlierPulled
 forge|forge|test_batch_realSigCheckGasStarved_revertsWhole
 forge|forge|test_batch_realUAVerifyGas_revertsWhole
 forge|forge|test_batch_forgedStarvationFromTarget_onlyThatPlan
+forge|forge|test_batch_resetForgesStarvation_onlyThatPlan
 forge|forge|test_batch_returnbombTarget_onlyThatPlan
 forge|forge|test_batch_gasBurningTarget_laterPlansFailEmpty
 forge|forge|test_exchange_forbiddenSelector_restorePulled

@@ -43,8 +43,6 @@ import {TokenCall} from "./TokenCall.sol";
 ///         `mtxHybridVia`, spec §4): one listed-market taker against 0..n makers at their own price and the rest of
 ///         its sell routed outside, in one atomic plan; the taker alone gets the output above `outsideFloor`.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
-    using SafeERC20 for IERC20;
-
     uint256 internal constant PPM = 1_000_000;
     uint8 internal constant ESCROW = 2;
     uint8 internal constant KIND_SCAAS = 1;
@@ -507,7 +505,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
                 (approvedSpender[na++],) = abi.decode(xs[i].data[4:], (address, uint256));
             }
         }
-        for (uint256 i; i < na; ++i) IERC20(approvedToken[i]).forceApprove(approvedSpender[i], 0);
+        // W-O, as `_send`: capped, the target's revert data dropped (a reset reverting with forged starvation bytes
+        // fails only this plan of a batch)
+        for (uint256 i; i < na; ++i) {
+            address tk = approvedToken[i];
+            if (!TokenCall.ok(tk, abi.encodeCall(IERC20.approve, (approvedSpender[i], 0)))) _tokenFailed(tk);
+        }
     }
 
     /// @notice Path (b): the sold fills go to `executor` (listed when a leg or the admin asks), which must transfer at

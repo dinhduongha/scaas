@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Vm} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -13,6 +14,15 @@ import {MockRouter, Hostile} from "./DexExchange.t.sol";
 contract Any1271 {
     function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4) {
         return 0x1626ba7e;
+    }
+}
+
+/// An `approve` target that grants (`approve(x, n > 0)` returns true) but reverts the DEX's reset `approve(x, 0)` with
+/// the bytes of `SigCheckGasStarved`.
+contract ResetForger {
+    function approve(address, uint256 v) external pure returns (bool) {
+        if (v == 0) revert ISCaaSDex.SigCheckGasStarved(1, 2);
+        return true;
     }
 }
 
@@ -308,6 +318,24 @@ contract DexBatchTest is UADexBase {
         bool[] memory ok =
             _batch(_ps(_p("p1", 1), _p("p2", 2)), _xs(_r(1900), _ix(address(h), abi.encodeCall(Hostile.forge, ()))));
         assertEq(_oks(ok), _bools(true, false));
+    }
+
+    /// The allowance reset after the route is a capped token call that drops the target's revert data (W-O): a target
+    /// that reverts `approve(x, 0)` with the bytes of `SigCheckGasStarved` fails only its plan, with
+    /// `SafeERC20FailedOperation(target)`; the first plan settles.
+    function test_batch_resetForgesStarvation_onlyThatPlan() public {
+        ResetForger f = new ResetForger();
+        ISCaaSDex.Interaction[] memory r = _r(1900);
+        ISCaaSDex.Interaction[] memory x2 = new ISCaaSDex.Interaction[](3);
+        (x2[0], x2[1]) = (r[0], r[1]);
+        x2[2] = ISCaaSDex.Interaction(address(f), abi.encodeCall(IERC20.approve, (address(1), 1)));
+        vm.expectEmit(address(dex));
+        emit ISCaaSDex.ExchangeFailed("p2",
+            abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(f)));
+        bool[] memory ok = _batch(_ps(_p("p1", 1), _p("p2", 2)), _xs(_r(1900), x2));
+        assertEq(_oks(ok), _bools(true, false));
+        assertEq(A.balanceOf(address(dex)), 0);
+        assertEq(B.balanceOf(address(dex)), 0);
     }
 
     /// A target reverting with 1 MB: its plan fails with a bounded reason (256 bytes of `InteractionFailed(…)`), the
