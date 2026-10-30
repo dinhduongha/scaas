@@ -56,6 +56,9 @@ contract MetaTxGasV2Test is Test {
     // (+7.6k to +7.8k).
     // Metatx split T8 (2026-10-27) re-measured on the final token bytecode (split + PayMeta): A 87,936, B 185,844, C 103,751,
     // D 103,666, E 103,744, F 185,868, G 182,453, P 189,496 (runs/2026-10-27-metatx-split-overhead-final.txt).
+    // no7702 (owner ruling D3, 2026-10-30): P is a bound-relayer (`MODE_RESTRICT_RELAYER`) row, so it pays the designator
+    // guard on the relayer (+313 warm EXTCODESIZE path); it sat inside BUDGET until the review fixes moved the bytecode
+    // metadata (and with it the CREATE2 addresses and signature bytes) by a few gas: P re-measured 189,800 (+304).
     uint256 constant AMS_A = 87_936;
     uint256 constant AMS_B = 185_844;
     uint256 constant AMS_C = 103_751;
@@ -63,7 +66,7 @@ contract MetaTxGasV2Test is Test {
     uint256 constant AMS_E = 103_744;
     uint256 constant AMS_F = 185_868;
     uint256 constant AMS_G = 182_453;
-    uint256 constant AMS_P = 189_496;
+    uint256 constant AMS_P = 189_800;
     address signer;
     address relayer = address(0xBEEF);
     address recipient = address(0xCAFE);
