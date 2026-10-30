@@ -296,9 +296,11 @@ impl UaSpike {
         mldsa_verify(&env, kind, &pk, &pq, &sig);
     }
 
-    /// Spike set-up only: writes a record (and a UA balance) as `register` would have. `id` None ⇒ the CTR-UA-04 id.
-    pub fn seed(env: Env, id: Option<BytesN<32>>, kind: u32, key_data: Bytes, pop: Bytes) -> BytesN<32> {
+    /// Spike set-up only: writes a record (and a UA balance) as `register` would have. `id` None ⇒ the CTR-UA-04 id;
+    /// `pop` None ⇒ empty (the CLI takes no empty `Bytes` argument).
+    pub fn seed(env: Env, id: Option<BytesN<32>>, kind: u32, key_data: Bytes, pop: Option<Bytes>) -> BytesN<32> {
         let id = id.unwrap_or_else(|| tagged(&env, kind, &key_data));
+        let pop = pop.unwrap_or_else(|| Bytes::new(&env));
         put(&env, &Key::Ua(id.clone()), &Rec { kind, key_data, pop });
         put(&env, &Key::UaBal(id.clone()), &1_000_000_000i128);
         id
@@ -466,7 +468,7 @@ impl UaSpike {
     /// with Soroban's 96-byte points: transcript keccaks, the Σ MSMs, m + 1 (m = 1: 2) range proofs. A cost model over
     /// fixed valid points, not a verifier. Not modelled: the token's ciphertext reads / writes and g1_add updates.
     pub fn zether_transfer_model(env: Env, m: u32) -> u32 {
-        assert!(m >= 1 && m <= 16);
+        assert!(m >= 1 && m <= 8); // the transcript absorbs slice ZEROS (8 KiB): m <= 8
         let mut t = Tr { env: &env, st: h(&env, &Bytes::from_slice(&env, b"SCAAS-ZETHER-TRANSCRIPT-V1")) };
         let single = m == 1;
         let (stmt, sigma) = if single { (512 + 9 * P, 10 * P) } else { (512 + 6 * P + 32 + 4 * P * m, (6 + 5 * m) * P) };

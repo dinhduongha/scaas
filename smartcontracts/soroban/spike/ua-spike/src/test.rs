@@ -87,7 +87,7 @@ fn spike_msig3_mldsa65_model_budget() {
     let mut ids = Vec::new(&env);
     for i in 1..=3u8 {
         let id = BytesN::from_array(&env, &[i; 32]);
-        c.seed(&Some(id.clone()), &0x0131, &pk.clone().into(), &sig.clone().into());
+        c.seed(&Some(id.clone()), &0x0131, &pk.clone().into(), &Some(sig.clone().into()));
         ids.push_back(id);
     }
     measure(&env, "msig_model n=3 mldsa65", || c.msig_model(&3, &ids, &pk, &msg, &sig));
@@ -125,7 +125,7 @@ fn hex_str(v: &[u8]) -> String {
 fn spike_ua_pay_passkey_model_budget() {
     let (env, c) = setup();
     let (kd, key, rp, auth, cdj, sig, digest, ua) = passkey_args(&env);
-    let id = c.seed(&None, &0x0100, &kd, &Bytes::new(&env));
+    let id = c.seed(&None, &0x0100, &kd, &None);
     assert_eq!(id.to_array().to_vec(), ua);
     measure(&env, "ua_pay_model webauthn-p256", || c.ua_pay_model(&key, &rp, &auth, &cdj, &sig, &digest));
     let other = BytesN::from_array(&env, &[7; 32]);

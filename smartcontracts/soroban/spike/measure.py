@@ -146,8 +146,8 @@ def main():
     # set-up (submitted): 16 mldsa65 member records, the passkey record and its UA balance
     ids = ['%064x' % (int('01' * 32, 16) * i) for i in range(1, 17)]
     for i in ids:
-        invoke('seed', ['--id', i, '--kind', '305', '--key_data', h(r65['keyData']), '--pop', h(r65['pop'])], False)
-    invoke('seed', ['--kind', '256', '--key_data', kd.hex(), '--pop', ''], False)
+        invoke('seed', ['--id', json.dumps(i), '--kind', '305', '--key_data', h(r65['keyData']), '--pop', json.dumps(h(r65['pop']))], False)  # Option<_>: JSON
+    invoke('seed', ['--kind', '256', '--key_data', kd.hex()], False)
     print('## seeded 16 mldsa65 member records and the webauthn-p256 record')
 
     m65 = ['--pk', h(r65['keyData']), '--msg', h(r65['popMessage']), '--sig', h(r65['pop'])]
@@ -168,13 +168,13 @@ def main():
     data += [('data', 'bls_pairing pairs=2', 'bls_pairing', ['--n_pairs', '2']),
              ('data', 'bls_add_mul n=1', 'bls_add_mul', ['--n', '1']),
              ('data', 'bls_fr_ops n=100', 'bls_fr_ops', ['--n', '100'])]
-    data += [('data', 'zether_transfer_model m=%d' % m, 'zether_transfer_model', ['--m', str(m)]) for m in (1, 2, 4, 8, 16)]
+    data += [('data', 'zether_transfer_model m=%d' % m, 'zether_transfer_model', ['--m', str(m)]) for m in (1, 2, 4, 8)]
 
     keys = list(L)
     print('| class | call | ' + ' | '.join(keys) + ' | resource fee (stroops) | verdict |')
     print('|---|---|' + '---|' * (len(keys) + 2))
     print('| limit | network | ' + ' | '.join(str(L[k]) for k in keys) + ' | — | — |')
-    bad = 0
+    bad, msig_fit = 0, 0
     for cls, label, fn, args in calls + data:
         try:
             f = simulate(fn, args)
@@ -184,9 +184,12 @@ def main():
             continue
         over = [k for k in keys if f[k] is not None and f[k] > L[k]]
         bad += cls == 'GATE' and bool(over)
+        if cls == 'data' and fn == 'msig_model' and not over:
+            msig_fit = max(msig_fit, int(args[1]))
         cell = lambda k: 'n/a' if f[k] is None else '%s (%.1f%%)' % (f[k], 100.0 * f[k] / L[k])
         print('| %s | %s | %s | %d | %s |' % (cls, label, ' | '.join(cell(k) for k in keys), f['fee'],
                                             'OVER: ' + ','.join(over) if over else 'within'))
+    print('## msig_model scan (data): largest n in 1..16 whose simulation fits every limit: %d' % msig_fit)
     print('## GATE: %s' % ('FAIL (%d gate call(s) failed or over a limit)' % bad if bad else 'PASS (every UA-Soroban figure within the limits)'))
     sys.exit(1 if bad else 0)
 
