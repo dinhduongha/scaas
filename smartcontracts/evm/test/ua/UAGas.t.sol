@@ -63,6 +63,7 @@ contract UAGasTest is UARegistryBase {
     uint256 internal constant MSIG_MEMBER_GAS = 45_000; // UARegistry.MSIG_MEMBER_GAS
 
     bytes internal _big;
+    bytes internal _memberPop; // `_derivedOverhead`'s registration pop when set (I1: a padded pop)
     address internal _impl;
 
     /// Per-member gas of `msig` beyond the member's own verifier, measured in the worst state: every touched account and
@@ -118,6 +119,11 @@ contract UAGasTest is UARegistryBase {
     /// transaction of its own, all accounts and slots cold (the binding case).
     function test_T_GAS_msigAtBudget() public {
         _logMemberOverhead();
+        _allAtBudget();
+    }
+
+    /// The structures of `test_T_GAS_msigAtBudget`, the derived members registered with `_memberPop` as their pop.
+    function _allAtBudget() internal {
         _big = _bigSig();
         BurnAll impl = new BurnAll();
         _impl = address(impl);
@@ -128,7 +134,7 @@ contract UAGasTest is UARegistryBase {
         UARegistry home = _deploy(address(0x5ce0), chainUidA, address(0), false, BUDGET, address(impl), true, c);
         Member[] memory all = new Member[](16);
         for (uint256 i; i < 8; ++i) {
-            all[i] = Member(KINDS[i], home.register(KINDS[i], _key(KINDS[i]), _none(), "", ""), 1);
+            all[i] = Member(KINDS[i], home.register(KINDS[i], _key(KINDS[i]), _none(), _memberPop, ""), 1);
         }
         bytes memory clone = abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3");
         for (uint256 i; i < 8; ++i) {
@@ -148,6 +154,30 @@ contract UAGasTest is UARegistryBase {
             _atBudget(gen, 1, pred, cfg, _msigKey(1, p256));
             _atBudget(gen, 2, pred, cfg, _msigKey(1, native));
         }
+    }
+
+    /// msig-pophash I1: a member's check reads only its key from its record, never its registration `pop`, so a member
+    /// registered with a padded `pop` (a `webauthn-p256` pop has no length limit; here 40,000 B: two blob chunks) costs
+    /// what a canonical one costs: the per-member overhead is the same, and `test_T_GAS_msigAtBudget`'s structures,
+    /// every member registered with the padded pop, still authorize within the bound (gen 1 and gen 2).
+    function test_T_GAS_memberPopSizeFree() public {
+        bytes memory big = _bigSig();
+        address[] memory v = new address[](8);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](8);
+        for (uint256 i; i < 8; ++i) {
+            v[i] = address(new AcceptAll());
+            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
+        }
+        UARegistry small = _deploy(address(0x5cb1), chainUidA, address(0), false, BUDGET, address(0), true, c);
+        UARegistry padded = _deploy(address(0x5cb2), chainUidA, address(0), false, BUDGET, address(0), true, c);
+        uint256 s = _derivedOverhead(small, small, big, v, 1);
+        _memberPop = new bytes(40_000);
+        uint256 p = _derivedOverhead(padded, padded, big, v, 1);
+        emit log_named_uint("msig per derived member, canonical pop (cold)", s);
+        emit log_named_uint("msig per derived member, 40,000 B pop (cold)", p);
+        assertEq(p, s, "the member's pop size does not enter its check");
+        _allAtBudget(); // every member registered with the 40,000 B pop
+        delete _memberPop;
     }
 
     /// Review2 C4-2: `MSIG_MEMBER_GAS` was calibrated with signatures <= 512 B; PQ member signatures are copied three
@@ -254,12 +284,12 @@ contract UAGasTest is UARegistryBase {
         }
     }
 
-    /// Registers `d`'s derived members in `r` (BurnAll PoPs accept anything).
+    /// Registers `d`'s derived members in `r` with `_memberPop` as pop (BurnAll PoPs accept anything).
     function _registerMembers(UARegistry r, bytes memory d) internal {
         uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         for (uint256 j; j < count; ++j) {
             uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * j], d[5 + 36 * j])));
-            if (kind >= 0x0100) r.register(kind, _key(kind), _none(), "", "");
+            if (kind >= 0x0100) r.register(kind, _key(kind), _none(), _memberPop, "");
         }
     }
 
@@ -307,7 +337,8 @@ contract UAGasTest is UARegistryBase {
         }
     }
 
-    /// msig over the 8 single-key kinds (weights 1); (gas with 8 member sigs - gas with 1) / 7, all cold.
+    /// msig over the 8 single-key kinds (weights 1), each registered (if not yet) with `_memberPop`, else `big`, as its
+    /// pop; (gas with 8 member sigs - gas with 1) / 7, all cold.
     function _derivedOverhead(UARegistry r, UARegistry home, bytes memory big, address[] memory verifiers, uint16 w)
         internal
         returns (uint256)
@@ -316,7 +347,7 @@ contract UAGasTest is UARegistryBase {
         for (uint256 i; i < 8; ++i) {
             bytes memory k = _key(KINDS[i]);
             bytes32 id = UAKinds.uaOf(KINDS[i], k);
-            if (!home.isRegistered(id)) home.register(KINDS[i], k, _none(), big, "");
+            if (!home.isRegistered(id)) home.register(KINDS[i], k, _none(), _memberPop.length != 0 ? _memberPop : big, "");
             m[i] = Member(KINDS[i], id, w);
         }
         uint256[2] memory used;

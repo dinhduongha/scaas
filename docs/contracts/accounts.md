@@ -336,8 +336,8 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   argument (`keyData`, `attrs`, `pqzPop`) and the `checked` values stay in the event.
 - **B.** In `auth = abi.encode(MemberSig[])` (and the `pop` / KEM / PQZ-key signatures of an `msig`), every `MemberSig.keyData`
   is empty: a native member has no key data, a registered member's key is read from its own record — `vk` at `keyPtr` for the
-  stored kinds, the key data in the registration blob for the classical kinds (every member is registered or native, §1.8
-  step 4). A non-empty `keyData` fails the member (`UAUnauthorized`, `UAPoP` in `register`). On EVM the rule is tied to the
+  stored kinds, the key data in the registration blob for the classical kinds — the key bytes only, never the member's
+  `pop`, whose length the member chose (every member is registered or native, §1.8 step 4). A non-empty `keyData` fails the member (`UAUnauthorized`, `UAPoP` in `register`). On EVM the rule is tied to the
   purpose `member`: `requireAuthorized(id, PURPOSE_MEMBER, …)` takes `auth = abi.encode(bytes(""), sig)` for every derived
   id, so a gen 2 hands a member of a gen-1 kind to gen 1 with the empty key data and gen 1 reads its record; other purposes
   keep `auth = abi.encode(keyData, sig)` with the key data of a classical kind.
@@ -1774,9 +1774,9 @@ Verification per check (execution gas, EVM). Caps are **starting values**; the d
 measured worst case (T-GAS), published in the chain profile. Measured (UA-2a, forge, osaka;
 `test/ua/UAGas.t.sol` and the verifier tests): the registry adds ~6 k per derived check; `register` costs 77 k–273 k
 per kind, and a `bls-bn254-minsig` registration needs ≥ 450 k call gas because of the 63/64 holds; `msig` adds
-`MSIG_MEMBER_GAS` = 45 k per member to the structure bound (the worst measured member overhead, cold, is 30.6 k for a
-member handed to gen 1 — it includes reading the member's key from its record, [CTR-UA-33](#CTR-UA-33) — plus the
-caller's hold for a 400 k cap, 11.3 k; 35 k before CTR-UA-33), and a member handed to gen 1 adds gen 1's own hold, `cap / 63 + 5 k`; an
+`MSIG_MEMBER_GAS` = 45 k per member to the structure bound (the worst measured member overhead, cold, is 28.5 k for a
+member handed to gen 1 — it includes reading the member's key bytes from its record, never its `pop`,
+[CTR-UA-33](#CTR-UA-33) — plus the caller's hold for a 400 k cap, 11.3 k; 35 k before CTR-UA-33), and a member handed to gen 1 adds gen 1's own hold, `cap / 63 + 5 k`; an
 `msig` registered exactly at `verifyBudget` authorizes with `verifyBudget` gas (T-GAS, cold under `--isolate`).
 
 | Kind | Calldata (key data + sig) | Verify | Registry overhead | Cap |

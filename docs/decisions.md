@@ -3656,18 +3656,26 @@ to the classical kinds (0x0100–0x0108: `webauthn-p256`, `p256`, `ed25519`, `bi
 
 As built on EVM (controller calls, owner may override): (1) a classical member's key is read from its registration blob
 `_reg[ua] = abi.encode(keyRest, pop, kemVersion)` (UA8-D7: `keyRest` is the whole key data of a non-stored kind; its
-`keyPtr` is 0), a stored member's from `keyPtr` as before. (2) The rule is tied to the purpose `member` inside
+`keyPtr` is 0), a stored member's from `keyPtr` as before. Only the `keyRest` bytes are read (its length word at 0x60 and
+its bytes from 0x80 of chunk 0, `SSTORE2.read(ptr, start, len)`), never the blob's `pop`: a member chooses its `pop`'s
+length (a `webauthn-p256` pop has no upper bound), so reading the whole blob would let one co-signer push every check of
+the `msig` past the per-member bound (review fix I1). (2) The rule is tied to the purpose `member` inside
 `UARegistry._derived`: `requireAuthorized(id, PURPOSE_MEMBER, digest, auth)` takes `abi.encode(bytes(""), sig)` for every
 derived id and refuses key data (`UAUnauthorized`). Why tied to the purpose and not only to the `msig` path: a gen 2 hands a
 member of a kind it does not enable to gen 1 through gen 1's `requireAuthorized` under `member`; with the empty key data gen 1
 reads its own record, so gen 2 needs no read of gen 1's blob and no new view. Every other purpose keeps
 `auth = abi.encode(keyData, sig)` for a classical kind (single-key authorization is unchanged). (3) `MSIG_MEMBER_GAS`
 35,000 → 45,000: reading the member's key from storage (cold SLOADs of the blob pointers, EXTCODECOPY) raised the worst
-measured member overhead (cold, `--isolate`, a member handed to gen 1) from 19,987 to 30,599; + the caller's hold for a
-400 k cap (11,349) = 41,948, rounded up. The `msig` structure bound (register step 4) and the PQZ-holder bound
+measured member overhead (cold, `--isolate`, a member handed to gen 1) from 19,987 to 28,544 (30,599 with the first
+whole-blob read); + the caller's hold for a 400 k cap (11,349) = 39,893, rounded up to 45,000 (kept from the first build:
+5 k spare, and the cap calibrations below stay). `test_T_GAS_memberPopSizeFree`: members registered with a 40,000 B `pop`
+cost exactly what canonical ones cost and the at-budget structures still authorize within the bound. The `msig` structure bound (register step 4) and the PQZ-holder bound
 (CTR-PQZ-12) use the new figure, so a few structures right at a budget no longer fit (the largest `mldsa65` cap of the
 2-of-3 PQ treasury at a 12 M budget: 5,921,000 → 5,911,000); `test_T_GAS_msigAtBudget` / `test_T_GAS_msigPqAtBudget`
-authorize at the new bounds.
+authorize at the new bounds. (4) Launch note (review M4, for the 22776 checklist): a gen 2 of this code in front of a gen 1
+built before CTR-UA-33 would hand `abi.encode("", sig)` under `member` and the old gen 1 would refuse every classical
+member (`uaOf("") != id`); the gen-2 constructor probes gen 1's UA-8 views only. Not reachable on the test-only chains (all
+redeploy together); a mainnet gen 2 must sit on a gen 1 with CTR-UA-33.
 
 NEAR and Algorand (inventory 2026-10-30): no UA registry and no registration event; an `msig` member there is a key id
 inside the structure, never registered (no member record exists), and its signature carries its key in the family's own auth
@@ -3686,7 +3694,7 @@ higher. Test-only chains: no migration, no compatibility path; the earlier vecto
 `smartcontracts/vectors/ua/legacy/msig-pophash/`.
 
 **Source.** owner, 2026-10-30 (UA-Soroban T0 hard gate; task brief `.superpowers/sdd/2026-10-30-msig-pophash/task-brief.md`).
-Status: decided (owner); built on branch `msig-pophash` (not merged; merge before `ua-soroban`): vectors and the clientkeys / ua-rs reference verifiers `17357941`, EVM registry + forge tests + gas pins + size baseline (`UARegistry` 37,066 → 37,181 B) `6d7010cb`, these docs in the next `msig-pophash:` commit.
+Status: decided (owner); built on branch `msig-pophash` (not merged; merge before `ua-soroban`): vectors and the clientkeys / ua-rs reference verifiers `17357941`, EVM registry + forge tests + gas pins + size baseline (`UARegistry` 37,066 → 37,181 B; 37,365 B after fix I1) `6d7010cb`, these docs `d531f769`; the review fixes (I1 key-only read, M1, M3, M4) in the `msig-pophash fix:` commit after it.
 
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —

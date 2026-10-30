@@ -148,7 +148,10 @@ fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth
             mkd.is_empty() && native_ecdsa(&id[12..].try_into().ok()?, &ua_auth_digest(&d, &id, &member, &md), sig)
         } else {
             // CTR-UA-33: a registered member's MemberSig carries no key data; the key is its record's (the derived rows)
-            let rec = arr(&v["derived"]).iter().find(|r| b32(&r["ua"]) == id).map(|r| bytes(&r["keyData"]));
+            let rec = arr(&v["derived"])
+                .iter()
+                .find(|r| b32(&r["ua"]) == id && num(&r["kind"]) as u16 == kind) // by (kind, id), as `_derived`
+                .map(|r| bytes(&r["keyData"]));
             mkd.is_empty()
                 && rec.is_some_and(|k| verify(kind, &k, &ua_message(kind, &member, &md).unwrap(), sig, false))
         };

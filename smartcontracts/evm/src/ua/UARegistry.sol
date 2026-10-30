@@ -96,10 +96,11 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// @notice EIP-7825 per-transaction gas cap, the bound of a PQZ `msig` holder (`_attrs`).
     uint256 internal constant TX_GAS_CAP = 1 << 24;
     /// @notice Registration bound for `msig` (register step 4): gas per member beyond its cap — MemberSig decoding,
-    ///         `uaOf`, `uaMessage`, the member's key read from its record (CTR-UA-33), the call or the gen-1 hand-off,
-    ///         cold accounts (measured worst, cold under `--isolate`: 30,599 for a member handed to gen 1, 23,502 for a
-    ///         derived member here), plus what the caller must hold for the largest cap (400 k / 63 + 5 k): 41,948,
-    ///         rounded up (35,000 before CTR-UA-33: 19,987 + 11,349 = 31,336). Also added in `_membersWorst`:
+    ///         `uaOf`, `uaMessage`, the member's key read from its record (CTR-UA-33: the key bytes only, never the
+    ///         member's `pop`, so the figure does not depend on how the member registered), the call or the gen-1
+    ///         hand-off, cold accounts (measured worst, cold under `--isolate`: 28,544 for a member handed to gen 1,
+    ///         21,224 for a derived member here), plus what the caller must hold for the largest cap (400 k / 63 + 5 k):
+    ///         39,893, rounded up (35,000 before CTR-UA-33: 19,987 + 11,349 = 31,336). Also added in `_membersWorst`:
     ///         `(held - 400 k) / 63` for the largest held member cap above 400 k, and for each member gen 2 hands to gen 1 the hold gen 2 keeps
     ///         around that call (the member counts `cap + cap / 63 + SigCheck.GAS_MARGIN`; gen 1 holds again
     ///         inside). `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
@@ -345,6 +346,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes memory rest;
         (rest, pop, v) = abi.decode(SSTORE2.readChunks(_reg[ua]), (bytes, bytes, uint64));
         keyData = bytes.concat(SSTORE2.read(keyPtr), rest);
+    }
+
+    /// The `keyRest` of a record held here, read alone (msig-pophash I1: never the blob's `pop`, whose length the
+    /// member does not bound): the blob `abi.encode(keyRest, pop, kemVersion)` has `keyRest`'s length at 0x60 and its
+    /// bytes from 0x80, in chunk 0 (key data of a non-stored kind: at most 256 B, an `msig` 580 B; chunks 32,768 B).
+    function _keyRest(bytes32 ua) private view returns (bytes memory) {
+        address p = _reg[ua][0];
+        return SSTORE2.read(p, 0x80, uint256(bytes32(SSTORE2.read(p, 0x60, 32))));
     }
 
     function popOf(bytes32 ua) external view returns (bytes memory pop) {
@@ -940,7 +949,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 Record memory r = _records[id];
                 if (r.kind != kind) return false;
                 if (vl == 0) {
-                    (keyData,,) = abi.decode(SSTORE2.readChunks(_reg[id]), (bytes, bytes, uint64));
+                    keyData = _keyRest(id);
                 } else {
                     bytes memory ek = _expanded(id, kind);
                     if (ek.length != 0) {

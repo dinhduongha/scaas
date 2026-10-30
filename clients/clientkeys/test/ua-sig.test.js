@@ -88,7 +88,7 @@ test('native EOA: UAAuth signatures verify, negatives fail', () => {
 });
 
 /** The registered derived keys (id → keyData): the records the registry reads a member's key from (CTR-UA-33). */
-const registered = new Map(V.derived.map((r) => [r.ua, r.keyData]));
+const registered = new Map(V.derived.map((r) => [`${r.kind}:${r.ua}`, r.keyData])); // by (kind, id), as `_derived`
 /** The registry's msig path (§1.9): auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])); every MemberSig
  *  carries an empty keyData (native: R12; registered: CTR-UA-33, the key comes from the member's record). */
 function msigOk(structureUa, purposeTag, digest, auth) {
@@ -118,8 +118,8 @@ function msigOk(structureUa, purposeTag, digest, auth) {
       const sig = bytesAt(sigs, t, t + 64);
       const ok = ua.isNativeKind(kind)
         ? mkd.length === 0 && nativeOk(hex(id.subarray(12)), ua.uaAuthDigest(domain(V.msig.context, V.msig.generation), id, tag('member'), md), hex(sig))
-        : mkd.length === 0 && registered.has(hex(id))
-          && verify(kind, registered.get(hex(id)), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig)); // CTR-UA-33
+        : mkd.length === 0 && registered.has(`${kind}:${hex(id)}`)
+          && verify(kind, registered.get(`${kind}:${hex(id)}`), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig)); // CTR-UA-33
       if (!ok) return false;
       sum += weight;
     }
