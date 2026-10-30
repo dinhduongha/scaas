@@ -7,10 +7,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as ua from '../src/ua.js';
-import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes, word } from '../src/bytes.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
-import { B, attempt, verify, nativeOk, wordAt, bytesAt } from './ua-verify.js';
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
 const TEXT = readFileSync(new URL('portable.json', dir), 'utf8');
@@ -22,40 +21,6 @@ const SETS = ['n2048-kmax1024', 'n2304-kmax4096', 'n2560-kmax16384', 'n2816-kmax
 const args = (r) => ({ ua: r.ua, keyData: r.keyData, pqzKey: r.attrs.pqzKey, pqzPopHash: r.attrs.pqzPopHash,
   kemVersion: r.attrs.kemVersion, kemPk: r.attrs.kemPk });
 
-const pqName = (kind) => Object.keys(PQ_KINDS).find((n) => PQ_KINDS[n].kind === kind);
-/** A derived kind's signature over a 32-byte ua_msg: test/ua-verify.js (classical, BLS pop DST) or noble (PQ). */
-function sigOk(kind, keyData, msg, sig) {
-  const n = pqName(kind);
-  if (!n) return verify(kind, keyData, msg, sig, true);
-  return attempt(() => PQ_KINDS[n].alg.verify(B(sig), PQ_KINDS[n].pq ? pqMessage(n, B(msg)) : B(msg), B(keyData)));
-}
-/** `abi.decode(blob, (MemberSig[]))`, MemberSig = (uint16 index, bytes keyData, bytes sig). */
-function memberSigs(blob) {
-  const b = B(blob);
-  const a = wordAt(b, 0);
-  const base = a + 32;
-  return Array.from({ length: wordAt(b, a) }, (_, i) => {
-    const t = base + wordAt(b, base + 32 * i);
-    return { index: wordAt(b, t), keyData: bytesAt(b, t, t + 32), sig: bytesAt(b, t, t + 64) };
-  });
-}
-/** An msig signature: indices strictly increasing, each member verifies over `memberDigest` (derived members by key data
- *  from `keyOf`, under `member`; a native member by EIP-191 personal_sign, no key data), weight at least the threshold. */
-function msigOk(r, md, blob, keyOf) {
-  let weight = 0;
-  let last = -1;
-  for (const s of memberSigs(blob)) {
-    const m = r.members[s.index];
-    if (!m || s.index <= last) return false;
-    last = s.index;
-    const ok = ua.isNativeKind(m.kind)
-      ? s.keyData.length === 0 && nativeOk(`0x${m.id.slice(26)}`, ua.personalSignDigest(B(md)), hex(s.sig))
-      : s.keyData.length === 0 && sigOk(m.kind, keyOf(m.id), hex(ua.uaMessage(m.kind, ua.purposeTag('member'), B(md))), hex(s.sig));
-    if (!ok) return false;
-    weight += m.weight;
-  }
-  return weight >= r.threshold;
-}
 const rec = (name) => P.pqzKeyRecords.find((r) => r.name === name) ?? assert.fail(`no PQZ key record ${name}`);
 const regOf = (id) => P.registrations.find((x) => x.ua === id) ?? assert.fail(`no registration of ${id}`);
 const keyOf = (id) => P.registrations.find((x) => x.ua === id)?.keyData ?? assert.fail(`no registration for member ${id}`);
