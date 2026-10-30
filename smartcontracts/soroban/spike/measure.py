@@ -22,6 +22,8 @@ def flat(o, out):
     """Every leaf `key: number` of the settings JSON (key names are unique across the config entries we read)."""
     if isinstance(o, dict):
         for k, v in o.items():
+            if isinstance(v, str) and v.lstrip('-').isdigit():
+                v = int(v)  # the XDR JSON writes 64-bit integers as strings
             if isinstance(v, (int, float)) and not isinstance(v, bool):
                 out.setdefault(k, v)
             flat(v, out)

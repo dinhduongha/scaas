@@ -18,7 +18,8 @@ echo "# stellar-cli: $("$STELLAR_BIN" --version | tr '\n' ' ')"
 cd "$HERE"
 echo "## unit tests (SDK testutils, protocol 30)"
 "$ROOT/scripts/capped" cargo test -j2 -- --nocapture --test-threads=1 2>&1 | grep -E 'BUDGET|^test |test result|panicked'
-"$ROOT/scripts/capped" cargo build -j2 --release --target wasm32v1-none -q
+# soroban-sdk 30 refuses a plain cargo build for Wasm: the CLI (>= 30) shakes the contract spec
+CARGO_BUILD_JOBS=2 "$ROOT/scripts/capped" "$STELLAR_BIN" contract build --manifest-path "$HERE/ua-spike/Cargo.toml" --quiet
 WASM="$HERE/target/wasm32v1-none/release/scaas_ua_spike.wasm"
 echo "## wasm $(stat -c %s "$WASM") bytes"
 
@@ -31,6 +32,7 @@ for i in $(seq 1 30); do   # friendbot comes up after the RPC
   "$STELLAR_BIN" keys generate spike --config-dir "$SPIKE_CFG" "${NET[@]}" --fund --overwrite >/dev/null 2>&1 && break
   sleep 5
 done
-export SPIKE_ID=$("$STELLAR_BIN" contract deploy --wasm "$WASM" --source-account spike --config-dir "$SPIKE_CFG" "${NET[@]}" 2>/dev/null)
+export SPIKE_ID=$("$STELLAR_BIN" contract deploy --wasm "$WASM" --source-account spike --config-dir "$SPIKE_CFG" "${NET[@]}" 2>"$SPIKE_CFG/deploy.err") \
+  || { cat "$SPIKE_CFG/deploy.err" >&2; exit 1; }
 echo "## spike contract $SPIKE_ID"
 python3 -I "$HERE/measure.py" "$RUNS/$DATE-ua-soroban-t0-settings.json"

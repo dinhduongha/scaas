@@ -337,7 +337,8 @@ impl UaSpike {
         assert!(member_ids.len() == n);
         let mut kd = Bytes::from_array(&env, &[0, n as u8, 0, n as u8]);
         let mut pop = Bytes::new(&env);
-        let pq: Bytes = tagged(&env, K_MSIG, &msg).into();
+        // each member signs pq_msg of its own kind (CTR-UA-23); the spike reuses one vector signature per member
+        let pq: Bytes = tagged(&env, K_MLDSA65, &msg).into();
         for id in member_ids.iter() {
             let k = Key::Ua(id.clone());
             let rec: Rec = env.storage().persistent().get(&k).expect("MemberUnknown");

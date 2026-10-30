@@ -3,7 +3,7 @@
 # memory-capped. usage: quickstart.sh up|down|wait|cli
 #   up    start it (exit 3 when a `scaas-stellar` container already exists)
 #   down  stop and remove it (no-op when absent)
-#   wait  poll getNetwork until protocolVersion == 30 (exit 1 on timeout or another version)
+#   wait  poll until protocolVersion == 30 and the testnet limits are applied (exit 1 after 10 min)
 #   cli   print the pinned stellar-cli binary (exit 1 with the install command when missing)
 set -euo pipefail
 
@@ -33,10 +33,14 @@ case "${1:-}" in
       v=$(curl -s -m 5 -X POST -H 'content-type: application/json' \
         -d '{"jsonrpc":"2.0","id":1,"method":"getNetwork"}' "$RPC_URL" 2>/dev/null \
         | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["result"]["protocolVersion"])' 2>/dev/null || true)
-      if [ "$v" = 30 ]; then echo "quickstart: protocolVersion 30"; exit 0; fi
+      # protocol 30 comes first; the `--limits testnet` config upgrade lands a few ledgers later (the image's /start
+      # touches this file once it is applied), and only then are the network settings the ones to measure against
+      if [ "$v" = 30 ] && docker exec "$NAME" test -f /opt/stellar/core/.upgrade-config-initialized 2>/dev/null; then
+        echo "quickstart: protocolVersion 30, testnet limits applied"; exit 0
+      fi
       sleep 5
     done
-    echo "quickstart: no protocolVersion 30 after 10 min (last: '${v:-none}')" >&2; exit 1 ;;
+    echo "quickstart: no protocolVersion 30 with testnet limits after 10 min (last version: '${v:-none}')" >&2; exit 1 ;;
   cli)
     bin="$STELLAR_CLI_ROOT/bin/stellar"
     if [ -x "$bin" ]; then echo "$bin"; exit 0; fi

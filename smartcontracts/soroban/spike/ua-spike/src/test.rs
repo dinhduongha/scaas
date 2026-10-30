@@ -165,7 +165,10 @@ fn spike_bls_add_mul_fr_budget() {
 #[test]
 fn spike_zether_transfer_model_budget() {
     let (env, c) = setup();
+    // An estimate (S13a; Z0 is the Zether gate): lift the testutils mainnet limits so every m prints its figure.
+    env.cost_estimate().disable_resource_limits();
     for m in [1u32, 2, 4, 8] {
-        measure(&env, &std::format!("zether_transfer_model m={m}"), || c.zether_transfer_model(&m));
+        let msms = measure(&env, &std::format!("zether_transfer_model m={m}"), || c.zether_transfer_model(&m));
+        assert_eq!(msms, if m == 1 { 8 + 2 * 2 } else { 5 + 4 * m + 2 * (m + 1) });
     }
 }
