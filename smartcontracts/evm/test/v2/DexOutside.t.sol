@@ -15,6 +15,7 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {Burner1271, Bomb1271} from "./Dex.t.sol";
+import {Sweeper} from "../metatx/Sweeper7702.t.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
@@ -634,6 +635,38 @@ contract DexOutsideTest is Test {
         bytes32 d6 = dex.invalidateNoncesDigest(dave, 1, 6);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, d6)); // signed for 5, replayed for 6
         dex.mtxInvalidateNonces(dave, 1, 6, inv);
+    }
+
+    /// Owner ruling 2026-10-30 (D1; no7702 review n5): Dave carries an EIP-7702 designator whose delegate says yes to
+    /// every ERC-1271 question. His order fill, cancel and nonce invalidation signed for the delegate are refused (the
+    /// DEX asks only his own key); signed by his own key, all three still work.
+    function test_designatorMaker_delegate1271Refused_ownKeyWorks() public {
+        vm.etch(dave, abi.encodePacked(hex"ef0100", address(new Sweeper())));
+        bytes memory junk = _sig(0xBAD, bytes32(0)); // not Dave's key: only the delegate would accept it
+        DexLegs.Leg memory ml = _dave(address(usdc), 1, 2000);
+        bytes32 h = dex.dexOrderDigest(address(usdc), ml.o);
+        ml.sig = junk;
+        _expectOne(_settlement(ml, 1), abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
+        ISCaaSDex.DexOrder[] memory os = new ISCaaSDex.DexOrder[](1);
+        os[0] = ISCaaSDex.DexOrder(address(usdc), _order(dave, address(a), 2000, 1000, 2));
+        bytes32 h2 = dex.dexOrderDigest(address(usdc), os[0].order);
+        bytes[] memory sigs = new bytes[](1);
+        sigs[0] = junk;
+        dex.mtxCancelOrders(os, sigs);
+        assertEq(dex.pulled(h2), 0, "the delegate's cancel is skipped");
+        bytes32 d = dex.invalidateNoncesDigest(dave, 1, 5);
+        vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, d));
+        dex.mtxInvalidateNonces(dave, 1, 5, junk);
+        // his own key
+        DexLegs.Settlement[] memory ss = _one(_settlement(_dave(address(usdc), 1, 2000), 1));
+        vm.prank(relayer);
+        assertTrue(dex.mtxSettle(DexLegs.wire(ss))[0]);
+        assertEq(dex.pulled(h), 2000);
+        sigs[0] = _sig(DAVE_PK, dex.cancelOrderDigest(h2));
+        dex.mtxCancelOrders(os, sigs);
+        assertEq(dex.pulled(h2), 2000, "cancelled");
+        dex.mtxInvalidateNonces(dave, 1, 5, _sig(DAVE_PK, d));
+        assertEq(dex.minNonce(dave, 1), 5);
     }
 
     /// A gas-burning or returndata-bomb ERC-1271 signer in a cancel batch is skipped; the others are cancelled.
