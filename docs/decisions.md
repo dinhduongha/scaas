@@ -6158,7 +6158,8 @@ containers 512 MB, pinned digests); the localnet runs `future` consensus (AlgoKi
 
 **Rule.** `ed25519verify_bare` over the wallet's sign-bytes form `"MX" ‖ text` (not `ed25519verify`, controller call
 refining spec §0), `ecdsa_verify Secp256k1 / Secp256r1` (controller call, accepted by the owner). A native address
-signs with its current authority; an address rekeyed to a LogicSig or msig signs through an account record. Task 12
+signs with its current authority; an address rekeyed to a LogicSig or msig signs through an account record (keys
+added before the rekey: [NET-ALG-24](networks/algorand.md#NET-ALG-24)). Task 12
 choices (controller 2026-10-28): auth tagged 1 ed25519 / 2 secp256k1 / 3 passkey / 4 msig, a native signature untagged
 64 B; passkey per NET-ALL-04, fields ≤ 1 KiB; secp256k1 high-s refused by the opcode. Wallet support checked
 2026-10-29: ARC-60 is a Draft with another signing form; algosdk `signBytes` / Pera Connect `signData` sign `"MX"` ‖
@@ -6179,7 +6180,7 @@ set (owner ruling, metatx-split item 2: fail fast, docs say keep a slot free); r
 = the zero holder, checked before the signature; key-op `extra = sha256(ARC-4 tuple)`; records shrink with no refund;
 `add_origin` idempotent; rulings m1 (an msig refuses a repeated signing key), m5 (the node refuses `add_key_native` for
 the executor), m6 (a LogicSig- or msig-rekeyed address can add keys natively but not remove: NEAR parity, a known
-limit), m8 (one `open` event). Status: BUILT (`70d34e8b`, `944ba770`, `9b41463e`).
+limit; amended 2026-10-30 by [NET-ALG-24](networks/algorand.md#NET-ALG-24): a rekeyed address adds no key natively), m8 (one `open` event). Status: BUILT (`70d34e8b`, `944ba770`, `9b41463e`).
 **Why.** Keys shared by every token mean one key op, not one per token (unlike NEAR).
 **Cost if wrong.** The account app is a single dependency of every token in the deployment.
 **Source.** near-algorand Task 12 report (choices 1–9), ledger rulings T12.
@@ -6404,6 +6405,24 @@ Status: BUILT (`3ec86cfe`, `1c7344b4`).
 **Why.** The router's `ref` names the target by its app address (spec §4.8).
 **Cost if wrong.** A client and vector change.
 **Source.** near-algorand Task 18 report and review.
+
+### NET-ALG-24 — Algorand: sender-authorised key ops refuse a rekeyed sender
+- old: — · status: current · owner: yes · date: 2026-10-30 · normative: networks/algorand.md#NET-ALG-24 · superseded-by: —
+
+**Rule.** Owner ruling D6 (2026-10-30, EIP-7702 follow-up: "an account must really sign with its own key, no
+delegation; an account must not run code"): `add_key_native`, the one key op authorised by `Txn.Sender` instead of a
+signature over a digest, asserts `AcctAuthAddr(Txn.Sender) == ZeroAddress`. Every rekeyed sender is refused, a rekey
+to another key or a multisig included, because on chain it cannot be told apart from a rekey to a LogicSig or an app.
+Signature paths (a native wallet signature, an `algorand-address` msig member) stay as they are: `ed25519verify_bare`
+by the current authority is key-only already. Reverses the Task 12 behaviour (an address rekeyed to a LogicSig or a
+multisig added its own key, test `test_rekeyed_address_signs_through_account_record`, now a refusal test). Status:
+BUILT on branch `no7702` (`86b099f1`).
+**Why.** A rekey to a LogicSig or an app is Algorand's EIP-7702 sweeper: code then acts for the address; SCaaS must
+not let code register keys that sign as the address.
+**Cost if wrong.** A rekeyed account (multisig, hardware key, post-quantum migration by rekey) must add its keys
+before the rekey or rekey back to itself first; a delegated LogicSig stays undetectable (wallet guidance,
+[networks/README §7](networks/README.md#code-authority)).
+**Source.** EIP-7702 audit 2026-10-30 (§1, §6 D6, §8; private notes); owner ruling 2026-10-30.
 
 ## 37. Clients — signers and clientkeys
 

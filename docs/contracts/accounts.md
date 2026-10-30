@@ -473,7 +473,7 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 | `0x0015` | `cosmos-account` | 20- or 32-byte account | Cosmos | ADR-036 secp256k1; native multisig |
 | `0x0016` | `ton-wallet` | 32-byte account id (workchain from chain config) | GRAM | wallet contract (W5R1/V4R2/V3R2), TON Connect |
 | `0x0017` | `near-account` | 32 bytes: an implicit account (64 lower-case hex) is its raw 32 bytes, any other account id (named, ETH-implicit) `sha256(account_id bytes)`; told apart by the account-id string, which travels with the member | NEAR | the member is the call's predecessor (access keys are not readable on chain) |
-| `0x0018` | `algorand-address` | 32-byte address public key | Algorand | `ed25519verify_bare` by the current authority (`AcctAuthAddr` if set, else the address); rekeyed to a LogicSig or multisig: through an account record |
+| `0x0018` | `algorand-address` | 32-byte address public key | Algorand | `ed25519verify_bare` by the current authority (`AcctAuthAddr` if set, else the address); rekeyed to a LogicSig or multisig: through an account record, keys added before the rekey ([NET-ALG-24](../networks/algorand.md#NET-ALG-24)) |
 
 `near-account` forms cannot collide: a 64-lower-case-hex account id is always an implicit account (raw bytes), so a
 named or ETH-implicit id meets one only through a sha256 preimage; upper-case ids are not NEAR account ids and are
