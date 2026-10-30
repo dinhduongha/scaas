@@ -147,6 +147,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
+     **Owner 2026-10-30: timing and the 7622 reset are approved; run them after the three running streams are merged
+     (`dex-round`, `ua-soroban`, `kem-scheme`)**, with no agent running during the two calibration runs (about 45–60 min
+     quiet; the whole Task 13 + Task 9 about 2–3 h).
   6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N
      (DEX).
   7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next UA-Soroban / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
