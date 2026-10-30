@@ -262,11 +262,15 @@ public class VectorTests
         }
         Assert.Equal(9, p.GetProperty("kemRecords").GetArrayLength());
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
-        Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 0, new byte[1600])).Code);
-        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, new byte[1599])).Code);
-        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, new byte[1601])).Code);
+        static byte[] Kem(int n, byte scheme = 1) { var k = new byte[n]; k[0] = scheme; return k; } // scheme byte, zeros
+        Assert.Equal("UAKemVersion", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 0, Kem(1601))).Code);
+        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, Kem(1600))).Code);
+        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, Kem(1602))).Code);
+        Assert.Equal("UAKemKeyLength", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, null!)).Code);
+        foreach (byte scheme in new byte[] { 0, 2, 255 })
+            Assert.Equal("UAKemScheme", Assert.Throws<UAException>(() => UA.KemRecordDigest(u, 1, Kem(1601, scheme))).Code);
         // known answers (ua-py / ua-go): the 8-byte version word and the decimal "evm:" chain key
-        Assert.Equal("0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31", Hx(UA.KemRecordDigest(u, ulong.MaxValue, new byte[1600])));
+        Assert.Equal("0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092", Hx(UA.KemRecordDigest(u, ulong.MaxValue, Kem(1601))));
         Assert.Equal("0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950", Hx(UA.ChainKeyHash((1UL << 40) + 7))); // keccak256("evm:1099511627783")
     }
 
@@ -382,7 +386,7 @@ public class VectorTests
             }
             else sigLevel++; // signatures / native personal_sign: verified by the signature vectors
         }
-        Assert.Equal((56, 7), (run, sigLevel));
+        Assert.Equal((60, 7), (run, sigLevel));
         // single-key non-holders refuse a PQZ key
         var u = Enumerable.Repeat((byte)1, 32).ToArray();
         var key = new byte[16384];

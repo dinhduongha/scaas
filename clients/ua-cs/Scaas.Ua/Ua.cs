@@ -184,8 +184,9 @@ public static partial class UA
 
     public static readonly byte[] PopV2Tag = PurposeTag("pop", 2);
     public static readonly byte[] KemRecordTag = Keccak256(Utf8("scaas.ua.kem-record.v1"));
-    /// <summary>The 1,600-byte ML-KEM-1024 ek ‖ X25519 pk the registry stores (UA-8 P7).</summary>
-    public const int KemPkLength = 1600;
+    /// <summary>The 1,601-byte <c>0x01</c> ‖ ML-KEM-1024 ek ‖ X25519 pk the registry stores (UA-8 P7, CTR-UA-32); <c>kemPk[0]</c> is the scheme id.</summary>
+    public const byte KemSchemeMlkem1024X25519 = 1;
+    public const int KemPkLength = 1601;
 
     /// <summary><c>keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)</c>, each hash 32 zero bytes when absent.</summary>
     public static byte[] PortablePopDigest(byte[] ua, byte[] pqzKeyHash, byte[] kemRecordHash) =>
@@ -195,11 +196,12 @@ public static partial class UA
     public static byte[] RegistrationDigest(byte[] portable, byte[] pqzPopHash) =>
         Keccak256(Sized(portable, 32, "portable"), Sized(pqzPopHash, 32, "pqzPopHash"));
 
-    /// <summary><c>keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))</c>: version 1 … 2^64 − 1, a 1,600-byte key.</summary>
+    /// <summary><c>keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))</c>: version 1 … 2^64 − 1, <c>kemPk</c> = scheme byte ‖ key (<c>UAKemScheme</c> for an id other than 1).</summary>
     public static byte[] KemRecordDigest(byte[] ua, ulong version, byte[] kemPk)
     {
         if (version == 0) throw new UAException("UAKemVersion", "0");
         kemPk ??= []; // ponytail: a null key is an empty key (UAKemKeyLength), not a NullReferenceException
+        if (kemPk.Length > 0 && kemPk[0] != KemSchemeMlkem1024X25519) throw new UAException("UAKemScheme", kemPk[0].ToString(CultureInfo.InvariantCulture));
         if (kemPk.Length != KemPkLength) throw new UAException("UAKemKeyLength", kemPk.Length.ToString(CultureInfo.InvariantCulture));
         return Keccak256(KemRecordTag, Sized(ua, 32, "ua"), Word(version), Keccak256(kemPk));
     }

@@ -133,7 +133,7 @@ U8Array32 registrationDigest({
   pqzPopHash: pqzPopHash,
 );
 
-/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0, `UAKemKeyLength` unless 1,600 bytes).
+/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0, `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 U8Array32 kemRecordDigest({
   required U8Array32 ua,
   required BigInt version,
@@ -317,7 +317,7 @@ class HolderPop {
           memberDigest == other.memberDigest;
 }
 
-/// A KEM record attribute `(version >= 1, 1,600-byte key)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
+/// A KEM record attribute `(version >= 1, 1,601-byte key: scheme byte 1 first)`; `None`, or `(0, [])`, = absent. `version` is a `u64` (a Dart
 /// `BigInt`: 1 ... 2^64 - 1).
 class KemRecord {
   final BigInt version;

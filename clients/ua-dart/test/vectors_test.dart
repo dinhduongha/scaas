@@ -42,6 +42,9 @@ UAError _err(void Function() f) {
   throw TestFailure('expected a UAError');
 }
 
+/// A KEM key of [n] bytes: the scheme byte, then zeros.
+Uint8List _kem(int n, [int scheme = 1]) => Uint8List(n)..[0] = scheme;
+
 void main() {
   final k = _load('kinds.json') as Map;
 
@@ -273,11 +276,15 @@ void main() {
     }
     expect((p['kemRecords'] as List).length, 9);
     final u = Uint8List.fromList(List.filled(32, 1));
-    expect(_err(() => kemRecordDigest(u, BigInt.zero, Uint8List(1600))).code, 'UAKemVersion');
-    expect(_err(() => kemRecordDigest(u, BigInt.one << 64, Uint8List(1600))).code, 'UAKemVersion');
-    expect(_err(() => kemRecordDigest(u, BigInt.one, Uint8List(1599))).code, 'UAKemKeyLength');
-    expect(_err(() => kemRecordDigest(u, BigInt.one, Uint8List(1601))).code, 'UAKemKeyLength');
-    expect(_hx(kemRecordDigest(u, (BigInt.one << 64) - BigInt.one, Uint8List(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31'); // pins the 8-byte version word
+    expect(_err(() => kemRecordDigest(u, BigInt.zero, _kem(1601))).code, 'UAKemVersion');
+    expect(_err(() => kemRecordDigest(u, BigInt.one << 64, _kem(1601))).code, 'UAKemVersion');
+    expect(_err(() => kemRecordDigest(u, BigInt.one, _kem(1600))).code, 'UAKemKeyLength');
+    expect(_err(() => kemRecordDigest(u, BigInt.one, _kem(1602))).code, 'UAKemKeyLength');
+    expect(_err(() => kemRecordDigest(u, BigInt.one, Uint8List(0))).code, 'UAKemKeyLength');
+    for (final scheme in [0, 2, 255]) {
+      expect(_err(() => kemRecordDigest(u, BigInt.one, _kem(1601, scheme))).code, 'UAKemScheme');
+    }
+    expect(_hx(kemRecordDigest(u, (BigInt.one << 64) - BigInt.one, _kem(1601))), '0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092'); // pins the 8-byte version word
     expect(_hx(chainKeyHash(0x10000000007)), '0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950'); // keccak256("evm:1099511627783")
   });
 
@@ -366,7 +373,7 @@ void main() {
         sigLevel++; // signatures / native personal_sign: verified by the signature vectors
       }
     }
-    expect([run, sigLevel], [56, 7]);
+    expect([run, sigLevel], [60, 7]);
     final u = Uint8List.fromList(List.filled(32, 1)), key = Uint8List(16384), proof = Uint8List.fromList(List.filled(32, 7));
     // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
     for (final kd in [Uint8List.fromList([0, 2, 0]), Uint8List.fromList([0, 2, 0, 2, 9, 9])]) {
@@ -377,7 +384,7 @@ void main() {
     expect(_err(() => holderPopMessage(0x0130, u, pqzKey: key, pqzPop: Uint8List(0))).code, 'UAPqzPopHash');
     expect(_err(() => holderPopMessage(0x0130, u, pqzKey: Uint8List(100), pqzPopHash: proof)).code, 'UAKeyData');
     expect(_err(() => holderPopMessage(0x0130, u, kem: (BigInt.one, Uint8List(0)))).code, 'UAKemKeyLength');
-    expect(_err(() => holderPopMessage(0x0101, u, kem: (BigInt.one, Uint8List(1600)))).code, 'UAKemHolder');
+    expect(_err(() => holderPopMessage(0x0101, u, kem: (BigInt.one, _kem(1601)))).code, 'UAKemHolder');
     // a zero-length proof hash is absent (same as no hash)
     expect(_hx(holderPopMessage(0x0130, u, pqzPopHash: Uint8List(0)).message), _hx(holderPopMessage(0x0130, u).message));
   });

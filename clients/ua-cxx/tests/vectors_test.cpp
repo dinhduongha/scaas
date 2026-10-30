@@ -282,10 +282,13 @@ static void kem_record() {
     }
     CHECK(p["kemRecords"].size() == 9, "kemRecords size");
     Bytes u(32, 1);
-    CHECK(code_of([&] { kemRecordDigest(u, 0, Bytes(kKemPkLength)); }) == "UAKemVersion", "version 0");
-    CHECK(code_of([&] { kemRecordDigest(u, 1, Bytes(kKemPkLength - 1)); }) == "UAKemKeyLength", "short key");
-    CHECK(code_of([&] { kemRecordDigest(u, 1, Bytes(kKemPkLength + 1)); }) == "UAKemKeyLength", "long key");
-    CHECK(hx(kemRecordDigest(u, UINT64_MAX, Bytes(kKemPkLength))) == "0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31", "max version");  // pins the 8-byte version word
+    auto kem = [](size_t n, uint8_t scheme = 1) { Bytes k(n); k[0] = scheme; return k; };  // scheme byte, zeros
+    CHECK(code_of([&] { kemRecordDigest(u, 0, kem(kKemPkLength)); }) == "UAKemVersion", "version 0");
+    CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength - 1)); }) == "UAKemKeyLength", "short key");
+    CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength + 1)); }) == "UAKemKeyLength", "long key");
+    CHECK(code_of([&] { kemRecordDigest(u, 1, Bytes{}); }) == "UAKemKeyLength", "empty key");
+    for (uint8_t scheme : {0, 2, 255}) CHECK(code_of([&] { kemRecordDigest(u, 1, kem(kKemPkLength, scheme)); }) == "UAKemScheme", "scheme not enabled");
+    CHECK(hx(kemRecordDigest(u, UINT64_MAX, kem(kKemPkLength))) == "0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092", "max version");  // pins the 8-byte version word
 }
 
 static void pqz_key_record() {
@@ -378,7 +381,7 @@ static void holder_refusals() {
             ++sigLevel;  // signatures / native personal_sign: verified by the signature vectors
         }
     }
-    CHECK(run == 56 && sigLevel == 7, "negatives counts");
+    CHECK(run == 60 && sigLevel == 7, "negatives counts");
     Bytes u(32, 1), key(16384), proof(32, 7);
     // malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
     for (Bytes kd : {Bytes{0, 2, 0}, Bytes{0, 2, 0, 2, 9, 9}})
@@ -388,7 +391,7 @@ static void holder_refusals() {
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, key, Bytes{}); }) == "UAPqzPopHash", "empty proof is no proof");
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, Bytes(100), std::nullopt, proof); }) == "UAKeyData", "key length");
     CHECK(code_of([&] { holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, std::nullopt, Kem{1, Bytes{}}); }) == "UAKemKeyLength", "kem key");
-    CHECK(code_of([&] { holderPopMessage(0x0101, u, {}, std::nullopt, std::nullopt, std::nullopt, Kem{1, Bytes(kKemPkLength)}); }) == "UAKemHolder", "kem holder");
+    CHECK(code_of([&] { holderPopMessage(0x0101, u, {}, std::nullopt, std::nullopt, std::nullopt, Kem{1, Bytes(kKemPkLength, 1)}); }) == "UAKemHolder", "kem holder");
     // a zero-length proof hash is absent (same as no hash)
     CHECK(holderPopMessage(0x0130, u, {}).message == holderPopMessage(0x0130, u, {}, std::nullopt, std::nullopt, Bytes{}).message, "empty hash is absent");
 }

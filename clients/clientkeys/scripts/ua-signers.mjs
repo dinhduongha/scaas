@@ -151,8 +151,9 @@ export const PQZ_SETS = Object.freeze({
  *  proof's length, not a proof; forge mocks the precompile per exact bytes). `other` labels a second filler of the same length. */
 export const pqzKeyOf = (set, other = '') => shake256(utf8ToBytes(`scaas ua-1 vector pqz-mlwe key${other}`), { dkLen: PQZ_SETS[set].pqzKeyLength });
 export const pqzPopOf = (set, other = '') => shake256(utf8ToBytes(`scaas ua-8 vector pqz-pop ${set}${other}`), { dkLen: PQZ_SETS[set].pqzPopLength });
-/** UA-8 D15: a real KEM key, ML-KEM-1024 ek ‖ X25519 pk (X-Wing order, 1,568 + 32 bytes), from a fixed label. */
+/** UA-8 D15: a real KEM key from a fixed label, as the registry stores it (CTR-UA-32 scheme byte): 0x01 ‖ ML-KEM-1024 ek ‖
+ *  X25519 pk (X-Wing order, 1 + 1,568 + 32 bytes). The key material is the pre-scheme vectors' (same seeds). */
 export function kemPublicKey(label) {
   const seed = shake256(utf8ToBytes(`scaas ua-8 vector kem ${label}`), { dkLen: 96 });
-  return concatBytes(ml_kem1024.keygen(seed.subarray(0, 64)).publicKey, x25519.getPublicKey(seed.subarray(64)));
+  return concatBytes(Uint8Array.of(1), ml_kem1024.keygen(seed.subarray(0, 64)).publicKey, x25519.getPublicKey(seed.subarray(64)));
 }

@@ -18,7 +18,7 @@ g.KemRecord? _k(g.KemRecord? k) {
 }
 
 /// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))` (`UAKemVersion` for 0 or outside 1 ... 2^64 - 1,
-/// `UAKemKeyLength` unless 1,600 bytes).
+/// `UAKemScheme` unless the first byte is 1, `UAKemKeyLength` unless 1,601 bytes).
 g.U8Array32 kemRecordDigest({required g.U8Array32 ua, required BigInt version, required List<int> kemPk}) =>
     g.kemRecordDigest(ua: ua, version: _v(version), kemPk: kemPk);
 

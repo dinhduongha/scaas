@@ -56,8 +56,11 @@ final Uint8List popV2Tag = purposeTag('pop', 2);
 final Uint8List kemRecordTag = _k([_utf8('scaas.ua.kem-record.v1')]);
 final Uint8List pqzKeyRecordTag = _k([_utf8('scaas.ua.pqz-key-record.v1')]);
 
-/// ML-KEM-1024 ek ‖ X25519 pk (X-Wing order): the only KEM key the registry stores (UA-8 P7).
-const kemPkLength = 1600;
+/// `kemPk[0]` of the one enabled KEM scheme (CTR-UA-32); 2 (ML-KEM-1024 + HQC + X25519, after FIPS 207) is reserved (`UAKemScheme`).
+const kemSchemeMlkem1024X25519 = 1;
+
+/// `0x01 ‖` ML-KEM-1024 ek ‖ X25519 pk (X-Wing order): the only KEM key the registry stores (UA-8 P7).
+const kemPkLength = 1601;
 
 Uint8List _sized(Uint8List b, int n, String what) {
   if (b.length != n) throw ArgumentError('$what must be $n bytes');
@@ -161,9 +164,10 @@ Uint8List registrationDigest(Uint8List portable, Uint8List pqzPopHash) =>
 final _two64 = BigInt.one << 64;
 
 /// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))`: version 1 … 2^64 − 1 (a [BigInt]: a Dart int
-/// cannot hold it on the VM or in JS), a 1,600-byte key.
+/// cannot hold it on the VM or in JS), `kemPk` = scheme byte ‖ key (`UAKemScheme` for an id other than 1).
 Uint8List kemRecordDigest(Uint8List ua, BigInt version, Uint8List kemPk) {
   if (version < BigInt.one || version >= _two64) throw UAError('UAKemVersion', '$version');
+  if (kemPk.isNotEmpty && kemPk[0] != kemSchemeMlkem1024X25519) throw UAError('UAKemScheme', '${kemPk[0]}');
   if (kemPk.length != kemPkLength) throw UAError('UAKemKeyLength', '${kemPk.length}');
   final v = Uint8List(32);
   var x = version;

@@ -392,12 +392,13 @@ func TestKemRecord(t *testing.T) {
 		v    uint64
 		pk   []byte
 		code string
-	}{{0, make([]byte, 1600), "UAKemVersion"}, {1, make([]byte, 1599), "UAKemKeyLength"}, {1, make([]byte, 1601), "UAKemKeyLength"}, {1, nil, "UAKemKeyLength"}} {
+	}{{0, kemKey(1601, 1), "UAKemVersion"}, {1, kemKey(1600, 1), "UAKemKeyLength"}, {1, kemKey(1602, 1), "UAKemKeyLength"}, {1, nil, "UAKemKeyLength"},
+		{1, kemKey(1601, 0), "UAKemScheme"}, {1, kemKey(1601, 2), "UAKemScheme"}, {1, kemKey(1600, 255), "UAKemScheme"}} {
 		if _, err := KemRecordDigest(ua, c.v, c.pk); code(err) != c.code {
 			t.Fatalf("kem %v: %v", c.code, err)
 		}
 	}
-	if d, err := KemRecordDigest(ua, ^uint64(0), make([]byte, 1600)); err != nil || hx(d[:]) != "0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31" {
+	if d, err := KemRecordDigest(ua, ^uint64(0), kemKey(1601, 1)); err != nil || hx(d[:]) != "0x8c997440926a352465f61b53b75606d794efa60c66ac4a7a63f25369a15f7092" {
 		t.Fatal("max version") // pins the 8-byte version word
 	}
 	if c := ChainKeyHash(1<<40 + 7); hx(c[:]) != "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950" { // keccak256("evm:1099511627783")
@@ -549,7 +550,7 @@ func TestHolderRefusals(t *testing.T) {
 			sigLevel++ // signatures / native personal_sign: verified by the signature vectors
 		}
 	}
-	if run != 56 || sigLevel != 7 {
+	if run != 60 || sigLevel != 7 {
 		t.Fatalf("negatives %d digest-layer, %d signature-level", run, sigLevel)
 	}
 	u, key, proof := b32(hx(bytes.Repeat([]byte{1}, 32))), make([]byte, 16384), bytes.Repeat([]byte{7}, 32)
@@ -570,7 +571,7 @@ func TestHolderRefusals(t *testing.T) {
 		{0x0130, nil, key, []byte{}, nil, nil, "UAPqzPopHash"},
 		{0x0130, nil, make([]byte, 100), nil, proof, nil, "UAKeyData"},
 		{0x0130, nil, nil, nil, nil, &Kem{1, nil}, "UAKemKeyLength"},
-		{0x0101, nil, nil, nil, nil, &Kem{1, make([]byte, 1600)}, "UAKemHolder"},
+		{0x0101, nil, nil, nil, nil, &Kem{1, kemKey(1601, 1)}, "UAKemHolder"},
 	} {
 		if _, err := HolderPopMessage(c.kind, u, c.kd, c.key, c.pop, c.hash, c.kem); code(err) != c.code {
 			t.Fatalf("refusal %+v: %v", c, err)
@@ -582,4 +583,11 @@ func TestHolderRefusals(t *testing.T) {
 	if a.Message != b.Message {
 		t.Fatal("empty proof hash is absent")
 	}
+}
+
+// kemKey is n bytes: the scheme byte, then zeros.
+func kemKey(n int, scheme byte) []byte {
+	k := make([]byte, n)
+	k[0] = scheme
+	return k
 }

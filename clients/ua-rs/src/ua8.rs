@@ -3,8 +3,13 @@
 //! digests are keccak256 of 32-byte words (= `abi.encode`): no chain id, chain uid or registry. UNAUDITED.
 use crate::*;
 
-/// ML-KEM-1024 ek ‖ X25519 pk (X-Wing order): the only KEM key the registry stores (UA-8 P7).
-pub const KEM_PK_LENGTH: usize = 1600;
+/// KEM scheme ids, `kem_pk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519; 2 = ML-KEM-1024 + HQC + X25519, reserved (after
+/// FIPS 207) and refused today.
+pub const KEM_SCHEME_MLKEM1024_X25519: u8 = 1;
+pub const KEM_SCHEME_MLKEM1024_HQC_X25519: u8 = 2;
+/// A scheme-1 `kemPk`: `0x01 ‖ ML-KEM-1024 ek (1,568 B) ‖ X25519 pk (32 B)` (X-Wing order), the only KEM key the registry
+/// stores (UA-8 P7).
+pub const KEM_PK_LENGTH: usize = 1601;
 pub use crate::PQZ_KEY_LENGTHS;
 
 /// Who checked a part of a record (UA-8 P11.3); `Relayer` comes with the relayer id.
@@ -43,10 +48,16 @@ pub fn portable_pop_digest(ua: &[u8; 32], pqz_key_hash: &[u8; 32], kem_record_ha
 pub fn registration_digest(portable: &[u8; 32], pqz_pop_hash: &[u8; 32]) -> [u8; 32] {
     keccak(&[portable, pqz_pop_hash])
 }
-/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))`: version 1 … 2^64 − 1, a 1,600-byte key.
+/// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))`: version 1 … 2^64 − 1, `kem_pk` = scheme byte ‖ key (empty:
+/// `KemKeyLength`; scheme not enabled: `KemScheme`; another length: `KemKeyLength`).
 pub fn kem_record_digest(ua: &[u8; 32], version: u64, kem_pk: &[u8]) -> Result<[u8; 32]> {
     if version == 0 {
         return Err(UAError::KemVersion);
+    }
+    match kem_pk.first() {
+        None => return Err(UAError::KemKeyLength),
+        Some(&KEM_SCHEME_MLKEM1024_X25519) => {}
+        Some(_) => return Err(UAError::KemScheme),
     }
     if kem_pk.len() != KEM_PK_LENGTH {
         return Err(UAError::KemKeyLength);

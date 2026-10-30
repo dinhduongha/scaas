@@ -241,7 +241,7 @@ rule; one event shape, a node decoder change).
   proof (28,191–35,479 B) in `PqzP(ua)`, each its own persistent entry, given by `register` or by `store_pqz_pop`;
   `Registration.attrs.pqz_key` stays empty in `Ua(ua)` and `registration_of` reassembles it (as `kem_pk`). The
   secondary-source limit of a contract-data entry is 65,536 B (read the real value at T0), so each fits one entry.
-- **KEM records** (CTR-UA-32): `Kem(ua, version)` write-once in any order, 1,600-byte keys, `KemMax(ua)`.
+- **KEM records** (CTR-UA-32): `Kem(ua, version)` write-once in any order, 1,601-byte keys (scheme byte 0x01 ‖ ek ‖ x25519 pk, CTR-UA-32; an unknown scheme id is refused), `KemMax(ua)`.
 
 ## 7. Storage, TTL, archival, fees
 

@@ -42,13 +42,15 @@ pub const SCAAS_UA_ERR_PQZ_HOLDER: ScaasUaStatus = 11;
 pub const SCAAS_UA_ERR_KEM_HOLDER: ScaasUaStatus = 12;
 /// "UAKemVersion": a KEM record version of 0.
 pub const SCAAS_UA_ERR_KEM_VERSION: ScaasUaStatus = 13;
-/// "UAKemKeyLength": a KEM key that is not 1,600 bytes.
+/// "UAKemKeyLength": a KEM key that is empty or not 1,601 bytes (scheme byte + key).
 pub const SCAAS_UA_ERR_KEM_KEY_LENGTH: ScaasUaStatus = 14;
 /// "UAPqzPopHash": a PQZ key without its proof hash (or the reverse), a hash that is not 32 bytes, differs from the proof's
 /// or is `keccak256("")`.
 pub const SCAAS_UA_ERR_PQZ_POP_HASH: ScaasUaStatus = 15;
 /// "UAPqzKeySet": `setPqzKey` on a registration that already has a PQZ key (write-once).
 pub const SCAAS_UA_ERR_PQZ_KEY_SET: ScaasUaStatus = 16;
+/// "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
+pub const SCAAS_UA_ERR_KEM_SCHEME: ScaasUaStatus = 17;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -91,6 +93,7 @@ impl From<ua::UAError> for Fail {
             KemKeyLength => SCAAS_UA_ERR_KEM_KEY_LENGTH,
             PqzPopHash => SCAAS_UA_ERR_PQZ_POP_HASH,
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
+            KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
         };
         Fail(status, e.to_string())
     }
@@ -198,7 +201,7 @@ pub extern "C" fn scaas_ua_abi_version() -> u32 {
 
 /// The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
 /// "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder", "UAKemHolder", "UAKemVersion", "UAKemKeyLength", "UAPqzPopHash",
-/// "UAPqzKeySet"; "UAStatusUnknown" for any other value.
+/// "UAPqzKeySet", "UAKemScheme"; "UAStatusUnknown" for any other value.
 #[no_mangle]
 pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
     let name: &'static CStr = match status {
@@ -219,6 +222,7 @@ pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
         SCAAS_UA_ERR_KEM_KEY_LENGTH => c"UAKemKeyLength",
         SCAAS_UA_ERR_PQZ_POP_HASH => c"UAPqzPopHash",
         SCAAS_UA_ERR_PQZ_KEY_SET => c"UAPqzKeySet",
+        SCAAS_UA_ERR_KEM_SCHEME => c"UAKemScheme",
         _ => c"UAStatusUnknown",
     };
     name.as_ptr()
@@ -458,7 +462,7 @@ pub extern "C" fn scaas_ua_registration_digest(portable32: *const u8, pqz_pop_ha
 }
 
 /// `keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kem_pk))`: version 1 ... 2^64 - 1
-/// (`SCAAS_UA_ERR_KEM_VERSION` for 0), a 1,600-byte key (`SCAAS_UA_ERR_KEM_KEY_LENGTH`).
+/// (`SCAAS_UA_ERR_KEM_VERSION` for 0), a 1,601-byte key, scheme byte first (`SCAAS_UA_ERR_KEM_SCHEME` for an id other than 1, `SCAAS_UA_ERR_KEM_KEY_LENGTH`).
 #[no_mangle]
 pub extern "C" fn scaas_ua_kem_record_digest(
     ua32: *const u8,

@@ -165,7 +165,8 @@ POP_TAG = purpose_tag('pop')  # v1, a registry constant (kinds.json); the portab
 POP_V2_TAG = purpose_tag('pop', 2)
 KEM_RECORD_TAG = keccak256(b'scaas.ua.kem-record.v1')
 PQZ_KEY_RECORD_TAG = keccak256(b'scaas.ua.pqz-key-record.v1')
-KEM_PK_LENGTH = 1600  # ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
+KEM_SCHEME_MLKEM1024_X25519 = 1  # kemPk[0] (CTR-UA-32); 2 = ML-KEM-1024 + HQC + X25519 is reserved (UAKemScheme)
+KEM_PK_LENGTH = 1601  # 0x01 ‖ ML-KEM-1024 ek ‖ X25519 pk (X-Wing order)
 DOMAIN_TYPEHASH = keccak256(b'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)')
 UAAUTH_TYPEHASH = keccak256(b'UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)')
 NAME_HASH = keccak256(b'SCaaS UARegistry')
@@ -241,10 +242,12 @@ def registration_digest(portable, pqz_pop_hash=bytes(32)):
 
 
 def kem_record_digest(ua, version, kem_pk):
-    """``keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))``: version 1 … 2^64 − 1, a 1,600-byte key."""
+    """``keccak256(KEM_RECORD_TAG ‖ ua ‖ uint256(version) ‖ keccak256(kemPk))``: version 1 … 2^64 − 1, ``kem_pk`` = scheme byte ‖ key."""
     if not 1 <= version < 2**64:
         raise UAError('UAKemVersion', str(version))
     pk = _bytes(kem_pk) if kem_pk is not None else b''
+    if pk and pk[0] != KEM_SCHEME_MLKEM1024_X25519:
+        raise UAError('UAKemScheme', str(pk[0]))
     if len(pk) != KEM_PK_LENGTH:
         raise UAError('UAKemKeyLength', str(len(pk)))
     return keccak256(KEM_RECORD_TAG, _sized(ua, 32, 'ua'), _word(version), keccak256(pk))
