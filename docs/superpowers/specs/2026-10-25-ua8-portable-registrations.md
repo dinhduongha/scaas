@@ -55,7 +55,7 @@ it": `pop`, `pqzPop`, the KEM record and its signature, as SSTORE2 blobs), so an
 state and re-submit it elsewhere even when logs are gone (history expiry); the event carries them as well. Cost **[measured 2026-10-30, `smartcontracts/evm/runs/2026-10-30-ua8-gas.txt`; the first draft's estimate was ≈ 1,530 state gas per byte and 75–95 M]**: a
 single classical key 1.3–1.9 M gas, `mldsa65` 9.7 M, `fndsa512` 9.3 M, `slhdsa128s` 14.4 M, a PQ registration with a stored `R_REG` proof (28,191–35,479 B by set)
 84.8–109.1 M (regular + state): more than a 60 M block, so on such a chain the proof is stored by a second call `storePqzPop` (P9; 45.6–57.5 M, the real `R_REG`
-verify adds ≈ 2.4 M, so `n2816-kmax65536` is ≈ 59.9 M, a fs3 Task 13 watch item) — on chains with larger blocks one `register` holds everything. Later KEM versions come by
+verify adds ≈ 2.4 M, so `n2816-kmax65536` is ≈ 59.9 M, a fs3 Task 13 watch item for 60 M-block chains) — on chains with larger blocks (SCaaS testnet 200 M) one `register` holds everything. Later KEM versions come by
 `setKemKey` (P7).
 
 **P3 — What must match.** The same kind must be enabled in the target registry's generation (a PQ kind needs its

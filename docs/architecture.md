@@ -723,7 +723,7 @@ sequenceDiagram
     participant REG as UARegistry
     participant VER as Kind verifier
     APP->>APP: ua = uaOf(kind, keyData)
-    APP->>APP: portable PoP over registrationDigest (no chain context; the same pop serves every chain)
+    APP->>APP: portable PoP over registrationDigest (no chain context, the same pop serves every chain)
     APP->>APP: the key signs the PoP
     APP->>GW: POST /v1/ua/register (chain, kind, keyData, attrs, pop, pqzPop?)
     GW->>GW: recompute the id, not yet registered, PoP of cheap kinds

@@ -226,7 +226,7 @@ sequenceDiagram
     K->>K: sign registrationDigest (covers PQZ key, KEM record, proof hash)
     K->>R: kind, keyData, attrs, pop, pqzPop
     R->>A: register (gasless, relayable)
-    A->>A: verify pop; check R_REG where the PQZ verifier exists
+    A->>A: verify pop, check R_REG where the PQZ verifier exists
     A-->>R: record, every field stored, checked flags
     Note over R,B: later, by anyone, from logs or from A's state (registrationOf)
     R->>B: the same register call, byte for byte
@@ -288,8 +288,9 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   relayer id on families that run the relayer-checked mode); these code points are shared by every family (`portable.json`).
   On EVM everything the registry stores is verified on chain, so `checked` is **derived, not stored**:
   `checkedOf(ua) → (pop, pqzPop, kem)` = `(CHAIN, proven ? CHAIN : NONE, KEM record stored ? CHAIN : NONE)` (an unproven PQZ proof
-  reads `NONE`: it is not yet stored or not yet checked; `NONE` for all three on an unregistered id), and `UARegistered` /
-  `UAPqzPopStored` / `UAPqzKeyAdded` / `UAKemKeySet` carry the same values (`checkedPop`, `checkedPqzPop`, `checkedKem`).
+  reads `NONE`: it is not yet stored or not yet checked; `NONE` for all three on an unregistered id), and the events carry them where the verdict varies:
+  `UARegistered` carries all three (`checkedPop`, `checkedPqzPop`, `checkedKem`) and `UAPqzPopStored` carries `checkedPqzPop`; `UAPqzKeyAdded` has no
+  field (its key is `NONE` until the `UAPqzPopStored` that proves it) and `UAKemKeySet` has none (always `CHAIN` on EVM).
   Clients of a family in relayer-checked mode re-verify before they use a key read from there (spec P11).
 - **Generations.** Generation 2 forwards the views (`registrationOf`, `popOf`, `pqzPopOf`, `pqzKeyOf`, `pqzKeySigOf`,
   `checkedOf`, `kemKeyOf`, `kemKeyAt`) to generation 1 for records it does not hold; `setKemKey`, `storePqzPop` and `setPqzKey` for such a
@@ -1511,7 +1512,7 @@ New registration flow:
    chain is read: no chain key, `chain_uid` or registry address is in the message, so the same `pop` serves every chain.
 3. Anyone submits `register(kind, keyData, attrs, pop, pqzPop)` (self-paid, a relayer job, or sponsored through the gateway route
    `POST /v1/ua/register`). If the whole call (with the proof) does not fit one block — the client compares `eth_estimateGas` with the
-   block gas limit — it submits `register` with an empty `pqzPop` and then `storePqzPop(ua, pqzPop)`. A copy to another chain is the
+   block gas limit (`e2e.py`: the full path only when the estimate is at most `gasLimit·1023/1024`, otherwise, or when the estimate fails, the split) — it submits `register` with an empty `pqzPop` and then `storePqzPop(ua, pqzPop)`. A copy to another chain is the
    same call, built from the first chain's logs or from `registrationOf` ([CTR-UA-31](#CTR-UA-31)).
 4. On the finalized `UARegistered` the client checks `registrationOf(ua)` — the stored `(kind, keyData, attrs, pop)` equal what it sent —
    and `pqzKeyOf(ua).proven` / `checkedOf(ua)` for the PQZ key, and only then marks the account usable on that chain. Later KEM versions
@@ -1746,13 +1747,11 @@ With the PQZ attachment (`n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384`
 | `storePqzPop` | 45.6 | 49.1 | 52.6 | 57.5 |
 
 A registration with the proof in the call (84.8–109.1 M) does not fit a 60 M block, so on such a chain the client registers without
-`pqzPop` and then calls `storePqzPop` ([CTR-UA-16](#CTR-UA-16); the e2e script chooses by `eth_estimateGas` of the full call against the
-block gas limit). The calldata floor of EIP-7976 (21,000 + 16 gas per token over the whole ABI calldata) is the regular gas of
+`pqzPop` and then calls `storePqzPop` ([CTR-UA-16](#CTR-UA-16); `e2e.py` takes the full path only when `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise, or on an estimate error, `register` + `storePqzPop`). The calldata floor of EIP-7976 (21,000 + 16 gas per token over the whole ABI calldata) is the regular gas of
 `storePqzPop` (1.83 / 1.97 / 2.10 / 2.29 M), and the proof as log data (243,048 gas at `n2304-kmax4096`) sits under that floor; a repeated
 `storePqzPop` costs the same floor and no state gas. These rows use the `rreg` stand-in for the PQZ verifier, so **the real `R_REG`
 verify (≈ 3.65 M) is not in them**; adding it lifts `storePqzPop` at `n2816-kmax65536` to **≈ 59.9 M, right at a 60 M block** (the other sets
-keep headroom: `n2304-kmax4096` about 7 M). That is a watch item for the SCaaS testnet roll-out (plan fs3 Task 13): measure the
-real call before using `n2816-kmax65536` on a chain with a 60 M block ([TODO.md](../../TODO.md)). `setKemKey` (version 2): `mldsa65` 8.2 M,
+keep headroom: `n2304-kmax4096` about 7 M). That concerns chains with a 60 M block, not the SCaaS testnet (200 M, genesis `0xbebc200`, where `e2e.py` takes the full path): a watch item measured in fs3 Task 13 before `n2816-kmax65536` is used on a 60 M-block chain ([TODO.md](../../TODO.md)). `setKemKey` (version 2): `mldsa65` 8.2 M,
 `fndsa512` 6.3 M, `msig-pq` 14.3 M (mostly the KEM record's state gas), of which the read of the registration blob is 3.7 % /
 0.4 % / 2.7 % of the regular gas (the separately stored key prefix, about 2 KB for `mldsa65`, adds 4–5 %); a 12-of-12 `slhdsa128s` `msig`
 (96,832 B signature) costs 158.3 M and is a test construction for a registration blob above 64 KiB, not a product row. `mldsa65`
@@ -1794,7 +1793,7 @@ Cross-language vectors (`smartcontracts/vectors/ua/`; `kinds.json` and `structur
   high-s P-256/ECDSA; **non-canonical encodings**: ed25519 `y ≥ p` and `x = 0` with the sign bit set, bn254/BLS
   coordinates `≥ p`, P-256 `x ≥ p`, secp256k1 prefix ∉ {02, 03}, an FN-DSA coefficient `≥ q`.
 
-`portable.json` (BUILT, UA-8; `clients/clientkeys` `scripts/ua-vectors.mjs` writes it, 2.5 MB; read by Foundry, `ua-rs` and every client library) —
+`portable.json` (BUILT, UA-8; `clients/clientkeys` `scripts/ua-portable-vectors.mjs` writes it, 2.5 MB; read by Foundry, `ua-rs` and every client library) —
 the shared contract of every family: the tags (`PURPOSE_POP_V2`, `PURPOSE_KEM`, `PURPOSE_PQZ_KEY`, `KEM_RECORD_TAG`, `PQZ_KEY_RECORD_TAG`) and the
 `checked` code points (`NONE` 0, `CHAIN` 1, `RELAYER` 2); `registrations` (25 UAs: every signing kind, the `msig` shapes, each with
 proof bytes and hash-only forms; 8 with a PQZ key at all four parameter sets, 6 `msig`), the digests of each step (`pqzKeyHash`,
