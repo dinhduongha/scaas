@@ -148,8 +148,8 @@ does with it.
 
 Why: the token verifies the signer's own limits against the fill figures, so a maker needs no allowance and an EOA
 never grants one ([CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)); orders without roles let the same signed
-order rest and later take. Cost: two transfers per leg (into the DEX, out to the destination), and partial fills
-below half an order are impossible.
+order rest and later take. Cost: two transfers per leg (into the DEX, out to the destination). An order fills in any
+number of settlements, each at least its `minFill` ([CTR-DEX-14](../contracts/dex.md#CTR-DEX-14)).
 
 Built (P5, `dex.rs`, `dex/venue.rs`): `ESCROW` is refused at intake (Path B is not built by the venue); the gas of
 every `mtxSettle` job is sized by a simulation that settles each planned settlement (an empty `MatchFailed` is gas);

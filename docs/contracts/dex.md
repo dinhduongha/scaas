@@ -396,7 +396,7 @@ the decoded fields; a shape other than 0 or 1 reverts `LegShapeUnknown(shape)`; 
 `tokenKind == SCaaS` and `IUALedger(token).registry() ≠ 0`; a derived destination is checked by the receive token's own
 `transferToUA` at the payout, so an unregistered one fails that settlement as `MatchFailed`); `test/ua/UADex.t.sol`,
 `UADexInvariant.t.sol` (conservation with UA handlers, 0 reverts), `UATradeVectors.t.sol`; the P2b suites keep
-address-shaped legs through `test/helpers/DexLegs.sol`. `SCaaSDex` is 23,493 B (+1,627), under EIP-170.
+address-shaped legs through `test/helpers/DexLegs.sol`. `SCaaSDex` is 27,252 B of runtime (T9-measured, after the DEX round), recorded in `size-baseline.json` (ceiling 65,536 B).
 
 Measured (forge, osaka; one taker × one maker, `mtxSettle` execution gas): shape 0 × 0 354,530; shape 1 × 1 with
 padded native ids 351,582; a derived taker × a native maker with the real verifiers 386,507 (`p256`), 387,276
