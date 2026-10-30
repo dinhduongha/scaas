@@ -1,15 +1,16 @@
 //! T0 spike unit tests (SDK testutils at protocol 30). Each prints the budget of the measured call; the gate figures
 //! are the network ones (`run.sh` / `measure.py`), since native test code under-counts the Wasm VM.
 extern crate std;
-use std::{println, string::String, vec::Vec as StdVec};
+use std::{println, vec::Vec as StdVec};
 
-use soroban_sdk::{Bytes, BytesN, Env, Vec};
 use serde_json::Value;
+use soroban_sdk::{Bytes, BytesN, Env};
 
-use crate::{UaSpike, UaSpikeClient};
+use crate::{purpose, tagged, UaSpike, UaSpikeClient, K_MLDSA65, K_MSIG, K_WEBAUTHN};
 
 const PORTABLE: &str = include_str!("../../../../vectors/ua/portable.json");
 const SIGNATURES: &str = include_str!("../../../../vectors/ua/signatures.json");
+const MSIG3: &str = include_str!("msig3.json"); // `measure.py fixture`: 3 generated ML-DSA-65 members
 
 fn hx(s: &str) -> StdVec<u8> {
     let s = s.trim_start_matches("0x");
@@ -64,72 +65,64 @@ fn spike_mldsa65_verify_budget() {
     mldsa_case("mldsa65#1", 0x0131, "mldsa65");
 }
 
-fn mldsa65_args(env: &Env) -> (BytesN<1952>, Bytes, BytesN<3309>, StdVec<u8>) {
-    let r = row("mldsa65#1");
-    let pk = BytesN::<1952>::from_array(env, &hx(r["keyData"].as_str().unwrap()).try_into().unwrap());
-    let sig = BytesN::<3309>::from_array(env, &hx(r["pop"].as_str().unwrap()).try_into().unwrap());
-    (pk, b(env, &hx(r["popMessage"].as_str().unwrap())), sig, hx(r["ua"].as_str().unwrap()))
-}
-
 #[test]
 fn spike_register_mldsa65_model_budget() {
     let (env, c) = setup();
-    let (pk, msg, sig, ua) = mldsa65_args(&env);
+    let r = row("mldsa65#1");
+    let pk = BytesN::<1952>::from_array(&env, &hx(r["keyData"].as_str().unwrap()).try_into().unwrap());
+    let sig = BytesN::<3309>::from_array(&env, &hx(r["pop"].as_str().unwrap()).try_into().unwrap());
+    let msg = b(&env, &hx(r["popMessage"].as_str().unwrap()));
     let id = measure(&env, "register_model mldsa65", || c.register_model(&pk, &msg, &sig));
-    assert_eq!(id.to_array().to_vec(), ua, "the model's id is the CTR-UA-04 id of the vector");
+    assert_eq!(id.to_array().to_vec(), hx(r["ua"].as_str().unwrap()), "the CTR-UA-04 id of the vector");
     assert!(c.try_register_model(&pk, &msg, &sig).is_err(), "already registered");
 }
 
 #[test]
 fn spike_msig3_mldsa65_model_budget() {
     let (env, c) = setup();
-    let (pk, msg, sig, _) = mldsa65_args(&env);
-    let mut ids = Vec::new(&env);
-    for i in 1..=3u8 {
-        let id = BytesN::from_array(&env, &[i; 32]);
-        c.seed(&Some(id.clone()), &0x0131, &pk.clone().into(), &Some(sig.clone().into()));
-        ids.push_back(id);
+    // the record-sized UaRegistered event of n = 3 exceeds testutils' 16 KiB events limit: lift the limits so the
+    // budget prints; the network run (measure.py) gives the verdict against the network's limits
+    env.cost_estimate().disable_resource_limits();
+    let f: Value = serde_json::from_str(MSIG3).unwrap();
+    let kd = b(&env, &hx(f["key_data"].as_str().unwrap()));
+    let msg = BytesN::<32>::from_array(&env, &hx(f["msg"].as_str().unwrap()).try_into().unwrap());
+    let pop = hx(f["pop"].as_str().unwrap());
+    assert!(c.try_msig_model(&kd, &msg, &b(&env, &pop)).is_err(), "MemberUnknown before the members register");
+    for m in f["members"].as_array().unwrap() {
+        let pk = b(&env, &hx(m["pk"].as_str().unwrap()));
+        c.seed(&K_MLDSA65, &pk, &Some(b(&env, &hx(m["pop"].as_str().unwrap()))));
     }
-    measure(&env, "msig_model n=3 mldsa65", || c.msig_model(&3, &ids, &pk, &msg, &sig));
+    let mut bad = pop.clone();
+    bad[pop.len() - 100] ^= 1; // inside the last member's signature
+    assert!(c.try_msig_model(&kd, &msg, &b(&env, &bad)).is_err(), "a member's bad signature");
+    let mut long = pop.clone();
+    long.extend_from_slice(&[0; 32]);
+    assert!(c.try_msig_model(&kd, &msg, &b(&env, &long)).is_err(), "non-canonical MemberSig[]");
+    let id = measure(&env, "msig_model n=3 mldsa65", || c.msig_model(&kd, &msg, &b(&env, &pop)));
+    assert_eq!(id, tagged(&env, K_MSIG, &kd));
+    assert!(c.try_msig_model(&kd, &msg, &b(&env, &pop)).is_err(), "already registered");
 }
 
-fn passkey_args(env: &Env) -> (Bytes, BytesN<65>, BytesN<32>, Bytes, Bytes, BytesN<64>, BytesN<32>, StdVec<u8>) {
+#[test]
+fn spike_require_authorized_passkey_budget() {
+    let (env, c) = setup();
     let s: Value = serde_json::from_str(SIGNATURES).unwrap();
     let r = s["derived"].as_array().unwrap().iter().find(|r| r["kind"] == 256).unwrap();
     let kd = hx(r["keyData"].as_str().unwrap());
     let m = r["sigs"].as_array().unwrap().iter().find(|x| x["purpose"] == "metatx").unwrap();
-    let sig = hx(m["sig"].as_str().unwrap()); // abi.encode(bytes authData, string clientDataJSON, uint256 r, uint256 s)
-    let word = |o: usize| usize::from_str_radix(&hex_str(&sig[o + 24..o + 32]), 16).unwrap();
-    let (o1, o2) = (word(0), word(32));
-    let auth = sig[o1 + 32..o1 + 32 + word(o1)].to_vec();
-    let cdj = sig[o2 + 32..o2 + 32 + word(o2)].to_vec();
-    let mut key = [4u8; 65];
-    key[1..].copy_from_slice(&kd[..64]);
-    (
-        b(env, &kd),
-        BytesN::from_array(env, &key),
-        BytesN::from_array(env, &kd[64..96].try_into().unwrap()),
-        b(env, &auth),
-        b(env, &cdj),
-        BytesN::from_array(env, &sig[64..128].try_into().unwrap()),
-        BytesN::from_array(env, &hx(m["digest"].as_str().unwrap()).try_into().unwrap()),
-        hx(r["ua"].as_str().unwrap()),
-    )
-}
-
-fn hex_str(v: &[u8]) -> String {
-    v.iter().map(|x| std::format!("{x:02x}")).collect()
-}
-
-#[test]
-fn spike_ua_pay_passkey_model_budget() {
-    let (env, c) = setup();
-    let (kd, key, rp, auth, cdj, sig, digest, ua) = passkey_args(&env);
-    let id = c.seed(&None, &0x0100, &kd, &None);
-    assert_eq!(id.to_array().to_vec(), ua);
-    measure(&env, "ua_pay_model webauthn-p256", || c.ua_pay_model(&key, &rp, &auth, &cdj, &sig, &digest));
+    let auth = hx(m["sig"].as_str().unwrap()); // abi.encode(bytes authData, string clientDataJSON, uint256 r, uint256 s)
+    let digest = BytesN::<32>::from_array(&env, &hx(m["digest"].as_str().unwrap()).try_into().unwrap());
+    let ua = c.seed(&K_WEBAUTHN, &b(&env, &kd), &None);
+    assert_eq!(ua.to_array().to_vec(), hx(r["ua"].as_str().unwrap()));
+    let p = purpose(&env, "scaas.ua.purpose.metatx.v1");
+    measure(&env, "require_authorized webauthn-p256", || c.require_authorized(&ua, &p, &digest, &b(&env, &auth)));
     let other = BytesN::from_array(&env, &[7; 32]);
-    assert!(c.try_ua_pay_model(&key, &rp, &auth, &cdj, &sig, &other).is_err(), "challenge binds the digest");
+    assert!(c.try_require_authorized(&ua, &p, &other, &b(&env, &auth)).is_err(), "challenge binds the digest");
+    let mut bad = auth.clone();
+    bad[100] ^= 1; // s
+    assert!(c.try_require_authorized(&ua, &p, &digest, &b(&env, &bad)).is_err(), "secp256r1 refuses a bad s");
+    assert!(c.receivable(&ua));
+    assert!(!c.receivable(&other));
 }
 
 #[test]

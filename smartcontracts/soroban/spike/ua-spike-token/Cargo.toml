@@ -1,0 +1,19 @@
+[package]
+name = "scaas-ua-spike-token"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+scaas-ua-spike = { path = "../ua-spike" }
+serde_json = { workspace = true }
+p256 = { version = "0.13", default-features = false, features = ["ecdsa"] }

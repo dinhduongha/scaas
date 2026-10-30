@@ -1,20 +1,54 @@
 //! T0 spike (plan UA-Soroban T0, spec §10 T0, S13a): cost models of the UA-Soroban calls and of the BLS12-381 building blocks of a
-//! classical Zether verifier at Protocol 30. Each model does the host work of the call it stands for; it is not the
-//! registry, the token or a verifier. Never deployed outside the spike.
+//! classical Zether verifier at Protocol 30. This crate is the registry side (`register`, `msig`, `require_authorized`,
+//! `receivable`); `ua-spike-token` is the token side of `ua_pay` (spec §5.1). Each model does the host work of the call
+//! it stands for; it is not the registry, the token or a verifier. Never deployed outside the spike.
 #![no_std]
-#![allow(deprecated)] // events().publish: the spike's events only need their size
+#![allow(deprecated)] // events().publish
 
 use soroban_sdk::{
     contract, contractimpl, contracttype,
     crypto::bls12_381::{Bls12381Fr, Bls12381G1Affine, Bls12381G2Affine},
-    Bytes, BytesN, Env, Vec, U256,
+    Address, Bytes, BytesN, Env, Symbol, Vec, U256,
 };
 
 const DAY: u32 = 17_280;
-const K_WEBAUTHN: u32 = 0x0100;
-const K_MLDSA44: u32 = 0x0130;
-const K_MLDSA65: u32 = 0x0131;
-const K_MSIG: u32 = 0x0120;
+pub const K_WEBAUTHN: u32 = 0x0100;
+pub const K_MLDSA44: u32 = 0x0130;
+pub const K_MLDSA65: u32 = 0x0131;
+pub const K_MSIG: u32 = 0x0120;
+
+// spec §4 types
+#[contracttype]
+#[derive(Clone)]
+pub enum Checked {
+    None,
+    Chain,
+    Relayer(Address),
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct UaAttrs {
+    pub pqz_key: Bytes,
+    pub pqz_pop_hash: BytesN<32>,
+    pub kem_version: u64,
+    pub kem_pk: Bytes,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub struct Registration {
+    pub kind: u32,
+    pub key_data: Bytes,
+    pub attrs: UaAttrs,
+    pub pop: Bytes,
+    pub pop_checked: Checked,
+    pub pqz_pop_checked: Checked,
+    pub proven: bool,
+    pub signable: bool,
+    pub index: u32,
+    pub ledger: u32,
+}
 
 #[contracttype]
 pub enum Key {
@@ -22,20 +56,19 @@ pub enum Key {
     Key(BytesN<32>),
     List(u32, u32),
     Count(u32),
-    UaBal(BytesN<32>),
-    Bal(BytesN<32>),
-    UaNonce(BytesN<32>, BytesN<32>),
 }
 
-#[contracttype]
-pub struct Rec {
-    pub kind: u32,
-    pub key_data: Bytes,
-    pub pop: Bytes,
-}
-
-fn h(env: &Env, data: &Bytes) -> BytesN<32> {
+pub fn h(env: &Env, data: &Bytes) -> BytesN<32> {
     env.crypto().keccak256(data).into()
+}
+
+fn hs(env: &Env, s: &str) -> BytesN<32> {
+    h(env, &Bytes::from_slice(env, s.as_bytes()))
+}
+
+/// keccak256(s) of a purpose name: the purposeTag of CTR-UA-12.
+pub fn purpose(env: &Env, name: &str) -> BytesN<32> {
+    hs(env, name)
 }
 
 fn tag_name(kind: u32) -> &'static str {
@@ -48,18 +81,18 @@ fn tag_name(kind: u32) -> &'static str {
     }
 }
 
-/// TAG(kind) ‖ x, hashed: the CTR-UA-04 id when x is the key data, pq_msg when x is ua_msg (CTR-UA-23).
-fn tagged(env: &Env, kind: u32, x: &Bytes) -> BytesN<32> {
-    let mut m = Bytes::from_array(env, &h(env, &Bytes::from_slice(env, tag_name(kind).as_bytes())).to_array());
+/// keccak256(TAG(kind) ‖ x): the CTR-UA-04 id when x is the key data, pq_msg when x is ua_msg (CTR-UA-23).
+pub fn tagged(env: &Env, kind: u32, x: &Bytes) -> BytesN<32> {
+    let mut m = Bytes::from_array(env, &hs(env, tag_name(kind)).to_array());
     m.append(x);
     h(env, &m)
 }
 
 /// ua_msg = keccak256(MSG_TAG ‖ TAG(kind) ‖ purposeTag ‖ digest) (CTR-UA-12).
-fn ua_msg(env: &Env, kind: u32, purpose: &str, digest: &BytesN<32>) -> BytesN<32> {
-    let mut m = Bytes::from_array(env, &h(env, &Bytes::from_slice(env, b"scaas.ua.msg.v1")).to_array());
-    m.append(&Bytes::from_array(env, &h(env, &Bytes::from_slice(env, tag_name(kind).as_bytes())).to_array()));
-    m.append(&Bytes::from_array(env, &h(env, &Bytes::from_slice(env, purpose.as_bytes())).to_array()));
+pub fn ua_msg(env: &Env, kind: u32, purpose: &BytesN<32>, digest: &BytesN<32>) -> BytesN<32> {
+    let mut m = Bytes::from_array(env, &hs(env, "scaas.ua.msg.v1").to_array());
+    m.append(&Bytes::from_array(env, &hs(env, tag_name(kind)).to_array()));
+    m.append(&Bytes::from_array(env, &purpose.to_array()));
     m.append(&Bytes::from_array(env, &digest.to_array()));
     h(env, &m)
 }
@@ -92,20 +125,97 @@ fn mldsa_verify(env: &Env, kind: u32, pk: &Bytes, msg: &Bytes, sig: &Bytes) {
     }
 }
 
-/// Stores a record under a new list position (the `register` writes after its checks).
-fn store(env: &Env, id: &BytesN<32>, rec: &Rec) {
-    let count_key = Key::Count(rec.kind);
+/// The `register` writes after its checks: `Ua(id)` (the full `Registration`), `List(kind, i)`, `Count(kind)` and the
+/// `UaRegistered` event (topics `ua`, `kind`; data the record and `checked`, spec §4).
+fn store(env: &Env, id: &BytesN<32>, kind: u32, key_data: Bytes, pop: Bytes) {
+    let count_key = Key::Count(kind);
     let i: u32 = env.storage().persistent().get(&count_key).unwrap_or(0);
-    put(env, &Key::Ua(id.clone()), rec);
-    put(env, &Key::List(rec.kind, i), id);
+    let rec = Registration {
+        kind,
+        key_data,
+        attrs: UaAttrs {
+            pqz_key: Bytes::new(env),
+            pqz_pop_hash: BytesN::from_array(env, &[0; 32]),
+            kem_version: 0,
+            kem_pk: Bytes::new(env),
+        },
+        pop,
+        pop_checked: Checked::Chain,
+        pqz_pop_checked: Checked::None,
+        proven: true,
+        signable: true,
+        index: i,
+        ledger: env.ledger().sequence(),
+    };
+    put(env, &Key::Ua(id.clone()), &rec);
+    put(env, &Key::List(kind, i), id);
     put(env, &count_key, &(i + 1));
-    env.events().publish((soroban_sdk::symbol_short!("UaReg"), id.clone(), rec.kind), rec.key_data.len());
+    env.events().publish((Symbol::new(env, "UaRegistered"), id.clone(), kind), (rec, Checked::Chain));
 }
 
-const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+// --- ABI words (abi.encode of the EVM structures, spec §3) ---
+fn word(b: &Bytes, off: u32) -> u32 {
+    let mut w = [0u8; 4];
+    b.slice(off + 28..off + 32).copy_into_slice(&mut w);
+    u32::from_be_bytes(w)
+}
+
+fn put_word(env: &Env, out: &mut Bytes, v: u32) {
+    let mut w = [0u8; 32];
+    w[28..].copy_from_slice(&v.to_be_bytes());
+    out.append(&Bytes::from_array(env, &w));
+}
+
+fn pad32(n: u32) -> u32 {
+    (n + 31) / 32 * 32
+}
+
+fn put_dyn(env: &Env, out: &mut Bytes, b: &Bytes) {
+    put_word(env, out, b.len());
+    out.append(b);
+    out.append(&Bytes::from_slice(env, &[0u8; 32][..(pad32(b.len()) - b.len()) as usize]));
+}
+
+/// The dynamic `bytes` whose offset word sits at `head`, offsets relative to `base`.
+fn dyn_at(b: &Bytes, base: u32, head: u32) -> Bytes {
+    let o = base + word(b, head);
+    b.slice(o + 32..o + 32 + word(b, o))
+}
+
+/// Decodes `abi.encode(MemberSig[])` (`{u16 index, bytes keyData, bytes sig}`, UA8-D5), canonical only: the decoded
+/// members are re-encoded and compared with the input (as EVM m3).
+fn member_sigs(env: &Env, auth: &Bytes) -> Vec<(u32, Bytes, Bytes)> {
+    assert!(word(auth, 0) == 32, "Pop");
+    let n = word(auth, 32);
+    assert!(n <= 16, "Pop");
+    let mut out = Vec::new(env);
+    for i in 0..n {
+        let t = 64 + word(auth, 64 + 32 * i);
+        out.push_back((word(auth, t), dyn_at(auth, t, t + 32), dyn_at(auth, t, t + 64)));
+    }
+    let mut enc = Bytes::new(env);
+    put_word(env, &mut enc, 32);
+    put_word(env, &mut enc, n);
+    let mut off = 32 * n;
+    for (_, kd, sig) in out.iter() {
+        put_word(env, &mut enc, off);
+        off += 96 + 32 + pad32(kd.len()) + 32 + pad32(sig.len());
+    }
+    for (idx, kd, sig) in out.iter() {
+        put_word(env, &mut enc, idx);
+        put_word(env, &mut enc, 96);
+        put_word(env, &mut enc, 96 + 32 + pad32(kd.len()));
+        put_dyn(env, &mut enc, &kd);
+        put_dyn(env, &mut enc, &sig);
+    }
+    assert!(enc == *auth, "Pop: not canonical");
+    out
+}
+
+pub const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
 /// base64url without padding of 32 bytes (43 characters).
-fn b64url32(x: &[u8; 32]) -> [u8; 43] {
+pub fn b64url32(x: &[u8; 32]) -> [u8; 43] {
     let mut out = [0u8; 43];
     let (mut o, mut i) = (0, 0);
     while i < 32 {
@@ -123,6 +233,39 @@ fn b64url32(x: &[u8; 32]) -> [u8; 43] {
 
 fn contains(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)
+}
+
+/// The S3 `webauthn-p256` check (spec §3): key data `x ‖ y ‖ rpIdHash`, `auth` =
+/// `abi.encode(bytes authenticatorData, string clientDataJSON, uint256 r, uint256 s)`.
+fn webauthn_check(env: &Env, kd: &Bytes, m: &BytesN<32>, auth: &Bytes) {
+    let authenticator_data = dyn_at(auth, 0, 0);
+    let client_data_json = dyn_at(auth, 0, 32);
+    let sig: BytesN<64> = auth.slice(64..128).try_into().unwrap();
+    let mut key = Bytes::from_array(env, &[4u8]);
+    key.append(&kd.slice(0..64));
+    let key: BytesN<65> = key.try_into().unwrap();
+    // client data: type, challenge = base64url(ua_msg), crossOrigin absent or false, no topOrigin
+    let n = client_data_json.len() as usize;
+    assert!(n <= 1024);
+    let mut cdj = [0u8; 1024];
+    client_data_json.copy_into_slice(&mut cdj[..n]);
+    let cdj = &cdj[..n];
+    let pre = b"{\"type\":\"webauthn.get\",\"challenge\":\"";
+    assert!(n > pre.len() + 44 && &cdj[..pre.len()] == pre);
+    assert!(cdj[pre.len()..pre.len() + 43] == b64url32(&m.to_array()) && cdj[pre.len() + 43] == b'"');
+    assert!(!contains(cdj, b"\"crossOrigin\":true") && !contains(cdj, b"\"topOrigin\""));
+    // authenticator data: rpIdHash, UP and UV
+    assert!(authenticator_data.len() >= 37);
+    assert!(authenticator_data.slice(0..32) == kd.slice(64..96));
+    assert!(authenticator_data.get(32).unwrap() & 0x05 == 0x05);
+    let mut signed = authenticator_data.clone();
+    signed.append(&env.crypto().sha256(&client_data_json).to_bytes().into());
+    env.crypto().secp256r1_verify(&key, &env.crypto().sha256(&signed), &sig);
+}
+
+/// A big-endian u16 at `off`.
+fn word2(b: &Bytes, off: u32) -> u32 {
+    (b.get(off).unwrap() as u32) << 8 | b.get(off + 1).unwrap() as u32
 }
 
 // --- BLS12-381 fixed valid points (the generators) ---
@@ -296,23 +439,21 @@ impl UaSpike {
         mldsa_verify(&env, kind, &pk, &pq, &sig);
     }
 
-    /// Spike set-up only: writes a record (and a UA balance) as `register` would have. `id` None ⇒ the CTR-UA-04 id;
+    /// Spike set-up only: writes the record `register` would have written for the CTR-UA-04 id of `key_data`;
     /// `pop` None ⇒ empty (the CLI takes no empty `Bytes` argument).
-    pub fn seed(env: Env, id: Option<BytesN<32>>, kind: u32, key_data: Bytes, pop: Option<Bytes>) -> BytesN<32> {
-        let id = id.unwrap_or_else(|| tagged(&env, kind, &key_data));
-        let pop = pop.unwrap_or_else(|| Bytes::new(&env));
-        put(&env, &Key::Ua(id.clone()), &Rec { kind, key_data, pop });
-        put(&env, &Key::UaBal(id.clone()), &1_000_000_000i128);
+    pub fn seed(env: Env, kind: u32, key_data: Bytes, pop: Option<Bytes>) -> BytesN<32> {
+        let id = tagged(&env, kind, &key_data);
+        store(&env, &id, kind, key_data, pop.unwrap_or_else(|| Bytes::new(&env)));
         id
     }
 
     /// `register` of an `mldsa65` UA: id, one verify of the PoP over pq_msg(`msg`), the record with key data **and**
-    /// pop (≈ 5.3 KB), `Key`, `List`, `Count`, an event.
+    /// pop (≈ 5.3 KB), `Key`, `List`, `Count`, the record-sized `UaRegistered` event. `msg` stands for the
+    /// `uaMessage(kind, PURPOSE_POP_V2, registrationDigest)` the real `register` computes (a few keccaks, not modelled).
     pub fn register_model(env: Env, pk: BytesN<1952>, msg: Bytes, sig: BytesN<3309>) -> BytesN<32> {
         let kd: Bytes = pk.clone().into();
         let id = tagged(&env, K_MLDSA65, &kd);
-        let key = Key::Ua(id.clone());
-        if env.storage().persistent().has(&key) {
+        if env.storage().persistent().has(&Key::Ua(id.clone())) {
             panic!("AlreadyRegistered");
         }
         let kh = h(&env, &kd);
@@ -322,98 +463,66 @@ impl UaSpike {
         let pq: Bytes = tagged(&env, K_MLDSA65, &msg).into();
         env.crypto().ml_dsa_65_verify(&pk, &pq, &sig, &Bytes::new(&env));
         put(&env, &Key::Key(kh), &id);
-        store(&env, &id, &Rec { kind: K_MLDSA65, key_data: kd, pop: sig.into() });
+        store(&env, &id, K_MLDSA65, kd, sig.into());
         id
     }
 
-    /// `register` of an `n`-member `mldsa65` `msig`: reads the `n` member records, `n` verifies, writes the record
-    /// whose `pop` holds the `n` signatures (CTR-UA-09 key data: 4 + 36n bytes).
-    pub fn msig_model(
-        env: Env,
-        n: u32,
-        member_ids: Vec<BytesN<32>>,
-        pk: BytesN<1952>,
-        msg: Bytes,
-        sig: BytesN<3309>,
-    ) -> BytesN<32> {
-        assert!(member_ids.len() == n);
-        let mut kd = Bytes::from_array(&env, &[0, n as u8, 0, n as u8]);
-        let mut pop = Bytes::new(&env);
-        // each member signs pq_msg of its own kind (CTR-UA-23); the spike reuses one vector signature per member
-        let pq: Bytes = tagged(&env, K_MLDSA65, &msg).into();
-        for id in member_ids.iter() {
-            let k = Key::Ua(id.clone());
-            let rec: Rec = env.storage().persistent().get(&k).expect("MemberUnknown");
-            bump(&env, &k);
-            assert!(rec.kind == K_MLDSA65);
-            kd.append(&Bytes::from_array(&env, &[1, 0x31]));
-            kd.append(&id.clone().into());
-            kd.append(&Bytes::from_array(&env, &[0, 1]));
-            env.crypto().ml_dsa_65_verify(&pk, &pq, &sig, &Bytes::new(&env));
-            pop.append(&sig.clone().into());
-        }
-        let id = tagged(&env, K_MSIG, &kd);
+    /// `register` of an `msig` (spec §3): `key_data` = CTR-UA-09 `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖
+    /// bytes32 id ‖ u16 weight)`, ids strictly increasing; `pop` = `abi.encode(MemberSig[])`, canonical. Each member's
+    /// record is read, its `keyData` compared with the record, and its signature verified over
+    /// `pq_msg(ua_msg(kind, member, keccak256(structureUA ‖ msg)))`, until the threshold weight. The record keeps `pop`.
+    /// `msg` stands for the msig's own `uaMessage(MSIG, PURPOSE_POP_V2, registrationDigest)`.
+    pub fn msig_model(env: Env, key_data: Bytes, msg: BytesN<32>, pop: Bytes) -> BytesN<32> {
+        let (threshold, count) = (word2(&key_data, 0), word2(&key_data, 2));
+        assert!(count >= 1 && count <= 16 && key_data.len() == 4 + 36 * count, "KeyData");
+        let id = tagged(&env, K_MSIG, &key_data);
         if env.storage().persistent().has(&Key::Ua(id.clone())) {
             panic!("AlreadyRegistered");
         }
-        store(&env, &id, &Rec { kind: K_MSIG, key_data: kd, pop });
+        let mut prev: Option<BytesN<32>> = None;
+        for i in 0..count {
+            let mid: BytesN<32> = key_data.slice(6 + 36 * i..38 + 36 * i).try_into().unwrap();
+            assert!(prev.map_or(true, |p| p.to_array() < mid.to_array()), "KeyData: ids not increasing");
+            prev = Some(mid);
+        }
+        let mut sd = Bytes::from_array(&env, &id.to_array());
+        sd.append(&Bytes::from_array(&env, &msg.to_array()));
+        let member_digest = h(&env, &sd);
+        let member = purpose(&env, "scaas.ua.purpose.member.v1");
+        let (mut weight, mut last) = (0u32, None::<u32>);
+        for (idx, kd, sig) in member_sigs(&env, &pop).iter() {
+            assert!(idx < count && last.map_or(true, |l| l < idx), "Pop: member index");
+            last = Some(idx);
+            let o = 4 + 36 * idx;
+            let kind = word2(&key_data, o);
+            let mid: BytesN<32> = key_data.slice(o + 2..o + 34).try_into().unwrap();
+            let k = Key::Ua(mid);
+            let rec: Registration = env.storage().persistent().get(&k).expect("MemberUnknown");
+            bump(&env, &k);
+            assert!(rec.kind == kind && rec.key_data == kd, "MemberUnknown");
+            let pq: Bytes = tagged(&env, kind, &ua_msg(&env, kind, &member, &member_digest).into()).into();
+            mldsa_verify(&env, kind, &kd, &pq, &sig);
+            weight += word2(&key_data, o + 34);
+        }
+        assert!(weight >= threshold, "Pop: weight");
+        store(&env, &id, K_MSIG, key_data, pop);
         id
     }
 
-    /// `ua_pay` of a passkey UA: the WebAuthn checks of spec §3, `secp256r1_verify`, the 96-byte record read, two
-    /// balance writes, the pay-lane write, three events.
-    pub fn ua_pay_model(
-        env: Env,
-        key: BytesN<65>,
-        rp_id_hash: BytesN<32>,
-        authenticator_data: Bytes,
-        client_data_json: Bytes,
-        sig: BytesN<64>,
-        digest: BytesN<32>,
-    ) {
-        let mut kd: Bytes = key.clone().into();
-        kd = kd.slice(1..);
-        kd.append(&rp_id_hash.clone().into());
-        let ua = tagged(&env, K_WEBAUTHN, &kd);
-        let rk = Key::Ua(ua.clone());
-        let rec: Rec = env.storage().persistent().get(&rk).expect("NotRegistered");
-        bump(&env, &rk);
-        assert!(rec.kind == K_WEBAUTHN && rec.key_data == kd);
-        // client data: type, challenge = base64url(ua_msg), crossOrigin absent or false, no topOrigin
-        let m = ua_msg(&env, K_WEBAUTHN, "scaas.ua.purpose.metatx.v1", &digest);
-        let n = client_data_json.len() as usize;
-        assert!(n <= 1024);
-        let mut cdj = [0u8; 1024];
-        client_data_json.copy_into_slice(&mut cdj[..n]);
-        let cdj = &cdj[..n];
-        let pre = b"{\"type\":\"webauthn.get\",\"challenge\":\"";
-        assert!(n > pre.len() + 44 && &cdj[..pre.len()] == pre);
-        assert!(cdj[pre.len()..pre.len() + 43] == b64url32(&m.to_array()) && cdj[pre.len() + 43] == b'"');
-        assert!(!contains(cdj, b"\"crossOrigin\":true") && !contains(cdj, b"\"topOrigin\""));
-        // authenticator data: rpIdHash, UP and UV
-        assert!(authenticator_data.len() >= 37);
-        assert!(authenticator_data.slice(0..32) == Bytes::from(rp_id_hash));
-        assert!(authenticator_data.get(32).unwrap() & 0x05 == 0x05);
-        let mut signed = authenticator_data.clone();
-        signed.append(&env.crypto().sha256(&client_data_json).to_bytes().into());
-        env.crypto().secp256r1_verify(&key, &env.crypto().sha256(&signed), &sig);
-        // lane = payLane(pay_ref), nonce 0; two balances; three events
-        let lane = h(&env, &digest.clone().into());
-        let nk = Key::UaNonce(ua.clone(), lane);
-        if env.storage().persistent().get::<_, u64>(&nk).unwrap_or(0) != 0 {
-            panic!("BadNonce");
-        }
-        put(&env, &nk, &1u64);
-        let bk = Key::UaBal(ua.clone());
-        let bal: i128 = env.storage().persistent().get(&bk).unwrap_or(0);
-        put(&env, &bk, &(bal - 1));
-        let tk = Key::Bal(digest.clone());
-        let to: i128 = env.storage().persistent().get(&tk).unwrap_or(0);
-        put(&env, &tk, &(to + 1));
-        let e = env.events();
-        e.publish((soroban_sdk::symbol_short!("transfer"), ua.clone(), digest.clone()), 1i128);
-        e.publish((soroban_sdk::symbol_short!("UaPay"), ua.clone()), digest.clone());
-        e.publish((soroban_sdk::symbol_short!("UaNonce"), ua), 0u64);
+    /// `require_authorized` (spec §4) for a `webauthn-p256` UA: the record (`NotRegistered`), `signable`
+    /// (`Unauthorized`), its TTL, then the S3 check over `ua_msg(kind, purpose, digest)`.
+    pub fn require_authorized(env: Env, ua: BytesN<32>, purpose: BytesN<32>, digest: BytesN<32>, auth: Bytes) {
+        let k = Key::Ua(ua);
+        let rec: Registration = env.storage().persistent().get(&k).expect("NotRegistered");
+        assert!(rec.signable, "Unauthorized");
+        bump(&env, &k);
+        assert!(rec.kind == K_WEBAUTHN, "NotVerifiable (spike: webauthn-p256 only)");
+        webauthn_check(&env, &rec.key_data, &ua_msg(&env, rec.kind, &purpose, &digest), &auth);
+    }
+
+    /// `receivable(ua)` (spec §4): the record's `signable`.
+    pub fn receivable(env: Env, ua: BytesN<32>) -> bool {
+        env.storage().persistent().get::<_, Registration>(&Key::Ua(ua)).map_or(false, |r| r.signable)
     }
 
     pub fn bls_g1_msm(env: Env, n: u32) -> BytesN<96> {
