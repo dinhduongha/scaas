@@ -902,12 +902,12 @@ async fn dex_fill_below_half_settles_on_anvil() {
     let guard = Arc::new(scaas_node::guard::Guard::new(&cfg, tokens.clone()).unwrap());
     let gw = GwChain { chain: shared.clone(), tx, tokens, dex: Some(venue.clone()), breaker: None, fee_recipient: None, guard };
     let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:18651").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:18653").await.unwrap();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let http = reqwest::Client::new();
     let post = |body: Value| {
         let http = http.clone();
-        async move { http.post("http://127.0.0.1:18651/v1/dex/orders").json(&body).send().await.unwrap().json::<Value>().await.unwrap() }
+        async move { http.post("http://127.0.0.1:18653/v1/dex/orders").json(&body).send().await.unwrap().json::<Value>().await.unwrap() }
     };
     let place = |sell: Address, o: TradeOrder, signer: &PrivateKeySigner| {
         let sig = sign_hash(signer, trade_order_hash(&domain("SCaaS MetaToken", chain_id, sell, uid), &o));
