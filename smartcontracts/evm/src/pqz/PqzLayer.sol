@@ -274,10 +274,11 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     /// @dev `units · shieldScale` public units of the signer (a derived UA signer: its UA-ledger balance) to
-    ///      `SHIELD_POOL` (D19).
+    ///      `SHIELD_POOL` (D19). The caller is read only when there is something to pull: with `units = 0` the
+    ///      submitter is an open role, so a designator relayer is not refused (D3, CTR-UA-24).
     function _toPool(uint256 units) internal {
-        address m = _msgSender();
         if (units != 0) {
+            address m = _msgSender();
             _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
                 units * PqzCore.$().shieldScale);
         }

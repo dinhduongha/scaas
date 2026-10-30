@@ -515,6 +515,29 @@ contract PqzNoneTest is PqzFixture {
         assertEq(tok.balanceOf(v), 10 * SCALE);
     }
 
+    /// no7702 review m1: the submitter of a UA-authorised PQZ op is an open role (CTR-UA-24, D3); only a `shieldIn` pull
+    /// makes it authority (its own public units move). A relayer with an EIP-7702 designator submits a transfer with
+    /// `shieldIn = 0`; with a pull it is refused `CallerDelegated`.
+    function test_transfer_delegatedSubmitterOnlyRefusedOnAPull() public {
+        _fund(tok, alice, 1000);
+        address r = address(0xD7702);
+        _public(tok, r, 10 * SCALE);
+        vm.etch(r, abi.encodePacked(hex"ef0100", address(this)));
+        bytes memory out = _out(61, false);
+        bytes memory auth = _mlAuth();
+        bytes memory pl = _payload(1, 1, alice, bob, bytes32(0), out, "");
+        bytes32 ben = _benT(pl);
+        vm.prank(r);
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, r));
+        tok.mtxConfidentialTransferSingle(pl, hex"01", auth, ben, "");
+        pl = _payloadFor(tok, alice, bob, bytes32(0), out);
+        ben = _benT(pl);
+        vm.prank(r);
+        tok.mtxConfidentialTransferSingle(pl, hex"01", auth, ben, "");
+        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.balanceOf(r), 10 * SCALE, "nothing pulled from the relayer");
+    }
+
     function test_shieldChecks() public {
         _public(tok, address(this), 10 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(1))));
