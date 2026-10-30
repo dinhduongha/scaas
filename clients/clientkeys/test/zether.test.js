@@ -73,7 +73,7 @@ test('the Zether PoP is portable (UA-8 P1): no chain field, over registrationDig
         [k.UA, hex(hp.portablePopDigest), hex(hp.registrationDigest), hex(hp.message)]);
       assert.equal(hex(hp.message), hex(uaMessage(0x0141, POP_V2_TAG, registrationDigest(portablePopDigest({ ua: k.UA })))));
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)), `${curve} ${k.path}`);
-      // the S3 vector's PoP (r33_keys.json; the prover moves to the portable PoP in UA-8 A3) verifies over its own message
+      // the S3 vector's PoP (r33_keys.json, regenerated on the portable PoP by the zether-prover in UA-8 A3) verifies over its own message
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path} S3`);
       // chain fields are not inputs any more: a caller still passing the old context gets an error, not a silent drop
       const ctx = { chainId: 7622, chainUid: '0x' + '25'.repeat(32), registry: '0x' + 'ab'.repeat(20) };

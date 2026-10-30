@@ -47,7 +47,7 @@ Binding rules of the design (quoted or restated without change):
 - P7: "One scheme only: ML-KEM-1024 + X25519", the contract "accepts only 1,600-byte keys"; only the U3 holders
   (`mldsa44` / `mldsa65` / `fndsa512`, PQ-eligible `msig`; not `slhdsa128s`) hold a KEM key; **no one-owner check** for
   KEM keys; storage keyed `(ua, keyId)` with `keyId = version`; views `kemKeyOf`, `kemKeyAt`, `popOf`, `pqzPopOf`;
-  event `UAKemKeySet(ua, version, keyHash)`.
+  event `UAKemKeySet(ua, version, keyHash, kemPk, sig)` (built form: it carries the written bytes).
 - P8: `pop` always required and checked; only PQ holders attach a PQZ key or a KEM record; a PQZ key always comes with
   `attrs.pqzPopHash ≠ 0`; the proof bytes optional in `register`, else `storePqzPop`; `proven = true` only where the PQZ
   verifier checked them; PQZ tokens accept only proven keys; one UA per PQZ key only among proven keys.
@@ -306,7 +306,7 @@ struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemP
 
 event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop, bool proven);
 event UAPqzPopStored(bytes32 indexed ua, bool proven);
-event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash);   // keyHash = keccak256(kemPk)
+event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, bytes kemPk, bytes sig);   // keyHash = keccak256(kemPk); built form (A7)
 
 error UAKemHolder(bytes32 ua);                 // kind / structure may not hold a KEM key (UA8-D12)
 error UAKemVersion(bytes32 ua, uint64 version); // 0, or already stored
@@ -426,7 +426,7 @@ function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memor
   record; `UAKemHolder(ua)` for a non-holder (kind from the record, `msig` eligibility from the stored key data);
   `UAKemVersion` for 0 or a stored version; `UAKemKeyLength`; `_sigOk(kind, d, ua, PURPOSE_KEM, kemRecordDigest(ua,
   version, kemPk), sig)` else `UAUnauthorized(ua)`; store `pk ‖ sig`, `_kemMax = max`, `UAKemKeySet(ua, version,
-  keccak256(kemPk))`. `kemKeyOf` = the highest stored version (`(0, "", "")` without one); `kemKeyAt` = `("", "")` for
+  keccak256(kemPk), kemPk, sig)` (built form, A7). `kemKeyOf` = the highest stored version (`(0, "", "")` without one); `kemKeyAt` = `("", "")` for
   a version not stored.
 
 - [ ] **Step 1: Failing tests:** `test_ua8_setKemKeyByThirdParty`, `test_ua8_kemCopyBetweenRegistries` (every

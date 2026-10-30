@@ -1151,3 +1151,13 @@ createZetherToken	renamed	v1 OpenFactoryV1 entry point (legacy/p5); Zether token
 registerImplementation	renamed	factory v2 (legacy/p1e) call; the registrar publishes releases with OpenFactory.deployImplementation(kind, version, envVersion, initcode, implArgs), contracts/token-wrappers.md#factory-interface
 zetherEnabled	renamed	factory v2 gate; the per-kind creation gate is OpenFactory.setKindEnabled(kind, on) and kindEnabled(kind), the confidential kinds start off, contracts/token-wrappers.md#factory-interface
 Move.toml:4	obsolete	the Aptos upgrade_policy line, "compatible" until owner ruling 2026-10-28, now "immutable" (networks/aptos.md#NET-APT-20)
+POST /v1/ua/register {chain, kind, keyData, pop, authRef}	renamed	the gateway body is {chain, kind, keyData, attrs?, pop, pqzPop?} (UA-8, node/gateway.md#NODE-GW-03, contracts/accounts.md#CTR-UA-07)
+authRef = 0	obsolete	the Zether authRef was removed in UA-6 (decisions.md CTR-UA-30); no registration field replaces it
+popDigest(ua, authRef)	renamed	UA-6 replaced authRef by the PQZ key hash, UA-8 made the digest portable: portablePopDigest / registrationDigest (contracts/accounts.md#CTR-UA-07)
+: it binds chain (	extraction-artifact	contracts/accounts.md#CTR-UA-07 (the PoP no longer binds a chain, UA-8)
+(ua, authRef)	obsolete	the authRef was removed in UA-6 (decisions.md CTR-UA-30)
+authRef ≠ 0	obsolete	the Zether authRef was removed in UA-6 (decisions.md CTR-UA-30)
+UARegistered(ua, kind, keyData, authRef)	renamed	UARegistered(ua, kind, keyData, attrs, pop, pqzPop, checkedPop, checkedPqzPop, checkedKem), contracts/accounts.md#registry (UA-8)
+uaMessage(kind, POP_TAG, popDigest)	renamed	uaMessage(kind, PURPOSE_POP_V2, registrationDigest), contracts/accounts.md#CTR-UA-07 (UA-8)
+register(kind, keyData, pop, authRef, authPop)	renamed	register(kind, keyData, attrs, pop, pqzPop), contracts/accounts.md#registry (UA-6, UA-8)
+ binds chain (	extraction-artifact	contracts/accounts.md#CTR-UA-07 (the PoP no longer binds a chain, UA-8)

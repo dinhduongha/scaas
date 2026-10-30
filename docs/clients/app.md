@@ -374,7 +374,7 @@ unlocked ([vault threat model](signers-clientkeys.md#vault)).
 | Passkey ceremony | `creationOptions`, `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `passkeySubjectKey`, `accountSalt`, `predictAccount`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `passkeyFlags` |
 | Backup | `hasBackup`, `backupStatus` — keys de-duplicated by P-256 `(x, y)` across `rpIdHash`/`originHash` before counting; `keys[]` carries `x, y`; the backup vectors gain "same passkey, two origins ⇒ 1 key" and the `msig` rule |
 | Seed vault | `createVault`, `openVault`, `rewrapPin`, `needsRewrap`, `checkPassphrase`, `SeedBackup`, `deriveKey`, `signDigest` (native only), `signFamily`; v2: `openStore`, `deviceKey`, `sealDevice`, `openDevice`, `needsBinding` |
-| UA | `ua.js`: `uaOf`, `keyHashOf`, `uaMessage`, `popDigest`, `deriveUAKey`, `UAKey.signUA`, `UAMetaTransaction` typed data |
+| UA | `ua.js`: `uaOf`, `keyHashOf`, `uaMessage`, `portablePopDigest`, `registrationDigest`, `holderPopMessage`, `pqzRegMessage`, `kemRecordDigest` / `kemRecordMessage`, `pqzKeyRecordMessage`, `personalSignDigest`, `isPortablePurpose`, `deriveUAKey`, `UAKey.signUA`, `UAMetaTransaction` typed data (UA-8: the registration PoP is portable, [accounts.md](../contracts/accounts.md) CTR-UA-07; `popDigest` is in `legacy/ua8/`) |
 | Zether | `deriveConfKey` (uses 7/8 only), `sealConfKey`, `openConfKey`, the tagged `zetherPop`, `zetherOwnerAuth`, the balance cache |
 | Wallets | `wallets/<family>.js`, `wallets/evm.js` (EIP-6963 + `walletKind`), `wallet-signer.js` entry |
 

@@ -30,8 +30,12 @@ NOTES
     * `register` without pqzPop, mldsa65/<set>: 39.2 M (n2048-kmax1024), 42.5 M (n2304-kmax4096), 45.7 M (n2560-kmax16384),
       49.0 M (n2816-kmax65536): fits. msig-pq/<set> (measured, Table 2): 42.0 M, 45.2 M, 48.5 M, 51.8 M: fits (n2816:
       8.2 M, 14 %, of a 60 M block left).
-    * `storePqzPop`: 45.6 M, 49.1 M, 52.6 M, 57.5 M: fits at every set, but n2816-kmax65536 leaves only 2.5 M (4 %) of a 60 M
-      block; the gen-2-over-gen-1 variant is 57.7 M there.
+    * `storePqzPop`: 45.6 M, 49.1 M, 52.6 M, 57.5 M with the `rreg` stand-in, i.e. WITHOUT the real R_REG verify (the stand-in
+      answers a mocked verifyPop): n2816-kmax65536 leaves only 2.5 M (4 %) of a 60 M block, the gen-2-over-gen-1 variant is
+      57.7 M there. The real verify (~3.65 M) lifts the regular gas by ~2.4 M (the calldata floor 2.29 M already covers part of
+      the execution), so n2816-kmax65536 is ~59.9 M WITH the real verify: right at a 60 M block, NOT "fits" (ruling A11-watch;
+      watch item for fs3 Task 13, measure the real call before using n2816-kmax65536 on a 60 M-block chain). The other sets keep
+      headroom (n2304-kmax4096 about 7 M).
     * Every other single-key / msig row fits (largest: slhdsa128s 14.4 M; mldsa44 11.3 M; mldsa65#1 9.7 M).
     * `setKemKey` of the 12 x slhdsa128s msig (96,832 B signature stored as the KEM record's `sig`): 158.3 M, over 60 M;
       this is a test construction (12-of-12 threshold) to get a >64 KiB registration blob, not a product row.
@@ -106,7 +110,7 @@ storePqzPop msig-pq on gen 1 n2816-kmax65536                    2,292,632   55,2
 registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536    174,433            0      174,433
 registrationOf msig-pq on gen 1 n2816-kmax65536                   120,870            0      120,870
 
-== Table 3: setKemKey (version 2). popOf = the `_reg` blob decode that setKemKey does (and nothing else: setKemKey does not read the PQZ proof, KEM record or key);
+== Table 3: setKemKey (version 2). popOf = the `_reg` blob decode that setKemKey does (setKemKey does not read the PQZ proof, KEM record or PQZ key; it also reads the separately stored key prefix, UARegistry.sol:323-325, about 2 KB for mldsa65, a further ~4-5 % of the call, conclusion unchanged);
    'popOf unregistered' is the view's own baseline (2,860), subtracted for the net read. A view's lastCallGas has no intrinsic gas.
 row                                                               regular        state          sum
 setKemKey mldsa65/v2 n2048-kmax1024                               342,936    7,891,740    8,234,676

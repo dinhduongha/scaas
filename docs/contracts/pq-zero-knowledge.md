@@ -100,7 +100,7 @@ constructor/`initialize` runs the precompile self-test ([self-test](#self-test))
 public chain) fails it. **And** the chain is identified by `(chainid, chain_uid)` ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
 `PqzToken.initialize` copies `registry.chainUid()` (the genesis hash, a registry constructor immutable, `≠ 0`) into an
 immutable `chainUid`, which enters every statement and `entryRef`, so no proof, authorization or disclosure verifies on
-another chain with the same chain id; the UA PoPs bind it through `popDigest` ([CTR-UA-07](accounts.md#CTR-UA-07)).
+another chain with the same chain id; the UA registration PoP is portable and carries no chain (UA-8, [CTR-UA-07](accounts.md#CTR-UA-07)); the chain binding lives in the statements and tokens above and in the registry's `UAAuth` domain.
 
 The node binds registry, `chainUid()` and the RPC genesis hash per chain profile and refuses a mismatch.
 `OpenFactory.kindEnabled(NONE_PQZ / UNDERLYING_PQZ)` starts `false` (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED — NOT FOR PRODUCTION FUNDS**. The SCaaS testnet is
@@ -625,17 +625,18 @@ kind** (owner, CTR-UA-30 in [decisions.md](../decisions.md)). Tag `scaas.ua.pqz-
 now), keyHash group `pqz-mlwe`. A UA is the actor that signs a write; the PQZ key cannot sign compactly (an `R_REG` proof
 is ≈ 40 KB), so it rides on a PQ signer: the signer's id is the PQZ account (`fromUA`, `toUA`, `auditorUA`), its public
 balance on the UA ledger and its confidential balance share it, and the PQZ key is **not** in the id. The key is supplied
-in the signer's `register(kind, keyData, pop, pqzKey, pqzPop)` ([CTR-UA-16](accounts.md#CTR-UA-16)), is immutable and
-belongs to one UA only (`UAKeyInUse` on the group `pqz-mlwe`, `msig` included). The signer's PoP and the `R_REG` proof
-are over the same `popDigest(ua, pqzKeyHash)` ([CTR-UA-07](accounts.md#CTR-UA-07)) under different kind tags: the proof is
-bound to chain (`chain_key` and `chain_uid`), registry and the signer's id, not the caller, and nobody can strip or swap
-the key. Key seed by the UA PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`, derived
+in the signer's `register(kind, keyData, attrs, pop, pqzPop)` (`attrs.pqzKey`; or later by the signed `setPqzKey`, [CTR-UA-16](accounts.md#CTR-UA-16)), is immutable and
+belongs to one UA only (`UAKeyInUse` on the group `pqz-mlwe`, `msig` included, checked once the key is proven). The `R_REG` proof is over
+`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))` and the signer's PoP over the `registrationDigest` that covers the proof's hash
+([CTR-UA-07](accounts.md#CTR-UA-07)): the proof is bound to the signer's id (a proof made for another UA fails) but **not to a chain or a registry**, so one
+proof serves every chain with the PQZ precompile; nobody can strip or swap the key. The proof is **optional** in `register` (the key is then `proven = false` until
+`storePqzPop` gives bytes that hash to the signed `pqzPopHash` and a registry with the verifier checks them); PQZ tokens accept only proven keys (`pqzKeyOf(ua).proven`). Key seed by the UA PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`, derived
 **only in the key worker** ([CLI-APP-24](../clients/app.md#CLI-APP-24)) and sealed there as a 32-byte PQZ leaf that the
 Zether worker and `pqz-cli` open (`sealPqKey` / `openPqKey`). PQZ adds no signing kind and no UA kind.
 
 | No. | Name (tag `scaas.ua.<name>.v1`) | Key | keyHash group | Proof | Verifier (EVM) | Chains |
 |---|---|---|---|---|---|---|
-| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, POP_TAG, popDigest(signerUA, pqzKeyHash))` | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
+| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(signerUA, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
 
 **Record storage.** The signer's UA `Record` is unchanged; the PQZ key is a second SSTORE2 pointer beside it
 (`recordOf(ua)` returns it, 0 = none; `UAPqzVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
@@ -841,22 +842,23 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
    every coefficient `< q`).
 3. Id: `uaOf(kind, keyData)` of the signer, not in the native space, not registered. Its `pop` is verified in step 6.
 4. `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)` free here and in the predecessor (`UAKeyInUse`).
-5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `pqzPop` is non-empty (`UAPoP`).
-6. The signer's PoP over `popDigest(ua, pqzKeyHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
+5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `attrs.pqzPopHash` ≠ 0 and not the hash of an empty proof (`UAPqzPopHash`); `pqzPop`, if given, hashes to it.
+6. The signer's PoP over `registrationDigest(portablePopDigest(ua, pqzKeyHash, kemRecordHash), pqzPopHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
 7. PoP of the PQZ key: `UAPqzVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
    `stmt = opTag(REGISTER) ‖ proofSystemId ‖ message ‖ pk` (prefix as [encodings](#encodings); `proofSystemId` is an
-   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, POP_TAG, popDigest(ua, pqzKeyHash))` — relation
-   `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `popDigest` is
-   `keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ pqzKeyHash)` ([CTR-UA-07](accounts.md#CTR-UA-07)):
-   it binds chain (`chain_key` and `chain_uid`), registry and the signer's id, not the caller, so anyone may submit,
-   nobody can strip or swap the key, and a proof made for another UA fails. The relation, the statement layout and the
-   verifier do not depend on what the message commits to.
+   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))` — relation
+   `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `portablePopDigest` is
+   `keccak256(abi.encode(PURPOSE_POP_V2, ua, pqzKeyHash, kemRecordHash))` ([CTR-UA-07](accounts.md#CTR-UA-07)): it binds the signer's id and
+   the attributes, not a chain, a registry or the caller, so anyone may submit on any chain, nobody can strip or swap the key,
+   and a proof made for another UA fails. The relation, the statement layout and the verifier do not depend on what the message
+   commits to: UA-8 changed only the 32-byte message's pre-image (the `pqz-core/stmt` doc comment that still names `popDigest` is
+   updated with the next core change, `TODO.md`). The step is optional in `register`: without `pqzPop`, or on a registry whose slot `0x0142` is empty,
+   the key is stored with `proven = false`, claims no `keyOwner` or list entry, and `storePqzPop(ua, pqzPop)` completes it later.
 8. Store the signer's record, `_pqzKey[ua] = SSTORE2(pk)`, `keyOwner` for the signer's key and for `pqzKeyHash`, the
    lists (the signer's kind, and `0x0142`); emit `UARegistered(ua, kind, keyData, pqzKeyPtr)` (a 20-byte pointer, not
    16 KB of log data).
 
-The signer's `register` without a PQZ key is the plain UA registration; it can never get one later (the PQZ key is not
-in the id; a new signing key is a new UA).
+The signer's `register` without a PQZ key is the plain UA registration; it may add the key later, once, by the signed `setPqzKey` ([CTR-UA-16](accounts.md#CTR-UA-16); the PQZ key is not in the id).
 
 No rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): a new key is a new UA plus a confidential transfer to it.
 
@@ -2421,7 +2423,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
 | T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9); for `R_TXM` per `(r_g, e1_g)` see T21; fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
 | T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
-| T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the UA `popDigest(ua, pqzKeyHash)` (chain key, `chain_uid`, registry, the signer's UA, the key hash) beside the signer's own PoP over the same digest ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
+| T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the portable digest of the signer's UA and its attributes, beside the signer's own PoP over the `registrationDigest` that covers the proof's hash ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`, held only by proven keys, so listing a victim's key without a proof blocks nobody; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
 | T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
@@ -2499,7 +2501,7 @@ Later phases add, in the same directory: `derive.json` (P6h), `register_pqz.json
 | `derive.json` | BIP-39 seed → derivation seeds, PQZ pk, ML-DSA pk, UAs, keyHashes (rows also in the UA `kinds.json`) |
 | `mldsa65.json` | NIST ACVP-style vectors via the chosen implementation |
 | `auth_{mldsa65,mldsa44,msig}.json` | `authDigest` → the UA `ua_msg` (with `MSG_TAG`, `TAG(authKind)`, `PURPOSE_ZETHER_AUTH`) → signature, for an `mldsa65`, an `mldsa44` and a hybrid `msig {mldsa65 w1, p256 w1} t=2` holder; each verifies through `UARegistry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, …)`; rows shared with the UA vectors |
-| `register_pqz.json` | `popDigest(ua, pqzKeyHash)` (with `chainKeyHash`, `chainUid`) for a signer with a PQZ key, the signer's PoP and the `R_REG` PoP over it |
+| `register_pqz.json` | the pre-UA-8 chain-bound form (`popDigest` with `chainKeyHash`, `chainUid`); UA-8 moved the registration rows to `smartcontracts/vectors/ua/portable.json` (`R_REG` message over `portablePopDigest`, the signer's PoP over `registrationDigest`; the `pqzPop` bytes there are length-faithful filler, not proofs) |
 | `metatx_pqz.json` | per op and path: envelope fields → `metaTxDigest` (v1 domain, no salt) / `uaDigest` (v3, `salt = chainUid`), `envelopeBinding` / `uaEnvelopeBinding`, the bound statement and `authDigest`, the signature (ECDSA, `mldsa65` fee UA); the direct form with binding 0; typehashes pinned to the classical meta-tx vectors and the UA `metatx3.json` |
 
 The UA `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed → pk, UA, keyHash).

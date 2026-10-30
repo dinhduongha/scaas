@@ -723,18 +723,20 @@ sequenceDiagram
     participant REG as UARegistry
     participant VER as Kind verifier
     APP->>APP: ua = uaOf(kind, keyData)
-    APP->>REG: popDigest(ua, authRef), bound to chain_uid
+    APP->>APP: portable PoP over registrationDigest (no chain context; the same pop serves every chain)
     APP->>APP: the key signs the PoP
-    APP->>GW: POST /v1/ua/register (chain, kind, keyData, pop, authRef)
+    APP->>GW: POST /v1/ua/register (chain, kind, keyData, attrs, pop, pqzPop?)
     GW->>GW: recompute the id, not yet registered, PoP of cheap kinds
     GW->>LANE: call job in ~gateway to chain.ua_registry
     GW-->>APP: 202 queued
-    LANE->>REG: register(kind, keyData, pop, authRef, authPop)
+    LANE->>REG: register(kind, keyData, attrs, pop, pqzPop)
     REG->>VER: verify the PoP, capped staticcall
     VER-->>REG: valid
-    REG->>REG: store the record, UARegistered(ua, kind, keyData, authRef)
-    APP->>REG: isRegistered(ua)
+    REG->>REG: store the record and every field, UARegistered(ua, kind, keyData, attrs, pop, pqzPop, checked)
+    APP->>REG: registrationOf(ua), checkedOf(ua)
 ```
+
+The same call, with the same bytes, registers the UA on any other chain (anyone submits it; [CTR-UA-31](contracts/accounts.md#CTR-UA-31)).
 
 <a id="confidential-wrap-shield-multi-recipient-transfer-unshield-unwrap-target-p3"></a>
 ### 6.5 Confidential: wrap-shield, multi-recipient transfer, unshield-unwrap (target, P3)
