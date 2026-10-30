@@ -127,6 +127,8 @@ minFill · receiveAmount / amount` follows from the sold side. The remainder cla
 `minFill` could never close. Consequences: an order fills in any number of settlements, each at least `minFill` except
 the one that closes it; the signer alone decides how small a fill it accepts. `minFill` is in the **sell** token's units, so a bid signs it in quote; clients take the minimum in base and convert ([CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35)).
 
+**Why an amount, not a percentage** (owner question 2026-10-30): `minFill` is an absolute sell-token amount signed in the order. It means the same in every settlement of a partly filled order (a percentage would have to say "of the original amount" or "of what remains", and the second changes after each fill); it states the signer's real constraint (do not fill me below X tokens: a smaller fill is not worth its fee and gas); the chain checks it with one comparison, no ppm arithmetic or rounding; a wallet that thinks in percent signs `minFill = amount · p`; and it covers fill-or-kill (`minFill = amount`) and any fill (`minFill = 0`). The removed 50 % floor was exactly a protocol-wide percentage.
+
 Why no floor ([decisions.md](../decisions.md#ctr-dex-14--minimum-fill-the-signers-minfill-for-every-order-in-a-settlement-no-protocol-floor)): the floor was a fixed
 number the signer could not lower. It let a large order at the best price show as liquidity that only takers of half
 its size could take (a cheap fake wall), pushed small takers to worse prices, made users split orders (more signatures
