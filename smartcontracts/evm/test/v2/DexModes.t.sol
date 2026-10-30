@@ -327,22 +327,22 @@ contract DexModesTest is UADexBase {
         assertEq(usdc.balanceOf(dave), 1e6);
     }
 
-    /// The route spends 557 of the 560 A it was given: the 3 A left are excess of a receive token, paid to the makers
-    /// pro rata of their floors (bob ⌊3 · 200 / 440⌋ = 1, dave the last receiver 2), not refunded to the taker (the
-    /// `mtxHybrid` rule, DX7, is not this path's).
+    /// The route spends 550 of the 560 A it was given: the 10 A left are excess of a receive token, paid to the makers
+    /// pro rata of their floors (bob ⌊10 · 200 / 440⌋ = 4, dave the last receiver 6; an equal split would be 5 / 5),
+    /// not refunded to the taker (the `mtxHybrid` rule, DX7, is not this path's).
     function test_mode3_exchangePlan_excessAToMakersProRata() public {
         ITradeToken.TradeOrder memory t = _taker(1);
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ExchangeLegSettled("m3", _h(address(A), t), alice, alice, 1000, 1898, 52, 6, 0, 1800);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("m3", _h(address(B), _bobM()), bob, bob, 400, 200, 1, 1, 0, 200);
+        emit ISCaaSDex.ExchangeLegSettled("m3", _h(address(B), _bobM()), bob, bob, 400, 200, 4, 1, 0, 200);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("m3", _h(address(B), _daveM()), dave, dave, 400, 240, 2, 0, 0, 240);
-        _exchange(_m3(t, _buffered(_quote(address(A), 560))), _swap(address(A), address(B), 557, 1150));
-        assertEq(A.balanceOf(bob), 200 - 1 + 1);
-        assertEq(A.balanceOf(dave), 242);
+        emit ISCaaSDex.ExchangeLegSettled("m3", _h(address(B), _daveM()), dave, dave, 400, 240, 6, 0, 0, 240);
+        _exchange(_m3(t, _buffered(_quote(address(A), 560))), _swap(address(A), address(B), 550, 1150));
+        assertEq(A.balanceOf(bob), 200 - 1 + 4);
+        assertEq(A.balanceOf(dave), 246);
         assertEq(A.balanceOf(alice), 800_000 - 1000);
-        assertEq(A.balanceOf(address(router)), 557);
+        assertEq(A.balanceOf(address(router)), 550);
         _empty();
     }
 
@@ -424,34 +424,40 @@ contract DexModesTest is UADexBase {
         _empty();
     }
 
-    /// A 3-token ring A → B → C → A with no interaction, at P(A→B) = 2, P(B→C) = 3/2, P(C→A) = 1/3; A is received by
-    /// two legs. Floors: alice 2008 B, bob 3013 C, dave ⌊1505 / 3⌋ = 501 A, erin ⌊1508 / 3⌋ = 502 A. B's excess 1 goes
-    /// to its only receiver (alice); A's rounding remainder 1 to its last receiver (erin), dave's share ⌊501 / 1003⌋ = 0.
+    /// A 3-token ring A → B → C → A with no interaction, at P(A→B) = 2, P(B→C) = 3/2, P(C→A) = 33/100 (the ring's
+    /// prices multiply to 0.99: 1 % of A is left as excess); A is received by two legs. Floors: alice 2020 B, bob
+    /// ⌊3031.5⌋ = 3031 C, dave ⌊1200 · 0.33⌋ = 396 A, erin ⌊1831 · 0.33⌋ = 604 A. B's excess 1 goes to its only
+    /// receiver (alice); A's excess 10 pro rata of the floors: dave ⌊10 · 396 / 1000⌋ = 3, the last receiver erin the
+    /// remainder 7 (an equal split would be 5 / 5).
     function test_mode4_ring3_noInteractions_remainderToLastReceiver() public {
-        ITradeToken.TradeOrder memory oa = _nat(alice, address(B), 1004, 2000, 0);
-        ITradeToken.TradeOrder memory ob = _nat(bob, address(C), 2009, 3000, 0);
-        ITradeToken.TradeOrder memory od = _nat(dave, address(A), 1505, 500, 0);
-        ITradeToken.TradeOrder memory oe = _nat(erin, address(A), 1508, 500, 0);
-        ISCaaSDex.ExchangePlan memory p = _plan("ring", _leg(ALICE_PK, address(A), oa, 1004, _floor(oa, 1004, _at(1004, 2, 1))),
-            _leg(BOB_PK, address(B), ob, 2009, _floor(ob, 2009, _at(2009, 3, 2))),
-            _leg(DAVE_PK, address(C), od, 1505, _floor(od, 1505, _at(1505, 1, 3))));
-        ISCaaSDex.ExchangeLeg[] memory legs = new ISCaaSDex.ExchangeLeg[](4);
-        (legs[0], legs[1], legs[2]) = (p.legs[0], p.legs[1], p.legs[2]);
-        legs[3] = _leg(ERIN_PK, address(C), oe, 1508, _floor(oe, 1508, _at(1508, 1, 3)));
-        p.legs = legs;
+        ITradeToken.TradeOrder memory oa = _nat(alice, address(B), 1010, 2000, 0);
+        ITradeToken.TradeOrder memory ob = _nat(bob, address(C), 2021, 3000, 0);
+        ITradeToken.TradeOrder memory od = _nat(dave, address(A), 1200, 390, 0);
+        ITradeToken.TradeOrder memory oe = _nat(erin, address(A), 1831, 600, 0);
+        ISCaaSDex.ExchangePlan memory p;
+        p.ref = "ring";
+        p.legs = new ISCaaSDex.ExchangeLeg[](4);
+        p.legs[0] = _leg(ALICE_PK, address(A), oa, 1010, _floor(oa, 1010, _at(1010, 2, 1)));
+        p.legs[1] = _leg(BOB_PK, address(B), ob, 2021, _floor(ob, 2021, _at(2021, 3, 2)));
+        p.legs[2] = _leg(DAVE_PK, address(C), od, 1200, _floor(od, 1200, _at(1200, 33, 100)));
+        p.legs[3] = _leg(ERIN_PK, address(C), oe, 1831, _floor(oe, 1831, _at(1831, 33, 100)));
         assertEq(abi.encode(p.legs[0].receiveFill, p.legs[1].receiveFill, p.legs[2].receiveFill, p.legs[3].receiveFill),
-            abi.encode(2008, 3013, 501, 502));
+            abi.encode(2020, 3031, 396, 604));
         uint256 bobC = C.balanceOf(bob);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("ring", _h(address(C), od), dave, dave, 1505, 501, 0, 0, 0, 500);
+        emit ISCaaSDex.ExchangeLegSettled("ring", _h(address(A), oa), alice, alice, 1010, 2020, 1, 0, 0, 2000);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("ring", _h(address(C), oe), erin, erin, 1508, 502, 1, 0, 0, 500);
+        emit ISCaaSDex.ExchangeLegSettled("ring", _h(address(B), ob), bob, bob, 2021, 3031, 0, 0, 0, 3000);
+        vm.expectEmit(address(dex));
+        emit ISCaaSDex.ExchangeLegSettled("ring", _h(address(C), od), dave, dave, 1200, 396, 3, 0, 0, 390);
+        vm.expectEmit(address(dex));
+        emit ISCaaSDex.ExchangeLegSettled("ring", _h(address(C), oe), erin, erin, 1831, 604, 7, 0, 0, 600);
         _exchange(p, _noIx());
-        assertEq(B.balanceOf(alice), 2008 + 1);
-        assertEq(C.balanceOf(bob), bobC + 3013);
-        assertEq(A.balanceOf(dave), 501);
-        assertEq(A.balanceOf(erin), 503);
-        assertEq(C.balanceOf(erin), 10_000 - 1508);
+        assertEq(B.balanceOf(alice), 2020 + 1);
+        assertEq(C.balanceOf(bob), bobC + 3031);
+        assertEq(A.balanceOf(dave), 396 + 3);
+        assertEq(A.balanceOf(erin), 604 + 7);
+        assertEq(C.balanceOf(erin), 10_000 - 1831);
         _empty();
     }
 
