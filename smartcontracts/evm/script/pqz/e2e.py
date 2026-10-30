@@ -626,7 +626,7 @@ def run(kd, kr, ke):
         pk, s, e, _ = K.keygen(seed)
         mlpk = pq.ml_pk(65, mlseed)
         ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], MLDSA65, mlpk)))[0]
-        kem = (kc("kem", mlseed) * 50)[:1600]  # the initial KEM record, version 1 (UA8-D3; any 1,600 bytes here)
+        kem = b"\x01" + (kc("kem", mlseed) * 50)[:1600]  # the initial KEM record, version 1 (UA8-D3; scheme byte 1 + any 1,600 bytes here)
         proof = pq.prove(3, K.build_register(portable("reg", ua=ua, pqzKey=pk, kemVersion=1, kemPk=kem), pk), K.i8(s) + K.i16(e))
         ph = kc(proof)
         pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], portable("pop", kind=MLDSA65, ua=ua, pqzKey=pk, pqzPopHash=ph,
@@ -657,7 +657,7 @@ def run(kd, kr, ke):
     U = {n: pqz_ua(n, sk("pqz-" + n), sk("ml-" + n)) for n in ("alice", "bob", "aud", "carol")}
     alice, bob, aud, carol = U["alice"], U["bob"], U["aud"], U["carol"]
     # UA8-D5: a second KEM record, signed by the holder (real ML-DSA-65) over the portable KEM message
-    kem2 = (kc("kem2", alice.seed) * 50)[:1600]
+    kem2 = b"\x01" + (kc("kem2", alice.seed) * 50)[:1600]  # scheme 1
     sd.send(reg, cd("setKemKey(bytes32,uint64,bytes,bytes)", ["w", "w", "b", "b"], alice.ua, 2, kem2,
                     pq.ml_sign(65, alice.seed, kc(TAG[MLDSA65], portable("kem", kind=MLDSA65, ua=alice.ua, kemVersion=2, kemPk=kem2)))),
             "setKemKey v2 (alice, ML-DSA-65 sig)")

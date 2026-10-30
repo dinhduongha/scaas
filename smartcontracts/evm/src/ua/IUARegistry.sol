@@ -144,7 +144,7 @@ interface IUARegistry is IERC5267 {
     /// version, `UAKemKeySet` with the bytes. Check order: an id this registry does not hold (`UAUnauthorized`: an
     /// unregistered id, and on gen 2 a gen-1 record, which goes to gen 1, UA8-D11) → holder (`UAKemHolder`: `mldsa44`,
     /// `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA8-D12) → version 0 or stored, the initial record from `register`
-    /// included (`UAKemVersion`, UA8-D4) → `kemPk` of 1,600 B (`UAKemKeyLength`) → signature (`UAUnauthorized`).
+    /// included (`UAKemVersion`, UA8-D4) → `kemPk` of scheme 1 (`UAKemScheme`) and 1,601 B (`UAKemKeyLength`) → signature (`UAUnauthorized`).
     function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
 
     /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, proven or not (UA8-D9: a directory), 0 = none (gen 2 forwards

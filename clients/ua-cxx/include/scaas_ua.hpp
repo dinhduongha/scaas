@@ -39,7 +39,7 @@ struct Member {
     Bytes id;  // 32 bytes
     uint16_t weight;
 };
-// A KEM record attribute: (version >= 1, 1,600-byte key). nullopt, or (0, empty), = absent.
+// A KEM record attribute: (version >= 1, 1,601-byte key, scheme byte first). nullopt, or (0, empty), = absent.
 using Kem = std::pair<uint64_t, Bytes>;
 // The portable PoP of a registration (UA-8 P1, P2); every hash is 32 bytes, 0 when absent.
 struct HolderPop {

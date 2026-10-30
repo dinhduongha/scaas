@@ -326,13 +326,16 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   the id do not. Nothing depends on which valid subset is stored.
 
 <a id="kem-keys"></a>
-<a id="CTR-UA-32"></a>**CTR-UA-32** — **KEM (chat) key records: signed, versioned, write-once in any order, never revoked, 1,600 bytes** (owner
-2026-10-25, UA-8 P4/P5/P7; the vector keys and the signature format are controller calls, owner may override;
+<a id="CTR-UA-32"></a>**CTR-UA-32** — **KEM (chat) key records: signed, versioned, write-once in any order, never revoked, 1,601 bytes (scheme byte + key)** (owner
+2026-10-25, UA-8 P4/P5/P7; scheme byte owner 2026-10-30; the vector keys and the signature format are controller calls, owner may override;
 [decisions.md](../decisions.md); the chat protocol is UA-7's).
 
 - **Scheme.** One scheme only: ML-KEM-1024 + X25519 (the X-Wing-style combiner of the CFRG hybrid-KEM draft with ML-KEM-1024),
-  public key 1,600 B (ML-KEM-1024 `ek` 1,568 B ‖ X25519 `pk` 32 B), ciphertext 1,600 B, shared secret 32 B. The registry checks
-  the length only (`UAKemKeyLength`); the scheme is UA-7's. The vector keys are real keys from fixed seeds.
+  public key 1,600 B (ML-KEM-1024 `ek` 1,568 B ‖ X25519 `pk` 32 B), ciphertext 1,600 B, shared secret 32 B. **The first byte of
+  `kemPk` is the scheme id** (owner 2026-10-30): `kemPk = 0x01 ‖ ek ‖ pk` = **1,601 B** for scheme 1; scheme 2 (ML-KEM-1024 + HQC +
+  X25519, after FIPS 207) is reserved and refused today, like any other id (`UAKemScheme(scheme)`), so a later scheme needs no new
+  registry generation. The registry checks the scheme id and that scheme's exact length (empty or wrong length: `UAKemKeyLength`);
+  the cryptography is UA-7's. `kemRecordDigest` hashes the whole `kemPk`, so the scheme byte is signed. The vector keys are real keys from fixed seeds.
 - **Record.** `(ua, version, kemPk)`; the UA signs the chain-independent digest `kemRecordDigest = keccak256(abi.encode(KEM_RECORD_TAG,
   ua, uint256(version), keccak256(kemPk)))` as `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)` with `PURPOSE_KEM =
   keccak256("scaas.ua.purpose.kem.v1")`. The signature has the `pop` format: the kind's raw signature for a single key,
@@ -1062,7 +1065,8 @@ interface IUARegistry is IERC5267 {
     error UAPqzHolder(bytes32 ua);                // this kind / structure may not carry a PQZ key (CTR-UA-16)
     error UAKemHolder(bytes32 ua);                // this kind / structure may not hold a KEM key (CTR-UA-32)
     error UAKemVersion(bytes32 ua, uint64 version);   // 0 (with a key), or already stored (the initial record included)
-    error UAKemKeyLength(uint256 length);         // ≠ 1,600
+    error UAKemKeyLength(uint256 length);         // empty, or ≠ 1,601 for scheme 1
+    error UAKemScheme(uint8 scheme);              // first byte of kemPk: not an enabled scheme (1 only; 2 reserved)
     error UAPqzPopHash(bytes32 ua);               // a PQZ key without its proof hash or a hash without a key, the hash of "" (an empty proof is no proof), or proof bytes that do not hash to the stored pqzPopHash
     error UAPqzKeySet(bytes32 ua);                // setPqzKey on a record that already has a PQZ key
     error UAPoP();
@@ -1101,7 +1105,7 @@ interface IUARegistry is IERC5267 {
     function storePqzPop(bytes32 ua, bytes calldata pqzPop) external;
     /// anyone: adds a PQZ key to a record without one, once; sig in the pop format over uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(...))
     function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, bytes calldata sig) external;
-    /// anyone: a KEM record (version ≥ 1, 1,600-byte kemPk), each (ua, version) once, any order; sig in the pop format over uaMessage(kind, PURPOSE_KEM, kemRecordDigest(...))
+    /// anyone: a KEM record (version ≥ 1, 1,601-byte kemPk: scheme byte 0x01 ‖ key), each (ua, version) once, any order; sig in the pop format over uaMessage(kind, PURPOSE_KEM, kemRecordDigest(...))
     function setKemKey(bytes32 ua, uint64 version, bytes calldata kemPk, bytes calldata sig) external;
 
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey);   // pqzKey: SSTORE2 pointer, proven or not (a directory), 0 = none
@@ -1178,7 +1182,7 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    EIP-7825 cap) — `UAPqzHolder`. KEM record (only if `kemVersion` ≠ 0 or `kemPk` is non-empty): a holder of the same set
    (without the debit bound) — `UAKemHolder`. A PQZ key comes with `attrs.pqzPopHash` and only with it, the hash is not
    `keccak256("")`, and given proof bytes hash to it — `UAPqzPopHash`; the key has the length of one of the four parameter
-   sets — `UAKeyData(0x0142)`; `kemVersion` ≥ 1 — `UAKemVersion`; `kemPk` is 1,600 B — `UAKemKeyLength`. `h = keyHashOf(0x0142,
+   sets — `UAKeyData(0x0142)`; `kemVersion` ≥ 1 — `UAKemVersion`; `kemPk` is empty or not 1,601 B — `UAKemKeyLength`, its first byte not 1 — `UAKemScheme`. `h = keyHashOf(0x0142,
    pqzKey)` (0 without a key). The key's owner (`UAKeyInUse`) is checked at step 7, only for a proven key.
 6. PoP: verify `pop` over `uaMessage(kind, PURPOSE_POP_V2, registrationDigest(portablePopDigest(ua, h, kemRecordHash), pqzPopHash))` with the
    kind's verifier (ML-DSA: on the cached expanded key when every part is stored; MuSig2: the KeyAgg
@@ -1944,7 +1948,7 @@ EVM tests:
 | T-REG-2 | every negative vector reverts with its error |
 | T-REG-3 | the same `register` calldata from two senders ⇒ identical storage diff |
 | T-REG-3b | (portable PoP) a PQZ key or KEM record stripped or swapped by a front-runner ⇒ `UAPoP`; `R_REG` over another UA's digest ⇒ `UAPoP`; the same PQZ key on two UAs (an `msig` and an ML-DSA UA) ⇒ `UAKeyInUse` once both are proven (an unproven listing blocks nobody); a non-holder (`secp256k1`, `slhdsa128s`, Zether, classical-dominant `msig`) with a key ⇒ `UAPqzHolder`; a PQ-eligible `msig` without `pop` ⇒ `UAPoP`; a `pqzKey` where `0x0142` is disabled ⇒ stored unproven, and `UAKindDisabled(0x0142)` on a gen 2 in front of a gen 1 that enables it; gen-2 `recordOf` forwards the pointer; `uaCount(0x0142)` order |
-| T-REG-3c | UA-8 (`test/ua/UARegistryUA8.t.sol`): `registrationOf` returns exactly the `register` arguments after later `setKemKey`s; the same registration is accepted on two registries with different chain ids, `chainUid`s and addresses (the copy from state); the `pop` covers every attribute; `storePqzPop` (hash check, no-op, proves on a registry with the verifier); `setPqzKey` once, portable; `setKemKey` any order, write-once, 1,600 B, holders; an `msig` with a native member signs by `personal_sign`; the gen-2-over-gen-1 paths; `checkedOf` |
+| T-REG-3c | UA-8 (`test/ua/UARegistryUA8.t.sol`): `registrationOf` returns exactly the `register` arguments after later `setKemKey`s; the same registration is accepted on two registries with different chain ids, `chainUid`s and addresses (the copy from state); the `pop` covers every attribute; `storePqzPop` (hash check, no-op, proves on a registry with the verifier); `setPqzKey` once, portable; `setKemKey` any order, write-once, 1,601 B (scheme byte + key), holders; an `msig` with a native member signs by `personal_sign`; the gen-2-over-gen-1 paths; `checkedOf` |
 | T-REG-4 | a gen-2 registry sees gen-1 records; `UAKeyInUse` across generations; gen 2 refuses (`UAKindDisabled`) every kind or keyHash group gen 1 enables, so registering in gen 1 after gen 2 for a shared group is impossible by construction; `msig` re-enabled in gen 2 gives the same `kind` and `keyPtr` (its own `registeredAt`); SCaaS testnet `mldsa65` + PQZ key in gen 1 |
 | T-REG-5 | invariants: registry balance 0, no record ever changes, `uaOf(record.keyData) == ua` |
 | T-REG-6 | MuSig2: wrong `Q`, a bad hint, unsorted keys ⇒ `UAKeyData`/`UAPoP`; FROST: one bad PoK, `Y ≠ Σ C_i0`, a commitment vector of the wrong length ⇒ refused; the attack of naming one's own key as `Q` with the board's list ⇒ refused |
