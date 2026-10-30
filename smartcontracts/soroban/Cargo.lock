@@ -1432,6 +1432,24 @@ dependencies = [
 name = "scaas-token"
 version = "0.1.0"
 dependencies = [
+ "scaas-ua-common",
+ "serde_json",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "scaas-ua-common"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
+name = "scaas-ua-registry"
+version = "0.1.0"
+dependencies = [
+ "p256",
+ "scaas-ua-common",
  "serde_json",
  "soroban-sdk",
 ]

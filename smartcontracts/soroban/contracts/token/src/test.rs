@@ -6,7 +6,7 @@ use soroban_sdk::xdr::{
     self, HashIdPreimage, HashIdPreimageSorobanAuthorization, InvokeContractArgs, Limits, ScVal,
     SorobanAuthorizedFunction, SorobanAuthorizedInvocation, WriteXdr,
 };
-use soroban_sdk::{Bytes, IntoVal, TryFromVal, Val};
+use soroban_sdk::{Bytes, IntoVal, Symbol, TryFromVal, Val};
 
 pub const NETWORK: &str = "Standalone Network ; February 2017";
 pub const CONTRACT: &str = "CARCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEIRCEVQO";
@@ -75,7 +75,7 @@ fn cross_implementation_vector() {
     })
     .to_xdr(Limits::none())
     .unwrap();
-    let digest = env.as_contract(&t.address, || op_digest(&env, "pay", args.clone()));
+    let digest = op_digest(&env, &t.address, "pay", args.clone());
     std::println!("preimage {}\npreimage_sha256 {}\ndigest {}", hex(&pre), hex(&sha256(&pre)), hex(&digest.to_array()));
     assert_eq!(hex(&sha256(&pre)), VEC_PREIMAGE_SHA256);
     assert_eq!(hex(&digest.to_array()), VEC_DIGEST);

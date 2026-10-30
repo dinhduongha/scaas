@@ -6,9 +6,12 @@
 //! tác (cùng công thức với Odoo/adapter) và phát trong `MetaTransactionExecuted` để Odoo chốt op.
 #![no_std]
 use soroban_sdk::{
-    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, xdr::ToXdr, Address,
-    Bytes, BytesN, Env, Executable, MuxedAddress, String, Symbol,
+    contract, contracterror, contractevent, contractimpl, contracttype, panic_with_error, Address,
+    Bytes, BytesN, Env, Executable, MuxedAddress, String,
 };
+/// The op digest (`MetaOp` v1, NET-SOR-16) and `meta_pay_id` (CTR-MTX-26), shared with the UA-Soroban contracts.
+pub use scaas_ua_common::op_digest;
+use scaas_ua_common::meta_pay_id;
 
 const DAY: u32 = 17_280;
 const TTL_BUMP: u32 = 60 * DAY;
@@ -104,27 +107,6 @@ pub struct Burn {
     pub amount: i128,
 }
 
-/// Digest thao tác (`MetaOp` v1 trên Soroban): sha256(XDR của
-/// `Vec[Symbol("scaas_metaop_v1"), BytesN32(network_id), Address(contract), Symbol(fn), Vec(args)]`).
-/// Python (`fam_soroban.op_digest`) và adapter Rust tính cùng giá trị — vector chéo trong test.
-pub fn op_digest(env: &Env, function: &str, args: soroban_sdk::Vec<soroban_sdk::Val>) -> BytesN<32> {
-    let v = (
-        Symbol::new(env, "scaas_metaop_v1"),
-        env.ledger().network_id(),
-        env.current_contract_address(),
-        Symbol::new(env, function),
-        args,
-    );
-    env.crypto().sha256(&v.to_xdr(env)).into()
-}
-
-fn meta_pay_id(env: &Env, salt: &BytesN<32>, meta: &Bytes) -> BytesN<32> {
-    let mut b = Bytes::from_slice(env, b"scaas.pay.meta");
-    b.append(&salt.clone().into());
-    b.append(&env.crypto().keccak256(meta).to_bytes().into());
-    env.crypto().keccak256(&b).into()
-}
-
 fn check_amount(env: &Env, amount: i128) {
     if amount < 0 {
         panic_with_error!(env, Error::NegativeAmount);
@@ -214,7 +196,7 @@ impl Token {
         from.require_auth();
         Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
         let args = (from.clone(), to, amount, pay_ref, valid_until);
-        let digest = op_digest(&env, "pay", soroban_sdk::IntoVal::into_val(&args, &env));
+        let digest = op_digest(&env, &env.current_contract_address(), "pay", soroban_sdk::IntoVal::into_val(&args, &env));
         MetaTransactionExecuted { from, digest }.publish(&env);
     }
 
@@ -226,7 +208,7 @@ impl Token {
         PaymentMeta { pay_id: pay_ref.clone(), meta: meta.clone() }.publish(&env);
         Self::settle_pay(&env, &from, &to, amount, &pay_ref, valid_until);
         let args = (from.clone(), to, amount, salt, meta, valid_until);
-        let digest = op_digest(&env, "pay_meta", soroban_sdk::IntoVal::into_val(&args, &env));
+        let digest = op_digest(&env, &env.current_contract_address(), "pay_meta", soroban_sdk::IntoVal::into_val(&args, &env));
         MetaTransactionExecuted { from, digest }.publish(&env);
     }
 

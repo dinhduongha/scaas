@@ -11,6 +11,7 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
+scaas-ua-common = { path = "../ua-common" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
