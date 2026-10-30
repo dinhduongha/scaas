@@ -942,10 +942,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// accounts.md §1.9 `msig` row: strictly increasing member indexes, stop at the threshold (a MemberSig after it
     /// fails, which keeps the registration bound sound), `member_digest = keccak256(ua ‖ ua_msg)`. `portable` (a portable
-    /// record's signature, `_sigOk` only — never `requireAuthorized`; rulings C7 / A1-I2 / A1-f1 / R-7702): `blob` must
-    /// be the canonical `abi.encode(MemberSig[])` (review m3), and a native member signs `member_digest` by EIP-191
-    /// `personal_sign` (code-less, or an EIP-7702 designator's root key) or answers ERC-1271 over `member_digest`
-    /// (`_nativePortable`); otherwise native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14).
+    /// record's signature, `_sigOk` only — never `requireAuthorized`; rulings C7 / A1-I2 / A1-f1, owner 2026-10-30): `blob`
+    /// must be the canonical `abi.encode(MemberSig[])` (review m3), and a native member signs `member_digest` by EIP-191
+    /// `personal_sign` (an EOA: code-less or an EIP-7702 designator, its own key only) or, a contract, answers ERC-1271
+    /// over `member_digest` (`_nativePortable`); otherwise native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14).
     function _msig(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory d, bytes memory blob, bool portable)
         private
         view
@@ -985,16 +985,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// the delegate; other code ⇒ ERC-1271 only. Always over `uaAuthDigest`. OZ `tryRecover` refuses high s and a
     /// recovered `address(0)`, so neither id 0 nor a garbage signature ever matches.
     function _native(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory sig) private view returns (bool) {
+        address a = address(uint160(uint256(ua)));
         bytes32 h = uaAuthDigest(ua, purposeTag, digest);
-        return _byCode(address(uint160(uint256(ua))), h, h, sig);
-    }
-
-    /// CTR-UA-24's order: empty code ⇒ ECDSA over `e`; the 23-byte EIP-7702 designator ⇒ ECDSA over `e` by the root
-    /// key, else ERC-1271 over `h`; other code ⇒ ERC-1271 over `h` only.
-    function _byCode(address a, bytes32 e, bytes32 h, bytes memory sig) private view returns (bool) {
         uint256 len = a.code.length;
-        if (len == 0 || (len == 23 && bytes3(a.code) == 0xef0100)) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(e, sig);
+        bool designator = len == 23 && bytes3(a.code) == 0xef0100;
+        if (len == 0 || designator) {
+            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(h, sig);
             if (err == ECDSA.RecoverError.NoError && rec == a) return true;
             if (len == 0) return false;
         }
@@ -1015,12 +1011,17 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         );
     }
 
-    /// A native `msig` member of a portable record (no chain context), in CTR-UA-24's order (ruling R-7702): code-less
-    /// ⇒ ECDSA (65-byte r ‖ s ‖ v, low s, v 27 / 28: OZ `tryRecover`) over the EIP-191 `personal_sign` hash of `md`; an
-    /// EIP-7702 designator ⇒ that root-key ECDSA first, then ERC-1271 `isValidSignature(md, sig)` through the delegate;
-    /// other code (a contract wallet) ⇒ ERC-1271 only; at the same caps as `_native`.
+    /// A native `msig` member of a portable record (no chain context; owner ruling 2026-10-30, "an EOA must really sign,
+    /// no delegation"): code-less or an EIP-7702 designator (an EOA) ⇒ ECDSA by its own key only (65-byte r ‖ s ‖ v, low
+    /// s, v 27 / 28: OZ `tryRecover`) over the EIP-191 `personal_sign` hash of `md`, never ERC-1271 through the delegate;
+    /// other code (a contract wallet) ⇒ ERC-1271 `isValidSignature(md, sig)` only, at the same caps as `_native`.
     function _nativePortable(address a, bytes32 md, bytes memory sig) private view returns (bool) {
-        return _byCode(a, MessageHashUtils.toEthSignedMessageHash(md), md, sig);
+        uint256 len = a.code.length;
+        if (len == 0 || (len == 23 && bytes3(a.code) == 0xef0100)) {
+            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(MessageHashUtils.toEthSignedMessageHash(md), sig);
+            return err == ECDSA.RecoverError.NoError && rec == a;
+        }
+        return _1271(a, md, sig);
     }
 
     function _verifierCall(uint256 cfg, bytes4 selector, bytes memory keyData, bytes32 message, bytes memory sig)

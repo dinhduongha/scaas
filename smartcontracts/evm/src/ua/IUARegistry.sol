@@ -95,8 +95,8 @@ interface IUARegistry is IERC5267 {
     function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
 
     /// `pop`: the kind's signature (an msig: the canonical `abi.encode(MemberSig[])` over `memberDigest`, other bytes are
-    /// `UAPoP`; a native member by EIP-191 `personal_sign` — code-less, or an EIP-7702 designator's root key first — or
-    /// by ERC-1271 over `memberDigest` with code, CTR-UA-24's order) over `uaMessage(kind, PURPOSE_POP_V2,
+    /// `UAPoP`; a native member that is an EOA — code-less or an EIP-7702 designator — by EIP-191 `personal_sign` with its
+    /// own key only, never ERC-1271 through the delegate; a contract by ERC-1271 over `memberDigest`) over `uaMessage(kind, PURPOSE_POP_V2,
     /// registrationDigest(portablePopDigest(ua, pqzKeyHash, kemRecordHash), attrs.pqzPopHash))`. `attrs`: only a holder
     /// (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA-6 U3, UA8-D12) carries a PQZ key or a KEM record.
     /// `pqzPop`: the `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(...))`, optional (empty: the

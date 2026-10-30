@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Vm, VmSafe} from "forge-std/Vm.sol";
+import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
@@ -910,9 +911,10 @@ contract UARegistryUA8Test is UARegistryBase {
         p.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
     }
 
-    /// Ruling R-7702 (CTR-UA-24's order; supersedes A5-m m2): a native member with an EIP-7702 designator (an EOA
-    /// delegated to a wallet) in a portable pop: its root key's `personal_sign` first (the vector's pop, accepted), then
-    /// ERC-1271 over `memberDigest` through the delegate (accepted); the root key over the raw digest is neither (`UAPoP`).
+    /// Owner ruling 2026-10-30 ("an EOA must really sign, no delegation"; supersedes R-7702 and A5-m m2): a native member
+    /// with an EIP-7702 designator (an EOA delegated to a wallet) in a portable pop is an EOA: only its own key's
+    /// `personal_sign` (the vector's pop) is accepted; ERC-1271 through the delegate is never asked, even for a signature
+    /// the delegate itself accepts, and the own key over the raw digest is refused (`UAPoP`).
     function test_ua8_msigNativeMember7702Portable() public {
         Row[] memory rows = _rows();
         _allowAll(rows);
@@ -921,18 +923,20 @@ contract UARegistryUA8Test is UARegistryBase {
         _members(a, rows);
         uint256 sk = _nativeSk();
         _delegate(m, sk, 0x5E55);
-        uint256 snap = vm.snapshotState();
-        _reg(a, m); // the root key's personal_sign, with the designator in place
-        vm.revertToState(snap);
         UARegistry.MemberSig[] memory s = abi.decode(m.pop, (UARegistry.MemberSig[]));
         bytes32 md = UAKinds.memberDigest(m.ua, m.popMessage);
-        s[0].sig = _ecdsa(sk, md); // the EOA's own key over the raw digest: the delegate's owner is the session key
-        bytes memory own = abi.encode(s);
-        vm.expectRevert(IUARegistry.UAPoP.selector);
-        a.register(m.kind, m.keyData, m.attrs, own, m.pqzPop);
         s[0].sig = _ecdsa(0x5E55, md);
+        (, bytes32 id) = _member(m.keyData, 0);
+        assertEq(IERC1271(address(uint160(uint256(id)))).isValidSignature(md, s[0].sig), IERC1271.isValidSignature.selector,
+            "the delegate would accept it");
         bytes memory viaDelegate = abi.encode(s);
-        assertEq(a.register(m.kind, m.keyData, m.attrs, viaDelegate, m.pqzPop), m.ua);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        a.register(m.kind, m.keyData, m.attrs, viaDelegate, m.pqzPop);
+        s[0].sig = _ecdsa(sk, md); // the EOA's own key over the raw digest, not personal_sign
+        bytes memory raw = abi.encode(s);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        a.register(m.kind, m.keyData, m.attrs, raw, m.pqzPop);
+        _reg(a, m); // the own key's personal_sign, with the designator in place
     }
 
     /// The native member of `m` (secret `sk`) delegates by EIP-7702 to a wallet owned by `sessionSk`.
