@@ -1,0 +1,42 @@
+# ua-c at commit 4adc323a
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (target/debug/deps/scaas_ua_c-253808dcc5db056b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/header.rs (target/debug/deps/header-91aaea4e95fe9d57)
+
+running 1 test
+test header_matches_src ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+smoke ok
+test_buffer_too_small (tests.test_vectors.Abi.test_buffer_too_small)
+SCAAS_UA_ERR_BUFFER with the size needed, and nothing written, for capacity 0, 1 and needed - 1. ... ok
+test_embedded_nul_ends_the_string (tests.test_vectors.Abi.test_embedded_nul_ends_the_string)
+A C string ends at its first NUL, so b'pop\x00x' is "pop". ... ok
+test_last_error_is_per_thread (tests.test_vectors.Abi.test_last_error_is_per_thread) ... ok
+test_layout (tests.test_vectors.Abi.test_layout) ... ok
+test_null_arguments (tests.test_vectors.Abi.test_null_arguments) ... ok
+test_holder_refusals (tests.test_vectors.Vectors.test_holder_refusals) ... ok
+test_invalid_rows (tests.test_vectors.Vectors.test_invalid_rows) ... ok
+test_kem_record (tests.test_vectors.Vectors.test_kem_record) ... ok
+test_messages (tests.test_vectors.Vectors.test_messages) ... ok
+test_natives_native_space_canonical_ids (tests.test_vectors.Vectors.test_natives_native_space_canonical_ids) ... ok
+test_personal_sign_portable_purposes (tests.test_vectors.Vectors.test_personal_sign_portable_purposes) ... ok
+test_portable (tests.test_vectors.Vectors.test_portable) ... ok
+test_pqz_key_record (tests.test_vectors.Vectors.test_pqz_key_record) ... ok
+test_structures (tests.test_vectors.Vectors.test_structures) ... ok
+test_table_groups_purposes_constants (tests.test_vectors.Vectors.test_table_groups_purposes_constants) ... ok
+test_valid_rows (tests.test_vectors.Vectors.test_valid_rows) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.561s
+
+OK
+rc=0

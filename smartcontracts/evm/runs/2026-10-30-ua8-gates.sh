@@ -5,6 +5,7 @@
 # Step <s> writes runs/2026-10-30-ua8-<s>.txt; resume = skip a step whose log ends rc=0 at this commit (see the base runner).
 # Every client step builds before it tests, so a client that stops building fails its step (rc != 0), never skips.
 # named-tests reads NAMED_TESTS_LOG_DIR (default runs/); the guard self-check points it at a scratch copy of the logs.
+# cargo-scaas-node needs smartcontracts/algorand/out (git-ignored): ALGORAND_ARTIFACTS_CHECK=1 scripts/capped smartcontracts/scripts/build.sh algorand once per checkout.
 # Owner rule 2026-10-23: when a docker job is running (docker ps), run with CAPPED_SLOTS=1.
 P=2026-10-30-ua8
 STEPS="forge-n2048-kmax1024 forge-n2304-kmax4096 forge-n2560-kmax16384 forge-n2816-kmax65536 forge-isolate sizes docs cargo-zether-prover zether-cross wasm-zether-prover cargo-scaas-node clientkeys ua-rs ua-rs-signers ua-qt ua-py ua-go ua-cs ua-c ua-cxx ua-dart ua-dart-frb named-tests"

@@ -1,0 +1,3 @@
+# named-tests at commit 4adc323a
+named-tests: 123 names, 0 problem(s)
+rc=0

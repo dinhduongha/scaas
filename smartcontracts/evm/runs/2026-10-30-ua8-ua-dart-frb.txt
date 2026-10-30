@@ -1,0 +1,39 @@
+# ua-dart-frb at commit 4adc323a
+Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 85.0.0 (111.0.0 available)
+  analyzer 7.7.1 (14.7.0 available)
+  coverage 1.15.1 (1.16.0 available)
+  crypto 3.0.7 (3.0.8 available)
+  frontend_server_client 4.1.0 (4.2.0 available)
+  http_multi_server 3.2.2 (3.2.3 available)
+  matcher 0.12.17 (0.12.20 available)
+  package_config 2.2.0 (3.0.0 available)
+  shelf 1.4.2 (1.4.3 available)
+  shelf_static 1.1.3 (1.2.0 available)
+  test 1.25.15 (1.33.0 available)
+  test_api 0.7.4 (0.7.15 available)
+  test_core 0.6.8 (0.6.21 available)
+  vm_service 15.3.0 (15.4.0 available)
+  web 1.1.1 (1.1.2 available)
+Got dependencies!
+15 packages have newer versions incompatible with dependency constraints.
+Try `dart pub outdated` for more information.
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+00:00 [32m+0[0m: [1m[90mloading test/vectors_test.dart[0m[0m
+00:00 [32m+0[0m: test/vectors_test.dart: (setUpAll)[0m
+00:00 [32m+0[0m: test/vectors_test.dart: table, groups, purposes, constants[0m
+00:00 [32m+1[0m: test/vectors_test.dart: valid rows[0m
+00:00 [32m+2[0m: test/vectors_test.dart: invalid rows[0m
+00:00 [32m+3[0m: test/vectors_test.dart: natives, native space, canonical ids[0m
+00:00 [32m+4[0m: test/vectors_test.dart: messages[0m
+00:00 [32m+5[0m: test/vectors_test.dart: structures[0m
+00:00 [32m+6[0m: test/vectors_test.dart: encodeMsig and UAError reason[0m
+00:00 [32m+7[0m: test/vectors_test.dart: portable[0m
+00:00 [32m+8[0m: test/vectors_test.dart: kem record[0m
+00:00 [32m+9[0m: test/vectors_test.dart: pqz key record[0m
+00:00 [32m+10[0m: test/vectors_test.dart: personal_sign of the portable purposes[0m
+00:00 [32m+11[0m: test/vectors_test.dart: holder refusals[0m
+00:00 [32m+12[0m: test/vectors_test.dart: (tearDownAll)[0m
+00:00 [32m+12[0m: All tests passed![0m
+rc=0

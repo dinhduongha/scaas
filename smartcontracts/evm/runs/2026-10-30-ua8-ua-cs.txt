@@ -1,0 +1,32 @@
+# ua-cs at commit 4adc323a
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Scaas.Ua -> /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cs/Scaas.Ua/bin/Debug/net10.0/Scaas.Ua.dll
+  Scaas.Ua.Tests -> /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll
+Test run for /home/ha/work/ainative/scaas/.claude/worktrees/ua8/clients/ua-cs/Scaas.Ua.Tests/bin/Debug/net10.0/Scaas.Ua.Tests.dll (.NETCoreApp,Version=v10.0)
+VSTest version 18.0.2 (x64)
+
+Starting test execution, please wait...
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.13)
+[xUnit.net 00:00:00.17]   Discovering: Scaas.Ua.Tests
+[xUnit.net 00:00:00.24]   Discovered:  Scaas.Ua.Tests
+[xUnit.net 00:00:00.29]   Starting:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.KemRecordVectors [99 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Structures [25 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PortableVectors [70 ms]
+  Passed Scaas.Ua.Tests.VectorTests.TableGroupsPurposesConstants [16 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PersonalSignPortablePurposes [30 ms]
+  Passed Scaas.Ua.Tests.VectorTests.HolderRefusals [155 ms]
+  Passed Scaas.Ua.Tests.VectorTests.PqzKeyRecordVectors [39 ms]
+  Passed Scaas.Ua.Tests.VectorTests.NativesNativeSpaceCanonicalIds [8 ms]
+  Passed Scaas.Ua.Tests.VectorTests.Messages [2 ms]
+  Passed Scaas.Ua.Tests.VectorTests.ValidRows [1 s]
+[xUnit.net 00:00:02.69]   Finished:    Scaas.Ua.Tests
+  Passed Scaas.Ua.Tests.VectorTests.InvalidRows [731 ms]
+
+Test Run Successful.
+Total tests: 11
+     Passed: 11
+ Total time: 3.6417 Seconds
+rc=0

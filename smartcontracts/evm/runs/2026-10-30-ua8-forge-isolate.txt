@@ -1,0 +1,34 @@
+# forge-isolate at commit 4adc323a
+No files changed, compilation skipped
+
+Ran 7 tests for test/ua/UAGas.t.sol:UAGasTest
+[PASS] test_T_GAS_capsWithinBudget() (gas: 110758)
+[PASS] test_T_GAS_ed25519() (gas: 23579022)
+[PASS] test_T_GAS_msigAtBudget() (gas: 470020817)
+[PASS] test_T_GAS_msigPqAtBudget() (gas: 436479966)
+[PASS] test_T_GAS_native() (gas: 4554105)
+[PASS] test_T_GAS_registerHeadroomBlsBn254() (gas: 21299531)
+[PASS] test_T_GAS_structureOverBudgetRefused() (gas: 23646612)
+Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 1.96s (3.80s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 14 tests for test/ua/UARegistryGroups.t.sol:UARegistryGroupsTest
+[PASS] test_T_GAS_groups() (gas: 133964321)
+[PASS] test_T_GAS_msigStoredMemberBound() (gas: 32863642)
+[PASS] test_authStored() (gas: 69802485)
+[PASS] test_authStoredStarved() (gas: 61296868)
+[PASS] test_gen2EnablesGroupKinds() (gas: 67934674)
+[PASS] test_gen2HandsStoredToGen1() (gas: 50483677)
+[PASS] test_groupKindsEnabled() (gas: 60715)
+[PASS] test_keyHashGroup() (gas: 17195326)
+[PASS] test_msigStoredMembers() (gas: 19916482)
+[PASS] test_msigStoredMembersGen2() (gas: 19442151)
+[PASS] test_registerKeyXAtLeastN() (gas: 4896501)
+[PASS] test_registerStoredStarved() (gas: 3060801723)
+[PASS] test_vectorsRegister() (gas: 142015326)
+[PASS] test_vectorsRegisterNegatives() (gas: 92326742)
+Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 2.65s (8.42s CPU time)
+
+Ran 2 test suites in 2.65s (4.60s CPU time): 21 tests passed, 0 failed, 0 skipped (21 total tests)
+rc=0

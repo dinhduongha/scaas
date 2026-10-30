@@ -759,9 +759,9 @@ named_tests() { # every new test passed; no family log with 0 passed, a skipped 
       qt) grep -qE "PASS +: ([A-Za-z_]+::)+${name}\(\)" "$D/$P-$step.txt" 2>/dev/null ;;
       pytest) grep -qE "^PASSED tests/${name}(\[[^ ]*\])?\$" "$D/$P-$step.txt" 2>/dev/null ;;
       go) grep -qE "^--- PASS: ${name} \\(" "$D/$P-$step.txt" 2>/dev/null ;;
-      cs) grep -qE "^ *Passed ${name} \\[" "$D/$P-$step.txt" 2>/dev/null ;;
+      cs) grep -qE "^ *Passed ([A-Za-z0-9_]+\\.)*${name} \\[" "$D/$P-$step.txt" 2>/dev/null ;;
       ctest) grep -qE "Test +#[0-9]+: ${name} \\.+ +Passed" "$D/$P-$step.txt" 2>/dev/null ;;
-      dart) sed -E 's/^[0-9:]+ \+[0-9]+( [-~][0-9]+)*: //' "$D/$P-$step.txt" 2>/dev/null | grep -qxF "$name" ;;
+      dart) sed -E 's/\x1b\[[0-9;]*m//g; s/^[0-9:]+ \+[0-9]+( [-~][0-9]+)*: //; s/^[^ ]+\.dart: //' "$D/$P-$step.txt" 2>/dev/null | grep -qxF "$name" ;;
       unittest) grep -qE "^${name} \(.*\) \.\.\. ok\$" "$D/$P-$step.txt" 2>/dev/null ;;
     esac || { echo "named-tests: not passed in $step: $name"; miss=$((miss + 1)); }
   done <<< "$NEW_TESTS"
