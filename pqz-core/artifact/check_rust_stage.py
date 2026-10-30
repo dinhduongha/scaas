@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Pins results.py's "Rust = C" checks (Task 12 review): on scratch copies of a passing quick run, each tamper must
 turn RESULT into FAIL, the untouched copy must stay PASS.
-  python3 -I artifact/check_rust_stage.py [run dir]     (default artifact/runs/t12-docker-quick); exit 1 on a miss
+  python3 -I artifact/check_rust_stage.py [run dir]     (default artifact/runs/fs3-t6-docker-quick); exit 1 on a miss
 """
 import os, re, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RUN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "runs", "t12-docker-quick")
+RUN = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "runs", "fs3-t6-docker-quick")
 
 
 def crash(d):  # the wasm32 bench panics: no JSON lines, rc 101
@@ -31,8 +31,8 @@ def rc_only(d):  # complete lines, but the process exited non-zero
 
 def verify_only(d):  # the Rust backend (no C core in the build) left an M = 8 row verify-only in the wasm32 replay
     p = os.path.join(d, "vectors-wasm.jsonl")
-    t = open(p).read().replace('"form":"TRANSFER-MULTI M8-on","proof_bytes":61794,"wasm_equal_native":true',
-                               '"form":"TRANSFER-MULTI M8-on","proof_bytes":61794,"wasm_equal_native":"native proof (verify only)"')
+    t = open(p).read().replace('"form":"TRANSFER-MULTI M8-on","proof_bytes":80290,"wasm_equal_native":true',
+                               '"form":"TRANSFER-MULTI M8-on","proof_bytes":80290,"wasm_equal_native":"native proof (verify only)"')
     open(p, "w").write(t)
 
 

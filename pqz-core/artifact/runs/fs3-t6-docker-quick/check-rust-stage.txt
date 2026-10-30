@@ -1,0 +1,17 @@
+untouched: PASS (rc 0), expected PASS: ok
+crash: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-wasm.jsonl fails | fails 0, verifier disagreements 0, last rc= line not 0 |
+    | FAIL | Rust rust-fnv-wasm.jsonl relations | missing (relation, n=3): ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0'] |
+early_stop: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-txm.jsonl relations | missing (relation, n=2): ['R_TXM8'] |
+missing: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-native.jsonl present | reproduce.sh quick |
+rc_only: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-native.jsonl fails | fails 0, verifier disagreements 0, last rc= line not 0 |
+verify_only: FAIL (rc 1), expected FAIL: ok
+    | FAIL | vectors wasm32 replay | 61 proofs, 60 byte-equal and valid, 1 native PQZL op 7 M > 4 proofs valid (verify only), fails 0 |
+    | FAIL | op 7 pqzl M8-on wasm32 | 80290 B, native proof verified (wasm32 proves PQZL M <= 4), precompile 1 |
+no_rust_expected: FAIL (rc 1), expected FAIL: ok
+    | FAIL | expected-results.json rust.txm_fnv present | the C values the Rust core is checked against |
+    | FAIL | expected-results.json rust.keys_kat present | the C values the Rust core is checked against |
+check_rust_stage: ok

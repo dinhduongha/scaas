@@ -6,17 +6,26 @@ the frozen reference values in `expected-results.json`; it exits 0 only if every
 reviewers and auditors who want to confirm the numbers in the [pqz-core README](../README.md) (§5), and for the team
 before a release. For the terms used here (relation, form, op, SV, `proofSystemId`) see the glossary in that README.
 
-**A historical record: this package reproduces the retired 2026-10-17 freeze; it does not check today's code.** The
-freeze was made at the parameters now called `n2048-kmax1024`, with the proof-system ids of that time, PQZL v2
-`0x2e07e6ed…` and PQZH v1 `0x0a47a768…` (`runs/freeze-2026-10-17/`); both ids are retired and refused today
-(`../params/sets/gen_set.py` `RETIRED`; the v2 transcript is the forgeable one, fixed by the PQZL v3 Fiat–Shamir fix
-of 2026-10-19, decisions CTR-PQZ-09). `expected-results.json` was last changed on 2026-10-18, so it predates that fix,
-the B-1 / A-2 transcript change (plan 5h Task 8a, 2026-10-21), the per-set ids (8d) and the R0 review fix (PQZL v5 /
-PQZH v3, 2026-10-25): its proof hashes no longer match, and a run against today's tree fails. Since 8d part 1
-`pqz-ffi`'s default parameter set is `n2304-kmax4096`: the package's `pqz-ffi` stages build that set (the C smoke test
-`tests/c_abi.c` gets its `max_input`, 524,288), while the rest of the package exports `PQZ_SET=n2048-kmax1024`. A
-refresh would pin one set everywhere (`--no-default-features --features pqzl-rust,set-<set>` on every `pqz-ffi` cargo
-call) and regenerate `expected-results.json`.
+**Refreshed 2026-10-30 (fs3 Task 6) at the set `n2304-kmax4096`.** The package was made at the retired 2026-10-17 freeze
+(`n2048-kmax1024`, PQZL v2 `0x2e07e6ed…`, PQZH v1 `0x0a47a768…`, `runs/freeze-2026-10-17/`; both ids are refused today, the
+v2 transcript is the forgeable one fixed by the PQZL v3 Fiat–Shamir fix, decisions CTR-PQZ-09). `reproduce.sh` now exports
+`PQZ_SET=n2304-kmax4096` (its KAT check reads that set's own `lazer-3330e48-kat.json`; `--upstream` compares the fork
+and upstream LaZer at one set, `n2048-kmax1024`: both sides are built and KAT-checked there), and `expected-results.json` carries the figures of the Docker quick run
+`runs/fs3-t6-docker-quick-fail-0448/` (`changes` entry "v3 transcript + D-2/D-3"): `relations.*.fnv` n = 1 / 2 / 3 from
+that run, n = 5 / 10 from `c-fnv-n5.jsonl` / `c-fnv-n10.jsonl` there (C `pqz_bench`), the proof sizes, `pqzh` figures of
+seeds 0 and 1 (seeds 2-4 need a `--full` refreeze), `ffi`, `txm` and `rust`. That run failed (106 ok, 137 FAIL) only
+because its image still held the 2026-10-18 `expected-results.json` and the `n2048-kmax1024` KAT path; its C hashes for
+n = 2 equal the per-set gate's (`../runs/gate/fin-fnv-c.txt`, all 14 relations), and the Rust core gives the same hashes
+for n = 1 / 3 / 5 / 10 and the eight op 7 shapes. The `pqzh` hashes and sizes have no gate anchor of their own: they
+rest on the reproduction in the PASS run and the in-run native = wasm32 check (`ffi.digest_lines`, which carry PQZH
+proofs through pqz-ffi, do equal the gate's). The values were written by
+`runs/fs3-t6-docker-quick-fail-0448/refreeze.py` from that run's committed files and the 2026-10-18 file
+(`python3 -I refreeze.py <base>` gives the committed `expected-results.json`); `refreshed` / `refresh_runs` name them,
+while `frozen` / `source_runs` stay the 2026-10-17 history. **Docker quick run on the refreshed file: PASS, 252 ok, 0 FAIL, 0 warn,
+0 info** (`runs/fs3-t6-docker-quick/`, 2026-10-30, `--memory=4g`, 75 min; every hash, proof size and digest line equal
+to the 04:48 run's).
+`--full`, `--upstream` and `--multi-bench` were not rerun and their sample sizes and `n2048-kmax1024` parts are still
+those of the 2026-10-17 freeze.
 
 **The current checks are the per-set gates:** `PQZ_SET=<set> scripts/capped pqz-core/gate.sh [label]` (`../gate.sh`:
 KAT, the fix checks, the PQZL differential, C = Rust = wasm32, the vectors, pqz-ffi, pqz-stmt / Ligero tests, the
@@ -36,7 +45,9 @@ PQZH cross-checks, fuzz and the Rust core, at each of the four sets; logs `../ru
 **Nothing built is published**: no image, no wasm, no binaries. You build and run everything yourself, and the package
 compares your results with `expected-results.json`.
 
-## Status (2026-10-17): frozen
+## Status (2026-10-17): frozen, refreshed 2026-10-30
+
+Today's values are the 2026-10-30 refresh at `n2304-kmax4096` (the paragraph at the top); this section records the freeze.
 
 The reference values are frozen (the retired freeze above: history, not today's state). After gates A and B passed (`../gate.sh`, 2026-10-17), the freeze ran the package's
 `--full` mode on the host toolchain under the machine lock (AMD Ryzen 5 7235HS, Ubuntu 24.04, clang 18.1.3,
@@ -65,7 +76,7 @@ itself changes into `pqz-core/`).
 | quick (no argument) | every stage below with small sample sizes | yes |
 | `--full` | the same stages with the sample sizes of the frozen runs, plus the x86-64-v3 differential and `tamper.py` | yes |
 | `--multi-bench` | the measurement table of the multi-recipient transfer (`R_TXM`), including oversize shapes in benchmark builds; ~1 h, ~2 GB | its own checks (29 in the 2026-10-17 run) |
-| `--upstream [N]` | builds upstream LaZer `3330e48` and compares it with the fork on the same relations ([below](#--upstream-upstream-lazer-and-avx-512)) | no (comparison only) |
+| `--upstream [N]` | builds upstream LaZer `3330e48` and compares it with the fork on the same relations, both at `n2048-kmax1024` ([below](#--upstream-upstream-lazer-and-avx-512)) | no (comparison only) |
 | `--serve` | builds both wasm modules and serves a local browser demo (PQZL `R_TX`, PQZH any form) | no |
 
 ```mermaid
@@ -269,7 +280,8 @@ to `pqz-core/`.
   - image build: a few minutes plus the apt snapshot download (which took 42 min while snapshot.ubuntu.com was
     failing);
   - quick: 27 min in the 2026-10-14 Docker run, before the multi-recipient transfer (PQZL 18, PQZH 4, pqz-ffi 4,
-    vectors 2);
+    vectors 2); 75 min in the 2026-10-30 Docker run at `n2304-kmax4096` with the Rust "Rust = C" stage
+    (`runs/fs3-t6-docker-quick/`, on a loaded host; the 04:48 run took 54 min);
   - `--full`: 69 min in the freeze run (`runs/freeze-2026-10-17/log.txt`, 08:49:55 to 09:59:07): roughly
     `research/pqzl-measure/relfix.sh` plus `pqzl/sv/rel3.sh`, plus PQZH's 1,000-verify benches, pqz-ffi, the vectors
     and `tamper.py`;
@@ -338,7 +350,8 @@ backend proves M = 8 in wasm32 (Task 12:
 
 `--upstream` builds upstream LaZer `3330e48` from source in two variants: x86-64-v3 (AVX2) and x86-64-v4 with
 AVX-512 IFMA / VBMI2. Each variant includes HEXL from LaZer's `third_party` zip, links the distribution's GMP /
-MPFR, and uses the flags of `../research/upstream/static/build.sh`. Then it does three things:
+MPFR, and uses the flags of `../research/upstream/static/build.sh`. Upstream and the fork are both built at the
+parameter set `n2048-kmax1024` (`reproduce.sh` sets `PQZ_SET` to it in this mode only). Then it does three things:
 
 1. It checks the upstream KAT dump against the golden `pqzl/kat/lazer-3330e48.json`.
 2. It runs the `R_REG` / `R_TX` cross-check bench through `../research/upstream/shim`. This compares upstream and the
@@ -377,15 +390,15 @@ History below.
 | `Dockerfile`, `Dockerfile.dockerignore` | the pinned image (build context: the repository root, narrowed by the allowlist in `Dockerfile.dockerignore`) |
 | `reproduce.sh` | every mode; works in Docker and on a local toolchain |
 | `results.py` | `check`: the tables and the comparison; `freeze`: `expected-results.json` from a frozen run (both systems + pqz-ffi); `freeze-txm`: only the multi-recipient parts, from a quick / full run; `multi`: the multi-recipient table of a `--multi-bench` run; `d6`: the Rust-against-C table of a `pqzl/rust/d6.sh` run. Rust rows appear next to the C rows when the Rust run files exist |
-| `check_rust_stage.py` | pins `results.py check`'s "Rust = C" checks: on scratch copies of a passing quick run (default `runs/t12-docker-quick`), a crashed, cut-short, missing or non-zero-rc Rust bench and a verify-only wasm32 row on the Rust backend each give FAIL; the untouched copy PASS (`runs/t12-docker-quick/check-rust-stage.txt`) |
-| `expected-results.json` | the reference values, frozen 2026-10-17 from `runs/freeze-2026-10-17/` |
+| `check_rust_stage.py` | pins `results.py check`'s "Rust = C" checks: on scratch copies of a passing quick run (default `runs/fs3-t6-docker-quick`), a crashed, cut-short, missing or non-zero-rc Rust bench and a verify-only wasm32 row on the Rust backend each give FAIL; the untouched copy PASS (`runs/fs3-t6-docker-quick/check-rust-stage.txt`) |
+| `expected-results.json` | the reference values: frozen 2026-10-17 from `runs/freeze-2026-10-17/`, refreshed 2026-10-30 from `runs/fs3-t6-docker-quick-fail-0448/` (reproduced by the PASS run `runs/fs3-t6-docker-quick/`) |
 | `web/index.html` | the `--serve` page (loads the locally built `pqz.wasm` and `pqzh_ligero_wasm.wasm`) |
 | `runs/` | logs of the package's own test runs (text only) |
 
 ## History (before the freeze)
 
 These notes record how the package and its provisional reference values got to the freeze, newest first. They are
-kept for the record; the current state is [Status](#status-2026-10-17-frozen) above. Branches named here are merged.
+kept for the record; the current state is [Status](#status-2026-10-17-frozen-refreshed-2026-10-30) above. Branches named here are merged.
 Run paths are given in the current pqz-core layout (the directories moved on 2026-10-15, branch `pqz-layout`).
 
 <details>

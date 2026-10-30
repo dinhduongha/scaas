@@ -37,8 +37,8 @@
 # pqz-ffi's wasm32 run ~0.6 GB; op 7: pqz-ffi prove up to ~0.9 GB per test thread, pqz-vectors --check ~1 GB;
 # --multi-bench: PQZL M = 16 ~1.6 GB).
 set -eu
-# the package is the frozen v3 set (owner 2026-10-21: one parameter set per build, pqz-core/params/sets/)
-export PQZ_SET=n2048-kmax1024
+# the package is the default set (owner 2026-10-21: one parameter set per build, pqz-core/params/sets/)
+export PQZ_SET=n2304-kmax4096
 cd "$(dirname "$0")/.."
 MODE=quick
 case "${1:-}" in
@@ -49,6 +49,9 @@ case "${1:-}" in
   --multi-bench) MODE=multi ;;
   *) sed -n '2,38p' "$0"; exit 2 ;;
 esac
+# --upstream compares the fork with upstream LaZer at one set, n2048-kmax1024 (the set of the upstream golden KAT):
+# the fork's pqzl/build.sh and every upstream -I / KAT path below use $PQZ_SET; the other modes keep n2304-kmax4096
+[ $MODE != upstream ] || export PQZ_SET=n2048-kmax1024
 OUT=${OUT:-artifact/out/$MODE-$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
@@ -120,13 +123,13 @@ if [ $MODE = upstream ]; then
       CF="-std=gnu11 -O3 $MARCH -fomit-frame-pointer -fno-strict-aliasing -DNDEBUG -w"
       # R_REG / R_TX bench: the fork's relation source ($U/up_rel.c, above) and bench through the cross-check shim
       # (research/upstream/README.md: libc heap instead of the arena)
-      gcc $CF -I"$P/research/upstream/shim" -I"$L" -I"$L/src" -I"$P/pqzl/src" -I"$P/params/sets/n2048-kmax1024" -c "$U/up_rel.c" -o "$U/up_rel-$V.o"
+      gcc $CF -I"$P/research/upstream/shim" -I"$L" -I"$L/src" -I"$P/pqzl/src" -I"$P/params/sets/$PQZ_SET" -c "$U/up_rel.c" -o "$U/up_rel-$V.o"
       gcc $CF -c "$P/research/upstream/shim/shim.c" -o "$U/up_shim-$V.o"
-      gcc $CF -I"$P/pqzl/src" -I"$P/params/sets/n2048-kmax1024" -c "$P/research/upstream/shim/bench.c" -o "$U/up_bench-$V.o"
+      gcc $CF -I"$P/pqzl/src" -I"$P/params/sets/$PQZ_SET" -c "$P/research/upstream/shim/bench.c" -o "$U/up_bench-$V.o"
       mkdir -p "$U/bin"
       g++ -o "$U/bin/bench_up_$V" "$U/up_bench-$V.o" "$U/up_rel-$V.o" "$U/up_shim-$V.o" $LIBS
       # arithmetic-layer KAT dump (pqzl/kat/build-lazer-dump.sh, here dynamic)
-      g++ -x c -std=gnu11 -O2 -fno-strict-aliasing $MARCH -DBUILD_FLAGS="\"lazer 3330e48 $V: $MARCH\"" -I. -I"$P/params/sets/n2048-kmax1024" \
+      g++ -x c -std=gnu11 -O2 -fno-strict-aliasing $MARCH -DBUILD_FLAGS="\"lazer 3330e48 $V: $MARCH\"" -I. -I"$P/params/sets/$PQZ_SET" \
         "$P/pqzl/kat/lazer_dump.c" -x none -o "$U/bin/lazer_dump-$V" $LIBS
       echo "$V: $MARCH; HEXL: $(grep -E 'Setting HEXL|not found: HEXL' "$U/hexl-cmake-$V.log" | sed 's/.*-- //' | tr '\n' ';')"
     ) >> "$OUT/upstream-build.txt" 2>&1 || { tail -20 "$OUT/upstream-build.txt"; echo "upstream $V build failed" >&2; exit 1; }
@@ -145,7 +148,7 @@ if [ $MODE = upstream ]; then
     fi
     step "KAT upstream $V against kat/lazer-3330e48.json"
     "$U/bin/lazer_dump-$V" > "$OUT/kat-upstream-$V.json"
-    python3 -I pqzl/kat/check.py params/sets/n2048-kmax1024/lazer-3330e48-kat.json "$OUT/kat-upstream-$V.json" | tee "$OUT/kat-upstream-$V.txt"
+    python3 -I pqzl/kat/check.py params/sets/$PQZ_SET/lazer-3330e48-kat.json "$OUT/kat-upstream-$V.json" | tee "$OUT/kat-upstream-$V.txt"
   done
   step "bench upstream vs fork, N=$N (research/upstream/static/run.sh; skips bench_up_v4 without avx512ifma)"
   cp research/upstream/static/run.sh "$U/bin/"
@@ -211,7 +214,7 @@ step "build (native, wasm, wasm without SV$( [ $X86 = 1 ] && echo ', native-x86v
   wc -c pqzl/build/wasm/pqz.wasm pqzl/build/wasm-nosv/wasm/pqz.wasm; } > "$OUT/build.txt" 2>&1
 step "KAT"
 pqzl/build/native/kat_dump > "$OUT/kat-pqz.json"
-python3 -I pqzl/kat/check.py params/sets/n2048-kmax1024/lazer-3330e48-kat.json "$OUT/kat-pqz.json" | tee "$OUT/kat.txt" || true
+python3 -I pqzl/kat/check.py params/sets/$PQZ_SET/lazer-3330e48-kat.json "$OUT/kat-pqz.json" | tee "$OUT/kat.txt" || true
 step "check_tbox_fixes.sh"
 pqzl/check_tbox_fixes.sh > "$OUT/tbox-fixes.txt" 2>&1 || true
 tail -1 "$OUT/tbox-fixes.txt"

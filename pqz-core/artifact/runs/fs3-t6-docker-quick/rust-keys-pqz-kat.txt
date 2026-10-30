@@ -1,0 +1,5 @@
+     C's own claim (not recomputed here): {"lowered": {"keygen_resampled": 3, "enc_resampled": 4, "ctr64_errors": 2}}
+     C's own claim (not recomputed here): {"roundtrip": 100, "max_abs_noise": 454, "bound": 13212, "max_ctr": 0, "noncanonical_rejected": 3, "fails": 0}
+     C keys KAT /out/quick/rust-keys-kat.jsonl: {'shake256': 10, 'keygen': 20, 'enc': 20, 'dec': 40, 'keygen_lowered': 6, 'enc_lowered': 6, 'keygen_resampled': 3, 'enc_resampled': 4, 'ctr64_errors': 2, 'enc_group_seed': 16}
+pqz_kat: ok
+rc=0

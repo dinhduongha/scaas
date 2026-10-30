@@ -547,7 +547,7 @@ def txm_summary(files):
     p = files.get(VECTORS)
     for o in (jsonl(p) if p and os.path.exists(p) else []):
         f = o.get("form", "").split()
-        if len(f) == 2 and f[0] == "TRANSFER-MULTI":
+        if len(f) == 2 and f[0] in ("TRANSFER-MULTI", "DISCLOSE-AUDITOR", "DISCLOSE-RECEIVER"):  # the leg-specific disclose vectors carry their own form name
             out["wasm"][f'{o["id"]} {f[1]}'] = {k: o.get(k) for k in ("proof_bytes", "wasm_equal_native", "wasm_precompile")}
     if os.path.exists(NEGATIVE):
         for r in json.load(open(NEGATIVE))["rows"]:
