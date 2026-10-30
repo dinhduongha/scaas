@@ -729,6 +729,7 @@ export function bidMinFill(minBase, amount, receiveAmount) {
   const r = uint(receiveAmount, 'the price');
   if (r === 0n) refuse('the amounts are malformed');
   const a = uint(amount, 'the amount');
+  if (a === 0n) refuse('the amounts are malformed');
   const m = (uint(minBase, 'the base minimum') * a + r - 1n) / r;
   if (m > a) refuse('that base minimum needs more than the bid\'s amount');
   return m;
