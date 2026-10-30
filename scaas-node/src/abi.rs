@@ -1,5 +1,5 @@
 //! ABI — copied from `smartcontracts/evm/src` (`IMetaTx`, `IERC20MetaTx`, `IERC20Payment`, `ITradeToken`, `MetaTxLib`,
-//! `ISCaaSDex`, `MandateWallet`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
+//! `ISCaaSDex`, `MandateWallet`, `IUARegistry`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
 //! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`, `dex_order_kat.json`: digests and relayed calldata).
 // `sol!` builds a constructor per event; `LegSettled` / `UALegSettled` have ten fields.
 #![allow(clippy::too_many_arguments)]
