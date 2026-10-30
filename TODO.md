@@ -58,9 +58,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          `proven`). Must land before fs3 Task 13 (the SCaaS testnet redeploys the registry once).
          **Status 2026-10-30:** built on branch `ua8` (worktree `.claude/worktrees/ua8`), tasks A1–A11 done (digests and
          `portable.json`, `ua-rs`, zether-prover, `UAKinds` / `UARegistry` with `storePqzPop`, `setPqzKey`, `setKemKey`, the gas
-         log, ten client libraries, node call-job test, e2e scripts); **A12 (docs, decisions, this TODO) is the commit that
-         adds this note; A13 (whole-branch gates: forge per set, size gate, client suites) is next**, then the review and the
-         owner's go to merge. Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
+         log, ten client libraries, node call-job test, e2e scripts), A12 (docs, decisions, this TODO) and A13 (whole-branch gates:
+         forge per set, size gate, client suites) done; the final whole-branch review (2026-10-30, two parts) is done and the
+         **final fix wave** is running (owner rulings 2026-10-30: R-node, R-cross-set, R-7702, `docs/decisions.md` CTR-UA-31,
+         CTR-UA-16, CTR-UA-24), then the owner's go to merge. Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
      - **Node:** follow-ups of the two merged branches — EVM node UA job path (`ua_metatx`), TON passkey relays (P-256
        in the node), relay-fee minimum before mainnet.
      - **pqz-core:** fs3 Task 12 (final gate + merge) → Task 6 (reproduction package); its heavy gate interleaves with
@@ -179,13 +180,18 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   `setPqzKey`, `setKemKey`, the views; the old chain-bound registry is not compatible — all chains are test-only, no
   migration); the e2e scripts (`script/pqz/e2e.py`, `scripts/e2e-zether.sh`) were rewritten on it and have **not run against
   a chain yet**. (2) **Watch item — `n2816-kmax65536` `storePqzPop` ≈ 59.9 M gas with the real `R_REG` verify** (57.5 M in the
-  gas log with the `rreg` stand-in, plus ≈ 2.4 M regular gas for the ≈ 3.65 M verify), right at a 60 M block; `n2304-kmax4096`
+  gas log with the `rreg` stand-in, plus ≈ 2.4 M regular gas for the ≈ 3.65 M verify), right at a 60 M block; **the gen-2 variant**
+  (`storePqzPop` on a gen 2 that enables `0x0142` for a gen-1 record, 57,729,122 in the gas log with the stand-in) is **≈ 60.1 M, above a
+  60 M block** (a gen-1 PQ holder's key could then never be proven on such a chain); `n2304-kmax4096`
   has ≈ 7 M headroom. Measure the real call (Task 13) before choosing `n2816-kmax65536` for a chain whose block limit is
   60 M; this concerns 60 M-block chains, **not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`)**. `e2e.py` takes the full path only when
   `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise (or on an estimate error) `register` + `storePqzPop` (a full
   registration with the proof is 84.8–109.1 M). Coverage note: on the SCaaS testnet (200 M) `e2e.py` takes the **full** path, so the inline `register` + proof runs
-  in Task 13; the path that has never run on a chain with the real `R_REG` verifier is the **split** one — `register` without `pqzPop`
-  then `storePqzPop`, and `setPqzKey` + `storePqzPop` over `PURPOSE_PQZ_KEY` — so run it once on the SCaaS testnet with `e2e.py --split` (an anvil has no PQZ precompile). (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
+  in Task 13; the paths that have never run on a chain with the real `R_REG` verifier are the **split** one — `register` without `pqzPop`
+  then `storePqzPop`, which `e2e.py --split` forces — and the **later PQZ key**: `setPqzKey` + `storePqzPop` with the `R_REG` proof over
+  `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, h))`, which `e2e.py` gains as its own step in the UA-8 final fix wave (an ML-DSA-65 UA
+  registered without a PQZ key, then `setPqzKey`, `storePqzPop`, `pqzKeyOf(ua).proven`); run both once on the SCaaS testnet in Task 13 (an
+  anvil has no PQZ precompile). (3) **`pqz-core/stmt/src/lib.rs` doc comment**: it still names `popDigest`; UA-8 changed only the 32-byte
   message's pre-image (`uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, pqzKeyHash, kemRecordHash))`), not the `R_REG`
   relation, statement or precompile. Edit the comment with the next pqz-core change (a doc-only edit in a core file would
   force the full pqz-core gate; owner rule: full gate only for core changes). Decision: `docs/decisions.md` CTR-UA-31 (the plan decision
@@ -209,7 +215,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   key registered in `UARegistry` as a signed versioned record, copyable the same way; short design
   [`2026-10-25-ua8-portable-registrations.md`](docs/superpowers/specs/2026-10-25-ua8-portable-registrations.md), plan
   [`2026-10-30-ua8-portable-registrations.md`](docs/superpowers/plans/2026-10-30-ua8-portable-registrations.md). **Step 1 (EVM) is
-  built on branch `ua8` (A1–A11 done, A12 docs, A13 gates next; not merged, not pushed)**; step 2 (Soroban, Part B) is open.
+  built on branch `ua8` (A1–A13 done, final review done, final fix wave running; not merged, not pushed)**; step 2 (Soroban, Part B) is open.
 - [ ] **UA-7: PQ chat sessions** (owner 2026-10-25, queued **after 5h**; **UA-7 can now read a UA's chat key with
   `UARegistry.kemKeyOf(ua)` (the highest stored version) and `kemKeyAt(ua, version)`**, UA-8 step 1 on branch `ua8`; wrap a session
   key to any stored version — every stored version is usable, no revocation): application contract `PqChat` — one

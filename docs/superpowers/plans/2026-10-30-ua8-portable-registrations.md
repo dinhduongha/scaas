@@ -304,8 +304,10 @@ Part B decisions (Soroban) are UA8-D18–D24 in Part B's header.
 ```solidity
 struct UAAttrs { bytes pqzKey; bytes32 pqzPopHash; uint64 kemVersion; bytes kemPk; }   // empty / 0 = absent
 
-event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop, bool proven);
-event UAPqzPopStored(bytes32 indexed ua, bool proven);
+event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop,
+    uint8 checkedPop, uint8 checkedPqzPop, uint8 checkedKem);              // built form (ruling C8: `checked` values, not `proven`)
+event UAPqzPopStored(bytes32 indexed ua, uint8 checkedPqzPop, bytes pqzPop);   // built form (C8, ruling A6-m: the written bytes)
+event UAPqzKeyAdded(bytes32 indexed ua, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);   // built (setPqzKey)
 event UAKemKeySet(bytes32 indexed ua, uint64 indexed version, bytes32 keyHash, bytes kemPk, bytes sig);   // keyHash = keccak256(kemPk); built form (A7)
 
 error UAKemHolder(bytes32 ua);                 // kind / structure may not hold a KEM key (UA8-D12)

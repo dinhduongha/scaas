@@ -178,7 +178,7 @@ Write validation: canonical addresses (`addresses.canonical`), lowercase selecto
 '0'`, `job_kind = call` ⇒ `receiver IS NULL ∧ min_value = '0'` (and `max_tx_per_payer_hour = 0` unless the target is a
 registered tender), policies on `~gateway`/`~mesh` need a concrete `contract` and (`min_value > 0` or a `receiver`) —
 except the one `~gateway` `call` shape of UA registration ([NODE-GW-03](gateway.md#NODE-GW-03)): `contract =
-chain.ua_registry`, `selector` = `register`, `max_tx_per_payer_hour = 0` (sponsored registration; budget and hourly cap
+chain.ua_registry`, `selector` ∈ {`register`, `setKemKey`, `storePqzPop`, `setPqzKey`} (owner 2026-10-30, ruling R-node), `max_tx_per_payer_hour = 0` (sponsored registration; budget and hourly cap
 bound it); every uint256 field parses, `namespace` exists or is reserved/`*`, `30 ≤ min_valid_secs ≤
 chain.max_valid_for_secs`, and `on_exhausted = unsponsored` on a client namespace (or `*`) only with
 `fallback_to_namespace: true` in the request (recorded in the audit row) ⇒ else `422 POLICY_INVALID`. A `PATCH` never

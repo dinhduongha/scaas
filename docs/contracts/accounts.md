@@ -199,8 +199,10 @@ purpose `member`): **each member signs `uaMessage(MSIG, PURPOSE_POP_V2, registra
 that holds a PQZ key or a KEM record is signed by every member over those hashes too (an earlier reading of the
 design signed the bare `portablePopDigest`, which left the proof hash signed by nobody). **A native (EOA) member signs
 chain-free**: a code-less EOA signs the EIP-191 `personal_sign` of `memberDigest` (`keccak256("\x19Ethereum Signed Message:\n32"
-‖ memberDigest)`), a member with code (an EIP-7702 delegate, a contract wallet) answers ERC-1271 `isValidSignature(memberDigest,
-sig)`; this holds for the three portable purposes only (`pop` v2, `kem`, `pqz-key`), every other purpose keeps the EIP-712
+‖ memberDigest)`); a member with code follows [CTR-UA-24](#CTR-UA-24): the EIP-7702 designator ⇒ the root key's
+ECDSA over the same `personal_sign` hash first, then ERC-1271 `isValidSignature(memberDigest, sig)` through the delegate; other code (a contract
+wallet) ⇒ ERC-1271 only (owner 2026-10-30, ruling R-7702: it supersedes the earlier controller ruling that sent every member with
+code to ERC-1271 only; so a member delegated on one chain and not on another still signs one portable `pop`); this holds for the three portable purposes only (`pop` v2, `kem`, `pqz-key`), every other purpose keeps the EIP-712
 `UAAuth` ([CTR-UA-24](#CTR-UA-24)). So an `msig` PoP with native members is portable too (controller call, owner may
 override; it supersedes the first plan's "native members stay chain-bound"; the cost is a `personal_sign` prompt instead of
 a typed-data view for the registration). A classical-dominant `msig` has no PoP of its own (its members proved theirs) and
@@ -299,8 +301,14 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
   gen 2 emits PQZ events (`UAPqzPopStored`, `UAPqzKeyAdded`) for UAs registered in gen 1, and `UARegistered` only for its own.
   On a gen 2 in front of a gen 1 that enables `0x0142` (the PQZ attachment lives in the oldest generation with the verifier), a non-holder's PQZ key gets `UAKindDisabled(0x0142)` before `UAPqzHolder`
   (the order of the checks is the order of the steps, [§1.8](#registry)).
-- **Relaying.** The three later writes are ordinary node `call` jobs (`kind = "call"`, target = the registry, calldata): no new job kind, no fee
-  form (there is no token to take a fee from; a relayer that wants payment arranges it off chain) ([NODE-GW-03](../node/gateway.md#NODE-GW-03)).
+- **Relaying** (owner 2026-10-30, ruling R-node; built on `ua8`, commit TBD). The node relays all four writes (`register`, `setKemKey`,
+  `storePqzPop`, `setPqzKey`) as ordinary `call` jobs (`kind = "call"`, target = the registry, calldata): its call table has a row for
+  each of the four selectors on the chain's registry ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)), and the gateway's `~gateway`
+  sponsor policy covers all four ([NODE-GW-03](../node/gateway.md#NODE-GW-03)). No new job kind, no fee form (there is no token to
+  take a fee from; a relayer that wants payment arranges it off chain). A relayed PQ registration **splits** (`register` without
+  `pqzPop`, then `storePqzPop`) when the full call's estimate exceeds **min(block gas limit, the relayer's per-transaction cap)**;
+  the SCaaS testnet's relayer cap stays 64 M (`max_gas_per_tx`), so there a relayed PQ registration with its proof (84.8–109.1 M) always
+  splits, while a direct submitter (`e2e.py`) compares with the 200 M block only.
 - **A submitter's choice of signatures.** For an `msig` any quorum's signatures are valid, so a front-runner that holds a
   quorum's signatures can submit a different valid subset first: the stored `pop` / `sig` differs, the key, the version and
   the id do not. Nothing depends on which valid subset is stored.
@@ -316,11 +324,14 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
 - **Record.** `(ua, version, kemPk)`; the UA signs the chain-independent digest `kemRecordDigest = keccak256(abi.encode(KEM_RECORD_TAG,
   ua, uint256(version), keccak256(kemPk)))` as `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)` with `PURPOSE_KEM =
   keccak256("scaas.ua.purpose.kem.v1")`. The signature has the `pop` format: the kind's raw signature for a single key,
-  `abi.encode(MemberSig[])` for an `msig` (members under `member`, a native member by `personal_sign`, [CTR-UA-07](#CTR-UA-07)),
+  `abi.encode(MemberSig[])` for an `msig` (members under `member`, a code-less native member by `personal_sign`, one with code by the
+  [CTR-UA-24](#CTR-UA-24) rule, [CTR-UA-07](#CTR-UA-07)),
   verified against the stored key data. The same bytes on every family.
 - **Versions start at 1** (`kemVersion = 0` with an empty `kemPk` means "no KEM record"); `setKemKey` refuses 0. Each `(ua, version)` is
   written **once**, **in any order** (a lower version may be stored after a higher one: others may still use it, and every stored
-  version is usable); the version is inside the signed record, so version `v` names the same key on every chain. `kemKeyOf(ua)`
+  version is usable); the version is inside the signed record, so version `v` names the same key on every chain — **if the client signs
+  one key per version, the initial record included** (client rule, [§1.13](#migration) step 5: two signed registrations with different
+  initial `(kemVersion, kemPk)` diverge across chains, and write-once means nothing can repair it). `kemKeyOf(ua)`
   is the highest stored version, `kemKeyAt(ua, version)` any stored one. Clients normally pick the highest version they see.
 - **The first record travels with `register`** (`attrs.kemVersion`, `attrs.kemPk`): it is stored as that version with an **empty `sig`**,
   because its consent is the registration `pop`, which covers `kemRecordHash`; `kemKeyAt(ua, v)` returns `sig = ""` for it, and it
@@ -337,7 +348,8 @@ transactions do"; scope every family, owner 2026-10-29; details are controller c
 - **State and events.** The registry stores `pk ‖ sig` per version (SSTORE2 chunks); `setKemKey` emits `UAKemKeySet(ua, version, keyHash,
   kemPk, sig)` with the call's bytes (`keyHash = keccak256(kemPk)`), checked on chain. Check order of `setKemKey`: an id this registry does
   not hold (`UAUnauthorized`; on gen 2 a gen-1 record goes to gen 1) → holder (`UAKemHolder`) → version 0 or stored, the initial record
-  included (`UAKemVersion`) → key length (`UAKemKeyLength`) → signature (`UAUnauthorized`). `setKemKey` decodes the whole registration blob
+  included (`UAKemVersion`) → key length (`UAKemKeyLength`) → signature (`UAUnauthorized`; an `msig` `sig` that does not decode as
+  `MemberSig[]` reverts with empty data from the ABI decoder, as `register`'s `pop` does — the same holds for `setPqzKey`). `setKemKey` decodes the whole registration blob
   (the key data, `pop` and the initial version: about 7 KB for an `msig` with PQ members), a few per cent of its gas ([§1.15](#gas)).
 
 ### 1.5 Keys, purposes, tags
@@ -366,7 +378,7 @@ Layer 3 — purposes:
 | `pqz-key` | `pqzKeyRecordDigest(pqzKeyDigest(ua, pqzKeyHash), pqzPopHash)`, the record of `setPqzKey` ([CTR-UA-16](#CTR-UA-16)); its `R_REG` proof's message wraps `pqzKeyDigest` under the tag `0x0142` |
 | `metatx` | v3 EIP-712 digest of `UAMetaTransaction` or `UAMetaTransfer` |
 | `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, chainUid, token, ua, batch, validUntil))` with `CANCEL_TAG` = this purpose tag (UA-4), the token's view `uaCancelDigest` — derived `ua` only (natives use `cancelNonce`); each signature cancels once |
-| `member` | `keccak256(structureUA ‖ ua_msg_of_structure)` (native members: inside `UAAuth`) |
+| `member` | `keccak256(structureUA ‖ ua_msg_of_structure)` (native members: inside `UAAuth`, except for the three portable purposes `pop` v2, `kem` and `pqz-key`, where a native member signs the EIP-191 `personal_sign` of it, or a member with code answers by [CTR-UA-24](#CTR-UA-24)'s rule, [CTR-UA-07](#CTR-UA-07)) |
 | `zether-auth` | the PQZ `authDigest` ([pq-zero-knowledge.md](pq-zero-knowledge.md)); classical Zether has none (its proof alone spends) |
 | `zether-owner` | the Zether rollOver/mode digests |
 | `keyop` | family subject-account key operations (replaces `scaas.keyop.v1` by version bump) |
@@ -376,10 +388,13 @@ Layer 3 — purposes:
 | `vc-anchor` | *reserved* (anchor contract deferred) |
 
 Digests are already chain/contract-separated; purpose tags separate *uses*, kind tags *kinds*. Native signers behind
-the registry get the same separation from the `purpose` field of `UAAuth`.
+the registry get the same separation from the `purpose` field of `UAAuth`, and a native `msig` member of a portable record from
+the purpose inside its `memberDigest` ([CTR-UA-07](#CTR-UA-07)).
 
 Layer 4 — EOAs: EOAs are never registered and sign only their wallet-native formats: token EIP-712 structs and, behind
-the registry, the EIP-712 `UAAuth` — never a raw hash. Registered secp256k1 kinds (`bip340`, `musig2-secp256k1`,
+the registry, the EIP-712 `UAAuth` — never a raw hash. The one exception is an EOA `msig` member of a portable record (purposes
+`pop` v2, `kem`, `pqz-key` only): it signs the EIP-191 `personal_sign` of its `memberDigest` (a prefixed message, not
+`eth_sign`; [CTR-UA-07](#CTR-UA-07)). Registered secp256k1 kinds (`bip340`, `musig2-secp256k1`,
 `frost-secp256k1`) sign only tagged `ua_msg`. The chain cannot detect that a BIP-340 key is also someone's EOA key (EVM
 exposes no nonce/key mapping); layer 1 prevents it for our wallets, and the residual risk for foreign wallets is
 recorded under security.
@@ -402,9 +417,11 @@ key register under two kinds. Structures have no keyHash (members do).
 hashed again. `digest` is the operation's own domain-separated digest (EIP-712 on EVM, the family digest elsewhere). The
 kind's scheme then signs `ua_msg` its own way (ML-DSA and SLH-DSA: `pq_msg`, [CTR-UA-23](#CTR-UA-23)). **Native signers behind the registry** (`requireAuthorized` on a native
 id: `msig` members) sign the EIP-712 struct `UAAuth(bytes32 ua, bytes32 purpose, bytes32
-digest)` under the registry's domain, never a raw hash; native kinds on token-local paths keep their wallet-native
+digest)` under the registry's domain, never a raw hash — except for the three portable purposes (`pop` v2, `kem`, `pqz-key`;
+[CTR-UA-07](#CTR-UA-07)), where a code-less native `msig` member signs the EIP-191 `personal_sign` of its `memberDigest`
+(chain-free) and a member with code answers by the [CTR-UA-24](#CTR-UA-24) rule over the same digest; native kinds on token-local paths keep their wallet-native
 signing (EIP-712 / family envelope) untouched. Cross-kind and cross-purpose replay die at the hash; native wallets
-display what they sign, and no raw-hash (`eth_sign`) signature is ever asked of an EOA. Cost: one extra keccak (~60 gas).
+display what they sign, and no raw-hash (`eth_sign`) signature is ever asked of an EOA (the portable `personal_sign` is prefixed, not raw). Cost: one extra keccak (~60 gas).
 
 ### <a id="kinds"></a>1.6 Kinds
 
@@ -730,13 +747,17 @@ signer's PoP covers; the `R_REG` proof over the portable digest ([CTR-UA-07](#CT
 members of kinds other than `0x0130`–`0x0133` weigh less than its threshold ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12));
 every other kind, `slhdsa128s` and Zether included, reverts `UAPqzHolder`. An `msig` holder whose worst-case authorization plus `PqzSet.PQZ_DEBIT_MIN_GAS` (the cheapest PQZL debit, full relayed transaction) exceeds 2^24 (EIP-7825) reverts `UAPqzHolder` too, so that no holder is registrable but unable to spend ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12), review2 C0-5). A PQ-eligible `msig` always registers with
 its m-of-n `pop` (a squatter could otherwise fix it without a key forever). The PQZ key is not in the id, and it never changes
-once set: **at most one PQZ key per UA per chain, written once**. A PQ signer registered without one may add it later by
+once set: **at most one PQZ key per UA per chain, written once** — with one exception, a key this chain can never prove (below). A PQ signer registered without one may add it later by
 `setPqzKey(ua, pqzKey, pqzPopHash, sig)` (controller call, owner may override: otherwise an old copied registration
 without the key would permanently deny it on that chain): anyone submits, `sig` is the signer's signature in the `pop` format over
 `uaMessage(kind, PURPOSE_PQZ_KEY, pqzKeyRecordDigest(pqzKeyDigest(ua, pqzKeyHash), pqzPopHash))`, chain-independent and stored
 (`pqzKeySigOf`); the key is stored unproven, and its `R_REG` proof, made over `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua,
-pqzKeyHash))`, comes by `storePqzPop`. A record that already has a PQZ key refuses a second one (`UAPqzKeySet`), so the key is the same
-on every chain where the UA has one **only if the client uses one PQZ key per UA, ever** — a client rule (a UA that signs two
+pqzKeyHash))`, comes by `storePqzPop`. A record that already has a PQZ key refuses a second one (`UAPqzKeySet`), **except** when the stored key's length is not the
+length of this chain's PQZ parameter set (owner 2026-10-30, ruling R-cross-set; built on `ua8`, commit TBD): such a key — for example a
+`n2304-kmax4096` key copied by anyone to a chain that runs `n2816-kmax65536` — can never be proven there (the chain's `R_REG`
+verifier and `PqzCore` refuse its length), so `setPqzKey` may replace it with a key of this chain's set; a key of this chain's set
+stays write-once. So the key is the same
+on every chain where the UA has one **only if the client uses one PQZ key per UA, ever** (per PQZ parameter set, ruling R-cross-set) — a client rule (a UA that signs two
 PoPs with different PQZ keys can diverge across chains; a generation-1 registry can still take a different `setPqzKey` key after
 generation 2 holds one for a gen-1 record, because gen 1 cannot see gen 2: gen 2 and its tokens use gen 2's key, and gen 1's
 can never be proven). **`proven`**: the key carries a flag. With the proof bytes in `register`, or later by `storePqzPop(ua,
@@ -1102,7 +1123,9 @@ interface IUARegistry is IERC5267 {
 ```
 
 The `UAAuth` wrapper is what every native signer behind the registry signs: `msig` native members
-(`UAAuth(memberId, PURPOSE_MEMBER, member_digest)`). Wallets display it as typed data with its purpose; ERC-7739-style 1271 wallets rehash under the
+(`UAAuth(memberId, PURPOSE_MEMBER, member_digest)`), except for the three portable purposes (`pop` v2, `kem`, `pqz-key`), where a
+code-less member signs the EIP-191 `personal_sign` of `member_digest` and a member with code answers by the
+[CTR-UA-24](#CTR-UA-24) rule ([CTR-UA-07](#CTR-UA-07)). Wallets display it as typed data with its purpose; ERC-7739-style 1271 wallets rehash under the
 registry's `eip712Domain()`. The domain's `salt` is the chain's `chain_uid`: clientkeys refuses to sign a `UAAuth` (or a
 v3 `UAMetaTransaction`) whose `salt` differs from the chain profile's `chain_uid`, the app shows it, and the vectors pin
 it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
@@ -1141,8 +1164,8 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    `x` under the Zether tag; a classical-dominant `msig`: **no** PoP of its own — members proved theirs, a non-empty
    `pop` is refused; a PQ-eligible `msig` (non-PQ weight below the threshold) **signs its registration**: `pop` is
    `abi.encode(MemberSig[])` reaching the threshold over the same message, with purpose `pop` v2, with or without a PQZ key,
-   so nobody can register it first without the key; a code-less native member signs `personal_sign`, one with code answers
-   ERC-1271, [CTR-UA-07](#CTR-UA-07)) — `UAPoP`; a `pop` of a PQ-eligible `msig` that does not decode as `MemberSig[]` reverts with empty data (the ABI decoder), not `UAPoP`. The PoP goes through `IUAPopVerifier.verifyPop`
+   so nobody can register it first without the key; a code-less native member signs `personal_sign`, one with code follows
+   [CTR-UA-24](#CTR-UA-24) (EIP-7702 designator: root-key ECDSA first, then ERC-1271; other code: ERC-1271), [CTR-UA-07](#CTR-UA-07)) — `UAPoP`; a `pop` of a PQ-eligible `msig` that does not decode as `MemberSig[]` reverts with empty data (the ABI decoder), not `UAPoP`. The PoP goes through `IUAPopVerifier.verifyPop`
    (below). For the group kinds the PoP call is capped at `verifyBudget` without the
    caller-holds-that-much check (else every group registration needs a ≥ 12.4 M gas limit); a starved group registration
    reverts `UAPoP` (a gas shortage at the key write reverts `SSTORE2WriteFailed`), never creates a record.
@@ -1227,6 +1250,15 @@ gas). Generation 2 takes `predecessor = gen1` and reads it for `UAAlreadyRegiste
 - **Structures (`msig`) may be re-enabled in gen 2**: a structure record is a pure function of its key data (no keyHash;
   a PQZ key claims `pqz-mlwe` in one generation only), so the same id registered in both generations has the same `kind` and `keyPtr` (each generation keeps
   its own `registeredAt`). A gen-1 `msig` can only name gen-1 members; an `msig` with a gen-2 member registers in gen 2.
+  With the portable PoP (UA-8) a PQ-eligible `msig` registered in gen 2 can also be copied into gen 1 by anyone (before UA-8 the
+  PoP named the registry, so this needed a new signature), even from another signed registration with other attributes: two
+  records of one id on one chain. Gen-2 readers use gen 2's record, so authorization is unaffected; but where gen 1 enables `0x0142`,
+  a PQZ key proven in the gen-1 copy is invisible to gen-2 readers (final review 2026-10-30, m5; recorded, no code change; client
+  rule 5 in [§1.13](#migration)).
+- **Deploy order: a gen 2 points only at a UA-8 gen 1.** A UA-8 gen 2 forwards the UA-8 views (`registrationOf`, `pqzKeyOf`,
+  `checkedOf`, …) to its predecessor; over a pre-UA-8 gen 1 those calls revert, and with them `PqzCore._keyPtr` for every gen-1
+  holder. Every chain redeploys both generations on UA-8 (test chains only, no migration); the gen-2 constructor checks only
+  `generation()`, `chainUid()` and `hederaNative()` of its predecessor (final review 2026-10-30, n3).
 - **Chain 7622's gen 1 deploys the PQ signing kinds and the PQZ scheme together**, so the holder's signer is visible to
   `0x0142` (the SCaaS testnet redeploys gen 1 with `UAPqzVerifier` in slot `0x0142`; every other chain leaves it 0: a `pqzKey` is then stored unproven, a directory entry
   that PQZ tokens do not accept, until the UA is copied to a chain with the verifier and `storePqzPop` proves it, [CTR-UA-16](#CTR-UA-16)). On other chains PQ signing kinds may arrive as gen 2 (their groups are new).
@@ -1318,6 +1350,10 @@ members, v3's native path): empty code ⇒ ECDSA low-s by the address; code that
 exactly the EIP-7702 designator `0xef0100 ‖ address` (23 bytes) ⇒ ECDSA low-s by the address is accepted, and otherwise
 ERC-1271 on the address (which runs the delegate code) under the 50 k cap; any other code ⇒ ERC-1271 only (50 k; 400 k for
 `SmartKeyAccount` clones). A member's stated kind `0x0001`/`0x0002` is a label checked for MEMBER, never the dispatch.
+The same rule holds for an `msig` native member of a portable record (`pop` v2, `kem`, `pqz-key`; [CTR-UA-07](#CTR-UA-07)), over the
+chain-free `memberDigest` instead of `UAAuth`: empty code ⇒ ECDSA over its EIP-191 `personal_sign` hash; the EIP-7702 designator ⇒
+that root-key ECDSA first, then ERC-1271 `isValidSignature(memberDigest, sig)`; other code ⇒ ERC-1271 only (owner 2026-10-30,
+ruling R-7702; it supersedes the earlier controller ruling that sent every member with code to ERC-1271 only on this path).
 
 The
 base key of a 7702 account controls it at protocol level (it can send a transaction itself, re-delegate or clear the
@@ -1508,17 +1544,29 @@ New registration flow:
    `uaMessage(0x0142, PURPOSE_POP_V2, portablePopDigest(ua, h, kemRecordHash))`) and its hash `pqzPopHash`, and the first KEM record
    `(kemVersion ≥ 1, kemPk)`. It computes `holderPopMessage(kind, …)` — `registrationDigest` wrapped as `uaMessage(kind, PURPOSE_POP_V2,
    ·)` — and signs it with the kind's signer (`UAKey.signUA("pop", …)`; MuSig2/FROST: a group signing session, plus the KeyAgg hints or the
-   DKG transcript; a PQ-eligible `msig`: the members' signatures over `memberDigest`, a native member by `personal_sign`). Nothing on the
+   DKG transcript; a PQ-eligible `msig`: the members' signatures over `memberDigest`, a code-less native member by `personal_sign`, one with code by
+   the [CTR-UA-24](#CTR-UA-24) rule). Nothing on the
    chain is read: no chain key, `chain_uid` or registry address is in the message, so the same `pop` serves every chain.
 3. Anyone submits `register(kind, keyData, attrs, pop, pqzPop)` (self-paid, a relayer job, or sponsored through the gateway route
-   `POST /v1/ua/register`). If the whole call (with the proof) does not fit one block — the client compares `eth_estimateGas` with the
-   block gas limit (`e2e.py`: the full path only when the estimate is at most `gasLimit·1023/1024`, otherwise, or when the estimate fails, the split) — it submits `register` with an empty `pqzPop` and then `storePqzPop(ua, pqzPop)`. A copy to another chain is the
+   `POST /v1/ua/register`). If the whole call (with the proof) does not fit one transaction — a direct submitter compares `eth_estimateGas` with
+   the block gas limit (`e2e.py`: the full path only when the estimate is at most `gasLimit·1023/1024`, otherwise, or when the estimate fails,
+   the split; `e2e.py --split` forces the split), a relayer with min(block gas limit, its per-transaction cap) (ruling R-node; the SCaaS
+   testnet relayer cap is 64 M) — it submits `register` with an empty `pqzPop` and then `storePqzPop(ua, pqzPop)`. A copy to another chain is the
    same call, built from the first chain's logs or from `registrationOf` ([CTR-UA-31](#CTR-UA-31)).
 4. On the finalized `UARegistered` the client checks `registrationOf(ua)` — the stored `(kind, keyData, attrs, pop)` equal what it sent —
    and `pqzKeyOf(ua).proven` / `checkedOf(ua)` for the PQZ key, and only then marks the account usable on that chain. Later KEM versions
    come by `setKemKey`.
-5. A client keeps **one PQZ key per UA, ever** ([CTR-UA-16](#CTR-UA-16)); and when it reads a registration from a registry, it reads both
-   generations of that chain (gen 2 emits PQZ events for gen-1 UAs).
+5. A client keeps **one PQZ key per UA per PQZ parameter set** ([CTR-UA-16](#CTR-UA-16); one key, ever, on chains of one set; on a
+   chain of another set, a copied key of the wrong length can be replaced once by `setPqzKey` with a key of that chain's set, owner
+   2026-10-30 ruling R-cross-set), and **one KEM key per KEM version, the initial record included** ([CTR-UA-32](#CTR-UA-32)): every
+   `(ua, version)` is write-once, so if a UA signs two registrations whose initial `(kemVersion, kemPk)` differ (for example a
+   re-registration with a new device key at version 1), each chain keeps whichever copy arrived first and nothing can repair the
+   divergence; a new key always takes a new version. When it reads a registration from a registry, it reads both generations of that
+   chain (gen 2 emits PQZ events for gen-1 UAs). An `msig` (enabled in both generations) can hold a record in each: a PQ-eligible
+   `msig` registered in gen 2 can be copied into gen 1 by its portable PoP (gen 1 cannot see gen 2), possibly from another signed
+   registration with other attributes; gen-2 readers use gen 2's record (no authorization impact), but a PQZ key proven in the gen-1
+   copy (where gen 1 enables `0x0142`) is invisible to gen-2 readers (gen 2 forwards only records it does not hold, and its
+   `setPqzKey` is `UAKindDisabled(0x0142)` there) — a recorded limit (final review 2026-10-30), no code change.
 
 Order: the registry, the Zether re-point, the prover and the client Zether change land in one change set (the vectors
 are shared; a partial landing breaks the cross-language tests); dev chains 31337/1337 redeploy; fixtures re-register;
@@ -1632,7 +1680,7 @@ live in the separate `ComplianceRegistry`. This interface was replaced by `IUARe
 | S20 | Typo in a UA id; Zether UA as receiver | unregistered `to` refused; `to` ∈ native ∪ SIGNING (`UAKindNotAccepted`) | none |
 | S21 | ERC-20 replay of `Transfer` ≠ `balanceOf` | the `UA_POOL` sub-ledger: every native balance change emits `Transfer` | naive tools show one large `UA_POOL` holder |
 | S22 | Gas repricing pushes an enabled kind over budget after funds are held | public-chain caps ≤ ~50 % of the budget; budget ≤ 70 % of the chain cap | a large repricing fork can still lock a PQ/ed25519 UA on that chain until a new generation and v3 version |
-| S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only; `uaCancelNonce` derived-only | the `secp256k1` kind (0x0108): its verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (on-chain review W-J; owner 2026-10-19: recorded residual risk; an EIP-191 `personal_sign` variant after P6, with new vectors and the six clients) |
+| S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only, except an `msig` native member of a portable record (`pop` v2, `kem`, `pqz-key`), which signs the prefixed EIP-191 `personal_sign` of its `memberDigest` ([CTR-UA-07](#CTR-UA-07)), never a raw hash; `uaCancelNonce` derived-only | the `secp256k1` kind (0x0108): its verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (on-chain review W-J; owner 2026-10-19: recorded residual risk; an EIP-191 `personal_sign` variant after P6, with new vectors and the six clients) |
 | S24 | Native send to a derived id on non-EVM (keyless address) | derived ids shown only as URN, never in the chain's address format | a user who converts the URN by hand |
 | S25 | Membership shown as consent | app rules (members confirm off chain); the MuSig2 PoP proves participation | `msig`/FROST groups found on chain without member confirmations |
 | S26 | Chain-id collision (7622 or any id shared by two networks): `UAAuth` or v3 signature replayed to a same-address registry/token there (a registration PoP is portable, so its replay is not an attack: it registers the same UA, S31) | `chain_uid` (genesis hash) in both EIP-712 domain salts, the cancel digest and the CREATE2 init code; the node binds registry, `chainUid()` and genesis hash per profile | a replica built from a copy of our profile on a colliding chain can copy our records; nothing of ours trusts it |
@@ -1717,7 +1765,7 @@ Registration (execution gas, bn254 base):
 <a id="gas-ua8"></a>**UA-8 registration gas (measured, plan task A8; forge `--isolate`, `evm_version amsterdam`, deterministic; log
 `smartcontracts/evm/runs/2026-10-30-ua8-gas.txt`).** The rows above that predate UA-8 (`register` 77 k–273 k, the "Total" column of the
 registration table) are the pre-UA-8 figures: the UA-8 record stores every `register` field (SSTORE2 of the whole registration, state gas
-≈ 1.2–1.3 M for a single classical key under EIP-8037), so a single-key registration is now regular + state gas as below. Columns are
+≈ 1.2–1.3 M for a single classical key under EIP-8037, 1.75 M for `webauthn-p256`), so a single-key registration is now regular + state gas as below. Columns are
 regular gas (including the calldata floor) + EIP-8037 state gas; a transaction is charged their sum. The figures assume no gas price and no
 block limit; the 60 M statements below compare one transaction with a 60 M block only to show what the split is for.
 
@@ -1747,11 +1795,12 @@ With the PQZ attachment (`n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384`
 | `storePqzPop` | 45.6 | 49.1 | 52.6 | 57.5 |
 
 A registration with the proof in the call (84.8–109.1 M) does not fit a 60 M block, so on such a chain the client registers without
-`pqzPop` and then calls `storePqzPop` ([CTR-UA-16](#CTR-UA-16); `e2e.py` takes the full path only when `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise, or on an estimate error, `register` + `storePqzPop`). The calldata floor of EIP-7976 (21,000 + 16 gas per token over the whole ABI calldata) is the regular gas of
+`pqzPop` and then calls `storePqzPop` ([CTR-UA-16](#CTR-UA-16); `e2e.py` takes the full path only when `eth_estimateGas` of the full register is at most `gasLimit·1023/1024`, otherwise, or on an estimate error, `register` + `storePqzPop`; `e2e.py --split` forces the split path, so it can be exercised on the SCaaS testnet; a relayer compares with min(block gas limit, its per-transaction cap), owner 2026-10-30 ruling R-node, [CTR-UA-31](#CTR-UA-31)). The calldata floor of EIP-7976 (21,000 + 16 gas per token over the whole ABI calldata) is the regular gas of
 `storePqzPop` (1.83 / 1.97 / 2.10 / 2.29 M), and the proof as log data (243,048 gas at `n2304-kmax4096`) sits under that floor; a repeated
 `storePqzPop` costs the same floor and no state gas. These rows use the `rreg` stand-in for the PQZ verifier, so **the real `R_REG`
-verify (≈ 3.65 M) is not in them**; adding it lifts `storePqzPop` at `n2816-kmax65536` to **≈ 59.9 M, right at a 60 M block** (the other sets
-keep headroom: `n2304-kmax4096` about 7 M). That concerns chains with a 60 M block, not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`, where `e2e.py` takes the full path): a watch item measured in fs3 Task 13 before `n2816-kmax65536` is used on a 60 M-block chain ([TODO.md](../../TODO.md)). `setKemKey` (version 2): `mldsa65` 8.2 M,
+verify (≈ 3.65 M) is not in them**; adding it lifts `storePqzPop` at `n2816-kmax65536` to **≈ 59.9 M, right at a 60 M block**, and the gen-2 variant (a gen 2 that enables
+`0x0142` proving a gen-1 record's key, 57,729,122 measured with the stand-in) to **≈ 60.1 M, above a 60 M block** (≈ 2.4 M net for the
+real verify): on such a chain a gen-1 PQ holder's key could never be proven (the other sets keep headroom: `n2304-kmax4096` about 7 M). That concerns chains with a 60 M block, not the SCaaS testnet (200 M, genesis `gasLimit` `0xbebc200`, where `e2e.py` takes the full path): a watch item measured in fs3 Task 13 before `n2816-kmax65536` is used on a 60 M-block chain ([TODO.md](../../TODO.md)). `setKemKey` (version 2): `mldsa65` 8.2 M,
 `fndsa512` 6.3 M, `msig-pq` 14.3 M (mostly the KEM record's state gas), of which the read of the registration blob is 3.7 % /
 0.4 % / 2.7 % of the regular gas (the separately stored key prefix, about 2 KB for `mldsa65`, adds 4–5 %); a 12-of-12 `slhdsa128s` `msig`
 (96,832 B signature) costs 158.3 M and is a test construction for a registration blob above 64 KiB, not a product row. `mldsa65`

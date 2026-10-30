@@ -268,8 +268,8 @@ account factory, mandate wallets, the DEX and the Universal Account registry —
 EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267 `eip712Domain()` fields
 `0x1f`.
 
-It is also bound into the registry's proof-of-possession digest and the `metatx-cancel` digest
-([CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
+It is also bound into the `metatx-cancel` digest (the registry's proof of possession is portable since UA-8 and carries no
+chain, [CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
 mode, disclosure and `entryRef` digests beside `chainId`, since those are not EIP-712 domains. The EVM cannot read its
 own genesis hash after block 256, so a contract cannot *prove* `chain_uid`; the deploy script reads it from the RPC,
 and the deploy gate and the node require each contract's `chainUid()` = the RPC's genesis hash = the chain profile

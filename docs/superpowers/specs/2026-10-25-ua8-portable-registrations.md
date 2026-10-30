@@ -7,7 +7,7 @@ before fs3 Task 13** (owner 2026-10-25; the SCaaS testnet redeploys the registry
 that information and register it on another chain: a UA account does not depend on the chain (its transactions do).
 The KEM keys likewise."
 
-## 1. Today
+## 1. Before UA-8
 
 - The **UA id is already chain-independent**: `UA = keccak256(keccak256(kind_tag) ‖ key_data)`, a pure function, the
   same on every chain ([accounts.md](../../contracts/accounts.md) scope, CTR-UA-03).

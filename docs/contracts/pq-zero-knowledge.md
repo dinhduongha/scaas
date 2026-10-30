@@ -251,9 +251,9 @@ PQZ parameters.
 | Forks live | through Fusaka + BPO2, incl. EIP-2537, EIP-7951 (secp256r1 at `0x100`), **EIP-7825**, **EIP-7623**, **EIP-7934** | — |
 | [EIP-7825](https://eips.ethereum.org/EIPS/eip-7825) tx gas cap | 16,777,216 per transaction, independent of block limit | rules out a Solidity lattice verifier ([verifier](#verifier)) |
 | Chain id | **7622** (owner, 2026-10-07; formerly 9000, which is **also Evmos Testnet**, a public chain: [chainlist](https://chainlist.org/chain/9000), [Sequence chainlist](https://docs.sequence.xyz/solutions/chainlist/non-integrated/evmos-testnet)). Chain ids are a registry convention, so 7622 is not assumed unique either | `chainid == 7622` does not prove "our chain"; the precompile self-test, the registry's `chain_uid` (genesis hash) in every statement and the node's genesis-hash binding do |
-| Block gas limit | 16,777,216 (Clique signer can move it without reset) | ~5 transfers per block unless raised ([CTR-PQZ-11](#CTR-PQZ-11)) |
+| Block gas limit | 200,000,000 since the reset of 2026-10-22 (genesis `gasLimit` `0xbebc200`, `TargetBlockGasLimit` 200,000,000); 16,777,216 at the time of this table, then an 80 M target (P6f) | gas meters block capacity ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | [EIP-7623](https://eips.ethereum.org/EIPS/eip-7623) calldata floor | `10 × tokens`, token = zero byte 1 / non-zero byte 4 ⇒ 40 gas per non-zero byte | dominates PQZ cost once verification is native |
-| [EIP-7934](https://eips.ethereum.org/EIPS/eip-7934) | RLP block ≤ 8,388,608 B | a block can carry at most `gasLimit / 10` calldata bytes (all-zero calldata at the floor); the 80 M target keeps that ≤ 8.0 MB, so the limit cannot be hit |
+| [EIP-7934](https://eips.ethereum.org/EIPS/eip-7934) | RLP block ≤ 8,388,608 B | a block can carry at most `gasLimit / 10` calldata bytes (all-zero calldata at the floor); the former 80 M target kept that ≤ 8.0 MB; at today's 200 M limit the gas limit alone no longer bounds a block under 8,388,608 B, so the block producer's own EIP-7934 check is what holds it |
 | Tx-pool size limit | 128 KiB is the common client default (geth/reth); Nethermind `TxPool.MaxTxSize` to be confirmed | transfers with inline credits exceed it ([CTR-PQZ-11](#CTR-PQZ-11)) |
 | Missing transition keys | Nethermind silently ignores unknown keys; `eip1108Transition` was once missing and made `ecMul` 6.4× dearer with no symptom | every PQZ activation is **probed**, never trusted ([CTR-PQZ-10](#CTR-PQZ-10)) |
 
@@ -1981,14 +1981,15 @@ calibrated on the p99 verify time over adversarial inputs against `ecMul` on the
 (`engine.Pqz.schedules`: per schedule an activation timestamp, the `pqz` rows `(op, id, stmtLen, gas)`, `selftestGas`,
 `mldsa44Gas`, `mldsa65Gas`; parsed strictly, a new price or op 7 is a new schedule with a later timestamp: P6f D2);
 `OP_SELFTEST` has a fixed price of its own and is computed once per process. EIP-7623 and EIP-7825 stay enabled.
-Operator change: Clique `TargetBlockGasLimit` **80,000,000** on the SCaaS testnet (no data reset): at the calldata floor a
-block then carries at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata, so
-no block the producer builds can be oversized.
+Operator change (P6f): Clique `TargetBlockGasLimit` **80,000,000** on the SCaaS testnet (no data reset): at the calldata floor a
+block then carried at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata. Since the
+reset of 2026-10-22 the SCaaS testnet runs **200,000,000** (genesis `gasLimit` `0xbebc200`, `TargetBlockGasLimit` 200,000,000), so that
+bound no longer follows from the gas limit (the producer's EIP-7934 check holds it).
 
 Node and client limits on the SCaaS testnet: Nethermind `TxPool.MaxTxSize`
-1,048,576 and `Blocks.TargetBlockGasLimit` 80,000,000 in the node's `config.json`, JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 16_000_000`, gateway body limit 1 MiB on job
+1,048,576 and `Blocks.TargetBlockGasLimit` 200,000,000 in the node's `config.json` (80,000,000 at P6f), JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 64_000_000` (owner 2026-10-22; `max_gas_per_tx = 16_000_000` at P6f), gateway body limit 1 MiB on job
 submissions to the `pqz` chain profile only (64 KiB elsewhere) — recommendations to node operators
-([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block while
+([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block (at 80 M) while
 the floor binds, ≈ 10 at the 50 ms verify kill threshold; ≈ 45 GB/day of archive growth at sustained full load. The
 node's default `max_gas_per_tx` of 3,000,000 already rejects classical Zether transfers (3.36 M), so a PQZ chain
 profile must raise it.
@@ -2191,7 +2192,8 @@ prices are recalibrated on measured p99 in P6f. The estimates are for PQZL; a PQ
 ≈ 9.2 M gas of EIP-7623 calldata floor (P6e D5), so its `INLINE_MAX` is a P6g question.
 
 Per received payment PQZ costs ≈ 3.3 M (transfer plus the later roll of its credit) against classical ≈ 3.4–3.5 M,
-while the floor binds. At the 80 M block target: ≈ 28 transfers per 5 s block (≈ 10 at the 50 ms threshold). **Archive
+while the floor binds. At the former 80 M block target (P6f): ≈ 28 transfers per 5 s block (≈ 10 at the 50 ms threshold); the 200 M
+limit of today raises the gas bound ≈ 2.5×, and the 50 ms verify threshold stays the binding one. **Archive
 growth** at sustained full load: ≈ 430 KB/s of calldata plus ≈ 95 KB/s of logs, ≈ 45 GB/day; operators size archive
 disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 
@@ -2272,7 +2274,7 @@ split, never a silent acceptance (fail closed).
    the formula, not with "it answered" (the `eip1108` lesson).
 3. Roll the signer and every follower to the image before the timestamp (or reset the testnet with `engine.Pqz` from
    genesis, owner 2026-10-15); then repeat step 2 on the live chain.
-4. Raise `TargetBlockGasLimit` to 80 M and `TxPool.MaxTxSize` to 1 MiB ([CTR-PQZ-11](#CTR-PQZ-11)).
+4. Set `TargetBlockGasLimit` to 200 M (genesis `gasLimit` `0xbebc200` since the reset of 2026-10-22; 80 M at P6f) and `TxPool.MaxTxSize` to 1 MiB ([CTR-PQZ-11](#CTR-PQZ-11)).
 5. **RPC topology.** The signer exposes no public RPC; a follower node serves all public `eth_call`, `eth_estimateGas`
    and node pre-simulation, and the signer peers only with our followers. A crash on a crafted `eth_call` then takes
    down a follower, not block production (defence in depth only, since an included transaction runs on every node).

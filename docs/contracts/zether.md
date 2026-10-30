@@ -395,8 +395,8 @@ implementation's constructor immutable, exposed as `chainUid()` and equal to the
 Without it a re-created chain restarts `modeNonce`, `accSeq`, `sendCounter` and
 block numbers, so a captured mode or rollover signature, a proof or a disclosure would verify there; `entryRef` gains
 it so that references never collide across chains (client reconciliation still keys by `(chain_key, entryRef)`). The
-UA registry (target) takes `chainUid` as a constructor immutable and adds it to its PoP challenge; because
-it checks raw digests, every caller's digest carries `chainUid` itself. **Built (P3)** for every token-side digest and
+UA registry (target) takes `chainUid` as a constructor immutable (its `UAAuth` domain salt; its PoP challenge carries no chain since
+UA-8); because it checks raw digests, every caller's digest carries `chainUid` itself. **Built (P3)** for every token-side digest and
 the prover (which also mixes `chainUid` into its `s`); the vectors are regenerated. The UA registry has it since UA-3 (the `UAAuth` domain salt; the registration PoP itself became portable in UA-8 and carries no chain, [CTR-UA-07](accounts.md#CTR-UA-07)).
 
 Points:
