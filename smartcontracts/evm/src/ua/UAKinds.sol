@@ -62,8 +62,11 @@ library UAKinds {
     bytes32 internal constant KEM_RECORD_TAG = keccak256("scaas.ua.kem-record.v1");
     bytes32 internal constant PURPOSE_PQZ_KEY = keccak256("scaas.ua.purpose.pqz-key.v1");
     bytes32 internal constant PQZ_KEY_RECORD_TAG = keccak256("scaas.ua.pqz-key-record.v1");
-    /// ML-KEM-1024 ek ‖ X25519 pk (X-Wing order): the only KEM key the registry stores (UA-8 P7).
-    uint256 internal constant KEM_PK_LENGTH = 1600;
+    /// First byte of `kemPk` = the KEM scheme id (CTR-UA-32). Scheme 1 = ML-KEM-1024 + X25519; 2 (ML-KEM-1024 + HQC +
+    /// X25519, after FIPS 207) is reserved and refused until enabled.
+    uint8 internal constant KEM_SCHEME_MLKEM1024_X25519 = 1;
+    /// `kemPk` of scheme 1: `0x01 ‖ ML-KEM-1024 ek (1,568 B) ‖ X25519 pk (32 B)` (X-Wing order): the only KEM key the registry stores.
+    uint256 internal constant KEM_PK_LENGTH = 1601;
     /// Who checked a part of a record (UA-8 P11.3), the code points of every family; `RELAYER` comes with the relayer id.
     uint8 internal constant CHECKED_NONE = 0;
     uint8 internal constant CHECKED_CHAIN = 1;
@@ -233,7 +236,7 @@ library UAKinds {
     }
 
     // UA-8 digests (UA8-D1): keccak256 of 32-byte words, no chain id, no chain uid, no registry; each hash 0 when absent.
-    // The registry checks the attributes (holder, version ≥ 1, 1,600-byte key) before it hashes them.
+    // The registry checks the attributes (holder, version ≥ 1, 1,601-byte scheme-1 key) before it hashes them.
 
     /// `keccak256(PURPOSE_POP_V2 ‖ ua ‖ pqzKeyHash ‖ kemRecordHash)`; `pqzKeyHash = keyHashOf(0x0142, pqzKey)`,
     /// `kemRecordHash = kemRecordDigest` of the initial KEM record. R_REG proves over `uaMessage(0x0142, PURPOSE_POP_V2, ·)`.

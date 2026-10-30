@@ -388,7 +388,14 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _kemAt(ua, version);
     }
 
-    /// The stored record `pk ‖ sig` of `(ua, version)` split at the 1,600-byte key; ("", "") when not stored.
+    /// Empty -> `UAKemKeyLength`; scheme id (first byte) not enabled -> `UAKemScheme`; other length -> `UAKemKeyLength`.
+    function _checkKemPk(bytes memory pk) private pure {
+        if (pk.length == 0) revert UAKemKeyLength(0);
+        if (uint8(pk[0]) != UAKinds.KEM_SCHEME_MLKEM1024_X25519) revert UAKemScheme(uint8(pk[0]));
+        if (pk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(pk.length);
+    }
+
+    /// The stored record `pk ‖ sig` of `(ua, version)` split at the 1,601-byte scheme-1 key; ("", "") when not stored.
     function _kemAt(bytes32 ua, uint64 version) private view returns (bytes memory pk, bytes memory sig) {
         bytes memory b = SSTORE2.readChunks(_kem[ua][version]);
         if (b.length == 0) return (pk, sig);
@@ -606,7 +613,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// whose worst-case authorization, with a gen-2 registry's forwarding hold, + `PqzSet.PQZ_DEBIT_MIN_GAS` exceeds
     /// 2^24; `UAPqzPopHash` unless a PQZ key comes with a proof hash and only with it, and given proof bytes hash to it;
     /// `UAKeyData(0x0142)` for a PQZ key of no parameter set's length; `UAKemVersion` for version 0 with a key,
-    /// `UAKemKeyLength` for a KEM key other than 1,600 B; `UAKindDisabled(0x0142)` for a PQZ key on a gen 2 whose gen 1
+    /// `UAKemKeyLength` for a KEM key other than the scheme-1 length (1,601 B); `UAKemScheme` for a scheme id not enabled; `UAKindDisabled(0x0142)` for a PQZ key on a gen 2 whose gen 1
     /// enables 0x0142 (ruling A5-I1). The PQZ key's owner (`UAKeyInUse`) is step 7, for a proven key.
     function _attrs(uint16 kind, bytes memory d, bytes32 ua, UAAttrs calldata attrs, bytes calldata pqzPop)
         private
@@ -624,7 +631,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes32 kemHash;
         if (kem) {
             if (v == 0) revert UAKemVersion(ua, 0);
-            if (attrs.kemPk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(attrs.kemPk.length);
+            _checkKemPk(attrs.kemPk);
             kemHash = UAKinds.kemRecordDigest(ua, v, attrs.kemPk);
         }
         portable = UAKinds.portablePopDigest(ua, h, kemHash);
@@ -800,7 +807,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (bytes memory d,,) = _registration(ua, r.keyPtr);
         if (!_holder(r.kind, d)) revert UAKemHolder(ua);
         if (version == 0 || _kem[ua][version].length != 0) revert UAKemVersion(ua, version);
-        if (kemPk.length != UAKinds.KEM_PK_LENGTH) revert UAKemKeyLength(kemPk.length);
+        _checkKemPk(kemPk);
         bytes32 rd = UAKinds.kemRecordDigest(ua, version, kemPk);
         if (!_sigOk(r.kind, d, ua, UAKinds.PURPOSE_KEM, rd, sig)) revert UAUnauthorized(ua);
         _kem[ua][version] = SSTORE2.writeChunks(bytes.concat(kemPk, sig));
