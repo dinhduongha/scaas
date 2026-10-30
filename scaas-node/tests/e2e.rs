@@ -708,14 +708,11 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let (st, _) = place(token_a, order(&alice, token_b, 100_000_000, 200_000_000, 1_000, 1, lane, token_b), &alice).await;
     assert_eq!(st, 400);
 
-    // 3. The ask rests; a bid of more than half of it is the taker of one settlement (NODE-DEX-15).
+    // 3. The ask rests; a bid is the taker of one settlement (NODE-DEX-15).
     let ask = order(&alice, token_b, 100_000_000, 200_000_000, 1_000, 2, lane, dex);
     let ask_hash = hash(token_a, &ask);
     let (st, body) = place(token_a, ask.clone(), &alice).await;
     assert_eq!((st, body["status"].as_str()), (202, Some("resting")), "{body}");
-    let small = order(&bob, token_a, 80_000_000, 40_000_000, 2_000, 3, lane, dex);
-    let (st, body) = place(token_b, small, &bob).await;
-    assert_eq!((st, body["status"].as_str()), (202, Some("cancelled")), "below the ask's minimum fill, it cannot rest crossed: {body}");
     let bid = order(&bob, token_a, 120_000_000, 60_000_000, 2_000, 4, lane, dex);
     let (st, body) = place(token_b, bid, &bob).await;
     assert_eq!((st, body["status"].as_str()), (202, Some("filled")), "{body}");
@@ -860,6 +857,83 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     assert_eq!(balance(&rpc, usdc, alice.address()).await, U256::from(200_000_000u64));
     assert_eq!(balance(&rpc, token_a, dave.address()).await, U256::from(100_000_000u64));
     assert_eq!(balance(&rpc, usdc, dex).await + balance(&rpc, usdc, pull).await, U256::ZERO);
+}
+
+#[tokio::test]
+#[ignore]
+async fn dex_fill_below_half_settles_on_anvil() {
+    let _ = tracing_subscriber::fmt().with_env_filter("info").try_init();
+    let chain_id = 31951;
+    let (_anvil, rpc) = start_anvil(chain_id, 18652).await;
+    let alice = small_key(0xA11CE);
+    let bob = small_key(0xB0B);
+    let dep = deploy(&rpc, chain_id, alice.address());
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let token_a: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let token_b: Address = dep["demo_token_2"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let deployer = key(DEPLOYER);
+    let alice_b0 = balance(&rpc, token_b, alice.address()).await;
+    send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
+    let treasury = Address::repeat_byte(0x7a);
+    let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { admin: deployer.address(),
+        relayerSharePpm: 500_000, treasury, listedOnly: false }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
+
+    let relayer = key(RELAYER);
+    let lane = relayer.address();
+    let cfg = chain_cfg(chain_id, &rpc, Some(dex));
+    // market: no fees, min_base_amount 100 (< the 200 bid, so it is not a junk leg)
+    let state = Arc::new(Mutex::new(FakeOdoo {
+        tokens: vec![format!("{token_a:#x}"), format!("{token_b:#x}")],
+        dex: format!("{dex:#x}"),
+        markets: vec![json!({"id": 1, "base": format!("{token_a:#x}"), "quote": format!("{token_b:#x}"), "base_decimals": 6,
+                             "quote_decimals": 6, "maker_fee_ppm": 0, "taker_fee_ppm": 0, "min_base_amount": "100"})],
+        ..Default::default()
+    }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let mut s = Submitter::start(Chain::with_signer(&cfg, relayer.clone()).unwrap(), odoo.clone(), cfg.clone(), "e2e".into(), Default::default())
+        .await
+        .unwrap();
+    let shared = Arc::new(Chain::with_signer(&cfg, relayer.clone()).unwrap());
+    let venue = Venue::start(shared.clone(), odoo.clone(), Some(odoo.clone()), dex).await.unwrap();
+    let (tx, mut rx) = mpsc::channel::<Work>(16);
+    let tokens = Arc::new(RwLock::new(vec![token_a, token_b]));
+    let guard = Arc::new(scaas_node::guard::Guard::new(&cfg, tokens.clone()).unwrap());
+    let gw = GwChain { chain: shared.clone(), tx, tokens, dex: Some(venue.clone()), breaker: None, fee_recipient: None, guard };
+    let app = router(AppState { chains: Arc::new([(chain_id, gw)].into_iter().collect()) });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:18653").await.unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let http = reqwest::Client::new();
+    let post = |body: Value| {
+        let http = http.clone();
+        async move { http.post("http://127.0.0.1:18653/v1/dex/orders").json(&body).send().await.unwrap().json::<Value>().await.unwrap() }
+    };
+    let place = |sell: Address, o: TradeOrder, signer: &PrivateKeySigner| {
+        let sig = sign_hash(signer, trade_order_hash(&domain("SCaaS MetaToken", chain_id, sell, uid), &o));
+        post(json!({"chain": chain_id, "sellToken": sell, "order": WireOrder::from_sol(&o), "signature": sig}))
+    };
+
+    // ask: 1000 A for 2000 B, minFill 0 (order() default)
+    let ask = order(&alice, token_b, 1_000, 2_000, 0, 1, lane, dex);
+    let ask_hash = format!("{:#x}", trade_order_hash(&domain("SCaaS MetaToken", chain_id, token_a, uid), &ask));
+    assert_eq!(place(token_a, ask, &alice).await["status"], "resting");
+
+    // bid 200 A (400 B) is 20 % of the ask: it fills, the ask stays partial with 800 left
+    assert_eq!(place(token_b, order(&bob, token_a, 400, 200, 0, 2, lane, dex), &bob).await["status"], "filled");
+    drain(&mut s, &mut rx).await;
+    let stored = state.lock().unwrap().orders[&ask_hash].clone();
+    assert_eq!((stored["state"].as_str(), stored["remaining"].as_str()), (Some("partial"), Some("800")));
+    assert_eq!(balance(&rpc, token_b, alice.address()).await, alice_b0 + U256::from(400u64));
+    assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(200u64));
+
+    // a second bid of 100 A (200 B) fills again
+    assert_eq!(place(token_b, order(&bob, token_a, 200, 100, 0, 3, lane, dex), &bob).await["status"], "filled");
+    drain(&mut s, &mut rx).await;
+    let stored = state.lock().unwrap().orders[&ask_hash].clone();
+    assert_eq!((stored["state"].as_str(), stored["remaining"].as_str()), (Some("partial"), Some("700")));
+    assert_eq!(balance(&rpc, token_b, alice.address()).await, alice_b0 + U256::from(600u64));
+    assert_eq!(balance(&rpc, token_a, bob.address()).await, U256::from(300u64));
 }
 
 fn pay_job(payer: &PrivateKeySigner, dep: &Value, chain_id: u64, token: Address, id: i64, tag: &[u8]) -> Value {

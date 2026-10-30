@@ -57,7 +57,7 @@ pub enum Rule {
 /// The call table as built in P5: the rows whose contracts exist (`cast sig` of the Solidity signatures; pinned
 /// against the KAT calldata). `mtxExecuteAsOwner` is one selector on `SmartKeyAccount` and `MandateWallet`, so it takes
 /// the wallet's rule. UA-8 (ruling R-node): the registry's four writes. Every other selector is refused.
-pub const CALL_TABLE: [([u8; 4], &str, Rule); 16] = [
+pub const CALL_TABLE: [([u8; 4], &str, Rule); 19] = [
     ([0x45, 0x9b, 0x5b, 0x50], "SmartKeyAccountFactory.deploy", Rule::AccountFactory),
     ([0xfd, 0xf2, 0xd3, 0x38], "mtxExecuteAsOwner", Rule::SelfAuth),
     ([0x3a, 0x5b, 0x07, 0x08], "HederaMandateWallet.mtxExecuteAsOwnerRaw", Rule::SelfAuth),
@@ -74,6 +74,9 @@ pub const CALL_TABLE: [([u8; 4], &str, Rule); 16] = [
     (<crate::abi::IUARegistry::setKemKeyCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.setKemKey", Rule::UaRegistry),
     (<crate::abi::IUARegistry::storePqzPopCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.storePqzPop", Rule::UaRegistry),
     (<crate::abi::IUARegistry::setPqzKeyCall as alloy::sol_types::SolCall>::SELECTOR, "UARegistry.setPqzKey", Rule::UaRegistry),
+    (<crate::abi::ISCaaSDex::mtxHybridCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxHybrid", Rule::Dex),
+    (<crate::abi::ISCaaSDex::mtxHybridViaCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxHybridVia", Rule::Dex),
+    (<crate::abi::ISCaaSDex::mtxExchangeBatchCall as alloy::sol_types::SolCall>::SELECTOR, "SCaaSDex.mtxExchangeBatch", Rule::Dex),
 ];
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
@@ -380,6 +383,13 @@ pub fn gas_limit(estimate: u64, floor: u64, cap: u64) -> u64 {
 /// `mtxSettle` returned `ok` for every settlement it was given.
 pub fn settled_all(ret: &[u8]) -> bool {
     <Vec<bool> as SolValue>::abi_decode(ret).is_ok_and(|v| !v.is_empty() && v.iter().all(|x| *x))
+}
+
+/// A failed plan's revert data that means "out of gas": empty, or an `InteractionFailed` whose inner reason is empty
+/// (an interaction that ran out of gas inside a later batch plan surfaces wrapped, not as an empty revert).
+pub fn reason_is_out_of_gas(data: &[u8]) -> bool {
+    use crate::abi::ISCaaSDex::InteractionFailed;
+    data.is_empty() || <InteractionFailed as alloy::sol_types::SolError>::abi_decode(data).is_ok_and(|e| e.reason.is_empty())
 }
 
 /// The next gas to try for `mtxSettle`: ×1.5, capped at `max`; `None` once at the cap.
@@ -789,8 +799,47 @@ mod tests {
         let rules: Vec<Rule> = CALL_TABLE.iter().map(|r| r.2).collect();
         assert_eq!(rules, [Rule::AccountFactory, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth, Rule::SelfAuth,
             Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::Dex, Rule::RelayFee, Rule::RelayFee,
-            Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry]);
+            Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::UaRegistry, Rule::Dex, Rule::Dex, Rule::Dex]);
         assert!(!allowed(Rule::RelayFee, &Facts { bound: true, ..Default::default() }), "never by facts");
+    }
+
+    /// The contract-generated hybrid / batch calldata (`DexKat.t.sol`) selects the table rows and round-trips through
+    /// the node's own bindings; read from the committed KAT, never copied.
+    #[test]
+    fn hybrid_and_batch_calldata_round_trip_the_kat() {
+        use crate::abi::ISCaaSDex as D;
+        let p = format!("{}/../smartcontracts/evm/test/vectors/dex_order_kat.json", env!("CARGO_MANIFEST_DIR"));
+        let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let kat = |k: &str| alloy::hex::decode(&v[k].as_str().unwrap()[2..]).unwrap();
+        let (h, hv, b) = (kat("hybrid_calldata"), kat("hybrid_via_calldata"), kat("exchange_batch_calldata"));
+        assert_eq!(h[..4], D::mtxHybridCall::SELECTOR);
+        assert_eq!(hv[..4], D::mtxHybridViaCall::SELECTOR);
+        assert_eq!(b[..4], D::mtxExchangeBatchCall::SELECTOR);
+        assert_eq!(D::mtxHybridCall::abi_decode(&h).unwrap().abi_encode(), h);
+        assert_eq!(D::mtxHybridViaCall::abi_decode(&hv).unwrap().abi_encode(), hv);
+        assert_eq!(D::mtxExchangeBatchCall::abi_decode(&b).unwrap().abi_encode(), b);
+        for (sel, name) in [(&h, "SCaaSDex.mtxHybrid"), (&hv, "SCaaSDex.mtxHybridVia"), (&b, "SCaaSDex.mtxExchangeBatch")] {
+            assert_eq!(row(sel[..4].try_into().unwrap()), Some((name, Rule::Dex)));
+        }
+        let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        let plan = "(bytes32,(address,uint8,bytes,bytes,uint256),(address,uint8,bytes,bytes,uint256)[],uint256,uint256,address[])";
+        let xp = "(bytes32,(address,uint8,bytes,bytes,uint256,uint256)[],address[])";
+        assert_eq!(D::mtxHybridCall::SELECTOR, sig(&format!("mtxHybrid({plan},(address,bytes)[])")));
+        assert_eq!(D::mtxHybridViaCall::SELECTOR, sig(&format!("mtxHybridVia({plan},address,bytes)")));
+        assert_eq!(D::mtxExchangeBatchCall::SELECTOR, sig(&format!("mtxExchangeBatch({xp}[],(address,bytes)[][])")));
+    }
+
+    /// NODE-DEX-16: the hybrid and batch entries go only to a listed DEX.
+    #[test]
+    fn hybrid_and_batch_only_to_a_listed_dex() {
+        use crate::abi::ISCaaSDex as D;
+        let bound = Facts { bound: true, ..Default::default() };
+        for sel in [D::mtxHybridCall::SELECTOR, D::mtxHybridViaCall::SELECTOR, D::mtxExchangeBatchCall::SELECTOR] {
+            let (_, rule) = row(sel).unwrap();
+            assert!(!allowed(rule, &bound), "unlisted target refused");
+            assert!(!allowed(rule, &Facts { token: true, ..bound }));
+            assert!(allowed(rule, &Facts { dex: true, ..bound }));
+        }
     }
 
     /// An entry job carries only an order or wrap entry; anything else is refused before any chain read.
@@ -896,6 +945,16 @@ mod tests {
         assert!(!settled_all(&ok(vec![true, false])), "an empty MatchFailed is out of gas: more gas, never invalid");
         assert!(!settled_all(&ok(vec![])));
         assert!(!settled_all(&[1, 2, 3]));
+    }
+
+    #[test]
+    fn a_wrapped_empty_interaction_revert_is_out_of_gas() {
+        use crate::abi::ISCaaSDex::InteractionFailed;
+        let e = |r: &[u8]| InteractionFailed { index: alloy::primitives::U256::from(1), target: Address::repeat_byte(7), reason: r.to_vec().into() }.abi_encode();
+        assert!(reason_is_out_of_gas(&[]));
+        assert!(reason_is_out_of_gas(&e(&[])));
+        assert!(!reason_is_out_of_gas(&e(&[1, 2])));
+        assert!(!reason_is_out_of_gas(&[1, 2, 3]));
     }
 
     /// An RPC answering `answer` to every `eth_call`; `(url, gas of each eth_call)`.

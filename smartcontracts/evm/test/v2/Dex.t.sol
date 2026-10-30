@@ -177,10 +177,11 @@ contract DexTest is Test {
     function test_pathB_dexChecksTheMatchedPart() public {
         ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
         mo.flags = 3;
+        mo.minFill = 500; // signed: the matched 400 is below it
         DexLegs.Settlement memory s;
         s.ref = "r";
         s.makers = new DexLegs.Leg[](1);
-        s.makers[0] = _leg(BOB_PK, b, mo, 400); // below the 50 % floor
+        s.makers[0] = _leg(BOB_PK, b, mo, 400);
         s.taker = _leg(ALICE_PK, a, _order(alice, b, 200, 400, 0), 200);
         bytes32 h = b.tradeOrderDigest(mo);
         vm.prank(relayer);
@@ -189,6 +190,69 @@ contract DexTest is Test {
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, h));
         vm.prank(address(dex));
         dex.settleOne(DexLegs.wire(s), relayer);
+        // minFill 0: no floor, 400 of 1000 settles and 600 is refunded
+        mo.minFill = 0;
+        s.makers[0] = _leg(BOB_PK, b, mo, 400);
+        uint256 bobB = b.balanceOf(bob);
+        vm.prank(relayer);
+        dex.mtxSettle(DexLegs.wire(_one(s)));
+        assertEq(b.balanceOf(bob), bobB - 400);
+        assertEq(a.balanceOf(bob), 200);
+        assertEq(b.balanceOf(address(dex)), 0);
+    }
+
+    function test_settle_makerAtTenPercent_settles() public {
+        DexLegs.Settlement memory s;
+        s.ref = "r";
+        s.makers = new DexLegs.Leg[](1);
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        s.makers[0] = _leg(BOB_PK, b, mo, 100); // 10 % of the maker's order
+        s.taker = _leg(ALICE_PK, a, _order(alice, b, 50, 100, 0), 50);
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(DexLegs.wire(_one(s)));
+        assertTrue(ok[0]);
+        assertEq(b.balanceOf(alice), 100);
+        assertEq(a.balanceOf(bob), 50);
+        assertEq(b.pulled(b.tradeOrderDigest(mo)), 100);
+    }
+
+    function test_settle_minFill_remainderClosesBelowMinFill() public {
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        mo.minFill = 300;
+        DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](2);
+        uint256[2] memory fills = [uint256(800), 200]; // the second is the remainder, below minFill
+        for (uint256 i; i < 2; ++i) {
+            ss[i].ref = bytes32(i + 1);
+            ss[i].makers = new DexLegs.Leg[](1);
+            ss[i].makers[0] = _leg(BOB_PK, b, mo, fills[i]);
+            ITradeToken.TradeOrder memory to = _order(alice, b, fills[i] / 2, fills[i], 0);
+            to.nonce = i + 1;
+            ss[i].taker = _leg(ALICE_PK, a, to, fills[i] / 2);
+        }
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
+        assertTrue(ok[0]);
+        assertTrue(ok[1]);
+        assertEq(b.pulled(b.tradeOrderDigest(mo)), 1000);
+    }
+
+    function test_settle_pathAOrderFilledInFiveSettlements() public {
+        ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
+        DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](5);
+        for (uint256 i; i < 5; ++i) {
+            ss[i].ref = bytes32(i + 1);
+            ss[i].makers = new DexLegs.Leg[](1);
+            ss[i].makers[0] = _leg(BOB_PK, b, mo, 200);
+            ITradeToken.TradeOrder memory to = _order(alice, b, 100, 200, 0);
+            to.nonce = i + 1;
+            ss[i].taker = _leg(ALICE_PK, a, to, 100);
+        }
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
+        for (uint256 i; i < 5; ++i) assertTrue(ok[i]);
+        assertEq(b.pulled(b.tradeOrderDigest(mo)), 1000);
+        assertEq(a.balanceOf(bob), 500);
+        assertEq(b.balanceOf(alice), 1000);
     }
 
     function test_aFailingSettlementIsIsolated() public {
@@ -358,7 +422,7 @@ contract DexTest is Test {
     }
 
     // What only the DEX enforces on a Path B leg (the token sees `TradeFill(amount, 0, 0, submitter)`): the signed
-    // minFill above 50 %, the signed fee rate, the refund recipient.
+    // signed minFill, the signed fee rate, the refund recipient.
 
     function _escrowMaker(ITradeToken.TradeOrder memory mo, uint256 fill) internal view returns (DexLegs.Settlement memory s) {
         mo.flags = 3; // IOC | ESCROW
@@ -368,7 +432,7 @@ contract DexTest is Test {
         s.taker = _leg(ALICE_PK, a, _order(alice, b, 300, 600, 0), 300);
     }
 
-    function test_pathB_signedMinFillAboveHalf_isEnforced() public {
+    function test_pathB_signedMinFill_isEnforced() public {
         ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
         mo.minFill = 1000; // fill-or-kill
         DexLegs.Settlement memory s = _escrowMaker(mo, 600);

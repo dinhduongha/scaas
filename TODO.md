@@ -122,13 +122,14 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      floor + four matching modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
      DEX spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-dex-round-design.md` (branch `spec-dex`; DX7
      changed: a hybrid's unsold taker remainder is refunded when the sold part meets its `minFill` and limit, else revert;
-     DX10 / DX11 confirmed). Plan written (no owner review): `docs/superpowers/plans/2026-10-30-dex-round.md` (T1–T19, build
-     branch `dex-round` from `main`).
-     **Status (paused 2026-10-30):** branch `dex-round` — T1 (floor removed), T2 (`InteractionFailed`), T3 (`mtxHybrid` /
-     `Via`) done and reviewed; T4 WIP `b45c4322` (DX7 refund + `restorePulled`, capacity restored per the owner; must also
-     forbid the `restorePulled` selectors in `_interact` — T3 review); then T5–T19.
-     **Status (2026-10-30, later):** T4–T9, T11, T12, T14 done and reviewed; T10 (Uniswap mainnet fork test, owner:
-     public dRPC `https://eth.drpc.org`, no key) in progress; then T13, T15–T19.
+     the batch form (path (a) only, parallel arrays) and the wrapped `InteractionFailed` confirmed). Plan written (no owner review):
+     `docs/superpowers/plans/2026-10-30-dex-round.md` (T1–T19). **Built on branch `dex-round`, 2026-10-30 (pending the owner's
+     go to merge and push; T17–T19 gates, review and merge follow):** the signer's `minFill` only (CTR-DEX-14), `mtxHybrid` /
+     `mtxHybridVia` with the taker's unsold remainder refunded and its capacity restored by `restorePulled` (CTR-DEX-27),
+     `mtxExchangeBatch` and `InteractionFailed` (CTR-DEX-28), `UniswapExecutor` and the opt-in Uniswap fork test, 9 of 9 at
+     block 22,000,000 (CTR-DEX-29), node `min_fill` + depth bucket + ABI and call-table rows, clientkeys `minFill` +
+     `bidMinFill` / `bidMinBase`; `SCaaSDex` 26,967 B. `main` merged in (kem-scheme, msig-pophash, webauthn-clients); the KAT regenerated
+     (the UA registry changed on main), sizes and gas pins unchanged. **The TradeEngine EVM stream (step 6) is unblocked** (the contracts it drives are built).
      **After the DEX round (owner 2026-10-30): BNB Smart Chain venues.** Uniswap v3 / v4 on BNB Chain through the
      existing `UniswapExecutor` (BSC factory, init-code hash, PoolManager in the constructor) and PancakeSwap v2 through
      path (a) interactions; **`PancakeV3Executor`** for PancakeSwap v3 (callback `pancakeV3SwapCallback`, pool address
@@ -159,10 +160,20 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      **Owner 2026-10-30: timing and the 7622 reset are approved; run them after the three running streams are merged
      (`dex-round`, `ua-soroban`, `kem-scheme`)**, with no agent running during the two calibration runs (about 45–60 min
      quiet; the whole Task 13 + Task 9 about 2–3 h).
-  6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N
+  6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N (the TradeEngine stream is unblocked: the DEX round contracts are built on `dex-round`; open follow-ups: NODE-DEX-15's "no settlement worth less than its gas", the `UniswapExecutor` deploy script with the first Uniswap chain)
      (DEX).
   7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next UA-Soroban / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
      NEAR → Cosmos / Sui / Aptos / Solana → Algorand (`fndsa512` once AVM v14 ships `falcon_verify` Falcon-DET-512, the same key signing deterministically there; no Falcon-DET-1024 kind, owner 2026-10-30) → TON (registry design first).
+     **Soroban job fee cap (owner question, from UA-Soroban T10 2026-10-31):** the node has no per-job resource-fee cap
+     on Soroban jobs. A first call to a fresh contract pays its 60-day TTL rent (measured 50–90 M stroops vs ≈0.7 M
+     warm); `deploy.sh` now warms every contract at deploy (controller ruling), but an operator cap per job / per lane
+     (and on other families' storage-rent paths) is an operator policy to decide. Also: NODE-JOB-08 `lane_hint` — a
+     lane-bound UA (or native relay_fee) job claimed by another lane goes `dead` on a two-lane chain.
+     **Mandate epoch on every family (owner 2026-10-30, CTR-ACC-07 parity):** EVM `MandateWallet` binds the delegate's
+     revoke and pay to `epoch[token]` (incremented by every set / revoke), so a revoke + re-set voids unused delegate
+     signatures. Soroban gets it in the UA-Soroban round (task T6b); NEAR, Algorand, Cosmos and Solana have no epoch
+     today (an unused delegate revoke / pay signature survives a revoke + re-set until `valid_until`) — add it in each
+     family's own UA round (Sui / Aptos / TON: check and add if missing).
   Details of the registration items:
      - **UA on non-EVM families — every kind, not only PQ** (owner 2026-10-29; rules NET-ALL-20 / NET-ALL-21,
        accounts.md "Where the records live"; today only EVM is built, NEAR / Algorand have a lazy-opened `Ua` on the
@@ -402,12 +413,12 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 ### Recorded, not scheduled
 
-- [ ] **DEX: drop the 50 % minimum-fill floor + four matching modes** (owner 2026-10-29; research
+- [ ] **DEX: drop the 50 % minimum-fill floor + four matching modes** (built on `dex-round`, see the status below) (owner 2026-10-29; research
   [docs/research/dex-matching-modes.md](docs/research/dex-matching-modes.md)): (a) owner decision: `MIN_FILL_PPM` goes,
   the per-fill minimum is the signer's `minFill` only (§6.3: new CTR-DEX-14 text, then `TradeLib`, `SCaaSDex` Path B,
   node `min_fill`, clientkeys, tests; non-EVM unchanged; spec DONE 2026-10-29: CTR-DEX-14 / NODE-DEX-15 / CLI-SGN-35 SPECIFIED; code after the near-algorand merge, owner 2026-10-29); (b) four modes book / outside / hybrid / CoW-ring on the two
   existing entry points, NODE-DEX-17 rewritten to one atomic plan per order (§1–§6); owner answers 2026-10-29 (§8): hybrid / CoW both via `mtxExchange` plans and a new `mtxHybrid` / `mtxHybridVia` entry (maker price on chain, surplus to the taker); CoW price = AMM marginal, else midpoint; `mtxExchangeBatch` now; TradeEngine EVM and non-EVM 1 × N in parallel. Order: after the near-algorand merge → minFill code → EVM contract spec + code (mtxHybrid, batch, mode 3 / 4 tests, executor, Uniswap fork test) → TradeEngine ∥ non-EVM 1 × N.
-  Spec first, then code.
+  **Status 2026-10-30:** (a) the minimum fill, (b) the modes 3 / 4 on `mtxExchange` plans and the new `mtxHybrid` / `mtxHybridVia`, and (c) `mtxExchangeBatch` are **built on branch `dex-round`** (pending the owner's go to merge; docs CTR-DEX-14 / -27 / -28 / -29, NODE-DEX-15, CLI-SGN-35); NODE-DEX-17 is rewritten in docs (SPECIFIED). Left, in the TradeEngine stream (step 6): the planner, quoter, routes, jobs and `GET /v1/dex/exchanges/{ref}`; the NODE-DEX-15 clause "no settlement worth less than its gas" (needs plan pricing); the executor deploy script and the `uniswap_executor` deployment key with the first chain that has Uniswap; non-EVM 1 × N in parallel.
 - [x] **EVM node: the UA job path** (controller call 2026-10-28, metatx-split T17 fix 1; owner ruling 2026-10-28: after the
   metatx-split merge; a new feature, not T17): BUILT on branch `node-ua-jobs` (2026-10-30, `f0f8fd50`; merged into main 2026-10-30): the
   `ua_metatx` kind (`uaExecute`, `uaExecuteTransfer`, `uaPayMeta`), the call-table row `MtxRelayFee.uaRelay` priced at
@@ -516,8 +527,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 ### Leftovers of P1–P5 (phases done; history in COMPLETED.md)
 
 - [ ] **MT-4:** `salt = chain_uid` still open for the UA registry (UA F1).
-- [ ] **MT-5 / DEX:** `checkOrder` for the new DEX (not specified; with the node's P7 intake), the DEX invariant suite
-  (dex.md §14), the fork test with real Uniswap bytecode, `IS_HEDERA` in `SCaaSDex` (a Hedera ED25519 account cannot
+- [ ] **MT-5 / DEX:** `checkOrder` for the new DEX (not specified; with the node's P7 intake), `IS_HEDERA` in `SCaaSDex` (a Hedera ED25519 account cannot
   sign a `DexOrder`); the node's P7 gas rules for `mtxSettle` are in COMPLETED.md (P2b-2).
 - [ ] **P3 Zether:** a real-passkey envelope test (CTR-ZTH-21), gas of `mtxWrapShield` / `mtxUnshieldUnwrap`
   (zether.md gas tables re-measured on the new kinds), client Zether encoders, the disclosure questions (P3 plan header).

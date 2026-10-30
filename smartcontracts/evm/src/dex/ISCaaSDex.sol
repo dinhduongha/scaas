@@ -69,6 +69,20 @@ interface ISCaaSDex {
         address[] extraTokens;
     }
 
+    /// @notice One listed-market taker against 0..n makers at the makers' own prices, the rest of the taker's sell
+    ///         routed outside (spec §4, DX2, DX5). `taker` sells A (= `taker.sellToken`) and receives B (its order's
+    ///         `receiveToken`), `taker.fill == Σ maker receive + outsideSell`; each maker sells B, receives A, `fill` =
+    ///         its `sellFill`; `outsideSell` of A goes to the route, which must return at least `outsideFloor` of B;
+    ///         `extraTokens` are intermediate hop tokens (snapshotted; each must end at its snapshot).
+    struct HybridPlan {
+        bytes32 ref;
+        Leg taker;
+        Leg[] makers;
+        uint256 outsideSell;
+        uint256 outsideFloor;
+        address[] extraTokens;
+    }
+
     event MarketSet(address indexed base, address indexed quote, bool listed);
     event FeeSplitSet(uint32 relayerSharePpm, address treasury);
     /// @notice `received` is net of the DEX fee: the party gets `receiveFill - dexFee`, so `received + dexFee` is the gross
@@ -80,10 +94,13 @@ interface ISCaaSDex {
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
     /// @notice `reason` = the failed settlement's revert data, at most its first 256 bytes.
     event MatchFailed(bytes32 indexed ref, bytes reason);
+    /// @notice `mtxExchangeBatch`: `reason` = the failed plan's revert data, at most its first 256 bytes.
+    event ExchangeFailed(bytes32 indexed ref, bytes reason);
     /// @notice Raised by `TradeLib` on outside-token legs and DEX-side cancels (same as `ITradeToken`), listed for the ABI.
     event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
         uint256 dexFee);
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
+    event PullRestored(bytes32 indexed orderHash, uint256 amount);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
     event ExchangeTargetSet(address indexed target, bool listed);
     event ListedOnlySet(bool on);
@@ -137,13 +154,17 @@ interface ISCaaSDex {
     error ZeroFill(bytes32 orderHash);
     error FeeAboveSigned(bytes32 orderHash);
     error EscrowFillShape(bytes32 orderHash);
+    error RestoreExceedsPull(bytes32 orderHash);
     error MinNonceNotIncreasing(uint256 current, uint256 requested);
     error MinNonceAboveCap(uint256 requested);
     /// @notice `SigCheck`'s: the submitter left too little gas for a capped ERC-1271 call (CTR-DEX-08); it reverts the
-    ///         whole `mtxSettle`, never only one settlement. The registry's `UAVerifyGas()` (a UA leg's verify could
-    ///         not get its cap) does the same (CTR-DEX-26).
+    ///         whole `mtxSettle` or `mtxExchangeBatch`, never only one item. The registry's `UAVerifyGas()` (a UA
+    ///         leg's verify could not get its cap) does the same (CTR-DEX-26).
     error SigCheckGasStarved(uint256 cap, uint256 gasLeft);
     error UAVerifyGas();
+    /// @notice A path (a) interaction failed (CTR-DEX-20): its position, target and at most 256 bytes of its revert
+    ///         data, so a target cannot forge `SigCheckGasStarved` / `UAVerifyGas` or return a bomb.
+    error InteractionFailed(uint256 index, address target, bytes reason);
     error FillMismatch(uint256 expected, uint256 got);
     /// @notice Path B checks the DEX makes on the matched part (the token checks Path A itself).
     error BelowMinFill(bytes32 orderHash);
@@ -170,6 +191,23 @@ interface ISCaaSDex {
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata interactions) external;
     /// @notice Exchange path (b): the pulled sell fills go to `executor`, which pays the DEX back in its callback.
     function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external;
+    /// @notice Path (a) plans, one isolated self-call each (spec §5, DX10): a failed plan emits `ExchangeFailed`, the
+    ///         others still settle; `SigCheckGasStarved` / `UAVerifyGas` revert the whole call; `NothingSettled` when
+    ///         no plan settles; `LengthMismatch` unless `ps.length == interactions.length`.
+    function mtxExchangeBatch(ExchangePlan[] calldata ps, Interaction[][] calldata interactions)
+        external returns (bool[] memory ok);
+    /// @notice The DEX only (`NotSelf`): one plan of `mtxExchangeBatch`, `submitter` its caller.
+    function exchangeOne(ExchangePlan calldata p, Interaction[] calldata interactions, address submitter) external;
+    /// @notice Hybrid path (a): makers at their own price (`⌈fill · receiveAmount / amount⌉`, `mtxSettle`'s fee and
+    ///         self-trade rule), the rest through the DEX's own interactions; the taker gets its floor
+    ///         (`Σ maker fill + outsideFloor`, the fee once on it) plus everything the route returns above
+    ///         `outsideFloor`, fee-free. `LISTED_POOLS` is read from the taker only. A part of `outsideSell` the route
+    ///         leaves (DX7) is refunded to the taker, fee-free, if its sold part still meets its order (`ZeroFill`,
+    ///         `BelowMinFill`, `PriceLimit` with its hash, else the plan reverts), and restored to its capacity.
+    function mtxHybrid(HybridPlan calldata p, Interaction[] calldata interactions) external;
+    /// @notice Hybrid path (b): `outsideSell` of A goes to `executor`, which must pay at least `outsideFloor` of B to
+    ///         the DEX in `exchangeCallback(ref, [A], [outsideSell], [B], [outsideFloor], data)`.
+    function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata data) external;
     function setExchangeTarget(address target, bool listed) external;
     function setListedOnly(bool on) external;
 

@@ -79,3 +79,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `_requireNativeUASignature`, and the Hedera overrides of `MetaTokenBase` (`_requireValidSignature`,
   `_requireNativeUASignature`, `_erc1271Gas`); the trade, cancel, invalidate and receiver-fee signatures now go through
   `MtxPipelineLib.requireSignature` / `authorize`. Not built.
+- `dex-round/`: the DEX before the DEX round (spec `docs/superpowers/specs/2026-10-30-dex-round-design.md`, DX1; owner:
+  backup, not delete), taken from `main` commit `c2cfc223`: `TradeLib.sol`, `SCaaSDex.sol`, `ISCaaSDex.sol` whole, and
+  `FloorTests.txt` (`test_minFill_oddAmountRoundsTheHalfUp`, `test_minFillPpm_halvingEncodesIt`). Superseded by: the 50 %
+  minimum-fill floor (`MIN_FILL_PPM`) is gone; the signer's `minFill` is the only per-fill minimum. Not built.

@@ -115,6 +115,25 @@ impl T {
     fn relay(&self, to: &Address, amount: i128) -> Res {
         self.relay_call(&self.wallet.address, &self.func(), &self.args(), 1, to, amount)
     }
+    /// `router.relay(payer, target, f, args, salt n, token, to, amount, NOW + 60, relayer)` with exactly the payer's
+    /// entry (rooted at this `relay`, `token.pay` its sub-invocation), the relayer's, and `extra` (no `mock_all_auths`).
+    fn relay_as(&self, payer: &Address, target: &Address, f: &str, args: &soroban_sdk::Vec<Val>, n: u8, to: &Address, amount: i128, extra: &[MockAuth]) -> Res {
+        let (e, tk, vu, salt) = (&self.env, &self.token.address, NOW + 60, self.salt(n));
+        let f = Symbol::new(e, f);
+        let rf = self.router.relay_ref(target, &f, args, &salt);
+        let signed: soroban_sdk::Vec<Val> = (target, &f, args, &salt, tk, to, amount, vu).into_val(e);
+        let all: soroban_sdk::Vec<Val> = (payer, target, &f, args, &salt, tk, to, amount, vu, &self.relayer).into_val(e);
+        let pay = [MockAuthInvoke { contract: tk, fn_name: "pay", args: (payer, to, amount, &rf, vu).into_val(e), sub_invokes: &[] }];
+        let root = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: signed, sub_invokes: &pay };
+        let rroot = MockAuthInvoke { contract: &self.router.address, fn_name: "relay", args: all, sub_invokes: &[] };
+        let mut auths = std::vec![MockAuth { address: payer, invoke: &root }, MockAuth { address: &self.relayer, invoke: &rroot }];
+        auths.extend(extra.iter().map(|a| MockAuth { address: a.address, invoke: a.invoke }));
+        e.mock_auths(&auths);
+        match self.router.try_relay(payer, target, &f, args, &salt, tk, to, &amount, &vu, &self.relayer) {
+            Ok(r) => Ok(r.unwrap()),
+            Err(e) => Err(e.unwrap()),
+        }
+    }
     fn relay_call(&self, target: &Address, f: &Symbol, a: &soroban_sdk::Vec<Val>, salt: u8, to: &Address, amount: i128) -> Res {
         match self.router.try_relay(
             &self.owner, target, f, a, &self.salt(salt), &self.token.address, to, &amount, &(NOW + 60), &self.relayer,
@@ -165,6 +184,7 @@ fn relay_open_mode_pays_relayer() {
     let all = t.env.events().all();
     assert!(t.wallet.mandate(&t.token.address).is_none(), "the target call ran");
     assert_eq!((t.token.balance(&t.owner), t.token.balance(&t.relayer), t.token.balance(&t.router.address)), (93, 7, 0));
+    assert_eq!(t.token.balance(&t.router.executor()), 0);
     assert!(t.token.ref_used(&t.owner, &rf));
     // RelayFeePaid names the relayer, not the router, as payee (SOR-D11: both as a `Holder`).
     let d = event_data(&all, "RelayFeePaid");
@@ -286,6 +306,27 @@ fn soroban_router_bound_pay_refused_direct() {
         &t.owner, &t.wallet.address, &t.func(), &t.args(), &t.salt(1), &t.token.address, &to, &8, &(NOW + 60), &t.relayer,
     );
     assert_eq!(r.err().unwrap().unwrap(), auth_err());
+}
+
+/// UA-Soroban T8 review (critical; controller ruling 2026-10-31): the router never runs a target as itself. Here a
+/// victim's signed plain `pay(victim, router, 20, …)` is the target of an attacker's open-mode `relay`, so the 20
+/// rest on the router; a second `relay` with `target = token.transfer(router, attacker, 20)` must not drain them
+/// (before the executor the router lent its own authority to that target call).
+#[test]
+fn relay_victim_pay_as_target_then_drain_refused() {
+    let t = setup();
+    let e = &t.env;
+    let (tk, router) = (t.token.address.clone(), t.router.address.clone());
+    let (victim, attacker) = (Address::generate(e), Address::generate(e));
+    t.token.mint(&victim, &50);
+    t.token.mint(&attacker, &10);
+    let vargs: soroban_sdk::Vec<Val> = (&victim, &router, 20i128, BytesN::from_array(e, &[0x77; 32]), NOW + 60).into_val(e);
+    let vpay = MockAuthInvoke { contract: &tk, fn_name: "pay", args: vargs.clone(), sub_invokes: &[] };
+    t.relay_as(&attacker, &tk, "pay", &vargs, 1, &router, 1, &[MockAuth { address: &victim, invoke: &vpay }]).unwrap();
+    assert_eq!((t.token.balance(&victim), t.token.balance(&router), t.token.balance(&t.relayer)), (30, 20, 1));
+    let targs: soroban_sdk::Vec<Val> = (&router, &attacker, 20i128).into_val(e);
+    assert_eq!(t.relay_as(&attacker, &tk, "transfer", &targs, 2, &router, 1, &[]), Err(auth_err()));
+    assert_eq!((t.token.balance(&router), t.token.balance(&attacker), t.token.balance(&t.relayer)), (20, 9, 1));
 }
 
 #[test]

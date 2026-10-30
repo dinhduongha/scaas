@@ -1,8 +1,8 @@
 //! DEX order book (NODE-DEX-01, NODE-DEX-15): role-free `TradeOrder`s settled by `SCaaSDex.mtxSettle`
 //! (contracts/dex.md), one book per market, price-time priority, partial fills, IOC, fill-or-kill (`minFill = amount`).
 //! An incoming order that crosses is the taker of ONE settlement against the resting orders it crosses (its makers);
-//! every order fills at least `max(minFill, ceil(amount / 2))` per settlement unless the fill closes it, exactly as the
-//! token (`TradeLib.record`) and the DEX (`settleOne`) check. PURE (no I/O, tested bit for bit); RPC, the client store
+//! every order fills at least its signed `minFill` (0 = any amount; no 50 % floor) per settlement unless the fill closes
+//! it, exactly as the token (`TradeLib.record`) and the DEX (`settleOne`) check. PURE (no I/O, tested bit for bit); RPC, the client store
 //! and the gateway are in `dex::venue`.
 pub mod venue;
 
@@ -291,9 +291,9 @@ fn to256(v: U512) -> U256 {
     U256::from_limbs_slice(&v.as_limbs()[..4])
 }
 
-/// The effective minimum sell fill per settlement: `max(minFill, ceil(amount / 2))` (`TradeLib.record`).
+/// The minimum sell fill per settlement: the signer's own `minFill` (0 = any amount; the contract has no floor).
 pub fn min_fill(o: &TradeOrder) -> U256 {
-    o.minFill.max(o.amount - o.amount / U256::from(2u8))
+    o.minFill
 }
 
 /// What a maker receives for selling `x` at its own price: `ceil(x · receiveAmount / amount)` (`SCaaSDex._makerCalc`).
@@ -621,6 +621,7 @@ impl Book {
         let unmined = |h: B256| pending.get(&h).is_some_and(|p| !p.is_zero());
         let (market_id, maker_ppm, taker_ppm) = (mb.cfg.id, mb.cfg.maker_fee_ppm, mb.cfg.taker_fee_ppm);
         let base = mb.cfg.base;
+        let min_base = uint(&mb.cfg.min_base_amount).unwrap_or_default();
         let opposite = if t.sell == base { &mut mb.bids } else { &mut mb.asks };
         let mut makers: Vec<(Resting, U256, U256)> = vec![];
         let mut taken = U256::ZERO;
@@ -644,9 +645,11 @@ impl Book {
                     break; // the taker's rest buys less than one unit here
                 }
                 let y = maker_receives(&r.order, x);
-                // the maker's minimum per settlement, unless this fill closes it ON CHAIN (nothing of it still
-                // unmined: `amount − pulled` counts only mined fills); a deeper maker may still fit
-                if x < min_fill(&r.order) && (x < r.remaining || unmined(r.hash)) {
+                // the maker's minimum per settlement, and a leg under the market's `min_base_amount` (NODE-DEX-15),
+                // unless this fill closes it ON CHAIN (nothing of it still unmined: `amount − pulled` counts only
+                // mined fills); a deeper maker may still fit
+                let leg_base = if r.sell == base { x } else { y };
+                if (x < min_fill(&r.order) || leg_base < min_base) && (x < r.remaining || unmined(r.hash)) {
                     continue;
                 }
                 if !limits_ok(r, &Resting { remaining: left, ..t.clone() }, x, y) {
@@ -702,13 +705,33 @@ impl Book {
         out
     }
 
-    /// Aggregated levels `(bids, asks)`, each `(decimal price quote/base, base amount)`.
+    /// Aggregated levels `(bids, asks)`, each `(decimal price quote/base, base amount)`. Orders whose minimum fill
+    /// exceeds the market's `min_base_amount` are not here; see `depth_min_fill`.
     pub fn depth(&self, market_id: i64, levels: usize) -> Option<(Vec<Level>, Vec<Level>)> {
+        self.levels(market_id, levels, false)
+    }
+
+    /// The `min_fill` bucket: the same levels for the orders `depth` leaves out.
+    pub fn depth_min_fill(&self, market_id: i64, levels: usize) -> Option<(Vec<Level>, Vec<Level>)> {
+        self.levels(market_id, levels, true)
+    }
+
+    fn levels(&self, market_id: i64, levels: usize, big: bool) -> Option<(Vec<Level>, Vec<Level>)> {
         let mb = self.markets.values().find(|m| m.cfg.id == market_id)?;
         let cfg = &mb.cfg;
+        let min_base = uint(&cfg.min_base_amount).unwrap_or_default();
         let agg = |side: &[Resting], is_ask: bool| -> Vec<Level> {
             let mut out: Vec<Level> = vec![];
             for r in side {
+                // the order's minimum fill in base units: an ask's `minFill`, a bid's `ceil(minFill · receive / amount)`
+                let min_in_base = if is_ask {
+                    r.order.minFill
+                } else {
+                    to256(div_ceil(mul(r.order.minFill, r.order.receiveAmount), U512::from(r.order.amount)))
+                };
+                if (min_in_base > min_base) != big {
+                    continue;
+                }
                 let (base_amt, quote_amt) = if is_ask {
                     (r.order.amount, r.order.receiveAmount)
                 } else {
@@ -815,6 +838,11 @@ mod tests {
         o(from, BASE, quote, base, nonce)
     }
 
+    /// The old fixed floor, now signed: `minFill = amount − amount/2`.
+    fn half(o: TradeOrder) -> TradeOrder {
+        TradeOrder { minFill: o.amount - o.amount / U256::from(2u8), ..o }
+    }
+
     fn makers(p: &Placement) -> Vec<(Address, U256, U256)> {
         p.settlement.as_ref().map_or(vec![], |s| s.makers.iter().map(|(m, x, y)| (m.order.from, *x, *y)).collect())
     }
@@ -907,11 +935,11 @@ mod tests {
         assert!(p.rested.is_none());
     }
 
-    /// NODE-DEX-15: every order fills at least `max(minFill, ceil(amount / 2))` per settlement unless it closes.
+    /// NODE-DEX-15: every order fills at least its signed `minFill` per settlement unless it closes.
     #[test]
     fn the_minimum_fill_binds_makers_and_takers() {
         let mut b = Book::new(vec![market()]);
-        put(&mut b, ask(1, 100, 200, 1)); // min 50 base
+        put(&mut b, half(ask(1, 100, 200, 1))); // min 50 base
         // a bid that can take only 20 base cannot partially fill a 100 ask: no settlement, and its remainder would
         // rest crossed, so it is cancelled
         let p = put(&mut b, bid(2, 40, 20, 1));
@@ -921,14 +949,14 @@ mod tests {
         // a taker whose crossing makers give less than its own minimum: nothing settles, it rests (GTC)
         let mut b = Book::new(vec![market()]);
         put(&mut b, ask(1, 10, 20, 1));
-        let p = put(&mut b, bid(3, 200, 100, 1)); // min 100 quote; the ask fills only 20 quote
+        let p = put(&mut b, half(bid(3, 200, 100, 1))); // min 100 quote; the ask fills only 20 quote
         assert!(p.settlement.is_none());
         assert!(p.dropped == U256::from(200), "crossing remainder never rests");
         // the same taker with a deeper maker: one settlement of two makers reaches its minimum
         let mut b = Book::new(vec![market()]);
         put(&mut b, ask(1, 10, 20, 1));
         put(&mut b, ask(4, 50, 100, 1));
-        let p = put(&mut b, bid(3, 200, 100, 1));
+        let p = put(&mut b, half(bid(3, 200, 100, 1)));
         assert_eq!(makers(&p).len(), 2);
         assert_eq!(p.settlement.as_ref().unwrap().taker_fill, U256::from(120));
         assert!(settlement_ok(p.settlement.as_ref().unwrap()));
@@ -937,11 +965,74 @@ mod tests {
     #[test]
     fn a_maker_too_large_for_the_taker_is_skipped_for_a_deeper_one() {
         let mut b = Book::new(vec![market()]);
-        put(&mut b, ask(1, 100, 200, 1)); // best price, min 50
+        put(&mut b, half(ask(1, 100, 200, 1))); // best price, min 50
         put(&mut b, ask(2, 10, 21, 1));   // worse price, closes whole
         let p = put(&mut b, bid(3, 25, 10, 1)); // pays up to 2.5, buys ~10 base
         assert_eq!(makers(&p), vec![(Address::repeat_byte(2), U256::from(10), U256::from(21))]);
         assert!(settlement_ok(p.settlement.as_ref().unwrap()));
+    }
+
+    #[test]
+    fn min_fill_is_the_signed_min_fill() {
+        assert_eq!(min_fill(&ask(1, 101, 202, 1)), U256::ZERO);
+        assert_eq!(min_fill(&TradeOrder { minFill: U256::from(7), ..ask(1, 101, 202, 1) }), U256::from(7));
+    }
+
+    #[test]
+    fn matcher_fills_a_maker_below_half() {
+        let mut b = Book::new(vec![market()]);
+        put(&mut b, ask(1, 100, 200, 1));
+        let p = put(&mut b, bid(2, 20, 10, 1)); // buys 10 of 100: under half, minFill 0
+        assert_eq!(makers(&p), vec![(Address::repeat_byte(1), U256::from(10), U256::from(20))]);
+        assert!(settlement_ok(p.settlement.as_ref().unwrap()));
+    }
+
+    #[test]
+    fn leg_below_min_base_amount_skipped_unless_closing() {
+        let mut m = market();
+        m.min_base_amount = "10".into();
+        let mut b = Book::new(vec![m]);
+        put(&mut b, ask(1, 100, 200, 1)); // best price, a 5-base leg is junk
+        put(&mut b, ask(2, 5, 10, 1)); // same price, later, and the leg closes it
+        let p = put(&mut b, bid(3, 10, 5, 1));
+        assert_eq!(makers(&p), vec![(Address::repeat_byte(2), U256::from(5), U256::from(10))]);
+        // a bid maker: the leg's base amount is what it receives
+        let mut m = market();
+        m.min_base_amount = "10".into();
+        let mut b = Book::new(vec![m]);
+        put(&mut b, bid(1, 200, 100, 1));
+        assert!(put(&mut b, ask(2, 5, 10, 1)).settlement.is_none(), "5 base from a 100-base bid is junk");
+    }
+
+    #[test]
+    fn depth_keeps_large_min_fill_in_its_own_bucket() {
+        let mut m = market();
+        m.min_base_amount = "10".into();
+        let mut b = Book::new(vec![m]);
+        put(&mut b, ask(1, 100, 200, 1));
+        put(&mut b, TradeOrder { minFill: U256::from(50), ..ask(2, 100, 210, 1) });
+        put(&mut b, TradeOrder { minFill: U256::from(10), ..bid(3, 100, 100, 1) }); // 10 quote = 10 base: normal
+        put(&mut b, TradeOrder { minFill: U256::from(30), ..bid(4, 100, 100, 2) }); // 30 quote = 30 base: bucket
+        let (bids, asks) = b.depth(1, 10).unwrap();
+        assert_eq!((bids.len(), asks.len()), (1, 1));
+        assert_eq!(asks[0].base_amount, U256::from(100));
+        let (bb, ba) = b.depth_min_fill(1, 10).unwrap();
+        assert_eq!((bb.len(), ba.len()), (1, 1));
+        assert_eq!(ba[0].price, price_str(U256::from(210), U256::from(100), 18, 6));
+    }
+
+    /// The bucket rule's edge: `min_in_base == min_base_amount` is a normal order, one more is in the bucket.
+    #[test]
+    fn depth_bucket_edge_is_min_in_base_equal_to_min_base_amount() {
+        let mut m = market();
+        m.min_base_amount = "10".into();
+        let mut b = Book::new(vec![m]);
+        put(&mut b, TradeOrder { minFill: U256::from(10), ..ask(1, 100, 200, 1) });
+        put(&mut b, TradeOrder { minFill: U256::from(11), ..ask(2, 100, 210, 1) });
+        let (_, asks) = b.depth(1, 10).unwrap();
+        let (_, big) = b.depth_min_fill(1, 10).unwrap();
+        assert_eq!((asks.len(), big.len()), (1, 1));
+        assert_eq!(big[0].price, price_str(U256::from(210), U256::from(100), 18, 6));
     }
 
     #[test]
@@ -1049,7 +1140,7 @@ mod tests {
         assert!(!settlement_ok(&ds(vec![leg.clone(), leg.clone()])), "DuplicateOrder");
         let wrong_token = (Resting { hash: B256::repeat_byte(9), sell: QUOTE, ..dm.clone() }, U256::from(2), U256::from(4));
         assert!(!settlement_ok(&ds(vec![leg.clone(), wrong_token])), "TokenMismatch");
-        // the taker's minimum: 4 of 8 quote is ceil(8/2); one leg of a taker whose minFill is 8 is below it
+        // the taker's minimum: 4 of 8 quote with minFill 0 settles; with minFill 8 it is below the taker's minimum
         let fok = PlannedSettlement { taker: Resting { order: TradeOrder { minFill: U256::from(8), ..dt.order.clone() }, ..dt.clone() },
             taker_fill: U256::from(4), ..ds(vec![leg.clone()]) };
         assert!(settlement_ok(&PlannedSettlement { taker_fill: U256::from(4), ..ds(vec![leg.clone()]) }));
@@ -1057,14 +1148,14 @@ mod tests {
         // the maker's receive is the CEILING (a floor would silently stop matching non-multiples)
         assert_eq!(maker_receives(&m.order, U256::from(1)), U256::from(4), "ceil(1 · 10 / 3)");
         assert_eq!(maker_receives(&m.order, U256::from(3)), U256::from(10));
-        // the 50 % floor rounds up for odd amounts (`amount − amount/2`, as `TradeLib.record`)
-        assert_eq!(min_fill(&ask(1, 101, 202, 1)), U256::from(51));
+        // no 50 % floor: the minimum is the signed `minFill` (0 = any amount)
+        assert_eq!(min_fill(&ask(1, 101, 202, 1)), U256::ZERO);
         assert_eq!(min_fill(&TradeOrder { minFill: U256::from(70), ..ask(1, 101, 202, 1) }), U256::from(70));
         let mut me = m.clone();
         me.order.from = t.order.from;
         assert!(!settlement_ok(&s(vec![(me, U256::from(3), U256::from(10))], 10)), "SelfTrade");
         let mut big = m.clone();
-        big.order = ask(1, 30, 100, 1);
+        big.order = half(ask(1, 30, 100, 1));
         big.remaining = U256::from(30);
         assert!(!settlement_ok(&s(vec![(big, U256::from(3), U256::from(10))], 10)), "maker below its minimum");
     }
@@ -1257,7 +1348,7 @@ mod tests {
     #[test]
     fn poc_second_fill_of_an_unmined_remainder() {
         let mut b = Book::new(vec![market()]);
-        let a = ask(1, 100, 200, 1); // min 50 base
+        let a = half(ask(1, 100, 200, 1)); // min 50 base
         let ah = hash_of(&a);
         put(&mut b, a.clone());
         let p1 = put(&mut b, bid(2, 120, 60, 1));

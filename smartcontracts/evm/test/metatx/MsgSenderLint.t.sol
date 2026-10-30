@@ -63,8 +63,9 @@ contract MsgSenderLintTest is Test {
             "MtxPipelineLib: relayer binding x3 (incl. the designator refusal), fee default x2 (preCall, _checkTransfer)");
         // metatx split T4: the fee defaults left with `_checkTransfer` / `_checkUATransfer` / `_callFee` (now in
         // MtxPipelineLib); the event of `_execute` came down from MetaTxBase in T3.
-        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 6,
-            "ERC20MetaTx: event relayer x4 (_execute, _executeTransfer, _uaExecute, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25)");
+        // dex-round T4 (DX7): the two `restorePulled` overloads read their caller directly (`o.dex`), as `mtxTrade`.
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 8,
+            "ERC20MetaTx: event relayer x4 (_execute, _executeTransfer, _uaExecute, _uaExecuteTransfer), mtxTrade and uaTrade caller (CTR-DEX-15, -25), restorePulled caller x2 (DX7)");
         assertEq(_count("src/metatx/MetaTokenBase.sol", "msg.sender", false), 1, "MetaTokenBase: factory check in initialize");
         assertEq(_count("src/metatx/NormalToken.sol", "msg.sender", false), 0, "NormalToken");
         assertEq(_count("src/metatx/WrappedToken.sol", "msg.sender", false), 4, "WrappedToken: mtxWrap and uaWrap submitter x2 (CTR-TOK-20)");

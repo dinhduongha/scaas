@@ -686,7 +686,7 @@ export function checkCancel(td, { account, chainId, chainUid, contract, orderHas
  *  itself must name a DEX on the signer's pinned list (or, for a wrap by signature, CLI-SGN-36: `dex` = `receiveToken` =
  *  a pinned wrapper and `minFill = amount`), fee at most 1 %, known flags (no ESCROW on an outside token), non-zero
  *  amounts. The server supplies only the nonce and, when `order` has none, `validUntil` within the window. Returns
- *  {digest, minFill (the effective one per settlement), warnings}. */
+ *  {digest, minFill (the signed one: no protocol floor, CTR-DEX-14), warnings}. */
 export function checkTradeOrder(td, { account, chainId, chainUid, order, sellToken, outside = false, dexes = [], wrappers = [],
   ua = false, now = Math.floor(Date.now() / 1000), maxWindow = 30 * 86400 }) {
   if (ua && outside) refuse('a UA order sells a SCaaS token only');
@@ -716,10 +716,28 @@ export function checkTradeOrder(td, { account, chainId, chainUid, order, sellTok
     : ua ? uaTradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o })
       : tradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the trade order you asked for');
-  const half = amount - amount / 2n;
   const idOf = (x) => (ua ? hex(bytes32(x)) : String(x).toLowerCase());
   const warnings = idOf(o.destination) === idOf(none) || idOf(o.destination) === idOf(account) ? []
     : ['someone else receives the proceeds'];
   if (same(o.relayer, ZERO_ADDRESS)) warnings.push('any submitter may settle this order and earn the relayer share');
-  return { digest, minFill: minFill > half ? minFill : half, warnings };
+  return { digest, minFill, warnings };
+}
+
+/** A bid's per-fill minimum in the sell token from a minimum in the base token: `ceil(minBase * amount / receiveAmount)`
+ *  (CLI-SGN-35). Refused above `amount`, which the chain would refuse as `BadMinFill`. */
+export function bidMinFill(minBase, amount, receiveAmount) {
+  const r = uint(receiveAmount, 'the price');
+  if (r === 0n) refuse('the amounts are malformed');
+  const a = uint(amount, 'the amount');
+  if (a === 0n) refuse('the amounts are malformed');
+  const m = (uint(minBase, 'the base minimum') * a + r - 1n) / r;
+  if (m > a) refuse('that base minimum needs more than the bid\'s amount');
+  return m;
+}
+
+/** The base-token minimum a bid's `minFill` guarantees: `ceil(minFill * receiveAmount / amount)`. */
+export function bidMinBase(minFill, amount, receiveAmount) {
+  const a = uint(amount, 'the amount');
+  if (a === 0n) refuse('the amounts are malformed');
+  return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
