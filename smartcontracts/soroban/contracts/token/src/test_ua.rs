@@ -681,6 +681,59 @@ fn ua_trade_only_named_dex() {
     assert_eq!(err(s.t.try_ua_trade(&dex, &o, &auth, &1)), Error::Expired);
 }
 
+/// Review I1 + controller ruling 2026-10-30 (EVM `DexNotContract` / `pulled[h]` parity): the token bounds what the named
+/// DEX pulls. A UA with 1 000, a 60-unit order signed for a `FakeDex`.
+fn trade_fixture() -> (T, Ua, Address, Order, Bytes) {
+    let s = setup();
+    let u = s.ua(1);
+    s.mint_ua(&u.id, 1_000);
+    let dex = s.env.register(FakeDex, ());
+    let o = order(&s.env, &u.id, &s.t.address, 60);
+    let auth = s.sign(&u, PURPOSE_TRADE, "ua_order", (&dex, &o).into_val(&s.env));
+    (s, u, dex, o, auth)
+}
+
+/// (a) `amount > sell_amount` in one call.
+#[test]
+fn ua_trade_over_pull_one_call_refused() {
+    let (s, u, dex, o, auth) = trade_fixture();
+    let d = FakeDexClient::new(&s.env, &dex);
+    assert_eq!(err(d.try_take(&s.t.address, &dex, &o, &auth, &61)), Error::BadOrder);
+    assert_eq!(s.t.ua_balance(&u.id), 1_000);
+}
+
+/// (c) the running `UaPulled(order digest)` total: two pulls over `sell_amount` refused, exactly `sell_amount` accepted.
+#[test]
+fn ua_trade_pulled_total_bounded() {
+    let (s, u, dex, o, auth) = trade_fixture();
+    let env = &s.env;
+    let d = FakeDexClient::new(env, &dex);
+    d.take(&s.t.address, &dex, &o, &auth, &40);
+    assert_eq!(err(d.try_take(&s.t.address, &dex, &o, &auth, &21)), Error::BadOrder);
+    d.take(&s.t.address, &dex, &o, &auth, &20);
+    assert_eq!(err(d.try_take(&s.t.address, &dex, &o, &auth, &1)), Error::BadOrder);
+    assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&dex)), (940, 60));
+    let k = Key::UaPulled(op_digest(env, &s.t.address, "ua_order", (&dex, &o).into_val(env)));
+    env.as_contract(&s.t.address, || {
+        assert_eq!(env.storage().persistent().get::<_, i128>(&k), Some(60));
+        assert_eq!(env.storage().persistent().get_ttl(&k), 60 * DAY);
+    });
+}
+
+/// (b) `dex` must be a deployed contract: a `G…` account (it signs for itself) or an empty `C…` id is refused.
+#[test]
+fn ua_trade_dex_must_be_contract() {
+    let (s, u, _, _, _) = trade_fixture();
+    let env = &s.env;
+    for acct in [Address::from_str(env, "GAZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTGMZTHCM6"), Address::generate(env)] {
+        let o = order(env, &u.id, &s.t.address, 60);
+        let auth = s.sign(&u, PURPOSE_TRADE, "ua_order", (&acct, &o).into_val(env));
+        // Refused before its authorisation is asked for.
+        assert_eq!(err(s.t.try_ua_trade(&acct, &o, &auth, &10)), Error::BadOrder);
+    }
+    assert_eq!(s.t.ua_balance(&u.id), 1_000);
+}
+
 // ---------- ua-ops.json ----------
 
 fn arg_vals(env: &Env, p: &Value) -> SVec<Val> {

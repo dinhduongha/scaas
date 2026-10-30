@@ -7,7 +7,8 @@ use scaas_ua_common::{
     PURPOSE_TRADE,
 };
 use soroban_sdk::{
-    contractevent, contractimpl, panic_with_error, Address, Bytes, BytesN, Env, IntoVal, TryFromVal, Val, Vec,
+    contractevent, contractimpl, panic_with_error, Address, Bytes, BytesN, Env, Executable, IntoVal, TryFromVal, Val,
+    Vec,
 };
 
 use crate::{
@@ -307,24 +308,29 @@ impl Token {
     /// names no nonce, so each cancel digest runs once (`UaCancelUsed`, EVM `cancelUsed`; a replay is `BadNonce`).
     pub fn ua_cancel_nonce(env: Env, ua: BytesN<32>, lane: BytesN<32>, valid_until: u64, auth: Bytes) {
         let nonce = Self::ua_nonce(env.clone(), ua.clone(), lane.clone());
-        let args = (ua.clone(), lane.clone(), valid_until);
-        let (_, digest) =
-            authorize(&env, "ua_cancel_nonce", args.into_val(&env), PURPOSE_METATX_CANCEL, &ua, &lane, nonce, valid_until, &None, &auth);
-        let used = Key::UaCancelUsed(digest.clone());
+        let args: Vec<Val> = (ua.clone(), lane.clone(), valid_until).into_val(&env);
+        // Before the signature check, as EVM `cancelUsed`: a replay costs no verify.
+        let used = Key::UaCancelUsed(op_digest(&env, &pool(&env), "ua_cancel_nonce", args.clone()));
         if read::<bool>(&env, &used).is_some() {
             panic_with_error!(&env, Error::BadNonce);
         }
+        let (_, digest) =
+            authorize(&env, "ua_cancel_nonce", args, PURPOSE_METATX_CANCEL, &ua, &lane, nonce, valid_until, &None, &auth);
         write(&env, &used, &true);
         UaNonceCancelled { ua: ua.clone(), lane, new_nonce: nonce + 1 }.publish(&env);
         UaMetaTransactionExecuted { from: ua, digest }.publish(&env);
     }
 
     /// The DEX (the direct invoker) moves `amount` of a UA maker's order from the UA ledger to itself (spec §5.3).
-    /// The order signature is over `op_digest(token, "ua_order", (dex, order))`, purpose `trade`; no nonce: the DEX's
-    /// `filled` bounds the fills, so one signature fills partially.
+    /// The order signature is over `op_digest(token, "ua_order", (dex, order))`, purpose `trade`; no nonce, so one
+    /// signature fills partially. The token bounds the pulls itself (controller ruling 2026-10-30, EVM `DexNotContract`
+    /// / `pulled[h]` parity): `dex` is a deployed contract and the running `UaPulled(digest)` stays `≤ sell_amount`.
     pub fn ua_trade(env: Env, dex: Address, order: Order, auth: Bytes, amount: i128) {
-        dex.require_auth();
         let reg = registry(&env);
+        if !matches!(dex.executable(), Some(Executable::Wasm(_))) {
+            panic_with_error!(&env, Error::BadOrder);
+        }
+        dex.require_auth();
         let Holder::Ua(ua) = order.maker.clone() else { panic_with_error!(&env, Error::BadOrder) };
         if order.sell_token != pool(&env) {
             panic_with_error!(&env, Error::BadOrder);
@@ -332,8 +338,16 @@ impl Token {
         if env.ledger().timestamp() > order.expiry {
             panic_with_error!(&env, Error::Expired);
         }
+        check_amount(&env, amount);
+        let sell_amount = order.sell_amount;
         let digest = op_digest(&env, &pool(&env), "ua_order", (dex.clone(), order).into_val(&env));
+        let k = Key::UaPulled(digest.clone());
+        let pulled = read::<i128>(&env, &k).unwrap_or(0);
+        if amount > sell_amount - pulled {
+            panic_with_error!(&env, Error::BadOrder);
+        }
         reg.require_authorized(&ua, &BytesN::from_array(&env, &PURPOSE_TRADE), &digest, &auth);
+        write(&env, &k, &(pulled + amount));
         debit_ua(&env, &ua, amount);
         let to = Holder::Addr(dex);
         credit(&env, &to, amount);

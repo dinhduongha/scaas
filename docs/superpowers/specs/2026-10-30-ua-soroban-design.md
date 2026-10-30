@@ -158,14 +158,14 @@ registry; there is no Soroban consumer of it yet).
 |---|---|---|
 | `ua_balance(ua) -> i128`, `ua_nonce(ua, lane) -> u64`, `ua_ref_used(ua, pay_ref) -> bool`, `registry() -> Option<Address>` | view | `balanceOfUA`, `uaNonce` |
 | `transfer_to_ua(from: Address, to: BytesN<32>, amount)` | `from.require_auth()` | `transferToUA` (CTR-UA-28) |
-| `pay_to_ua(from: Address, to: BytesN<32>, amount, pay_ref, valid_until)` | `from.require_auth()`; `PayRef(from, pay_ref)` once | `payWithFeeToUA` (the receiver axis; the mandate pays a UA payee through it) |
+| `pay_to_ua(from: Address, to: BytesN<32>, amount, pay_ref, valid_until)` | `from.require_auth()`; `PayRef(from, pay_ref)` once; emits the native `MetaTransactionExecuted { from, digest = op_digest(token, "pay_to_ua", args) }` as `pay` does (controller ruling 2026-10-30, owner may override) | `payWithFeeToUA` (the receiver axis; the mandate pays a UA payee through it) |
 | `mint_to_ua(to, amount)` | admin | `mintToUA` |
 | `ua_transfer(from: BytesN<32>, to: Holder, amount, lane: BytesN<32>, nonce: u64, valid_until: u64, relayer: Option<Address>, auth: Bytes)` | `registry.require_authorized(from, PURPOSE_METATX, digest, auth)`, lane nonce | `uaTransfer` / `uaExecuteTransfer` |
 | `ua_pay(from, to: Holder, amount, pay_ref, valid_until, relayer, auth)` | as above, `lane = payLane(pay_ref)`, `nonce = 0` | `uaPay` |
 | `ua_pay_meta(from, to, amount, salt, meta, valid_until, relayer, auth)` | `pay_ref = metaPayId(salt, meta)`; `PaymentMeta` before the settlement event | `uaPayMeta` (CTR-MTX-26) |
 | `ua_burn(from, amount, lane, nonce, valid_until, relayer, auth)` | as `ua_transfer` | `uaExecute(burn)` |
-| `ua_cancel_nonce(ua, lane, valid_until, auth)` | purpose `metatx-cancel` | `uaCancelNonce` |
-| `ua_trade(dex: Address, order: Order, auth: Bytes, amount)` | `dex.require_auth()` (the DEX is the direct invoker), purpose `trade` over the order digest | `uaTrade` (CTR-DEX-25 / -26) |
+| `ua_cancel_nonce(ua, lane, valid_until, auth)` | purpose `metatx-cancel`; the signature names no nonce, so each digest runs once: persistent `UaCancelUsed(digest)`, checked before the signature, a replay `BadNonce` (EVM `cancelUsed`; controller ruling 2026-10-30, owner may override) | `uaCancelNonce` |
+| `ua_trade(dex: Address, order: Order, auth: Bytes, amount)` | `dex` a deployed Wasm contract, `dex.require_auth()` (the DEX is the direct invoker), purpose `trade` over the order digest; `order.maker == Holder::Ua`, `order.sell_token == token`, a running persistent `UaPulled(order digest) + amount ≤ sell_amount`; else `BadOrder` (EVM `DexNotContract` / `pulled[h]` parity; controller ruling 2026-10-30, owner may override) | `uaTrade` (CTR-DEX-25 / -26) |
 
 Rules (CTR-UA-27 parity, Soroban form):
 
@@ -202,7 +202,9 @@ so the order type changes in this deployment anyway). A native maker keeps `requ
 calls the sell token's `ua_trade(dex, order, auth, fill)`, which verifies the UA (purpose `trade`) and moves `fill`
 from the UA ledger to the DEX; proceeds go to `destination` (`transfer_to_ua` from the DEX for a UA). A UA signature is
 not consumed by the host, so a UA order fills partially without re-signing; `filled[order_hash]` bounds it
-(NET-SOR-05's overfill rule), `ua_cancel(order, auth)` sets `filled = sell_amount`, and the settling relayer stays
+(NET-SOR-05's overfill rule), and the token bounds it again on its own: `ua_trade` refuses a `dex` that is not a
+deployed contract and keeps `UaPulled(order digest) ≤ sell_amount` (EVM `pulled[h]` parity, one rule on every family;
+controller ruling 2026-10-30, owner may override), so a wrong or malicious DEX pulls at most the signed amount; `ua_cancel(order, auth)` sets `filled = sell_amount`, and the settling relayer stays
 bound (`order.relayer.require_auth()`).
 
 ### 5.4 Relay fee (CTR-MTX-27)

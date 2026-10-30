@@ -53,6 +53,8 @@ enum Key {
     UaNonce(BytesN<32>, BytesN<32>),
     /// A `ua_cancel_nonce` digest already run (EVM `cancelUsed`): its signature names no nonce, so it runs once.
     UaCancelUsed(BytesN<32>),
+    /// `ua_trade`'s running total per order digest, `≤ sell_amount` (controller ruling 2026-10-30, EVM `pulled[h]`).
+    UaPulled(BytesN<32>),
 }
 
 #[contracttype]
