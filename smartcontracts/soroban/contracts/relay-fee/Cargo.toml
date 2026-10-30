@@ -11,11 +11,14 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
+scaas-ua-common = { path = "../ua-common" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
 scaas-token = { path = "../token" }
 scaas-mandate = { path = "../mandate" }
+scaas-ua-registry = { path = "../ua-registry" }
+serde_json = { workspace = true }
 ed25519-dalek = "2"
 sha2 = "0.10"
 soroban-ledger-snapshot = "=30.0.0-rc.1"
