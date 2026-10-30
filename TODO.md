@@ -127,6 +127,15 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      **Status (paused 2026-10-30):** branch `dex-round` — T1 (floor removed), T2 (`InteractionFailed`), T3 (`mtxHybrid` /
      `Via`) done and reviewed; T4 WIP `b45c4322` (DX7 refund + `restorePulled`, capacity restored per the owner; must also
      forbid the `restorePulled` selectors in `_interact` — T3 review); then T5–T19.
+     **Status (2026-10-30, later):** T4–T9, T11, T12, T14 done and reviewed; T10 (Uniswap mainnet fork test, owner:
+     public dRPC `https://eth.drpc.org`, no key) in progress; then T13, T15–T19.
+     **After the DEX round (owner 2026-10-30): BNB Smart Chain venues.** Uniswap v3 / v4 on BNB Chain through the
+     existing `UniswapExecutor` (BSC factory, init-code hash, PoolManager in the constructor) and PancakeSwap v2 through
+     path (a) interactions; **`PancakeV3Executor`** for PancakeSwap v3 (callback `pancakeV3SwapCallback`, pool address
+     by CREATE2 from the separate PoolDeployer with Pancake's init-code hash; T7 review minor m3); a BSC fork test
+     (public archive RPCs without a key: Blast `https://bsc-mainnet.public.blastapi.io`, Tatum
+     `https://bsc-mainnet.gateway.tatum.io`; list in `scratchpad/public-rpc-providers.md`). PancakeSwap Infinity
+     (v4-like) not in scope.
   4. **UA-Soroban (UA base) + UA-8 step 2 (Soroban registry)**, plus **classical Zether on Soroban** (owner 2026-10-30;
      spec S13a: its own track and branch `zether-soroban` after `ua-soroban`, BLS12-381 host functions, measure the verifier
      first — a verify over the per-transaction budget is a STOP for the owner), in one round — shared ML-DSA verifier (CAP-0087 host
