@@ -284,6 +284,14 @@ void main() {
     expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(1599))), 'UAKemKeyLength');
     expect(errCode(() => kemRecordDigest(ua: u, version: BigInt.one, kemPk: Uint8List(1601))), 'UAKemKeyLength');
     expect(hx(kemRecordDigest(ua: u, version: (BigInt.one << 64) - BigInt.one, kemPk: Uint8List(1600))), '0xdea39530ca31145e34cb14a02a34952227ee39703d12cbeb2428539002c7dd31'); // pins the 8-byte version word
+    // m-C3: frb would wrap 2^64 + 1 to 1 and -1 to 2^64 - 1; the package refuses them (as ua-dart / JS)
+    final pk = Uint8List(1600), big = (BigInt.one << 64) + BigInt.one;
+    for (final bad in [BigInt.one << 64, big, -BigInt.one]) {
+      expect(errCode(() => kemRecordDigest(ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
+      expect(errCode(() => kemRecordMessage(kind: 0x0130, ua: u, version: bad, kemPk: pk)), 'UAKemVersion', reason: '$bad');
+      expect(errCode(() => holderPopMessage(kind: 0x0130, ua: u, keyData: Uint8List(0), kemRecord: KemRecord(version: bad, pk: pk))), 'UAKemVersion', reason: '$bad');
+      expect(errCode(() => pqzRegMessage(ua: u, pqzKey: Uint8List(16384), kemRecord: KemRecord(version: bad, pk: pk))), 'UAKemVersion', reason: '$bad');
+    }
   });
 
   test('pqz key record', () {
