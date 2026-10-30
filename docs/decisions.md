@@ -4365,6 +4365,7 @@ Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the accoun
 **Why.** A 20-byte form is exactly the truncation the UA id space forbids (2^80 collision work against secp256k1 accounts, CTR-UA-03); an account-shaped form invites native sends to a keyless address.
 **Cost if wrong.** dev passkey accounts re-open; users copy a URN, not an address. Owner-confirmed.
 **Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 311; [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 1413.
+Change (2026-10-30, owner ruling 2026-10-30; status: current; first used by branch ua-soroban, task T4, clientkeys `soroban.js` `uaUrn`): the URN's `<kind>` segment is the kind's **name** as in `kinds.json` (e.g. `urn:scaas:ua:v1:webauthn-p256:<hex32>`), not the numeric code (`0x0100`); `<hex32>` is lower-case hex. Options were name (readable, matches the prose and the `KINDS` table of `ua.js`) or code (shorter, independent of a later rename); the owner chose the name. Cost if wrong: a kind rename changes its URN, so kind names are frozen once used in a URN. Every family's clients and wallets follow it.
 
 ### NET-ALL-22 — Chain identified by (chain_key, chain_uid); chain_uid salts every SCaaS domain
 - old: R330 · status: current · owner: no · date: 2026-10-08 · normative: networks/README.md#NET-ALL-22 · superseded-by: —

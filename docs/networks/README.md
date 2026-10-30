@@ -429,7 +429,9 @@ the 32-byte UA id instead of a 20-byte truncated hash; Solana: the passkey owner
 contracts, not accounts of the chain: nobody can sign for them as an x/auth account or a Solana pubkey, so a bank
 `MsgSend`, a SOL transfer or an ATA created for one burns funds. They are therefore **displayed and encoded only as
 `urn:scaas:ua:v1:<kind>:<hex32>`** (never the chain's account HRP, never base58 as a pubkey), and wallets and
-clientkeys refuse a native send to that form. Why: a 20-byte form is exactly the truncation the UA id space forbids
+clientkeys refuse a native send to that form. `<kind>` is the kind's **name** as in `kinds.json` (e.g.
+`urn:scaas:ua:v1:webauthn-p256:<hex32>`), never its numeric code; `<hex32>` is the 32-byte id in lower-case hex
+(owner 2026-10-30). Why: a 20-byte form is exactly the truncation the UA id space forbids
 (2^80 collision work against secp256k1 accounts, [CTR-UA-03](../contracts/accounts.md#CTR-UA-03)); an
 account-shaped form invites native sends to a keyless address. Cost: dev passkey accounts re-open; users copy a URN,
 not an address. Owner-confirmed.
