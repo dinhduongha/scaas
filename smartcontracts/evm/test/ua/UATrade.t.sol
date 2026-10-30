@@ -218,6 +218,7 @@ contract UATradeTest is UALedgerBase {
         o = _o(uaP, 1000, 2000);
         _expect(ITradeToken.ZeroFill.selector, o, _f(0, 0, 0));
         _expect(ITradeToken.Overfill.selector, o, _f(1001, 2002, 0));
+        o.minFill = 500;
         _expect(ITradeToken.BelowMinFill.selector, o, _f(499, 998, 0));
         _expect(ITradeToken.PriceLimit.selector, o, _f(600, 1199, 0));
         _expect(ITradeToken.FeeAboveSigned.selector, o, _f(600, 1200, 1));
@@ -226,6 +227,12 @@ contract UATradeTest is UALedgerBase {
         o.fee = 3_000; // ceil(1600 * 0.3 %) = 5
         _expect(ITradeToken.FeeAboveSigned.selector, o, _f(800, 1600, 6));
         _trade(o, _f(800, 1600, 5));
+    }
+
+    function test_uaTrade_belowHalfSettles() public {
+        ITradeToken.UATradeOrder memory o = _o(uaP, 1000, 2000); // minFill 0: no floor
+        _trade(o, _f(100, 200, 0));
+        assertEq(tok.pulled(tok.uaTradeOrderDigest(o)), 100);
     }
 
     function test_nonceFloor_and_balance() public {

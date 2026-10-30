@@ -32,7 +32,6 @@ library TradeLib {
     uint8 internal constant ESCROW = 2;
     uint8 internal constant LISTED_POOLS = 4;
     uint256 internal constant PPM = 1_000_000;
-    uint256 internal constant MIN_FILL_PPM = 500_000;
     uint256 internal constant MAX_FEE_PPM = 10_000;
     uint256 internal constant MAX_MIN_NONCE = 2 ** 128;
 
@@ -110,19 +109,8 @@ library TradeLib {
             move = f.sellFill;
             if (move == 0) revert ITradeToken.ZeroFill(h);
             if (move > o.amount - p) revert ITradeToken.Overfill(h);
-            if (move != o.amount - p) {
-                // effective minimum: max(minFill, ceil(amount/2)); received side: receiveFill >= ceil(receiveAmount/2).
-                // Written as halves, not products, so a huge amount cannot overflow: equal to the MIN_FILL_PPM =
-                // 500_000 form (ceil(x * 500_000 / 1e6) = x - x / 2); the halving encodes MIN_FILL_PPM = PPM / 2 (pinned by
-                // test_minFillPpm_halvingEncodesIt). The received-side term is implied by the PriceLimit check below
-                // (move >= ceil(amount/2) and move*R <= receiveFill*amount give receiveFill >= R/2, an integer, so
-                // >= ceil(R/2)): it never binds on its own and is kept as a defensive floor.
-                uint256 half = o.amount - o.amount / 2;
-                uint256 m = o.minFill > half ? o.minFill : half;
-                if (move < m || f.receiveFill < o.receiveAmount - o.receiveAmount / 2) {
-                    revert ITradeToken.BelowMinFill(h);
-                }
-            }
+            // the signer's minFill is the only per-fill minimum (CTR-DEX-14); the remainder may close below it
+            if (move != o.amount - p && move < o.minFill) revert ITradeToken.BelowMinFill(h);
             if (mulGt(move, o.receiveAmount, f.receiveFill, o.amount)) revert ITradeToken.PriceLimit(h);
             if (f.dexFee > Math.mulDiv(f.receiveFill, o.fee, PPM, Math.Rounding.Ceil)) revert ITradeToken.FeeAboveSigned(h);
         } else {

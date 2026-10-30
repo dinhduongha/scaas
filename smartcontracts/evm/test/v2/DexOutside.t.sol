@@ -287,10 +287,12 @@ contract DexOutsideTest is Test {
     /// Path A bounds on an outside leg are the DEX's (`TradeLib.record` on its own state): minimum fill, accumulation,
     /// remainder, close.
     function test_outsidePartialFills_accumulateOnTheDex_thenClosed() public {
-        DexLegs.Settlement memory s = _settlement(_dave(address(usdc), 1, 998), 1);
-        s.taker = _taker(_order(alice, address(usdc), 499, 998, 1), 499); // the taker whole, Dave below half
-        bytes32 h = dex.dexOrderDigest(address(usdc), s.makers[0].o);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, h));
+        ITradeToken.TradeOrder memory dm = _order(dave, address(a), 2000, 1000, 1);
+        dm.minFill = 1500; // signed: 998 is below it
+        DexLegs.Settlement memory s = _settlement(_outsideLeg(DAVE_PK, address(usdc), dm, 998), 1);
+        s.taker = _taker(_order(alice, address(usdc), 499, 998, 1), 499);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, dex.dexOrderDigest(address(usdc), dm)));
+        bytes32 h = dex.dexOrderDigest(address(usdc), _order(dave, address(a), 2000, 1000, 1));
         DexLegs.Settlement[] memory ss = _two(
             _settlement(_dave(address(usdc), 1, 1000), 1), _settlement(_dave(address(usdc), 1, 1000), 2));
         vm.prank(relayer);
@@ -299,6 +301,15 @@ contract DexOutsideTest is Test {
         assertEq(usdc.balanceOf(alice), 2000);
         s = _settlement(_dave(address(usdc), 1, 1000), 3);
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.OrderClosed.selector, h));
+    }
+
+    function test_outsideLeg_belowHalfSettles() public {
+        DexLegs.Settlement memory s = _settlement(_dave(address(usdc), 1, 998), 1); // minFill 0: 998 of 2000 settles
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(DexLegs.wire(_one(s)));
+        assertTrue(ok[0]);
+        assertEq(dex.pulled(dex.dexOrderDigest(address(usdc), s.makers[0].o)), 998);
+        assertEq(usdc.balanceOf(alice), 998);
     }
 
     /// The digest is EIP-712 over the DEX's salted domain and binds the sell token.
