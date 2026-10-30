@@ -191,6 +191,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     function _onlyAdmin() private view returns (DexStorage storage s) {
         s = _s();
         if (msg.sender != s.admin) revert NotAdmin(msg.sender);
+        SigCheck.requireNotDelegated(msg.sender); // owner ruling 2026-10-30, D2
     }
 
     /// @dev SCaaS iff the factory made it from a registered (version ≠ 0), non-deprecated implementation.

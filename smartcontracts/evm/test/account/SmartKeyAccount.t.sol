@@ -14,6 +14,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {SigCheck} from "../../src/common/SigCheck.sol";
 
 /// Software authenticator: a fixed P-256 key, authenticatorData/clientDataJSON in the WebAuthn format (L3 §5.8.1.1),
 /// the signature normalised to low-s as clients do.
@@ -711,6 +712,19 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         acct.completeRecovery(k);
         _ownerCallFails(abi.encodeCall(SmartKeyAccount.cancelRecovery, ()),
             abi.encodeWithSelector(SmartKeyAccount.NoRecovery.selector));
+    }
+
+    /// Owner ruling 2026-10-30 (D2): a guardian with an EIP-7702 designator is running its delegate's code (a phished
+    /// guardian's sweeper); `initiateRecovery` refuses it before anything changes.
+    function test_recovery_delegatedGuardianRefused() public {
+        vm.etch(GUARDIAN, abi.encodePacked(hex"ef0100", address(0x5EE9)));
+        vm.prank(GUARDIAN);
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, GUARDIAN));
+        acct.initiateRecovery(_seedKey(SEED));
+        assertEq(acct.pendingRecovery(), bytes32(0));
+        vm.etch(GUARDIAN, "");
+        vm.prank(GUARDIAN);
+        acct.initiateRecovery(_seedKey(SEED));
     }
 
     function test_recovery_guards() public {

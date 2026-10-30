@@ -17,6 +17,7 @@ import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
+import {SigCheck} from "../../src/common/SigCheck.sol";
 
 /// A verifier that claims any precompile and proof system and says "supported" (review W-B).
 contract FakePqzVerifier {
@@ -494,6 +495,18 @@ contract PqzNoneTest is PqzFixture {
         c.conf.auditorKey = abi.encode(k);
         vm.expectRevert(err); // auditor
         factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), "keyless");
+    }
+
+    /// Owner ruling 2026-10-30 (D2): a holder with an EIP-7702 designator (a sweeper's code calling as it) cannot shield
+    /// its public units away.
+    function test_shield_delegatedCallerRefused() public {
+        address v = address(0xD7702);
+        _public(tok, v, 10 * SCALE);
+        vm.etch(v, abi.encodePacked(hex"ef0100", address(this)));
+        vm.prank(v);
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, v));
+        tok.mtxShield(alice, 1);
+        assertEq(tok.balanceOf(v), 10 * SCALE);
     }
 
     function test_shieldChecks() public {

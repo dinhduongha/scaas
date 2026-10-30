@@ -13,6 +13,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
+import {SigCheck} from "../../src/common/SigCheck.sol";
 
 /// Answers nothing the factory asks.
 contract Muted {}
@@ -250,6 +251,17 @@ contract FactoryTest is Test {
         g.createToken(NONE, 1, abi.encode(_none(alice)), "early");
         vm.warp(from);
         assertTrue(g.isRegisteredToken(g.createToken(NONE, 1, abi.encode(_none(alice)), "on time")));
+    }
+
+    /// Owner ruling 2026-10-30 (D2): a registrar with an EIP-7702 designator (its delegate's code calls) is refused.
+    function test_delegatedRegistrarRefused() public {
+        vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, registrar));
+        f.setKindEnabled(NONE, false);
+        vm.etch(registrar, "");
+        vm.prank(registrar);
+        f.setKindEnabled(NONE, false);
     }
 
     /// The factory's generic gate (plan 5g-Z2): the plain kinds start on, the confidential ones off; registrar only.

@@ -14,6 +14,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {SigCheck} from "../../src/common/SigCheck.sol";
 
 /// A DEX release answering `factory()` (its deployer) on another chain.
 contract OtherChainDex {
@@ -774,6 +775,17 @@ contract DexTest is Test {
         g.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 0, treasury, false)), "early");
         vm.warp(from);
         assertTrue(g.isDex(g.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 0, treasury, false)), "on time")));
+    }
+
+    /// Owner ruling 2026-10-30 (D2): an admin with an EIP-7702 designator (its delegate's code calls) is refused.
+    function test_adminOnly_delegatedAdminRefused() public {
+        vm.etch(admin, abi.encodePacked(hex"ef0100", address(0x5EE9)));
+        vm.prank(admin);
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, admin));
+        dex.setFeeSplit(0, treasury);
+        vm.etch(admin, "");
+        vm.prank(admin);
+        dex.setFeeSplit(0, treasury);
     }
 
     function test_adminOnly_feeSplitBounds() public {

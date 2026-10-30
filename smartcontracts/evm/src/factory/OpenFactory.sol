@@ -6,6 +6,7 @@ import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain (plan 5g-Z2).
 /// @notice Anyone creates tokens and DEXes; the registrar publishes deployment environments (`publishEnv`, versioned
@@ -63,6 +64,7 @@ contract OpenFactory is IOpenFactory {
 
     modifier onlyRegistrar() {
         if (msg.sender != registrar) revert NotRegistrar();
+        SigCheck.requireNotDelegated(msg.sender); // owner ruling 2026-10-30, D2
         _;
     }
 

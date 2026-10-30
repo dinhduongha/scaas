@@ -13,6 +13,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {ZetherTranscript} from "../../src/zether/ZetherTranscript.sol";
+import {SigCheck} from "../../src/common/SigCheck.sol";
 
 /// @notice The whole life of a `NONE_ZETHER` token (a factory clone, the real verifier, real proofs from the test
 ///         prover), on BLS12-381 (the only classical Zether curve since UA-6): shield from the public balance, transfer,
@@ -121,6 +122,18 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         vm.expectRevert(err); // a spender
         tok.transfer(address(this), 1);
         assertEq(tok.balanceOf(SHIELD_POOL_), 5 * SCALE, "untouched");
+    }
+
+    /// Owner ruling 2026-10-30 (D2): a holder with an EIP-7702 designator (a sweeper's code calling as it) cannot shield
+    /// its public units away.
+    function test_shield_delegatedCallerRefused() public {
+        address v = address(0xD7702);
+        _public(tok, v, 30 * SCALE);
+        vm.etch(v, abi.encodePacked(hex"ef0100", address(this)));
+        vm.prank(v);
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, v));
+        tok.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 30);
+        assertEq(tok.balanceOf(v), 30 * SCALE);
     }
 
     function test_shieldMovesTheCallersPublicUnitsToThePool() public {

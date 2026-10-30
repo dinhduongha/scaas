@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {V2Fixture, UID_, noneInit} from "./helpers/V2Fixture.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
@@ -122,7 +123,8 @@ contract Tier1Test is V2Fixture {
         t.transferFrom(address(this), bob, 0);
     }
 
-    /// An EOA with an EIP-7702 designator (`0xef0100 ‖ addr`) has code but is not a contract here (CTR-TOK-01).
+    /// An EOA with an EIP-7702 designator (`0xef0100 ‖ addr`) has code but is not a contract here (CTR-TOK-01); as a
+    /// direct caller it is refused earlier, by `_msgSender()` (owner ruling 2026-10-30, D2).
     function test_allowance_7702DelegatedEoaRefused() public {
         NoUnderlyingToken t = _none(address(this), 100, address(0));
         vm.etch(bob, abi.encodePacked(hex"ef0100", address(this)));
@@ -130,10 +132,10 @@ contract Tier1Test is V2Fixture {
         vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.SpenderNotContract.selector, bob));
         t.approve(bob, 1);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, bob));
         t.approve(address(this), 1);
         vm.prank(bob);
-        vm.expectRevert(abi.encodeWithSelector(IERC20MetaTx.CallerNotContract.selector, bob));
+        vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, bob));
         t.transferFrom(address(this), bob, 0);
     }
 

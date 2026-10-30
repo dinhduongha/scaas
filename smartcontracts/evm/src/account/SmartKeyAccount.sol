@@ -160,7 +160,7 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
 
     /// @notice Called again while pending: replaces the key and restarts the clock.
     function initiateRecovery(SubjectKey calldata key) external nonReentrant {
-        if (msg.sender != guardian || guardian == address(0)) revert NotGuardian();
+        if (_msgSender() != guardian || guardian == address(0)) revert NotGuardian(); // a delegated guardian: CallerDelegated
         _checkKey(key);
         bytes32 id = keyIdOf(key);
         pendingRecovery = id;

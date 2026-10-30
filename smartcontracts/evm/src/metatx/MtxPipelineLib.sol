@@ -135,8 +135,9 @@ library MtxPipelineLib {
     function _checkEnvelope(
         bytes32 from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer
     ) internal view returns (bool self) {
-        if (mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 && relayer != msg.sender) {
-            revert IMetaTx.MetaTxUnauthorizedRelayer(relayer, msg.sender);
+        if (mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0) {
+            if (relayer != msg.sender) revert IMetaTx.MetaTxUnauthorizedRelayer(relayer, msg.sender);
+            SigCheck.requireNotDelegated(msg.sender); // a bound relayer runs no delegate code (owner ruling 2026-10-30, D3)
         }
         if (block.timestamp > validUntil) revert IMetaTx.MetaTxExpired(validUntil, block.timestamp);
         if (mode & ~MetaTxLib.MODE_KNOWN_MASK != 0 || mode & MetaTxLib.MODE_FEE_MASK > MetaTxLib.MODE_FEE_FIXED) {

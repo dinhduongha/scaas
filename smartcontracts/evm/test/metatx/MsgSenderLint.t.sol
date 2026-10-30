@@ -4,7 +4,8 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 
 /// CTR-MTX-18: authority and balance owners are read through `_msgSender()`; the reads that stay `msg.sender`
-/// are exactly: the reentrancy guard, `_msgSender()` and `_ticketSubject()` themselves, the relayer binding, the
+/// are exactly: the reentrancy guard, `_msgSender()` and `_ticketSubject()` themselves (with `_msgSender()`'s EIP-7702
+/// designator refusal), the relayer binding (with its designator refusal), the
 /// default fee recipient and the event `relayer` (every pipeline, the UA ledger's two included), and the factory check
 /// in `initialize`. Lines whose first non-blank characters
 /// are `//` are skipped (block comments are not). A change here is deliberate: update the pin in the same commit and
@@ -55,10 +56,11 @@ contract MsgSenderLintTest is Test {
 
     function test_msgSenderReadsArePinned() public view {
         // metatx split T2: the relayer binding x2 moved into MtxPipelineLib._checkEnvelope (inlined into MetaTxBase).
-        assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 7,
-            "MetaTxBase: guard, event, _msgSender x2, fee default, ticket binding (CTR-ZTH-34), _ticketSubject");
-        assertEq(_count("src/metatx/MtxPipelineLib.sol", "msg.sender", false), 4,
-            "MtxPipelineLib: relayer binding x2, fee default x2 (preCall, _checkTransfer)");
+        // no7702 (owner ruling 2026-10-30, D2 / D3): `_msgSender()` and the relayer binding refuse a designator caller.
+        assertEq(_count("src/metatx/MetaTxBase.sol", "msg.sender", false), 8,
+            "MetaTxBase: guard, event, _msgSender x3 (incl. the designator refusal), fee default, ticket binding (CTR-ZTH-34), _ticketSubject");
+        assertEq(_count("src/metatx/MtxPipelineLib.sol", "msg.sender", false), 5,
+            "MtxPipelineLib: relayer binding x3 (incl. the designator refusal), fee default x2 (preCall, _checkTransfer)");
         // metatx split T4: the fee defaults left with `_checkTransfer` / `_checkUATransfer` / `_callFee` (now in
         // MtxPipelineLib); the event of `_execute` came down from MetaTxBase in T3.
         assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 6,

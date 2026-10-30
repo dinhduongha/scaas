@@ -261,12 +261,15 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     }
 
     /// @notice The signer inside the one self-call of step 5 (live ticket), else `msg.sender` (CTR-MTX-18). A derived
-    ///         UA signer (top 96 bits non-zero) is `UA_POOL`: its balance is the pool's sub-ledger (CTR-UA-18).
+    ///         UA signer (top 96 bits non-zero) is `UA_POOL`: its balance is the pool's sub-ledger (CTR-UA-18). A direct
+    ///         caller that is an EIP-7702 designator reverts `CallerDelegated`: its delegate's code is running as the EOA
+    ///         (owner ruling 2026-10-30, D2); it acts through a relayed, key-signed `mtx*` instead.
     function _msgSender() internal view virtual override returns (address) {
         if (msg.sender == address(this) && _tload(_TICKET) != 0) {
             uint256 s = _tload(_SENDER);
             return s >> 160 == 0 ? address(uint160(s)) : MetaTxLib.UA_POOL;
         }
+        SigCheck.requireNotDelegated(msg.sender);
         return msg.sender;
     }
 
