@@ -221,7 +221,7 @@ contract DexKatTest is Test {
     /// The three encoding-only entries decode and re-encode to the same bytes, under `ISCaaSDex`'s selectors.
     function test_dexKat_newEntriesRoundTrip() public view {
         _rtHybrid();
-        // _rtHybridVia();
+        _rtHybridVia();
         _rtBatch();
     }
 
