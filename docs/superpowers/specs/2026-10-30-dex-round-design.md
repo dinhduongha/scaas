@@ -2,9 +2,23 @@
 
 **Status:** accepted by the owner 2026-10-30 (DX7 changed to refund the taker; DX10, DX11 confirmed); every other §0
 row a controller proposal, owner may override; the plan follows without owner review
-(`docs/superpowers/plans/2026-10-30-dex-round.md`). Nothing is built. Written 2026-10-30 on branch `spec-dex` from
+(`docs/superpowers/plans/2026-10-30-dex-round.md`). **Built on branch `dex-round`** (tasks T1–T14 done and reviewed
+2026-10-30, docs in T15 / T16; merge and push wait for the owner's go); the built rules are
+[CTR-DEX-14](../../contracts/dex.md#CTR-DEX-14), [CTR-DEX-27](../../contracts/dex.md#CTR-DEX-27),
+[CTR-DEX-28](../../contracts/dex.md#CTR-DEX-28), [CTR-DEX-29](../../contracts/dex.md#CTR-DEX-29),
+[NODE-DEX-15](../../node/dex-venue.md#NODE-DEX-15) and [CLI-SGN-35](../../clients/signers-clientkeys.md#CLI-SGN-35).
+Written 2026-10-30 on branch `spec-dex` from
 `main` `cc07fced` (after the token-family rename: `NormalToken` / `WrappedToken`, `TokenKind.NORMAL` / `WRAPPED`).
-Rules are cited by ID, not restated. Every row of §0 marked **controller proposal** is the controller's and the owner
+Rules are cited by ID, not restated.
+
+**Change notes after the build (2026-10-30).** Three lines of this spec were amended where the build found them
+stale or contradicting a later ruling: (1) §4.2 step 6 said "the token cannot be told to give capacity back"; the owner's
+follow-up of the same day (DX7, capacity restored) replaced it by `restorePulled` (owner 2026-10-30). (2) §9 said every
+`tokensOut` balance must be zero (`Leftover`); the executor now returns unspent `tokensOut`, the taker's unsold sell
+token included, to its DEX and raises `Leftover` for intermediate hop tokens only (controller ruling at T7, because DX7's
+refund post-dates that line; owner may override). (3) §5 / NODE-DEX-06: a gas-burning target's out-of-gas inside a plan
+reads `InteractionFailed(i, target, "")` (not an empty reason), which the node reads as `out_of_gas` (T5 minor, T12
+fix). Each is marked "(amended 2026-10-30)" at its place. Every row of §0 marked **controller proposal** is the controller's and the owner
 may override it; the rows marked **owner** rest on a recorded ruling (the owner answers of 2026-10-29 are research note
 `docs/research/dex-matching-modes.md` §8, the minimum-fill ruling is CTR-DEX-14, the EIP-7702 rulings are D1–D5 of
 2026-10-30 in [accounts.md](../../contracts/accounts.md#CTR-UA-24)).
@@ -224,8 +238,13 @@ SCaaS Path A / Path B and outside-token (`DexOrder`) legs all work as in `mtxSet
    B refund), event `ExchangeLegSettled` / `UAExchangeLegSettled(ref, h, from, to, sold, receivedFloor = recv,
    surplus = out − outsideFloor, dexFee, refund, limitReceive = ⌈sold · receiveAmount / amount⌉)` with `sold =
    taker.fill − leftover`. A client sees the refund as `refund − (amount − taker.fill)` on Path B, `refund` on Path A;
-   the token's `TradeFilled` still shows the pulled `taker.fill`, and `pulled[h]` keeps counting it (the token cannot
-   be told to give capacity back).
+   the token's `TradeFilled` still shows the pulled `taker.fill`, but the refunded `leftover` is given back as capacity
+   (amended 2026-10-30, owner follow-up of DX7): right after paying the refund the DEX calls the sell token's
+   `restorePulled(order, leftover)` (the `UATradeOrder` overload for a UA taker; on the DEX's own state for an
+   outside-token taker; skipped for an IOC taker, which stays closed): `msg.sender == o.dex` (`NotDex`), `leftover ≤`
+   this transaction's pull for `h` (a transient EIP-1153 counter, `RestoreExceedsPull(h)`), then `pulled[h]` and the
+   counter drop by `leftover` and `PullRestored(h, leftover)` is emitted. Both `restorePulled` selectors are
+   `ForbiddenSelector` in an interaction (T4 security ruling: an interaction runs as the DEX, which is `o.dex`).
 7. **Conservation** over every snapshotted token (`ConservationBroken`).
 
 Implementation note: steps 2–7 are the exchange path's `_exchangeIn` / `_exchangeOut` with the makers' floors computed
@@ -280,7 +299,9 @@ returnbomb on the plan's frame. One rule on every path (a) entry, so `mtxExchang
 
 **Gas bounds.** No count limit in the contract; the transaction is bounded by EIP-7825 (2^24 = 16,777,216 gas;
 Hedera 15 M). Each plan gets 63/64 of what is left; a gas-burning target exhausts its plan and leaves 1/64 for the
-rest, so later plans fail `ExchangeFailed(ref, "")` (the node's `out_of_gas`) — at the relayer's cost only. The node
+rest, so later plans fail `ExchangeFailed(ref, "")` or, when the burn was inside a target call,
+`ExchangeFailed(ref, InteractionFailed(i, target, ""))` (amended 2026-10-30; the node reads both as `out_of_gas`,
+NODE-DEX-06) — at the relayer's cost only. The node
 packs plans from the simulation's per-plan gas plus each leg kind's verify cap (CTR-DEX-26's table), keeps the sum
 under the cap with its ordinary margin, puts plans with untried targets last, and uses listed targets where the
 chain's operator requires it (`setListedOnly`). A per-plan gas field is not added (DX10, CTR-DEX-16's ruling).
@@ -388,8 +409,10 @@ int256(amountIn), limit, data)`; the callback checks `msg.sender` is `CREATE2(V3
 fee), V3_POOL_INIT_CODE_HASH)` (`NotPool`) and pays the positive delta. v4: all v4 hops in one `unlock`; per hop
 `swap`, then `sync` / `transfer` / `settle` the input and `take` the output; a native currency (address 0) is refused
 (`NativeCurrency`: the DEX holds no native coin). At the end it transfers its whole balance of each `tokensIn` to the
-DEX (everything above the floors is the signers' surplus) and requires a zero balance of every `tokensOut` and hop
-token (`Leftover(token)`), so it holds nothing between calls. No admin, no owner, no upgrade, no sweep. A stray balance
+DEX (everything above the floors is the signers' surplus) and returns to the DEX any unspent balance of each
+`tokensOut` too (amended 2026-10-30: DX7 refunds the taker's unsold sell token A, so A comes back to the DEX, whose
+conservation check stays the guard) and requires a zero balance of every intermediate hop token (`Leftover(token)`),
+so it holds nothing between calls and ends at 0 in every token. No admin, no owner, no upgrade, no sweep. A stray balance
 sent to it becomes surplus at its next use. Listing: the DEX admin lists it with `setExchangeTarget` where listed-only
 mode or `LISTED_POOLS` asks; the node names it in `trade_engine.executor`. Deployed per chain only where Uniswap exists
 (a `uniswap_executor` key in `deployments/<chainid>.json` when deployed); not on 7622. CI covers it with mock v3 pools

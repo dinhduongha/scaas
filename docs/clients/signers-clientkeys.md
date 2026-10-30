@@ -248,9 +248,9 @@ the meta-transaction) and an order lane (`batch` of a trade order) are labelled 
 to build and sign it.** Status: clientkeys `checkTradeOrder` **BUILT** (P5: the `order` and `sellToken` the client built from the user's input must hash to the server's order, which adds only the nonce and an in-window `validUntil`; no ESCROW on an outside token; a cancel is the user's own `orderHash` or lane, `checkCancel`). Before signing a `TradeOrder` (in the app, clientkeys or a portal)
 the review shows `dex`, `relayer`, `destination`, the price limit both ways, the signed `fee` rate and the effective
 minimum fill per settlement (`minFill`, [CTR-DEX-14](../contracts/dex.md#CTR-DEX-14): no protocol floor, owner
-2026-10-29; the client defaults it to the market's minimum size; `minFill = amount` as fill-or-kill; SPECIFIED —
-Transitional (BUILT, P5): until the contracts drop the floor, a `minFill` below half is shown as half,
-`max(minFill, ceil(amount / 2))`). By default the client **refuses** to build or sign when `dex` is not on its pinned chain
+2026-10-29; the client defaults it to the market's minimum size; `minFill = amount` as fill-or-kill; BUILT in the DEX
+round, 2026-10-30: `checkTradeOrder` returns the signed `minFill` as it is, a `minFill` below half is shown as itself).
+By default the client **refuses** to build or sign when `dex` is not on its pinned chain
 profile's DEX list ([NET-ALL-24](../networks/README.md#NET-ALL-24); a listed DEX is `isDex` and of a non-deprecated version, [CTR-DEX-24](../contracts/dex.md#CTR-DEX-24)) — for a signature wrap, when `dex` is not a
 registered wrapper of that underlying — with a warning that a contract named there can take the signed amount;
 overriding needs an explicit expert setting and is never offered in a portal. It warns when `destination ≠ from`
@@ -276,7 +276,10 @@ gives `receiveFill ≥ sellFill · receiveAmount / amount`, and `receiveFill` is
 same guaranteed base. At a better price a fill of `minFill` quote buys more base, so a fill that buys exactly
 `minBase` base spends less than `minFill` and is refused: the review says "at least `minBase` at your limit price".
 `decimals` of both tokens are applied before the formula (amounts are raw units). The venue counts a bid's minimum
-the same way ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). Status **SPECIFIED**.
+the same way ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)). Status **BUILT** (DEX round, 2026-10-30, `a6284544`,
+`65bc2f8d`, `bea138c5`): the two helpers are exported from clientkeys `evm.js` — `bidMinFill(minBase, amount,
+receiveAmount)` (refused above `amount` and for `amount = 0`) and `bidMinBase(minFill, amount, receiveAmount)` — with
+tests for the ceilings (exact and inexact divisions), the round trip and the zero guards.
 
 <a id="CLI-SGN-36"></a>**CLI-SGN-36** — **A client never asks an EOA to approve a SCaaS token; wrapping a SCaaS
 underlying is signed, not approved.** Status: **BUILT** in clientkeys (P5: no approve builder; `checkTradeOrder` with `wrappers`, a flat list: defence in depth, the wrapper itself checks the underlying). On a SCaaS token only a contract may call `approve`

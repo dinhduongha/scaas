@@ -119,8 +119,12 @@ does with it.
   number of settlements; the dust rule ([NODE-DEX-05](#NODE-DEX-05)) applies to remainders. **Junk fills are venue
   policy:** no leg whose base-token amount is below the market's `min_base_amount` ([intake](#intake)) unless it closes
   the order, no settlement worth less than its gas; `depth` / `ticker` keep an order whose minimum fill in base units (an ask's `minFill`, a bid's `ceil(minFill · receiveAmount / amount)`, [CLI-SGN-35](../clients/signers-clientkeys.md#CLI-SGN-35))
-  exceeds `min_base_amount` in a separate `min_fill` bucket, never in best bid / ask. Status **SPECIFIED**;
-  **Transitional (BUILT, P5):** `min_fill` still returns `max(minFill, ceil(amount / 2))`, as the built contracts.
+  exceeds `min_base_amount` in a separate `min_fill` bucket, never in best bid / ask. Status **BUILT** (DEX round,
+  2026-10-30, `0ab15170`, `dex.rs`, `dex/venue.rs`): `min_fill` returns the signed `minFill`; the matcher skips a maker
+  leg whose base amount is below the market's `min_base_amount` unless the leg closes the order on chain; `Book::depth`
+  keeps the normal levels and `Book::depth_min_fill` the bucket, which the `depth` JSON returns as `min_fill:
+  {bids, asks}` (the ticker reads only the normal levels). **Still SPECIFIED** (built with the TradeEngine, TODO step 6,
+  because it needs plan pricing): "no settlement worth less than its gas", for hybrids and plans on every chain.
 - **IOC, FOK, escrow.** `IOC` (flag 1): the token closes the order at its single pull, so nothing of it rests. FOK:
   `minFill = amount`. `ESCROW` (flag 2, implies IOC): the whole `amount` is pulled into the DEX and the unmatched part
   refunded in the same call; the DEX, not the token, enforces price, minimum and fee on it.
@@ -171,20 +175,38 @@ and the node never carries such an order. Cost: a new DEX needs a chain-profile 
 
 <a id="trade-engine"></a><a id="NODE-DEX-17"></a>**NODE-DEX-17** — **The TradeEngine executes orders against AMMs through
 `mtxExchange`/`mtxExchangeVia`** ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)); off unless the chain enables it. Status:
-**SPECIFIED**. Intake: an order on a listed market enters the book; one whose pair is no listed market, or whose
-`receiveToken` is its sell token (a cycle), is **exchange-only** — never in the book, both tokens known to the DEX, else
-`TOKEN_NOT_SERVED`. Each tick (every block or `trade_engine.tick`): (1) book matching first (`mtxSettle`: internal
-liquidity pays no pool fee); (2) coincidences of wants among exchange-only orders, then AMM routes for the rest — quotes
-by `eth_call` to the configured quoters, at most `trade_engine.max_hops` (3) hops, cycles for X→X orders; (3) a resting
-book order is also filled through AMMs when a route reaches its limit (per market `amm_fill`, default on with the
-engine); (4) floor `receiveFill` = quote × (1 − `trade_engine.buffer`), never below the signed limit (the buffer costs the
-signer nothing: the surplus comes back, [CTR-DEX-21](../contracts/dex.md#CTR-DEX-21)); (5) path (a) when routers suffice,
-(b) through the node's own listed executor for callbacks and flash swaps; (6) simulate the whole call, submit it as a
-`call` job, watch the final event. Fees by role: an exchange-only order pays `taker_fee_ppm` (below ⇒ `FEE_TOO_LOW`), a
-resting order filled through an AMM `maker_fee_ppm`. MEV: on a public chain submit through a private relay where one
-exists (a sandwich takes only surplus, never below the signed limit); the SCaaS testnet has no public mempool. Config per
-chain: `trade_engine.enabled` (default `false`), `trade_engine.amm` (`{kind: univ2|univ3, factory, quoter, router}`),
-`max_hops`, `executor`, `tick`, `buffer`. EVM only.
+**SPECIFIED** (the planner, quoter, routes, jobs and `GET /v1/dex/exchanges/{ref}` are built in TODO step 6, TradeEngine
+EVM; the contracts it drives — [CTR-DEX-27](../contracts/dex.md#CTR-DEX-27), [-28](../contracts/dex.md#CTR-DEX-28),
+[-29](../contracts/dex.md#CTR-DEX-29) — and the node's ABI and call-table rows for the three new entries are built).
+Off unless the chain enables it (`trade_engine.enabled`). Intake: an order on a listed market enters the book; one whose
+pair is no listed market, or whose `receiveToken` is its sell token (a cycle), is exchange-only — never in the book, both
+tokens known, else `TOKEN_NOT_SERVED`. Each tick (`trade_engine.tick`; also the CoW window):
+
+1. **Listed-market orders, book first.** An incoming order that the book absorbs within every order's `minFill` is
+   settled by `mtxSettle` (mode 1). If the book is short and a route reaches the order's limit, the makers and the
+   route go in **one** `mtxHybrid` / `mtxHybridVia` call (mode 3): makers at their own price, `outsideFloor` = quote ×
+   (1 − `buffer`). Never `mtxSettle` and then an AMM call in a later transaction for the same incoming order: IOC
+   closes at its single pull and FOK cannot span two calls. A resting GTC order is also filled through a route when one
+   reaches its limit (`amm_fill`), as its own matching event.
+2. **Exchange-only orders: CoW / ring, then outside.** Pairs of opposite orders and rings across pairs among the
+   window's exchange-only orders are netted in one `mtxExchange` plan, each order one leg, floors at one clearing price
+   per pair (AMM marginal price when a pool exists, else the midpoint of the two limits), the net imbalance routed
+   outside in the same plan (mode 4). What is left takes a route (mode 2): at most `max_hops` (3) hops, splits, cycles
+   for X→X; path (a) when routers suffice, (b) through the listed executor for callbacks.
+3. A listed-market order's outside remainder may be netted with exchange-only counterparts only inside one
+   `mtxExchange` plan (makers then at node-set floors ≥ their limits, [CTR-DEX-21](../contracts/dex.md#CTR-DEX-21)).
+4. Floors never below the signed limit; the buffer costs the signer nothing (the surplus comes back). Independent plans
+   of a tick go in one `mtxExchangeBatch` (a failing plan only `ExchangeFailed`); hybrids and executor plans one per
+   transaction. Simulate, submit as a `call` job, watch the final events (`LegSettled`, `ExchangeLegSettled`,
+   `ExchangeFailed`), attribute failures by the `orderHash` in the revert ([NODE-DEX-02](#NODE-DEX-02)).
+
+Fees by role: an exchange-only order and a hybrid taker pay `taker_fee_ppm`, a maker (book or hybrid) and a resting order
+filled through a route `maker_fee_ppm` (below ⇒ `FEE_TOO_LOW` / not selected). MEV: a private relay where one exists;
+floors bound any loss to surplus; netted flows never reach a pool; the SCaaS testnet has no public mempool. Config:
+`enabled`, `amm` (`{kind: univ2|univ3|univ4, factory, quoter, router}`), `max_hops`, `executor`, `tick`, `buffer`. EVM
+only. A hybrid whose route leaves part of the taker's sell unspent is refunded to the taker if its sold part still meets
+its `minFill` and limit ([CTR-DEX-27](../contracts/dex.md#CTR-DEX-27)); the planner sizes `outsideSell` so this is the
+exception.
 
 <a id="NODE-DEX-18"></a>**NODE-DEX-18** — **The node keeps no surplus: its income is the relayer share of the signed fee**
 (owner). Every swap the engine builds sends its output to the DEX, so the contract pays all of it to the signers;
@@ -253,7 +275,7 @@ a dependency for no need at the volumes served.
 
 <a id="watcher"></a><a id="NODE-DEX-04"></a>**NODE-DEX-04** — **The DEX watcher has its own cursor.** One task per
 chain with the same finality helpers as the indexer (`finality::{safe_head, next_range, quorum_ok}`) and a **separate
-cursor** (`dex_cursor`) reads, **by emitter** (review C6-3: a log from any other address, a listed outside token included, is dropped, never acted on): leg and failure events from the DEX only, cancel and invalidation from the DEX (outside tokens' orders) or a SCaaS token (only the orders it sells), `UANoncesInvalidated(pad(addr), batch, minNonce)` (review C6-7; it drops the dead shape-0 orders of that lane from the in-memory book; the client store is not sent it) from a SCaaS token (**residual:** `UANoncesInvalidated` updates the in-memory book only; after a restart the dead orders return from the client store until a failed match heals them, bounded per order, gas only, no funds; the cheap closure, checking the nonce floor on chain when the book loads, is not built); the DEX's `LegSettled`, `MatchFailed` (an empty reason reported `out_of_gas`), `OrderCancelled`,
+cursor** (`dex_cursor`) reads, **by emitter** (review C6-3: a log from any other address, a listed outside token included, is dropped, never acted on): leg and failure events from the DEX only, cancel and invalidation from the DEX (outside tokens' orders) or a SCaaS token (only the orders it sells), `UANoncesInvalidated(pad(addr), batch, minNonce)` (review C6-7; it drops the dead shape-0 orders of that lane from the in-memory book; the client store is not sent it) from a SCaaS token (**residual:** `UANoncesInvalidated` updates the in-memory book only; after a restart the dead orders return from the client store until a failed match heals them, bounded per order, gas only, no funds; the cheap closure, checking the nonce floor on chain when the book loads, is not built); the DEX's `LegSettled`, `MatchFailed` (an empty reason reported `out_of_gas`), `ExchangeFailed(ref, reason)` of a failing plan in an `mtxExchangeBatch` ([CTR-DEX-28](../contracts/dex.md#CTR-DEX-28); an empty reason, or a reason that is `InteractionFailed(i, target, "")`, a target that ran out of gas, is reported `out_of_gas` — BUILT, `guard::reason_is_out_of_gas`, read by the venue's `revert_name`), `OrderCancelled`,
 `NoncesInvalidated` and the market tokens' `OrderCancelled`, `NoncesInvalidated` (BUILT, P5; `UALegSettled`, a shape-1
 leg's `LegSettled` with ids, read the same way, BUILT with UA-5b ([CTR-DEX-26](../contracts/dex.md#CTR-DEX-26)); the
 venue itself sends shape-0 legs until its UA order intake (UA F5); `ExchangeLegSettled` with P7,
@@ -522,7 +544,7 @@ cancel-all; an outside-token `DexOrder` through the puller. Built (P5) in `dex.r
 maker offered less than its minimum is skipped; FOK filled across two makers; an IOC remainder never rests; `ESCROW` refused;
 signed `fee` below the taker rate ⇒ `FEE_TOO_LOW`; `dex` off the chain's list ⇒ `DEX_NOT_LISTED` at intake and never
 replicated; cancel on the sell token closes the order on the mined `OrderCancelled`; the DEX's balances unchanged after
-every settlement. TradeEngine: route finder (hops, cycles), coincidence of wants, quote → plan → simulation,
+every settlement. DEX round (BUILT, 2026-10-30): `min_fill` is the signed `minFill`; a maker filled at a fraction of its order; a leg below `min_base_amount` skipped unless it closes the order; a large `minFill` in the `min_fill` depth bucket and out of the ticker; the call table pins `mtxHybrid`, `mtxHybridVia` and `mtxExchangeBatch` (19 rows, only a listed DEX) with their selectors and an encode / decode round trip against the three new `dex_order_kat.json` keys; a wrapped empty `InteractionFailed` is `out_of_gas`; e2e on anvil: a fill below half an order settles through the gateway. TradeEngine: route finder (hops, cycles), coincidence of wants, quote → plan → simulation,
 exchange-only intake split, `amm_fill` on resting orders, fee-by-role refusal, `/v1/dex/exchanges/{ref}`. Managed markets: intake refusals
 per reason; drop on `AccountFrozen`/`Paused`/revocation/attester disable; pre-settle re-check; unbound and fee refusals;
 gossip refusal and admin-trust-only listing. Book gossip: merge commutativity/idempotence (proptest over update orders ⇒

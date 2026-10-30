@@ -888,7 +888,7 @@ each library ≤ 24,576 B.
 
 | Library | Content | Kinds |
 |---|---|---|
-| `TradeLib` (built, 3,104 B) | `TradeOrder` checks, `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, the token side of fills; `scaas.trade` | all |
+| `TradeLib` (built, 3,104 B) | `TradeOrder` checks, `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, `restorePulled` (CTR-DEX-27), the token side of fills; `scaas.trade` | all |
 | `AdminLib` | flag validation, roles, owner, `disableFeature` (built, 3,406 B); later freeze / force / pause / allowlist | all |
 | `WrappedLib` (built, 11,658 B) | legs; the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out); rate changes with timelock; `disableWrap`; the reserve invariant | `WRAPPED*` |
 | `ZetherLib` (built, 15,662 B) | statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries | `*_ZETHER` |
