@@ -4380,12 +4380,12 @@ to an attacker key) stays undetectable; signature paths already verify the curre
 
 **Rule.** Every family's UA spec answers the 19-row checklist of networks/README.md NET-ALL-84 in its own §0 (or says
 why a row does not apply): a shared answer that is the same on every chain, and a family-specific part that states the
-chain's own mechanics. The rows come from the 4b Soroban spec's §0 (S1–S18, S13 split into classical Zether S13a and
+chain's own mechanics. The rows come from the UA-Soroban spec's §0 (S1–S18, S13 split into classical Zether S13a and
 PQZ S13b). Owner request 2026-10-30. Status: current (docs).
 **Why.** The same questions must be asked of NEAR, Cosmos / Sui / Aptos / Solana, Algorand and TON as of Soroban, so
 no family spec silently skips one, while the answers keep each chain's real mechanics.
 **Cost if wrong.** A family whose mechanics do not fit a row explains why in its spec.
-**Source.** The 4b Soroban spec, `docs/superpowers/specs/2026-10-30-soroban-4b-ua-base-design.md` §0.
+**Source.** The UA-Soroban spec, `docs/superpowers/specs/2026-10-30-ua-soroban-design.md` §0.
 
 ## 27. Networks — EVM
 

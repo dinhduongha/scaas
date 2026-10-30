@@ -1,17 +1,20 @@
-# Soroban UA base (4b) and the Soroban registry of UA-8 step 2 — design
+# Soroban UA base (UA-Soroban) and the Soroban registry of UA-8 step 2 — design
 
 **Status:** accepted by the owner 2026-10-30 (S6 UA ledger in each token and S10 msig members confirmed as specified; every other §0 row stands as a controller proposal, owner may override); the plan follows without owner review. Nothing is built. Written from `main` at `920f13d0`. Rules are cited by
 ID, not restated. Every choice marked **controller call** is the controller's; the owner may override it. A choice
 that an owner ruling already decides cites the ruling.
 
-**What "4b" is.** "4b" is the TODO item **"UA on non-EVM families — every kind, not only PQ"** (owner 2026-10-29; it was
-numbered 4b in the order of that day, commit `1a4dab53`, and kept the label when the order was re-cut): per family the
-UA id space, the registry or the lazy open, the UA ledger in the tokens, the mtx / account / mandate / DEX paths
-accepting UA holders, and the kinds the family verifies — classical first, then PQ where an on-chain verifier exists.
-There is no "4a". **4b Soroban** is that item's first family after EVM (TODO "Now (order)" step 4: "4b Soroban (UA
-base) + UA-8 step 2 (Soroban registry) in one round — shared ML-DSA verifier (CAP-0087 host functions) and vectors").
-NEAR and Algorand have a lazy-opened `Ua` holder on their own branch (classical, native and `msig` kinds); they are
-later 4b / UA-8 plans (TODO step 7).
+**What the "UA-Soroban" round is.** It is the Soroban round of the TODO item **"UA on non-EVM families — every kind,
+not only PQ"** (owner 2026-10-29): per family the UA id space, the registry or the lazy open, the UA ledger in the
+tokens, the mtx / account / mandate / DEX paths accepting UA holders, and the kinds the family verifies — classical
+first, then PQ where an on-chain verifier exists. Each family gets one such **UA family round**, named `ua-<family>`
+(owner 2026-10-30: `ua-soroban`, later `ua-near`, `ua-cosmos`, …; UA-8's portable registry step is `ua8-<family>`, a
+classical Zether track `zether-<family>`), and its spec answers the checklist [NET-ALL-84](../../networks/README.md#NET-ALL-84).
+This round was first called "4b" (its number in the order of 2026-10-29, commit `1a4dab53`); the name was retired
+on 2026-10-30. Soroban is the first family after EVM (TODO "Now (order)" step 4: UA-Soroban + UA-8 step 2 (Soroban
+registry) in one round — shared ML-DSA verifier (CAP-0087 host functions) and vectors). NEAR and Algorand have a
+lazy-opened `Ua` holder on their own branch (classical, native and `msig` kinds); their UA family rounds come later
+(TODO step 7).
 
 **Inputs.** UA-8 spec [2026-10-25-ua8-portable-registrations.md](2026-10-25-ua8-portable-registrations.md) (P1–P11);
 the UA-8 plan [2026-10-30-ua8-portable-registrations.md](../plans/2026-10-30-ua8-portable-registrations.md) Part B
@@ -27,10 +30,10 @@ Each row: the decision, the options weighed, the choice, why, and the cost if it
 
 | # | Decision | Options | Choice and why | Cost if wrong | Who |
 |---|---|---|---|---|---|
-| S1 | Where the records live | (a) entries in a `SmartKeyAccount` factory (accounts.md "Where the records live" row; no Soroban factory exists — `SmartKeyAccount` is deployed per account); (b) a stand-alone registry contract, the EVM `UARegistry` shape; (c) no registry, lazy open per token (NEAR / Algorand) | **(b)** new crate `smartcontracts/soroban/contracts/ua-registry/`, contract `UaRegistry`. Soroban cross-contract calls are synchronous, so tokens call the registry as EVM tokens do (CTR-UA-17), unlike NEAR; one place for chain-wide `keyHash` uniqueness (CTR-UA-11) and for the UA-8 records; no factory to invent. This crate is the plan's "4b factory crate"; its `ua8` module is Part B (plan: "the 4b name wins") | a rename; the accounts.md row is corrected by the build | controller call |
-| S2 | The registration form | (a) a chain-bound PoP first, the portable one in Part B; (b) the portable `register` from day one | **(b)** `register(kind, key_data, attrs, pop, pqz_pop, relayer)` on the CTR-UA-07 digests (UA-8 P1: "`register` accepts only this form (one rule)"). 4b accepts only empty `attrs` (error `Attrs`); Part B lifts that and adds the KEM / PQZ entries, `checked` and the relayer mode. 4b already defines the full `Registration` type, so Part B changes no layout | none found | owner P1 / P2 (2026-10-25); split controller call |
+| S1 | Where the records live | (a) entries in a `SmartKeyAccount` factory (accounts.md "Where the records live" row; no Soroban factory exists — `SmartKeyAccount` is deployed per account); (b) a stand-alone registry contract, the EVM `UARegistry` shape; (c) no registry, lazy open per token (NEAR / Algorand) | **(b)** new crate `smartcontracts/soroban/contracts/ua-registry/`, contract `UaRegistry`. Soroban cross-contract calls are synchronous, so tokens call the registry as EVM tokens do (CTR-UA-17), unlike NEAR; one place for chain-wide `keyHash` uniqueness (CTR-UA-11) and for the UA-8 records; no factory to invent. This crate is the plan's "UA-Soroban registry crate"; its `ua8` module is Part B (plan: "the UA-Soroban name wins") | a rename; the accounts.md row is corrected by the build | controller call |
+| S2 | The registration form | (a) a chain-bound PoP first, the portable one in Part B; (b) the portable `register` from day one | **(b)** `register(kind, key_data, attrs, pop, pqz_pop, relayer)` on the CTR-UA-07 digests (UA-8 P1: "`register` accepts only this form (one rule)"). UA-Soroban accepts only empty `attrs` (error `Attrs`); Part B lifts that and adds the KEM / PQZ entries, `checked` and the relayer mode. UA-Soroban already defines the full `Registration` type, so Part B changes no layout | none found | owner P1 / P2 (2026-10-25); split controller call |
 | S3 | Kinds of generation 1 on Soroban | classical first (owner 2026-10-29), then PQ where a host function exists; pure-Rust BIP-340 / FROST / MuSig2, the BLS12-381 kinds (CAP-59 host functions exist), `fndsa512` / `slhdsa128s` pure | **enabled:** `webauthn-p256` 0x0100, `p256` 0x0101, `ed25519` 0x0102, `secp256k1` 0x0108, `msig` 0x0120, `mldsa44` 0x0130, `mldsa65` 0x0131 (§3). Every other derived kind is disabled (`KindDisabled`), stays valid elsewhere (UA-8 P3), and reaches Soroban only through Part B's relayer-checked mode, never as a signer. A later generation may add BLS12-381 or pure-Rust kinds after a budget spike (CTR-UA-05: a new generation) | a UA of a disabled kind cannot use Soroban until that generation | controller call within the owner's list |
-| S4 | The ML-DSA verifier | (a) CAP-0087 host functions; (b) pure Rust in the contract (third-party figure: ML-DSA-65 77.5 M instructions, 33–61 KB Wasm) until Protocol 30 is live | **(a) only.** The owner's "no waiting" (2026-10-29) puts all code on a local Protocol 30 network; mainnet votes Protocol 30 on 2026-11-23, before any use. One verifier module (`verify.rs` in `ua-registry`) serves `register`, `require_authorized` (4b) and `set_kem_key` (Part B): the "shared ML-DSA verifier" of TODO step 4. P11's "pure Rust until then" is dropped | a Soroban network without Protocol 30 has no ML-DSA kinds (they are disabled there by the code, not by a flag) | controller call |
+| S4 | The ML-DSA verifier | (a) CAP-0087 host functions; (b) pure Rust in the contract (third-party figure: ML-DSA-65 77.5 M instructions, 33–61 KB Wasm) until Protocol 30 is live | **(a) only.** The owner's "no waiting" (2026-10-29) puts all code on a local Protocol 30 network; mainnet votes Protocol 30 on 2026-11-23, before any use. One verifier module (`verify.rs` in `ua-registry`) serves `register`, `require_authorized` (UA-Soroban) and `set_kem_key` (Part B): the "shared ML-DSA verifier" of TODO step 4. P11's "pure Rust until then" is dropped | a Soroban network without Protocol 30 has no ML-DSA kinds (they are disabled there by the code, not by a flag) | controller call |
 | S5 | SDK and network pins | soroban-sdk 26.1.1 (today) / 29.0.1 (latest stable) / 30.0.0-rc.1 (2026-10-21, the first release with `Crypto::ml_dsa_{44,65,87}_verify`) / a git revision | **`soroban-sdk = "=30.0.0-rc.1"`** for the whole Soroban workspace (every crate rebuilds and re-tests); swapped to 30.0.0 when released, **before** the testnet e2e (this closes C16b). `stellar/quickstart` pinned by digest, run `--local --protocol-version 30 --limits testnet` | an RC API change before 30.0.0 means one more rebuild | controller call |
 | S6 | The UA ledger in Soroban tokens | (a) a per-UA custom account (`C…` contract at a salt = the UA, whose `__check_auth` asks the registry): every existing entry works unchanged; (b) a `Holder` enum in the existing entries (NEAR shape); (c) a `UaBalance(ua)` ledger with separate `ua_*` entries beside the native ones (EVM CTR-UA-18 / -26 shape) | **(c).** (a) is a contract per user per chain and gives a derived UA a native address, against CTR-UA-02 and NET-ALL-21; (b) changes the built `pay` / `pay_meta` and their cross vectors. The UA pool is the token's own address (§5.1) | more entry points in the token | controller call |
 | S7 | UA replay protection | (a) host-style random nonces in temporary storage; (b) lanes `UaNonce(ua, lane) → u64` in persistent storage, EVM `_uaNonce[ua][batch]` | **(b)**; `ua_pay` uses `lane = payLane(pay_ref)`, `nonce = 0` (CTR-MTX-26). Temporary entries are deleted on expiry, so (a) would re-open spent nonces (NET-ALL-01, CTR-MTX-04) | none found | controller call |
@@ -39,17 +42,17 @@ Each row: the decision, the options weighed, the choice, why, and the cost if it
 | S10 | `msig` members on Soroban | the EVM MEMBER set; plus Soroban natives; plus EVM natives | **MEMBER = the enabled single-key kinds of S3, plus `stellar-account` 0x0011 and `soroban-contract` 0x0012** (verified by the host: `member.require_auth_for_args((ua, purpose, digest))`, Soroban's form of the EIP-712 `UAAuth`). An `msig` with a 0x0011 / 0x0012 member is a **Soroban-network-local record** (no other registry verifies those members, as EVM's 0x0003 is Hedera-only). **`evm-eoa` 0x0001 members** are verified for the portable purposes only (`pop` v2, `kem`: ECDSA over the EIP-191 `personal_sign` of `memberDigest`, by `secp256k1_recover`, exactly CTR-UA-07), and have **zero signing weight** for every other purpose (no Soroban signing form); `evm-contract` 0x0002 members are never chain-verified here (Part B: the part is `Relayer`) | an EVM `msig` that needs its EOA members to reach its threshold is discovery-only on Soroban (S9) | controller call |
 | S11 | Storage class and TTL | instance / persistent / temporary | **persistent, one entry per key**, for every record, balance, lane, pay ref and (Part B) KEM / PQZ entry; instance storage only for constructor constants; temporary only for SEP-41 allowances (a UA never holds one). TTL `extend_ttl(30 days, 60 days)` on each write and each in-transaction read (UA8-D22); **no node TTL job**; an archived entry is restored on its next use (§7) | rent for large entries (§7) | controller call (UA8-D22) |
 | S12 | Who pays fees, rent and restores | the user / the relayer | **the relayer** (lane); users and UAs hold no XLM. Reimbursement: the relay-fee router (`ua_relay`, §5.4) or the node's sponsorship policy; registry writes have no fee form (UA-8 P9) | relayer cost on spam (CTR-UA-25: node sponsorship limits) | owner precedent 2026-10-28 (NEAR / Algorand: "the relayer pays storage"), applied here |
-| S13a | Classical Zether (not post-quantum) | a later item; in this round | **in this round, its own track** (owner 2026-10-30: "classical Zether for Soroban too"). Classical Zether was never built on Soroban. Port the EVM classical Zether (BLS12-381, the `*_zether_bls12381` token kinds `NormalZetherToken` / `WrappedZetherToken`) to Soroban on the BLS12-381 host functions (CAP-59), with the same proof bytes as `clients/zether-prover` (one prover, two verifiers; shared vectors), feature parity with the EVM classical Zether token (shield / unshield, transfers incl. multi-recipient, auditor, disclosure) unless the measurement forces a cut; ciphertexts stay in contract state (never-lose rule). **Measure first** (T0): a verify that does not fit the per-transaction CPU / memory budget is a **STOP** for the owner (options: split the verification over transactions, a smaller range, Groth16 over a Zether-like circuit, wait for cheaper host functions). The Zether PoP kind 0x0141 is enabled on the Soroban registry together with the token (until then S3 keeps it off). Branch `soroban-zether` after `soroban-4b` (it needs the UA ledger and the registry) | a verifier that does not fit; the measurement decides before any token code | owner 2026-10-30 (in scope); the port design is a controller proposal, owner may override |
+| S13a | Classical Zether (not post-quantum) | a later item; in this round | **in this round, its own track** (owner 2026-10-30: "classical Zether for Soroban too"). Classical Zether was never built on Soroban. Port the EVM classical Zether (BLS12-381, the `*_zether_bls12381` token kinds `NormalZetherToken` / `WrappedZetherToken`) to Soroban on the BLS12-381 host functions (CAP-59), with the same proof bytes as `clients/zether-prover` (one prover, two verifiers; shared vectors), feature parity with the EVM classical Zether token (shield / unshield, transfers incl. multi-recipient, auditor, disclosure) unless the measurement forces a cut; ciphertexts stay in contract state (never-lose rule). **Measure first** (T0): a verify that does not fit the per-transaction CPU / memory budget is a **STOP** for the owner (options: split the verification over transactions, a smaller range, Groth16 over a Zether-like circuit, wait for cheaper host functions). The Zether PoP kind 0x0141 is enabled on the Soroban registry together with the token (until then S3 keeps it off). Branch `zether-soroban` after `ua-soroban` (it needs the UA ledger and the registry) | a verifier that does not fit; the measurement decides before any token code | owner 2026-10-30 (in scope); the port design is a controller proposal, owner may override |
 | S13b | PQZ (post-quantum Zether) | — | **none on Soroban**: no PQZ verifier and no PQZ token there. Part B stores PQZ attributes unproven (UA8-D20 / D21) in full; no PQZ ciphertext ever exists on Soroban, so "never lose ciphertext" is met vacuously, and the PQZ key and proof bytes live in state, not only as hashes (§6) | — | owner (UA-8 P8, P10; never-lose rule) |
 | S14 | Code authority | — | **an account signs with its own key; no delegated code authority** (owner rulings D1–D5, 2026-10-30; NET-ALL-83 lists Soroban as having no analogue). Applied in §8: `G…` accounts only add key / hash / pre-auth-tx signers; a `C…` account is a contract account (the EVM 0x0002 analogue), its own authority, never a key account's delegate; a UA is a key, never code; the node never lends a lane's authority | — | owner |
 | S15 | Node job kinds | new names / the EVM names | **`ua_metatx`** for the UA-ledger, mandate and DEX UA entries (the EVM job kind, `scaas-node/src/submit.rs`), **`call`** for the registry writes (UA8-D23) | — | controller call |
 | S16 | Upgrade and admin | — | `UaRegistry`: no admin, no upgrade function (`update_current_contract_wasm` is never called), the relayer list a constructor argument (CTR-UA-15; UA8-D19). Tokens bind the registry at construction, immutable; `None` = the UA ledger is off (`UaLedgerOff`), as EVM's registry 0 | a new kind or a bug fix is a new registry generation and new token deployments (all chains test-only today) | CTR-UA-15 (owner) |
 | S17 | Test order | — | unit tests (SDK testutils at protocol 30) → local quickstart at Protocol 30 → Stellar testnet e2e **only after 2026-11-03** and only when the RPC reports protocol 30 | — | owner 2026-10-29 ("no waiting") |
-| S18 | Order inside the round | one branch for 4b and Part B / two | **two, as the UA-8 plan says:** branch `soroban-4b` from `main` (after the token-family rename merges); on the owner's go it merges, then Part B branches `ua8-soroban`. The testnet e2e of both runs once, as the round's last step | none found | plan (controller), unchanged |
+| S18 | Order inside the round | one branch for UA-Soroban and Part B / two | **two, as the UA-8 plan says:** branch `ua-soroban` from `main` (after the token-family rename merges); on the owner's go it merges, then Part B branches `ua8-soroban`. The testnet e2e of both runs once, as the round's last step | none found | plan (controller), unchanged |
 
 ## 1. Scope and non-goals
 
-**In scope (4b).** The `UaRegistry` contract with the S3 kinds, the portable `register` (empty `attrs`), the per-kind
+**In scope (UA-Soroban).** The `UaRegistry` contract with the S3 kinds, the portable `register` (empty `attrs`), the per-kind
 UA list (CTR-UA-29), `require_authorized`; the UA ledger and `ua_*` entries in the Soroban token; UA holders in the
 mandate, the DEX and the relay-fee router; the node adapter (§9) and `clientkeys` (§10); vectors and tests (§10);
 `docs/networks/soroban.md`, `docs/contracts/accounts.md`, `docs/node/job-api.md`, `docs/decisions.md`.
@@ -106,7 +109,7 @@ spend; a lane's authority spent by a call it did not mean to authorise; any admi
 
 `register` checks, in order: kind enabled (`KindDisabled`) → key data canonical (`KeyData`) → id (`IdInNativeSpace`) →
 not registered (`AlreadyRegistered`) → `keyHash` free (`KeyInUse`; `msig` has none) → `msig` members registered or
-native and in MEMBER (`MemberUnknown`) → `attrs` empty in 4b (`Attrs`) → `pop` over
+native and in MEMBER (`MemberUnknown`) → `attrs` empty in UA-Soroban (`Attrs`) → `pop` over
 `uaMessage(kind, PURPOSE_POP_V2, registrationDigest)` (`Pop`) → store, list, event. Nothing is read from the
 submitter (CTR-UA-07): anyone may submit, a front-runner gets the identical record or a revert. Cost figures (CPU
 instructions per kind, rent per entry) are measured by T0 / T2; CAP-0087 gives no calibration yet ("a few times an
@@ -131,7 +134,7 @@ fn ua_count(env, kind) -> u32;  fn ua_at(env, kind, i) -> BytesN<32>;  fn ua_pag
 ```
 
 Errors (`contracterror`): `KindDisabled`, `KeyData`, `IdInNativeSpace`, `AlreadyRegistered`, `KeyInUse`,
-`MemberUnknown`, `Attrs` (4b only), `Pop`, `NotRegistered`, `Unauthorized`, `NotVerifiable`, `RelayerNotListed`,
+`MemberUnknown`, `Attrs` (UA-Soroban only), `Pop`, `NotRegistered`, `Unauthorized`, `NotVerifiable`, `RelayerNotListed`,
 plus Part B's `PqzHolder`, `KemHolder`, `KemVersion`, `KemKeyLength`, `PqzPopHash`. Events: `UaRegistered` (topics
 `ua`, `kind`; data the record and `checked`). `Registration.index` is the CTR-UA-29 list position (one rule on every
 registry; there is no Soroban consumer of it yet).
@@ -222,7 +225,7 @@ rule; one event shape, a node decoder change).
 | Lanes non-pruning (NET-ALL-01, CTR-MTX-04) | persistent `UaNonce`; archived ≠ deleted (§7) |
 | One vector file per rule | §10 |
 
-## 6. UA-8 records on Soroban (Part B, mapped onto 4b)
+## 6. UA-8 records on Soroban (Part B, mapped onto UA-Soroban)
 
 - **Same bytes and digests as EVM (P1, P10).** `portablePopDigest`, `registrationDigest`, `kemRecordDigest` and
   `uaMessage` are computed with the host keccak over 32-byte words (`abi.encode` of 32-byte words is their
@@ -289,7 +292,7 @@ rule; one event shape, a node decoder change).
    are listed when the relayer mode is configured (Part B).
 6. **Indexer:** `UaTransfer`, `UaPaymentSettled`, `UaMetaTransactionExecuted`, `UaRegistered`, `RelayFeePaid` with a
    `Holder` payer.
-7. `tx_fee` / `lane_balance` (NET-SOR-14) are not part of 4b.
+7. `tx_fee` / `lane_balance` (NET-SOR-14) are not part of UA-Soroban.
 
 ## 10. Vectors and test plan
 
@@ -320,18 +323,18 @@ payment to a UA payee, one UA DEX leg. Every Soroban crate keeps its tests with 
 Gates: `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban`, the node's `cargo test` / `clippy`,
 `clientkeys` `npm test`, `docs_check`; docker runs capped with `--memory`.
 
-## 11. UA-8 Part B conflicts C11–C17, ruled against the 4b names
+## 11. UA-8 Part B conflicts C11–C17, ruled against the UA-Soroban names
 
 | Conflict (progress ledger) | Ruling (controller call, owner may override) |
 |---|---|
-| **C11** B0's spike needs digests B1 creates; B0 claims network figures but runs unit tests | 4b builds the portable digests and `register` (S2), so B1 shrinks to the KEM record digest and the `portable.json` check; the network spike is 4b's T0 (RPC `simulateTransaction` on the local quickstart) and Part B's B0 re-runs it for the full PQZ + KEM registration; spikes are their own gate step (`soroban-spike-local`, docker), never inside the `soroban` unit step |
+| **C11** B0's spike needs digests B1 creates; B0 claims network figures but runs unit tests | UA-Soroban builds the portable digests and `register` (S2), so B1 shrinks to the KEM record digest and the `portable.json` check; the network spike is UA-Soroban's T0 (RPC `simulateTransaction` on the local quickstart) and Part B's B0 re-runs it for the full PQZ + KEM registration; spikes are their own gate step (`soroban-spike-local`, docker), never inside the `soroban` unit step |
 | **C12** (a) no input path for a hash-only PQZ fallback; (b) two STOP definitions in B0; (c) the PQZ key stored twice | (a) no hash-only fallback: P2 stores the key, so a key or proof that cannot be stored is a **STOP** for the owner; (b) one STOP: any limit exceeded after the `store_pqz_pop` split; (c) the key only in `PqzK(ua)`, `attrs.pqz_key` empty in `Ua(ua)`, reassembled by `registration_of` (§6) |
-| **C13** the relayer list appears only in B4 and changes the constructor | 4b's constructor already takes `relayers: Vec<Address>` (empty allowed) and `register` already takes `relayer: Option<Address>` (§4); B4 changes no caller |
+| **C13** the relayer list appears only in B4 and changes the constructor | UA-Soroban's constructor already takes `relayers: Vec<Address>` (empty allowed) and `register` already takes `relayer: Option<Address>` (§4); B4 changes no caller |
 | **C14** B5 lets a kind stay unverifiable off chain but requires every KAT to pass | per-kind gating: a crate that disagrees with a KAT row leaves that kind unverifiable off chain (the node refuses relayer mode for it), its KAT tests are marked for that kind, and the finding is reported; not a STOP |
 | **C15** the round trip covers kinds Soroban refuses, and the forge test repeats A5 | the Soroban round trip covers the `Chain` rows plus one `fndsa512` through the relayer mode; `ua8-roundtrip.json` carries what only Soroban produces (`checked`, the KEM order); the forge `test_ua8_sorobanRoundTripRegisters` is dropped (A5 covers the bytes); B7's e2e reads EVM `registrationOf` itself (`eth_call`) |
 | **C16** `zether-prover` hard-codes `.v1` purpose tags | not a Soroban item; Part A's record, not ruled here |
-| **C16b** no task swaps the SDK pin | the swap to soroban-sdk 30.0.0 is the first step of the round's testnet task (4b T12, which Part B's B10 follows) |
-| **C17** `NotRegistered` missing | in 4b's error set (§4); B3 reuses it |
+| **C16b** no task swaps the SDK pin | the swap to soroban-sdk 30.0.0 is the first step of the round's testnet task (UA-Soroban T12, which Part B's B10 follows) |
+| **C17** `NotRegistered` missing | in UA-Soroban's error set (§4); B3 reuses it |
 | B4 `ua8_relayer_list_immutable` is weak | assert on the contract's exported function list (its spec): no function besides the constructor writes the list |
 | B8 says "step 2 done" before B10 | B8 says "built, local e2e passed"; "done" only after B10 |
 

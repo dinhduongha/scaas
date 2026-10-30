@@ -1,14 +1,14 @@
-## Session 2026-10-30 (part 2: UA-8 + no7702 merged and pushed, token rename, 4b Soroban spec + plan) — resume here
+## Session 2026-10-30 (part 2: UA-8 + no7702 merged and pushed, token rename, UA-Soroban spec + plan) — resume here
 
 **Pushed** (origin/main `cc07fced`): fs3 Task 6 (merge `2b162239`), UA-8 step 1 (merge `0390d3cf` + fixes), EIP-7702 work
 `no7702` (fast-forward to `b82f7c7f`), CI fixes (`920f13d0` Algorand artifacts in the node job, libudev for cargo-near;
-`74ae18f9` node anvil e2e on the UA-8 ABI — CI green from there), the token-family rename (merge `1a68427a`), the 4b
+`74ae18f9` node anvil e2e on the UA-8 ABI — CI green from there), the token-family rename (merge `1a68427a`), the UA-Soroban
 Soroban spec (merge `b7c34170`, S13 split `70bc6cf7`), NET-ALL-84 UA checklist (`cc07fced`). **Local, not pushed:**
 `04355b57` (classical Zether on Soroban in this round, spec S13a), `17342f75` (gate step `node-e2e-anvil`; parity gas
-refreshed), `ee6bfd22` (parity kind labels NONE / UNDERLYING → NORMAL / WRAPPED), `f18ed81a` (merge of the 4b plan).
+refreshed), `ee6bfd22` (parity kind labels NONE / UNDERLYING → NORMAL / WRAPPED), `f18ed81a` (merge of the UA-Soroban plan).
 
 **Owner rulings 2026-10-30** (all in `docs/decisions.md`; ledgers `.superpowers/sdd/2026-10-30-ua8-portable-registrations/progress.md`,
-`.superpowers/sdd/2026-10-30-soroban-4b/progress.md`):
+`.superpowers/sdd/2026-10-30-soroban-UA-Soroban/progress.md`):
 - UA-8 final review: R-node (the node relays register / setKemKey / storePqzPop / setPqzKey; split when estimate >
   min(block limit, relayer cap)); R-cross-set (setPqzKey may replace an unproven key of another set); R-7702 superseded by D1.
 - EIP-7702 (after the 2026-10-29 Binance hot-wallet drain): an EOA signs with its own key only, never ERC-1271 through a
@@ -19,16 +19,16 @@ refreshed), `ee6bfd22` (parity kind labels NONE / UNDERLYING → NORMAL / WRAPPE
   never reset from a scratchpad genesis copy) **and on 22776 at launch** (NET-EVM-07). Audit:
   `docs/research/eip7702-audit-2026-10-30.md`. Disclosure rule held: ua8 pushed only together with no7702.
 - Token-family rename option (a) incl. deploy keys and (follow-up) the parity labels.
-- 4b Soroban spec accepted (S6 UA ledger in each token, S10 msig members confirmed); classical Zether (S13a) and PQZ
+- UA-Soroban Soroban spec accepted (S6 UA ledger in each token, S10 msig members confirmed); classical Zether (S13a) and PQZ
   (S13b) are separate items; **classical Zether on Soroban is in this round** (own track, measure first); NET-ALL-84: every
   family's UA spec answers the 19-row checklist; plan runs without owner review.
 - C# node: scope assessment only (`scratchpad/csharp-node-scope-2026-10-30.md`), owner questions open.
 
-**Running at this note:** 4b **T0** (Protocol 30 spike, branch `soroban-4b`, worktree `.claude/worktrees/soroban-4b`;
-HARD GATE — stop for the owner if a 4b figure is over a limit); the combined **DEX spec** (worktree `.claude/worktrees/spec-dex`);
+**Running at this note:** UA-Soroban **T0** (Protocol 30 spike, branch `soroban-UA-Soroban`, worktree `.claude/worktrees/soroban-UA-Soroban`;
+HARD GATE — stop for the owner if a UA-Soroban figure is over a limit); the combined **DEX spec** (worktree `.claude/worktrees/spec-dex`);
 CI on `cc07fced`.
 
-**Next:** 4b T1–T13 subagent-driven (T14 testnet after 2026-11-03), then `soroban-zether` Z0–Z10 (Z0 = the real
+**Next:** UA-Soroban T1–T13 subagent-driven (T14 testnet after 2026-11-03), then `zether-soroban` Z0–Z10 (Z0 = the real
 measure-first STOP check), then UA-8 Part B (`ua8-soroban`); the DEX round after its spec (owner review of the spec);
 fs3 Task 13 + Task 9 calibration (owner's go for timing; reset 7622 with 7702 off; redeploy incl. the new MtxRelayFee
 address; `e2e.py` full + `--split` + setPqzKey path; check `probe.sh`, which gave 28 ok / 30 FAIL against the default

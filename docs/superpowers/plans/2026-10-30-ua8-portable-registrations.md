@@ -11,9 +11,9 @@ and on Soroban (the `SmartKeyAccount` factory's registry entries, Part B).
 parallel with the token-family rename in its own worktree (TODO "Now (order)" step 2; the only shared file is
 `src/pqz/PqzCore.sol`, where Part A changes one function, `_keyPtr`). Order: the JS reference and the vectors first
 (A1–A3: every PoP in the vector files moves to the portable digest), then Solidity (A4–A8), the other reproducers
-(A9–A10), scripts and node (A11), docs (A12), gates (A13). Part B starts only when the 4b Soroban spec exists and its UA
-base has landed on `main` (TODO step 4, "4b Soroban (UA base) + UA-8 step 2 in one round"); it branches `ua8-soroban`
-from `main` after both Part A and the 4b round's UA base are merged. Code and tests on a local Protocol 30 network; the
+(A9–A10), scripts and node (A11), docs (A12), gates (A13). Part B starts only when the UA-Soroban spec exists and its UA
+base has landed on `main` (TODO step 4, "UA-Soroban (UA base) + UA-8 step 2 in one round"); it branches `ua8-soroban`
+from `main` after both Part A and the UA-Soroban round's UA base are merged. Code and tests on a local Protocol 30 network; the
 Stellar testnet e2e (B10) only after 2026-11-03, as the last step of the round.
 
 **Tech Stack:** Solidity / Foundry v1.8.5 (`evm_version = "amsterdam"`), SSTORE2; Node `node --test` with
@@ -184,7 +184,7 @@ Part B decisions (Soroban) are UA8-D18–D24 in Part B's header.
 | `smartcontracts/evm/script/pqz/e2e.py`, `scripts/e2e-zether.sh`, `scaas-node/src/submit.rs` (test) | scripts, EVM node |
 | `docs/contracts/{accounts.md,pq-zero-knowledge.md,zether.md}`, `docs/{decisions.md,architecture.md,integration.md}`, `docs/networks/README.md`, `docs/node/gateway.md`, the spec, `TODO.md` | docs |
 | `smartcontracts/evm/runs/2026-10-30-ua8-gates.sh` + logs, `.github/workflows/ci.yml` | gates |
-| Part B: the 4b factory crate under `smartcontracts/soroban/contracts/` (its `ua8` module), `smartcontracts/soroban/{vectors/ua8-roundtrip.json,runs/}`, `scaas-node/src/adapters/soroban.rs`, `scaas-node/tests/e2e_ua8.rs`, `smartcontracts/scripts/devnet.sh`, `docs/networks/soroban.md` | Soroban step |
+| Part B: the UA-Soroban registry crate under `smartcontracts/soroban/contracts/` (its `ua8` module), `smartcontracts/soroban/{vectors/ua8-roundtrip.json,runs/}`, `scaas-node/src/adapters/soroban.rs`, `scaas-node/tests/e2e_ua8.rs`, `smartcontracts/scripts/devnet.sh`, `docs/networks/soroban.md` | Soroban step |
 
 ## Setup (before Task A1)
 
@@ -568,12 +568,12 @@ function kemKeyAt(bytes32 ua, uint64 version) external view returns (bytes memor
 
 # Part B — Soroban registry (UA-8 step 2)
 
-**4b plan pointer:** `docs/superpowers/plans/2026-10-30-soroban-4b-ua-base.md` builds the Part B items that spec rulings C11 / C13 / C16b / C17 move into 4b (its table "Part B items this plan builds"); where the two differ, that table and the 4b names win.
+**UA-Soroban plan pointer:** `docs/superpowers/plans/2026-10-30-ua-soroban.md` builds the Part B items that spec rulings C11 / C13 / C16b / C17 move into UA-Soroban (its table "Part B items this plan builds"); where the two differ, that table and the UA-Soroban names win.
 
-**Starts only when** (a) the 4b Soroban spec exists (TODO step 2 "Specs") and (b) its UA base (UA ids, the
+**Starts only when** (a) the UA-Soroban spec exists (TODO step 2 "Specs") and (b) its UA base (UA ids, the
 `SmartKeyAccount` factory with the `UA(ua)` / `KEY(keyHash)` persistent entries, the classical kinds it verifies, the
 UA ledger) has landed on `main` (TODO step 4, one round with this part), and (c) Part A is merged. Names below follow
-the accounts.md "Where the records live" row; where the 4b spec names a type, entry or crate differently, the 4b name
+the accounts.md "Where the records live" row; where the UA-Soroban spec names a type, entry or crate differently, the UA-Soroban name
 wins and the tests here are renamed, not re-scoped (controller call).
 
 **Part B decisions (controller calls, owner may override; recorded by Task B8):**
@@ -585,9 +585,9 @@ wins and the tests here are renamed, not re-scoped (controller call).
 - **UA8-D19 The relayer list.** Given to the factory's constructor (the node's lane addresses at deploy, from the node's
   key derivation), immutable, no admin (the CTR-UA-15 pattern); "the operator delists such a relayer" (P11.6) means a
   new factory deployment — records of the old one stay readable.
-- **UA8-D20 Who checks what on Soroban.** Signature parts (`pop`, KEM `sig`): `Chain` for the classical kinds the 4b
+- **UA8-D20 Who checks what on Soroban.** Signature parts (`pop`, KEM `sig`): `Chain` for the classical kinds the UA-Soroban
   base verifies and for `mldsa44` / `mldsa65` (CAP-0087 host functions, empty context, `M = ua_msg`); `Relayer(id)` for
-  `fndsa512`, `slhdsa128s` and any kind 4b does not verify; an `msig` part is `Chain` when every signature of its signing
+  `fndsa512`, `slhdsa128s` and any kind UA-Soroban does not verify; an `msig` part is `Chain` when every signature of its signing
   set is chain-verifiable, else `Relayer(id)`. The PQZ proof: always `None` (no verifier on Soroban and none in the node;
   `proven = false`, `store_pqz_pop` open to anyone, hash-checked).
 - **UA8-D21 PQZ bytes on Soroban.** Stored in full (P2, so a copy back to EVM works from Soroban state) when B0's
@@ -610,9 +610,9 @@ wins and the tests here are renamed, not re-scoped (controller call).
 ### Task B0: preconditions and the Soroban budget spike — HARD GATE (§3 item 7)
 
 **Files:**
-- Create: `smartcontracts/soroban/runs/<date>-ua8-b0.txt`; the spike as a test of the 4b factory crate
+- Create: `smartcontracts/soroban/runs/<date>-ua8-b0.txt`; the spike as a test of the UA-Soroban registry crate
   (`tests/ua8_spike.rs`, kept)
-- Modify: `smartcontracts/soroban/Cargo.toml` / `Cargo.lock` (only if 4b did not already pin the Protocol 30 SDK),
+- Modify: `smartcontracts/soroban/Cargo.toml` / `Cargo.lock` (only if UA-Soroban did not already pin the Protocol 30 SDK),
   `smartcontracts/scripts/devnet.sh` (`soroban`: the pinned quickstart command)
 
 **Interfaces:**
@@ -628,7 +628,7 @@ wins and the tests here are renamed, not re-scoped (controller call).
   simulated on the local network: CPU instructions and memory within the per-transaction limits, sizes within the
   entry / write limits; prints the figures.
 - [ ] **Step 2:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — FAIL (no entry points).
-- [ ] **Step 3:** Pin the SDK and the image, record the limits and the 4b merge commit in the run log; a minimal
+- [ ] **Step 3:** Pin the SDK and the image, record the limits and the UA-Soroban merge commit in the run log; a minimal
   `register` for the spike.
 - [ ] **Step 4: Gate:** PASS ⇒ continue, with UA8-D21's case written into the log. FAIL (no SDK carrying the wrappers,
   no Protocol 30 image, or the full `mldsa65` registration over a limit even split per UA8-D21) ⇒ **STOP**: commit the
@@ -687,7 +687,7 @@ fn checked_of(env: Env, ua: BytesN<32>) -> (Checked, Checked);
   entry for the PQZ key), `ua8_key_hash_unique`, `ua8_pop_covers_attrs` (the `negatives[]` swaps → `Pop`),
   `ua8_any_submitter` (a third-party source account), `ua8_entries_extend_ttl` (UA8-D22).
 - [ ] **Step 2:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — FAIL.
-- [ ] **Step 3: Implement** (verification through the 4b base's verifiers for the classical kinds and
+- [ ] **Step 3: Implement** (verification through the UA-Soroban base's verifiers for the classical kinds and
   `env.crypto().ml_dsa_{44,65}_verify` for the PQ ones).
 - [ ] **Step 4:** Step 2's command — PASS.
 - [ ] **Step 5: Commit** `ua8 B2: Soroban registry entries + register (portable PoP, ML-DSA via CAP-0087)`.
@@ -722,7 +722,7 @@ fn checked_of(env: Env, ua: BytesN<32>) -> (Checked, Checked);
   `pop` with a bad signature submitted with a listed relayer → `Pop`), `ua8_relayer_msig_mixed_members` (an `msig` with
   an `fndsa512` member → `Relayer`; all `mldsa65` → `Chain`), `ua8_relayer_bad_record_takes_slot_marked` (P11.6: a
   listed relayer's bad `fndsa512` KEM record occupies `(ua, v)`, marked with its id), `ua8_relayer_checked_ua_authorises_nothing`
-  (P11.5: the 4b base refuses any signature of a UA whose kind it cannot verify), `ua8_relayer_list_immutable` (no entry
+  (P11.5: the UA-Soroban base refuses any signature of a UA whose kind it cannot verify), `ua8_relayer_list_immutable` (no entry
   changes it).
 - [ ] **Step 2:** `CARGO_BUILD_JOBS=2 scripts/capped smartcontracts/scripts/test.sh soroban` — FAIL.
 - [ ] **Step 3: Implement.**
@@ -850,5 +850,5 @@ fn checked_of(env: Env, ua: BytesN<32>) -> (Checked, Checked);
 ---
 
 **Open questions:** none blocks a task. The plan decides UA8-D1–D24 above (each recorded in `docs/decisions.md` as a
-controller call the owner may override); Part B's only external dependency is the 4b Soroban spec and UA base, a
+controller call the owner may override); Part B's only external dependency is the UA-Soroban spec and UA base, a
 precondition, not a question.

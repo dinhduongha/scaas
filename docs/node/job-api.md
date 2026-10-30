@@ -300,7 +300,7 @@ submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: 
      [NODE-LANE-17](submit-lanes.md#NODE-LANE-17)). A lane-funded deposit a third party can reclaim (e.g. a Solana
      ATA of an unconfigured recipient) ⇒ `422 DEPOSIT_NOT_ALLOWED` (re-checked before signing;
      [NODE-LANE-18](submit-lanes.md#NODE-LANE-18)).
-   - 4b. The payload's `from` is over the grief threshold (≥ 10 billed failures in 24 h, or cost ≥
+   - UA-Soroban. The payload's `from` is over the grief threshold (≥ 10 billed failures in 24 h, or cost ≥
      `chain.grief_cost_cap`) ⇒ `429 SUBJECT_THROTTLED {retry_after}`; from 3 in 24 h it gets one live job per chain
      ([NODE-LANE-15](submit-lanes.md#NODE-LANE-15)).
 5. `now < valid_until ≤ now + chain.max_valid_for_secs` (default: `now < valid_until ≤ now + 3600`) ⇒ `422 EXPIRED` / `VALID_TOO_LONG`.

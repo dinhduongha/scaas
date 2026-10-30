@@ -79,7 +79,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          `pop` ignores leftover chain fields (clientkeys throws); ua-qt KEM version exact only to 2^53 (document it); py / C# / Go /
          Dart small inconsistencies (part-2 n-C10); the metatx-split runner's commands changed under its committed logs (n-G4);
          the `zetherPop` `popDigest` field name now means the portable digest (A3); doc nits n-D7 / n-J2 / n-V1
-         (`.superpowers/sdd/2026-10-30-ua8-portable-registrations/final-review-part2.md`). Soroban (step 2, Part B) waits for the 4b spec and the Soroban UA base.
+         (`.superpowers/sdd/2026-10-30-ua8-portable-registrations/final-review-part2.md`). Soroban (step 2, Part B) waits for the UA-Soroban spec and the Soroban UA base.
      - **EIP-7702 on branch `no7702` — BUILT, next: review + merge into `main` + push** (one push with `ua8`, never `ua8`
        alone: disclosure rule). Owner rulings D1–D5 of 2026-10-30 (after the 2026-10-29 EIP-7702 hot-wallet drain: "an EOA
        must really sign — no delegation at all; an EOA must not run code"; audit `docs/research/eip7702-audit-2026-10-30.md`;
@@ -116,7 +116,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
        after the reset a type-4 transaction must be refused (`InvalidTxType`). **Mainnet 22776: 7702 off at launch** (no
        config in the repo yet).
      - **Specs (docs only):** the combined DEX spec (minFill code + `mtxHybrid` / `Via` + `mtxExchangeBatch`), the
-       **4b spec for Soroban**, the governance matrix (§0).
+       **UA-Soroban spec for Soroban**, the governance matrix (§0).
   3. EVM contracts: **DEX, one round** — the 50 % minFill floor removed + `mtxHybrid` / `mtxHybridVia` +
      `mtxExchangeBatch` + mode 3 / 4 tests + reference executor + Uniswap fork test (item "DEX: drop the 50 % minimum-fill
      floor + four matching modes" under "Recorded, not scheduled"); `TradeLib`, `SCaaSDex`, node `dex.rs`, clientkeys.
@@ -124,23 +124,23 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
      changed: a hybrid's unsold taker remainder is refunded when the sold part meets its `minFill` and limit, else revert;
      DX10 / DX11 confirmed). Plan written (no owner review): `docs/superpowers/plans/2026-10-30-dex-round.md` (T1–T19, build
      branch `dex-round` from `main`).
-  4. **4b Soroban (UA base) + UA-8 step 2 (Soroban registry)**, plus **classical Zether on Soroban** (owner 2026-10-30;
-     spec S13a: its own track and branch `soroban-zether` after `soroban-4b`, BLS12-381 host functions, measure the verifier
+  4. **UA-Soroban (UA base) + UA-8 step 2 (Soroban registry)**, plus **classical Zether on Soroban** (owner 2026-10-30;
+     spec S13a: its own track and branch `zether-soroban` after `ua-soroban`, BLS12-381 host functions, measure the verifier
      first — a verify over the per-transaction budget is a STOP for the owner), in one round — shared ML-DSA verifier (CAP-0087 host
      functions) and vectors. **No waiting** (owner 2026-10-29): code and tests on a local network / quickstart at
      Protocol 30 as soon as the stream is free (Stellar Core v30.0.0 stable, the SDK's ML-DSA wrapper merged 2026-10-19
      — check which soroban-sdk release carries it); only the testnet e2e runs after 2026-11-03 (Stellar testnet votes
      Protocol 30), as the last step of the round.
-     4b spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-soroban-4b-ua-base-design.md`; plan next (no owner review) (S1–S18; it also
+     UA-Soroban spec accepted by the owner 2026-10-30: `docs/superpowers/specs/2026-10-30-ua-soroban-design.md`; plan next (no owner review) (S1–S18; it also
      rules UA-8 Part B conflicts C11–C17; soroban-sdk 30.0.0-rc.1 carries the ML-DSA wrappers).
-     4b plan: `docs/superpowers/plans/2026-10-30-soroban-4b-ua-base.md`; runs without owner review (Part 4b on `soroban-4b`,
-     then UA-8 Part B and Part Z — classical Zether on Soroban, branch `soroban-zether`, S13a — after its merge).
+     UA-Soroban plan: `docs/superpowers/plans/2026-10-30-ua-soroban.md`; runs without owner review (Part UA-Soroban on `ua-soroban`,
+     then UA-8 Part B and Part Z — classical Zether on Soroban, branch `zether-soroban`, S13a — after its merge).
   5. fs3 Task 13 (SCaaS testnet roll-out, Rust core image, gas re-calibration) **together with Task 9 calibration**
      (owner 2026-10-29: one measurement run; it still needs the owner's go at run time, other heavy sessions stopped)
      and, where possible, the metatx-split e2e owed on a real node → Task 14 (wasm32 limb path).
   6. P6h (clients + WASM) → P6i (node) → P6j (review) → P6-PUB drafts. In parallel: TradeEngine EVM ∥ non-EVM 1 × N
      (DEX).
-  7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next 4b / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
+  7. UA-7 PQ chat sessions (needs UA-8's KEM keys); then the next UA-Soroban / UA-8 plans in the family order (each spec answers the checklist [NET-ALL-84](docs/networks/README.md#NET-ALL-84))
      NEAR → Cosmos / Sui / Aptos / Solana → Algorand (`fndsa512` once AVM v14 ships) → TON (registry design first).
   Details of the registration items:
      - **UA on non-EVM families — every kind, not only PQ** (owner 2026-10-29; rules NET-ALL-20 / NET-ALL-21,
@@ -485,7 +485,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     - NEAR node: `relay_timeout` sent outside the runner's sequence (documented; at most one `Rejected` requeue) (`final-review-node-clients.md` m4).
     - clientkeys `algorand.js` `buildRelayFee`: derive the router address with `appAddress(routerApp)` instead of taking the address key (`final-review-node-clients.md` m5).
     - NEAR e2e: read the quote from the node's `Built` (as Algorand's) instead of recomputing `quote_gas` from the call sent (`final-review-node-clients.md` m7).
-- [ ] **Family priority for UA and long-lived balances (owner 2026-10-19, late; order superseded 2026-10-29 by work order item 4b, the long-term-balance assessment stays):** first EVM, Cosmos, Sui, Aptos and Solana (balances and records stay in state for good: no TTL, a one-time deposit or fee); then assess each of Soroban, NEAR and Algorand separately — whether balances can be kept long-term there and at what cost (Soroban: TTL / archival and restore fees; NEAR: storage staking by attached deposit, records per token contract; Algorand: minimum balance and box MBR, records in the shared `account` app). The UA F phases on non-EVM follow this order.
+- [ ] **Family priority for UA and long-lived balances (owner 2026-10-19, late; order superseded 2026-10-29 by work order item UA-Soroban, the long-term-balance assessment stays):** first EVM, Cosmos, Sui, Aptos and Solana (balances and records stay in state for good: no TTL, a one-time deposit or fee); then assess each of Soroban, NEAR and Algorand separately — whether balances can be kept long-term there and at what cost (Soroban: TTL / archival and restore fees; NEAR: storage staking by attached deposit, records per token contract; Algorand: minimum balance and box MBR, records in the shared `account` app). The UA F phases on non-EVM follow this order.
 - [ ] **`secp256k1` UA kind: EIP-191 `personal_sign` variant (owner 2026-10-19, on-chain review W-J; after P6)**: today the kind 0x0108 verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (residual risk recorded in accounts.md S23). Add a verifier for the `personal_sign` form, new vectors, the six clients.
 - [ ] **ERC-7674 temporary approvals on SCaaS tokens (owner 2026-10-18; after P6)**: `temporaryApprove(spender, value)`
   (EIP-1153 transient allowance, contract callers only) in the token base, read first by `transferFrom`; SCaaS contracts
