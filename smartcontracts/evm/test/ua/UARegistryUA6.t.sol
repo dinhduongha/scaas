@@ -108,11 +108,20 @@ contract UARegistryUA6Test is UARegistryBase {
         uint16 pi = _indexOf(d, p256Ua);
         UARegistry.MemberSig memory ms = UARegistry.MemberSig(mi, "", _sig(mlKey, r.uaMessage(0x0131, UAKinds.PURPOSE_MEMBER, md)));
         UARegistry.MemberSig memory ps =
-            UARegistry.MemberSig(pi, p256Key, _sig(p256Key, r.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
+            UARegistry.MemberSig(pi, "", _sig(p256Key, r.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
         UARegistry.MemberSig[] memory sigs = new UARegistry.MemberSig[](both ? 2 : 1);
         if (!both) sigs[0] = ms;
         else (sigs[0], sigs[1]) = mi < pi ? (ms, ps) : (ps, ms);
         return abi.encode(sigs);
+    }
+
+    /// `pop` (`abi.encode(MemberSig[])`) with the member at `index` carrying key data `k`.
+    function _withMemberKey(bytes memory pop, uint16 index, bytes memory k) internal pure returns (bytes memory) {
+        UARegistry.MemberSig[] memory ms = abi.decode(pop, (UARegistry.MemberSig[]));
+        for (uint256 i; i < ms.length; ++i) {
+            if (ms[i].index == index) ms[i].keyData = k;
+        }
+        return abi.encode(ms);
     }
 
     function _zetherUa() internal returns (bytes32 ua) {
@@ -154,9 +163,10 @@ contract UARegistryUA6Test is UARegistryBase {
             assertEq(e.topics[0], IUARegistry.UARegistered.selector);
             assertEq(e.topics[1], ua);
             assertEq(uint256(e.topics[2]), ks[i]);
-            (bytes memory kd, IUARegistry.UAAttrs memory ea,,, uint8 cp, uint8 cq, uint8 ck) =
-                abi.decode(e.data, (bytes, IUARegistry.UAAttrs, bytes, bytes, uint8, uint8, uint8));
+            (bytes memory kd, IUARegistry.UAAttrs memory ea, bytes32 popHash,, uint8 cp, uint8 cq, uint8 ck) =
+                abi.decode(e.data, (bytes, IUARegistry.UAAttrs, bytes32, bytes, uint8, uint8, uint8));
             assertEq(kd, pk);
+            assertEq(popHash, keccak256(r.popOf(ua)), "CTR-UA-33: the event carries keccak256(pop), pop is in state");
             assertEq(ea.pqzKey, pqzKey, "the event carries the key");
             assertEq(abi.encode(cp, cq, ck), abi.encode(1, 1, 0));
         }
@@ -238,6 +248,10 @@ contract UARegistryUA6Test is UARegistryBase {
         r.register(UAKinds.MSIG, d, a, other, rReg);
         // below the threshold (one member of weight 1, t = 2)
         bytes memory weak = _msigPop(d, ua, a, false);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        r.register(UAKinds.MSIG, d, a, weak, rReg);
+        // CTR-UA-33: the registered p256 member's MemberSig carrying its own key data
+        weak = _withMemberKey(_msigPop(d, ua, a, true), _indexOf(d, p256Ua), p256Key);
         vm.expectRevert(IUARegistry.UAPoP.selector);
         r.register(UAKinds.MSIG, d, a, weak, rReg);
         // the members' pop: without a key and with one

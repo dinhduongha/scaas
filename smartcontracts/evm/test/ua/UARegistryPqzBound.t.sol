@@ -110,7 +110,7 @@ contract UARegistryPqzBoundTest is UARegistryBase {
 
     /// 2-of-2 worst case at cap `c`, the gen-2 forwarding hold (w / 63 + margin) and the cheapest debit.
     function _bound(uint256 c) internal pure returns (uint256) {
-        uint256 w = 2 * (c + 35_000) + (c - 400_000) / 63;
+        uint256 w = 2 * (c + 45_000) + (c - 400_000) / 63;
         return w + w / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS;
     }
 

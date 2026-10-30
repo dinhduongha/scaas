@@ -3638,6 +3638,81 @@ override**, status decided, built on branch `ua8` (not merged):
 
 Change (2026-10-30): **the KEM key record carries a scheme id — the first byte of `kemPk`** (owner 2026-10-30; the design below is the controller's, owner may override). Rule: `kemPk = scheme byte ‖ key`. **Scheme 1** = ML-KEM-1024 + X25519 (X-Wing order): `kemPk = 0x01 ‖ ek (1,568 B) ‖ X25519 pk (32 B)` = **1,601 B**. **Scheme 2** is reserved for ML-KEM-1024 + HQC + X25519 (after FIPS 207) and is **not enabled**: the registry refuses it like any unknown id. HQC itself is not built now. Registry check order (EVM `UARegistry._checkKemPk`, every client the same): empty `kemPk` → `UAKemKeyLength(0)`; first byte not an enabled scheme (0, 2, 3 … 255) → new error `UAKemScheme(uint8 scheme)`; enabled scheme but not its exact length → `UAKemKeyLength(length)`. `kemRecordDigest` is unchanged (it already hashes `kemPk`, so the scheme byte is signed); the ABI of the existing functions is unchanged (one error added). Why: a later hybrid scheme with HQC then needs no new registry generation and no new record format — only an enabled id and its length; a registry that does not know the id refuses it, so a key of an unknown scheme is never stored. Test-only chains: no migration and no compatibility path (the 1,600-byte keys of the earlier test vectors are in `smartcontracts/vectors/ua/legacy/portable.json`). Status: decided (owner 2026-10-30); built on branch `kem-scheme` — clientkeys `90c79186`, EVM registry + forge tests + size baseline (`UARegistry` 36,868 → 37,066 B), the Rust, C, C++, Qt, Go, Python, C#, Dart and Dart-FRB clients and these docs in the later `kem-scheme:` commits; not merged (merge before the UA-Soroban registry task, whose `Kem(ua, version)` stores 1,601-byte keys). The 1,600 B of the CTR-UA-32 text above and of the earlier UA-8 spec and plan records is the pre-scheme length (history).
 
+### CTR-UA-33 — The registration event carries `popHash`; `msig` members sign without key data; WebAuthn blobs canonical only
+- old: — · status: current · owner: yes · date: 2026-10-30 · normative: contracts/accounts.md#CTR-UA-33 · superseded-by: —
+
+**Rule.** Owner ruling 2026-10-30, two parts, one rule on every family (owner: never split a rule by chain kind). **A.** The
+registration event — `UARegistered` on EVM, `UaRegistered` on Soroban, the equivalent on any other family that emits one —
+carries `popHash = keccak256(pop)` (`keccak256("")` for an empty `pop`) instead of the `pop` bytes. `pop` stays in contract
+state, readable through the existing views (`popOf`, `registrationOf`; it was already stored, CTR-UA-31), so nothing is lost;
+every other `register` argument (`keyData`, `attrs`, `pqzPop`) and the three `checked` values stay in the event. **B.** In
+`auth = abi.encode(MemberSig[])` (`MemberSig {uint16 index; bytes keyData; bytes sig}`) — and in the `pop`, `setKemKey` and
+`setPqzKey` signatures of an `msig`, which have the same format — every **registered** member carries an **empty**
+`keyData`; the registry reads the member's key from the member's own record. Native members already carried empty key data
+(R12); ML-DSA and the other stored kinds already did (CTR-UA-17, `vk` at `keyPtr`). B extends "empty, read from the record"
+to the classical kinds (0x0100–0x0108: `webauthn-p256`, `p256`, `ed25519`, `bip340`, `schnorr-bn254`, `schnorr-bls12381`,
+`bls12381-minsig`, `bls-bn254-minsig`, `secp256k1`), which sent their key data and were checked by
+`uaOf(kind, keyData) == id`. A non-empty `keyData` for a registered member is refused, as CTR-UA-17 did for ML-DSA.
+
+As built on EVM (controller calls, owner may override): (1) a classical member's key is read from its registration blob
+`_reg[ua] = abi.encode(keyRest, pop, kemVersion)` (UA8-D7: `keyRest` is the whole key data of a non-stored kind; its
+`keyPtr` is 0), a stored member's from `keyPtr` as before. Only the `keyRest` bytes are read (its length word at 0x60 and
+its bytes from 0x80 of chunk 0, `SSTORE2.read(ptr, start, len)`), never the blob's `pop`: a member chooses its `pop`'s
+length (a `webauthn-p256` pop has no upper bound), so reading the whole blob would let one co-signer push every check of
+the `msig` past the per-member bound (review fix I1). (2) The rule is tied to the purpose `member` inside
+`UARegistry._derived`: `requireAuthorized(id, PURPOSE_MEMBER, digest, auth)` takes `abi.encode(bytes(""), sig)` for every
+derived id and refuses key data (`UAUnauthorized`). Why tied to the purpose and not only to the `msig` path: a gen 2 hands a
+member of a kind it does not enable to gen 1 through gen 1's `requireAuthorized` under `member`; with the empty key data gen 1
+reads its own record, so gen 2 needs no read of gen 1's blob and no new view. Every other purpose keeps
+`auth = abi.encode(keyData, sig)` for a classical kind (single-key authorization is unchanged). (3) `MSIG_MEMBER_GAS`
+35,000 → 45,000: reading the member's key from storage (cold SLOADs of the blob pointers, EXTCODECOPY) raised the worst
+measured member overhead (cold, `--isolate`, a member handed to gen 1) from 19,987 to 28,544 (30,599 with the first
+whole-blob read); + the caller's hold for a 400 k cap (11,349) = 39,893, rounded up to 45,000 (kept from the first build:
+5 k spare, and the cap calibrations below stay). `test_T_GAS_memberPopSizeFree`: members registered with a 40,000 B `pop`
+cost exactly what canonical ones cost and the at-budget structures still authorize within the bound. The `msig` structure bound (register step 4) and the PQZ-holder bound
+(CTR-PQZ-12) use the new figure, so a few structures right at a budget no longer fit (the largest `mldsa65` cap of the
+2-of-3 PQ treasury at a 12 M budget: 5,921,000 → 5,911,000); `test_T_GAS_msigAtBudget` / `test_T_GAS_msigPqAtBudget`
+authorize at the new bounds. (4) Launch note (review M4, for the 22776 checklist): a gen 2 of this code in front of a gen 1
+built before CTR-UA-33 would hand `abi.encode("", sig)` under `member` and the old gen 1 would refuse every classical
+member (`uaOf("") != id`); the gen-2 constructor probes gen 1's UA-8 views only. Not reachable on the test-only chains (all
+redeploy together); a mainnet gen 2 must sit on a gen 1 with CTR-UA-33.
+
+**C. WebAuthn signature blob canonical only** (owner ruling 2026-10-30, every registry). Rule: wherever a registry, or
+the verifier it relies on, decodes the `webauthn-p256` signature `abi.encode(bytes authenticatorData, bytes clientDataJSON,
+bytes32 r, bytes32 s)`, the input is refused unless it is byte-equal to its canonical re-encoding: head offsets 0x80 and
+0x80 + 32 + pad32(len(authenticatorData)), each dynamic field = 32-byte length ‖ data ‖ zero padding, no trailing bytes.
+Why: a lenient decoder gives one signature many byte strings, so a front-runner could register the same id with different
+`pop` bytes and so another `popHash` (CTR-UA-07: identical record or revert), and the canonical-only `MemberSig[]` rule
+(review m3) would not hold for a WebAuthn member. As built on EVM: `WebAuthnP256Verifier._fields` reads the two lengths at
+their canonical places, requires the canonical total length and compares `keccak256(sig)` with the hash of the re-encoding;
+it is the verifier's first check (before the rpIdHash, flags, clientDataJSON grammar and the signature), and `verify` and
+`verifyPop` share it, so it covers `register`'s PoP, the portable `msig` records (KEM / PQZ key), `requireAuthorized`
+(tokens, `msig` member slots). Not covered: `SmartKeyAccount._verifyWebAuthn` (CTR-ACC-08, Solidity `abi.decode`; an
+account, not a registry, outside the ruling) and the client mirrors (`clients/ua-rs` `verify`, `clientkeys` test helper),
+which still accept a non-canonical blob the registry refuses. Soroban: built on `ua-soroban` (T2b `657e71ab`, test
+`webauthn_blob_canonical_only`). Test: `EccVerifiers.t.sol` `test_WebAuthnCanonicalOnly` (trailing byte, each offset
+shifted, non-zero padding after each field, each length word beyond the data, fields swapped with offsets fixed up; RED on
+the old decoder). Status: decided (owner 2026-10-30); built on `msig-pophash` in `80be9314`.
+
+NEAR and Algorand (inventory 2026-10-30): no UA registry and no registration event; an `msig` member there is a key id
+inside the structure, never registered (no member record exists), and its signature carries its key in the family's own auth
+format (NEAR Borsh `Auth`, Algorand tag 4). A and B have nothing to apply to there; no change. Cosmos, Move, Solana and TON
+have no `msig` and no registry. Soroban is changed on its own branch (`ua-soroban`).
+
+**Why.** The UA-Soroban T0 hard gate (2026-10-30) measured an `msig` of 3 ML-DSA-65 members putting 17,228 B of contract
+events on Soroban, over the network's 16,384 B contract-events limit, because the registration event carried the whole `pop`
+(its ML-DSA-65 member signatures, 3,309 B each). The hash keeps the event small on every family while the state keeps the bytes; empty member key
+data shortens every `msig` authorization by each classical member's key and makes "the key comes from the record" one rule
+for every member kind.
+
+**Cost if wrong.** An indexer that rebuilt a registration from the log alone now also reads `popOf` (or `registrationOf`);
+`msig` authorizations pay ~10 k gas more per classical member on EVM (the storage read), and the per-member bound is 10 k
+higher. Test-only chains: no migration, no compatibility path; the earlier vector blobs are in
+`smartcontracts/vectors/ua/legacy/msig-pophash/`.
+
+**Source.** owner, 2026-10-30 (UA-Soroban T0 hard gate; task brief `.superpowers/sdd/2026-10-30-msig-pophash/task-brief.md`).
+Status: decided (owner); built on branch `msig-pophash` (not merged; merge before `ua-soroban`): vectors and the clientkeys / ua-rs reference verifiers `17357941`, EVM registry + forge tests + gas pins + size baseline (`UARegistry` 37,066 → 37,181 B; 37,365 B after fix I1) `6d7010cb`, these docs `d531f769`; the review fixes (I1 key-only read, M1, M3, M4) in the `msig-pophash fix:` commit after it.
+
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 

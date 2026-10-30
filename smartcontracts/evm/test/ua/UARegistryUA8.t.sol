@@ -733,7 +733,7 @@ contract UARegistryUA8Test is UARegistryBase {
             Row memory x = xs[i];
             uint64 v = x.attrs.kemVersion;
             vm.expectEmit(true, true, false, true, address(a));
-            emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop, UAKinds.CHECKED_CHAIN,
+            emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, keccak256(x.pop), x.pqzPop, UAKinds.CHECKED_CHAIN,
                 UAKinds.CHECKED_NONE, v == 0 ? UAKinds.CHECKED_NONE : UAKinds.CHECKED_CHAIN);
             vm.startStateDiffRecording();
             a.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
@@ -787,7 +787,7 @@ contract UARegistryUA8Test is UARegistryBase {
         vm.expectEmit(true, false, false, true, address(p));
         emit IUARegistry.UAPqzPopStored(x.ua, UAKinds.CHECKED_CHAIN, ""); // the bytes: in UARegistered
         vm.expectEmit(true, true, false, true, address(p));
-        emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, x.pop, x.pqzPop, 1, 1, 1);
+        emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, keccak256(x.pop), x.pqzPop, 1, 1, 1);
         p.register(x.kind, x.keyData, x.attrs, x.pop, x.pqzPop);
         (cp, cq, ck) = p.checkedOf(x.ua);
         assertEq(abi.encode(cp, cq, ck), abi.encode(1, 1, 1));
@@ -799,7 +799,7 @@ contract UARegistryUA8Test is UARegistryBase {
         // unproven: no proof bytes in register (the verifier is there)
         UARegistry q = _deploy(address(0x5ce81), chainUidA, address(0), false, BUDGET, address(0), true, _vcfg(0, true));
         vm.expectEmit(true, true, false, true, address(q));
-        emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, x.pop, "", 1, 0, 1);
+        emit IUARegistry.UARegistered(x.ua, x.kind, x.keyData, x.attrs, keccak256(x.pop), "", 1, 0, 1);
         q.register(x.kind, x.keyData, x.attrs, x.pop, "");
         (cp, cq, ck) = q.checkedOf(x.ua);
         assertEq(abi.encode(cp, cq, ck), abi.encode(1, 0, 1));
@@ -859,7 +859,7 @@ contract UARegistryUA8Test is UARegistryBase {
         c[0] = UARegistry.KindConfig(0x0133, address(new BurnAll()), 1_400_000);
         address clone = address(0x5cf40);
         vm.etch(clone, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
-        uint256 bound = 8 * (1_400_000 + 35_000) + 400_000 + 35_000 + uint256(1_400_000 - 400_000) / 63;
+        uint256 bound = 8 * (1_400_000 + 45_000) + 400_000 + 45_000 + uint256(1_400_000 - 400_000) / 63;
         UARegistry r = _deploy(address(0x5cea0), chainUidA, address(0), false, uint64(bound), address(impl), true, c);
         Member[] memory m = new Member[](9);
         for (uint256 i; i < 8; ++i) {
@@ -869,7 +869,7 @@ contract UARegistryUA8Test is UARegistryBase {
         _storedPop(r, _msigKey(9, m), 9);
         // 12 members, a budget that admits them
         c[0].verifier = address(new AcceptAll());
-        UARegistry big = _deploy(address(0x5cea1), chainUidA, address(0), false, uint64(12 * 1_435_000 + uint256(1_000_000) / 63),
+        UARegistry big = _deploy(address(0x5cea1), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63),
             address(0), true, c);
         Member[] memory m12 = new Member[](12);
         for (uint256 i; i < 12; ++i) {
@@ -2495,23 +2495,23 @@ contract UARegistryUA8Test is UARegistryBase {
     function _pin(string memory name) internal pure returns (uint256, uint256) {
         bytes32 h = keccak256(bytes(name));
         // PINS: name -> (regular gas, state gas); the rows of all four sets (a set's rows carry its name)
-        if (h == keccak256("register webauthn-p256")) return (175451, 1751850);
-        if (h == keccak256("register p256")) return (155455, 1213290);
-        if (h == keccak256("register ed25519")) return (314604, 1164330);
-        if (h == keccak256("register bip340")) return (152187, 1164330);
-        if (h == keccak256("register secp256k1")) return (151402, 1262250);
-        if (h == keccak256("register schnorr-bn254")) return (166897, 1262250);
-        if (h == keccak256("register schnorr-bls12381")) return (194467, 1458090);
-        if (h == keccak256("register bls12381-minsig")) return (330047, 1604970);
-        if (h == keccak256("register bls-bn254-minsig")) return (344511, 1311210);
-        if (h == keccak256("register zether-bls12381")) return (207073, 1643220);
-        if (h == keccak256("register mldsa44")) return (4360970, 6930900);
+        if (h == keccak256("register webauthn-p256")) return (173018, 1751850);
+        if (h == keccak256("register p256")) return (154657, 1213290);
+        if (h == keccak256("register ed25519")) return (313806, 1164330);
+        if (h == keccak256("register bip340")) return (151389, 1164330);
+        if (h == keccak256("register secp256k1")) return (150351, 1262250);
+        if (h == keccak256("register schnorr-bn254")) return (165847, 1262250);
+        if (h == keccak256("register schnorr-bls12381")) return (192908, 1458090);
+        if (h == keccak256("register bls12381-minsig")) return (328741, 1604970);
+        if (h == keccak256("register bls-bn254-minsig")) return (343714, 1311210);
+        if (h == keccak256("register zether-bls12381")) return (205514, 1643220);
+        if (h == keccak256("register mldsa44")) return (4341359, 6930900);
         if (h == keccak256("register mldsa65#1")) return (381848, 9280980);
         if (h == keccak256("register mldsa65#2")) return (381848, 9183060);
         if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3339160, 81366930);
-        if (h == keccak256("register fndsa512")) return (2746633, 6531570);
-        if (h == keccak256("register slhdsa128s")) return (1145991, 13295700);
-        if (h == keccak256("register msig-classical")) return (145012, 1164330);
+        if (h == keccak256("register fndsa512")) return (2740970, 6531570);
+        if (h == keccak256("register slhdsa128s")) return (1084058, 13295700);
+        if (h == keccak256("register msig-classical")) return (144722, 1164330);
         if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3462040, 83923560);
         if (h == keccak256("register msig-pq-native")) return (297880, 6892650);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (344984, 7893270);
@@ -2673,7 +2673,7 @@ contract UARegistryUA8Test is UARegistryBase {
         // 12 x slhdsa128s members
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(0x0133, address(new AcceptAll()), 1_400_000);
-        UARegistry big = _deploy(address(0x5cea2), chainUidA, address(0), false, uint64(12 * 1_435_000 + uint256(1_000_000) / 63),
+        UARegistry big = _deploy(address(0x5cea2), chainUidA, address(0), false, uint64(12 * 1_445_000 + uint256(1_000_000) / 63),
             address(0), true, c);
         Member[] memory m12 = new Member[](12);
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](12);

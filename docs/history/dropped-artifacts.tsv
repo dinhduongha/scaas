@@ -1185,3 +1185,4 @@ AdminLib.KIND_UNDERLYING	renamed	AdminLib.KIND_WRAPPED (and the _ZETHER / _PQZ v
 implementation_none	renamed	deploy JSON key implementation_normal, networks/evm.md, contracts/token-wrappers.md#CTR-TOK-21 (token-family rename, owner 2026-10-29 / 30; names only)
 implementation_none_zether_bls12381	renamed	deploy JSON key implementation_normal_zether_bls12381, networks/evm.md, contracts/token-wrappers.md#CTR-TOK-21 (token-family rename, owner 2026-10-29 / 30; names only)
 implementation_underlying_zether_bls12381	renamed	deploy JSON key implementation_wrapped_zether_bls12381, networks/evm.md, contracts/token-wrappers.md#CTR-TOK-21 (token-family rename, owner 2026-10-29 / 30; names only)
+keccak(TAG(kind) ‖ keyData) == id	obsolete	the msig member check by key data in the MemberSig is superseded: every MemberSig carries an empty keyData and the registry reads a registered member's key from its record, contracts/accounts.md#CTR-UA-33 (owner 2026-10-30)

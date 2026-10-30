@@ -33,6 +33,14 @@ library SSTORE2 {
         }
     }
 
+    /// `len` bytes of the data `write` stored at `ptr`, from data offset `start` (EXTCODECOPY: zeros past the end).
+    function read(address ptr, uint256 start, uint256 len) internal view returns (bytes memory data) {
+        data = new bytes(len);
+        assembly ("memory-safe") {
+            extcodecopy(ptr, add(data, 32), add(start, 1), len)
+        }
+    }
+
     /// `data` in pieces of `BLOB_CHUNK` bytes (the last one shorter), one `write` each; no pointer for empty data.
     function writeChunks(bytes memory data) internal returns (address[] memory ptrs) {
         uint256 n = (data.length + BLOB_CHUNK - 1) / BLOB_CHUNK;

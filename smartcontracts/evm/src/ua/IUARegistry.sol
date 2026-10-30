@@ -31,10 +31,13 @@ interface IUARegistry is IERC5267 {
         bytes kemPk;
     }
 
-    /// Every `register` argument (the record is copyable from the log) and the three `checkedOf` values at registration.
+    /// Every `register` argument but `pop`, which comes as `popHash = keccak256(pop)` (`keccak256("")` for an empty
+    /// `pop`; CTR-UA-33, owner 2026-10-30: one rule on every family, an `msig` PoP of ML-DSA members overflows Soroban's
+    /// 16,384 B events limit), and the three `checkedOf` values at registration. `pop` itself is in state (`popOf`,
+    /// `registrationOf`): the record is copyable from the log plus `popOf`.
     event UARegistered(
-        bytes32 indexed ua, uint16 indexed kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop, uint8 checkedPop,
-        uint8 checkedPqzPop, uint8 checkedKem
+        bytes32 indexed ua, uint16 indexed kind, bytes keyData, UAAttrs attrs, bytes32 popHash, bytes pqzPop,
+        uint8 checkedPop, uint8 checkedPqzPop, uint8 checkedKem
     );
     /// The PQZ proof stored (`register` with a `pqzPop`, or `storePqzPop`); `checkedPqzPop` = `CHECKED_CHAIN` iff the
     /// verifier checked it. `pqzPop`: the bytes `storePqzPop` wrote (spec P2: a later write's event carries its bytes);
