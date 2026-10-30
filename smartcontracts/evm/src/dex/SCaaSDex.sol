@@ -39,7 +39,9 @@ import {TokenCall} from "./TokenCall.sol";
 ///         shape 1 a `UATradeOrder` (ids as `bytes32`) — and decoded into one form (`UATradeOrder` in memory, a native
 ///         id zero-padded); a shape-1 leg sells a SCaaS token with its UA ledger on, through the token's `uaTrade`; a
 ///         derived party is paid and refunded by the token's `transferToUA` from the DEX's own balance; self-trade is
-///         over ids; a UA leg's starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`.
+///         over ids; a UA leg's starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`. Hybrid (`mtxHybrid` /
+///         `mtxHybridVia`, spec §4): one listed-market taker against 0..n makers at their own price and the rest of
+///         its sell routed outside, in one atomic plan; the taker alone gets the output above `outsideFloor`.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
@@ -313,22 +315,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         address tokenA = s.taker.sellToken;      // the taker sells A, the makers sell B
         address tokenB = taker.o.receiveToken;
         _checkMarket(tokenA, tokenB);
-        Calc[] memory makers = new Calc[](n);
-        uint256 takerSell;
-        uint256 takerRecv;
-        for (uint256 i; i < n; ++i) {
-            Leg calldata m = s.makers[i];
-            Calc memory c = _decode(m.sellToken, m.shape, m.order);
-            if (m.sellToken != tokenB || c.o.receiveToken != tokenA) revert TokenMismatch();
-            if (c.o.from == taker.o.from) revert SelfTrade(c.o.from);
-            // a maker sells `fill` at its own price: it receives `⌈fill·receiveAmount/amount⌉` (in its favour)
-            uint256 recv = Math.mulDiv(m.fill, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
-            _calc(c, m.sellToken, submitter, m.fill, recv);
-            makers[i] = c;
-            for (uint256 j; j < i; ++j) if (makers[j].h == c.h) revert DuplicateOrder(c.h);
-            takerSell += c.recv;
-            takerRecv += c.sold;
-        }
+        (Calc[] memory makers, uint256 takerSell, uint256 takerRecv) =
+            _makers(s.makers, taker.o.from, tokenA, tokenB, submitter);
         if (s.taker.fill != takerSell) revert FillMismatch(takerSell, s.taker.fill);
         _calc(taker, tokenA, submitter, takerSell, takerRecv);
         uint256 balA = _bal(tokenA);
@@ -339,6 +327,28 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter);
         if (_bal(tokenA) != balA) revert ConservationBroken(tokenA);
         if (_bal(tokenB) != balB) revert ConservationBroken(tokenB);
+    }
+
+    /// @dev The makers of a settlement or a hybrid: each sells B and receives A; no maker's `from` is the taker's
+    ///      (makers may share a signer); no order twice. Returns their legs, Σ receive (what the taker sells them) and
+    ///      Σ fill (what the taker receives from them).
+    function _makers(Leg[] calldata ms, bytes32 takerFrom, address tokenA, address tokenB, address submitter)
+        private view returns (Calc[] memory makers, uint256 takerSell, uint256 takerRecv)
+    {
+        makers = new Calc[](ms.length);
+        for (uint256 i; i < ms.length; ++i) {
+            Leg calldata m = ms[i];
+            Calc memory c = _decode(m.sellToken, m.shape, m.order);
+            if (m.sellToken != tokenB || c.o.receiveToken != tokenA) revert TokenMismatch();
+            if (c.o.from == takerFrom) revert SelfTrade(c.o.from);
+            // a maker sells `fill` at its own price: it receives `⌈fill·receiveAmount/amount⌉` (in its favour)
+            uint256 recv = Math.mulDiv(m.fill, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
+            _calc(c, tokenB, submitter, m.fill, recv);
+            makers[i] = c;
+            for (uint256 j; j < i; ++j) if (makers[j].h == c.h) revert DuplicateOrder(c.h);
+            takerSell += c.recv;
+            takerRecv += c.sold;
+        }
     }
 
     function _checkMarket(address a, address b) private view {
@@ -445,6 +455,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     ///         allowance past the route).
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata xs) external nonReentrant {
         (Tok[] memory t, Calc[] memory c, bool onlyListed) = _exchangeIn(p, msg.sender);
+        _route(xs, onlyListed);
+        _exchangeOut(p, t, c, msg.sender);
+    }
+
+    /// @dev Path (a)'s interactions in order, then every allowance an `approve` among them granted set back to 0.
+    function _route(Interaction[] calldata xs, bool onlyListed) private {
         address[] memory approvedToken = new address[](xs.length);
         address[] memory approvedSpender = new address[](xs.length);
         uint256 na;
@@ -456,7 +472,6 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             }
         }
         for (uint256 i; i < na; ++i) IERC20(approvedToken[i]).forceApprove(approvedSpender[i], 0);
-        _exchangeOut(p, t, c, msg.sender);
     }
 
     /// @notice Path (b): the sold fills go to `executor` (listed when a leg or the admin asks), which must transfer at
@@ -471,6 +486,92 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         for (uint256 i; i < tokensOut.length; ++i) _send(tokensOut[i], executor, amountsOut[i]);
         IExchangeExecutor(executor).exchangeCallback(p.ref, tokensOut, amountsOut, tokensIn, amountsIn, data);
         _exchangeOut(p, t, c, msg.sender);
+    }
+
+    // ------------------------------------------------------------------ hybrid (spec §4; DX2, DX5-DX9)
+
+    /// @notice Path (a) of a hybrid: one listed-market taker against 0..n makers at their own price, the rest of its
+    ///         sell through the DEX's interactions (as `mtxExchange`); the taker gets its floor less its fee plus every
+    ///         unit the route returns above `outsideFloor`.
+    function mtxHybrid(HybridPlan calldata p, Interaction[] calldata xs) external nonReentrant {
+        (Tok[] memory t, Calc memory taker, Calc[] memory makers, bool onlyListed) = _hybridIn(p, msg.sender);
+        _route(xs, onlyListed);
+        _hybridOut(p, t, taker, makers, msg.sender);
+    }
+
+    /// @notice Path (b) of a hybrid: `outsideSell` of A to `executor` (listed when the taker or the admin asks), which
+    ///         must pay at least `outsideFloor` of B to the DEX in `exchangeCallback`.
+    function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata data) external nonReentrant {
+        (Tok[] memory t, Calc memory taker, Calc[] memory makers, bool onlyListed) = _hybridIn(p, msg.sender);
+        if (onlyListed && !_s().exchangeTarget[executor]) revert TargetNotListed(executor);
+        _hybridCall(p, executor, data, t[0].token, t[1].token);
+        _hybridOut(p, t, taker, makers, msg.sender);
+    }
+
+    function _hybridCall(HybridPlan calldata p, address executor, bytes calldata data, address tokenA, address tokenB)
+        private
+    {
+        _send(tokenA, executor, p.outsideSell);
+        IExchangeExecutor(executor).exchangeCallback(p.ref, _one(tokenA), _one(p.outsideSell), _one(tokenB),
+            _one(p.outsideFloor), data);
+    }
+
+    function _one(address a) private pure returns (address[] memory x) {
+        x = new address[](1);
+        x[0] = a;
+    }
+
+    function _one(uint256 a) private pure returns (uint256[] memory x) {
+        x = new uint256[](1);
+        x[0] = a;
+    }
+
+    /// @dev Spec §4.2 steps 1-3: the check step (`settleOne`'s makers; the taker `fill == Σ maker receive +
+    ///      outsideSell`, its floor `Σ maker fill + outsideFloor` with the fee on it), then the exchange path's
+    ///      snapshot, pulls and pull check. `t[0]` is A (sold by the taker), `t[1]` B (sold by the makers; the taker's
+    ///      floor), then the `extraTokens`. `LISTED_POOLS` is read from the taker only (DX8).
+    function _hybridIn(HybridPlan calldata p, address submitter)
+        private returns (Tok[] memory t, Calc memory taker, Calc[] memory makers, bool onlyListed)
+    {
+        taker = _decode(p.taker.sellToken, p.taker.shape, p.taker.order);
+        address tokenA = p.taker.sellToken;
+        address tokenB = taker.o.receiveToken;
+        _checkMarket(tokenA, tokenB);
+        uint256 sell;
+        uint256 recv;
+        (makers, sell, recv) = _makers(p.makers, taker.o.from, tokenA, tokenB, submitter);
+        sell += p.outsideSell;
+        if (p.taker.fill != sell) revert FillMismatch(sell, p.taker.fill);
+        _calc(taker, tokenA, submitter, sell, recv + p.outsideFloor);
+        onlyListed = _s().listedOnly || taker.o.flags & LISTED_POOLS != 0;
+        t = new Tok[](2 + p.extraTokens.length);
+        (t[0].token, t[0].sold, t[0].refunds) = (tokenA, taker.sold, taker.refund);
+        Tok memory b = t[1];
+        (b.token, b.floors) = (tokenB, taker.recv);
+        for (uint256 i; i < makers.length; ++i) {
+            b.sold += makers[i].sold;
+            b.refunds += makers[i].refund;
+        }
+        for (uint256 i; i < p.extraTokens.length; ++i) _tok(t, p.extraTokens[i]);
+        _snap(t);
+        _pull(tokenA, taker, p.taker.sig, submitter);
+        for (uint256 i; i < makers.length; ++i) _pull(tokenB, makers[i], p.makers[i].sig, submitter);
+        _checkPulled(t);
+    }
+
+    /// @dev Spec §4.2 steps 5-7: B's output at least `outsideFloor` (`InsufficientOutput`; the excess is the taker's
+    ///      surplus: B has one receiver); A must hold exactly the makers' receive and the taker's Path B refund (a
+    ///      leftover of `outsideSell` is `ConservationBroken(A)` until the DX7 refund); the makers paid as in
+    ///      `mtxSettle`, the taker as on the exchange path; conservation over every token.
+    function _hybridOut(HybridPlan calldata p, Tok[] memory t, Calc memory taker, Calc[] memory makers,
+        address submitter) private
+    {
+        _excess(t);
+        Tok memory a = t[0];
+        if (_bal(a.token) != a.snap + a.refunds + taker.sold - p.outsideSell) revert ConservationBroken(a.token);
+        for (uint256 i; i < makers.length; ++i) _pay(p.ref, t[1].token, makers[i], submitter);
+        _payExchange(p.ref, a.token, taker, t[1].excess, submitter);
+        _conserve(t);
     }
 
     /// @dev Path (b)'s figures: per sold token Σ sellFill (the Path B remainders stay for the refunds), per receive
@@ -518,6 +619,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             _tok(t, rt).floors += ci.recv;
         }
         for (uint256 i; i < p.extraTokens.length; ++i) _tok(t, p.extraTokens[i]);
+        _snap(t);
+        for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, submitter);
+        _checkPulled(t);
+    }
+
+    /// @dev Trims `t` to its entries and snapshots the DEX's balance of each.
+    function _snap(Tok[] memory t) private view {
         uint256 nt;
         while (nt < t.length && t[nt].token != address(0)) ++nt;
         assembly ("memory-safe") { mstore(t, nt) }
@@ -525,12 +633,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             t[i].snap = _bal(t[i].token);
             t[i].floorsLeft = t[i].floors;
         }
-        for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, submitter);
-        for (uint256 i; i < nt; ++i) {
+    }
+
+    /// @dev After the pulls: each token's balance rose by exactly what was pulled.
+    function _checkPulled(Tok[] memory t) private view {
+        for (uint256 i; i < t.length; ++i) {
             Tok memory x = t[i];
-            if (_bal(x.token) != x.snap + x.sold + x.refunds) {
-                revert ConservationBroken(x.token);
-            }
+            if (_bal(x.token) != x.snap + x.sold + x.refunds) revert ConservationBroken(x.token);
         }
     }
 
@@ -567,6 +676,20 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     /// @dev Steps 5-6: the surplus per receive token (CTR-DEX-21), the payouts, conservation over every token (a
     ///      sold-only or intermediate leftover fails there: a route bug, not something to assign).
     function _exchangeOut(ExchangePlan calldata p, Tok[] memory t, Calc[] memory c, address submitter) private {
+        _excess(t);
+        for (uint256 i; i < p.legs.length; ++i) {
+            Tok memory x = _tok(t, c[i].o.receiveToken);
+            uint256 share = x.floorsLeft == c[i].recv ? x.excess - x.paid : Math.mulDiv(x.excess, c[i].recv, x.floors);
+            x.floorsLeft -= c[i].recv;
+            x.paid += share;
+            _payExchange(p.ref, p.legs[i].sellToken, c[i], share, submitter);
+        }
+        _conserve(t);
+    }
+
+    /// @dev Per receive token: its balance must cover the snapshot, the refunds and the floors (`InsufficientOutput`);
+    ///      the rest is the excess (CTR-DEX-21).
+    function _excess(Tok[] memory t) private view {
         for (uint256 i; i < t.length; ++i) {
             Tok memory x = t[i];
             if (x.floors == 0) continue;
@@ -575,13 +698,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             if (bal < keep) revert InsufficientOutput(x.token);
             x.excess = bal - keep;
         }
-        for (uint256 i; i < p.legs.length; ++i) {
-            Tok memory x = _tok(t, c[i].o.receiveToken);
-            uint256 share = x.floorsLeft == c[i].recv ? x.excess - x.paid : Math.mulDiv(x.excess, c[i].recv, x.floors);
-            x.floorsLeft -= c[i].recv;
-            x.paid += share;
-            _payExchange(p.ref, p.legs[i].sellToken, c[i], share, submitter);
-        }
+    }
+
+    /// @dev After the payouts: every token back at its snapshot.
+    function _conserve(Tok[] memory t) private view {
         for (uint256 i; i < t.length; ++i) {
             if (_bal(t[i].token) != t[i].snap) revert ConservationBroken(t[i].token);
         }

@@ -69,6 +69,20 @@ interface ISCaaSDex {
         address[] extraTokens;
     }
 
+    /// @notice One listed-market taker against 0..n makers at the makers' own prices, the rest of the taker's sell
+    ///         routed outside (spec §4, DX2, DX5). `taker` sells A (= `taker.sellToken`) and receives B (its order's
+    ///         `receiveToken`), `taker.fill == Σ maker receive + outsideSell`; each maker sells B, receives A, `fill` =
+    ///         its `sellFill`; `outsideSell` of A goes to the route, which must return at least `outsideFloor` of B;
+    ///         `extraTokens` are intermediate hop tokens (snapshotted; each must end at its snapshot).
+    struct HybridPlan {
+        bytes32 ref;
+        Leg taker;
+        Leg[] makers;
+        uint256 outsideSell;
+        uint256 outsideFloor;
+        address[] extraTokens;
+    }
+
     event MarketSet(address indexed base, address indexed quote, bool listed);
     event FeeSplitSet(uint32 relayerSharePpm, address treasury);
     /// @notice `received` is net of the DEX fee: the party gets `receiveFill - dexFee`, so `received + dexFee` is the gross
@@ -173,6 +187,14 @@ interface ISCaaSDex {
     function mtxExchange(ExchangePlan calldata p, Interaction[] calldata interactions) external;
     /// @notice Exchange path (b): the pulled sell fills go to `executor`, which pays the DEX back in its callback.
     function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external;
+    /// @notice Hybrid path (a): makers at their own price (`⌈fill · receiveAmount / amount⌉`, `mtxSettle`'s fee and
+    ///         self-trade rule), the rest through the DEX's own interactions; the taker gets its floor
+    ///         (`Σ maker fill + outsideFloor`, the fee once on it) plus everything the route returns above
+    ///         `outsideFloor`, fee-free. `LISTED_POOLS` is read from the taker only.
+    function mtxHybrid(HybridPlan calldata p, Interaction[] calldata interactions) external;
+    /// @notice Hybrid path (b): `outsideSell` of A goes to `executor`, which must pay at least `outsideFloor` of B to
+    ///         the DEX in `exchangeCallback(ref, [A], [outsideSell], [B], [outsideFloor], data)`.
+    function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata data) external;
     function setExchangeTarget(address target, bool listed) external;
     function setListedOnly(bool on) external;
 
