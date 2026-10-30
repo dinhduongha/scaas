@@ -152,6 +152,8 @@ fn authorize(
     relayer: &Option<Address>,
     auth: &Bytes,
 ) {
+    // Every entry, also those that write nothing persistent (`mtx_revoke`, `mtx_withdraw`, `mtx_set_payee(false)`).
+    env.storage().instance().extend_ttl(TTL_MIN, TTL_BUMP);
     if env.ledger().timestamp() > valid_until {
         panic_with_error!(env, Error::Expired);
     }
@@ -198,6 +200,10 @@ impl MandateWallet {
 
     pub fn owner(env: Env) -> Holder {
         owner(&env)
+    }
+
+    pub fn registry(env: Env) -> Option<Address> {
+        env.storage().instance().get::<_, Option<Address>>(&Key::Registry).flatten()
     }
 
     pub fn mandate(env: Env, token: Address) -> Option<Mandate> {

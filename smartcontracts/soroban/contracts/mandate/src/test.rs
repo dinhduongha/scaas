@@ -381,6 +381,25 @@ fn mandate_withdraw_to_ua() {
     assert_eq!((s.t.ua_balance(&u.id), s.t.balance(&w.address)), (40, 60));
 }
 
+/// T6 review m1 / m2: every entry extends the instance TTL, also one that writes nothing persistent (`mtx_revoke`);
+/// `registry()` names the bound registry.
+#[test]
+fn mandate_instance_ttl_on_every_entry() {
+    use soroban_sdk::testutils::storage::Instance as _;
+    let s = base();
+    let e = &s.env;
+    let owner = Address::generate(e);
+    let o = Holder::Addr(owner.clone());
+    let w = s.mandate(&o, 0);
+    assert_eq!(w.registry(), Some(s.reg.address.clone()));
+    s.set_mandate(&w, Who::Native(&owner), &o, 10, 100, 3600, NOW + 86_400, 1, 0).unwrap();
+    e.ledger().with_mut(|l| l.sequence_number += 35 * DAY);
+    let ttl = || e.as_contract(&w.address, || e.storage().instance().get_ttl());
+    assert_eq!(ttl(), TTL_BUMP - 35 * DAY);
+    s.revoke(&w, Who::Native(&owner), &o, 1, 0).unwrap();
+    assert_eq!(ttl(), TTL_BUMP);
+}
+
 /// A UA owner needs a registry (a native owner does not: every other test of the native path could run without one).
 #[test]
 #[should_panic(expected = "Error(Contract, #12)")]
