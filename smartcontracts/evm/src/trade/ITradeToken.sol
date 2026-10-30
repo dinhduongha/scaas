@@ -13,7 +13,7 @@ interface ITradeToken {
         address receiveToken;  // what the signer receives
         uint256 amount;        // at most this much of THIS token in total
         uint256 receiveAmount; // signed price limit: `amount` for at least `receiveAmount` (gross, before the DEX fee)
-        uint256 minFill;       // per settlement; effective = max(minFill, ceil(amount/2)); = amount => fill-or-kill
+        uint256 minFill;       // per settlement, unless the fill closes the remainder; = amount => fill-or-kill (CTR-DEX-14)
         uint256 fee;           // DEX fee rate in ppm on what the signer receives; <= 10 000 (1 %)
         address relayer;       // the only submitter allowed (0 = anyone)
         address dex;           // the only contract that may pull, and the only recipient; a contract
