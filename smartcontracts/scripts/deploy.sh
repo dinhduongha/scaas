@@ -24,6 +24,9 @@
 #                            0x2::package::make_immutable(UpgradeCap) (NET-SUI-15, owner ruling 2026-10-28): the cap
 #                            object is gone afterwards; the script stops if it cannot find or destroy it
 #   soroban <network> <contract>   stellar contract deploy of scaas_<contract>.wasm (build.sh soroban first); STELLAR_BIN overrides the CLI
+#                            relay_fee: deploys the executor and the router, each constructor naming the other (the
+#                            router's id derived first from a salt, SOROBAN_SALT = 64 hex or random); "$@" = tx options
+#                            only (--source <acct>); prints the router id (controller ruling 2026-10-31, UA-Soroban T8 review)
 #   solana  <cluster-url> <program-keypair> <upgrade-authority-keypair>   solana/scripts/deploy.sh
 #   near    <rpc-url> [gate <account…>]   near/scripts/deploy.sh: token(s), dex, relayfee, relayexec as sub-accounts of
 #                            the funding account, initialised, every lane registered on every token, then every access
@@ -58,8 +61,28 @@ case "$FAMILY" in
            # --gas-budget: older Sui CLIs require it (SUI_GAS_BUDGET, MIST)
            exec sui client --client.env "$NET" call --package 0x2 --module package --function make_immutable --args "$cap" \
              --gas-budget "${SUI_GAS_BUDGET:-50000000}" ;;
-  soroban) C="${1:?contract (token|mandate|dex|smart_key_account)}"; shift
-           exec "${STELLAR_BIN:-stellar}" contract deploy --network "$NET" --wasm "$SC/soroban/target/wasm32v1-none/release/scaas_$C.wasm" "$@" ;;
+  soroban) C="${1:?contract (token|mandate|dex|smart_key_account|relay_fee)}"; shift
+           ST="${STELLAR_BIN:-stellar}"; W="$SC/soroban/target/wasm32v1-none/release"
+           if [ "$C" = relay_fee ]; then
+             S="${SOROBAN_SALT:-$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')}"
+             # `contract id wasm` takes only the source / RPC / config options: pass those of "$@" (a deploy-only
+             # option such as --alias or --inclusion-fee would make it fail)
+             I=(); A=("$@")
+             for ((i = 0; i < ${#A[@]}; i++)); do
+               case "${A[i]}" in
+                 -s|--source|--source-account|--rpc-url|--rpc-header|--network-passphrase|--config-dir|--hd-path)
+                   I+=("${A[i]}" "${A[i + 1]-}"); i=$((i + 1)) ;;
+                 --source=*|--source-account=*|--rpc-url=*|--rpc-header=*|--network-passphrase=*|--config-dir=*|--hd-path=*)
+                   I+=("${A[i]}") ;;
+               esac
+             done
+             R="$("$ST" contract id wasm --network "$NET" --salt "$S" "${I[@]}")"
+             X="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_executor.wasm" "$@" -- --router "$R")"
+             got="$("$ST" contract deploy --network "$NET" --wasm "$W/scaas_relay_fee.wasm" --salt "$S" "$@" -- --executor "$X")"
+             [ "$got" = "$R" ] || { echo "router id $got != derived $R (executor $X is bound to $R)" >&2; exit 1; }
+             echo "$R"; exit 0
+           fi
+           exec "$ST" contract deploy --network "$NET" --wasm "$W/scaas_$C.wasm" "$@" ;;
   solana)  exec "$SC/solana/scripts/deploy.sh" "$NET" "$@" ;;
   near)    exec "$SC/near/scripts/deploy.sh" "$NET" "$@" ;;
   algorand) exec "$SC/algorand/scripts/deploy.sh" "$NET" "$@" ;;

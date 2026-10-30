@@ -350,10 +350,16 @@ Spec `docs/superpowers/specs/2026-10-27-metatx-split-design.md` §6.2 / §7.2; r
   `payer.require_auth_for_args((target, func, args, salt, token, to, amount, valid_until))`; the payer's auth entry is rooted
   at this router call with the token's `pay` as sub-invocation. `ref = keccak256("scaas.relayfee" ‖ network id ‖ xdr(target) ‖
   keccak256(xdr((func, args))) ‖ salt)`; the payer-signed `salt` is needed because Soroban's target auth is outside `args`.
-  Open mode (`to == router`): the router receives, then `token.transfer(router, relayer, amount)`. Stateless; no executor
-  (Soroban refuses contract re-entry). Event `RelayFeePaid` topics `ref, target, token`, data `payer, payee, amount`.
+  Open mode (`to == router`): the router receives, then `token.transfer(router, relayer, amount)`. The target runs
+  through `contracts/relay-executor` (`executor.exec`, router-only), never as the router: Soroban grants a contract's
+  authority to every contract it calls directly, so a target `token.transfer(router, …)` could take a router balance
+  (controller ruling 2026-10-31 after the UA-Soroban T8 review, EVM parity). Each constructor names the other, the
+  router checks `executor.router() == self` (`BadExecutor`), a payee equal to the router or the executor is `BadPayee`;
+  `deploy.sh soroban <net> relay_fee` derives the router id from a salt and deploys the executor, then the router.
+  Event `RelayFeePaid` topics `ref, target, token`, data `payer, payee, amount`.
 - **Relayer rule.** `relayer.require_auth()` is not satisfied by the transaction source: the node adds an explicit
-  `SourceAccount` auth entry rooted at the `relay` call. Node config `params.relay_fee = { router, min_amount }`.
+  `SourceAccount` auth entry rooted at the `relay` call. Node config `params.relay_fee = { router, min_amount }`; the node
+  reads `router.executor()` once and refuses a plain pay, a pay-meta or a relay fee to the router or its executor.
 - **Owed.** A testnet or localnet simulate-and-submit of a `relay_fee` job to prove the `SourceAccount` path (the Rust test
   environment has no transaction source). TODO.md, "metatx split — e2e still owed".
 - Commits: pay-meta + router T10 `cd5e508c`, fix 1 `351f67ea`.

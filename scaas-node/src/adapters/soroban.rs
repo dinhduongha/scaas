@@ -6,7 +6,7 @@
 //! Thiết kế: `docs/history/specs/2026-10-03-net-soroban.md`.
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -302,6 +302,35 @@ impl SorobanAdapter {
             signature: Signature(signer.sign(hash)?.try_into()?),
         })
     }
+
+    /// A read-only call by simulation from lane 0; a simulation error or a restore it needs is an `Err` (fail closed).
+    async fn view(&self, contract: &ScAddress, f: &str, args: Vec<ScVal>) -> Result<ScVal> {
+        let call = InvokeContractArgs { contract_address: contract.clone(), function_name: ScSymbol(f.try_into()?), args: args.try_into()? };
+        let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: self.tx(0, 0, 0, call, vec![])?, signatures: Default::default() });
+        let sim = self.rpc("simulateTransaction", json!({"transaction": env.to_xdr_base64(Limits::none())?})).await?;
+        if let Some(e) = sim.get("error").and_then(|e| e.as_str()) {
+            bail!("{f}: {e}");
+        }
+        if sim.get("restorePreamble").is_some_and(|r| !r.is_null()) {
+            bail!("{f}: contract state is archived; restore it first");
+        }
+        let x = sim["results"][0]["xdr"].as_str().ok_or_else(|| anyhow!("{f}: simulation without a result"))?;
+        Ok(ScVal::from_xdr_base64(x, Limits { depth: 64, len: 1 << 16 })?)
+    }
+
+    /// Decision (D) extended (controller ruling 2026-10-31): the router's executor, read once from `router.executor()`
+    /// (bound at construction, immutable); a plain pay, a pay-meta or a relay fee to it is refused like one to the router.
+    async fn load_executor(&self) -> std::result::Result<(), SimError> {
+        let (Some(router), None) = (&self.relay_fee.router, self.relay_fee.executor.get()) else { return Ok(()) };
+        match self.view(router, "executor", vec![]).await {
+            Ok(ScVal::Address(x)) => {
+                let _ = self.relay_fee.executor.set(x);
+                Ok(())
+            }
+            Ok(v) => Err(SimError::Transport(format!("router executor() unreadable: {v:?}"))),
+            Err(e) => Err(SimError::Transport(format!("router executor(): {e:#}"))),
+        }
+    }
 }
 
 fn clone_signer(s: &LocalSigner) -> Result<LocalSigner> {
@@ -331,6 +360,7 @@ impl ChainAdapter for SorobanAdapter {
         let rv = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let pk = lane_pk(self.signer(lane).map_err(rv)?).map_err(rv)?;
         let lane_addr = ScAddress::from_str(&stellar_account_strkey(&pk)).map_err(|e| SimError::Revert(e.to_string()))?;
+        self.load_executor().await?;
         let (call, auth) = job_call(&self.network_id, &op, &lane_addr, &self.relay_fee).map_err(rv)?;
         let tx = self.tx(lane, 0, valid_until, call, auth).map_err(|e| SimError::Revert(format!("{e:#}")))?;
         let env = TransactionEnvelope::Tx(TransactionV1Envelope { tx: tx.clone(), signatures: Default::default() });
@@ -555,6 +585,8 @@ pub struct RelayFeePolicy {
     pub router: Option<ScAddress>,
     pub tokens: Vec<ScAddress>,
     pub params: crate::config::RelayParams,
+    /// The router's executor (decision (D) extended), read once from `router.executor()` (`SorobanAdapter::load_executor`).
+    pub executor: OnceLock<ScAddress>,
 }
 
 impl RelayFeePolicy {
@@ -573,13 +605,13 @@ impl RelayFeePolicy {
         let tokens = cfg.tokens.iter()
             .map(|t| ScAddress::from_str(&t.address).map_err(|e| anyhow!("tokens: {} is not a Soroban address: {e}", t.address)))
             .collect::<Result<_>>()?;
-        Ok(Self { router, tokens, params })
+        Ok(Self { router, tokens, params, executor: OnceLock::new() })
     }
 }
 
 /// The job's invocation, checked before simulation (fail closed): `op.kind` by the one rule (`adapter::op_kind`):
 /// `"pay_meta"` (`pay_meta_job`), `"relay_fee"` (`relay_fee_job`), none = the signed invocation as it is; outside a
-/// relay, never a pay to the router.
+/// relay, never a pay to the router or its executor.
 pub fn job_call(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &RelayFeePolicy)
     -> Result<(InvokeContractArgs, Vec<SorobanAuthorizationEntry>)>
 {
@@ -593,17 +625,17 @@ pub fn job_call(network: &[u8; 32], op: &Value, lane: &ScAddress, policy: &Relay
         None => host_call(network, op)?,
     };
     if pays_router(&call, policy) {
-        bail!("a plain pay to the relay-fee router is refused (CTR-MTX-27: never pay the router)");
+        bail!("a plain pay to the relay-fee router or its executor is refused (CTR-MTX-27: never pay the router)");
     }
     Ok((call, auth))
 }
 
-/// CTR-MTX-27: a token `pay` / `pay_meta` / `transfer` whose payee (argument 1) is the router. The router's balance is
-/// whatever a relay in open mode forwards, so coins sent there outside a relay are stranded.
+/// CTR-MTX-27: a token `pay` / `pay_meta` / `transfer` whose payee (argument 1) is the router or its executor. The
+/// router's balance is whatever a relay in open mode forwards and the executor holds nothing, so coins sent to either
+/// are stranded.
 pub fn pays_router(call: &InvokeContractArgs, policy: &RelayFeePolicy) -> bool {
-    let Some(router) = &policy.router else { return false };
     matches!(call.function_name.0.as_slice(), b"pay" | b"pay_meta" | b"transfer")
-        && call.args.get(1) == Some(&ScVal::Address(router.clone()))
+        && policy.router.iter().chain(policy.executor.get()).any(|x| call.args.get(1) == Some(&ScVal::Address(x.clone())))
 }
 
 /// Relay-fee job: `extra.call` is the router's `relay(payer, target, func, args, salt, token, to, amount,
@@ -650,6 +682,9 @@ pub fn relay_fee_job(
     let amount = scval_i128(&call.args[7]).and_then(|a| u128::try_from(a).ok()).ok_or_else(|| anyhow!("amount argument malformed or negative"))?;
     // open mode: `to` is the router (it forwards to the relayer, this lane); a bound payee is `to` itself
     let to = &call.args[6];
+    if policy.executor.get().is_some_and(|x| *to == ScVal::Address(x.clone())) {
+        bail!("the fee is bound to the router's executor (BadPayee)");
+    }
     crate::adapter::relay_fee_ours(*to == ScVal::Address(call.contract_address.clone()), *to == ScVal::Address(lane.clone()), amount, &policy.params)?;
     let rf = relay_ref(network, target, func, inner.as_slice(), &salt);
     if op_bytes(op, "ref")? != rf {
@@ -899,7 +934,7 @@ mod tests {
 
     fn policy() -> RelayFeePolicy {
         RelayFeePolicy { router: Some(ScAddress::from_str(WALLET2).unwrap()), tokens: vec![ScAddress::from_str(CONTRACT).unwrap()],
-                         params: rp(5) }
+                         params: rp(5), executor: OnceLock::new() }
     }
 
     fn rp(min_amount: u128) -> crate::config::RelayParams {
@@ -994,6 +1029,85 @@ mod tests {
         let dear = RelayFeePolicy { params: rp(8), ..policy() };
         assert!(relay_fee_job(&NET7, &ok, &lane, &dear).is_err());
         assert!(relay_fee_job(&NET7, &ok, &lane, &RelayFeePolicy { params: rp(7), ..policy() }).is_ok());
+    }
+
+    fn executor() -> ScAddress {
+        ScAddress::Contract(stellar_xdr::ContractId(Hash([0x5a; 32])))
+    }
+
+    fn pay_to(net: [u8; 32], to: &str) -> Value {
+        json!({"payload": payload(net, inv(CONTRACT, "pay", vec![addr(FROM), addr(to), i128v(1), byt(&[3; 32]), ScVal::U64(1)], vec![])),
+            "from": FROM, "signature": sig(), "contract": CONTRACT, "valid_until": 1_800_000_300u64, "extra": {}})
+    }
+
+    /// Decision (D) extended (controller ruling 2026-10-31): the router's executor is never a payee: plain `pay` /
+    /// `pay_meta` and relay-fee jobs refuse it like the router.
+    #[test]
+    fn relay_jobs_refuse_the_executor_as_payee() {
+        let (p, lane) = (policy(), ScAddress::from_str(LANE).unwrap());
+        p.executor.set(executor()).unwrap();
+        let ex = executor().to_string();
+        assert!(job_call(&NET7, &pay_to(NET7, WALLET), &lane, &p).is_ok());
+        assert!(job_call(&NET7, &pay_to(NET7, &ex), &lane, &p).unwrap_err().to_string().contains("executor"));
+        let r = meta_row();
+        let (salt, meta) = (strip(&r["salt"]), strip(&r["meta"]));
+        let mut pm = pay_meta_op(&salt, &meta, &salt, &meta);
+        pm["kind"] = json!("pay_meta");
+        assert!(job_call(&NET7, &pm, &lane, &p).is_ok());
+        let args = vec![addr(FROM), addr(&ex), i128v(40), byt(&salt), byt(&meta), ScVal::U64(1_800_000_300)];
+        pm["payload"] = json!(payload(NET7, inv(CONTRACT, "pay_meta", args, vec![])));
+        assert!(job_call(&NET7, &pm, &lane, &p).unwrap_err().to_string().contains("executor"));
+        let a = vec![addr(CONTRACT), addr(OWNER)];
+        let rf = relay_ref(&NET7, &ScAddress::from_str(WALLET).unwrap(), &ScSymbol("revoke".try_into().unwrap()), &a, &SALT);
+        let sponsored = RelayFeePolicy { params: crate::config::RelayParams { relay_bound_payee: true, ..rp(5) }, ..policy() };
+        sponsored.executor.set(executor()).unwrap();
+        assert!(relay_fee_job(&NET7, &relay_job_to(&rf, LANE, WALLET, &rf, sym("revoke"), WALLET), &lane, &sponsored).is_ok());
+        let e = relay_fee_job(&NET7, &relay_job_to(&rf, LANE, WALLET, &rf, sym("revoke"), &ex), &lane, &sponsored).unwrap_err().to_string();
+        assert!(e.contains("executor"), "{e}");
+    }
+
+    /// Decision (D) extended: the router's `executor()` is read once (first build, from a stub RPC), then every job is
+    /// checked against it.
+    #[tokio::test]
+    async fn executor_is_read_once() {
+        use std::sync::Arc;
+        let calls = Arc::new(Mutex::new(Vec::<String>::new()));
+        let c2 = calls.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(b): axum::Json<Value>| {
+            let calls = c2.clone();
+            async move {
+                let env = TransactionEnvelope::from_xdr_base64(b["params"]["transaction"].as_str().unwrap(), Limits::none()).unwrap();
+                let TransactionEnvelope::Tx(t) = env else { panic!() };
+                let OperationBody::InvokeHostFunction(op) = &t.tx.operations[0].body else { panic!() };
+                let HostFunction::InvokeContract(c) = &op.host_function else { panic!() };
+                let f = String::from_utf8_lossy(c.function_name.0.as_slice()).into_owned();
+                calls.lock().unwrap().push(f.clone());
+                let r = match f.as_str() {
+                    "executor" => json!({"results": [{"xdr": ScVal::Address(executor()).to_xdr_base64(Limits::none()).unwrap(), "auth": []}]}),
+                    _ => json!({"error": "stop here"}),
+                };
+                axum::Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let mut c = ChainCfg { family: "soroban".into(), rpc_urls: vec![url], lanes: vec![0], ..Default::default() };
+        c.tokens = vec![crate::config::TokenCfg { address: CONTRACT.into(), decimals: 7 }];
+        c.params.insert("network_passphrase".into(), "x".into());
+        let mut t = toml::Table::new();
+        t.insert("router".into(), WALLET2.into());
+        c.params.insert("relay_fee".into(), toml::Value::Table(t));
+        let a = SorobanAdapter::new(&c, &[LocalSigner::Ed(ed25519_dalek::SigningKey::from_bytes(&[1; 32]))]).unwrap();
+        let job = |to: &str| -> Job { serde_json::from_value(json!({"id": 7, "op": pay_to(network_id("x"), to)})).unwrap() };
+        for _ in 0..2 {
+            let e = a.build(&job(WALLET), 0).await.err().unwrap();
+            assert!(matches!(&e, SimError::Revert(r) if r.contains("stop here")), "{e:?}");
+        }
+        assert_eq!(a.relay_fee.executor.get(), Some(&executor()));
+        assert_eq!(calls.lock().unwrap().iter().filter(|c| *c == "executor").count(), 1);
+        let e = a.build(&job(&executor().to_string()), 0).await.err().unwrap();
+        assert!(matches!(&e, SimError::Revert(r) if r.contains("executor")), "{e:?}");
     }
 
     /// A function symbol that is not UTF-8 (32 raw bytes) is hashed as received: no panic, and a bad ref.
