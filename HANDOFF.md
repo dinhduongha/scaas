@@ -29,7 +29,7 @@ no `capped` jobs.
   - token-family rename: option (a), regenerate `dex_order_kat.json` and `metatx-parity.json` (CREATE2-derived fields
     only), and rename the deploy JSON keys `implementation_none…` as well. Start after the `ua8` merge, rebased onto
     main. Inventory: `scratchpad/token-rename-report.md`; worktree `.claude/worktrees/token-rename`: BUILT on branch
-    `token-rename` (on main `920f13d0`; code `5823c740`, vectors `593af6e5`, docs and gate logs after; report
+    `token-rename` (on main `b7c34170`; code `d4550552`, vectors `ea7a671f`, docs and gate logs after; report
     `scratchpad/token-rename-report-2.md`); waits for the owner's go to merge.
   - no bamboo-dms / Odoo items in scaas (memory `bamboo-dms-separate`).
 

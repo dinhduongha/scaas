@@ -55,8 +55,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
          the calldata embedding them); also rename the deploy JSON keys `implementation_none` /
          `implementation_{none,underlying}_zether_bls12381` (`deployments/<chainid>.json`, read by e2e and the node);
          start after the `ua8` merge (rebase onto main then). Inventory: `scratchpad/token-rename-report.md`;
-         **BUILT 2026-10-30 on branch `token-rename`** (worktree `.claude/worktrees/token-rename`, on main `920f13d0`;
-         code `5823c740`, vectors `593af6e5`, then docs and gate logs; report `scratchpad/token-rename-report-2.md`);
+         **BUILT 2026-10-30 on branch `token-rename`** (worktree `.claude/worktrees/token-rename`, on main `b7c34170`;
+         code `d4550552`, vectors `ea7a671f`, then docs and gate logs; report `scratchpad/token-rename-report-2.md`);
          merge after the owner's go. `metatx-parity.json` needed no change (CREATE clones; its `gas` column is stale
          on main in eight PQZ rows, compared only under `PARITY_GAS=1`).
        - **UA-8 step 1 (EVM `UARegistry`)** — IN PROGRESS on branch `ua8` (worktree `.claude/worktrees/ua8`; plan
